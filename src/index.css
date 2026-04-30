@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #3b82f6, #f97316);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #2563eb, #ea580c);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3b82f6 transparent;
+  }
+}
+
+@layer components {
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer;
+  }
+  .nav-item-active {
+    @apply bg-gradient-to-r from-orange-500 to-orange-400 text-white shadow-md shadow-orange-200 border border-orange-300;
+  }
+  .nav-item-inactive {
+    @apply text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:shadow-sm;
+  }
+  .btn-primary {
+    @apply bg-gradient-to-r from-orange-500 to-orange-400 text-white font-semibold rounded-xl px-5 py-2.5 text-sm transition-all hover:from-orange-600 hover:to-orange-500 hover:shadow-lg hover:shadow-orange-200 active:scale-95;
+  }
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent focus:bg-white transition-all;
+  }
+  .card {
+    @apply bg-white border border-gray-100 rounded-2xl shadow-sm;
+  }
+}

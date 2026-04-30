@@ -1,0 +1,51 @@
+export const ROUTES = {
+  // Auth
+  LOGIN: "/login",
+  ACCESS_DENIED: "/acesso-negado",
+
+  // Retiradas
+  DASHBOARD: "/",
+  FERIAS: "/ferias",
+  BANCO_HORAS: "/banco-horas",
+  PRESENCA: "/presenca",
+  ATESTADOS: "/atestados",
+  FROTA: "/frota",
+  FERIADOS: "/feriados",
+  USUARIOS: "/usuarios",
+  COLABORADORES: "/colaboradores",
+  COMISSAO: "/comissao",
+  EQUIPAMENTOS: "/equipamentos",
+  REGIONAIS: "/regionais",
+  AGENTES: "/agentes",
+  AGENDA: "/agenda",
+  GESTAO_DUVIDAS: "/gestao-duvidas",
+  METAS: "/metas",
+  REGRAS: "/configuracoes/regras",
+  RELATORIOS: "/relatorios",
+  FERRAMENTAS: "/ferramentas",
+  MAPA: "/mapa",
+  MAPEAMENTO: "/mapeamento",
+  TECNICOS: "/tecnicos",
+  VISITANTES: "/visitantes",
+  AUDITORIA: "/auditoria",
+  OPERACIONAL: "/operacional",
+  ANALISES: "/analises",
+
+  // Field Service
+  FS_DASHBOARD: "/fs/dashboard",
+  FS_COLABORADORES: "/fs/colaboradores",
+  FS_BANCO_HORAS: "/fs/banco-horas",
+  FS_FERIAS: "/fs/ferias",
+  FS_FROTA: "/fs/frota",
+  FS_FERRAMENTAS: "/fs/ferramentas",
+  FS_RECLAMACOES: "/fs/reclamacoes",
+  FS_REUNIOES: "/fs/reunioes",
+  FS_ESCALA: "/fs/escala",
+
+  // Publico
+  PAINEL_PUBLICO: "/painel",
+  DUVIDAS_PUBLICO: "/duvidas",
+  PAINEL_MAPA: "/painel/mapa",
+  PAINEL_MATCH: "/painel/match",
+  AGENTES_MATCH_PUBLICO: "/aa-sempre",
+};

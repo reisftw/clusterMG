@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "analises_projecao",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

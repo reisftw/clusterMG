@@ -1,0 +1,139 @@
+import { useState, useEffect } from 'react';
+import { X, Package } from 'lucide-react';
+import { TIPOS_EQUIPAMENTO, STATUS_EQUIPAMENTO } from '../hooks/useEquipamentos';
+import { useColaboradores } from '../../colaboradores/hooks/useColaboradores';
+
+const EquipamentoModal = ({ equipamento, onSalvar, onClose }) => {
+  const { colaboradores } = useColaboradores();
+  const ativos   = colaboradores.filter((c) => c.status === 'Ativo' || c.status === 'Em Experiência');
+  const editando = !!equipamento;
+
+  const [form, setForm] = useState({
+    tipo: '', modelo: '', patrimonio: '', responsavel: '', status: 'EM USO', observacao: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (equipamento) setForm({ observacao: '', ...equipamento });
+  }, [equipamento]);
+
+  const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+
+  const handleSalvar = async () => {
+    if (!form.tipo || !form.modelo) return;
+    setSaving(true);
+    await onSalvar(form);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-100">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Package size={16} className="text-blue-600" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900">
+              {editando ? 'Editar Equipamento' : 'Novo Equipamento'}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+
+          {/* Tipo + Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Tipo *</label>
+              <select value={form.tipo} onChange={(e) => set('tipo', e.target.value)} className="input-field">
+                <option value="">Selecione...</option>
+                {TIPOS_EQUIPAMENTO.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Status *</label>
+              <select value={form.status} onChange={(e) => set('status', e.target.value)} className="input-field">
+                {STATUS_EQUIPAMENTO.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Modelo */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Modelo *</label>
+            <input
+              type="text"
+              value={form.modelo}
+              onChange={(e) => set('modelo', e.target.value)}
+              placeholder="Ex: Galaxy A54 5G"
+              className="input-field"
+            />
+          </div>
+
+          {/* Patrimônio */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Patrimônio</label>
+            <input
+              type="text"
+              value={form.patrimonio}
+              onChange={(e) => set('patrimonio', e.target.value)}
+              placeholder="Ex: 201343"
+              className="input-field"
+            />
+          </div>
+
+          {/* Responsável */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Responsável</label>
+            <select value={form.responsavel} onChange={(e) => set('responsavel', e.target.value)} className="input-field">
+              <option value="">— Sem responsável —</option>
+              {ativos.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+            </select>
+          </div>
+
+          {/* Observação */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Observação (opcional)</label>
+            <textarea
+              value={form.observacao}
+              onChange={(e) => set('observacao', e.target.value)}
+              rows={2}
+              placeholder="Ex: Tela trincada, aguardando peça..."
+              className="input-field resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-6 pb-5">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSalvar}
+            disabled={saving || !form.tipo || !form.modelo}
+            className="flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Salvando...' : editando ? 'Salvar alterações' : 'Cadastrar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default EquipamentoModal;
