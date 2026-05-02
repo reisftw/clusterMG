@@ -23,7 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Firebase Functions env files
-functions/.env
-functions/.env.*
+# Environment files
+.env*
+!.env.example
 !functions/.env.example
