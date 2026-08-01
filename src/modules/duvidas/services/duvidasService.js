@@ -37,7 +37,7 @@ export function normalizeDuvidasContent(payload = {}) {
     titulo: cleanText(payload?.titulo) || "Wiki da Retirada",
     descricao:
       cleanText(payload?.descricao) ||
-      "Dicas rapidas, duvidas frequentes e contatos corporativos da operacao.",
+      "Dicas rápidas, dúvidas frequentes e contatos corporativos da operação.",
     equipe: {
       backoffice: Array.isArray(equipe.backoffice)
         ? equipe.backoffice.map(normalizeContato)
