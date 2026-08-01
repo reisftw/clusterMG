@@ -27,11 +27,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
       return;
     }
     if (novaSenha !== confirmar) {
-      setErro("As senhas não coincidem.");
-      return;
-    }
-    if (novaSenha === "Sempre#2026") {
-      setErro("Escolha uma senha diferente da senha padrão.");
+      setErro("As senhas nao coincidem.");
       return;
     }
 
@@ -41,14 +37,14 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
       await atualizarPerfilFirestore(currentUser.id, { trocar_senha: false });
       await refreshUser();
       onClose?.();
-    } catch (e) {
+    } catch (error) {
       if (
-        e.code === "auth/wrong-password" ||
-        e.code === "auth/invalid-credential"
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/invalid-credential"
       ) {
         setErro("Senha atual incorreta.");
       } else {
-        setErro("Erro ao trocar senha: " + e.message);
+        setErro("Erro ao trocar senha: " + error.message);
       }
     } finally {
       setSaving(false);
@@ -59,7 +55,6 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 space-y-4">
         <div className="text-center space-y-1">
-          {/* Logo da empresa */}
           <div className="flex justify-center mb-2">
             <img
               src="https://i.ibb.co/Xk2MjZLG/logosempre.png"
@@ -73,18 +68,18 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
           <h2 className="font-bold text-gray-900 dark:text-white">
             {obrigatorio ? "Troque sua senha" : "Alterar senha"}
           </h2>
-          {obrigatorio && (
+          {obrigatorio ? (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Por segurança, crie uma senha pessoal antes de continuar.
+              Por seguranca, crie uma senha pessoal antes de continuar.
             </p>
-          )}
+          ) : null}
         </div>
 
-        {erro && (
+        {erro ? (
           <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
             {erro}
           </p>
-        )}
+        ) : null}
 
         <div className="space-y-3">
           <div>
@@ -95,13 +90,13 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
               <input
                 type={showAtual ? "text" : "password"}
                 value={senhaAtual}
-                onChange={(e) => setSenhaAtual(e.target.value)}
+                onChange={(event) => setSenhaAtual(event.target.value)}
                 className={inputClass}
                 placeholder="Senha atual"
               />
               <button
                 type="button"
-                onClick={() => setShowAtual((p) => !p)}
+                onClick={() => setShowAtual((previous) => !previous)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
               >
                 {showAtual ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -117,13 +112,13 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
               <input
                 type={showNova ? "text" : "password"}
                 value={novaSenha}
-                onChange={(e) => setNovaSenha(e.target.value)}
+                onChange={(event) => setNovaSenha(event.target.value)}
                 className={inputClass}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Minimo 6 caracteres"
               />
               <button
                 type="button"
-                onClick={() => setShowNova((p) => !p)}
+                onClick={() => setShowNova((previous) => !previous)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
               >
                 {showNova ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -138,7 +133,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
             <input
               type="password"
               value={confirmar}
-              onChange={(e) => setConfirmar(e.target.value)}
+              onChange={(event) => setConfirmar(event.target.value)}
               className={inputClass.replace("pr-10", "")}
               placeholder="Repita a nova senha"
             />
@@ -146,14 +141,14 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
         </div>
 
         <div className="flex gap-3 pt-1">
-          {!obrigatorio && (
+          {!obrigatorio ? (
             <button
               onClick={onClose}
               className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm"
             >
               Cancelar
             </button>
-          )}
+          ) : null}
           <button
             onClick={handleSalvar}
             disabled={saving}
