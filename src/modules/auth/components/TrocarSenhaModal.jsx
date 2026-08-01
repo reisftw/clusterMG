@@ -27,7 +27,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
       return;
     }
     if (novaSenha !== confirmar) {
-      setErro("As senhas nao coincidem.");
+      setErro("As senhas não coincidem.");
       return;
     }
 
@@ -70,7 +70,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
           </h2>
           {obrigatorio ? (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Por seguranca, crie uma senha pessoal antes de continuar.
+              Por segurança, crie uma senha pessoal antes de continuar.
             </p>
           ) : null}
         </div>
@@ -114,7 +114,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
                 value={novaSenha}
                 onChange={(event) => setNovaSenha(event.target.value)}
                 className={inputClass}
-                placeholder="Minimo 6 caracteres"
+                placeholder="Mínimo 6 caracteres"
               />
               <button
                 type="button"
