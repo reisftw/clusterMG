@@ -66,7 +66,7 @@ export default function MultaForm({
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Veiculo</label>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Veículo</label>
               <select
                 name="veiculo_id"
                 value={form.veiculo_id}
@@ -131,7 +131,7 @@ export default function MultaForm({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Responsavel</label>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Responsável</label>
               <select
                 name="responsavel"
                 value={form.responsavel}
@@ -149,26 +149,26 @@ export default function MultaForm({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Descricao</label>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Descrição</label>
             <input
               name="descricao"
               value={form.descricao}
               onChange={handle}
               required
               className="input-field"
-              placeholder="Detalhe da infracao"
+              placeholder="Detalhe da infração"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Observacao</label>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Observação</label>
             <textarea
               name="observacao"
               value={form.observacao}
               onChange={handle}
               rows={3}
               className="input-field resize-none"
-              placeholder="Informacoes adicionais"
+              placeholder="Informações adicionais"
             />
           </div>
 
@@ -191,7 +191,7 @@ export default function MultaForm({
               disabled={isSubmitting}
               className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50"
             >
-              {isSubmitting ? "Salvando..." : inicial ? "Salvar alteracoes" : "Registrar"}
+              {isSubmitting ? "Salvando..." : inicial ? "Salvar alterações" : "Registrar"}
             </button>
           </div>
         </form>
