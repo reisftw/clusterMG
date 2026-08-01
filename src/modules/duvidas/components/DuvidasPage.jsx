@@ -18,8 +18,8 @@ import { useDuvidas } from "../hooks/useDuvidas";
 const TEAM_LABELS = {
   backoffice: "Backoffice",
   supervisor: "Supervisor",
-  lider: "Lider",
-  tecnico: "Tecnico",
+  lider: "Líder",
+  tecnico: "Técnico",
 };
 
 const EMPTY_DUVIDA = { id: null, pergunta: "", resposta: "", categoria: "" };
@@ -77,7 +77,7 @@ function DuvidaModal({ initialValue, onClose, onSave, saving }) {
 
   return (
     <BaseModal
-      title={form?.id ? "Editar duvida" : "Nova duvida"}
+      title={form?.id ? "Editar dúvida" : "Nova dúvida"}
       onClose={onClose}
     >
       <div className="space-y-4">
@@ -127,7 +127,7 @@ function DuvidaModal({ initialValue, onClose, onSave, saving }) {
             onClick={() => onSave(form)}
             className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? "Salvando..." : "Salvar duvida"}
+            {saving ? "Salvando..." : "Salvar dúvida"}
           </button>
         </div>
       </div>
@@ -196,7 +196,7 @@ function ContatoModal({ initialValue, onClose, onSave, saving }) {
         </div>
         <div className="md:col-span-2">
           <label className="mb-1 block text-xs font-semibold text-gray-600">
-            Observacao
+            Observação
           </label>
           <textarea
             value={form.observacao}
@@ -346,7 +346,7 @@ export default function DuvidasPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                Duvidas
+                Dúvidas
               </p>
               <p className="text-2xl font-extrabold text-gray-900">
                 {conteudo.duvidas.length}
@@ -390,7 +390,7 @@ export default function DuvidasPage() {
             <SectionHeader
               icon={BookOpen}
               title="Wiki da Retirada"
-              subtitle="Duvidas frequentes para consulta rapida da operacao."
+              subtitle="Dúvidas frequentes para consulta rápida da operação."
               action={
                 podeEditar ? (
                   <button
@@ -400,7 +400,7 @@ export default function DuvidasPage() {
                   >
                     <span className="inline-flex items-center gap-2">
                       <Plus size={16} />
-                      Nova duvida
+                      Nova dúvida
                     </span>
                   </button>
                 ) : null
@@ -419,7 +419,7 @@ export default function DuvidasPage() {
             <div className="mt-4 space-y-3">
               {duvidasFiltradas.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">
-                  Nenhuma duvida cadastrada.
+                  Nenhuma dúvida cadastrada.
                 </div>
               ) : (
                 duvidasFiltradas.map((item) => (
@@ -474,7 +474,7 @@ export default function DuvidasPage() {
             <SectionHeader
               icon={Phone}
               title="Equipe e telefones corporativos"
-              subtitle="Contatos corporativos da retirada para apoio rapido."
+              subtitle="Contatos corporativos da retirada para apoio rápido."
               action={
                 podeEditar ? (
                   <button
