@@ -41,7 +41,7 @@ export default function AlertasAutomaticosWidget({ resumo }) {
         items.push({
           icon: AlertTriangle,
           title: "Meta mensal abaixo do esperado",
-          description: `${pct.toFixed(1)}% atingido frente a meta sazonal de ${sazonal.toFixed(1)}%.`,
+          description: `${pct.toFixed(1)}% atingido frente à meta sazonal de ${sazonal.toFixed(1)}%.`,
           tone: pct < sazonal * 0.8 ? "red" : "amber",
         });
       }
@@ -50,8 +50,8 @@ export default function AlertasAutomaticosWidget({ resumo }) {
     if ((resumo?.veiculosAlerta || 0) > 0) {
       items.push({
         icon: Wrench,
-        title: "Veiculos proximos da manutencao",
-        description: `${resumo.veiculosAlerta} veiculo(s) exigem atencao preventiva.`,
+        title: "Veículos próximos da manutenção",
+        description: `${resumo.veiculosAlerta} veículo(s) exigem atenção preventiva.`,
         tone: "amber",
       });
     }
@@ -63,7 +63,7 @@ export default function AlertasAutomaticosWidget({ resumo }) {
       items.push({
         icon: BellRing,
         title: "Banco de horas com saldos negativos",
-        description: `${negativos} colaborador(es) estao com banco de horas negativo.`,
+        description: `${negativos} colaborador(es) estão com banco de horas negativo.`,
         tone: negativos >= 5 ? "red" : "amber",
       });
     }
@@ -77,14 +77,14 @@ export default function AlertasAutomaticosWidget({ resumo }) {
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
           <BellRing size={16} className="text-amber-600" />
         </div>
-        <p className="text-sm font-bold text-gray-900">Alertas Automaticos</p>
+        <p className="text-sm font-bold text-gray-900">Alertas Automáticos</p>
       </div>
 
       {loading ? (
         <p className="text-sm text-gray-400">Atualizando alertas...</p>
       ) : alertas.length === 0 ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          Nenhum alerta critico no momento.
+          Nenhum alerta crítico no momento.
         </div>
       ) : (
         <div className="space-y-3">
