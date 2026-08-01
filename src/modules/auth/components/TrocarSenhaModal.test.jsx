@@ -31,7 +31,7 @@ describe("TrocarSenhaModal", () => {
     fireEvent.change(screen.getByPlaceholderText("Senha atual"), {
       target: { value: "123456" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Minimo 6 caracteres"), {
+    fireEvent.change(screen.getByPlaceholderText("Mínimo 6 caracteres"), {
       target: { value: "abcdef" },
     });
     fireEvent.change(screen.getByPlaceholderText("Repita a nova senha"), {
@@ -40,7 +40,7 @@ describe("TrocarSenhaModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /salvar senha/i }));
 
-    expect(await screen.findByText("As senhas nao coincidem.")).toBeInTheDocument();
+    expect(await screen.findByText("As senhas não coincidem.")).toBeInTheDocument();
   });
 
   it("salva a nova senha com sucesso", async () => {
@@ -53,7 +53,7 @@ describe("TrocarSenhaModal", () => {
     fireEvent.change(screen.getByPlaceholderText("Senha atual"), {
       target: { value: "123456" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Minimo 6 caracteres"), {
+    fireEvent.change(screen.getByPlaceholderText("Mínimo 6 caracteres"), {
       target: { value: "abcdef" },
     });
     fireEvent.change(screen.getByPlaceholderText("Repita a nova senha"), {
