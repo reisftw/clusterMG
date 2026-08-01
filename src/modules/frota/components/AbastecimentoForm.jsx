@@ -69,7 +69,7 @@ export default function AbastecimentoForm({
         <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Veiculo</label>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Veículo</label>
               <select
                 name="veiculo_id"
                 value={form.veiculo_id}
@@ -167,14 +167,14 @@ export default function AbastecimentoForm({
                 name="comprovante"
                 value={form.comprovante}
                 onChange={handle}
-                placeholder="Link ou referencia"
+                placeholder="Link ou referência"
                 className="input-field"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Observacao</label>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Observação</label>
             <textarea
               name="observacao"
               value={form.observacao}
@@ -200,7 +200,7 @@ export default function AbastecimentoForm({
               Cancelar
             </button>
             <button type="submit" disabled={isSubmitting} className="btn-primary flex-1 disabled:opacity-50">
-              {isSubmitting ? "Salvando..." : inicial ? "Salvar alteracoes" : "Registrar"}
+              {isSubmitting ? "Salvando..." : inicial ? "Salvar alterações" : "Registrar"}
             </button>
           </div>
         </form>
