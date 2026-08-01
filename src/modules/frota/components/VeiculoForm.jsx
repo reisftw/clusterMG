@@ -40,7 +40,7 @@ const VeiculoForm = ({
       });
       onClose();
     } catch {
-      setErro("Erro ao salvar veiculo.");
+      setErro("Erro ao salvar veículo.");
     } finally {
       setIsSubmitting(false);
     }
@@ -50,8 +50,8 @@ const VeiculoForm = ({
     { name: "placa", label: "Placa", type: "text", placeholder: "ABC-1234" },
     { name: "modelo", label: "Modelo", type: "text", placeholder: "Ex: Fiat Strada" },
     { name: "km_atual", label: "KM Atual", type: "number", placeholder: "0" },
-    { name: "km_ultima_revisao", label: "KM Ultima Revisao", type: "number", placeholder: "0" },
-    { name: "km_proxima_manutencao", label: "KM Proxima Manutencao", type: "number", placeholder: "0" },
+    { name: "km_ultima_revisao", label: "KM Última Revisão", type: "number", placeholder: "0" },
+    { name: "km_proxima_manutencao", label: "KM Próxima Manutenção", type: "number", placeholder: "0" },
   ];
 
   return (
@@ -63,7 +63,7 @@ const VeiculoForm = ({
               <Car size={16} className="text-blue-600" />
             </div>
             <h3 className="text-base font-bold text-gray-900">
-              {inicial ? "Editar" : "Cadastrar"} Veiculo
+              {inicial ? "Editar" : "Cadastrar"} Veículo
             </h3>
           </div>
           <button
@@ -114,7 +114,7 @@ const VeiculoForm = ({
               <label className="mb-1.5 block text-xs font-semibold text-gray-600">Status</label>
               <select name="status" value={form.status} onChange={handle} className="input-field">
                 <option value="ativo">Ativo</option>
-                <option value="manutencao">Em manutencao</option>
+                <option value="manutencao">Em manutenção</option>
                 <option value="parado">Parado</option>
               </select>
             </div>
@@ -132,7 +132,7 @@ const VeiculoForm = ({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Responsavel</label>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Responsável</label>
               <select
                 name="responsavel"
                 value={form.responsavel}
@@ -150,14 +150,14 @@ const VeiculoForm = ({
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Observacao</label>
+            <label className="mb-1.5 block text-xs font-semibold text-gray-600">Observação</label>
             <textarea
               name="observacao"
               value={form.observacao}
               onChange={handle}
               rows={3}
               className="input-field resize-none"
-              placeholder="Observacoes do veiculo"
+              placeholder="Observações do veículo"
             />
           </div>
 
@@ -176,7 +176,7 @@ const VeiculoForm = ({
               Cancelar
             </button>
             <button type="submit" disabled={isSubmitting} className="btn-primary flex-1 disabled:opacity-50">
-              {isSubmitting ? "Salvando..." : inicial ? "Salvar alteracoes" : "Cadastrar"}
+              {isSubmitting ? "Salvando..." : inicial ? "Salvar alterações" : "Cadastrar"}
             </button>
           </div>
         </form>
