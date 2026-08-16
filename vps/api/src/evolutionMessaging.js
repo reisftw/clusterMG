@@ -1,0 +1,2084 @@
+const documents = require("./documents");
+const notificationsService = require("./notificationsService");
+const cvortexIntegration = require("./cvortexIntegration");
+const { broadcastRealtime } = require("./realtime");
+
+const CONFIG_PATH = "mensageria_config/global";
+const QUEUE_COLLECTION = "mensageria_fila";
+const TEMPLATE_COLLECTION = "mensageria_templates";
+const HISTORY_COLLECTION = "mensageria_historico";
+const CALLBACK_COLLECTION = "mensageria_callbacks";
+const SCHEDULE_CONVERSATION_COLLECTION = "mensageria_agendamento_conversas";
+const APPOINTMENT_COLLECTION = "agendamentos";
+const AUTOMATION_ATTENDANT_ID = "retorninho";
+const AUTOMATION_ATTENDANT_NAME = "RETORNINHO";
+const SEND_TIME_ZONE = "America/Sao_Paulo";
+const CENTRAL_REDIRECT_MESSAGE =
+  "Olá! Este número é utilizado apenas por um sistema automático de mensagens.\n\n" +
+  "Não realizamos atendimento e não respondemos por este canal.\n\n" +
+  "Para falar com a Central de Retiradas, entre em contato pelo telefone: 31 3987-0880.";
+
+const DEFAULT_CONFIG = {
+  whatsappProvider: "evolution",
+  evolutionEnabled: false,
+  evolutionBaseUrl: "",
+  evolutionApiKey: "",
+  evolutionInstance: "",
+  evolutionAccounts: [],
+  evolutionSelectedAccountId: "default",
+  evolutionSendTextPath: "/message/sendText/{instance}",
+  evolutionButtonPath: "/message/sendButtons/{instance}",
+  evolutionWebhookUrl: "https://retiradas.tech/api/webhooks/evolution",
+  officialWhatsappEnabled: false,
+  officialWhatsappBaseUrl: "https://graph.facebook.com/v20.0",
+  officialWhatsappAccessToken: "",
+  officialWhatsappPhoneNumberId: "",
+  officialWhatsappBusinessAccountId: "",
+  officialWhatsappTemplateName: "",
+  officialWhatsappTemplateLanguage: "pt_BR",
+  officialWhatsappTemplateBodyUsesMessage: true,
+  officialWebhookVerifyToken: "",
+  zapiEnabled: false,
+  zapiBaseUrl: "https://api.z-api.io",
+  zapiInstanceId: "",
+  zapiInstanceToken: "",
+  zapiClientToken: "",
+  zapiWebhookUrl: "https://retiradas.tech/api/webhooks/zapi",
+  cvortexEnabled: false,
+  evolutionPaused: true,
+  smartDelayEnabled: true,
+  evolutionMinDelaySeconds: 45,
+  evolutionMaxDelaySeconds: 120,
+  evolutionBatchSize: 1,
+  replyNoScheduleMessage:
+    "Perfeito, vamos agendar sua retirada.\n\nResponda com a data e o horário desejados ou digite SIM para receber as opções disponíveis.",
+  replyAfterScheduledMessage:
+    CENTRAL_REDIRECT_MESSAGE,
+  replyUnmatchedMessage:
+    "Anotado a informação!\n\nNão encontrei sua O.S automaticamente por este telefone. Caso necessite de apoio, acione a central de retiradas: 31 3987-0880.",
+  replyScheduledConfirmationMessage:
+    "Agendamento registrado com sucesso para {data_agendamento} {hora_agendamento}.\n\nEm caso de d\u00favidas, fale com nossa central de retiradas.",
+  replyDeliveredMessage:
+    "Caso j\u00e1 tenha feito a devolu\u00e7\u00e3o, favor entrar em contato com nossa central para tratativa e remo\u00e7\u00e3o da sua ordem de servi\u00e7o: 31 3987-0880",
+  guidedScheduleEnabled: true,
+  guidedScheduleDateMessage:
+    "Perfeito! Escolha uma das datas abaixo para agendarmos a retirada:\n\n{opcoes_datas}\n\nSe preferir outra data, responda com a data desejada. Exemplo: 25/08.",
+  guidedScheduleTimeMessage:
+    "Ótimo. Agora escolha um horário para o dia {data_agendamento}:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nSe preferir, responda com o horário desejado. Exemplo: 14:30.",
+  guidedScheduleInvalidDateMessage:
+    "Não entendi a data escolhida. Por favor, escolha uma das opções abaixo ou informe outra data:\n\n{opcoes_datas}\n\nExemplo: 25/08.",
+  guidedScheduleInvalidTimeMessage:
+    "Não entendi o horário escolhido. Por favor, escolha uma das opções abaixo ou informe outro horário:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nExemplo: 14:30.",
+  sendWindowStart: "08:00",
+  sendWindowEnd: "18:00",
+  sendDays: ["seg", "ter", "qua", "qui", "sex", "sab"],
+  retryLimit: 3,
+  retryAfterMinutes: 30,
+  dailySendLimit: 100,
+  activeTemplateId: "cancelamento",
+};
+
+const DEFAULT_TEMPLATES = {
+  cancelamento:
+    "Olá, {primeiro_nome}! Tudo bem?\n\nIdentificamos que há uma ordem de retirada de equipamento pendente referente ao contrato {contrato}, na cidade de *{cidade}*.\n\nGostaríamos de agendar a retirada. Por favor, responda esta mensagem informando uma data e um horário em que estará disponível para receber nossa equipe ou digite apenas *SIM* para receber opções de agendamento.\n\n⚠️ Importante: a não devolução do equipamento poderá gerar cobrança de multa, conforme previsto em contrato.\n\nAguardamos seu retorno para realizarmos o agendamento.\n\nEquipe de Retiradas - Sempre Internet",
+  segunda_tentativa:
+    "Olá, {primeiro_nome}! Tudo bem?\n\nEstamos retornando o contato sobre a ordem de retirada de equipamento pendente referente ao contrato {contrato}, na cidade de *{cidade}*.\n\nPara agendar a retirada, responda com uma data e um horário disponíveis ou digite apenas *SIM* para receber opções de agendamento.\n\n⚠️ Importante: a não devolução do equipamento poderá gerar cobrança de multa, conforme previsto em contrato.\n\nEquipe de Retiradas - Sempre Internet",
+  confirmacao:
+    "Olá, {primeiro_nome}! Sua coleta dos equipamentos do contrato {contrato} foi registrada.",
+};
+
+let workerTimer = null;
+let workerRunning = false;
+let lastRun = null;
+let lastError = "";
+let lastSkipped = "";
+let nextRunAt = null;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizePhone(value) {
+  let digits = normalizeDigits(value);
+  if (!digits) return "";
+  if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
+  return digits;
+}
+
+function getPhoneVariants(value) {
+  const digits = normalizePhone(value);
+  if (!digits) return [];
+  const variants = new Set([digits]);
+  if (digits.startsWith("55") && digits.length === 13 && digits[4] === "9") {
+    variants.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+  }
+  if (digits.startsWith("55") && digits.length === 12) {
+    variants.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+  }
+  return [...variants];
+}
+
+function phonesMatch(left, right) {
+  const leftVariants = getPhoneVariants(left);
+  const rightVariants = new Set(getPhoneVariants(right));
+  return leftVariants.some((item) => rightVariants.has(item));
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function fixMojibakeText(value) {
+  return String(value || "")
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã /g, "à")
+    .replace(/Ã¢/g, "â")
+    .replace(/Ã£/g, "ã")
+    .replace(/Ã©/g, "é")
+    .replace(/Ãª/g, "ê")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ãµ/g, "õ")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã€/g, "À")
+    .replace(/Ã‚/g, "Â")
+    .replace(/Ãƒ/g, "Ã")
+    .replace(/Ã‰/g, "É")
+    .replace(/ÃŠ/g, "Ê")
+    .replace(/Ã/g, "Í")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ã”/g, "Ô")
+    .replace(/Ã•/g, "Õ")
+    .replace(/Ãš/g, "Ú")
+    .replace(/Ã‡/g, "Ç");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function randomDelayMs(config) {
+  const min = Math.max(5, Number(config.evolutionMinDelaySeconds || 45));
+  const max = Math.max(min, Number(config.evolutionMaxDelaySeconds || 120));
+  return (min + Math.floor(Math.random() * (max - min + 1))) * 1000;
+}
+
+function getSendWindowRemainingMs(config, date = new Date()) {
+  const start = timeToMinutes(config.sendWindowStart || DEFAULT_CONFIG.sendWindowStart);
+  const end = timeToMinutes(config.sendWindowEnd || DEFAULT_CONFIG.sendWindowEnd);
+  if (start === null || end === null) return 0;
+
+  const parts = getZonedDateParts(date);
+  let current = parts.hour * 60 + parts.minute + parts.second / 60;
+  let effectiveEnd = end;
+
+  if (end < start) {
+    effectiveEnd += 24 * 60;
+    if (current < start) current += 24 * 60;
+  }
+
+  return Math.max(0, Math.floor((effectiveEnd - current) * 60 * 1000));
+}
+
+function calculateQueueDelayMs(config, remainingMessagesAfterCurrent = 1, date = new Date()) {
+  if (config.smartDelayEnabled === false) return randomDelayMs(config);
+
+  const minMs = Math.max(5, Number(config.evolutionMinDelaySeconds || 45)) * 1000;
+  const manualMaxMs = Math.max(minMs, Number(config.evolutionMaxDelaySeconds || 120) * 1000);
+  const remainingWindowMs = getSendWindowRemainingMs(config, date);
+  const remainingMessages = Math.max(1, Number(remainingMessagesAfterCurrent || 1));
+
+  if (!remainingWindowMs) return randomDelayMs(config);
+
+  const baseMs = remainingWindowMs / remainingMessages;
+  const jitterFactor = 0.85 + Math.random() * 0.3;
+  const dynamicMaxMs = Math.max(manualMaxMs, baseMs * 1.3);
+  const delayMs = Math.round(baseMs * jitterFactor);
+
+  return Math.max(minMs, Math.min(dynamicMaxMs, delayMs));
+}
+
+function getZonedDateParts(date = new Date()) {
+  const values = {};
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SEND_TIME_ZONE,
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  for (const part of parts) {
+    if (part.type !== "literal") values[part.type] = part.value;
+  }
+
+  return {
+    weekday: values.weekday,
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour) % 24,
+    minute: Number(values.minute),
+    second: Number(values.second),
+  };
+}
+
+function getWeekDayKey(date = new Date()) {
+  const weekday = getZonedDateParts(date).weekday;
+  return {
+    Sun: "dom",
+    Mon: "seg",
+    Tue: "ter",
+    Wed: "qua",
+    Thu: "qui",
+    Fri: "sex",
+    Sat: "sab",
+  }[weekday] || "seg";
+}
+
+function zonedWallTimeToDate({ year, month, day, hour, minute, second = 0 }) {
+  const targetWallTime = Date.UTC(year, month - 1, day, hour, minute, second);
+  let instant = new Date(targetWallTime);
+
+  for (let index = 0; index < 3; index += 1) {
+    const parts = getZonedDateParts(instant);
+    const currentWallTime = Date.UTC(
+      parts.year,
+      parts.month - 1,
+      parts.day,
+      parts.hour,
+      parts.minute,
+      parts.second,
+    );
+    const diff = targetWallTime - currentWallTime;
+    if (diff === 0) break;
+    instant = new Date(instant.getTime() + diff);
+  }
+
+  return instant;
+}
+
+function timeToMinutes(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function isInsideSendWindow(config, date = new Date()) {
+  const days = Array.isArray(config.sendDays) && config.sendDays.length ? config.sendDays : DEFAULT_CONFIG.sendDays;
+  if (!days.includes(getWeekDayKey(date))) return false;
+  const start = timeToMinutes(config.sendWindowStart || DEFAULT_CONFIG.sendWindowStart);
+  const end = timeToMinutes(config.sendWindowEnd || DEFAULT_CONFIG.sendWindowEnd);
+  if (start === null || end === null) return true;
+  const parts = getZonedDateParts(date);
+  const current = parts.hour * 60 + parts.minute;
+  if (end < start) return current >= start || current <= end;
+  return current >= start && current <= end;
+}
+
+function getNextSendWindowStart(config, date = new Date()) {
+  const days = Array.isArray(config.sendDays) && config.sendDays.length ? config.sendDays : DEFAULT_CONFIG.sendDays;
+  const start = timeToMinutes(config.sendWindowStart || DEFAULT_CONFIG.sendWindowStart);
+  if (start === null) return null;
+  const currentParts = getZonedDateParts(date);
+  const startHour = Math.floor(start / 60);
+  const startMinute = start % 60;
+
+  for (let offset = 0; offset < 8; offset += 1) {
+    const calendarDay = new Date(Date.UTC(currentParts.year, currentParts.month - 1, currentParts.day + offset, 12, 0, 0));
+    const dayParts = getZonedDateParts(calendarDay);
+    const dayKey = getWeekDayKey(calendarDay);
+    if (!days.includes(dayKey)) continue;
+    const next = zonedWallTimeToDate({
+      year: dayParts.year,
+      month: dayParts.month,
+      day: dayParts.day,
+      hour: startHour,
+      minute: startMinute,
+      second: 0,
+    });
+    if (next.getTime() > date.getTime()) return next;
+  }
+
+  return null;
+}
+
+function skippedQueue(message, extra = {}) {
+  lastSkipped = message;
+  return { ok: true, skipped: message, ...extra };
+}
+
+function getLocalDateKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
+async function getConfig() {
+  const doc = await documents.getDocument(CONFIG_PATH).catch(() => null);
+  const config = { ...DEFAULT_CONFIG, ...(doc?.data || {}) };
+  config.evolutionAccounts = [];
+  config.evolutionSelectedAccountId = "default";
+  return config;
+}
+
+async function saveConfigPatch(patch = {}) {
+  const current = await getConfig();
+  await documents.upsertDocument({
+    path: CONFIG_PATH,
+    collectionPath: "mensageria_config",
+    documentId: "global",
+    parentPath: null,
+    data: { ...current, ...patch, atualizadoEm: nowIso() },
+  });
+}
+
+async function getTemplate(templateId) {
+  const id = String(templateId || "cancelamento");
+  const doc = await documents.getDocument(`${TEMPLATE_COLLECTION}/${id}`).catch(() => null);
+  const template = doc?.data || { id, conteudo: DEFAULT_TEMPLATES[id] || DEFAULT_TEMPLATES.cancelamento };
+  return { ...template, conteudo: fixMojibakeText(template.conteudo) };
+}
+
+async function listQueue(limit = 20) {
+  const result = await documents.listDocuments({
+    collectionPath: QUEUE_COLLECTION,
+    limit,
+    offset: 0,
+  });
+  return result
+    .map((item) => ({ id: item.documentId, ...(item.data || {}) }))
+    .sort((left, right) => {
+      const leftPriority = left.prioridadeEm ? 0 : 1;
+      const rightPriority = right.prioridadeEm ? 0 : 1;
+      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+      const leftDate = new Date(left.prioridadeEm || left.proximaTentativaEm || left.criadoEm || 0).getTime() || 0;
+      const rightDate = new Date(right.prioridadeEm || right.proximaTentativaEm || right.criadoEm || 0).getTime() || 0;
+      return leftDate - rightDate;
+    });
+}
+
+async function upsertQueueItem(id, data) {
+  await documents.upsertDocument({
+    path: `${QUEUE_COLLECTION}/${id}`,
+    collectionPath: QUEUE_COLLECTION,
+    documentId: id,
+    parentPath: null,
+    data,
+  });
+}
+
+async function createHistory(data) {
+  const id = `evo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await documents.upsertDocument({
+    path: `${HISTORY_COLLECTION}/${id}`,
+    collectionPath: HISTORY_COLLECTION,
+    documentId: id,
+    parentPath: null,
+    data: { id, ...data, criadoEm: nowIso() },
+  });
+  return id;
+}
+
+async function listHistory(limit = 1000) {
+  const result = await documents.listDocuments({
+    collectionPath: HISTORY_COLLECTION,
+    limit,
+    offset: 0,
+  });
+  return result.map((item) => ({ id: item.documentId, ...(item.data || {}) }));
+}
+
+async function countQueueMessagesSentToday(config = {}) {
+  const todayKey = getLocalDateKey();
+  const history = await listHistory(2000);
+  return history.filter((item) => {
+    if (String(item.status || "") !== "enviado") return false;
+    if (!item.filaId) return false;
+    if (item.evolutionMode && String(config.whatsappProvider || "evolution") === "zapi" && item.evolutionMode !== "zapi_text") {
+      return false;
+    }
+    const createdAt = item.criadoEm?.value || item.criadoEm || item.criado_em?.value || item.criado_em || "";
+    return getLocalDateKey(createdAt) === todayKey;
+  }).length;
+}
+
+async function listCallbacks(limit = 500) {
+  const result = await documents.listDocuments({
+    collectionPath: CALLBACK_COLLECTION,
+    limit,
+    offset: 0,
+  });
+  return result.map((item) => ({ id: item.documentId, ...(item.data || {}) }));
+}
+
+function getFirstName(name) {
+  return String(name || "Cliente").trim().split(/\s+/)[0] || "Cliente";
+}
+
+function renderTemplate(text, item = {}, config = {}) {
+  const centralPhone = normalizePhone(config.buttonPhone || "+55 31 3987-0880");
+  const data = {
+    ...item,
+    primeiro_nome: getFirstName(item.cliente || item.cliente_nome),
+    central_whatsapp: config.buttonPhone || "+55 31 3987-0880",
+    link_agendamento: centralPhone ? `https://wa.me/${centralPhone}` : "",
+    data_cancelamento: item.data_cancelamento || item.data_abertura_os || "",
+    protocolo: item.protocolo || item.os || "",
+    data_agendamento: item.data_agendamento || "",
+    hora_agendamento: item.hora_agendamento || "",
+  };
+  return String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) =>
+    data[key] === undefined || data[key] === null || data[key] === "" ? match : String(data[key]),
+  );
+}
+
+function buildEvolutionUrl(config) {
+  const baseUrl = String(config.evolutionBaseUrl || "").replace(/\/+$/, "");
+  const instance = encodeURIComponent(String(config.evolutionInstance || "").trim());
+  const path = String(config.evolutionSendTextPath || DEFAULT_CONFIG.evolutionSendTextPath)
+    .replace("{instance}", instance)
+    .replace(/^\/?/, "/");
+  return `${baseUrl}${path}`;
+}
+
+function buildEvolutionPath(config, templatePath) {
+  const instance = encodeURIComponent(String(config.evolutionInstance || "").trim());
+  return String(templatePath || "")
+    .replace("{instance}", instance)
+    .replace(/^\/?/, "/");
+}
+
+function buildEvolutionApiUrl(config, path) {
+  const baseUrl = String(config.evolutionBaseUrl || "").replace(/\/+$/, "");
+  if (!baseUrl || !config.evolutionApiKey) {
+    throw new Error("Evolution API nao configurada.");
+  }
+  return `${baseUrl}${String(path || "").replace(/^\/?/, "/")}`;
+}
+
+async function requestEvolution(config, path, options = {}) {
+  const response = await fetch(buildEvolutionApiUrl(config, path), {
+    method: options.method || "GET",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: String(config.evolutionApiKey),
+      Authorization: `Bearer ${config.evolutionApiKey}`,
+      ...(options.headers || {}),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || `Evolution HTTP ${response.status}`);
+  }
+  return data || { ok: true };
+}
+
+function extractConnectionState(payload) {
+  return (
+    payload?.instance?.state ||
+    payload?.state ||
+    payload?.connectionState ||
+    payload?.connection?.state ||
+    ""
+  );
+}
+
+function extractConnectedNumber(...payloads) {
+  const candidates = [];
+  const walk = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    Object.entries(value).forEach(([key, inner]) => {
+      const lowerKey = key.toLowerCase();
+      if (
+        typeof inner === "string" &&
+        ["number", "phone", "owner", "ownerjid", "remotejid", "jid", "profileid"].some((part) =>
+          lowerKey.includes(part),
+        )
+      ) {
+        candidates.push(inner);
+      }
+      if (inner && typeof inner === "object") walk(inner);
+    });
+  };
+  payloads.forEach(walk);
+  const raw = candidates.find((value) => /@s\.whatsapp\.net|^\d{10,15}/.test(String(value)));
+  if (!raw) return "";
+  const digits = normalizeDigits(String(raw).split("@")[0]);
+  return digits ? `+${digits}` : String(raw);
+}
+
+async function getConnectionInfo(config = null) {
+  const nextConfig = config || (await getConfig());
+  const instanceName = String(nextConfig.evolutionInstance || "").trim();
+  if (!nextConfig.evolutionBaseUrl || !nextConfig.evolutionApiKey || !instanceName) {
+    return { configured: false, connected: false, state: "nao_configurada", number: "" };
+  }
+
+  let connection = null;
+  let instances = null;
+  try {
+    connection = await requestEvolution(
+      nextConfig,
+      `/instance/connectionState/${encodeURIComponent(instanceName)}`,
+    );
+  } catch (error) {
+    return {
+      configured: true,
+      connected: false,
+      state: "erro",
+      number: "",
+      error: String(error?.message || error),
+    };
+  }
+
+  try {
+    instances = await requestEvolution(nextConfig, "/instance/fetchInstances");
+  } catch {
+    instances = null;
+  }
+
+  const state = extractConnectionState(connection) || "desconhecido";
+  return {
+    configured: true,
+    connected: state === "open",
+    state,
+    number: extractConnectedNumber(connection, instances),
+    connection,
+  };
+}
+
+async function getAccountsConnectionInfo() {
+  const config = await getConfig();
+  const connection = await getConnectionInfo(config);
+  const items = [{
+    id: "default",
+    name: "Conta principal",
+    instance: config.evolutionInstance || "",
+    selected: true,
+    ...connection,
+  }];
+  return {
+    total: items.length,
+    connected: items.filter((item) => item.connected).length,
+    items,
+  };
+}
+
+async function createOrConnectInstance(providedConfig = null, options = {}) {
+  const config = providedConfig || (await getConfig());
+  const instanceName = String(config.evolutionInstance || "").trim();
+  if (!instanceName) throw new Error("Informe o nome da instancia da Evolution.");
+
+  const connectPath = `/instance/connect/${encodeURIComponent(instanceName)}`;
+  let firstConnectError = "";
+  try {
+    const connectResult = await requestEvolution(config, connectPath);
+    let webhook = null;
+    try {
+      webhook = await configureWebhook(config, options);
+    } catch (error) {
+      webhook = { ok: false, error: String(error?.message || error) };
+    }
+    return {
+      ok: true,
+      instanceName,
+      create: { skipped: true, reason: "Instancia ja existe ou connect respondeu primeiro." },
+      connect: connectResult,
+      webhook,
+    };
+  } catch (error) {
+    firstConnectError = String(error?.message || error);
+  }
+
+  let createResult = null;
+  try {
+    createResult = await requestEvolution(config, "/instance/create", {
+      method: "POST",
+      body: {
+        instanceName,
+        qrcode: true,
+        integration: "WHATSAPP-BAILEYS",
+      },
+    });
+  } catch (error) {
+    const firstCreateMessage = String(error?.message || error);
+    try {
+      createResult = await requestEvolution(config, "/instance/create", {
+        method: "POST",
+        body: {
+          instanceName,
+          qrcode: true,
+          integration: "BAILEYS",
+        },
+      });
+    } catch (fallbackError) {
+      createResult = {
+        ok: false,
+        ignored: true,
+        message: `${firstCreateMessage} | ${String(fallbackError?.message || fallbackError)}`,
+      };
+    }
+  }
+
+  let connectResult = null;
+  try {
+    connectResult = await requestEvolution(config, connectPath);
+  } catch (error) {
+    throw new Error(
+      `Nao foi possivel gerar QR Code. Connect inicial: ${firstConnectError}. Create: ${createResult?.message || "ok"}. Connect final: ${String(error?.message || error)}`,
+    );
+  }
+  return {
+    ok: true,
+    instanceName,
+    create: createResult,
+    connect: connectResult,
+    webhook: await configureWebhook(config, options).catch((error) => ({ ok: false, error: String(error?.message || error) })),
+  };
+}
+
+async function logoutInstance(providedConfig = null) {
+  const config = providedConfig || (await getConfig());
+  const instanceName = String(config.evolutionInstance || "").trim();
+  if (!instanceName) throw new Error("Informe o nome da instancia da Evolution.");
+  let logoutResult = null;
+  let logoutError = "";
+  try {
+    logoutResult = await requestEvolution(
+      config,
+      `/instance/logout/${encodeURIComponent(instanceName)}`,
+      { method: "DELETE" },
+    );
+  } catch (error) {
+    logoutError = String(error?.message || error);
+  }
+  const connection = await getConnectionInfo(config);
+  if (logoutError && connection.connected) throw new Error(logoutError);
+  return { ok: true, logout: logoutResult, ignoredError: logoutError, connection };
+}
+
+async function configureWebhook(providedConfig = null, options = {}) {
+  const config = providedConfig || (await getConfig());
+  const shouldPersist = options.persist !== false;
+  const instanceName = String(config.evolutionInstance || "").trim();
+  if (!instanceName) throw new Error("Informe o nome da instancia da Evolution.");
+  const webhookUrl = String(config.evolutionWebhookUrl || DEFAULT_CONFIG.evolutionWebhookUrl || "").trim();
+  if (!webhookUrl) throw new Error("Informe a URL do webhook da Evolution.");
+  const path = `/webhook/set/${encodeURIComponent(instanceName)}`;
+  const webhook = {
+    enabled: true,
+    url: webhookUrl,
+    headers: {},
+    byEvents: false,
+    base64: false,
+    events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+  };
+
+  try {
+    const response = await requestEvolution(config, path, {
+      method: "POST",
+      body: { webhook },
+    });
+    if (shouldPersist) {
+      await saveConfigPatch({ evolutionWebhookUrl: webhookUrl, evolutionWebhookConfiguredAt: nowIso() });
+    }
+    return { ok: true, webhook, response };
+  } catch (firstError) {
+    const fallbackBody = {
+      enabled: true,
+      url: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: false,
+      events: webhook.events,
+    };
+    const response = await requestEvolution(config, path, {
+      method: "POST",
+      body: fallbackBody,
+    });
+    if (shouldPersist) {
+      await saveConfigPatch({ evolutionWebhookUrl: webhookUrl, evolutionWebhookConfiguredAt: nowIso() });
+    }
+    return {
+      ok: true,
+      webhook: fallbackBody,
+      response,
+      fallback: true,
+      firstError: String(firstError?.message || firstError),
+    };
+  }
+}
+
+async function getWebhookInfo(providedConfig = null) {
+  const config = providedConfig || (await getConfig());
+  const instanceName = String(config.evolutionInstance || "").trim();
+  if (!instanceName) throw new Error("Informe o nome da instancia da Evolution.");
+  const paths = [
+    `/webhook/find/${encodeURIComponent(instanceName)}`,
+    `/webhook/${encodeURIComponent(instanceName)}`,
+  ];
+  let lastError = "";
+  for (const path of paths) {
+    try {
+      return { ok: true, path, response: await requestEvolution(config, path) };
+    } catch (error) {
+      lastError = String(error?.message || error);
+    }
+  }
+  return {
+    ok: false,
+    error: lastError || "Nao foi possivel consultar webhook.",
+    configuredUrl: config.evolutionWebhookUrl || DEFAULT_CONFIG.evolutionWebhookUrl,
+    configuredAt: config.evolutionWebhookConfiguredAt || "",
+  };
+}
+
+async function sendTextMessage(config, number, text) {
+  const url = buildEvolutionUrl(config);
+  if (!config.evolutionBaseUrl || !config.evolutionApiKey || !config.evolutionInstance) {
+    throw new Error("Evolution API nao configurada.");
+  }
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: String(config.evolutionApiKey),
+      Authorization: `Bearer ${config.evolutionApiKey}`,
+    },
+    body: JSON.stringify({
+      number,
+      text,
+      textMessage: { text },
+      options: { delay: 1200, presence: "composing" },
+    }),
+  });
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || `Evolution HTTP ${response.status}`);
+  }
+  return data || { ok: true };
+}
+
+async function sendOfficialWhatsAppMessage(config, number, text) {
+  const baseUrl = String(config.officialWhatsappBaseUrl || DEFAULT_CONFIG.officialWhatsappBaseUrl).replace(/\/+$/, "");
+  const phoneNumberId = encodeURIComponent(String(config.officialWhatsappPhoneNumberId || "").trim());
+  const token = String(config.officialWhatsappAccessToken || "").trim();
+  if (!baseUrl || !phoneNumberId || !token) {
+    throw new Error("WhatsApp oficial nao configurado.");
+  }
+
+  const body = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizePhone(number),
+  };
+  const templateName = String(config.officialWhatsappTemplateName || "").trim();
+  if (templateName) {
+    const components = [];
+    if (config.officialWhatsappTemplateBodyUsesMessage !== false) {
+      components.push({
+        type: "body",
+        parameters: [{ type: "text", text: String(text || "").slice(0, 1024) }],
+      });
+    }
+    body.type = "template";
+    body.template = {
+      name: templateName,
+      language: { code: config.officialWhatsappTemplateLanguage || "pt_BR" },
+      ...(components.length ? { components } : {}),
+    };
+  } else {
+    body.type = "text";
+    body.text = { preview_url: false, body: String(text || "") };
+  }
+
+  const response = await fetch(`${baseUrl}/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    throw new Error(data?.error?.message || data?.message || `WhatsApp oficial HTTP ${response.status}`);
+  }
+  return data || { ok: true };
+}
+
+function buildZapiApiUrl(config, path) {
+  const baseUrl = String(config.zapiBaseUrl || DEFAULT_CONFIG.zapiBaseUrl).replace(/\/+$/, "");
+  const instanceId = encodeURIComponent(String(config.zapiInstanceId || "").trim());
+  const instanceToken = encodeURIComponent(String(config.zapiInstanceToken || "").trim());
+  if (!baseUrl || !instanceId || !instanceToken) {
+    throw new Error("Z-API nao configurada.");
+  }
+  return `${baseUrl}/instances/${instanceId}/token/${instanceToken}${String(path || "").replace(/^\/?/, "/")}`;
+}
+
+async function requestZapi(config, path, options = {}) {
+  const clientToken = String(config.zapiClientToken || "").trim();
+  const response = await fetch(buildZapiApiUrl(config, path), {
+    method: options.method || "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(clientToken ? { "Client-Token": clientToken } : {}),
+      ...(options.headers || {}),
+    },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+  if (!response.ok) {
+    const details = typeof data === "string" ? data : JSON.stringify(data || {});
+    throw new Error(data?.message || data?.error || data?.errorMessage || `Z-API HTTP ${response.status}: ${details}`);
+  }
+  return data || { ok: true };
+}
+
+async function sendZapiTextMessage(config, number, text) {
+  const phone = normalizePhone(number);
+  const message = String(text || "").trim();
+  if (!phone) throw new Error("Z-API sem telefone de destino.");
+  if (!message) throw new Error("Z-API sem texto para envio.");
+  return requestZapi(config, "/send-text", {
+    method: "POST",
+    body: {
+      phone,
+      message,
+      delayMessage: 2,
+      delayTyping: 2,
+    },
+  });
+}
+
+function getProviderName(config = {}) {
+  const provider = String(config.whatsappProvider || "evolution");
+  if (provider === "official_whatsapp") return "WhatsApp oficial";
+  if (provider === "zapi") return "Z-API";
+  if (provider === "cvortex") return "Cvortex";
+  return "Evolution API";
+}
+
+function isSelectedProviderEnabled(config = {}) {
+  const provider = String(config.whatsappProvider || "evolution");
+  if (provider === "official_whatsapp") return Boolean(config.officialWhatsappEnabled);
+  if (provider === "zapi") return Boolean(config.zapiEnabled);
+  if (provider === "cvortex") return Boolean(config.cvortexEnabled);
+  return Boolean(config.evolutionEnabled);
+}
+
+async function sendWhatsAppMessage(config, number, text, item = {}) {
+  const provider = String(config.whatsappProvider || "evolution");
+  if (provider === "official_whatsapp") {
+    return {
+      mode: "official_whatsapp",
+      response: await sendOfficialWhatsAppMessage(config, number, text, item),
+    };
+  }
+  if (provider === "zapi") {
+    return {
+      mode: "zapi_text",
+      response: await sendZapiTextMessage(config, number, text),
+    };
+  }
+  if (provider === "cvortex") {
+    return {
+      mode: "cvortex_text",
+      response: await cvortexIntegration.sendTextMessage(number, text, item),
+    };
+  }
+  return {
+    mode: "evolution_text",
+    response: await sendTextMessage(config, number, text),
+  };
+}
+
+function canSendItem(item, config, now = new Date()) {
+  if (!["aprovado", "novo", "aguardando_janela"].includes(String(item.status || "novo"))) return false;
+  if (!normalizePhone(item.telefone)) return false;
+  const attempts = Number(item.tentativas || 0);
+  if (attempts >= Number(config.retryLimit || 3)) return false;
+  if (item.proximaTentativaEm) {
+    const next = new Date(item.proximaTentativaEm);
+    if (!Number.isNaN(next.getTime()) && next > now) return false;
+  }
+  return true;
+}
+
+async function processQueueOnce({ manual = false } = {}) {
+  const config = await getConfig();
+  lastRun = nowIso();
+  lastError = "";
+  lastSkipped = "";
+
+  if (!isSelectedProviderEnabled(config)) return skippedQueue(`${getProviderName(config)} desativado.`);
+  if (config.evolutionPaused && !manual) return skippedQueue("Envio pausado.");
+  if (!config.autoSend && !manual) return skippedQueue("Envio automatico desativado.");
+  if (!manual && !isInsideSendWindow(config)) {
+    const nextWindow = getNextSendWindowStart(config);
+    nextRunAt = nextWindow ? nextWindow.toISOString() : new Date(Date.now() + 30000).toISOString();
+    return skippedQueue("Fora da janela de envio.", { nextRunAt });
+  }
+
+  const dailyLimit = Math.max(1, Number(config.dailySendLimit || DEFAULT_CONFIG.dailySendLimit));
+  const sentToday = await countQueueMessagesSentToday(config);
+  const remainingToday = Math.max(0, dailyLimit - sentToday);
+  if (remainingToday <= 0) {
+    const nextWindow = getNextSendWindowStart(config);
+    nextRunAt = nextWindow ? nextWindow.toISOString() : new Date(Date.now() + 30000).toISOString();
+    return skippedQueue(`Limite diario de ${dailyLimit} mensagens atingido.`, {
+      dailyLimit,
+      sentToday,
+      remainingToday,
+      nextRunAt,
+    });
+  }
+
+  const items = await listQueue(2000);
+  const batchSize = 1;
+  const candidates = items.filter((item) => canSendItem(item, config)).slice(0, batchSize);
+  const sent = [];
+  const failed = [];
+
+  for (const item of candidates) {
+    const phone = normalizePhone(item.telefone);
+    const template = await getTemplate(item.templateId || config.activeTemplateId);
+    const message = renderTemplate(template.conteudo, item, config);
+    const attempts = Number(item.tentativas || 0) + 1;
+    try {
+      const response = await sendWhatsAppMessage(config, phone, message, item);
+      await upsertQueueItem(item.id, {
+        ...item,
+        status: "enviado",
+        tentativas: attempts,
+        ultimoEnvioEm: nowIso(),
+        evolutionResponse: response.response,
+        evolutionMode: response.mode,
+        evolutionButtonError: response.buttonError || "",
+        atualizadoEm: nowIso(),
+      });
+      await createHistory({
+        cliente: item.cliente,
+        telefone: item.telefone,
+        os: item.os,
+        cidade: item.cidade,
+        templateId: template.id,
+        mensagem: message,
+        status: "enviado",
+        origem: getProviderName(config),
+        filaId: item.id,
+        evolutionMode: response.mode,
+        evolutionButtonError: response.buttonError || "",
+      });
+      sent.push(item.id);
+      broadcastRealtime("mensageria", { action: "sent", id: item.id });
+    } catch (error) {
+      const retryAt = new Date(Date.now() + Number(config.retryAfterMinutes || 30) * 60 * 1000).toISOString();
+      await upsertQueueItem(item.id, {
+        ...item,
+        status: attempts >= Number(config.retryLimit || 3) ? "falhou" : "aprovado",
+        tentativas: attempts,
+        ultimoErro: error?.message || "Falha no envio.",
+        proximaTentativaEm: retryAt,
+        atualizadoEm: nowIso(),
+      });
+      await createHistory({
+        cliente: item.cliente,
+        telefone: item.telefone,
+        os: item.os,
+        cidade: item.cidade,
+        status: "falhou",
+        erro: error?.message || "Falha no envio.",
+        origem: getProviderName(config),
+        filaId: item.id,
+      });
+      failed.push({ id: item.id, error: error?.message });
+    }
+    if (!manual && sent.length < candidates.length) {
+      const remainingAfterCurrent = Math.max(1, remainingToday - sent.length);
+      await sleep(calculateQueueDelayMs(config, remainingAfterCurrent));
+    }
+  }
+
+  if (sent.length) {
+    const remainingAfterBatch = Math.max(1, remainingToday - sent.length);
+    nextRunAt = new Date(Date.now() + calculateQueueDelayMs(config, remainingAfterBatch)).toISOString();
+  } else if (!manual) {
+    nextRunAt = new Date(Date.now() + 30000).toISOString();
+  }
+
+  return {
+    ok: true,
+    sent: sent.length,
+    failed: failed.length,
+    sentIds: sent,
+    failedItems: failed,
+    dailyLimit,
+    sentToday: sentToday + sent.length,
+    remainingToday: Math.max(0, remainingToday - sent.length),
+  };
+}
+
+async function sendTestMessage(payload = {}, user = {}) {
+  const config = await getConfig();
+  const number = normalizePhone(payload.number || payload.telefone);
+  if (!number) throw new Error("Informe um telefone valido para teste.");
+  const template = await getTemplate(payload.templateId || config.activeTemplateId);
+  const sample = {
+    cliente: payload.cliente || "Cliente Teste",
+    codigo_cliente: payload.codigo_cliente || "0000",
+    contrato: payload.contrato || "TESTE",
+    os: payload.os || "OS-TESTE",
+    cidade: payload.cidade || "Cidade Teste",
+    regional: payload.regional || "Regional Teste",
+    endereco: payload.endereco || "Endereco teste",
+    telefone: number,
+  };
+  const message = renderTemplate(template.conteudo, sample, config);
+  const response = await sendWhatsAppMessage(config, number, message, sample);
+  await createHistory({
+    cliente: sample.cliente,
+    telefone: number,
+    os: sample.os,
+    cidade: sample.cidade,
+    templateId: template.id,
+    mensagem: message,
+    status: "enviado",
+    origem: `Teste ${getProviderName(config)}`,
+    enviadoPor: user?.uid || null,
+    evolutionResponse: response.response,
+    evolutionMode: response.mode,
+    evolutionButtonError: response.buttonError || "",
+  });
+  broadcastRealtime("mensageria", { action: "test_sent" });
+  return { ok: true, number, templateId: template.id, message, response };
+}
+
+function startWorker() {
+  if (workerTimer) return;
+  workerTimer = setInterval(async () => {
+    if (workerRunning) return;
+    if (nextRunAt && new Date(nextRunAt).getTime() > Date.now()) return;
+    workerRunning = true;
+    try {
+      await processQueueOnce();
+    } catch (error) {
+      lastError = error?.message || "Falha no worker.";
+      console.error("[evolutionMessaging] worker:", error);
+    } finally {
+      workerRunning = false;
+    }
+  }, 30000);
+}
+
+function wakeQueueWorker() {
+  nextRunAt = new Date(Date.now() + 1000).toISOString();
+  startWorker();
+  setImmediate(async () => {
+    if (workerRunning) return;
+    workerRunning = true;
+    try {
+      await processQueueOnce();
+    } catch (error) {
+      lastError = error?.message || "Falha no worker.";
+      console.error("[evolutionMessaging] worker:", error);
+    } finally {
+      workerRunning = false;
+    }
+  });
+}
+
+function stopWorker() {
+  if (!workerTimer) return;
+  clearInterval(workerTimer);
+  workerTimer = null;
+}
+
+function resetNextRunAt() {
+  nextRunAt = null;
+}
+
+function getStatus() {
+  const localParts = getZonedDateParts();
+  return {
+    workerActive: Boolean(workerTimer),
+    workerRunning,
+    lastRun,
+    lastError,
+    lastSkipped,
+    nextRunAt,
+    sendTimeZone: SEND_TIME_ZONE,
+    sendLocalTime: `${String(localParts.hour).padStart(2, "0")}:${String(localParts.minute).padStart(2, "0")}:${String(localParts.second).padStart(2, "0")}`,
+  };
+}
+
+function extractTextFromWebhook(payload = {}) {
+  const deepCandidates = [];
+  const visit = (value, key = "", depth = 0) => {
+    if (depth > 5 || value === null || value === undefined) return;
+    if (typeof value === "string" || typeof value === "number") {
+      const lowerKey = String(key || "").toLowerCase();
+      if (
+        [
+          "message",
+          "body",
+          "text",
+          "caption",
+          "selecteddisplaytext",
+          "displaytext",
+          "title",
+          "description",
+        ].some((part) => lowerKey === part || lowerKey.endsWith(part))
+      ) {
+        deepCandidates.push(String(value));
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, key, depth + 1));
+      return;
+    }
+    if (typeof value === "object") {
+      Object.entries(value).forEach(([innerKey, innerValue]) => visit(innerValue, innerKey, depth + 1));
+    }
+  };
+  visit(payload);
+  const candidates = [
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body,
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.button?.text,
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.title,
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.list_reply?.title,
+    payload.text?.message,
+    payload.text?.body,
+    payload.text?.description,
+    payload.text?.title,
+    payload.hydratedTemplate?.message,
+    payload.hydratedTemplate?.title,
+    payload.hydratedTemplate?.footer,
+    payload.buttonReply?.message,
+    payload.buttonReply?.selectedDisplayText,
+    payload.buttonsResponseMessage?.selectedDisplayText,
+    payload.listResponseMessage?.title,
+    payload.listResponseMessage?.description,
+    payload.message?.text,
+    payload.message?.body,
+    payload.text,
+    typeof payload.message === "string" ? payload.message : "",
+    payload.message?.conversation,
+    payload.message?.extendedTextMessage?.text,
+    payload.message?.ephemeralMessage?.message?.conversation,
+    payload.message?.ephemeralMessage?.message?.extendedTextMessage?.text,
+    payload.body,
+    typeof payload.data?.message === "string" ? payload.data.message : "",
+    payload.data?.text,
+    typeof payload.data?.message?.message === "string" ? payload.data.message.message : "",
+    payload.data?.message?.conversation,
+    payload.data?.message?.extendedTextMessage?.text,
+    payload.data?.message?.ephemeralMessage?.message?.conversation,
+    payload.data?.message?.ephemeralMessage?.message?.extendedTextMessage?.text,
+    payload.data?.message?.text,
+    payload.data?.text?.message,
+    payload.data?.message?.text?.message,
+    payload.data?.body,
+    payload.notification?.message,
+    payload.chat?.message,
+    payload.data?.pushName && payload.data?.messageText,
+    payload.body?.text,
+    payload.body?.message,
+    ...deepCandidates,
+  ];
+  return candidates
+    .map((item) => (typeof item === "string" || typeof item === "number" ? String(item).trim() : ""))
+    .find(Boolean) || "";
+}
+
+function extractPhoneFromWebhook(payload = {}) {
+  const candidates = [
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from,
+    payload.phone,
+    payload.number,
+    payload.telephone,
+    payload.remoteJid,
+    payload.from,
+    payload.key?.remoteJid,
+    payload.data?.key?.remoteJid,
+    payload.data?.remoteJid,
+    payload.data?.phone,
+    payload.data?.sender,
+    payload.data?.fromMe ? "" : payload.data?.participantPhone,
+    payload.data?.from,
+    payload.sender,
+    payload.participantPhone,
+    payload.connectedPhone,
+  ];
+  const raw = candidates.map((item) => String(item || "")).find(Boolean) || "";
+  return normalizePhone(raw.split("@")[0]);
+}
+
+function extractTimestampFromWebhook(payload = {}) {
+  const value =
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.timestamp ||
+    payload.messageTimestamp ||
+    payload.timestamp ||
+    payload.momment ||
+    payload.moment ||
+    payload.data?.messageTimestamp ||
+    payload.data?.timestamp ||
+    payload.data?.momment ||
+    payload.data?.moment ||
+    payload.data?.message?.messageTimestamp ||
+    null;
+  const numeric = Number(value);
+  if (!numeric || Number.isNaN(numeric)) return nowIso();
+  const milliseconds = numeric > 100000000000 ? numeric : numeric * 1000;
+  return new Date(milliseconds).toISOString();
+}
+
+function extractWebhookMessageId(payload = {}) {
+  const candidates = [
+    payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id,
+    payload.messageId,
+    payload.message_id,
+    payload.id,
+    payload.data?.key?.id,
+    payload.key?.id,
+    payload.data?.messageId,
+    payload.data?.message?.key?.id,
+    payload.data?.message?.id,
+    payload.data?.id,
+  ];
+  return candidates.map((item) => String(item || "").trim()).find(Boolean) || "";
+}
+
+function isOutboundWebhook(payload = {}) {
+  return Boolean(
+    payload.entry?.[0]?.changes?.[0]?.value?.statuses?.length ||
+    payload.fromMe ||
+      payload.key?.fromMe ||
+      payload.data?.key?.fromMe ||
+      payload.data?.fromMe ||
+      payload.message?.fromMe ||
+      payload.fromApi,
+  );
+}
+
+function isNonMessageWebhook(payload = {}) {
+  const event = String(payload.webhookEvent || payload.event || payload.type || "").toLowerCase();
+  if (
+    event.includes("connection") ||
+    event.includes("qrcode") ||
+    event.includes("status.instance") ||
+    event.includes("deliverycallback") ||
+    event.includes("delivery")
+  ) {
+    return true;
+  }
+  if (payload.data?.state && payload.data?.instance && !extractTextFromWebhook(payload)) return true;
+  if (payload.status && String(payload.status).toUpperCase() !== "RECEIVED" && !extractTextFromWebhook(payload)) return true;
+  return false;
+}
+
+function isAutomationText(text) {
+  const value = normalizeText(text);
+  return (
+    value.startsWith("anotado a informacao") ||
+    value.startsWith("agendamento registrado") ||
+    value.startsWith("caso ja tenha feito a devolucao") ||
+    value.includes("porem eu sou apenas uma automacao") ||
+    value.includes("falar com a central")
+  );
+}
+
+function isDeliveredIntent(text) {
+  const value = normalizeText(text);
+  if (
+    value.includes("nao entreguei") ||
+    value.includes("nao devolvi") ||
+    value.includes("nao fiz a devolucao")
+  ) {
+    return false;
+  }
+  return [
+    "ja entreguei",
+    "ja entregou",
+    "entreguei",
+    "entreguei ontem",
+    "entreguei em loja",
+    "devolvi",
+    "ja devolvi",
+    "devolucao feita",
+    "ja fiz a devolucao",
+    "entrega em loja",
+  ].some((term) => value.includes(term));
+}
+
+function isPositiveScheduleIntent(text) {
+  const value = normalizeText(text);
+  if (
+    value.includes("nao") ||
+    value.includes("sem interesse") ||
+    value.includes("nao quero") ||
+    value.includes("nao posso")
+  ) {
+    return false;
+  }
+  return [
+    "sim",
+    "pode",
+    "quero",
+    "vamos",
+    "agendar",
+    "pode agendar",
+    "ok",
+    "confirmo",
+    "confirmado",
+  ].some((term) => value === term || value.includes(term));
+}
+
+async function findDuplicateCallback({ phone, mensagem, webhookMessageId, recebidoEm, allowTextMatch = true }) {
+  const phoneDigits = normalizePhone(phone);
+  const text = normalizeText(mensagem);
+  const eventId = String(webhookMessageId || "").trim();
+  if (!phoneDigits && !eventId) return null;
+  const callbacks = await listCallbacks(500);
+  return callbacks.find((callback) => {
+    if (eventId && String(callback.webhook_message_id || "") === eventId) return true;
+    if (!allowTextMatch) return false;
+    if (!phoneDigits || !text) return false;
+    if (!phonesMatch(callback.telefone, phoneDigits)) return false;
+    if (normalizeText(callback.mensagem) !== text) return false;
+    const callbackDate = new Date(callback.recebido_em || callback.criado_em || callback.criadoEm || "");
+    const eventDate = new Date(recebidoEm || "");
+    if (Number.isNaN(callbackDate.getTime()) || Number.isNaN(eventDate.getTime())) return true;
+    return Math.abs(callbackDate.getTime() - eventDate.getTime()) <= 10 * 60 * 1000;
+  }) || null;
+}
+
+function isGroupWebhook(payload = {}) {
+  const remoteJid = String(
+    payload.key?.remoteJid ||
+      payload.data?.key?.remoteJid ||
+      payload.remoteJid ||
+      payload.data?.remoteJid ||
+      payload.chatId ||
+      payload.data?.chatId ||
+      "",
+  );
+  return remoteJid.includes("@g.us") || remoteJid.startsWith("120363");
+}
+
+function parseScheduleFromText(text, baseDate = new Date()) {
+  const value = String(text || "");
+  const dateMatch = value.match(/(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/);
+  if (!dateMatch) return null;
+
+  const valueWithoutDate = value.replace(dateMatch[0], " ");
+  const timeMatch =
+    valueWithoutDate.match(/(?:\b(?:às|as|a|para|por volta de)\s*)?(\d{1,2})\s*[:h]\s*(\d{2})\b/i) ||
+    valueWithoutDate.match(/\b(?:às|as|a|para|por volta de)\s*(\d{1,2})(?:\s*(?:h|horas?))?\b/i) ||
+    valueWithoutDate.match(/\b(\d{1,2})\s*h(?:oras?)?\b/i);
+
+  const day = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const todayParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SEND_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(baseDate).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const rawYear = dateMatch[3] ? Number(dateMatch[3]) : Number(todayParts.year);
+  let year = rawYear < 100 ? 2000 + rawYear : rawYear;
+  const explicitYear = Boolean(dateMatch[3]);
+  const hourNumber = timeMatch ? Number(timeMatch[1]) : null;
+  const minuteNumber = timeMatch ? Number(timeMatch[2] || 0) : null;
+  if (hourNumber !== null && (hourNumber < 0 || hourNumber > 23 || minuteNumber < 0 || minuteNumber > 59)) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+
+  if (!explicitYear) {
+    const todayKey = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+    const scheduleKey = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (scheduleKey < todayKey) year += 1;
+  }
+
+  const hour = timeMatch ? String(hourNumber).padStart(2, "0") : "";
+  const minute = timeMatch ? String(minuteNumber).padStart(2, "0") : "";
+  return {
+    date: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+    time: hour && minute ? `${hour}:${minute}` : "",
+  };
+}
+
+function getSaoPauloDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SEND_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+}
+
+function dateKeyFromDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateLabel(dateKey, { withWeekday = false } = {}) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("pt-BR", {
+    timeZone: SEND_TIME_ZONE,
+    ...(withWeekday ? { weekday: "long" } : {}),
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function getGuidedDateOptions(baseDate = new Date()) {
+  const localDate = getSaoPauloDate(baseDate);
+  const first = new Date(localDate);
+  first.setDate(first.getDate() + 1);
+  const second = new Date(localDate);
+  second.setDate(second.getDate() + 2);
+  const saturday = new Date(localDate);
+  const daysUntilSaturday = (6 - saturday.getDay() + 7) % 7 || 7;
+  saturday.setDate(saturday.getDate() + daysUntilSaturday);
+  while (dateKeyFromDate(saturday) <= dateKeyFromDate(second)) {
+    saturday.setDate(saturday.getDate() + 7);
+  }
+  return [
+    { key: "1", date: dateKeyFromDate(first), label: formatDateLabel(dateKeyFromDate(first)) },
+    { key: "2", date: dateKeyFromDate(second), label: formatDateLabel(dateKeyFromDate(second)) },
+    { key: "3", date: dateKeyFromDate(saturday), label: formatDateLabel(dateKeyFromDate(saturday), { withWeekday: true }) },
+  ];
+}
+
+function renderGuidedDateOptions(options = []) {
+  return [
+    ...options.map((option) => `${option.key} - ${option.label}`),
+    "4 - Outra data",
+  ].join("\n");
+}
+
+function parseGuidedDateChoice(text, conversation = {}) {
+  const value = normalizeText(text);
+  const options = Array.isArray(conversation.dateOptions) ? conversation.dateOptions : [];
+  const selected = options.find((option) => value === option.key || value.includes(`opcao ${option.key}`));
+  if (selected?.date) return selected.date;
+  if (value === "4" || value.includes("outra")) return "other";
+  const schedule = parseScheduleFromText(text);
+  return schedule?.date || null;
+}
+
+function parseGuidedTimeChoice(text) {
+  const value = normalizeText(text);
+  if (value === "1" || value.includes("09") || value.includes("9h")) return "09:00";
+  if (value === "2" || value.includes("12") || value.includes("meio dia")) return "12:00";
+  if (value === "3" || value.includes("16") || value.includes("4 da tarde")) return "16:00";
+  if (value === "4" || value.includes("outro")) return "other";
+  const timeMatch =
+    String(text || "").match(/\b(\d{1,2})\s*[:h]\s*(\d{2})\b/i) ||
+    String(text || "").match(/\b(\d{1,2})\s*h(?:oras?)?\b/i) ||
+    String(text || "").match(/\b(\d{1,2})\b/);
+  if (!timeMatch) return null;
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2] || 0);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function getConversationId(phone) {
+  return normalizePhone(phone) || "";
+}
+
+async function getScheduleConversation(phone) {
+  const id = getConversationId(phone);
+  if (!id) return null;
+  const doc = await documents.getDocument(`${SCHEDULE_CONVERSATION_COLLECTION}/${id}`).catch(() => null);
+  return doc?.data || null;
+}
+
+async function saveScheduleConversation(phone, data = {}) {
+  const id = getConversationId(phone);
+  if (!id) return null;
+  const current = await getScheduleConversation(phone);
+  const next = {
+    ...(current || {}),
+    ...data,
+    id,
+    telefone: id,
+    atualizado_em: nowIso(),
+  };
+  await documents.upsertDocument({
+    path: `${SCHEDULE_CONVERSATION_COLLECTION}/${id}`,
+    collectionPath: SCHEDULE_CONVERSATION_COLLECTION,
+    documentId: id,
+    parentPath: null,
+    data: next,
+  });
+  return next;
+}
+
+async function clearScheduleConversation(phone, patch = {}) {
+  const current = await getScheduleConversation(phone);
+  if (!current) return null;
+  return saveScheduleConversation(phone, {
+    ...patch,
+    stage: "completed",
+    completedAt: nowIso(),
+  });
+}
+
+async function findQueueItemForCallback({ phone, codigoCliente, cliente }) {
+  const queue = await listQueue(500);
+  const phoneDigits = normalizePhone(phone);
+  const code = String(codigoCliente || "").trim();
+  const name = normalizeText(cliente);
+  return queue.find((item) => {
+    if (code && String(item.codigo_cliente || "") === code) return true;
+    if (phoneDigits && phonesMatch(item.telefone, phoneDigits)) return true;
+    if (name && normalizeText(item.cliente).includes(name)) return true;
+    return false;
+  }) || null;
+}
+
+async function findHistoryItemForCallback({ phone, codigoCliente, cliente }) {
+  const history = await listHistory(1000);
+  const phoneDigits = normalizePhone(phone);
+  const code = String(codigoCliente || "").trim();
+  const name = normalizeText(cliente);
+  return history
+    .filter((item) => String(item.status || "") === "enviado")
+    .sort((a, b) => String(b.criadoEm || "").localeCompare(String(a.criadoEm || "")))
+    .find((item) => {
+      if (code && String(item.codigo_cliente || "") === code) return true;
+      if (phoneDigits && phonesMatch(item.telefone, phoneDigits)) return true;
+      if (name && normalizeText(item.cliente).includes(name)) return true;
+      return false;
+    }) || null;
+}
+
+async function createAppointmentFromCallback(item, schedule, callbackId) {
+  const id = `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  await documents.upsertDocument({
+    path: `${APPOINTMENT_COLLECTION}/${id}`,
+    collectionPath: APPOINTMENT_COLLECTION,
+    documentId: id,
+    parentPath: null,
+    data: {
+      tecnico_nome: item?.tecnico || "A definir",
+      codigo_cliente: String(item?.codigo_cliente || ""),
+      cliente_nome: item?.cliente || "",
+      cidade: item?.cidade || "",
+      data: schedule.date,
+      turno: schedule.time && Number(schedule.time.slice(0, 2)) >= 12 ? "Tarde" : "Manha",
+      hora: schedule.time || "",
+      status: "Aguardando dia",
+      observacao: `Agendado automaticamente via WhatsApp. O.S: ${item?.os || "-"}. Callback: ${callbackId}.`,
+      origem: "evolution_whatsapp",
+      os: item?.os || "",
+      telefone: item?.telefone || "",
+      atendente_id: AUTOMATION_ATTENDANT_ID,
+      atendente_nome: AUTOMATION_ATTENDANT_NAME,
+      agendado_por_id: AUTOMATION_ATTENDANT_ID,
+      agendado_por_nome: AUTOMATION_ATTENDANT_NAME,
+      criado_por_id: AUTOMATION_ATTENDANT_ID,
+      criado_por_nome: AUTOMATION_ATTENDANT_NAME,
+      usuario_id: AUTOMATION_ATTENDANT_ID,
+      usuario_nome: AUTOMATION_ATTENDANT_NAME,
+      criado_em: nowIso(),
+      atualizado_em: nowIso(),
+    },
+  });
+  broadcastRealtime("acompanhamento", { collectionPath: APPOINTMENT_COLLECTION, documentId: id });
+  notificationsService.createNotification({
+    type: "whatsapp_agendamento_auto",
+    title: "Agendamento automático",
+    message: `${AUTOMATION_ATTENDANT_NAME} agendou ${item?.cliente || "cliente"} para ${String(schedule.date || "").split("-").reverse().join("/")} ${schedule.time || ""}.`,
+    targetPath: "/agendamentos",
+    severity: "success",
+    user: {
+      uid: AUTOMATION_ATTENDANT_ID,
+      nome: AUTOMATION_ATTENDANT_NAME,
+    },
+    targets: {
+      roles: ["admin", "backoffice_retirada", "supervisor"],
+    },
+    meta: {
+      agendamentoId: id,
+      callbackId,
+      telefone: item?.telefone || "",
+      os: item?.os || "",
+      cliente: item?.cliente || "",
+      cidade: item?.cidade || "",
+      data: schedule.date,
+      hora: schedule.time || "",
+    },
+  }).catch((error) => {
+    console.warn("[evolution] Falha ao criar notificacao de agendamento:", error?.message || error);
+  });
+  return id;
+}
+
+async function sendConfiguredAutoReply(config, phone, item = {}, messageTemplate = "") {
+  const number = normalizePhone(phone || item?.telefone);
+  if (!number) return null;
+  const message = renderTemplate(messageTemplate, item, config);
+  const response = await sendWhatsAppMessage(config, number, message, {
+    ...item,
+    telefone: number,
+  });
+  await createHistory({
+    cliente: item?.cliente || "",
+    telefone: number,
+    os: item?.os || "",
+    cidade: item?.cidade || "",
+    mensagem: message,
+    status: "enviado",
+    origem: "Resposta automatica",
+    filaId: item?.id || "",
+    evolutionMode: response.mode,
+    evolutionButtonError: response.buttonError || "",
+    evolutionResponse: response.response,
+  });
+  return response;
+}
+
+async function startGuidedScheduleFlow(config, phone, item = {}) {
+  const options = getGuidedDateOptions();
+  const message = renderTemplate(
+    config.guidedScheduleDateMessage || DEFAULT_CONFIG.guidedScheduleDateMessage,
+    {
+      ...item,
+      opcoes_datas: renderGuidedDateOptions(options),
+    },
+    config,
+  );
+  await saveScheduleConversation(phone, {
+    stage: "awaiting_date",
+    item,
+    dateOptions: options,
+    startedAt: nowIso(),
+    lastMessageAt: nowIso(),
+  });
+  return sendConfiguredAutoReply(config, phone, item, message);
+}
+
+function renderInvalidDateMessage(config, conversation = {}) {
+  const options = Array.isArray(conversation.dateOptions) && conversation.dateOptions.length
+    ? conversation.dateOptions
+    : getGuidedDateOptions();
+  const template = config.guidedScheduleInvalidDateMessage || DEFAULT_CONFIG.guidedScheduleInvalidDateMessage;
+  const message = renderTemplate(
+    template,
+    {
+      opcoes_datas: renderGuidedDateOptions(options),
+    },
+    config,
+  );
+  if (String(template).includes("{opcoes_datas}")) return message;
+  return `${message}\n\n${renderGuidedDateOptions(options)}`;
+}
+
+function renderInvalidTimeMessage(config, conversation = {}) {
+  const template = config.guidedScheduleInvalidTimeMessage || DEFAULT_CONFIG.guidedScheduleInvalidTimeMessage;
+  const fallbackOptions = "1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário";
+  const message = renderTemplate(
+    template,
+    {
+      data_agendamento: formatDateLabel(conversation.selectedDate),
+    },
+    config,
+  );
+  if (String(template).includes("1 - 09h") || String(template).includes("1 - 9h")) return message;
+  return `${message}\n\n${fallbackOptions}`;
+}
+
+async function continueGuidedScheduleFlow(config, phone, item = {}, mensagem = "", callbackId = "") {
+  const conversation = await getScheduleConversation(phone);
+  if (!conversation || !["awaiting_date", "awaiting_time"].includes(String(conversation.stage || ""))) {
+    return null;
+  }
+  const conversationItem = conversation.item || item || {};
+  if (conversation.stage === "awaiting_date") {
+    const selectedDate = parseGuidedDateChoice(mensagem, conversation);
+    if (selectedDate === "other") {
+      return sendConfiguredAutoReply(
+        config,
+        phone,
+        conversationItem,
+        "Sem problema. Responda com a data desejada. Exemplo: 25/08.",
+      );
+    }
+    if (!selectedDate) {
+      return sendConfiguredAutoReply(
+        config,
+        phone,
+        conversationItem,
+        renderInvalidDateMessage(config, conversation),
+      );
+    }
+    await saveScheduleConversation(phone, {
+      stage: "awaiting_time",
+      item: conversationItem,
+      selectedDate,
+      lastMessageAt: nowIso(),
+    });
+    return sendConfiguredAutoReply(
+      config,
+      phone,
+      {
+        ...conversationItem,
+        data_agendamento: formatDateLabel(selectedDate),
+      },
+      config.guidedScheduleTimeMessage || DEFAULT_CONFIG.guidedScheduleTimeMessage,
+    );
+  }
+
+  const selectedTime = parseGuidedTimeChoice(mensagem);
+  if (selectedTime === "other") {
+    return sendConfiguredAutoReply(
+      config,
+      phone,
+      conversationItem,
+      "Claro. Responda com o horário desejado. Exemplo: 14:30.",
+    );
+  }
+  if (!selectedTime) {
+    return sendConfiguredAutoReply(
+      config,
+      phone,
+      conversationItem,
+      renderInvalidTimeMessage(config, conversation),
+    );
+  }
+  const schedule = {
+    date: conversation.selectedDate,
+    time: selectedTime,
+  };
+  const agendamentoId = await createAppointmentFromCallback(conversationItem, schedule, callbackId);
+  if (conversationItem?.id) {
+    await upsertQueueItem(conversationItem.id, {
+      ...conversationItem,
+      status: "agendado",
+      agendamento_id: agendamentoId,
+      respostaCliente: mensagem,
+      ultimaRespostaCliente: mensagem,
+      ultimaRespostaClienteEm: nowIso(),
+      atualizadoEm: nowIso(),
+    });
+  }
+  await clearScheduleConversation(phone, { agendamentoId, schedule });
+  let confirmation = null;
+  let confirmationError = "";
+  try {
+    confirmation = await sendConfiguredAutoReply(
+      config,
+      phone,
+      {
+        ...conversationItem,
+        data_agendamento: schedule.date.split("-").reverse().join("/"),
+        hora_agendamento: schedule.time || "",
+      },
+      config.replyScheduledConfirmationMessage || DEFAULT_CONFIG.replyScheduledConfirmationMessage,
+    );
+  } catch (error) {
+    confirmationError = String(error?.message || error);
+  }
+  return {
+    agendamentoId,
+    schedule,
+    respostaAutomatica: confirmation,
+    respostaAutomaticaErro: confirmationError,
+  };
+}
+
+async function sendHumanSupportAutoReply(config, phone, item = {}) {
+  const number = normalizePhone(phone || item?.telefone);
+  if (!number) return null;
+  const message = config.replyAfterScheduledMessage || DEFAULT_CONFIG.replyAfterScheduledMessage;
+  const response = await sendWhatsAppMessage(config, number, message, {
+    ...item,
+    telefone: number,
+  });
+  await createHistory({
+    cliente: item?.cliente || "",
+    telefone: number,
+    os: item?.os || "",
+    cidade: item?.cidade || "",
+    mensagem: message,
+    status: "enviado",
+    origem: "Resposta automática",
+    filaId: item?.id || "",
+    evolutionMode: response.mode,
+    evolutionButtonError: response.buttonError || "",
+    evolutionResponse: response.response,
+  });
+  return response;
+}
+
+async function registerCallback(payload = {}) {
+  if (isNonMessageWebhook(payload)) {
+    return { ok: true, ignored: true, reason: "Evento sem mensagem ignorado." };
+  }
+  if (isOutboundWebhook(payload)) {
+    return { ok: true, ignored: true, reason: "Mensagem enviada pela propria instancia." };
+  }
+  if (isGroupWebhook(payload)) {
+    return { ok: true, ignored: true, reason: "Mensagem de grupo ignorada." };
+  }
+  const mensagem = String(payload.mensagem || extractTextFromWebhook(payload) || "").trim();
+  if (isAutomationText(mensagem)) {
+    return { ok: true, ignored: true, reason: "Mensagem automatica ignorada." };
+  }
+  const telefone = payload.telefone || payload.phone || extractPhoneFromWebhook(payload);
+  const codigoCliente = payload.codigo_cliente || payload.codigoCliente || "";
+  const cliente = payload.cliente || "";
+  const recebidoEm = extractTimestampFromWebhook(payload);
+  const webhookMessageId = extractWebhookMessageId(payload);
+  const schedule = parseScheduleFromText(mensagem);
+  const activeConversation = await getScheduleConversation(telefone);
+  const hasActiveGuidedConversation = ["awaiting_date", "awaiting_time"].includes(String(activeConversation?.stage || ""));
+  const duplicate = await findDuplicateCallback({
+    phone: telefone,
+    mensagem,
+    webhookMessageId,
+    recebidoEm,
+    allowTextMatch: !hasActiveGuidedConversation,
+  });
+  if (duplicate) {
+    return {
+      ok: true,
+      ignored: true,
+      reason: "Resposta duplicada ignorada.",
+      callbackId: duplicate.id,
+      status: duplicate.status,
+      agendamento_id: duplicate.agendamento_id || null,
+    };
+  }
+  const queueItem = await findQueueItemForCallback({ phone: telefone, codigoCliente, cliente });
+  const historyItem = queueItem ? null : await findHistoryItemForCallback({ phone: telefone, codigoCliente, cliente });
+  const item = queueItem || historyItem;
+  const callbackId = `cb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  let status = "recebido";
+  let agendamentoId = null;
+  let motivo = "";
+  let respostaAutomatica = null;
+  const config = await getConfig();
+  let guidedResult = null;
+  let guidedError = "";
+  if ((item || hasActiveGuidedConversation) && config.guidedScheduleEnabled !== false) {
+    try {
+      guidedResult = await continueGuidedScheduleFlow(
+        config,
+        telefone,
+        item || activeConversation?.item || { telefone },
+        mensagem,
+        callbackId,
+      );
+    } catch (error) {
+      guidedError = String(error?.message || error);
+    }
+  }
+
+  if (guidedResult) {
+    status = guidedResult.agendamentoId ? "agendado" : "fluxo_agendamento";
+    agendamentoId = guidedResult.agendamentoId || null;
+    respostaAutomatica = guidedResult.respostaAutomatica || guidedResult;
+    motivo = guidedResult.agendamentoId
+      ? "Agendamento criado pelo fluxo guiado."
+      : "Fluxo guiado de agendamento em andamento.";
+    if (guidedResult.respostaAutomaticaErro) {
+      motivo = `${motivo} Confirmacao automatica falhou: ${guidedResult.respostaAutomaticaErro}`;
+    }
+  } else if (guidedError) {
+    status = hasActiveGuidedConversation ? "fluxo_agendamento_erro" : "erro";
+    motivo = `Falha no fluxo guiado: ${guidedError}`;
+  } else if (isDeliveredIntent(mensagem)) {
+    status = "devolucao_informada";
+    motivo = "Cliente informou que ja realizou a devolucao.";
+    try {
+      respostaAutomatica = await sendConfiguredAutoReply(
+        config,
+        telefone,
+        item || { telefone },
+        config.replyDeliveredMessage || DEFAULT_CONFIG.replyDeliveredMessage,
+      );
+    } catch (error) {
+      motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+    }
+  } else if (!item) {
+    status = "cliente_nao_localizado";
+    motivo = "Nao foi encontrada O.S/fila pelo telefone, codigo ou nome.";
+    try {
+      respostaAutomatica = await sendConfiguredAutoReply(
+        config,
+        telefone,
+        { telefone },
+        config.replyUnmatchedMessage || DEFAULT_CONFIG.replyUnmatchedMessage,
+      );
+    } catch (error) {
+      motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+    }
+  } else if (String(item.status || "").toLowerCase() === "agendado") {
+    status = "resposta_pos_agendamento";
+    motivo = "Cliente respondeu novamente apos agendamento. Encaminhado para a central.";
+    try {
+      respostaAutomatica = await sendHumanSupportAutoReply(config, telefone, item);
+    } catch (error) {
+      motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+    }
+  } else if (!schedule) {
+    if (config.guidedScheduleEnabled !== false && isPositiveScheduleIntent(mensagem)) {
+      status = "fluxo_agendamento";
+      motivo = "Cliente aceitou agendar. Opcoes de data enviadas.";
+      try {
+        respostaAutomatica = await startGuidedScheduleFlow(config, telefone, item);
+      } catch (error) {
+        motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+      }
+    } else {
+      status = "sem_data_horario";
+      motivo = "Resposta recebida sem data valida.";
+      try {
+        respostaAutomatica = await sendConfiguredAutoReply(
+          config,
+          telefone,
+          item,
+          config.replyNoScheduleMessage || DEFAULT_CONFIG.replyNoScheduleMessage,
+        );
+      } catch (error) {
+        motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+      }
+    }
+  } else {
+    agendamentoId = await createAppointmentFromCallback(item, schedule, callbackId);
+    status = "agendado";
+    if (queueItem?.id) {
+      await upsertQueueItem(queueItem.id, {
+        ...queueItem,
+        status: "agendado",
+        agendamento_id: agendamentoId,
+        respostaCliente: mensagem,
+        ultimaRespostaCliente: mensagem,
+        ultimaRespostaClienteEm: nowIso(),
+        atualizadoEm: nowIso(),
+      });
+    }
+    try {
+      respostaAutomatica = await sendConfiguredAutoReply(
+        config,
+        telefone,
+        {
+          ...item,
+          data_agendamento: schedule.date.split("-").reverse().join("/"),
+          hora_agendamento: schedule.time || "",
+        },
+        config.replyScheduledConfirmationMessage || DEFAULT_CONFIG.replyScheduledConfirmationMessage,
+      );
+    } catch (error) {
+      motivo = `Agendamento criado, mas confirmacao automatica falhou: ${String(error?.message || error)}`;
+    }
+  }
+
+  await documents.upsertDocument({
+    path: `${CALLBACK_COLLECTION}/${callbackId}`,
+    collectionPath: CALLBACK_COLLECTION,
+    documentId: callbackId,
+    parentPath: null,
+    data: {
+      id: callbackId,
+      telefone,
+      codigo_cliente: codigoCliente || item?.codigo_cliente || "",
+      cliente: cliente || item?.cliente || "",
+      os: item?.os || "",
+      filaId: queueItem?.id || item?.filaId || "",
+      historicoId: historyItem?.id || "",
+      webhook_message_id: webhookMessageId,
+      mensagem,
+      payload,
+      schedule,
+      status,
+      motivo,
+      resposta_automatica: respostaAutomatica,
+      agendado: Boolean(agendamentoId),
+      agendamento_id: agendamentoId,
+      criado_em: nowIso(),
+      recebido_em: recebidoEm,
+    },
+  });
+
+  broadcastRealtime("mensageria", { action: "callback", status });
+  broadcastRealtime("acompanhamento", { collectionPath: CALLBACK_COLLECTION });
+  return { ok: true, status, agendado: Boolean(agendamentoId), agendamento_id: agendamentoId, schedule, motivo };
+}
+
+module.exports = {
+  getConfig,
+  getStatus,
+  getConnectionInfo,
+  getAccountsConnectionInfo,
+  createOrConnectInstance,
+  logoutInstance,
+  configureWebhook,
+  getWebhookInfo,
+  processQueueOnce,
+  registerCallback,
+  sendTestMessage,
+  saveConfigPatch,
+  startWorker,
+  wakeQueueWorker,
+  stopWorker,
+  resetNextRunAt,
+  normalizePhone,
+  sendWhatsAppMessage,
+};

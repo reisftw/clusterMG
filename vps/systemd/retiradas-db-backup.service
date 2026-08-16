@@ -1,0 +1,17 @@
+[Unit]
+Description=Retiradas PostgreSQL backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/retiradas/vps
+EnvironmentFile=/etc/retiradas/api.env
+Environment=NODE_ENV=production
+Environment=DB_BACKUP_DIR=/opt/retiradas/backups/postgres
+Environment=DB_BACKUP_MAX_FILES=30
+Environment=DB_BACKUP_MAX_BYTES=10gb
+ExecStart=/usr/bin/npm run backup:database -- --scheduled
+User=www-data
+Group=www-data
+NoNewPrivileges=true
+PrivateTmp=true
