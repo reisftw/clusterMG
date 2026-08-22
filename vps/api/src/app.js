@@ -23,6 +23,7 @@ const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
+const createAgendamentoConfirmacaoAdminRouter = require("./agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes");
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
@@ -3097,109 +3098,14 @@ function createApp() {
     requireCsrfToken,
   }));
 
-  app.get("/api/agendamentos/confirmacao/config", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json({ ok: true, config: await agendamentoConfirmacao.getConfig(), worker: await agendamentoConfirmacao.getStatus() });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.put("/api/agendamentos/confirmacao/config", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json({ ok: true, config: await agendamentoConfirmacao.saveConfig(req.body || {}) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/agendamentos/confirmacao/run", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.processOnce({ forceMorning: req.body?.forceMorning === true }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/agendamentos/confirmacao/test", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.sendTestMessage(req.body || {}, req.user?.profile || req.user || {}));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/agendamentos/confirmacao/evolution/status", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.getEvolutionStatus());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/agendamentos/confirmacao/evolution/connect", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.connectEvolutionInstance());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/agendamentos/confirmacao/evolution/disconnect", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.disconnectEvolutionInstance());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/agendamentos/confirmacao/evolution/webhook", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.configureEvolutionWebhook(req.body?.webhookUrl || ""));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/agendamentos/confirmacao/envios/:id/responsavel", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.assignManualResponsible(req.params.id, req.body || {}, req.user?.profile || req.user || {}));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/agendamentos/confirmacao/envios", requireAuthenticated, requireRoles(FULL_OPERATION_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.listTracks({ limit: req.query.limit, offset: req.query.offset }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/agendamentos/confirmacao/logs", requireAuthenticated, requireRoles(FULL_OPERATION_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.listLogs({ limit: req.query.limit, offset: req.query.offset }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/agendamentos/confirmacao/preview", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.getPreview({ dateKey: req.query.dateKey, daysAhead: req.query.daysAhead }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/agendamentos/confirmacao/relatorio", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await agendamentoConfirmacao.getReport());
-    } catch (error) {
-      next(error);
-    }
-  });
+  app.use("/api/agendamentos/confirmacao", createAgendamentoConfirmacaoAdminRouter({
+    adminRoles: ADMIN_ROLES,
+    agendamentoConfirmacao,
+    fullOperationRoles: FULL_OPERATION_ROLES,
+    requireAuthenticated,
+    requireCsrfToken,
+    requireRoles,
+  }));
 
   async function handleEvolutionWebhook(req, res, next) {
     try {
