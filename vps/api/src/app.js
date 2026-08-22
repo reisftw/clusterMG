@@ -24,6 +24,7 @@ const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
+const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
@@ -1265,22 +1266,11 @@ function createApp() {
     },
   );
 
-  app.get("/api/health", async (req, res, next) => {
-    try {
-      const database = await db.healthcheck();
-      res.json({
-        ok: true,
-        service: "retiradas-vps-api",
-        databaseTime: database.now,
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/events", realtimeLimiter, (req, res) => {
-    attachRealtimeClient(req, res);
-  });
+  app.use("/api", createHealthRealtimeRouter({
+    attachRealtimeClient,
+    db,
+    realtimeLimiter,
+  }));
 
   app.get("/api/notifications", requireAuthenticated, async (req, res, next) => {
     try {
