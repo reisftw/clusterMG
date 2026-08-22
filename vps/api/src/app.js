@@ -18,12 +18,12 @@ const emailService = require("./emailService");
 const operationalImports = require("./operationalImports");
 const sempreIntegration = require("./sempreIntegration");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
-const financeiro = require("./financeiro");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
+const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
@@ -1157,114 +1157,14 @@ function createApp() {
     requireRoles,
   }));
 
-  app.get(
-    "/api/financeiro/dashboard",
-    requireAuthenticated,
-    requireAnyPermission(FINANCEIRO_VIEW_PERMISSIONS, FINANCEIRO_ROLES),
-    async (_req, res, next) => {
-      try {
-        res.json(await financeiro.getDashboard());
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/financeiro/mockup",
+  app.use("/api/financeiro", createFinanceiroRouter({
+    financeiroManagePermissions: FINANCEIRO_MANAGE_PERMISSIONS,
+    financeiroRoles: FINANCEIRO_ROLES,
+    financeiroViewPermissions: FINANCEIRO_VIEW_PERMISSIONS,
+    requireAnyPermission,
     requireAuthenticated,
     requireCsrfToken,
-    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await financeiro.seedMockup(req.user));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.delete(
-    "/api/financeiro/mockup",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
-    async (_req, res, next) => {
-      try {
-        res.json(await financeiro.clearMockup());
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/financeiro/sheets-config",
-    requireAuthenticated,
-    requireAnyPermission(["financeiro.configuracoes.view", "financeiro.configuracoes.manage"], FINANCEIRO_ROLES),
-    async (_req, res, next) => {
-      try {
-        res.json(await financeiro.getSheetsConfig());
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.put(
-    "/api/financeiro/sheets-config",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await financeiro.saveSheetsConfig(req.body || {}, req.user));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/financeiro/sheets-config/test/:sourceId",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await financeiro.testSheetSource(req.params.sourceId));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/financeiro/sheets-config/sync",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await financeiro.runSheetsImport(req.user, { manual: true }));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/financeiro/sheets-config/logs",
-    requireAuthenticated,
-    requireAnyPermission(["financeiro.configuracoes.view", "financeiro.configuracoes.manage"], FINANCEIRO_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await financeiro.listImportLogs(req.query.limit));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+  }));
 
   app.use("/api", createHealthRealtimeRouter({
     attachRealtimeClient,
