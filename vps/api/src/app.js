@@ -30,6 +30,7 @@ const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
+const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const { createImoveisRouter } = require("./imoveis");
@@ -3088,96 +3089,13 @@ function createApp() {
     }
   });
 
-  app.get("/api/mensageria/evolution/status", requireAuthenticated, requireAnyPermission(["mensageria.api.view", "mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json({
-        config: await evolutionMessaging.getConfig(),
-        worker: evolutionMessaging.getStatus(),
-        connection: await evolutionMessaging.getConnectionInfo(),
-        accountsConnection: await evolutionMessaging.getAccountsConnectionInfo(),
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/connect", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await evolutionMessaging.createOrConnectInstance());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/disconnect", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await evolutionMessaging.logoutInstance());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/webhook", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      if (req.body?.webhookUrl) {
-        await evolutionMessaging.saveConfigPatch({ evolutionWebhookUrl: req.body.webhookUrl });
-      }
-      res.json(await evolutionMessaging.configureWebhook());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/mensageria/evolution/webhook", requireAuthenticated, requireAnyPermission(["mensageria.api.view", "mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await evolutionMessaging.getWebhookInfo());
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/run", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.fila.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await evolutionMessaging.processQueueOnce({ manual: true }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/test", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      res.json(await evolutionMessaging.sendTestMessage(req.body || {}, req.user));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/pause", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.fila.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      await evolutionMessaging.saveConfigPatch({ evolutionPaused: true });
-      evolutionMessaging.resetNextRunAt();
-      res.json({ ok: true, paused: true });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/mensageria/evolution/resume", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.fila.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
-    try {
-      const config = await evolutionMessaging.getConfig();
-      const provider = String(config.whatsappProvider || "evolution");
-      await evolutionMessaging.saveConfigPatch({
-        evolutionPaused: false,
-        autoSend: true,
-        evolutionEnabled: provider === "evolution" ? true : Boolean(config.evolutionEnabled),
-        officialWhatsappEnabled: provider === "official_whatsapp" ? true : Boolean(config.officialWhatsappEnabled),
-      });
-      evolutionMessaging.wakeQueueWorker();
-      res.json({ ok: true, paused: false, autoSend: true, worker: evolutionMessaging.getStatus() });
-    } catch (error) {
-      next(error);
-    }
-  });
+  app.use("/api/mensageria/evolution", createMensageriaEvolutionRouter({
+    adminRoles: ADMIN_ROLES,
+    evolutionMessaging,
+    requireAnyPermission,
+    requireAuthenticated,
+    requireCsrfToken,
+  }));
 
   app.get("/api/agendamentos/confirmacao/config", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
     try {
