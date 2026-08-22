@@ -29,6 +29,7 @@ const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
 const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
+const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const { createImoveisRouter } = require("./imoveis");
@@ -2759,60 +2760,13 @@ function createApp() {
     },
   );
 
-  app.get(
-    "/api/logistica/config",
-    requireAuthenticated,
-    requireRoles(FULL_OPERATION_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await logisticaIntegration.readConfig({ sanitized: true }));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.put(
-    "/api/logistica/config",
+  app.use("/api/logistica", createLogisticaRouter({
+    fullOperationRoles: FULL_OPERATION_ROLES,
+    logisticaIntegration,
     requireAuthenticated,
     requireCsrfToken,
-    requireRoles(FULL_OPERATION_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await logisticaIntegration.saveConfig(req.body || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/logistica/lalamove/quote",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(FULL_OPERATION_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await logisticaIntegration.requestLalamoveQuotation(req.body || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/logistica/geocode",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(FULL_OPERATION_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await logisticaIntegration.geocodeAddress(req.body || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+    requireRoles,
+  }));
 
   app.post(
     "/api/admin/documents",
