@@ -23,10 +23,13 @@ const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
+const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
 const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
+const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
+const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
@@ -2448,228 +2451,29 @@ function createApp() {
     },
   );
 
-  app.get(
-    "/api/admin/hubsoft/config",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await hubsoftIntegration.readConfig({ sanitized: true }));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.put(
-    "/api/admin/hubsoft/config",
+  app.use("/api/admin/hubsoft", createHubsoftAdminRouter({
+    adminRoles: ADMIN_ROLES,
+    hubsoftIntegration,
     requireAuthenticated,
     requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await hubsoftIntegration.saveConfig(req.body || {}, req.user?.profile || req.user || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+    requireRoles,
+  }));
 
-  app.post(
-    "/api/admin/hubsoft/test",
+  app.use("/api/admin/cvortex", createCvortexAdminRouter({
+    adminRoles: ADMIN_ROLES,
+    cvortexIntegration,
     requireAuthenticated,
     requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await hubsoftIntegration.testConnection());
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+    requireRoles,
+  }));
 
-  app.post(
-    "/api/admin/hubsoft/associate",
+  app.use("/api/admin/senior", createSeniorAdminRouter({
+    adminRoles: ADMIN_ROLES,
+    requireAnyPermission,
     requireAuthenticated,
     requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await hubsoftIntegration.associateHubsoft(req.user?.profile || req.user || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/admin/hubsoft/ordens-servico",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await hubsoftIntegration.searchOrdensServico(req.query || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/hubsoft/sync",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await hubsoftIntegration.startSyncJob(req.body || {}, req.user || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/admin/cvortex/config",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await cvortexIntegration.readConfig({ sanitized: true }));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.put(
-    "/api/admin/cvortex/config",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await cvortexIntegration.saveConfig(req.body || {}, req.user?.profile || req.user || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/cvortex/test",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await cvortexIntegration.testConnection());
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/cvortex/send-test",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await cvortexIntegration.sendTestMessage(req.body || {}, req.user));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/cvortex/associate",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await cvortexIntegration.associateCvortex(req.user?.profile || req.user || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/admin/senior/config",
-    requireAuthenticated,
-    requireAnyPermission(["manage_integracoes", "configuracao.senior.view", "configuracao.senior.manage"], ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await seniorIntegration.readConfig({ sanitized: true }));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.put(
-    "/api/admin/senior/config",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireAnyPermission(["manage_integracoes", "configuracao.senior.manage"], ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await seniorIntegration.saveConfig(req.body || {}, req.user?.profile || req.user || {}));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/senior/test",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireAnyPermission(["manage_integracoes", "configuracao.senior.manage"], ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await seniorIntegration.testConnection());
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/admin/hubsoft/sync/jobs/:jobId",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        const job = await hubsoftIntegration.getSyncJob(req.params.jobId);
-        if (!job) {
-          res.status(404).json({ error: "Job Hubsoft nao encontrado." });
-          return;
-        }
-        res.json(job);
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/admin/hubsoft/sync/runs",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json({ items: await hubsoftIntegration.listSyncRuns(req.query || {}) });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+    seniorIntegration,
+  }));
 
   app.get(
     "/api/admin/database/backups",
