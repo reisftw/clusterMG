@@ -1,12 +1,15 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import TabMatchOS from "./tabs/TabMatchOS";
 import { useAgentesMatchPublico } from "./hooks/useAgentesMatchPublico";
-import { resolveFirestoreDate } from "../../services/firestoreDate";
+import { resolveVpsDate } from "../../services/vpsDate";
 import PublicPageLoading from "./components/PublicPageLoading";
+import PwaInstallButton from "../../components/layout/PwaInstallButton";
+import PublicNotificationsButton from "../../components/layout/PublicNotificationsButton";
+import "./PainelPublico.css";
+import "./PublicMobileFix.css";
 
 function formatData(meta) {
-  if (!meta?.data) return "Nunca atualizado";
-  const date = resolveFirestoreDate(meta.data);
+  const date = resolveVpsDate(meta);
 
   if (!date || Number.isNaN(date.getTime())) return "Nunca atualizado";
 
@@ -31,45 +34,45 @@ export default function AgentesMatchPage() {
   const dadosValidos = useMemo(() => data || null, [data]);
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6">
-      <div className="mx-auto max-w-[1200px]">
-        <div className="overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-900 via-blue-900 to-cyan-700 shadow-[0_24px_80px_rgba(15,23,42,0.25)]">
-          <div className="px-6 py-8 sm:px-8 sm:py-10">
-            <div className="inline-flex items-center rounded-full border border-amber-300/30 bg-amber-300/10 px-4 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-amber-100">
-              Portal de Oportunidades
+    <div className="agentes-match-page">
+      <div className="agentes-match-shell">
+        <div className="agentes-match-hero">
+          <div className="agentes-match-hero-inner">
+            <div className="agentes-match-top">
+              <div className="agentes-match-pill">
+                Portal de Oportunidades
+              </div>
+              <div className="agentes-match-actions">
+                <PublicNotificationsButton labelMode="full" />
+                <PwaInstallButton labelMode="full" />
+              </div>
             </div>
-            <h1 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">
+            <h1 className="agentes-match-title">
               Oportunidades para Agentes Autorizados
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200 sm:text-base">
-              Aqui voce acompanha oportunidades identificadas para atendimento
-              nas cidades dos agentes autorizados, com destaque para servicos
+            <p className="agentes-match-subtitle">
+              Aqui você acompanha oportunidades identificadas para atendimento
+              nas cidades dos agentes autorizados, com destaque para serviços
               proximos de retiradas e cancelamentos.
             </p>
-            <div className="mt-5 flex flex-wrap gap-4 text-xs text-slate-200 sm:text-sm">
+            <div className="agentes-match-meta">
               <span>
-                Ultima atualizacao:{" "}
-                <strong className="text-white">
-                  {formatData(ultimaAtualizacao)}
-                </strong>
+                Última atualização:{" "}
+                <strong>{formatData(ultimaAtualizacao)}</strong>
               </span>
               {ultimaAtualizacao?.periodoInicio && ultimaAtualizacao?.periodoFim ? (
                 <span>
-                  Periodo:{" "}
-                  <strong className="text-white">
-                    {formatarPeriodo(ultimaAtualizacao.periodoInicio)}
-                  </strong>{" "}
+                  Período:{" "}
+                  <strong>{formatarPeriodo(ultimaAtualizacao.periodoInicio)}</strong>{" "}
                   ate{" "}
-                  <strong className="text-white">
-                    {formatarPeriodo(ultimaAtualizacao.periodoFim)}
-                  </strong>
+                  <strong>{formatarPeriodo(ultimaAtualizacao.periodoFim)}</strong>
                 </span>
               ) : null}
             </div>
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="agentes-match-content mt-6">
           {loading ? (
             <PublicPageLoading
               title="Carregando oportunidades"
@@ -87,3 +90,4 @@ export default function AgentesMatchPage() {
     </div>
   );
 }
+

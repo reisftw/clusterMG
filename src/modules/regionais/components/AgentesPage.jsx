@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Plus, RefreshCw, Pencil, Trash2, Star, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAgentes } from '../hooks/useAgentes';
 import { useRegionais } from '../hooks/useRegionais';
@@ -11,13 +11,13 @@ import Spinner from '../../../components/ui/Spinner';
 const AgentesPage = () => {
   const { currentUser } = useAuthContext();
   const { agentes, loading, carregar, criar, atualizar, excluir } = useAgentes();
-  const { regionais } = useRegionais();
+  useRegionais();
 
   const [expandidos,      setExpandidos]      = useState({});
   const [modal,           setModal]           = useState(null);
   const [confirmarExcluir, setConfirmarExcluir] = useState(null);
 
-  const podeEditar = hasPermission(currentUser?.role, 'manage_regionais');
+  const podeEditar = hasPermission(currentUser?.role, 'manage_agentes');
   const toggle = (id) => setExpandidos((p) => ({ ...p, [id]: !p[id] }));
 
   const porRegional = useMemo(() => {
@@ -78,6 +78,14 @@ const AgentesPage = () => {
               <div
                 className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
                 onClick={() => toggle(nomeRegional)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggle(nomeRegional);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-gray-400">
@@ -120,7 +128,7 @@ const AgentesPage = () => {
                             </div>
                           )}
                         </div>
-                        <ContactCard label="Responsável" pessoa={agente.responsavel} />
+                        <ContactCard label="Responsavel" pessoa={agente.responsavel} />
                       </div>
                     ))}
                   </div>
@@ -154,7 +162,7 @@ const AgentesPage = () => {
             </div>
             <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir agente?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              Agente de <span className="font-semibold text-gray-700">{confirmarExcluir.cidade}</span> será removido permanentemente.
+              Agente de <span className="font-semibold text-gray-700">{confirmarExcluir.cidade}</span> sera removido permanentemente.
             </p>
             <div className="flex gap-3">
               <button
@@ -178,3 +186,4 @@ const AgentesPage = () => {
 };
 
 export default AgentesPage;
+

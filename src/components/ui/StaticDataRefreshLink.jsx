@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { regenerateStaticData } from "../../services/staticDataService";
 
@@ -59,9 +59,7 @@ export default function StaticDataRefreshLink({
 
       {status ? (
         <span
-          className={`text-xs ${
-            status.type === "success" ? "text-green-600" : "text-red-600"
-          }`}
+          className="text-xs font-bold text-red-600"
         >
           {status.message}
         </span>
@@ -69,3 +67,4 @@ export default function StaticDataRefreshLink({
     </div>
   );
 }
+

@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { CalendarDays, User, X } from "lucide-react";
 
 const isColaboradorAtivo = (colaborador) => {
   const status = String(colaborador?.status || "").toLowerCase();
   return (
     status === "ativo" ||
-    status === "em experiência" ||
+    status === "em experiencia" ||
     status === "em experiencia" ||
     status === "em_experiencia"
   );
@@ -16,7 +16,7 @@ const FeriasSolicitacaoForm = ({
   onClose,
   colaboradores = [],
   permitirEscolherColaborador = false,
-  titulo = "Solicitar Férias",
+  titulo = "Solicitar Ferias",
   textoAcao = "Solicitar",
 }) => {
   const [colaboradorId, setColaboradorId] = useState("");
@@ -56,7 +56,7 @@ const FeriasSolicitacaoForm = ({
     }
 
     if (new Date(dataFim) < new Date(dataInicio)) {
-      setErro("A data de fim não pode ser anterior à data de início.");
+      setErro("A data de fim nao pode ser anterior a data de inicio.");
       return;
     }
 
@@ -120,7 +120,7 @@ const FeriasSolicitacaoForm = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                Data de Início
+                Data de Inicio
               </label>
               <input
                 type="date"
@@ -149,7 +149,7 @@ const FeriasSolicitacaoForm = ({
             <div className="flex items-center justify-center gap-3 py-3 bg-orange-50 rounded-xl border border-orange-100">
               <CalendarDays size={18} className="text-orange-500" />
               <span className="text-sm font-bold text-orange-700">
-                {dias} dia{dias !== 1 ? "s" : ""} de férias
+                {dias} dia{dias !== 1 ? "s" : ""} de ferias
               </span>
             </div>
           )}
@@ -183,3 +183,4 @@ const FeriasSolicitacaoForm = ({
 };
 
 export default FeriasSolicitacaoForm;
+

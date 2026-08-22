@@ -1,161 +1,406 @@
-import { useState } from "react";
-import { X, User } from "lucide-react";
-import { atualizarUsuarioAdmin } from "../services/authService";
-import { useRegionais } from "../../regionais/hooks/useRegionais";
-import { ROLES } from "../../../constants/roles";
+import { useEffect, useState } from "react";
+import { Camera, KeyRound, Mail, MapPin, ShieldCheck, User, UserCheck, X } from "lucide-react";
+import ModalShell from "../../../components/ui/ModalShell";
+import {
+  atualizarUsuarioAdmin,
+  enviarAvatarAdmin,
+  gerarLinkPrimeiroAcessoAdmin,
+  listarEmpresasAdmin,
+  listarRegionaisAdmin,
+} from "../services/authService";
+import { CARGOS_RETIRADAS, ROLES, getRoleLabel } from "../../../constants/roles";
+import { AVATAR_ACCEPT, validateImageFile } from "../../../utils/imageUpload";
 
-const inputClass =
-  "w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm";
+const fieldClass =
+  "w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 placeholder:text-slate-400";
+const labelClass = "mb-2 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-700";
+const labelIconClass = "flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600";
 
-const EditarUsuarioModal = ({ usuario, onClose, onSalvo }) => {
-  const { regionais } = useRegionais();
+function buildAllowedRoles(currentUser, cargosOptions = CARGOS_RETIRADAS) {
+  const normalizedRole = String(currentUser?.role || currentUser || "").toLowerCase();
+  if (normalizedRole === ROLES.SUPERVISOR) return [ROLES.BACKOFFICE, ROLES.LIDER_EMPRESA];
+  if (normalizedRole === ROLES.SUPERVISOR_ADMINISTRATIVO) return [ROLES.ANALISTA_ADMINISTRATIVO, ROLES.LIDER_EMPRESA, ROLES.AGENTE_AUTORIZADO];
+  if (normalizedRole !== ROLES.ADMIN) return [];
+  return cargosOptions.map((cargo) => cargo.value).filter(Boolean);
+}
+
+function requiresEmpresa(role) {
+  return [ROLES.LIDER_EMPRESA, ROLES.AGENTE_AUTORIZADO].includes(role);
+}
+
+const EditarUsuarioModal = ({ usuario, currentUser, onClose, onSalvo, cargosOptions = CARGOS_RETIRADAS }) => {
+  const allowedRoles = buildAllowedRoles(currentUser, cargosOptions);
+  const isSupervisor = String(currentUser?.role || "").toLowerCase() === ROLES.SUPERVISOR;
+  const [regionais, setRegionais] = useState([]);
+  const [empresas, setEmpresas] = useState([]);
+  const [loadingRegionais, setLoadingRegionais] = useState(true);
   const [form, setForm] = useState({
     nome: usuario.nome || "",
     email: usuario.email || "",
-    role: usuario.role || ROLES.TECNICO,
-    regional: usuario.regional || "",
+    role:
+      usuario.role && allowedRoles.includes(usuario.role)
+        ? usuario.role
+        : allowedRoles[0] || ROLES.BACKOFFICE_RETIRADA,
+    regional: usuario.regional || (isSupervisor ? currentUser?.regional || "" : ""),
+    empresaId: usuario.empresaId || usuario.empresa_id || "",
+    empresaNome: usuario.empresaNome || usuario.empresa_nome || "",
+    avatarUrl: usuario.avatarUrl || "",
   });
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
+  const [loadingLink, setLoadingLink] = useState(false);
+  const [senhaPrimeiroAcesso, setSenhaPrimeiroAcesso] = useState("");
 
-  const set = (field, val) => setForm((f) => ({ ...f, [field]: val }));
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setSaving(true);
+    setErro("");
+    try {
+      validateImageFile(file);
+      const avatarUrl = await enviarAvatarAdmin(file);
+      set("avatarUrl", avatarUrl);
+    } catch (error) {
+      setErro(error?.message || "Não foi possível enviar o avatar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const set = (field, val) => setForm((current) => ({ ...current, [field]: val }));
+
+  useEffect(() => {
+    let active = true;
+
+    const carregarRegionais = async () => {
+      setLoadingRegionais(true);
+      try {
+        const [data, empresasData] = await Promise.all([
+          listarRegionaisAdmin(),
+          listarEmpresasAdmin().catch(() => []),
+        ]);
+        if (active) {
+          const regionalKey = String(currentUser?.regional || "").toLowerCase();
+          setRegionais(isSupervisor ? data.filter((item) => String(item.nome || "").toLowerCase() === regionalKey) : data);
+          setEmpresas(isSupervisor ? empresasData.filter((item) => String(item.regional || "").toLowerCase() === regionalKey) : empresasData);
+        }
+      } catch {
+        if (active) {
+          setErro("Nao foi possivel carregar as regionais.");
+        }
+      } finally {
+        if (active) {
+          setLoadingRegionais(false);
+        }
+      }
+    };
+
+    carregarRegionais();
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.regional, isSupervisor]);
 
   const handleSalvar = async () => {
     if (!form.nome.trim()) {
-      setErro("Nome é obrigatório.");
+      setErro("Nome e obrigatorio.");
       return;
     }
+    if (requiresEmpresa(form.role) && !form.empresaId) {
+      setErro("Selecione a empresa vinculada ao usuário.");
+      return;
+    }
+
     setSaving(true);
     setErro("");
+
     try {
       await atualizarUsuarioAdmin(usuario.id, {
         nome: form.nome.trim(),
         email: form.email.trim().toLowerCase(),
         role: form.role,
         regional: form.regional,
+        empresaId: form.empresaId,
+        empresaNome: form.empresaNome,
+        avatarUrl: form.avatarUrl,
       });
       onSalvo();
       onClose();
-    } catch (e) {
-      setErro("Erro ao salvar: " + e.message);
+    } catch (error) {
+      setErro("Erro ao salvar: " + error.message);
     } finally {
       setSaving(false);
     }
   };
 
+  const handleGerarLink = async () => {
+    setLoadingLink(true);
+    setErro("");
+
+    try {
+      const response = await gerarLinkPrimeiroAcessoAdmin(usuario.id);
+      setSenhaPrimeiroAcesso(response?.temporaryPassword || "");
+    } catch (error) {
+      setErro("Erro ao gerar senha temporaria: " + error.message);
+    } finally {
+      setLoadingLink(false);
+    }
+  };
+
+  const handleRoleChange = (value) => {
+    setForm((current) => ({
+      ...current,
+      role: value,
+      ...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
+    }));
+  };
+
+  const handleEmpresaChange = (value) => {
+    const empresa = empresas.find((item) => item.id === value);
+    setForm((current) => ({
+      ...current,
+      empresaId: empresa?.id || "",
+      empresaNome: empresa?.nome || "",
+      regional: empresa?.regional || current.regional,
+    }));
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6 space-y-4">
-        <div className="flex justify-center">
-          <img
-            src="https://i.ibb.co/Xk2MjZLG/logosempre.png"
-            alt="Logo"
-            className="h-8 object-contain"
-          />
-        </div>
+    <ModalShell onClose={onClose} showClose={false} size="3xl" bodyClassName="p-0">
+      <div className="relative w-full">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-5 top-5 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+          aria-label="Fechar"
+        >
+          <X size={22} />
+        </button>
 
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <User size={17} /> Editar Usuário
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-          >
-            <X size={18} />
-          </button>
-        </div>
+        <div className="px-5 pb-6 pt-6 sm:px-7">
+          <div className="flex items-center gap-4 border-b border-slate-200 pb-5 pr-12">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#061d38] shadow-lg shadow-slate-200">
+                <img
+                  src="/cluster-mg.png"
+                  alt="Cluster MG"
+                  className="h-full w-full object-cover"
+                />
+              </div>
 
-        {erro && (
-          <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg">
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-slate-950">
+                  Editar usuário
+                </h2>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-500">
+                  Atualize o perfil, permissões e regional vinculada ao usuário.
+                </p>
+              </div>
+          </div>
+
+        {erro ? (
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {erro}
           </p>
-        )}
+        ) : null}
 
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Nome *
+          <div className="mt-5 flex items-center gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-black text-white">
+              {form.avatarUrl || usuario.avatarDataUrl ? (
+                <img src={form.avatarUrl || usuario.avatarDataUrl} alt="Avatar do usuário" className="h-full w-full object-cover" />
+              ) : (
+                String(form.nome || form.email || "U").charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-slate-950">Avatar do usuário</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Aceita apenas JPG ou PNG até 600 KB.
+              </p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-blue-700 shadow-sm ring-1 ring-blue-100 transition hover:bg-blue-50">
+              <Camera size={15} /> Trocar
+              <input
+                type="file"
+                accept={AVATAR_ACCEPT}
+                disabled={saving}
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div>
+                <label className={labelClass}>
+                  <span className={labelIconClass}>
+                    <User size={18} />
+                  </span>
+                  Nome completo <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={form.nome}
-              onChange={(e) => set("nome", e.target.value)}
-              className={inputClass}
-              placeholder="Nome completo"
+              onChange={(event) => set("nome", event.target.value)}
+                  className={fieldClass}
+                  placeholder="Digite o nome completo"
             />
           </div>
+
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                <label className={labelClass}>
+                  <span className={labelIconClass}>
+                    <Mail size={18} />
+                  </span>
               E-mail
             </label>
             <input
               type="email"
               value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-              className={inputClass}
-              placeholder="email@exemplo.com"
+              onChange={(event) => set("email", event.target.value)}
+                  className={fieldClass}
+                  placeholder="exemplo@email.com"
             />
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-              * Alterar e-mail só atualiza o Firestore. Para alterar no Auth, o
-              próprio usuário deve fazer pelo perfil.
+                <p className="mt-2 text-xs text-slate-500">
+                  Alterar e-mail atualiza o login local e o perfil na VPS.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Role *
+                <label className={labelClass}>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <ShieldCheck size={18} />
+                  </span>
+                  Role <span className="text-red-500">*</span>
               </label>
               <select
                 value={form.role}
-                onChange={(e) => set("role", e.target.value)}
-                className={inputClass}
+                onChange={(event) => handleRoleChange(event.target.value)}
+                  className={fieldClass}
               >
-                {Object.values(ROLES).map((r) => (
-                  <option key={r} value={r}>
-                    {r}
+                {allowedRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {cargosOptions.find((cargo) => cargo.value === role)?.label || getRoleLabel(role)}
                   </option>
                 ))}
               </select>
             </div>
+
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Regional
+                <label className={labelClass}>
+                  <span className={labelIconClass}>
+                    <MapPin size={18} />
+                  </span>
+                  Regional
               </label>
               <select
                 value={form.regional}
-                onChange={(e) => set("regional", e.target.value)}
-                className={inputClass}
+                onChange={(event) => set("regional", event.target.value)}
+                  className={fieldClass}
+                disabled={loadingRegionais || isSupervisor}
               >
-                <option value="">— Nenhuma —</option>
-                {regionais.map((r) => (
-                  <option key={r.id} value={r.nome}>
-                    {r.nome}
+                <option value="">- Nenhuma -</option>
+                {regionais.map((regional) => (
+                  <option key={regional.id} value={regional.nome}>
+                    {regional.nome}
                   </option>
                 ))}
               </select>
+                <p className="mt-2 text-xs text-slate-500">
+                {loadingRegionais
+                  ? "Carregando regionais..."
+                    : `${regionais.length} regional(is) disponível(is).`}
+              </p>
             </div>
+          </div>
+
+            {requiresEmpresa(form.role) ? (
+              <div className="mt-5">
+                <label className={labelClass}>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <UserCheck size={18} />
+                  </span>
+                  Empresa vinculada <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.empresaId}
+                  onChange={(event) => handleEmpresaChange(event.target.value)}
+                  className={fieldClass}
+                >
+                  <option value="">Selecione a empresa</option>
+                  {empresas.map((empresa) => (
+                    <option key={empresa.id} value={empresa.id}>
+                      {empresa.nome}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  Este perfil só enxerga o perfil e os documentos da empresa selecionada.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex gap-5">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+                    <KeyRound size={22} />
+                  </div>
+              <div>
+                    <p className="text-base font-black text-amber-600">
+                      Primeiro acesso / redefinição
+                </p>
+                    <p className="mt-1 text-sm leading-relaxed text-amber-900">
+                      Gere uma senha temporária para o usuário entrar e trocar a senha.
+                </p>
+              </div>
+                </div>
+              <button
+                type="button"
+                onClick={handleGerarLink}
+                disabled={loadingLink}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white px-4 text-sm font-extrabold text-amber-700 shadow-sm transition hover:bg-amber-50 disabled:opacity-60"
+              >
+                <KeyRound size={14} />
+                {loadingLink ? "Gerando..." : "Gerar senha"}
+              </button>
+            </div>
+
+            {senhaPrimeiroAcesso ? (
+              <textarea
+                readOnly
+                  value={`E-mail: ${form.email}\nSenha temporária: ${senhaPrimeiroAcesso}`}
+                  className="mt-4 h-20 w-full rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm"
+              />
+            ) : null}
           </div>
         </div>
 
-        <div className="flex gap-3 pt-1">
+          <div className="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-6 text-sm font-extrabold text-slate-700 transition hover:bg-slate-200"
           >
+              <X size={18} />
             Cancelar
           </button>
           <button
             onClick={handleSalvar}
             disabled={saving}
-            className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-60 text-sm"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-60"
           >
+              <UserCheck size={18} />
             {saving ? "Salvando..." : "Salvar"}
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ModalShell>
   );
 };
 
 export default EditarUsuarioModal;
+

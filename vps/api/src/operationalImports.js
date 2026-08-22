@@ -1,6 +1,9 @@
 const documents = require("./documents");
+const db = require("./db");
 const { broadcastRealtime } = require("./realtime");
 const { reconcileAppointmentsWithMapa } = require("./agendamentoMapaReconciliation");
+const { buildSnapshotDomain } = require("./publicDashboard");
+const { randomId } = require("./secureRandom");
 
 const MAPA_FONTES = {
   sempre: {
@@ -713,7 +716,7 @@ async function getCollectionMap(collectionPath) {
 }
 
 async function saveImportRun(type, payload = {}, uid = null) {
-  const id = `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId(type);
   await documents.upsertDocument({
     path: `operational_import_runs/${id}`,
     collectionPath: "operational_import_runs",
@@ -752,7 +755,7 @@ async function updateImportJob(jobId, patch = {}) {
 }
 
 async function createImportJob(type, payload = {}, user = {}) {
-  const id = `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId(type);
   const now = new Date().toISOString();
   const job = {
     id,
@@ -875,6 +878,19 @@ async function publishAcompanhamentoUpdate(source, payload = {}) {
   });
 }
 
+async function refreshDashboardSnapshot(generatedAt = new Date().toISOString()) {
+  const snapshot = await buildSnapshotDomain("dashboard");
+  await db.query(
+    `insert into static_snapshots (domain, data, generated_at)
+     values ($1, $2, $3)
+     on conflict (domain)
+     do update set
+       data = excluded.data,
+       generated_at = excluded.generated_at`,
+    ["dashboard", JSON.stringify(snapshot), generatedAt],
+  );
+}
+
 async function getMensageriaConfig() {
   const doc = await documents.getDocument(MENSAGERIA_CONFIG_PATH).catch(() => null);
   return doc?.data || {};
@@ -893,6 +909,7 @@ async function getMensageriaQueueKeys() {
 }
 
 function buildMensageriaQueueItemFromOrder(order = {}, id = "", config = {}) {
+  const createdAt = new Date().toISOString();
   const clienteRaw = String(readAnyField(order, ["nome_cliente", "cliente", "nome_razaosocial", "assinante"]));
   const cliente = clienteRaw
     .replace(/^\s*\(\d+\)\s*/, "")
@@ -918,6 +935,9 @@ function buildMensageriaQueueItemFromOrder(order = {}, id = "", config = {}) {
     status_os: String(readAnyField(order, ["status"])) || "Aberta",
     tipo: String(readAnyField(order, ["tipo", "tipo_ordem_servico"])) || "Tipo nao informado",
     origem: "Mapa - diferenca automatica",
+    origemTipo: "mapa_diff",
+    prioridadeEm: createdAt,
+    diffMapaEm: createdAt,
     templateId: config.activeTemplateId || "cancelamento",
     status: config.autoSend && config.approvedTemplate ? "aprovado" : "novo",
     tentativas: 0,
@@ -925,8 +945,8 @@ function buildMensageriaQueueItemFromOrder(order = {}, id = "", config = {}) {
     centralButtonText: "Falar com a central",
     centralButtonPhone: "+55 31 3987-0880",
     centralButtonMessage: config.buttonMessage || "",
-    criadoEm: new Date().toISOString(),
-    atualizadoEm: new Date().toISOString(),
+    criadoEm: createdAt,
+    atualizadoEm: createdAt,
   };
 }
 
@@ -1459,6 +1479,196 @@ async function saveMetasForceTaskConfig(rawConfig = {}, user = {}) {
   return { source: "metas", generatedAt: nowIso, config };
 }
 
+const DEFAULT_META_SEASONAL = {
+  Janeiro: 65,
+  Fevereiro: 65,
+  Marco: 75,
+  Abril: 85,
+  Maio: 90,
+  Junho: 90,
+  Julho: 90,
+  Agosto: 90,
+  Setembro: 85,
+  Outubro: 85,
+  Novembro: 75,
+  Dezembro: 65,
+};
+
+const META_BASE_IDS = ["sempre", "onnet", "onnetSempre"];
+const META_BASE_DEFAULTS = {
+  sempre: { mode: "sazonal", fixedPercent: 80 },
+  onnet: { mode: "fixa", fixedPercent: 65 },
+  onnetSempre: { mode: "fixa", fixedPercent: 80 },
+};
+
+function sanitizeMetaPercent(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(100, Math.max(0, Number(number.toFixed(1))));
+}
+
+function normalizeMetasBaseConfig(rawConfig = {}) {
+  return META_BASE_IDS.reduce((acc, baseId) => {
+    const defaults = META_BASE_DEFAULTS[baseId];
+    const raw = rawConfig?.[baseId] || {};
+    const rawSeasonal = raw.seasonalPercentByMonth || raw.sazonalidade || {};
+    acc[baseId] = {
+      mode: raw.mode === "fixa" || raw.mode === "sazonal" ? raw.mode : defaults.mode,
+      fixedPercent: sanitizeMetaPercent(raw.fixedPercent ?? raw.percentualFixo, defaults.fixedPercent),
+      seasonalPercentByMonth: Object.fromEntries(
+        Object.entries(DEFAULT_META_SEASONAL).map(([month, fallback]) => [
+          month,
+          sanitizeMetaPercent(rawSeasonal[month], fallback),
+        ]),
+      ),
+    };
+    return acc;
+  }, {});
+}
+
+function getMetaPercentForBase(config, baseId, month) {
+  const base = config?.[baseId] || config?.sempre || {};
+  if (base.mode === "fixa") return Number(base.fixedPercent || 0);
+  return Number(base.seasonalPercentByMonth?.[month] || base.fixedPercent || 80);
+}
+
+function getMetaModeLabel(config, baseId) {
+  const base = config?.[baseId] || config?.sempre || {};
+  return base.mode === "fixa" ? "Meta fixa" : "Meta sazonal";
+}
+
+function recalculateSaldoDiarioByMeta(saldoDiario = [], meta, metaOriginal) {
+  if (!Array.isArray(saldoDiario) || saldoDiario.length === 0) return saldoDiario;
+  const ratio = metaOriginal > 0 ? meta / metaOriginal : 1;
+  let saldoMes = 0;
+
+  return saldoDiario.map((row) => {
+    const totalDia = Number(row?.totalDia || 0);
+    const metaDia = Number((Number(row?.metaDia || 0) * ratio).toFixed(2));
+    const saldoDia = Number((totalDia - metaDia).toFixed(2));
+    saldoMes = Number((saldoMes + saldoDia).toFixed(2));
+    return {
+      ...row,
+      totalDia,
+      metaDia,
+      metaAcumulada: Number((Number(row?.metaAcumulada || 0) * ratio).toFixed(2)),
+      saldoDia,
+      saldoMes,
+    };
+  });
+}
+
+function recalculatePerformanceItemsByMeta(items = [], meta, metaOriginal) {
+  if (!Array.isArray(items) || items.length === 0) return items;
+  const ratio = metaOriginal > 0 ? meta / metaOriginal : 1;
+
+  return items.map((item) => {
+    const itemMetaOriginal = Number(item?.meta || 0);
+    const itemMeta = itemMetaOriginal > 0
+      ? Number((itemMetaOriginal * ratio).toFixed(2))
+      : itemMetaOriginal;
+    const total = Number(item?.total || 0);
+    return {
+      ...item,
+      meta: itemMeta,
+      percent: itemMeta > 0
+        ? Number(((total / itemMeta) * 100).toFixed(1))
+        : Number(item?.percent || 0),
+    };
+  });
+}
+
+function applyMetasBaseConfigToRecord(data, config, baseId, month) {
+  if (!data || typeof data !== "object") return data;
+  const metaSazonal = getMetaPercentForBase(config, baseId, month);
+  const metaOriginal = Number(data.meta || 0);
+  const cancelamentos =
+    Number(data.cancelamentos || 0) ||
+    Number(data.totalCancelamentos || 0) ||
+    (
+      metaOriginal > 0 && Number(data.metaSazonal || 0) > 0
+        ? metaOriginal / (Number(data.metaSazonal || 0) / 100)
+        : 0
+    );
+  const meta = cancelamentos > 0
+    ? Math.round(cancelamentos * (metaSazonal / 100))
+    : metaOriginal;
+  const totalOS = Number(data.totalOS || 0);
+  const percentAchieved = meta > 0
+    ? Number(((totalOS / meta) * 100).toFixed(1))
+    : Number(data.percentAchieved || 0);
+
+  return {
+    ...data,
+    meta,
+    metaSazonal,
+    metaMode: config?.[baseId]?.mode || "sazonal",
+    metaModeLabel: getMetaModeLabel(config, baseId),
+    percentAchieved,
+    saldoDiario: recalculateSaldoDiarioByMeta(data.saldoDiario, meta, metaOriginal),
+    technicians: recalculatePerformanceItemsByMeta(data.technicians, meta, metaOriginal),
+    regionais: recalculatePerformanceItemsByMeta(data.regionais, meta, metaOriginal),
+    status: percentAchieved >= 100
+      ? "Meta atingida!"
+      : `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
+  };
+}
+
+function applyMetasBaseConfigToMonthData(data, config, month) {
+  if (!data || typeof data !== "object") return data;
+  return {
+    ...applyMetasBaseConfigToRecord(data, config, "sempre", month),
+    onnet: applyMetasBaseConfigToRecord(data.onnet, config, "onnet", month),
+    onnetSempre: applyMetasBaseConfigToRecord(data.onnetSempre, config, "onnetSempre", month),
+  };
+}
+
+async function recalculateExistingMetasDocuments(config, nowIso) {
+  for (const collectionPath of ["metas", "dashboard"]) {
+    const rows = await documents.listAllDocuments(collectionPath);
+    for (const row of rows) {
+      const recalculated = applyMetasBaseConfigToMonthData(
+        row.data,
+        config,
+        row.documentId,
+      );
+      await documents.upsertDocument({
+        path: row.path,
+        collectionPath,
+        documentId: row.documentId,
+        parentPath: row.parentPath || null,
+        data: {
+          ...recalculated,
+          updatedAt: nowIso,
+        },
+      });
+    }
+  }
+}
+
+async function saveMetasBaseConfig(rawConfig = {}, user = {}) {
+  const nowIso = new Date().toISOString();
+  const config = normalizeMetasBaseConfig(rawConfig);
+  const current = (await documents.getDocument("config/metas"))?.data || {};
+  await documents.upsertDocument({
+    path: "config/metas",
+    collectionPath: "config",
+    documentId: "metas",
+    parentPath: null,
+    data: { ...current, baseConfig: config, updatedAt: nowIso },
+  });
+  await recalculateExistingMetasDocuments(config, nowIso);
+  await publishAcompanhamentoUpdate("metas", {
+    generatedAt: nowIso,
+    updatedBy: user.uid || null,
+    message: "Configuração de metas por base atualizada.",
+    summary: { baseConfig: config },
+  });
+  await refreshDashboardSnapshot(nowIso);
+
+  return { source: "metas", generatedAt: nowIso, config };
+}
+
 async function getMatchConfig() {
   const config = await loadMatchIgnoredTypes();
   return {
@@ -1501,5 +1711,6 @@ module.exports = {
   persistMatchImport,
   persistMetasImport,
   saveMatchConfig,
+  saveMetasBaseConfig,
   saveMetasForceTaskConfig,
 };

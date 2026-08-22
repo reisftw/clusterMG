@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Calendar, AlertTriangle, Map } from "lucide-react";
 import MapaGeoModal from "./MapaGeoModal";
 
@@ -21,16 +21,16 @@ export default function MapaFiltros({
 
   return (
     <>
-      <div className="flex flex-wrap gap-3 items-center mb-6">
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+      <div className="mb-6 grid w-full min-w-0 grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <Calendar size={14} className="text-gray-400" />
           <span className="text-xs font-semibold text-gray-500">Período:</span>
-          <div className="flex gap-1">
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto sm:flex-none">
             {OPCOES.map((op) => (
               <button
                 key={op.value}
                 onClick={() => setFiltroData(op.value)}
-                className={`text-xs font-semibold px-3 py-1 rounded-lg transition-all ${
+                className={`shrink-0 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
                   filtroData === op.value
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-500 hover:bg-gray-200"
@@ -42,7 +42,7 @@ export default function MapaFiltros({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+        <div className="flex min-w-0 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
           <AlertTriangle size={14} className="text-amber-500" />
           <span className="text-xs font-semibold text-gray-500">
             Alerta acima de:
@@ -60,14 +60,14 @@ export default function MapaFiltros({
         <button
           onClick={() => setMapaAberto(true)}
           disabled={disableMapa}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 shadow-sm text-xs font-semibold transition-all ${
+          className={`flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all ${
             disableMapa
               ? "bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed"
               : "bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 text-gray-600 hover:text-blue-600"
           }`}
         >
           <Map size={14} />
-          {disableMapa ? "Mapa indisponivel" : "Mapa"}
+          {disableMapa ? "Mapa indisponível" : "Mapa"}
         </button>
       </div>
 
@@ -77,3 +77,4 @@ export default function MapaFiltros({
     </>
   );
 }
+

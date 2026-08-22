@@ -28,6 +28,10 @@ async function query(text, params) {
   return pool.query(text, params);
 }
 
+async function connect() {
+  return pool.connect();
+}
+
 async function healthcheck() {
   const result = await query("select now() as now");
   return result.rows[0];
@@ -38,6 +42,7 @@ async function closePool() {
 }
 
 module.exports = {
+  connect,
   closePool,
   healthcheck,
   query,

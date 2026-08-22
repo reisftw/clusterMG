@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Plus, RefreshCw, Pencil, Trash2, ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { useRegionais } from '../hooks/useRegionais';
 import { useAuthContext } from '../../../context/AuthContext';
@@ -87,6 +87,14 @@ const RegionaisPage = () => {
               <div
                 className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
                 onClick={() => toggle(regional.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggle(regional.id);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-gray-400">
@@ -108,7 +116,12 @@ const RegionaisPage = () => {
                   )}
                 </div>
                 {podeEditar && (
-                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="flex gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    role="presentation"
+                  >
                     <button onClick={() => setModal(regional)} className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-500 transition-colors">
                       <Pencil size={14} />
                     </button>
@@ -132,7 +145,7 @@ const RegionaisPage = () => {
                           {listaBackoffices.map((b, i) => (
                             <ContactCard
                               key={i}
-                              label={listaBackoffices.length > 1 ? `Backoffice ${i + 1}` : 'Backoffice'}
+                              label={listaBackoffices.length > 1 ? `BackOffice ${String(i + 1).padStart(2, '0')}` : 'BackOffice'}
                               pessoa={b}
                             />
                           ))}
@@ -188,7 +201,7 @@ const RegionaisPage = () => {
             <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir regional?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
               <span className="font-semibold text-gray-700">{confirmarExcluir.nome}</span> e suas{' '}
-              {confirmarExcluir.cidades?.length ?? 0} cidades serão removidas permanentemente.
+              {confirmarExcluir.cidades?.length ?? 0} cidades serao removidas permanentemente.
             </p>
             <div className="flex gap-3">
               <button onClick={() => setConfirmarExcluir(null)}
@@ -209,3 +222,4 @@ const RegionaisPage = () => {
 };
 
 export default RegionaisPage;
+

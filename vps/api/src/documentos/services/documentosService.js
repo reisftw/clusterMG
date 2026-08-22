@@ -5,6 +5,8 @@ const repository = require("../repositories/documentosRepository");
 const drive = require("./googleDriveService");
 const archiverModule = require("archiver");
 
+const INVOICE_FIELDS_COLLECTION = "documentos_notas_fiscais_campos";
+
 const createArchiver = typeof archiverModule === "function"
   ? archiverModule
   : archiverModule.default;
@@ -34,6 +36,20 @@ function userName(user) {
 
 function userId(user) {
   return text(user?.uid || user?.id || user?.email);
+}
+
+function safeSlug(value) {
+  return normalize(value).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || `campo_${Date.now()}`;
+}
+
+function parseCurrency(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const normalized = text(value)
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 async function getEmpresa(empresaId) {
@@ -346,6 +362,12 @@ function fileExtension(file) {
   return "";
 }
 
+function invoiceFileName(field, mesReferencia, file) {
+  const ext = fileExtension(file);
+  const label = monthLabel(mesReferencia).replace("/", " ");
+  return `${field.nome} - ${label}${ext}`;
+}
+
 function monthlyDocumentFileName(field, mesReferencia, file) {
   const month = monthLabel(mesReferencia, " ");
   return `${sanitizeFileName(field?.nome || "Documento")} - ${sanitizeFileName(month)}${fileExtension(file)}`;
@@ -367,8 +389,12 @@ function latestFilesByField(files = []) {
   return [...latest.values()];
 }
 
+function documentFilesOnly(files = []) {
+  return files.filter((file) => normalize(file.categoria || "documento") !== "nota_fiscal");
+}
+
 function computeSubmissionStatus(files = []) {
-  const latestFiles = latestFilesByField(files);
+  const latestFiles = latestFilesByField(documentFilesOnly(files));
   if (!latestFiles.length) return "pendente";
   const statuses = latestFiles.map((item) => normalize(item.status || "pendente"));
   if (statuses.some((status) => status !== "aprovado")) return "pendente";
@@ -379,7 +405,7 @@ function computeSubmissionStatus(files = []) {
 }
 
 function summarizeRejectedFiles(files = []) {
-  return latestFilesByField(files)
+  return latestFilesByField(documentFilesOnly(files))
     .filter((item) => ["reprovado"].includes(normalize(item.status)) || normalize(item.adminStatus) === "reprovado")
     .map((item) => `${item.fieldNome || item.nome}: ${item.adminMotivoReprovacao || item.motivoReprovacao || "-"}`)
     .join("\n") || null;
@@ -447,7 +473,7 @@ async function markMissingDriveFileForResubmission(submission, file) {
     approvedAt: new Date().toISOString(),
   });
   const files = await repository.listSubmissionFiles(submission.id);
-  const latestFiles = latestFilesByField(files);
+  const latestFiles = latestFilesByField(documentFilesOnly(files));
   const nextStatus = computeSubmissionStatus(files);
   await repository.updateSubmissionOnly(submission.id, {
     status: nextStatus,
@@ -748,7 +774,7 @@ async function runBillingNotifications({ force = false, now = new Date() } = {})
 
     const submission = await repository.getLatestSubmissionByEmpresaMes(empresa.id, month);
     const files = submission ? await repository.listSubmissionFiles(submission.id) : [];
-    const latestByField = new Map(latestFilesByField(files).map((file) => [file.fieldId, file]));
+    const latestByField = new Map(latestFilesByField(documentFilesOnly(files)).map((file) => [file.fieldId, file]));
     const audience = empresa.agenteAutorizado ? "agente" : "tecnico";
     const companyFields = fields.filter((field) => fieldAppliesToAudience(field, audience));
     const pendingFields = companyFields.filter((field) => normalize(latestByField.get(field.id)?.status) !== "aprovado");
@@ -821,7 +847,7 @@ async function createMonthlySubmission({ mesReferencia, files = [], fieldIds = [
     error.statusCode = 409;
     throw error;
   }
-  const latestByField = new Map(latestFilesByField(existingFiles).map((file) => [file.fieldId, file]));
+  const latestByField = new Map(latestFilesByField(documentFilesOnly(existingFiles)).map((file) => [file.fieldId, file]));
   const pendingFields = [...latestByField.values()].filter((file) => normalize(file.status) === "pendente");
   if (pendingFields.length) {
     const error = new Error("Existem documentos aguardando avaliação neste mês. Aguarde o supervisor avaliar antes de enviar novamente.");
@@ -874,16 +900,23 @@ async function createMonthlySubmission({ mesReferencia, files = [], fieldIds = [
     const file = files[index];
     const field = fieldMap.get(fieldIds[index]) || null;
     if (field?.id) {
-      const repeatedFiles = existingFiles.filter((item) => item.fieldId === field.id && normalize(item.status) !== "aprovado");
+      const repeatedFiles = documentFilesOnly(existingFiles).filter((item) => item.fieldId === field.id && normalize(item.status) !== "aprovado");
       for (const repeatedFile of repeatedFiles) {
         await deleteDriveFileQuietly(repeatedFile);
       }
     }
-    const uploaded = await drive.uploadFile({
-      file,
-      folderId: monthFolder.id,
-      name: field?.nome ? monthlyDocumentFileName(field, month, file) : file.originalname,
-    });
+    let uploaded = null;
+    try {
+      uploaded = await drive.uploadFile({
+        file,
+        folderId: monthFolder.id,
+        name: field?.nome ? monthlyDocumentFileName(field, month, file) : file.originalname,
+      });
+    } catch (error) {
+      const uploadError = new Error(`Falha ao enviar arquivo para o Google Drive: ${error?.message || "erro desconhecido"}`);
+      uploadError.statusCode = error?.statusCode || 502;
+      throw uploadError;
+    }
     uploadedFiles.push(await repository.createFile({
       empresaId: empresa.id,
       empresaNome: empresa.nome,
@@ -923,6 +956,147 @@ async function createMonthlySubmission({ mesReferencia, files = [], fieldIds = [
   notifyInBackground(() => notifySubmissionCreated(updatedSubmission || submission));
   notifyInBackground(() => notifyInternalSubmissionCreated(updatedSubmission || submission, user));
   return { ...(updatedSubmission || submission), files: uploadedFiles };
+}
+
+function mapInvoiceFieldDocument(doc) {
+  if (!doc?.data) return null;
+  const data = doc.data || {};
+  return {
+    id: doc.documentId,
+    nome: text(data.nome),
+    ordem: Number(data.ordem || 0),
+    ativo: data.ativo !== false,
+    createdAt: data.createdAt || doc.importedAt,
+    updatedAt: data.updatedAt || doc.updatedAt,
+  };
+}
+
+async function listInvoiceFields({ includeInactive = false } = {}) {
+  const docs = await documents.listAllDocuments(INVOICE_FIELDS_COLLECTION);
+  return docs
+    .map(mapInvoiceFieldDocument)
+    .filter(Boolean)
+    .filter((field) => includeInactive || field.ativo)
+    .sort((a, b) => (a.ordem - b.ordem) || a.nome.localeCompare(b.nome));
+}
+
+async function saveInvoiceField(field = {}, user) {
+  requireAdminUser(user);
+  const nome = text(field.nome);
+  if (!nome) {
+    const error = new Error("Informe o nome da nota fiscal.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const id = text(field.id) || safeSlug(nome);
+  const now = new Date().toISOString();
+  const current = await documents.getDocument(`${INVOICE_FIELDS_COLLECTION}/${id}`).catch(() => null);
+  const data = {
+    ...(current?.data || {}),
+    nome,
+    ordem: Number(field.ordem || 0),
+    ativo: field.ativo !== false,
+    updatedAt: now,
+    updatedBy: userId(user),
+    updatedByName: userName(user),
+  };
+  if (!data.createdAt) data.createdAt = now;
+  await documents.upsertDocument({
+    path: `${INVOICE_FIELDS_COLLECTION}/${id}`,
+    collectionPath: INVOICE_FIELDS_COLLECTION,
+    documentId: id,
+    data,
+  });
+  return mapInvoiceFieldDocument({ documentId: id, data });
+}
+
+function canUploadInvoices(user, submission) {
+  const role = normalize(user?.role);
+  if (["admin", "supervisor_administrativo", "analista_administrativo"].includes(role)) return true;
+  if (role === "supervisor") return normalize(user?.regional || user?.profile?.regional) === normalize(submission.regional);
+  if (["lider_empresa", "agente_autorizado"].includes(role)) {
+    const empresaId = text(user?.empresaId || user?.empresa_id || user?.profile?.empresaId || user?.profile?.empresa_id);
+    return empresaId && empresaId === submission.empresaId;
+  }
+  return false;
+}
+
+async function uploadSubmissionInvoices({ id, files = [], fieldIds = [], valores = [], user }) {
+  const submission = await getSubmissionWithFiles({ id, user });
+  if (!canUploadInvoices(user, submission)) {
+    const error = new Error("Sem permissão para enviar notas fiscais deste envio.");
+    error.statusCode = 403;
+    throw error;
+  }
+  if (normalize(submission.status) !== "aprovado") {
+    const error = new Error("As notas fiscais só podem ser enviadas após todos os documentos serem aprovados.");
+    error.statusCode = 409;
+    throw error;
+  }
+  if (!files.length) {
+    const error = new Error("Envie ao menos uma nota fiscal.");
+    error.statusCode = 400;
+    throw error;
+  }
+  files.forEach(ensureAllowedMonthlyDocument);
+  const fields = await listInvoiceFields();
+  const fieldMap = new Map(fields.map((field) => [field.id, field]));
+  const empresa = await requireEmpresaAccess(user, submission.empresaId);
+  const { monthFolder } = await ensureMonthFolder(empresa, submission.mesReferencia, user);
+  const invoiceFolder = await drive.createFolder("Notas fiscais", monthFolder.id);
+  const uploadedFiles = [];
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    const field = fieldMap.get(fieldIds[index]) || { id: null, nome: text(file.originalname || "Nota fiscal") };
+    const valor = parseCurrency(valores[index]);
+    if (valor <= 0) {
+      const error = new Error(`Informe o valor da nota fiscal "${field.nome}".`);
+      error.statusCode = 400;
+      throw error;
+    }
+    let uploaded = null;
+    try {
+      uploaded = await drive.uploadFile({
+        file,
+        folderId: invoiceFolder.id,
+        name: invoiceFileName(field, submission.mesReferencia, file),
+      });
+    } catch (error) {
+      const uploadError = new Error(`Falha ao enviar nota fiscal para o Google Drive: ${error?.message || "erro desconhecido"}`);
+      uploadError.statusCode = error?.statusCode || 502;
+      throw uploadError;
+    }
+    uploadedFiles.push(await repository.createFile({
+      empresaId: submission.empresaId,
+      empresaNome: submission.empresaNome,
+      supervisorId: submission.supervisorId,
+      supervisorNome: submission.supervisorNome,
+      regional: submission.regional,
+      driveFileId: uploaded.id,
+      driveFolderId: invoiceFolder.id,
+      parentDriveFolderId: monthFolder.id,
+      nome: uploaded.name || file.originalname,
+      mimeType: uploaded.mimeType || file.mimetype,
+      tipo: field.nome || "Nota fiscal",
+      categoria: "nota_fiscal",
+      valor,
+      tamanho: Number(uploaded.size || file.size || 0),
+      status: "aprovado",
+      uploadedBy: userId(user),
+      uploadedByName: userName(user),
+      submissionId: submission.id,
+      fieldId: field.id || null,
+      fieldNome: field.nome || null,
+      mesReferencia: submission.mesReferencia,
+    }));
+  }
+
+  return {
+    ...submission,
+    files: await repository.listSubmissionFiles(submission.id),
+    invoices: uploadedFiles,
+  };
 }
 
 async function listSubmissions({ status, mine = false, empresaId, limit, offset, user }) {
@@ -1093,7 +1267,7 @@ async function downloadDocument({ id, user }) {
 
 async function downloadSubmissionZip({ id, user }) {
   const submission = await getSubmissionWithFiles({ id, user });
-  const latestFiles = latestFilesByField(submission.files || []);
+  const latestFiles = latestFilesByField(documentFilesOnly(submission.files || []));
   const approvedFiles = latestFiles.filter((file) => normalize(file.status) === "aprovado");
   if (computeSubmissionStatus(submission.files || []) !== "aprovado" || !approvedFiles.length) {
     const error = new Error("O ZIP so fica disponivel quando todos os documentos estiverem aprovados.");
@@ -1167,69 +1341,124 @@ async function deleteDocument({ id, user }) {
   return repository.deleteFile(id);
 }
 
-async function updateApproval({ id, status, motivo, user }) {
-  const file = await getAccessibleFile(id, user);
-  const normalizedStatus = normalize(status);
-  if (!["aprovado", "reprovado", "pendente"].includes(normalizedStatus)) {
+function assertApprovalStatus(status, motivo) {
+  if (!["aprovado", "reprovado", "pendente"].includes(status)) {
     const error = new Error("Status invalido.");
     error.statusCode = 400;
     throw error;
   }
-  if (normalizedStatus === "reprovado" && !text(motivo)) {
+  if (status === "reprovado" && !text(motivo)) {
     const error = new Error("Informe o motivo da reprovação.");
     error.statusCode = 400;
     throw error;
   }
-  const isAdministrativeStep = normalize(file.status) === "aprovado" && normalize(file.adminStatus) !== "aprovado";
-  const reviewMode = isAdministrativeStep ? "administrativo" : "operacional";
-  if (isAdministrativeStep) {
-    if (!canAdministrativeReview(user)) {
-      const error = new Error("Apenas o administrativo pode finalizar documentos já aprovados pelo supervisor.");
-      error.statusCode = 403;
-      throw error;
-    }
-  } else if (!canApprove(user, file)) {
+}
+
+function getReviewMode(file) {
+  const isAdministrativeStep = normalize(file.status) === "aprovado"
+    && normalize(file.adminStatus) !== "aprovado";
+  return isAdministrativeStep ? "administrativo" : "operacional";
+}
+
+function assertReviewPermission({ user, file, reviewMode }) {
+  if (reviewMode === "administrativo" && !canAdministrativeReview(user)) {
+    const error = new Error("Apenas o administrativo pode finalizar documentos já aprovados pelo supervisor.");
+    error.statusCode = 403;
+    throw error;
+  }
+  if (reviewMode !== "administrativo" && !canApprove(user, file)) {
     const error = new Error("Sem permissão para aprovar documentos desta empresa.");
     error.statusCode = 403;
     throw error;
   }
+}
 
-  const now = new Date().toISOString();
-  let changes;
-  if (reviewMode === "administrativo") {
-    changes = normalizedStatus === "reprovado"
-      ? {
-          status: "reprovado",
-          motivoReprovacao: text(motivo),
-          adminStatus: "reprovado",
-          adminMotivoReprovacao: text(motivo),
-          adminReviewedBy: userId(user),
-          adminReviewedByName: userName(user),
-          adminReviewedAt: now,
-        }
-      : {
-          status: "aprovado",
-          motivoReprovacao: null,
-          adminStatus: normalizedStatus,
-          adminMotivoReprovacao: null,
-          adminReviewedBy: normalizedStatus === "pendente" ? null : userId(user),
-          adminReviewedByName: normalizedStatus === "pendente" ? null : userName(user),
-          adminReviewedAt: normalizedStatus === "pendente" ? null : now,
-        };
-  } else {
-    changes = {
-      status: normalizedStatus,
-      motivoReprovacao: normalizedStatus === "reprovado" ? text(motivo) : null,
-      adminStatus: normalizedStatus === "aprovado" ? "pendente" : "pendente",
-      adminMotivoReprovacao: null,
-      adminReviewedBy: null,
-      adminReviewedByName: null,
-      adminReviewedAt: null,
-      approvedBy: normalizedStatus === "pendente" ? null : userId(user),
-      approvedByName: normalizedStatus === "pendente" ? null : userName(user),
-      approvedAt: normalizedStatus === "pendente" ? null : now,
+function buildAdministrativeApprovalChanges({ status, motivo, user, now }) {
+  if (status === "reprovado") {
+    return {
+      status: "reprovado",
+      motivoReprovacao: text(motivo),
+      adminStatus: "reprovado",
+      adminMotivoReprovacao: text(motivo),
+      adminReviewedBy: userId(user),
+      adminReviewedByName: userName(user),
+      adminReviewedAt: now,
     };
   }
+  const pending = status === "pendente";
+  return {
+    status: "aprovado",
+    motivoReprovacao: null,
+    adminStatus: status,
+    adminMotivoReprovacao: null,
+    adminReviewedBy: pending ? null : userId(user),
+    adminReviewedByName: pending ? null : userName(user),
+    adminReviewedAt: pending ? null : now,
+  };
+}
+
+function buildOperationalApprovalChanges({ status, motivo, user, now }) {
+  const pending = status === "pendente";
+  return {
+    status,
+    motivoReprovacao: status === "reprovado" ? text(motivo) : null,
+    adminStatus: "pendente",
+    adminMotivoReprovacao: null,
+    adminReviewedBy: null,
+    adminReviewedByName: null,
+    adminReviewedAt: null,
+    approvedBy: pending ? null : userId(user),
+    approvedByName: pending ? null : userName(user),
+    approvedAt: pending ? null : now,
+  };
+}
+
+function buildApprovalChanges({ reviewMode, status, motivo, user, now }) {
+  if (reviewMode === "administrativo") {
+    return buildAdministrativeApprovalChanges({ status, motivo, user, now });
+  }
+  return buildOperationalApprovalChanges({ status, motivo, user, now });
+}
+
+async function notifyApprovalSideEffects({
+  file,
+  updatedFile,
+  normalizedStatus,
+  nextStatus,
+  updatedSubmission,
+  reviewMode,
+}) {
+  if (normalizedStatus === "reprovado") {
+    const submission = await repository.getSubmission(file.submissionId);
+    if (submission) {
+      notifyInBackground(() => notifyDocumentRejected(submission, updatedFile));
+      if (reviewMode === "administrativo") {
+        notifyInBackground(() => notifyAdministrativeRejected(submission, updatedFile));
+      }
+    }
+  }
+  if (nextStatus === "aguardando_administrativo" && updatedSubmission) {
+    notifyInBackground(() => notifyAdministrativeQueue(updatedSubmission));
+  }
+  if (nextStatus === "aprovado" && updatedSubmission) {
+    notifyInBackground(() => notifySubmissionReviewed(updatedSubmission));
+  }
+}
+
+async function updateApproval({ id, status, motivo, user }) {
+  const file = await getAccessibleFile(id, user);
+  const normalizedStatus = normalize(status);
+  assertApprovalStatus(normalizedStatus, motivo);
+  const reviewMode = getReviewMode(file);
+  assertReviewPermission({ user, file, reviewMode });
+  const now = new Date().toISOString();
+  const changes = buildApprovalChanges({
+    reviewMode,
+    status: normalizedStatus,
+    motivo,
+    user,
+    now,
+  });
 
   const updatedFile = await repository.updateFile(id, changes);
   if (normalizedStatus === "reprovado") await deleteDriveFileQuietly(file);
@@ -1243,21 +1472,14 @@ async function updateApproval({ id, status, motivo, user }) {
       motivoReprovacao: summarizeRejectedFiles(latestFiles),
       ...getPrimaryReviewFields(nextStatus, user, reviewMode),
     });
-    if (normalizedStatus === "reprovado") {
-      const submission = await repository.getSubmission(file.submissionId);
-      if (submission) {
-        notifyInBackground(() => notifyDocumentRejected(submission, updatedFile));
-        if (reviewMode === "administrativo") {
-          notifyInBackground(() => notifyAdministrativeRejected(submission, updatedFile));
-        }
-      }
-    }
-    if (nextStatus === "aguardando_administrativo" && updatedSubmission) {
-      notifyInBackground(() => notifyAdministrativeQueue(updatedSubmission));
-    }
-    if (nextStatus === "aprovado" && updatedSubmission) {
-      notifyInBackground(() => notifySubmissionReviewed(updatedSubmission));
-    }
+    await notifyApprovalSideEffects({
+      file,
+      updatedFile,
+      normalizedStatus,
+      nextStatus,
+      updatedSubmission,
+      reviewMode,
+    });
   }
   return updatedFile;
 }
@@ -1310,6 +1532,7 @@ module.exports = {
   downloadSubmissionZip,
   getSubmissionWithFiles,
   getBillingConfig,
+  listInvoiceFields,
   listCompanyDriveFolder,
   listDocuments,
   listRequiredFields,
@@ -1320,7 +1543,9 @@ module.exports = {
   runBillingNotifications,
   purgeDocumentHistory,
   saveBillingConfig,
+  saveInvoiceField,
   saveRequiredField,
   updateApproval,
   uploadDocument,
+  uploadSubmissionInvoices,
 };

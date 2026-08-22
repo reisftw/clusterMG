@@ -1,9 +1,19 @@
-import { useState, useCallback } from 'react';
-import { gerarRelatorioHtml, copiarRelatorioParaClipboard } from '../services/clipboardService';
+﻿import { useState, useCallback, useEffect, useRef } from "react";
+import {
+  gerarRelatorioHtml,
+  copiarRelatorioParaClipboard,
+} from "../services/clipboardService";
 
 export const useClipboard = () => {
   const [copiado, setCopiado] = useState(false);
-  const [erro, setErro]       = useState(null);
+  const [erro, setErro] = useState(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const copiar = useCallback(async (dados, incluir) => {
     setErro(null);
@@ -11,11 +21,13 @@ export const useClipboard = () => {
       const html = gerarRelatorioHtml({ ...dados, incluir });
       await copiarRelatorioParaClipboard(html);
       setCopiado(true);
-      setTimeout(() => setCopiado(false), 3000);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopiado(false), 3000);
     } catch {
-      setErro('Erro ao copiar relatório.');
+      setErro("Erro ao copiar relatorio.");
     }
   }, []);
 
   return { copiar, copiado, erro };
 };
+

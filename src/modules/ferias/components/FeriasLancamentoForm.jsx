@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { CalendarDays, X } from 'lucide-react';
 
 const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
@@ -18,7 +18,7 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
     e.preventDefault();
     setErro('');
     if (!colaboradorId)                          { setErro('Selecione um colaborador.'); return; }
-    if (new Date(dataFim) < new Date(dataInicio)){ setErro('Data de fim anterior ao início.'); return; }
+    if (new Date(dataFim) < new Date(dataInicio)){ setErro('Data de fim anterior ao inicio.'); return; }
 
     setIsSubmitting(true);
     try {
@@ -30,7 +30,7 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
       });
       onClose();
     } catch {
-      setErro('Erro ao lançar férias.');
+      setErro('Erro ao lancar ferias.');
     } finally {
       setIsSubmitting(false);
     }
@@ -43,7 +43,7 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <CalendarDays size={20} /> Lançar Férias
+            <CalendarDays size={20} /> Lancar Ferias
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={20} /></button>
         </div>
@@ -60,7 +60,7 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data de Início</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data de Inicio</label>
             <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} required className={inputClass} />
           </div>
 
@@ -82,7 +82,7 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
             </button>
             <button type="submit" disabled={isSubmitting}
               className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors disabled:opacity-60">
-              {isSubmitting ? 'Salvando...' : 'Lançar'}
+              {isSubmitting ? 'Salvando...' : 'Lancar'}
             </button>
           </div>
         </form>
@@ -92,3 +92,4 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 };
 
 export default FeriasLancamentoForm;
+

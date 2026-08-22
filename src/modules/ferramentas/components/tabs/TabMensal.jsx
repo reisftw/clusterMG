@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
@@ -88,7 +88,7 @@ const TabMensal = () => {
             _cidade: cidade,
             _servico: String(r.servico || r.servicos || "N/A"),
             _regional: info.regional || "Sem Regional",
-            _agente: info.agente ? "SIM" : "NÃO",
+            _agente: info.agente ? "SIM" : "NAO",
             _tectipo: tecSet.has(norm(tecRaw)) ? "RETIRADA" : "ATIVA",
           };
         });
@@ -165,14 +165,14 @@ const TabMensal = () => {
         ws.getRow(r + 1).height = 48;
       };
 
-      // ── ABA 1: Por Regional ───────────────────────────────────────────────
+      // -- ABA 1: Por Regional -----------------------------------------------
       const ws1 = wb.addWorksheet("Por Regional");
       ws1.views = [{ showGridLines: false }];
       xT(
         ws1,
         1,
         6,
-        `ANÁLISE MENSAL — ${D.length} registros — ${new Date().toLocaleDateString("pt-BR")}`,
+        `ANALISE MENSAL — ${D.length} registros — ${new Date().toLocaleDateString("pt-BR")}`,
         "003087",
       );
       xKpi(ws1, 3, 1, "TOTAL O.S", D.length, "003087");
@@ -262,7 +262,7 @@ const TabMensal = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 2: Por Cidade -------------------------------------------------
       const ws2 = wb.addWorksheet("Por Cidade");
       ws2.views = [{ showGridLines: false }];
       xT(ws2, 1, 6, "POR CIDADE", "1F618D");
@@ -307,10 +307,10 @@ const TabMensal = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Por Serviço ────────────────────────────────────────────────
+      // -- ABA 3: Por Serviço ------------------------------------------------
       const ws3 = wb.addWorksheet("Por Serviço");
       ws3.views = [{ showGridLines: false }];
-      xT(ws3, 1, 3, "POR TIPO DE SERVIÇO", "6C3483");
+      xT(ws3, 1, 3, "POR TIPO DE SERVICO", "6C3483");
       ["Serviço", "Total", "% do Total"].forEach((h, i) =>
         xH(ws3, 2, i + 1, h, "6C3483"),
       );
@@ -338,10 +338,10 @@ const TabMensal = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 4: Por Técnico ────────────────────────────────────────────────
+      // -- ABA 4: Por Técnico ------------------------------------------------
       const ws4 = wb.addWorksheet("Por Técnico");
       ws4.views = [{ showGridLines: false }];
-      xT(ws4, 1, 5, "POR TÉCNICO", "2C3E50");
+      xT(ws4, 1, 5, "POR TECNICO", "2C3E50");
       ["Técnico", "Tipo", "Total O.S", "Regional Principal", "% Total"].forEach(
         (h, i) => xH(ws4, 2, i + 1, h, "566573"),
       );
@@ -376,7 +376,7 @@ const TabMensal = () => {
         ws4.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 5: Dados Completos ────────────────────────────────────────────
+      // -- ABA 5: Dados Completos --------------------------------------------
       const ws5 = wb.addWorksheet("Dados Completos");
       ws5.views = [{ showGridLines: false }];
       xT(ws5, 1, 7, "DADOS COMPLETOS", "2C3E50");
@@ -411,7 +411,7 @@ const TabMensal = () => {
         ws5.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -436,6 +436,14 @@ const TabMensal = () => {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
           ${status === "ok" || status === "generating" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-orange-400"}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -501,14 +509,14 @@ const TabMensal = () => {
         </div>
       )}
 
-      {/* Botão gerar */}
+      {/* Botao gerar */}
       {rows.length > 0 && (
         <button
           onClick={gerar}
           className="flex items-center gap-2 px-5 py-2.5 bg-blue-800 text-white rounded-xl font-semibold hover:bg-blue-900 transition-colors"
         >
           <FileDown size={16} />
-          Gerar Análise Mensal (5 abas)
+          Gerar Analise Mensal (5 abas)
         </button>
       )}
 
@@ -525,3 +533,4 @@ const TabMensal = () => {
 };
 
 export default TabMensal;
+

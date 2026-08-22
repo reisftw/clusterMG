@@ -1,4 +1,4 @@
-// hooks/useMapaHistorico.js — sem Firestore
+﻿// hooks/useMapaHistorico.js
 import { useMemo } from "react";
 import { useDashboardData } from "../../PainelPublico/hooks/useDashboardData";
 

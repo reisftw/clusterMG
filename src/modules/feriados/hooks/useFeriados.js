@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   buscarFeriados,
   cadastrarFeriado,
   deletarFeriado,
   buscarFeriadosNacionais,
 } from '../services/feriadosService';
-import { getOrLoadCachedValue, invalidateCache } from '../../../services/firestoreCache';
-import { logFirestoreRead } from '../../../services/firestoreMonitoring';
+import { getOrLoadCachedValue, invalidateCache } from '../../../services/dataCache';
+import { logDataRead } from '../../../services/dataMonitoring';
+import { regenerateStaticData } from '../../../services/staticDataService';
 
 const CACHE_KEYS = {
   manuais: 'feriados:manuais',
@@ -34,9 +35,9 @@ export const useFeriados = () => {
           CACHE_KEYS.manuais,
           async () => {
             const items = await buscarFeriados();
-            logFirestoreRead({
+            logDataRead({
               source: 'useFeriados:manuais',
-              operation: 'getDocs',
+              operation: 'sql-list',
               count: items.length,
             });
             return sortByDate(items);
@@ -70,6 +71,13 @@ export const useFeriados = () => {
       setFeriados((prev) => sortByDate([...prev, { id: ref.id, ...dados }]));
     } catch {
       setError('Erro ao cadastrar feriado.');
+      return;
+    }
+
+    try {
+      await regenerateStaticData({ scope: 'metas' });
+    } catch {
+      setError('Feriado salvo, mas o calendario dos paineis nao foi atualizado.');
     }
   }, []);
 
@@ -80,8 +88,17 @@ export const useFeriados = () => {
       setFeriados((prev) => prev.filter((item) => item.id !== id));
     } catch {
       setError('Erro ao deletar feriado.');
+      return;
+    }
+
+    try {
+      await regenerateStaticData({ scope: 'metas' });
+    } catch {
+      setError('Feriado excluido, mas o calendario dos paineis nao foi atualizado.');
     }
   }, []);
 
   return { feriados, feriadosApi, loading, error, cadastrar, deletar, carregar: () => carregar(true) };
 };
+
+

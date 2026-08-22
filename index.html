@@ -2,11 +2,150 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" href="/favicon-64.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gestão Retiradas — Sempre Internet</title>
+    <meta name="theme-color" content="#f97316" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Retirada" />
+    <title>Sistema de Retiradas | Cluster MG</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      #app-preload {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+          radial-gradient(circle at top, rgba(255, 148, 77, 0.18), transparent 30%),
+          linear-gradient(160deg, #001a57 0%, #003087 52%, #0052cc 100%);
+        transition: opacity 0.35s ease, visibility 0.35s ease;
+      }
+
+      #app-preload.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .app-preload__content {
+        width: min(92vw, 420px);
+        padding: 32px 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .app-preload__orb {
+        position: relative;
+        width: min(58vw, 220px);
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+      }
+
+      .app-preload__orb::before {
+        content: "";
+        position: absolute;
+        inset: 10%;
+        border-radius: 999px;
+        background:
+          radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(255, 107, 0, 0.24) 32%, rgba(255, 255, 255, 0) 70%);
+        filter: blur(8px);
+        animation: preloadHalo 1.9s ease-in-out infinite;
+      }
+
+      .app-preload__orb::after {
+        content: "";
+        position: absolute;
+        width: 64%;
+        height: 18px;
+        bottom: 10px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.22);
+        filter: blur(12px);
+        animation: preloadShadow 1.9s ease-in-out infinite;
+      }
+
+      .app-preload__image {
+        position: relative;
+        width: 100%;
+        max-width: 220px;
+        height: auto;
+        animation: preloadFloat 1.9s ease-in-out infinite;
+        transform-origin: center bottom;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+
+      .app-preload__title {
+        margin: 22px 0 0;
+        font-family: Arial, sans-serif;
+        font-size: clamp(1.15rem, 2vw, 1.45rem);
+        font-weight: 800;
+        line-height: 1.35;
+        color: #ffffff;
+        text-wrap: balance;
+      }
+
+      @keyframes preloadFloat {
+        0%, 100% {
+          transform: translateY(0) rotate(-2deg) scale(1);
+        }
+        50% {
+          transform: translateY(-10px) rotate(2deg) scale(1.02);
+        }
+      }
+
+      @keyframes preloadHalo {
+        0%, 100% {
+          transform: scale(0.94);
+          opacity: 0.82;
+        }
+        50% {
+          transform: scale(1.05);
+          opacity: 1;
+        }
+      }
+
+      @keyframes preloadShadow {
+        0%, 100% {
+          transform: scaleX(0.9);
+          opacity: 0.22;
+        }
+        50% {
+          transform: scaleX(1.02);
+          opacity: 0.14;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="app-preload" aria-hidden="true">
+      <div class="app-preload__content">
+        <div class="app-preload__orb">
+          <img
+            class="app-preload__image"
+            src="/retorninho-loader.png"
+            alt=""
+          />
+        </div>
+        <p class="app-preload__title">Seja bem vindo ao Painel de Retiradas</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

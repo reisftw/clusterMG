@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { FileDown } from "lucide-react";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
+import RetorninhoLoader from "../../../../components/ui/RetorninhoLoader";
 
 const TabDevolucoesMes = () => {
   const { regionais } = useFerramentasRegionais();
@@ -95,7 +96,7 @@ const TabDevolucoesMes = () => {
             ...r,
             _cidade: cidade,
             _regional: info.regional,
-            _agente: info.agente ? "SIM" : "NÃO",
+            _agente: info.agente ? "SIM" : "NAO",
             _date: parseDate(r.datafechamento || ""),
           };
         });
@@ -174,14 +175,14 @@ const TabDevolucoesMes = () => {
         ws.getRow(r + 1).height = 46;
       };
 
-      // ── ABA 1: Resumo Mensal ──────────────────────────────────────────────
+      // -- ABA 1: Resumo Mensal ----------------------------------------------
       const ws1 = wb.addWorksheet("Resumo Mensal");
       ws1.views = [{ showGridLines: false }];
       xT(
         ws1,
         1,
         5,
-        `DEVOLUÇÕES POR PERÍODO — ${periodo} — ${D.length} registros`,
+        `DEVOLUCOES POR PERIODO — ${periodo} — ${D.length} registros`,
         "003087",
       );
 
@@ -212,9 +213,9 @@ const TabDevolucoesMes = () => {
       );
 
       let rr = 6;
-      xT(ws1, rr, 3, "DEVOLUÇÕES POR MÊS", "1F618D");
+      xT(ws1, rr, 3, "DEVOLUCOES POR MES", "1F618D");
       rr++;
-      ["Mês/Ano", "Total", "% Total"].forEach((h, i) =>
+      ["Mes/Ano", "Total", "% Total"].forEach((h, i) =>
         xH(ws1, rr, i + 1, h, "2471A3"),
       );
       rr++;
@@ -224,7 +225,7 @@ const TabDevolucoesMes = () => {
         if (mes) byMes[mes] = (byMes[mes] || 0) + 1;
       });
       Object.entries(byMes)
-        .sort()
+        .sort(([mesA], [mesB]) => String(mesA).localeCompare(String(mesB), "pt-BR"))
         .forEach(([mes, q], i) => {
           const bg = i % 2 ? "FFFFFF" : "EBF5FB";
           xD(ws1, rr, 1, mes, bg, "center");
@@ -236,10 +237,10 @@ const TabDevolucoesMes = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Regional ───────────────────────────────────────────────
+      // -- ABA 2: Por Regional -----------------------------------------------
       const ws2 = wb.addWorksheet("Por Regional");
       ws2.views = [{ showGridLines: false }];
-      xT(ws2, 1, 5, `DEVOLUÇÕES POR REGIONAL — ${periodo}`, "1F618D");
+      xT(ws2, 1, 5, `DEVOLUCOES POR REGIONAL — ${periodo}`, "1F618D");
       ["Regional", "Total", "% Total", "Cidades", "Agentes Aut."].forEach(
         (h, i) => xH(ws2, 2, i + 1, h, "2471A3"),
       );
@@ -272,10 +273,10 @@ const TabDevolucoesMes = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 3: Por Cidade -------------------------------------------------
       const ws3 = wb.addWorksheet("Por Cidade");
       ws3.views = [{ showGridLines: false }];
-      xT(ws3, 1, 4, `DEVOLUÇÕES POR CIDADE — ${periodo}`, "1F618D");
+      xT(ws3, 1, 4, `DEVOLUCOES POR CIDADE — ${periodo}`, "1F618D");
       ["Cidade", "Regional", "Total", "Agente Aut."].forEach((h, i) =>
         xH(ws3, 2, i + 1, h, "2471A3"),
       );
@@ -299,11 +300,11 @@ const TabDevolucoesMes = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 4: Por Mês e Cidade ───────────────────────────────────────────
-      const ws4 = wb.addWorksheet("Por Mês e Cidade");
+      // -- ABA 4: Por Mes e Cidade -------------------------------------------
+      const ws4 = wb.addWorksheet("Por Mes e Cidade");
       ws4.views = [{ showGridLines: false }];
-      xT(ws4, 1, 5, `DEVOLUÇÕES POR MÊS E CIDADE — ${periodo}`, "003087");
-      ["Mês/Ano", "Cidade", "Regional", "Total", "Agente Aut."].forEach(
+      xT(ws4, 1, 5, `DEVOLUCOES POR MES E CIDADE — ${periodo}`, "003087");
+      ["Mes/Ano", "Cidade", "Regional", "Total", "Agente Aut."].forEach(
         (h, i) => xH(ws4, 2, i + 1, h, "2471A3"),
       );
       const byMesCid = {};
@@ -336,7 +337,7 @@ const TabDevolucoesMes = () => {
         ws4.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 5: Dados Completos ────────────────────────────────────────────
+      // -- ABA 5: Dados Completos --------------------------------------------
       const ws5 = wb.addWorksheet("Dados Completos");
       ws5.views = [{ showGridLines: false }];
       xT(ws5, 1, 5, `DADOS COMPLETOS — ${periodo}`, "003087");
@@ -375,7 +376,7 @@ const TabDevolucoesMes = () => {
         ws5.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -400,6 +401,14 @@ const TabDevolucoesMes = () => {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
           ${status === "ok" || status === "gerando" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-blue-400"}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -417,7 +426,7 @@ const TabDevolucoesMes = () => {
             </p>
           </>
         ) : status === "loading" ? (
-          <p className="text-sm text-gray-500">Carregando...</p>
+          <RetorninhoLoader compact size="sm" title="Carregando..." />
         ) : (
           <>
             <p className="font-semibold text-gray-700">
@@ -431,12 +440,12 @@ const TabDevolucoesMes = () => {
         )}
       </div>
 
-      {/* Filtro de período */}
+      {/* Filtro de periodo */}
       {rows.length > 0 && (
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="block text-xs text-gray-500 font-medium mb-1">
-              Data Início
+              Data Inicio
             </label>
             <input
               type="date"
@@ -459,14 +468,14 @@ const TabDevolucoesMes = () => {
         </div>
       )}
 
-      {/* Botão gerar */}
+      {/* Botao gerar */}
       {rows.length > 0 && de && ate && (
         <button
           onClick={gerar}
           className="flex items-center gap-2 px-5 py-2.5 bg-blue-800 text-white rounded-xl font-semibold hover:bg-blue-900 transition-colors"
         >
           <FileDown size={16} />
-          Gerar Devoluções por Período (5 abas)
+          Gerar Devolucoes por Período (5 abas)
         </button>
       )}
 
@@ -483,3 +492,4 @@ const TabDevolucoesMes = () => {
 };
 
 export default TabDevolucoesMes;
+

@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { carregarDadosDashboard } from '../services/dashboardService';
+import { invalidateDashboardDataCache } from '../../../pages/PainelPublico/hooks/useDashboardData';
+import { invalidateCache } from '../../../services/dataCache';
+import { invalidateInternalStaticDataCache } from '../../../services/internalStaticDataService';
+import { subscribeRealtimeTopics } from '../../../services/realtimeEvents';
 
 function parseDateLocal(str) {
   if (!str) return null;
@@ -10,6 +14,11 @@ function parseDateLocal(str) {
 function hoje() {
   const h = new Date();
   return new Date(h.getFullYear(), h.getMonth(), h.getDate());
+}
+
+function mesAtualKey() {
+  const h = new Date();
+  return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export const useDashboard = () => {
@@ -33,6 +42,18 @@ export const useDashboard = () => {
 
   useEffect(() => {
     carregar();
+    return subscribeRealtimeTopics(
+      ['dashboard', 'metas', 'mapa', 'match', 'acompanhamento'],
+      (event) => {
+        const token = event?.generatedAt || event?.emittedAt || new Date().toISOString();
+        invalidateCache('metas');
+        invalidateCache('metas-auditoria');
+        invalidateInternalStaticDataCache(token);
+        invalidateDashboardDataCache(token);
+        carregar(true);
+      },
+      { debounceMs: 250 },
+    );
   }, [carregar]);
 
   const resumo = useMemo(() => {
@@ -51,11 +72,8 @@ export const useDashboard = () => {
       const fim = new Date(item.data_fim);
       return agora >= inicio && agora <= fim;
     }).length;
-
-    const veiculosEmRota = dados.veiculos.filter((item) => item.tecnico_id).length;
-    const KM_ALERTA = 5000;
-    const veiculosAlerta = dados.veiculos.filter(
-      (item) => item.km_atual >= item.km_proxima_manutencao - KM_ALERTA,
+    const visitasNoMes = dados.visitas.filter((item) =>
+      String(item.data || '').startsWith(mesAtualKey()),
     ).length;
 
     const proximoAniversariante = (() => {
@@ -64,7 +82,7 @@ export const useDashboard = () => {
         .filter(
           (item) =>
             item.data_nascimento &&
-            (item.status === 'Ativo' || item.status === 'Em Experiência'),
+            (item.status === 'Ativo' || item.status === 'Em Experiencia'),
         )
         .map((item) => {
           const nasc = new Date(item.data_nascimento);
@@ -80,11 +98,11 @@ export const useDashboard = () => {
     return {
       feriadosProximos,
       tecnicosEmFerias,
-      veiculosEmRota,
-      veiculosAlerta,
+      visitasNoMes,
       proximoAniversariante,
     };
   }, [dados]);
 
   return { dados, resumo, loading, error, carregar: () => carregar(true) };
 };
+

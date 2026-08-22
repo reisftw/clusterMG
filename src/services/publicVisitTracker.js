@@ -1,12 +1,12 @@
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { ROUTES } from "../router/routes";
-import { db } from "./firebase";
+﻿import { ROUTES } from "../router/routes";
+import { getApiBaseUrl } from "./vpsApiClient";
 
-const COLLECTION_NAME = "painel_visitas";
 const TRACKING_TIMEZONE = "America/Sao_Paulo";
 const TRACKING_SESSION_PREFIX = "painel_visitas";
+const TRACKING_BROWSER_PREFIX = "painel_visitas_browser";
 const PUBLIC_PAGE_LABELS = {
   [ROUTES.PAINEL_PUBLICO]: "Painel publico",
+  [ROUTES.PAINEL_RELATORIOS]: "Painel relatorios",
   [ROUTES.PAINEL_MAPA]: "Painel mapa",
   [ROUTES.PAINEL_MATCH]: "Painel match",
   [ROUTES.AGENTES_MATCH_PUBLICO]: "Portal agentes autorizados",
@@ -49,8 +49,16 @@ function canUseSessionStorage() {
   return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
 }
 
+function canUseLocalStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
 function buildTrackKey(dayKey, pagePath) {
   return `${TRACKING_SESSION_PREFIX}:${dayKey}:${pagePath}`;
+}
+
+function buildBrowserTrackKey(dayKey) {
+  return `${TRACKING_BROWSER_PREFIX}:${dayKey}`;
 }
 
 function wasTrackedInSession(trackKey) {
@@ -58,9 +66,19 @@ function wasTrackedInSession(trackKey) {
   return window.sessionStorage.getItem(trackKey) === "1";
 }
 
+function wasTrackedInBrowser(trackKey) {
+  if (!canUseLocalStorage()) return false;
+  return window.localStorage.getItem(trackKey) === "1";
+}
+
 function markTrackedInSession(trackKey) {
   if (!canUseSessionStorage()) return;
   window.sessionStorage.setItem(trackKey, "1");
+}
+
+function markTrackedInBrowser(trackKey) {
+  if (!canUseLocalStorage()) return;
+  window.localStorage.setItem(trackKey, "1");
 }
 
 function getPageLabel(pagePath) {
@@ -136,8 +154,13 @@ export async function trackPainelVisit() {
 
   const dayKey = getTodayKey();
   const trackKey = buildTrackKey(dayKey, pagePath);
+  const browserTrackKey = buildBrowserTrackKey(dayKey);
 
-  if (pendingTrackKeys.has(trackKey) || wasTrackedInSession(trackKey)) {
+  if (
+    pendingTrackKeys.has(trackKey) ||
+    wasTrackedInBrowser(browserTrackKey) ||
+    wasTrackedInSession(trackKey)
+  ) {
     return null;
   }
 
@@ -152,19 +175,37 @@ export async function trackPainelVisit() {
   pendingTrackKeys.add(trackKey);
 
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      createdAt: serverTimestamp(),
-      dayKey,
-      pagePath,
-      pageLabel: getPageLabel(pagePath),
-      referrer: source.referrer,
-      sourceType: source.sourceType,
-      sourceLabel: source.sourceLabel,
-      hostname: window.location.hostname || "",
+    const response = await fetch(`${getApiBaseUrl()}/public/visits`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dayKey,
+        pagePath,
+        pageLabel: getPageLabel(pagePath),
+        referrer: source.referrer,
+        sourceType: source.sourceType,
+        sourceLabel: source.sourceLabel,
+        hostname: window.location.hostname || "",
+      }),
     });
 
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.error || `Erro HTTP ${response.status}.`);
+    }
+
     markTrackedInSession(trackKey);
-    return docRef.id;
+    markTrackedInBrowser(browserTrackKey);
+    return data?.id || null;
   } catch (error) {
     console.error("Erro ao registrar visita publica:", error);
     return null;
@@ -176,3 +217,4 @@ export async function trackPainelVisit() {
 export function getTodayVisitKey() {
   return getTodayKey();
 }
+

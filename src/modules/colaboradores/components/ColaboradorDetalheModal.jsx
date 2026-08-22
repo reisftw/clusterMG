@@ -1,9 +1,10 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { X, Copy, Check, Pencil } from "lucide-react";
+import ModalShell from "../../../components/ui/ModalShell";
 
 const STATUS_STYLES = {
   Ativo: "bg-green-100 text-green-700",
-  "Em Experiência": "bg-yellow-100 text-yellow-700",
+  "Em Experiencia": "bg-yellow-100 text-yellow-700",
   Desligado: "bg-red-100 text-red-600",
 };
 
@@ -14,15 +15,15 @@ const gerarTextoCopiavel = (c) => {
   const linhas = [
     `Colaborador: ${c.nome}`,
     `Cargo: ${c.cargo ?? "—"}`,
-    `Matrícula: ${c.matricula ?? "—"}`,
+    `Matricula: ${c.matricula ?? "—"}`,
     `Status: ${c.status ?? "—"}`,
     `Base: ${c.base_operacional || "—"}`,
-    `Contratação: ${formatarData(c.data_contratacao)}`,
+    `Contratacao: ${formatarData(c.data_contratacao)}`,
     `Nascimento: ${formatarData(c.data_nascimento)}`,
     `E-mail: ${c.email || "—"}`,
     `Cel. Pessoal: ${c.celular_pessoal || "—"}`,
     `Cel. Corporativo: ${c.celular_corporativo || "—"}`,
-    `Endereço: ${c.endereco || "—"}`,
+    `Endereco: ${c.endereco || "—"}`,
   ];
 
   if (c.status === "Desligado") {
@@ -54,8 +55,8 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-gray-100">
+    <ModalShell onClose={onClose} showClose={false} size="lg" bodyClassName="p-0">
+      <div className="flex min-h-0 flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shrink-0">
@@ -76,7 +77,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
           <div className="flex items-center gap-1">
             <button
               onClick={copiar}
-              className="p-2 rounded-xl text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
               title="Copiar dados"
             >
               {copiado ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
@@ -84,7 +85,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
             {onEditar && (
               <button
                 onClick={onEditar}
-                className="p-2 rounded-xl text-gray-400 hover:bg-orange-50 hover:text-orange-500 transition-colors"
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-orange-50 hover:text-orange-500"
                 title="Editar"
               >
                 <Pencil size={16} />
@@ -92,7 +93,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
             )}
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
             >
               <X size={18} />
             </button>
@@ -105,9 +106,9 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
               <span className="w-4 h-px bg-blue-200 inline-block" /> Dados Profissionais
             </p>
             <div className="grid grid-cols-2 gap-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
-              <Campo label="Matrícula" valor={c.matricula} />
+              <Campo label="Matricula" valor={c.matricula} />
               <Campo label="Base Operacional" valor={c.base_operacional} />
-              <Campo label="Contratação" valor={formatarData(c.data_contratacao)} />
+              <Campo label="Contratacao" valor={formatarData(c.data_contratacao)} />
               <Campo label="Regional" valor={c.regional} />
             </div>
           </div>
@@ -122,7 +123,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
               <Campo label="Cel. Pessoal" valor={c.celular_pessoal} />
               <Campo label="Cel. Corporativo" valor={c.celular_corporativo} />
               <div className="col-span-2">
-                <Campo label="Endereço" valor={c.endereco} />
+                <Campo label="Endereco" valor={c.endereco} />
               </div>
             </div>
           </div>
@@ -156,8 +157,9 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 
 export default ColaboradorDetalheModal;
+

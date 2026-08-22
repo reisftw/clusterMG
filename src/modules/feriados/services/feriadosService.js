@@ -1,23 +1,21 @@
+﻿import { COLLECTIONS } from '../../../constants/dataCollections';
 import {
-  collection, addDoc, deleteDoc,
-  doc, getDocs, serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '../../../services/firebase';
-import { COLLECTIONS } from '../../../constants/firestoreCollections';
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+} from '../../../services/vpsApiClient';
 
-const col = () => collection(db, COLLECTIONS.FERIADOS);
+export const buscarFeriados = async () =>
+  listVpsDocuments(COLLECTIONS.FERIADOS, { limit: 200 });
 
-export const buscarFeriados = async () => {
-  const snap = await getDocs(col());
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-};
-
-export const cadastrarFeriado = async (dados) => {
-  return await addDoc(col(), { ...dados, criado_em: serverTimestamp() });
-};
+export const cadastrarFeriado = async (dados) =>
+  createVpsDocument(COLLECTIONS.FERIADOS, {
+    ...dados,
+    criado_em: new Date().toISOString(),
+  });
 
 export const deletarFeriado = async (id) => {
-  await deleteDoc(doc(db, COLLECTIONS.FERIADOS, id));
+  await deleteVpsDocument(`${COLLECTIONS.FERIADOS}/${id}`);
 };
 
 export const buscarFeriadosNacionais = async (ano) => {
@@ -29,3 +27,4 @@ export const buscarFeriadosNacionais = async (ano) => {
     return [];
   }
 };
+

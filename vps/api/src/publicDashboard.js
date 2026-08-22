@@ -71,6 +71,7 @@ async function buildMetasSlice() {
     all: rowsToDocumentMap(metasRows),
     lastUpdate: config?.lastUpdate || null,
     forcaTarefa: config?.forcaTarefa || null,
+    baseConfig: config?.baseConfig || null,
     feriados: feriadosRows
       .map((row) => normalizeHoliday(row.data))
       .map((item) => item.date)
@@ -108,6 +109,7 @@ async function buildDashboardDomain() {
       retiradas: {
         result: rowsToDocumentMap(dashboardRows),
         meta: { generatedAt: new Date().toISOString() },
+        baseConfig: metas.baseConfig || null,
         feriados: feriadosRows.map((row) => normalizeHoliday(row.data)),
       },
       forcaTarefa: metas.forcaTarefa,

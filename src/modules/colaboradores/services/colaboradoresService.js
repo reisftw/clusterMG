@@ -1,56 +1,57 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "../../../services/firebase";
-import { COLLECTIONS } from "../../../constants/firestoreCollections";
+﻿import { COLLECTIONS } from "../../../constants/dataCollections";
 import {
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
-import { getInternalStaticDataSlice } from "../../../services/internalStaticDataService";
+} from "../../../services/dataCache";
+import {
+  getInternalSnapshotSlice,
+  SNAPSHOT_DOMAINS,
+} from "../../../services/internalStaticDataService";
+import {
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from "../../../services/vpsApiClient";
 
 const MAX_COLABORADORES = 300;
 const CACHE_KEY = "colaboradores-service:lista";
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-const col = () => collection(db, COLLECTIONS.COLABORADORES);
-
-export const buscarColaboradores = async (force = false) => {
+export const buscarColaboradores = async (
+  force = false,
+  { allowFallback = true } = {},
+) => {
   if (!force) {
-    const staticItems = await getInternalStaticDataSlice(
+    const staticItems = await getInternalSnapshotSlice(
+      SNAPSHOT_DOMAINS.RH,
       (payload) => payload?.colaboradores?.items ?? null,
     );
-    if (Array.isArray(staticItems)) {
+    if (Array.isArray(staticItems) && staticItems.length > 0) {
       return staticItems;
+    }
+
+    const dashboardItems = await getInternalSnapshotSlice(
+      SNAPSHOT_DOMAINS.DASHBOARD,
+      (payload) => payload?.colaboradores?.items ?? null,
+    );
+    if (Array.isArray(dashboardItems) && dashboardItems.length > 0) {
+      return dashboardItems;
     }
   }
 
+  if (!allowFallback) {
+    return [];
+  }
+
   const { data } = await getOrLoadCachedValue(
-    CACHE_KEY,
-    async () => {
-      const snap = await getDocs(
-        query(col(), orderBy("nome"), limit(MAX_COLABORADORES)),
-      );
-
-      logFirestoreRead({
-        source: "colaboradoresService:buscarColaboradores",
-        operation: "getDocs",
-        path: COLLECTIONS.COLABORADORES,
-        count: snap.size,
-      });
-
-      return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
-    },
+    `${CACHE_KEY}:vps`,
+    async () =>
+      (await listVpsDocuments(COLLECTIONS.COLABORADORES, {
+        limit: MAX_COLABORADORES,
+      })).sort((a, b) =>
+        String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"),
+      ),
     { ttlMs: CACHE_TTL_MS, force },
   );
 
@@ -58,20 +59,27 @@ export const buscarColaboradores = async (force = false) => {
 };
 
 export const cadastrarColaborador = async (dados) => {
-  const ref = await addDoc(col(), { ...dados, criado_em: serverTimestamp() });
+  const ref = await createVpsDocument(COLLECTIONS.COLABORADORES, {
+    ...dados,
+    criado_em: new Date().toISOString(),
+  });
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
   return ref;
 };
 
 export const atualizarColaborador = async (id, dados) => {
-  await updateDoc(doc(db, COLLECTIONS.COLABORADORES, id), {
+  await updateVpsDocument(`${COLLECTIONS.COLABORADORES}/${id}`, {
     ...dados,
-    atualizado_em: serverTimestamp(),
+    atualizado_em: new Date().toISOString(),
   });
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
 };
 
 export const deletarColaborador = async (id) => {
-  await deleteDoc(doc(db, COLLECTIONS.COLABORADORES, id));
+  await deleteVpsDocument(`${COLLECTIONS.COLABORADORES}/${id}`);
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
 };
+

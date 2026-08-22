@@ -1,4 +1,4 @@
-const PessoaFields = ({ label, value = {}, onChange }) => {
+﻿const PessoaFields = ({ label, value = {}, onChange }) => {
   const set = (field, val) => onChange({ ...value, [field]: val });
   return (
     <div className="space-y-2">
@@ -31,3 +31,4 @@ const PessoaFields = ({ label, value = {}, onChange }) => {
 };
 
 export default PessoaFields;
+

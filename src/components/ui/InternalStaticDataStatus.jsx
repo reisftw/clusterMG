@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Clock3, Database } from "lucide-react";
 import {
   getInternalStaticDataMeta,
   INTERNAL_STATIC_DATA_UPDATED_EVENT,
+  SNAPSHOT_DOMAINS,
 } from "../../services/internalStaticDataService";
-import { resolveFirestoreDate } from "../../services/firestoreDate";
+import { resolveDataDate } from "../../services/dataDate";
 
 function formatGeneratedAt(value) {
-  const date = resolveFirestoreDate(value);
+  const date = resolveDataDate(value);
   if (!date) return null;
 
   return date.toLocaleString("pt-BR", {
@@ -19,7 +20,10 @@ function formatGeneratedAt(value) {
   });
 }
 
-export default function InternalStaticDataStatus({ className = "" }) {
+export default function InternalStaticDataStatus({
+  className = "",
+  fallbackIsHealthy = false,
+}) {
   const [available, setAvailable] = useState(true);
   const [generatedAt, setGeneratedAt] = useState(null);
 
@@ -27,7 +31,9 @@ export default function InternalStaticDataStatus({ className = "" }) {
     let active = true;
 
     async function loadMeta() {
-      const meta = await getInternalStaticDataMeta();
+      const meta = await getInternalStaticDataMeta({
+        domain: SNAPSHOT_DOMAINS.DASHBOARD,
+      });
       if (!active) return;
 
       setAvailable(meta.available);
@@ -58,16 +64,25 @@ export default function InternalStaticDataStatus({ className = "" }) {
   }, []);
 
   const formattedDate = formatGeneratedAt(generatedAt);
-  const toneClasses = available
+  const isHealthy = available || fallbackIsHealthy;
+  const toneClasses = isHealthy
     ? "border-blue-100 bg-blue-50 text-blue-900"
     : "border-amber-200 bg-amber-50 text-amber-900";
+  const title = available
+    ? "JSON interno ativo"
+    : "Leitura pela VPS";
+  const description = available
+    ? "Base padrao desta tela: snapshots internos segmentados, com metadados lidos em internal/dashboard.json."
+    : fallbackIsHealthy
+      ? "Esta tela segue operando normalmente com leitura direta pela API da VPS enquanto o snapshot interno segmentado fica indisponivel."
+      : "Sem snapshot interno segmentado disponivel agora. Os dados serao lidos pela API da VPS ou pela republicacao dos JSONs internos.";
 
   return (
     <div className={`rounded-2xl border px-4 py-3 shadow-sm ${toneClasses} ${className}`.trim()}>
       <div className="flex flex-wrap items-center gap-3">
         <span className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]">
           <Database size={14} />
-          {available ? "JSON interno ativo" : "Leitura em tempo real"}
+          {title}
         </span>
         {available && formattedDate ? (
           <span className="inline-flex items-center gap-1 text-xs opacity-80">
@@ -78,10 +93,9 @@ export default function InternalStaticDataStatus({ className = "" }) {
       </div>
 
       <p className="mt-2 text-sm leading-5">
-        {available
-          ? "Base padrao desta tela: static/internal/data.json."
-          : "Sem snapshot interno disponivel agora. Esta tela depende do static/internal/data.json e nao consulta o Firestore."}
+        {description}
       </p>
     </div>
   );
 }
+

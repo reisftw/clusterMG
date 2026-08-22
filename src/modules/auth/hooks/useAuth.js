@@ -1,43 +1,137 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from "react";
 import {
-  loginWithEmail, logout,
-  fetchUserProfile, subscribeToAuthChanges,
-} from '../services/authService';
+  loginWithEmail,
+  loginWithGoogleCredential,
+  loginWithOktaCredential,
+  logout,
+  fetchUserProfile,
+  subscribeToAuthChanges,
+  verificarMfaEmail,
+} from "../services/authService";
 
 export const useAuth = () => {
-  const [currentUser, setCurrentUser]           = useState(null);
-  const [loading, setLoading]                   = useState(true);
-  const [error, setError]                       = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [trocarSenhaObrigatorio, setTrocarSenha] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges(async (firebaseUser) => {
-      if (firebaseUser) {
+    const unsubscribe = subscribeToAuthChanges(async (sessionUser) => {
+      if (sessionUser) {
         try {
-          const profile = await fetchUserProfile(firebaseUser.uid);
+          const profile = await fetchUserProfile(sessionUser.uid);
           setCurrentUser(profile);
-          // Força troca de senha se flag ativa
           setTrocarSenha(!!profile.trocar_senha);
         } catch (err) {
-          console.error('Erro ao buscar perfil:', err);
-          setCurrentUser(null);
+          console.error("Erro ao buscar perfil:", err);
+          setCurrentUser(sessionUser);
+          setTrocarSenha(!!sessionUser.trocar_senha);
         }
       } else {
         setCurrentUser(null);
         setTrocarSenha(false);
       }
+
       setLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
 
   const login = useCallback(async (email, password) => {
     setError(null);
+    setLoading(true);
+
     try {
-      await loginWithEmail(email, password);
-    } catch {
-      setError('E-mail ou senha inválidos.');
-      throw new Error('login failed');
+      const credential = await loginWithEmail(email, password);
+      if (credential?.mfaRequired) {
+        return credential;
+      }
+      let profile = credential.user;
+      try {
+        profile = await fetchUserProfile(credential.user.uid);
+      } catch (profileError) {
+        console.error("Erro ao buscar perfil após login:", profileError);
+      }
+      setCurrentUser(profile);
+      setTrocarSenha(!!profile.trocar_senha);
+      return null;
+    } catch (err) {
+      const message = err?.message || "Não foi possível entrar.";
+      setError(message);
+      setCurrentUser(null);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const verifyEmailMfa = useCallback(async ({ challengeId, code }) => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      const credential = await verificarMfaEmail({ challengeId, code });
+      let profile = credential.user;
+      try {
+        profile = await fetchUserProfile(credential.user.uid);
+      } catch (profileError) {
+        console.error("Erro ao buscar perfil após MFA:", profileError);
+      }
+      setCurrentUser(profile);
+      setTrocarSenha(!!profile.trocar_senha);
+    } catch (err) {
+      setError(err?.message || "Código MFA inválido.");
+      setCurrentUser(null);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loginWithGoogle = useCallback(async (credential) => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      const googleCredential = await loginWithGoogleCredential(credential);
+      let profile = googleCredential.user;
+      try {
+        profile = await fetchUserProfile(googleCredential.user.uid);
+      } catch (profileError) {
+        console.error("Erro ao buscar perfil após login Google:", profileError);
+      }
+      setCurrentUser(profile);
+      setTrocarSenha(!!profile.trocar_senha);
+    } catch (err) {
+      setError(err?.message || "Não foi possível entrar com Google.");
+      setCurrentUser(null);
+      throw new Error("google login failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loginWithOkta = useCallback(async ({ credential, nonce }) => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      const oktaCredential = await loginWithOktaCredential({ credential, nonce });
+      let profile = oktaCredential.user;
+      try {
+        profile = await fetchUserProfile(oktaCredential.user.uid);
+      } catch (profileError) {
+        console.error("Erro ao buscar perfil após login Okta:", profileError);
+      }
+      setCurrentUser(profile);
+      setTrocarSenha(!!profile.trocar_senha);
+    } catch (err) {
+      setError(err?.message || "Não foi possível entrar com Okta.");
+      setCurrentUser(null);
+      throw new Error("okta login failed");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -46,16 +140,29 @@ export const useAuth = () => {
       await logout();
       setCurrentUser(null);
     } catch {
-      setError('Erro ao encerrar sessão.');
+      setError("Erro ao encerrar sessao.");
     }
   }, []);
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = async () => {
     if (!currentUser?.id) return;
+
     const profile = await fetchUserProfile(currentUser.id);
     setCurrentUser(profile);
     setTrocarSenha(!!profile.trocar_senha);
-  }, [currentUser?.id]);
+  };
 
-  return { currentUser, loading, error, login, signOut, trocarSenhaObrigatorio, refreshUser };
+  return {
+    currentUser,
+    loading,
+    error,
+    login,
+    verifyEmailMfa,
+    loginWithGoogle,
+    loginWithOkta,
+    signOut,
+    trocarSenhaObrigatorio,
+    refreshUser,
+  };
 };
+

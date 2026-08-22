@@ -1,27 +1,28 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import ModalShell from "../../../components/ui/ModalShell";
 import Spinner from "../../../components/ui/Spinner";
 import { useColaboradores } from "../hooks/useColaboradores";
 import ColaboradorDetalheModal from "./ColaboradorDetalheModal";
 import ColaboradorForm from "./ColaboradorForm";
 
 const CARGO_COLOR = {
-  "Técnico I": "bg-blue-50 text-blue-700",
-  "Técnico II": "bg-blue-50 text-blue-700",
-  "Técnico III": "bg-blue-50 text-blue-700",
+  "Tecnico I": "bg-blue-50 text-blue-700",
+  "Tecnico II": "bg-blue-50 text-blue-700",
+  "Tecnico III": "bg-blue-50 text-blue-700",
   "BackOffice I": "bg-purple-50 text-purple-700",
   "BackOffice II": "bg-purple-50 text-purple-700",
   "BackOffice III": "bg-purple-50 text-purple-700",
-  "Líder Técnico": "bg-orange-50 text-orange-700",
+  "Lider Tecnico": "bg-orange-50 text-orange-700",
 };
 
 const STATUS_STYLES = {
   Ativo: "bg-green-100 text-green-700",
-  "Em Experiência": "bg-yellow-100 text-yellow-700",
+  "Em Experiencia": "bg-yellow-100 text-yellow-700",
   Desligado: "bg-red-100 text-red-600",
 };
 
-const FILTROS_STATUS = ["Todos", "Ativo", "Em Experiência", "Desligado"];
+const FILTROS_STATUS = ["Todos", "Ativo", "Em Experiencia", "Desligado"];
 
 const ColaboradoresPage = () => {
   const { colaboradores, loading, error, cadastrar, atualizar, deletar, carregar } =
@@ -100,7 +101,7 @@ const ColaboradoresPage = () => {
           <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por nome, cargo ou matrícula..."
+            placeholder="Buscar por nome, cargo ou matricula..."
             value={busca}
             onChange={(event) => setBusca(event.target.value)}
             className="input-field pl-9"
@@ -125,10 +126,10 @@ const ColaboradoresPage = () => {
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="min-w-[860px] w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {["Nome", "Cargo", "Matrícula", "Base", "Status", "Contratação", "Ações"].map(
+                {["Nome", "Cargo", "Matricula", "Base", "Status", "Contratacao", "Acoes"].map(
                   (header) => (
                     <th
                       key={header}
@@ -193,13 +194,13 @@ const ColaboradoresPage = () => {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleEditar(colaborador)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-500 transition-colors"
+                          className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-orange-50 hover:text-orange-500"
                         >
                           <Pencil size={14} />
                         </button>
                         <button
                           onClick={() => setConfirmar(colaborador)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -236,14 +237,14 @@ const ColaboradoresPage = () => {
       )}
 
       {confirmar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm">
+        <ModalShell onClose={() => setConfirmar(null)} showClose={false} size="sm" bodyClassName="p-0">
+          <div className="p-6">
             <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
               <Trash2 size={18} className="text-red-500" />
             </div>
             <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir colaborador?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              <span className="font-semibold text-gray-700">"{confirmar.nome}"</span> será removido permanentemente.
+              <span className="font-semibold text-gray-700">"{confirmar.nome}"</span> sera removido permanentemente.
             </p>
             <div className="flex gap-3">
               <button
@@ -263,10 +264,11 @@ const ColaboradoresPage = () => {
               </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   );
 };
 
 export default ColaboradoresPage;
+

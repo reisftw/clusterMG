@@ -1,16 +1,23 @@
+﻿import { COLLECTIONS } from '../../../constants/dataCollections';
 import {
-  collection, addDoc, updateDoc, deleteDoc,
-  getDocs, doc, serverTimestamp, orderBy, query,
-} from 'firebase/firestore';
-import { db } from '../../../services/firebase';
-import { COLLECTIONS } from '../../../constants/firestoreCollections';
-import { getInternalStaticDataSlice } from '../../../services/internalStaticDataService';
+  getInternalSnapshotSlice,
+  SNAPSHOT_DOMAINS,
+} from '../../../services/internalStaticDataService';
+import {
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from '../../../services/vpsApiClient';
+import { emitRealtimeUpdate } from '../../../services/realtimeEvents';
 
-const col = () => collection(db, COLLECTIONS.AGENDA);
-
-export const buscarAgenda = async (force = false) => {
-  if (!force) {
-    const staticEventos = await getInternalStaticDataSlice(
+export const buscarAgenda = async (
+  force = false,
+  { allowFallback = true, preferStatic = false } = {},
+) => {
+  if (preferStatic && !force) {
+    const staticEventos = await getInternalSnapshotSlice(
+      SNAPSHOT_DOMAINS.DASHBOARD,
       (payload) => payload?.agenda?.eventos ?? null,
     );
     if (Array.isArray(staticEventos)) {
@@ -18,17 +25,35 @@ export const buscarAgenda = async (force = false) => {
     }
   }
 
-  const snap = await getDocs(query(col(), orderBy('data_inicio', 'asc')));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  if (!allowFallback) {
+    return [];
+  }
+
+  return (await listVpsDocuments(COLLECTIONS.AGENDA, { limit: 500 })).sort((a, b) =>
+    String(a.data_inicio || "").localeCompare(String(b.data_inicio || "")),
+  );
 };
 
-export const criarAgenda = async (dados) =>
-  await addDoc(col(), { ...dados, criado_em: serverTimestamp() });
-
-export const atualizarAgenda = async (id, dados) =>
-  await updateDoc(doc(db, COLLECTIONS.AGENDA, id), {
-    ...dados, atualizado_em: serverTimestamp(),
+export const criarAgenda = async (dados) => {
+  const result = await createVpsDocument(COLLECTIONS.AGENDA, {
+    ...dados,
+    criado_em: new Date().toISOString(),
   });
+  emitRealtimeUpdate("acompanhamento", { collectionPath: COLLECTIONS.AGENDA });
+  return result;
+};
 
-export const excluirAgenda = async (id) =>
-  await deleteDoc(doc(db, COLLECTIONS.AGENDA, id));
+export const atualizarAgenda = async (id, dados) => {
+  const result = await updateVpsDocument(`${COLLECTIONS.AGENDA}/${id}`, {
+    ...dados,
+    atualizado_em: new Date().toISOString(),
+  });
+  emitRealtimeUpdate("acompanhamento", { collectionPath: COLLECTIONS.AGENDA, documentId: id });
+  return result;
+};
+
+export const excluirAgenda = async (id) => {
+  await deleteVpsDocument(`${COLLECTIONS.AGENDA}/${id}`);
+  emitRealtimeUpdate("acompanhamento", { collectionPath: COLLECTIONS.AGENDA, documentId: id });
+};
+

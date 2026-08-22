@@ -1,19 +1,21 @@
-import {
-  doc,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
-import { db } from "../../../services/firebase";
-
-const DUVIDAS_DOC_REF = doc(db, "config", "duvidas_retirada");
+﻿import { updateVpsDocument } from "../../../services/vpsApiClient";
 
 function cleanText(value) {
   return String(value || "").trim();
 }
 
+let fallbackIdCounter = 0;
+
+function createLocalId(prefix) {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return `${prefix}_${uuid}`;
+  fallbackIdCounter += 1;
+  return `${prefix}_${Date.now()}_${fallbackIdCounter}`;
+}
+
 function normalizeContato(item = {}) {
   return {
-    id: cleanText(item.id) || `contato-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: cleanText(item.id) || createLocalId("contato"),
     nome: cleanText(item.nome),
     telefone: cleanText(item.telefone),
     cargo: cleanText(item.cargo),
@@ -23,7 +25,7 @@ function normalizeContato(item = {}) {
 
 function normalizeDuvida(item = {}) {
   return {
-    id: cleanText(item.id) || `duvida-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: cleanText(item.id) || createLocalId("duvida"),
     pergunta: cleanText(item.pergunta),
     resposta: cleanText(item.resposta),
     categoria: cleanText(item.categoria),
@@ -61,13 +63,10 @@ export function normalizeDuvidasContent(payload = {}) {
 
 export async function salvarDuvidasContent(payload) {
   const normalized = normalizeDuvidasContent(payload);
-  await setDoc(
-    DUVIDAS_DOC_REF,
-    {
-      ...normalized,
-      atualizadoEm: serverTimestamp(),
-    },
-    { merge: true },
-  );
+  await updateVpsDocument("config/duvidas_retirada", {
+    ...normalized,
+    atualizadoEm: new Date().toISOString(),
+  });
   return normalized;
 }
+

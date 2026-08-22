@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { FileDown } from "lucide-react";
@@ -121,7 +121,7 @@ const TabOSAberto = () => {
           _tecnico: extractTec(r.tecnicos ?? r.tecnico ?? ""),
           _cidade: cidade,
           _regional: info.regional,
-          _agente: info.agente ? "SIM" : "NÃO",
+          _agente: info.agente ? "SIM" : "NAO",
           _datAb: datAb,
           _datAbStr: datAb ? datAb.toLocaleDateString("pt-BR") : "",
         };
@@ -182,7 +182,7 @@ const TabOSAberto = () => {
         ws.getRow(r + 1).height = 48;
       };
 
-      // ── ABA 1: O.S em Aberto ──────────────────────────────────────────────
+      // -- ABA 1: O.S em Aberto ----------------------------------------------
       const ws1 = wb.addWorksheet("O.S em Aberto");
       ws1.views = [{ showGridLines: false }];
       xT(
@@ -254,7 +254,7 @@ const TabOSAberto = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Regional ───────────────────────────────────────────────
+      // -- ABA 2: Por Regional -----------------------------------------------
       const ws2 = wb.addWorksheet("Por Regional");
       ws2.views = [{ showGridLines: false }];
       xT(ws2, 1, 4, "O.S EM ABERTO — POR REGIONAL", "1F618D");
@@ -282,7 +282,7 @@ const TabOSAberto = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 3: Por Cidade -------------------------------------------------
       const ws3 = wb.addWorksheet("Por Cidade");
       ws3.views = [{ showGridLines: false }];
       xT(ws3, 1, 4, "O.S EM ABERTO — POR CIDADE", "6C3483");
@@ -309,7 +309,7 @@ const TabOSAberto = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -332,6 +332,14 @@ const TabOSAberto = () => {
       className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
         ${fname ? "border-green-400 bg-green-50" : "border-gray-200 bg-white hover:border-red-400"}`}
       onClick={() => inputRef.current?.click()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       <input
         ref={inputRef}
@@ -372,7 +380,7 @@ const TabOSAberto = () => {
         />
       </div>
 
-      {/* Botão confrontar */}
+      {/* Botao confrontar */}
       {atRows.length > 0 && osRows.length > 0 && (
         <button
           onClick={confrontar}
@@ -426,7 +434,7 @@ const TabOSAberto = () => {
         </div>
       )}
 
-      {/* Botão gerar */}
+      {/* Botao gerar */}
       {resultado?.length > 0 && (
         <button
           onClick={gerar}
@@ -450,3 +458,4 @@ const TabOSAberto = () => {
 };
 
 export default TabOSAberto;
+

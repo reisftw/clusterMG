@@ -1,8 +1,8 @@
-import * as XLSX from 'xlsx';
+﻿import * as XLSX from 'xlsx';
 
 const AG_ABA_MES = {
   'AG_JAN': 'Janeiro',  'AG_FEV': 'Fevereiro',
-  'AG_MAR': 'Março',    'AG_ABR': 'Abril',
+  'AG_MAR': 'Marco',    'AG_ABR': 'Abril',
   'AG_MAI': 'Maio',     'AG_JUN': 'Junho',
   'AG_JUL': 'Julho',    'AG_AGO': 'Agosto',
   'AG_SET': 'Setembro', 'AG_OUT': 'Outubro',
@@ -25,6 +25,77 @@ function cvCell(ws, row, col) {
   return isNaN(n) ? 0 : n;
 }
 
+function normalizaTexto(valor) {
+  return String(valor ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+const CITY_DISPLAY_ALIASES = {
+  AGUIANIL: 'Aguanil',
+};
+
+function normalizaCidade(valor) {
+  const cidade = String(valor ?? '').trim();
+  if (!cidade) return '';
+
+  return CITY_DISPLAY_ALIASES[normalizaTexto(cidade)] || cidade;
+}
+
+function deduplicarCidades(cidades = []) {
+  const map = new Map();
+
+  cidades.forEach((cidade) => {
+    const nome = normalizaCidade(cidade?.cidade);
+    const key = normalizaTexto(nome);
+    if (!key) return;
+    map.set(key, { ...cidade, cidade: nome });
+  });
+
+  return [...map.values()];
+}
+
+function findHeaderRow(ws, range) {
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    const primeiraColuna = normalizaTexto(ws[XLSX.utils.encode_cell({ r: row, c: 0 })]?.v);
+    const segundaColuna = normalizaTexto(ws[XLSX.utils.encode_cell({ r: row, c: 1 })]?.v);
+    if (primeiraColuna === 'CIDADE' && segundaColuna === '1') {
+      return row;
+    }
+  }
+
+  return -1;
+}
+
+function getDayColumns(ws, headerRow, range) {
+  const dayCols = [];
+
+  for (let col = 1; col <= range.e.c; col++) {
+    const valor = normalizaTexto(ws[XLSX.utils.encode_cell({ r: headerRow, c: col })]?.v);
+    const dia = Number(valor);
+    if (Number.isInteger(dia) && dia >= 1 && dia <= 31) {
+      dayCols.push(col);
+      continue;
+    }
+
+    if (dayCols.length > 0) break;
+  }
+
+  return dayCols;
+}
+
+function findColumnByHeader(ws, headerRow, range, matcher) {
+  for (let col = 0; col <= range.e.c; col++) {
+    const valor = normalizaTexto(ws[XLSX.utils.encode_cell({ r: headerRow, c: col })]?.v);
+    if (matcher(valor)) return col;
+  }
+
+  return -1;
+}
+
 export function parseAgentesWorkbook(wb) {
   const resultado = {};
 
@@ -35,40 +106,47 @@ export function parseAgentesWorkbook(wb) {
     const ws = wb.Sheets[realName];
     if (!ws || !ws['!ref']) continue;
 
-    const range      = XLSX.utils.decode_range(ws['!ref']);
-    const totalCols  = range.e.c + 1;
-    const hasMetaCols = totalCols >= 35;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const headerRow = findHeaderRow(ws, range);
+    if (headerRow < 0) continue;
+
+    const dayCols = getDayColumns(ws, headerRow, range);
+    if (dayCols.length === 0) continue;
+
+    const totalCol = findColumnByHeader(ws, headerRow, range, (valor) => valor === 'TOTAL');
+    const cancelCol = findColumnByHeader(ws, headerRow, range, (valor) => valor.includes('CANCEL'));
+    const metaCol = findColumnByHeader(ws, headerRow, range, (valor) => valor === 'META');
 
     const cidades = [];
-    for (let row = 5; row <= 23; row++) {
+    for (let row = headerRow + 1; row <= range.e.r; row++) {
       const cidadeAddr = XLSX.utils.encode_cell({ r: row, c: 0 });
       const cidadeCell = ws[cidadeAddr];
-      if (!cidadeCell?.v) continue;
-      const cidade = String(cidadeCell.v).trim();
-      if (!cidade || cidade === 'CIDADE') continue;
+      const cidade = normalizaCidade(cidadeCell?.v);
+      const cidadeNormalizada = normalizaTexto(cidade);
 
-      const daily = [];
-      for (let d = 1; d <= 31; d++) {
-        daily.push(cvCell(ws, row, d));
+      if (!cidade) continue;
+
+      if (
+        cidadeNormalizada === 'CIDADE' ||
+        cidadeNormalizada.startsWith('ENTREGA EM LOJA') ||
+        cidadeNormalizada.startsWith('TOTAL')
+      ) {
+        break;
       }
 
-      let total = 0, cancelamentos = 0, meta = 0;
+      const daily = dayCols.map((col) => cvCell(ws, row, col));
 
-      if (hasMetaCols) {
-        total         = cvCell(ws, row, 32) || daily.reduce((s, v) => s + v, 0);
-        cancelamentos = cvCell(ws, row, 33);
-        meta          = cvCell(ws, row, 34);
-      } else {
-        total         = daily.reduce((s, v) => s + v, 0);
-        cancelamentos = cvCell(ws, row, 32);
-      }
+      const total = totalCol >= 0 ? cvCell(ws, row, totalCol) || daily.reduce((s, v) => s + v, 0) : daily.reduce((s, v) => s + v, 0);
+      const cancelamentos = cancelCol >= 0 ? cvCell(ws, row, cancelCol) : 0;
+      const meta = metaCol >= 0 ? cvCell(ws, row, metaCol) : 0;
 
       const pct = meta > 0 ? parseFloat(((total / meta) * 100).toFixed(1)) : 0;
       cidades.push({ cidade, total, cancelamentos, meta, pct, daily });
     }
 
-    if (cidades.length > 0) resultado[mes] = cidades;
+    if (cidades.length > 0) resultado[mes] = deduplicarCidades(cidades);
   }
 
   return resultado;
 }
+

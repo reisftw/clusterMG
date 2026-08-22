@@ -1,9 +1,41 @@
-import { db } from '../../../services/firebase';
-import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { buildCacheKey, invalidateCache } from '../../../services/firestoreCache';
+﻿import { buildCacheKey, invalidateCache } from '../../../services/dataCache';
+import { deleteVpsDocument, setVpsDocument } from '../../../services/vpsApiClient';
+
+const CITY_DISPLAY_ALIASES = {
+  AGUIANIL: 'Aguanil',
+};
+
+function normalizaTexto(valor) {
+  return String(valor ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
+function normalizaCidade(valor) {
+  const cidade = String(valor ?? '').trim();
+  if (!cidade) return '';
+  return CITY_DISPLAY_ALIASES[normalizaTexto(cidade)] || cidade;
+}
+
+function deduplicarCidades(cidades = []) {
+  const map = new Map();
+
+  cidades.forEach((cidade) => {
+    const nome = normalizaCidade(cidade?.cidade || cidade?.nome);
+    const key = normalizaTexto(nome);
+    if (!key) return;
+    map.set(key, { ...cidade, cidade: nome });
+  });
+
+  return [...map.values()];
+}
 
 const MONTHORDER = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ];
 
@@ -12,43 +44,39 @@ export async function salvarDashboardAgentes(agentesData) {
     await Promise.all(
       MONTHORDER.map(async (mes) => {
         const cidades = agentesData[mes];
-        const ref = doc(collection(db, 'dashboardagentes'), mes);
 
         if (!cidades || cidades.length === 0) {
-          await deleteDoc(ref).catch(() => {});
+          await deleteVpsDocument(`dashboardagentes/${mes}`).catch(() => {});
           return;
         }
 
-        // Normaliza shape para o formato que o index.html espera
-        const cidadesNorm = cidades.map(c => ({
-          nome:           c.cidade,
-          cancelamentos:  c.cancelamentos,
-          meta80:         c.meta,
-          realizado:      c.total,
-          falta:          c.meta - c.total,
-          pct:            c.pct,
-          daily:          c.daily,
+        const cidadesNorm = deduplicarCidades(cidades).map((c) => ({
+          nome: normalizaCidade(c.cidade),
+          cancelamentos: c.cancelamentos,
+          meta80: c.meta,
+          realizado: c.total,
+          falta: c.meta - c.total,
+          pct: c.pct,
+          daily: c.daily,
         }));
 
         const cidadesRanking = [...cidadesNorm].sort((a, b) => b.realizado - a.realizado);
-
-        const totalRealizado     = cidadesNorm.reduce((s, c) => s + c.realizado, 0);
-        const totalMeta          = cidadesNorm.reduce((s, c) => s + c.meta80, 0);
+        const totalRealizado = cidadesNorm.reduce((s, c) => s + c.realizado, 0);
+        const totalMeta = cidadesNorm.reduce((s, c) => s + c.meta80, 0);
         const totalCancelamentos = cidadesNorm.reduce((s, c) => s + c.cancelamentos, 0);
-        const totalFalta         = totalMeta - totalRealizado;
-        const percentAchieved    = totalCancelamentos > 0
+        const totalFalta = totalMeta - totalRealizado;
+        const percentAchieved = totalCancelamentos > 0
           ? parseFloat((totalRealizado / totalCancelamentos * 100).toFixed(1))
           : 0;
 
-        // totalDaily: soma dos dias de todas as cidades
         const dayCount = cidadesNorm[0]?.daily?.length ?? 31;
         const totalDaily = Array.from({ length: dayCount }, (_, i) =>
           cidadesNorm.reduce((s, c) => s + (c.daily[i] || 0), 0)
         );
 
-        await setDoc(ref, {
-          month:            mes,
-          cidades:          cidadesNorm,
+        await setVpsDocument(`dashboardagentes/${mes}`, {
+          month: mes,
+          cidades: cidadesNorm,
           cidadesRanking,
           dayCount,
           totalCancelamentos,
@@ -69,3 +97,4 @@ export async function salvarDashboardAgentes(agentesData) {
     invalidateCache(buildCacheKey(['painel-publico', 'agentes', 'v2']));
   }
 }
+

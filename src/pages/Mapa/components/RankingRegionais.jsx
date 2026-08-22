@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { rankingCidadesRegionais } from "../utils/mapaUtils";
 
 export default function RankingRegionais({ ordens = [], rankingOverride = null }) {
@@ -45,3 +45,4 @@ export default function RankingRegionais({ ordens = [], rankingOverride = null }
     </div>
   );
 }
+

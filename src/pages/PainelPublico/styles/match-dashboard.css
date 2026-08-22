@@ -1,0 +1,342 @@
+/* Remodelacao fiel ao mockup aprovado */
+.painel-classico .retiradas-focus-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, .9fr) minmax(0, 1.1fr);
+  gap: 20px;
+  align-items: stretch;
+  margin: 0 0 20px;
+}
+
+.painel-classico .retiradas-performance-card {
+  border: 1px solid rgba(255, 107, 0, .34);
+  border-radius: 8px;
+  padding: 24px;
+  background:
+    linear-gradient(180deg, #fff 0%, #fffaf4 100%),
+    radial-gradient(circle at top right, rgba(255, 107, 0, .16), transparent 36%);
+  box-shadow: 0 12px 30px rgba(0, 48, 135, .08);
+  position: relative;
+  overflow: hidden;
+}
+
+.painel-classico .retiradas-performance-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--panel-orange);
+}
+
+.painel-classico .retiradas-section-topline,
+.painel-classico .retiradas-chart-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.painel-classico .retiradas-section-topline > span:first-child {
+  color: var(--panel-blue);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.painel-classico .retiradas-status-chip {
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: #fff0df;
+  color: #c84d00;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-status-chip.ok {
+  background: #e6f8ef;
+  color: var(--panel-green);
+}
+
+.painel-classico .retiradas-status-chip.danger {
+  background: #ffe9e4;
+  color: var(--red);
+}
+
+.painel-classico .retiradas-performance-card h2 {
+  margin: 18px 0 8px;
+  color: var(--panel-navy);
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-performance-copy {
+  max-width: 560px;
+  color: #3f4b69;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.painel-classico .retiradas-progress-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 24px 0 14px;
+  padding: 18px;
+  border: 1px solid rgba(255, 107, 0, .18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .82);
+}
+
+.painel-classico .retiradas-progress-summary span,
+.painel-classico .retiradas-chart-metrics span {
+  display: block;
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.painel-classico .retiradas-progress-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--panel-blue);
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-progress-summary div:first-child strong {
+  color: var(--panel-orange);
+}
+
+.painel-classico .retiradas-progress-summary div:nth-child(2) strong {
+  color: var(--panel-green);
+}
+
+.painel-classico .retiradas-target-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #e8edf5;
+  overflow: hidden;
+}
+
+.painel-classico .retiradas-target-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--panel-orange), #ff8b1a);
+}
+
+.painel-classico .retiradas-track-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--panel-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.painel-classico .retiradas-retorninho-callout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid rgba(0, 48, 135, .1);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.painel-classico .retiradas-retorninho-callout span {
+  color: var(--panel-blue);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-retorninho-callout p {
+  margin-top: 6px;
+  color: #46546f;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.painel-classico .retiradas-retorninho-callout img {
+  width: 112px;
+  max-width: 100%;
+  filter: drop-shadow(0 16px 20px rgba(0, 48, 135, .18));
+}
+
+.painel-classico .retiradas-action-button {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 18px;
+  border: none;
+  border-radius: 7px;
+  background: var(--panel-orange);
+  color: #fff;
+  cursor: pointer;
+  font-family: Outfit, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-evolution-card {
+  min-height: 100%;
+}
+
+.painel-classico .retiradas-evolution-card .chart-container {
+  height: 390px;
+}
+
+.painel-classico .retiradas-chart-caption {
+  color: var(--panel-muted);
+  font-family: Outfit, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.painel-classico .retiradas-chart-metrics {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.painel-classico .retiradas-chart-metrics > div {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  border-right: 1px solid var(--panel-border);
+}
+
+.painel-classico .retiradas-chart-metrics > div:last-child {
+  border-right: none;
+}
+
+.painel-classico .retiradas-chart-metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--panel-blue);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-chart-metrics strong.negative {
+  color: var(--red);
+}
+
+.painel-classico .retiradas-chart-metrics strong.positive {
+  color: var(--panel-green);
+}
+
+.painel-classico .anomaly-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.painel-classico .anomaly-item {
+  min-height: 112px;
+  border: 1px solid var(--panel-border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fff;
+}
+
+@media (max-width: 1080px) {
+  .painel-classico .retiradas-focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .painel-classico .retiradas-evolution-card .chart-container {
+    height: 320px;
+  }
+
+  .painel-classico .anomaly-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .painel-classico .retiradas-performance-card {
+    padding: 18px 16px;
+  }
+
+  .painel-classico .retiradas-progress-summary,
+  .painel-classico .retiradas-retorninho-callout,
+  .painel-classico .retiradas-chart-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .painel-classico .retiradas-chart-metrics {
+    display: grid;
+  }
+
+  .painel-classico .retiradas-chart-metrics > div {
+    border-right: none;
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 12px;
+  }
+
+  .painel-classico .retiradas-chart-metrics > div:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .painel-tab {
+    flex: 0 0 auto;
+  }
+
+  .painel-classico .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .painel-classico .ritmo-retorninho-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .painel-publico-page {
+    padding: 12px;
+  }
+
+  .header {
+    min-height: 0;
+    padding: 18px 14px;
+  }
+
+  .painel-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .painel-tab {
+    min-height: 44px;
+    padding: 10px 8px;
+  }
+
+  .painel-classico .kpis {
+    grid-template-columns: 1fr;
+  }
+
+  .painel-classico .retiradas-source-card {
+    align-items: stretch;
+  }
+
+  .painel-classico .retiradas-source-options {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+}
+

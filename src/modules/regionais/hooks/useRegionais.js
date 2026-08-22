@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import {
   atualizarRegional,
   buscarRegionais,
@@ -11,12 +11,12 @@ import {
   buildCacheKey,
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
+} from "../../../services/dataCache";
+import { logDataRead } from "../../../services/dataMonitoring";
 
 export const TIPOS_CIDADE = ["Comum", "Agente Aut."];
 
-const CACHE_KEY = buildCacheKey(["regionais", "lista"]);
+const CACHE_KEY = buildCacheKey(["regionais", "lista", "v2"]);
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export const useRegionais = () => {
@@ -32,9 +32,9 @@ export const useRegionais = () => {
         CACHE_KEY,
         async () => {
           const itens = await buscarRegionais();
-          logFirestoreRead({
+          logDataRead({
             source: "useRegionais",
-            operation: "getDocs",
+            operation: "sql-list",
             count: itens.length,
           });
           return itens;
@@ -43,7 +43,7 @@ export const useRegionais = () => {
       );
 
       if (fromCache) {
-        logFirestoreRead({
+        logDataRead({
           source: "useRegionais",
           operation: "cache-hit",
           cacheHit: true,
@@ -124,5 +124,15 @@ export const useRegionais = () => {
     }
   }, [currentUser?.id, currentUser?.nome]);
 
-  return { regionais, loading, error, carregar, criar, atualizar, excluir };
+  return {
+    regionais,
+    loading,
+    error,
+    carregar: () => carregar(true),
+    criar,
+    atualizar,
+    excluir,
+  };
 };
+
+

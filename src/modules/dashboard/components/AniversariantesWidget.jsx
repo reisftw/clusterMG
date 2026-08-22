@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import { Cake } from "lucide-react";
 import { useColaboradores } from "../../colaboradores/hooks/useColaboradores";
 
@@ -30,7 +30,7 @@ const AniversariantesWidget = () => {
     return colaboradores
       .filter(
         (c) =>
-          (c.status === "Ativo" || c.status === "Em Experiência") &&
+          (c.status === "Ativo" || c.status === "Em Experiencia") &&
           c.data_nascimento
       )
       .map((c) => {
@@ -63,7 +63,7 @@ const AniversariantesWidget = () => {
         <p className="text-sm font-bold text-gray-900">Aniversariantes</p>
       </div>
 
-      {/* Destaque próximo */}
+      {/* Destaque proximo */}
       {proximo && (
         <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-100 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
           <div>
@@ -116,3 +116,4 @@ const AniversariantesWidget = () => {
 };
 
 export default AniversariantesWidget;
+

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { FileDown, History, Lock } from "lucide-react";
 import MapaHeader from "../../Mapa/components/MapaHeader";
 import MapaFiltros from "../../Mapa/components/MapaFiltros";
@@ -8,13 +8,13 @@ import RankingAgentes from "../../Mapa/components/RankingAgentes";
 import MapaRegionais from "../../Mapa/components/MapaRegionais";
 import MapaAgentes from "../../Mapa/components/MapaAgentes";
 import { buildEmptyPublicMapaSnapshot } from "../../Mapa/utils/mapaUtils";
+import { resolveVpsDate } from "../../../services/vpsDate";
 import "./TabMapaOS.css";
 
 function resolveSnapshotByFilter(summaryBase, filtroData, lastUpdate) {
   if (filtroData === "tudo") return summaryBase;
 
-  const rawDate =
-    lastUpdate?.data?.toDate?.() || new Date(lastUpdate?.data || lastUpdate);
+  const rawDate = resolveVpsDate(lastUpdate);
 
   if (Number.isNaN(rawDate?.getTime?.())) {
     return buildEmptyPublicMapaSnapshot();
@@ -118,13 +118,13 @@ export default function TabMapaOS({ allData, month, lastUpdate }) {
           <span className="text-5xl mb-4">Mapa</span>
           <p className="text-gray-600 font-semibold text-base">
             {summaryBase.totalOrdens > 0
-              ? "Nenhuma O.S no periodo selecionado"
+              ? "Nenhuma O.S no período selecionado"
               : "Nenhuma O.S em aberto"}
           </p>
           <p className="text-gray-400 text-sm mt-1">
             {summaryBase.totalOrdens > 0
               ? "Tente outro filtro de data"
-              : "Nao ha O.S para exibir"}
+              : "Não há O.S para exibir"}
           </p>
         </div>
       ) : (
@@ -153,3 +153,4 @@ export default function TabMapaOS({ allData, month, lastUpdate }) {
     </div>
   );
 }
+

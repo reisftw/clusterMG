@@ -2,6 +2,7 @@ const documents = require("./documents");
 const notificationsService = require("./notificationsService");
 const cvortexIntegration = require("./cvortexIntegration");
 const { broadcastRealtime } = require("./realtime");
+const { randomFloat, randomId, randomIntInclusive } = require("./secureRandom");
 
 const CONFIG_PATH = "mensageria_config/global";
 const QUEUE_COLLECTION = "mensageria_fila";
@@ -10,6 +11,7 @@ const HISTORY_COLLECTION = "mensageria_historico";
 const CALLBACK_COLLECTION = "mensageria_callbacks";
 const SCHEDULE_CONVERSATION_COLLECTION = "mensageria_agendamento_conversas";
 const APPOINTMENT_COLLECTION = "agendamentos";
+const SUPPORTED_WHATSAPP_PROVIDERS = new Set(["evolution", "official_whatsapp", "cvortex"]);
 const AUTOMATION_ATTENDANT_ID = "retorninho";
 const AUTOMATION_ATTENDANT_NAME = "RETORNINHO";
 const SEND_TIME_ZONE = "America/Sao_Paulo";
@@ -38,12 +40,6 @@ const DEFAULT_CONFIG = {
   officialWhatsappTemplateLanguage: "pt_BR",
   officialWhatsappTemplateBodyUsesMessage: true,
   officialWebhookVerifyToken: "",
-  zapiEnabled: false,
-  zapiBaseUrl: "https://api.z-api.io",
-  zapiInstanceId: "",
-  zapiInstanceToken: "",
-  zapiClientToken: "",
-  zapiWebhookUrl: "https://retiradas.tech/api/webhooks/zapi",
   cvortexEnabled: false,
   evolutionPaused: true,
   smartDelayEnabled: true,
@@ -93,9 +89,37 @@ let lastRun = null;
 let lastError = "";
 let lastSkipped = "";
 let nextRunAt = null;
+const recentInboundCallbacks = new Map();
+const RECENT_INBOUND_TTL_MS = 10 * 60 * 1000;
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function pruneRecentInboundCallbacks(now = Date.now()) {
+  for (const [key, createdAt] of recentInboundCallbacks.entries()) {
+    if (now - createdAt > RECENT_INBOUND_TTL_MS) {
+      recentInboundCallbacks.delete(key);
+    }
+  }
+}
+
+function buildRecentInboundKey({ phone, mensagem, webhookMessageId }) {
+  const eventId = String(webhookMessageId || "").trim();
+  if (eventId) return `event:${eventId}`;
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedText = normalizeText(mensagem);
+  if (!normalizedPhone || !normalizedText) return "";
+  return `text:${normalizedPhone}:${normalizedText}`;
+}
+
+function markRecentInboundCallback({ phone, mensagem, webhookMessageId }) {
+  pruneRecentInboundCallbacks();
+  const key = buildRecentInboundKey({ phone, mensagem, webhookMessageId });
+  if (!key) return false;
+  if (recentInboundCallbacks.has(key)) return true;
+  recentInboundCallbacks.set(key, Date.now());
+  return false;
 }
 
 function normalizeDigits(value) {
@@ -171,7 +195,7 @@ function sleep(ms) {
 function randomDelayMs(config) {
   const min = Math.max(5, Number(config.evolutionMinDelaySeconds || 45));
   const max = Math.max(min, Number(config.evolutionMaxDelaySeconds || 120));
-  return (min + Math.floor(Math.random() * (max - min + 1))) * 1000;
+  return randomIntInclusive(min, max) * 1000;
 }
 
 function getSendWindowRemainingMs(config, date = new Date()) {
@@ -202,7 +226,7 @@ function calculateQueueDelayMs(config, remainingMessagesAfterCurrent = 1, date =
   if (!remainingWindowMs) return randomDelayMs(config);
 
   const baseMs = remainingWindowMs / remainingMessages;
-  const jitterFactor = 0.85 + Math.random() * 0.3;
+  const jitterFactor = randomFloat(0.85, 1.15);
   const dynamicMaxMs = Math.max(manualMaxMs, baseMs * 1.3);
   const delayMs = Math.round(baseMs * jitterFactor);
 
@@ -332,6 +356,9 @@ function getLocalDateKey(value = new Date()) {
 async function getConfig() {
   const doc = await documents.getDocument(CONFIG_PATH).catch(() => null);
   const config = { ...DEFAULT_CONFIG, ...(doc?.data || {}) };
+  if (!SUPPORTED_WHATSAPP_PROVIDERS.has(config.whatsappProvider)) {
+    config.whatsappProvider = "evolution";
+  }
   config.evolutionAccounts = [];
   config.evolutionSelectedAccountId = "default";
   return config;
@@ -356,21 +383,24 @@ async function getTemplate(templateId) {
 }
 
 async function listQueue(limit = 20) {
-  const result = await documents.listDocuments({
-    collectionPath: QUEUE_COLLECTION,
-    limit,
-    offset: 0,
-  });
+  const result = await documents.listAllDocuments(QUEUE_COLLECTION);
   return result
     .map((item) => ({ id: item.documentId, ...(item.data || {}) }))
     .sort((left, right) => {
-      const leftPriority = left.prioridadeEm ? 0 : 1;
-      const rightPriority = right.prioridadeEm ? 0 : 1;
+      const leftIsMapDiff = left.origemTipo === "mapa_diff" || normalizeText(left.origem).includes("diferenca automatica");
+      const rightIsMapDiff = right.origemTipo === "mapa_diff" || normalizeText(right.origem).includes("diferenca automatica");
+      const leftPriority = left.prioridadeEm || leftIsMapDiff ? 0 : 1;
+      const rightPriority = right.prioridadeEm || rightIsMapDiff ? 0 : 1;
       if (leftPriority !== rightPriority) return leftPriority - rightPriority;
-      const leftDate = new Date(left.prioridadeEm || left.proximaTentativaEm || left.criadoEm || 0).getTime() || 0;
-      const rightDate = new Date(right.prioridadeEm || right.proximaTentativaEm || right.criadoEm || 0).getTime() || 0;
-      return leftDate - rightDate;
-    });
+
+      const leftDate =
+        new Date(left.prioridadeEm || left.diffMapaEm || left.criadoEm || left.proximaTentativaEm || 0).getTime() || 0;
+      const rightDate =
+        new Date(right.prioridadeEm || right.diffMapaEm || right.criadoEm || right.proximaTentativaEm || 0).getTime() || 0;
+
+      return leftPriority === 0 ? rightDate - leftDate : leftDate - rightDate;
+    })
+    .slice(0, Math.max(1, Number(limit || 20)));
 }
 
 async function upsertQueueItem(id, data) {
@@ -384,7 +414,7 @@ async function upsertQueueItem(id, data) {
 }
 
 async function createHistory(data) {
-  const id = `evo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId("evo");
   await documents.upsertDocument({
     path: `${HISTORY_COLLECTION}/${id}`,
     collectionPath: HISTORY_COLLECTION,
@@ -404,15 +434,12 @@ async function listHistory(limit = 1000) {
   return result.map((item) => ({ id: item.documentId, ...(item.data || {}) }));
 }
 
-async function countQueueMessagesSentToday(config = {}) {
+async function countQueueMessagesSentToday() {
   const todayKey = getLocalDateKey();
   const history = await listHistory(2000);
   return history.filter((item) => {
     if (String(item.status || "") !== "enviado") return false;
     if (!item.filaId) return false;
-    if (item.evolutionMode && String(config.whatsappProvider || "evolution") === "zapi" && item.evolutionMode !== "zapi_text") {
-      return false;
-    }
     const createdAt = item.criadoEm?.value || item.criadoEm || item.criado_em?.value || item.criado_em || "";
     return getLocalDateKey(createdAt) === todayKey;
   }).length;
@@ -455,13 +482,6 @@ function buildEvolutionUrl(config) {
     .replace("{instance}", instance)
     .replace(/^\/?/, "/");
   return `${baseUrl}${path}`;
-}
-
-function buildEvolutionPath(config, templatePath) {
-  const instance = encodeURIComponent(String(config.evolutionInstance || "").trim());
-  return String(templatePath || "")
-    .replace("{instance}", instance)
-    .replace(/^\/?/, "/");
 }
 
 function buildEvolutionApiUrl(config, path) {
@@ -842,60 +862,9 @@ async function sendOfficialWhatsAppMessage(config, number, text) {
   return data || { ok: true };
 }
 
-function buildZapiApiUrl(config, path) {
-  const baseUrl = String(config.zapiBaseUrl || DEFAULT_CONFIG.zapiBaseUrl).replace(/\/+$/, "");
-  const instanceId = encodeURIComponent(String(config.zapiInstanceId || "").trim());
-  const instanceToken = encodeURIComponent(String(config.zapiInstanceToken || "").trim());
-  if (!baseUrl || !instanceId || !instanceToken) {
-    throw new Error("Z-API nao configurada.");
-  }
-  return `${baseUrl}/instances/${instanceId}/token/${instanceToken}${String(path || "").replace(/^\/?/, "/")}`;
-}
-
-async function requestZapi(config, path, options = {}) {
-  const clientToken = String(config.zapiClientToken || "").trim();
-  const response = await fetch(buildZapiApiUrl(config, path), {
-    method: options.method || "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(clientToken ? { "Client-Token": clientToken } : {}),
-      ...(options.headers || {}),
-    },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
-  }
-  if (!response.ok) {
-    const details = typeof data === "string" ? data : JSON.stringify(data || {});
-    throw new Error(data?.message || data?.error || data?.errorMessage || `Z-API HTTP ${response.status}: ${details}`);
-  }
-  return data || { ok: true };
-}
-
-async function sendZapiTextMessage(config, number, text) {
-  const phone = normalizePhone(number);
-  const message = String(text || "").trim();
-  if (!phone) throw new Error("Z-API sem telefone de destino.");
-  if (!message) throw new Error("Z-API sem texto para envio.");
-  return requestZapi(config, "/send-text", {
-    method: "POST",
-    body: {
-      phone,
-      message,
-      delayMessage: 2,
-      delayTyping: 2,
-    },
-  });
-}
-
 function getProviderName(config = {}) {
   const provider = String(config.whatsappProvider || "evolution");
   if (provider === "official_whatsapp") return "WhatsApp oficial";
-  if (provider === "zapi") return "Z-API";
   if (provider === "cvortex") return "Cvortex";
   return "Evolution API";
 }
@@ -903,7 +872,6 @@ function getProviderName(config = {}) {
 function isSelectedProviderEnabled(config = {}) {
   const provider = String(config.whatsappProvider || "evolution");
   if (provider === "official_whatsapp") return Boolean(config.officialWhatsappEnabled);
-  if (provider === "zapi") return Boolean(config.zapiEnabled);
   if (provider === "cvortex") return Boolean(config.cvortexEnabled);
   return Boolean(config.evolutionEnabled);
 }
@@ -913,13 +881,7 @@ async function sendWhatsAppMessage(config, number, text, item = {}) {
   if (provider === "official_whatsapp") {
     return {
       mode: "official_whatsapp",
-      response: await sendOfficialWhatsAppMessage(config, number, text, item),
-    };
-  }
-  if (provider === "zapi") {
-    return {
-      mode: "zapi_text",
-      response: await sendZapiTextMessage(config, number, text),
+      response: await sendOfficialWhatsAppMessage(config, number, text),
     };
   }
   if (provider === "cvortex") {
@@ -962,7 +924,7 @@ async function processQueueOnce({ manual = false } = {}) {
   }
 
   const dailyLimit = Math.max(1, Number(config.dailySendLimit || DEFAULT_CONFIG.dailySendLimit));
-  const sentToday = await countQueueMessagesSentToday(config);
+  const sentToday = await countQueueMessagesSentToday();
   const remainingToday = Math.max(0, dailyLimit - sentToday);
   if (remainingToday <= 0) {
     const nextWindow = getNextSendWindowStart(config);
@@ -1353,6 +1315,14 @@ function isDeliveredIntent(text) {
   ].some((term) => value.includes(term));
 }
 
+function isYesTypoIntent(value) {
+  const compact = normalizeText(value).replace(/[^a-z0-9]/g, "");
+  if (!compact || compact.length > 4) return false;
+  if (["s", "si", "sim", "simm", "sii", "sm", "ss", "sik", "sin"].includes(compact)) return true;
+  if (!compact.startsWith("si")) return false;
+  return compact.length <= 4;
+}
+
 function isPositiveScheduleIntent(text) {
   const value = normalizeText(text);
   if (
@@ -1363,6 +1333,7 @@ function isPositiveScheduleIntent(text) {
   ) {
     return false;
   }
+  if (isYesTypoIntent(value)) return true;
   return [
     "sim",
     "pode",
@@ -1597,7 +1568,7 @@ async function findHistoryItemForCallback({ phone, codigoCliente, cliente }) {
   const code = String(codigoCliente || "").trim();
   const name = normalizeText(cliente);
   return history
-    .filter((item) => String(item.status || "") === "enviado")
+    .filter((item) => String(item.status || "") === "enviado" && !isAutomaticReplyHistoryItem(item))
     .sort((a, b) => String(b.criadoEm || "").localeCompare(String(a.criadoEm || "")))
     .find((item) => {
       if (code && String(item.codigo_cliente || "") === code) return true;
@@ -1607,39 +1578,89 @@ async function findHistoryItemForCallback({ phone, codigoCliente, cliente }) {
     }) || null;
 }
 
+function isAutomaticReplyHistoryItem(item = {}) {
+  const origem = normalizeText(item.origem);
+  return origem.startsWith("resposta automatica");
+}
+
+function getMessageTimestamp(item = {}) {
+  const value =
+    item.criadoEm?.value ||
+    item.criadoEm ||
+    item.criado_em?.value ||
+    item.criado_em ||
+    item.ultimoEnvioEm?.value ||
+    item.ultimoEnvioEm ||
+    item.atualizadoEm?.value ||
+    item.atualizadoEm ||
+    "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function isRecentTestHistoryItem(item = {}, maxAgeMs = 6 * 60 * 60 * 1000) {
+  if (!item) return false;
+  const origem = normalizeText(item.origem);
+  if (!origem.startsWith("teste ")) return false;
+  const timestamp = getMessageTimestamp(item);
+  return Boolean(timestamp && Date.now() - timestamp <= maxAgeMs);
+}
+
+function toCallbackHistoryItem(item = {}) {
+  const { id, ...data } = item;
+  return {
+    ...data,
+    historicoId: id || item.historicoId || "",
+  };
+}
+
+function chooseCallbackItem(queueItem, historyItem) {
+  if (isRecentTestHistoryItem(historyItem)) return toCallbackHistoryItem(historyItem);
+  return queueItem || historyItem || null;
+}
+
 async function createAppointmentFromCallback(item, schedule, callbackId) {
-  const id = `wa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId("wa");
+  const createdAt = nowIso();
+  const appointmentData = {
+    tecnico_nome: item?.tecnico || "A definir",
+    codigo_cliente: String(item?.codigo_cliente || ""),
+    cliente_nome: item?.cliente || "",
+    cidade: item?.cidade || "",
+    data: schedule.date,
+    turno: schedule.time && Number(schedule.time.slice(0, 2)) >= 12 ? "Tarde" : "Manha",
+    hora: schedule.time || "",
+    status: "Aguardando dia",
+    observacao: `Agendado automaticamente via WhatsApp. O.S: ${item?.os || "-"}. Callback: ${callbackId}.`,
+    origem: "evolution_whatsapp",
+    os: item?.os || "",
+    telefone: item?.telefone || "",
+    atendente_id: AUTOMATION_ATTENDANT_ID,
+    atendente_nome: AUTOMATION_ATTENDANT_NAME,
+    agendado_por_id: AUTOMATION_ATTENDANT_ID,
+    agendado_por_nome: AUTOMATION_ATTENDANT_NAME,
+    criado_por_id: AUTOMATION_ATTENDANT_ID,
+    criado_por_nome: AUTOMATION_ATTENDANT_NAME,
+    usuario_id: AUTOMATION_ATTENDANT_ID,
+    usuario_nome: AUTOMATION_ATTENDANT_NAME,
+    criado_em: createdAt,
+    atualizado_em: createdAt,
+  };
+
   await documents.upsertDocument({
     path: `${APPOINTMENT_COLLECTION}/${id}`,
     collectionPath: APPOINTMENT_COLLECTION,
     documentId: id,
     parentPath: null,
-    data: {
-      tecnico_nome: item?.tecnico || "A definir",
-      codigo_cliente: String(item?.codigo_cliente || ""),
-      cliente_nome: item?.cliente || "",
-      cidade: item?.cidade || "",
-      data: schedule.date,
-      turno: schedule.time && Number(schedule.time.slice(0, 2)) >= 12 ? "Tarde" : "Manha",
-      hora: schedule.time || "",
-      status: "Aguardando dia",
-      observacao: `Agendado automaticamente via WhatsApp. O.S: ${item?.os || "-"}. Callback: ${callbackId}.`,
-      origem: "evolution_whatsapp",
-      os: item?.os || "",
-      telefone: item?.telefone || "",
-      atendente_id: AUTOMATION_ATTENDANT_ID,
-      atendente_nome: AUTOMATION_ATTENDANT_NAME,
-      agendado_por_id: AUTOMATION_ATTENDANT_ID,
-      agendado_por_nome: AUTOMATION_ATTENDANT_NAME,
-      criado_por_id: AUTOMATION_ATTENDANT_ID,
-      criado_por_nome: AUTOMATION_ATTENDANT_NAME,
-      usuario_id: AUTOMATION_ATTENDANT_ID,
-      usuario_nome: AUTOMATION_ATTENDANT_NAME,
-      criado_em: nowIso(),
-      atualizado_em: nowIso(),
-    },
+    data: appointmentData,
   });
-  broadcastRealtime("acompanhamento", { collectionPath: APPOINTMENT_COLLECTION, documentId: id });
+  broadcastRealtime("acompanhamento", {
+    action: "upsert",
+    collectionPath: APPOINTMENT_COLLECTION,
+    documentId: id,
+    data: appointmentData,
+    eventType: "agendamento_upsert",
+  });
   notificationsService.createNotification({
     type: "whatsapp_agendamento_auto",
     title: "Agendamento automático",
@@ -1713,6 +1734,27 @@ async function startGuidedScheduleFlow(config, phone, item = {}) {
   return sendConfiguredAutoReply(config, phone, item, message);
 }
 
+async function resendGuidedDateOptions(config, phone, item = {}, conversation = {}) {
+  const options = Array.isArray(conversation.dateOptions) && conversation.dateOptions.length
+    ? conversation.dateOptions
+    : getGuidedDateOptions();
+  const message = renderTemplate(
+    config.guidedScheduleDateMessage || DEFAULT_CONFIG.guidedScheduleDateMessage,
+    {
+      ...item,
+      opcoes_datas: renderGuidedDateOptions(options),
+    },
+    config,
+  );
+  await saveScheduleConversation(phone, {
+    stage: "awaiting_date",
+    item,
+    dateOptions: options,
+    lastMessageAt: nowIso(),
+  });
+  return sendConfiguredAutoReply(config, phone, item, message);
+}
+
 function renderInvalidDateMessage(config, conversation = {}) {
   const options = Array.isArray(conversation.dateOptions) && conversation.dateOptions.length
     ? conversation.dateOptions
@@ -1750,6 +1792,9 @@ async function continueGuidedScheduleFlow(config, phone, item = {}, mensagem = "
   }
   const conversationItem = conversation.item || item || {};
   if (conversation.stage === "awaiting_date") {
+    if (isPositiveScheduleIntent(mensagem)) {
+      return resendGuidedDateOptions(config, phone, conversationItem, conversation);
+    }
     const selectedDate = parseGuidedDateChoice(mensagem, conversation);
     if (selectedDate === "other") {
       return sendConfiguredAutoReply(
@@ -1785,6 +1830,17 @@ async function continueGuidedScheduleFlow(config, phone, item = {}, mensagem = "
   }
 
   const selectedTime = parseGuidedTimeChoice(mensagem);
+  if (!selectedTime && isPositiveScheduleIntent(mensagem)) {
+    return sendConfiguredAutoReply(
+      config,
+      phone,
+      {
+        ...conversationItem,
+        data_agendamento: formatDateLabel(conversation.selectedDate),
+      },
+      config.guidedScheduleTimeMessage || DEFAULT_CONFIG.guidedScheduleTimeMessage,
+    );
+  }
   if (selectedTime === "other") {
     return sendConfiguredAutoReply(
       config,
@@ -1885,6 +1941,14 @@ async function registerCallback(payload = {}) {
   const cliente = payload.cliente || "";
   const recebidoEm = extractTimestampFromWebhook(payload);
   const webhookMessageId = extractWebhookMessageId(payload);
+  if (markRecentInboundCallback({ phone: telefone, mensagem, webhookMessageId })) {
+    return {
+      ok: true,
+      ignored: true,
+      reason: "Resposta repetida em processamento ignorada.",
+      status: "duplicado_em_processamento",
+    };
+  }
   const schedule = parseScheduleFromText(mensagem);
   const activeConversation = await getScheduleConversation(telefone);
   const hasActiveGuidedConversation = ["awaiting_date", "awaiting_time"].includes(String(activeConversation?.stage || ""));
@@ -1906,9 +1970,9 @@ async function registerCallback(payload = {}) {
     };
   }
   const queueItem = await findQueueItemForCallback({ phone: telefone, codigoCliente, cliente });
-  const historyItem = queueItem ? null : await findHistoryItemForCallback({ phone: telefone, codigoCliente, cliente });
-  const item = queueItem || historyItem;
-  const callbackId = `cb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const historyItem = await findHistoryItemForCallback({ phone: telefone, codigoCliente, cliente });
+  const item = chooseCallbackItem(queueItem, historyItem);
+  const callbackId = randomId("cb");
   let status = "recebido";
   let agendamentoId = null;
   let motivo = "";

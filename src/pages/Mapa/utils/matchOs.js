@@ -1,4 +1,4 @@
-const MATCH_DISTANCE_METERS = 120;
+﻿const MATCH_DISTANCE_METERS = 120;
 
 function normalizeText(value) {
   return String(value || "")
@@ -51,16 +51,16 @@ export function isRetiradaTipo(tipo) {
 function buildCopyText(grupo, cidade, principal, relacionadas, isAgente) {
   const linhas = [
     `${isAgente ? "Agente autorizado" : grupo} -> ${cidade}`,
-    `Servico base: ${principal.tipo}`,
-    `Cliente: ${principal.nome_cliente || "-"} | Codigo: ${principal.codigo_cliente || "-"} | OS: ${principal.num_os || "-"}`,
-    `Tecnico: ${principal.tecnico || "Nao informado"}`,
-    `Endereco: ${principal.endereco_resumo || principal.endereco || "-"}`,
-    "Retiradas proximas:",
+    `Serviço base: ${principal.tipo}`,
+    `Cliente: ${principal.nome_cliente || "-"} | Código: ${principal.codigo_cliente || "-"} | OS: ${principal.num_os || "-"}`,
+    `Técnico: ${principal.tecnico || "Não informado"}`,
+    `Endereço: ${principal.endereco_resumo || principal.endereco || "-"}`,
+    "Retiradas próximas:",
   ];
 
   relacionadas.forEach((ordem) => {
     linhas.push(
-      `- ${ordem.tipo} | ${ordem.nome_cliente || "-"} | Codigo ${ordem.codigo_cliente || "-"} | OS ${ordem.num_os || "-"} | ${ordem.distanceMeters}m`,
+      `- ${ordem.tipo} | ${ordem.nome_cliente || "-"} | Código ${ordem.codigo_cliente || "-"} | OS ${ordem.num_os || "-"} | ${ordem.distanceMeters}m`,
     );
   });
 
@@ -143,6 +143,19 @@ function buildSection(agrupado, { isAgente = false } = {}) {
     .sort((a, b) => b.totalMatches - a.totalMatches);
 }
 
+function sumRetiradasRelacionadas(section = []) {
+  return section.reduce(
+    (totalSection, item) =>
+      totalSection +
+      (item.cidades || []).reduce(
+        (totalCidades, cidade) =>
+          totalCidades + Number(cidade.totalRetiradasRelacionadas || 0),
+        0,
+      ),
+    0,
+  );
+}
+
 export function buildMatchOSData(ordens = []) {
   const agrupadoRegionais = {};
   const agrupadoAgentes = {};
@@ -180,8 +193,11 @@ export function buildMatchOSData(ordens = []) {
       totalMatches:
         regionais.reduce((sum, item) => sum + item.totalMatches, 0) +
         agentes.reduce((sum, item) => sum + item.totalMatches, 0),
+      totalRetiradasRelacionadas:
+        sumRetiradasRelacionadas(regionais) + sumRetiradasRelacionadas(agentes),
       ignoradasSemRegional,
       distanciaMaximaMetros: MATCH_DISTANCE_METERS,
     },
   };
 }
+

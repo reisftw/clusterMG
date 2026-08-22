@@ -1,4 +1,4 @@
-export function agruparPorRegional(ordens) {
+﻿export function agruparPorRegional(ordens) {
   const mapa = {};
   ordens.forEach(os => {
     if (os.agente) return;
@@ -39,7 +39,7 @@ export function rankingCidadesRegionais(ordens, top = 10) {
     .map(([cidade, total]) => ({ cidade, total }));
 }
 
-export function rankingCidadesAgentes(ordens, top = 5) {
+export function rankingCidadesAgentes(ordens, top = 10) {
   const contagem = {};
   ordens.forEach(os => {
     if (!os.agente) return;
@@ -105,8 +105,9 @@ export function buildPublicMapaSnapshot(ordens = []) {
       }))
       .sort((a, b) => b.total - a.total),
     rankingRegionais: rankingCidadesRegionais(lista, 10),
-    rankingAgentes: rankingCidadesAgentes(lista, 5),
+    rankingAgentes: rankingCidadesAgentes(lista, 10),
     regionais,
     agentes,
   };
 }
+

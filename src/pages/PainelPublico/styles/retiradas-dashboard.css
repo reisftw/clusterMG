@@ -1,0 +1,393 @@
+/* Remodelacao 2026 - Dashboard Retiradas */
+.painel-publico-page {
+  --panel-bg: #eef3fb;
+  --panel-card: #ffffff;
+  --panel-border: #dce5f2;
+  --panel-blue: #003a98;
+  --panel-blue-2: #0061d5;
+  --panel-navy: #120064;
+  --panel-orange: #ff6b00;
+  --panel-green: #009f72;
+  --panel-purple: #8257ff;
+  --panel-text: #17213d;
+  --panel-muted: #667493;
+  background:
+    linear-gradient(180deg, #f7f9fd 0%, var(--panel-bg) 72%, #edf3fb 100%);
+  color: var(--panel-text);
+}
+
+.header {
+  min-height: 110px;
+  padding: 22px 28px;
+  border-radius: 10px;
+  margin-bottom: 22px;
+  box-shadow: 0 16px 34px rgba(0, 48, 135, .22);
+}
+
+.header-logo {
+  width: 138px;
+  height: 74px;
+  border-radius: 16px;
+  object-fit: contain;
+}
+
+.header h1 {
+  font-size: 34px;
+  letter-spacing: 1.4px;
+}
+
+.header p {
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fb-status {
+  color: rgba(255, 255, 255, .76);
+  font-size: 11px;
+}
+
+.header-right {
+  justify-content: flex-end;
+  flex: 1 1 720px;
+}
+
+.header-actions {
+  gap: 10px;
+}
+
+.public-header-btn {
+  min-width: 142px;
+  min-height: 42px;
+  border-radius: 9px !important;
+  padding: 0 15px !important;
+  font-size: 12px !important;
+}
+
+.painel-tabs {
+  border: none;
+  background: transparent;
+  gap: 8px;
+  overflow: visible;
+}
+
+.painel-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .18);
+  padding: 10px 15px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.painel-tab.active {
+  border-color: var(--panel-orange);
+  background: var(--panel-orange);
+  box-shadow: 0 10px 22px rgba(255, 107, 0, .24);
+}
+
+.month-selector {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.painel-classico .retiradas-source-card,
+.painel-classico .card,
+.painel-classico .kpi,
+.painel-classico .ritmo-bar {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--panel-card);
+  box-shadow: 0 8px 24px rgba(0, 48, 135, .07);
+}
+
+.painel-classico .retiradas-source-card {
+  min-height: 58px;
+  padding: 13px 16px;
+  margin-bottom: 14px;
+}
+
+.painel-classico .retiradas-update-card {
+  margin-bottom: 16px !important;
+  padding: 13px 16px !important;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(0, 48, 135, .045), rgba(255, 107, 0, .04)) !important;
+  box-shadow: 0 8px 24px rgba(0, 48, 135, .055);
+}
+
+.painel-classico .retiradas-update-card > div:first-child {
+  margin-bottom: 3px !important;
+  color: var(--panel-blue) !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase !important;
+}
+
+.painel-classico .retiradas-update-card > div:last-child {
+  color: var(--panel-text) !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.painel-classico .retiradas-source-eyebrow {
+  font-size: 10px;
+  letter-spacing: .08em;
+}
+
+.painel-classico .retiradas-source-title {
+  margin-top: 2px;
+  font-size: 15px;
+  color: var(--panel-blue);
+}
+
+.painel-classico .retiradas-source-options {
+  gap: 7px;
+}
+
+.painel-classico .retiradas-source-btn {
+  min-height: 34px;
+  border-radius: 7px;
+  padding: 8px 13px;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.painel-classico .retiradas-source-btn.active {
+  background: var(--panel-blue);
+}
+
+.painel-classico .kpis {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.painel-classico .kpi {
+  min-height: 102px;
+  padding: 18px 20px;
+}
+
+.painel-classico .kpi::before {
+  height: 4px;
+}
+
+.painel-classico .kpi-label {
+  margin-bottom: 9px;
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+
+.painel-classico .kpi-value {
+  font-size: 40px;
+  letter-spacing: .7px;
+}
+
+.painel-classico .kpi-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--panel-muted);
+}
+
+.painel-classico .kpi.orange .kpi-value { color: var(--panel-orange); }
+.painel-classico .kpi.blue .kpi-value { color: var(--panel-blue); }
+.painel-classico .kpi.green .kpi-value { color: var(--panel-green); }
+.painel-classico .kpi.red .kpi-value { color: var(--panel-red); }
+.painel-classico .kpi.purple .kpi-value { color: var(--panel-purple); }
+
+.painel-classico .ritmo-bar {
+  gap: 18px;
+  padding: 24px 28px 16px;
+  margin-bottom: 20px;
+}
+
+.painel-classico .ritmo-bar::before {
+  width: 5px;
+  border-radius: 8px 0 0 8px;
+}
+
+.painel-classico .ritmo-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  font-size: 22px;
+}
+
+.painel-classico .ritmo-title {
+  font-size: 11px;
+  letter-spacing: .1em;
+}
+
+.painel-classico .ritmo-msg {
+  font-size: 17px;
+}
+
+.painel-classico .ritmo-detail {
+  font-size: 11px;
+}
+
+.painel-classico .ritmo-badge {
+  padding: 7px 14px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.painel-classico .ritmo-retorninho-card {
+  min-height: 180px;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  border-radius: 16px;
+  padding: 22px 28px;
+}
+
+.painel-classico .ritmo-retorninho-kicker {
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  font-size: 10px;
+}
+
+.painel-classico .ritmo-retorninho-title {
+  max-width: 590px;
+  font-size: 23px;
+}
+
+.painel-classico .ritmo-retorninho-text {
+  max-width: 650px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.painel-classico .ritmo-retorninho-visual {
+  min-height: 142px;
+}
+
+.painel-classico .ritmo-retorninho-img {
+  width: min(100%, 176px);
+}
+
+.painel-classico .grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.07fr);
+  gap: 16px;
+}
+
+.painel-classico .card {
+  padding: 22px;
+}
+
+.painel-classico .card-title {
+  margin-bottom: 16px;
+  font-size: 20px;
+  letter-spacing: 1.2px;
+}
+
+.painel-classico .card-title::before {
+  width: 4px;
+  height: 21px;
+}
+
+.painel-classico .rank-item {
+  gap: 13px;
+  margin-bottom: 13px;
+  padding-bottom: 13px;
+}
+
+.painel-classico .rank-pos {
+  min-width: 30px;
+  font-size: 25px;
+}
+
+.painel-classico .rank-name {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.painel-classico .rank-bar {
+  height: 7px;
+}
+
+.painel-classico .rank-value {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.painel-classico .rank-meta {
+  font-size: 10px;
+}
+
+.painel-classico .tec-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.painel-classico .tec-card {
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.painel-classico .tec-name {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.painel-classico .tec-num-val {
+  font-size: 21px;
+}
+
+.painel-classico .tec-num-lbl {
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.painel-classico .tec-status {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.painel-classico .comparativo-action-btn {
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.painel-classico .chart-container {
+  height: 300px;
+}
+
+.painel-classico .saldo-wrap {
+  border-radius: 8px;
+}
+
+.painel-classico .saldo-table {
+  font-size: 12px;
+}
+
+.painel-classico .saldo-table th {
+  height: 40px;
+  background: var(--panel-blue);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.painel-classico .saldo-table td {
+  padding: 8px 10px;
+  font-weight: 700;
+}
+
+.painel-classico .badge {
+  min-width: 34px;
+  padding: 3px 9px;
+  font-size: 10px;
+}
+

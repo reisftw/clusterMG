@@ -1,11 +1,13 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
 import { Copy, Check, Plus, Trash2 } from "lucide-react";
+import { sanitizeHtml } from "../../../../shared/html/sanitizeHtml";
 
 const SEASONAL_META = {
   Janeiro: 65,
   Fevereiro: 65,
   Março: 75,
+  Marco: 75,
   Abril: 85,
   Maio: 90,
   Junho: 90,
@@ -34,14 +36,23 @@ const MESES = [
 
 const mesAtual = MESES[new Date().getMonth()];
 const anoAtual = new Date().getFullYear().toString();
+const RETORNINHO_EMAIL_URL =
+  "https://retiradas.tech/retorninho-prancheta.png";
+const MAPA_URL = "https://retiradas.tech/painel/mapa";
+const MATCH_URL = "https://retiradas.tech/painel/match";
+
+const getMesAnterior = (mes) => {
+  const index = MESES.indexOf(mes);
+  return MESES[index === 0 ? MESES.length - 1 : index - 1] || mes;
+};
 
 const TabEmailFechamento = () => {
-  const { regionais: regsBase } = useFerramentasRegionais();
+  useFerramentasRegionais();
 
-  // ── ABA ───────────────────────────────────────────────────────
+  // -- ABA -------------------------------------------------------
   const [aba, setAba] = useState("fechamento");
 
-  // ── FECHAMENTO ────────────────────────────────────────────────
+  // -- FECHAMENTO ------------------------------------------------
   const [fcMes, setFcMes] = useState(mesAtual);
   const [fcAno, setFcAno] = useState(anoAtual);
   const [fcMetaGeral, setFcMetaGeral] = useState("");
@@ -86,12 +97,12 @@ const TabEmailFechamento = () => {
     });
 
     const msgMeta = bateuMeta
-      ? `<p style="color:#28a745;font-weight:bold">✅ Parabéns! Atingimos <strong>${pctGeral}%</strong> da meta geral no mês de ${fcMes}/${fcAno}. Continuemos com esse desempenho!</p>`
+      ? `<p style="color:#28a745;font-weight:bold">✅ Parabens! Atingimos <strong>${pctGeral}%</strong> da meta geral no mes de ${fcMes}/${fcAno}. Continuemos com esse desempenho!</p>`
       : `<p style="color:#dc3545;font-weight:bold">⚠️ Neste mês não conseguimos bater a meta estabelecida, atingindo <strong>${pctGeral}%</strong> do total. Mas estamos evoluindo! Cada retirada conta e estamos no caminho certo. Contamos com o apoio de todos para que no próximo mês possamos superar essa marca juntos. 💪</p>`;
 
     setFcHTML(`
-      <h1>📦 Relatório de Fechamento — Retiradas ${fcMes}/${fcAno}</h1>
-      <p>Prezados, segue abaixo o relatório de fechamento de retiradas referente ao mês de <strong>${fcMes}/${fcAno}</strong>. Confira o desempenho por regional:</p>
+      <h1>📦 Relatorio de Fechamento — Retiradas ${fcMes}/${fcAno}</h1>
+      <p>Prezados, segue abaixo o relatorio de fechamento de retiradas referente ao mes de <strong>${fcMes}/${fcAno}</strong>. Confira o desempenho por regional:</p>
 
       <table>
         <thead>
@@ -107,22 +118,22 @@ const TabEmailFechamento = () => {
       </table>
 
       <hr style="margin:20px 0;border:none;border-top:1px solid #ddd">
-      <h2 style="font-size:16px;margin-bottom:10px">📊 Resultado Geral do Mês</h2>
+      <h2 style="font-size:16px;margin-bottom:10px">📊 Resultado Geral do Mes</h2>
       <table>
         <thead><tr><th>Indicador</th><th style="text-align:center">Valor</th></tr></thead>
         <tbody>
           <tr><td>Total de retiradas realizadas</td><td style="text-align:center;font-weight:bold">${totalRealizado}</td></tr>
           <tr><td>Meta geral (100%)</td><td style="text-align:center">${metaGeral}</td></tr>
-          <tr><td>Meta mínima exigida (${goalPctDisplay}%)</td><td style="text-align:center">${meta80}</td></tr>
+          <tr><td>Meta minima exigida (${goalPctDisplay}%)</td><td style="text-align:center">${meta80}</td></tr>
           <tr><td>% atingida sobre meta geral</td><td style="text-align:center;font-weight:bold;color:${parseFloat(pctGeral) >= 80 ? "#28a745" : "#dc3545"}">${pctGeral}%</td></tr>
-          <tr><td>% atingida sobre meta mínima (${goalPctDisplay}%)</td><td style="text-align:center;font-weight:bold;color:${parseFloat(pct80) >= 100 ? "#28a745" : "#dc3545"}">${pct80}%</td></tr>
+          <tr><td>% atingida sobre meta minima (${goalPctDisplay}%)</td><td style="text-align:center;font-weight:bold;color:${parseFloat(pct80) >= 100 ? "#28a745" : "#dc3545"}">${pct80}%</td></tr>
         </tbody>
       </table>
 
       <div style="margin-top:18px">${msgMeta}</div>
 
       <div class="footer-email">
-        <p>Em caso de dúvidas ou informações adicionais, entre em contato:</p>
+        <p>Em caso de duvidas ou informacoes adicionais, entre em contato:</p>
         <p><strong>Rodrigo Reis</strong> — (31) 9 8466-7498</p>
       </div>`);
   };
@@ -140,12 +151,14 @@ const TabEmailFechamento = () => {
     setTimeout(() => setFcCopied(false), 2000);
   };
 
-  // ── INÍCIO ────────────────────────────────────────────────────
+  // -- INICIO ----------------------------------------------------
   const [inMes, setInMes] = useState(mesAtual);
   const [inAno, setInAno] = useState(anoAtual);
   const [inCancel, setInCancel] = useState("");
   const [inDiasU, setInDiasU] = useState("");
   const [inDiasC, setInDiasC] = useState("");
+  const [inRegs, setInRegs] = useState([]);
+  const [inNovaReg, setInNovaReg] = useState("");
   const [inHTML, setInHTML] = useState("");
   const [inCopied, setInCopied] = useState(false);
 
@@ -158,31 +171,102 @@ const TabEmailFechamento = () => {
   const inMedU = inDiasUNum > 0 ? (inMeta / inDiasUNum).toFixed(1) : "—";
   const inMedC = inDiasCNum > 0 ? (inMeta / inDiasCNum).toFixed(1) : "—";
 
+  const inAddRegional = () => {
+    const nome = inNovaReg.trim();
+    if (!nome) return;
+    setInRegs((p) => [...p, { nome, cancelamentos: 0, meta: 110 }]);
+    setInNovaReg("");
+  };
+
   const inGerar = () => {
     const medU = inDiasUNum > 0 ? (inMeta / inDiasUNum).toFixed(1) : "N/A";
     const medC = inDiasCNum > 0 ? (inMeta / inDiasCNum).toFixed(1) : "N/A";
+    const mesAnterior = getMesAnterior(inMes);
+    const linhasReg = inRegs
+      .map((r) => {
+        const cancelamentos = parseInt(r.cancelamentos) || 0;
+        const meta = parseInt(r.meta) || 110;
+        const pctCobertura =
+          cancelamentos > 0 ? ((meta / cancelamentos) * 100).toFixed(1) : "0.0";
+
+        return `
+          <tr>
+            <td>${r.nome}</td>
+            <td style="text-align:center">${cancelamentos}</td>
+            <td style="text-align:center;font-weight:bold">${meta}</td>
+            <td style="text-align:center;color:#c2410c;font-weight:bold">${pctCobertura}%</td>
+          </tr>`;
+      })
+      .join("");
+    const maiorRegional = [...inRegs]
+      .map((r) => ({
+        nome: r.nome,
+        cancelamentos: parseInt(r.cancelamentos) || 0,
+        meta: parseInt(r.meta) || 110,
+      }))
+      .sort((a, b) => b.cancelamentos - a.cancelamentos)[0];
+    const destaqueRegional =
+      maiorRegional && maiorRegional.cancelamentos > 0
+        ? `<p>O maior volume esta em <strong>${maiorRegional.nome}</strong>, com <strong>${maiorRegional.cancelamentos}</strong> cancelamentos em ${mesAnterior}. Nesse caso, a referencia de <strong>${maiorRegional.meta}</strong> retiradas representa apenas <strong>${((maiorRegional.meta / maiorRegional.cancelamentos) * 100).toFixed(1)}%</strong> do que foi aberto. Essa disparidade mostra que ainda temos bastante espaco para crescer, principalmente com as regionais puxando as ordens e usando melhor as rotas.</p>`
+        : "";
+    const tabelaRegional = linhasReg
+      ? `
+      <h2 style="font-size:15px;margin:18px 0 10px">Cancelamentos do mes anterior por regional</h2>
+      <p>Os cancelamentos abertos em <strong>${mesAnterior}</strong> mostram o tamanho da oportunidade para ${inMes}. As regionais sao decisivas para transformar esse volume em retirada executada e aproximar o resultado da meta final.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Regional</th>
+            <th style="text-align:center">Cancelamentos em ${mesAnterior}</th>
+            <th style="text-align:center">Meta referencia</th>
+            <th style="text-align:center">Meta x abertos</th>
+          </tr>
+        </thead>
+        <tbody>${linhasReg}</tbody>
+      </table>
+      ${destaqueRegional}`
+      : "";
 
     setInHTML(`
-      <h1>🚀 Início de Mês — Retiradas ${inMes}/${inAno}</h1>
-      <p>Prezados, iniciamos o mês de <strong>${inMes}/${inAno}</strong>! Com base nos cancelamentos do período anterior, seguem as metas e orientações para este mês.</p>
+      <h1>🚀 Inicio de Mes — Retiradas ${inMes}/${inAno}</h1>
+      <p>Prezados, iniciamos o mes de <strong>${inMes}/${inAno}</strong>! Com base nos cancelamentos do periodo anterior, seguem as metas e orientacoes para este mes.</p>
 
-      <h2 style="font-size:15px;margin:18px 0 10px">📊 Metas do Mês</h2>
+      <h2 style="font-size:15px;margin:18px 0 10px">📊 Metas do Mes</h2>
       <table>
         <thead><tr><th>Indicador</th><th style="text-align:center">Valor</th></tr></thead>
         <tbody>
           <tr><td>Total de cancelamentos (base)</td><td style="text-align:center">${inCancelNum}</td></tr>
-          <tr><td><strong>Meta do mês (${inGoalDisplay}% dos cancelamentos)</strong></td><td style="text-align:center;font-weight:bold;color:#1a6f3c;font-size:15px">${inMeta}</td></tr>
-          <tr><td>Média diária necessária <em>(incluindo sábado e domingo)</em></td><td style="text-align:center;font-weight:bold">${medC} / dia</td></tr>
-          <tr><td>Média diária necessária <em>(apenas dias úteis, sem sáb/dom)</em></td><td style="text-align:center;font-weight:bold">${medU} / dia</td></tr>
+          <tr><td><strong>Meta do mes (${inGoalDisplay}% dos cancelamentos)</strong></td><td style="text-align:center;font-weight:bold;color:#1a6f3c;font-size:15px">${inMeta}</td></tr>
+          <tr><td>Media diaria necessaria <em>(incluindo sabado e domingo)</em></td><td style="text-align:center;font-weight:bold">${medC} / dia</td></tr>
+          <tr><td>Media diaria necessaria <em>(apenas dias uteis, sem sab/dom)</em></td><td style="text-align:center;font-weight:bold">${medU} / dia</td></tr>
         </tbody>
       </table>
 
+      ${tabelaRegional}
+
+      <div style="background:#eef7ff;border-left:4px solid #0f5ea8;padding:14px 18px;margin:18px 0;border-radius:4px">
+        <p style="font-weight:bold;margin-bottom:6px">Mapa e Match no painel</p>
+        <p>Tambem contamos com as ferramentas de <strong>Mapa</strong> e <strong>Match</strong>, disponiveis no painel, para organizar retiradas em fila e acionar os servicos de ativa com mais inteligencia. Isso nos ajuda a aproveitar melhor as rotas, ganhar tempo em campo e gerar economia financeira ao reduzir deslocamentos isolados.</p>
+        <div style="margin:16px 0 18px">
+          <p style="font-weight:bold;margin:0 0 10px">Links de apoio:</p>
+          <a href="${MAPA_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#0f5ea8;color:#ffffff;text-decoration:none;font-weight:bold;padding:10px 16px;border-radius:6px;margin:0 10px 8px 0">Acessar Mapa</a>
+          <a href="${MATCH_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1a6f3c;color:#ffffff;text-decoration:none;font-weight:bold;padding:10px 16px;border-radius:6px;margin:0 0 8px 0">Acessar Match</a>
+        </div>
+        <p>Hoje a equipe dedicada de retiradas conta com <strong>7 tecnicos</strong>. Ja na equipe de ativa conseguimos ampliar o alcance com profissionais proprios e terceirizados, aumentando a gama de atendimento e trazendo mais efetividade para a tratativa das ordens de retirada.</p>
+      </div>
+
       <div style="background:#e8f4fd;border-left:4px solid #1a73e8;padding:14px 18px;margin:18px 0;border-radius:4px">
-        <p style="font-weight:bold;margin-bottom:6px">💪 Contamos com todos vocês!</p>
-        <p>Juntos conseguimos atingir nossas metas. Cada atendimento realizado é um passo a mais para o nosso sucesso. Vamos com tudo nesse mês de ${inMes}!</p>
+        <p style="font-weight:bold;margin-bottom:6px">💪 Contamos com todos voces!</p>
+        <p>Juntos conseguimos atingir nossas metas. Cada atendimento realizado e um passo a mais para o nosso sucesso. Vamos com tudo nesse mes de ${inMes}!</p>
       </div>
 
       <h2 style="font-size:15px;margin:18px 0 10px">🔍 Como filtrar as ordens no sistema</h2>
+      <div style="background:#f7fbff;border:1px solid #dbeafe;padding:14px 18px;margin:18px 0;border-radius:4px;text-align:center">
+        <img src="${RETORNINHO_EMAIL_URL}" alt="Retorninho com plano de acao" style="max-width:150px;width:100%;height:auto;margin:0 auto 8px;display:block">
+        <p style="font-weight:bold;margin:0;color:#1e3a8a">O Retorninho tambem esta confiante: com rota bem aproveitada e apoio das regionais, a meta fica mais perto.</p>
+        <p style="margin:8px 0 0">Confiamos no empenho de cada regional para aumentar as retiradas e fortalecer a meta final.</p>
+      </div>
+
       <p>Para localizar as ordens que precisam de retirada, utilize os seguintes filtros:</p>
 
       <table>
@@ -196,17 +280,17 @@ const TabEmailFechamento = () => {
       </table>
 
       <div style="background:#fff8e1;border-left:4px solid #f9a825;padding:14px 18px;margin:18px 0;border-radius:4px">
-        <p style="font-weight:bold;margin-bottom:6px">⚙️ Configuração do filtro de data</p>
-        <p>Filtrar como <strong>Data de Cadastro</strong> até <strong>01/01/2026</strong>.</p>
+        <p style="font-weight:bold;margin-bottom:6px">⚙️ Configuracao do filtro de data</p>
+        <p>Filtrar como <strong>Data de Cadastro</strong> ate <strong>01/01/2026</strong>.</p>
       </div>
 
       <div style="background:#fce4ec;border-left:4px solid #c62828;padding:14px 18px;margin:18px 0;border-radius:4px">
-        <p style="font-weight:bold;margin-bottom:6px">🚨 Atenção — Ordens sem técnico</p>
+        <p style="font-weight:bold;margin-bottom:6px">🚨 Atencao — Ordens sem técnico</p>
         <p><strong>Não filtrar pelo nome de nenhum técnico.</strong> Existem ordens de serviço abertas <u>sem técnico vinculado</u> que precisam de tentativa de atendimento. <strong>Essas ordens devem ser priorizadas!</strong></p>
       </div>
 
       <div class="footer-email">
-        <p>Em caso de dúvidas ou necessidade de apoio, fale comigo:</p>
+        <p>Em caso de duvidas ou necessidade de apoio, fale comigo:</p>
         <p><strong>Rodrigo Reis</strong> — (31) 9 8466-7498</p>
       </div>`);
   };
@@ -224,21 +308,14 @@ const TabEmailFechamento = () => {
     setTimeout(() => setInCopied(false), 2000);
   };
 
-  // ── ESTILOS DO PREVIEW ────────────────────────────────────────
-  const previewStyle = `
-    font-family: Arial, sans-serif;
-    color: #1a1a1a;
-    line-height: 1.7;
-    font-size: 14px;
-  `;
-
+  // -- ESTILOS DO PREVIEW ----------------------------------------
   return (
     <div className="space-y-4">
       {/* Seletor de aba */}
       <div className="flex gap-2">
         {[
           { key: "fechamento", label: "📧 E-mail Fechamento" },
-          { key: "inicio", label: "🚀 E-mail Início de Mês" },
+          { key: "inicio", label: "🚀 E-mail Inicio de Mes" },
         ].map((t) => (
           <button
             key={t.key}
@@ -255,19 +332,19 @@ const TabEmailFechamento = () => {
         ))}
       </div>
 
-      {/* ── ABA FECHAMENTO ── */}
+      {/* -- ABA FECHAMENTO -- */}
       {aba === "fechamento" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Configurações */}
+          {/* Configuracoes */}
           <div className="space-y-4">
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-                Configurações do Mês
+                Configuracoes do Mes
               </p>
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">
-                    Mês de Referência
+                    Mes de Referencia
                   </label>
                   <select
                     value={fcMes}
@@ -309,7 +386,7 @@ const TabEmailFechamento = () => {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
-                  Total de retiradas realizadas no mês
+                  Total de retiradas realizadas no mes
                 </label>
                 <input
                   type="number"
@@ -380,7 +457,7 @@ const TabEmailFechamento = () => {
           {/* Preview fechamento */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-              Pré-visualização
+              Pre-visualizacao
             </p>
             <button
               onClick={fcGerar}
@@ -413,7 +490,7 @@ const TabEmailFechamento = () => {
                     fontSize: 14,
                   }}
                   className="border border-gray-200 rounded-xl p-6 bg-gray-50 overflow-auto max-h-[600px] [&_table]:w-full [&_table]:border-collapse [&_table]:my-4 [&_th]:bg-blue-900 [&_th]:text-white [&_th]:p-3 [&_th]:text-left [&_th]:text-xs [&_td]:p-3 [&_td]:border [&_td]:border-gray-200 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-blue-900 [&_h1]:mb-4 [&_tr:nth-child(even)_td]:bg-blue-50 [&_.meta-ok_td:first-child]:border-l-4 [&_.meta-ok_td:first-child]:border-l-green-500 [&_.meta-nok_td:first-child]:border-l-4 [&_.meta-nok_td:first-child]:border-l-orange-500 [&_.footer-email]:mt-6 [&_.footer-email]:pt-4 [&_.footer-email]:border-t [&_.footer-email]:border-gray-200 [&_.footer-email]:text-xs [&_.footer-email]:text-gray-500"
-                  dangerouslySetInnerHTML={{ __html: fcHTML }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(fcHTML) }}
                 />
               </div>
             )}
@@ -421,19 +498,19 @@ const TabEmailFechamento = () => {
         </div>
       )}
 
-      {/* ── ABA INÍCIO ── */}
+      {/* -- ABA INICIO -- */}
       {aba === "inicio" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Configurações */}
+          {/* Configuracoes */}
           <div className="space-y-4">
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-                Configurações do Mês
+                Configuracoes do Mes
               </p>
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">
-                    Mês de Referência
+                    Mes de Referencia
                   </label>
                   <select
                     value={inMes}
@@ -459,7 +536,7 @@ const TabEmailFechamento = () => {
               </div>
               <div className="mb-3">
                 <label className="block text-xs text-gray-500 mb-1">
-                  Total de cancelamentos no mês anterior
+                  Total de cancelamentos no mes anterior
                 </label>
                 <input
                   type="number"
@@ -469,12 +546,12 @@ const TabEmailFechamento = () => {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  💡 {inGoalDisplay}% desse valor será a meta do mês
+                  💡 {inGoalDisplay}% desse valor sera a meta do mes
                 </p>
               </div>
               <div className="mb-3">
                 <label className="block text-xs text-gray-500 mb-1">
-                  Dias úteis no mês (sem sáb/dom)
+                  Dias uteis no mes (sem sab/dom)
                 </label>
                 <input
                   type="number"
@@ -486,7 +563,7 @@ const TabEmailFechamento = () => {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
-                  Dias corridos no mês (com sáb/dom)
+                  Dias corridos no mes (com sab/dom)
                 </label>
                 <input
                   type="number"
@@ -496,6 +573,82 @@ const TabEmailFechamento = () => {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
                 />
               </div>
+            </div>
+
+            {/* Regionais inicio */}
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
+                Cancelamentos por Regional
+              </p>
+              <div className="space-y-2 mb-3">
+                {inRegs.map((r, i) => (
+                  <div
+                    key={i}
+                    className="grid grid-cols-[minmax(0,1fr)_90px_80px_28px] items-center gap-2"
+                  >
+                    <span className="text-sm font-semibold text-gray-700 truncate">
+                      {r.nome}
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={r.cancelamentos || ""}
+                      placeholder="Canc."
+                      onChange={(e) => {
+                        const updated = [...inRegs];
+                        updated[i] = {
+                          ...updated[i],
+                          cancelamentos: parseInt(e.target.value) || 0,
+                        };
+                        setInRegs(updated);
+                      }}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={r.meta || ""}
+                      placeholder="Meta"
+                      onChange={(e) => {
+                        const updated = [...inRegs];
+                        updated[i] = {
+                          ...updated[i],
+                          meta: parseInt(e.target.value) || 0,
+                        };
+                        setInRegs(updated);
+                      }}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                    />
+                    <button
+                      onClick={() =>
+                        setInRegs((p) => p.filter((_, j) => j !== i))
+                      }
+                      className="text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={inNovaReg}
+                  onChange={(e) => setInNovaReg(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && inAddRegional()}
+                  placeholder="Nome da regional..."
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
+                />
+                <button
+                  onClick={inAddRegional}
+                  className="flex items-center gap-1 px-3 py-2 bg-blue-800 text-white rounded-lg text-sm font-semibold hover:bg-blue-900"
+                >
+                  <Plus size={14} /> Regional
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Use a meta 110 como referencia ou ajuste conforme a regional.
+              </p>
             </div>
 
             {/* KPIs calculados */}
@@ -509,7 +662,7 @@ const TabEmailFechamento = () => {
                     {inMeta > 0 ? inMeta : "—"}
                   </div>
                   <div className="text-xs text-gray-400 uppercase mt-1">
-                    Meta do Mês ({inGoalDisplay}%)
+                    Meta do Mes ({inGoalDisplay}%)
                   </div>
                 </div>
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
@@ -517,7 +670,7 @@ const TabEmailFechamento = () => {
                     {inMedU}
                   </div>
                   <div className="text-xs text-gray-400 uppercase mt-1">
-                    Média/dia (úteis)
+                    Media/dia (uteis)
                   </div>
                 </div>
               </div>
@@ -527,7 +680,7 @@ const TabEmailFechamento = () => {
                     {inMedC}
                   </div>
                   <div className="text-xs text-gray-400 uppercase mt-1">
-                    Média/dia (corridos)
+                    Media/dia (corridos)
                   </div>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
@@ -542,10 +695,10 @@ const TabEmailFechamento = () => {
             </div>
           </div>
 
-          {/* Preview início */}
+          {/* Preview inicio */}
           <div className="bg-white border border-gray-200 rounded-xl p-5">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
-              Pré-visualização
+              Pre-visualizacao
             </p>
             <button
               onClick={inGerar}
@@ -578,7 +731,7 @@ const TabEmailFechamento = () => {
                     fontSize: 14,
                   }}
                   className="border border-gray-200 rounded-xl p-6 bg-gray-50 overflow-auto max-h-[600px] [&_table]:w-full [&_table]:border-collapse [&_table]:my-4 [&_th]:bg-blue-900 [&_th]:text-white [&_th]:p-3 [&_th]:text-left [&_th]:text-xs [&_td]:p-3 [&_td]:border [&_td]:border-gray-200 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-blue-900 [&_h1]:mb-4 [&_h2]:font-bold [&_h2]:text-blue-900 [&_tr:nth-child(even)_td]:bg-blue-50 [&_.footer-email]:mt-6 [&_.footer-email]:pt-4 [&_.footer-email]:border-t [&_.footer-email]:border-gray-200 [&_.footer-email]:text-xs [&_.footer-email]:text-gray-500"
-                  dangerouslySetInnerHTML={{ __html: inHTML }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(inHTML) }}
                 />
               </div>
             )}
@@ -590,3 +743,4 @@ const TabEmailFechamento = () => {
 };
 
 export default TabEmailFechamento;
+

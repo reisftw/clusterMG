@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { FileDown } from "lucide-react";
@@ -164,10 +164,10 @@ const TabMultas = () => {
         ws.getRow(r + 1).height = 48;
       };
 
-      // ── ABA 1: Por Mês ────────────────────────────────────────────────────
-      const ws1 = wb.addWorksheet("Por Mês");
+      // -- ABA 1: Por Mes ----------------------------------------------------
+      const ws1 = wb.addWorksheet("Por Mes");
       ws1.views = [{ showGridLines: false }];
-      xT(ws1, 1, 5, `MULTAS POR MÊS — ${D.length} registros`, "8E44AD");
+      xT(ws1, 1, 5, `MULTAS POR MES — ${D.length} registros`, "8E44AD");
       xKpi(ws1, 3, 1, "TOTAL", D.length, "8E44AD");
       xKpi(ws1, 3, 2, "EM ABERTO", abertas.length, "C0392B");
       xKpi(ws1, 3, 3, "ENCERRADAS", D.length - abertas.length, "117A65");
@@ -189,9 +189,9 @@ const TabMultas = () => {
       );
 
       let rr = 6;
-      xT(ws1, rr, 4, "ABERTAS POR MÊS DE CADASTRO", "8E44AD");
+      xT(ws1, rr, 4, "ABERTAS POR MES DE CADASTRO", "8E44AD");
       rr++;
-      ["Mês/Ano", "Total Multas", "Em Aberto", "Cidades"].forEach((h, i) =>
+      ["Mes/Ano", "Total Multas", "Em Aberto", "Cidades"].forEach((h, i) =>
         xH(ws1, rr, i + 1, h, "8E44AD"),
       );
       rr++;
@@ -205,7 +205,7 @@ const TabMultas = () => {
         byMes[mes].cidades.add(r._cidade);
       });
       Object.entries(byMes)
-        .sort()
+        .sort(([mesA], [mesB]) => String(mesA).localeCompare(String(mesB), "pt-BR"))
         .forEach(([mes, v], i) => {
           const bg = i % 2 ? "FFFFFF" : "F5EEF8";
           xD(ws1, rr, 1, mes, bg, "center");
@@ -218,7 +218,7 @@ const TabMultas = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Dia (Top 30) ───────────────────────────────────────────
+      // -- ABA 2: Por Dia (Top 30) -------------------------------------------
       const ws2 = wb.addWorksheet("Por Dia");
       ws2.views = [{ showGridLines: false }];
       xT(ws2, 1, 4, "MULTAS POR DIA — TOP 30", "6C3483");
@@ -250,7 +250,7 @@ const TabMultas = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 3: Por Cidade -------------------------------------------------
       const ws3 = wb.addWorksheet("Por Cidade");
       ws3.views = [{ showGridLines: false }];
       xT(ws3, 1, 4, "MULTAS POR CIDADE", "1F618D");
@@ -277,13 +277,13 @@ const TabMultas = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 4: Em Aberto ──────────────────────────────────────────────────
+      // -- ABA 4: Em Aberto --------------------------------------------------
       const ws4 = wb.addWorksheet("Em Aberto");
       ws4.views = [{ showGridLines: false }];
       xT(ws4, 1, 5, `MULTAS EM ABERTO — ${abertas.length} registros`, "C0392B");
       [
         "Código",
-        "Nome/Razão Social",
+        "Nome/Razao Social",
         "Cidade",
         "Regional",
         "Data Cadastro",
@@ -310,13 +310,13 @@ const TabMultas = () => {
         ws4.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 5: Dados Completos ────────────────────────────────────────────
+      // -- ABA 5: Dados Completos --------------------------------------------
       const ws5 = wb.addWorksheet("Dados Completos");
       ws5.views = [{ showGridLines: false }];
       xT(ws5, 1, 6, "DADOS COMPLETOS — MULTAS", "2C3E50");
       [
         "Código",
-        "Nome/Razão Social",
+        "Nome/Razao Social",
         "Cidade",
         "Regional",
         "Data Cadastro",
@@ -345,7 +345,7 @@ const TabMultas = () => {
         ws5.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -370,6 +370,14 @@ const TabMultas = () => {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
           ${status === "ok" || status === "gerando" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-purple-400"}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -433,14 +441,14 @@ const TabMultas = () => {
         </div>
       )}
 
-      {/* Botão */}
+      {/* Botao */}
       {rows.length > 0 && (
         <button
           onClick={gerar}
           className="flex items-center gap-2 px-5 py-2.5 bg-purple-700 text-white rounded-xl font-semibold hover:bg-purple-800 transition-colors"
         >
           <FileDown size={16} />
-          Gerar Relatório de Multas (5 abas)
+          Gerar Relatorio de Multas (5 abas)
         </button>
       )}
 
@@ -457,3 +465,4 @@ const TabMultas = () => {
 };
 
 export default TabMultas;
+

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Plus, RefreshCw, Pencil, Trash2, Search, Package } from 'lucide-react';
 import { useEquipamentos, STATUS_COLORS, TIPOS_EQUIPAMENTO } from '../hooks/useEquipamentos';
 import { useAuthContext } from '../../../context/AuthContext';
@@ -8,8 +8,8 @@ import Spinner from '../../../components/ui/Spinner';
 
 const STATUS_BADGE = {
   'EM USO':        'bg-green-50 text-green-700 border-green-200',
-  'DISPONÍVEL':    'bg-blue-50 text-blue-700 border-blue-200',
-  'EM MANUTENÇÃO': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+  'DISPONIVEL':    'bg-blue-50 text-blue-700 border-blue-200',
+  'EM MANUTENCAO': 'bg-yellow-50 text-yellow-700 border-yellow-200',
   'EXTRAVIADO':    'bg-red-50 text-red-600 border-red-200',
   'DESCARTADO':    'bg-gray-100 text-gray-500 border-gray-200',
 };
@@ -38,7 +38,7 @@ const EquipamentosPage = () => {
   }), [equipamentos, busca, filtroTipo, filtroStatus]);
 
   const resumo = useMemo(() => {
-    const r = { 'EM USO': 0, 'DISPONÍVEL': 0, 'EM MANUTENÇÃO': 0, 'EXTRAVIADO': 0 };
+    const r = { 'EM USO': 0, 'DISPONIVEL': 0, 'EM MANUTENCAO': 0, 'EXTRAVIADO': 0 };
     equipamentos.forEach((e) => { if (r[e.status] !== undefined) r[e.status]++; });
     return r;
   }, [equipamentos]);
@@ -91,8 +91,8 @@ const EquipamentosPage = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Em Uso',      key: 'EM USO',        bg: 'bg-green-50  border-green-100',  text: 'text-green-700'  },
-          { label: 'Disponível',  key: 'DISPONÍVEL',    bg: 'bg-blue-50   border-blue-100',   text: 'text-blue-700'   },
-          { label: 'Manutenção',  key: 'EM MANUTENÇÃO', bg: 'bg-yellow-50 border-yellow-100', text: 'text-yellow-700' },
+          { label: 'Disponivel',  key: 'DISPONIVEL',    bg: 'bg-blue-50   border-blue-100',   text: 'text-blue-700'   },
+          { label: 'Manutencao',  key: 'EM MANUTENCAO', bg: 'bg-yellow-50 border-yellow-100', text: 'text-yellow-700' },
           { label: 'Extraviado',  key: 'EXTRAVIADO',    bg: 'bg-red-50    border-red-100',    text: 'text-red-600'    },
         ].map(({ label, key, bg, text }) => (
           <div key={key} className={`rounded-2xl border p-4 text-center ${bg}`}>
@@ -110,7 +110,7 @@ const EquipamentosPage = () => {
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar modelo, patrimônio ou responsável..."
+            placeholder="Buscar modelo, patrimonio ou responsavel..."
             className="input-field pl-9"
           />
         </div>
@@ -121,8 +121,8 @@ const EquipamentosPage = () => {
         <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="input-field w-auto">
           <option value="">Todos os status</option>
           <option value="EM USO">Em Uso</option>
-          <option value="DISPONÍVEL">Disponível</option>
-          <option value="EM MANUTENÇÃO">Em Manutenção</option>
+          <option value="DISPONIVEL">Disponivel</option>
+          <option value="EM MANUTENCAO">Em Manutencao</option>
           <option value="EXTRAVIADO">Extraviado</option>
           <option value="DESCARTADO">Descartado</option>
         </select>
@@ -134,7 +134,7 @@ const EquipamentosPage = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                {['Tipo','Modelo','Patrimônio','Responsável','Status','Observação', ...(podeEditar ? ['Ações'] : [])].map((h) => (
+                {['Tipo','Modelo','Patrimonio','Responsavel','Status','Observacao', ...(podeEditar ? ['Acoes'] : [])].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                     {h}
                   </th>
@@ -219,7 +219,7 @@ const EquipamentosPage = () => {
         />
       )}
 
-      {/* Modal exclusão */}
+      {/* Modal exclusao */}
       {confirmarExcluir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm">
@@ -228,7 +228,7 @@ const EquipamentosPage = () => {
             </div>
             <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir equipamento?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              <span className="font-semibold text-gray-700">{confirmarExcluir.modelo}</span> será removido permanentemente.
+              <span className="font-semibold text-gray-700">{confirmarExcluir.modelo}</span> sera removido permanentemente.
             </p>
             <div className="flex gap-3">
               <button
@@ -252,3 +252,4 @@ const EquipamentosPage = () => {
 };
 
 export default EquipamentosPage;
+

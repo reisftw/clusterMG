@@ -1,16 +1,16 @@
-import React from "react";
+﻿import React from "react";
 import { rankingCidadesAgentes } from "../utils/mapaUtils";
 
 export default function RankingAgentes({ ordens = [], rankingOverride = null }) {
   const ranking = Array.isArray(rankingOverride)
     ? rankingOverride
-    : rankingCidadesAgentes(ordens, 5);
+    : rankingCidadesAgentes(ordens, 10);
   const max = ranking[0]?.total || 1;
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl p-5 flex-1 min-w-[280px] shadow-sm">
       <h3 className="text-sm font-bold text-gray-800 mb-4">
-        🏅 Top 5 Cidades — Agentes Autorizados
+        Top 10 Cidades - Agentes Autorizados
       </h3>
       <div className="flex flex-col gap-3">
         {ranking.map((item, i) => (
@@ -45,3 +45,4 @@ export default function RankingAgentes({ ordens = [], rankingOverride = null }) 
     </div>
   );
 }
+

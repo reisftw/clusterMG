@@ -31,6 +31,8 @@ function mapFile(row) {
     nome: row.nome,
     mimeType: row.mime_type,
     tipo: row.tipo,
+    categoria: row.categoria || "documento",
+    valor: row.valor === null || row.valor === undefined ? null : Number(row.valor),
     tamanho: Number(row.tamanho || 0),
     status: row.status,
     submissionId: row.submission_id,
@@ -137,9 +139,9 @@ async function createFile(record) {
     `insert into document_files (
        empresa_id, empresa_nome, supervisor_id, supervisor_nome, regional,
        drive_file_id, drive_folder_id, parent_drive_folder_id, nome, mime_type,
-       tipo, tamanho, status, uploaded_by, uploaded_by_name, submission_id,
+       tipo, categoria, valor, tamanho, status, uploaded_by, uploaded_by_name, submission_id,
        field_id, field_nome, mes_referencia
-     ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+     ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
      returning *`,
     [
       record.empresaId,
@@ -153,6 +155,8 @@ async function createFile(record) {
       record.nome,
       record.mimeType || null,
       record.tipo || null,
+      record.categoria || "documento",
+      record.valor === null || record.valor === undefined ? null : Number(record.valor || 0),
       record.tamanho || 0,
       record.status || "pendente",
       record.uploadedBy || null,
@@ -379,7 +383,7 @@ async function markSubmissionPending(id, changes = {}) {
   return mapSubmission(result.rows[0]);
 }
 
-async function listFiles({ status, empresaId, supervisorId, regional, limit = 20, offset = 0 }) {
+async function listFiles({ status, empresaId, supervisorId, regional, categoria, limit = 20, offset = 0 }) {
   const filters = [];
   const params = [];
   const push = (sql, value) => {
@@ -390,6 +394,7 @@ async function listFiles({ status, empresaId, supervisorId, regional, limit = 20
   if (empresaId) push("empresa_id = ?", empresaId);
   if (supervisorId) push("supervisor_id = ?", supervisorId);
   if (regional) push("lower(regional) = lower(?)", regional);
+  if (categoria) push("categoria = ?", categoria);
 
   params.push(Math.max(Math.min(Number(limit || 20), 100), 1));
   const limitIndex = params.length;
@@ -427,6 +432,7 @@ async function updateFile(id, changes = {}) {
        nome = $2,
        status = $3,
        motivo_reprovacao = $4,
+       valor = $13,
        admin_status = $5,
        admin_motivo_reprovacao = $6,
        admin_reviewed_by = $7,
@@ -451,6 +457,7 @@ async function updateFile(id, changes = {}) {
       next.approvedBy || null,
       next.approvedByName || null,
       next.approvedAt || null,
+      next.valor === null || next.valor === undefined ? null : Number(next.valor || 0),
     ],
   );
   return mapFile(result.rows[0]);

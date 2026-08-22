@@ -1,13 +1,23 @@
-import { useMemo } from "react";
-import PainelMapaNav from "./components/PainelMapaNav";
+﻿import { useMemo } from "react";
 import TabMatchOS from "./tabs/TabMatchOS";
 import { useMatchPublico } from "./hooks/useMatchPublico";
 import PublicPageLoading from "./components/PublicPageLoading";
-import { resolveFirestoreDate } from "../../services/firestoreDate";
+import { resolveVpsDate } from "../../services/vpsDate";
+import { ROUTES } from "../../router/routes";
+import PwaInstallButton from "../../components/layout/PwaInstallButton";
+import MelzFooter from "../../components/layout/MelzFooter";
+import {
+  ClipboardList,
+  FileBarChart,
+  Map,
+  Route,
+  ShieldCheck,
+} from "lucide-react";
+import "./PainelPublico.css";
+import "./PublicMobileFix.css";
 
 function formatData(meta) {
-  if (!meta?.data) return "Nunca atualizado";
-  const date = resolveFirestoreDate(meta.data);
+  const date = resolveVpsDate(meta);
 
   if (!date || Number.isNaN(date.getTime())) return "Nunca atualizado";
 
@@ -30,44 +40,103 @@ function formatarPeriodo(data) {
 export default function MatchPublicoPage() {
   const { data, ultimaAtualizacao, loading } = useMatchPublico();
   const dadosValidos = useMemo(() => data || null, [data]);
+  const from =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("from")
+      : "";
+  const fromExternalApp = from === "terceiros" || from === "terceirizados";
+  const suffix = fromExternalApp ? `?from=${from}` : "";
+  const homeRoute = from === "terceirizados"
+    ? ROUTES.TERCEIRIZADOS
+    : from === "terceiros"
+      ? ROUTES.TERCEIROS
+      : ROUTES.PAINEL_PUBLICO;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      <div className="p-6 max-w-[1400px] mx-auto">
-        <PainelMapaNav current="match" />
-
-        <div className="mb-6 rounded-3xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-700 shadow-sm">
-          <div className="flex flex-wrap gap-4">
-            <span>
-              Ultima atualizacao:{" "}
-              <strong className="text-slate-900">
-                {formatData(ultimaAtualizacao)}
-              </strong>
-            </span>
-            {ultimaAtualizacao?.periodoInicio && ultimaAtualizacao?.periodoFim ? (
-              <span>
-                Periodo:{" "}
-                <strong className="text-slate-900">
-                  {formatarPeriodo(ultimaAtualizacao.periodoInicio)}
-                </strong>{" "}
-                ate{" "}
-                <strong className="text-slate-900">
-                  {formatarPeriodo(ultimaAtualizacao.periodoFim)}
-                </strong>
-              </span>
-            ) : null}
+    <div className="painel-publico-page">
+      <div className="match-public-header header">
+        <div className="header-left">
+          <img src="/cluster-mg.png" alt="Logo Retirada" className="header-logo" decoding="async" />
+          <div>
+            <h1>MATCH</h1>
           </div>
         </div>
+
+        <div className="header-right">
+          <div className="painel-tabs">
+            <button
+              type="button"
+              className="painel-tab"
+              onClick={() => window.location.assign(homeRoute)}
+            >
+              <ClipboardList size={14} aria-hidden="true" />
+              {fromExternalApp ? "Voltar ao app" : "Visao geral"}
+            </button>
+            <PwaInstallButton
+              labelMode="full"
+              className="public-install-btn public-header-btn"
+            />
+            <button
+              type="button"
+              className="painel-tab"
+              onClick={() => window.location.assign(`${ROUTES.PAINEL_MAPA}${suffix}`)}
+            >
+              <Map size={14} aria-hidden="true" />
+              Mapa de O.S.
+            </button>
+            <button type="button" className="painel-tab active">
+              <Route size={14} aria-hidden="true" />
+              Match - OS
+            </button>
+            <button
+              type="button"
+              className="painel-tab"
+              onClick={() => window.location.assign(`${ROUTES.PAINEL_RELATORIOS}${suffix}`)}
+            >
+              <FileBarChart size={14} aria-hidden="true" />
+              Relatórios
+            </button>
+            <button
+              type="button"
+              className="painel-tab"
+              onClick={() => window.location.assign(`${ROUTES.AGENTES_MATCH_PUBLICO}${suffix}`)}
+            >
+              <ShieldCheck size={14} aria-hidden="true" />
+              Agentes Autorizados
+            </button>
+          </div>
+          <select className="month-selector" defaultValue="Julho">
+            <option value="Julho">Julho 2026</option>
+          </select>
+          <span className="header-avatar" aria-label="Usuario AD">
+            AD
+          </span>
+        </div>
+      </div>
+
+      <div className="match-update-strip">
+        <span>
+          Última atualização: <strong>{formatData(ultimaAtualizacao)}</strong>
+        </span>
+        {ultimaAtualizacao?.periodoInicio && ultimaAtualizacao?.periodoFim ? (
+          <span>
+            Período:{" "}
+            <strong>{formatarPeriodo(ultimaAtualizacao.periodoInicio)}</strong>{" "}
+            ate <strong>{formatarPeriodo(ultimaAtualizacao.periodoFim)}</strong>
+          </span>
+        ) : null}
+      </div>
 
         {loading ? (
           <PublicPageLoading
             title="Carregando match"
-            description="Estamos analisando os servicos e as retiradas proximas para montar as oportunidades."
+            description="Estamos analisando os servicos e as retiradas proximas para montar os matches."
           />
         ) : (
           <TabMatchOS dataOverride={dadosValidos} />
         )}
-      </div>
+      <MelzFooter className="mt-8" />
     </div>
   );
 }
+

@@ -1,6 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
 import { Trash2, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import RetorninhoLoader from "../../../../components/ui/RetorninhoLoader";
 
 const TabRegionais = () => {
   const {
@@ -13,7 +14,7 @@ const TabRegionais = () => {
     salvarConfig,
   } = useFerramentasRegionais();
 
-  // Estado global de técnicos e metas (lidos da primeira regional como referência global)
+  // Estado global de tecnicos e metas (lidos da primeira regional como referencia global)
   const tecnicosGlobais = config.tecnicos || [];
   const metaAtiva = config.metaAtiva ?? 110;
   const metaRetirada = config.metaRetirada ?? 110;
@@ -28,19 +29,7 @@ const TabRegionais = () => {
 
   const toggle = (id) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
-  // ── Salva técnicos e metas em TODAS as regionais (padrão global) ──────────
-  const saveGlobal = async (novosTecs, novaMA, novaMR) => {
-    await Promise.all(
-      regionais.map((reg) =>
-        atualizar(reg.id, {
-          tecnicosGlobais: novosTecs,
-          metaAtiva: Number(novaMA),
-          metaRetirada: Number(novaMR),
-        }),
-      ),
-    );
-  };
-
+  // -- Salva tecnicos e metas em TODAS as regionais (padrao global) ----------
   const addTecnico = async () => {
     const nome = novoTec.trim();
     if (!nome) return;
@@ -61,10 +50,10 @@ const TabRegionais = () => {
     });
   };
 
-  // ── Regionais e cidades ───────────────────────────────────────────────────
+  // -- Regionais e cidades ---------------------------------------------------
   const addRegional = async () => {
     if (!novaReg.trim()) return;
-    // Ao criar, já herda técnicos e metas globais
+    // Ao criar, ja herda tecnicos e metas globais
     await criar(novaReg.trim(), tecnicosGlobais, metaAtiva, metaRetirada);
     setNovaReg("");
   };
@@ -94,11 +83,11 @@ const TabRegionais = () => {
   };
 
   if (loading)
-    return <p className="text-sm text-gray-400 p-4">Carregando...</p>;
+    return <RetorninhoLoader compact title="Carregando..." />;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* ── Coluna Esquerda — Formulários globais ── */}
+      {/* -- Coluna Esquerda — Formularios globais -- */}
       <div className="space-y-4">
         {/* Nova Regional */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
@@ -199,15 +188,15 @@ const TabRegionais = () => {
           </button>
         </div>
 
-        {/* Técnicos de Retirada (global) */}
+        {/* Tecnicos de Retirada (global) */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-            Técnicos de Retirada
+            Tecnicos de Retirada
           </p>
           <div className="flex gap-2 mb-3">
             <input
               className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
-              placeholder="Ex: João Silva"
+              placeholder="Ex: Joao Silva"
               value={novoTec}
               onChange={(e) => setNovoTec(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addTecnico()}
@@ -222,7 +211,7 @@ const TabRegionais = () => {
           <div className="space-y-1 max-h-48 overflow-y-auto">
             {tecnicosGlobais.length === 0 && (
               <p className="text-xs text-gray-400">
-                Nenhum técnico cadastrado.
+                Nenhum tecnico cadastrado.
               </p>
             )}
             {tecnicosGlobais.map((t, i) => (
@@ -254,7 +243,7 @@ const TabRegionais = () => {
           </p>
           <div className="mb-3">
             <label className="text-xs text-gray-500 block mb-1">
-              Meta Ativa (O.S/mês)
+              Meta Ativa (O.S/mes)
             </label>
             <div className="flex gap-2">
               <input
@@ -267,7 +256,7 @@ const TabRegionais = () => {
           </div>
           <div className="mb-3">
             <label className="text-xs text-gray-500 block mb-1">
-              Meta Retirada (O.S/mês)
+              Meta Retirada (O.S/mes)
             </label>
             <div className="flex gap-2">
               <input
@@ -285,13 +274,13 @@ const TabRegionais = () => {
             Salvar Metas
           </button>
           <p className="text-xs text-gray-400 mt-2 text-center">
-            Meta atual: <strong>{metaAtiva}</strong> O.S/mês · Retirada:{" "}
+            Meta atual: <strong>{metaAtiva}</strong> O.S/mes · Retirada:{" "}
             <strong>{metaRetirada}</strong>
           </p>
         </div>
       </div>
 
-      {/* ── Coluna Direita — Lista de Regionais ── */}
+      {/* -- Coluna Direita — Lista de Regionais -- */}
       <div className="lg:col-span-2 space-y-3">
         {regionais.length === 0 && (
           <div className="text-center py-16 text-gray-400">
@@ -304,10 +293,18 @@ const TabRegionais = () => {
             key={reg.id}
             className="bg-white border border-gray-200 rounded-xl overflow-hidden"
           >
-            {/* Cabeçalho */}
+            {/* Cabecalho */}
             <div
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-orange-50 transition-colors"
               onClick={() => toggle(reg.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  toggle(reg.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
             >
               <div className="flex items-center gap-3">
                 {expanded[reg.id] ? (
@@ -414,3 +411,4 @@ const TabRegionais = () => {
 };
 
 export default TabRegionais;
+

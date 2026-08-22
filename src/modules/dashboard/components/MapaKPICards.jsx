@@ -1,5 +1,4 @@
-import { Map, Clock, CalendarX } from "lucide-react";
-import { useMapaOS } from "../../../pages/Mapa/hooks/useMapaOS";
+﻿import { Map, Clock, CalendarX } from "lucide-react";
 
 const CARDS = [
   {
@@ -31,9 +30,7 @@ const CARDS = [
   },
 ];
 
-export default function MapaKPICards() {
-  const { ordens } = useMapaOS();
-
+export default function MapaKPICards({ ordens = [], variant = "classic" }) {
   const kpis = ordens.reduce(
     (acc, os) => {
       acc.total++;
@@ -44,29 +41,68 @@ export default function MapaKPICards() {
     { total: 0, pendente: 0, aguardando: 0 },
   );
 
+  const isModern = variant === "modern";
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div
+      className={
+        isModern
+          ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+          : "grid grid-cols-1 sm:grid-cols-3 gap-4"
+      }
+    >
       {CARDS.map(({ key, label, icon: Icon, color, bg, border, accent }) => (
         <div
           key={key}
-          className={`bg-white rounded-2xl border ${border} p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow`}
+          className={
+            isModern
+              ? `rounded-lg border ${border} bg-white p-5 shadow-card transition-shadow hover:shadow-md`
+              : `bg-white rounded-2xl border ${border} p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow`
+          }
         >
-          <div
-            className={`w-12 h-12 rounded-xl ${bg} flex items-center justify-center shrink-0`}
-          >
-            <Icon size={22} className={color} />
-          </div>
-          <div>
-            <p className="text-2xl font-extrabold text-gray-900">
-              {kpis[key].toLocaleString("pt-BR")}
-            </p>
-            <p className="text-xs text-gray-500 font-medium mt-0.5">{label}</p>
-          </div>
-          <div
-            className={`ml-auto w-1 h-10 rounded-full bg-gradient-to-b ${accent} opacity-60`}
-          />
+          {isModern ? (
+            <>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${bg}`}
+                >
+                  <Icon size={21} className={color} />
+                </div>
+                <span className="rounded-full bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-500">
+                  O.S
+                </span>
+              </div>
+              <p className="text-3xl font-black text-slate-950">
+                {kpis[key].toLocaleString("pt-BR")}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-500">{label}</p>
+              <div
+                className={`mt-4 h-1 rounded-full bg-gradient-to-r ${accent} opacity-70`}
+              />
+            </>
+          ) : (
+            <>
+              <div
+                className={`w-12 h-12 rounded-xl ${bg} flex items-center justify-center shrink-0`}
+              >
+                <Icon size={22} className={color} />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-gray-900">
+                  {kpis[key].toLocaleString("pt-BR")}
+                </p>
+                <p className="text-xs text-gray-500 font-medium mt-0.5">
+                  {label}
+                </p>
+              </div>
+              <div
+                className={`ml-auto w-1 h-10 rounded-full bg-gradient-to-b ${accent} opacity-60`}
+              />
+            </>
+          )}
         </div>
       ))}
     </div>
   );
 }
+

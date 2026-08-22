@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { buscarAgentes, criarAgente, atualizarAgente, excluirAgente } from '../services/agentesService';
 import { useAuthContext } from '../../../context/AuthContext';
 import { registrarAtividade } from '../../../services/activityLogService';
-import { getOrLoadCachedValue, invalidateCache } from '../../../services/firestoreCache';
-import { logFirestoreRead } from '../../../services/firestoreMonitoring';
+import { getOrLoadCachedValue, invalidateCache } from '../../../services/dataCache';
+import { logDataRead } from '../../../services/dataMonitoring';
 
-const CACHE_KEY = 'agentes:lista';
+const CACHE_KEY = 'agentes:lista:v2';
 const CACHE_TTL = 10 * 60 * 1000;
 
-const sortByNome = (items = []) =>
-  [...items].sort((a, b) => (a?.nome ?? '').localeCompare(b?.nome ?? ''));
+const sortAgentes = (items = []) =>
+  [...items].sort((a, b) =>
+    (a?.cidade ?? a?.nome ?? '').localeCompare(b?.cidade ?? b?.nome ?? ''),
+  );
 
 export const useAgentes = () => {
   const { currentUser } = useAuthContext();
@@ -25,16 +27,16 @@ export const useAgentes = () => {
         CACHE_KEY,
         async () => {
           const items = await buscarAgentes();
-          logFirestoreRead({
+          logDataRead({
             source: 'useAgentes',
-            operation: 'getDocs',
+            operation: 'sql-list',
             count: items.length,
           });
-          return sortByNome(items);
+          return sortAgentes(items);
         },
         { ttlMs: CACHE_TTL, force },
       );
-      setAgentes(sortByNome(data || []));
+      setAgentes(sortAgentes(data || []));
     } catch {
       setError('Erro ao carregar agentes.');
     } finally {
@@ -56,7 +58,7 @@ export const useAgentes = () => {
       detalhes: { nome: dados?.nome || null, cidade: dados?.cidade || null },
     });
     invalidateCache(CACHE_KEY);
-    setAgentes((prev) => sortByNome([...prev, { id: ref.id, ...dados }]));
+    setAgentes((prev) => sortAgentes([...prev, { id: ref.id, ...dados }]));
   }, [currentUser?.id, currentUser?.nome]);
 
   const atualizar = useCallback(async (id, dados) => {
@@ -71,7 +73,7 @@ export const useAgentes = () => {
     });
     invalidateCache(CACHE_KEY);
     setAgentes((prev) =>
-      sortByNome(prev.map((item) => (item.id === id ? { ...item, ...dados } : item))),
+      sortAgentes(prev.map((item) => (item.id === id ? { ...item, ...dados } : item))),
     );
   }, [currentUser?.id, currentUser?.nome]);
 
@@ -90,3 +92,5 @@ export const useAgentes = () => {
 
   return { agentes, loading, error, carregar: () => carregar(true), criar, atualizar, excluir };
 };
+
+

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import {
   atualizarColaborador,
   buscarColaboradores,
@@ -11,10 +11,9 @@ import {
   buildCacheKey,
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
+} from "../../../services/dataCache";
+import { logDataRead } from "../../../services/dataMonitoring";
 import { regenerateStaticData } from "../../../services/staticDataService";
-import { getInternalStaticDataSlice } from "../../../services/internalStaticDataService";
 
 const CACHE_KEY = buildCacheKey(["colaboradores", "lista"]);
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -29,11 +28,8 @@ export const useColaboradores = ({ preferStatic = false } = {}) => {
     setLoading(true);
     try {
       if (preferStatic) {
-        const staticItems = await getInternalStaticDataSlice(
-          (payload) => payload?.colaboradores?.items ?? null,
-          { force },
-        );
-        setColaboradores(Array.isArray(staticItems) ? staticItems : []);
+        const itens = await buscarColaboradores(force, { allowFallback: false });
+        setColaboradores(Array.isArray(itens) ? itens : []);
         setError(null);
         setLoading(false);
         return;
@@ -43,9 +39,9 @@ export const useColaboradores = ({ preferStatic = false } = {}) => {
         CACHE_KEY,
         async () => {
           const itens = await buscarColaboradores(force);
-          logFirestoreRead({
+          logDataRead({
             source: "useColaboradores",
-            operation: "getDocs",
+            operation: "sql-list",
             count: itens.length,
           });
           return itens;
@@ -54,7 +50,7 @@ export const useColaboradores = ({ preferStatic = false } = {}) => {
       );
 
       if (fromCache) {
-        logFirestoreRead({
+        logDataRead({
           source: "useColaboradores",
           operation: "cache-hit",
           cacheHit: true,
@@ -140,3 +136,5 @@ export const useColaboradores = ({ preferStatic = false } = {}) => {
 
   return { colaboradores, loading, error, cadastrar, atualizar, deletar, carregar };
 };
+
+

@@ -1,46 +1,30 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "../../../services/firebase";
-import { COLLECTIONS } from "../../../constants/firestoreCollections";
+﻿import { COLLECTIONS } from "../../../constants/dataCollections";
 import {
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
+} from "../../../services/dataCache";
+import {
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from "../../../services/vpsApiClient";
 
 const MAX_REGIONAIS = 150;
 const CACHE_KEY = "regionais-service:lista";
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-const col = () => collection(db, COLLECTIONS.REGIONAIS);
+const getRegionalSortLabel = (item = {}) => item?.nome || "";
 
 export const buscarRegionais = async (force = false) => {
   const { data } = await getOrLoadCachedValue(
-    CACHE_KEY,
-    async () => {
-      const snap = await getDocs(
-        query(col(), orderBy("nome"), limit(MAX_REGIONAIS)),
-      );
-
-      logFirestoreRead({
-        source: "regionaisService:buscarRegionais",
-        operation: "getDocs",
-        path: COLLECTIONS.REGIONAIS,
-        count: snap.size,
-      });
-
-      return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
-    },
+    `${CACHE_KEY}:vps`,
+    async () =>
+      (await listVpsDocuments(COLLECTIONS.REGIONAIS, {
+        limit: MAX_REGIONAIS,
+      })).sort((a, b) =>
+        getRegionalSortLabel(a).localeCompare(getRegionalSortLabel(b)),
+      ),
     { ttlMs: CACHE_TTL_MS, force },
   );
 
@@ -48,20 +32,27 @@ export const buscarRegionais = async (force = false) => {
 };
 
 export const criarRegional = async (dados) => {
-  const ref = await addDoc(col(), { ...dados, criado_em: serverTimestamp() });
+  const ref = await createVpsDocument(COLLECTIONS.REGIONAIS, {
+    ...dados,
+    criado_em: new Date().toISOString(),
+  });
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
   return ref;
 };
 
 export const atualizarRegional = async (id, dados) => {
-  await updateDoc(doc(db, COLLECTIONS.REGIONAIS, id), {
+  await updateVpsDocument(`${COLLECTIONS.REGIONAIS}/${id}`, {
     ...dados,
-    atualizado_em: serverTimestamp(),
+    atualizado_em: new Date().toISOString(),
   });
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
 };
 
 export const excluirRegional = async (id) => {
-  await deleteDoc(doc(db, COLLECTIONS.REGIONAIS, id));
+  await deleteVpsDocument(`${COLLECTIONS.REGIONAIS}/${id}`);
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
 };
+

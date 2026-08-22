@@ -216,39 +216,6 @@ async function checkEvolutionStatus() {
   };
 }
 
-async function checkZapiStatus() {
-  const config = (await getDocumentData("mensageria_config/global")) || {};
-  const baseUrl = String(config.zapiBaseUrl || "https://api.z-api.io").replace(/\/+$/, "");
-  const instanceId = String(config.zapiInstanceId || "").trim();
-  const instanceToken = String(config.zapiInstanceToken || "").trim();
-  const clientToken = String(config.zapiClientToken || "").trim();
-  if (!baseUrl || !instanceId || !instanceToken) {
-    throw new Error("Z-API nao configurada em Mensageria.");
-  }
-  const endpoint = `${baseUrl}/instances/${encodeURIComponent(instanceId)}/token/${encodeURIComponent(instanceToken)}/status`;
-  const response = await fetch(endpoint, {
-    headers: {
-      ...(clientToken ? { "Client-Token": clientToken } : {}),
-    },
-  });
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-  if (!response.ok) {
-    throw new Error(payload?.message || payload?.error || payload?.errorMessage || `Z-API HTTP ${response.status}`);
-  }
-  return {
-    endpoint,
-    instanceId,
-    enabled: Boolean(config.zapiEnabled),
-    providerSelected: config.whatsappProvider === "zapi",
-    connected: payload?.connected ?? payload?.isConnected ?? payload?.status ?? "desconhecido",
-  };
-}
-
 async function getApiStatus() {
   const uptimeSeconds = Math.floor(process.uptime());
   const runtimeEvents = await listRuntimeEvents().catch(() => []);
@@ -368,9 +335,6 @@ async function getApiStatus() {
       checkEvolutionStatus(),
     ),
 
-    checkService("zapi-whatsapp", "API Z-API WhatsApp", async () =>
-      checkZapiStatus(),
-    ),
   ]);
 
   const online = services.filter((service) => service.status === "online").length;

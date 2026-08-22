@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -50,13 +50,21 @@ function CidadeRow({ cidade, data, maxTotal, alertaThreshold, onDrillDown }) {
       className="border-b border-gray-100 last:border-0 px-5 py-3 flex flex-col gap-2 cursor-pointer hover:brightness-95 transition-all"
       style={{ background: getHeatColor(total, maxTotal) }}
       onClick={() => onDrillDown(cidade, data)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onDrillDown(cidade, data);
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-700">{cidade}</span>
           {isAlerta && (
             <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-              <AlertTriangle size={10} /> Crítico
+              <AlertTriangle size={10} /> Critico
             </span>
           )}
         </div>
@@ -98,6 +106,14 @@ function RegionalCard({ regional, cidades, alertaThreshold, onDrillDown }) {
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm mb-4">
       <div
         onClick={() => setAberto(!aberto)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setAberto(!aberto);
+          }
+        }}
+        role="button"
+        tabIndex={0}
         className="flex justify-between items-center px-5 py-4 cursor-pointer hover:bg-gray-50 transition-all"
       >
         <div className="flex items-center gap-2">
@@ -191,3 +207,4 @@ export default function MapaRegionais({
     </div>
   );
 }
+

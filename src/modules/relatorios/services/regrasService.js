@@ -1,17 +1,9 @@
-import { db } from '../../../services/firebase';
+﻿import { getOrLoadCachedValue, invalidateCache } from '../../../services/dataCache';
 import {
-  addDoc,
-  collection,
-  doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
-import { getOrLoadCachedValue, invalidateCache } from '../../../services/firestoreCache';
-import { logFirestoreRead } from '../../../services/firestoreMonitoring';
+  createVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from '../../../services/vpsApiClient';
 
 const COL_REGRAS = 'regras';
 const CACHE_KEY = 'regras:ativas';
@@ -30,7 +22,7 @@ export const criarRegraMetaRisco = async () => {
     criadoEm: new Date().toISOString(),
   };
 
-  const ref = await addDoc(collection(db, COL_REGRAS), regra);
+  const ref = await createVpsDocument(COL_REGRAS, regra);
   return ref.id;
 };
 
@@ -38,21 +30,9 @@ export const buscarRegrasAtivas = async () => {
   const { data } = await getOrLoadCachedValue(
     CACHE_KEY,
     async () => {
-      const snap = await getDocs(
-        query(
-          collection(db, COL_REGRAS),
-          where('ativo', '==', true),
-          orderBy('nome'),
-          limit(REGRAS_MAX),
-        ),
-      );
-      logFirestoreRead({
-        source: 'regrasService:buscarRegrasAtivas',
-        operation: 'getDocs',
-        path: COL_REGRAS,
-        count: snap.size,
-      });
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return (await listVpsDocuments(COL_REGRAS, { limit: REGRAS_MAX }))
+        .filter((item) => item.ativo === true)
+        .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
     },
     { ttlMs: 10 * 60 * 1000 },
   );
@@ -61,7 +41,7 @@ export const buscarRegrasAtivas = async () => {
 };
 
 export const toggleRegra = async (id, ativo) => {
-  const ref = doc(db, COL_REGRAS, id);
-  await updateDoc(ref, { ativo });
+  await updateVpsDocument(`${COL_REGRAS}/${id}`, { ativo });
   invalidateCache(CACHE_KEY);
 };
+

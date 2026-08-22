@@ -1,23 +1,23 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const COR_POR_CARGO = {
-  "Técnico I": { bg: "bg-blue-400", text: "text-blue-700", dot: "bg-blue-400" },
-  "Técnico II": { bg: "bg-blue-500", text: "text-blue-700", dot: "bg-blue-500" },
-  "Técnico III": { bg: "bg-blue-700", text: "text-blue-800", dot: "bg-blue-700" },
+  "Tecnico I": { bg: "bg-blue-400", text: "text-blue-700", dot: "bg-blue-400" },
+  "Tecnico II": { bg: "bg-blue-500", text: "text-blue-700", dot: "bg-blue-500" },
+  "Tecnico III": { bg: "bg-blue-700", text: "text-blue-800", dot: "bg-blue-700" },
   "BackOffice I": { bg: "bg-purple-400", text: "text-purple-700", dot: "bg-purple-400" },
   "BackOffice II": { bg: "bg-purple-500", text: "text-purple-700", dot: "bg-purple-500" },
   "BackOffice III": { bg: "bg-purple-700", text: "text-purple-800", dot: "bg-purple-700" },
-  "Líder Técnico": { bg: "bg-orange-400", text: "text-orange-700", dot: "bg-orange-400" },
+  "Lider Tecnico": { bg: "bg-orange-400", text: "text-orange-700", dot: "bg-orange-400" },
 };
 
 const COR_PADRAO = { bg: "bg-gray-400", text: "text-gray-600", dot: "bg-gray-400" };
 
-const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
 const MESES = [
   "Janeiro",
   "Fevereiro",
-  "Março",
+  "Marco",
   "Abril",
   "Maio",
   "Junho",
@@ -200,7 +200,7 @@ const FeriasCalendario = ({ ferias, colaboradores }) => {
       {colaboradoresComFerias.length > 0 ? (
         <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
-            Férias neste mês
+            Ferias neste mes
           </p>
           <div className="flex flex-wrap gap-2">
             {colaboradoresComFerias.map((colaborador) => {
@@ -222,7 +222,7 @@ const FeriasCalendario = ({ ferias, colaboradores }) => {
         </div>
       ) : (
         <div className="px-5 py-4 border-t border-gray-100 text-center">
-          <p className="text-xs text-gray-400">Nenhuma férias registrada neste mês.</p>
+          <p className="text-xs text-gray-400">Nenhuma ferias registrada neste mes.</p>
         </div>
       )}
     </div>
@@ -230,3 +230,4 @@ const FeriasCalendario = ({ ferias, colaboradores }) => {
 };
 
 export default FeriasCalendario;
+

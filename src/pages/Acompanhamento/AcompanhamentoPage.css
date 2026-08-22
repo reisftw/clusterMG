@@ -1,0 +1,3754 @@
+.acomp-page {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 107, 0, 0.34), transparent 26%),
+    radial-gradient(circle at 92% 12%, rgba(0, 48, 135, 0.56), transparent 34%),
+    radial-gradient(circle at 72% 92%, rgba(56, 189, 248, 0.16), transparent 34%),
+    linear-gradient(135deg, #001b4d 0%, #003087 42%, #07111f 100%);
+  color: #f8fafc;
+}
+
+.acomp-page.is-cursor-idle,
+.acomp-page.is-cursor-idle * {
+  cursor: none !important;
+}
+
+.acomp-bg-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, #000, transparent 82%);
+}
+
+.acomp-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100vh;
+  min-height: 0;
+  flex-direction: column;
+  gap: clamp(7px, 0.75vw, 12px);
+  padding: clamp(10px, 1.05vw, 18px);
+}
+
+.acomp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  gap: 18px;
+}
+
+.acomp-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.acomp-brand img {
+  width: clamp(104px, 8.2vw, 150px);
+  height: clamp(42px, 3.1vw, 58px);
+  border: 2px solid rgba(255, 255, 255, 0.38);
+  border-radius: 14px;
+  object-fit: contain;
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.28),
+    0 0 0 6px rgba(255, 107, 0, 0.13);
+}
+
+.acomp-brand span,
+.acomp-panel-title span {
+  color: #93c5fd;
+}
+
+.acomp-brand span {
+  display: block;
+  font-size: clamp(11px, 0.9vw, 15px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.acomp-brand h1 {
+  margin: 2px 0 0;
+  font-size: clamp(24px, 2.25vw, 38px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-live {
+  display: flex;
+  min-width: 260px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+    rgba(0, 27, 77, 0.82);
+  padding: 9px 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.acomp-settings-btn,
+.acomp-icon-btn {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.acomp-settings-btn:hover,
+.acomp-icon-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(96, 165, 250, 0.18);
+}
+
+.acomp-live strong {
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.acomp-live small {
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.acomp-live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.85);
+  animation: acompPulse 1.8s infinite;
+}
+
+.acomp-main-grid {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(300px, 1.15fr) repeat(4, minmax(180px, 1fr));
+  grid-template-areas:
+    "spotlight kpis kpis kpis kpis"
+    "spotlight status status latest deliveries"
+    "match attendants cities openregs deliveries"
+    "technicians attendants daily agenda deliveries";
+  grid-template-rows: minmax(82px, 0.82fr) minmax(72px, 0.58fr) minmax(166px, 1.2fr) minmax(112px, 0.92fr);
+  align-content: start;
+  gap: clamp(8px, 0.75vw, 13px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.acomp-spotlight {
+  position: relative;
+  grid-area: spotlight;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
+    rgba(0, 27, 77, 0.76);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.acomp-spotlight::after {
+  content: "";
+  position: absolute;
+  inset: auto -20% -34% 10%;
+  height: 54%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13);
+  filter: blur(22px);
+}
+
+.acomp-spotlight-copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: clamp(13px, 1.25vw, 22px);
+  padding-right: clamp(132px, 34%, 190px);
+}
+
+.acomp-spotlight-copy span {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 6px 11px;
+  color: #e0f2fe;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.acomp-spotlight-copy h1 {
+  max-width: 100%;
+  margin: 10px 0 6px;
+  font-size: clamp(22px, 2vw, 34px);
+  font-weight: 950;
+  line-height: 0.98;
+  overflow-wrap: anywhere;
+}
+
+.acomp-spotlight-number {
+  color: #ffffff;
+  margin-top: auto;
+  font-size: clamp(42px, 3.8vw, 66px);
+  font-weight: 950;
+  line-height: 0.88;
+  letter-spacing: 0;
+  text-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.acomp-spotlight-copy p {
+  max-width: 100%;
+  margin: 7px 0 0;
+  color: #dbeafe;
+  font-size: clamp(12px, 0.95vw, 16px);
+  font-weight: 750;
+  line-height: 1.18;
+}
+
+.acomp-spotlight img {
+  position: absolute;
+  right: clamp(10px, 1vw, 18px);
+  bottom: clamp(18px, 2.4vw, 40px);
+  z-index: 1;
+  width: clamp(112px, 11vw, 190px);
+  max-height: 42%;
+  object-fit: contain;
+  filter: drop-shadow(0 28px 38px rgba(0, 0, 0, 0.28));
+  animation: acompFloat 5.5s ease-in-out infinite;
+}
+
+.acomp-spotlight-orange {
+  background:
+    linear-gradient(135deg, rgba(255, 107, 0, 0.96), rgba(0, 48, 135, 0.76)),
+    #003087;
+}
+
+.acomp-spotlight-blue {
+  background:
+    linear-gradient(135deg, rgba(0, 48, 135, 0.96), rgba(0, 120, 210, 0.7)),
+    #003087;
+}
+
+.acomp-spotlight-green {
+  background:
+    linear-gradient(135deg, rgba(0, 48, 135, 0.92), rgba(34, 197, 94, 0.68)),
+    #003087;
+}
+
+.acomp-kpis {
+  display: grid;
+  grid-area: kpis;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: clamp(6px, 0.62vw, 10px);
+}
+
+.acomp-kpi,
+.acomp-panel {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.055)),
+    rgba(0, 27, 77, 0.78);
+  box-shadow:
+    0 18px 52px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.acomp-kpi {
+  display: flex;
+  min-height: 0;
+  align-items: center;
+  gap: clamp(6px, 0.52vw, 10px);
+  padding: clamp(8px, 0.72vw, 13px);
+}
+
+.acomp-kpi-meta-source,
+.acomp-kpi:has(> .acomp-meta-alert),
+.acomp-kpi:has(> .acomp-meta-retorninho) {
+  cursor: default;
+}
+
+.acomp-kpi-icon {
+  display: flex;
+  width: clamp(32px, 2.1vw, 40px);
+  height: clamp(32px, 2.1vw, 40px);
+  flex: 0 0 clamp(32px, 2.1vw, 40px);
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+}
+
+.acomp-kpi p {
+  margin: 0;
+  color: #bfdbfe;
+  font-size: clamp(8px, 0.56vw, 11px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.acomp-kpi strong {
+  display: block;
+  margin-top: 4px;
+  font-size: clamp(18px, 1.55vw, 34px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-kpi span {
+  display: block;
+  margin-top: 5px;
+  color: #cbd5e1;
+  font-size: clamp(8px, 0.58vw, 12px);
+  font-weight: 700;
+}
+
+.acomp-kpi-meta-source strong {
+  font-size: clamp(17px, 1.32vw, 28px);
+}
+
+.acomp-kpi-meta-source .acomp-meta-alert {
+  right: 6px;
+  top: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
+}
+
+.acomp-kpi-meta-source .acomp-meta-retorninho {
+  width: clamp(30px, 2.45vw, 44px);
+}
+
+.acomp-kpi-orange .acomp-kpi-icon {
+  background: rgba(255, 107, 0, 0.22);
+  color: #ffb366;
+}
+
+.acomp-kpi-blue .acomp-kpi-icon {
+  background: rgba(59, 130, 246, 0.22);
+  color: #93c5fd;
+}
+
+.acomp-kpi-green .acomp-kpi-icon {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.acomp-kpi-purple .acomp-kpi-icon {
+  background: rgba(168, 85, 247, 0.16);
+  color: #c084fc;
+}
+
+.acomp-kpi-meta-low {
+  border-color: rgba(248, 113, 113, 0.72);
+  background:
+    linear-gradient(135deg, rgba(185, 28, 28, 0.58), rgba(127, 29, 29, 0.18)),
+    rgba(0, 27, 77, 0.82);
+  box-shadow:
+    0 0 0 1px rgba(248, 113, 113, 0.2),
+    0 0 28px rgba(239, 68, 68, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  animation: acompMetaAlertCard 1.55s ease-in-out infinite;
+}
+
+.acomp-kpi-meta-low .acomp-kpi-icon {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+}
+
+.acomp-kpi-meta-low > div:nth-child(2),
+.acomp-kpi-meta-ok > div:nth-child(2) {
+  min-width: 0;
+  padding-right: 42px;
+}
+
+.acomp-kpi-meta-low p,
+.acomp-kpi-meta-low span {
+  color: #fee2e2;
+}
+
+.acomp-kpi-meta-ok {
+  border-color: rgba(74, 222, 128, 0.68);
+  background:
+    linear-gradient(135deg, rgba(21, 128, 61, 0.48), rgba(34, 197, 94, 0.12)),
+    rgba(0, 27, 77, 0.82);
+  box-shadow:
+    0 0 0 1px rgba(74, 222, 128, 0.16),
+    0 0 26px rgba(34, 197, 94, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.acomp-kpi-meta-ok .acomp-kpi-icon {
+  background: rgba(34, 197, 94, 0.24);
+  color: #86efac;
+}
+
+.acomp-kpi-meta-ok p,
+.acomp-kpi-meta-ok span {
+  color: #dcfce7;
+}
+
+.acomp-meta-alert {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.72);
+  color: #fecaca;
+  animation: acompSirenShake 700ms ease-in-out infinite;
+}
+
+.acomp-meta-alert span {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid rgba(248, 113, 113, 0.65);
+  border-radius: 15px;
+  animation: acompSirenPulse 1.1s ease-out infinite;
+}
+
+.acomp-meta-retorninho {
+  position: absolute;
+  right: 6px;
+  bottom: -4px;
+  width: clamp(38px, 3.2vw, 58px);
+  max-height: 72%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.3));
+  animation: acompRetorninhoHappy 2.2s ease-in-out infinite;
+}
+
+.acomp-panel {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: clamp(8px, 0.68vw, 12px);
+}
+
+.acomp-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #ffb366;
+}
+
+.acomp-panel-title h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: clamp(13px, 0.88vw, 16px);
+  font-weight: 950;
+}
+
+.acomp-ranking-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.acomp-rank-row {
+  display: flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 8px;
+}
+
+.acomp-rank-pos {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.acomp-rank-pos.pos-1 {
+  background: #facc15;
+  color: #422006;
+}
+
+.acomp-rank-pos.pos-2 {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+
+.acomp-rank-pos.pos-3 {
+  background: #fb923c;
+  color: #431407;
+}
+
+.acomp-rank-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.acomp-rank-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.acomp-rank-label span {
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: clamp(11px, 0.82vw, 14px);
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-rank-label strong {
+  color: #e0f2fe;
+  font-size: clamp(12px, 0.84vw, 15px);
+  font-weight: 950;
+}
+
+.acomp-bar-track {
+  height: 5px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.acomp-bar-track div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff6b00, #60a5fa);
+  transition: width 700ms ease;
+}
+
+.acomp-rank-subline {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #bfdbfe;
+  font-size: clamp(8px, 0.62vw, 10px);
+  font-weight: 850;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.acomp-status-panel {
+  position: relative;
+  grid-area: status;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-self: stretch;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px clamp(150px, 22%, 230px) 8px 10px;
+}
+
+.acomp-status-panel .acomp-panel-title {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 0;
+}
+
+.acomp-status-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.acomp-status-pill {
+  display: flex;
+  min-height: 31px;
+  flex-direction: column;
+  justify-content: center;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 107, 0, 0.12), rgba(255, 255, 255, 0.06)),
+    rgba(255, 255, 255, 0.06);
+  padding: 4px 7px;
+}
+
+.acomp-status-pill span {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 9px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-status-pill strong {
+  margin-top: 1px;
+  font-size: clamp(15px, 1.08vw, 21px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-status-retorninho {
+  position: absolute;
+  right: clamp(8px, 1.2vw, 16px);
+  bottom: 3px;
+  z-index: 0;
+  width: clamp(112px, 17vw, 210px);
+  max-height: calc(100% - 6px);
+  object-fit: contain;
+  object-position: right bottom;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.3));
+}
+
+.acomp-festive-page.is-christmas .acomp-status-retorninho {
+  right: clamp(4px, 0.8vw, 12px);
+  bottom: -2px;
+  width: clamp(128px, 20vw, 250px);
+  max-height: calc(100% + 10px);
+}
+
+.acomp-recent-deliveries-panel {
+  grid-area: latest;
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 6px 8px 4px;
+}
+
+.acomp-recent-deliveries-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.acomp-recent-deliveries-head h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(12px, 0.86vw, 15px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-recent-deliveries-head svg {
+  flex: 0 0 auto;
+  color: #bfdbfe;
+}
+
+.acomp-recent-deliveries-list {
+  display: grid;
+  min-height: 0;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.acomp-recent-delivery:nth-child(n+2) {
+  display: grid;
+}
+
+.acomp-recent-delivery {
+  display: grid;
+  min-height: 19px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-left: 3px solid #f97316;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 1px 6px;
+}
+
+.acomp-recent-delivery.is-hit {
+  border-left-color: #22c55e;
+}
+
+.acomp-recent-delivery.is-missed {
+  border-left-color: #ef4444;
+}
+
+.acomp-recent-delivery strong {
+  display: block;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: clamp(8px, 0.62vw, 10px);
+  font-weight: 950;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-recent-delivery span,
+.acomp-recent-deliveries-empty {
+  display: block;
+  margin-top: 1px;
+  color: #cbd5e1;
+  font-size: 6px;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.acomp-recent-delivery.is-hit span {
+  color: #bbf7d0;
+}
+
+.acomp-recent-delivery.is-missed span {
+  color: #fecaca;
+}
+
+.acomp-recent-delivery-value {
+  text-align: right;
+}
+
+.acomp-recent-delivery-value strong {
+  font-size: clamp(11px, 0.78vw, 14px);
+}
+
+.acomp-recent-deliveries-empty {
+  margin-top: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px;
+  text-align: center;
+}
+
+.acomp-delivery-panel {
+  grid-area: daily;
+  align-self: stretch;
+  justify-content: space-between;
+  padding-bottom: 8px;
+}
+
+.acomp-delivery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.acomp-delivery-head div {
+  min-width: 0;
+}
+
+.acomp-delivery-head strong {
+  display: block;
+  color: #ffffff;
+  font-size: clamp(18px, 1.45vw, 26px);
+  font-weight: 950;
+  line-height: 0.9;
+}
+
+.acomp-delivery-head small {
+  display: block;
+  margin-top: 1px;
+  color: #93c5fd;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.acomp-delivery-head span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #cbd5e1;
+  font-size: 9px;
+  font-weight: 850;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.acomp-delivery-head span small {
+  color: #93c5fd;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.acomp-delivery-chart {
+  display: block;
+  width: 100%;
+  height: 34px;
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.acomp-delivery-chart line {
+  stroke: rgba(226, 232, 240, 0.18);
+  stroke-width: 1;
+}
+
+.acomp-delivery-chart rect {
+  fill: rgba(255, 107, 0, 0.58);
+}
+
+.acomp-delivery-chart polyline {
+  fill: none;
+  stroke: #60a5fa;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  filter: drop-shadow(0 8px 14px rgba(96, 165, 250, 0.28));
+}
+
+.acomp-delivery-chart circle {
+  fill: #ffb366;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+}
+
+.acomp-delivery-days {
+  display: flex;
+  justify-content: space-between;
+  color: #93c5fd;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.acomp-agenda-stack {
+  grid-area: agenda;
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 0.82fr) minmax(92px, 0.98fr);
+  gap: clamp(6px, 0.5vw, 8px);
+}
+
+.acomp-agenda-panel {
+  align-self: stretch;
+}
+
+.acomp-agenda-stack .acomp-agenda-panel {
+  grid-area: auto;
+}
+
+.acomp-agenda-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.acomp-agenda-item {
+  display: grid;
+  min-height: 30px;
+  grid-template-columns: minmax(0, 1fr) 70px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 11px;
+  background:
+    linear-gradient(135deg, rgba(255, 107, 0, 0.14), rgba(96, 165, 250, 0.08)),
+    rgba(255, 255, 255, 0.06);
+  padding: 4px 6px 4px 9px;
+}
+
+.acomp-agenda-item div {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.acomp-agenda-item strong {
+  display: block;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: clamp(9px, 0.6vw, 11px);
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-agenda-item small {
+  display: inline-flex;
+  width: 70px;
+  max-width: 70px;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(96, 165, 250, 0.18);
+  padding: 3px 4px;
+  color: #dbeafe;
+  font-size: 8px;
+  font-weight: 950;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.acomp-delivery-hours-panel {
+  grid-area: technicians;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.acomp-delivery-hours-date {
+  margin-top: -2px;
+  color: #93c5fd;
+  font-size: clamp(9px, 0.62vw, 11px);
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.acomp-delivery-hours-grid {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.acomp-delivery-hour {
+  display: flex;
+  min-height: 37px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 107, 0, 0.16), rgba(96, 165, 250, 0.08)),
+    rgba(255, 255, 255, 0.07);
+  padding: 6px 8px;
+}
+
+.acomp-delivery-hour span,
+.acomp-delivery-hours-total span,
+.acomp-fines-panel span,
+.acomp-fines-panel small {
+  color: #bfdbfe;
+  font-size: clamp(8px, 0.58vw, 10px);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.acomp-delivery-hour strong {
+  color: #ffffff;
+  font-size: clamp(16px, 1.28vw, 24px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-delivery-hours-total {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  padding-top: 6px;
+}
+
+.acomp-delivery-hours-total strong {
+  color: #ffb366;
+  font-size: clamp(18px, 1.45vw, 28px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-fines-panel {
+  justify-content: flex-start;
+  gap: 4px;
+  padding-top: 9px;
+  padding-bottom: 8px;
+}
+
+.acomp-fines-panel .acomp-panel-title {
+  margin-bottom: 0;
+}
+
+.acomp-fines-content {
+  display: grid;
+  min-height: 0;
+  gap: 1px;
+}
+
+.acomp-fines-panel strong {
+  color: #ffffff;
+  font-size: clamp(23px, 1.7vw, 34px);
+  font-weight: 950;
+  line-height: 0.96;
+}
+
+.acomp-fines-panel small {
+  color: #fca5a5;
+}
+
+.acomp-daily-board {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: clamp(10px, 1vw, 16px);
+  overflow: hidden;
+}
+
+.acomp-daily-board-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+    rgba(0, 27, 77, 0.84);
+  padding: clamp(12px, 1vw, 18px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+}
+
+.acomp-daily-board-header span,
+.acomp-daily-section-title span,
+.acomp-daily-card > span {
+  color: #93c5fd;
+  font-size: clamp(11px, 0.8vw, 14px);
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.acomp-daily-board-header h2 {
+  margin: 3px 0 0;
+  color: #ffffff;
+  font-size: clamp(28px, 2.8vw, 54px);
+  font-weight: 950;
+  line-height: 0.96;
+}
+
+.acomp-daily-status {
+  min-width: clamp(180px, 14vw, 260px);
+  border-radius: 16px;
+  padding: 12px 16px;
+  text-align: right;
+}
+
+.acomp-daily-status strong,
+.acomp-daily-status small {
+  display: block;
+}
+
+.acomp-daily-status strong {
+  color: #ffffff;
+  font-size: clamp(24px, 2vw, 42px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-daily-status small {
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: clamp(11px, 0.78vw, 14px);
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.acomp-daily-status.is-good {
+  background: linear-gradient(135deg, #15803d, #16a34a);
+}
+
+.acomp-daily-status.is-warn {
+  background: linear-gradient(135deg, #b45309, #f59e0b);
+}
+
+.acomp-daily-status.is-bad {
+  background: linear-gradient(135deg, #991b1b, #dc2626);
+}
+
+.acomp-daily-grid {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: clamp(10px, 1vw, 16px);
+}
+
+.acomp-daily-whiteboard,
+.acomp-daily-card {
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.94)),
+    #ffffff;
+  color: #0f172a;
+  box-shadow:
+    0 24px 65px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.acomp-daily-whiteboard {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: clamp(12px, 1vw, 20px);
+}
+
+.acomp-daily-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.acomp-daily-section-title span,
+.acomp-daily-card > span {
+  color: #dc2626;
+}
+
+.acomp-daily-section-title strong {
+  color: #2563eb;
+  font-size: clamp(14px, 1.1vw, 21px);
+  font-weight: 950;
+}
+
+.acomp-daily-week-table {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: repeat(var(--daily-columns), minmax(0, 1fr));
+  gap: clamp(8px, 0.75vw, 13px);
+}
+
+.acomp-daily-day {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border: 2px solid rgba(37, 99, 235, 0.16);
+  border-radius: 16px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 34px, rgba(37, 99, 235, 0.06) 35px 36px),
+    rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.acomp-daily-day header {
+  border-bottom: 2px solid rgba(220, 38, 38, 0.18);
+  padding: clamp(8px, 0.8vw, 14px);
+}
+
+.acomp-daily-day header span,
+.acomp-daily-day header strong {
+  display: block;
+}
+
+.acomp-daily-day header span {
+  color: #dc2626;
+  font-size: clamp(11px, 0.82vw, 15px);
+  font-weight: 950;
+  text-transform: capitalize;
+}
+
+.acomp-daily-day header strong {
+  margin-top: 3px;
+  color: #1d4ed8;
+  font-size: clamp(18px, 1.5vw, 30px);
+  font-weight: 950;
+}
+
+.acomp-daily-hours {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 6px;
+  padding: clamp(8px, 0.8vw, 14px);
+}
+
+.acomp-daily-hours p,
+.acomp-daily-day footer,
+.acomp-daily-week-goals p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+}
+
+.acomp-daily-hours span,
+.acomp-daily-day footer span {
+  color: #dc2626;
+  font-size: clamp(12px, 0.95vw, 17px);
+  font-weight: 950;
+}
+
+.acomp-daily-hours strong {
+  color: #1d4ed8;
+  font-size: clamp(18px, 1.6vw, 32px);
+  font-weight: 950;
+}
+
+.acomp-daily-day footer {
+  border-top: 2px solid rgba(37, 99, 235, 0.14);
+  background: rgba(219, 234, 254, 0.72);
+  padding: clamp(8px, 0.8vw, 14px);
+}
+
+.acomp-daily-day footer strong {
+  color: #0f172a;
+  font-size: clamp(20px, 1.8vw, 36px);
+  font-weight: 950;
+}
+
+.acomp-daily-side {
+  display: grid;
+  min-height: 0;
+  gap: clamp(8px, 0.75vw, 13px);
+}
+
+.acomp-daily-card {
+  min-height: 0;
+  padding: clamp(12px, 1vw, 18px);
+  overflow: hidden;
+}
+
+.acomp-daily-card > strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: clamp(34px, 3.8vw, 72px);
+  font-weight: 950;
+  line-height: 0.92;
+}
+
+.acomp-daily-card > small {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: clamp(11px, 0.8vw, 14px);
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.acomp-daily-production {
+  background:
+    radial-gradient(circle at 92% 12%, rgba(34, 197, 94, 0.16), transparent 28%),
+    #ffffff;
+}
+
+.acomp-daily-scale {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.acomp-daily-scale p {
+  margin: 0;
+  color: #475569;
+  font-size: clamp(10px, 0.72vw, 13px);
+  font-weight: 850;
+}
+
+.acomp-daily-scale b {
+  color: #0f172a;
+}
+
+.acomp-daily-week-goals {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.acomp-daily-week-goals p {
+  border-left: 5px solid #ef4444;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 8px 10px;
+}
+
+.acomp-daily-week-goals p.is-good {
+  border-left-color: #22c55e;
+}
+
+.acomp-daily-week-goals p.is-warn {
+  border-left-color: #f59e0b;
+}
+
+.acomp-daily-week-goals span {
+  color: #475569;
+  font-size: clamp(11px, 0.78vw, 14px);
+  font-weight: 900;
+}
+
+.acomp-daily-week-goals strong {
+  color: #0f172a;
+  font-size: clamp(18px, 1.4vw, 28px);
+  font-weight: 950;
+}
+
+.acomp-daily-fines {
+  background:
+    radial-gradient(circle at 90% 15%, rgba(249, 115, 22, 0.18), transparent 30%),
+    #ffffff;
+}
+
+.acomp-match-stack {
+  grid-area: match;
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 0.82fr) minmax(0, 0.9fr);
+  gap: clamp(6px, 0.5vw, 8px);
+}
+
+.acomp-match-stack .acomp-match-panel {
+  grid-area: auto;
+  padding-bottom: 8px;
+}
+
+.acomp-weekly-production-panel {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.acomp-weekly-production-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.acomp-weekly-production-main.is-warn {
+  background: rgba(249, 115, 22, 0.24);
+}
+
+.acomp-weekly-production-main.is-bad {
+  border: 1px solid rgba(254, 202, 202, 0.28);
+  background:
+    linear-gradient(135deg, #dc2626 0%, #b91c1c 48%, #7f1d1d 100%);
+  box-shadow:
+    0 0 0 1px rgba(220, 38, 38, 0.28),
+    0 12px 28px rgba(220, 38, 38, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.acomp-weekly-production-main strong {
+  color: #ffffff;
+  font-size: clamp(24px, 1.7vw, 36px);
+  font-weight: 950;
+  line-height: 0.92;
+}
+
+.acomp-weekly-production-main span {
+  color: #dcfce7;
+  font-size: clamp(11px, 0.76vw, 14px);
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.acomp-weekly-production-main.is-warn span {
+  color: #fde68a;
+}
+
+.acomp-weekly-production-main.is-bad span {
+  color: #fecaca;
+}
+
+.acomp-weekly-production-scale {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.acomp-weekly-production-scale p {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-height: 30px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 4px 5px;
+  margin: 0;
+  color: #cbd5e1;
+  font-size: clamp(7px, 0.48vw, 9px);
+  font-weight: 850;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.acomp-weekly-production-scale p.is-good {
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.acomp-weekly-production-scale p.is-warn {
+  background: rgba(249, 115, 22, 0.16);
+}
+
+.acomp-weekly-production-scale p.is-bad {
+  border: 1px solid rgba(254, 202, 202, 0.22);
+  background:
+    linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%);
+}
+
+.acomp-weekly-production-scale b {
+  color: #ffffff;
+}
+
+.acomp-weekly-production-scale span {
+  color: #bfdbfe;
+}
+
+.acomp-weekly-production-scale p.is-good span {
+  color: #bbf7d0;
+}
+
+.acomp-weekly-production-scale p.is-warn span {
+  color: #fed7aa;
+}
+
+.acomp-weekly-production-scale p.is-bad span {
+  color: #fecaca;
+}
+
+.acomp-atendentes-panel {
+  grid-area: attendants;
+}
+
+.acomp-cidades-panel {
+  grid-area: cities;
+}
+
+.acomp-atendentes-panel .acomp-ranking-list,
+.acomp-entregas-regionais-panel .acomp-ranking-list {
+  gap: 4px;
+}
+
+.acomp-regionais-panel .acomp-ranking-list,
+.acomp-tecnicos-panel .acomp-ranking-list {
+  justify-content: space-evenly;
+}
+
+.acomp-regionais-panel {
+  grid-area: openregs;
+}
+
+.acomp-tecnicos-panel {
+  grid-area: technicians;
+}
+
+.acomp-entregas-regionais-panel {
+  grid-area: deliveries;
+}
+
+.acomp-entregas-regionais-panel .acomp-rank-row {
+  min-height: 25px;
+  align-items: flex-start;
+}
+
+.acomp-entregas-regionais-panel .acomp-ranking-list {
+  flex: 1 1 auto;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.acomp-entregas-regionais-panel .acomp-rank-pos {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.acomp-entregas-regionais-panel .acomp-rank-label span,
+.acomp-entregas-regionais-panel .acomp-rank-label strong {
+  font-size: clamp(9px, 0.64vw, 12px);
+}
+
+.acomp-entregas-regionais-panel .acomp-bar-track {
+  height: 4px;
+  margin-top: 3px;
+}
+
+.acomp-entregas-regionais-panel .acomp-rank-subline {
+  margin-top: 2px;
+  font-size: clamp(7px, 0.5vw, 9px);
+}
+
+.acomp-atendentes-panel .acomp-rank-row {
+  min-height: 21px;
+}
+
+.acomp-atendentes-panel .acomp-rank-pos {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.acomp-atendentes-panel .acomp-rank-label span,
+.acomp-atendentes-panel .acomp-rank-label strong {
+  font-size: clamp(10px, 0.7vw, 12px);
+}
+
+.acomp-atendentes-panel .acomp-bar-track {
+  height: 4px;
+  margin-top: 3px;
+}
+
+.acomp-match-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+  align-content: center;
+}
+
+.acomp-match-grid div {
+  min-height: 72px;
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 107, 0, 0.16), rgba(96, 165, 250, 0.12)),
+    rgba(255, 255, 255, 0.06);
+  padding: 11px 12px;
+}
+
+.acomp-match-grid strong {
+  display: block;
+  font-size: clamp(24px, 1.65vw, 34px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-match-grid span {
+  display: block;
+  margin-top: 5px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.acomp-empty {
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.acomp-ticker {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background:
+    linear-gradient(90deg, rgba(255, 107, 0, 0.18), rgba(0, 48, 135, 0.7)),
+    rgba(0, 27, 77, 0.82);
+  min-height: 42px;
+  padding: 7px 12px;
+}
+
+.acomp-ticker-label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  color: #ffb366;
+  font-size: 13px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.acomp-ticker-window {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.acomp-ticker-track {
+  display: inline-flex;
+  gap: 28px;
+  white-space: nowrap;
+  animation: acompTicker 42s linear infinite;
+}
+
+.acomp-ticker-track span {
+  color: #e2e8f0;
+  font-size: clamp(13px, 0.95vw, 17px);
+  font-weight: 750;
+}
+
+.acomp-config-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.72);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+}
+
+.acomp-config-card {
+  width: min(920px, 96vw);
+  max-height: 92vh;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(0, 48, 135, 0.98), rgba(0, 27, 77, 0.98)),
+    #003087;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+  padding: 22px;
+}
+
+.acomp-config-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.acomp-config-header span {
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.acomp-config-header h2 {
+  margin: 4px 0 0;
+  color: #f8fafc;
+  font-size: clamp(22px, 2vw, 34px);
+  font-weight: 950;
+}
+
+.acomp-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.acomp-config-toggle {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(0, 27, 77, 0.64);
+  padding: 12px;
+  color: #cbd5e1;
+  text-align: left;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.acomp-config-toggle.is-on {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.12);
+  color: #ecfdf5;
+}
+
+.acomp-config-toggle span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-config-toggle strong {
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.acomp-config-label {
+  display: block;
+  margin-top: 18px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.acomp-config-label textarea {
+  display: block;
+  width: 100%;
+  margin-top: 9px;
+  resize: vertical;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 18px;
+  background: rgba(2, 6, 23, 0.52);
+  padding: 14px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 650;
+  outline: none;
+}
+
+.acomp-config-label textarea:focus {
+  border-color: rgba(96, 165, 250, 0.7);
+}
+
+.acomp-config-ads {
+  margin-top: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 18px;
+  background: rgba(2, 6, 23, 0.22);
+  padding: 14px;
+}
+
+.acomp-config-ads-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.acomp-config-ads-header span {
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.acomp-config-ads-header h3 {
+  margin: 3px 0 0;
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.acomp-config-ad-switch {
+  min-width: 220px;
+}
+
+.acomp-config-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.acomp-config-time-grid label {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.acomp-config-time-grid input {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.52);
+  padding: 11px 12px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 850;
+  outline: none;
+}
+
+.acomp-config-time-grid select {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.52);
+  padding: 11px 12px;
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 850;
+  outline: none;
+}
+
+.acomp-meta-test-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.acomp-meta-test-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.acomp-meta-test-row button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.acomp-meta-test-row .is-alert {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(185, 28, 28, 0.78);
+}
+
+.acomp-meta-test-row .is-ok {
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(21, 128, 61, 0.78);
+}
+
+.acomp-meta-test-row .is-festive {
+  border-color: rgba(250, 204, 21, 0.5);
+  background: rgba(217, 119, 6, 0.78);
+}
+
+.acomp-config-help-card {
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  border: 1px solid rgba(147, 197, 253, 0.16);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.42);
+  padding: 12px 14px;
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.acomp-ad-upload-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.acomp-ad-upload-row small {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.acomp-ad-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #ff6b00;
+  padding: 11px 14px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.acomp-ad-test-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-radius: 12px;
+  background: rgba(96, 165, 250, 0.16);
+  padding: 11px 14px;
+  color: #dbeafe;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.acomp-ad-test-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.acomp-ad-upload.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.acomp-ad-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.acomp-config-error {
+  margin-top: 10px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.15);
+  padding: 10px 12px;
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.acomp-ad-images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.acomp-ad-thumb {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.acomp-ad-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.acomp-ad-thumb span {
+  display: block;
+  overflow: hidden;
+  padding: 9px 42px 9px 10px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-ad-thumb button {
+  position: absolute;
+  right: 7px;
+  bottom: 6px;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+}
+
+.acomp-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.acomp-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: #ff6b00;
+  padding: 12px 16px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 950;
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
+}
+
+.acomp-save-btn:hover {
+  transform: translateY(-1px);
+  background: #fb923c;
+}
+
+.acomp-ad-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #020617;
+  animation: acompAdFade 450ms ease both;
+}
+
+.acomp-ad-overlay img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.acomp-festive-page.is-christmas .acomp-shell {
+  isolation: isolate;
+}
+
+.acomp-festive-page.is-christmas {
+  background:
+    radial-gradient(circle at 14% 16%, rgba(250, 204, 21, 0.14), transparent 22%),
+    radial-gradient(circle at 82% 14%, rgba(239, 68, 68, 0.16), transparent 24%),
+    radial-gradient(circle at 50% 102%, rgba(255, 255, 255, 0.22), transparent 18%),
+    linear-gradient(135deg, #061726 0%, #08281f 42%, #040b16 100%);
+}
+
+.acomp-festive-page.is-christmas::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  height: 34px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 2% 12px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 7% 10px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 12% 12px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 17% 10px, #38bdf8 0 4px, transparent 4.8px),
+    radial-gradient(circle at 22% 12px, #f472b6 0 4px, transparent 4.8px),
+    radial-gradient(circle at 27% 10px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 32% 12px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 37% 10px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 42% 12px, #38bdf8 0 4px, transparent 4.8px),
+    radial-gradient(circle at 47% 10px, #f472b6 0 4px, transparent 4.8px),
+    radial-gradient(circle at 52% 12px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 57% 10px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 62% 12px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 67% 10px, #38bdf8 0 4px, transparent 4.8px),
+    radial-gradient(circle at 72% 12px, #f472b6 0 4px, transparent 4.8px),
+    radial-gradient(circle at 77% 10px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 82% 12px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 87% 10px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 92% 12px, #38bdf8 0 4px, transparent 4.8px),
+    radial-gradient(circle at 97% 10px, #f472b6 0 4px, transparent 4.8px);
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.52));
+  animation: acompChristmasLights 2.4s ease-in-out infinite;
+}
+
+.acomp-festive-page.is-christmas::after {
+  content: "";
+  position: fixed;
+  left: -4vw;
+  right: -4vw;
+  bottom: -22px;
+  z-index: 2;
+  height: 76px;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 6% 74%, rgba(255, 255, 255, 0.98) 0 44px, transparent 45px),
+    radial-gradient(ellipse at 18% 82%, rgba(255, 255, 255, 0.95) 0 42px, transparent 43px),
+    radial-gradient(ellipse at 32% 78%, rgba(255, 255, 255, 0.98) 0 48px, transparent 49px),
+    radial-gradient(ellipse at 48% 84%, rgba(255, 255, 255, 0.95) 0 42px, transparent 43px),
+    radial-gradient(ellipse at 65% 78%, rgba(255, 255, 255, 0.98) 0 48px, transparent 49px),
+    radial-gradient(ellipse at 82% 84%, rgba(255, 255, 255, 0.95) 0 42px, transparent 43px),
+    radial-gradient(ellipse at 96% 76%, rgba(255, 255, 255, 0.98) 0 46px, transparent 47px);
+  opacity: 0.9;
+}
+
+.acomp-festive-page.is-christmas .acomp-bg-grid {
+  opacity: 0.22;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.32) 0 1px, transparent 1.5px),
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 96px 96px, 64px 64px, 64px 64px;
+}
+
+.acomp-festive-page.is-christmas .acomp-brand img {
+  border-color: rgba(250, 204, 21, 0.72);
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.35),
+    0 0 0 5px rgba(127, 29, 29, 0.72),
+    0 0 0 7px rgba(250, 204, 21, 0.58);
+}
+
+.acomp-festive-page.is-christmas .acomp-brand span {
+  color: #fbbf24;
+  font-size: clamp(18px, 1.55vw, 28px);
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: none;
+  text-shadow: 0 5px 16px rgba(0, 0, 0, 0.46);
+}
+
+.acomp-festive-page.is-christmas .acomp-brand h1 {
+  color: #fff7ed;
+  text-shadow:
+    0 5px 16px rgba(0, 0, 0, 0.54),
+    0 0 22px rgba(250, 204, 21, 0.18);
+}
+
+.acomp-festive-page.is-christmas .acomp-header {
+  position: relative;
+}
+
+.acomp-festive-page.is-christmas .acomp-header::before,
+.acomp-festive-page.is-christmas .acomp-header::after {
+  content: "";
+  position: absolute;
+  top: -12px;
+  z-index: 0;
+  width: 170px;
+  height: 82px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 64%, #dc2626 0 7px, transparent 7.8px),
+    radial-gradient(circle at 35% 36%, #facc15 0 6px, transparent 6.8px),
+    radial-gradient(circle at 55% 56%, #22c55e 0 7px, transparent 7.8px),
+    radial-gradient(ellipse at 18% 34%, rgba(22, 101, 52, 0.92) 0 18px, transparent 19px),
+    radial-gradient(ellipse at 34% 26%, rgba(21, 128, 61, 0.92) 0 20px, transparent 21px),
+    radial-gradient(ellipse at 52% 30%, rgba(22, 101, 52, 0.92) 0 18px, transparent 19px);
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.25));
+  opacity: 0.88;
+}
+
+.acomp-festive-page.is-christmas .acomp-header::before {
+  left: -26px;
+}
+
+.acomp-festive-page.is-christmas .acomp-header::after {
+  right: -26px;
+  transform: scaleX(-1);
+}
+
+.acomp-festive-page.is-christmas .acomp-brand,
+.acomp-festive-page.is-christmas .acomp-live {
+  position: relative;
+  z-index: 1;
+}
+
+.acomp-festive-page.is-christmas .acomp-live {
+  border-color: rgba(250, 204, 21, 0.72);
+  background:
+    linear-gradient(135deg, rgba(185, 28, 28, 0.95), rgba(127, 29, 29, 0.88)),
+    #7f1d1d;
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi,
+.acomp-festive-page.is-christmas .acomp-panel {
+  border-color: rgba(250, 204, 21, 0.76);
+  background:
+    radial-gradient(circle at 92% 8%, rgba(250, 204, 21, 0.13), transparent 18%),
+    linear-gradient(145deg, rgba(6, 78, 59, 0.92), rgba(6, 35, 31, 0.9)),
+    #052e2b;
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(250, 204, 21, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(4),
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(5),
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(6),
+.acomp-festive-page.is-christmas .acomp-spotlight,
+.acomp-festive-page.is-christmas .acomp-cidades-panel {
+  background:
+    radial-gradient(circle at 90% 10%, rgba(250, 204, 21, 0.14), transparent 20%),
+    linear-gradient(145deg, rgba(127, 29, 29, 0.95), rgba(69, 10, 10, 0.92)),
+    #7f1d1d;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi {
+  border-radius: 18px;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi p,
+.acomp-festive-page.is-christmas .acomp-panel-title h2,
+.acomp-festive-page.is-christmas .acomp-match-grid span,
+.acomp-festive-page.is-christmas .acomp-kpi span {
+  color: #fff7ed;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi strong,
+.acomp-festive-page.is-christmas .acomp-match-grid strong {
+  color: #fffaf0;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.36);
+}
+
+.acomp-festive-page.is-christmas .acomp-panel-title {
+  color: #fbbf24;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi-icon,
+.acomp-festive-page.is-christmas .acomp-rank-pos.pos-1 {
+  background:
+    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.52), transparent 26%),
+    linear-gradient(145deg, #fbbf24, #b45309);
+  color: #431407;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight {
+  border: 4px solid transparent;
+  background:
+    linear-gradient(145deg, rgba(127, 29, 29, 0.96), rgba(69, 10, 10, 0.9)) padding-box,
+    repeating-linear-gradient(
+      135deg,
+      #f8fafc 0 10px,
+      #f8fafc 10px 18px,
+      #dc2626 18px 28px,
+      #dc2626 28px 36px
+    ) border-box;
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy span {
+  background: rgba(250, 204, 21, 0.2);
+  color: #fde68a;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy h1 {
+  color: #fff7ed;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy h1::first-line {
+  color: #facc15;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-number {
+  color: #fffaf0;
+  text-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(250, 204, 21, 0.18);
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight img {
+  width: min(38%, 260px);
+  max-height: 230px;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 20px 22px rgba(0, 0, 0, 0.34))
+    drop-shadow(0 0 16px rgba(250, 204, 21, 0.18));
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi::before,
+.acomp-festive-page.is-christmas .acomp-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 0;
+  height: 18px;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 10% 7px, #ef4444 0 3px, transparent 3.6px),
+    radial-gradient(circle at 24% 8px, #facc15 0 2.8px, transparent 3.4px),
+    radial-gradient(circle at 38% 7px, #22c55e 0 3px, transparent 3.6px),
+    radial-gradient(circle at 52% 8px, #60a5fa 0 2.8px, transparent 3.4px),
+    radial-gradient(circle at 66% 7px, #ef4444 0 3px, transparent 3.6px),
+    radial-gradient(circle at 80% 8px, #facc15 0 2.8px, transparent 3.4px),
+    radial-gradient(circle at 94% 7px, #22c55e 0 3px, transparent 3.6px);
+  background-size: 100% 18px;
+  opacity: 0.95;
+  pointer-events: none;
+  animation: acompChristmasLights 2.4s ease-in-out infinite;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi::after,
+.acomp-festive-page.is-christmas .acomp-panel::after {
+  content: "";
+  position: absolute;
+  right: clamp(10px, 1vw, 18px);
+  top: 0;
+  z-index: 0;
+  width: 56px;
+  height: 64px;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.1)) 10px 0 / 1px 28px no-repeat,
+    radial-gradient(circle at 10px 34px, #ef4444 0 8px, #991b1b 8.5px 10px, transparent 10.5px),
+    linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.1)) 36px 0 / 1px 20px no-repeat,
+    radial-gradient(circle at 36px 26px, #facc15 0 7px, #a16207 7.5px 9px, transparent 9.5px),
+    radial-gradient(circle at 20px 52px, rgba(255, 255, 255, 0.48), transparent 16px);
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.2));
+  opacity: 0.88;
+  transform-origin: top center;
+  animation: acompChristmasOrnaments 3.8s ease-in-out infinite;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(2n)::after,
+.acomp-festive-page.is-christmas .acomp-panel:nth-child(2n)::after {
+  left: clamp(12px, 1vw, 20px);
+  right: auto;
+  transform: scaleX(-1);
+  animation-delay: -1.2s;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight::before {
+  height: 24px;
+  background:
+    radial-gradient(circle at 8% 9px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 18% 10px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 28% 9px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 38% 10px, #60a5fa 0 4px, transparent 4.8px),
+    radial-gradient(circle at 48% 9px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 58% 10px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 68% 9px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 78% 10px, #60a5fa 0 4px, transparent 4.8px),
+    radial-gradient(circle at 88% 9px, #facc15 0 4px, transparent 4.8px);
+}
+
+.acomp-festive-page.is-christmas .acomp-status-panel::after,
+.acomp-festive-page.is-christmas .acomp-match-panel::after,
+.acomp-festive-page.is-christmas .acomp-agenda-panel::after,
+.acomp-festive-page.is-christmas .acomp-fines-panel::after,
+.acomp-festive-page.is-christmas .acomp-recent-deliveries-panel::after,
+.acomp-festive-page.is-christmas .acomp-tecnicos-panel::after,
+.acomp-festive-page.is-christmas .acomp-delivery-hours-panel::after,
+.acomp-festive-page.is-christmas .acomp-weekly-production-panel::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  bottom: -12px;
+  top: auto;
+  left: auto;
+  z-index: 0;
+  width: clamp(76px, 8.5vw, 140px);
+  height: clamp(76px, 8.5vw, 140px);
+  pointer-events: none;
+  background: url("/retorninho-xmas-gift.png") right bottom / contain no-repeat;
+  filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.32));
+  opacity: 0.74;
+  transform: none;
+  animation: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-match-panel::after {
+  right: -18px;
+  bottom: -16px;
+  width: clamp(110px, 13vw, 205px);
+  height: clamp(88px, 10vw, 160px);
+  background-image: url("/retorninho-xmas-tree.png");
+  opacity: 0.62;
+}
+
+.acomp-festive-page.is-christmas .acomp-agenda-panel::after,
+.acomp-festive-page.is-christmas .acomp-fines-panel::after,
+.acomp-festive-page.is-christmas .acomp-recent-deliveries-panel::after {
+  opacity: 0.48;
+}
+
+.acomp-festive-page.is-christmas .acomp-tecnicos-panel::after,
+.acomp-festive-page.is-christmas .acomp-delivery-hours-panel::after {
+  left: -10px;
+  right: auto;
+  opacity: 0.54;
+}
+
+.acomp-festive-page.is-christmas .acomp-status-panel .acomp-status-retorninho {
+  z-index: 1;
+  transform: translateY(4px);
+  filter:
+    drop-shadow(0 18px 18px rgba(0, 0, 0, 0.3))
+    drop-shadow(0 0 14px rgba(250, 204, 21, 0.2));
+}
+
+.acomp-festive-page.is-christmas {
+  background:
+    radial-gradient(circle at 50% 4%, rgba(250, 204, 21, 0.13), transparent 18%),
+    radial-gradient(circle at 12% 18%, rgba(14, 165, 233, 0.16), transparent 22%),
+    radial-gradient(circle at 86% 26%, rgba(239, 68, 68, 0.12), transparent 24%),
+    linear-gradient(180deg, #06131f 0%, #06283a 36%, #073422 100%);
+}
+
+.acomp-festive-page.is-christmas .acomp-shell {
+  z-index: 5;
+  gap: clamp(8px, 0.68vw, 12px);
+  padding: clamp(12px, 1.15vw, 20px) clamp(16px, 1.8vw, 30px) clamp(12px, 1.25vw, 22px);
+}
+
+.acomp-xmas-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.acomp-xmas-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 17%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 64% 12%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 82% 44%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 34% 54%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.5px),
+    linear-gradient(180deg, rgba(3, 7, 18, 0.08), rgba(3, 7, 18, 0.34));
+  background-size: 170px 170px, 210px 210px, 250px 250px, 190px 190px, 100% 100%;
+}
+
+.acomp-xmas-corner {
+  position: absolute;
+  top: 5px;
+  width: 210px;
+  height: 118px;
+  background:
+    radial-gradient(circle at 16% 64%, #dc2626 0 8px, transparent 9px),
+    radial-gradient(circle at 31% 42%, #facc15 0 6px, transparent 7px),
+    radial-gradient(circle at 45% 70%, #ef4444 0 7px, transparent 8px),
+    radial-gradient(circle at 61% 48%, #22c55e 0 6px, transparent 7px),
+    radial-gradient(ellipse at 15% 29%, rgba(22, 101, 52, 0.98) 0 28px, transparent 29px),
+    radial-gradient(ellipse at 33% 22%, rgba(21, 128, 61, 0.98) 0 34px, transparent 35px),
+    radial-gradient(ellipse at 55% 28%, rgba(22, 101, 52, 0.98) 0 30px, transparent 31px),
+    radial-gradient(ellipse at 78% 22%, rgba(20, 83, 45, 0.95) 0 25px, transparent 26px);
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.34));
+  opacity: 0.96;
+}
+
+.acomp-xmas-corner-left {
+  left: -26px;
+}
+
+.acomp-xmas-corner-right {
+  right: -26px;
+  transform: scaleX(-1);
+}
+
+.acomp-xmas-snow-floor {
+  position: absolute;
+  right: -5vw;
+  bottom: -30px;
+  left: -5vw;
+  height: 108px;
+  background:
+    radial-gradient(ellipse at 5% 70%, rgba(255, 255, 255, 0.98) 0 50px, transparent 51px),
+    radial-gradient(ellipse at 17% 86%, rgba(255, 255, 255, 0.96) 0 46px, transparent 47px),
+    radial-gradient(ellipse at 31% 76%, rgba(255, 255, 255, 0.99) 0 54px, transparent 55px),
+    radial-gradient(ellipse at 48% 88%, rgba(255, 255, 255, 0.96) 0 50px, transparent 51px),
+    radial-gradient(ellipse at 66% 78%, rgba(255, 255, 255, 0.99) 0 56px, transparent 57px),
+    radial-gradient(ellipse at 84% 88%, rgba(255, 255, 255, 0.96) 0 50px, transparent 51px),
+    radial-gradient(ellipse at 98% 72%, rgba(255, 255, 255, 0.99) 0 54px, transparent 55px);
+  opacity: 0.95;
+}
+
+.acomp-festive-page.is-christmas .acomp-header {
+  min-height: clamp(66px, 6vw, 92px);
+  align-items: flex-start;
+  padding-top: 18px;
+}
+
+.acomp-festive-page.is-christmas .acomp-brand {
+  align-items: flex-start;
+}
+
+.acomp-festive-page.is-christmas .acomp-brand img {
+  width: clamp(124px, 10vw, 190px);
+  height: clamp(52px, 4.5vw, 82px);
+  border-radius: 18px;
+  border-color: #f59e0b;
+  background: #082f49;
+  box-shadow:
+    0 0 0 3px rgba(127, 29, 29, 0.96),
+    0 0 0 5px rgba(245, 158, 11, 0.88),
+    0 18px 36px rgba(0, 0, 0, 0.38);
+}
+
+.acomp-festive-page.is-christmas .acomp-brand span {
+  margin-top: -3px;
+  color: #fbbf24;
+  font-family: "Segoe Script", "Brush Script MT", cursive;
+  font-size: clamp(20px, 2.05vw, 40px);
+  font-weight: 900;
+  line-height: 0.92;
+  text-transform: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-brand h1 {
+  margin-top: 0;
+  color: #fff7ed;
+  font-size: clamp(29px, 3.1vw, 58px);
+  line-height: 0.9;
+  text-shadow:
+    0 4px 0 rgba(15, 23, 42, 0.22),
+    0 10px 20px rgba(0, 0, 0, 0.48);
+}
+
+.acomp-festive-page.is-christmas .acomp-live {
+  min-width: clamp(260px, 19vw, 360px);
+  border: 2px solid rgba(250, 204, 21, 0.84);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 92% 10%, rgba(250, 204, 21, 0.2), transparent 28%),
+    linear-gradient(135deg, #b91c1c, #7f1d1d 58%, #451a03);
+  padding: 12px 14px;
+}
+
+.acomp-festive-page.is-christmas .acomp-settings-btn {
+  border-color: rgba(250, 204, 21, 0.58);
+  background: rgba(127, 29, 29, 0.62);
+}
+
+.acomp-festive-page.is-christmas .acomp-main-grid {
+  grid-template-columns: minmax(330px, 1.22fr) repeat(4, minmax(180px, 1fr)) minmax(250px, 1.08fr);
+  grid-template-areas:
+    "spotlight kpis kpis kpis kpis kpis"
+    "spotlight status status status latest deliveries"
+    "match attendants cities openregs agenda deliveries"
+    "technicians attendants cities daily agenda deliveries";
+  grid-template-rows: minmax(112px, 0.82fr) minmax(110px, 0.62fr) minmax(170px, 1.08fr) minmax(140px, 0.9fr);
+  gap: clamp(9px, 0.78vw, 15px);
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi,
+.acomp-festive-page.is-christmas .acomp-panel,
+.acomp-festive-page.is-christmas .acomp-ticker {
+  border: 2px solid rgba(245, 158, 11, 0.9);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 94% 8%, rgba(250, 204, 21, 0.16), transparent 20%),
+    linear-gradient(145deg, rgba(6, 78, 59, 0.96), rgba(5, 46, 22, 0.92)),
+    #052e16;
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(251, 191, 36, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(4),
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(5),
+.acomp-festive-page.is-christmas .acomp-kpi:nth-child(6),
+.acomp-festive-page.is-christmas .acomp-spotlight,
+.acomp-festive-page.is-christmas .acomp-cidades-panel,
+.acomp-festive-page.is-christmas .acomp-atendentes-panel {
+  background:
+    radial-gradient(circle at 91% 8%, rgba(250, 204, 21, 0.14), transparent 22%),
+    linear-gradient(145deg, rgba(127, 29, 29, 0.98), rgba(69, 10, 10, 0.94)),
+    #7f1d1d;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi {
+  min-height: 106px;
+  align-items: center;
+  padding: 14px 14px 14px 16px;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi-icon {
+  width: clamp(44px, 3.2vw, 64px);
+  height: clamp(44px, 3.2vw, 64px);
+  flex-basis: clamp(44px, 3.2vw, 64px);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.48), transparent 26%),
+    linear-gradient(145deg, #facc15, #b45309);
+  color: #451a03;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi p {
+  color: #fff7ed;
+  font-size: clamp(9px, 0.58vw, 12px);
+  line-height: 1.05;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi strong {
+  margin-top: 6px;
+  color: #fffaf0;
+  font-size: clamp(24px, 1.9vw, 40px);
+  line-height: 0.95;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi span {
+  color: #fff7ed;
+  font-size: clamp(8px, 0.54vw, 11px);
+  line-height: 1.12;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi::before,
+.acomp-festive-page.is-christmas .acomp-panel::before,
+.acomp-festive-page.is-christmas .acomp-ticker::before {
+  height: 24px;
+  border-radius: 14px 14px 0 0;
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.46), rgba(0, 0, 0, 0.04)) 0 0 / 100% 1px no-repeat,
+    radial-gradient(circle at 8% 9px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 18% 11px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 28% 9px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 38% 11px, #38bdf8 0 4px, transparent 4.8px),
+    radial-gradient(circle at 48% 9px, #f472b6 0 4px, transparent 4.8px),
+    radial-gradient(circle at 58% 11px, #facc15 0 4px, transparent 4.8px),
+    radial-gradient(circle at 68% 9px, #ef4444 0 4px, transparent 4.8px),
+    radial-gradient(circle at 78% 11px, #22c55e 0 4px, transparent 4.8px),
+    radial-gradient(circle at 88% 9px, #38bdf8 0 4px, transparent 4.8px);
+  opacity: 1;
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi::after,
+.acomp-festive-page.is-christmas .acomp-panel::after {
+  width: 76px;
+  height: 52px;
+  background:
+    radial-gradient(ellipse at 16% 34%, rgba(22, 101, 52, 0.95) 0 14px, transparent 15px),
+    radial-gradient(ellipse at 34% 26%, rgba(21, 128, 61, 0.95) 0 16px, transparent 17px),
+    radial-gradient(ellipse at 54% 34%, rgba(20, 83, 45, 0.95) 0 14px, transparent 15px),
+    radial-gradient(circle at 26% 54%, #dc2626 0 5px, transparent 5.8px),
+    radial-gradient(circle at 44% 42%, #facc15 0 4px, transparent 4.8px);
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.26));
+}
+
+.acomp-festive-page.is-christmas .acomp-kpi::after {
+  display: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight {
+  border: 5px solid transparent;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 90% 18%, rgba(250, 204, 21, 0.2), transparent 19%) padding-box,
+    linear-gradient(145deg, rgba(127, 29, 29, 0.98), rgba(69, 10, 10, 0.94)) padding-box,
+    repeating-linear-gradient(135deg, #f8fafc 0 12px, #f8fafc 12px 22px, #dc2626 22px 34px, #dc2626 34px 44px) border-box;
+}
+
+.acomp-festive-page.is-christmas .acomp-xmas-ribbon {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 18% 15%, rgba(250, 204, 21, 0.3) 0 1px, transparent 2px),
+    radial-gradient(circle at 65% 45%, rgba(250, 204, 21, 0.25) 0 1px, transparent 2px),
+    linear-gradient(115deg, transparent 0 61%, rgba(255, 255, 255, 0.06) 61% 66%, transparent 66%);
+  background-size: 55px 55px, 70px 70px, 100% 100%;
+  pointer-events: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-xmas-snowbank {
+  position: absolute;
+  right: -6px;
+  bottom: -18px;
+  left: -6px;
+  z-index: 1;
+  height: 58px;
+  background:
+    radial-gradient(ellipse at 12% 70%, rgba(255, 255, 255, 0.96) 0 26px, transparent 27px),
+    radial-gradient(ellipse at 38% 84%, rgba(255, 255, 255, 0.96) 0 30px, transparent 31px),
+    radial-gradient(ellipse at 68% 74%, rgba(255, 255, 255, 0.96) 0 28px, transparent 29px),
+    radial-gradient(ellipse at 94% 84%, rgba(255, 255, 255, 0.96) 0 30px, transparent 31px);
+  pointer-events: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy {
+  z-index: 3;
+  width: min(60%, 340px);
+  min-width: 0;
+  padding: clamp(18px, 1.45vw, 28px);
+  padding-right: 8px;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy span {
+  max-width: 100%;
+  border-radius: 9px;
+  background: rgba(146, 64, 14, 0.72);
+  color: #fff7ed;
+  font-size: clamp(10px, 0.68vw, 13px);
+  line-height: 1.15;
+  white-space: normal;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy h1 {
+  max-width: 100%;
+  color: #fff7ed;
+  font-size: clamp(22px, 1.65vw, 36px);
+  line-height: 1.02;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy h1::first-line {
+  color: #fff7ed;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-number {
+  font-size: clamp(48px, 4.2vw, 86px);
+  line-height: 0.84;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight img {
+  right: clamp(8px, 1vw, 18px);
+  bottom: clamp(22px, 2.3vw, 42px);
+  z-index: 2;
+  width: clamp(96px, 9vw, 190px);
+  max-height: 48%;
+  object-position: right bottom;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-green img {
+  width: clamp(108px, 9.5vw, 205px);
+  max-height: 38%;
+}
+
+.acomp-festive-page.is-christmas .acomp-spotlight-copy p {
+  max-width: 100%;
+  font-size: clamp(11px, 0.78vw, 14px);
+  line-height: 1.16;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.acomp-festive-page.is-christmas .acomp-status-panel {
+  justify-content: flex-start;
+  padding: 12px clamp(235px, 26%, 360px) 12px 14px;
+}
+
+.acomp-festive-page.is-christmas .acomp-xmas-sleigh-trace {
+  position: absolute;
+  right: 128px;
+  bottom: 8px;
+  z-index: 0;
+  width: 160px;
+  height: 64px;
+  background:
+    radial-gradient(circle at 10% 72%, rgba(250, 204, 21, 0.9) 0 2px, transparent 3px),
+    radial-gradient(circle at 30% 62%, rgba(250, 204, 21, 0.8) 0 2px, transparent 3px),
+    radial-gradient(circle at 56% 50%, rgba(250, 204, 21, 0.7) 0 2px, transparent 3px),
+    linear-gradient(12deg, transparent 0 8%, rgba(250, 204, 21, 0.3) 8% 10%, transparent 10%);
+  opacity: 0.85;
+}
+
+.acomp-festive-page.is-christmas .acomp-status-pill,
+.acomp-festive-page.is-christmas .acomp-agenda-item,
+.acomp-festive-page.is-christmas .acomp-recent-delivery,
+.acomp-festive-page.is-christmas .acomp-delivery-hour,
+.acomp-festive-page.is-christmas .acomp-weekly-production-main,
+.acomp-festive-page.is-christmas .acomp-match-grid div {
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  background:
+    linear-gradient(145deg, rgba(15, 76, 117, 0.72), rgba(7, 45, 74, 0.72)),
+    rgba(255, 255, 255, 0.06);
+}
+
+.acomp-festive-page.is-christmas .acomp-status-retorninho {
+  right: clamp(4px, 1vw, 16px);
+  bottom: -12px;
+  width: clamp(250px, 30vw, 470px);
+  max-height: calc(100% + 40px);
+}
+
+.acomp-festive-page.is-christmas .acomp-status-panel::after {
+  display: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-match-panel::after {
+  right: -28px;
+  bottom: -26px;
+  width: clamp(190px, 20vw, 370px);
+  height: clamp(128px, 15vw, 260px);
+  opacity: 0.28;
+}
+
+.acomp-festive-page.is-christmas .acomp-tecnicos-panel::after,
+.acomp-festive-page.is-christmas .acomp-delivery-hours-panel::after,
+.acomp-festive-page.is-christmas .acomp-weekly-production-panel::after,
+.acomp-festive-page.is-christmas .acomp-agenda-panel::after,
+.acomp-festive-page.is-christmas .acomp-fines-panel::after,
+.acomp-festive-page.is-christmas .acomp-recent-deliveries-panel::after {
+  width: clamp(110px, 11vw, 205px);
+  height: clamp(110px, 11vw, 205px);
+  opacity: 0.28;
+}
+
+.acomp-festive-page.is-christmas .acomp-tecnicos-panel::after,
+.acomp-festive-page.is-christmas .acomp-delivery-hours-panel::after {
+  background-image: url("/retorninho-xmas-list.png");
+}
+
+.acomp-festive-page.is-christmas .acomp-agenda-panel::after,
+.acomp-festive-page.is-christmas .acomp-fines-panel::after,
+.acomp-festive-page.is-christmas .acomp-weekly-production-panel::after {
+  background-image: url("/retorninho-xmas-gift.png");
+}
+
+.acomp-festive-page.is-christmas .acomp-recent-deliveries-panel::after {
+  background-image: url("/retorninho-xmas-gift.png");
+}
+
+.acomp-festive-page.is-christmas .acomp-tecnicos-panel,
+.acomp-festive-page.is-christmas .acomp-delivery-hours-panel {
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+.acomp-festive-page.is-christmas .acomp-tecnicos-panel .acomp-empty,
+.acomp-festive-page.is-christmas .acomp-delivery-hours-panel .acomp-empty {
+  margin: auto 18px 28px;
+  min-height: 56px;
+  border-radius: 8px;
+  border: 2px solid rgba(120, 53, 15, 0.7);
+  background:
+    linear-gradient(180deg, rgba(120, 53, 15, 0.92), rgba(69, 26, 3, 0.92));
+  color: #fff7ed;
+  box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.2);
+}
+
+.acomp-festive-page.is-christmas .acomp-cidades-panel::after,
+.acomp-festive-page.is-christmas .acomp-regionais-panel::after,
+.acomp-festive-page.is-christmas .acomp-entregas-regionais-panel::after,
+.acomp-festive-page.is-christmas .acomp-delivery-panel::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 4px;
+  top: auto;
+  left: auto;
+  z-index: 0;
+  width: clamp(72px, 8vw, 150px);
+  height: clamp(50px, 6vw, 104px);
+  pointer-events: none;
+  background: url("/retorninho-xmas-tree.png") right bottom / contain no-repeat;
+  filter: drop-shadow(0 12px 12px rgba(0, 0, 0, 0.28));
+  opacity: 0.78;
+  transform: none;
+  animation: none;
+}
+
+.acomp-festive-page.is-christmas .acomp-cidades-panel::after {
+  right: -34px;
+  bottom: -28px;
+  width: clamp(120px, 12vw, 220px);
+  height: clamp(82px, 9vw, 162px);
+  opacity: 0.3;
+}
+
+.acomp-festive-page.is-christmas .acomp-regionais-panel::after {
+  right: -46px;
+  bottom: -34px;
+  background-image: url("/retorninho-xmas-gift.png");
+  opacity: 0.24;
+}
+
+.acomp-festive-page.is-christmas .acomp-entregas-regionais-panel::after {
+  right: -74px;
+  bottom: -54px;
+  width: clamp(130px, 13vw, 240px);
+  height: clamp(130px, 13vw, 240px);
+  background-image: url("/retorninho-xmas-gift.png");
+  opacity: 0.28;
+}
+
+.acomp-festive-page.is-christmas .acomp-delivery-panel::after {
+  right: -70px;
+  bottom: -52px;
+  width: clamp(150px, 14vw, 250px);
+  height: clamp(100px, 10vw, 180px);
+  background-image: url("/retorninho-xmas-sleigh.png");
+  opacity: 0.24;
+}
+
+.acomp-festive-page.is-christmas .acomp-rank-row {
+  min-height: 28px;
+}
+
+.acomp-festive-page.is-christmas .acomp-atendentes-panel .acomp-ranking-list {
+  gap: 3px;
+}
+
+.acomp-festive-page.is-christmas .acomp-atendentes-panel .acomp-rank-row {
+  min-height: 23px;
+}
+
+.acomp-festive-page.is-christmas .acomp-atendentes-panel .acomp-rank-pos {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  font-size: 10px;
+}
+
+.acomp-festive-page.is-christmas .acomp-atendentes-panel .acomp-rank-label span,
+.acomp-festive-page.is-christmas .acomp-atendentes-panel .acomp-rank-label strong {
+  font-size: clamp(9px, 0.62vw, 11px);
+}
+
+.acomp-festive-page.is-christmas .acomp-atendentes-panel .acomp-bar-track {
+  height: 3px;
+  margin-top: 2px;
+}
+
+.acomp-festive-page.is-christmas .acomp-rank-pos {
+  background: rgba(226, 232, 240, 0.92);
+  color: #0f172a;
+  border-radius: 999px;
+}
+
+.acomp-festive-page.is-christmas .acomp-rank-pos.pos-1 {
+  background: #facc15;
+  color: #451a03;
+}
+
+.acomp-festive-page.is-christmas .acomp-rank-pos.pos-2 {
+  background: #e5e7eb;
+}
+
+.acomp-festive-page.is-christmas .acomp-rank-pos.pos-3 {
+  background: #fb923c;
+  color: #431407;
+}
+
+.acomp-festive-page.is-christmas .acomp-bar-track {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.acomp-festive-page.is-christmas .acomp-bar-track div {
+  background: linear-gradient(90deg, #f97316, #fde68a, #86efac);
+}
+
+.acomp-festive-page.is-christmas .acomp-delivery-chart rect {
+  fill: rgba(239, 68, 68, 0.76);
+}
+
+.acomp-festive-page.is-christmas .acomp-delivery-chart polyline {
+  stroke: #fef3c7;
+}
+
+.acomp-festive-page.is-christmas .acomp-ticker {
+  position: relative;
+  min-height: 56px;
+  border-radius: 14px;
+  background:
+    linear-gradient(90deg, #7f1d1d 0 190px, rgba(7, 45, 74, 0.94) 190px),
+    #082f49;
+}
+
+.acomp-festive-page.is-christmas .acomp-ticker-label {
+  color: #fff7ed;
+}
+
+.acomp-festive-page.is-christmas .acomp-ticker-label::after {
+  content: "do Polo Norte";
+  margin-left: 3px;
+}
+
+.acomp-festive-page.is-christmas .acomp-ticker-track span {
+  color: #fff7ed;
+}
+
+.acomp-festive-page.is-christmas .acomp-panel-title,
+.acomp-festive-page.is-christmas .acomp-kpi-icon,
+.acomp-festive-page.is-christmas .acomp-kpi > div,
+.acomp-festive-page.is-christmas .acomp-ranking-list,
+.acomp-festive-page.is-christmas .acomp-match-grid,
+.acomp-festive-page.is-christmas .acomp-status-grid,
+.acomp-festive-page.is-christmas .acomp-agenda-list,
+.acomp-festive-page.is-christmas .acomp-delivery-head,
+.acomp-festive-page.is-christmas .acomp-delivery-chart,
+.acomp-festive-page.is-christmas .acomp-delivery-days,
+.acomp-festive-page.is-christmas .acomp-recent-deliveries-head,
+.acomp-festive-page.is-christmas .acomp-recent-deliveries-list,
+.acomp-festive-page.is-christmas .acomp-empty {
+  position: relative;
+  z-index: 2;
+}
+
+.acomp-festive-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.acomp-festive-particles {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.acomp-festive-particles span {
+  position: absolute;
+  top: -8vh;
+  left: var(--particle-left);
+  width: var(--particle-size);
+  height: var(--particle-size);
+  animation:
+    acompFestiveFall var(--particle-duration) linear infinite,
+    acompFestiveDrift 3.8s ease-in-out infinite alternate;
+  animation-delay: var(--particle-delay);
+  opacity: 0.9;
+}
+
+.acomp-festive-overlay.is-christmas .acomp-festive-particles span {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 12px rgba(255, 255, 255, 0.72),
+    0 0 2px rgba(147, 197, 253, 0.9);
+}
+
+.acomp-festive-overlay.is-easter .acomp-festive-particles span {
+  height: calc(var(--particle-size) * 1.28);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 52% 48% 48% 52% / 62% 62% 38% 38%;
+  background:
+    linear-gradient(135deg, transparent 38%, rgba(255, 255, 255, 0.55) 39% 45%, transparent 46%),
+    linear-gradient(45deg, #f9a8d4 0 30%, #fde68a 30% 58%, #93c5fd 58% 100%);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+}
+
+.acomp-sleigh-flight {
+  position: absolute;
+  z-index: 2;
+  top: clamp(60px, 14vh, 150px);
+  left: 0;
+  width: clamp(340px, 42vw, 780px);
+  max-width: none;
+  filter:
+    drop-shadow(0 24px 34px rgba(0, 0, 0, 0.48))
+    drop-shadow(0 0 18px rgba(250, 204, 21, 0.28));
+  transform: translateX(-115%) rotate(-2deg);
+  animation: acompSleighFly 8.2s cubic-bezier(0.17, 0.85, 0.34, 1) both;
+}
+
+.acomp-grinch-peeker {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: clamp(220px, 24vw, 430px);
+  --grinch-edge-offset: clamp(-88px, -5.2vw, -42px);
+  --grinch-top-offset: clamp(-48px, -2.8vw, -20px);
+  --grinch-bottom-offset: clamp(-36px, -2.5vw, -16px);
+  max-width: none;
+  opacity: 1;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 20px 26px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 16px rgba(132, 204, 22, 0.22));
+  animation-duration: var(--grinch-duration, 8s);
+  animation-fill-mode: both;
+  animation-timing-function: cubic-bezier(0.16, 0.84, 0.28, 1);
+  rotate: 0deg;
+}
+
+.acomp-grinch-peeker.is-top {
+  top: var(--grinch-top-offset);
+  left: clamp(16px, 22vw, 420px);
+  animation-name: acompGrinchPeekFromTop;
+  rotate: 180deg;
+}
+
+.acomp-grinch-peeker.is-right {
+  top: clamp(120px, 34vh, 390px);
+  right: var(--grinch-edge-offset);
+  animation-name: acompGrinchPeekFromRight;
+  rotate: -90deg;
+}
+
+.acomp-grinch-peeker.is-bottom {
+  right: clamp(16px, 18vw, 360px);
+  bottom: var(--grinch-bottom-offset);
+  animation-name: acompGrinchPeekFromBottom;
+}
+
+.acomp-grinch-peeker.is-left {
+  top: clamp(170px, 50vh, 520px);
+  left: var(--grinch-edge-offset);
+  animation-name: acompGrinchPeekFromLeft;
+  rotate: 90deg;
+}
+
+.acomp-egg-flight {
+  position: absolute;
+  top: clamp(70px, 18vh, 170px);
+  left: 0;
+  width: clamp(82px, 9vw, 150px);
+  aspect-ratio: 0.78;
+  border: 5px solid rgba(255, 255, 255, 0.74);
+  border-radius: 52% 48% 48% 52% / 62% 62% 38% 38%;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.82), transparent 15%),
+    linear-gradient(135deg, transparent 40%, rgba(255, 255, 255, 0.5) 41% 49%, transparent 50%),
+    linear-gradient(45deg, #f472b6 0 28%, #fef08a 28% 55%, #60a5fa 55% 78%, #86efac 78%);
+  box-shadow:
+    0 20px 35px rgba(0, 0, 0, 0.32),
+    0 0 28px rgba(253, 224, 71, 0.42);
+  transform: translateX(-130%) rotate(-14deg);
+  animation: acompEggFly 7.4s cubic-bezier(0.17, 0.85, 0.34, 1) both;
+}
+
+.acomp-meta-showcase-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(18px, 4vw, 64px);
+  background: rgba(2, 6, 23, 0.82);
+  backdrop-filter: blur(16px);
+  animation: acompAdFade 360ms ease both;
+}
+
+.acomp-meta-showcase-card {
+  width: min(1180px, 100%);
+  border: 1px solid rgba(147, 197, 253, 0.3);
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.28), transparent 38%),
+    linear-gradient(145deg, rgba(0, 48, 135, 0.98), rgba(2, 20, 55, 0.98));
+  padding: clamp(22px, 3vw, 42px);
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.55);
+  animation: acompMetaShowcaseIn 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.acomp-meta-showcase-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: clamp(20px, 3vw, 36px);
+}
+
+.acomp-meta-showcase-header span {
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.acomp-meta-showcase-header h2 {
+  margin: 5px 0 0;
+  color: #fff;
+  font-size: clamp(26px, 3vw, 48px);
+  font-weight: 950;
+}
+
+.acomp-meta-showcase-header button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.acomp-meta-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(14px, 2vw, 24px);
+}
+
+.acomp-meta-showcase-tile {
+  min-height: clamp(190px, 24vh, 270px);
+  padding: clamp(18px, 2vw, 30px);
+  border-radius: 24px;
+}
+
+.acomp-meta-showcase-tile .acomp-kpi-icon {
+  width: 56px;
+  height: 56px;
+  flex-basis: 56px;
+}
+
+.acomp-meta-showcase-tile p {
+  font-size: clamp(12px, 1vw, 16px);
+}
+
+.acomp-meta-showcase-tile strong {
+  margin-top: 12px;
+  font-size: clamp(34px, 4vw, 66px);
+}
+
+.acomp-meta-showcase-tile span {
+  margin-top: 12px;
+  font-size: clamp(11px, 1vw, 15px);
+}
+
+.acomp-realtime-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.72);
+  padding: 24px;
+  backdrop-filter: blur(12px);
+  animation: acompAdFade 260ms ease both;
+}
+
+.acomp-realtime-card {
+  width: min(520px, 94vw);
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(0, 48, 135, 0.98), rgba(0, 27, 77, 0.98)),
+    #003087;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.48);
+  padding: 28px;
+  text-align: center;
+  animation: acompMetaShowcaseIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.acomp-realtime-icon {
+  display: inline-flex;
+  width: 64px;
+  height: 64px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: rgba(255, 107, 0, 0.16);
+  color: #ffb366;
+}
+
+.acomp-realtime-card > span {
+  display: block;
+  margin-top: 18px;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.acomp-realtime-card h2 {
+  margin: 8px 0 0;
+  color: #f8fafc;
+  font-size: clamp(34px, 4vw, 58px);
+  font-weight: 950;
+  line-height: 0.95;
+}
+
+.acomp-realtime-card p {
+  margin: 18px 0 0;
+  color: #dbeafe;
+  font-size: clamp(16px, 1.4vw, 20px);
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.acomp-realtime-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px solid rgba(147, 197, 253, 0.22);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.28);
+  padding: 12px;
+  color: #bfdbfe;
+}
+
+.acomp-realtime-meta strong,
+.acomp-realtime-meta small {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.acomp-appointment-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.76);
+  padding: 24px;
+  backdrop-filter: blur(14px);
+  animation: acompAdFade 260ms ease both;
+}
+
+.acomp-appointment-card {
+  width: min(760px, 94vw);
+  max-height: min(78vh, 760px);
+  overflow: hidden;
+  border: 1px solid rgba(74, 222, 128, 0.42);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.24), transparent 38%),
+    linear-gradient(145deg, rgba(2, 44, 34, 0.98), rgba(4, 23, 54, 0.98)),
+    #03281f;
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.54);
+  padding: clamp(22px, 3vw, 34px);
+  animation: acompMetaShowcaseIn 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.acomp-appointment-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.acomp-appointment-icon {
+  display: inline-flex;
+  width: clamp(70px, 7vw, 92px);
+  height: clamp(70px, 7vw, 92px);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+  box-shadow: inset 0 0 0 1px rgba(134, 239, 172, 0.22);
+}
+
+.acomp-appointment-head span:not(.acomp-appointment-icon) {
+  display: block;
+  color: #86efac;
+  font-size: clamp(13px, 1vw, 16px);
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.acomp-appointment-head h2 {
+  margin: 8px 0 0;
+  color: #f8fafc;
+  font-size: clamp(34px, 4.2vw, 64px);
+  font-weight: 950;
+  line-height: 0.95;
+}
+
+.acomp-appointment-groups {
+  display: grid;
+  gap: 14px;
+  max-height: 56vh;
+  margin-top: 24px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.acomp-appointment-group {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr);
+  gap: 14px;
+  border: 1px solid rgba(134, 239, 172, 0.18);
+  border-radius: 20px;
+  background: rgba(2, 6, 23, 0.3);
+  padding: 14px;
+}
+
+.acomp-appointment-time {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 16px;
+  background: rgba(34, 197, 94, 0.12);
+  padding: 14px;
+}
+
+.acomp-appointment-time strong {
+  color: #dcfce7;
+  font-size: clamp(16px, 1.35vw, 22px);
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: capitalize;
+}
+
+.acomp-appointment-time span {
+  color: #86efac;
+  font-size: clamp(24px, 3vw, 44px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.acomp-appointment-list {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.acomp-appointment-item {
+  min-width: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 13px 15px;
+}
+
+.acomp-appointment-item strong,
+.acomp-appointment-item span,
+.acomp-appointment-item small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acomp-appointment-item strong {
+  color: #ffffff;
+  font-size: clamp(18px, 1.8vw, 30px);
+  font-weight: 950;
+}
+
+.acomp-appointment-item span {
+  margin-top: 5px;
+  color: #cbd5e1;
+  font-size: clamp(12px, 1vw, 16px);
+  font-weight: 750;
+}
+
+.acomp-appointment-item small {
+  margin-top: 7px;
+  color: #86efac;
+  font-size: clamp(12px, 1vw, 15px);
+  font-weight: 900;
+}
+
+@media (max-width: 720px) {
+  .acomp-appointment-group {
+    grid-template-columns: 1fr;
+  }
+
+  .acomp-appointment-head {
+    align-items: flex-start;
+  }
+}
+
+@keyframes acompMetaShowcaseIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes acompPulse {
+  70% {
+    box-shadow: 0 0 0 11px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes acompFloat {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(1deg);
+  }
+}
+
+@keyframes acompTicker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes acompAdFade {
+  from {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes acompMetaAlertCard {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(248, 113, 113, 0.2),
+      0 0 24px rgba(239, 68, 68, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(248, 113, 113, 0.44),
+      0 0 42px rgba(239, 68, 68, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+}
+
+@keyframes acompSirenShake {
+  0%,
+  100% {
+    transform: rotate(-5deg) scale(1);
+  }
+  50% {
+    transform: rotate(5deg) scale(1.08);
+  }
+}
+
+@keyframes acompSirenPulse {
+  from {
+    opacity: 0.9;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes acompRetorninhoHappy {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(3deg);
+  }
+}
+
+@keyframes acompFestiveFall {
+  from {
+    transform: translate3d(0, -10vh, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(var(--particle-drift), 112vh, 0) rotate(360deg);
+  }
+}
+
+@keyframes acompFestiveDrift {
+  from {
+    margin-left: -12px;
+  }
+  to {
+    margin-left: 18px;
+  }
+}
+
+@keyframes acompSleighFly {
+  0% {
+    opacity: 0;
+    transform: translateX(-115%) translateY(20px) rotate(-5deg) scale(0.9);
+  }
+  12%,
+  86% {
+    opacity: 1;
+  }
+  48% {
+    transform: translateX(42vw) translateY(-22px) rotate(2deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(112vw) translateY(12px) rotate(4deg) scale(0.96);
+  }
+}
+
+@keyframes acompGrinchPeekFromBottom {
+  0% {
+    translate: 0 118%;
+  }
+  22%,
+  78% {
+    translate: 0 0;
+  }
+  100% {
+    translate: 0 118%;
+  }
+}
+
+@keyframes acompGrinchPeekFromTop {
+  0% {
+    translate: 0 -118%;
+  }
+  22%,
+  78% {
+    translate: 0 0;
+  }
+  100% {
+    translate: 0 -118%;
+  }
+}
+
+@keyframes acompGrinchPeekFromRight {
+  0% {
+    translate: 118% 0;
+  }
+  22%,
+  78% {
+    translate: 0 0;
+  }
+  100% {
+    translate: 118% 0;
+  }
+}
+
+@keyframes acompGrinchPeekFromLeft {
+  0% {
+    translate: -118% 0;
+  }
+  22%,
+  78% {
+    translate: 0 0;
+  }
+  100% {
+    translate: -118% 0;
+  }
+}
+
+@keyframes acompEggFly {
+  0% {
+    opacity: 0;
+    transform: translateX(-130%) translateY(28px) rotate(-22deg);
+  }
+  12%,
+  86% {
+    opacity: 1;
+  }
+  50% {
+    transform: translateX(48vw) translateY(-22px) rotate(16deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(112vw) translateY(18px) rotate(34deg);
+  }
+}
+
+@keyframes acompChristmasLights {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 2px rgba(250, 204, 21, 0.42));
+    opacity: 0.72;
+  }
+  50% {
+    filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.82));
+    opacity: 1;
+  }
+}
+
+@keyframes acompChristmasOrnaments {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .acomp-main-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: none;
+    grid-template-rows: auto;
+  }
+
+  .acomp-spotlight,
+  .acomp-kpis,
+  .acomp-status-panel,
+  .acomp-recent-deliveries-panel,
+  .acomp-delivery-panel,
+  .acomp-atendentes-panel,
+  .acomp-cidades-panel,
+  .acomp-regionais-panel,
+  .acomp-tecnicos-panel,
+  .acomp-delivery-hours-panel,
+  .acomp-entregas-regionais-panel,
+  .acomp-match-panel,
+  .acomp-match-stack,
+  .acomp-agenda-stack,
+  .acomp-weekly-production-panel,
+  .acomp-fines-panel {
+    grid-area: auto;
+    grid-column: 1 / -1;
+  }
+
+  .acomp-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .acomp-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .acomp-recent-delivery:nth-child(n+2) {
+    display: grid;
+  }
+}
+
+@media (max-width: 760px) {
+  .acomp-page {
+    overflow: auto;
+  }
+
+  .acomp-header,
+  .acomp-live {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .acomp-main-grid,
+  .acomp-kpis,
+  .acomp-status-grid,
+  .acomp-match-grid,
+  .acomp-config-time-grid,
+  .acomp-ad-images,
+  .acomp-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .acomp-config-ads-header,
+  .acomp-ad-upload-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .acomp-spotlight {
+    min-height: 440px;
+  }
+}

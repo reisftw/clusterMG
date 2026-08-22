@@ -8,7 +8,7 @@ const ProximosFeriados = ({ feriados }) => {
    * usa o fuso local e a data exibida fica correta.
    */
   const formatarData = (dateStr) => {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     const [y, m, d] = dateStr.split("-").map(Number);
     return new Date(y, m - 1, d).toLocaleDateString("pt-BR", {
       day: "2-digit",
@@ -17,34 +17,33 @@ const ProximosFeriados = ({ feriados }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-5">
-        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+    <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <div className="mb-5 flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50">
           <CalendarCheck size={16} className="text-blue-600" />
         </div>
         <p className="text-sm font-bold text-gray-900">Próximos Feriados</p>
       </div>
 
       {!feriados?.length ? (
-        <p className="text-sm text-gray-400 text-center py-6">
+        <p className="py-6 text-center text-sm text-gray-400">
           Nenhum feriado próximo.
         </p>
       ) : (
         <ul className="space-y-2">
-          {feriados.map((f, i) => (
+          {feriados.map((feriado, index) => (
             <li
-              key={i}
-              className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0"
+              key={index}
+              className="flex items-center justify-between border-b border-gray-50 py-2.5 last:border-0"
             >
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                <span className="text-sm text-gray-700 font-medium">
-                  {f.name}
+                <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                <span className="text-sm font-medium text-gray-700">
+                  {feriado.name}
                 </span>
               </div>
-              <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg">
-                {formatarData(f.date)}
+              <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">
+                {formatarData(feriado.date)}
               </span>
             </li>
           ))}

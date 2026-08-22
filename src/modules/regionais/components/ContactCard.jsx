@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Copy, Check, Phone, Mail, User } from "lucide-react";
 
 const CopyBtn = ({ value }) => {
@@ -74,3 +74,4 @@ const ContactCard = ({ label, pessoa }) => {
 };
 
 export default ContactCard;
+

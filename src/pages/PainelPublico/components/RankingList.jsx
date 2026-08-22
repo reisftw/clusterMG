@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 const PER_PAGE = 8;
 
@@ -94,3 +94,4 @@ export default function RankingList({
     </div>
   );
 }
+

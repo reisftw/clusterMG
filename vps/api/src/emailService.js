@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 const db = require("./db");
 const documents = require("./documents");
+const { randomId } = require("./secureRandom");
 
 const CONFIG_PATH = "system_email_config/global";
 const LOG_COLLECTION = "system_email_logs";
@@ -33,6 +34,15 @@ const DEFAULT_EMAIL_TEMPLATES = {
     body:
       "Olá, {nome}.\n\nSua senha do sistema Retiradas foi alterada com sucesso.\n\nSe você não reconhece esta ação, avise a administração.",
   },
+  mfa_login_code: {
+    label: "Código MFA por e-mail",
+    subject: "Código de segurança - Retiradas",
+    title: "Confirme seu acesso",
+    preview: "Use o código de segurança para concluir o login.",
+    actionLabel: "",
+    body:
+      "Olá, {nome}.\n\nRecebemos uma tentativa de login na sua conta do sistema Retiradas.\n\nSeu código de segurança é: {codigo}\n\nEste código expira em {minutos} minutos. Se você não reconhece esta tentativa, avise a administração.",
+  },
   smtp_test: {
     label: "Teste SMTP",
     subject: "Teste de e-mail - Retiradas",
@@ -51,6 +61,24 @@ const DEFAULT_EMAIL_TEMPLATES = {
     body:
       "Olá, {nome}.\n\nEste é um aviso automático do sistema Retiradas.\n\nMensagem: {mensagem}\n\nAcesse o sistema para acompanhar os detalhes.",
   },
+  insumos_low_stock: {
+    label: "Estoque baixo de insumo",
+    subject: "Estoque baixo: {produto}",
+    title: "Estoque baixo identificado",
+    preview: "{produto} chegou ao estoque baixo.",
+    actionLabel: "Abrir insumos",
+    body:
+      "Olá, {nome}.\n\nO sistema identificou que o item {produto} chegou ao nível de estoque baixo.\n\nEstoque atual: {estoque_atual} {unidade}\nEstoque mínimo: {estoque_minimo} {unidade}\nCategoria: {categoria}\nObservação: {observacao}\n\nRevise a necessidade de compra ou reposição para evitar falta do material.",
+  },
+  insumos_request_approved: {
+    label: "Requisição de insumo aprovada",
+    subject: "Requisição aprovada: {protocolo}",
+    title: "Sua requisição foi aprovada",
+    preview: "O material solicitado foi reservado por 24 horas para retirada.",
+    actionLabel: "Abrir requisição",
+    body:
+      "Olá, {nome}.\n\nSua requisição de insumo foi aprovada e o material já está reservado para retirada.\n\nProtocolo: {protocolo}\nItem: {produto}\nQuantidade: {quantidade} {unidade}\nAprovado por: {aprovado_por}\nPrazo para retirada: {prazo}\n\nImportante: se o item não for retirado em até 24 horas, a requisição será encerrada automaticamente e o material voltará ao estoque.",
+  },
 };
 
 const DEFAULT_CONFIG = {
@@ -64,6 +92,8 @@ const DEFAULT_CONFIG = {
   fromEmail: process.env.SMTP_FROM_EMAIL || "naoresponda@retiradas.tech",
   replyTo: process.env.SMTP_REPLY_TO || "administracao@retiradas.tech",
   appUrl: process.env.PUBLIC_APP_URL || "https://retiradas.tech",
+  mfaEmailEnabled: String(process.env.MFA_EMAIL_ENABLED || "false").toLowerCase() === "true",
+  mfaEmailTtlMinutes: Number(process.env.MFA_EMAIL_TTL_MINUTES || 10),
   templates: DEFAULT_EMAIL_TEMPLATES,
 };
 
@@ -364,6 +394,22 @@ function userInfoForTemplate(templateKey, variables = {}) {
   if (templateKey === "password_reset" || templateKey === "password_changed") {
     return [{ label: "E-mail", value: variables.email, type: "email" }];
   }
+  if (templateKey === "mfa_login_code") {
+    return [
+      { label: "E-mail", value: variables.email, type: "email" },
+      { label: "Código", value: variables.codigo, type: "security" },
+      { label: "Validade", value: `${variables.minutos || 10} minutos`, type: "security" },
+    ];
+  }
+  if (templateKey === "insumos_low_stock") {
+    return [
+      { label: "Item", value: variables.produto, type: "success" },
+      { label: "Estoque atual", value: `${variables.estoque_atual || "-"} ${variables.unidade || ""}`.trim(), type: "role" },
+      { label: "Estoque mínimo", value: `${variables.estoque_minimo || "-"} ${variables.unidade || ""}`.trim(), type: "security" },
+      { label: "Categoria", value: variables.categoria || "-", type: "location" },
+      { label: "Observação", value: variables.observacao || "-", type: "email" },
+    ];
+  }
   return [];
 }
 
@@ -376,6 +422,8 @@ async function getConfig() {
     smtpPassword: data.smtpPassword || DEFAULT_CONFIG.smtpPassword,
     smtpPort: Number(data.smtpPort || DEFAULT_CONFIG.smtpPort),
     smtpSecure: Boolean(data.smtpSecure ?? DEFAULT_CONFIG.smtpSecure),
+    mfaEmailEnabled: Boolean(data.mfaEmailEnabled ?? DEFAULT_CONFIG.mfaEmailEnabled),
+    mfaEmailTtlMinutes: Number(data.mfaEmailTtlMinutes || DEFAULT_CONFIG.mfaEmailTtlMinutes),
     templates: normalizeTemplates(data.templates),
   };
 }
@@ -391,6 +439,8 @@ async function saveConfig(patch = {}) {
     ...current,
     ...patch,
     smtpPassword: patch.smtpPassword || current.smtpPassword || "",
+    mfaEmailEnabled: Boolean(patch.mfaEmailEnabled ?? current.mfaEmailEnabled),
+    mfaEmailTtlMinutes: Math.max(3, Math.min(30, Number(patch.mfaEmailTtlMinutes || current.mfaEmailTtlMinutes || 10))),
     templates: normalizeTemplates(patch.templates || current.templates),
     updatedAt: nowIso(),
   };
@@ -436,14 +486,14 @@ function renderConfiguredEmail(config, templateKey, variables = {}) {
     replyTo: config.replyTo || DEFAULT_CONFIG.replyTo,
     ...variables,
   };
-  const actionUrl = ["welcome_user", "password_reset", "system_notice"].includes(templateKey)
+  const actionUrl = ["welcome_user", "password_reset", "system_notice", "insumos_low_stock", "insumos_request_approved"].includes(templateKey)
     ? renderVariables("{resetUrl}", resolvedVariables)
     : "";
   const actionLabel = renderVariables(template.actionLabel, resolvedVariables);
   const subject = renderVariables(template.subject, resolvedVariables);
   const text = renderVariables(template.body, resolvedVariables);
   const parsed = parseConfiguredBody(text, templateKey);
-  const isSecurityEmail = ["welcome_user", "password_reset", "password_changed"].includes(templateKey);
+  const isSecurityEmail = ["welcome_user", "password_reset", "password_changed", "mfa_login_code"].includes(templateKey);
   const variant = templateKey === "password_changed" ? "success" : "security";
 
   return {
@@ -466,7 +516,7 @@ function renderConfiguredEmail(config, templateKey, variables = {}) {
 }
 
 async function logEmail({ to, subject, status, error = "", meta = {} }) {
-  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId("email");
   const normalizedMeta = meta && typeof meta === "object" ? meta : {};
   await db.query(
     `insert into email_logs (
@@ -543,7 +593,7 @@ async function listEmailLogs({ limit = 20, offset = 0, status = "", type = "", q
   };
 }
 
-async function sendMail({ to, subject, html, text = "", meta = {} }) {
+async function sendMail({ to, subject, html, text = "", meta = {}, attachments = [] }) {
   const config = await getConfig();
   const transporter = createTransport(config);
   const from = `${config.fromName || "Retiradas"} <${config.fromEmail}>`;
@@ -555,6 +605,7 @@ async function sendMail({ to, subject, html, text = "", meta = {} }) {
       subject,
       html,
       text,
+      attachments,
     });
     await logEmail({ to, subject, status: "enviado", meta: { ...meta, messageId: response.messageId || "" } });
     return { ok: true, messageId: response.messageId || "" };
@@ -607,6 +658,79 @@ async function sendPasswordChangedEmail({ user }) {
   });
 }
 
+async function sendMfaLoginCodeEmail({ user, code, ttlMinutes = 10 }) {
+  const config = await getConfig();
+  const rendered = renderConfiguredEmail(config, "mfa_login_code", {
+    nome: user.display_name || user.nome || user.email,
+    email: user.email,
+    codigo: code,
+    minutos: ttlMinutes,
+  });
+  return sendMail({
+    to: user.email,
+    ...rendered,
+    meta: { type: "mfa_login_code", uid: user.uid },
+  });
+}
+
+async function sendInsumosLowStockEmail({ to, produto = {}, recipients = [] }) {
+  const config = await getConfig();
+  const appUrl = String(config.appUrl || DEFAULT_CONFIG.appUrl || "https://retiradas.tech").replace(/\/+$/, "");
+  const rendered = renderConfiguredEmail(config, "insumos_low_stock", {
+    nome: recipients.length === 1 ? recipients[0]?.displayName || recipients[0]?.nome || "Supervisor Administrativo" : "equipe administrativa",
+    produto: produto.nome || "Insumo administrativo",
+    estoque_atual: produto.estoqueAtual,
+    estoque_minimo: produto.estoqueMinimo,
+    unidade: produto.unidade || "unidade",
+    categoria: produto.categoria || "-",
+    observacao: produto.observacao || "-",
+    resetUrl: `${appUrl}/administrativo/insumos`,
+  });
+  return sendMail({
+    to,
+    ...rendered,
+    meta: {
+      type: "insumos_low_stock",
+      documentPath: produto.documentPath || "",
+      documentId: produto.documentId || "",
+      produtoNome: produto.nome || "",
+      estoqueAtual: produto.estoqueAtual,
+      estoqueMinimo: produto.estoqueMinimo,
+      unidade: produto.unidade || "",
+      recipients,
+    },
+  });
+}
+
+async function sendInsumosRequestApprovedEmail({ to, requisicao = {} }) {
+  const config = await getConfig();
+  const appUrl = String(config.appUrl || DEFAULT_CONFIG.appUrl || "https://retiradas.tech").replace(/\/+$/, "");
+  const prazo = requisicao.expira_em
+    ? new Date(requisicao.expira_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+    : "24 horas";
+  const rendered = renderConfiguredEmail(config, "insumos_request_approved", {
+    nome: requisicao.solicitante_nome || requisicao.solicitante_email || "solicitante",
+    protocolo: requisicao.protocolo || "-",
+    produto: requisicao.produto_nome || "Insumo",
+    quantidade: requisicao.quantidade || "-",
+    unidade: requisicao.unidade || "",
+    aprovado_por: requisicao.aprovado_por_nome || "-",
+    prazo,
+    resetUrl: `${appUrl}/administrativo/insumos/requisicoes`,
+  });
+  return sendMail({
+    to,
+    ...rendered,
+    meta: {
+      type: "insumos_request_approved",
+      requisicaoId: requisicao.id || "",
+      protocolo: requisicao.protocolo || "",
+      produtoNome: requisicao.produto_nome || "",
+      quantidade: requisicao.quantidade || "",
+    },
+  });
+}
+
 async function sendTestEmail(to) {
   const config = await getConfig();
   const target = String(to || config.replyTo || config.smtpUser || "").trim();
@@ -618,6 +742,8 @@ async function sendTestEmail(to) {
     regional: "METROPOLITANA",
     resetUrl: `${config.appUrl || DEFAULT_CONFIG.appUrl}/redefinir-senha?token=exemplo`,
     mensagem: "Este e um exemplo de comunicado para validar o layout do e-mail.",
+    codigo: "123456",
+    minutos: config.mfaEmailTtlMinutes || 10,
   };
   const results = [];
   for (const templateKey of Object.keys(DEFAULT_EMAIL_TEMPLATES)) {
@@ -640,6 +766,9 @@ module.exports = {
   saveConfig,
   listEmailLogs,
   sendMail,
+  sendInsumosLowStockEmail,
+  sendInsumosRequestApprovedEmail,
+  sendMfaLoginCodeEmail,
   sendPasswordChangedEmail,
   sendPasswordResetEmail,
   sendTestEmail,

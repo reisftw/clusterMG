@@ -100,6 +100,8 @@ function createDocumentosRouter({ requireAuthenticated, requireCsrfToken, requir
   router.get("/google/auth-url", requireAdmin, controller.googleAuthUrl);
   router.get("/fields", controller.listFields);
   router.post("/fields", requireCsrfToken, requireAdmin, controller.saveField);
+  router.get("/invoice-fields", controller.listInvoiceFields);
+  router.post("/invoice-fields", requireCsrfToken, requireAdmin, controller.saveInvoiceField);
   router.get("/billing-config", requireAdmin, controller.getBillingConfig);
   router.post("/billing-config", requireCsrfToken, requireAdmin, controller.saveBillingConfig);
   router.post("/admin/purge-history", requireCsrfToken, requireAdmin, controller.purgeHistory);
@@ -108,6 +110,7 @@ function createDocumentosRouter({ requireAuthenticated, requireCsrfToken, requir
   router.get("/submissions/:id/zip", controller.downloadSubmissionZip);
   router.get("/submissions/:id", controller.getSubmission);
   router.post("/submissions", requireCsrfToken, uploadManyFiles, rejectInvalidPdf, controller.createSubmission);
+  router.post("/submissions/:id/invoices", requireCsrfToken, uploadManyFiles, rejectInvalidPdf, controller.uploadSubmissionInvoices);
   router.patch("/submissions/:id/review", requireCsrfToken, controller.reviewSubmission);
   router.get("/", controller.list);
   router.get("/folders/:empresaId/browser", controller.browseCompanyFolder);

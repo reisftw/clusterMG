@@ -1,46 +1,30 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "../../../services/firebase";
-import { COLLECTIONS } from "../../../constants/firestoreCollections";
+﻿import { COLLECTIONS } from "../../../constants/dataCollections";
 import {
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
+} from "../../../services/dataCache";
+import {
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from "../../../services/vpsApiClient";
 
 const MAX_AGENTES = 300;
 const CACHE_KEY = "agentes-service:lista";
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-const col = () => collection(db, COLLECTIONS.AGENTES);
+const getAgenteSortLabel = (item = {}) => item?.cidade || item?.nome || "";
 
 export const buscarAgentes = async (force = false) => {
   const { data } = await getOrLoadCachedValue(
-    CACHE_KEY,
-    async () => {
-      const snap = await getDocs(
-        query(col(), orderBy("nome"), limit(MAX_AGENTES)),
-      );
-
-      logFirestoreRead({
-        source: "agentesService:buscarAgentes",
-        operation: "getDocs",
-        path: COLLECTIONS.AGENTES,
-        count: snap.size,
-      });
-
-      return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
-    },
+    `${CACHE_KEY}:vps`,
+    async () =>
+      (await listVpsDocuments(COLLECTIONS.AGENTES, {
+        limit: MAX_AGENTES,
+      })).sort((a, b) =>
+        getAgenteSortLabel(a).localeCompare(getAgenteSortLabel(b)),
+      ),
     { ttlMs: CACHE_TTL_MS, force },
   );
 
@@ -48,20 +32,27 @@ export const buscarAgentes = async (force = false) => {
 };
 
 export const criarAgente = async (dados) => {
-  const ref = await addDoc(col(), { ...dados, criado_em: serverTimestamp() });
+  const ref = await createVpsDocument(COLLECTIONS.AGENTES, {
+    ...dados,
+    criado_em: new Date().toISOString(),
+  });
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
   return ref;
 };
 
 export const atualizarAgente = async (id, dados) => {
-  await updateDoc(doc(db, COLLECTIONS.AGENTES, id), {
+  await updateVpsDocument(`${COLLECTIONS.AGENTES}/${id}`, {
     ...dados,
-    atualizado_em: serverTimestamp(),
+    atualizado_em: new Date().toISOString(),
   });
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
 };
 
 export const excluirAgente = async (id) => {
-  await deleteDoc(doc(db, COLLECTIONS.AGENTES, id));
+  await deleteVpsDocument(`${COLLECTIONS.AGENTES}/${id}`);
   invalidateCache(CACHE_KEY);
+  invalidateCache(`${CACHE_KEY}:vps`);
 };
+

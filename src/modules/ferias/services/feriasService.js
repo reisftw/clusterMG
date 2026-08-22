@@ -1,45 +1,45 @@
+﻿import { COLLECTIONS } from '../../../constants/dataCollections';
 import {
-  collection, addDoc, updateDoc, deleteDoc,
-  doc, getDocs, query, where, serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '../../../services/firebase';
-import { COLLECTIONS } from '../../../constants/firestoreCollections';
-
-const col = () => collection(db, COLLECTIONS.FERIAS);
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from '../../../services/vpsApiClient';
 
 export const solicitarFerias = async (dados) => {
-  return await addDoc(col(), {
+  return await createVpsDocument(COLLECTIONS.FERIAS, {
     ...dados,
     status: 'pendente',
-    criado_em: serverTimestamp(),
+    criado_em: new Date().toISOString(),
   });
 };
 
 export const cadastrarFerias = async (dados) => {
-  return await addDoc(col(), {
+  return await createVpsDocument(COLLECTIONS.FERIAS, {
     ...dados,
     status: dados?.status || 'aprovado',
-    criado_em: serverTimestamp(),
-    atualizado_em: serverTimestamp(),
+    criado_em: new Date().toISOString(),
+    atualizado_em: new Date().toISOString(),
   });
 };
 
 export const atualizarStatusFerias = async (id, status) => {
-  const ref = doc(db, COLLECTIONS.FERIAS, id);
-  await updateDoc(ref, { status, atualizado_em: serverTimestamp() });
+  await updateVpsDocument(`${COLLECTIONS.FERIAS}/${id}`, {
+    status,
+    atualizado_em: new Date().toISOString(),
+  });
 };
 
 export const deletarFerias = async (id) => {
-  await deleteDoc(doc(db, COLLECTIONS.FERIAS, id));
+  await deleteVpsDocument(`${COLLECTIONS.FERIAS}/${id}`);
 };
 
 export const buscarFeriasPorColaborador = async (colaboradorId) => {
-  const q = query(col(), where('colaborador_id', '==', colaboradorId));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const items = await listVpsDocuments(COLLECTIONS.FERIAS, { limit: 1000 });
+  return items.filter((item) => String(item.colaborador_id ?? '') === String(colaboradorId ?? ''));
 };
 
 export const buscarTodasFerias = async () => {
-  const snap = await getDocs(col());
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return await listVpsDocuments(COLLECTIONS.FERIAS, { limit: 1000 });
 };
+

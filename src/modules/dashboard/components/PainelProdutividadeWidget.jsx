@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import { Activity, Gauge, Moon, Trophy } from "lucide-react";
 
 function kpiTone(type) {
@@ -137,7 +137,7 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
           </p>
         </div>
         <p className="mt-4 text-sm text-gray-400">
-          Nenhuma analise de tecnicos encontrada para montar o painel.
+          Nenhuma análise de técnicos encontrada para montar o painel.
         </p>
       </div>
     );
@@ -156,13 +156,13 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
             </p>
           </div>
           <p className="mt-2 text-sm text-gray-500">
-            Leitura executiva da producao dos tecnicos com foco em ocupacao,
+            Leitura executiva da produção dos técnicos com foco em ocupação,
             ritmo e regionais de melhor desempenho.
           </p>
         </div>
 
         <div className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-          {dados.totalTecnicos} tecnico(s) monitorado(s)
+          {dados.totalTecnicos} técnico(s) monitorado(s)
         </div>
       </div>
 
@@ -171,28 +171,28 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
           icon={Trophy}
           label="OS Analisadas"
           value={dados.totalOS}
-          helper="Volume consolidado da ultima analise"
+          helper="Volume consolidado da última análise"
           tone="blue"
         />
         <KpiCard
           icon={Gauge}
-          label="Ocupacao Media"
+          label="Ocupação Média"
           value={`${Math.round(dados.mediaOcupacao)}%`}
-          helper="Media de ocupacao operacional"
+          helper="Média de ocupação operacional"
           tone="green"
         />
         <KpiCard
           icon={Activity}
           label="Retiradas"
           value={dados.totalRetiradas}
-          helper="Retiradas somadas dos tecnicos"
+          helper="Retiradas somadas dos técnicos"
           tone="amber"
         />
         <KpiCard
           icon={Moon}
           label="Com Ociosidade"
           value={dados.ociosos}
-          helper="Tecnicos com folga de capacidade"
+          helper="Técnicos com folga de capacidade"
           tone="purple"
         />
       </div>
@@ -202,7 +202,7 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold text-gray-900">
-                Top 5 tecnicos por produtividade
+                Top 5 técnicos por produtividade
               </p>
               <p className="text-xs text-gray-400">
                 Ordenado por O.S analisadas e retiradas realizadas
@@ -225,7 +225,7 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
                       </p>
                       <p className="text-xs text-gray-400">
                         {tecnico.regional} · {tecnico.totalRetiradas} retiradas ·{" "}
-                        {Math.round(tecnico.pctOcupado)}% ocupacao
+                        {Math.round(tecnico.pctOcupado)}% ocupação
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-black text-blue-700">
@@ -251,7 +251,7 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
                 Regionais mais produtivas
               </p>
               <p className="text-xs text-gray-400">
-                Media de O.S por tecnico na ultima analise
+                Média de O.S por técnico na última análise
               </p>
             </div>
             <div className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">
@@ -268,8 +268,8 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
                       {regional.regional}
                     </p>
                     <p className="text-xs text-gray-400">
-                      {regional.tecnicos} tecnico(s) ·{" "}
-                      {Math.round(regional.ocupacaoMedia)}% ocupacao media
+                      {regional.tecnicos} técnico(s) ·{" "}
+                      {Math.round(regional.ocupacaoMedia)}% ocupação média
                     </p>
                   </div>
                   <span className="shrink-0 text-sm font-black text-emerald-700">
@@ -296,3 +296,4 @@ export default function PainelProdutividadeWidget({ historico = [] }) {
     </div>
   );
 }
+

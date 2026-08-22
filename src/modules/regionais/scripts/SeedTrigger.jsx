@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { seedAll } from './seedAll';
 
 const SeedTrigger = () => {
@@ -6,7 +6,7 @@ const SeedTrigger = () => {
 
   useEffect(() => {
     seedAll()
-      .then(() => setStatus('✅ Seed concluído! Remova o <SeedTrigger />.'))
+      .then(() => setStatus('✅ Seed concluido! Remova o <SeedTrigger />.'))
       .catch((e) => setStatus('❌ Erro: ' + e.message));
   }, []);
 
@@ -19,3 +19,4 @@ const SeedTrigger = () => {
 };
 
 export default SeedTrigger;
+

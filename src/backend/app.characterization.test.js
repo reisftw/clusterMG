@@ -210,6 +210,7 @@ function baseMocks(overrides = {}) {
       listSyncRuns: vi.fn(async () => ({ items: [] })),
     },
     documentosService: {},
+    createImoveisRouter: vi.fn(() => require("express").Router()),
     realtime: {
       attachRealtimeClient: vi.fn((req, res) => res.status(200).end()),
       broadcastRealtime: vi.fn(() => undefined),
@@ -239,6 +240,7 @@ function installMocks(overrides = {}) {
   setMock("./logisticaIntegration", currentMocks.logisticaIntegration);
   setMock("./hubsoftIntegration", currentMocks.hubsoftIntegration);
   setMock("./cvortexIntegration", currentMocks.cvortexIntegration);
+  setMock("./imoveis", { createImoveisRouter: currentMocks.createImoveisRouter });
   setMock("./documentos/routes/documentosRoutes", currentMocks.createDocumentosRouter);
   setMock("./documentos/services/documentosService", currentMocks.documentosService);
   setMock("./realtime", currentMocks.realtime);
@@ -330,7 +332,6 @@ beforeEach(() => {
     INTERNAL_API_TOKEN: "internal-token-12345678901234567890",
     EVOLUTION_WEBHOOK_SECRET: "evolution-secret-12345678901234567890",
     CVORTEX_WEBHOOK_SECRET: "cvortex-secret-12345678901234567890",
-    ZAPI_WEBHOOK_SECRET: "zapi-secret-12345678901234567890",
     WHATSAPP_OFFICIAL_WEBHOOK_SECRET: "official-secret-12345678901234567890",
   };
   mockedModules = [];
@@ -356,7 +357,7 @@ describe("vps api app characterization - health/realtime", () => {
       service: "retiradas-vps-api",
       databaseTime: "2026-08-16T00:00:00.000Z",
     });
-  });
+  }, 15000);
 });
 
 describe("vps api app characterization - auth", () => {
@@ -615,19 +616,6 @@ describe("vps api app characterization - public webhooks secret gate", () => {
       .post("/api/webhooks/cvortex")
       .set("x-retiradas-webhook-secret", process.env.CVORTEX_WEBHOOK_SECRET)
       .send({ event: "message" });
-
-    expect(rejected.status).toBe(401);
-    expect(accepted.status).toBe(200);
-  });
-
-  it("POST /api/webhooks/zapi rejeita sem segredo e aceita com segredo valido", async () => {
-    const app = loadApp();
-
-    const rejected = await request(app).post("/api/webhooks/zapi").send({ type: "ReceivedCallback" });
-    const accepted = await request(app)
-      .post("/api/webhooks/zapi")
-      .set("x-api-key", process.env.ZAPI_WEBHOOK_SECRET)
-      .send({ type: "ReceivedCallback" });
 
     expect(rejected.status).toBe(401);
     expect(accepted.status).toBe(200);

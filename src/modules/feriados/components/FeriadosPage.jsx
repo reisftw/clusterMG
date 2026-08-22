@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Plus, RefreshCw, Trash2, Globe, BookMarked, CalendarDays } from 'lucide-react';
 import { useAuthContext } from '../../../context/AuthContext';
 import { useFeriados } from '../hooks/useFeriados';
@@ -19,7 +19,7 @@ const TipoBadge = ({ tipo }) => (
   </span>
 );
 
-/* ─── FeriadoForm ─────────────────────────────────────────── */
+/* --- FeriadoForm ------------------------------------------- */
 const FeriadoForm = ({ onSubmit, onClose }) => {
   const [form, setForm]         = useState({ nome: '', data: '', tipo: 'manual', estado: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,7 +55,7 @@ const FeriadoForm = ({ onSubmit, onClose }) => {
               value={form.nome}
               onChange={handle}
               required
-              placeholder="Ex: Aniversário da cidade"
+              placeholder="Ex: Aniversario da cidade"
               className="input-field"
             />
           </div>
@@ -104,7 +104,7 @@ const FeriadoForm = ({ onSubmit, onClose }) => {
   );
 };
 
-/* ─── FeriadosPage ────────────────────────────────────────── */
+/* --- FeriadosPage ------------------------------------------ */
 const FeriadosPage = () => {
   const { currentUser } = useAuthContext();
   const { feriados, feriadosApi, loading, error, cadastrar, deletar, carregar } = useFeriados();
@@ -129,7 +129,7 @@ const FeriadosPage = () => {
             <CalendarDays size={18} className="text-blue-600" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Feriados e Calendário</h2>
+            <h2 className="text-lg font-bold text-gray-900">Feriados e Calendario</h2>
             <p className="text-xs text-gray-400">{new Date().getFullYear()}</p>
           </div>
         </div>
@@ -235,7 +235,7 @@ const FeriadosPage = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    {['Data','Nome','Tipo', ...(podeGerenciar ? ['Ações'] : [])].map((h) => (
+                    {['Data','Nome','Tipo', ...(podeGerenciar ? ['Acoes'] : [])].map((h) => (
                       <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
@@ -270,7 +270,7 @@ const FeriadosPage = () => {
         <FeriadoForm onSubmit={cadastrar} onClose={() => setShowForm(false)} />
       )}
 
-      {/* Modal exclusão */}
+      {/* Modal exclusao */}
       {confirmarDel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 w-full max-w-sm">
@@ -279,7 +279,7 @@ const FeriadosPage = () => {
             </div>
             <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir feriado?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              <span className="font-semibold text-gray-700">{confirmarDel.nome}</span> ({formatarData(confirmarDel.data)}) será removido permanentemente.
+              <span className="font-semibold text-gray-700">{confirmarDel.nome}</span> ({formatarData(confirmarDel.data)}) sera removido permanentemente.
             </p>
             <div className="flex gap-3">
               <button
@@ -303,3 +303,4 @@ const FeriadosPage = () => {
 };
 
 export default FeriadosPage;
+

@@ -1,4 +1,4 @@
-export function calcAnomalias(d) {
+﻿export function calcAnomalias(d) {
   const anomalias = [];
   if (!d) return anomalias;
 
@@ -26,8 +26,8 @@ export function calcAnomalias(d) {
       anomalias.push({
         level: "medium",
         icon: "⚠️",
-        title: `Regional ${r.name} — Produção muito baixa`,
-        desc: `Apenas ${total} O.S registradas no mês.`,
+        title: `Regional ${r.name} — Producao muito baixa`,
+        desc: `Apenas ${total} O.S registradas no mes.`,
       });
       return;
     }
@@ -42,7 +42,7 @@ export function calcAnomalias(d) {
     }
   });
 
-  // Dias com zero total em faixa crítica do mês
+  // Dias com zero total em faixa critica do mes
   if (rawDays.length) {
     const diasZerados = rawDays.filter((r) => {
       const dia = Number(r.dia) || 0;
@@ -66,7 +66,7 @@ export function calcAnomalias(d) {
       level: "high",
       icon: "📉",
       title: "Meta geral em risco",
-      desc: `Apenas ${percentAchieved.toFixed(1)}% da meta atingida. Intervenção necessária.`,
+      desc: `Apenas ${percentAchieved.toFixed(1)}% da meta atingida. Intervencao necessaria.`,
     });
   }
 
@@ -81,3 +81,4 @@ export function calcAnomalias(d) {
 
   return anomalias;
 }
+

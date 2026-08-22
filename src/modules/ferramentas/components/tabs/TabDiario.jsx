@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
@@ -101,7 +101,7 @@ const TabDiario = () => {
             _tecnico: tecRaw,
             _cidade: cidade,
             _regional: info.regional || "Sem Regional",
-            _agente: info.agente ? "SIM" : "NÃO",
+            _agente: info.agente ? "SIM" : "NAO",
             _tectipo: tecSet.has(norm(tecRaw)) ? "RETIRADA" : "ATIVA",
             _date: dateParsed,
             _dateStr: dateParsed ? dateParsed.toLocaleDateString("pt-BR") : "",
@@ -117,7 +117,7 @@ const TabDiario = () => {
     reader.readAsArrayBuffer(f);
   };
 
-  // Datas únicas para filtro
+  // Datas unicas para filtro
   const datas = [...new Set(rows.map((r) => r._dateStr).filter(Boolean))].sort(
     (a, b) => {
       const [da, ma, ya] = a.split("/");
@@ -174,7 +174,7 @@ const TabDiario = () => {
       const dataSlug =
         filtroData === "todos" ? "geral" : filtroData.replace(/\//g, "-");
 
-      // ── ABA 1: O.S do Dia ─────────────────────────────────────────────────
+      // -- ABA 1: O.S do Dia -------------------------------------------------
       const ws1 = wb.addWorksheet("O.S do Dia");
       ws1.views = [{ showGridLines: false }];
       xT(ws1, 1, 7, `O.S DO DIA — ${titulo} — ${D.length} registros`, "003087");
@@ -209,10 +209,10 @@ const TabDiario = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Técnico ────────────────────────────────────────────────
+      // -- ABA 2: Por Técnico ------------------------------------------------
       const ws2 = wb.addWorksheet("Por Técnico");
       ws2.views = [{ showGridLines: false }];
-      xT(ws2, 1, 5, `O.S POR TÉCNICO — ${titulo}`, "2C3E50");
+      xT(ws2, 1, 5, `O.S POR TECNICO — ${titulo}`, "2C3E50");
       ["Técnico", "Tipo", "O.S", "Regionais", "Cidades"].forEach((h, i) =>
         xH(ws2, 2, i + 1, h, "566573"),
       );
@@ -245,7 +245,7 @@ const TabDiario = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Por Regional ───────────────────────────────────────────────
+      // -- ABA 3: Por Regional -----------------------------------------------
       const ws3 = wb.addWorksheet("Por Regional");
       ws3.views = [{ showGridLines: false }];
       xT(ws3, 1, 5, `O.S POR REGIONAL — ${titulo}`, "117A65");
@@ -286,7 +286,7 @@ const TabDiario = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 4: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 4: Por Cidade -------------------------------------------------
       const ws4 = wb.addWorksheet("Por Cidade");
       ws4.views = [{ showGridLines: false }];
       xT(ws4, 1, 4, `O.S POR CIDADE — ${titulo}`, "1F618D");
@@ -313,7 +313,7 @@ const TabDiario = () => {
         ws4.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -338,6 +338,14 @@ const TabDiario = () => {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
           ${status === "ok" || status === "gerando" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-orange-400"}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -397,7 +405,7 @@ const TabDiario = () => {
         </div>
       )}
 
-      {/* Botão gerar */}
+      {/* Botao gerar */}
       {D.length > 0 && (
         <button
           onClick={gerar}
@@ -423,3 +431,4 @@ const TabDiario = () => {
 };
 
 export default TabDiario;
+

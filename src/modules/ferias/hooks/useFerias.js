@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   cadastrarFerias,
   solicitarFerias,
@@ -10,15 +10,23 @@ import {
 import {
   getOrLoadCachedValue,
   invalidateCache,
-} from '../../../services/firestoreCache';
-import { logFirestoreRead } from '../../../services/firestoreMonitoring';
+} from '../../../services/dataCache';
+import { logDataRead } from '../../../services/dataMonitoring';
+import { ROLES } from '../../../constants/roles';
 
 const CACHE_TTL = 10 * 60 * 1000;
+const GLOBAL_FERIAS_ROLES = new Set([ROLES.ADMIN, ROLES.GESTOR]);
+
+const getCurrentColaboradorId = (currentUser) =>
+  currentUser?.colaborador_id ?? currentUser?.id ?? null;
+
+const canReadAllFerias = (currentUser) =>
+  GLOBAL_FERIAS_ROLES.has(String(currentUser?.role ?? '').toLowerCase());
 
 const buildCacheKey = (currentUser) => {
-  const role = currentUser?.role?.toLowerCase();
-  if (role === 'tecnico') {
-    return `ferias:colaborador:${currentUser?.colaborador_id ?? currentUser?.id}`;
+  const colaboradorId = getCurrentColaboradorId(currentUser);
+  if (!canReadAllFerias(currentUser) && colaboradorId) {
+    return `ferias:colaborador:${colaboradorId}`;
   }
 
   return 'ferias:todas';
@@ -39,20 +47,21 @@ export const useFerias = (currentUser) => {
     setError(null);
 
     try {
-      const role = currentUser.role?.toLowerCase();
+      const colaboradorId = getCurrentColaboradorId(currentUser);
+      const scopedToCurrentUser = !canReadAllFerias(currentUser) && Boolean(colaboradorId);
       const cacheKey = buildCacheKey(currentUser);
       const { data } = await getOrLoadCachedValue(
         cacheKey,
         async () => {
           const items =
-            role === 'tecnico'
-              ? await buscarFeriasPorColaborador(currentUser.colaborador_id ?? currentUser.id)
+            scopedToCurrentUser
+              ? await buscarFeriasPorColaborador(colaboradorId)
               : await buscarTodasFerias();
 
-          logFirestoreRead({
+          logDataRead({
             source: 'useFerias',
-            type: 'getDocs',
-            path: role === 'tecnico' ? `ferias:colaborador:${currentUser.colaborador_id ?? currentUser.id}` : 'ferias',
+            type: 'sql-list',
+            path: scopedToCurrentUser ? `ferias:colaborador:${colaboradorId}` : 'ferias',
             count: items.length,
           });
 
@@ -75,21 +84,26 @@ export const useFerias = (currentUser) => {
 
   const atualizarCaches = useCallback(() => {
     invalidateCache('ferias:todas');
-    if (currentUser?.colaborador_id || currentUser?.id) {
-      invalidateCache(`ferias:colaborador:${currentUser.colaborador_id ?? currentUser.id}`);
+    const colaboradorId = getCurrentColaboradorId(currentUser);
+    if (colaboradorId) {
+      invalidateCache(`ferias:colaborador:${colaboradorId}`);
     }
-  }, [currentUser?.colaborador_id, currentUser?.id]);
+  }, [currentUser]);
 
   const solicitar = useCallback(async (dados) => {
     try {
-      const ref = await solicitarFerias(dados);
+      const payload = {
+        ...dados,
+        colaborador_id: dados?.colaborador_id ?? getCurrentColaboradorId(currentUser),
+      };
+      const ref = await solicitarFerias(payload);
       atualizarCaches();
       setFerias((prev) =>
         sortByInicioDesc([
           ...prev,
           {
             id: ref.id,
-            ...dados,
+            ...payload,
             status: 'pendente',
           },
         ]),
@@ -97,7 +111,7 @@ export const useFerias = (currentUser) => {
     } catch {
       setError('Erro ao lançar férias.');
     }
-  }, [atualizarCaches]);
+  }, [atualizarCaches, currentUser]);
 
   const cadastrar = useCallback(async (dados) => {
     try {
@@ -114,7 +128,7 @@ export const useFerias = (currentUser) => {
         ]),
       );
     } catch {
-      setError('Erro ao cadastrar fÃ©rias.');
+      setError('Erro ao cadastrar férias.');
     }
   }, [atualizarCaches]);
 
@@ -149,3 +163,5 @@ export const useFerias = (currentUser) => {
     carregar: () => carregar(true),
   };
 };
+
+

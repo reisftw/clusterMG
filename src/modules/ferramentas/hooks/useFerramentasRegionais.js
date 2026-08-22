@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   getRegionais, addRegional, updateRegional, deleteRegional,
   getConfig, saveConfig,
@@ -54,3 +54,4 @@ export const useFerramentasRegionais = () => {
 
   return { regionais, config, loading, criar, atualizar, remover, salvarConfig, reload: fetch };
 };
+

@@ -26,7 +26,9 @@ async function geocodificar(cidade) {
     );
     const data = await res.json();
     if (data?.[0]) return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-  } catch {}
+  } catch {
+    // Falhas de geocodificação não devem quebrar o mapa inteiro.
+  }
   return null;
 }
 
@@ -56,10 +58,14 @@ export default function MapaGeoModal({ ordens, onClose }) {
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    link.integrity = "sha256-p4NxAoJBhIINfQwYf4cg1i5RZV6RFqLJQj0NmmHfJxN2o=";
+    link.crossOrigin = "anonymous";
     document.head.appendChild(link);
 
     const script = document.createElement("script");
     script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
+    script.crossOrigin = "anonymous";
     script.onload = async () => {
       const L = window.L;
       const map = L.map(mapRef.current).setView([-19.95, -44.2], 8);
@@ -117,8 +123,14 @@ export default function MapaGeoModal({ ordens, onClose }) {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-8 bg-white rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden">
+      <div
+        className="fixed inset-0 z-layout-modal bg-black/50"
+        onClick={onClose}
+        onKeyDown={(event) => event.key === "Escape" && onClose()}
+        role="button"
+        tabIndex={-1}
+      />
+      <div className="fixed inset-4 z-layout-modal flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:inset-8">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-blue-50">
           <div className="flex items-center gap-2">
@@ -171,3 +183,4 @@ export default function MapaGeoModal({ ordens, onClose }) {
     </>
   );
 }
+

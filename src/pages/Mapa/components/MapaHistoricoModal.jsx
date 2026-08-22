@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { X, History, ChevronDown, ChevronUp } from "lucide-react";
+import ModalShell from "../../../components/ui/ModalShell";
 import { useMapaHistorico } from "../hooks/useMapaHistorico";
+import { resolveVpsDate } from "../../../services/vpsDate";
 
 function formatarData(ts) {
   if (!ts) return "—";
-  const d = ts.toDate?.() || new Date(ts);
+  const d = resolveVpsDate(ts);
+  if (!d) return "--";
   return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -43,6 +46,14 @@ function HistoricoCard({ item }) {
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
         onClick={() => setAberto(!aberto)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setAberto(!aberto);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <div>
           <p className="text-sm font-semibold text-gray-800">
@@ -103,16 +114,8 @@ export default function MapaHistoricoModal({ onClose }) {
   const { historico, loading } = useMapaHistorico();
 
   return (
-    // Backdrop
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      {/* Modal */}
-      <div
-        className="relative w-full max-w-xl mx-4 bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalShell onClose={onClose} showClose={false} size="xl" bodyClassName="p-0">
+      <div className="flex min-h-0 flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-2">
@@ -126,7 +129,7 @@ export default function MapaHistoricoModal({ onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
           >
             <X size={16} />
           </button>
@@ -153,6 +156,7 @@ export default function MapaHistoricoModal({ onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import HeaderPainel from "./components/HeaderPainel";
 import TabRetiradas from "./tabs/TabRetiradas";
 import TabAgentes from "./tabs/TabAgentes";
@@ -6,9 +6,12 @@ import TabMapaOS from "./tabs/TabMapaOS";
 import { useRetiradas } from "./hooks/useRetiradas";
 import { useAgentes } from "./hooks/useAgentes";
 import { useMapaOS } from "./hooks/useMapaOS";
+import { obterMesAtual } from "../../utils/mes";
+import RetorninhoLoader from "../../components/ui/RetorninhoLoader";
+import MelzFooter from "../../components/layout/MelzFooter";
 import "./PainelPublico.css";
 
-const MESES = [
+const MONTH_ORDER = [
   "Janeiro",
   "Fevereiro",
   "Março",
@@ -23,13 +26,64 @@ const MESES = [
   "Dezembro",
 ];
 
-export default function PainelPublico() {
-  const [month, setMonth] = useState(() => MESES[new Date().getMonth()] || "Janeiro");
-  const [activeTab, setActiveTab] = useState("retiradas");
+function normalizeMonthName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function resolveMonthRecord(allData = {}, month) {
+  const normalizedMonth = normalizeMonthName(month);
+  const monthKey = Object.keys(allData || {}).find(
+    (key) => normalizeMonthName(key) === normalizedMonth,
+  );
+  return monthKey ? allData[monthKey] : allData?.[month];
+}
+
+function hasMonthData(record) {
+  if (!record || typeof record !== "object") return false;
+  const values = [
+    record.totalOS,
+    record.totalRealizado,
+    record.totalCancelamentos,
+    record.meta,
+    record.onnet?.totalOS,
+    record.onnetSempre?.totalOS,
+  ];
+  return values.some((value) => Number(value || 0) > 0);
+}
+
+function latestMonthWithData(allData = {}) {
+  const orderedMonth = [...MONTH_ORDER]
+    .reverse()
+    .find((monthName) => hasMonthData(resolveMonthRecord(allData, monthName)));
+
+  return (
+    orderedMonth ||
+    Object.keys(allData || {})
+      .reverse()
+      .find((monthName) => hasMonthData(allData?.[monthName]))
+  );
+}
+
+export default function PainelPublico({ initialTab = "retiradas" }) {
+  const [month, setMonth] = useState(() => obterMesAtual() || "Janeiro");
+  const activeTab = initialTab;
 
   const retiradas = useRetiradas(activeTab === "retiradas");
   const agentes = useAgentes(activeTab === "agentes");
   const mapaOS = useMapaOS(activeTab === "mapa");
+
+  const displayMonth = useMemo(() => {
+    if (activeTab === "mapa") return month;
+
+    const source = activeTab === "agentes" ? agentes.allData : retiradas.allData;
+    if (hasMonthData(resolveMonthRecord(source, month))) return month;
+
+    return latestMonthWithData(source) || month;
+  }, [activeTab, agentes.allData, month, retiradas.allData]);
 
   const loading =
     activeTab === "retiradas"
@@ -41,10 +95,9 @@ export default function PainelPublico() {
   return (
     <div className="painel-publico-page">
       <HeaderPainel
-        month={month}
+        month={displayMonth}
         onMonthChange={setMonth}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
         fbStatusRetiradas={retiradas.fbStatus}
         fbStatusAgentes={agentes.fbStatus}
         fbStatusMapa={mapaOS.fbStatus}
@@ -54,23 +107,13 @@ export default function PainelPublico() {
       />
 
       {loading ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "80px 20px",
-            color: "var(--muted)",
-          }}
-        >
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-          <p
-            style={{
-              fontFamily: "Bebas Neue, sans-serif",
-              fontSize: 28,
-              color: "var(--blue)",
-            }}
-          >
-            Carregando dados...
-          </p>
+        <div style={{ padding: "40px 0 80px" }}>
+          <RetorninhoLoader
+            card
+            title="Carregando dados..."
+            description="O Retorninho está atualizando os indicadores do painel público."
+            size="lg"
+          />
         </div>
       ) : (
         <>
@@ -78,27 +121,36 @@ export default function PainelPublico() {
             <div className="painel-classico">
               <TabRetiradas
                 allData={retiradas.allData}
-                month={month}
+                month={displayMonth}
                 lastUpdate={retiradas.lastUpdate}
+                forcaTarefa={retiradas.forcaTarefa}
+                agentesData={retiradas.agentesData}
+                feriadosSet={retiradas.feriadosSet}
               />
             </div>
           )}
 
           {activeTab === "agentes" && (
             <div className="painel-classico">
-              <TabAgentes allData={agentes.allData} month={month} />
+              <TabAgentes
+                allData={agentes.allData}
+                month={displayMonth}
+                lastUpdate={agentes.lastUpdate}
+              />
             </div>
           )}
 
           {activeTab === "mapa" && (
             <TabMapaOS
               allData={mapaOS.allData}
-              month={month}
+              month={displayMonth}
               lastUpdate={mapaOS.lastUpdate}
             />
           )}
         </>
       )}
+      <MelzFooter className="mt-8" />
     </div>
   );
 }
+

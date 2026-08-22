@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { useMapaHistorico } from "./hooks/useMapaHistorico";
 import { ChevronDown, ChevronUp, History } from "lucide-react";
 import Spinner from "../../components/ui/Spinner";
+import { resolveVpsDate } from "../../services/vpsDate";
 
 function formatarData(ts) {
   if (!ts) return "—";
-  const d = ts.toDate?.() || new Date(ts);
+  const d = resolveVpsDate(ts);
+  if (!d) return "--";
   return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
@@ -46,6 +48,14 @@ function HistoricoCard({ item }) {
       <div
         className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 transition-all"
         onClick={() => setAberto(!aberto)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setAberto(!aberto);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
@@ -115,11 +125,11 @@ export default function MapaHistoricoPage() {
     <div className="p-6 max-w-[900px] mx-auto">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">
-          📋 Histórico de Uploads
+          Histórico de Uploads
         </h2>
         <p className="text-xs text-gray-400 mt-1">
           Cada entrada representa um upload de planilha com o snapshot das O.S
-          abertas naquele momento
+          abertas naquele momento.
         </p>
       </div>
 
@@ -145,3 +155,4 @@ export default function MapaHistoricoPage() {
     </div>
   );
 }
+

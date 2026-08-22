@@ -405,17 +405,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /webhooks/zapi:
-    post:
-      tags: [Webhooks]
-      summary: Recebe eventos da Z-API
-      security: []
-      requestBody:
-        $ref: "#/components/requestBodies/WebhookPayload"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
   /webhooks/whatsapp-official:
     get:
       tags: [Webhooks]

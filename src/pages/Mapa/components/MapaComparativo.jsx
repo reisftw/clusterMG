@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -40,6 +40,14 @@ export default function MapaComparativo({ comparativo }) {
       <div
         className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-50 transition-all"
         onClick={() => setAberto(!aberto)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setAberto(!aberto);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <div className="flex items-center gap-3">
           <span className="text-base">📊</span>
@@ -53,11 +61,11 @@ export default function MapaComparativo({ comparativo }) {
               </span>
               {" · "}
               <span className="text-green-500 font-semibold">
-                ↓ {diminuiram} diminuíram
+                ↓ {diminuiram} diminuiram
               </span>
               {" · "}
               <span className="text-gray-400">
-                {semAlteracao} sem alteração
+                {semAlteracao} sem alteracao
               </span>
             </p>
           </div>
@@ -103,3 +111,4 @@ export default function MapaComparativo({ comparativo }) {
     </div>
   );
 }
+

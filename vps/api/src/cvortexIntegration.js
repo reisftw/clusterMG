@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const documents = require("./documents");
+const { randomId } = require("./secureRandom");
 
 const CONFIG_PATH = "cvortex_config/global";
 const MESSAGING_CONFIG_PATH = "mensageria_config/global";
@@ -335,7 +336,7 @@ function pickFirst(source, paths = []) {
 
 async function registerWebhook(payload = {}, meta = {}) {
   const createdAt = new Date().toISOString();
-  const id = `cvortex_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId("cvortex");
   const phone = normalizePhone(pickFirst(payload, [
     "phone",
     "telefone",

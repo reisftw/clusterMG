@@ -1,4 +1,4 @@
-const MetasMultas = ({ dados }) => {
+﻿const MetasMultas = ({ dados }) => {
   if (!dados) return null;
   const { totalMultas, propMult, totalOS, multasDiarias = [] } = dados;
 
@@ -8,7 +8,7 @@ const MetasMultas = ({ dados }) => {
         {[
           { label: 'Total de Multas',     value: totalMultas || '—', color: 'bg-red-50 border-red-100',      text: 'text-red-600'    },
           { label: 'Total de Retiradas',  value: totalOS     || '—', color: 'bg-blue-50 border-blue-100',    text: 'text-blue-700'   },
-          { label: 'Proporção Ret/Multa', value: propMult > 0 ? `${propMult}x` : '—',
+          { label: 'Proporcao Ret/Multa', value: propMult > 0 ? `${propMult}x` : '—',
             color: 'bg-purple-50 border-purple-100', text: 'text-purple-700' },
         ].map(({ label, value, color, text }) => (
           <div key={label} className={`rounded-2xl border p-4 ${color}`}>
@@ -21,13 +21,13 @@ const MetasMultas = ({ dados }) => {
       {multasDiarias.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">
-            <h3 className="text-sm font-bold text-gray-800">Lançamento Diário de Multas</h3>
+            <h3 className="text-sm font-bold text-gray-800">Lancamento Diario de Multas</h3>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="min-w-[680px] w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {['Dia','Multas Lançadas','Retiradas do Dia','Relação Retir/Multa'].map(h => (
+                  {['Dia','Multas Lancadas','Retiradas do Dia','Relacao Retir/Multa'].map(h => (
                     <th key={h} className="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -54,3 +54,4 @@ const MetasMultas = ({ dados }) => {
 };
 
 export default MetasMultas;
+

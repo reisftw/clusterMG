@@ -1,9 +1,8 @@
-import { db } from '../../../services/firebase';
-import { collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { buildCacheKey, invalidateCache } from '../../../services/firestoreCache';
+﻿import { buildCacheKey, invalidateCache } from '../../../services/dataCache';
+import { deleteVpsDocument, setVpsDocument } from '../../../services/vpsApiClient';
 
 const MONTHORDER = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ];
 
@@ -12,35 +11,49 @@ export async function salvarDashboard(allParsed) {
     await Promise.all(
       MONTHORDER.map(async (mes) => {
         const d = allParsed[mes];
-        const ref = doc(collection(db, 'dashboard'), mes);
+        const manterMesSemLancamentosComMeta =
+          d &&
+          d.planilhaCarregada === true &&
+          Number(d.totalOS) === 0 &&
+          Number(d.meta) > 0;
+        const manterMesComOnnet =
+          Number(d?.onnet?.totalOS || 0) > 0 ||
+          Number(d?.onnet?.meta || 0) > 0 ||
+          Number(d?.onnetSempre?.totalOS || 0) > 0 ||
+          Number(d?.onnetSempre?.meta || 0) > 0;
 
-        if (!d || Number(d.totalOS) === 0) {
-          await deleteDoc(ref).catch(() => {});
+        if (!d || (Number(d.totalOS) === 0 && !manterMesSemLancamentosComMeta && !manterMesComOnnet)) {
+          await deleteVpsDocument(`dashboard/${mes}`).catch(() => {});
           return;
         }
 
-        // rawDays: apenas os dados brutos, sem saldo (calculado no painel)
-        const rawDays = d.saldoDiario.map(s => ({
-          dia:       s.dia,
-          equipe:    s.equipe,
-          agente:    s.agente,
-          loja:      s.loja,
+        const rawDays = d.saldoDiario.map((s) => ({
+          dia: s.dia,
+          equipe: s.equipe,
+          agente: s.agente,
+          loja: s.loja,
           regionais: s.regionais,
-          totalDia:  s.totalDia,
+          totalDia: s.totalDia,
         }));
 
-        await setDoc(ref, {
-          month:            mes,
-          meta:             d.meta,
-          totalOS:          d.totalOS,
-          percentAchieved:  String(d.percentAchieved),
-          status:           d.status,
-          technicians:      d.technicians,
-          regionais:        d.regionais,
-          agenteTotal:      d.agenteTotal,
-          lojaTotal:        d.lojaTotal,
+        await setVpsDocument(`dashboard/${mes}`, {
+          month: mes,
+          meta: d.meta,
+          totalOS: d.totalOS,
+          cancelamentos: d.cancelamentos,
+          percentAchieved: String(d.percentAchieved),
+          status: d.status,
+          planilhaCarregada: d.planilhaCarregada === true,
+          temLancamentos: d.temLancamentos === true,
+          technicians: d.technicians,
+          regionais: d.regionais,
+          agenteTotal: d.agenteTotal,
+          lojaTotal: d.lojaTotal,
+          onnet: d.onnet || null,
+          onnetSempre: d.onnetSempre || null,
+          saldoDiario: d.saldoDiario,
           rawDays,
-          updatedAt:        new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         });
       })
     );
@@ -49,3 +62,4 @@ export async function salvarDashboard(allParsed) {
     invalidateCache(buildCacheKey(['painel-publico', 'retiradas', 'v2']));
   }
 }
+

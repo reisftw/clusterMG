@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import TabRegionais from "./tabs/TabRegionais";
 import TabMensal from "./tabs/TabMensal";
 import TabDiario from "./tabs/TabDiario";
@@ -8,20 +8,28 @@ import TabDevolucoesMes from "./tabs/TabDevolucoesMes";
 import TabOSAberto from "./tabs/TabOSAberto";
 import TabMultas from "./tabs/TabMultas";
 import TabCancelamento from "./tabs/TabCancelamento";
+import TabCancelamentoAvaliacao from "./tabs/TabCancelamentoAvaliacao";
+import TabCancelamentosMes from "./tabs/TabCancelamentosMes";
 import TabEquipServico from "./tabs/TabEquipServico";
 import TabEmailFechamento from "./tabs/TabEmailFechamento";
+import TabMesInicial from "./tabs/TabMesInicial";
+import TabEntregaLoja from "./tabs/TabEntregaLoja";
 
 const TABS = [
   { id: "regionais", label: "Regionais" },
   { id: "mensal", label: "Análise Mensal" },
   { id: "diario", label: "O.S do Dia" },
   { id: "media", label: "Análise Média" },
-  { id: "dvd", label: "Devoluções Diária" },
+  { id: "dvd", label: "Devoluções Diárias" },
   { id: "dvm", label: "Devoluções Mês" },
   { id: "osaberto", label: "O.S em Aberto" },
   { id: "multas", label: "Multas" },
   { id: "cancelamento", label: "Cancelamento" },
+  { id: "cancelamentomes", label: "Cancelamentos Mês" },
+  { id: "cancelamentoavaliacao", label: "Cancelamento Avaliação" },
   { id: "equipservico", label: "Equip. por Serviço" },
+  { id: "entregaloja", label: "Entrega Loja" },
+  { id: "mesinicial", label: "MES INICIAL" },
   { id: "email", label: "E-mail Fechamento" },
 ];
 
@@ -48,8 +56,16 @@ const FerramentasPage = () => {
         return <TabMultas />;
       case "cancelamento":
         return <TabCancelamento />;
+      case "cancelamentomes":
+        return <TabCancelamentosMes />;
+      case "cancelamentoavaliacao":
+        return <TabCancelamentoAvaliacao />;
       case "equipservico":
         return <TabEquipServico />;
+      case "entregaloja":
+        return <TabEntregaLoja />;
+      case "mesinicial":
+        return <TabMesInicial />;
       case "email":
         return <TabEmailFechamento />;
       default:
@@ -83,10 +99,11 @@ const FerramentasPage = () => {
         ))}
       </div>
 
-      {/* Conteúdo da aba */}
+      {/* Conteudo da aba */}
       <div>{renderTab()}</div>
     </div>
   );
 };
 
 export default FerramentasPage;
+

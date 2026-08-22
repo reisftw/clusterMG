@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
+import { Archive, Layers3 } from "lucide-react";
 import MapaHeader from "../Mapa/components/MapaHeader";
 import MapaRegionais from "../Mapa/components/MapaRegionais";
 import MapaAgentes from "../Mapa/components/MapaAgentes";
@@ -6,18 +7,20 @@ import MapaFiltros from "../Mapa/components/MapaFiltros";
 import MapaGrafico from "../Mapa/components/MapaGrafico";
 import RankingRegionais from "../Mapa/components/RankingRegionais";
 import RankingAgentes from "../Mapa/components/RankingAgentes";
+import MapaLegadoPanel from "../Mapa/components/MapaLegadoPanel";
+import { useMapaLegado } from "../Mapa/hooks/useMapaLegado";
 import PainelMapaNav from "./components/PainelMapaNav";
 import { useMapaOS } from "./hooks/useMapaOS";
 import { buildEmptyPublicMapaSnapshot } from "../Mapa/utils/mapaUtils";
-import { resolveFirestoreDate } from "../../services/firestoreDate";
+import { resolveVpsDate } from "../../services/vpsDate";
 import PublicPageLoading from "./components/PublicPageLoading";
+import MelzFooter from "../../components/layout/MelzFooter";
 
 function resolveSnapshotByFilter(summaryBase, filtroData, lastUpdate) {
   if (filtroData === "tudo") return summaryBase;
 
   const rawDate =
-    resolveFirestoreDate(lastUpdate?.data) ||
-    resolveFirestoreDate(lastUpdate);
+    resolveVpsDate(lastUpdate);
 
   if (!rawDate || Number.isNaN(rawDate.getTime())) {
     return buildEmptyPublicMapaSnapshot();
@@ -50,10 +53,34 @@ function resolveSnapshotByFilter(summaryBase, filtroData, lastUpdate) {
   return summaryBase;
 }
 
+function ViewTab({ active, onClick, icon, label, helper }) {
+  const IconComponent = icon;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-w-0 rounded-2xl border px-4 py-3 text-left transition-all ${
+        active
+          ? "border-blue-300 bg-blue-50 text-blue-900 shadow-sm"
+          : "border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-sm font-bold">
+        <IconComponent size={16} />
+        <span>{label}</span>
+      </div>
+      <div className="mt-1 text-xs opacity-80">{helper}</div>
+    </button>
+  );
+}
+
 export default function MapaPublicoPage() {
   const { allData, lastUpdate: ultimaAtualizacao, loading } = useMapaOS(true);
+  const legado = useMapaLegado(true);
   const [filtroData, setFiltroData] = useState("tudo");
   const [alertaThreshold, setAlertaThreshold] = useState(50);
+  const [activeView, setActiveView] = useState("abertas");
 
   const summaryBase = useMemo(() => {
     return allData?.Janeiro?.summary || buildEmptyPublicMapaSnapshot();
@@ -64,69 +91,100 @@ export default function MapaPublicoPage() {
     [filtroData, summaryBase, ultimaAtualizacao],
   );
 
+  const isLegacyView = activeView === "legado";
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-      <div className="p-6 max-w-[1400px] mx-auto">
+    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
+      <div className="mx-auto w-full max-w-[1400px] min-w-0 px-3 py-4 sm:px-6 sm:py-6">
         <PainelMapaNav current="mapa" />
 
-        <MapaHeader
-          ordens={[]}
-          ultimaAtualizacao={ultimaAtualizacao}
-          kpisOverride={summary.kpis}
-        />
-
-        <MapaFiltros
-          filtroData={filtroData}
-          setFiltroData={setFiltroData}
-          alertaThreshold={alertaThreshold}
-          setAlertaThreshold={setAlertaThreshold}
-          ordens={[]}
-          disableMapa
-        />
-
-        {loading ? (
-          <PublicPageLoading
-            title="Carregando mapa"
-            description="Estamos lendo as ordens em aberto e montando a visao do mapa para voce."
+        <div className="mb-6 grid min-w-0 gap-3 md:grid-cols-2">
+          <ViewTab
+            active={!isLegacyView}
+            onClick={() => setActiveView("abertas")}
+            icon={Layers3}
+            label="Mapa Atual"
+            helper="Ordens em aberto da carga principal, com filtros por periodo."
           />
-        ) : summary.totalOrdens === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <span className="text-5xl mb-4">Mapa</span>
-            <p className="text-gray-600 font-semibold text-base">
-              {summaryBase.totalOrdens > 0
-                ? "Nenhuma O.S no periodo selecionado"
-                : "Nenhuma O.S em aberto"}
-            </p>
-            <p className="text-gray-400 text-sm mt-1">
-              {summaryBase.totalOrdens > 0
-                ? "Tente outro filtro de data"
-                : "Nao ha O.S para exibir"}
-            </p>
-          </div>
+          <ViewTab
+            active={isLegacyView}
+            onClick={() => setActiveView("legado")}
+            icon={Archive}
+            label="Acervo Legado"
+            helper="Ordens anteriores a 31/12/2025, com mapa separado para acompanhar o passivo antigo."
+          />
+        </div>
+
+        {isLegacyView ? (
+          <MapaLegadoPanel
+            summary={legado.summary}
+            meta={legado.meta}
+            loading={legado.loading}
+          />
         ) : (
           <>
-            <MapaGrafico seriesOverride={summary.chartRegionais} />
+            <MapaHeader
+              ordens={[]}
+              ultimaAtualizacao={ultimaAtualizacao}
+              kpisOverride={summary.kpis}
+            />
 
-            <div className="flex gap-4 mb-8 flex-wrap">
-              <RankingRegionais rankingOverride={summary.rankingRegionais} />
-              <RankingAgentes rankingOverride={summary.rankingAgentes} />
-            </div>
+            <MapaFiltros
+              filtroData={filtroData}
+              setFiltroData={setFiltroData}
+              alertaThreshold={alertaThreshold}
+              setAlertaThreshold={setAlertaThreshold}
+              ordens={[]}
+              disableMapa
+            />
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <MapaRegionais
-                ordens={[]}
-                dataOverride={summary.regionais}
-                alertaThreshold={alertaThreshold}
+            {loading ? (
+              <PublicPageLoading
+                title="Carregando mapa"
+                description="Estamos lendo as ordens em aberto e montando a visão do mapa para você."
               />
-              <MapaAgentes
-                ordens={[]}
-                dataOverride={summary.agentes}
-                alertaThreshold={alertaThreshold}
-              />
-            </div>
+            ) : summary.totalOrdens === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <span className="text-5xl mb-4">Mapa</span>
+                <p className="text-gray-600 font-semibold text-base">
+                  {summaryBase.totalOrdens > 0
+                    ? "Nenhuma O.S no período selecionado"
+                    : "Nenhuma O.S em aberto"}
+                </p>
+                <p className="text-gray-400 text-sm mt-1">
+                  {summaryBase.totalOrdens > 0
+                    ? "Tente outro filtro de data"
+                    : "Não há O.S para exibir"}
+                </p>
+              </div>
+            ) : (
+              <>
+                <MapaGrafico seriesOverride={summary.chartRegionais} />
+
+                <div className="mb-8 flex min-w-0 flex-wrap gap-4">
+                  <RankingRegionais rankingOverride={summary.rankingRegionais} />
+                  <RankingAgentes rankingOverride={summary.rankingAgentes} />
+                </div>
+
+                <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+                  <MapaRegionais
+                    ordens={[]}
+                    dataOverride={summary.regionais}
+                    alertaThreshold={alertaThreshold}
+                  />
+                  <MapaAgentes
+                    ordens={[]}
+                    dataOverride={summary.agentes}
+                    alertaThreshold={alertaThreshold}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
+      <MelzFooter />
     </div>
   );
 }
+

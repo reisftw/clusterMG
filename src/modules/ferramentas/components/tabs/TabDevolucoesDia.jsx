@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { FileDown } from "lucide-react";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
+import RetorninhoLoader from "../../../../components/ui/RetorninhoLoader";
 
 const TabDevolucoesDia = () => {
   const { regionais } = useFerramentasRegionais();
@@ -79,7 +80,7 @@ const TabDevolucoesDia = () => {
             ...r,
             _cidade: cidade,
             _regional: info.regional,
-            _agente: info.agente ? "SIM" : "NÃO",
+            _agente: info.agente ? "SIM" : "NAO",
           };
         });
         setRows(enriched);
@@ -91,14 +92,14 @@ const TabDevolucoesDia = () => {
     reader.readAsArrayBuffer(f);
   };
 
-  // Extrai datas únicas da coluna datafechamento
+  // Extrai datas unicas da coluna datafechamento
   const getDatas = () => {
     const datas = new Set();
     rows.forEach((r) => {
       const v = String(r.datafechamento || "").split(" ")[0];
       if (v) datas.add(v);
     });
-    return [...datas].sort();
+    return [...datas].sort((a, b) => String(a).localeCompare(String(b), "pt-BR"));
   };
 
   const gerar = async () => {
@@ -149,14 +150,14 @@ const TabDevolucoesDia = () => {
         ws.getRow(r).height = 28;
       };
 
-      // ── ABA 1: Resumo do Dia ──────────────────────────────────────────────
+      // -- ABA 1: Resumo do Dia ----------------------------------------------
       const ws1 = wb.addWorksheet(`Resumo ${filtroData.replace(/\//g, "-")}`);
       ws1.views = [{ showGridLines: false }];
       xT(
         ws1,
         1,
         5,
-        `DEVOLUÇÕES DIÁRIA — ${filtroData} — ${D.length} registros`,
+        `DEVOLUCOES DIARIA — ${filtroData} — ${D.length} registros`,
         "003087",
       );
 
@@ -222,10 +223,10 @@ const TabDevolucoesDia = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 2: Por Cidade -------------------------------------------------
       const ws2 = wb.addWorksheet("Por Cidade");
       ws2.views = [{ showGridLines: false }];
-      xT(ws2, 1, 4, `DEVOLUÇÕES POR CIDADE — ${filtroData}`, "1F618D");
+      xT(ws2, 1, 4, `DEVOLUCOES POR CIDADE — ${filtroData}`, "1F618D");
       ["Cidade", "Regional", "Total", "Agente Aut."].forEach((h, i) =>
         xH(ws2, 2, i + 1, h, "2471A3"),
       );
@@ -249,7 +250,7 @@ const TabDevolucoesDia = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Dados Completos ────────────────────────────────────────────
+      // -- ABA 3: Dados Completos --------------------------------------------
       const ws3 = wb.addWorksheet("Dados Completos");
       ws3.views = [{ showGridLines: false }];
       xT(ws3, 1, 5, `DADOS COMPLETOS — ${filtroData}`, "003087");
@@ -279,7 +280,7 @@ const TabDevolucoesDia = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -306,6 +307,14 @@ const TabDevolucoesDia = () => {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
           ${status === "ok" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-blue-400"}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -323,7 +332,7 @@ const TabDevolucoesDia = () => {
             </p>
           </>
         ) : status === "loading" ? (
-          <p className="text-sm text-gray-500">Carregando...</p>
+          <RetorninhoLoader compact size="sm" title="Carregando..." />
         ) : (
           <>
             <p className="font-semibold text-gray-700">
@@ -360,14 +369,14 @@ const TabDevolucoesDia = () => {
         </div>
       )}
 
-      {/* Botão gerar */}
+      {/* Botao gerar */}
       {rows.length > 0 && filtroData && (
         <button
           onClick={gerar}
           className="flex items-center gap-2 px-5 py-2.5 bg-blue-800 text-white rounded-xl font-semibold hover:bg-blue-900 transition-colors"
         >
           <FileDown size={16} />
-          Gerar Devoluções — {filtroData} (3 abas)
+          Gerar Devolucoes — {filtroData} (3 abas)
         </button>
       )}
 
@@ -384,3 +393,4 @@ const TabDevolucoesDia = () => {
 };
 
 export default TabDevolucoesDia;
+

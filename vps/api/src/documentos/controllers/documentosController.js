@@ -46,6 +46,28 @@ async function saveField(req, res, next) {
   }
 }
 
+async function listInvoiceFields(req, res, next) {
+  try {
+    res.json({ items: await service.listInvoiceFields({ includeInactive: req.query.includeInactive === "true" }) });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function saveInvoiceField(req, res, next) {
+  try {
+    const field = await service.saveInvoiceField({
+      id: req.body?.id,
+      nome: req.body?.nome,
+      ordem: req.body?.ordem,
+      ativo: req.body?.ativo,
+    }, req.user);
+    res.json({ ok: true, field });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getBillingConfig(req, res, next) {
   try {
     res.json(await service.getBillingConfig());
@@ -159,6 +181,21 @@ async function reviewSubmission(req, res, next) {
       id: req.params.id,
       status: req.body?.status,
       motivo: req.body?.motivo,
+      user: req.user,
+    });
+    res.json({ ok: true, submission });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function uploadSubmissionInvoices(req, res, next) {
+  try {
+    const submission = await service.uploadSubmissionInvoices({
+      id: req.params.id,
+      fieldIds: parseJsonArray(req.body?.fieldIds),
+      valores: parseJsonArray(req.body?.valores),
+      files: req.files || [],
       user: req.user,
     });
     res.json({ ok: true, submission });
@@ -365,6 +402,7 @@ module.exports = {
   googleStatus,
   getBillingConfig,
   listFields,
+  listInvoiceFields,
   list,
   listSubmissions,
   listSupervisorTreatments,
@@ -374,5 +412,7 @@ module.exports = {
   reviewSubmission,
   saveBillingConfig,
   saveField,
+  saveInvoiceField,
+  uploadSubmissionInvoices,
   upload,
 };

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+﻿import { useRef } from 'react';
 import { Upload, RefreshCw } from 'lucide-react';
 import StaticDataRefreshLink from '../../../components/ui/StaticDataRefreshLink';
 
@@ -51,3 +51,4 @@ const MetasUpload = ({ onUpload, uploading, lastUpdate, onRefresh }) => {
 };
 
 export default MetasUpload;
+

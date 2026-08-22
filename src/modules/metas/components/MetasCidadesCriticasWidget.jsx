@@ -1,6 +1,14 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { AlertTriangle, TrendingDown, Skull } from "lucide-react";
-import { getInternalStaticDataSlice } from "../../../services/internalStaticDataService";
+import {
+  getInternalSnapshotSlice,
+  INTERNAL_STATIC_DATA_UPDATED_EVENT,
+  SNAPSHOT_DOMAINS,
+} from "../../../services/internalStaticDataService";
+import {
+  buscarAuditoriaAgentes,
+  deduplicarCidadesAuditoria,
+} from "../services/metasAuditoriaService";
 
 const MONTHORDER = [
   "Janeiro",
@@ -32,26 +40,37 @@ const MetasCidadesCriticasWidget = () => {
   const [mes, setMes] = useState("");
 
   useEffect(() => {
-    const carregar = async () => {
+    let active = true;
+    const VERSION_KEY = "internal-static-data-version";
+
+    const carregar = async (force = false) => {
       setLoading(true);
       try {
         const mesAtual = MONTHORDER[new Date().getMonth()];
+        if (!active) return;
         setMes(mesAtual);
 
-        const snapshot = await getInternalStaticDataSlice(
+        const snapshot = await getInternalSnapshotSlice(
+          SNAPSHOT_DOMAINS.DASHBOARD,
           (payload) => payload?.metas?.auditoriaAgentes ?? null,
+          { force },
         );
-        const data =
+        let data =
           snapshot?.mes === mesAtual && Array.isArray(snapshot?.cidades)
             ? snapshot.cidades
             : [];
 
         if (data.length === 0) {
+          data = await buscarAuditoriaAgentes(mesAtual, force);
+        }
+
+        if (data.length === 0) {
+          if (!active) return;
           setCidades([]);
           return;
         }
 
-        const extremas = data
+        const extremas = deduplicarCidadesAuditoria(data)
           .map((cidade) => ({
             ...cidade,
             eficiencia: getEficiencia(cidade.total, cidade.cancelamentos),
@@ -59,15 +78,40 @@ const MetasCidadesCriticasWidget = () => {
           .filter((cidade) => Number(cidade.eficiencia) < 30)
           .sort((a, b) => a.eficiencia - b.eficiencia);
 
+        if (!active) return;
         setCidades(extremas);
       } catch (error) {
         console.error(error);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     carregar();
+
+    const handleStaticDataUpdated = () => {
+      carregar(true);
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key !== VERSION_KEY) return;
+      carregar(true);
+    };
+
+    window.addEventListener(
+      INTERNAL_STATIC_DATA_UPDATED_EVENT,
+      handleStaticDataUpdated,
+    );
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      active = false;
+      window.removeEventListener(
+        INTERNAL_STATIC_DATA_UPDATED_EVENT,
+        handleStaticDataUpdated,
+      );
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, []);
 
   if (loading || cidades.length === 0) return null;
@@ -95,7 +139,7 @@ const MetasCidadesCriticasWidget = () => {
       <ul className="divide-y divide-gray-50">
         {cidades.map((cidade, index) => (
           <li
-            key={`${cidade.cidade}-${index}`}
+            key={cidade.cidade}
             className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-red-50/40 transition-colors"
           >
             <span className="text-xs font-bold text-red-300 w-5 shrink-0 text-center">
@@ -132,3 +176,4 @@ const MetasCidadesCriticasWidget = () => {
 };
 
 export default MetasCidadesCriticasWidget;
+

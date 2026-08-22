@@ -1,4 +1,4 @@
-export default function EmptyState({
+﻿export default function EmptyState({
   icon = "📊",
   title = "Sem dados",
   desc = "",
@@ -11,3 +11,4 @@ export default function EmptyState({
     </div>
   );
 }
+

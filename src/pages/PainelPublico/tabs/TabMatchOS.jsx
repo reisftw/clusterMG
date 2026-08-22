@@ -1,272 +1,549 @@
 import { useMemo, useState } from "react";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
+  ClipboardCheck,
   Copy,
+  Download,
   MapPin,
   Route,
+  Search,
+  ShieldCheck,
   Star,
 } from "lucide-react";
 import { buildMatchOSData } from "../../Mapa/utils/matchOs";
 
-function SummaryCard({ label, value, helper, color }) {
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function normalizeCode(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("pt-BR");
+}
+
+function buildCopyText(grupo, cidade, match, isAgente) {
+  const principal = match.principal || {};
+  const linhas = [
+    `${isAgente ? "Agente autorizado" : grupo} -> ${cidade}`,
+    `Serviço base: ${principal.tipo || "-"}`,
+    `Cliente: ${principal.nome_cliente || "-"} | Código: ${principal.codigo_cliente || "-"} | OS: ${principal.num_os || "-"}`,
+    `Técnico: ${principal.tecnico || "Não informado"}`,
+    `Endereço: ${principal.endereco_resumo || principal.endereco || "-"}`,
+    "Retiradas proximas:",
+  ];
+
+  (match.relacionadas || []).forEach((ordem) => {
+    linhas.push(
+      `- ${ordem.tipo || "-"} | ${ordem.nome_cliente || "-"} | Código ${ordem.codigo_cliente || "-"} | OS ${ordem.num_os || "-"} | ${ordem.distanceMeters ?? "-"}m${ordem.sameStreet ? " | mesma rua" : ""}`,
+    );
+  });
+
+  return linhas.join("\n");
+}
+
+function sumRetiradasRelacionadas(section = []) {
+  return section.reduce(
+    (totalSection, item) =>
+      totalSection +
+      (item.cidades || []).reduce(
+        (totalCidades, cidade) =>
+          totalCidades + Number(cidade.totalRetiradasRelacionadas || 0),
+        0,
+      ),
+    0,
+  );
+}
+
+function flattenMatches(sections = []) {
+  return sections.flatMap((regional) =>
+    (regional.cidades || []).flatMap((cidade) =>
+      (cidade.matches || []).map((match) => ({
+        id: `${regional.regional}::${cidade.cidade}::${match.id}`,
+        regional: regional.regional,
+        cidade: cidade.cidade,
+        cidadeTotalMatches: cidade.totalMatches,
+        cidadeTotalRetiradasRelacionadas: cidade.totalRetiradasRelacionadas,
+        regionalTotalMatches: regional.totalMatches,
+        regionalTotalCidades: regional.totalCidades,
+        isAgente: Boolean(cidade.isAgente || regional.isAgente),
+        match,
+        copyText:
+          match.copyText ||
+          buildCopyText(regional.regional, cidade.cidade, match, regional.isAgente),
+      })),
+    ),
+  );
+}
+
+function MatchSummaryCard({ label, value, helper, tone, icon: Icon }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">
-        {label}
+    <div className={`match-kpi-card ${tone}`}>
+      <div className="match-kpi-icon">{Icon ? <Icon size={22} /> : null}</div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{helper}</p>
       </div>
-      <div className={`mt-2 text-3xl font-black ${color}`}>{value}</div>
-      <div className="mt-1 text-xs text-gray-500">{helper}</div>
     </div>
   );
 }
 
-function InfoLabel({ children, className }) {
-  return <span className={`font-extrabold ${className}`}>{children}</span>;
-}
+function CopyButton({
+  text,
+  children = "Copiar",
+  className = "",
+  tone = "default",
+  disabled = false,
+}) {
+  const [copied, setCopied] = useState(false);
 
-function HighlightValue({ children }) {
-  return <span className="font-bold italic text-gray-900">{children}</span>;
-}
-
-function MatchCard({ grupo, cidade, match, isAgente = false }) {
-  const [copiado, setCopiado] = useState(false);
-
-  async function copiar() {
-    await navigator.clipboard.writeText(match.copyText);
-    setCopiado(true);
-    window.setTimeout(() => setCopiado(false), 1800);
+  async function handleCopy() {
+    if (!text || disabled) return;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div
-            className={`flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] ${
-              isAgente ? "text-amber-700" : "text-blue-600"
-            }`}
-          >
-            {isAgente ? <Star size={12} /> : null}
-            <span>{grupo}</span>
-            <span>&bull;</span>
-            <span>{cidade}</span>
-          </div>
-          <div className="mt-1 text-base font-bold text-gray-900">
-            {match.principal.tipo}
-          </div>
-          <div className="mt-1 text-sm text-gray-600">
-            {match.principal.nome_cliente || "-"} &bull;{" "}
-            <InfoLabel className="text-orange-600">COD</InfoLabel>{" "}
-            <HighlightValue>{match.principal.codigo_cliente || "-"}</HighlightValue>
-          </div>
-          <div className="text-sm text-gray-500">
-            O.S {match.principal.num_os || "-"} &bull;{" "}
-            <InfoLabel className="text-blue-700">Técnico</InfoLabel>:{" "}
-            <HighlightValue>
-              {match.principal.tecnico || "Nao informado"}
-            </HighlightValue>
-          </div>
-          <div className="mt-1 text-xs text-gray-500">
-            {match.principal.endereco_resumo ||
-              match.principal.endereco ||
-              "Endereco nao informado"}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={copiar}
-          className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
-            copiado
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-          }`}
-        >
-          {copiado ? <Check size={15} /> : <Copy size={15} />}
-          {copiado ? "Copiado" : "Copiar"}
-        </button>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-        <div className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-          Retiradas proximas
-        </div>
-        <div className="space-y-2">
-          {match.relacionadas.map((ordem) => (
-            <div
-              key={ordem.id || ordem.num_os}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-bold text-gray-800">
-                  {ordem.tipo}
-                </span>
-                <span className="rounded-full border border-orange-100 bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">
-                  {ordem.distanceMeters}m
-                </span>
-                {ordem.sameStreet ? (
-                  <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                    mesma rua
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-1 text-sm text-gray-700">
-                {ordem.nome_cliente || "-"} &bull;{" "}
-                <InfoLabel className="text-orange-600">COD</InfoLabel>{" "}
-                <HighlightValue>{ordem.codigo_cliente || "-"}</HighlightValue>{" "}
-                &bull; O.S{" "}
-                {ordem.num_os || "-"}
-              </div>
-              <div className="mt-1 text-xs text-gray-500">
-                {ordem.endereco_resumo ||
-                  ordem.endereco ||
-                  "Endereco nao informado"}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <textarea
-        readOnly
-        value={match.copyText}
-        className="mt-3 min-h-[108px] w-full rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-700 outline-none"
-      />
-    </div>
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={disabled}
+      className={`match-copy-btn ${tone} ${className}`.trim()}
+    >
+      {copied ? <Check size={16} /> : <Copy size={16} />}
+      {copied ? "Copiado" : children}
+    </button>
   );
 }
 
-function CidadeSection({ grupo, cidade, isAgente = false }) {
-  const [aberta, setAberta] = useState(false);
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-      <button
-        type="button"
-        onClick={() => setAberta((valor) => !valor)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 transition-all hover:bg-gray-50"
-      >
-        <div className="text-left">
-          <div className="flex items-center gap-2 text-sm font-bold text-gray-900">
-            {isAgente ? <Star size={14} className="text-amber-500" /> : null}
-            <span>{cidade.cidade}</span>
-          </div>
-          <div className="text-xs text-gray-500">
-            {cidade.totalMatches} match(es) &bull;{" "}
-            {cidade.totalRetiradasRelacionadas} retirada(s) relacionada(s)
-          </div>
-        </div>
-        {aberta ? (
-          <ChevronUp size={18} className="text-gray-400" />
-        ) : (
-          <ChevronDown size={18} className="text-gray-400" />
-        )}
-      </button>
-
-      {aberta ? (
-        <div className="space-y-4 border-t border-gray-100 bg-slate-50 p-4">
-          {cidade.matches.map((match) => (
-            <MatchCard
-              key={match.id}
-              grupo={grupo}
-              cidade={cidade.cidade}
-              match={match}
-              isAgente={isAgente}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function GrupoSection({ item, isAgente = false }) {
-  const [aberta, setAberta] = useState(true);
-
-  return (
-    <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm">
-      <button
-        type="button"
-        onClick={() => setAberta((valor) => !valor)}
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 transition-all hover:bg-gray-50"
-      >
-        <div className="text-left">
-          <div className="flex items-center gap-2">
-            {isAgente ? (
-              <Star size={16} className="text-amber-500" />
-            ) : (
-              <MapPin size={16} className="text-blue-600" />
-            )}
-            <span className="text-base font-black text-gray-900">
-              {item.regional}
-            </span>
-          </div>
-          <div className="mt-1 text-xs text-gray-500">
-            {item.totalCidades} cidade(s) com match &bull; {item.totalMatches}{" "}
-            match(es)
-          </div>
-        </div>
-        {aberta ? (
-          <ChevronUp size={18} className="text-gray-400" />
-        ) : (
-          <ChevronDown size={18} className="text-gray-400" />
-        )}
-      </button>
-
-      {aberta ? (
-        <div className="space-y-3 border-t border-gray-100 bg-slate-50 p-4">
-          {item.cidades.map((cidade) => (
-            <CidadeSection
-              key={`${item.regional}-${cidade.cidade}`}
-              grupo={item.regional}
-              cidade={cidade}
-              isAgente={isAgente}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function SectionBlock({
-  title,
-  helper,
-  items,
-  isAgente = false,
-  emptyText,
+function RegionList({
+  sections = [],
+  selectedId,
+  onSelect,
+  search,
+  customerCode,
+  activeRegional,
+  activeCity,
+  activeFilter,
 }) {
+  const [expandedState, setExpandedState] = useState(() => ({
+    open: new Set(),
+    closed: new Set(),
+  }));
+  const firstRegional = String(sections[0]?.regional || "");
+  const expanded = useMemo(() => {
+    const next = new Set(expandedState.open);
+    if (firstRegional && !expandedState.closed.has(firstRegional)) {
+      next.add(firstRegional);
+    }
+    return next;
+  }, [expandedState, firstRegional]);
+
+  function toggle(key) {
+    setExpandedState((current) => {
+      const open = new Set(current.open);
+      const closed = new Set(current.closed);
+      const isOpen =
+        open.has(key) || (key === firstRegional && !closed.has(key));
+
+      if (isOpen) {
+        open.delete(key);
+        closed.add(key);
+      } else {
+        open.add(key);
+        closed.delete(key);
+      }
+
+      return { open, closed };
+    });
+  }
+
+  const normalizedSearch = normalizeText(search);
+  const normalizedCustomerCode = normalizeCode(customerCode);
+
+  const filteredSections = sections
+    .map((regional) => {
+      const cidades = (regional.cidades || [])
+        .map((cidade) => {
+          const matches = (cidade.matches || []).filter((match) => {
+            const text = normalizeText(
+              [
+                regional.regional,
+                cidade.cidade,
+                match.principal?.tipo,
+                match.principal?.nome_cliente,
+                match.principal?.codigo_cliente,
+                match.principal?.num_os,
+                match.principal?.tecnico,
+                ...(match.relacionadas || []).flatMap((ordem) => [
+                  ordem.tipo,
+                  ordem.nome_cliente,
+                  ordem.codigo_cliente,
+                  ordem.num_os,
+                  ordem.endereco_resumo,
+                  ordem.endereco,
+                ]),
+              ].join(" "),
+            );
+            const matchesSearch = !normalizedSearch || text.includes(normalizedSearch);
+            const matchesType =
+              activeFilter === "todos" ||
+              (activeFilter === "com-retirada" && match.totalRelacionadas > 0) ||
+              (activeFilter === "mesma-rua" &&
+                (match.relacionadas || []).some((ordem) => ordem.sameStreet)) ||
+              (activeFilter === "agentes" && regional.isAgente);
+            const matchesCustomerCode =
+              !normalizedCustomerCode ||
+              normalizeCode(match.principal?.codigo_cliente) === normalizedCustomerCode;
+            return matchesSearch && matchesType && matchesCustomerCode;
+          });
+
+          return { ...cidade, matches };
+        })
+        .filter((cidade) => {
+          const cityMatches =
+            activeCity === "todas" || normalizeText(cidade.cidade) === activeCity;
+          return cityMatches && cidade.matches.length > 0;
+        });
+
+      return { ...regional, cidades };
+    })
+    .filter((regional) => {
+      const regionalMatches =
+        activeRegional === "todas" || normalizeText(regional.regional) === activeRegional;
+      return regionalMatches && regional.cidades.length > 0;
+    });
+
+  if (!filteredSections.length) {
+    return (
+      <div className="match-empty-list">
+        Nenhum match encontrado com os filtros atuais.
+      </div>
+    );
+  }
+
   return (
-    <section className="space-y-4">
-      <div
-        className={`rounded-3xl border px-5 py-4 text-sm ${
-          isAgente
-            ? "border-amber-100 bg-amber-50 text-amber-900"
-            : "border-blue-100 bg-blue-50 text-blue-900"
-        }`}
-      >
-        <div className="flex flex-wrap items-center gap-2 text-base font-black">
-          {isAgente ? <Star size={16} /> : <MapPin size={16} />}
-          <span>{title}</span>
-        </div>
-        <div className="mt-1 text-sm opacity-90">{helper}</div>
+    <div className="match-region-list">
+      {filteredSections.map((regional) => {
+        const isOpen = expanded.has(regional.regional);
+        const visibleMatches = flattenMatches([regional]);
+
+        return (
+          <section className="match-region-item" key={regional.regional}>
+            <button
+              type="button"
+              className="match-region-header"
+              onClick={() => toggle(regional.regional)}
+            >
+              <span className={`match-region-icon ${regional.isAgente ? "agent" : ""}`}>
+                {regional.isAgente ? <Star size={18} /> : <MapPin size={18} />}
+              </span>
+              <span className="match-region-text">
+                <strong>{regional.regional}</strong>
+                <small>
+                  {formatNumber(regional.cidades.length)} cidades •{" "}
+                  {formatNumber(visibleMatches.length)} matches
+                </small>
+              </span>
+              {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+
+            {isOpen ? (
+              <div className="match-city-list">
+                {regional.cidades.map((cidade) => (
+                  <div className="match-city-group" key={`${regional.regional}-${cidade.cidade}`}>
+                    <div className="match-city-heading">
+                      <div>
+                        <strong>{cidade.cidade}</strong>
+                        <small>
+                          {formatNumber(cidade.matches.length)} match(es) •{" "}
+                          {formatNumber(cidade.totalRetiradasRelacionadas)} retirada(s)
+                          relacionada(s)
+                        </small>
+                      </div>
+                    </div>
+                    <div className="match-mini-list">
+                      {cidade.matches.slice(0, 5).map((match) => {
+                        const id = `${regional.regional}::${cidade.cidade}::${match.id}`;
+                        const firstDistance = match.relacionadas?.[0]?.distanceMeters;
+                        return (
+                          <button
+                            type="button"
+                            key={id}
+                            onClick={() =>
+                              onSelect({
+                                id,
+                                regional: regional.regional,
+                                cidade: cidade.cidade,
+                                cidadeTotalMatches: cidade.totalMatches,
+                                cidadeTotalRetiradasRelacionadas:
+                                  cidade.totalRetiradasRelacionadas,
+                                regionalTotalMatches: regional.totalMatches,
+                                regionalTotalCidades: regional.totalCidades,
+                                isAgente: regional.isAgente,
+                                match,
+                                copyText:
+                                  match.copyText ||
+                                  buildCopyText(
+                                    regional.regional,
+                                    cidade.cidade,
+                                    match,
+                                    regional.isAgente,
+                                  ),
+                              })
+                            }
+                            className={`match-mini-row ${selectedId === id ? "active" : ""}`}
+                          >
+                            <span>
+                              <strong>{match.principal?.tipo || "Serviço"}</strong>
+                              <small>
+                                {formatNumber(match.totalRelacionadas)} retirada(s) proxima(s)
+                                {firstDistance != null ? ` • ${firstDistance}m` : ""}
+                              </small>
+                            </span>
+                            <ChevronRight size={16} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function SelectedMatchPanel({ selected, allMatches, onBack = null }) {
+  const [reviewState, setReviewState] = useState({ id: null, reviewed: false });
+  const match = selected?.match;
+  const selectedId = selected?.id || null;
+  const reviewed =
+    reviewState.id === selectedId ? reviewState.reviewed : false;
+
+  if (!selected || !match) {
+    return (
+      <section className="match-detail-card empty">
+        <Route size={34} />
+        <h2>Selecione um match</h2>
+        <p>Escolha uma cidade na lista para visualizar a O.S. base, as retiradas proximas e o texto para copiar.</p>
+      </section>
+    );
+  }
+
+  const principal = match.principal || {};
+  const relacionadas = match.relacionadas || [];
+  const sameStreetCount = relacionadas.filter((ordem) => ordem.sameStreet).length;
+  const minDistance = relacionadas.reduce(
+    (min, ordem) => Math.min(min, Number(ordem.distanceMeters || Infinity)),
+    Infinity,
+  );
+  const otherMatches = allMatches
+    .filter((item) => item.cidade === selected.cidade && item.id !== selected.id)
+    .slice(0, 4);
+
+  return (
+    <section className="match-detail-card">
+      {onBack ? (
+        <button type="button" className="match-modal-back" onClick={onBack}>
+          <ArrowLeft size={18} />
+          Voltar
+        </button>
+      ) : null}
+
+      <div className="match-detail-title">
+        <h2>{selected.cidade}</h2>
       </div>
 
-      {items.length ? (
-        <div className="space-y-4">
-          {items.map((item) => (
-            <GrupoSection
-              key={item.regional}
-              item={item}
-              isAgente={isAgente}
-            />
+      <div className="match-insight-strip">
+        <div>
+          <strong>{formatNumber(selected.cidadeTotalMatches)}</strong>
+          <span>matches nesta cidade</span>
+        </div>
+        <div>
+          <strong>{formatNumber(relacionadas.length)}</strong>
+          <span>retiradas no match selecionado</span>
+        </div>
+        <div>
+          <strong>{formatNumber(sameStreetCount)}</strong>
+          <span>mesma rua</span>
+        </div>
+        <div>
+          <strong>{Number.isFinite(minDistance) ? `${formatNumber(minDistance)}m` : "--"}</strong>
+          <span>menor distancia</span>
+        </div>
+      </div>
+
+      <div className="match-os-card">
+        <div className="match-os-top">
+          <div>
+            <div className="match-breadcrumb">
+              {selected.regional} <span>•</span> {selected.cidade}
+            </div>
+            <h3>{principal.tipo || "Serviço"}</h3>
+            <p>
+              {principal.nome_cliente || "-"} <span>•</span>{" "}
+              <strong>COD {principal.codigo_cliente || "-"}</strong>
+            </p>
+            <p>
+              O.S {principal.num_os || "-"} <span>•</span>{" "}
+              <strong className="blue">Técnico: {principal.tecnico || "Não informado"}</strong>
+            </p>
+            <small>{principal.endereco_resumo || principal.endereco || "Endereço não informado"}</small>
+          </div>
+          <CopyButton text={selected.copyText}>Copiar match</CopyButton>
+        </div>
+
+        <div className="match-nearby-box">
+          <h4>Retiradas proximas</h4>
+          <div className="match-nearby-list">
+            {relacionadas.map((ordem) => (
+              <article className="match-nearby-item" key={ordem.id || ordem.num_os}>
+                <div className="match-nearby-title">
+                  <strong>{ordem.tipo || "Retirada"}</strong>
+                  <span className="distance">{ordem.distanceMeters ?? "-"}m</span>
+                  {ordem.sameStreet ? <span className="same-street">mesma rua</span> : null}
+                </div>
+                <p>
+                  {ordem.nome_cliente || "-"} <span>•</span>{" "}
+                  <strong>COD {ordem.codigo_cliente || "-"}</strong> <span>•</span> O.S{" "}
+                  {ordem.num_os || "-"}
+                </p>
+                <small>{ordem.endereco_resumo || ordem.endereco || "Endereço não informado"}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="match-copy-preview">
+          <div className="match-copy-title">
+            <strong>Texto para copiar</strong>
+          </div>
+          <textarea readOnly value={selected.copyText} />
+          <div className="match-copy-actions">
+            <CopyButton text={selected.copyText} tone="primary">
+              Copiar texto
+            </CopyButton>
+            <CopyButton text={selected.copyText} tone="whatsapp">
+              Copiar WhatsApp
+            </CopyButton>
+            <button
+              type="button"
+              className={`match-copy-btn review ${reviewed ? "done" : ""}`}
+              onClick={() =>
+                setReviewState({ id: selectedId, reviewed: !reviewed })
+              }
+            >
+              <ClipboardCheck size={16} />
+              {reviewed ? "Revisado" : "Marcar revisado"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="match-other-card">
+        <div className="match-other-title">
+          <strong>Outros matches nesta cidade ({formatNumber(otherMatches.length)})</strong>
+        </div>
+        <div className="match-other-list">
+          {otherMatches.length ? (
+            otherMatches.map((item) => (
+              <article className="match-other-row" key={item.id}>
+                <MapPin size={18} />
+                <div>
+                  <strong>{item.match.principal?.tipo || "Serviço"}</strong>
+                  <span>
+                    {formatNumber(item.match.totalRelacionadas)} retirada(s) proxima(s)
+                    {item.match.relacionadas?.[0]?.distanceMeters != null
+                      ? ` • menor distancia: ${item.match.relacionadas[0].distanceMeters}m`
+                      : ""}
+                  </span>
+                </div>
+                <CopyButton text={item.copyText} className="compact">
+                  Copiar
+                </CopyButton>
+              </article>
+            ))
+          ) : (
+            <p className="match-empty-inline">Não há outros matches para esta cidade nos filtros atuais.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AgentCards({ agentes = [] }) {
+  const agentCities = agentes
+    .flatMap((regional) =>
+      (regional.cidades || []).map((cidade) => ({
+        regional: regional.regional,
+        ...cidade,
+      })),
+    )
+    .slice(0, 12);
+
+  const agentCopyText = agentCities
+    .map(
+      (cidade) =>
+        `${cidade.cidade}: ${cidade.totalMatches} match(es), ${cidade.totalRetiradasRelacionadas} retirada(s) relacionada(s)`,
+    )
+    .join("\n");
+
+  return (
+    <section className="match-agents-card">
+      <div className="match-agents-top">
+        <div>
+          <h2>Agentes Autorizados</h2>
+          <p>Cidades de agentes aparecem em bloco proprio, no fim do Match.</p>
+        </div>
+        <CopyButton text={agentCopyText} disabled={!agentCopyText}>
+          Copiar todos os agentes
+        </CopyButton>
+      </div>
+      {agentCities.length ? (
+        <div className="match-agent-grid">
+          {agentCities.map((cidade) => (
+            <article className="match-agent-item" key={`${cidade.regional}-${cidade.cidade}`}>
+              <MapPin size={18} />
+              <div>
+                <strong>{cidade.cidade}</strong>
+                <span>
+                  {formatNumber(cidade.totalMatches)} matches • Agente ativo
+                </span>
+              </div>
+              <CopyButton
+                text={(cidade.matches || [])
+                  .map((match) =>
+                    match.copyText ||
+                    buildCopyText(cidade.regional, cidade.cidade, match, true),
+                  )
+                  .join("\n\n")}
+                className="icon-only"
+              >
+                Copiar
+              </CopyButton>
+            </article>
           ))}
         </div>
       ) : (
-        <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center text-sm text-gray-500">
-          {emptyText}
+        <div className="match-agent-empty">
+          Nenhum match de agente autorizado encontrado para os filtros atuais.
         </div>
       )}
     </section>
@@ -284,9 +561,53 @@ export default function TabMatchOS({
     [dataOverride, ordens],
   );
   const agentesOnly = mode === "agentes-only";
+  const [search, setSearch] = useState("");
+  const [regionalFilter, setRegionalFilter] = useState("todas");
+  const [cityFilter, setCityFilter] = useState("todas");
+  const [activeFilter, setActiveFilter] = useState("todos");
+  const [customerCode, setCustomerCode] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+
+  const sections = useMemo(
+    () => (agentesOnly ? dados.agentes || [] : [...(dados.regionais || []), ...(dados.agentes || [])]),
+    [agentesOnly, dados],
+  );
+
+  const allMatches = useMemo(() => flattenMatches(sections), [sections]);
+  const normalizedCustomerCode = normalizeCode(customerCode);
+  const customerCodeMatches = useMemo(() => {
+    if (!normalizedCustomerCode) return [];
+    return allMatches.filter(
+      (item) =>
+        normalizeCode(item.match?.principal?.codigo_cliente) === normalizedCustomerCode,
+    );
+  }, [allMatches, normalizedCustomerCode]);
+
+  const selectedMatch = useMemo(() => {
+    if (normalizedCustomerCode && customerCodeMatches[0]) return customerCodeMatches[0];
+    if (selected && allMatches.some((item) => item.id === selected.id)) return selected;
+    return allMatches[0] || null;
+  }, [allMatches, customerCodeMatches, normalizedCustomerCode, selected]);
+
+  const customerCodeMessage = useMemo(() => {
+    if (!normalizedCustomerCode) return "";
+    if (!customerCodeMatches.length) {
+      return `Nenhum ativo com codigo ${normalizedCustomerCode} encontrado no snapshot atual.`;
+    }
+    return `${customerCodeMatches.length} match(es) encontrado(s) para o ativo ${normalizedCustomerCode}.`;
+  }, [customerCodeMatches.length, normalizedCustomerCode]);
+
   const totalMatches = agentesOnly
     ? dados.agentes.reduce((sum, item) => sum + item.totalMatches, 0)
     : dados.resumo.totalMatches;
+  const totalRetiradasRelacionadas = agentesOnly
+    ? sumRetiradasRelacionadas(dados.agentes)
+    : Number(
+        dados.resumo.totalRetiradasRelacionadas ??
+          sumRetiradasRelacionadas(dados.regionais) +
+            sumRetiradasRelacionadas(dados.agentes),
+      );
   const totalCidades = agentesOnly
     ? dados.agentes.reduce((sum, item) => sum + item.totalCidades, 0)
     : dados.resumo.totalCidades;
@@ -295,108 +616,259 @@ export default function TabMatchOS({
     0,
   );
 
+  const regionalOptions = useMemo(
+    () =>
+      sections.map((item) => ({
+        label: item.regional,
+        value: normalizeText(item.regional),
+      })),
+    [sections],
+  );
+  const cityOptions = useMemo(() => {
+    const map = new Map();
+    sections.forEach((regional) => {
+      (regional.cidades || []).forEach((cidade) => {
+        map.set(normalizeText(cidade.cidade), cidade.cidade);
+      });
+    });
+    return [...map.entries()].map(([value, label]) => ({ value, label }));
+  }, [sections]);
+
+  const selectedCopyText = selectedMatch?.copyText || "";
+
+  function findCustomerCodeMatches(code) {
+    if (!code) return [];
+    return allMatches.filter(
+      (item) => normalizeCode(item.match?.principal?.codigo_cliente) === code,
+    );
+  }
+
+  function applyCustomerCode(value, { openMobile = false } = {}) {
+    const code = normalizeCode(value);
+    setCustomerCode(code);
+
+    if (!code) return;
+
+    const matches = findCustomerCodeMatches(code);
+    const firstMatch = matches[0];
+    if (!firstMatch) return;
+
+    setSelected(firstMatch);
+    setRegionalFilter(normalizeText(firstMatch.regional));
+    setCityFilter(normalizeText(firstMatch.cidade));
+    setActiveFilter("todos");
+    if (openMobile) setMobileDetailOpen(true);
+  }
+
+  function handleSelectMatch(item) {
+    setSelected(item);
+    setMobileDetailOpen(true);
+  }
+
+  function handleCustomerCodeSubmit(event) {
+    event.preventDefault();
+    applyCustomerCode(customerCode, { openMobile: true });
+  }
+
+  function clearCustomerCode() {
+    setCustomerCode("");
+    setRegionalFilter("todas");
+    setCityFilter("todas");
+  }
+
+  function exportTextFile() {
+    const content = allMatches.map((item) => item.copyText).join("\n\n---\n\n");
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "match-os.txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
   if (!totalMatches) {
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {!agentesOnly ? (
-            <SummaryCard
-              label="Regionais"
-              value="0"
-              helper="Nenhuma regional com match"
-              color="text-blue-700"
-            />
-          ) : null}
-          <SummaryCard
-            label="Agentes"
-            value="0"
-            helper="Nenhuma cidade de agente com match"
-            color="text-amber-600"
-          />
-          <SummaryCard
-            label="Cidades"
-            value="0"
-            helper="Nenhuma cidade com match"
-            color="text-orange-600"
-          />
-          <SummaryCard
-            label="Matches"
-            value="0"
-            helper="Nenhum servico proximo de retirada"
-            color="text-green-700"
-          />
-        </div>
-
-        <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-6 py-14 text-center">
-          <div className="mb-4 flex justify-center">
-            <Route size={30} className="text-blue-500" />
-          </div>
-          <div className="text-lg font-bold text-gray-900">
-            Nenhum Match - OS encontrado
-          </div>
-          <div className="mt-2 text-sm text-gray-500">
+      <div className="match-dashboard">
+        <div className="match-empty-state">
+          <Route size={34} />
+          <h2>Nenhum Match encontrado</h2>
+          <p>
             {agentesOnly
               ? "Nenhuma cidade de agente autorizado teve servicos proximos de retirada ou cancelamento."
               : "O painel compara servicos de campo com retiradas e cancelamentos proximos nas cidades cadastradas."}
-          </div>
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="match-dashboard">
+      <section className="match-hero-card">
+        <div className="match-hero-top">
+          <div>
+            <h1>MATCH</h1>
+            <p>Encontre vinculos entre O.S. e retiradas proximas por cidade.</p>
+          </div>
+          <div className="match-hero-actions">
+            <CopyButton text={selectedCopyText} tone="primary" disabled={!selectedCopyText}>
+              Copiar selecionados
+            </CopyButton>
+            <button type="button" className="match-export-btn" onClick={exportTextFile}>
+              <Download size={16} />
+              Exportar
+            </button>
+          </div>
+        </div>
+
+        <div className="match-filter-grid">
+          <label className="match-search-box">
+            <Search size={18} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar regional, cidade, cliente, codigo ou O.S."
+            />
+          </label>
+          <form className="match-client-code-box" onSubmit={handleCustomerCodeSubmit}>
+            <label>
+              <Search size={18} />
+              <input
+                value={customerCode}
+                onChange={(event) => applyCustomerCode(event.target.value)}
+                inputMode="numeric"
+                placeholder="Código do cliente ativo. Ex: 601629"
+              />
+            </label>
+            <button type="submit">Pesquisar</button>
+            {normalizedCustomerCode ? (
+              <button type="button" className="ghost" onClick={clearCustomerCode}>
+                Limpar
+              </button>
+            ) : null}
+          </form>
+          <select
+            value={regionalFilter}
+            onChange={(event) => setRegionalFilter(event.target.value)}
+          >
+            <option value="todas">Regional: Todas</option>
+            {regionalOptions.map((item) => (
+              <option key={item.value} value={item.value}>
+                Regional: {item.label}
+              </option>
+            ))}
+          </select>
+          <select value={cityFilter} onChange={(event) => setCityFilter(event.target.value)}>
+            <option value="todas">Cidade: Todas</option>
+            {cityOptions.map((item) => (
+              <option key={item.value} value={item.value}>
+                Cidade: {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {customerCodeMessage ? (
+          <div
+            className={`match-client-code-message ${
+              customerCodeMatches.length ? "success" : "warning"
+            }`}
+          >
+            {customerCodeMessage}
+          </div>
+        ) : null}
+
+        <div className="match-filter-chips">
+          {[
+            ["todos", "Todos"],
+            ["com-retirada", "Com retirada proxima"],
+            ["mesma-rua", "Mesma rua"],
+            ["agentes", "Agentes autorizados"],
+          ].map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              className={activeFilter === value ? "active" : ""}
+              onClick={() => setActiveFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="match-kpi-grid">
         {!agentesOnly ? (
-          <SummaryCard
+          <MatchSummaryCard
             label="Regionais"
-            value={String(dados.resumo.totalRegionais)}
+            value={formatNumber(dados.resumo.totalRegionais)}
             helper="Grupos regionais com match"
-            color="text-blue-700"
+            tone="blue"
+            icon={MapPin}
           />
         ) : null}
-        <SummaryCard
+        <MatchSummaryCard
           label="Agentes"
-          value={String(totalAgentes)}
-          helper="Cidades de agente autorizado com match"
-          color="text-amber-600"
+          value={formatNumber(totalAgentes)}
+          helper="Cidades de agente autorizado"
+          tone="green"
+          icon={ShieldCheck}
         />
-        <SummaryCard
+        <MatchSummaryCard
           label="Cidades"
-          value={String(totalCidades)}
-          helper="Com servicos proximos de retirada"
-          color="text-orange-600"
+          value={formatNumber(totalCidades)}
+          helper="Com vinculos proximos"
+          tone="orange"
+          icon={Route}
         />
-        <SummaryCard
+        <MatchSummaryCard
           label="Matches"
-          value={String(totalMatches)}
-          helper={`Raio maximo de ${dados.resumo.distanciaMaximaMetros}m`}
-          color="text-green-700"
+          value={formatNumber(totalMatches)}
+          helper={`${formatNumber(totalRetiradasRelacionadas)} retiradas relacionadas`}
+          tone="purple"
+          icon={ClipboardCheck}
         />
       </div>
 
-      {note ? (
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
-          {note}
+      {note ? <div className="match-note">{note}</div> : null}
+
+      <div className="match-main-grid">
+        <aside className="match-sidebar-card">
+          <h2>Regionais</h2>
+          <RegionList
+            sections={sections}
+            selectedId={selectedMatch?.id}
+            onSelect={handleSelectMatch}
+            search={search}
+            customerCode={customerCode}
+            activeRegional={regionalFilter}
+            activeCity={cityFilter}
+            activeFilter={activeFilter}
+          />
+        </aside>
+
+        <SelectedMatchPanel selected={selectedMatch} allMatches={allMatches} />
+      </div>
+
+      {mobileDetailOpen && selectedMatch ? (
+        <div className="match-mobile-modal" role="dialog" aria-modal="true">
+          <SelectedMatchPanel
+            selected={selectedMatch}
+            allMatches={allMatches}
+            onBack={() => setMobileDetailOpen(false)}
+          />
         </div>
       ) : null}
 
-      {!agentesOnly ? (
-        <SectionBlock
-          title="Regionais"
-          helper="Matches agrupados por regional e depois por cidade."
-          items={dados.regionais}
-          emptyText="Nenhuma regional cadastrada teve match neste carregamento."
-        />
-      ) : null}
+      {!agentesOnly ? <AgentCards agentes={dados.agentes || []} /> : null}
 
-      <SectionBlock
-        title="Agentes Autorizados"
-        helper="Cidades de agente aparecem em bloco proprio, com destaque visual."
-        items={dados.agentes}
-        isAgente
-        emptyText="Nenhuma cidade de agente autorizado teve match neste carregamento."
-      />
+      <div className="match-footer-note">
+        Os dados sao atualizados automaticamente conforme a ultima importacao do Match.
+      </div>
     </div>
   );
 }
+

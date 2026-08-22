@@ -1,26 +1,17 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "../../../services/firebase";
-import {
+﻿import {
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
+} from "../../../services/dataCache";
+import {
+  createVpsDocument,
+  deleteVpsDocument,
+  getVpsDocument,
+  listVpsDocuments,
+  setVpsDocument,
+  updateVpsDocument,
+} from "../../../services/vpsApiClient";
 
 const COL = "ferramentas_regionais";
-const CFG_DOC = doc(db, "ferramentas_config", "global");
 const REGIONAIS_MAX = 150;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -33,18 +24,9 @@ export const getRegionais = async (force = false) => {
   const { data } = await getOrLoadCachedValue(
     CACHE_KEYS.regionais,
     async () => {
-      const snap = await getDocs(
-        query(collection(db, COL), orderBy("nome"), limit(REGIONAIS_MAX)),
+      return (await listVpsDocuments(COL, { limit: REGIONAIS_MAX })).sort((a, b) =>
+        String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR"),
       );
-
-      logFirestoreRead({
-        source: "ferramentasService:getRegionais",
-        operation: "getDocs",
-        path: COL,
-        count: snap.size,
-      });
-
-      return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
     },
     { ttlMs: CACHE_TTL_MS, force },
   );
@@ -53,21 +35,21 @@ export const getRegionais = async (force = false) => {
 };
 
 export const addRegional = async (data) => {
-  const ref = await addDoc(collection(db, COL), {
+  const ref = await createVpsDocument(COL, {
     ...data,
-    criadoEm: serverTimestamp(),
+    criadoEm: new Date().toISOString(),
   });
   invalidateCache(CACHE_KEYS.regionais);
   return ref;
 };
 
 export const updateRegional = async (id, data) => {
-  await updateDoc(doc(db, COL, id), data);
+  await updateVpsDocument(`${COL}/${id}`, data);
   invalidateCache(CACHE_KEYS.regionais);
 };
 
 export const deleteRegional = async (id) => {
-  await deleteDoc(doc(db, COL, id));
+  await deleteVpsDocument(`${COL}/${id}`);
   invalidateCache(CACHE_KEYS.regionais);
 };
 
@@ -75,18 +57,8 @@ export const getConfig = async (force = false) => {
   const { data } = await getOrLoadCachedValue(
     CACHE_KEYS.config,
     async () => {
-      const snap = await getDoc(CFG_DOC);
-
-      logFirestoreRead({
-        source: "ferramentasService:getConfig",
-        operation: "getDoc",
-        path: "ferramentas_config/global",
-        count: snap.exists() ? 1 : 0,
-      });
-
-      return snap.exists()
-        ? snap.data()
-        : { tecnicos: [], metaAtiva: 110, metaRetirada: 110 };
+      return (await getVpsDocument("ferramentas_config/global").catch(() => null)) ||
+        { tecnicos: [], metaAtiva: 110, metaRetirada: 110 };
     },
     { ttlMs: CACHE_TTL_MS, force },
   );
@@ -95,6 +67,7 @@ export const getConfig = async (force = false) => {
 };
 
 export const saveConfig = async (data) => {
-  await setDoc(CFG_DOC, data, { merge: true });
+  await setVpsDocument("ferramentas_config/global", data);
   invalidateCache(CACHE_KEYS.config);
 };
+

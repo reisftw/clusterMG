@@ -1,4 +1,4 @@
-export default function CityTable({ cidades = [], onCityClick }) {
+﻿export default function CityTable({ cidades = [], onCityClick }) {
   function pctClass(pct) {
     if (pct > 100) return "over";
     if (pct >= 80) return "ok";
@@ -18,10 +18,10 @@ export default function CityTable({ cidades = [], onCityClick }) {
 
   const total = cidades.reduce(
     (acc, c) => ({
-      cancelamentos: acc.cancelamentos + c.cancelamentos,
-      meta80: acc.meta80 + c.meta80,
-      realizado: acc.realizado + c.realizado,
-      falta: acc.falta + c.falta,
+      cancelamentos: acc.cancelamentos + Number(c.cancelamentos || 0),
+      meta80: acc.meta80 + Number(c.meta80 || 0),
+      realizado: acc.realizado + Number(c.realizado || 0),
+      falta: acc.falta + Number(c.falta || 0),
     }),
     { cancelamentos: 0, meta80: 0, realizado: 0, falta: 0 },
   );
@@ -51,24 +51,24 @@ export default function CityTable({ cidades = [], onCityClick }) {
             const cls = pctClass(c.pct);
             return (
               <tr
-                key={i}
+                key={c.nome || i}
                 style={{ cursor: "pointer" }}
                 onClick={() => onCityClick(c)}
               >
-                <td>{c.nome}</td>
-                <td>{c.cancelamentos}</td>
-                <td>{Math.round(c.meta80)}</td>
-                <td>
+                <td data-label="Cidade">{c.nome}</td>
+                <td data-label="Cancelamentos">{c.cancelamentos}</td>
+                <td data-label="Meta 80%">{Math.round(c.meta80)}</td>
+                <td data-label="Realizado">
                   <strong>{c.realizado}</strong>
                 </td>
-                <td>
+                <td data-label="Falta">
                   <span
                     className={`badge ${c.falta > 0 ? "neg" : c.falta < 0 ? "pos" : "zero"}`}
                   >
                     {c.falta > 0 ? `-${c.falta}` : `+${Math.abs(c.falta)}`}
                   </span>
                 </td>
-                <td>
+                <td data-label="% Atingido">
                   <div className="pct-bar-wrap">
                     <div className="pct-bar">
                       <div
@@ -79,8 +79,8 @@ export default function CityTable({ cidades = [], onCityClick }) {
                     <span className={`pct-txt ${cls}`}>{c.pct}%</span>
                   </div>
                 </td>
-                <td>{statusPill(c.pct)}</td>
-                <td>
+                <td data-label="Status">{statusPill(c.pct)}</td>
+                <td data-label="Relatório">
                   <button
                     className="btn-city-pdf"
                     onClick={(e) => {
@@ -96,18 +96,18 @@ export default function CityTable({ cidades = [], onCityClick }) {
           })}
 
           <tr className="total-row">
-            <td>TOTAL GERAL</td>
-            <td>{total.cancelamentos}</td>
-            <td>{Math.round(total.meta80)}</td>
-            <td>{total.realizado}</td>
-            <td>
+            <td data-label="Cidade">TOTAL GERAL</td>
+            <td data-label="Cancelamentos">{total.cancelamentos}</td>
+            <td data-label="Meta 80%">{Math.round(total.meta80)}</td>
+            <td data-label="Realizado">{total.realizado}</td>
+            <td data-label="Falta">
               <span className={`badge ${total.falta > 0 ? "neg" : "pos"}`}>
                 {total.falta > 0
                   ? `-${Math.round(total.falta)}`
                   : `+${Math.abs(Math.round(total.falta))}`}
               </span>
             </td>
-            <td>
+            <td data-label="% Atingido">
               <div className="pct-bar-wrap">
                 <div className="pct-bar">
                   <div
@@ -120,10 +120,13 @@ export default function CityTable({ cidades = [], onCityClick }) {
                 </span>
               </div>
             </td>
-            <td colSpan="2">{statusPill(parseFloat(totalPct))}</td>
+            <td data-label="Status" colSpan="2">
+              {statusPill(parseFloat(totalPct))}
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
   );
 }
+

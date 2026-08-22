@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+﻿import { AlertTriangle } from "lucide-react";
 import { useMetasDashboard } from "../hooks/useMetasDashboard";
 
 function diasUteisRestantesNoMes(feriadosSet = new Set()) {
@@ -26,6 +26,33 @@ const MetasAlertWidget = () => {
   const { metaMes, loading, feriadosSet } = useMetasDashboard();
 
   if (loading || !metaMes) return null;
+
+  const planilhaSemNumeros =
+    metaMes.planilhaCarregada &&
+    !metaMes.temLancamentos &&
+    Number(metaMes.totalOS || 0) === 0;
+
+  if (planilhaSemNumeros) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 p-4">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-amber-500">
+            <AlertTriangle size={20} className="text-white" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-sm font-bold text-amber-800">
+              Planilha carregada, sem numeros ainda
+            </p>
+
+            <p className="text-xs text-amber-700">
+              A aba de {metaMes.mes.toLowerCase()} ja foi identificada, mas ainda nao ha lancamentos para exibir.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const diasUteisRestantes = diasUteisRestantesNoMes(feriadosSet);
   const falta = Math.max(0, metaMes.meta - metaMes.totalOS);
@@ -64,3 +91,4 @@ const MetasAlertWidget = () => {
 };
 
 export default MetasAlertWidget;
+

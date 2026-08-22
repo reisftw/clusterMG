@@ -385,7 +385,7 @@ const AgendaPage = () => {
               <span className="font-semibold text-gray-700">
                 "{confirmar.atividade}"
               </span>{' '}
-              sera removido permanentemente.
+              será removido permanentemente.
             </p>
             <div className="flex gap-3">
               <button
@@ -412,3 +412,4 @@ const AgendaPage = () => {
 };
 
 export default AgendaPage;
+

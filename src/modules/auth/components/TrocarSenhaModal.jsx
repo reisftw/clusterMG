@@ -1,6 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { KeyRound, Eye, EyeOff } from "lucide-react";
-import { trocarSenha, atualizarPerfilFirestore } from "../services/authService";
+import { trocarSenha, atualizarPerfilVps } from "../services/authService";
 import { useAuthContext } from "../../../context/AuthContext";
 
 const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
@@ -22,8 +22,8 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
       setErro("Informe a senha atual.");
       return;
     }
-    if (novaSenha.length < 6) {
-      setErro("A nova senha deve ter ao menos 6 caracteres.");
+    if (novaSenha.length < 8) {
+      setErro("A nova senha deve ter ao menos 8 caracteres.");
       return;
     }
     if (novaSenha !== confirmar) {
@@ -34,7 +34,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
     setSaving(true);
     try {
       await trocarSenha(senhaAtual, novaSenha);
-      await atualizarPerfilFirestore(currentUser.id, { trocar_senha: false });
+      await atualizarPerfilVps(currentUser.id, { trocar_senha: false });
       await refreshUser();
       onClose?.();
     } catch (error) {
@@ -57,7 +57,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
         <div className="text-center space-y-1">
           <div className="flex justify-center mb-2">
             <img
-              src="https://i.ibb.co/Xk2MjZLG/logosempre.png"
+              src="/cluster-mg.png"
               alt="Logo"
               className="h-8 object-contain"
             />
@@ -114,7 +114,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
                 value={novaSenha}
                 onChange={(event) => setNovaSenha(event.target.value)}
                 className={inputClass}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
               />
               <button
                 type="button"
@@ -163,3 +163,4 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 };
 
 export default TrocarSenhaModal;
+

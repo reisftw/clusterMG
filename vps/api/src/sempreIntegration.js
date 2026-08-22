@@ -219,12 +219,17 @@ async function ensureSempreToken(config) {
 }
 
 async function requestSempre(path, options = {}) {
-  const config = await getSempreConfig();
+  const config = {
+    ...(await getSempreConfig()),
+    ...(options.timeoutMs ? { timeoutMs: Number(options.timeoutMs) } : {}),
+  };
   const token = await ensureSempreToken(config);
+  const fetchOptions = { ...options };
+  delete fetchOptions.timeoutMs;
   const requestOptions = (nextToken) => ({
-    ...options,
+    ...fetchOptions,
     headers: {
-      ...(options.headers || {}),
+      ...(fetchOptions.headers || {}),
       authorization: normalizeBearer(nextToken),
     },
   });
@@ -238,6 +243,10 @@ async function requestSempre(path, options = {}) {
     if (!nextToken) throw error;
     return rawSempreRequest({ ...config, token: nextToken }, path, requestOptions(nextToken));
   }
+}
+
+async function requestSempreRaw(path, options = {}) {
+  return requestSempre(path, options);
 }
 
 function sanitizeCpfCnpj(value) {
@@ -820,7 +829,7 @@ function isRealResponsibleForBag(item = {}) {
 }
 
 function buildFilterOptions(items = []) {
-  const collect = (getter) => [...new Set(items.map(getter).map((value) => String(value || "").trim()).filter(Boolean))]
+  const collect = (getter) => [...new Set(items.map((item) => getter(item)).map((value) => String(value || "").trim()).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, "pt-BR"));
   return {
     cidades: collect((item) => item.cidade),
@@ -1459,6 +1468,7 @@ module.exports = {
   consultHistory,
   listEquipmentTreatments,
   listMapEquipments,
+  requestSempreRaw,
   refreshMapEquipmentsSnapshot,
   saveEquipmentTreatment,
   normalizeMac,

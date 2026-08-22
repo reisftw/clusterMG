@@ -1,9 +1,7 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { gerarPDFCidade, gerarRelatorio3Meses } from "../utils/pdfAgentes";
 
 export default function CityModal({ cidade, month, allData, onClose }) {
-  if (!cidade) return null;
-
   useEffect(() => {
     function onKey(e) {
       if (e.key === "Escape") onClose();
@@ -11,6 +9,8 @@ export default function CityModal({ cidade, month, allData, onClose }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  if (!cidade) return null;
 
   const pct = cidade.pct ?? 0;
   const over = pct > 100;
@@ -44,6 +44,9 @@ export default function CityModal({ cidade, month, allData, onClose }) {
       onClick={(e) => {
         if (e.target.classList.contains("city-modal-overlay")) onClose();
       }}
+      onKeyDown={(event) => event.key === "Escape" && onClose()}
+      role="button"
+      tabIndex={-1}
     >
       <div className="city-modal">
         {/* Header */}
@@ -92,6 +95,7 @@ export default function CityModal({ cidade, month, allData, onClose }) {
           <div className="city-modal-section">
             <h3>📊 Progresso da Meta</h3>
             <div
+              className="city-modal-progress-bar"
               style={{
                 background: "var(--bg)",
                 borderRadius: 12,
@@ -111,6 +115,7 @@ export default function CityModal({ cidade, month, allData, onClose }) {
               />
             </div>
             <div
+              className="city-modal-progress-meta"
               style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -148,7 +153,7 @@ export default function CityModal({ cidade, month, allData, onClose }) {
             </div>
           </div>
 
-          {/* Ações */}
+          {/* Acoes */}
           <div className="city-modal-actions">
             <button className="btn-fechar-modal" onClick={onClose}>
               Fechar
@@ -172,3 +177,4 @@ export default function CityModal({ cidade, month, allData, onClose }) {
     </div>
   );
 }
+

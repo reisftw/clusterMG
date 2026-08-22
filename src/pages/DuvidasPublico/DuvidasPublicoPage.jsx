@@ -1,6 +1,16 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { BookOpen, CircleHelp, Search, ChevronDown } from "lucide-react";
 import { useDashboardData } from "../PainelPublico/hooks/useDashboardData";
+import RetorninhoLoader from "../../components/ui/RetorninhoLoader";
+
+let fallbackDuvidaIdCounter = 0;
+
+function createDuvidaId() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return `duvida_${uuid}`;
+  fallbackDuvidaIdCounter += 1;
+  return `duvida_${Date.now()}_${fallbackDuvidaIdCounter}`;
+}
 
 function normalizeDuvidasPublicas(payload = {}) {
   return {
@@ -12,7 +22,7 @@ function normalizeDuvidasPublicas(payload = {}) {
     atualizadoEm: payload?.atualizadoEm || payload?.atualizado_em || null,
     duvidas: Array.isArray(payload?.duvidas)
       ? payload.duvidas.map((item) => ({
-          id: item?.id || `duvida-${Math.random().toString(36).slice(2, 8)}`,
+          id: item?.id || createDuvidaId(),
           pergunta: String(item?.pergunta || "").trim(),
           resposta: String(item?.resposta || "").trim(),
           categoria: String(item?.categoria || "").trim(),
@@ -207,7 +217,11 @@ export default function DuvidasPublicoPage() {
           <div className="space-y-4">
             {loading ? (
               <div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-                Carregando wiki...
+                <RetorninhoLoader
+                  compact
+                  title="Carregando wiki..."
+                  description="O Retorninho esta separando as respostas."
+                />
               </div>
             ) : error ? (
               <div className="rounded-[32px] border border-red-200 bg-red-50 p-8 text-sm text-red-700 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
@@ -240,3 +254,4 @@ export default function DuvidasPublicoPage() {
     </div>
   );
 }
+

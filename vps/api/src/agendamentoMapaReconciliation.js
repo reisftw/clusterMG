@@ -170,6 +170,15 @@ async function updateAppointment(record, nextData) {
   });
 }
 
+async function clearPreviousReconciliationLogs() {
+  await db.query(
+    `delete from app_documents
+      where collection_path = $1
+        and data->>'tipo' = 'verificacao_mapa'`,
+    [LOG_COLLECTION],
+  );
+}
+
 async function saveReconciliationLog({ record, before, after, match, reason, checkedAt }) {
   const id = `mapa_${checkedAt.replace(/[^0-9]/g, "")}_${record.documentId}`;
   await documents.upsertDocument({
@@ -208,6 +217,8 @@ async function reconcileAppointmentsWithMapa({ user = {}, monthsBack = null, rea
   const today = currentDateKey();
   const minDate = minDateByMonthsBack(monthsBack);
   const checkedAt = nowIso();
+  await clearPreviousReconciliationLogs();
+
   const summary = {
     ok: true,
     reason,

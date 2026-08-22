@@ -1,4 +1,4 @@
-import { useRegionais } from '../../regionais/hooks/useRegionais';
+﻿import { useRegionais } from '../../regionais/hooks/useRegionais';
 
 const ColaboradorRegionalField = ({ value, onChange }) => {
   const { regionais, loading } = useRegionais();
@@ -22,3 +22,4 @@ const ColaboradorRegionalField = ({ value, onChange }) => {
 };
 
 export default ColaboradorRegionalField;
+

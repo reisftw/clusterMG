@@ -1,8 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { buscarAgentes, buscarAuditoriaMes, buscarHistoricoCidade } from '../services/metasAuditoriaService';
 
+function normalizaTexto(valor) {
+  return String(valor ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+}
+
 const MESES = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ];
 
@@ -10,8 +20,8 @@ export function getCriticidade(pct, total) {
   if (total === 0)   return { label: 'Sem retirada',         cor: 'red',    nivel: 0 };
   if (pct >= 80)     return { label: 'Na meta',              cor: 'green',  nivel: 3 };
   if (pct >= 60)     return { label: 'Em melhora',           cor: 'yellow', nivel: 2 };
-  if (pct >= 30)     return { label: 'Crítica',              cor: 'orange', nivel: 1 };
-  return                    { label: 'Extremamente crítica',  cor: 'red',    nivel: 0 };
+  if (pct >= 30)     return { label: 'Critica',              cor: 'orange', nivel: 1 };
+  return                    { label: 'Extremamente critica',  cor: 'red',    nivel: 0 };
 }
 
 export const useMetasAuditoria = (mesSelecionado) => {
@@ -28,7 +38,7 @@ export const useMetasAuditoria = (mesSelecionado) => {
       ]);
 
       const enriquecidas = dadosMes.map(c => {
-        const key    = String(c.cidade).toUpperCase().trim();
+        const key    = normalizaTexto(c.cidade);
         const agente = mapa[key] ?? null;
         const pct    = c.meta > 0 ? (c.total / c.meta) * 100 : 0;
         return {
@@ -52,9 +62,10 @@ export const useMetasAuditoria = (mesSelecionado) => {
   useEffect(() => { carregar(); }, [carregar]);
 
   const buscarHistorico = useCallback(async (cidade) => {
-    const key = String(cidade).toUpperCase().replace(/\s+/g, '_');
+    const key = normalizaTexto(cidade).replace(/\s+/g, '_');
     return buscarHistoricoCidade(key);
   }, []);
 
   return { cidades, agentes, loading, carregar, buscarHistorico };
 };
+

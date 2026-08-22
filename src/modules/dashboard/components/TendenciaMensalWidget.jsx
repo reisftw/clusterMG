@@ -1,6 +1,8 @@
 import { TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getInternalStaticDataSlice } from "../../../services/internalStaticDataService";
+import { buscarTodasMetas } from "../../metas/services/metasService";
+import { INTERNAL_STATIC_DATA_UPDATED_EVENT } from "../../../services/internalStaticDataService";
+import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 
 const MONTH_ORDER = {
   Janeiro: 1,
@@ -24,22 +26,49 @@ export default function TendenciaMensalWidget() {
 
   useEffect(() => {
     let mounted = true;
+    const VERSION_KEY = "internal-static-data-version";
 
-    getInternalStaticDataSlice((payload) => payload?.metas?.all ?? null)
-      .then((data) => {
-        if (mounted && data && typeof data === "object") setAllData(data);
-        if (mounted && (!data || typeof data !== "object")) setAllData({});
-      })
-      .catch((error) => {
-        console.error("Erro ao carregar tendencia mensal:", error);
-        if (mounted) setAllData({});
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+    const carregar = (force = false) => {
+      setLoading(true);
+
+      buscarTodasMetas(force)
+        .then((data) => {
+          if (mounted && data && typeof data === "object") setAllData(data);
+          if (mounted && (!data || typeof data !== "object")) setAllData({});
+        })
+        .catch((error) => {
+          console.error("Erro ao carregar tendência mensal:", error);
+          if (mounted) setAllData({});
+        })
+        .finally(() => {
+          if (mounted) setLoading(false);
+        });
+    };
+
+    carregar();
+
+    const handleStaticDataUpdated = () => {
+      carregar(true);
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key !== VERSION_KEY) return;
+      carregar(true);
+    };
+
+    window.addEventListener(
+      INTERNAL_STATIC_DATA_UPDATED_EVENT,
+      handleStaticDataUpdated,
+    );
+    window.addEventListener("storage", handleStorageChange);
 
     return () => {
       mounted = false;
+      window.removeEventListener(
+        INTERNAL_STATIC_DATA_UPDATED_EVENT,
+        handleStaticDataUpdated,
+      );
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
 
@@ -81,17 +110,17 @@ export default function TendenciaMensalWidget() {
           <TrendingUp size={16} className="text-violet-600" />
         </div>
         <div>
-          <p className="text-sm font-bold text-gray-900">Tendencia Mensal</p>
+          <p className="text-sm font-bold text-gray-900">Tendência Mensal</p>
           <p className="text-xs text-gray-400">
-            Ultimos meses com producao registrada
+            Últimos meses com produção registrada
           </p>
         </div>
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400">Carregando tendencia...</p>
+        <RetorninhoLoader compact size="sm" title="Carregando tendência..." />
       ) : items.length === 0 ? (
-        <p className="text-sm text-gray-400">Sem historico suficiente.</p>
+        <p className="text-sm text-gray-400">Sem histórico suficiente.</p>
       ) : (
         <>
           <div className="space-y-4">
@@ -99,7 +128,7 @@ export default function TendenciaMensalWidget() {
               <div key={item.month}>
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <span className="text-sm font-medium text-gray-700">
-                    {item.month}
+                    {item.month === "Marco" ? "Março" : item.month}
                   </span>
                   <span className="text-xs font-semibold text-gray-500">
                     {item.total.toLocaleString("pt-BR")} O.S •{" "}
@@ -118,7 +147,7 @@ export default function TendenciaMensalWidget() {
 
           {variacao != null && (
             <div className="mt-5 rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              Variacao do ultimo mes:{" "}
+              Variação do último mês:{" "}
               <span
                 className={`font-bold ${variacao >= 0 ? "text-emerald-600" : "text-red-500"}`}
               >
@@ -132,3 +161,4 @@ export default function TendenciaMensalWidget() {
     </div>
   );
 }
+

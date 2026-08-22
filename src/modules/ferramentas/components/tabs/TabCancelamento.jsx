@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { FileDown } from "lucide-react";
@@ -97,7 +97,7 @@ const TabCancelamento = () => {
     if (!rowsCan.length) return;
     setStatus("gerando");
     try {
-      // Enriquece cancelamentos com cidade (do endereço se não tiver) e regional
+      // Enriquece cancelamentos com cidade (do endereco se nao tiver) e regional
       const D = rowsCan.map((r) => {
         const cidade =
           r.cidade || extractCidade(r.enderecoinstalacao || r.endereco || "");
@@ -158,7 +158,7 @@ const TabCancelamento = () => {
         ws.getRow(r).height = 28;
       };
 
-      // ── ABA 1: Por Motivo ─────────────────────────────────────────────────
+      // -- ABA 1: Por Motivo -------------------------------------------------
       const ws1 = wb.addWorksheet("Por Motivo");
       ws1.views = [{ showGridLines: false }];
       xT(
@@ -194,7 +194,7 @@ const TabCancelamento = () => {
         ws1.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 2: Por Cidade ─────────────────────────────────────────────────
+      // -- ABA 2: Por Cidade -------------------------------------------------
       const ws2 = wb.addWorksheet("Por Cidade");
       ws2.views = [{ showGridLines: false }];
       xT(ws2, 1, 5, "CANCELAMENTOS POR CIDADE", "E74C3C");
@@ -231,7 +231,7 @@ const TabCancelamento = () => {
         ws2.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 3: Por Regional ───────────────────────────────────────────────
+      // -- ABA 3: Por Regional -----------------------------------------------
       const ws3 = wb.addWorksheet("Por Regional");
       ws3.views = [{ showGridLines: false }];
       xT(ws3, 1, 4, "CANCELAMENTOS POR REGIONAL", "922B21");
@@ -268,11 +268,11 @@ const TabCancelamento = () => {
         ws3.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 4: Por Mês ────────────────────────────────────────────────────
-      const ws4 = wb.addWorksheet("Por Mês");
+      // -- ABA 4: Por Mes ----------------------------------------------------
+      const ws4 = wb.addWorksheet("Por Mes");
       ws4.views = [{ showGridLines: false }];
-      xT(ws4, 1, 3, "CANCELAMENTOS POR MÊS", "C0392B");
-      ["Mês/Ano", "Total Cancelamentos", "O.S Executadas no Mês"].forEach(
+      xT(ws4, 1, 3, "CANCELAMENTOS POR MES", "C0392B");
+      ["Mes/Ano", "Total Cancelamentos", "O.S Executadas no Mes"].forEach(
         (h, i) => xH(ws4, 2, i + 1, h, "C0392B"),
       );
       const byMes = {};
@@ -280,14 +280,14 @@ const TabCancelamento = () => {
         const mes = fmtMes(r._dataCan);
         if (mes) byMes[mes] = (byMes[mes] || 0) + 1;
       });
-      // O.S executadas por mês (segunda planilha)
+      // O.S executadas por mes (segunda planilha)
       const osByMes = {};
       DOS.forEach((r) => {
         const mes = fmtMes(r._dateExec);
         if (mes) osByMes[mes] = (osByMes[mes] || 0) + 1;
       });
       Object.entries(byMes)
-        .sort()
+        .sort(([mesA], [mesB]) => String(mesA).localeCompare(String(mesB), "pt-BR"))
         .forEach(([mes, q], i) => {
           const bg = i % 2 ? "FFFFFF" : "FFF0F0";
           xD(ws4, i + 3, 1, mes, bg, "center");
@@ -298,12 +298,12 @@ const TabCancelamento = () => {
         ws4.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 5: Confronto Mês/Cidade ───────────────────────────────────────
-      const ws5 = wb.addWorksheet("Confronto Mês-Cidade");
+      // -- ABA 5: Confronto Mes/Cidade ---------------------------------------
+      const ws5 = wb.addWorksheet("Confronto Mes-Cidade");
       ws5.views = [{ showGridLines: false }];
-      xT(ws5, 1, 5, "CONFRONTO CANCELAMENTOS × O.S POR MÊS E CIDADE", "7B241C");
+      xT(ws5, 1, 5, "CONFRONTO CANCELAMENTOS × O.S POR MES E CIDADE", "7B241C");
       [
-        "Mês/Ano",
+        "Mes/Ano",
         "Cidade",
         "Regional",
         "Cancelamentos",
@@ -352,7 +352,7 @@ const TabCancelamento = () => {
         ws5.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 6: Dados Completos ────────────────────────────────────────────
+      // -- ABA 6: Dados Completos --------------------------------------------
       const ws6 = wb.addWorksheet("Dados Completos");
       ws6.views = [{ showGridLines: false }];
       xT(ws6, 1, 5, "DADOS COMPLETOS — CANCELAMENTOS", "922B21");
@@ -380,7 +380,7 @@ const TabCancelamento = () => {
         ws6.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -408,6 +408,14 @@ const TabCancelamento = () => {
         className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
           ${canOk ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-red-400"}`}
         onClick={() => inputCanRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputCanRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputCanRef}
@@ -441,6 +449,14 @@ const TabCancelamento = () => {
         className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
           ${osOk ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-400"}`}
         onClick={() => inputOsRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputOsRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputOsRef}
@@ -470,14 +486,14 @@ const TabCancelamento = () => {
         )}
       </div>
 
-      {/* Botão */}
+      {/* Botao */}
       {canOk && (
         <button
           onClick={gerar}
           className="flex items-center gap-2 px-5 py-2.5 bg-red-700 text-white rounded-xl font-semibold hover:bg-red-800 transition-colors"
         >
           <FileDown size={16} />
-          Gerar Relatório de Cancelamentos (6 abas)
+          Gerar Relatorio de Cancelamentos (6 abas)
         </button>
       )}
 
@@ -494,3 +510,4 @@ const TabCancelamento = () => {
 };
 
 export default TabCancelamento;
+

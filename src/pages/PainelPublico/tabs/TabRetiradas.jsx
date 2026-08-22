@@ -1,15 +1,17 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import { Chart } from "chart.js/auto";
 import KpiCard from "../components/KpiCard";
 import RankingList from "../components/RankingList";
-import RitmoBar from "../components/RitmoBar";
-import TecIndividual from "../components/TecIndividual";
 import AnomaliaList from "../components/AnomaliaList";
 import SaldoTable from "../components/SaldoTable";
 import EmptyState from "../components/EmptyState";
 import { calcProjecao, calcSaldoDiario } from "../utils/calcProjecao";
 import { calcRitmo } from "../utils/calcRitmo";
 import { calcAnomalias } from "../utils/calcAnomalias";
+import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
+import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
+import { logger } from "../../../utils/logger";
+import { resolveVpsDate } from "../../../services/vpsDate";
 
 const MONTHS = [
   "Janeiro",
@@ -26,13 +28,33 @@ const MONTHS = [
   "Dezembro",
 ];
 
+const RETIRADAS_DATA_SOURCES = [
+  { key: "sempre", label: "SEMPRE" },
+  { key: "onnet", label: "ONNET" },
+  { key: "onnetSempre", label: "ONNET + SEMPRE" },
+];
+
 function normalizeMonthName(value) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ç/gi, "c")
     .toLowerCase()
     .trim();
+}
+
+function getMonthDataBySource(monthData, source) {
+  if (!monthData) return null;
+  if (source === "onnet") return monthData.onnet || null;
+  if (source === "onnetSempre") return monthData.onnetSempre || null;
+  return monthData;
+}
+
+function buildAllDataBySource(allData, source) {
+  return Object.fromEntries(
+    Object.entries(allData || {})
+      .map(([monthName, monthData]) => [monthName, getMonthDataBySource(monthData, source)])
+      .filter(([, monthData]) => Boolean(monthData)),
+  );
 }
 
 function formatLastUpdate(value) {
@@ -74,7 +96,7 @@ function formatLastUpdate(value) {
     return raw;
   }
 
-  const date = raw?.toDate?.() || (raw ? new Date(raw) : null);
+  const date = resolveVpsDate(raw);
   if (!date || Number.isNaN(date.getTime())) return "";
 
   return date.toLocaleDateString("pt-BR", {
@@ -86,177 +108,567 @@ function formatLastUpdate(value) {
   });
 }
 
-function getMonthPrevious(month, allData) {
-  const index = MONTHS.findIndex(
+function getMonthsFromCurrent(month, allData) {
+  const currentIndex = MONTHS.findIndex(
     (item) => normalizeMonthName(item) === normalizeMonthName(month),
   );
-  if (index <= 0) return null;
-  const previous = MONTHS[index - 1];
-  return (
-    Object.keys(allData || {}).find(
-      (item) => normalizeMonthName(item) === normalizeMonthName(previous),
-    ) || previous
+
+  if (currentIndex < 0) {
+    return Object.keys(allData || {}).filter((item) => Number(allData[item]?.totalOS || 0) > 0);
+  }
+
+  return Array.from({ length: MONTHS.length }, (_, offset) => MONTHS[(currentIndex - offset + MONTHS.length) % MONTHS.length])
+    .map(
+      (monthName) =>
+        Object.keys(allData || {}).find(
+          (item) => normalizeMonthName(item) === normalizeMonthName(monthName),
+        ) || monthName,
+    )
+    .filter((item, index, array) => array.indexOf(item) === index)
+    .filter((item) => Number(allData[item]?.totalOS || 0) > 0);
+}
+
+function getMonthIndex(month) {
+  return MONTHS.findIndex(
+    (item) => normalizeMonthName(item) === normalizeMonthName(month),
   );
 }
 
-function getDayRow(rawDays = [], day) {
-  return rawDays.find((item) => Number(item?.dia) === Number(day)) || null;
+function getPreviousMonthData(month, allData) {
+  const index = getMonthIndex(month);
+  if (index < 0) return null;
+
+  for (let offset = 1; offset < MONTHS.length; offset += 1) {
+    const previousName = MONTHS[(index - offset + MONTHS.length) % MONTHS.length];
+    const key =
+      Object.keys(allData || {}).find(
+        (item) => normalizeMonthName(item) === normalizeMonthName(previousName),
+      ) || previousName;
+    if (allData?.[key]) return allData[key];
+  }
+
+  return null;
 }
 
-function getComparisonReferenceDay() {
-  return Math.max(1, new Date().getDate() - 1);
-}
+function formatTrend(current, previous, suffix = "%") {
+  const currentNumber = Number(current || 0);
+  const previousNumber = Number(previous || 0);
+  if (!previousNumber) return { value: null, tone: "neutral" };
 
-function buildComparativoDiaAtual(allData, month) {
-  const previousMonth = getMonthPrevious(month, allData);
-  if (!previousMonth) return null;
-
-  const currentMonthData = allData[month];
-  const previousMonthData = allData[previousMonth];
-  if (!currentMonthData || !previousMonthData) return null;
-
-  const referenceDay = getComparisonReferenceDay();
-  const atual = getDayRow(currentMonthData.rawDays || [], referenceDay) || {};
-  const anterior = getDayRow(previousMonthData.rawDays || [], referenceDay) || {};
-
-  const grupos = [
-    { key: "equipe", label: "Técnico retirada" },
-    { key: "agente", label: "Agente autorizado" },
-    { key: "loja", label: "Entregue em loja" },
-    { key: "regionais", label: "Regionais" },
-  ].map((grupo) => {
-    const hoje = Number(atual?.[grupo.key] || 0);
-    const mesAnterior = Number(anterior?.[grupo.key] || 0);
-    return {
-      ...grupo,
-      hoje,
-      mesAnterior,
-      diferenca: hoje - mesAnterior,
-    };
-  });
-
+  const delta = ((currentNumber - previousNumber) / previousNumber) * 100;
   return {
-    dia: referenceDay,
-    previousMonth,
-    grupos,
-    totalHoje: grupos.reduce((sum, item) => sum + item.hoje, 0),
-    totalMesAnterior: grupos.reduce((sum, item) => sum + item.mesAnterior, 0),
+    value: `${delta >= 0 ? "↑ +" : "↓ "}${delta.toFixed(1).replace(".", ",")}${suffix}`,
+    tone: delta >= 0 ? "positive" : "negative",
   };
 }
 
-function buildComparativoMes(allData, month) {
-  const previousMonth = getMonthPrevious(month, allData);
-  if (!previousMonth) return null;
+function getPanelPeriodLabel(month, monthData, lastDayWithData) {
+  const monthIndex = getMonthIndex(month);
+  const year = Number(monthData?.ano || monthData?.year) || new Date().getFullYear();
+  if (monthIndex < 0) return "--";
 
-  const currentMonthData = allData[month];
-  const previousMonthData = allData[previousMonth];
-  if (!currentMonthData || !previousMonthData) return null;
+  const firstDay = new Date(year, monthIndex, 1);
+  const lastDay =
+    lastDayWithData > 0
+      ? new Date(year, monthIndex, lastDayWithData)
+      : new Date(year, monthIndex + 1, 0);
 
-  const currentRaw = currentMonthData.rawDays || [];
-  const previousRaw = previousMonthData.rawDays || [];
-  const maxDay = Math.max(
-    ...currentRaw.map((item) => Number(item?.dia) || 0),
-    ...previousRaw.map((item) => Number(item?.dia) || 0),
-    0,
-  );
-
-  const linhas = Array.from({ length: maxDay }, (_, index) => {
-    const dia = index + 1;
-    const atual = getDayRow(currentRaw, dia) || {};
-    const anterior = getDayRow(previousRaw, dia) || {};
-    const equipeHoje = Number(atual.equipe || 0);
-    const equipeAnterior = Number(anterior.equipe || 0);
-    const agenteHoje = Number(atual.agente || 0);
-    const agenteAnterior = Number(anterior.agente || 0);
-    const lojaHoje = Number(atual.loja || 0);
-    const lojaAnterior = Number(anterior.loja || 0);
-    const regionaisHoje = Number(atual.regionais || 0);
-    const regionaisAnterior = Number(anterior.regionais || 0);
-    const totalHoje = Number(atual.totalDia || 0);
-    const totalAnterior = Number(anterior.totalDia || 0);
-
-    return {
-      dia,
-      equipeHoje,
-      equipeAnterior,
-      agenteHoje,
-      agenteAnterior,
-      lojaHoje,
-      lojaAnterior,
-      regionaisHoje,
-      regionaisAnterior,
-      totalHoje,
-      totalAnterior,
-      diferenca: totalHoje - totalAnterior,
-    };
-  });
-
-  return { previousMonth, linhas };
+  return `${firstDay.toLocaleDateString("pt-BR")} - ${lastDay.toLocaleDateString("pt-BR")}`;
 }
 
-function buildComparativoSemana(allData, month) {
-  const previousMonth = getMonthPrevious(month, allData);
-  if (!previousMonth) return null;
+function getRegionalStatus(item) {
+  const pct = Number(item?.percent ?? item?.pct ?? 0);
+  if (pct >= 100) return { label: "OK", className: "ok" };
+  if (pct < 50) return { label: "Critico", className: "critical" };
+  return { label: "Atencao", className: "warning" };
+}
 
-  const currentMonthData = allData[month];
-  const previousMonthData = allData[previousMonth];
-  if (!currentMonthData || !previousMonthData) return null;
+function RegionalGoalsTable({ items = [] }) {
+  const rows = items.slice(0, 7);
 
-  const referenceDay = getComparisonReferenceDay();
-  const diaInicial = Math.max(1, referenceDay - 6);
-  const dias = Array.from(
-    { length: referenceDay - diaInicial + 1 },
-    (_, index) => diaInicial + index,
+  return (
+    <div className="regional-goals-wrap">
+      <table className="regional-goals-table">
+        <thead>
+          <tr>
+            <th>Regional</th>
+            <th>Realizado</th>
+            <th>Meta</th>
+            <th>% Ating.</th>
+            <th>Ritmo/dia</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((item) => {
+            const realizado = Number(item.total ?? item.realizado ?? 0);
+            const meta = Math.round(Number(item.meta80 ?? 110));
+            const pct = Number(item.percent ?? item.pct ?? 0);
+            const daily = Array.isArray(item.daily)
+              ? item.daily.filter((value) => Number(value || 0) > 0)
+              : [];
+            const ritmoDia = daily.length > 0 ? realizado / daily.length : 0;
+            const status = getRegionalStatus(item);
+
+            return (
+              <tr key={item.name ?? item.nome}>
+                <td>{item.name ?? item.nome}</td>
+                <td>{realizado.toLocaleString("pt-BR")}</td>
+                <td>{meta.toLocaleString("pt-BR")}</td>
+                <td className={pct >= 80 ? "positive" : "negative"}>
+                  {pct.toFixed(1).replace(".", ",")}%
+                </td>
+                <td>{ritmoDia.toFixed(1).replace(".", ",")}</td>
+                <td>
+                  <span className={`regional-status-pill ${status.className}`}>
+                    {status.label}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <button type="button" className="regional-goals-action">
+        Ver todas as regionais
+      </button>
+    </div>
   );
+}
 
-  const grupos = [
-    { key: "equipe", label: "Técnico retirada" },
-    { key: "agente", label: "Agente autorizado" },
-    { key: "loja", label: "Entregue em loja" },
-    { key: "regionais", label: "Regionais" },
-  ].map((grupo) => {
-    const hoje = dias.reduce((sum, dia) => sum + Number(getDayRow(currentMonthData.rawDays || [], dia)?.[grupo.key] || 0), 0);
-    const mesAnterior = dias.reduce((sum, dia) => sum + Number(getDayRow(previousMonthData.rawDays || [], dia)?.[grupo.key] || 0), 0);
-    return {
-      ...grupo,
-      hoje,
-      mesAnterior,
-      diferenca: hoje - mesAnterior,
-    };
+function parseLocalDate(value) {
+  if (!value) return null;
+  const [year, month, day] = String(value).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateBR(value) {
+  const date = parseLocalDate(value);
+  return date
+    ? date.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : "--";
+}
+
+function formatCompactNumber(value) {
+  return Number(value || 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: Number.isInteger(Number(value)) ? 0 : 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+function getAnonymousTechnicianName(position) {
+  return `Técnico ${String(position).padStart(2, "0")}`;
+}
+
+function buildForcaTarefaDetalhes({
+  items,
+  meta,
+  divisor,
+  start,
+  end,
+  year,
+  monthIndex,
+  nameKey = "name",
+  limit = 7,
+  anonymizeNames = false,
+}) {
+  const metaIndividual = divisor > 0 ? meta / divisor : meta;
+
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const daily = Array.isArray(item.daily) ? item.daily : [];
+      const realizado = daily.reduce((sum, value, index) => {
+        const current = new Date(year, monthIndex, index + 1);
+        if (current < start || current > end) return sum;
+        return sum + Number(value || 0);
+      }, 0);
+
+      return {
+        name: item[nameKey] || item.name || item.nome || "Sem nome",
+        realizado,
+        falta: Math.max(0, metaIndividual - realizado),
+      };
+    })
+    .sort((a, b) => b.realizado - a.realizado)
+    .slice(0, limit)
+    .map((item, index) => ({
+      ...item,
+      displayName: anonymizeNames ? getAnonymousTechnicianName(index + 1) : item.name,
+    }));
+}
+
+function buildForcaTarefaResumo(config, monthData, month, agenteMonthData = null) {
+  if (!config?.ativa || !monthData) return null;
+
+  const start = parseLocalDate(config.inicio);
+  const end = parseLocalDate(config.fim);
+  if (!start || !end || start > end) return null;
+
+  const monthIndex = MONTHS.findIndex(
+    (item) => normalizeMonthName(item) === normalizeMonthName(month),
+  );
+  if (monthIndex < 0) return null;
+
+  let year = null;
+  for (let candidate = start.getFullYear(); candidate <= end.getFullYear(); candidate += 1) {
+    const monthStart = new Date(candidate, monthIndex, 1);
+    const monthEnd = new Date(candidate, monthIndex + 1, 0);
+    if (monthEnd >= start && monthStart <= end) {
+      year = candidate;
+      break;
+    }
+  }
+  if (!year) return null;
+
+  const rawDays = Array.isArray(monthData.rawDays) ? monthData.rawDays : [];
+  const daysInRange = rawDays.filter((row) => {
+    const dia = Number(row?.dia);
+    if (!dia) return false;
+    const current = new Date(year, monthIndex, dia);
+    return current >= start && current <= end;
   });
 
+  const metas = config.metas || {};
+  const metaRegionais = Number(metas.regionais) || 0;
+  const metaAgentes = Number(metas.agentes) || 0;
+  const metaTecnicos = Number(metas.tecnicos) || 0;
+  const regionaisDetalhe = buildForcaTarefaDetalhes({
+    items: monthData.regionais,
+    meta: metaRegionais,
+    divisor: 7,
+    start,
+    end,
+    year,
+    monthIndex,
+    limit: 7,
+  });
+  const agentesDetalhe = buildForcaTarefaDetalhes({
+    items: agenteMonthData?.cidades,
+    meta: metaAgentes,
+    divisor: 10,
+    start,
+    end,
+    year,
+    monthIndex,
+    nameKey: "nome",
+    limit: 7,
+  });
+  const tecnicosDetalhe = buildForcaTarefaDetalhes({
+    items: monthData.technicians,
+    meta: metaTecnicos,
+    divisor: 7,
+    start,
+    end,
+    year,
+    monthIndex,
+    limit: 7,
+    anonymizeNames: true,
+  });
+
+  const grupos = [
+    {
+      key: "regionais",
+      label: "Regionais",
+      meta: metaRegionais,
+      realizado: daysInRange.reduce((sum, row) => sum + Number(row.regionais || 0), 0),
+      detalhes: regionaisDetalhe,
+      detalheLabel: "Regional",
+      detalheMeta: metaRegionais / 7,
+    },
+    {
+      key: "agentes",
+      label: "Agente autorizado",
+      meta: metaAgentes,
+      realizado: daysInRange.reduce((sum, row) => sum + Number(row.agente || 0), 0),
+      detalhes: agentesDetalhe,
+      detalheLabel: "Cidade",
+      detalheMeta: metaAgentes / 10,
+    },
+    {
+      key: "tecnicos",
+      label: "Tecnicos de retirada",
+      meta: metaTecnicos,
+      realizado: daysInRange.reduce((sum, row) => sum + Number(row.equipe || 0), 0),
+      detalhes: tecnicosDetalhe,
+      detalheLabel: "Técnico",
+      detalheMeta: metaTecnicos / 7,
+    },
+  ].map((grupo) => ({
+    ...grupo,
+    falta: Math.max(0, grupo.meta - grupo.realizado),
+    pct: grupo.meta > 0 ? Math.min(100, (grupo.realizado / grupo.meta) * 100) : 0,
+  }));
+
   return {
-    previousMonth,
-    periodo: `${diaInicial} a ${referenceDay}`,
+    periodo: `${formatDateBR(config.inicio)} a ${formatDateBR(config.fim)}`,
     grupos,
-    totalHoje: grupos.reduce((sum, item) => sum + item.hoje, 0),
-    totalMesAnterior: grupos.reduce((sum, item) => sum + item.mesAnterior, 0),
+    totalRealizado: grupos.reduce((sum, item) => sum + item.realizado, 0),
+    totalMeta: grupos.reduce((sum, item) => sum + item.meta, 0),
   };
 }
 
-function DiffValue({ value }) {
-  const color = value >= 0 ? "var(--green)" : "var(--orange)";
+function ForcaTarefaCard({ resumo }) {
+  if (!resumo) return null;
+
   return (
-    <span style={{ color, fontWeight: 800 }}>
-      {value >= 0 ? "+" : ""}
-      {value.toLocaleString("pt-BR")}
-    </span>
+    <div
+      className="card"
+      style={{
+        marginBottom: 16,
+        borderColor: "rgba(255,107,0,0.25)",
+        background:
+          "linear-gradient(135deg, rgba(255,107,0,0.08), rgba(0,48,135,0.04))",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 18,
+          flexWrap: "wrap",
+        }}
+      >
+        <div className="card-title card-title-split" style={{ flex: "1 1 280px" }}>
+          <span>Forca tarefa</span>
+          <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 700 }}>
+            {resumo.periodo}
+          </span>
+        </div>
+        <img
+          src="/retorninho-prancheta.png"
+          alt="Retorninho com plano de acao"
+          loading="lazy"
+          style={{
+            width: "clamp(112px, 16vw, 190px)",
+            maxWidth: "38%",
+            height: "auto",
+            objectFit: "contain",
+            marginTop: -20,
+            marginBottom: -18,
+            filter: "drop-shadow(0 14px 22px rgba(0, 48, 135, 0.18))",
+          }}
+        />
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 14,
+          marginTop: 16,
+        }}
+      >
+        {resumo.grupos.map((grupo) => (
+          <div
+            key={grupo.key}
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 18,
+              padding: 16,
+              background: "#fff",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--blue)",
+                marginBottom: 10,
+              }}
+            >
+              {grupo.label}
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 900, color: "var(--text)" }}>
+              {grupo.realizado.toLocaleString("pt-BR")}
+              <span style={{ fontSize: 14, color: "var(--muted)", marginLeft: 6 }}>
+                / {grupo.meta.toLocaleString("pt-BR")}
+              </span>
+            </div>
+            <div
+              style={{
+                height: 8,
+                borderRadius: 999,
+                background: "rgba(0,48,135,0.09)",
+                overflow: "hidden",
+                marginTop: 12,
+              }}
+            >
+              <div
+                style={{
+                  width: `${grupo.pct}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  background: grupo.pct >= 100 ? "var(--green)" : "var(--orange)",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 8,
+                marginTop: 10,
+                fontSize: 12,
+                fontWeight: 800,
+                color: "var(--muted)",
+              }}
+            >
+              <span>{grupo.pct.toFixed(1)}%</span>
+              <span>Faltam {grupo.falta.toLocaleString("pt-BR")}</span>
+            </div>
+
+            {grupo.detalhes?.length ? (
+              <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                    gap: 8,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  <span>{grupo.detalheLabel || "Item"}</span>
+                  <span>Fez</span>
+                  <span>Falta p/ {formatCompactNumber(grupo.detalheMeta || grupo.meta)}</span>
+                </div>
+                {grupo.detalhes.map((regional) => (
+                  <div
+                    key={regional.name}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                      gap: 8,
+                      alignItems: "center",
+                      padding: "5px 0",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: "var(--text)",
+                    }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {regional.displayName || regional.name}
+                    </span>
+                    <span style={{ color: "var(--blue)" }}>
+                      {regional.realizado.toLocaleString("pt-BR")}
+                    </span>
+                    <span style={{ color: regional.falta > 0 ? "var(--orange)" : "var(--green)" }}>
+                      {formatCompactNumber(regional.falta)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-export default function TabRetiradas({ allData, month, lastUpdate }) {
-  const d = allData[month];
+export default function TabRetiradas({
+  allData,
+  month,
+  lastUpdate,
+  forcaTarefa,
+  agentesData = {},
+  feriadosSet: feriadosCalendario = null,
+}) {
+  const [dataSource, setDataSource] = useState("sempre");
+  const [selectedRegional, setSelectedRegional] = useState("todas");
+  const selectedAllData = useMemo(
+    () => buildAllDataBySource(allData, dataSource),
+    [allData, dataSource],
+  );
+  const d = selectedAllData[month];
+  const selectedSourceLabel = RETIRADAS_DATA_SOURCES.find((item) => item.key === dataSource)?.label || "SEMPRE";
   const lastUpdateText = useMemo(() => formatLastUpdate(lastUpdate), [lastUpdate]);
-  const comparativoDia = useMemo(() => buildComparativoDiaAtual(allData, month), [allData, month]);
-  const comparativoMes = useMemo(() => buildComparativoMes(allData, month), [allData, month]);
-  const comparativoSemana = useMemo(() => buildComparativoSemana(allData, month), [allData, month]);
+  const forcaTarefaResumo = useMemo(
+    () => dataSource === "sempre"
+      ? buildForcaTarefaResumo(forcaTarefa, d, month, agentesData?.[month])
+      : null,
+    [agentesData, d, dataSource, forcaTarefa, month],
+  );
 
   const [projecao, setProjecao] = useState(null);
   const [ritmo, setRitmo] = useState(null);
   const [saldoDiario, setSaldoDiario] = useState([]);
-  const [anomaliasMinimizadas, setAnomaliasMinimizadas] = useState(true);
-  const [comparativoMesAberto, setComparativoMesAberto] = useState(false);
+  const [feriadosSet, setFeriadosSet] = useState(() => new Set());
+  const [anomaliasMinimizadas, setAnomaliasMinimizadas] = useState(false);
   const anomalias = useMemo(() => calcAnomalias(d), [d]);
+  const lastDayWithData = useMemo(
+    () =>
+      (d?.rawDays || []).reduce((ultimoDia, row, index) => {
+        const dia = Number(row?.dia || index + 1);
+        return Number(row?.totalDia) > 0 ? dia || ultimoDia : ultimoDia;
+      }, 0),
+    [d],
+  );
+  const regionaisFiltradas = useMemo(() => {
+    const items = Array.isArray(d?.regionais) ? d.regionais : [];
+    if (selectedRegional === "todas") return items;
+    return items.filter(
+      (item) => normalizeMonthName(item?.name || item?.nome) === selectedRegional,
+    );
+  }, [d, selectedRegional]);
+  const previousMonthData = useMemo(
+    () => getPreviousMonthData(month, selectedAllData),
+    [month, selectedAllData],
+  );
+  const totalTrend = useMemo(
+    () => formatTrend(d?.totalOS, previousMonthData?.totalOS),
+    [d, previousMonthData],
+  );
+  const metaTrend = useMemo(
+    () => formatTrend(d?.meta, previousMonthData?.meta),
+    [d, previousMonthData],
+  );
+  const atingimentoTrend = useMemo(
+    () => formatTrend(d?.percentAchieved, previousMonthData?.percentAchieved, " p.p."),
+    [d, previousMonthData],
+  );
+  const projectionTrend = useMemo(
+    () => formatTrend(projecao?.projecaoFinal, previousMonthData?.totalOS),
+    [previousMonthData, projecao],
+  );
+  const periodLabel = useMemo(
+    () => getPanelPeriodLabel(month, d, lastDayWithData),
+    [d, lastDayWithData, month],
+  );
+  const metaBrasilTecpar = useMemo(
+    () =>
+      calcularMetaBrasilTecpar({
+        cancelamentos: d?.cancelamentos,
+        totalOS: d?.totalOS,
+      }),
+    [d],
+  );
+
+  useEffect(() => {
+    const exists =
+      selectedRegional === "todas" ||
+      (d?.regionais || []).some(
+        (item) => normalizeMonthName(item?.name || item?.nome) === selectedRegional,
+      );
+    if (exists) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setSelectedRegional("todas");
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [d, selectedRegional]);
 
   const chartDailyRef = useRef(null);
   const chartMonthlyRef = useRef(null);
@@ -264,15 +676,59 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
   const chartMonthlyInst = useRef(null);
 
   useEffect(() => {
-    if (!d) return;
-    calcProjecao(d, month).then(setProjecao);
-    calcRitmo(d, month).then(setRitmo);
-    calcSaldoDiario(d, month).then(({ lista }) => setSaldoDiario(lista || []));
-  }, [d, month]);
+    let active = true;
+
+    if (!d) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+
+      setProjecao(null);
+      setRitmo(null);
+      setSaldoDiario([]);
+      setFeriadosSet(feriadosCalendario || new Set());
+
+      try {
+        const saldo = await calcSaldoDiario(
+          d,
+          month,
+          feriadosCalendario,
+        );
+        const calendarioAplicado = saldo.feriadosSet || new Set();
+        const [nextProjecao, nextRitmo] = await Promise.all([
+          calcProjecao(d, month, calendarioAplicado),
+          calcRitmo(d, month, calendarioAplicado),
+        ]);
+
+        if (!active) return;
+        setProjecao(nextProjecao);
+        setRitmo(nextRitmo);
+        setSaldoDiario(saldo.lista || []);
+        setFeriadosSet(calendarioAplicado);
+      } catch (error) {
+        if (!active) return;
+        logger.error("[TabRetiradas] Erro ao calcular indicadores:", error);
+        setProjecao(null);
+        setRitmo(null);
+        setSaldoDiario([]);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [d, feriadosCalendario, month]);
 
   useEffect(() => {
+    if (chartDailyInst.current) {
+      chartDailyInst.current.destroy();
+      chartDailyInst.current = null;
+    }
     if (!d || !saldoDiario.length || !chartDailyRef.current) return;
-    if (chartDailyInst.current) chartDailyInst.current.destroy();
 
     const labels = saldoDiario.map((s) => `Dia ${s.dia}`);
     let sum = 0;
@@ -280,7 +736,16 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
       sum += Number(s.totalDia) || 0;
       return sum;
     });
-    const metaLine = saldoDiario.map(() => Number(d.meta) || 0);
+    const year = Number(d?.ano || d?.year) || new Date().getFullYear();
+    const { metaAcumuladaPorDia } = buildMetaDiariaSchedule({
+      month,
+      meta: d.meta,
+      feriadosSet,
+      year,
+    });
+    const metaLine = saldoDiario.map(
+      (s) => Number(s.metaAcumulada ?? metaAcumuladaPorDia.get(Number(s.dia)) ?? 0),
+    );
 
     const projecaoLine = new Array(saldoDiario.length).fill(null);
     if (projecao && projecao.diasUteisRestantes > 0) {
@@ -288,7 +753,7 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
         labels.push(`Dia ${ponto.dia}`);
         projecaoLine.push(ponto.valor);
         accumulated.push(null);
-        metaLine.push(Number(d.meta) || 0);
+        metaLine.push(metaAcumuladaPorDia.get(Number(ponto.dia)) ?? Number(d.meta || 0));
       }
       projecaoLine[saldoDiario.length - 1] = Number(d.totalOS) || 0;
     }
@@ -318,7 +783,7 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
             fill: false,
           },
           {
-            label: "Projeção",
+            label: "Projecao",
             data: projecaoLine,
             borderColor: "#7C3AED",
             borderDash: [4, 4],
@@ -338,18 +803,16 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
         },
       },
     });
-  }, [d, saldoDiario, projecao]);
+  }, [d, saldoDiario, projecao, month, feriadosSet]);
 
   useEffect(() => {
     if (!chartMonthlyRef.current) return;
     if (chartMonthlyInst.current) chartMonthlyInst.current.destroy();
 
-    const mesesComDados = Object.keys(allData).filter(
-      (m) => Number(allData[m]?.totalOS || 0) > 0,
-    );
+    const mesesComDados = getMonthsFromCurrent(month, selectedAllData);
     const labels = mesesComDados;
-    const realizados = mesesComDados.map((m) => Number(allData[m]?.totalOS || 0));
-    const metas = mesesComDados.map((m) => Number(allData[m]?.meta || 0));
+    const realizados = mesesComDados.map((m) => Number(selectedAllData[m]?.totalOS || 0));
+    const metas = mesesComDados.map((m) => Number(selectedAllData[m]?.meta || 0));
     const mesAtualNormalizado = normalizeMonthName(month);
     const coresRealizado = mesesComDados.map((m) =>
       normalizeMonthName(m) === mesAtualNormalizado ? "#003087" : "#FF6B00",
@@ -392,7 +855,7 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
         },
       },
     });
-  }, [allData, month]);
+  }, [selectedAllData, month]);
 
   useEffect(() => {
     return () => {
@@ -401,67 +864,125 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
     };
   }, []);
 
+  const filterBar = (
+    <div className="retiradas-filterbar">
+      <label>
+        <span>Base do painel</span>
+        <select value={dataSource} onChange={(event) => setDataSource(event.target.value)}>
+          {RETIRADAS_DATA_SOURCES.map((source) => {
+            const hasData = Boolean(getMonthDataBySource(allData?.[month], source.key));
+            return (
+              <option key={source.key} value={source.key} disabled={!hasData}>
+                {source.label}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+
+      <label>
+        <span>Período</span>
+        <input type="text" value={periodLabel} readOnly />
+      </label>
+
+      <label>
+        <span>Regional</span>
+        <select
+          value={selectedRegional}
+          onChange={(event) => setSelectedRegional(event.target.value)}
+        >
+          <option value="todas">Todas</option>
+          {(d?.regionais || []).map((item) => {
+            const name = item.name || item.nome;
+            return (
+              <option key={name} value={normalizeMonthName(name)}>
+                {name}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+
+      <label>
+        <span>Equipe tecnica</span>
+        <select defaultValue="todas">
+          <option value="todas">Todas</option>
+          <option value="com-producao">Com producao</option>
+        </select>
+      </label>
+
+      <label>
+        <span>Entrega loja</span>
+        <select defaultValue="todas">
+          <option value="todas">Todas</option>
+          <option value="com-entrega">Com entrega</option>
+        </select>
+      </label>
+
+      <div className="retiradas-filter-update">
+        <span>Última atualização:</span>
+        <strong>{lastUpdateText || "Carregando..."}</strong>
+      </div>
+    </div>
+  );
+
   if (!d) {
     return (
-      <EmptyState
-        icon="📊"
-        title="Sem dados para este mês"
-        desc="Aguardando sincronização com o Firebase."
-      />
+      <div>
+        {filterBar}
+        <EmptyState
+          icon="📊"
+          title={`Sem dados para ${selectedSourceLabel} neste mes`}
+          desc="Aguardando sincronizacao com a VPS."
+        />
+      </div>
     );
   }
 
   return (
     <div>
-      {lastUpdateText ? (
-        <div
-          className="card"
-          style={{
-            marginBottom: 16,
-            padding: "12px 16px",
-            background:
-              "linear-gradient(135deg, rgba(0,48,135,0.04), rgba(255,107,0,0.05))",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--blue)",
-              marginBottom: 4,
-            }}
-          >
-            Última atualização
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-            {`Última atualização: ${lastUpdateText}`}
-          </div>
-        </div>
-      ) : null}
+      {filterBar}
 
       <div className="kpis">
         <KpiCard
-          label="Total O.S Realizado"
+          label="O.S. realizadas"
           value={Number(d.totalOS || 0).toLocaleString("pt-BR")}
-          sub="No mês selecionado"
+          sub="No mes selecionado"
           color="orange"
+          trendValue={totalTrend.value}
+          trendTone={totalTrend.tone}
         />
         <KpiCard
           label="Meta"
           value={Math.round(Number(d.meta || 0)).toLocaleString("pt-BR")}
-          sub="Objetivo do mês"
+          sub="Objetivo do mes"
           color="blue"
+          trendValue={metaTrend.value}
+          trendTone={metaTrend.tone}
         />
         <KpiCard
-          label="% Atingido"
+          label="Brasil Tecpar 65%"
+          value={metaBrasilTecpar.meta.toLocaleString("pt-BR")}
+          sub={
+            metaBrasilTecpar.atingiu
+              ? `${metaBrasilTecpar.percentAchieved}% da meta fixa · atingida`
+              : `Faltam ${metaBrasilTecpar.falta.toLocaleString("pt-BR")} O.S`
+          }
+          color={metaBrasilTecpar.atingiu ? "green" : "red"}
+          trendLabel="meta fixa"
+          trendValue="65%"
+          trendTone={metaBrasilTecpar.atingiu ? "positive" : "negative"}
+        />
+        <KpiCard
+          label="Atingimento"
           value={`${Number(d.percentAchieved || 0).toFixed(1)}%`}
           sub={d.status}
           color="green"
+          trendValue={atingimentoTrend.value}
+          trendTone={atingimentoTrend.tone}
         />
         <KpiCard
-          label="Projeção Final do Mês"
+          label="Projecao"
           value={
             projecao
               ? Number(projecao.projecaoFinal || 0).toLocaleString("pt-BR")
@@ -473,257 +994,134 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
               : "Calculando..."
           }
           color="purple"
+          trendValue={projectionTrend.value}
+          trendTone={projectionTrend.tone}
         />
       </div>
 
-      <RitmoBar ritmo={ritmo} />
+      <div className="retiradas-focus-grid">
+        <section className={`retiradas-performance-card ${ritmo?.status || "warn"}`}>
+          <div className="retiradas-section-topline">
+            <span>Desempenho do mes</span>
+            <span className={`retiradas-status-chip ${ritmo?.status || "warn"}`}>
+              {ritmo?.badge || "Calculando"}
+            </span>
+          </div>
+
+          <h2>
+            {ritmo
+              ? ritmo.status === "ok"
+                ? "Ritmo adequado para a meta"
+                : ritmo.status === "danger"
+                  ? "Ritmo critico para o fechamento"
+                  : "Ritmo abaixo do esperado"
+              : "Calculando ritmo do mes"}
+          </h2>
+
+          <p className="retiradas-performance-copy">
+            {ritmo
+              ? `A media diaria esta em ${ritmo.media} O.S./dia util. O necessario e ${ritmo.necessario} O.S./dia util, com ${ritmo.ratio}% do ritmo esperado.`
+              : "Avaliando realizado, meta e dias uteis restantes para calcular o ritmo ideal."}
+          </p>
+
+          <div className="retiradas-progress-summary">
+            <div>
+              <span>Realizado</span>
+              <strong>{Number(d.totalOS || 0).toLocaleString("pt-BR")}</strong>
+            </div>
+            <div>
+              <span>Atingimento</span>
+              <strong>{Number(d.percentAchieved || 0).toFixed(1)}%</strong>
+            </div>
+            <div>
+              <span>Meta</span>
+              <strong>{Math.round(Number(d.meta || 0)).toLocaleString("pt-BR")}</strong>
+            </div>
+            <div>
+              <span>Brasil Tecpar 65%</span>
+              <strong>{metaBrasilTecpar.meta.toLocaleString("pt-BR")}</strong>
+            </div>
+          </div>
+
+          <div className="retiradas-target-track" aria-hidden="true">
+            <span
+              style={{
+                width: `${Math.min(Number(d.percentAchieved || 0), 100)}%`,
+              }}
+            />
+          </div>
+          <div className="retiradas-track-labels">
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
+
+          <div className="retiradas-retorninho-callout">
+            <div>
+              <span>Retorninho entrou em modo torcida</span>
+              <p>
+                Estamos abaixo da meta ideal, mas uma boa sequencia hoje ja
+                comeca a virar esse placar.
+              </p>
+            </div>
+            <img src="/retorninho-triste.png" alt="" loading="lazy" />
+          </div>
+
+          <button type="button" className="retiradas-action-button">
+            Acoes recomendadas
+          </button>
+        </section>
+
+        <section className="card retiradas-evolution-card">
+          <div className="card-title card-title-split">
+            <span>Evolucao diaria</span>
+            <span className="retiradas-chart-caption">
+              Projecao:{" "}
+              {projecao
+                ? Number(projecao.projecaoFinal || 0).toLocaleString("pt-BR")
+                : "--"}
+            </span>
+          </div>
+          <div className="chart-container">
+            <canvas ref={chartDailyRef} />
+          </div>
+          <div className="retiradas-chart-metrics">
+            <div>
+              <span>Media realizada/dia</span>
+              <strong>{ritmo?.media || "--"} O.S.</strong>
+            </div>
+            <div>
+              <span>Media necessaria/dia</span>
+              <strong>{ritmo?.necessario || "--"} O.S.</strong>
+            </div>
+            <div>
+              <span>Diferenca</span>
+              <strong className={ritmo?.status === "ok" ? "positive" : "negative"}>
+                {ritmo ? `${Number(ritmo.ratio || 0) - 100 > 0 ? "+" : ""}${(Number(ritmo.ratio || 0) - 100).toFixed(1)}%` : "--"}
+              </strong>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <ForcaTarefaCard resumo={forcaTarefaResumo} />
 
       <div className="grid">
-        {comparativoDia ? (
-          <div className="card grid-full">
-            <div
-              className="card-title"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span>{`📅 Comparativo do Dia ${comparativoDia.dia} x ${comparativoDia.previousMonth}`}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color:
-                      comparativoDia.totalHoje - comparativoDia.totalMesAnterior >= 0
-                        ? "var(--green)"
-                        : "var(--orange)",
-                  }}
-                >
-                  {`Diferença total: ${
-                    comparativoDia.totalHoje - comparativoDia.totalMesAnterior >= 0 ? "+" : ""
-                  }${(comparativoDia.totalHoje - comparativoDia.totalMesAnterior).toLocaleString("pt-BR")} O.S`}
-                </span>
-                {comparativoMes ? (
-                  <button
-                    type="button"
-                    onClick={() => setComparativoMesAberto(true)}
-                    style={{
-                      border: "1px solid var(--line)",
-                      background: "#fff",
-                      color: "var(--blue)",
-                      borderRadius: 999,
-                      padding: "6px 12px",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Comparativo mês
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 14,
-                marginTop: 16,
-              }}
-            >
-              {comparativoDia.grupos.map((item) => (
-                <div
-                  key={item.key}
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 18,
-                    padding: 16,
-                    background: "#fff",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "var(--blue)",
-                      marginBottom: 12,
-                    }}
-                  >
-                    {item.label}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 10,
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
-                        Mês anterior
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>
-                        {item.mesAnterior.toLocaleString("pt-BR")}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
-                        Hoje
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>
-                        {item.hoje.toLocaleString("pt-BR")}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
-                        Diferença
-                      </div>
-                      <div style={{ fontSize: 22 }}>
-                        <DiffValue value={item.diferenca} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {comparativoSemana ? (
-          <div className="card grid-full">
-            <div
-              className="card-title"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span>{`🗓️ Comparativo por Semana (${comparativoSemana.periodo}) x ${comparativoSemana.previousMonth}`}</span>
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color:
-                    comparativoSemana.totalHoje - comparativoSemana.totalMesAnterior >= 0
-                      ? "var(--green)"
-                      : "var(--orange)",
-                }}
-              >
-                {`Diferença total: ${
-                  comparativoSemana.totalHoje - comparativoSemana.totalMesAnterior >= 0 ? "+" : ""
-                }${(comparativoSemana.totalHoje - comparativoSemana.totalMesAnterior).toLocaleString("pt-BR")} O.S`}
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 14,
-                marginTop: 16,
-              }}
-            >
-              {comparativoSemana.grupos.map((item) => (
-                <div
-                  key={item.key}
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 18,
-                    padding: 16,
-                    background: "#fff",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "var(--blue)",
-                      marginBottom: 12,
-                    }}
-                  >
-                    {item.label}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 10,
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
-                        Semana anterior
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>
-                        {item.mesAnterior.toLocaleString("pt-BR")}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
-                        Semana atual
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text)" }}>
-                        {item.hoje.toLocaleString("pt-BR")}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
-                        Diferença
-                      </div>
-                      <div style={{ fontSize: 22 }}>
-                        <DiffValue value={item.diferenca} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="card">
-          <div className="card-title">🏆 Ranking Técnicos</div>
-          <RankingList items={d.technicians || []} metaRef={110} label="O.S" />
-        </div>
-
         <div className="card">
           <div className="card-title">🗺️ Ranking Regionais</div>
-          <RankingList items={d.regionais || []} metaRef={110} label="O.S" />
+          <RankingList items={regionaisFiltradas || []} metaRef={110} label="O.S" />
+          <button type="button" className="rank-complete-action">
+            Ver ranking completo
+          </button>
         </div>
-
-        <TecIndividual
-          title="Meta Individual — Técnicos"
-          icon="👤"
-          items={d.technicians || []}
-          month={month}
-        />
-
-        <TecIndividual
-          title="Meta Individual — Regionais"
-          icon="🗺️"
-          items={d.regionais || []}
-          month={month}
-        />
+        <div className="card">
+          <div className="card-title">Metas por regional</div>
+          <RegionalGoalsTable items={regionaisFiltradas || []} />
+        </div>
 
         <div className="card grid-full">
           <div
-            className="card-title"
+            className="card-title card-title-split"
             style={{
               display: "flex",
               alignItems: "center",
@@ -735,16 +1133,7 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
             <button
               type="button"
               onClick={() => setAnomaliasMinimizadas((current) => !current)}
-              style={{
-                border: "1px solid var(--line)",
-                background: "#fff",
-                color: "var(--text)",
-                borderRadius: 999,
-                padding: "6px 12px",
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              className="comparativo-action-btn neutral"
             >
               {anomaliasMinimizadas ? "Expandir" : "Minimizar"}
             </button>
@@ -753,27 +1142,20 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
         </div>
 
         <div className="card grid-full">
-          <div className="card-title">📈 Evolução Diária Acumulada</div>
-          <div className="chart-container">
-            <canvas ref={chartDailyRef} />
-          </div>
-        </div>
-
-        <div className="card grid-full">
-          <div className="card-title">⚖️ Saldo Diário — Meta por Dia</div>
+          <div className="card-title">⚖️ Saldo Diario — Meta por Dia</div>
           <div className="saldo-wrap">
             <table className="saldo-table">
               <thead>
                 <tr>
                   <th>Dia</th>
-                  <th>Equipe Técnica</th>
+                  <th>Equipe Tecnica</th>
                   <th>Agente Aut.</th>
                   <th>Entregue Loja</th>
                   <th>Regionais</th>
                   <th>Total Dia</th>
-                  <th>Meta Diária</th>
+                  <th>Meta Diaria</th>
                   <th>Saldo Dia</th>
-                  <th>Saldo Mês</th>
+                  <th>Saldo Mes</th>
                 </tr>
               </thead>
               <tbody>
@@ -791,76 +1173,9 @@ export default function TabRetiradas({ allData, month, lastUpdate }) {
         </div>
       </div>
 
-      {comparativoMesAberto && comparativoMes ? (
-        <div className="city-modal-overlay show" onClick={() => setComparativoMesAberto(false)}>
-          <div className="city-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 1180 }}>
-            <div className="city-modal-header">
-              <div>
-                <h2>{`Comparativo Mês — ${month} x ${comparativoMes.previousMonth}`}</h2>
-                <p>Comparação dia a dia entre o mês atual e o mês anterior.</p>
-              </div>
-              <button
-                type="button"
-                className="city-modal-close"
-                onClick={() => setComparativoMesAberto(false)}
-              >
-                ×
-              </button>
-            </div>
 
-            <div className="city-modal-body">
-              <div className="saldo-wrap" style={{ maxHeight: "65vh", overflow: "auto" }}>
-                <table className="saldo-table">
-                  <thead>
-                    <tr>
-                      <th>Dia</th>
-                      <th>Téc. Ant.</th>
-                      <th>Téc. Hoje</th>
-                      <th>Agente Ant.</th>
-                      <th>Agente Hoje</th>
-                      <th>Loja Ant.</th>
-                      <th>Loja Hoje</th>
-                      <th>Regionais Ant.</th>
-                      <th>Regionais Hoje</th>
-                      <th>Total Ant.</th>
-                      <th>Total Hoje</th>
-                      <th>Diferença</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparativoMes.linhas.map((linha) => (
-                      <tr key={linha.dia}>
-                        <td>{linha.dia}</td>
-                        <td>{linha.equipeAnterior}</td>
-                        <td>{linha.equipeHoje}</td>
-                        <td>{linha.agenteAnterior}</td>
-                        <td>{linha.agenteHoje}</td>
-                        <td>{linha.lojaAnterior}</td>
-                        <td>{linha.lojaHoje}</td>
-                        <td>{linha.regionaisAnterior}</td>
-                        <td>{linha.regionaisHoje}</td>
-                        <td>{linha.totalAnterior}</td>
-                        <td>{linha.totalHoje}</td>
-                        <td><DiffValue value={linha.diferenca} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="city-modal-actions">
-                <button
-                  type="button"
-                  className="btn-fechar-modal"
-                  onClick={() => setComparativoMesAberto(false)}
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
+
+

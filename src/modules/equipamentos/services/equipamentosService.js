@@ -1,28 +1,26 @@
+﻿import { COLLECTIONS } from '../../../constants/dataCollections';
 import {
-  collection, addDoc, updateDoc, deleteDoc,
-  getDocs, doc, serverTimestamp,
-} from 'firebase/firestore';
-import { db } from '../../../services/firebase';
-import { COLLECTIONS } from '../../../constants/firestoreCollections';
+  createVpsDocument,
+  deleteVpsDocument,
+  listVpsDocuments,
+  updateVpsDocument,
+} from '../../../services/vpsApiClient';
 
-const col = () => collection(db, COLLECTIONS.EQUIPAMENTOS);
+export const buscarEquipamentos = async () =>
+  listVpsDocuments(COLLECTIONS.EQUIPAMENTOS, { limit: 500 });
 
-export const buscarEquipamentos = async () => {
-  const snap = await getDocs(col());
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-};
-
-export const criarEquipamento = async (dados) => {
-  return await addDoc(col(), { ...dados, criado_em: serverTimestamp() });
-};
-
-export const atualizarEquipamento = async (id, dados) => {
-  return await updateDoc(doc(db, COLLECTIONS.EQUIPAMENTOS, id), {
+export const criarEquipamento = async (dados) =>
+  createVpsDocument(COLLECTIONS.EQUIPAMENTOS, {
     ...dados,
-    atualizado_em: serverTimestamp(),
+    criado_em: new Date().toISOString(),
   });
-};
 
-export const excluirEquipamento = async (id) => {
-  return await deleteDoc(doc(db, COLLECTIONS.EQUIPAMENTOS, id));
-};
+export const atualizarEquipamento = async (id, dados) =>
+  updateVpsDocument(`${COLLECTIONS.EQUIPAMENTOS}/${id}`, {
+    ...dados,
+    atualizado_em: new Date().toISOString(),
+  });
+
+export const excluirEquipamento = async (id) =>
+  deleteVpsDocument(`${COLLECTIONS.EQUIPAMENTOS}/${id}`);
+

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   buscarRegrasAtivas,
   toggleRegra,
   criarRegraMetaRisco,
 } from "../services/regrasService";
+import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 
 const RegrasConfig = () => {
   const [regras, setRegras] = useState([]);
@@ -49,7 +50,16 @@ const RegrasConfig = () => {
     }
   };
 
-  if (loading) return <div>Carregando...</div>;
+  if (loading) {
+    return (
+      <RetorninhoLoader
+        card
+        compact
+        title="Carregando regras..."
+        description="O Retorninho esta conferindo as configuracoes."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -127,3 +137,4 @@ const RegrasConfig = () => {
 };
 
 export default RegrasConfig;
+

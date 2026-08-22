@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+﻿import React, { useMemo } from "react";
+import { Trophy } from "lucide-react";
 import "./TopCidadesCard.css";
 
 function rankingCidadesRegionais(ordens, top = 20) {
@@ -50,7 +51,9 @@ export default function TopCidadesCard({ ordens }) {
   return (
     <div className="top-cidades-card">
       <div className="top-cidades-header">
-        <span className="top-cidades-icon">🏆</span>
+        <span className="top-cidades-icon">
+          <Trophy size={18} />
+        </span>
         <h2>Top 10 Cidades com mais O.S</h2>
         <span className="top-cidades-subtitle">por volume de O.S</span>
       </div>
@@ -71,7 +74,9 @@ export default function TopCidadesCard({ ordens }) {
 
             <div className="barra-wrapper">
               <div
-                className={`barra-fill ${item.tipo === "agente" ? "barra-agente" : ""}`}
+                className={`barra-fill ${
+                  item.tipo === "agente" ? "barra-agente" : ""
+                }`}
                 style={{ width: `${(item.total / maxTotal) * 100}%` }}
               />
             </div>
@@ -83,3 +88,4 @@ export default function TopCidadesCard({ ordens }) {
     </div>
   );
 }
+

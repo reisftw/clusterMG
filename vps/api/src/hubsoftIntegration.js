@@ -1,5 +1,6 @@
 const documents = require("./documents");
 const operationalImports = require("./operationalImports");
+const { randomId } = require("./secureRandom");
 
 const CONFIG_PATH = "hubsoft_config/global";
 const SYNC_JOB_COLLECTION = "hubsoft_sync_jobs";
@@ -485,7 +486,7 @@ async function fetchSyncRows(config, jobId) {
 }
 
 async function saveSyncRun(data = {}) {
-  const id = data.id || `hubsoft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = data.id || randomId("hubsoft");
   await documents.upsertDocument({
     path: `${SYNC_RUN_COLLECTION}/${id}`,
     collectionPath: SYNC_RUN_COLLECTION,
@@ -533,7 +534,7 @@ async function listSyncRuns({ limit = 10 } = {}) {
 }
 
 async function startSyncJob(options = {}, user = {}) {
-  const id = `hubsoft_sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId("hubsoft_sync");
   const now = new Date().toISOString();
   const job = {
     id,

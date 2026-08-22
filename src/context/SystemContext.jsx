@@ -1,22 +1,20 @@
-import { createContext, useContext, useState, useEffect } from "react";
+﻿import { createContext, useContext } from "react";
 
-const SystemContext = createContext(null);
+const SystemContext = createContext({
+  sistema: "retiradas",
+  trocarSistema: () => {},
+});
 
-export const SystemProvider = ({ children }) => {
-  const [sistema, setSistema] = useState(
-    () => localStorage.getItem("sistema_ativo") ?? "retiradas",
-  );
-
-  const trocarSistema = (novo) => {
-    setSistema(novo);
-    localStorage.setItem("sistema_ativo", novo);
-  };
-
-  return (
-    <SystemContext.Provider value={{ sistema, trocarSistema }}>
-      {children}
-    </SystemContext.Provider>
-  );
-};
+export const SystemProvider = ({ children }) => (
+  <SystemContext.Provider
+    value={{
+      sistema: "retiradas",
+      trocarSistema: () => {},
+    }}
+  >
+    {children}
+  </SystemContext.Provider>
+);
 
 export const useSystem = () => useContext(SystemContext);
+

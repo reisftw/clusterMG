@@ -1,6 +1,6 @@
-import { Clock } from "lucide-react";
+﻿import { Clock } from "lucide-react";
 import { useMetasDashboard } from "../hooks/useMetasDashboard";
-import { buildMetasProjection } from "../../../utils/metasProjection";
+import { buildMonthProjection } from "../hooks/useMetasResumoMensal";
 
 const MetasPrevisaoWidget = () => {
   const { metaMes, loading, feriadosSet } = useMetasDashboard();
@@ -8,17 +8,10 @@ const MetasPrevisaoWidget = () => {
   if (loading || !metaMes) return null;
 
   const falta = Math.max(0, Number(metaMes.meta) - Number(metaMes.totalOS));
-  const projecao = buildMetasProjection({
-    month: metaMes.mes,
-    saldoDiario: metaMes.saldoDiario,
-    totalOS: metaMes.totalOS,
-    meta: metaMes.meta,
-    cancelamentos: metaMes.cancelamentos,
-    feriadosSet,
-  });
+  const projecao = buildMonthProjection(metaMes, feriadosSet);
 
   const ritmoAtual = projecao?.ritmoAtual ?? 0;
-  const diasRestantes = projecao?.diasUteisRestantes ?? 0;
+  const diasRestantes = projecao?.diasRestantes ?? 0;
   const ritmoNecessario =
     diasRestantes > 0 && falta > 0 ? Math.ceil(falta / diasRestantes) : 0;
 
@@ -78,3 +71,4 @@ const MetasPrevisaoWidget = () => {
 };
 
 export default MetasPrevisaoWidget;
+

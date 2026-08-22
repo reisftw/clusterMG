@@ -1,30 +1,101 @@
-import { useEffect, useState, useCallback } from 'react';
-import { getInternalStaticDataSlice } from '../../../services/internalStaticDataService';
+﻿import { useEffect, useState, useCallback } from 'react';
+import {
+  buscarFeriados,
+  buscarMetasBaseConfig,
+  buscarTodasMetas,
+} from '../services/metasService';
+import { INTERNAL_STATIC_DATA_UPDATED_EVENT } from '../../../services/internalStaticDataService';
+import { applyMetasBaseConfigToAllData } from '../constants/metasBaseConfig';
 
 const MESES = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ];
 
+function hasMetaValue(value) {
+  return Number(value || 0) > 0;
+}
+
+function hasMetaData(meta) {
+  if (!meta || typeof meta !== 'object') return false;
+
+  if (
+    hasMetaValue(meta.totalOS) ||
+    hasMetaValue(meta.meta) ||
+    hasMetaValue(meta.cancelamentos) ||
+    hasMetaValue(meta.percentAchieved) ||
+    hasMetaValue(meta.totalGeral) ||
+    hasMetaValue(meta.realizado)
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(meta.saldoDiario) && meta.saldoDiario.length > 0) return true;
+  if (Array.isArray(meta.rawDays) && meta.rawDays.length > 0) return true;
+  if (Array.isArray(meta.technicians) && meta.technicians.length > 0) return true;
+  if (Array.isArray(meta.regionais) && meta.regionais.length > 0) return true;
+
+  return ['consolidado', 'onnet', 'onnetSempre'].some((key) =>
+    hasMetaData(meta[key]),
+  );
+}
+
+function withMonth(meta, mes) {
+  if (!meta || typeof meta !== 'object') return meta;
+
+  return ['consolidado', 'onnet', 'onnetSempre'].reduce(
+    (acc, key) => {
+      if (acc[key] && typeof acc[key] === 'object') {
+        acc[key] = { mes, ...acc[key] };
+      }
+      return acc;
+    },
+    { mes, ...meta },
+  );
+}
+
+function pickDashboardMonth(todos, currentMonth) {
+  if (!todos || typeof todos !== 'object') return null;
+
+  const currentData = todos[currentMonth] ?? null;
+  if (hasMetaData(currentData)) {
+    return { mes: currentMonth, data: currentData };
+  }
+
+  for (let index = MESES.length - 1; index >= 0; index -= 1) {
+    const mes = MESES[index];
+    if (hasMetaData(todos[mes])) {
+      return { mes, data: todos[mes] };
+    }
+  }
+
+  return null;
+}
+
 export const useMetasDashboard = () => {
-  const [metaMes,     setMetaMes]     = useState(null);
-  const [loading,     setLoading]     = useState(true);
+  const [metaMes, setMetaMes] = useState(null);
+  const [allData, setAllData] = useState({});
+  const [loading, setLoading] = useState(true);
   const [feriadosSet, setFeriadosSet] = useState(new Set());
 
   const carregar = useCallback(async (force = false) => {
     try {
       setLoading(true);
-      const [todos, feriados] = await Promise.all([
-        getInternalStaticDataSlice((payload) => payload?.metas?.all ?? null, { force }),
-        getInternalStaticDataSlice((payload) => payload?.metas?.feriados ?? null, { force }),
+      const [todos, feriados, baseConfig] = await Promise.all([
+        buscarTodasMetas(force),
+        buscarFeriados(force),
+        buscarMetasBaseConfig(force).catch(() => null),
       ]);
-      const agora   = new Date();
+      const metasConfiguradas = applyMetasBaseConfigToAllData(todos || {}, baseConfig);
+      const agora = new Date();
       const mesNome = MESES[agora.getMonth()];
-      const dados   = todos && typeof todos === 'object' ? (todos?.[mesNome] ?? null) : null;
-      setMetaMes(dados);
-      setFeriadosSet(new Set(Array.isArray(feriados) ? feriados : []));
+      const selected = pickDashboardMonth(metasConfiguradas, mesNome);
+      setAllData(metasConfiguradas || {});
+      setMetaMes(selected ? withMonth(selected.data, selected.mes) : null);
+      setFeriadosSet(feriados instanceof Set ? feriados : new Set());
     } catch (e) {
       console.error('Erro ao carregar metas dashboard', e);
+      setAllData({});
       setMetaMes(null);
       setFeriadosSet(new Set());
     } finally {
@@ -32,7 +103,34 @@ export const useMetasDashboard = () => {
     }
   }, []);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    const VERSION_KEY = 'internal-static-data-version';
+    carregar();
 
-  return { metaMes, loading, feriadosSet, refetch: () => carregar(true) };
+    const handleStaticDataUpdated = () => {
+      carregar(true);
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key !== VERSION_KEY) return;
+      carregar(true);
+    };
+
+    window.addEventListener(
+      INTERNAL_STATIC_DATA_UPDATED_EVENT,
+      handleStaticDataUpdated,
+    );
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener(
+        INTERNAL_STATIC_DATA_UPDATED_EVENT,
+        handleStaticDataUpdated,
+      );
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [carregar]);
+
+  return { metaMes, allData, loading, feriadosSet, refetch: () => carregar(true) };
 };
+

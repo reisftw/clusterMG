@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
@@ -8,6 +8,51 @@ const norm = (v) =>
   String(v ?? "")
     .trim()
     .toLowerCase();
+
+function countRowTypes(rows = []) {
+  return rows.reduce(
+    (acc, row) => {
+      if (row._agente === "SIM") acc.agente += 1;
+      else if (row._tectipo === "RETIRADA") acc.retirada += 1;
+      else acc.ativa += 1;
+      return acc;
+    },
+    { ativa: 0, retirada: 0, agente: 0 },
+  );
+}
+
+function compareBrDateKeys(a, b) {
+  const [da, ma, ya] = a.split("/");
+  const [db, mb, yb] = b.split("/");
+  return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db);
+}
+
+function setSheetColumns(ws, widths) {
+  widths.forEach((width, index) => {
+    ws.getColumn(index + 1).width = width;
+  });
+}
+
+function writeMergedHeader(ws, rowIndex, columnCount, value, color, C, size = 10) {
+  ws.mergeCells(rowIndex, 1, rowIndex, columnCount);
+  const cell = ws.getCell(rowIndex, 1);
+  cell.value = value;
+  cell.font = { name: "Arial", bold: true, size, color: C("FFFFFF") };
+  cell.fill = { type: "pattern", pattern: "solid", fgColor: C(color) };
+  cell.alignment = { horizontal: "left", vertical: "middle" };
+  ws.getRow(rowIndex).height = size >= 11 ? 20 : 18;
+}
+
+function writePorDiaCidadeRow({ ws, rowIndex, dia, regional, cidade, rows, bg, xD }) {
+  const counts = countRowTypes(rows);
+  xD(ws, rowIndex, 1, dia, bg, false, "center");
+  xD(ws, rowIndex, 2, regional, bg);
+  xD(ws, rowIndex, 3, cidade, bg, true);
+  xD(ws, rowIndex, 4, rows.length, bg, false, "center");
+  xD(ws, rowIndex, 5, counts.ativa, bg, false, "center");
+  xD(ws, rowIndex, 6, counts.retirada, counts.retirada > 0 ? "EBF5FB" : bg, false, "center");
+  xD(ws, rowIndex, 7, counts.agente, counts.agente > 0 ? "FEF9E7" : bg, false, "center");
+}
 
 const TabMedia = () => {
   const { regionais, config } = useFerramentasRegionais();
@@ -36,7 +81,7 @@ const TabMedia = () => {
         const wb = XLSX.read(ev.target.result, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws, { raw: false, defval: "" });
-        // Normaliza chaves: minúsculo sem espaços/underscores
+        // Normaliza chaves: minusculo sem espacos/underscores
         const normalized = data.map((row) => {
           const out = {};
           Object.keys(row).forEach((k) => {
@@ -77,7 +122,7 @@ const TabMedia = () => {
     return d ? d.toLocaleDateString("pt-BR") : "";
   };
 
-  // Extrai cidade do endereço: "RUA X, 123 - BAIRRO, CIDADE/MG | CEP: XXXXX"
+  // Extrai cidade do endereco: "RUA X, 123 - BAIRRO, CIDADE/MG | CEP: XXXXX"
   const extractCidade = (endereco) => {
     if (!endereco) return "N/A";
     const s = String(endereco);
@@ -92,7 +137,7 @@ const TabMedia = () => {
     return "N/A";
   };
 
-  // Extrai nome do técnico antes do " | "
+  // Extrai nome do tecnico antes do " | "
   const extractTec = (v) => {
     if (!v) return "ND";
     return String(v).split("|")[0].trim() || "ND";
@@ -110,7 +155,7 @@ const TabMedia = () => {
     if (!rows.length) return;
     setStatus("gerando");
     try {
-      // Após normalização de chaves, a coluna fica "dataterminoexecutado"
+      // Apos normalizacao de chaves, a coluna fica "dataterminoexecutado"
       const dateCol = "dataterminoexecutado";
 
       const D = rows.map((r) => {
@@ -125,7 +170,7 @@ const TabMedia = () => {
           tecnico: tecRaw,
           cidade,
           _regional: info.regional || "Sem Regional",
-          _agente: info.agente ? "SIM" : "NÃO",
+          _agente: info.agente ? "SIM" : "NAO",
           _tectipo: tecSet.has(tec) ? "RETIRADA" : "ATIVA",
           _date: parseDate(r[dateCol]),
         };
@@ -138,11 +183,7 @@ const TabMedia = () => {
         D.filter((r) => dkFn(r)),
         dkFn,
       );
-      const diasSort = Object.keys(byDia).sort((a, b) => {
-        const [da, ma, ya] = a.split("/");
-        const [db, mb, yb] = b.split("/");
-        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db);
-      });
+      const diasSort = Object.keys(byDia).sort(compareBrDateKeys);
       const nd = diasSort.length || 1;
       const dMin = diasSort[0];
       const dMax = diasSort[diasSort.length - 1];
@@ -155,7 +196,7 @@ const TabMedia = () => {
       wb.creator = "Sempre";
       wb.created = new Date();
 
-      // ── Helpers ────────────────────────────────────────────────────────────
+      // -- Helpers ------------------------------------------------------------
       const C = (hex) => ({ argb: "FF" + hex.replace("#", "") });
       const xH = (ws, r, c, v, bg = "1A5276") => {
         const cell = ws.getCell(r, c);
@@ -204,7 +245,7 @@ const TabMedia = () => {
         ws.getRow(r + 1).height = 52;
       };
 
-      // ── byReg2 compartilhado ───────────────────────────────────────────────
+      // -- byReg2 compartilhado -----------------------------------------------
       const byReg2 = {};
       D.forEach((r) => {
         if (!byReg2[r._regional])
@@ -232,19 +273,19 @@ const TabMedia = () => {
         if (dk) byReg2[r._regional].dias.add(dk);
       });
 
-      // ── ABA 1: Resumo Geral ───────────────────────────────────────────────
+      // -- ABA 1: Resumo Geral -----------------------------------------------
       const ws1 = wb.addWorksheet("Resumo Geral");
       ws1.views = [{ showGridLines: false }];
       ws1.mergeCells("A1:H2");
       let cell = ws1.getCell("A1");
-      cell.value = `ANÁLISE MÉDIA DE O.S — ${periodo}`;
+      cell.value = `ANALISE MEDIA DE O.S — ${periodo}`;
       cell.font = { name: "Arial", bold: true, size: 16, color: C("FFFFFF") };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: C("1A5276") };
       cell.alignment = { horizontal: "center", vertical: "middle" };
       ws1.getRow(1).height = 38;
       ws1.mergeCells("A3:H3");
       cell = ws1.getCell("A3");
-      cell.value = `Gerado em ${new Date().toLocaleString("pt-BR")} — ${D.length} O.S — ${nd} dias — Média ${(D.length / nd).toFixed(1)}/dia`;
+      cell.value = `Gerado em ${new Date().toLocaleString("pt-BR")} — ${D.length} O.S — ${nd} dias — Media ${(D.length / nd).toFixed(1)}/dia`;
       cell.font = { name: "Arial", size: 10, color: C("FFFFFF") };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: C("2471A3") };
       cell.alignment = { horizontal: "center", vertical: "middle" };
@@ -252,8 +293,8 @@ const TabMedia = () => {
       [
         ["TOTAL O.S", D.length, "1A5276"],
         ["DIAS", nd, "117A65"],
-        ["MÉDIA/DIA", (D.length / nd).toFixed(1), "B7950B"],
-        ["TÉCNICOS", new Set(D.map((r) => r.tecnico)).size, "6C3483"],
+        ["MEDIA/DIA", (D.length / nd).toFixed(1), "B7950B"],
+        ["TECNICOS", new Set(D.map((r) => r.tecnico)).size, "6C3483"],
         ["CIDADES", new Set(D.map((r) => r.cidade)).size, "1F618D"],
       ].forEach(([l, v, c], i) => xKpi(ws1, 5, i + 1, l, v, c));
 
@@ -261,7 +302,7 @@ const TabMedia = () => {
 
       xT(ws1, rr, 4, "TOTAL POR TIPO DE O.S", "1A5276");
       rr++;
-      ["Tipo", "Total", "Média/Dia", "% Total"].forEach((h, i) =>
+      ["Tipo", "Total", "Media/Dia", "% Total"].forEach((h, i) =>
         xH(ws1, rr, i + 1, h, "2471A3"),
       );
       rr++;
@@ -368,11 +409,9 @@ const TabMedia = () => {
           );
           rr++;
         });
-      [30, 14, 14, 16, 16, 28, 14, 14].forEach((w, i) => {
-        ws1.getColumn(i + 1).width = w;
-      });
+      setSheetColumns(ws1, [30, 14, 14, 16, 16, 28, 14, 14]);
 
-      // ── ABA 2: Por Dia e Regional ─────────────────────────────────────────
+      // -- ABA 2: Por Dia e Regional -----------------------------------------
       const ws2 = wb.addWorksheet("Por Dia e Regional");
       ws2.views = [{ showGridLines: false }];
       xT(ws2, 1, 7, `O.S POR DIA — ${periodo}`, "1A5276");
@@ -388,86 +427,51 @@ const TabMedia = () => {
       let r2 = 3;
       diasSort.forEach((dia) => {
         const dRows = byDia[dia];
-        ws2.mergeCells(r2, 1, r2, 7);
-        const ch = ws2.getCell(r2, 1);
-        ch.value = `${dia} — ${dRows.length} O.S  Ativa: ${dRows.filter((r) => r._agente !== "SIM" && r._tectipo !== "RETIRADA").length}  Ret: ${dRows.filter((r) => r._agente !== "SIM" && r._tectipo === "RETIRADA").length}  Ag.Aut: ${dRows.filter((r) => r._agente === "SIM").length}`;
-        ch.font = { name: "Arial", bold: true, size: 11, color: C("FFFFFF") };
-        ch.fill = { type: "pattern", pattern: "solid", fgColor: C("1A5276") };
-        ch.alignment = { horizontal: "left", vertical: "middle" };
-        ws2.getRow(r2).height = 20;
+        const dayCounts = countRowTypes(dRows);
+        writeMergedHeader(
+          ws2,
+          r2,
+          7,
+          `${dia} — ${dRows.length} O.S  Ativa: ${dayCounts.ativa}  Ret: ${dayCounts.retirada}  Ag.Aut: ${dayCounts.agente}`,
+          "1A5276",
+          C,
+          11,
+        );
         r2++;
         Object.entries(grpBy(dRows, "_regional"))
           .sort((a, b) => b[1].length - a[1].length)
           .forEach(([reg, rRows]) => {
-            ws2.mergeCells(r2, 1, r2, 7);
-            const rh = ws2.getCell(r2, 1);
-            rh.value = `${reg} — ${rRows.length}  A:${rRows.filter((r) => r._agente !== "SIM" && r._tectipo !== "RETIRADA").length}  R:${rRows.filter((r) => r._agente !== "SIM" && r._tectipo === "RETIRADA").length}  Ag.Aut:${rRows.filter((r) => r._agente === "SIM").length}`;
-            rh.font = {
-              name: "Arial",
-              bold: true,
-              size: 10,
-              color: C("FFFFFF"),
-            };
-            rh.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: C("117A65"),
-            };
-            rh.alignment = { horizontal: "left", vertical: "middle" };
-            ws2.getRow(r2).height = 18;
+            const regionalCounts = countRowTypes(rRows);
+            writeMergedHeader(
+              ws2,
+              r2,
+              7,
+              `${reg} — ${rRows.length}  A:${regionalCounts.ativa}  R:${regionalCounts.retirada}  Ag.Aut:${regionalCounts.agente}`,
+              "117A65",
+              C,
+            );
             r2++;
             Object.entries(grpBy(rRows, "cidade"))
               .sort((a, b) => b[1].length - a[1].length)
               .forEach(([cidade, cRows], ci) => {
                 const bg = ci % 2 ? "FFFFFF" : "E8F8F5";
-                xD(ws2, r2, 1, dia, bg, false, "center");
-                xD(ws2, r2, 2, reg, bg);
-                xD(ws2, r2, 3, cidade, bg, true);
-                xD(ws2, r2, 4, cRows.length, bg, false, "center");
-                xD(
-                  ws2,
-                  r2,
-                  5,
-                  cRows.filter(
-                    (r) => r._agente !== "SIM" && r._tectipo !== "RETIRADA",
-                  ).length,
+                writePorDiaCidadeRow({
+                  ws: ws2,
+                  rowIndex: r2,
+                  dia,
+                  regional: reg,
+                  cidade,
+                  rows: cRows,
                   bg,
-                  false,
-                  "center",
-                );
-                xD(
-                  ws2,
-                  r2,
-                  6,
-                  cRows.filter(
-                    (r) => r._agente !== "SIM" && r._tectipo === "RETIRADA",
-                  ).length,
-                  cRows.filter((r) => r._tectipo === "RETIRADA").length > 0
-                    ? "EBF5FB"
-                    : bg,
-                  false,
-                  "center",
-                );
-                xD(
-                  ws2,
-                  r2,
-                  7,
-                  cRows.filter((r) => r._agente === "SIM").length,
-                  cRows.filter((r) => r._agente === "SIM").length > 0
-                    ? "FEF9E7"
-                    : bg,
-                  false,
-                  "center",
-                );
+                  xD,
+                });
                 r2++;
               });
           });
       });
-      [16, 28, 26, 12, 14, 16, 16].forEach((w, i) => {
-        ws2.getColumn(i + 1).width = w;
-      });
+      setSheetColumns(ws2, [16, 28, 26, 12, 14, 16, 16]);
 
-      // ── ABA 3: Agentes por Dia ────────────────────────────────────────────
+      // -- ABA 3: Agentes por Dia --------------------------------------------
       const ws3 = wb.addWorksheet("Agentes por Dia");
       ws3.views = [{ showGridLines: false }];
       xT(ws3, 1, 5, "AGENTES POR DIA", "6C3483");
@@ -511,14 +515,12 @@ const TabMedia = () => {
             r3++;
           });
       });
-      [16, 28, 26, 14, 14].forEach((w, i) => {
-        ws3.getColumn(i + 1).width = w;
-      });
+      setSheetColumns(ws3, [16, 28, 26, 14, 14]);
 
-      // ── ABA 4: Técnicos por Dia ───────────────────────────────────────────
+      // -- ABA 4: Técnicos por Dia -------------------------------------------
       const ws4 = wb.addWorksheet("Técnicos por Dia");
       ws4.views = [{ showGridLines: false }];
-      xT(ws4, 1, 4, `O.S POR TÉCNICO — ${periodo}`, "2C3E50");
+      xT(ws4, 1, 4, `O.S POR TECNICO — ${periodo}`, "2C3E50");
       ["Técnico", "Tipo", "Data", "O.S no Dia"].forEach((h, i) =>
         xH(ws4, 2, i + 1, h, "566573"),
       );
@@ -531,7 +533,7 @@ const TabMedia = () => {
             tRows[0]?._tectipo === "RETIRADA" ? "RETIRADA" : "ATIVA";
           ws4.mergeCells(r4, 1, r4, 4);
           const th = ws4.getCell(r4, 1);
-          th.value = `${tec} (${tipoTec}) — ${tRows.length} O.S em ${diasTec.size} dias — média ${(tRows.length / (diasTec.size || 1)).toFixed(1)}/dia`;
+          th.value = `${tec} (${tipoTec}) — ${tRows.length} O.S em ${diasTec.size} dias — media ${(tRows.length / (diasTec.size || 1)).toFixed(1)}/dia`;
           th.font = { name: "Arial", bold: true, size: 10, color: C("FFFFFF") };
           th.fill = {
             type: "pattern",
@@ -543,11 +545,7 @@ const TabMedia = () => {
           r4++;
           const byDiaTec = grpBy(tRows, dkFn);
           Object.keys(byDiaTec)
-            .sort((a, b) => {
-              const [da, ma, ya] = a.split("/");
-              const [db, mb, yb] = b.split("/");
-              return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db);
-            })
+            .sort(compareBrDateKeys)
             .forEach((dia, di) => {
               const bg = di % 2 ? "FFFFFF" : "F2F3F4";
               xD(ws4, r4, 1, tec, bg);
@@ -565,11 +563,9 @@ const TabMedia = () => {
               r4++;
             });
         });
-      [32, 14, 16, 14].forEach((w, i) => {
-        ws4.getColumn(i + 1).width = w;
-      });
+      setSheetColumns(ws4, [32, 14, 16, 14]);
 
-      // ── ABA 5: Dados Completos ────────────────────────────────────────────
+      // -- ABA 5: Dados Completos --------------------------------------------
       const ws5 = wb.addWorksheet("Dados Completos");
       ws5.views = [{ showGridLines: false }];
       xT(ws5, 1, 8, "DADOS COMPLETOS", "2C3E50");
@@ -597,23 +593,21 @@ const TabMedia = () => {
           xD(ws5, i + 3, 7, row._agente, bg, false, "center");
           xD(ws5, i + 3, 8, fmtD(row[dateCol]), bg, false, "center");
         });
-      [20, 30, 14, 26, 24, 24, 16, 14].forEach((w, i) => {
-        ws5.getColumn(i + 1).width = w;
-      });
+      setSheetColumns(ws5, [20, 30, 14, 26, 24, 24, 16, 14]);
 
-      // ── ABA 6: Meta Ativa por Regional ───────────────────────────────────
+      // -- ABA 6: Meta Ativa por Regional -----------------------------------
       const wsMa = wb.addWorksheet("Meta Ativa Regional");
       wsMa.views = [{ showGridLines: false }];
       wsMa.mergeCells("A1:G2");
       const maTit = wsMa.getCell("A1");
-      maTit.value = `META TÉCNICOS DA ATIVA — ${periodo}`;
+      maTit.value = `META TECNICOS DA ATIVA — ${periodo}`;
       maTit.font = { name: "Arial", bold: true, size: 15, color: C("FFFFFF") };
       maTit.fill = { type: "pattern", pattern: "solid", fgColor: C("1E8449") };
       maTit.alignment = { horizontal: "center", vertical: "middle" };
       wsMa.getRow(1).height = 36;
       wsMa.mergeCells("A3:G3");
       const maSub = wsMa.getCell("A3");
-      maSub.value = `Meta: ${metaAtiva} O.S/mês por regional — ${periodo}`;
+      maSub.value = `Meta: ${metaAtiva} O.S/mes por regional — ${periodo}`;
       maSub.font = { name: "Arial", size: 10, color: C("FFFFFF") };
       maSub.fill = { type: "pattern", pattern: "solid", fgColor: C("27AE60") };
       maSub.alignment = { horizontal: "center", vertical: "middle" };
@@ -626,7 +620,7 @@ const TabMedia = () => {
         ["O.S ATIVA", dAtiva.length, "1E8449"],
         ["REGIONAIS", regsAtiva.length, "117A65"],
         ["BATERAM", regsBateram, "27AE60"],
-        ["NÃO BATERAM", regsAtiva.length - regsBateram, "C0392B"],
+        ["NAO BATERAM", regsAtiva.length - regsBateram, "C0392B"],
       ].forEach(([l, v, c], i) => xKpi(wsMa, 5, i + 1, l, v, c));
       let rMa = 8;
       xT(wsMa, rMa, 7, "DESEMPENHO POR REGIONAL VS META", "1E8449");
@@ -638,7 +632,7 @@ const TabMedia = () => {
         "Saldo",
         "% Meta",
         "Status",
-        "Técnicos únicos",
+        "Técnicos unicos",
       ].forEach((h, i) => xH(wsMa, rMa, i + 1, h, "27AE60"));
       rMa++;
       Object.entries(byReg2)
@@ -707,13 +701,13 @@ const TabMedia = () => {
         wsMa.getRow(rMa).height = 18;
       });
       rMa += 2;
-      xT(wsMa, rMa, 5, "TOP TÉCNICOS POR REGIONAL ATIVA", "117A65");
+      xT(wsMa, rMa, 5, "TOP TECNICOS POR REGIONAL ATIVA", "117A65");
       rMa++;
       [
         "Regional",
         "Técnico",
         "O.S",
-        "Média/Dia",
+        "Media/Dia",
         "% da Regional",
         "Dias Ativos",
       ].forEach((h, i) => xH(wsMa, rMa, i + 1, h, "1E8449"));
@@ -764,20 +758,20 @@ const TabMedia = () => {
         wsMa.getColumn(i + 1).width = w;
       });
 
-      // ── ABA 7: Meta Retirada Individual ──────────────────────────────────
+      // -- ABA 7: Meta Retirada Individual ----------------------------------
       const dRet = D.filter((r) => r._tectipo === "RETIRADA");
       const wsMr = wb.addWorksheet("Meta Retirada Individual");
       wsMr.views = [{ showGridLines: false }];
       wsMr.mergeCells("A1:G2");
       const mrTit = wsMr.getCell("A1");
-      mrTit.value = `META TÉCNICOS DE RETIRADA INDIVIDUAL — ${periodo}`;
+      mrTit.value = `META TECNICOS DE RETIRADA INDIVIDUAL — ${periodo}`;
       mrTit.font = { name: "Arial", bold: true, size: 15, color: C("FFFFFF") };
       mrTit.fill = { type: "pattern", pattern: "solid", fgColor: C("1F618D") };
       mrTit.alignment = { horizontal: "center", vertical: "middle" };
       wsMr.getRow(1).height = 36;
       wsMr.mergeCells("A3:G3");
       const mrSub = wsMr.getCell("A3");
-      mrSub.value = `Meta individual: ${metaRet} O.S/mês — ${periodo}`;
+      mrSub.value = `Meta individual: ${metaRet} O.S/mes — ${periodo}`;
       mrSub.font = { name: "Arial", size: 10, color: C("FFFFFF") };
       mrSub.fill = { type: "pattern", pattern: "solid", fgColor: C("2471A3") };
       mrSub.alignment = { horizontal: "center", vertical: "middle" };
@@ -787,9 +781,9 @@ const TabMedia = () => {
       ).length;
       [
         ["O.S RETIRADA", dRet.length, "1F618D"],
-        ["TÉCNICOS", tecsByRet.length, "117A65"],
+        ["TECNICOS", tecsByRet.length, "117A65"],
         ["BATERAM", retBateram, "27AE60"],
-        ["NÃO BATERAM", tecsByRet.length - retBateram, "C0392B"],
+        ["NAO BATERAM", tecsByRet.length - retBateram, "C0392B"],
       ].forEach(([l, v, c], i) => xKpi(wsMr, 5, i + 1, l, v, c));
       let rMr = 8;
       xT(wsMr, rMr, 7, "DESEMPENHO INDIVIDUAL VS META", "1F618D");
@@ -884,7 +878,7 @@ const TabMedia = () => {
           const bateu = tRows.length >= metaRet;
           wsMr.mergeCells(rMr, 1, rMr, 4);
           const th = wsMr.getCell(rMr, 1);
-          th.value = `${tec} — ${tRows.length} O.S | Meta: ${metaRet} | Saldo: ${tRows.length - metaRet >= 0 ? "+" : ""}${tRows.length - metaRet} | Média: ${(tRows.length / (diasTec.size || 1)).toFixed(1)}/dia`;
+          th.value = `${tec} — ${tRows.length} O.S | Meta: ${metaRet} | Saldo: ${tRows.length - metaRet >= 0 ? "+" : ""}${tRows.length - metaRet} | Media: ${(tRows.length / (diasTec.size || 1)).toFixed(1)}/dia`;
           th.font = { name: "Arial", bold: true, size: 10, color: C("FFFFFF") };
           th.fill = {
             type: "pattern",
@@ -914,7 +908,7 @@ const TabMedia = () => {
         wsMr.getColumn(i + 1).width = w;
       });
 
-      // ── Download ──────────────────────────────────────────────────────────
+      // -- Download ----------------------------------------------------------
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -938,6 +932,14 @@ const TabMedia = () => {
         className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
           ${status === "ok" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-orange-400"}`}
         onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <input
           ref={inputRef}
@@ -992,3 +994,4 @@ const TabMedia = () => {
 };
 
 export default TabMedia;
+

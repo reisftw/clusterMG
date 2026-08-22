@@ -1,4 +1,4 @@
-export default function AnomaliaList({ anomalias = [] }) {
+﻿export default function AnomaliaList({ anomalias = [] }) {
   if (!anomalias.length)
     return (
       <p style={{ color: "var(--muted)", fontSize: 13 }}>
@@ -20,3 +20,4 @@ export default function AnomaliaList({ anomalias = [] }) {
     </div>
   );
 }
+

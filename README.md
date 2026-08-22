@@ -1,89 +1,80 @@
 # Gestao Retiradas
 
-Aplicação React/Vite para a operação de retirada, com módulos internos de metas, mapa, frota, agenda, usuários e painel público.
+Aplicacao React/Vite para a operacao de retiradas, usando backend proprio em VPS e PostgreSQL.
+
+## Stack atual
+
+- Frontend: React, Vite, Tailwind e lucide-react.
+- Backend: Node.js/Express em `/vps/api`.
+- Banco: PostgreSQL na VPS.
+- Hospedagem: Nginx em `https://retiradas.tech`.
+- Autenticacao: usuarios locais na tabela `app_users`.
+- Dados operacionais: documentos JSON em `app_documents` e snapshots em `static_snapshots`.
+- Backups: `pg_dump` diario via systemd timer.
 
 ## Scripts
 
-- `npm run dev`: sobe o ambiente local com hot reload.
-- `npm run lint`: executa o ESLint no projeto inteiro.
-- `npm run build`: gera o build de produção.
-- `npm test`: executa a suíte do Vitest em modo CI com relatório de cobertura.
-- `npm run test:watch`: abre o Vitest em modo interativo para desenvolvimento.
-- `npm run seed:admin`: executa o bootstrap único do primeiro usuário administrador via `firebase-admin`.
-
-## Variaveis de ambiente
-
-As variaveis locais do frontend devem ser copiadas de `.env.example` para `.env`, sem versionar valores reais no repositório.
-
-## Bootstrap do administrador
-
-O bootstrap inicial do administrador deve ser feito uma única vez com o script `scripts/seed-admin.js`. O script usa apenas `firebase-admin`, não depende do client SDK e nunca contém credenciais fixas no código.
-
-Pré-requisitos:
-
-- fornecer credenciais administrativas do Firebase via `GOOGLE_APPLICATION_CREDENTIALS=/caminho/service-account.json` ou `FIREBASE_SERVICE_ACCOUNT_JSON='{\"projectId\":\"...\"}'`;
-- definir as variáveis `ADMIN_EMAIL` e `ADMIN_PASSWORD`;
-- opcionalmente definir `ADMIN_NOME`, `ADMIN_ROLE`, `ADMIN_REGIONAL` e `FIREBASE_PROJECT_ID`.
-
-Exemplo de execução:
-
 ```bash
-ADMIN_EMAIL=admin@empresa.com \
-ADMIN_PASSWORD='uma-senha-forte-e-unica' \
-ADMIN_NOME='Administrador Principal' \
-ADMIN_ROLE=admin \
-ADMIN_REGIONAL='Matriz' \
-GOOGLE_APPLICATION_CREDENTIALS=/caminho/service-account.json \
-npm run seed:admin
-```
-
-O script cria o usuário em `Auth` com `admin.auth().createUser()` e grava o perfil correspondente em `firestore().collection('usuarios')`.
-
-Importante: a senha administrativa anteriormente exposta em código deve ser rotacionada manualmente no console do Firebase antes de reutilizar esse fluxo.
-
-## Primeiro acesso de usuarios
-
-Novos usuarios internos sao criados pela Cloud Function `criarUsuario` com senha temporaria aleatoria e um link de redefinicao de senha para primeiro acesso. O campo legado `trocar_senha` permanece apenas para contas antigas criadas antes dessa migracao e pode ser removido apos a regularizacao desses acessos.
-
-## Testes
-
-A suíte usa `Vitest` + `React Testing Library` + `jsdom`.
-
-Cobertura atual:
-
-- `src/utils/`: cobertura acima de 90% para statements, functions e lines.
-- Regras puras críticas: projeção de metas e resumo mensal cobertas com testes dedicados.
-- Integrações: autenticação, criação de usuário com mock de Firebase e modais principais.
-
-### Como rodar
-
-```bash
+npm run dev
+npm run build
 npm test
+npm run test:coverage
 ```
 
-Esse comando:
+## Variaveis do frontend
 
-- executa todos os testes em modo não interativo;
-- gera cobertura no terminal;
-- falha o processo se os limiares configurados no `vite.config.js` não forem atendidos.
+Copie `.env.example` para `.env`:
 
-### Como interpretar o resultado
+```env
+VITE_API_BASE_URL=https://retiradas.tech/api
+VITE_DATA_BACKEND=vps
+```
 
-- `Test Files`: quantidade de arquivos de teste executados.
-- `Tests`: quantidade total de cenários cobertos.
-- `Coverage report`: cobertura dos arquivos monitorados.
-- `Statements / Functions / Lines`: métricas principais usadas como base mínima de qualidade.
+## VPS
 
-Se um teste falhar, o Vitest mostra:
+Os arquivos da API, SQL, backups e services ficam em `vps/`.
 
-- o arquivo e o cenário que falhou;
-- a asserção esperada versus o valor recebido;
-- stack trace do ponto exato da falha.
+Principais comandos no servidor:
 
-Se a cobertura ficar abaixo do mínimo, o comando termina com erro mesmo que todos os testes passem.
+```bash
+cd /opt/retiradas/vps
+npm install
+systemctl restart retiradas-api
+curl https://retiradas.tech/api/health
+```
 
-## Decisões de estrutura recentes
+## Deploy do frontend
 
-- `MetasResumoMensal` foi fatiado em `components/`, `hooks/` e `constants/` para separar cálculo, modal, projeção, histórico e KPIs.
-- A configuração de testes foi acoplada ao `vite.config.js` para manter Vite e Vitest usando a mesma base de resolução.
-- Os testes de integração usam mocks de Firebase e de contexto para validar fluxos sem depender de serviços externos.
+```powershell
+npm.cmd run build
+scp -r .\dist\* root@145.223.27.204:/var/www/retiradas/dist/
+```
+
+No servidor:
+
+```bash
+chown -R www-data:www-data /var/www/retiradas/dist
+```
+
+## Backups
+
+A tela **Configuracao > Banco de Dados** lista backups, tamanho do banco, quota e permite rollback com confirmacao.
+
+O timer roda diariamente as 00:01:
+
+```bash
+systemctl list-timers --all | grep retiradas
+```
+
+## Monitoramento
+
+A tela **Configuracao > APIs** monitora:
+
+- API principal
+- login
+- banco de dados
+- documentos
+- dados publicos
+- importacoes
+- backups
+- tempo real

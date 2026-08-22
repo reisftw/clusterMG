@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { buscarAgenda, criarAgenda, atualizarAgenda, excluirAgenda } from '../services/agendaService';
 import { useAuthContext } from '../../../context/AuthContext';
 import { registrarAtividade } from '../../../services/activityLogService';
-import { getOrLoadCachedValue, invalidateCache } from '../../../services/firestoreCache';
-import { logFirestoreRead } from '../../../services/firestoreMonitoring';
+import { getOrLoadCachedValue, invalidateCache } from '../../../services/dataCache';
+import { logDataRead } from '../../../services/dataMonitoring';
 import { regenerateStaticData } from '../../../services/staticDataService';
-import { getInternalStaticDataSlice } from '../../../services/internalStaticDataService';
 
 const CACHE_KEY = 'agenda:eventos';
 const CACHE_TTL = 5 * 60 * 1000;
@@ -24,11 +23,11 @@ export const useAgenda = ({ preferStatic = false } = {}) => {
     setError(null);
     try {
       if (preferStatic) {
-        const staticEventos = await getInternalStaticDataSlice(
-          (payload) => payload?.agenda?.eventos ?? null,
-          { force },
-        );
-        setEventos(sortByDataInicio(Array.isArray(staticEventos) ? staticEventos : []));
+        const items = await buscarAgenda(force, {
+          allowFallback: false,
+          preferStatic: true,
+        });
+        setEventos(sortByDataInicio(items || []));
         setLoading(false);
         return;
       }
@@ -37,9 +36,9 @@ export const useAgenda = ({ preferStatic = false } = {}) => {
         CACHE_KEY,
         async () => {
           const items = await buscarAgenda(force);
-          logFirestoreRead({
+          logDataRead({
             source: 'useAgenda',
-            operation: 'getDocs',
+            operation: 'sql-list',
             count: items.length,
           });
           return sortByDataInicio(items);
@@ -105,3 +104,5 @@ export const useAgenda = ({ preferStatic = false } = {}) => {
 
   return { eventos, loading, error, carregar: () => carregar(true), criar, atualizar, excluir };
 };
+
+

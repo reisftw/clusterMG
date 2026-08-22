@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
+import {
+  diasUteisDoMes,
+  diasUteisRestantesNoMes,
+} from "../../../utils/diaUtil";
 
 const META_INDIVIDUAL = 110;
 const MONTHS = [
   "Janeiro",
   "Fevereiro",
-  "Marco",
+  "Março",
   "Abril",
   "Maio",
   "Junho",
@@ -26,14 +30,19 @@ function normalizeMonthName(value) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/Ã§/gi, "c")
-    .replace(/ÃƒÂ§/gi, "c")
     .toLowerCase()
     .trim();
 }
 
-function getMonthContext(month) {
-  const now = new Date();
+function getMonthContext(
+  month,
+  {
+    feriadosSet = new Set(),
+    lastDayWithData = 0,
+    year = new Date().getFullYear(),
+    now = new Date(),
+  } = {},
+) {
   const currentMonthIndex = now.getMonth();
   const selectedMonthIndex = MONTHS.findIndex(
     (item) => normalizeMonthName(item) === normalizeMonthName(month),
@@ -49,17 +58,16 @@ function getMonthContext(month) {
   }
 
   if (selectedMonthIndex === currentMonthIndex) {
-    const totalDaysInMonth = new Date(
-      now.getFullYear(),
-      selectedMonthIndex + 1,
-      0,
-    ).getDate();
-
     return {
       isCurrentMonth: true,
       isPastMonth: false,
       isFutureMonth: false,
-      daysRemaining: Math.max(0, totalDaysInMonth - now.getDate()),
+      daysRemaining: diasUteisRestantesNoMes(
+        month,
+        feriadosSet,
+        lastDayWithData,
+        year,
+      ),
     };
   }
 
@@ -76,18 +84,14 @@ function getMonthContext(month) {
     isCurrentMonth: false,
     isPastMonth: false,
     isFutureMonth: true,
-    daysRemaining: new Date(
-      now.getFullYear(),
-      selectedMonthIndex + 1,
-      0,
-    ).getDate(),
+    daysRemaining: diasUteisDoMes(month, feriadosSet, year),
   };
 }
 
 function getStatusText(total, meta, monthContext) {
   const faltam = Math.max(0, meta - total);
-  if (monthContext.isFutureMonth) return "Mes ainda nao iniciado";
-  if (faltam === 0) return "Meta atingida no mes";
+  if (monthContext.isFutureMonth) return "Mês ainda não iniciado";
+  if (faltam === 0) return "Meta atingida no mês";
   if (monthContext.isCurrentMonth) return `Em andamento: faltam ${faltam} O.S`;
   if (monthContext.isPastMonth) return `Fechado: faltaram ${faltam} O.S`;
   return `Faltam ${faltam} O.S`;
@@ -117,9 +121,16 @@ export default function TecIndividual({
   items = [],
   meta = META_INDIVIDUAL,
   month,
+  feriadosSet = new Set(),
+  lastDayWithData = 0,
+  defaultCollapsed = true,
+  fullWidth = true,
 }) {
-  const [collapsed, setCollapsed] = useState(true);
-  const monthContext = useMemo(() => getMonthContext(month), [month]);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const monthContext = useMemo(
+    () => getMonthContext(month, { feriadosSet, lastDayWithData }),
+    [feriadosSet, lastDayWithData, month],
+  );
 
   const normalizedItems = useMemo(
     () =>
@@ -146,11 +157,19 @@ export default function TecIndividual({
   );
 
   return (
-    <div className="card grid-full">
+    <div className={`card ${fullWidth ? "grid-full" : ""}`}>
       <div
         className="card-title"
         style={{ justifyContent: "space-between", cursor: "pointer" }}
         onClick={() => setCollapsed((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setCollapsed((current) => !current);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
           <span>{icon}</span>
@@ -248,3 +267,4 @@ export default function TecIndividual({
     </div>
   );
 }
+

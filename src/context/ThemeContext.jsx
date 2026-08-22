@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+﻿import { createContext, useContext, useState, useEffect } from 'react';
 
 const ThemeContext = createContext(null);
 
@@ -25,3 +25,4 @@ export const useTheme = () => {
   if (!context) throw new Error('useTheme must be used within ThemeProvider');
   return context;
 };
+

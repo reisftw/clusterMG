@@ -1,8 +1,8 @@
 .top-cidades-card {
-  background: var(--color-surface, #fff);
-  border-radius: 12px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 6px rgba(0,48,135,0.05);
   padding: 20px 24px;
   min-width: 320px;
 }
@@ -14,18 +14,27 @@
   margin-bottom: 20px;
 }
 
-.top-cidades-icon { font-size: 1.1rem; }
+.top-cidades-icon {
+  align-items: center;
+  background: #fff7ed;
+  border-radius: 8px;
+  color: #f97316;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
 
 .top-cidades-header h2 {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--color-text, #1a1a1a);
+  color: #0f172a;
   margin: 0;
 }
 
 .top-cidades-subtitle {
   font-size: 0.75rem;
-  color: var(--color-text-muted, #6b7280);
+  color: #64748b;
   margin-left: auto;
 }
 
@@ -60,7 +69,7 @@
 .rank-1       { background: #fef3c7; color: #b45309; }
 .rank-2       { background: #f3f4f6; color: #374151; }
 .rank-3       { background: #fde8d0; color: #92400e; }
-.rank-default { background: var(--color-surface-offset, #f3f4f6); color: var(--color-text-muted, #6b7280); }
+.rank-default { background: #f1f5f9; color: #64748b; }
 
 .cidade-info {
   display: flex;
@@ -72,7 +81,7 @@
 .cidade-nome {
   font-size: 0.82rem;
   font-weight: 500;
-  color: var(--color-text, #1a1a1a);
+  color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -92,7 +101,7 @@
 .barra-wrapper {
   width: 80px;
   height: 6px;
-  background: var(--color-surface-offset, #f3f4f6);
+  background: #e2e8f0;
   border-radius: 99px;
   overflow: hidden;
   flex-shrink: 0;
@@ -101,16 +110,16 @@
 .barra-fill {
   height: 100%;
   border-radius: 99px;
-  background: var(--color-primary, #01696f);
+  background: #2563eb;
   transition: width 0.4s ease;
 }
 
-.barra-agente { background: #7c3aed; }
+.barra-agente { background: #f97316; }
 
 .cidade-total {
   font-size: 0.82rem;
   font-weight: 700;
-  color: var(--color-text, #1a1a1a);
+  color: #0f172a;
   font-variant-numeric: tabular-nums;
   min-width: 32px;
   text-align: right;

@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { X, MapPin, Handshake } from "lucide-react";
 
 function TipoBadge({ tipo, qtd, status }) {
@@ -33,10 +33,13 @@ export default function MapaCidadeDrawer({ cidade, data, tipo, onClose }) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/30 z-40 transition-opacity"
+        className="fixed inset-0 z-layout-modal bg-black/30 transition-opacity"
         onClick={onClose}
+        onKeyDown={(event) => event.key === "Escape" && onClose()}
+        role="button"
+        tabIndex={-1}
       />
-      <div className="fixed right-0 top-0 h-full w-full max-w-sm bg-white shadow-2xl z-50 flex flex-col">
+      <div className="fixed right-0 top-0 z-layout-modal flex h-full w-full max-w-sm flex-col bg-white shadow-2xl">
         <div
           className={`px-6 py-5 border-b border-gray-100 flex items-center justify-between ${
             isAgente ? "bg-amber-50" : "bg-blue-50"
@@ -122,3 +125,4 @@ export default function MapaCidadeDrawer({ cidade, data, tipo, onClose }) {
     </>
   );
 }
+

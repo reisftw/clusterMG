@@ -1,4 +1,4 @@
-// hooks/useAgentes.js — sem Firestore
+﻿// hooks/useAgentes.js
 import { useMemo } from "react";
 import { useDashboardData } from "./useDashboardData";
 

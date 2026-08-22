@@ -1,11 +1,11 @@
-import jsPDF from 'jspdf';
+﻿import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 export const exportMetasPDF = (dados) => {
   const doc = new jsPDF();
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("Relatório de Metas - Retirada FTTH", 14, 20);
+  doc.text("Relatorio de Metas - Retirada FTTH", 14, 20);
 
   doc.setFontSize(12);
   doc.text(`${dados.mes} 2026`, 14, 30);
@@ -19,9 +19,10 @@ export const exportMetasPDF = (dados) => {
   // Ranking
   doc.autoTable({
     startY: 90,
-    head: [['Ranking', 'Técnico', 'O.S']],
+    head: [['Ranking', 'Tecnico', 'O.S']],
     body: dados.technicians.slice(0, 5).map((t, i) => [i+1, t.name, t.total]),
   });
 
   doc.save(`metas-${dados.mes.toLowerCase()}.pdf`);
 };
+

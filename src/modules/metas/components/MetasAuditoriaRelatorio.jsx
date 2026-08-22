@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { X, Download, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import ModalShell from "../../../components/ui/ModalShell";
+import { addClusterLogo } from "../../../utils/pdfBranding";
 import { getCriticidade } from "../hooks/useMetasAuditoria";
 
 const COR_PDF = {
@@ -10,6 +12,16 @@ const COR_PDF = {
   orange: [249, 115, 22],
   red: [239, 68, 68],
 };
+
+function normalizaTexto(valor) {
+  return String(valor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
 
 function EvIcon({ atual, anterior }) {
   if (!anterior || anterior.pct === undefined)
@@ -31,7 +43,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
       try {
         const { buscarHistoricoCidade } =
           await import("../services/metasAuditoriaService");
-        const key = String(cidade.cidade).toUpperCase().replace(/\s+/g, "_");
+        const key = normalizaTexto(cidade.cidade).replace(/\s+/g, "_");
         const hist = await buscarHistoricoCidade(key);
         setHistorico(hist);
       } catch (e) {
@@ -43,7 +55,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
     carregar();
   }, [cidade]);
 
-  const gerarPDF = () => {
+  const gerarPDF = async () => {
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -54,21 +66,22 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
     const corRgb = COR_PDF[crit.cor] || COR_PDF.red;
     const now = new Date();
 
-    // Cabeçalho
+    // Cabecalho
     pdf.setFillColor(30, 58, 138);
     pdf.rect(0, 0, 210, 32, "F");
     pdf.setTextColor(255, 255, 255);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(16);
-    pdf.text("RELATÓRIO DE AUDITORIA — AA", 14, 13);
+    pdf.text("RELATORIO DE AUDITORIA — AA", 14, 13);
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
     pdf.text(
-      `Gerado em: ${now.toLocaleDateString("pt-BR")} às ${now.toLocaleTimeString("pt-BR")}`,
+      `Gerado em: ${now.toLocaleDateString("pt-BR")} as ${now.toLocaleTimeString("pt-BR")}`,
       14,
       22,
     );
-    pdf.text(`Referência: ${mes} 2026`, 14, 28);
+    pdf.text(`Referencia: ${mes} 2026`, 14, 28);
+    await addClusterLogo(pdf, { width: 24, height: 12, y: 7, marginRight: 12 });
 
     pdf.setFillColor(...corRgb);
     pdf.roundedRect(140, 8, 58, 18, 3, 3, "F");
@@ -95,7 +108,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
         fontSize: 9,
       },
       bodyStyles: { fontSize: 9 },
-      head: [["Regional", "Responsável", "Telefone", "E-mail"]],
+      head: [["Regional", "Responsavel", "Telefone", "E-mail"]],
       body: [
         [
           agente?.regional_nome ?? "—",
@@ -124,7 +137,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
       },
       bodyStyles: { fontSize: 10 },
       head: [
-        ["Meta", "Realizado", "Cancelamentos", "Eficiência (%)", "Status"],
+        ["Meta", "Realizado", "Cancelamentos", "Eficiencia (%)", "Status"],
       ],
       body: [
         [
@@ -148,7 +161,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
       pdf.setTextColor(30, 58, 138);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(11);
-      pdf.text("Histórico de Evolução", 14, y);
+      pdf.text("Historico de Evolucao", 14, y);
       y += 4;
 
       const histRows = historico.map((h, i) => {
@@ -183,7 +196,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
         },
         bodyStyles: { fontSize: 9 },
         head: [
-          ["Mês", "Meta", "Realizado", "Cancel.", "Eficiência", "Variação"],
+          ["Mes", "Meta", "Realizado", "Cancel.", "Eficiencia", "Variacao"],
         ],
         body: histRows,
         didParseCell: (data) => {
@@ -206,7 +219,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
       pdf.setTextColor(30, 58, 138);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(11);
-      pdf.text("Distribuição Diária de Retiradas", 14, y);
+      pdf.text("Distribuicao Diaria de Retiradas", 14, y);
       y += 4;
 
       const diasCom = cidade.daily
@@ -222,7 +235,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
         theme: "plain",
         bodyStyles: { fontSize: 8, textColor: [75, 85, 99] },
         body:
-          rows.length > 0 ? rows : [["Nenhuma retirada registrada no mês."]],
+          rows.length > 0 ? rows : [["Nenhuma retirada registrada no mes."]],
       });
       y = pdf.lastAutoTable.finalY + 8;
     }
@@ -233,10 +246,10 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
       pdf.setTextColor(185, 28, 28);
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(9);
-      pdf.text("⚠ ATENÇÃO JURÍDICA", 18, y + 6);
+      pdf.text("⚠ ATENCAO JURIDICA", 18, y + 6);
       pdf.setFont("helvetica", "normal");
       pdf.text(
-        "Esta cidade não realizou nenhuma retirada. Recomenda-se acionamento do setor jurídico.",
+        "Esta cidade nao realizou nenhuma retirada. Recomenda-se acionamento do setor juridico.",
         18,
         y + 13,
       );
@@ -252,7 +265,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
       14,
       290,
     );
-    pdf.text("Página 1", 196, 290, { align: "right" });
+    pdf.text("Pagina 1", 196, 290, { align: "right" });
 
     pdf.save(`Auditoria_${cidade.cidade.replace(/\s+/g, "_")}_${mes}_2026.pdf`);
   };
@@ -260,27 +273,27 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
   const crit = cidade.critica;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <ModalShell onClose={onClose} showClose={false} size="2xl" bodyClassName="p-0">
+      <div>
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <div>
             <h2 className="text-base font-bold text-gray-900">
               {cidade.cidade}
             </h2>
             <p className="text-xs text-gray-400">
-              {mes} 2026 — Relatório de Auditoria
+              {mes} 2026 — Relatorio de Auditoria
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={gerarPDF}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+              className="flex min-h-11 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
             >
               <Download size={14} /> Exportar PDF
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100"
             >
               <X size={18} />
             </button>
@@ -297,10 +310,10 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
           `}
           >
             {crit.label} — {cidade.total === 0 ? "0%" : `${cidade.pct}%`} de
-            eficiência
+            eficiencia
             {crit.cor === "red" && cidade.total === 0 && (
               <span className="ml-2 text-xs font-normal">
-                ⚠ Acionar jurídico
+                ⚠ Acionar juridico
               </span>
             )}
           </div>
@@ -317,7 +330,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-400">Responsável</p>
+                <p className="text-xs text-gray-400">Responsavel</p>
                 <p className="font-semibold text-gray-800">
                   {cidade.agente?.responsavel?.nome ?? "—"}
                 </p>
@@ -347,7 +360,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
                 { label: "Realizado", value: cidade.total },
                 { label: "Cancelamentos", value: cidade.cancelamentos },
                 {
-                  label: "Eficiência",
+                  label: "Eficiencia",
                   value: cidade.total === 0 ? "0%" : `${cidade.pct}%`,
                 },
               ].map(({ label, value }) => (
@@ -364,25 +377,26 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
 
           <div>
             <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">
-              Histórico de evolução
+              Historico de evolucao
             </h3>
             {loadingHist ? (
-              <p className="text-xs text-gray-400">Carregando histórico...</p>
+              <p className="text-xs text-gray-400">Carregando historico...</p>
             ) : historico.length === 0 ? (
               <p className="text-xs text-gray-400">
-                Nenhum histórico registrado ainda.
+                Nenhum historico registrado ainda.
               </p>
             ) : (
-              <table className="w-full text-xs">
+              <div className="overflow-x-auto">
+              <table className="min-w-[620px] w-full text-xs">
                 <thead>
                   <tr className="bg-gray-50">
                     {[
-                      "Mês",
+                      "Mes",
                       "Meta",
                       "Realizado",
                       "Cancel.",
-                      "Eficiência",
-                      "Variação",
+                      "Eficiencia",
+                      "Variacao",
                     ].map((h) => (
                       <th
                         key={h}
@@ -455,12 +469,14 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 
 export default MetasAuditoriaRelatorio;
+

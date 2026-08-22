@@ -1,26 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   buscarEquipamentos,
   criarEquipamento,
   atualizarEquipamento,
   excluirEquipamento,
 } from '../services/equipamentosService';
-import { getOrLoadCachedValue, invalidateCache } from '../../../services/firestoreCache';
-import { logFirestoreRead } from '../../../services/firestoreMonitoring';
+import { getOrLoadCachedValue, invalidateCache } from '../../../services/dataCache';
+import { logDataRead } from '../../../services/dataMonitoring';
 
 export const TIPOS_EQUIPAMENTO = [
   'CELULAR', 'NOTEBOOK', 'TABLET', 'ROTEADOR', 'FERRAMENTA',
-  'EPI', 'VEÍCULO', 'OUTRO',
+  'EPI', 'VEICULO', 'OUTRO',
 ];
 
 export const STATUS_EQUIPAMENTO = [
-  'EM USO', 'DISPONÍVEL', 'EM MANUTENÇÃO', 'EXTRAVIADO', 'DESCARTADO',
+  'EM USO', 'DISPONIVEL', 'EM MANUTENCAO', 'EXTRAVIADO', 'DESCARTADO',
 ];
 
 export const STATUS_COLORS = {
   'EM USO': 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-  'DISPONÍVEL': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-  'EM MANUTENÇÃO': 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+  'DISPONIVEL': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+  'EM MANUTENCAO': 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
   'EXTRAVIADO': 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   'DESCARTADO': 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400',
 };
@@ -44,9 +44,9 @@ export const useEquipamentos = () => {
         CACHE_KEY,
         async () => {
           const items = await buscarEquipamentos();
-          logFirestoreRead({
+          logDataRead({
             source: 'useEquipamentos',
-            operation: 'getDocs',
+            operation: 'sql-list',
             count: items.length,
           });
           return sortByNome(items);
@@ -88,3 +88,5 @@ export const useEquipamentos = () => {
 
   return { equipamentos, loading, error, carregar: () => carregar(true), criar, atualizar, excluir };
 };
+
+

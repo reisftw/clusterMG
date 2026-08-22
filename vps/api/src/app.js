@@ -17,9 +17,14 @@ const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const emailService = require("./emailService");
 const operationalImports = require("./operationalImports");
 const sempreIntegration = require("./sempreIntegration");
+const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
+const financeiro = require("./financeiro");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
+const seniorIntegration = require("./seniorIntegration");
+const rolePermissions = require("./rolePermissions");
+const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
 const { attachRealtimeClient, broadcastRealtime } = require("./realtime");
@@ -35,7 +40,11 @@ const {
   createCsrfToken,
   createLocalUser,
   deleteLocalUser,
+  getGoogleOAuthConfig,
+  getOktaOAuthConfig,
   getImportedUserProfile,
+  loginWithGoogleIdToken,
+  loginWithOktaIdToken,
   loginWithPassword,
   makeTemporaryPassword,
   requireAuthenticated,
@@ -44,8 +53,10 @@ const {
   revokeSession,
   resetLocalUserPassword,
   resetPasswordWithToken,
+  startEmailMfaLogin,
   TOKEN_TTL_SECONDS,
   updateLocalUser,
+  verifyEmailMfaLogin,
   verifyCsrfToken,
 } = require("./auth");
 
@@ -167,7 +178,7 @@ function normalizeUserRole(role) {
 
 const ADMIN_ROLES = ["admin"];
 const DOCUMENTOS_CONFIG_ROLES = ["admin", "supervisor_administrativo"];
-const USER_MANAGED_ROLES = ["admin", "backoffice_retirada", "supervisor", "supervisor_administrativo", "analista_administrativo", "lider_empresa", "agente_autorizado", "backoffice"];
+const USER_MANAGED_ROLES = ["admin", "backoffice_retirada", "supervisor", "supervisor_administrativo", "analista_administrativo", "lider_empresa", "agente_autorizado", "backoffice", "visitante"];
 const USER_MANAGER_ROLES = ["admin", "supervisor", "supervisor_administrativo"];
 const SUPERVISOR_MANAGED_USER_ROLES = ["backoffice", "lider_empresa"];
 const ADMINISTRATIVO_MANAGED_USER_ROLES = ["analista_administrativo", "lider_empresa", "agente_autorizado"];
@@ -181,6 +192,14 @@ const DASHBOARD_ROLES = [
 ];
 const ACERTO_ROLES = ["admin", "supervisor", "backoffice"];
 const ESTOQUE_INTEGRADO_ROLES = [...new Set([...FULL_OPERATION_ROLES, ...ACERTO_ROLES])];
+const TECNICOS_BOLSA_AUDITORIA_ROLES = ["admin", "supervisor", "backoffice", "backoffice_retirada", "lider_empresa"];
+const TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS = [
+  "tecnicos.auditoria_bolsa.view",
+  "tecnicos.auditoria_bolsa.manage",
+];
+const TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS = [
+  "tecnicos.auditoria_bolsa.manage",
+];
 const REGIONAL_SCOPED_ACERTO_ROLES = ["supervisor"];
 const EMPRESAS_COLLECTION = "empresas_tecnicos";
 const ADMINISTRATIVO_DOCUMENTOS_ROLES = ["supervisor_administrativo", "analista_administrativo"];
@@ -189,12 +208,77 @@ const EMPRESAS_WRITE_ROLES = [...FULL_OPERATION_ROLES, ...ADMINISTRATIVO_DOCUMEN
 const INSUMOS_ADMINISTRATIVOS_COLLECTIONS = new Set([
   "insumos_administrativos_produtos",
   "insumos_administrativos_retiradas",
+  "insumos_administrativos_reposicoes",
+  "insumos_administrativos_requisicoes",
   "insumos_administrativos_config",
 ]);
 const INSUMOS_ADMINISTRATIVOS_ROLES = [...FULL_OPERATION_ROLES, ...ADMINISTRATIVO_DOCUMENTOS_ROLES];
+const INSUMOS_PRODUTOS_COLLECTION = "insumos_administrativos_produtos";
+const INSUMOS_RETIRADAS_COLLECTION = "insumos_administrativos_retiradas";
+const INSUMOS_REQUISICOES_COLLECTION = "insumos_administrativos_requisicoes";
+const IMOVEIS_ADMINISTRATIVOS_COLLECTIONS = new Set([
+  "imoveis_administrativos",
+  "imoveis_administrativos_reajustes",
+  "imoveis_administrativos_iptu",
+  "imoveis_administrativos_alugueis",
+  "imoveis_administrativos_contratos",
+]);
+const IMOVEIS_ADMINISTRATIVOS_ROLES = ["admin", ...ADMINISTRATIVO_DOCUMENTOS_ROLES];
+const FINANCEIRO_ROLES = ["admin"];
+const FINANCEIRO_VIEW_PERMISSIONS = [
+  "financeiro.visao_geral.view",
+  "financeiro.visao_geral.manage",
+  "financeiro.contas_pagar.view",
+  "financeiro.contas_pagar.manage",
+  "financeiro.contas_receber.view",
+  "financeiro.contas_receber.manage",
+  "financeiro.faturamento.view",
+  "financeiro.notas.view",
+  "financeiro.chamados.view",
+  "financeiro.configuracoes.view",
+  "financeiro.configuracoes.manage",
+];
+const FINANCEIRO_MANAGE_PERMISSIONS = ["financeiro.configuracoes.manage"];
 
 function hasRole(user, roles) {
   return roles.includes(normalizeUserRole(user?.role));
+}
+
+function getUserPermissions(user = {}) {
+  return Array.isArray(user?.profile?.permissions)
+    ? user.profile.permissions
+    : Array.isArray(user?.permissions)
+      ? user.permissions
+      : [];
+}
+
+function hasPermission(user, permission) {
+  if (!permission) return false;
+  const role = normalizeUserRole(user?.role || user?.profile?.role);
+  if (role === "admin") return true;
+  const permissions = new Set(getUserPermissions(user));
+  if (permissions.has("*") || permissions.has(permission)) return true;
+  if (String(permission).endsWith(".view")) {
+    const managePermission = String(permission).replace(/\.view$/, ".manage");
+    if (permissions.has(managePermission)) return true;
+  }
+  return false;
+}
+
+function hasAnyPermission(user, permissions = []) {
+  return (Array.isArray(permissions) ? permissions : [permissions]).some((permission) =>
+    hasPermission(user, permission),
+  );
+}
+
+function requireAnyPermission(permissions, fallbackRoles = []) {
+  return (req, res, next) => {
+    if (hasAnyPermission(req.user, permissions) || (fallbackRoles.length && hasRole(req.user, fallbackRoles))) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "Permissao insuficiente." });
+  };
 }
 
 function normalizeComparableText(value) {
@@ -341,6 +425,265 @@ async function ensureEmpresaDriveFolderIfConfigured(collectionPath, documentId, 
   }
 }
 
+function normalizeStockNumber(value) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isProdutoInLowStock(data = {}) {
+  if (String(data.status || "ativo").toLowerCase() !== "ativo") return false;
+  const minimo = normalizeStockNumber(data.estoque_minimo);
+  if (minimo <= 0) return false;
+  return normalizeStockNumber(data.estoque_atual) <= minimo;
+}
+
+function buildLowStockAlertSignature(data = {}) {
+  return [
+    String(data.nome || "").trim(),
+    normalizeStockNumber(data.estoque_atual),
+    normalizeStockNumber(data.estoque_minimo),
+    String(data.unidade || "").trim(),
+  ].join("|");
+}
+
+async function listSupervisoresAdministrativosForEmail() {
+  const result = await db.query(
+    `select uid, email, display_name as "displayName"
+       from app_users
+      where lower(role) = 'supervisor_administrativo'
+        and coalesce(disabled, false) = false
+        and coalesce(email, '') <> ''
+      order by display_name, email`,
+  );
+  return result.rows;
+}
+
+async function notifyAdministrativeLowStock({ documentPath, documentId, data = {}, previousData = {} }) {
+  if (!isProdutoInLowStock(data) || isProdutoInLowStock(previousData)) return;
+
+  const recipients = await listSupervisoresAdministrativosForEmail();
+  if (!recipients.length) return;
+
+  const appUrl = process.env.PUBLIC_APP_URL || "https://retiradas.tech";
+  const produtoNome = String(data.nome || "Insumo administrativo").trim();
+  const estoqueAtual = normalizeStockNumber(data.estoque_atual);
+  const estoqueMinimo = normalizeStockNumber(data.estoque_minimo);
+  const unidade = String(data.unidade || "unidade").trim();
+  const categoria = String(data.categoria || "-").trim();
+  const observacao = String(data.observacao || "").trim();
+
+  const to = recipients.map((recipient) => recipient.email).join(",");
+  await emailService.sendInsumosLowStockEmail({
+    to,
+    recipients: recipients.map((recipient) => ({
+      uid: recipient.uid,
+      email: recipient.email,
+      nome: recipient.displayName,
+      displayName: recipient.displayName,
+    })),
+    produto: {
+      documentPath,
+      documentId,
+      nome: produtoNome,
+      estoqueAtual,
+      estoqueMinimo,
+      unidade,
+      categoria,
+      observacao,
+      appUrl,
+    },
+  });
+
+  await documents.upsertDocument({
+    path: documentPath,
+    collectionPath: INSUMOS_PRODUTOS_COLLECTION,
+    documentId,
+    parentPath: null,
+    data: {
+      ...data,
+      low_stock_alert_sent_at: new Date().toISOString(),
+      low_stock_alert_signature: buildLowStockAlertSignature(data),
+    },
+  });
+}
+
+function buildProdutoDataWithLowStockReset(data = {}) {
+  if (isProdutoInLowStock(data)) return data;
+  if (!data.low_stock_alert_sent_at && !data.low_stock_alert_signature) return data;
+  const next = { ...(data || {}) };
+  delete next.low_stock_alert_sent_at;
+  delete next.low_stock_alert_signature;
+  return next;
+}
+
+async function handleInsumosLowStockAfterWrite({ collectionPath, documentPath, documentId, data = {}, existing = null }) {
+  if (collectionPath !== INSUMOS_PRODUTOS_COLLECTION) return;
+  const previousData = existing?.data || {};
+  const normalizedData = buildProdutoDataWithLowStockReset(data);
+
+  if (normalizedData !== data) {
+    await documents.upsertDocument({
+      path: documentPath,
+      collectionPath,
+      documentId,
+      parentPath: null,
+      data: normalizedData,
+    });
+  }
+
+  try {
+    await notifyAdministrativeLowStock({
+      documentPath,
+      documentId,
+      data: normalizedData,
+      previousData,
+    });
+  } catch (error) {
+    console.error("[insumos] Falha ao enviar alerta de estoque baixo:", error?.message || error);
+  }
+}
+
+function isInsumosManager(user) {
+  return hasRole(user, INSUMOS_ADMINISTRATIVOS_ROLES);
+}
+
+function getUserDisplayName(user = {}) {
+  return String(user.displayName || user.display_name || user.nome || user.email || user.uid || "Usuario").trim();
+}
+
+function getUserEmail(user = {}) {
+  return String(user.email || "").trim();
+}
+
+function normalizeRequestQuantity(value) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.trunc(parsed));
+}
+
+function buildInsumosRequestProtocol() {
+  const now = new Date();
+  const ymd = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
+  return `REQ-${ymd}-${suffix}`;
+}
+
+function formatSaoPauloDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
+function insumosRequestPath(id) {
+  return `${INSUMOS_REQUISICOES_COLLECTION}/${id}`;
+}
+
+function addInsumosAudit(data = {}, entry = {}) {
+  const history = Array.isArray(data.auditoria) ? data.auditoria : [];
+  return [
+    ...history,
+    {
+      ...entry,
+      data: entry.data || new Date().toISOString(),
+    },
+  ];
+}
+
+function normalizeInsumosRequestRow(row = {}) {
+  return {
+    id: row.documentId,
+    path: row.path,
+    ...(row.data || {}),
+  };
+}
+
+async function getDocumentForUpdate(client, documentPath) {
+  const result = await client.query(
+    `select path, collection_path as "collectionPath", document_id as "documentId", data
+       from app_documents
+      where path = $1
+      for update`,
+    [documentPath],
+  );
+  return result.rows[0] || null;
+}
+
+async function updateDocumentData(client, documentPath, data = {}) {
+  await client.query(
+    `update app_documents
+        set data = $2::jsonb
+      where path = $1`,
+    [documentPath, JSON.stringify(data || {})],
+  );
+}
+
+async function insertDocumentData(client, { path: documentPath, collectionPath, documentId, data = {} }) {
+  await client.query(
+    `insert into app_documents (path, collection_path, document_id, parent_path, data)
+     values ($1, $2, $3, null, $4::jsonb)`,
+    [documentPath, collectionPath, documentId, JSON.stringify(data || {})],
+  );
+}
+
+async function expireOverdueInsumosRequests() {
+  const client = await db.connect();
+  const expired = [];
+  try {
+    await client.query("begin");
+    const result = await client.query(
+      `select path, document_id as "documentId", data
+         from app_documents
+        where collection_path = $1
+          and data->>'status' = 'aprovada_aguardando_retirada'
+          and nullif(data->>'expira_em', '')::timestamptz <= now()
+        for update`,
+      [INSUMOS_REQUISICOES_COLLECTION],
+    );
+
+    for (const request of result.rows) {
+      const data = request.data || {};
+      const productPath = `${INSUMOS_PRODUTOS_COLLECTION}/${data.produto_id}`;
+      const product = await getDocumentForUpdate(client, productPath);
+      if (product) {
+        const productData = product.data || {};
+        const quantidade = normalizeRequestQuantity(data.quantidade);
+        await updateDocumentData(client, productPath, {
+          ...productData,
+          estoque_atual: normalizeStockNumber(productData.estoque_atual) + quantidade,
+          atualizado_em: new Date().toISOString(),
+          atualizado_por: "Expiração automática de requisição",
+        });
+      }
+
+      const updated = {
+        ...data,
+        status: "expirada",
+        atualizado_em: new Date().toISOString(),
+        expirado_em: new Date().toISOString(),
+        auditoria: addInsumosAudit(data, {
+          acao: "expirou",
+          usuario_nome: "Sistema",
+          observacao: "Prazo de 24h expirado. Itens devolvidos ao estoque.",
+        }),
+      };
+      await updateDocumentData(client, request.path, updated);
+      expired.push({ id: request.documentId, ...updated });
+    }
+
+    await client.query("commit");
+    return expired;
+  } catch (error) {
+    await client.query("rollback").catch(() => null);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function mergeUserProfileExtras(uid, body = {}) {
   const allowed = {};
   if (body.empresaId !== undefined || body.empresa_id !== undefined) {
@@ -375,7 +718,25 @@ async function mergeUserProfileExtras(uid, body = {}) {
 }
 
 function canManageUsers(user) {
-  return hasRole(user, USER_MANAGER_ROLES);
+  return hasAnyPermission(user, ["configuracao.usuarios.manage", "manage_users"]) ||
+    hasRole(user, USER_MANAGER_ROLES);
+}
+
+function canViewUsers(user) {
+  return canManageUsers(user) ||
+    hasAnyPermission(user, ["configuracao.usuarios.view"]);
+}
+
+async function isKnownManagedRole(role) {
+  const normalized = normalizeUserRole(role);
+  if (USER_MANAGED_ROLES.includes(normalized)) return true;
+  try {
+    const roles = await rolePermissions.listRoles();
+    return roles.some((item) => item.id === normalized && item.active !== false);
+  } catch (error) {
+    console.error("[roles] Falha ao validar cargo dinamico:", error?.message || error);
+    return false;
+  }
 }
 
 function canSupervisorManageUserRole(role) {
@@ -412,6 +773,56 @@ function filterUserDocumentsForManager(user, collectionPath, items = []) {
     return items.filter((item) => canAdministrativoAccessUserRecord(user, item?.data || {}));
   }
   return items;
+}
+
+function mapAdminUserRow(row = {}) {
+  const profile = row.profile_data || {};
+  return {
+    id: row.uid,
+    uid: row.uid,
+    email: row.email || profile.email || "",
+    nome: row.display_name || profile.nome || profile.displayName || row.email || "",
+    role: normalizeUserRole(row.role || profile.role),
+    regional: row.regional || profile.regional || "",
+    disabled: Boolean(row.disabled),
+    trocar_senha: Boolean(row.must_change_password),
+    must_change_password: Boolean(row.must_change_password),
+    ultimo_login: row.last_login_at || profile.ultimo_login || null,
+    last_login_at: row.last_login_at || profile.last_login_at || null,
+    ultimo_login_ip: row.last_login_ip || profile.ultimo_login_ip || "",
+    ultimo_login_navegador: row.last_login_user_agent || profile.ultimo_login_navegador || "",
+    login_provider: profile.login_provider || "local",
+    criado_por_oauth: Boolean(profile.criado_por_oauth),
+    status_oauth: profile.status_oauth || "",
+    empresaId: profile.empresaId || profile.empresa_id || "",
+    empresaNome: profile.empresaNome || profile.empresa_nome || "",
+    avatarUrl: profile.avatarUrl || profile.avatar_url || "",
+    avatarDataUrl: profile.avatarDataUrl || profile.avatar_data_url || "",
+    criado_em: profile.criado_em || row.created_at || null,
+    atualizado_em: profile.atualizado_em || null,
+  };
+}
+
+async function listManagedUsersForAdmin(user) {
+  const result = await db.query(
+    `select au.uid, au.email, au.display_name, au.role, au.regional,
+            au.disabled, au.must_change_password, au.last_login_at,
+            au.last_login_ip, au.last_login_user_agent,
+            au.created_at,
+            coalesce(ad.data, '{}'::jsonb) as profile_data
+       from app_users au
+       left join app_documents ad on ad.path = 'usuarios/' || au.uid
+      order by coalesce(au.display_name, au.email) asc`,
+  );
+
+  return filterUserDocumentsForManager(
+    user,
+    "usuarios",
+    result.rows.map((row) => ({
+      documentId: row.uid,
+      data: mapAdminUserRow(row),
+    })),
+  ).map((item) => item.data);
 }
 
 async function getUserProfileDocument(uid) {
@@ -601,6 +1012,7 @@ function canReadCollection(user, collectionPath) {
   if (collection === "usuarios") return canManageUsers(user);
   if (collection === EMPRESAS_COLLECTION) return hasRole(user, EMPRESAS_VIEW_ROLES);
   if (INSUMOS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return hasRole(user, INSUMOS_ADMINISTRATIVOS_ROLES);
+  if (IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return hasRole(user, IMOVEIS_ADMINISTRATIVOS_ROLES);
   if (hasRole(user, FULL_OPERATION_ROLES)) return true;
   if (hasRole(user, ACERTO_ROLES)) return ACERTO_ESTOQUE_COLLECTIONS.has(collection);
   return false;
@@ -619,6 +1031,7 @@ function canWriteCollection(user, collectionPath) {
   if (collection === "usuarios") return canManageUsers(user);
   if (collection === EMPRESAS_COLLECTION) return hasRole(user, EMPRESAS_WRITE_ROLES);
   if (INSUMOS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return hasRole(user, INSUMOS_ADMINISTRATIVOS_ROLES);
+  if (IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return hasRole(user, IMOVEIS_ADMINISTRATIVOS_ROLES);
   if (hasRole(user, FULL_OPERATION_ROLES)) return true;
   if (hasRole(user, ACERTO_ROLES)) return ACERTO_ESTOQUE_COLLECTIONS.has(collection);
   return false;
@@ -737,6 +1150,120 @@ function createApp() {
     requireRoles,
     adminRoles: DOCUMENTOS_CONFIG_ROLES,
   }));
+  app.use("/api/imoveis", createImoveisRouter({
+    requireAuthenticated,
+    requireCsrfToken,
+    requireRoles,
+  }));
+
+  app.get(
+    "/api/financeiro/dashboard",
+    requireAuthenticated,
+    requireAnyPermission(FINANCEIRO_VIEW_PERMISSIONS, FINANCEIRO_ROLES),
+    async (_req, res, next) => {
+      try {
+        res.json(await financeiro.getDashboard());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/financeiro/mockup",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await financeiro.seedMockup(req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.delete(
+    "/api/financeiro/mockup",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
+    async (_req, res, next) => {
+      try {
+        res.json(await financeiro.clearMockup());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/financeiro/sheets-config",
+    requireAuthenticated,
+    requireAnyPermission(["financeiro.configuracoes.view", "financeiro.configuracoes.manage"], FINANCEIRO_ROLES),
+    async (_req, res, next) => {
+      try {
+        res.json(await financeiro.getSheetsConfig());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.put(
+    "/api/financeiro/sheets-config",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await financeiro.saveSheetsConfig(req.body || {}, req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/financeiro/sheets-config/test/:sourceId",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await financeiro.testSheetSource(req.params.sourceId));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/financeiro/sheets-config/sync",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(FINANCEIRO_MANAGE_PERMISSIONS, FINANCEIRO_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await financeiro.runSheetsImport(req.user, { manual: true }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/financeiro/sheets-config/logs",
+    requireAuthenticated,
+    requireAnyPermission(["financeiro.configuracoes.view", "financeiro.configuracoes.manage"], FINANCEIRO_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await financeiro.listImportLogs(req.query.limit));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.get("/api/health", async (req, res, next) => {
     try {
@@ -790,7 +1317,7 @@ function createApp() {
     }
   });
 
-  app.put("/api/notifications/preferences", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+  app.put("/api/notifications/preferences", requireAuthenticated, requireAnyPermission(["configuracao.geral.manage", "manage_general_settings"], ADMIN_ROLES), requireCsrfToken, async (req, res, next) => {
     try {
       res.json(await notificationsService.savePreferences({
         user: req.user?.profile || req.user || {},
@@ -823,7 +1350,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/notifications/check-critical", requireAuthenticated, requireRoles(ADMIN_ROLES), requireCsrfToken, async (req, res, next) => {
+  app.post("/api/notifications/check-critical", requireAuthenticated, requireAnyPermission(["configuracao.notificacoes.manage", "manage_general_settings"], ADMIN_ROLES), requireCsrfToken, async (req, res, next) => {
     try {
       res.json(await notificationsService.createCriticalServiceAlerts({
         user: req.user?.profile || req.user || {},
@@ -937,6 +1464,81 @@ function createApp() {
     }
   });
 
+  app.get("/api/auth/google/config", async (req, res, next) => {
+    try {
+      const config = await getGoogleOAuthConfig();
+      res.json({
+        enabled: Boolean(config.enabled && config.clientId),
+        clientId: config.enabled ? config.clientId : "",
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/auth/okta/config", async (req, res, next) => {
+    try {
+      const config = await getOktaOAuthConfig();
+      res.json({
+        enabled: Boolean(config.enabled && config.issuer && config.clientId),
+        issuer: config.enabled ? config.issuer : "",
+        clientId: config.enabled ? config.clientId : "",
+        redirectUri: config.enabled ? config.redirectUri : "",
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/auth/google", loginLimiter, async (req, res) => {
+    try {
+      const credential = String(req.body?.credential || req.body?.idToken || "").trim();
+      if (!credential) {
+        res.json({ ok: false, error: "Token Google ausente." });
+        return;
+      }
+
+      const session = await loginWithGoogleIdToken(credential, { req });
+      const csrfToken = setAuthCookie(res, session.token, session.expiresIn);
+      res.json({
+        ok: true,
+        csrfToken,
+        expiresIn: session.expiresIn,
+        token: session.token,
+        user: session.user,
+      });
+    } catch (error) {
+      console.error("[auth] Falha no login Google:", error?.message || error);
+      res.json({ ok: false, error: error?.message || "Nao foi possivel entrar com Google." });
+    }
+  });
+
+  app.post("/api/auth/okta", loginLimiter, async (req, res) => {
+    try {
+      const credential = String(req.body?.credential || req.body?.idToken || "").trim();
+      if (!credential) {
+        res.json({ ok: false, error: "Token Okta ausente." });
+        return;
+      }
+
+      const session = await loginWithOktaIdToken(credential, {
+        nonce: String(req.body?.nonce || ""),
+        req,
+      });
+      const csrfToken = setAuthCookie(res, session.token, session.expiresIn);
+      res.json({
+        ok: true,
+        csrfToken,
+        expiresIn: session.expiresIn,
+        token: session.token,
+        user: session.user,
+      });
+    } catch (error) {
+      console.error("[auth] Falha no login Okta:", error?.message || error);
+      res.json({ ok: false, error: error?.message || "Nao foi possivel entrar com Okta." });
+    }
+  });
+
   app.post("/api/auth/login", loginLimiter, async (req, res) => {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
@@ -946,16 +1548,63 @@ function createApp() {
         return;
       }
 
+      const emailConfig = await emailService.getConfig().catch(() => ({}));
+      if (emailConfig.mfaEmailEnabled) {
+        const challenge = await startEmailMfaLogin(email, password, {
+          ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
+          req,
+        });
+        await emailService.sendMfaLoginCodeEmail({
+          user: challenge.user,
+          code: challenge.code,
+          ttlMinutes: challenge.ttlMinutes,
+        });
+        res.json({
+          ok: true,
+          mfaRequired: true,
+          method: "email",
+          challengeId: challenge.challengeId,
+          maskedEmail: challenge.maskedEmail,
+          expiresAt: challenge.expiresAt,
+          ttlMinutes: challenge.ttlMinutes,
+        });
+        return;
+      }
+
       const session = await loginWithPassword(email, password, { req });
       const csrfToken = setAuthCookie(res, session.token, session.expiresIn);
       res.json({
         ok: true,
         csrfToken,
         expiresIn: session.expiresIn,
+        token: session.token,
         user: session.user,
       });
     } catch (error) {
       res.json({ ok: false, error: error?.message || "E-mail ou senha invalidos." });
+    }
+  });
+
+  app.post("/api/auth/mfa/email/verify", loginLimiter, async (req, res) => {
+    try {
+      const challengeId = String(req.body?.challengeId || "").trim();
+      const code = String(req.body?.code || "").replace(/\D/g, "");
+      if (!challengeId || code.length !== 6) {
+        res.json({ ok: false, error: "Informe o código de 6 dígitos." });
+        return;
+      }
+
+      const session = await verifyEmailMfaLogin(challengeId, code, { req });
+      const csrfToken = setAuthCookie(res, session.token, session.expiresIn);
+      res.json({
+        ok: true,
+        csrfToken,
+        expiresIn: session.expiresIn,
+        token: session.token,
+        user: session.user,
+      });
+    } catch (error) {
+      res.json({ ok: false, error: error?.message || "Código MFA inválido." });
     }
   });
 
@@ -977,7 +1626,7 @@ function createApp() {
       if (shouldRenewAuthToken(req.authPayload)) {
         const renewedToken = await renewSessionFromPayload(req.authPayload);
         const csrfToken = setAuthCookie(res, renewedToken, TOKEN_TTL_SECONDS);
-        res.json({ csrfToken, expiresIn: TOKEN_TTL_SECONDS, renewed: true, user: req.user.profile });
+        res.json({ csrfToken, expiresIn: TOKEN_TTL_SECONDS, renewed: true, token: renewedToken, user: req.user.profile });
         return;
       }
 
@@ -1082,6 +1731,104 @@ function createApp() {
     }
   });
 
+  app.get("/api/admin/oauth/google", requireAuthenticated, requireRoles(ADMIN_ROLES), async (_req, res, next) => {
+    try {
+      const config = await getGoogleOAuthConfig();
+      res.json({
+        ok: true,
+        config: {
+          enabled: Boolean(config.enabled),
+          clientId: config.clientId,
+          autoProvision: Boolean(config.autoProvision),
+          defaultRole: config.defaultRole || "visitante",
+          allowedDomains: config.allowedDomains.join(","),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/admin/oauth/google", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+    try {
+      const data = {
+        enabled: req.body?.enabled === true,
+        clientId: String(req.body?.clientId || "").trim(),
+        autoProvision: req.body?.autoProvision === true,
+        defaultRole: "visitante",
+        allowedDomains: String(req.body?.allowedDomains || "")
+          .split(",")
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean)
+          .join(","),
+        updatedAt: new Date().toISOString(),
+        updatedBy: req.user?.uid || "",
+      };
+
+      await documents.upsertDocument({
+        path: "config/google_oauth",
+        collectionPath: "config",
+        documentId: "google_oauth",
+        parentPath: null,
+        data,
+      });
+      res.json({ ok: true, config: data });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/admin/oauth/okta", requireAuthenticated, requireRoles(ADMIN_ROLES), async (_req, res, next) => {
+    try {
+      const config = await getOktaOAuthConfig();
+      res.json({
+        ok: true,
+        config: {
+          enabled: Boolean(config.enabled),
+          issuer: config.issuer,
+          clientId: config.clientId,
+          redirectUri: config.redirectUri,
+          autoProvision: Boolean(config.autoProvision),
+          defaultRole: config.defaultRole || "visitante",
+          allowedDomains: config.allowedDomains.join(","),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put("/api/admin/oauth/okta", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+    try {
+      const data = {
+        enabled: req.body?.enabled === true,
+        issuer: String(req.body?.issuer || "").trim().replace(/\/+$/, ""),
+        clientId: String(req.body?.clientId || "").trim(),
+        redirectUri: String(req.body?.redirectUri || "").trim(),
+        autoProvision: req.body?.autoProvision === true,
+        defaultRole: "visitante",
+        allowedDomains: String(req.body?.allowedDomains || "")
+          .split(",")
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean)
+          .join(","),
+        updatedAt: new Date().toISOString(),
+        updatedBy: req.user?.uid || "",
+      };
+
+      await documents.upsertDocument({
+        path: "config/okta_oauth",
+        collectionPath: "config",
+        documentId: "okta_oauth",
+        parentPath: null,
+        data,
+      });
+      res.json({ ok: true, config: data });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get(
     "/api/admin/email/config",
     requireAuthenticated,
@@ -1164,6 +1911,334 @@ function createApp() {
       }
     },
   );
+
+  app.get("/api/insumos/requisicoes", requireAuthenticated, async (req, res, next) => {
+    try {
+      await expireOverdueInsumosRequests();
+      const manager = isInsumosManager(req.user);
+      const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
+      const offset = Math.max(Number(req.query.offset || 0), 0);
+      const status = String(req.query.status || "").trim();
+      const params = [INSUMOS_REQUISICOES_COLLECTION];
+      const where = ["collection_path = $1"];
+
+      if (!manager) {
+        params.push(String(req.user?.uid || ""));
+        where.push(`data->>'solicitante_uid' = $${params.length}`);
+      }
+      if (status && status !== "todos") {
+        params.push(status);
+        where.push(`data->>'status' = $${params.length}`);
+      }
+
+      const whereSql = where.join(" and ");
+      const countResult = await db.query(
+        `select count(*)::int as total from app_documents where ${whereSql}`,
+        params,
+      );
+      const result = await db.query(
+        `select path, document_id as "documentId", data
+           from app_documents
+          where ${whereSql}
+          order by coalesce(data->>'atualizado_em', data->>'criado_em') desc, document_id desc
+          limit $${params.length + 1} offset $${params.length + 2}`,
+        [...params, limit, offset],
+      );
+
+      res.json({
+        ok: true,
+        items: result.rows.map(normalizeInsumosRequestRow),
+        total: countResult.rows[0]?.total || 0,
+        limit,
+        offset,
+        canManage: manager,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/insumos/requisicoes", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+    try {
+      const produtoId = String(req.body?.produtoId || req.body?.produto_id || "").trim();
+      const quantidade = normalizeRequestQuantity(req.body?.quantidade);
+      const observacao = String(req.body?.observacao || "").trim();
+      if (!produtoId) {
+        res.status(400).json({ error: "Produto obrigatorio." });
+        return;
+      }
+      if (quantidade <= 0) {
+        res.status(400).json({ error: "Quantidade deve ser maior que zero." });
+        return;
+      }
+
+      const produto = await documents.getDocument(`${INSUMOS_PRODUTOS_COLLECTION}/${produtoId}`);
+      if (!produto || String(produto.data?.status || "ativo") === "excluido") {
+        res.status(404).json({ error: "Produto nao encontrado." });
+        return;
+      }
+      if (String(produto.data?.status || "ativo") !== "ativo") {
+        res.status(400).json({ error: "Produto inativo nao pode ser solicitado." });
+        return;
+      }
+      const estoqueAtual = normalizeStockNumber(produto.data?.estoque_atual);
+      if (quantidade > estoqueAtual) {
+        res.status(400).json({ error: `Estoque insuficiente. Disponivel: ${estoqueAtual} ${produto.data?.unidade || ""}.` });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const documentId = crypto.randomUUID();
+      const data = {
+        id: documentId,
+        protocolo: buildInsumosRequestProtocol(),
+        status: "pendente",
+        produto_id: produtoId,
+        produto_nome: produto.data?.nome || "Insumo",
+        unidade: produto.data?.unidade || "Unidade",
+        categoria: produto.data?.categoria || "",
+        quantidade,
+        observacao,
+        solicitante_uid: req.user?.uid || "",
+        solicitante_nome: getUserDisplayName(req.user),
+        solicitante_email: getUserEmail(req.user),
+        solicitante_role: normalizeUserRole(req.user?.role),
+        criado_em: now,
+        atualizado_em: now,
+        auditoria: addInsumosAudit({}, {
+          acao: "criou",
+          usuario_uid: req.user?.uid || "",
+          usuario_nome: getUserDisplayName(req.user),
+          observacao: `Solicitou ${quantidade} ${produto.data?.unidade || ""}.`,
+        }),
+      };
+
+      await documents.upsertDocument({
+        path: insumosRequestPath(documentId),
+        collectionPath: INSUMOS_REQUISICOES_COLLECTION,
+        documentId,
+        parentPath: null,
+        data,
+      });
+      res.json({ ok: true, item: { id: documentId, ...data } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/insumos/requisicoes/:id/aprovar", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+    if (!isInsumosManager(req.user)) {
+      res.status(403).json({ error: "Permissao insuficiente." });
+      return;
+    }
+    const client = await db.connect();
+    let updatedRequest = null;
+    try {
+      await client.query("begin");
+      const request = await getDocumentForUpdate(client, insumosRequestPath(req.params.id));
+      if (!request) {
+        await client.query("rollback");
+        res.status(404).json({ error: "Requisicao nao encontrada." });
+        return;
+      }
+      const data = request.data || {};
+      if (data.status !== "pendente") {
+        await client.query("rollback");
+        res.status(400).json({ error: "Apenas requisicoes pendentes podem ser aprovadas." });
+        return;
+      }
+      const productPath = `${INSUMOS_PRODUTOS_COLLECTION}/${data.produto_id}`;
+      const produto = await getDocumentForUpdate(client, productPath);
+      if (!produto) {
+        await client.query("rollback");
+        res.status(404).json({ error: "Produto nao encontrado." });
+        return;
+      }
+      const productData = produto.data || {};
+      const quantidade = normalizeRequestQuantity(data.quantidade);
+      const estoqueAtual = normalizeStockNumber(productData.estoque_atual);
+      if (quantidade > estoqueAtual) {
+        await client.query("rollback");
+        res.status(400).json({ error: `Estoque insuficiente. Disponivel: ${estoqueAtual} ${productData.unidade || ""}.` });
+        return;
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+      await updateDocumentData(client, productPath, {
+        ...productData,
+        estoque_atual: estoqueAtual - quantidade,
+        atualizado_em: now.toISOString(),
+        atualizado_por: getUserDisplayName(req.user),
+      });
+
+      updatedRequest = {
+        ...data,
+        status: "aprovada_aguardando_retirada",
+        aprovado_em: now.toISOString(),
+        aprovado_por_uid: req.user?.uid || "",
+        aprovado_por_nome: getUserDisplayName(req.user),
+        expira_em: expiresAt,
+        atualizado_em: now.toISOString(),
+        auditoria: addInsumosAudit(data, {
+          acao: "aprovou",
+          usuario_uid: req.user?.uid || "",
+          usuario_nome: getUserDisplayName(req.user),
+          observacao: `Estoque reservado por 24h. Expira em ${formatSaoPauloDateTime(expiresAt)}.`,
+        }),
+      };
+      await updateDocumentData(client, request.path, updatedRequest);
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback").catch(() => null);
+      next(error);
+      return;
+    } finally {
+      client.release();
+    }
+
+    if (updatedRequest?.solicitante_email) {
+      emailService.sendInsumosRequestApprovedEmail({
+        to: updatedRequest.solicitante_email,
+        requisicao: updatedRequest,
+      }).catch((error) => {
+        console.error("[insumos] Falha ao enviar e-mail de requisicao aprovada:", error?.message || error);
+      });
+    }
+    res.json({ ok: true, item: { id: req.params.id, ...updatedRequest } });
+  });
+
+  app.post("/api/insumos/requisicoes/:id/rejeitar", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+    if (!isInsumosManager(req.user)) {
+      res.status(403).json({ error: "Permissao insuficiente." });
+      return;
+    }
+    try {
+      const item = await documents.getDocument(insumosRequestPath(req.params.id));
+      if (!item) {
+        res.status(404).json({ error: "Requisicao nao encontrada." });
+        return;
+      }
+      const data = item.data || {};
+      if (data.status !== "pendente") {
+        res.status(400).json({ error: "Apenas requisicoes pendentes podem ser rejeitadas." });
+        return;
+      }
+      const now = new Date().toISOString();
+      const updated = {
+        ...data,
+        status: "rejeitada",
+        rejeitado_em: now,
+        rejeitado_por_uid: req.user?.uid || "",
+        rejeitado_por_nome: getUserDisplayName(req.user),
+        motivo_rejeicao: String(req.body?.motivo || "").trim(),
+        atualizado_em: now,
+        auditoria: addInsumosAudit(data, {
+          acao: "rejeitou",
+          usuario_uid: req.user?.uid || "",
+          usuario_nome: getUserDisplayName(req.user),
+          observacao: String(req.body?.motivo || "Sem motivo informado.").trim(),
+        }),
+      };
+      await documents.upsertDocument({
+        path: item.path,
+        collectionPath: INSUMOS_REQUISICOES_COLLECTION,
+        documentId: item.documentId,
+        parentPath: null,
+        data: updated,
+      });
+      res.json({ ok: true, item: { id: item.documentId, ...updated } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/insumos/requisicoes/:id/entregar", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+    if (!isInsumosManager(req.user)) {
+      res.status(403).json({ error: "Permissao insuficiente." });
+      return;
+    }
+    const client = await db.connect();
+    let updatedRequest = null;
+    try {
+      await client.query("begin");
+      const request = await getDocumentForUpdate(client, insumosRequestPath(req.params.id));
+      if (!request) {
+        await client.query("rollback");
+        res.status(404).json({ error: "Requisicao nao encontrada." });
+        return;
+      }
+      const data = request.data || {};
+      if (data.status !== "aprovada_aguardando_retirada") {
+        await client.query("rollback");
+        res.status(400).json({ error: "Apenas requisicoes aprovadas aguardando retirada podem ser entregues." });
+        return;
+      }
+      const now = new Date().toISOString();
+      const retiradaId = crypto.randomUUID();
+      const retirada = {
+        produto_id: data.produto_id,
+        produto_nome: data.produto_nome,
+        unidade: data.unidade,
+        categoria: data.categoria || "",
+        quantidade: normalizeRequestQuantity(data.quantidade),
+        responsavel: data.solicitante_nome,
+        responsavel_uid: data.solicitante_uid || "",
+        setor: data.solicitante_role || "Solicitacao",
+        observacao: `Retirada vinculada ao protocolo ${data.protocolo}. ${String(req.body?.observacao || "").trim()}`.trim(),
+        retirado_em: now,
+        criado_em: now,
+        criado_por: getUserDisplayName(req.user),
+        estoque_antes: null,
+        estoque_depois: null,
+        requisicao_id: request.documentId,
+        protocolo: data.protocolo,
+      };
+      await insertDocumentData(client, {
+        path: `${INSUMOS_RETIRADAS_COLLECTION}/${retiradaId}`,
+        collectionPath: INSUMOS_RETIRADAS_COLLECTION,
+        documentId: retiradaId,
+        data: retirada,
+      });
+
+      updatedRequest = {
+        ...data,
+        status: "retirada",
+        retirado_em: now,
+        retirado_por_uid: req.user?.uid || "",
+        retirado_por_nome: getUserDisplayName(req.user),
+        retirada_id: retiradaId,
+        atualizado_em: now,
+        auditoria: addInsumosAudit(data, {
+          acao: "entregou",
+          usuario_uid: req.user?.uid || "",
+          usuario_nome: getUserDisplayName(req.user),
+          observacao: "Material entregue ao solicitante e contabilizado como retirada.",
+        }),
+      };
+      await updateDocumentData(client, request.path, updatedRequest);
+      await client.query("commit");
+      res.json({ ok: true, item: { id: request.documentId, ...updatedRequest }, retirada: { id: retiradaId, ...retirada } });
+    } catch (error) {
+      await client.query("rollback").catch(() => null);
+      next(error);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/insumos/requisicoes/expirar", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+    if (!isInsumosManager(req.user)) {
+      res.status(403).json({ error: "Permissao insuficiente." });
+      return;
+    }
+    try {
+      const items = await expireOverdueInsumosRequests();
+      res.json({ ok: true, expiradas: items.length, items });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   app.get("/api/documents", async (req, res, next) => {
     try {
@@ -1369,6 +2444,33 @@ function createApp() {
     },
   );
 
+  app.get(
+    "/api/admin/users",
+    requireAuthenticated,
+    async (req, res, next) => {
+      try {
+        if (!canViewUsers(req.user)) {
+          res.status(403).json({ error: "Permissao insuficiente." });
+          return;
+        }
+
+        const users = await listManagedUsersForAdmin(req.user);
+        const totalOAuth = users.filter((user) => user.criado_por_oauth || user.login_provider === "google").length;
+        res.json({
+          ok: true,
+          items: users,
+          total: users.length,
+          stats: {
+            totalOAuth,
+            totalNeverAccessed: users.filter((user) => !(user.ultimo_login || user.last_login_at)).length,
+          },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.post(
     "/api/admin/users",
     requireAuthenticated,
@@ -1390,7 +2492,7 @@ function createApp() {
           res.status(400).json({ error: "Nome, e-mail e perfil sao obrigatorios." });
           return;
         }
-        if (!USER_MANAGED_ROLES.includes(role)) {
+        if (!(await isKnownManagedRole(role))) {
           res.status(400).json({ error: "Cargo invalido para novo usuario." });
           return;
         }
@@ -1449,6 +2551,45 @@ function createApp() {
     },
   );
 
+  app.get(
+    "/api/admin/roles",
+    requireAuthenticated,
+    requireAnyPermission(["configuracao.cargos_permissoes.view", "configuracao.cargos_permissoes.manage", "manage_roles"], ADMIN_ROLES),
+    async (_req, res, next) => {
+      try {
+        res.json({
+          ok: true,
+          roles: await rolePermissions.listRoles(),
+          permissions: await rolePermissions.listPermissionCatalog(),
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.put(
+    "/api/admin/roles/:roleId",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(["configuracao.cargos_permissoes.manage", "manage_roles"], ADMIN_ROLES),
+    async (req, res, next) => {
+      try {
+        const roleId = normalizeUserRole(req.params.roleId);
+        await rolePermissions.saveRole({
+          id: roleId,
+          name: req.body?.name,
+          description: req.body?.description,
+          active: req.body?.active !== false,
+          permissions: req.body?.permissions || [],
+        });
+        res.json({ ok: true, role: roleId });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.put(
     "/api/admin/users/:uid",
     requireAuthenticated,
@@ -1471,7 +2612,7 @@ function createApp() {
           nextBody.regional = getUserRegional(req.user);
         }
         const nextRole = nextBody.role !== undefined ? normalizeUserRole(nextBody.role) : "";
-        if (nextRole && !USER_MANAGED_ROLES.includes(nextRole)) {
+        if (nextRole && !(await isKnownManagedRole(nextRole))) {
           res.status(400).json({ error: "Cargo invalido para usuario." });
           return;
         }
@@ -1711,6 +2852,47 @@ function createApp() {
   );
 
   app.get(
+    "/api/admin/senior/config",
+    requireAuthenticated,
+    requireAnyPermission(["manage_integracoes", "configuracao.senior.view", "configuracao.senior.manage"], ADMIN_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await seniorIntegration.readConfig({ sanitized: true }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.put(
+    "/api/admin/senior/config",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(["manage_integracoes", "configuracao.senior.manage"], ADMIN_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await seniorIntegration.saveConfig(req.body || {}, req.user?.profile || req.user || {}));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/senior/test",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(["manage_integracoes", "configuracao.senior.manage"], ADMIN_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await seniorIntegration.testConnection());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
     "/api/admin/hubsoft/sync/jobs/:jobId",
     requireAuthenticated,
     requireRoles(ADMIN_ROLES),
@@ -1926,6 +3108,169 @@ function createApp() {
   );
 
   app.get(
+    "/api/tecnicos/auditoria/bolsa",
+    requireAuthenticated,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await tecnicosBolsaAuditoria.getDashboard(req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/tecnicos/auditoria/bolsa/config",
+    requireAuthenticated,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (_req, res, next) => {
+      try {
+        res.json(await tecnicosBolsaAuditoria.readConfig({ sanitized: true }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.put(
+    "/api/tecnicos/auditoria/bolsa/config",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS, ["admin", "supervisor"]),
+    async (req, res, next) => {
+      try {
+        res.json(await tecnicosBolsaAuditoria.saveConfig(req.body || {}, req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/tecnicos/auditoria/bolsa/logs",
+    requireAuthenticated,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await tecnicosBolsaAuditoria.listLogs({
+          page: req.query.page,
+          limit: req.query.limit,
+          user: req.user,
+        }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/tecnicos/auditoria/bolsa/relatorios",
+    requireAuthenticated,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await tecnicosBolsaAuditoria.getReports({ user: req.user, query: req.query }));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/tecnicos/auditoria/bolsa/relatorios/refresh",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res) => {
+      try {
+        res.status(202).json(await tecnicosBolsaAuditoria.startReportRefreshJob(req.user, req.body || {}));
+      } catch (error) {
+        console.error("[tecnicosBolsaAuditoria] Falha ao atualizar movimentacoes do relatorio:", error?.message || error);
+        res.status(error?.statusCode || error?.status || 500).json({
+          error: error?.message || "Falha ao atualizar movimentacoes do relatorio.",
+        });
+      }
+    },
+  );
+
+  app.post(
+    "/api/tecnicos/auditoria/bolsa/relatorios/email",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        res.json(await tecnicosBolsaAuditoria.sendReportByEmail(req.body || {}, req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/tecnicos/auditoria/bolsa/refresh",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        res.status(202).json(await tecnicosBolsaAuditoria.startRefreshAllJob(req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/tecnicos/auditoria/bolsa/jobs/:jobId",
+    requireAuthenticated,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        const job = await tecnicosBolsaAuditoria.getRefreshJob(req.params.jobId);
+        if (!job) {
+          res.status(404).json({ error: "Atualização não encontrada." });
+          return;
+        }
+        res.json(job);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/tecnicos/auditoria/bolsa/refresh/:id",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS, TECNICOS_BOLSA_AUDITORIA_ROLES),
+    async (req, res, next) => {
+      try {
+        const result = await tecnicosBolsaAuditoria.refreshBySnapshotId(req.params.id, req.user);
+        broadcastRealtime("tecnicos_bolsa_auditoria", result);
+        res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/tecnicos/auditoria/bolsa/run-daily",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireAnyPermission(TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS, ["admin", "supervisor"]),
+    async (req, res, next) => {
+      try {
+        res.status(202).json(await tecnicosBolsaAuditoria.startRefreshAllJob(req.user));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
     "/api/logistica/config",
     requireAuthenticated,
     requireRoles(FULL_OPERATION_ROLES),
@@ -2009,6 +3354,13 @@ function createApp() {
           data,
         });
         await ensureEmpresaDriveFolderIfConfigured(collectionPath, documentId, req.user);
+        await handleInsumosLowStockAfterWrite({
+          collectionPath,
+          documentPath: path,
+          documentId,
+          data,
+          existing: null,
+        });
         res.json({ ok: true, path, documentId });
       } catch (error) {
         next(error);
@@ -2070,6 +3422,13 @@ function createApp() {
           data,
         });
         await ensureEmpresaDriveFolderIfConfigured(collectionPath, parts.at(-1), req.user);
+        await handleInsumosLowStockAfterWrite({
+          collectionPath,
+          documentPath,
+          documentId: parts.at(-1),
+          data,
+          existing,
+        });
         res.json({ ok: true, path: documentPath, documentId: parts.at(-1) });
       } catch (error) {
         next(error);
@@ -2240,6 +3599,24 @@ function createApp() {
     },
   );
 
+  app.post(
+    "/api/imports/metas/base-config",
+    requireAuthenticated,
+    requireCsrfToken,
+    requireRoles(FULL_OPERATION_ROLES),
+    async (req, res, next) => {
+      try {
+        const result = await operationalImports.saveMetasBaseConfig(req.body?.config || {}, req.user);
+        broadcastRealtime("metas", result);
+        broadcastRealtime("dashboard", result);
+        broadcastRealtime("acompanhamento", result);
+        res.json(result);
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.get("/api/imports/match/config", requireAuthenticated, async (req, res, next) => {
     try {
       res.json(await operationalImports.getMatchConfig());
@@ -2268,7 +3645,7 @@ function createApp() {
     }
   });
 
-  app.get("/api/mensageria/evolution/status", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.get("/api/mensageria/evolution/status", requireAuthenticated, requireAnyPermission(["mensageria.api.view", "mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       res.json({
         config: await evolutionMessaging.getConfig(),
@@ -2281,7 +3658,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/connect", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/connect", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       res.json(await evolutionMessaging.createOrConnectInstance());
     } catch (error) {
@@ -2289,7 +3666,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/disconnect", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/disconnect", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       res.json(await evolutionMessaging.logoutInstance());
     } catch (error) {
@@ -2297,7 +3674,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/webhook", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/webhook", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       if (req.body?.webhookUrl) {
         await evolutionMessaging.saveConfigPatch({ evolutionWebhookUrl: req.body.webhookUrl });
@@ -2308,7 +3685,7 @@ function createApp() {
     }
   });
 
-  app.get("/api/mensageria/evolution/webhook", requireAuthenticated, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.get("/api/mensageria/evolution/webhook", requireAuthenticated, requireAnyPermission(["mensageria.api.view", "mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       res.json(await evolutionMessaging.getWebhookInfo());
     } catch (error) {
@@ -2316,7 +3693,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/run", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/run", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.fila.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       res.json(await evolutionMessaging.processQueueOnce({ manual: true }));
     } catch (error) {
@@ -2324,7 +3701,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/test", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/test", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.api.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       res.json(await evolutionMessaging.sendTestMessage(req.body || {}, req.user));
     } catch (error) {
@@ -2332,7 +3709,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/pause", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/pause", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.fila.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       await evolutionMessaging.saveConfigPatch({ evolutionPaused: true });
       evolutionMessaging.resetNextRunAt();
@@ -2342,7 +3719,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/mensageria/evolution/resume", requireAuthenticated, requireCsrfToken, requireRoles(ADMIN_ROLES), async (req, res, next) => {
+  app.post("/api/mensageria/evolution/resume", requireAuthenticated, requireCsrfToken, requireAnyPermission(["mensageria.fila.manage", "manage_mensageria"], ADMIN_ROLES), async (req, res, next) => {
     try {
       const config = await evolutionMessaging.getConfig();
       const provider = String(config.whatsappProvider || "evolution");
@@ -2351,7 +3728,6 @@ function createApp() {
         autoSend: true,
         evolutionEnabled: provider === "evolution" ? true : Boolean(config.evolutionEnabled),
         officialWhatsappEnabled: provider === "official_whatsapp" ? true : Boolean(config.officialWhatsappEnabled),
-        zapiEnabled: provider === "zapi" ? true : Boolean(config.zapiEnabled),
       });
       evolutionMessaging.wakeQueueWorker();
       res.json({ ok: true, paused: false, autoSend: true, worker: evolutionMessaging.getStatus() });
@@ -2522,29 +3898,6 @@ function createApp() {
     }
   });
 
-  app.post("/api/webhooks/zapi", async (req, res, next) => {
-    try {
-      if (!verifyWebhookSecret(req, res, "ZAPI_WEBHOOK_SECRET", "Z-API")) {
-        return;
-      }
-      const confirmationResult = await agendamentoConfirmacao.registerIncomingResponse(req.body || {}).catch((error) => {
-        console.warn("[confirmacao-agendamentos] Falha ao processar resposta:", error?.message || error);
-        return null;
-      });
-      if (confirmationResult?.confirmed) {
-        res.json({ ok: true, confirmation: confirmationResult });
-        return;
-      }
-      const result = await evolutionMessaging.registerCallback({
-        ...(req.body || {}),
-        webhookEvent: req.body?.type || req.body?.event || "zapi",
-      });
-      res.json(result);
-    } catch (error) {
-      next(error);
-    }
-  });
-
   app.get("/api/webhooks/whatsapp-official", async (req, res, next) => {
     try {
       const config = await evolutionMessaging.getConfig();
@@ -2623,6 +3976,30 @@ function createApp() {
     }
   });
 
+  if (!app.locals.insumosExpirationTimer) {
+    const timer = setInterval(() => {
+      expireOverdueInsumosRequests().catch((error) => {
+        console.error("[insumos] Falha ao expirar requisicoes vencidas:", error?.message || error);
+      });
+    }, Number(process.env.INSUMOS_REQUEST_EXPIRATION_INTERVAL_MS || 10 * 60 * 1000));
+    timer.unref?.();
+    app.locals.insumosExpirationTimer = timer;
+  }
+
+  if (!app.locals.tecnicosBolsaAuditoriaTimer) {
+    const timer = setInterval(() => {
+      tecnicosBolsaAuditoria.runDailyIfDue({
+        uid: "system",
+        role: "admin",
+        profile: { nome: "Rotina automática", role: "admin" },
+      }).catch((error) => {
+        console.error("[tecnicosBolsaAuditoria] Falha na rotina diaria:", error?.message || error);
+      });
+    }, Number(process.env.TECNICOS_BOLSA_AUDITORIA_INTERVAL_MS || 60 * 1000));
+    timer.unref?.();
+    app.locals.tecnicosBolsaAuditoriaTimer = timer;
+  }
+
   app.use((error, req, res, next) => {
     if (res.headersSent) {
       next(error);
@@ -2639,3 +4016,4 @@ function createApp() {
 module.exports = {
   createApp,
 };
+

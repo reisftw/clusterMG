@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+﻿import React, { useMemo } from "react";
 import { agruparPorRegional, totalCidade } from "../utils/mapaUtils";
 
 const CORES = [
@@ -72,3 +72,4 @@ export default function MapaGrafico({ ordens = [], seriesOverride = null }) {
     </div>
   );
 }
+

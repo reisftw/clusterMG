@@ -1,114 +1,74 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import { Target, TrendingUp, Users, MapPin } from "lucide-react";
 import { useMetasDashboard } from "../hooks/useMetasDashboard";
-import { buildMetasProjection } from "../../../utils/metasProjection";
-
-const MONTHORDER = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
-
-function calcDiasUteisMes(mes, feriadosSet) {
-  const mIdx = MONTHORDER.indexOf(mes);
-  if (mIdx < 0) return 22;
-  const m = mIdx + 1;
-  const ano = new Date().getFullYear();
-  const diasNoMes = new Date(ano, m, 0).getDate();
-  let count = 0;
-  for (let d = 1; d <= diasNoMes; d++) {
-    const dt = new Date(ano, m - 1, d);
-    if (dt.getDay() === 0 || dt.getDay() === 6) continue;
-    const key = `${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    if (feriadosSet.has(key)) continue;
-    count++;
-  }
-  return count;
-}
-
-function isDiaUtil(mes, dia, feriadosSet) {
-  const mIdx = MONTHORDER.indexOf(mes);
-  if (mIdx < 0) return true;
-  const m = mIdx + 1;
-  const ano = new Date().getFullYear();
-  const dt = new Date(ano, m - 1, dia);
-  if (dt.getDay() === 0 || dt.getDay() === 6) return false;
-  const key = `${String(m).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-  return !feriadosSet.has(key);
-}
+import { buildMonthProjection } from "../hooks/useMetasResumoMensal";
+import { recalcularSaldoDiario } from "../utils/metasSaldo";
+import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
+import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 
 const MetasDashboardWidget = () => {
   const { metaMes, loading, feriadosSet } = useMetasDashboard();
 
   const { metaDiaria, diasUteis, saldoRecalculado, projecao } = useMemo(() => {
-    if (!metaMes?.saldoDiario?.length)
-      return { metaDiaria: 0, diasUteis: 0, saldoRecalculado: [], projecao: null };
+    if (!metaMes) {
+      return {
+        metaDiaria: 0,
+        diasUteis: 0,
+        saldoRecalculado: [],
+        projecao: null,
+      };
+    }
 
-    const diasUteis = calcDiasUteisMes(metaMes.mes, feriadosSet);
-    const metaDiaria = diasUteis > 0 ? Math.ceil(metaMes.meta / diasUteis) : 0;
+    const {
+      diasUteis,
+      metaDiaria,
+      saldoDiario: saldoRecalculado,
+    } = recalcularSaldoDiario(metaMes, feriadosSet);
 
-    let saldoMes = 0;
-    const saldoRecalculado = metaMes.saldoDiario.map((row) => {
-      const util = isDiaUtil(metaMes.mes, row.dia, feriadosSet);
-      const metaDia = util ? metaDiaria : 0;
-      const saldoDia = row.totalDia - metaDia;
-      saldoMes += saldoDia;
-      return { ...row, util, metaDia, saldoDia, saldoMes };
-    });
+    if (!metaMes?.saldoDiario?.length) {
+      return { metaDiaria, diasUteis, saldoRecalculado: [], projecao: null };
+    }
 
-    const projecao = buildMetasProjection({
-      month: metaMes.mes,
-      saldoDiario: metaMes.saldoDiario,
-      totalOS: metaMes.totalOS,
-      meta: metaMes.meta,
-      cancelamentos: metaMes.cancelamentos,
-      feriadosSet,
-    });
+    const projecao = buildMonthProjection(metaMes, feriadosSet);
 
     return { metaDiaria, diasUteis, saldoRecalculado, projecao };
   }, [metaMes, feriadosSet]);
 
-  if (loading)
+  if (loading) {
     return (
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <p className="text-xs text-gray-400">Carregando metas...</p>
+        <RetorninhoLoader compact size="sm" title="Carregando metas..." />
       </div>
     );
+  }
 
-  if (!metaMes)
+  if (!metaMes) {
     return (
       <div className="bg-white rounded-xl border border-gray-100 p-5">
         <p className="text-xs text-gray-400">
-          Nenhuma meta carregada para o mês atual.
+          Nenhuma meta carregada para o mes atual.
         </p>
       </div>
     );
+  }
 
-  const sazonal = metaMes.metaSazonal ?? 80;
+  const metaModeLabel = metaMes.metaModeLabel || "Meta sazonal";
   const cancelamentos = Math.round(metaMes.cancelamentos ?? 0);
   const metaOS = Math.round(metaMes.meta);
+  const metaBrasilTecpar = calcularMetaBrasilTecpar({
+    cancelamentos,
+    totalOS: metaMes.totalOS,
+  });
   const falta = Math.max(0, metaMes.meta - metaMes.totalOS);
   const topTec = metaMes.technicians?.[0];
   const topReg = metaMes.regionais?.[0];
-  const atingido = parseFloat(metaMes.percentAchieved) >= sazonal;
-
+  const atingido = parseFloat(metaMes.percentAchieved) >= 100;
   const ritmoAtual = projecao?.ritmoAtual ?? 0;
-
   const saldoMesAtual =
     saldoRecalculado[saldoRecalculado.length - 1]?.saldoMes ?? 0;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4">
-      {/* Cabeçalho */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -116,7 +76,7 @@ const MetasDashboardWidget = () => {
           </div>
           <div>
             <p className="text-xs text-gray-400 uppercase font-semibold">
-              Meta do mês
+              Meta do mes
             </p>
             <p className="text-sm font-bold text-gray-900">
               {metaMes.mes} 2026
@@ -140,8 +100,7 @@ const MetasDashboardWidget = () => {
         </div>
       </div>
 
-      {/* Números principais */}
-      <div className="grid grid-cols-3 gap-3 text-xs">
+      <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
         <div>
           <p className="text-[11px] text-gray-400 font-semibold mb-1">
             Cancelamentos
@@ -152,10 +111,18 @@ const MetasDashboardWidget = () => {
         </div>
         <div>
           <p className="text-[11px] text-gray-400 font-semibold mb-1">
-            Meta sazonal
+            {metaModeLabel}
           </p>
           <p className="text-base font-bold text-blue-700">
             {metaOS.toLocaleString("pt-BR")}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-gray-400 font-semibold mb-1">
+            Brasil Tecpar 65%
+          </p>
+          <p className="text-base font-bold text-amber-700">
+            {metaBrasilTecpar.meta.toLocaleString("pt-BR")}
           </p>
         </div>
         <div>
@@ -168,7 +135,6 @@ const MetasDashboardWidget = () => {
         </div>
       </div>
 
-      {/* Status */}
       <div className="text-[11px] text-gray-500">
         {falta > 0 ? (
           <span>
@@ -180,16 +146,29 @@ const MetasDashboardWidget = () => {
           </span>
         ) : (
           <span className="font-semibold text-green-600">
-            Meta atingida para o mês. 🎉
+            Meta atingida para o mes.
           </span>
         )}
       </div>
 
-      {/* Ritmo, meta diária, saldo e dias úteis */}
+      <div
+        className={`rounded-2xl border px-3 py-2 text-[11px] ${
+          metaBrasilTecpar.atingiu
+            ? "border-green-100 bg-green-50 text-green-700"
+            : "border-amber-100 bg-amber-50 text-amber-800"
+        }`}
+      >
+        Brasil Tecpar:{" "}
+        <strong>{metaBrasilTecpar.percentAchieved}%</strong> da meta fixa de 65%
+        {metaBrasilTecpar.atingiu
+          ? " atingida."
+          : ` · faltam ${metaBrasilTecpar.falta.toLocaleString("pt-BR")} O.S.`}
+      </div>
+
       <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 text-xs">
         <div>
           <p className="text-[11px] text-gray-400 font-semibold uppercase mb-1">
-            Meta diária
+            Meta diaria
           </p>
           <p className="text-base font-bold text-gray-900">
             {metaDiaria}{" "}
@@ -213,7 +192,7 @@ const MetasDashboardWidget = () => {
         </div>
         <div>
           <p className="text-[11px] text-gray-400 font-semibold uppercase mb-1">
-            Saldo do mês
+            Saldo do mes
           </p>
           <p
             className={`text-base font-bold ${saldoMesAtual >= 0 ? "text-green-600" : "text-red-500"}`}
@@ -223,7 +202,7 @@ const MetasDashboardWidget = () => {
         </div>
         <div>
           <p className="text-[11px] text-gray-400 font-semibold uppercase mb-1">
-            Dias úteis/mês
+            Dias uteis/mes
           </p>
           <p className="text-base font-bold text-gray-900">
             {diasUteis}{" "}
@@ -232,7 +211,6 @@ const MetasDashboardWidget = () => {
         </div>
       </div>
 
-      {/* Top técnico e regional */}
       <div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 mt-1 text-xs">
         <div className="flex items-start gap-2">
           <div className="w-7 h-7 rounded-full bg-orange-50 flex items-center justify-center mt-0.5">
@@ -240,7 +218,7 @@ const MetasDashboardWidget = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] text-gray-400 font-semibold uppercase">
-              Top Técnico
+              Top tecnico
             </p>
             <p className="text-xs font-semibold text-gray-900 truncate">
               {topTec?.name ?? "—"}
@@ -256,7 +234,7 @@ const MetasDashboardWidget = () => {
           </div>
           <div className="min-w-0">
             <p className="text-[11px] text-gray-400 font-semibold uppercase">
-              Top Regional
+              Top regional
             </p>
             <p className="text-xs font-semibold text-gray-900 truncate">
               {topReg?.name ?? "—"}
@@ -272,3 +250,4 @@ const MetasDashboardWidget = () => {
 };
 
 export default MetasDashboardWidget;
+

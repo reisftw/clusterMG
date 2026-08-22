@@ -1,4 +1,4 @@
-// src/pages/Mapa/utils/mapaWhatsapp.js
+﻿// src/pages/Mapa/utils/mapaWhatsapp.js
 
 export function formatarRegionalWhatsapp(regional, cidades) {
   const linhas = [];

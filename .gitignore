@@ -11,6 +11,22 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tgz
+
+# Generated reports and local tool output
+coverage
+.nyc_output
+.scannerwork
+.tmp-swagger
+tmp
+output
+outputs
+uploads
+RELATORIO_QUALIDADE.*
+relatorio_*.csv
+relatorio_*.pdf
+relatorio-avaliacao-sistema.pdf
+sonar-project.properties.txt
 
 # Editor directories and files
 .vscode/*
@@ -26,4 +42,3 @@ dist-ssr
 # Environment files
 .env*
 !.env.example
-!functions/.env.example

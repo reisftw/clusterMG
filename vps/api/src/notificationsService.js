@@ -106,31 +106,41 @@ function userEmpresaId(user = {}) {
   return normalizeText(user.empresaId || user.empresa_id || user.profile?.empresaId || user.profile?.empresa_id);
 }
 
-function canSeeNotification(data = {}, user = {}) {
-  const targets = data.targets || {};
-  const roles = Array.isArray(targets.roles) ? targets.roles.map((role) => String(role).toLowerCase()) : [];
-  const regionals = Array.isArray(targets.regionais) ? targets.regionais : [];
-  const empresas = Array.isArray(targets.empresas) ? targets.empresas : [];
-  const users = Array.isArray(targets.users) ? targets.users : [];
+function normalizeTargets(targets = {}) {
+  return {
+    roles: Array.isArray(targets.roles) ? targets.roles.map((role) => String(role).toLowerCase()) : [],
+    regionals: Array.isArray(targets.regionais) ? targets.regionais : [],
+    empresas: Array.isArray(targets.empresas) ? targets.empresas : [],
+    users: Array.isArray(targets.users) ? targets.users : [],
+  };
+}
+
+function roleCanSeeType(role, type) {
+  if (role === "admin") return true;
+  if (role === "backoffice_retirada") return RETIRADA_NOTIFICATION_TYPES.has(type);
+  if (DOCUMENT_AND_SYSTEM_ROLES.has(role)) {
+    return DOCUMENT_NOTIFICATION_TYPES.has(type) || SYSTEM_NOTIFICATION_TYPES.has(type);
+  }
+  return true;
+}
+
+function targetMatchesUser(targets, user = {}) {
   const role = userRole(user);
   const regional = normalizeComparableText(userRegional(user));
   const empresaId = userEmpresaId(user);
   const uid = userKey(user);
-  const type = normalizeText(data.type || "geral");
 
-  if (role === "admin") return true;
-
-  if (role === "backoffice_retirada") {
-    if (!RETIRADA_NOTIFICATION_TYPES.has(type)) return false;
-  } else if (DOCUMENT_AND_SYSTEM_ROLES.has(role)) {
-    if (!DOCUMENT_NOTIFICATION_TYPES.has(type) && !SYSTEM_NOTIFICATION_TYPES.has(type)) return false;
-  }
-
-  if (users.length && !users.includes(uid)) return false;
-  if (roles.length && !roles.includes(role)) return false;
-  if (regionals.length && !regionals.some((item) => normalizeComparableText(item) === regional)) return false;
-  if (empresas.length && !empresas.includes(empresaId)) return false;
+  if (targets.users.length && !targets.users.includes(uid)) return false;
+  if (targets.roles.length && !targets.roles.includes(role)) return false;
+  if (targets.regionals.length && !targets.regionals.some((item) => normalizeComparableText(item) === regional)) return false;
+  if (targets.empresas.length && !targets.empresas.includes(empresaId)) return false;
   return true;
+}
+
+function canSeeNotification(data = {}, user = {}) {
+  const role = userRole(user);
+  const type = normalizeText(data.type || "geral");
+  return roleCanSeeType(role, type) && targetMatchesUser(normalizeTargets(data.targets), user);
 }
 
 function mapNotification(row, user) {

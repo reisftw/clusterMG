@@ -2,6 +2,7 @@ const documents = require("./documents");
 const notificationsService = require("./notificationsService");
 const evolutionMessaging = require("./evolutionMessaging");
 const { broadcastRealtime } = require("./realtime");
+const { randomId } = require("./secureRandom");
 
 const CONFIG_PATH = "confirmacao_agendamentos_config/global";
 const TRACK_COLLECTION = "confirmacao_agendamentos_envios";
@@ -155,41 +156,55 @@ function render(template, params = {}) {
   return String(template || "").replace(/\{(\w+)\}/g, (_, key) => String(params[key] ?? ""));
 }
 
+function normalizeAppointmentObjectDateKey(value = {}) {
+  if (value.value) return normalizeAppointmentDateKey(value.value);
+  if (value.seconds || value._seconds) {
+    return getLocalDateKey(new Date(Number(value.seconds || value._seconds) * 1000));
+  }
+  return "";
+}
+
+function validAppointmentDateKey(key) {
+  return key && !Number.isNaN(new Date(`${key}T12:00:00`).getTime()) ? key : "";
+}
+
+function normalizeIsoAppointmentDateKey(raw) {
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!isoMatch) return "";
+  return validAppointmentDateKey(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`);
+}
+
+function normalizeBrAppointmentDateKey(raw) {
+  const brMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!brMatch) return "";
+  const key = `${brMatch[3]}-${String(brMatch[2]).padStart(2, "0")}-${String(brMatch[1]).padStart(2, "0")}`;
+  return validAppointmentDateKey(key);
+}
+
+function normalizeLongPtAppointmentDateKey(raw) {
+  const longPtMatch = normalizeText(raw).match(/^(\d{1,2})\s+de\s+([a-z]+)\.?\s+de\s+(\d{4})/);
+  if (!longPtMatch) return "";
+  const month = MONTHS_PT[longPtMatch[2]];
+  if (!month) return "";
+  const key = `${longPtMatch[3]}-${month}-${String(longPtMatch[1]).padStart(2, "0")}`;
+  return validAppointmentDateKey(key);
+}
+
 function normalizeAppointmentDateKey(value) {
   if (!value) return "";
   if (value instanceof Date) return getLocalDateKey(value);
   if (typeof value === "object") {
-    if (value.value) return normalizeAppointmentDateKey(value.value);
-    if (value.seconds || value._seconds) {
-      return getLocalDateKey(new Date(Number(value.seconds || value._seconds) * 1000));
-    }
-    return "";
+    return normalizeAppointmentObjectDateKey(value);
   }
 
   const raw = String(value).trim();
   if (!raw) return "";
 
-  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    const key = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-    return Number.isNaN(new Date(`${key}T12:00:00`).getTime()) ? "" : key;
-  }
-
-  const brMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (brMatch) {
-    const key = `${brMatch[3]}-${String(brMatch[2]).padStart(2, "0")}-${String(brMatch[1]).padStart(2, "0")}`;
-    return Number.isNaN(new Date(`${key}T12:00:00`).getTime()) ? "" : key;
-  }
-
-  const longPtMatch = normalizeText(raw).match(/^(\d{1,2})\s+de\s+([a-z]+)\.?\s+de\s+(\d{4})/);
-  if (longPtMatch) {
-    const month = MONTHS_PT[longPtMatch[2]];
-    if (!month) return "";
-    const key = `${longPtMatch[3]}-${month}-${String(longPtMatch[1]).padStart(2, "0")}`;
-    return Number.isNaN(new Date(`${key}T12:00:00`).getTime()) ? "" : key;
-  }
-
-  return "";
+  return (
+    normalizeIsoAppointmentDateKey(raw) ||
+    normalizeBrAppointmentDateKey(raw) ||
+    normalizeLongPtAppointmentDateKey(raw)
+  );
 }
 
 function appointmentDate(data = {}) {
@@ -419,7 +434,7 @@ function buildEscalationSteps(regional = {}) {
 }
 
 async function createLog(data = {}) {
-  const id = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = randomId("conf");
   await documents.upsertDocument({
     path: `${LOG_COLLECTION}/${id}`,
     collectionPath: LOG_COLLECTION,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Calendar, MapPin, Users, ChevronRight } from "lucide-react";
 import { useAgenda } from "../../agenda/hooks/useAgenda";
 import { useNavigate } from "react-router-dom";
@@ -17,8 +17,8 @@ const formatCurto = (str) => {
 
 const TIPO_DOT = {
   Viagem: "bg-blue-500",
-  Reunião: "bg-purple-500",
-  "Visita Técnica": "bg-green-500",
+  Reuniao: "bg-purple-500",
+  "Visita Tecnica": "bg-green-500",
   Treinamento: "bg-amber-500",
   Outro: "bg-gray-400",
 };
@@ -60,13 +60,12 @@ const ParticipantesTooltip = ({ participantes }) => {
 };
 
 const ProximasAgendas = () => {
-  const { eventos } = useAgenda({ preferStatic: true });
+  const { eventos } = useAgenda();
   const navigate = useNavigate();
 
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-
   const proximos = useMemo(() => {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
     return eventos
       .filter((e) => {
         const fim = parseLocal(e.data_fim || e.data_inicio);
@@ -84,7 +83,7 @@ const ProximasAgendas = () => {
           <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
             <Calendar size={16} className="text-blue-600" />
           </div>
-          <p className="text-sm font-bold text-gray-900">Próximas Agendas</p>
+          <p className="text-sm font-bold text-gray-900">Proximas Agendas</p>
         </div>
         <button
           onClick={() => navigate(ROUTES.AGENDA)}
@@ -95,7 +94,7 @@ const ProximasAgendas = () => {
       </div>
 
       {!proximos.length ? (
-        <p className="text-sm text-gray-400 text-center py-6">Nenhum evento próximo.</p>
+        <p className="text-sm text-gray-400 text-center py-6">Nenhum evento proximo.</p>
       ) : (
         <ul className="space-y-2">
           {proximos.map((e) => {
@@ -130,3 +129,4 @@ const ProximasAgendas = () => {
 };
 
 export default ProximasAgendas;
+

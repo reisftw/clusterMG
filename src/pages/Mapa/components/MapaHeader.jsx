@@ -1,14 +1,14 @@
-import React from "react";
+﻿import React from "react";
 import { calcularKPIs } from "../utils/mapaUtils";
-import { resolveFirestoreDate } from "../../../services/firestoreDate";
+import { resolveVpsDate } from "../../../services/vpsDate";
 
 function KPICard({ label, valor, corBorda, corTexto, sub }) {
   return (
     <div
-      className="bg-white border border-gray-200 rounded-2xl p-4 flex-1 min-w-[130px] shadow-sm border-t-4"
+      className="min-w-[130px] flex-1 rounded-2xl border border-gray-200 border-t-4 bg-white p-4 shadow-sm"
       style={{ borderTopColor: corBorda }}
     >
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
         {label}
       </p>
       <p
@@ -17,7 +17,7 @@ function KPICard({ label, valor, corBorda, corTexto, sub }) {
       >
         {valor.toLocaleString("pt-BR")}
       </p>
-      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      {sub ? <p className="mt-1 text-xs text-gray-400">{sub}</p> : null}
     </div>
   );
 }
@@ -26,14 +26,15 @@ export default function MapaHeader({
   ordens = [],
   ultimaAtualizacao,
   kpisOverride = null,
+  titleOverride = "Mapa de Ordens em Aberto",
+  totalLabel = "Total em Aberto",
 }) {
   const kpis = kpisOverride || calcularKPIs(ordens);
 
   const formatData = (meta) => {
-    if (!meta?.data) return "Nunca atualizado";
-    const d = resolveFirestoreDate(meta.data);
-    if (!d) return "Nunca atualizado";
-    return d.toLocaleDateString("pt-BR", {
+    const date = resolveVpsDate(meta);
+    if (!date) return "Nunca atualizado";
+    return date.toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -42,41 +43,41 @@ export default function MapaHeader({
     });
   };
 
-  const formatarPeriodo = (str) =>
-    new Date(str + "T12:00:00").toLocaleDateString("pt-BR");
+  const formatarPeriodo = (value) => {
+    if (!value) return "";
+    const date = new Date(`${value}T12:00:00`);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("pt-BR");
+  };
 
   return (
     <div className="mb-6">
-      <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">
-            🗺️ Mapa de Ordens em Aberto
-          </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <h2 className="text-xl font-bold text-gray-900">{titleOverride}</h2>
+          <p className="mt-0.5 text-xs text-gray-400">
             Última atualização:{" "}
-            <span className="text-gray-600 font-medium">
+            <span className="font-medium text-gray-600">
               {formatData(ultimaAtualizacao)}
             </span>
           </p>
-          {ultimaAtualizacao?.periodoInicio &&
-            ultimaAtualizacao?.periodoFim && (
-              <p className="text-xs text-blue-500 font-medium mt-1">
-                📅 Período filtrado:{" "}
-                <span className="font-bold">
-                  {formatarPeriodo(ultimaAtualizacao.periodoInicio)}
-                </span>{" "}
-                até{" "}
-                <span className="font-bold">
-                  {formatarPeriodo(ultimaAtualizacao.periodoFim)}
-                </span>
-              </p>
-            )}
+          {ultimaAtualizacao?.periodoInicio && ultimaAtualizacao?.periodoFim ? (
+            <p className="mt-1 text-xs font-medium text-blue-500">
+              Período filtrado:{" "}
+              <span className="font-bold">
+                {formatarPeriodo(ultimaAtualizacao.periodoInicio)}
+              </span>{" "}
+              até{" "}
+              <span className="font-bold">
+                {formatarPeriodo(ultimaAtualizacao.periodoFim)}
+              </span>
+            </p>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex flex-wrap gap-3">
         <KPICard
-          label="Total em Aberto"
+          label={totalLabel}
           valor={kpis.total}
           corBorda="#3b82f6"
           corTexto="#3b82f6"
@@ -119,3 +120,4 @@ export default function MapaHeader({
     </div>
   );
 }
+

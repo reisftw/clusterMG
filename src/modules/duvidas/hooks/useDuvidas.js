@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { getInternalStaticDataSlice } from "../../../services/internalStaticDataService";
+﻿import { useCallback, useEffect, useState } from "react";
+import {
+  getInternalSnapshotSlice,
+  SNAPSHOT_DOMAINS,
+} from "../../../services/internalStaticDataService";
 import { regenerateStaticData } from "../../../services/staticDataService";
 import {
   normalizeDuvidasContent,
@@ -18,7 +21,8 @@ export function useDuvidas() {
     setLoading(true);
     setError(null);
     try {
-      const snapshot = await getInternalStaticDataSlice(
+      const snapshot = await getInternalSnapshotSlice(
+        SNAPSHOT_DOMAINS.DASHBOARD,
         (payload) => payload?.duvidas ?? null,
         { force },
       );
@@ -67,3 +71,4 @@ export function useDuvidas() {
     salvar,
   };
 }
+

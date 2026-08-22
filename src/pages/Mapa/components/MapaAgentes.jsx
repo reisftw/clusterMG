@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -55,6 +55,14 @@ function AgenteCard({ cidade, data, maxTotal, alertaThreshold, onDrillDown }) {
     >
       <div
         onClick={() => setAberto(!aberto)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setAberto(!aberto);
+          }
+        }}
+        role="button"
+        tabIndex={0}
         className="flex justify-between items-center px-5 py-4 cursor-pointer hover:brightness-95 transition-all"
       >
         <div className="flex items-center gap-2">
@@ -75,7 +83,7 @@ function AgenteCard({ cidade, data, maxTotal, alertaThreshold, onDrillDown }) {
           )}
           {isAlerta && (
             <span className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
-              <AlertTriangle size={10} /> Crítico
+              <AlertTriangle size={10} /> Critico
             </span>
           )}
         </div>
@@ -178,3 +186,4 @@ export default function MapaAgentes({
     </div>
   );
 }
+

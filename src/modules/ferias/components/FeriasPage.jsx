@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Calendar, Check, List, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useAuthContext } from "../../../context/AuthContext";
 import { hasPermission } from "../../../constants/roles";
@@ -81,7 +81,7 @@ const FeriasPage = () => {
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              <Calendar size={13} /> Calendário
+              <Calendar size={13} /> Calendario
             </button>
           </div>
         </div>
@@ -96,7 +96,7 @@ const FeriasPage = () => {
           {podeLancar && (
             <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
               <Plus size={16} />
-              {podeCadastrarDireto ? "Cadastrar Férias" : "Solicitar Férias"}
+              {podeCadastrarDireto ? "Cadastrar Ferias" : "Solicitar Ferias"}
             </button>
           )}
         </div>
@@ -142,7 +142,7 @@ const FeriasPage = () => {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  {["Colaborador", "Início", "Fim", "Dias", "Status", "Ações"].map((header) => (
+                  {["Colaborador", "Inicio", "Fim", "Dias", "Status", "Acoes"].map((header) => (
                     <th key={header} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                       {header}
                     </th>
@@ -153,7 +153,7 @@ const FeriasPage = () => {
                 {feriasFiltradas.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-5 py-10 text-center text-sm text-gray-400">
-                      Nenhuma solicitação encontrada.
+                      Nenhuma solicitacao encontrada.
                     </td>
                   </tr>
                 ) : (
@@ -223,7 +223,7 @@ const FeriasPage = () => {
           onClose={() => setShowForm(false)}
           colaboradores={colaboradores}
           permitirEscolherColaborador={podeCadastrarDireto}
-          titulo={podeCadastrarDireto ? "Cadastrar Férias" : "Solicitar Férias"}
+          titulo={podeCadastrarDireto ? "Cadastrar Ferias" : "Solicitar Ferias"}
           textoAcao={podeCadastrarDireto ? "Cadastrar" : "Solicitar"}
         />
       )}
@@ -234,10 +234,10 @@ const FeriasPage = () => {
             <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
               <Trash2 size={18} className="text-red-500" />
             </div>
-            <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir solicitação?</h3>
+            <h3 className="text-base font-bold text-gray-900 text-center mb-1">Excluir solicitacao?</h3>
             <p className="text-sm text-gray-500 text-center mb-6">
-              Férias de <span className="font-semibold text-gray-700">{getNomeColaborador(confirmarDel.colaborador_id)}</span>{" "}
-              ({formatarData(confirmarDel.data_inicio)} → {formatarData(confirmarDel.data_fim)}) serão removidas.
+              Ferias de <span className="font-semibold text-gray-700">{getNomeColaborador(confirmarDel.colaborador_id)}</span>{" "}
+              ({formatarData(confirmarDel.data_inicio)} → {formatarData(confirmarDel.data_fim)}) serao removidas.
             </p>
             <div className="flex gap-3">
               <button
@@ -264,3 +264,4 @@ const FeriasPage = () => {
 };
 
 export default FeriasPage;
+

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle,
@@ -8,13 +8,14 @@ import {
   RefreshCw,
   FileText,
 } from "lucide-react";
-import { useMetasAuditoria, getCriticidade } from "../hooks/useMetasAuditoria";
+import { useMetasAuditoria } from "../hooks/useMetasAuditoria";
 import MetasAuditoriaRelatorio from "./MetasAuditoriaRelatorio";
+import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 
 const MESES = [
   "Janeiro",
   "Fevereiro",
-  "Março",
+  "Marco",
   "Abril",
   "Maio",
   "Junho",
@@ -62,8 +63,8 @@ const ICONE_MAP = {
 
 const FILTROS = [
   { id: "todos", label: "Todas" },
-  { id: "red", label: "Críticas" },
-  { id: "orange", label: "Atenção" },
+  { id: "red", label: "Criticas" },
+  { id: "orange", label: "Atencao" },
   { id: "yellow", label: "Em melhora" },
   { id: "green", label: "Na meta" },
   { id: "sem", label: "Sem retirada" },
@@ -97,7 +98,11 @@ const MetasAuditoria = () => {
   if (loading)
     return (
       <div className="bg-white rounded-2xl border border-gray-100 p-14 text-center">
-        <p className="text-sm text-gray-400">Carregando auditoria...</p>
+        <RetorninhoLoader
+          compact
+          title="Carregando auditoria..."
+          description="O Retorninho esta analisando as cidades criticas."
+        />
       </div>
     );
 
@@ -121,10 +126,10 @@ const MetasAuditoria = () => {
         {[
           { cor: "green", label: "Na meta", count: resumo.green },
           { cor: "yellow", label: "Em melhora", count: resumo.yellow },
-          { cor: "orange", label: "Crítica", count: resumo.orange },
+          { cor: "orange", label: "Critica", count: resumo.orange },
           {
             cor: "red",
-            label: "Ext. crítica / Sem retirada",
+            label: "Ext. critica / Sem retirada",
             count: resumo.red,
           },
         ].map(({ cor, label, count }) => {
@@ -195,17 +200,17 @@ const MetasAuditoria = () => {
 
       {/* Tabela */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="min-w-[760px] w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
               {[
                 "Cidade",
                 "Regional",
-                "Responsável",
+                "Responsavel",
                 "Meta",
                 "Realizado",
                 "Cancelamentos",
-                "% Eficiência",
+                "% Eficiencia",
                 "Status",
                 "",
               ].map((h) => (
@@ -263,7 +268,7 @@ const MetasAuditoria = () => {
                     <button
                       onClick={() => setCidadeSel(c)}
                       className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors"
-                      title="Gerar relatório"
+                      title="Gerar relatorio"
                     >
                       <FileText size={15} />
                     </button>
@@ -292,3 +297,4 @@ const MetasAuditoria = () => {
 };
 
 export default MetasAuditoria;
+

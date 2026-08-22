@@ -1,5 +1,5 @@
-import { Activity } from "lucide-react";
-import { resolveFirestoreDate } from "../../../services/firestoreDate";
+﻿import { Activity } from "lucide-react";
+import { resolveDataDate } from "../../../services/dataDate";
 
 const MODULO_COLOR = {
   ferias: "bg-blue-50 text-blue-600",
@@ -9,7 +9,7 @@ const MODULO_COLOR = {
 };
 
 const formatarTempo = (timestamp) => {
-  const date = resolveFirestoreDate(timestamp);
+  const date = resolveDataDate(timestamp);
   if (!date) return "-";
 
   const diff = Math.floor((new Date() - date) / 1000);
@@ -70,3 +70,4 @@ const ActivityFeed = ({ atividades }) => (
 );
 
 export default ActivityFeed;
+

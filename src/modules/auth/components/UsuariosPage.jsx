@@ -1,84 +1,218 @@
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { Pencil, Trash2, RefreshCw, Plus, X, KeyRound } from "lucide-react";
-import { db, functions } from "../../../services/firebase";
-import { COLLECTIONS } from "../../../constants/firestoreCollections";
-import { ROLES } from "../../../constants/roles";
-import { useRegionais } from "../../regionais/hooks/useRegionais";
+import {
+  Eye,
+  EyeOff,
+  Camera,
+  KeyRound,
+  LockKeyhole,
+  Mail,
+  MapPin,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Trash2,
+  User,
+  UserCheck,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
+import { CARGOS_RETIRADAS, ROLES, getRoleLabel, hasPermission } from "../../../constants/roles";
+import { useAuthContext } from "../../../context/AuthContext";
 import EditarUsuarioModal from "./EditarUsuarioModal";
+import ModalShell from "../../../components/ui/ModalShell";
+import ResponsiveDataView from "../../../components/ui/ResponsiveDataView";
 import Spinner from "../../../components/ui/Spinner";
 import {
   getOrLoadCachedValue,
   invalidateCache,
-} from "../../../services/firestoreCache";
-import { logFirestoreRead } from "../../../services/firestoreMonitoring";
+} from "../../../services/dataCache";
+import {
+  criarUsuarioAdmin,
+  deletarUsuarioAdmin,
+  enviarAvatarAdmin,
+  listarCargosAdmin,
+  listarEmpresasAdmin,
+  listarRegionaisAdmin,
+  listarUsuariosAdmin,
+} from "../services/authService";
+import { AVATAR_ACCEPT, validateImageFile } from "../../../utils/imageUpload";
+import { obterPreferenciasNotificacoes } from "../../../services/internalNotificationsService";
 
 const ROLE_STYLES = {
   [ROLES.ADMIN]: "bg-red-100 text-red-700",
   [ROLES.GESTOR]: "bg-blue-100 text-blue-700",
   [ROLES.TECNICO]: "bg-green-100 text-green-700",
+  [ROLES.ESTOQUE]: "bg-amber-100 text-amber-700",
+  [ROLES.SUPERVISOR_ESTOQUE]: "bg-orange-100 text-orange-700",
+  [ROLES.BACKOFFICE_RETIRADA]: "bg-cyan-100 text-cyan-700",
+  [ROLES.SUPERVISOR]: "bg-violet-100 text-violet-700",
+  [ROLES.SUPERVISOR_ADMINISTRATIVO]: "bg-purple-100 text-purple-700",
+  [ROLES.ANALISTA_ADMINISTRATIVO]: "bg-sky-100 text-sky-700",
+  [ROLES.LIDER_EMPRESA]: "bg-indigo-100 text-indigo-700",
+  [ROLES.AGENTE_AUTORIZADO]: "bg-amber-100 text-amber-700",
+  [ROLES.BACKOFFICE]: "bg-emerald-100 text-emerald-700",
+  [ROLES.VISITANTE]: "bg-slate-100 text-slate-700",
 };
 
-const CACHE_KEY = "usuarios:lista";
 const CACHE_TTL = 10 * 60 * 1000;
-const USUARIOS_MAX = 300;
-const inputClass =
-  "w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm";
+const USUARIOS_PAGE_SIZE_OPTIONS = [20, 30, 50, 100];
+const fieldClass =
+  "w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 placeholder:text-slate-400";
+const labelClass = "mb-2 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wide text-slate-700";
+const labelIconClass = "flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600";
 
-function criarUsuarioCallable() {
-  return httpsCallable(functions, "criarUsuario");
-}
-
-function deletarUsuarioCallable() {
-  return httpsCallable(functions, "deletarUsuario");
+function formatUltimoLogin(value) {
+  if (!value) return "Nunca acessou";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Nunca acessou";
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function getCallableErrorMessage(error, fallbackMessage) {
-  const code = String(error?.code || "");
   const message = String(error?.message || "");
 
-  if (
-    code === "functions/already-exists" ||
-    message.includes("already-exists") ||
-    message.includes("ja cadastrado")
-  ) {
+  if (message.includes("already-exists") || message.includes("ja cadastrado")) {
     return "E-mail ja cadastrado.";
   }
 
-  if (
-    code === "functions/permission-denied" ||
-    message.includes("Permissao insuficiente")
-  ) {
+  if (message.includes("Permissao insuficiente")) {
     return "Voce nao tem permissao para executar esta acao.";
   }
 
-  if (
-    code === "functions/unauthenticated" ||
-    message.includes("Autenticacao obrigatoria")
-  ) {
+  if (message.includes("Autenticacao obrigatoria")) {
     return "Sua sessao expirou. Entre novamente para continuar.";
   }
 
-  if (code === "functions/invalid-argument" && message) {
+  if (message) {
     return message;
   }
 
   return message || fallbackMessage;
 }
 
-const NovoUsuarioModal = ({ onClose, onCriado }) => {
-  const { regionais } = useRegionais();
-  const [form, setForm] = useState({
+function buildAllowedRoles(currentUser, cargosOptions = CARGOS_RETIRADAS) {
+  const normalizedRole = String(currentUser?.role || currentUser || "").toLowerCase();
+  if (normalizedRole === ROLES.SUPERVISOR) return [ROLES.BACKOFFICE, ROLES.LIDER_EMPRESA];
+  if (normalizedRole === ROLES.SUPERVISOR_ADMINISTRATIVO) return [ROLES.ANALISTA_ADMINISTRATIVO, ROLES.LIDER_EMPRESA, ROLES.AGENTE_AUTORIZADO];
+  if (normalizedRole !== ROLES.ADMIN) return [];
+  return cargosOptions.map((cargo) => cargo.value).filter(Boolean);
+}
+
+function requiresEmpresa(role) {
+  return [ROLES.LIDER_EMPRESA, ROLES.AGENTE_AUTORIZADO].includes(role);
+}
+
+function getInitialUserRole({ initialEmpresa, allowedRoles }) {
+  if (initialEmpresa?.agenteAutorizado) return ROLES.AGENTE_AUTORIZADO;
+  if (initialEmpresa) return ROLES.LIDER_EMPRESA;
+  if (allowedRoles.includes(ROLES.BACKOFFICE_RETIRADA)) return ROLES.BACKOFFICE_RETIRADA;
+  return allowedRoles[0];
+}
+
+function buildInitialUserForm({ initialEmpresa, allowedRoles, isSupervisor, currentUser }) {
+  return {
     nome: "",
     email: "",
-    role: ROLES.TECNICO,
-    regional: "",
-  });
+    role: getInitialUserRole({ initialEmpresa, allowedRoles }),
+    regional: initialEmpresa?.regional || (isSupervisor ? currentUser?.regional || "" : ""),
+    empresaId: initialEmpresa?.id || "",
+    empresaNome: initialEmpresa?.nome || "",
+    temporaryPassword: "",
+    avatarUrl: "",
+  };
+}
+
+function filterModalOptionsByRole({ data, empresasData, currentUser, isSupervisor, isSupervisorAdministrativo }) {
+  const regionalKey = String(currentUser?.regional || "").toLowerCase();
+  const regionais = isSupervisor
+    ? data.filter((item) => String(item.nome || "").toLowerCase() === regionalKey)
+    : data;
+  const empresas = isSupervisor || isSupervisorAdministrativo
+    ? empresasData.filter((item) => String(item.regional || "").toLowerCase() === regionalKey)
+    : empresasData;
+  return { regionais, empresas };
+}
+
+const NovoUsuarioModal = ({ currentUser, onClose, onCriado, initialEmpresa = null, cargosOptions = CARGOS_RETIRADAS }) => {
+  const [regionais, setRegionais] = useState([]);
+  const [empresas, setEmpresas] = useState([]);
+  const [loadingRegionais, setLoadingRegionais] = useState(true);
+  const allowedRoles = buildAllowedRoles(currentUser, cargosOptions);
+  const isSupervisor = String(currentUser?.role || "").toLowerCase() === ROLES.SUPERVISOR;
+  const isSupervisorAdministrativo = String(currentUser?.role || "").toLowerCase() === ROLES.SUPERVISOR_ADMINISTRATIVO;
+  const [form, setForm] = useState(() =>
+    buildInitialUserForm({ initialEmpresa, allowedRoles, isSupervisor, currentUser }),
+  );
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState("");
   const [resultadoCriacao, setResultadoCriacao] = useState(null);
   const [copiado, setCopiado] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setSaving(true);
+    setErro("");
+    try {
+      validateImageFile(file);
+      const avatarUrl = await enviarAvatarAdmin(file);
+      set("avatarUrl", avatarUrl);
+    } catch (error) {
+      setErro(error?.message || "Não foi possível enviar o avatar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const carregarRegionais = async () => {
+      setLoadingRegionais(true);
+      try {
+        const [data, empresasData] = await Promise.all([
+          listarRegionaisAdmin(),
+          listarEmpresasAdmin().catch(() => []),
+        ]);
+        if (active) {
+          const options = filterModalOptionsByRole({
+            data,
+            empresasData,
+            currentUser,
+            isSupervisor,
+            isSupervisorAdministrativo,
+          });
+          setRegionais(options.regionais);
+          setEmpresas(options.empresas);
+        }
+      } catch {
+        if (active) {
+          setErro("Nao foi possivel carregar as regionais.");
+        }
+      } finally {
+        if (active) {
+          setLoadingRegionais(false);
+        }
+      }
+    };
+
+    carregarRegionais();
+    return () => {
+      active = false;
+    };
+  }, [currentUser, currentUser?.regional, isSupervisor, isSupervisorAdministrativo]);
 
   const set = (field, value) =>
     setForm((current) => ({ ...current, [field]: value }));
@@ -88,25 +222,34 @@ const NovoUsuarioModal = ({ onClose, onCriado }) => {
       setErro("Preencha nome e e-mail.");
       return;
     }
+    if (requiresEmpresa(form.role) && !form.empresaId) {
+      setErro("Selecione a empresa vinculada ao usuário.");
+      return;
+    }
 
     setSaving(true);
     setErro("");
     setCopiado(false);
 
     try {
-      const response = await criarUsuarioCallable()({
+      const response = await criarUsuarioAdmin({
         email: form.email.trim().toLowerCase(),
         nome: form.nome.trim(),
         role: form.role,
         regional: form.regional,
+        empresaId: form.empresaId,
+        empresaNome: form.empresaNome,
+        avatarUrl: form.avatarUrl,
+        temporaryPassword: form.temporaryPassword,
       });
-      const result = response?.data || {};
+      const result = response || {};
 
-      invalidateCache(CACHE_KEY);
+      invalidateCache(`usuarios:lista:${currentUser?.role || ""}:${currentUser?.regional || ""}`);
       onCriado();
       setResultadoCriacao({
         email: form.email.trim().toLowerCase(),
         passwordResetLink: result.passwordResetLink || "",
+        temporaryPassword: result.temporaryPassword || "",
       });
     } catch (error) {
       setErro(getCallableErrorMessage(error, "Erro ao criar usuario."));
@@ -116,16 +259,49 @@ const NovoUsuarioModal = ({ onClose, onCriado }) => {
   };
 
   const handleCopiarLink = async () => {
-    if (!resultadoCriacao?.passwordResetLink || !navigator?.clipboard) return;
+    if (!resultadoCriacao?.temporaryPassword || !navigator?.clipboard) return;
 
-    await navigator.clipboard.writeText(resultadoCriacao.passwordResetLink);
+    await navigator.clipboard.writeText(resultadoCriacao.temporaryPassword);
     setCopiado(true);
+  };
+
+  const handleCopiarAcesso = async () => {
+    if (!navigator?.clipboard) return;
+
+    const lines = [
+      `E-mail: ${resultadoCriacao?.email || ""}`,
+      `Senha temporaria: ${resultadoCriacao?.temporaryPassword || ""}`,
+      resultadoCriacao?.passwordResetLink
+        ? `Link para redefinir senha: ${resultadoCriacao.passwordResetLink}`
+        : "",
+    ].filter(Boolean);
+
+    await navigator.clipboard.writeText(lines.join("\n"));
+    setCopiado(true);
+  };
+
+  const handleRoleChange = (value) => {
+    setForm((current) => ({
+      ...current,
+      role: value,
+      ...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
+    }));
+  };
+
+  const handleEmpresaChange = (value) => {
+    const empresa = empresas.find((item) => item.id === value);
+    setForm((current) => ({
+      ...current,
+      empresaId: empresa?.id || "",
+      empresaNome: empresa?.nome || "",
+      regional: empresa?.regional || current.regional,
+    }));
   };
 
   if (resultadoCriacao) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 space-y-4">
+      <ModalShell onClose={onClose} showClose={false} size="md" bodyClassName="p-0">
+        <div className="space-y-4 p-6">
           <div className="flex justify-center">
             <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
               <KeyRound size={22} />
@@ -135,26 +311,35 @@ const NovoUsuarioModal = ({ onClose, onCriado }) => {
           <div className="text-center space-y-2">
             <h2 className="font-bold text-gray-900">Primeiro acesso gerado</h2>
             <p className="text-sm text-gray-600">
-              Compartilhe o link abaixo com{" "}
+              Compartilhe os dados abaixo com{" "}
               <strong>{resultadoCriacao.email}</strong> por um canal seguro.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+              Senha temporaria
+            </p>
+            <p className="mt-1 font-mono text-sm font-bold text-blue-900">
+              {resultadoCriacao.temporaryPassword || "-"}
             </p>
           </div>
 
           <textarea
             readOnly
-            value={resultadoCriacao.passwordResetLink}
+            value={`E-mail: ${resultadoCriacao.email}\nSenha temporaria: ${resultadoCriacao.temporaryPassword || "-"}`}
             className="w-full h-28 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-700"
           />
 
-          {!resultadoCriacao.passwordResetLink ? (
+          {!resultadoCriacao.temporaryPassword ? (
             <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-              O usuario deve verificar o e-mail para definir a senha inicial.
+              Nao foi possivel exibir a senha temporaria. Gere uma nova redefinicao no cadastro do usuario.
             </p>
           ) : null}
 
           {copiado ? (
             <p className="text-xs text-green-700 bg-green-50 px-3 py-2 rounded-lg">
-              Link copiado com sucesso.
+              Acesso copiado com sucesso.
             </p>
           ) : null}
 
@@ -166,145 +351,282 @@ const NovoUsuarioModal = ({ onClose, onCriado }) => {
               Fechar
             </button>
             <button
-              onClick={handleCopiarLink}
-              disabled={!resultadoCriacao.passwordResetLink}
+              onClick={handleCopiarAcesso}
               className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-60 text-sm"
             >
-              Copiar link
+              Copiar acesso
+            </button>
+            <button
+              onClick={handleCopiarLink}
+              disabled={!resultadoCriacao.temporaryPassword}
+              className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold disabled:opacity-60 text-sm"
+            >
+              Copiar senha
             </button>
           </div>
         </div>
-      </div>
+      </ModalShell>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 space-y-4">
-        <div className="flex justify-center">
-          <img
-            src="https://i.ibb.co/Xk2MjZLG/logosempre.png"
-            alt="Logo"
-            className="h-8 object-contain"
-          />
-        </div>
+    <ModalShell onClose={onClose} showClose={false} size="3xl" bodyClassName="p-0">
+      <div className="relative w-full">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-5 top-5 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200"
+          aria-label="Fechar"
+        >
+          <X size={22} />
+        </button>
 
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">Novo Usuario</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X size={18} />
-          </button>
-        </div>
+        <div className="px-5 pb-6 pt-6 sm:px-7">
+          <div className="flex items-center gap-4 border-b border-slate-200 pb-5 pr-12">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#061d38] shadow-lg shadow-slate-200">
+                <img
+                  src="/cluster-mg.png"
+                  alt="Cluster MG"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+
+              <div>
+                <h2 className="text-2xl font-black tracking-tight text-slate-950">
+                  Criar novo usuário
+                </h2>
+                <p className="mt-1 max-w-xl text-sm leading-relaxed text-slate-500">
+                  Preencha as informações abaixo para adicionar um novo usuário ao sistema.
+                </p>
+              </div>
+          </div>
 
         {erro ? (
-          <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
             {erro}
           </p>
         ) : null}
 
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Nome *
+          <div className="mt-5 flex items-center gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-black text-white">
+              {form.avatarUrl ? (
+                <img src={form.avatarUrl} alt="Avatar do usuário" className="h-full w-full object-cover" />
+              ) : (
+                String(form.nome || form.email || "U").charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-slate-950">Avatar do usuário</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Opcional. Aceita apenas JPG ou PNG até 600 KB.
+              </p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-blue-700 shadow-sm ring-1 ring-blue-100 transition hover:bg-blue-50">
+              <Camera size={15} /> Enviar
+              <input
+                type="file"
+                accept={AVATAR_ACCEPT}
+                disabled={saving}
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div>
+                <label className={labelClass}>
+                  <span className={labelIconClass}>
+                    <User size={20} />
+                  </span>
+                  Nome completo <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={form.nome}
               onChange={(event) => set("nome", event.target.value)}
-              placeholder="Nome completo"
-              className={inputClass}
+                  placeholder="Digite o nome completo"
+                  className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              E-mail *
+                <label className={labelClass}>
+                  <span className={labelIconClass}>
+                    <Mail size={20} />
+                  </span>
+                  E-mail <span className="text-red-500">*</span>
             </label>
             <input
               type="email"
               value={form.email}
               onChange={(event) => set("email", event.target.value)}
-              placeholder="email@exemplo.com"
-              className={inputClass}
+                  placeholder="exemplo@email.com"
+                  className={fieldClass}
             />
           </div>
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Primeiro acesso
-            </label>
-            <p className="text-[10px] text-amber-600 mt-1">
-              O backend cria uma senha temporaria aleatoria e devolve um link seguro para definicao da senha pessoal.
+            <div className="mt-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-amber-950">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+                <LockKeyhole size={22} />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-amber-600">Primeiro acesso</h3>
+                <p className="mt-1 text-sm leading-relaxed text-amber-900">
+                  O backend cria uma senha temporária local. No primeiro login, o usuário troca pela senha pessoal.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <label className="mb-3 flex items-center gap-3 text-sm font-extrabold text-violet-700">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+                  <ShieldCheck size={18} />
+                </span>
+                Senha temporária
+              </label>
+              <div className="relative">
+            <input
+                  type={showPassword ? "text" : "password"}
+              value={form.temporaryPassword}
+              onChange={(event) => set("temporaryPassword", event.target.value)}
+                  placeholder="Opcional. Se vazio, o sistema gera uma senha."
+                  className={`${fieldClass} pr-14`}
+            />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800"
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                >
+                  {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                </button>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                Se informar aqui, essa será a senha do primeiro login. Caso deixe vazio, uma senha temporária será gerada e exibida após o cadastro.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+            <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Role *
+                <label className={labelClass}>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                    <ShieldCheck size={18} />
+                  </span>
+                  Role <span className="text-red-500">*</span>
               </label>
               <select
                 value={form.role}
-                onChange={(event) => set("role", event.target.value)}
-                className={inputClass}
+                onChange={(event) => handleRoleChange(event.target.value)}
+                  className={fieldClass}
               >
-                {Object.values(ROLES).map((role) => (
+                {allowedRoles.map((role) => (
                   <option key={role} value={role}>
-                    {role}
+                    {cargosOptions.find((cargo) => cargo.value === role)?.label || getRoleLabel(role)}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Regional
+                <label className={labelClass}>
+                  <span className={labelIconClass}>
+                    <MapPin size={18} />
+                  </span>
+                  Regional
               </label>
               <select
                 value={form.regional}
                 onChange={(event) => set("regional", event.target.value)}
-                className={inputClass}
+                  className={fieldClass}
+                disabled={loadingRegionais || isSupervisor}
               >
-                <option value="">- Nenhuma -</option>
+                  <option value="">- Nenhuma -</option>
                 {regionais.map((regional) => (
                   <option key={regional.id} value={regional.nome}>
                     {regional.nome}
                   </option>
                 ))}
               </select>
+                <p className="mt-2 text-xs text-slate-500">
+                {loadingRegionais
+                  ? "Carregando regionais..."
+                    : `${regionais.length} regional(is) disponível(is).`}
+              </p>
             </div>
           </div>
+
+            {requiresEmpresa(form.role) ? (
+              <div className="mt-5">
+                <label className={labelClass}>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <Users size={18} />
+                  </span>
+                  Empresa vinculada <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={form.empresaId}
+                  onChange={(event) => handleEmpresaChange(event.target.value)}
+                  className={fieldClass}
+                >
+                  <option value="">Selecione a empresa</option>
+                  {empresas.map((empresa) => (
+                    <option key={empresa.id} value={empresa.id}>
+                      {empresa.nome}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  Este perfil só enxerga o perfil e os documentos da empresa selecionada.
+                </p>
+              </div>
+            ) : null}
         </div>
 
-        <div className="flex gap-3 pt-1">
+          <div className="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-6 text-sm font-extrabold text-slate-700 transition hover:bg-slate-200"
           >
+              <X size={18} />
             Cancelar
           </button>
           <button
             onClick={handleCriar}
             disabled={saving}
-            className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-60 text-sm"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-60"
           >
-            {saving ? "Criando..." : "Criar Usuario"}
+              <UserPlus size={18} />
+              {saving ? "Criando..." : "Criar usuário"}
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ModalShell>
   );
 };
 
 const UsuariosPage = () => {
+  const { currentUser } = useAuthContext();
+  const isAdmin = String(currentUser?.role || "").toLowerCase() === ROLES.ADMIN;
+  const canManage =
+    hasPermission(currentUser, "configuracao.usuarios.manage") ||
+    hasPermission(currentUser, "manage_users");
   const [usuarios, setUsuarios] = useState([]);
+  const [usuariosStats, setUsuariosStats] = useState({});
+  const [cargosOptions, setCargosOptions] = useState(CARGOS_RETIRADAS);
+  const [defaultAvatarUrl, setDefaultAvatarUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [modalNovo, setModalNovo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [erroPagina, setErroPagina] = useState("");
+  const [busca, setBusca] = useState("");
+  const [cargoFiltro, setCargoFiltro] = useState("");
+  const [regionalFiltro, setRegionalFiltro] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(20);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -312,169 +634,423 @@ const UsuariosPage = () => {
 
     try {
       const { data } = await getOrLoadCachedValue(
-        CACHE_KEY,
+        `usuarios:lista:${currentUser?.role || ""}:${currentUser?.regional || ""}`,
         async () => {
-          const snap = await getDocs(
-            query(
-              collection(db, COLLECTIONS.USUARIOS),
-              orderBy("nome"),
-              limit(USUARIOS_MAX),
-            ),
-          );
-
-          logFirestoreRead({
-            source: "UsuariosPage",
-            operation: "getDocs",
-            path: COLLECTIONS.USUARIOS,
-            count: snap.size,
-          });
-
-          return snap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          }));
+          return listarUsuariosAdmin();
         },
         { ttlMs: CACHE_TTL },
       );
 
-      setUsuarios(data || []);
+      setUsuarios(Array.isArray(data) ? data : data?.items || []);
+      setUsuariosStats(Array.isArray(data) ? {} : data?.stats || {});
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser?.regional, currentUser?.role]);
 
   useEffect(() => {
     carregar();
+    listarCargosAdmin()
+      .then((items) => {
+        if (items?.length) {
+          const merged = new Map(CARGOS_RETIRADAS.map((cargo) => [cargo.value, cargo]));
+          items.forEach((cargo) => {
+            if (cargo?.value) merged.set(cargo.value, cargo);
+          });
+          setCargosOptions([...merged.values()]);
+        }
+      })
+      .catch(() => setCargosOptions(CARGOS_RETIRADAS));
+    obterPreferenciasNotificacoes()
+      .then((preferences) => setDefaultAvatarUrl(preferences?.defaultAvatarUrl || preferences?.defaultAvatarDataUrl || ""))
+      .catch(() => {});
   }, [carregar]);
 
   const deletar = async (uid) => {
+    if (!canManage || !isAdmin) return;
     if (!confirm("Deseja remover este usuario do sistema?")) return;
 
     setErroPagina("");
 
     try {
-      await deletarUsuarioCallable()({ uid });
-      invalidateCache(CACHE_KEY);
+      await deletarUsuarioAdmin(uid);
+      invalidateCache(`usuarios:lista:${currentUser?.role || ""}:${currentUser?.regional || ""}`);
       setUsuarios((current) => current.filter((item) => item.id !== uid));
     } catch (error) {
       setErroPagina(getCallableErrorMessage(error, "Erro ao remover usuario."));
     }
   };
+  const invalidateUsuariosCache = () =>
+    invalidateCache(`usuarios:lista:${currentUser?.role || ""}:${currentUser?.regional || ""}`);
+  const atualizarLista = () => {
+    invalidateUsuariosCache();
+    carregar();
+  };
+
+  const regionaisDisponiveis = [...new Set(usuarios.map((usuario) => usuario.regional).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b), "pt-BR"));
+  const cargosDisponiveis = [...new Set(usuarios.map((usuario) => usuario.role).filter(Boolean))]
+    .sort((a, b) => getRoleLabel(a).localeCompare(getRoleLabel(b), "pt-BR"));
+  const usuariosFiltrados = usuarios.filter((usuario) => {
+    const query = busca.trim().toLowerCase();
+    const matchesBusca = !query || [
+      usuario.nome,
+      usuario.email,
+      usuario.regional,
+      getRoleLabel(usuario.role),
+    ].some((value) => String(value || "").toLowerCase().includes(query));
+    const matchesCargo = !cargoFiltro || usuario.role === cargoFiltro;
+    const matchesRegional = !regionalFiltro || usuario.regional === regionalFiltro;
+    return matchesBusca && matchesCargo && matchesRegional;
+  });
+  const totalPaginas = Math.max(1, Math.ceil(usuariosFiltrados.length / itensPorPagina));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const usuariosPaginados = usuariosFiltrados.slice(
+    (paginaAtual - 1) * itensPorPagina,
+    paginaAtual * itensPorPagina,
+  );
+  const totalNuncaAcessou = usuarios.filter((usuario) => !(usuario.ultimo_login || usuario.last_login_at)).length;
+  const totalAdministrativos = usuarios.filter((usuario) =>
+    [ROLES.SUPERVISOR_ADMINISTRATIVO, ROLES.ANALISTA_ADMINISTRATIVO].includes(String(usuario.role || "").toLowerCase()),
+  ).length;
+  const totalEmpresas = usuarios.filter((usuario) =>
+    [ROLES.LIDER_EMPRESA, ROLES.AGENTE_AUTORIZADO].includes(String(usuario.role || "").toLowerCase()),
+  ).length;
+  const totalOAuth = Number(usuariosStats.totalOAuth ?? usuarios.filter((usuario) =>
+    usuario.criado_por_oauth || usuario.login_provider === "google",
+  ).length);
+  const usuariosColumns = [
+    {
+      key: "usuario",
+      header: "Usuário",
+      render: (usuario) => (
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50 text-sm font-black text-blue-700">
+            {usuario.avatarUrl || usuario.avatarDataUrl || defaultAvatarUrl ? (
+              <img src={usuario.avatarUrl || usuario.avatarDataUrl || defaultAvatarUrl} alt={usuario.nome || "Avatar"} className="h-full w-full object-cover" />
+            ) : (
+              String(usuario.nome || usuario.email || "U").charAt(0).toUpperCase()
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="break-anywhere font-black text-slate-900">{usuario.nome || "-"}</p>
+            <p className="break-anywhere text-xs font-semibold text-slate-500">{usuario.email || "-"}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "regional",
+      header: "Regional",
+      render: (usuario) => usuario.regional || "-",
+      className: "text-sm font-semibold text-slate-600",
+    },
+    {
+      key: "cargo",
+      header: "Cargo",
+      render: (usuario) => (
+        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ${ROLE_STYLES[usuario.role] ?? "bg-slate-100 text-slate-700"}`}>
+          {getRoleLabel(usuario.role)}
+        </span>
+      ),
+    },
+    {
+      key: "ultimoLogin",
+      header: "Último login",
+      render: (usuario) => (
+        <div>
+          <div className="font-bold text-slate-800">
+            {formatUltimoLogin(usuario.ultimo_login || usuario.last_login_at)}
+          </div>
+          {usuario.ultimo_login_ip ? (
+            <div className="mt-0.5 break-anywhere text-xs text-slate-400">{usuario.ultimo_login_ip}</div>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "acoes",
+      header: "Ações",
+      headerClassName: "text-right",
+      className: "md:text-right",
+      render: (usuario) => (
+        <div className="flex justify-end gap-1">
+          {canManage ? (
+            <button
+              onClick={() => setEditando(usuario)}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+              title="Editar"
+              type="button"
+            >
+              <Pencil size={16} />
+            </button>
+          ) : (
+            <span className="text-xs font-bold text-slate-400">Somente leitura</span>
+          )}
+          {isAdmin ? (
+            <button
+              onClick={() => deletar(usuario.id)}
+              disabled={!canManage}
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+              title="Excluir"
+              type="button"
+            >
+              <Trash2 size={16} />
+            </button>
+          ) : null}
+        </div>
+      ),
+    },
+  ];
+
+  useEffect(() => {
+    setPagina(1);
+  }, [busca, cargoFiltro, regionalFiltro, itensPorPagina]);
 
   if (loading) return <Spinner fullScreen />;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Usuarios</h2>
-          <p className="text-sm text-gray-500">
-            {usuarios.length} usuario(s) cadastrado(s)
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <Users size={24} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-950">Usuários</h2>
+              <p className="text-sm text-slate-500">
+                Gerencie acessos, perfis, regionais e vínculos de empresa.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="flex gap-2">
           <button
-            onClick={carregar}
-            className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition-colors"
+            onClick={atualizarLista}
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
-            <RefreshCw size={18} />
+            <RefreshCw size={17} /> Atualizar
           </button>
           <button
             onClick={() => setModalNovo(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+            disabled={!canManage}
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"
           >
-            <Plus size={16} /> Novo Usuario
+            <Plus size={17} /> Novo usuário
           </button>
         </div>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500">Total</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Users size={20} />
+            </span>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{usuarios.length}</p>
+          <p className="mt-1 text-sm text-slate-500">usuários cadastrados</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500">Com acesso</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <UserCheck size={20} />
+            </span>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{usuarios.length - totalNuncaAcessou}</p>
+          <p className="mt-1 text-sm text-slate-500">já fizeram login</p>
+        </div>
+        <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500">Administrativo</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+              <ShieldCheck size={20} />
+            </span>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{totalAdministrativos}</p>
+          <p className="mt-1 text-sm text-slate-500">supervisores e analistas</p>
+        </div>
+        <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500">Empresas</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <UserPlus size={20} />
+            </span>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{totalEmpresas}</p>
+          <p className="mt-1 text-sm text-slate-500">líderes e agentes</p>
+        </div>
+        <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-wide text-slate-500">OAuth</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <KeyRound size={20} />
+            </span>
+          </div>
+          <p className="mt-3 text-3xl font-black text-slate-950">{totalOAuth}</p>
+          <p className="mt-1 text-sm text-slate-500">criados pelo Google</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex items-center gap-2 text-sm font-black text-slate-800">
+          <SlidersHorizontal size={18} className="text-blue-600" />
+          Filtros
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[1.4fr_.9fr_.9fr_auto]">
+          <label className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Buscar por nome, e-mail, cargo ou regional"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-semibold outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            />
+          </label>
+          <select
+            value={cargoFiltro}
+            onChange={(event) => setCargoFiltro(event.target.value)}
+            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+          >
+            <option value="">Todos os cargos</option>
+            {cargosDisponiveis.map((role) => (
+              <option key={role} value={role}>{getRoleLabel(role)}</option>
+            ))}
+          </select>
+          <select
+            value={regionalFiltro}
+            onChange={(event) => setRegionalFiltro(event.target.value)}
+            className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+          >
+            <option value="">Todas as regionais</option>
+            {regionaisDisponiveis.map((regional) => (
+              <option key={regional} value={regional}>{regional}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              setBusca("");
+              setCargoFiltro("");
+              setRegionalFiltro("");
+              setPagina(1);
+            }}
+            className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50"
+          >
+            Limpar
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-black text-slate-950">Usuários cadastrados</h3>
+          <p className="text-sm text-slate-500">
+              Mostrando {usuariosPaginados.length} de {usuariosFiltrados.length} usuário(s) filtrado(s)
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black uppercase tracking-wide text-slate-500">
+              Total carregado: {usuarios.length}
+            </p>
+            <select
+              value={itensPorPagina}
+              onChange={(event) => setItensPorPagina(Number(event.target.value) || 20)}
+              className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            >
+              {USUARIOS_PAGE_SIZE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option} por página
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
       {erroPagina ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mx-5 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {erroPagina}
         </div>
       ) : null}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 text-gray-600 font-medium">
-                  Nome
-                </th>
-                <th className="text-left px-4 py-3 text-gray-600 font-medium">
-                  E-mail
-                </th>
-                <th className="text-left px-4 py-3 text-gray-600 font-medium">
-                  Regional
-                </th>
-                <th className="text-left px-4 py-3 text-gray-600 font-medium">
-                  Role
-                </th>
-                <th className="text-left px-4 py-3 text-gray-600 font-medium">
-                  Acoes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {usuarios.map((usuario) => (
-                <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {usuario.nome}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{usuario.email}</td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {usuario.regional || "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_STYLES[usuario.role] ?? ""}`}
-                    >
-                      {usuario.role}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => setEditando(usuario)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                        title="Editar"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => deletar(usuario.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                        title="Excluir"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="p-5 pt-4">
+          <ResponsiveDataView
+            items={usuariosPaginados}
+            columns={usuariosColumns}
+            getRowKey={(usuario) => usuario.id}
+            emptyMessage="Nenhum usuário encontrado. Ajuste os filtros para ampliar a busca."
+            strategy="cards"
+            minTableWidth="min-w-[860px]"
+          />
         </div>
+        {usuariosFiltrados.length ? (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-semibold text-slate-500">
+              Página {paginaAtual} de {totalPaginas}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPagina(1)}
+                disabled={paginaAtual <= 1}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => setPagina((current) => Math.max(1, current - 1))}
+                disabled={paginaAtual <= 1}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => setPagina((current) => Math.min(totalPaginas, current + 1))}
+                disabled={paginaAtual >= totalPaginas}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Próxima
+              </button>
+              <button
+                type="button"
+                onClick={() => setPagina(totalPaginas)}
+                disabled={paginaAtual >= totalPaginas}
+                className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                »
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      {modalNovo ? (
+      {modalNovo && canManage ? (
         <NovoUsuarioModal
+          currentUser={currentUser}
+          cargosOptions={cargosOptions}
           onClose={() => setModalNovo(false)}
           onCriado={() => {
-            invalidateCache(CACHE_KEY);
+            invalidateUsuariosCache();
             carregar();
           }}
         />
       ) : null}
 
-      {editando ? (
+      {editando && canManage ? (
         <EditarUsuarioModal
           usuario={editando}
+          currentUser={currentUser}
+          cargosOptions={cargosOptions}
           onClose={() => setEditando(null)}
           onSalvo={() => {
-            invalidateCache(CACHE_KEY);
+            invalidateUsuariosCache();
             carregar();
           }}
         />
@@ -484,3 +1060,4 @@ const UsuariosPage = () => {
 };
 
 export default UsuariosPage;
+

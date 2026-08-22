@@ -1,12 +1,10 @@
+﻿import { COLLECTIONS } from "../constants/dataCollections";
 import {
-  collection,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "./firebase";
-import { COLLECTIONS } from "../constants/firestoreCollections";
-import { getInternalStaticDataSlice } from "./internalStaticDataService";
-import { resolveFirestoreDate } from "./firestoreDate";
+  getInternalSnapshotSlice,
+  SNAPSHOT_DOMAINS,
+} from "./internalStaticDataService";
+import { resolveDataDate } from "./dataDate";
+import { createVpsDocument } from "./vpsApiClient";
 
 export const registrarAtividade = async ({
   usuarioId,
@@ -17,14 +15,14 @@ export const registrarAtividade = async ({
   detalhes = null,
 }) => {
   try {
-    await addDoc(collection(db, COLLECTIONS.ACTIVITY_LOG), {
+    await createVpsDocument(COLLECTIONS.ACTIVITY_LOG, {
       usuario_id: usuarioId,
       nome,
       acao,
       modulo,
       entidade_id: entidadeId,
       detalhes,
-      timestamp: serverTimestamp(),
+      timestamp: new Date().toISOString(),
     });
   } catch {
     // Falha silenciosa: log nao deve interromper o fluxo principal.
@@ -32,7 +30,8 @@ export const registrarAtividade = async ({
 };
 
 export const buscarAtividades = async (quantidade = 20, force = false) => {
-  const staticItems = await getInternalStaticDataSlice(
+  const staticItems = await getInternalSnapshotSlice(
+    SNAPSHOT_DOMAINS.OPERACIONAL,
     (payload) => payload?.auditoria?.atividades ?? null,
     { force },
   );
@@ -48,7 +47,8 @@ export const buscarAtividadesFiltradas = async ({
   quantidade = 200,
   force = false,
 } = {}) => {
-  const staticItems = await getInternalStaticDataSlice(
+  const staticItems = await getInternalSnapshotSlice(
+    SNAPSHOT_DOMAINS.OPERACIONAL,
     (payload) => payload?.auditoria?.atividades ?? null,
     { force },
   );
@@ -65,7 +65,7 @@ export const buscarAtividadesFiltradas = async ({
       if (modulo && item.modulo !== modulo) return false;
       if (usuario && item.nome !== usuario) return false;
 
-      const date = resolveFirestoreDate(item.timestamp);
+      const date = resolveDataDate(item.timestamp);
       if (!date) return false;
       if (inicio && date < inicio) return false;
       if (fim && date > fim) return false;
@@ -73,3 +73,4 @@ export const buscarAtividadesFiltradas = async ({
     })
     .slice(0, quantidade);
 };
+

@@ -3,6 +3,7 @@ const db = require("./db");
 const apiStatus = require("./apiStatus");
 const evolutionMessaging = require("./evolutionMessaging");
 const agendamentoConfirmacao = require("./agendamentoConfirmacao");
+const financeiro = require("./financeiro");
 const { closeRealtimeClients } = require("./realtime");
 
 const port = Number(process.env.PORT || 3001);
@@ -12,6 +13,7 @@ const server = app.listen(port, () => {
   console.log(`[retiradas-api] ouvindo em http://127.0.0.1:${port}`);
   evolutionMessaging.startWorker();
   agendamentoConfirmacao.startWorker();
+  financeiro.startWorker();
   apiStatus.recordRuntimeEvent("startup", {
     port,
     reason: "process_started",
@@ -26,6 +28,7 @@ async function shutdown(signal) {
   console.log(`[retiradas-api] Encerrando por ${signal}...`);
   evolutionMessaging.stopWorker();
   agendamentoConfirmacao.stopWorker();
+  financeiro.stopWorker();
   closeRealtimeClients();
 
   const forceExit = setTimeout(() => {

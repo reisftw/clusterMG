@@ -1,47 +1,296 @@
+﻿import { imprimirHtml, formatarDataGeracao } from "../../../utils/impressao";
+import { obterMesesAnteriores } from "../../../utils/mes";
+
+const intFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+
+function normalizarNumero(value) {
+  return Math.round(Number(value) || 0);
+}
+
+async function carregarImagemDataUrl(src) {
+  try {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function getPerformanceStatus(pct) {
+  if (pct > 100) {
+    return {
+      key: "over",
+      color: "#7c3aed",
+      bg: "#F3E8FF",
+      text: "Acima da Meta",
+    };
+  }
+  if (pct >= 80) {
+    return {
+      key: "atingido",
+      color: "#00875A",
+      bg: "#E3FCEF",
+      text: "Meta Atingida",
+    };
+  }
+  if (pct >= 50) {
+    return {
+      key: "andamento",
+      color: "#FF8B00",
+      bg: "#FFF3CD",
+      text: "Em Andamento",
+    };
+  }
+  return {
+    key: "abaixo",
+    color: "#DE350B",
+    bg: "#FFEBE6",
+    text: "Abaixo da Meta",
+  };
+}
+
+function getFaltaInfo(falta) {
+  const value = parseFloat(falta.toFixed(1));
+  if (falta < 0) {
+    return {
+      display: `+${Math.abs(value)}`,
+      text: `${Math.abs(value)} acima da meta`,
+    };
+  }
+  if (falta === 0) {
+    return {
+      display: value,
+      text: "Meta cumprida",
+    };
+  }
+  return {
+    display: value,
+    text: `${value} retiradas pendentes`,
+  };
+}
+
+function getDailyCellStyle(value) {
+  return {
+    bg: value > 0 ? "#E6EEFF" : "#F4F6FA",
+    color: value > 0 ? "#003087" : "#aaa",
+  };
+}
+
+function getThreeMonthAlertTone(mesesAbaixoCount) {
+  if (mesesAbaixoCount === 0) {
+    return { bg: "#E3FCEF", border: "#00875A", color: "#00875A" };
+  }
+  if (mesesAbaixoCount >= 2) {
+    return { bg: "#FFEBE6", border: "#DE350B", color: "#DE350B" };
+  }
+  return { bg: "#FFF3CD", border: "#FF8B00", color: "#7A5700" };
+}
+
+function getThreeMonthAlertTitle({ mesesAbaixoCount, mesesComDados }) {
+  if (mesesAbaixoCount === 0) {
+    return `Excelente! Atingiu a meta nos ${mesesComDados} meses analisados.`;
+  }
+  const monthLabel = mesesComDados === 1 ? "mês" : "meses";
+  return `Ficou abaixo da meta em ${mesesAbaixoCount} de ${mesesComDados} ${monthLabel} analisados.`;
+}
+
+function getThreeMonthAlertDescription(mesesAbaixoCount) {
+  if (mesesAbaixoCount >= 2) {
+    return "Atenção: desempenho recorrentemente abaixo do esperado. Ação necessária.";
+  }
+  if (mesesAbaixoCount === 1) {
+    return "Desempenho irregular. Monitorar evolucao no proximo periodo.";
+  }
+  return "Continue assim! Performance consistente acima dos 80%.";
+}
+
+function buildThreeMonthAlertHtml({ mesesComDados, mesesAbaixoCount }) {
+  if (mesesComDados <= 0) return "";
+  const tone = getThreeMonthAlertTone(mesesAbaixoCount);
+  return `
+    <div style="border-radius:8px;padding:9px 14px;margin-bottom:10px;background:${tone.bg};border:1.5px solid ${tone.border}">
+      <div style="font-size:12px;font-weight:700;color:${tone.color};margin-bottom:2px">
+        ${getThreeMonthAlertTitle({ mesesAbaixoCount, mesesComDados })}
+      </div>
+      <div style="font-size:11px;color:${tone.color}">
+        ${getThreeMonthAlertDescription(mesesAbaixoCount)}
+      </div>
+    </div>`;
+}
+
+export async function gerarPDFMetaMensal(month, cidades = []) {
+  const linhas = [...cidades]
+    .map((cidade) => {
+      const cancelamentos = normalizarNumero(cidade.cancelamentos);
+      const meta80 = normalizarNumero(
+        cidade.meta80 ?? cidade.meta ?? cancelamentos * 0.8,
+      );
+
+      return {
+        nome: cidade.nome || cidade.cidade || "Sem cidade",
+        cancelamentos,
+        meta80,
+      };
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  if (linhas.length === 0) return;
+
+  const { default: jsPDF } = await import("jspdf");
+  const { default: autoTable } = await import("jspdf-autotable");
+  const logoDataUrl = await carregarImagemDataUrl("/cluster-mg.png");
+  const dataGeracao = formatarDataGeracao(new Date(), {
+    incluirPreposicao: true,
+  });
+  const totalCancelamentos = linhas.reduce(
+    (total, cidade) => total + cidade.cancelamentos,
+    0,
+  );
+  const totalMeta = linhas.reduce((total, cidade) => total + cidade.meta80, 0);
+  const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+
+  pdf.setFillColor(0, 48, 135);
+  pdf.rect(0, 0, pageWidth, 34, "F");
+  pdf.setFillColor(255, 107, 0);
+  pdf.rect(0, 31, pageWidth, 3, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(16);
+  pdf.text("Meta Mensal - Agentes Autorizados", 14, 13);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.text(`${month} 2026 | Gerado em ${dataGeracao}`, 14, 22);
+
+  if (logoDataUrl) {
+    pdf.setFillColor(255, 255, 255);
+    pdf.roundedRect(pageWidth - 38, 6, 22, 22, 2, 2, "F");
+    pdf.addImage(logoDataUrl, "PNG", pageWidth - 35.5, 8.5, 17, 17);
+  }
+
+  const cardY = 42;
+  const cardW = 55;
+  const cards = [
+    ["Cidades", intFmt.format(linhas.length), [0, 48, 135]],
+    ["Cancelamentos", intFmt.format(totalCancelamentos), [255, 107, 0]],
+    ["Meta 80%", `${intFmt.format(totalMeta)} retiradas`, [0, 135, 90]],
+  ];
+
+  cards.forEach(([label, value, color], index) => {
+    const x = 14 + index * (cardW + 7);
+    pdf.setFillColor(248, 250, 252);
+    pdf.roundedRect(x, cardY, cardW, 18, 2, 2, "F");
+    pdf.setDrawColor(221, 227, 238);
+    pdf.roundedRect(x, cardY, cardW, 18, 2, 2, "S");
+    pdf.setTextColor(107, 120, 151);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7);
+    pdf.text(label.toUpperCase(), x + 4, cardY + 6);
+    pdf.setTextColor(...color);
+    pdf.setFontSize(12);
+    pdf.text(String(value), x + 4, cardY + 14);
+  });
+
+  pdf.setTextColor(26, 35, 64);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.text("Metas calculadas por cidade com base nos cancelamentos do mês anterior.", 14, 69);
+
+  autoTable(pdf, {
+    startY: 75,
+    head: [["Cidade", "Cancelamento mês anterior", "Meta 80%"]],
+    body: linhas.map((cidade) => [
+      cidade.nome,
+      `${intFmt.format(cidade.cancelamentos)} ${cidade.cancelamentos === 1 ? "cancelamento" : "cancelamentos"}`,
+      `${intFmt.format(cidade.meta80)} ${cidade.meta80 === 1 ? "retirada" : "retiradas"}`,
+    ]),
+    theme: "grid",
+    styles: {
+      font: "helvetica",
+      fontSize: 9,
+      cellPadding: 2.5,
+      textColor: [26, 35, 64],
+      lineColor: [221, 227, 238],
+      lineWidth: 0.2,
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    headStyles: {
+      fillColor: [0, 48, 135],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      halign: "center",
+    },
+    columnStyles: {
+      0: { halign: "left", cellWidth: 76 },
+      1: { halign: "center", cellWidth: 54 },
+      2: { halign: "center", cellWidth: 50 },
+    },
+    didParseCell: (data) => {
+      if (data.section === "body" && data.column.index === 0) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.textColor = [0, 48, 135];
+      }
+      if (data.section === "body" && data.column.index === 2) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.textColor = [0, 135, 90];
+      }
+    },
+    didDrawPage: () => {
+      const pageCount = pdf.internal.getNumberOfPages();
+      pdf.setFillColor(243, 246, 250);
+      pdf.rect(0, 282, pageWidth, 15, "F");
+      pdf.setFontSize(8);
+      pdf.setTextColor(107, 120, 151);
+      pdf.text("Sempre Internet | Dashboard Agentes Autorizados", 14, 290);
+      pdf.text(
+        `Página ${pdf.internal.getCurrentPageInfo().pageNumber} de ${pageCount}`,
+        196,
+        290,
+        { align: "right" },
+      );
+    },
+  });
+
+  const nomeMes = String(month || "mes").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  pdf.save(`Meta_Mensal_Agentes_${nomeMes}_2026.pdf`);
+}
+
 export function gerarPDFCidade(cidadeNome, month, allData) {
   const d = allData[month];
   if (!d) return;
-  const c = d.cidades.find(x => x.nome === cidadeNome);
+  const c = d.cidades.find((x) => x.nome === cidadeNome);
   if (!c) return;
 
-  const now = new Date();
-  const dataGeracao = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} às ${String(now.getHours()).padStart(2,'0')}h${String(now.getMinutes()).padStart(2,'0')}`;
+  const dataGeracao = formatarDataGeracao(new Date(), {
+    incluirPreposicao: true,
+  });
 
   const pct = c.pct;
   const barW = Math.min(pct, 100);
-  const barColor = pct > 100 ? '#7c3aed' : pct >= 80 ? '#00875A' : pct >= 50 ? '#FF8B00' : '#DE350B';
-  const sk = pct > 100 ? 'over' : pct >= 80 ? 'atingido' : pct >= 50 ? 'andamento' : 'abaixo';
-  const statusMap = {
-    over:     { cls: '#6B21A8', bg: '#F3E8FF', txt: 'Acima da Meta' },
-    atingido: { cls: '#00875A', bg: '#E3FCEF', txt: 'Meta Atingida' },
-    andamento:{ cls: '#7A5700', bg: '#FFF3CD', txt: 'Em Andamento' },
-    abaixo:   { cls: '#DE350B', bg: '#FFEBE6', txt: 'Abaixo da Meta' },
-  };
-  const st = statusMap[sk];
+  const status = getPerformanceStatus(pct);
+  const faltaInfo = getFaltaInfo(c.falta);
 
-  const faltaVal = parseFloat(c.falta.toFixed(1));
-  const faltaDisplay = c.falta < 0 ? '+' + Math.abs(faltaVal) : faltaVal;
-
-  let daysHtml = '';
+  let daysHtml = "";
   c.daily.forEach((val, i) => {
-    const bg    = val > 0 ? '#E6EEFF' : '#F4F6FA';
-    const color = val > 0 ? '#003087' : '#aaa';
+    const { bg, color } = getDailyCellStyle(val);
     daysHtml += `
       <div style="border:1px solid #DDE3EE;border-radius:6px;padding:6px 4px;text-align:center;background:${bg}">
-        <div style="font-size:9px;color:#6B7897;font-weight:600">Dia ${i+1}</div>
-        <div style="font-size:18px;font-weight:700;color:${color}">${val > 0 ? val : '-'}</div>
+        <div style="font-size:9px;color:#6B7897;font-weight:600">Dia ${i + 1}</div>
+        <div style="font-size:18px;font-weight:700;color:${color}">${val > 0 ? val : "-"}</div>
       </div>`;
   });
-
-  const faltaTxt = c.falta < 0
-    ? `${Math.abs(faltaVal)} acima da meta`
-    : c.falta === 0 ? 'Meta cumprida'
-    : `${faltaVal} retiradas pendentes`;
 
   const conteudo = `
 <div style="font-family:Arial,sans-serif;color:#1A2340;font-size:13px;background:#fff;padding:24px">
 
-  <!-- CABEÇALHO -->
   <div style="background:linear-gradient(135deg,#1a0050 0%,#003087 55%,#0052CC 100%);padding:24px 28px;border-radius:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <div style="color:rgba(255,255,255,.6);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:5px">Sempre Internet · Agentes Autorizados</div>
@@ -49,12 +298,11 @@ export function gerarPDFCidade(cidadeNome, month, allData) {
       <div style="color:rgba(255,255,255,.75);font-size:13px">${month} 2026 · Relatório Individual de Performance</div>
     </div>
     <div style="text-align:right">
-      <div style="background:${st.bg};color:${st.cls};border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700">${st.txt}</div>
+      <div style="background:${status.bg};color:${status.color};border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700">${status.text}</div>
       <div style="color:rgba(255,255,255,.5);font-size:10px;margin-top:8px">Gerado em ${dataGeracao}</div>
     </div>
   </div>
 
-  <!-- KPIs -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
     <div style="border:1.5px solid #DDE3EE;border-radius:10px;padding:14px;border-top:4px solid #003087">
       <div style="font-size:9px;font-weight:700;color:#6B7897;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Cancelamentos</div>
@@ -68,41 +316,38 @@ export function gerarPDFCidade(cidadeNome, month, allData) {
       <div style="font-size:9px;font-weight:700;color:#6B7897;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Realizado</div>
       <div style="font-size:32px;font-weight:800;color:#00875A">${c.realizado}</div>
     </div>
-    <div style="border:1.5px solid #DDE3EE;border-radius:10px;padding:14px;border-top:4px solid ${barColor}">
+    <div style="border:1.5px solid #DDE3EE;border-radius:10px;padding:14px;border-top:4px solid ${status.color}">
       <div style="font-size:9px;font-weight:700;color:#6B7897;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Falta / Sobra</div>
-      <div style="font-size:32px;font-weight:800;color:${barColor}">${faltaDisplay}</div>
+      <div style="font-size:32px;font-weight:800;color:${status.color}">${faltaInfo.display}</div>
     </div>
   </div>
 
-  <!-- PROGRESSO -->
   <div style="border:1.5px solid #DDE3EE;border-radius:10px;padding:18px;margin-bottom:20px">
-    <div style="font-size:13px;font-weight:700;color:#003087;margin-bottom:12px">📊 Progresso da Meta</div>
+    <div style="font-size:13px;font-weight:700;color:#003087;margin-bottom:12px">Progresso da Meta</div>
     <div style="background:#F4F6FA;border-radius:8px;overflow:hidden;height:18px;margin-bottom:7px">
-      <div style="width:${barW}%;height:100%;background:${barColor};border-radius:8px"></div>
+      <div style="width:${barW}%;height:100%;background:${status.color};border-radius:8px"></div>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:12px;color:#6B7897">
-      <span>${c.daily.reduce((a,b) => a+b, 0).toLocaleString('pt-BR')} retiradas</span>
+      <span>${c.daily.reduce((a, b) => a + b, 0).toLocaleString("pt-BR")} retiradas</span>
       <span style="font-size:18px;font-weight:800;color:#1A2340">${pct.toFixed(1)}% da meta</span>
       <span>Meta: ${Math.round(c.meta80)}</span>
     </div>
   </div>
 
-  <!-- DIAS -->
   <div style="border:1.5px solid #DDE3EE;border-radius:10px;padding:18px;margin-bottom:20px">
-    <div style="font-size:13px;font-weight:700;color:#003087;margin-bottom:12px">📅 Retiradas por Dia</div>
+    <div style="font-size:13px;font-weight:700;color:#003087;margin-bottom:12px">Retiradas por Dia</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(50px,1fr));gap:5px">
       ${daysHtml}
     </div>
     <div style="margin-top:10px;font-size:11px;color:#6B7897">
-      Total acumulado no mês: <strong style="color:#003087">${c.daily.reduce((a,b) => a+b, 0).toLocaleString('pt-BR')}</strong> retiradas
+      Total acumulado no mês: <strong style="color:#003087">${c.daily.reduce((a, b) => a + b, 0).toLocaleString("pt-BR")}</strong> retiradas
     </div>
   </div>
 
-  <!-- RODAPÉ -->
   <div style="background:#F0F3F8;border-radius:10px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center">
     <div>
-      <div style="font-size:10px;color:#6B7897;font-weight:700;text-transform:uppercase;letter-spacing:1px">Situação atual</div>
-      <div style="font-size:14px;font-weight:700;color:${barColor};margin-top:3px">${faltaTxt}</div>
+      <div style="font-size:10px;color:#6B7897;font-weight:700;text-transform:uppercase;letter-spacing:1px">Situacao atual</div>
+      <div style="font-size:14px;font-weight:700;color:${status.color};margin-top:3px">${faltaInfo.text}</div>
     </div>
     <div style="text-align:right;font-size:10px;color:#6B7897">
       <div style="font-weight:600">Sempre Internet</div>
@@ -113,28 +358,20 @@ export function gerarPDFCidade(cidadeNome, month, allData) {
 
 </div>`;
 
-  _printArea(conteudo);
+  imprimirHtml(conteudo, { areaId: "pdf-print-area", styleId: "pdf-print-style" });
 }
 
 export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
-  const MONTH_ORDER = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const dataGeracao = formatarDataGeracao(new Date(), {
+    incluirPreposicao: true,
+  });
+  const meses3 = obterMesesAnteriores(mesAtual, 3);
 
-  const now = new Date();
-  const dataGeracao = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()} às ${String(now.getHours()).padStart(2,'0')}h${String(now.getMinutes()).padStart(2,'0')}`;
-
-  const mesIdx = MONTH_ORDER.indexOf(mesAtual);
-  const meses3 = [];
-  for (let i = 2; i >= 0; i--) {
-    const idx = mesIdx - i;
-    if (idx >= 0) meses3.push(MONTH_ORDER[idx]);
-  }
-
-  let blocosHtml = '';
+  let blocosHtml = "";
   let mesesAbaixoCount = 0;
   let mesesComDados = 0;
 
-  meses3.forEach(m => {
+  meses3.forEach((m) => {
     const dadosMes = allData[m];
     if (!dadosMes) {
       blocosHtml += `
@@ -145,7 +382,7 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
       return;
     }
 
-    const cidadeM = dadosMes.cidades.find(x => x.nome === cidadeNome);
+    const cidadeM = dadosMes.cidades.find((x) => x.nome === cidadeNome);
     if (!cidadeM) {
       blocosHtml += `
         <div style="border:1.5px solid #DDE3EE;border-radius:12px;padding:18px;margin-bottom:16px;opacity:.5">
@@ -155,27 +392,20 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
       return;
     }
 
-    mesesComDados++;
+    mesesComDados += 1;
     const pct = cidadeM.pct;
     const atingiu = pct >= 80;
-    if (!atingiu) mesesAbaixoCount++;
+    if (!atingiu) mesesAbaixoCount += 1;
 
-    const barColor = pct > 100 ? '#7c3aed' : pct >= 80 ? '#00875A' : pct >= 50 ? '#FF8B00' : '#DE350B';
+    const status = getPerformanceStatus(pct);
     const barW = Math.min(pct, 100);
-    const statusTxt = pct > 100 ? 'Acima da meta' : pct >= 80 ? 'Meta atingida' : pct >= 50 ? 'Em andamento' : 'Abaixo da meta';
-    const statusBg  = pct > 100 ? '#F3E8FF' : pct >= 80 ? '#E3FCEF' : pct >= 50 ? '#FFF3CD' : '#FFEBE6';
-
-    const faltaVal = parseFloat(cidadeM.falta.toFixed(1));
-    const faltaTxt = cidadeM.falta < 0
-      ? `${Math.abs(faltaVal)} acima`
-      : cidadeM.falta === 0 ? 'Meta cumprida'
-      : `${faltaVal} pendentes`;
+    const faltaInfo = getFaltaInfo(cidadeM.falta);
 
     blocosHtml += `
-      <div style="border:1.5px solid ${atingiu ? '#00875A' : '#DE350B'};border-radius:8px;padding:10px 14px;margin-bottom:8px;background:${atingiu ? '#F0FFF7' : '#FFF8F7'}">
+      <div style="border:1.5px solid ${atingiu ? "#00875A" : "#DE350B"};border-radius:8px;padding:10px 14px;margin-bottom:8px;background:${atingiu ? "#F0FFF7" : "#FFF8F7"}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <div style="font-size:13px;font-weight:700;color:#003087">${m} 2026</div>
-          <div style="background:${statusBg};color:${barColor};border-radius:20px;padding:2px 10px;font-size:10px;font-weight:700">${statusTxt}</div>
+          <div style="background:${status.bg};color:${status.color};border-radius:20px;padding:2px 10px;font-size:10px;font-weight:700">${status.text}</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:8px">
           <div style="background:#fff;border:1px solid #DDE3EE;border-radius:6px;padding:7px 8px;border-top:3px solid #003087">
@@ -190,13 +420,13 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
             <div style="font-size:8px;color:#6B7897;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Realizado</div>
             <div style="font-size:19px;font-weight:800;color:#00875A;line-height:1">${cidadeM.realizado}</div>
           </div>
-          <div style="background:#fff;border:1px solid #DDE3EE;border-radius:6px;padding:7px 8px;border-top:3px solid ${barColor}">
+          <div style="background:#fff;border:1px solid #DDE3EE;border-radius:6px;padding:7px 8px;border-top:3px solid ${status.color}">
             <div style="font-size:8px;color:#6B7897;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Falta/Sobra</div>
-            <div style="font-size:19px;font-weight:800;color:${barColor};line-height:1">${faltaTxt}</div>
+            <div style="font-size:19px;font-weight:800;color:${status.color};line-height:1">${faltaInfo.text}</div>
           </div>
         </div>
         <div style="background:#F4F6FA;border-radius:6px;overflow:hidden;height:10px;margin-bottom:4px">
-          <div style="width:${barW}%;height:100%;background:${barColor};border-radius:6px"></div>
+          <div style="width:${barW}%;height:100%;background:${status.color};border-radius:6px"></div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:10px;color:#6B7897">
           <span>${cidadeM.realizado} realizados</span>
@@ -206,26 +436,11 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
       </div>`;
   });
 
-  const alertaHtml = mesesComDados > 0 ? `
-    <div style="border-radius:8px;padding:9px 14px;margin-bottom:10px;background:${mesesAbaixoCount === 0 ? '#E3FCEF' : mesesAbaixoCount >= 2 ? '#FFEBE6' : '#FFF3CD'};border:1.5px solid ${mesesAbaixoCount === 0 ? '#00875A' : mesesAbaixoCount >= 2 ? '#DE350B' : '#FF8B00'}">
-      <div style="font-size:12px;font-weight:700;color:${mesesAbaixoCount === 0 ? '#00875A' : mesesAbaixoCount >= 2 ? '#DE350B' : '#7A5700'};margin-bottom:2px">
-        ${mesesAbaixoCount === 0
-          ? `Excelente! Atingiu a meta nos ${mesesComDados} meses analisados.`
-          : `Ficou abaixo da meta em ${mesesAbaixoCount} de ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'} analisados.`}
-      </div>
-      <div style="font-size:11px;color:${mesesAbaixoCount === 0 ? '#00875A' : mesesAbaixoCount >= 2 ? '#DE350B' : '#7A5700'}">
-        ${mesesAbaixoCount >= 2
-          ? 'Atenção: desempenho recorrentemente abaixo do esperado. Ação necessária.'
-          : mesesAbaixoCount === 1
-          ? 'Desempenho irregular. Monitorar evolução no próximo período.'
-          : 'Continue assim! Performance consistente acima dos 80%.'}
-      </div>
-    </div>` : '';
+  const alertaHtml = buildThreeMonthAlertHtml({ mesesComDados, mesesAbaixoCount });
 
   const conteudo = `
 <div style="font-family:Arial,sans-serif;color:#1A2340;font-size:12px;background:#fff;padding:16px">
 
-  <!-- CABEÇALHO -->
   <div style="background:linear-gradient(135deg,#1a0050 0%,#003087 55%,#0052CC 100%);padding:16px 20px;border-radius:10px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <div style="color:rgba(255,255,255,.6);font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px">Sempre Internet · Agentes Autorizados</div>
@@ -241,11 +456,10 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
   ${alertaHtml}
   ${blocosHtml}
 
-  <!-- RODAPÉ -->
   <div style="background:#F0F3F8;border-radius:8px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;margin-top:4px">
     <div>
       <div style="font-size:9px;color:#6B7897;font-weight:700;text-transform:uppercase;letter-spacing:1px">Meses abaixo da meta</div>
-      <div style="font-size:17px;font-weight:800;color:${mesesAbaixoCount === 0 ? '#00875A' : '#DE350B'};margin-top:1px">${mesesAbaixoCount} de ${mesesComDados} ${mesesComDados === 1 ? 'mês' : 'meses'}</div>
+      <div style="font-size:17px;font-weight:800;color:${mesesAbaixoCount === 0 ? "#00875A" : "#DE350B"};margin-top:1px">${mesesAbaixoCount} de ${mesesComDados} ${mesesComDados === 1 ? "mês" : "meses"}</div>
     </div>
     <div style="text-align:right;font-size:9px;color:#6B7897">
       <div style="font-weight:600">Sempre Internet</div>
@@ -256,41 +470,6 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
 
 </div>`;
 
-  _printArea(conteudo);
+  imprimirHtml(conteudo, { areaId: "pdf-print-area", styleId: "pdf-print-style" });
 }
 
-function _printArea(conteudo) {
-  const existing = document.getElementById('pdf-print-area');
-  if (existing) existing.remove();
-
-  const printArea = document.createElement('div');
-  printArea.id = 'pdf-print-area';
-  printArea.innerHTML = conteudo;
-  printArea.style.cssText = `
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: #fff;
-    z-index: 99999;
-    overflow: auto;
-  `;
-
-  document.body.appendChild(printArea);
-
-  const style = document.createElement('style');
-  style.id = 'pdf-print-style';
-  style.innerHTML = `
-    @media print {
-      body > *:not(#pdf-print-area) { display: none !important; }
-      #pdf-print-area { display: block !important; position: static !important; }
-    }
-  `;
-  document.head.appendChild(style);
-
-  window.print();
-
-  setTimeout(() => {
-    printArea.remove();
-    style.remove();
-  }, 1000);
-}

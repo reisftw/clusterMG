@@ -1,17 +1,18 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { X, UserPlus } from "lucide-react";
+import ModalShell from "../../../components/ui/ModalShell";
 
 const CARGOS = [
-  "Técnico I",
-  "Técnico II",
-  "Técnico III",
+  "Tecnico I",
+  "Tecnico II",
+  "Tecnico III",
   "BackOffice I",
   "BackOffice II",
   "BackOffice III",
-  "Líder Técnico",
+  "Lider Tecnico",
 ];
 
-const STATUS_OPTIONS = ["Ativo", "Em Experiência", "Desligado"];
+const STATUS_OPTIONS = ["Ativo", "Em Experiencia", "Desligado"];
 
 const CAMPOS_INICIAIS = {
   nome: "",
@@ -95,8 +96,8 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-100">
+    <ModalShell onClose={onClose} showClose={false} size="2xl" bodyClassName="p-0">
+      <div className="flex min-h-0 flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -108,7 +109,7 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           >
             <X size={18} />
           </button>
@@ -118,7 +119,7 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
           <div className="space-y-5">
             <div>
               <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">
-                Dados Básicos
+                Dados Basicos
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
@@ -166,7 +167,7 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
                   </select>
                 </div>
                 <Field
-                  label="Matrícula"
+                  label="Matricula"
                   name="matricula"
                   value={form.matricula}
                   onChange={handle}
@@ -188,7 +189,7 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field
-                  label="Data de Contratação"
+                  label="Data de Contratacao"
                   name="data_contratacao"
                   value={form.data_contratacao}
                   onChange={handle}
@@ -233,11 +234,11 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
                 />
                 <div className="sm:col-span-2">
                   <Field
-                    label="Endereço"
+                    label="Endereco"
                     name="endereco"
                     value={form.endereco}
                     onChange={handle}
-                    placeholder="Rua, número, bairro..."
+                    placeholder="Rua, numero, bairro..."
                   />
                 </div>
               </div>
@@ -296,14 +297,15 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
               {isSubmitting
                 ? "Salvando..."
                 : inicial
-                  ? "Salvar alterações"
+                  ? "Salvar alteracoes"
                   : "Cadastrar"}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 };
 
 export default ColaboradorForm;
+

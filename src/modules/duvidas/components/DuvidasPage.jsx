@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import {
   BookOpen,
   CircleHelp,
@@ -584,3 +584,4 @@ export default function DuvidasPage() {
     </div>
   );
 }
+
