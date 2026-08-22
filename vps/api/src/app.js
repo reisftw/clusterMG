@@ -25,6 +25,7 @@ const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
 const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
+const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
@@ -1172,83 +1173,13 @@ function createApp() {
     realtimeLimiter,
   }));
 
-  app.get("/api/notifications", requireAuthenticated, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.listNotifications({
-        user: req.user?.profile || req.user || {},
-        limit: req.query.limit,
-        offset: req.query.offset,
-        type: req.query.type,
-        severity: req.query.severity,
-        unread: req.query.unread,
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/notifications/stats", requireAuthenticated, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.getNotificationStats({
-        user: req.user?.profile || req.user || {},
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/notifications/preferences", requireAuthenticated, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.getPreferences({
-        user: req.user?.profile || req.user || {},
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.put("/api/notifications/preferences", requireAuthenticated, requireAnyPermission(["configuracao.geral.manage", "manage_general_settings"], ADMIN_ROLES), requireCsrfToken, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.savePreferences({
-        user: req.user?.profile || req.user || {},
-        preferences: req.body || {},
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/notifications/counters", requireAuthenticated, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.getCounters({
-        user: req.user?.profile || req.user || {},
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/notifications/read", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.markNotificationsRead({
-        user: req.user?.profile || req.user || {},
-        ids: req.body?.ids,
-        all: req.body?.all === true,
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/notifications/check-critical", requireAuthenticated, requireAnyPermission(["configuracao.notificacoes.manage", "manage_general_settings"], ADMIN_ROLES), requireCsrfToken, async (req, res, next) => {
-    try {
-      res.json(await notificationsService.createCriticalServiceAlerts({
-        user: req.user?.profile || req.user || {},
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
+  app.use("/api/notifications", createNotificationsRouter({
+    adminRoles: ADMIN_ROLES,
+    notificationsService,
+    requireAnyPermission,
+    requireAuthenticated,
+    requireCsrfToken,
+  }));
 
   app.get("/api/public/dashboard", async (req, res, next) => {
     try {
