@@ -34,6 +34,7 @@ const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
+const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
 const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
@@ -150,36 +151,6 @@ function requireInternalToken(req, res, next) {
   }
 
   next();
-}
-
-function getProvidedWebhookSecret(req) {
-  return String(
-    req.get("x-retiradas-webhook-secret") ||
-      req.get("x-webhook-secret") ||
-      req.get("x-api-key") ||
-      req.query.secret ||
-      req.body?.secret ||
-      "",
-  );
-}
-
-function verifyWebhookSecret(req, res, envName, label) {
-  const expected = String(process.env[envName] || "");
-  if (!expected || expected.length < 24) {
-    if (isProduction()) {
-      res.status(503).json({ error: `${label} sem segredo de webhook configurado.` });
-      return false;
-    }
-    return true;
-  }
-
-  const provided = getProvidedWebhookSecret(req);
-  if (!timingSafeEqualText(provided, expected)) {
-    res.status(401).json({ error: "Webhook nao autorizado." });
-    return false;
-  }
-
-  return true;
 }
 
 function normalizeUserRole(role) {
@@ -3107,94 +3078,11 @@ function createApp() {
     requireRoles,
   }));
 
-  async function handleEvolutionWebhook(req, res, next) {
-    try {
-      if (!verifyWebhookSecret(req, res, "EVOLUTION_WEBHOOK_SECRET", "Evolution")) {
-        return;
-      }
-      const confirmationResult = await agendamentoConfirmacao.registerIncomingResponse(req.body || {}).catch((error) => {
-        console.warn("[confirmacao-agendamentos] Falha ao processar resposta:", error?.message || error);
-        return null;
-      });
-      if (confirmationResult?.confirmed) {
-        res.json({ ok: true, confirmation: confirmationResult });
-        return;
-      }
-      const result = await evolutionMessaging.registerCallback({
-        ...(req.body || {}),
-        webhookEvent: req.params?.event || req.body?.event || "",
-      });
-      res.json(result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  app.post("/api/webhooks/evolution", handleEvolutionWebhook);
-  app.post("/api/webhooks/evolution/:event", handleEvolutionWebhook);
-
-  async function handleEvolutionConfirmationWebhook(req, res, next) {
-    try {
-      if (!verifyWebhookSecret(req, res, "EVOLUTION_CONFIRMATION_WEBHOOK_SECRET", "Evolution confirmação")) {
-        return;
-      }
-      const confirmationResult = await agendamentoConfirmacao.registerIncomingResponse(req.body || {});
-      res.json({ ok: true, confirmation: confirmationResult });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  app.post("/api/webhooks/evolution-confirmacao", handleEvolutionConfirmationWebhook);
-  app.post("/api/webhooks/evolution-confirmacao/:event", handleEvolutionConfirmationWebhook);
-
-  app.post("/api/webhooks/cvortex", async (req, res, next) => {
-    try {
-      const verification = await cvortexIntegration.verifyWebhookSecret(req);
-      if (!verification.ok) {
-        res.status(401).json({ error: "Webhook Cvortex não autorizado." });
-        return;
-      }
-      const result = await evolutionMessaging.registerCallback({
-        ...(req.body || {}),
-        webhookEvent: req.body?.event || req.body?.type || "cvortex",
-      });
-      res.json(result);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.get("/api/webhooks/whatsapp-official", async (req, res, next) => {
-    try {
-      const config = await evolutionMessaging.getConfig();
-      const expectedToken = String(process.env.WHATSAPP_OFFICIAL_VERIFY_TOKEN || config.officialWebhookVerifyToken || "");
-      const mode = String(req.query["hub.mode"] || "");
-      const token = String(req.query["hub.verify_token"] || "");
-      const challenge = String(req.query["hub.challenge"] || "");
-      if (mode === "subscribe" && expectedToken && token === expectedToken) {
-        res.status(200).send(challenge);
-        return;
-      }
-      res.status(403).json({ error: "Webhook oficial nao autorizado." });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/webhooks/whatsapp-official", async (req, res, next) => {
-    try {
-      if (!verifyWebhookSecret(req, res, "WHATSAPP_OFFICIAL_WEBHOOK_SECRET", "WhatsApp Oficial")) {
-        return;
-      }
-      res.json(await evolutionMessaging.registerCallback({
-        ...(req.body || {}),
-        webhookEvent: "whatsapp_official",
-      }));
-    } catch (error) {
-      next(error);
-    }
-  });
+  app.use("/api/webhooks", createWebhooksRouter({
+    agendamentoConfirmacao,
+    cvortexIntegration,
+    evolutionMessaging,
+  }));
 
   app.put("/api/static/:domain", requireInternalToken, async (req, res, next) => {
     try {
