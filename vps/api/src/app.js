@@ -23,6 +23,7 @@ const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
+const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
 const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
@@ -1650,88 +1651,14 @@ function createApp() {
     }
   });
 
-  app.get(
-    "/api/admin/email/config",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json({ ok: true, config: emailService.sanitizeConfig(await emailService.getConfig()) });
-      } catch (error) {
-        notificationsService.createNotification({
-          type: "backup",
-          title: "Falha ao gerar backup",
-          message: error?.message || "Não foi possível gerar o backup do PostgreSQL.",
-          targetPath: "/configuracoes/banco-de-dados",
-          severity: "critical",
-          user: req.user?.profile || req.user || {},
-          targets: { roles: ["admin"] },
-          meta: { event: "backup_failed" },
-        }).catch((notifyError) => console.warn("[notifications] Falha ao avisar erro de backup:", notifyError?.message || notifyError));
-        next(error);
-      }
-    },
-  );
-
-  app.put(
-    "/api/admin/email/config",
+  app.use("/api/admin/email", createEmailAdminRouter({
+    adminRoles: ADMIN_ROLES,
+    emailService,
+    notificationsService,
     requireAuthenticated,
     requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json({ ok: true, config: await emailService.saveConfig(req.body || {}) });
-      } catch (error) {
-        notificationsService.createNotification({
-          type: "backup",
-          title: "Falha no rollback",
-          message: error?.message || "Não foi possível restaurar o backup selecionado.",
-          targetPath: "/configuracoes/banco-de-dados",
-          severity: "critical",
-          user: req.user?.profile || req.user || {},
-          targets: { roles: ["admin"] },
-          meta: { event: "backup_restore_failed", fileName: req.params.fileName },
-        }).catch((notifyError) => console.warn("[notifications] Falha ao avisar erro de restore:", notifyError?.message || notifyError));
-        next(error);
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/email/test",
-    requireAuthenticated,
-    requireCsrfToken,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json(await emailService.sendTestEmail(req.body?.to || req.user?.email));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  app.get(
-    "/api/admin/email/logs",
-    requireAuthenticated,
-    requireRoles(ADMIN_ROLES),
-    async (req, res, next) => {
-      try {
-        res.json({
-          ok: true,
-          ...(await emailService.listEmailLogs({
-            limit: req.query.limit,
-            offset: req.query.offset,
-            status: req.query.status,
-            type: req.query.type,
-            q: req.query.q,
-          })),
-        });
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
+    requireRoles,
+  }));
 
   app.get("/api/insumos/requisicoes", requireAuthenticated, async (req, res, next) => {
     try {
