@@ -5,6 +5,7 @@ import {
   getVpsCsrfToken,
   setVpsAuthSession,
 } from "./vpsAuthSession";
+import { captureApiError } from "./errorTracking";
 
 const DEFAULT_API_BASE_URL = "https://retiradas.tech/api";
 let csrfRefreshPromise = null;
@@ -105,7 +106,14 @@ export async function requestVpsApi(path, options = {}) {
     if (isAuthExpired(response)) {
       clearVpsAuthSession();
     }
-    throw new Error(data?.error || `Erro HTTP ${response.status}.`);
+    const message = data?.error || `Erro HTTP ${response.status}.`;
+    captureApiError({
+      path,
+      method: options.method || "GET",
+      status: response.status,
+      message,
+    });
+    throw new Error(message);
   }
 
   return data;

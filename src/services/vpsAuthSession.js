@@ -1,3 +1,5 @@
+import { clearErrorTrackingUser, setErrorTrackingUser } from "./errorTracking";
+
 const SESSION_STORAGE_KEY = "retiradas_vps_auth_session_v1";
 const CSRF_COOKIE_NAME = "retiradas_csrf";
 
@@ -102,12 +104,14 @@ export function setVpsAuthSession(session) {
   const shouldNotify = !areSessionIdentitiesEqual(currentSession, nextSession);
   currentSession = nextSession;
   writeStoredSession(currentSession);
+  setErrorTrackingUser(currentSession?.user || null);
   if (shouldNotify) notify();
 }
 
 export function clearVpsAuthSession() {
   currentSession = null;
   writeStoredSession(null);
+  clearErrorTrackingUser();
   notify();
 }
 

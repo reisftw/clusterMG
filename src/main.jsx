@@ -7,6 +7,9 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { LayoutModeProvider } from "./context/LayoutModeContext";
 import { SystemProvider } from "./context/SystemContext";
 import { registerAppServiceWorker } from "./services/appServiceWorker";
+import { initErrorTracking } from "./services/errorTracking";
+
+initErrorTracking();
 
 const PUBLIC_PWA_PATHS = new Set([
   "/painel",
