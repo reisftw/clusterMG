@@ -22,6 +22,8 @@ const OKTA_OAUTH_CONFIG_PATH = "config/okta_oauth";
 const GOOGLE_OAUTH_DEFAULT_AUTO_ROLE = "visitante";
 const OKTA_OAUTH_DEFAULT_AUTO_ROLE = "visitante";
 const oktaJwksCache = new Map();
+const AUTH_REQUEST_CACHE_TTL_MS = Math.max(Number(process.env.AUTH_REQUEST_CACHE_TTL_MS || 2000), 0);
+const authRequestCache = new Map();
 
 const FULL_OPERATION_ROLES = ["admin", "backoffice_retirada", "supervisor"];
 const DASHBOARD_ROLES = [
@@ -415,6 +417,34 @@ async function requireActiveSession(payload) {
     [payload.jti, payload.uid],
   );
   if (!result.rows[0]) throw new Error("Sessao revogada ou expirada.");
+}
+
+function authCacheKey(payload = {}) {
+  return `${payload.jti || ""}:${payload.uid || ""}:${payload.sv || ""}`;
+}
+
+function getCachedAuthenticatedUser(payload = {}) {
+  if (!AUTH_REQUEST_CACHE_TTL_MS) return null;
+  const key = authCacheKey(payload);
+  const cached = authRequestCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > AUTH_REQUEST_CACHE_TTL_MS) {
+    authRequestCache.delete(key);
+    return null;
+  }
+  return cached.user;
+}
+
+function setCachedAuthenticatedUser(payload = {}, user) {
+  if (!AUTH_REQUEST_CACHE_TTL_MS || !payload?.jti || !payload?.uid || !user) return;
+  authRequestCache.set(authCacheKey(payload), { createdAt: Date.now(), user });
+  if (authRequestCache.size > 1000) {
+    const expiredAt = Date.now() - AUTH_REQUEST_CACHE_TTL_MS;
+    for (const [key, value] of authRequestCache.entries()) {
+      if (value.createdAt < expiredAt || authRequestCache.size > 1000) authRequestCache.delete(key);
+      if (authRequestCache.size <= 1000) break;
+    }
+  }
 }
 
 async function upgradePasswordHashIfNeeded(user, password) {
@@ -1165,6 +1195,15 @@ async function requireAuthenticated(req, res, next) {
     }
 
     const decoded = verifyToken(token);
+    const cachedUser = getCachedAuthenticatedUser(decoded);
+    if (cachedUser) {
+      req.user = cachedUser;
+      req.authPayload = decoded;
+      req.authToken = token;
+      db.runWithRequestContext(req.user, next);
+      return;
+    }
+
     await requireActiveSession(decoded);
     const [user, profile] = await Promise.all([
       getLocalUserByUid(decoded.uid),
@@ -1186,9 +1225,10 @@ async function requireAuthenticated(req, res, next) {
       profile,
       role: normalizeRole(profile.role),
     };
+    setCachedAuthenticatedUser(decoded, req.user);
     req.authPayload = decoded;
     req.authToken = token;
-    next();
+    db.runWithRequestContext(req.user, next);
   } catch (error) {
     console.error("[auth] Falha ao autenticar requisicao:", error?.message || error);
     res.status(401).json({ error: "Token invalido ou expirado." });
@@ -1223,6 +1263,7 @@ module.exports = {
   getImportedUserProfile,
   getGoogleOAuthConfig,
   getOktaOAuthConfig,
+  getLocalUserByEmail,
   getLocalUserByUid,
   getRequestAuthToken,
   hashPassword,
