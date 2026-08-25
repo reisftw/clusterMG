@@ -73,6 +73,14 @@ export default defineConfig([
     },
   },
   {
+    files: ['tests/e2e/**/*.js', 'playwright.config.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  {
     files: ['src/context/**/*.jsx'],
     rules: {
       'react-refresh/only-export-components': 'off',

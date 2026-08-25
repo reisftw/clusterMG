@@ -15,6 +15,8 @@ dist-ssr
 
 # Generated reports and local tool output
 coverage
+playwright-report
+test-results
 .nyc_output
 .scannerwork
 .tmp-swagger
