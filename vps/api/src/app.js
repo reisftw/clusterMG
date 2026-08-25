@@ -1,9 +1,10 @@
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const helmet = require("helmet");
-const crypto = require("crypto");
-const fs = require("fs/promises");
-const path = require("path");
+const crypto = require("node:crypto");
+const fs = require("node:fs/promises");
+const path = require("node:path");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const db = require("./db");
@@ -14,6 +15,8 @@ const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
 const evolutionMessaging = require("./evolutionMessaging");
 const agendamentoConfirmacao = require("./agendamentoConfirmacao");
+const antiBot = require("./antiBot");
+const atendimentoService = require("./atendimento/atendimentoService");
 const emailService = require("./emailService");
 const operationalImports = require("./operationalImports");
 const sempreIntegration = require("./sempreIntegration");
@@ -24,6 +27,7 @@ const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
 const createAgendamentoConfirmacaoAdminRouter = require("./agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes");
+const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes");
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
@@ -32,6 +36,7 @@ const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealti
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
+const metrics = require("./metrics");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
@@ -40,8 +45,8 @@ const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
 const { attachRealtimeClient, broadcastRealtime } = require("./realtime");
 const {
-  buildPublicDashboard,
   buildSnapshotDomain,
+  getCachedPublicDashboard,
 } = require("./publicDashboard");
 const {
   canReadSnapshotDomain,
@@ -54,6 +59,7 @@ const {
   getGoogleOAuthConfig,
   getOktaOAuthConfig,
   getImportedUserProfile,
+  getLocalUserByEmail,
   loginWithGoogleIdToken,
   loginWithOktaIdToken,
   loginWithPassword,
@@ -197,6 +203,9 @@ const INSUMOS_ADMINISTRATIVOS_ROLES = [...FULL_OPERATION_ROLES, ...ADMINISTRATIV
 const INSUMOS_PRODUTOS_COLLECTION = "insumos_administrativos_produtos";
 const INSUMOS_RETIRADAS_COLLECTION = "insumos_administrativos_retiradas";
 const INSUMOS_REQUISICOES_COLLECTION = "insumos_administrativos_requisicoes";
+const INSUMOS_EXPIRATION_CHECK_INTERVAL_MS = Math.max(Number(process.env.INSUMOS_EXPIRATION_CHECK_INTERVAL_MS || 60000), 0);
+let lastInsumosExpirationCheckAt = 0;
+let insumosExpirationPromise = null;
 const IMOVEIS_ADMINISTRATIVOS_COLLECTIONS = new Set([
   "imoveis_administrativos",
   "imoveis_administrativos_reajustes",
@@ -206,6 +215,8 @@ const IMOVEIS_ADMINISTRATIVOS_COLLECTIONS = new Set([
 ]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = ["admin", ...ADMINISTRATIVO_DOCUMENTOS_ROLES];
 const FINANCEIRO_ROLES = ["admin"];
+const PUBLIC_STATIC_CACHE_TTL_MS = Math.max(Number(process.env.PUBLIC_STATIC_CACHE_TTL_MS || 10000), 0);
+const publicStaticCache = new Map();
 const FINANCEIRO_VIEW_PERMISSIONS = [
   "financeiro.visao_geral.view",
   "financeiro.visao_geral.manage",
@@ -220,6 +231,102 @@ const FINANCEIRO_VIEW_PERMISSIONS = [
   "financeiro.configuracoes.manage",
 ];
 const FINANCEIRO_MANAGE_PERMISSIONS = ["financeiro.configuracoes.manage"];
+
+const COLLECTION_READ_PERMISSIONS = Object.freeze({
+  usuarios: ["configuracao.usuarios.view", "configuracao.usuarios.manage", "manage_users"],
+  [EMPRESAS_COLLECTION]: ["empresas.cadastro.view", "empresas.cadastro.manage", "view_empresas_tecnicos", "manage_empresas_tecnicos"],
+  agendamentos: ["destaque.dashboard.view", "view_dashboard", "cliente.agendamentos.view", "cliente.agendamentos.manage", "view_agendamentos", "manage_agendamentos"],
+  agendamentos_logs: ["cliente.agendamentos.view", "cliente.agendamentos.manage", "view_agendamentos", "manage_agendamentos"],
+  acompanhamento_diario: ["destaque.diario.view", "destaque.diario.manage", "view_diario"],
+  acompanhamento_diario_logs: ["destaque.diario.view", "destaque.diario.manage", "view_diario"],
+  feriados: ["equipe.feriados.view", "equipe.feriados.manage", "manage_feriados", "destaque.dashboard.view", "view_dashboard"],
+  regionais: ["configuracao.regionais.view", "configuracao.regionais.manage", "view_regionais", "manage_regionais"],
+  agentes: ["configuracao.agentes.view", "configuracao.agentes.manage", "view_agentes", "manage_agentes"],
+  agenda: ["equipe.agenda.view", "equipe.agenda.manage", "view_agenda", "manage_agenda"],
+  visitas: ["view_visitas", "manage_visitas"],
+  visitas_tecnicos: ["view_visitas", "manage_visitas"],
+  visitas_config: ["view_visitas", "manage_visitas"],
+  duvidas_retirada: ["view_duvidas", "manage_duvidas"],
+  retiradas_solicitacoes: ["view_retiradas", "manage_retiradas"],
+  insumos_administrativos_produtos: ["administrativo.insumos.view", "administrativo.insumos.manage", "view_insumos_administrativos", "manage_insumos_administrativos"],
+  insumos_administrativos_retiradas: ["administrativo.insumos.view", "administrativo.insumos.manage", "view_insumos_administrativos", "manage_insumos_administrativos"],
+  insumos_administrativos_reposicoes: ["administrativo.insumos.view", "administrativo.insumos.manage", "view_insumos_administrativos", "manage_insumos_administrativos"],
+  insumos_administrativos_requisicoes: ["administrativo.insumos.view", "administrativo.insumos.manage", "view_insumos_requisicoes", "view_insumos_administrativos", "manage_insumos_administrativos"],
+  insumos_administrativos_config: ["administrativo.insumos.view", "administrativo.insumos.manage", "view_insumos_administrativos", "manage_insumos_administrativos"],
+  imoveis_administrativos: ["administrativo.imoveis.view", "administrativo.imoveis.manage", "view_imoveis_administrativos", "manage_imoveis_administrativos"],
+  imoveis_administrativos_reajustes: ["administrativo.imoveis.view", "administrativo.imoveis.manage", "view_imoveis_administrativos", "manage_imoveis_administrativos"],
+  imoveis_administrativos_iptu: ["administrativo.imoveis.view", "administrativo.imoveis.manage", "view_imoveis_administrativos", "manage_imoveis_administrativos"],
+  imoveis_administrativos_alugueis: ["administrativo.imoveis.view", "administrativo.imoveis.manage", "view_imoveis_administrativos", "manage_imoveis_administrativos"],
+  imoveis_administrativos_contratos: ["administrativo.imoveis.view", "administrativo.imoveis.manage", "view_imoveis_administrativos", "manage_imoveis_administrativos"],
+  integracoes_api: ["configuracao.integracoes.view", "configuracao.integracoes.manage", "view_integracoes", "manage_integracoes"],
+  equipamentos: ["estoque.equipamentos.view", "estoque.equipamentos.manage", "view_equipamentos", "manage_equipamentos"],
+  entregas_tecnicos: ["tecnicos.entrega_tecnicos.view", "tecnicos.entrega_tecnicos.manage", "view_entregas_tecnicos", "manage_entregas_tecnicos"],
+  validacoes_entregas: ["tecnicos.entrega_tecnicos.view", "tecnicos.entrega_tecnicos.manage", "view_entregas_tecnicos", "manage_entregas_tecnicos"],
+  competencias_entregas: ["tecnicos.entrega_tecnicos.view", "tecnicos.entrega_tecnicos.manage", "view_entregas_tecnicos", "manage_entregas_tecnicos"],
+  entregas_tecnicos_config: ["tecnicos.entrega_tecnicos.view", "tecnicos.entrega_tecnicos.manage", "view_entregas_tecnicos", "manage_entregas_tecnicos"],
+  mensageria_config: ["mensageria.email_config.view", "mensageria.email_config.manage", "manage_mensageria"],
+  mensageria_templates: ["mensageria.email_config.view", "mensageria.email_config.manage", "manage_mensageria"],
+  mensageria_fila: ["mensageria.fila.view", "mensageria.fila.manage", "manage_mensageria"],
+  mensageria_historico: ["mensageria.enviados.view", "mensageria.relatorios.view", "view_mensageria", "view_mensageria_relatorios", "manage_mensageria"],
+  mensageria_callbacks: ["mensageria.callback.view", "mensageria.callback.manage", "manage_mensageria"],
+  logistica_pontos: ["logistica.logistica.view", "logistica.logistica.manage", "view_logistica", "manage_logistica"],
+  logistica_cotacoes: ["logistica.logistica.view", "logistica.logistica.manage", "view_logistica", "manage_logistica"],
+  logistica_config: ["logistica.logistica.view", "logistica.logistica.manage", "view_logistica", "manage_logistica"],
+  config: [
+    "destaque.dashboard.view",
+    "destaque.metas.view",
+    "destaque.metas.manage",
+    "configuracao.geral.view",
+    "configuracao.geral.manage",
+    "view_dashboard",
+    "view_metas",
+    "manage_metas",
+    "manage_general_settings",
+  ],
+});
+
+const COLLECTION_WRITE_PERMISSIONS = Object.freeze({
+  usuarios: ["configuracao.usuarios.manage", "manage_users"],
+  [EMPRESAS_COLLECTION]: ["empresas.cadastro.manage", "manage_empresas_tecnicos"],
+  agendamentos: ["cliente.agendamentos.manage", "manage_agendamentos"],
+  agendamentos_logs: ["cliente.agendamentos.manage", "manage_agendamentos"],
+  acompanhamento_diario: ["destaque.diario.manage"],
+  acompanhamento_diario_logs: ["destaque.diario.manage"],
+  feriados: ["equipe.feriados.manage", "manage_feriados"],
+  regionais: ["configuracao.regionais.manage", "manage_regionais"],
+  agentes: ["configuracao.agentes.manage", "manage_agentes"],
+  agenda: ["equipe.agenda.manage", "manage_agenda"],
+  visitas: ["manage_visitas"],
+  visitas_tecnicos: ["manage_visitas"],
+  visitas_config: ["manage_visitas"],
+  duvidas_retirada: ["manage_duvidas"],
+  retiradas_solicitacoes: ["manage_retiradas"],
+  insumos_administrativos_produtos: ["administrativo.insumos.manage", "manage_insumos_administrativos"],
+  insumos_administrativos_retiradas: ["administrativo.insumos.manage", "manage_insumos_administrativos"],
+  insumos_administrativos_reposicoes: ["administrativo.insumos.manage", "manage_insumos_administrativos"],
+  insumos_administrativos_requisicoes: ["administrativo.insumos.manage", "manage_insumos_administrativos"],
+  insumos_administrativos_config: ["administrativo.insumos.manage", "manage_insumos_administrativos"],
+  imoveis_administrativos: ["administrativo.imoveis.manage", "manage_imoveis_administrativos"],
+  imoveis_administrativos_reajustes: ["administrativo.imoveis.manage", "manage_imoveis_administrativos"],
+  imoveis_administrativos_iptu: ["administrativo.imoveis.manage", "manage_imoveis_administrativos"],
+  imoveis_administrativos_alugueis: ["administrativo.imoveis.manage", "manage_imoveis_administrativos"],
+  imoveis_administrativos_contratos: ["administrativo.imoveis.manage", "manage_imoveis_administrativos"],
+  integracoes_api: ["configuracao.integracoes.manage", "manage_integracoes"],
+  equipamentos: ["estoque.equipamentos.manage", "manage_equipamentos"],
+  entregas_tecnicos: ["tecnicos.entrega_tecnicos.manage", "manage_entregas_tecnicos"],
+  validacoes_entregas: ["tecnicos.entrega_tecnicos.manage", "manage_entregas_tecnicos"],
+  competencias_entregas: ["tecnicos.entrega_tecnicos.manage", "manage_entregas_tecnicos"],
+  entregas_tecnicos_config: ["tecnicos.entrega_tecnicos.manage", "manage_entregas_tecnicos"],
+  mensageria_config: ["mensageria.email_config.manage", "manage_mensageria"],
+  mensageria_templates: ["mensageria.email_config.manage", "manage_mensageria"],
+  mensageria_fila: ["mensageria.fila.manage", "manage_mensageria"],
+  mensageria_historico: ["manage_mensageria"],
+  mensageria_callbacks: ["mensageria.callback.manage", "manage_mensageria"],
+  logistica_pontos: ["logistica.logistica.manage", "manage_logistica"],
+  logistica_cotacoes: ["logistica.logistica.manage", "manage_logistica"],
+  logistica_config: ["logistica.logistica.manage", "manage_logistica"],
+  config: ["destaque.metas.manage", "configuracao.geral.manage", "manage_metas", "manage_general_settings"],
+});
 
 function hasRole(user, roles) {
   return roles.includes(normalizeUserRole(user?.role));
@@ -260,6 +367,36 @@ function requireAnyPermission(permissions, fallbackRoles = []) {
     }
     res.status(403).json({ error: "Permissao insuficiente." });
   };
+}
+
+function getPublicStaticCacheKey(domain, { compact = false } = {}) {
+  const key = String(domain || "").trim();
+  return key ? `${key}:${compact ? "compact" : "full"}` : "";
+}
+
+function getCachedPublicStaticSnapshot(domain, options = {}) {
+  const key = String(domain || "").trim();
+  if (!PUBLIC_STATIC_CACHE_TTL_MS || !key) return null;
+  const cached = publicStaticCache.get(getPublicStaticCacheKey(domain, options));
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > PUBLIC_STATIC_CACHE_TTL_MS) {
+    publicStaticCache.delete(getPublicStaticCacheKey(domain, options));
+    return null;
+  }
+  return {
+    data: cached.data,
+    cacheStatus: "HIT",
+    cacheAgeMs: Date.now() - cached.createdAt,
+  };
+}
+
+function setCachedPublicStaticSnapshot(domain, data, options = {}) {
+  if (!PUBLIC_STATIC_CACHE_TTL_MS || !domain || !data) return;
+  publicStaticCache.set(getPublicStaticCacheKey(domain, options), { createdAt: Date.now(), data });
+  if (publicStaticCache.size > 20) {
+    const firstKey = publicStaticCache.keys().next().value;
+    if (firstKey) publicStaticCache.delete(firstKey);
+  }
 }
 
 function normalizeComparableText(value) {
@@ -665,6 +802,25 @@ async function expireOverdueInsumosRequests() {
   }
 }
 
+async function expireOverdueInsumosRequestsThrottled({ force = false } = {}) {
+  const now = Date.now();
+  if (
+    !force &&
+    INSUMOS_EXPIRATION_CHECK_INTERVAL_MS > 0 &&
+    now - lastInsumosExpirationCheckAt < INSUMOS_EXPIRATION_CHECK_INTERVAL_MS
+  ) {
+    return [];
+  }
+  if (insumosExpirationPromise) return insumosExpirationPromise;
+
+  lastInsumosExpirationCheckAt = now;
+  insumosExpirationPromise = expireOverdueInsumosRequests()
+    .finally(() => {
+      insumosExpirationPromise = null;
+    });
+  return insumosExpirationPromise;
+}
+
 async function mergeUserProfileExtras(uid, body = {}) {
   const allowed = {};
   if (body.empresaId !== undefined || body.empresa_id !== undefined) {
@@ -990,6 +1146,7 @@ function canReadCollection(user, collectionPath) {
   if (ADMIN_ONLY_COLLECTION_PREFIXES.some((prefix) => collection === prefix || collection.startsWith(`${prefix}/`))) {
     return hasRole(user, ADMIN_ROLES);
   }
+  if (hasAnyPermission(user, COLLECTION_READ_PERMISSIONS[collection] || [])) return true;
   if (collection === "usuarios") return canManageUsers(user);
   if (collection === EMPRESAS_COLLECTION) return hasRole(user, EMPRESAS_VIEW_ROLES);
   if (INSUMOS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return hasRole(user, INSUMOS_ADMINISTRATIVOS_ROLES);
@@ -1009,6 +1166,7 @@ function canWriteCollection(user, collectionPath) {
   if (ADMIN_ONLY_COLLECTION_PREFIXES.some((prefix) => collection === prefix || collection.startsWith(`${prefix}/`))) {
     return hasRole(user, ADMIN_ROLES);
   }
+  if (hasAnyPermission(user, COLLECTION_WRITE_PERMISSIONS[collection] || [])) return true;
   if (collection === "usuarios") return canManageUsers(user);
   if (collection === EMPRESAS_COLLECTION) return hasRole(user, EMPRESAS_WRITE_ROLES);
   if (INSUMOS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return hasRole(user, INSUMOS_ADMINISTRATIVOS_ROLES);
@@ -1090,6 +1248,7 @@ function createApp() {
     legacyHeaders: false,
     message: { error: "Muitas conexoes em tempo real. Tente novamente em instantes." },
   });
+  const antiBotGuard = antiBot.requireAntiBot();
 
   app.set("trust proxy", 1);
   app.use(helmet());
@@ -1119,6 +1278,19 @@ function createApp() {
     },
     credentials: true,
   }));
+  app.use(compression({
+    threshold: 1024,
+    filter(req, res) {
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    },
+  }));
+  metrics.initMetrics().catch((error) => {
+    console.error("[metrics] Falha ao inicializar metricas:", error);
+  });
+  app.use(metrics.metricsMiddleware);
+  app.get("/api/admin/metrics", requireInternalToken, metrics.metricsController);
+  app.post("/api/admin/metrics/reset", requireInternalToken, metrics.resetMetricsController);
   app.use("/api/uploads", requireAuthenticated, express.static(uploadRoot, {
     immutable: true,
     maxAge: "30d",
@@ -1162,7 +1334,10 @@ function createApp() {
 
   app.get("/api/public/dashboard", async (req, res, next) => {
     try {
-      res.json(await buildPublicDashboard());
+      const dashboard = await getCachedPublicDashboard();
+      res.set("X-Retiradas-Cache", dashboard.cacheStatus);
+      res.set("X-Retiradas-Cache-Age-Ms", String(Math.max(0, Math.round(dashboard.cacheAgeMs))));
+      res.json(dashboard.data);
     } catch (error) {
       next(error);
     }
@@ -1171,12 +1346,27 @@ function createApp() {
   app.get("/api/public/static/:domain", async (req, res, next) => {
     try {
       const domain = String(req.params.domain || "").trim();
-      const dynamicSnapshot = await buildSnapshotDomain(domain);
+      const compact = ["1", "true", "yes"].includes(String(req.query.compact || "").toLowerCase());
+      const cacheOptions = { compact };
+      const cached = getCachedPublicStaticSnapshot(domain, cacheOptions);
+      if (cached) {
+        res.set("X-Retiradas-Static-Cache", cached.cacheStatus);
+        res.set("X-Retiradas-Static-Cache-Age-Ms", String(Math.max(0, Math.round(cached.cacheAgeMs))));
+        if (compact) res.set("X-Retiradas-Static-Compact", "1");
+        res.json(cached.data);
+        return;
+      }
+
+      const dynamicSnapshot = await buildSnapshotDomain(domain, { compact });
       if (!dynamicSnapshot) {
         res.status(404).json({ error: "Snapshot nao encontrado." });
         return;
       }
 
+      setCachedPublicStaticSnapshot(domain, dynamicSnapshot, cacheOptions);
+      res.set("X-Retiradas-Static-Cache", "MISS");
+      res.set("X-Retiradas-Static-Cache-Age-Ms", "0");
+      if (compact) res.set("X-Retiradas-Static-Compact", "1");
       res.json(dynamicSnapshot);
     } catch (error) {
       next(error);
@@ -1290,6 +1480,10 @@ function createApp() {
     }
   });
 
+  app.get("/api/auth/anti-bot/config", async (_req, res) => {
+    res.json(antiBot.getAntiBotConfig());
+  });
+
   app.post("/api/auth/google", loginLimiter, async (req, res) => {
     try {
       const credential = String(req.body?.credential || req.body?.idToken || "").trim();
@@ -1339,7 +1533,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/auth/login", loginLimiter, async (req, res) => {
+  app.post("/api/auth/login", loginLimiter, antiBotGuard, async (req, res) => {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       const password = String(req.body?.password || "");
@@ -1385,7 +1579,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/auth/mfa/email/verify", loginLimiter, async (req, res) => {
+  app.post("/api/auth/mfa/email/verify", loginLimiter, antiBotGuard, async (req, res) => {
     try {
       const challengeId = String(req.body?.challengeId || "").trim();
       const code = String(req.body?.code || "").replace(/\D/g, "");
@@ -1497,7 +1691,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/auth/forgot-password", loginLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", loginLimiter, antiBotGuard, async (req, res) => {
     try {
       const email = String(req.body?.email || "").trim().toLowerCase();
       if (email) {
@@ -1516,7 +1710,7 @@ function createApp() {
     }
   });
 
-  app.post("/api/auth/reset-password", loginLimiter, async (req, res) => {
+  app.post("/api/auth/reset-password", loginLimiter, antiBotGuard, async (req, res) => {
     try {
       const user = await resetPasswordWithToken(
         String(req.body?.token || ""),
@@ -1640,7 +1834,7 @@ function createApp() {
 
   app.get("/api/insumos/requisicoes", requireAuthenticated, async (req, res, next) => {
     try {
-      await expireOverdueInsumosRequests();
+      await expireOverdueInsumosRequestsThrottled();
       const manager = isInsumosManager(req.user);
       const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
       const offset = Math.max(Number(req.query.offset || 0), 0);
@@ -2222,15 +2416,28 @@ function createApp() {
           res.status(400).json({ error: "Cargo invalido para novo usuario." });
           return;
         }
+        if (await getLocalUserByEmail(email)) {
+          res.status(409).json({ error: "Usuario ja cadastrado com este e-mail." });
+          return;
+        }
 
-        const user = await createLocalUser({
-          email,
-          nome,
-          role,
-          regional,
-          password: temporaryPassword,
-          mustChangePassword: true,
-        });
+        let user = null;
+        try {
+          user = await createLocalUser({
+            email,
+            nome,
+            role,
+            regional,
+            password: temporaryPassword,
+            mustChangePassword: true,
+          });
+        } catch (error) {
+          if (error?.code === "23505") {
+            res.status(409).json({ error: "Usuario ja cadastrado com este e-mail." });
+            return;
+          }
+          throw error;
+        }
         await mergeUserProfileExtras(user.uid, req.body || {});
 
         let passwordResetLink = "";
@@ -3078,8 +3285,17 @@ function createApp() {
     requireRoles,
   }));
 
+  app.use("/api/atendimento", createAtendimentoRouter({
+    adminRoles: ADMIN_ROLES,
+    atendimentoService,
+    requireAnyPermission,
+    requireAuthenticated,
+    requireCsrfToken,
+  }));
+
   app.use("/api/webhooks", createWebhooksRouter({
     agendamentoConfirmacao,
+    atendimentoService,
     cvortexIntegration,
     evolutionMessaging,
   }));

@@ -12,7 +12,8 @@ import {
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
 import MelzFooter from "../../../components/layout/MelzFooter";
-import { obterConfigGoogleLogin, obterConfigOktaLogin } from "../services/authService";
+import { obterConfigAntiBot, obterConfigGoogleLogin, obterConfigOktaLogin } from "../services/authService";
+import TurnstileWidget from "./TurnstileWidget";
 
 const trustItems = [
   { label: "Acesso seguro", icon: ShieldCheck },
@@ -113,7 +114,7 @@ function CredentialFields({ email, password, showPassword, onEmailChange, onPass
             type="checkbox"
             className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-200"
           />
-          Lembrar de mim
+          <span>Lembrar de mim</span>
         </label>
         <Link
           to={ROUTES.FORGOT_PASSWORD}
@@ -139,15 +140,33 @@ const LoginForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [googleConfig, setGoogleConfig] = useState({ enabled: false, clientId: "" });
   const [oktaConfig, setOktaConfig] = useState({ enabled: false, issuer: "", clientId: "", redirectUri: "" });
+  const [antiBotConfig, setAntiBotConfig] = useState({ enabled: false, provider: "turnstile", siteKey: "" });
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [captchaMessage, setCaptchaMessage] = useState("");
+
+  const resetTurnstile = () => {
+    setTurnstileToken("");
+    setTurnstileResetKey((current) => current + 1);
+  };
+
+  const requireTurnstileToken = () => {
+    if (!antiBotConfig.enabled || turnstileToken) return true;
+    setCaptchaMessage("Conclua a verificacao anti-bot para continuar.");
+    return false;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setCaptchaMessage("");
+    if (!requireTurnstileToken()) return;
     setIsSubmitting(true);
     try {
-      const result = await login(email, password);
+      const result = await login(email, password, turnstileToken);
       if (result?.mfaRequired) {
         setMfaChallenge(result);
         setMfaCode("");
+        resetTurnstile();
         return;
       }
       navigate(ROUTES.DASHBOARD);
@@ -155,23 +174,28 @@ const LoginForm = () => {
       // Erro tratado no useAuth.
     } finally {
       setIsSubmitting(false);
+      if (antiBotConfig.enabled) resetTurnstile();
     }
   };
 
   const handleMfaSubmit = async (e) => {
     e.preventDefault();
     if (!mfaChallenge?.challengeId) return;
+    setCaptchaMessage("");
+    if (!requireTurnstileToken()) return;
     setIsSubmitting(true);
     try {
       await verifyEmailMfa({
         challengeId: mfaChallenge.challengeId,
         code: mfaCode,
+        turnstileToken,
       });
       navigate(ROUTES.DASHBOARD);
     } catch {
       // Erro tratado no useAuth.
     } finally {
       setIsSubmitting(false);
+      if (antiBotConfig.enabled) resetTurnstile();
     }
   };
 
@@ -198,8 +222,8 @@ const LoginForm = () => {
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([obterConfigGoogleLogin(), obterConfigOktaLogin()])
-      .then(([googleResult, oktaResult]) => {
+    Promise.allSettled([obterConfigGoogleLogin(), obterConfigOktaLogin(), obterConfigAntiBot()])
+      .then(([googleResult, oktaResult, antiBotResult]) => {
         if (!active) return;
         if (googleResult.status === "fulfilled") {
           setGoogleConfig(googleResult.value || { enabled: false, clientId: "" });
@@ -207,11 +231,15 @@ const LoginForm = () => {
         if (oktaResult.status === "fulfilled") {
           setOktaConfig(oktaResult.value || { enabled: false, issuer: "", clientId: "", redirectUri: "" });
         }
+        if (antiBotResult.status === "fulfilled") {
+          setAntiBotConfig(antiBotResult.value || { enabled: false, provider: "turnstile", siteKey: "" });
+        }
       })
       .catch(() => {
         if (active) {
           setGoogleConfig({ enabled: false, clientId: "" });
           setOktaConfig({ enabled: false, issuer: "", clientId: "", redirectUri: "" });
+          setAntiBotConfig({ enabled: false, provider: "turnstile", siteKey: "" });
         }
       });
     return () => {
@@ -385,6 +413,17 @@ const LoginForm = () => {
                   {error}
                 </div>
               ) : null}
+              {captchaMessage ? (
+                <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                  {captchaMessage}
+                </div>
+              ) : null}
+
+              <TurnstileWidget
+                config={antiBotConfig}
+                resetKey={turnstileResetKey}
+                onTokenChange={setTurnstileToken}
+              />
 
               <button
                 type="submit"

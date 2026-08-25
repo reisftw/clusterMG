@@ -13,7 +13,7 @@ export const useAuth = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [trocarSenhaObrigatorio, setTrocarSenha] = useState(false);
+  const [trocarSenhaObrigatorio, setTrocarSenhaObrigatorio] = useState(false);
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(async (sessionUser) => {
@@ -21,15 +21,15 @@ export const useAuth = () => {
         try {
           const profile = await fetchUserProfile(sessionUser.uid);
           setCurrentUser(profile);
-          setTrocarSenha(!!profile.trocar_senha);
+          setTrocarSenhaObrigatorio(!!profile.trocar_senha);
         } catch (err) {
           console.error("Erro ao buscar perfil:", err);
           setCurrentUser(sessionUser);
-          setTrocarSenha(!!sessionUser.trocar_senha);
+          setTrocarSenhaObrigatorio(!!sessionUser.trocar_senha);
         }
       } else {
         setCurrentUser(null);
-        setTrocarSenha(false);
+        setTrocarSenhaObrigatorio(false);
       }
 
       setLoading(false);
@@ -38,12 +38,12 @@ export const useAuth = () => {
     return () => unsubscribe();
   }, []);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, turnstileToken = "") => {
     setError(null);
     setLoading(true);
 
     try {
-      const credential = await loginWithEmail(email, password);
+      const credential = await loginWithEmail(email, password, turnstileToken);
       if (credential?.mfaRequired) {
         return credential;
       }
@@ -54,7 +54,7 @@ export const useAuth = () => {
         console.error("Erro ao buscar perfil após login:", profileError);
       }
       setCurrentUser(profile);
-      setTrocarSenha(!!profile.trocar_senha);
+      setTrocarSenhaObrigatorio(!!profile.trocar_senha);
       return null;
     } catch (err) {
       const message = err?.message || "Não foi possível entrar.";
@@ -66,12 +66,12 @@ export const useAuth = () => {
     }
   }, []);
 
-  const verifyEmailMfa = useCallback(async ({ challengeId, code }) => {
+  const verifyEmailMfa = useCallback(async ({ challengeId, code, turnstileToken = "" }) => {
     setError(null);
     setLoading(true);
 
     try {
-      const credential = await verificarMfaEmail({ challengeId, code });
+      const credential = await verificarMfaEmail({ challengeId, code, turnstileToken });
       let profile = credential.user;
       try {
         profile = await fetchUserProfile(credential.user.uid);
@@ -79,7 +79,7 @@ export const useAuth = () => {
         console.error("Erro ao buscar perfil após MFA:", profileError);
       }
       setCurrentUser(profile);
-      setTrocarSenha(!!profile.trocar_senha);
+      setTrocarSenhaObrigatorio(!!profile.trocar_senha);
     } catch (err) {
       setError(err?.message || "Código MFA inválido.");
       setCurrentUser(null);
@@ -89,12 +89,12 @@ export const useAuth = () => {
     }
   }, []);
 
-  const loginWithGoogle = useCallback(async (credential) => {
+  const loginWithGoogle = useCallback(async (credential, turnstileToken = "") => {
     setError(null);
     setLoading(true);
 
     try {
-      const googleCredential = await loginWithGoogleCredential(credential);
+      const googleCredential = await loginWithGoogleCredential(credential, turnstileToken);
       let profile = googleCredential.user;
       try {
         profile = await fetchUserProfile(googleCredential.user.uid);
@@ -102,7 +102,7 @@ export const useAuth = () => {
         console.error("Erro ao buscar perfil após login Google:", profileError);
       }
       setCurrentUser(profile);
-      setTrocarSenha(!!profile.trocar_senha);
+      setTrocarSenhaObrigatorio(!!profile.trocar_senha);
     } catch (err) {
       setError(err?.message || "Não foi possível entrar com Google.");
       setCurrentUser(null);
@@ -112,12 +112,12 @@ export const useAuth = () => {
     }
   }, []);
 
-  const loginWithOkta = useCallback(async ({ credential, nonce }) => {
+  const loginWithOkta = useCallback(async ({ credential, nonce, turnstileToken = "" }) => {
     setError(null);
     setLoading(true);
 
     try {
-      const oktaCredential = await loginWithOktaCredential({ credential, nonce });
+      const oktaCredential = await loginWithOktaCredential({ credential, nonce, turnstileToken });
       let profile = oktaCredential.user;
       try {
         profile = await fetchUserProfile(oktaCredential.user.uid);
@@ -125,7 +125,7 @@ export const useAuth = () => {
         console.error("Erro ao buscar perfil após login Okta:", profileError);
       }
       setCurrentUser(profile);
-      setTrocarSenha(!!profile.trocar_senha);
+      setTrocarSenhaObrigatorio(!!profile.trocar_senha);
     } catch (err) {
       setError(err?.message || "Não foi possível entrar com Okta.");
       setCurrentUser(null);
@@ -149,7 +149,7 @@ export const useAuth = () => {
 
     const profile = await fetchUserProfile(currentUser.id);
     setCurrentUser(profile);
-    setTrocarSenha(!!profile.trocar_senha);
+    setTrocarSenhaObrigatorio(!!profile.trocar_senha);
   };
 
   return {

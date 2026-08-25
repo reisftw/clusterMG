@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Lock } from "lucide-react";
 import { ROUTES } from "../../../router/routes";
-import { redefinirSenhaComToken } from "../services/authService";
+import { obterConfigAntiBot, redefinirSenhaComToken } from "../services/authService";
+import TurnstileWidget from "./TurnstileWidget";
 
 const ResetPasswordPage = () => {
   const [params] = useSearchParams();
@@ -13,6 +14,23 @@ const ResetPasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [done, setDone] = useState(false);
+  const [antiBotConfig, setAntiBotConfig] = useState({ enabled: false, provider: "turnstile", siteKey: "" });
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    obterConfigAntiBot()
+      .then((config) => {
+        if (active) setAntiBotConfig(config || { enabled: false, provider: "turnstile", siteKey: "" });
+      })
+      .catch(() => {
+        if (active) setAntiBotConfig({ enabled: false, provider: "turnstile", siteKey: "" });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -25,9 +43,13 @@ const ResetPasswordPage = () => {
       setMessage("As senhas nao conferem.");
       return;
     }
+    if (antiBotConfig.enabled && !turnstileToken) {
+      setMessage("Conclua a verificacao anti-bot para continuar.");
+      return;
+    }
     setLoading(true);
     try {
-      await redefinirSenhaComToken(token, password);
+      await redefinirSenhaComToken(token, password, turnstileToken);
       setDone(true);
       setMessage("Senha definida com sucesso. Voce ja pode entrar.");
       setTimeout(() => navigate(ROUTES.LOGIN), 1800);
@@ -35,6 +57,10 @@ const ResetPasswordPage = () => {
       setMessage(error?.message || "Nao foi possivel redefinir a senha.");
     } finally {
       setLoading(false);
+      if (antiBotConfig.enabled) {
+        setTurnstileToken("");
+        setTurnstileResetKey((current) => current + 1);
+      }
     }
   };
 
@@ -76,6 +102,11 @@ const ResetPasswordPage = () => {
               {message}
             </div>
           ) : null}
+          <TurnstileWidget
+            config={antiBotConfig}
+            resetKey={turnstileResetKey}
+            onTokenChange={setTurnstileToken}
+          />
           <button
             type="submit"
             disabled={loading || done || !token}

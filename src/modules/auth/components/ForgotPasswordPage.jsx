@@ -1,25 +1,51 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Mail, Send } from "lucide-react";
 import { ROUTES } from "../../../router/routes";
-import { solicitarRedefinicaoSenha } from "../services/authService";
+import { obterConfigAntiBot, solicitarRedefinicaoSenha } from "../services/authService";
+import TurnstileWidget from "./TurnstileWidget";
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [antiBotConfig, setAntiBotConfig] = useState({ enabled: false, provider: "turnstile", siteKey: "" });
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    obterConfigAntiBot()
+      .then((config) => {
+        if (active) setAntiBotConfig(config || { enabled: false, provider: "turnstile", siteKey: "" });
+      })
+      .catch(() => {
+        if (active) setAntiBotConfig({ enabled: false, provider: "turnstile", siteKey: "" });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const submit = async (event) => {
     event.preventDefault();
+    if (antiBotConfig.enabled && !turnstileToken) {
+      setMessage("Conclua a verificacao anti-bot para continuar.");
+      return;
+    }
     setLoading(true);
     setMessage("");
     try {
-      await solicitarRedefinicaoSenha(email);
+      await solicitarRedefinicaoSenha(email, turnstileToken);
       setMessage("Se o e-mail estiver cadastrado, enviamos um link de redefinicao.");
     } catch (error) {
       setMessage(error?.message || "Nao foi possivel solicitar a redefinicao.");
     } finally {
       setLoading(false);
+      if (antiBotConfig.enabled) {
+        setTurnstileToken("");
+        setTurnstileResetKey((current) => current + 1);
+      }
     }
   };
 
@@ -53,6 +79,11 @@ const ForgotPasswordPage = () => {
               {message}
             </div>
           ) : null}
+          <TurnstileWidget
+            config={antiBotConfig}
+            resetKey={turnstileResetKey}
+            onTokenChange={setTurnstileToken}
+          />
           <button
             type="submit"
             disabled={loading}

@@ -58,7 +58,7 @@ describe("useAuth", () => {
     await act(async () => {
       await result.current.login("a@b.com", "123456");
     });
-    expect(authMocks.loginWithEmail).toHaveBeenCalledWith("a@b.com", "123456");
+    expect(authMocks.loginWithEmail).toHaveBeenCalledWith("a@b.com", "123456", "");
 
     await act(async () => {
       await result.current.signOut();
@@ -101,6 +101,7 @@ describe("useAuth", () => {
 
     expect(authMocks.loginWithGoogleCredential).toHaveBeenCalledWith(
       "google-token",
+      "",
     );
     expect(result.current.currentUser?.id).toBe("user-1");
   });

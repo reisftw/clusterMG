@@ -44,7 +44,7 @@ describe("LoginForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /entrar no sistema/i }));
 
     await waitFor(() =>
-      expect(mocks.login).toHaveBeenCalledWith("admin@empresa.com", "123456"),
+      expect(mocks.login).toHaveBeenCalledWith("admin@empresa.com", "123456", ""),
     );
     expect(mocks.navigate).toHaveBeenCalled();
   });

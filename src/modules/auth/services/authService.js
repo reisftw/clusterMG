@@ -46,8 +46,21 @@ function buildCredentialUser(user = {}) {
   };
 }
 
-export const loginWithEmail = async (email, password) => {
-  const session = await requestPublicAuth("/auth/login", { email, password });
+export const obterConfigAntiBot = async () => {
+  const response = await fetch(`${getApiBaseUrl()}/auth/anti-bot/config`, {
+    cache: "no-store",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || `Erro HTTP ${response.status}.`);
+  return data || { enabled: false, provider: "turnstile", siteKey: "" };
+};
+
+export const loginWithEmail = async (email, password, turnstileToken = "") => {
+  const session = await requestPublicAuth("/auth/login", { email, password, turnstileToken });
   if (session?.mfaRequired) {
     return {
       mfaRequired: true,
@@ -67,8 +80,8 @@ export const loginWithEmail = async (email, password) => {
   };
 };
 
-export const verificarMfaEmail = async ({ challengeId, code }) => {
-  const session = await requestPublicAuth("/auth/mfa/email/verify", { challengeId, code });
+export const verificarMfaEmail = async ({ challengeId, code, turnstileToken = "" }) => {
+  const session = await requestPublicAuth("/auth/mfa/email/verify", { challengeId, code, turnstileToken });
   if (!session?.user?.id) {
     throw new Error(session?.error || "Código MFA inválido.");
   }
@@ -104,8 +117,8 @@ export const obterConfigOktaLogin = async () => {
   return data || { enabled: false, issuer: "", clientId: "", redirectUri: "" };
 };
 
-export const loginWithGoogleCredential = async (credential) => {
-  const session = await requestPublicAuth("/auth/google", { credential });
+export const loginWithGoogleCredential = async (credential, turnstileToken = "") => {
+  const session = await requestPublicAuth("/auth/google", { credential, turnstileToken });
   if (!session?.user?.id) {
     throw new Error(session?.error || "Não foi possível entrar com Google.");
   }
@@ -115,8 +128,8 @@ export const loginWithGoogleCredential = async (credential) => {
   };
 };
 
-export const loginWithOktaCredential = async ({ credential, nonce }) => {
-  const session = await requestPublicAuth("/auth/okta", { credential, nonce });
+export const loginWithOktaCredential = async ({ credential, nonce, turnstileToken = "" }) => {
+  const session = await requestPublicAuth("/auth/okta", { credential, nonce, turnstileToken });
   if (!session?.user?.id) {
     throw new Error(session?.error || "Não foi possível entrar com Okta.");
   }
@@ -126,11 +139,11 @@ export const loginWithOktaCredential = async ({ credential, nonce }) => {
   };
 };
 
-export const solicitarRedefinicaoSenha = async (email) =>
-  requestPublicAuth("/auth/forgot-password", { email });
+export const solicitarRedefinicaoSenha = async (email, turnstileToken = "") =>
+  requestPublicAuth("/auth/forgot-password", { email, turnstileToken });
 
-export const redefinirSenhaComToken = async (token, password) =>
-  requestPublicAuth("/auth/reset-password", { token, password });
+export const redefinirSenhaComToken = async (token, password, turnstileToken = "") =>
+  requestPublicAuth("/auth/reset-password", { token, password, turnstileToken });
 
 export const logout = async () => {
   await requestVpsApi("/auth/logout", { method: "POST" }).catch(() => null);
