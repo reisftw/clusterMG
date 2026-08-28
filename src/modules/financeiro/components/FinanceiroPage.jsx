@@ -1,1066 +1,17007 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  ArrowRight,
-  BadgeDollarSign,
-  CalendarClock,
-  CheckCircle2,
-  CircleDollarSign,
-  ClipboardCheck,
-  Copy,
-  Download,
-  FileText,
-  Landmark,
-  Loader2,
-  ReceiptText,
-  RefreshCw,
-  Repeat2,
-  Settings,
-  TableProperties,
-  Trash2,
-  Wallet,
-} from "lucide-react";
-import { Link } from "react-router-dom";
-import {
-  ArcElement,
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip,
+	ArcElement,
+	BarElement,
+	CategoryScale,
+	Chart as ChartJS,
+	Filler,
+	Legend,
+	LinearScale,
+	LineElement,
+	PointElement,
+	Tooltip,
 } from "chart.js";
+import {
+	AlertTriangle,
+	ArrowRight,
+	BadgeDollarSign,
+	CalendarClock,
+	CheckCircle2,
+	CircleDollarSign,
+	ClipboardCheck,
+	Copy,
+	Download,
+	Eye,
+	FileText,
+	Landmark,
+	Loader2,
+	Mail,
+	Pencil,
+	Plus,
+	ReceiptText,
+	RefreshCw,
+	Repeat2,
+	Search,
+	Settings,
+	TableProperties,
+	Trash2,
+	Upload,
+	Users,
+	Wallet,
+	X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
+import { Link } from "react-router-dom";
+import * as XLSX from "xlsx";
+import ModalShell from "../../../components/ui/ModalShell";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
-import ModalShell from "../../../components/ui/ModalShell";
 import { addClusterLogo } from "../../../utils/pdfBranding";
 import {
-  buscarDashboardFinanceiro,
-  buscarConfigPlanilhasFinanceiro,
-  buscarLogsPlanilhasFinanceiro,
-  carregarMockupFinanceiro,
-  limparMockupFinanceiro,
-  salvarConfigPlanilhasFinanceiro,
-  sincronizarPlanilhasFinanceiro,
-  testarPlanilhaFinanceiro,
+	atualizarAprovacaoOrcamentoFinanceiro,
+	buscarCentrosCustoOrcamentoFinanceiro,
+	buscarConfigPlanilhasFinanceiro,
+	buscarDadosOrcamentoFinanceiro,
+	buscarDashboardFinanceiro,
+	buscarLogsPlanilhasFinanceiro,
+	buscarSerasaReportFinanceiro,
+	buscarTarifasReportFinanceiro,
+	importarDadosOrcamentoFinanceiro,
+	limparDadosOrcamentoFinanceiro,
+	limparSerasaReportFinanceiro,
+	limparTarifasReportFinanceiro,
+	salvarCentrosCustoOrcamentoFinanceiro,
+	salvarConfigPlanilhasFinanceiro,
+	salvarSerasaReportFinanceiro,
+	salvarTarifasReportFinanceiro,
+	sincronizarPlanilhasFinanceiro,
+	testarPlanilhaFinanceiro,
 } from "../services/financeiroService";
+import { normalizeBudgetImportDate } from "../utils/budgetImportDate";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend);
+const FINANCE_FONT_STACK =
+	"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
-const FINANCE_FONT_STACK = "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const centerTextPlugin = {
+	id: "centerText",
+	afterDraw(chart, _args, options = {}) {
+		if (!options.title && !options.value) return;
+		const arc = chart.getDatasetMeta(0)?.data?.[0];
+		if (!arc) return;
+		const { ctx } = chart;
+		const x = arc.x;
+		const y = arc.y;
+		const fitText = (text, maxWidth, baseSize, minSize) => {
+			let size = baseSize;
+			ctx.font = `900 ${size}px ${FINANCE_FONT_STACK}`;
+			while (ctx.measureText(text).width > maxWidth && size > minSize) {
+				size -= 1;
+				ctx.font = `900 ${size}px ${FINANCE_FONT_STACK}`;
+			}
+			return size;
+		};
+		ctx.save();
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillStyle = options.titleColor || "#64748b";
+		ctx.font = `900 11px ${FINANCE_FONT_STACK}`;
+		ctx.fillText(options.title || "", x, y - 9);
+		ctx.fillStyle = options.valueColor || "#0f172a";
+		fitText(String(options.value || ""), options.maxWidth || 118, 17, 11);
+		ctx.fillText(options.value || "", x, y + 9);
+		ctx.restore();
+	},
+};
+
+ChartJS.register(
+	CategoryScale,
+	LinearScale,
+	BarElement,
+	ArcElement,
+	PointElement,
+	LineElement,
+	Filler,
+	Tooltip,
+	Legend,
+	centerTextPlugin,
+);
 
 ChartJS.defaults.font.family = FINANCE_FONT_STACK;
 ChartJS.defaults.font.weight = "600";
 ChartJS.defaults.color = "#334155";
 
-const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const brl = new Intl.NumberFormat("pt-BR", {
+	style: "currency",
+	currency: "BRL",
+});
 const integer = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+const EMPTY_SERASA_LIST = [];
 
 const ICONS = {
-  AlertTriangle,
-  BadgeDollarSign,
-  CalendarClock,
-  CircleDollarSign,
-  ClipboardCheck,
-  FileText,
-  Landmark,
-  ReceiptText,
-  Repeat2,
-  Wallet,
+	AlertTriangle,
+	BadgeDollarSign,
+	CalendarClock,
+	CheckCircle2,
+	CircleDollarSign,
+	ClipboardCheck,
+	FileText,
+	Landmark,
+	ReceiptText,
+	Repeat2,
+	Users,
+	Wallet,
 };
 
 const PAGE_META = {
-  dashboard: {
-    title: "Painel Financeiro",
-    subtitle: "Acompanhamento diário de indicadores",
-  },
-  contasPagar: {
-    title: "Contas a Pagar",
-    subtitle: "Controle de vencimentos, pagamentos e pendências.",
-  },
-  contasReceber: {
-    title: "Contas a Receber",
-    subtitle: "Recebíveis, inadimplência e saldo em aberto.",
-  },
-  faturamento: {
-    title: "Faturamento",
-    subtitle: "Receita por período, cidade, empresa e produto.",
-  },
-  notas: {
-    title: "Notas",
-    subtitle: "Acompanhamento de notas lançadas no financeiro.",
-  },
-  chamados: {
-    title: "Chamados Financeiros",
-    subtitle: "Tickets, SLA e produtividade do atendimento financeiro.",
-  },
-  configuracoes: {
-    title: "Configurações Financeiras",
-    subtitle: "Metas, categorias, alertas e dados demonstrativos.",
-  },
+	dashboard: {
+		title: "Painel Financeiro",
+		subtitle: "Acompanhamento diário de indicadores",
+	},
+	contasPagar: {
+		title: "Contas a Pagar",
+		subtitle: "Controle de vencimentos, pagamentos e pendências.",
+	},
+	contasReceber: {
+		title: "Contas a Receber",
+		subtitle: "Recebíveis, inadimplência e saldo em aberto.",
+	},
+	faturamento: {
+		title: "Faturamento",
+		subtitle: "Receita por período, cidade, empresa e produto.",
+	},
+	notas: {
+		title: "Notas",
+		subtitle: "Acompanhamento de notas lançadas no financeiro.",
+	},
+	reportsSerasa: {
+		title: "Reports - Serasa",
+		subtitle: "Dashboard de acompanhamento das movimentações Serasa.",
+	},
+	reportsTarifas: {
+		title: "Reports - Tarifas",
+		subtitle: "Tarifas, formas de pagamento, faturas e receita por cliente.",
+	},
+	reportsTarifasFaturas: {
+		title: "Reports - Tarifas - Faturas",
+		subtitle: "Faturas agrupadas por ano e mês.",
+	},
+	reportsTarifasRecCliente: {
+		title: "Reports - Tarifas - Receita Cliente",
+		subtitle: "Receita por cliente separada por ano.",
+	},
+	reportsTarifasFormasPagamento: {
+		title: "Reports - Tarifas - Formas de Pagamento",
+		subtitle: "Formas de pagamento, cobrança e tarifas por período.",
+	},
+	orcamentoDashboard: {
+		title: "Gestão Orçamento",
+		subtitle: "Visão executiva do orçamento, realizado, saldo e desvios.",
+	},
+	orcamentoDados: {
+		title: "Dados Orçamentários",
+		subtitle:
+			"Importe XLSX, confira os campos e alimente a gestão orçamentária.",
+	},
+	orcamentoCentrosCusto: {
+		title: "Centros de Custo",
+		subtitle: "Organize áreas, responsáveis e limites orçamentários.",
+	},
+	orcamentoRealizado: {
+		title: "Orçado x Realizado",
+		subtitle: "Compare previsto, realizado e saldo por período.",
+	},
+	orcamentoAprovacoes: {
+		title: "Aprovações de Orçamento",
+		subtitle: "Fluxo de solicitações, aprovações e bloqueios.",
+	},
+	orcamentoConfiguracoes: {
+		title: "Configurações de Orçamento",
+		subtitle: "Parâmetros, categorias e regras do módulo orçamentário.",
+	},
+	configuracoes: {
+		title: "Configurações Financeiras",
+		subtitle: "Metas, categorias, alertas e dados demonstrativos.",
+	},
 };
+
+const BUDGET_IMPORT_FIELDS = [
+	{ key: "quebra", label: "Quebra" },
+	{ key: "data", label: "Data" },
+	{ key: "fornecedor", label: "Fornecedor" },
+	{ key: "codConta", label: "Cod_Conta" },
+	{ key: "nomeConta", label: "Nome_Conta" },
+	{ key: "codCc", label: "Cod_CC" },
+	{ key: "nomeCc", label: "Nome_CC" },
+	{ key: "orcado", label: "Orçado" },
+	{ key: "realizado", label: "Realizado" },
+	{ key: "empresa", label: "Empresa" },
+	{ key: "filial", label: "Filial" },
+	{ key: "conta", label: "Conta" },
+	{ key: "seqMov", label: "SeqMov" },
+	{ key: "titulo", label: "Titulo" },
+	{ key: "tipo", label: "Tipo" },
+	{ key: "observacoes", label: "Observações" },
+	{ key: "ano", label: "Ano" },
+	{ key: "numMes", label: "Num_Mes" },
+	{ key: "mes", label: "Mês" },
+	{ key: "categoria", label: "Categoria" },
+	{ key: "gestor", label: "Gestor" },
+	{ key: "quebra2", label: "Quebra2" },
+	{ key: "entidade", label: "Entidade" },
+	{ key: "diretoria", label: "Diretoria" },
+	{ key: "diretor", label: "Diretor" },
+	{ key: "statusProjetos", label: "Status_Projetos" },
+	{ key: "grupo", label: "Grupo" },
+];
+
+const BUDGET_IMPORT_HEADER_MAP = {
+	area: "quebra",
+	quebra: "quebra",
+	data: "data",
+	datapagamento: "data",
+	data_pagamento: "data",
+	fornecedor: "fornecedor",
+	cf: "cf",
+	codconta: "codConta",
+	cod_conta: "codConta",
+	nomeconta: "nomeConta",
+	nome_conta: "nomeConta",
+	cc: "cc",
+	codcc: "codCc",
+	cod_cc: "codCc",
+	nomecc: "nomeCc",
+	nome_cc: "nomeCc",
+	orcado: "orcado",
+	realizado: "realizado",
+	valor: "realizado",
+	empresa: "empresa",
+	filial: "filial",
+	banco: "conta",
+	conta: "conta",
+	seq: "seqMov",
+	seqmov: "seqMov",
+	titulo: "titulo",
+	tipo: "tipo",
+	observacoes: "observacoes",
+	historico: "observacoes",
+	__empty_8: "observacoes",
+	ano: "ano",
+	nummes: "numMes",
+	num_mes: "numMes",
+	mes: "mes",
+	categoria: "categoria",
+	gestor: "gestor",
+	quebra2: "quebra2",
+	entidade: "entidade",
+	diretoria: "diretoria",
+	diretor: "diretor",
+	statusprojetos: "statusProjetos",
+	status_projetos: "statusProjetos",
+	grupo: "grupo",
+};
+
+function normalizeImportHeader(value) {
+	return String(value || "")
+		.trim()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9_]+/g, "");
+}
+
+function formatSpreadsheetValue(value) {
+	if (value instanceof Date && !Number.isNaN(value.getTime())) {
+		return value.toLocaleDateString("pt-BR");
+	}
+	return value ?? "";
+}
+
+function parseBudgetCurrency(value) {
+	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+	const text = String(value || "").trim();
+	if (!text) return 0;
+	const withoutCurrency = text.replace(/[R$\s]/g, "");
+	const normalized = withoutCurrency.includes(",")
+		? withoutCurrency.replace(/\./g, "").replace(",", ".")
+		: withoutCurrency;
+	const number = Number(normalized || 0);
+	return Number.isFinite(number) ? number : 0;
+}
+
+function formatBudgetCurrency(value) {
+	return brl.format(parseBudgetCurrency(value));
+}
+
+function splitBudgetCodeName(value) {
+	const text = String(value || "").trim();
+	if (!text) return { code: "", name: "" };
+	const match = text.match(/^\s*([^-–—]+?)\s*[-–—]\s*(.+)\s*$/);
+	if (!match) return { code: "", name: text };
+	return {
+		code: String(match[1] || "").trim(),
+		name: String(match[2] || "").trim(),
+	};
+}
+
+function budgetMonthName(month) {
+	return (
+		[
+			"",
+			"Janeiro",
+			"Fevereiro",
+			"Marco",
+			"Abril",
+			"Maio",
+			"Junho",
+			"Julho",
+			"Agosto",
+			"Setembro",
+			"Outubro",
+			"Novembro",
+			"Dezembro",
+		][Number(month) || 0] || ""
+	);
+}
+
+function normalizeBudgetImportRows(rows = []) {
+	const detectedFields = new Set();
+	const normalizedRows = rows
+		.map((row) => {
+			const normalized = {};
+			Object.entries(row || {}).forEach(([header, value]) => {
+				const mappedKey =
+					BUDGET_IMPORT_HEADER_MAP[normalizeImportHeader(header)];
+				if (mappedKey) {
+					const formattedValue = formatSpreadsheetValue(value);
+					if (mappedKey === "cf") {
+						const account = splitBudgetCodeName(formattedValue);
+						if (account.code) {
+							detectedFields.add("codConta");
+							normalized.codConta = account.code;
+						}
+						if (account.name) {
+							detectedFields.add("nomeConta");
+							normalized.nomeConta = account.name;
+						}
+						normalized.cf = formattedValue;
+						return;
+					}
+					if (mappedKey === "cc") {
+						const costCenter = splitBudgetCodeName(formattedValue);
+						if (costCenter.code) {
+							detectedFields.add("codCc");
+							normalized.codCc = costCenter.code;
+						}
+						if (costCenter.name) {
+							detectedFields.add("nomeCc");
+							normalized.nomeCc = costCenter.name;
+						}
+						normalized.cc = formattedValue;
+						return;
+					}
+					if (mappedKey === "data") {
+						const dateInfo = normalizeBudgetImportDate(value) || {};
+						detectedFields.add("data");
+						normalized.data = dateInfo.data || formattedValue;
+						if (dateInfo.ano) {
+							detectedFields.add("ano");
+							normalized.ano = dateInfo.ano;
+						}
+						if (dateInfo.numMes) {
+							detectedFields.add("numMes");
+							normalized.numMes = dateInfo.numMes;
+						}
+						if (dateInfo.mes) {
+							detectedFields.add("mes");
+							normalized.mes = dateInfo.mes;
+						}
+						return;
+					}
+					if (mappedKey === "orcado" || mappedKey === "realizado") {
+						detectedFields.add(mappedKey);
+						normalized[mappedKey] = parseBudgetCurrency(formattedValue);
+						return;
+					}
+					if (mappedKey === "numMes") {
+						const month = Number(formattedValue || 0) || 0;
+						if (month >= 1 && month <= 12 && !normalized.numMes) {
+							detectedFields.add(mappedKey);
+							normalized[mappedKey] = month;
+						}
+						return;
+					}
+					detectedFields.add(mappedKey);
+					normalized[mappedKey] = formattedValue;
+				}
+			});
+			return normalized;
+		})
+		.filter((row) =>
+			Object.values(row).some((value) => String(value ?? "").trim()),
+		);
+
+	return { rows: normalizedRows, detectedFields: Array.from(detectedFields) };
+}
 
 const DEFAULT_SHEETS_CONFIG = {
-  enabled: false,
-  intervalMinutes: 30,
-  serviceAccountConfigured: false,
-  serviceAccountEmail: "",
-  serviceAccountProjectId: "",
-  serviceAccountError: "",
-  lastRunAt: "",
-  lastRunStatus: "",
-  lastRunMessage: "",
-  nextRunAt: "",
-  sources: [
-    { id: "contas_pagar", label: "Contas a pagar", enabled: false, spreadsheetId: "", spreadsheetUrl: "", sheetName: "", range: "A:Z", headerRow: 1 },
-    { id: "contas_receber", label: "Contas a receber", enabled: false, spreadsheetId: "", spreadsheetUrl: "", sheetName: "", range: "A:Z", headerRow: 1 },
-    { id: "faturamento", label: "Faturamento", enabled: false, spreadsheetId: "", spreadsheetUrl: "", sheetName: "", range: "A:Z", headerRow: 1 },
-    { id: "notas", label: "Notas", enabled: false, spreadsheetId: "", spreadsheetUrl: "", sheetName: "", range: "A:Z", headerRow: 1 },
-  ],
+	enabled: false,
+	intervalMinutes: 30,
+	serviceAccountConfigured: false,
+	serviceAccountEmail: "",
+	serviceAccountProjectId: "",
+	serviceAccountError: "",
+	lastRunAt: "",
+	lastRunStatus: "",
+	lastRunMessage: "",
+	nextRunAt: "",
+	sources: [
+		{
+			id: "contas_pagar",
+			label: "Contas a pagar",
+			enabled: false,
+			spreadsheetId: "",
+			spreadsheetUrl: "",
+			sheetName: "",
+			range: "A:ZZ",
+			headerRow: 1,
+		},
+		{
+			id: "contas_receber",
+			label: "Contas a receber",
+			enabled: false,
+			spreadsheetId: "",
+			spreadsheetUrl: "",
+			sheetName: "",
+			range: "A:ZZ",
+			headerRow: 1,
+		},
+		{
+			id: "faturamento",
+			label: "Faturamento",
+			enabled: false,
+			spreadsheetId: "",
+			spreadsheetUrl: "",
+			sheetName: "",
+			range: "A:ZZ",
+			headerRow: 1,
+		},
+		{
+			id: "notas",
+			label: "Notas",
+			enabled: false,
+			spreadsheetId: "",
+			spreadsheetUrl: "",
+			sheetName: "",
+			range: "A:ZZ",
+			headerRow: 1,
+		},
+		{
+			id: "serasa",
+			label: "Serasa",
+			enabled: false,
+			spreadsheetId: "",
+			spreadsheetUrl: "",
+			sheetName: "MOVIMENTAÇÃO SERASA",
+			range: "A:ZZ",
+			headerRow: 1,
+			intervalMinutes: 60,
+		},
+		{
+			id: "tarifas",
+			label: "Tarifas",
+			enabled: false,
+			spreadsheetId: "",
+			spreadsheetUrl: "",
+			sheetName: "",
+			range: "A:ZZ",
+			headerRow: 1,
+			intervalMinutes: 60,
+		},
+	],
 };
 
+function normalizeSerasaUploadRows(rows = []) {
+	return rows
+		.map((row) => {
+			const normalized = {};
+			Object.entries(row || {}).forEach(([key, value]) => {
+				normalized[key] = formatSpreadsheetValue(value);
+			});
+			if (!normalized.Data && normalized["Coluna 1"]) {
+				normalized.Data = normalized["Coluna 1"];
+			}
+			return normalized;
+		})
+		.filter((row) =>
+			Object.values(row).some((value) => String(value ?? "").trim()),
+		);
+}
+
+function extractWorksheetNumberCell(worksheet, address) {
+	const value = worksheet?.[address]?.v ?? worksheet?.[address]?.w ?? "";
+	const number = Number(String(value).replace(/[^\d.-]/g, ""));
+	return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function isSerasaClientMarker(row = {}) {
+	const text = [row.type, row.description, row.operation]
+		.join(" ")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+	return /\b(clientes?|usuarios?|usuarias?|base\s+serasa|qtd\s+clientes?)\b/.test(text);
+}
+
+function serasaMovementKey(row = {}) {
+	const value = Math.round(Math.abs(Number(row.value || 0)) * 100);
+	return [
+		row.date || "",
+		String(row.type || "").trim().toLowerCase(),
+		String(row.description || "").trim().toLowerCase(),
+		String(row.operation || "").trim().toLowerCase(),
+		value,
+	].join("|");
+}
+
+function dedupeSerasaRows(rows = []) {
+	return [...new Map(rows.map((row) => [serasaMovementKey(row), row])).values()];
+}
+
+const SERASA_KPI_CONFIG = [
+	{
+		id: "receitaLiquida",
+		title: "Receita líquida",
+		icon: "BadgeDollarSign",
+		color: "emerald",
+	},
+	{
+		id: "totalEntradas",
+		title: "Entradas",
+		icon: "CircleDollarSign",
+		color: "blue",
+	},
+	{
+		id: "totalSaidas",
+		title: "Saídas",
+		icon: "Wallet",
+		color: "red",
+	},
+	{
+		id: "comissao",
+		title: "Comissão",
+		icon: "ReceiptText",
+		color: "amber",
+	},
+	{
+		id: "ticketMedio",
+		title: "Ticket médio",
+		icon: "Landmark",
+		color: "violet",
+	},
+	{
+		id: "clientes",
+		title: "Clientes na base",
+		icon: "Users",
+		color: "slate",
+		type: "number",
+	},
+];
+
+function isSerasaNetRevenue(row = {}) {
+	return (
+		row.isNetRevenue ||
+		row.direction === "receita_liquida" ||
+		String(row.operation || "").trim().toLowerCase() === "receita líquida" ||
+		String(row.operation || "").trim() === "-"
+	);
+}
+
+function normalizeSerasaOperationLabel(value, fallback = "Movimentação") {
+	const text = String(value || fallback).trim();
+	if (!text) return fallback;
+	const normalized = text
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+	if (normalized === "entrada" || normalized === "credito") return "Entrada";
+	if (normalized === "saida" || normalized === "debito") return "Saída";
+	if (normalized === "estorno") return "Estorno";
+	if (normalized === "receita liquida") return "Receita líquida";
+	return text;
+}
+
+function getSerasaRowDate(row = {}) {
+	const date = dateFromInput(row.date);
+	return date || null;
+}
+
+function serasaRowMatchesPeriod(row = {}, selectedPeriod = {}) {
+	const date = getSerasaRowDate(row);
+	if (!date) return false;
+	if (selectedPeriod.mode === "custom") {
+		const start = dateFromInput(selectedPeriod.startDate);
+		const end = dateFromInput(selectedPeriod.endDate);
+		if (!start || !end) return true;
+		return date >= start && date <= end;
+	}
+	const year = Number(row.year || date.getFullYear());
+	const month = Number(row.month || date.getMonth() + 1);
+	if (selectedPeriod.mode === "year") {
+		return year === Number(selectedPeriod.referenceYear);
+	}
+	return (
+		year === Number(selectedPeriod.referenceYear) &&
+		month === Number(selectedPeriod.referenceMonth)
+	);
+}
+
+function serasaClientHistoryMatchesPeriod(item = {}, selectedPeriod = {}) {
+	const year = Number(item.year || 0);
+	const month = Number(item.month || 0);
+	if (!year || !month) return false;
+	if (selectedPeriod.mode === "year") {
+		return year === Number(selectedPeriod.referenceYear);
+	}
+	if (selectedPeriod.mode === "custom") {
+		const date = dateFromInput(`${year}-${String(month).padStart(2, "0")}-01`);
+		const start = dateFromInput(selectedPeriod.startDate);
+		const end = dateFromInput(selectedPeriod.endDate);
+		if (!date || !start || !end) return false;
+		return date >= start && date <= end;
+	}
+	return (
+		year === Number(selectedPeriod.referenceYear) &&
+		month === Number(selectedPeriod.referenceMonth)
+	);
+}
+
+function resolveSerasaClients(clientesHistory = [], selectedPeriod = {}) {
+	return [...(clientesHistory || [])]
+		.filter((item) => serasaClientHistoryMatchesPeriod(item, selectedPeriod))
+		.sort((a, b) => String(b.key || "").localeCompare(String(a.key || "")))[0]?.clientes || 0;
+}
+
+function summarizeSerasaRows(rows = [], clientesHistory = [], selectedPeriod = {}) {
+	const uniqueRows = dedupeSerasaRows(
+		rows.filter((row) => !isSerasaClientMarker(row)),
+	);
+	const monthly = new Map();
+	const operationTotals = new Map();
+	const summary = uniqueRows.reduce(
+		(acc, row) => {
+			const value = Number(row.value || 0);
+			const absoluteValue = Math.abs(value);
+			const netRevenue = isSerasaNetRevenue(row);
+			const date = getSerasaRowDate(row);
+			const year = Number(row.year || date?.getFullYear() || 0);
+			const month = Number(row.month || (date ? date.getMonth() + 1 : 0));
+			const monthLabel =
+				year && month ? `${year} - ${budgetMonthName(month)}` : "Sem mês";
+			const monthKey = year && month ? `${year}-${String(month).padStart(2, "0")}` : "sem-mes";
+			const currentMonth = monthly.get(monthKey) || {
+				key: monthKey,
+				label: monthLabel,
+				entradas: 0,
+				saidas: 0,
+				receitaLiquida: 0,
+				total: 0,
+			};
+
+			if (netRevenue) {
+				acc.receitaLiquida += absoluteValue;
+				currentMonth.receitaLiquida += absoluteValue;
+				operationTotals.set(
+					"Receita líquida",
+					(operationTotals.get("Receita líquida") || 0) + absoluteValue,
+				);
+			} else if (value < 0 || row.direction === "saida") {
+				acc.totalSaidas += absoluteValue;
+				currentMonth.saidas += absoluteValue;
+				const label = normalizeSerasaOperationLabel(
+					row.operation || row.type,
+					"Saída",
+				);
+				operationTotals.set(label, (operationTotals.get(label) || 0) + absoluteValue);
+			} else if (value > 0 || row.direction === "entrada") {
+				acc.totalEntradas += absoluteValue;
+				currentMonth.entradas += absoluteValue;
+				const label = normalizeSerasaOperationLabel(
+					row.operation || row.type,
+					"Entrada",
+				);
+				operationTotals.set(label, (operationTotals.get(label) || 0) + absoluteValue);
+			}
+
+			currentMonth.total += 1;
+			monthly.set(monthKey, currentMonth);
+			return acc;
+		},
+		{
+			totalRows: uniqueRows.length,
+			totalEntradas: 0,
+			totalSaidas: 0,
+			receitaLiquida: 0,
+			comissao: 0,
+			ticketMedio: 0,
+			clientes: resolveSerasaClients(clientesHistory, selectedPeriod),
+		},
+	);
+	const entryRows = uniqueRows.filter(
+		(row) => Number(row.value || 0) > 0 && !isSerasaNetRevenue(row),
+	);
+	summary.comissao = summary.totalSaidas;
+	summary.ticketMedio = entryRows.length ? summary.totalEntradas / entryRows.length : 0;
+	return {
+		summary,
+		monthly: [...monthly.values()].sort((a, b) => String(a.key).localeCompare(String(b.key))),
+		operationTotals: [...operationTotals.entries()]
+			.map(([label, value]) => ({ label, value }))
+			.sort((a, b) => b.value - a.value)
+			.slice(0, 6),
+	};
+}
+
+function formatSerasaPeriodLabel(selectedPeriod = {}) {
+	if (selectedPeriod.mode === "year") {
+		return `Ano ${selectedPeriod.referenceYear}`;
+	}
+	if (selectedPeriod.mode === "custom") {
+		return "Datas selecionadas";
+	}
+	return `Mês ${budgetMonthName(selectedPeriod.referenceMonth)}`;
+}
+
+function tariffItemMatchesPeriod(item = {}, selectedPeriod = {}) {
+	const year = Number(item.year || 0);
+	const month = Number(item.month || 0);
+	if (!year || !month) return true;
+	if (selectedPeriod.mode === "year") return year === Number(selectedPeriod.referenceYear);
+	if (selectedPeriod.mode === "custom") {
+		const date = dateFromInput(`${year}-${String(month).padStart(2, "0")}-01`);
+		const start = dateFromInput(selectedPeriod.startDate);
+		const end = dateFromInput(selectedPeriod.endDate);
+		if (!date || !start || !end) return true;
+		return date >= start && date <= end;
+	}
+	return (
+		year === Number(selectedPeriod.referenceYear) &&
+		month === Number(selectedPeriod.referenceMonth)
+	);
+}
+
+function formatTariffsPeriodLabel(selectedPeriod = {}) {
+	if (selectedPeriod.mode === "year") return `Ano ${selectedPeriod.referenceYear}`;
+	if (selectedPeriod.mode === "custom") return "Datas selecionadas";
+	return `Mês ${budgetMonthName(selectedPeriod.referenceMonth)}`;
+}
+
+function aggregateTariffsByMonth(items = [], valueField = "value") {
+	const map = new Map();
+	items.forEach((item) => {
+		const year = Number(item.year || 0);
+		const month = Number(item.month || 0);
+		if (!year || !month) return;
+		const key = `${year}-${String(month).padStart(2, "0")}`;
+		const current = map.get(key) || {
+			key,
+			year,
+			month,
+			label: `${year} - ${budgetMonthName(month)}`,
+			value: 0,
+			count: 0,
+		};
+		current.value += Number(item[valueField] || 0);
+		current.count += 1;
+		map.set(key, current);
+	});
+	return [...map.values()].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+}
+
+function aggregateInvoiceNetByMonth(items = []) {
+	const map = new Map();
+	items.forEach((item) => {
+		const year = Number(item.year || 0);
+		const month = Number(item.month || 0);
+		if (!year || !month) return;
+		const type = invoiceMetricType(item.metric);
+		if (!type) return;
+		const key = `${year}-${String(month).padStart(2, "0")}`;
+		const current = map.get(key) || {
+			key,
+			year,
+			month,
+			label: `${year} - ${budgetMonthName(month)}`,
+			value: 0,
+			active: 0,
+			canceled: 0,
+			count: 0,
+		};
+		const value = Number(item.value || 0);
+		if (type === "Ativas") {
+			current.active += value;
+			current.value += value;
+		}
+		if (type === "Canceladas") {
+			current.canceled += value;
+			current.value -= value;
+		}
+		current.count += 1;
+		map.set(key, current);
+	});
+	return [...map.values()].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+}
+
+function aggregateTariffsByLabel(items = [], labelField, valueField = "value") {
+	const map = new Map();
+	items.forEach((item) => {
+		const label = String(item[labelField] || "Sem identificação").trim();
+		const current = map.get(label) || {
+			label,
+			value: 0,
+			count: 0,
+			bankColor: item.bankColor,
+			bankInitials: item.bankInitials,
+		};
+		current.value += Number(item[valueField] || 0);
+		current.count += 1;
+		map.set(label, current);
+	});
+	return [...map.values()].sort((a, b) => b.value - a.value);
+}
+
+function aggregateBillingClients(items = []) {
+	const map = new Map();
+	items.forEach((item) => {
+		const label = String(item.method || "Sem identificação").trim();
+		const current = map.get(label) || {
+			label,
+			method: label,
+			value: 0,
+			customers: 0,
+			estimatedValue: 0,
+			count: 0,
+			bankColor: item.bankColor,
+			bankInitials: item.bankInitials,
+		};
+		current.value += Number(item.customers || 0);
+		current.customers += Number(item.customers || 0);
+		current.estimatedValue += Number(item.estimatedValue || 0);
+		current.count += 1;
+		map.set(label, current);
+	});
+	return [...map.values()].sort((a, b) => b.customers - a.customers);
+}
+
+function buildTariffsInsights(report = {}, selectedPeriod = {}) {
+	const filter = (items = []) =>
+		(items || []).filter((item) => tariffItemMatchesPeriod(item, selectedPeriod));
+	const receitasDiarias = filter(report.receitasDiarias);
+	const tarifasMensais = filter(report.tarifasMensais);
+	const formasPagamentoQuantidade = filter(report.formasPagamentoQuantidade);
+	const formasPagamentoValor = filter(report.formasPagamentoValor);
+	const formasCobrancaValor = filter(report.formasCobrancaValor);
+	const faturas = filter(report.faturas).filter(isRelevantTariffInvoiceRecord);
+	const receitaPorCliente = filter(report.receitaPorCliente);
+	const formasCobrancaClientes = report.formasCobrancaClientes || [];
+	const tarifasBoletos = report.tarifasBoletos || [];
+	const receitaMensal = aggregateTariffsByMonth(receitasDiarias);
+	const tarifasPorMes = aggregateTariffsByMonth(tarifasMensais);
+	const bancos = aggregateTariffsByLabel(tarifasMensais, "bank");
+	const pagamentoValor = aggregateTariffsByLabel(formasPagamentoValor, "method");
+	const pagamentoQuantidade = aggregateTariffsByLabel(formasPagamentoQuantidade, "method", "quantity");
+	const cobrancaClientes = aggregateBillingClients(formasCobrancaClientes);
+	const topClientes = aggregateTariffsByLabel(receitaPorCliente, "clientName").slice(0, 10);
+	const faturasMensais = aggregateInvoiceNetByMonth(faturas);
+	const receitaTotal = receitaMensal.reduce((sum, item) => sum + item.value, 0);
+	const tarifasTotal = tarifasMensais.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	const receitaClienteTotal = receitaPorCliente.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	const totalClientesCobranca = formasCobrancaClientes.reduce((sum, item) => sum + Number(item.customers || 0), 0);
+	const totalPagamentos = formasPagamentoQuantidade.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+	const custoMedioCobranca = totalClientesCobranca ? tarifasTotal / totalClientesCobranca : 0;
+	return {
+		receitasDiarias,
+		tarifasMensais,
+		formasPagamentoQuantidade,
+		formasPagamentoValor,
+		formasCobrancaValor,
+		formasCobrancaClientes,
+		tarifasBoletos,
+		faturas,
+		receitaPorCliente,
+		receitaMensal,
+		tarifasPorMes,
+		bancos,
+		pagamentoValor,
+		pagamentoQuantidade,
+		cobrancaClientes,
+		topClientes,
+		faturasMensais,
+		kpis: {
+			receitaTotal,
+			tarifasTotal,
+			custoMedioCobranca,
+			totalClientesCobranca,
+			totalPagamentos,
+			receitaClienteTotal,
+		},
+	};
+}
+
 function formatValue(value, type = "number") {
-  if (type === "currency") return brl.format(Number(value || 0));
-  if (type === "percent") return `${decimal.format(Number(value || 0))}%`;
-  return integer.format(Number(value || 0));
+	if (type === "text") return value || "-";
+	if (type === "currency") return brl.format(Number(value || 0));
+	if (type === "percent") return `${decimal.format(Number(value || 0))}%`;
+	return integer.format(Number(value || 0));
+}
+
+function formatTariffFee(item = {}) {
+	const label = String(item.valueLabel || "").trim();
+	if (label && /%/.test(label)) return label;
+	const numericLabel = Number(label.replace(",", "."));
+	if (label && Number.isNaN(numericLabel)) return label;
+	return brl.format(Number(item.value || numericLabel || 0));
 }
 
 function formatUpdatedAt(value) {
-  if (!value) return "Sem atualização";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Sem atualização";
-  return date.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+	if (!value) return "Sem atualização";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "Sem atualização";
+	return date.toLocaleString("pt-BR", {
+		day: "2-digit",
+		month: "2-digit",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
 }
 
 function trendText(trend, label) {
-  if (!trend) return "Sem comparativo";
-  const arrow = trend.direction === "up" ? "↑" : "↓";
-  return `${arrow} ${decimal.format(Number(trend.percent || 0))}% ${label || ""}`.trim();
+	if (!trend) return "Sem comparativo";
+	const arrow = trend.direction === "up" ? "↑" : "↓";
+	return `${arrow} ${decimal.format(Number(trend.percent || 0))}% ${label || ""}`.trim();
 }
 
 const EXPORT_OPTIONS = [
-  { id: "kpis", label: "Indicadores principais" },
-  { id: "billing", label: "Últimos faturamentos" },
-  { id: "receivables", label: "Previsão x recebido" },
-  { id: "methods", label: "Formas de pagamento" },
-  { id: "evolution", label: "Evolução de recebimento" },
-  { id: "cities", label: "Top cidades" },
-  { id: "alerts", label: "Alertas financeiros" },
-  { id: "summary", label: "Resumo operacional" },
-  { id: "upcoming", label: "Contas a vencer" },
+	{ id: "kpis", label: "Indicadores principais" },
+	{ id: "billing", label: "Últimos faturamentos" },
+	{ id: "receivables", label: "Previsão x recebido" },
+	{ id: "methods", label: "Formas de pagamento" },
+	{ id: "evolution", label: "Evolução de recebimento" },
+	{ id: "cities", label: "Top cidades" },
+	{ id: "alerts", label: "Alertas financeiros" },
+	{ id: "summary", label: "Resumo operacional" },
+	{ id: "upcoming", label: "Contas a vencer" },
+];
+
+const BUDGET_REPORT_OPTIONS = [
+	{ id: "summary", label: "KPIs: orçado, realizado, saldo e desvio" },
+	{ id: "burnRate", label: "Ritmo de consumo do período" },
+	{ id: "villains", label: "Vilões do orçamento" },
+	{ id: "monthly", label: "Gráfico orçado x realizado mensal" },
+	{ id: "forecast", label: "Gráfico de tendência e forecast" },
+	{ id: "waterfall", label: "Cascata por conta financeira" },
+	{ id: "accounts", label: "Ranking por conta financeira" },
+	{ id: "centers", label: "Distribuição por centro de custo" },
+	{ id: "suppliers", label: "Concentração por fornecedor" },
+	{ id: "directorates", label: "Ranking por diretoria" },
+	{ id: "movements", label: "Todas as movimentações do período" },
+	{ id: "approvals", label: "Aprovações do orçamento" },
+];
+
+const SERASA_REPORT_OPTIONS = [
+	{ id: "kpis", label: "Indicadores principais" },
+	{ id: "monthly", label: "Evolução mensal Serasa" },
+	{ id: "clients", label: "Evolução mensal Clientes Base" },
+	{ id: "operations", label: "Concentração por operação" },
+	{ id: "movements", label: "Movimentações do período" },
+];
+
+const TARIFFS_REPORT_OPTIONS = [
+	{ id: "kpis", label: "Indicadores principais" },
+	{ id: "boletoTariffs", label: "Tarifas de boletos por banco/forma de cobrança" },
+	{ id: "monthlyTariffs", label: "Tarifas mensais por banco" },
+	{ id: "paymentMix", label: "Formas de pagamento" },
+	{ id: "billingMethods", label: "Clientes por forma de cobrança" },
+	{ id: "topClients", label: "Receita por cliente" },
+	{ id: "invoices", label: "Faturas por mês" },
 ];
 
 function periodLabel(period) {
-  if (period === "today") return "Hoje";
-  if (period === "year") return "Ano";
-  return "Mês";
+	if (period === "today") return "Hoje";
+	if (period === "year") return "Ano";
+	return "Mês";
 }
 
 function sanitizeFileName(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase();
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.replace(/[^a-z0-9]+/gi, "-")
+		.replace(/^-|-$/g, "")
+		.toLowerCase();
 }
 
 function buildFinanceiroRows(data, sectionId) {
-  if (sectionId === "billing") {
-    return (data?.lastBillings || []).map((item) => [item.label, brl.format(Number(item.value || 0))]);
-  }
-  if (sectionId === "receivables") {
-    return (data?.receivables || []).map((item) => [
-      item.label,
-      brl.format(Number(item.previsto || 0)),
-      brl.format(Number(item.recebido || 0)),
-    ]);
-  }
-  if (sectionId === "methods") {
-    const total = (data?.paymentMethods || []).reduce((sum, item) => sum + Number(item.value || 0), 0);
-    return (data?.paymentMethods || []).map((item) => [
-      item.label,
-      brl.format(Number(item.value || 0)),
-      `${decimal.format(total ? (Number(item.value || 0) / total) * 100 : 0)}%`,
-    ]);
-  }
-  if (sectionId === "evolution") {
-    return (data?.revenueEvolution || []).map((item) => [item.label, brl.format(Number(item.value || 0))]);
-  }
-  if (sectionId === "cities") {
-    return (data?.citiesRanking || []).map((item) => [item.label, brl.format(Number(item.value || 0))]);
-  }
-  if (sectionId === "alerts") {
-    return (data?.alerts || []).map((item) => [item.title, item.description || "-", item.severity || "-"]);
-  }
-  if (sectionId === "summary") {
-    return [
-      ["Notas lançadas", integer.format(Number(data?.operationalSummary?.notasLancadas || 0))],
-      ["Pagamentos conciliados", integer.format(Number(data?.operationalSummary?.pagamentosConciliados || 0))],
-      ["Valor conciliado", brl.format(Number(data?.operationalSummary?.valorConciliado || 0))],
-      ["Tickets resolvidos", integer.format(Number(data?.operationalSummary?.ticketsResolvidos || 0))],
-      ["Pendências em aberto", integer.format(Number(data?.operationalSummary?.pendenciasAbertas || 0))],
-    ];
-  }
-  if (sectionId === "upcoming") {
-    return (data?.upcomingAccounts || []).map((item) => [
-      item.vencimento,
-      item.nome,
-      brl.format(Number(item.valor || 0)),
-      String(item.dias ?? "-"),
-    ]);
-  }
-  return [];
+	if (sectionId === "billing") {
+		return (data?.lastBillings || []).map((item) => [
+			item.label,
+			brl.format(Number(item.value || 0)),
+		]);
+	}
+	if (sectionId === "receivables") {
+		return (data?.receivables || []).map((item) => [
+			item.label,
+			brl.format(Number(item.previsto || 0)),
+			brl.format(Number(item.recebido || 0)),
+		]);
+	}
+	if (sectionId === "methods") {
+		const total = (data?.paymentMethods || []).reduce(
+			(sum, item) => sum + Number(item.value || 0),
+			0,
+		);
+		return (data?.paymentMethods || []).map((item) => [
+			item.label,
+			brl.format(Number(item.value || 0)),
+			`${decimal.format(total ? (Number(item.value || 0) / total) * 100 : 0)}%`,
+		]);
+	}
+	if (sectionId === "evolution") {
+		return (data?.revenueEvolution || []).map((item) => [
+			item.label,
+			brl.format(Number(item.value || 0)),
+		]);
+	}
+	if (sectionId === "cities") {
+		return (data?.citiesRanking || []).map((item) => [
+			item.label,
+			brl.format(Number(item.value || 0)),
+		]);
+	}
+	if (sectionId === "alerts") {
+		return (data?.alerts || []).map((item) => [
+			item.title,
+			item.description || "-",
+			item.severity || "-",
+		]);
+	}
+	if (sectionId === "summary") {
+		return [
+			[
+				"Notas lançadas",
+				integer.format(Number(data?.operationalSummary?.notasLancadas || 0)),
+			],
+			[
+				"Pagamentos conciliados",
+				integer.format(
+					Number(data?.operationalSummary?.pagamentosConciliados || 0),
+				),
+			],
+			[
+				"Valor conciliado",
+				brl.format(Number(data?.operationalSummary?.valorConciliado || 0)),
+			],
+			[
+				"Tickets resolvidos",
+				integer.format(
+					Number(data?.operationalSummary?.ticketsResolvidos || 0),
+				),
+			],
+			[
+				"Pendências em aberto",
+				integer.format(
+					Number(data?.operationalSummary?.pendenciasAbertas || 0),
+				),
+			],
+		];
+	}
+	if (sectionId === "upcoming") {
+		return (data?.upcomingAccounts || []).map((item) => [
+			item.vencimento,
+			item.nome,
+			brl.format(Number(item.valor || 0)),
+			String(item.dias ?? "-"),
+		]);
+	}
+	return [];
 }
 
 async function exportFinanceiroPdf(data, selectedSections, period) {
-  const { default: jsPDF } = await import("jspdf");
-  const { default: autoTable } = await import("jspdf-autotable");
-  const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 12;
-  let y = 46;
+	const { default: jsPDF } = await import("jspdf");
+	const { default: autoTable } = await import("jspdf-autotable");
+	const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const pageWidth = pdf.internal.pageSize.getWidth();
+	const pageHeight = pdf.internal.pageSize.getHeight();
+	const margin = 12;
+	let y = 46;
 
-  const ensureSpace = (height = 30) => {
-    if (y + height <= pageHeight - 18) return;
-    pdf.addPage();
-    y = 18;
-  };
+	const ensureSpace = (height = 30) => {
+		if (y + height <= pageHeight - 18) return;
+		pdf.addPage();
+		y = 18;
+	};
 
-  const drawTitle = (title) => {
-    ensureSpace(18);
-    pdf.setTextColor(15, 23, 42);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(12);
-    pdf.text(title, margin, y);
-    y += 6;
-  };
+	const drawTitle = (title) => {
+		ensureSpace(18);
+		pdf.setTextColor(15, 23, 42);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(12);
+		pdf.text(title, margin, y);
+		y += 6;
+	};
 
-  const drawMiniBars = (items, labelKey = "label", valueKey = "value") => {
-    const rows = items.slice(0, 6);
-    if (!rows.length) return;
-    const max = Math.max(...rows.map((item) => Number(item[valueKey] || 0)), 1);
-    rows.forEach((item) => {
-      ensureSpace(9);
-      const value = Number(item[valueKey] || 0);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8);
-      pdf.setTextColor(51, 65, 85);
-      pdf.text(String(item[labelKey] || "-").slice(0, 34), margin, y);
-      pdf.setFillColor(226, 232, 240);
-      pdf.roundedRect(margin + 48, y - 4, 60, 3.5, 1, 1, "F");
-      pdf.setFillColor(37, 99, 235);
-      pdf.roundedRect(margin + 48, y - 4, Math.max(3, (value / max) * 60), 3.5, 1, 1, "F");
-      pdf.setTextColor(15, 23, 42);
-      pdf.text(brl.format(value), margin + 112, y);
-      y += 8;
-    });
-    y += 2;
-  };
+	const drawMiniBars = (items, labelKey = "label", valueKey = "value") => {
+		const rows = items.slice(0, 6);
+		if (!rows.length) return;
+		const max = Math.max(...rows.map((item) => Number(item[valueKey] || 0)), 1);
+		rows.forEach((item) => {
+			ensureSpace(9);
+			const value = Number(item[valueKey] || 0);
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(8);
+			pdf.setTextColor(51, 65, 85);
+			pdf.text(String(item[labelKey] || "-").slice(0, 34), margin, y);
+			pdf.setFillColor(226, 232, 240);
+			pdf.roundedRect(margin + 48, y - 4, 60, 3.5, 1, 1, "F");
+			pdf.setFillColor(37, 99, 235);
+			pdf.roundedRect(
+				margin + 48,
+				y - 4,
+				Math.max(3, (value / max) * 60),
+				3.5,
+				1,
+				1,
+				"F",
+			);
+			pdf.setTextColor(15, 23, 42);
+			pdf.text(brl.format(value), margin + 112, y);
+			y += 8;
+		});
+		y += 2;
+	};
 
-  pdf.setFillColor(5, 35, 75);
-  pdf.rect(0, 0, pageWidth, 34, "F");
-  pdf.setFillColor(249, 115, 22);
-  pdf.rect(0, 32, pageWidth, 2, "F");
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(18);
-  pdf.text("Painel Financeiro", margin, 14);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
-  pdf.text(`${periodLabel(period)} · Gerado em ${new Date().toLocaleString("pt-BR")} · Atualizado em ${formatUpdatedAt(data?.updatedAt)}`, margin, 24);
-  await addClusterLogo(pdf, { width: 24, height: 12, y: 8, marginRight: 12 });
+	pdf.setFillColor(5, 35, 75);
+	pdf.rect(0, 0, pageWidth, 34, "F");
+	pdf.setFillColor(249, 115, 22);
+	pdf.rect(0, 32, pageWidth, 2, "F");
+	pdf.setTextColor(255, 255, 255);
+	pdf.setFont("helvetica", "bold");
+	pdf.setFontSize(18);
+	pdf.text("Painel Financeiro", margin, 14);
+	pdf.setFont("helvetica", "normal");
+	pdf.setFontSize(9);
+	pdf.text(
+		`${periodLabel(period)} · Gerado em ${new Date().toLocaleString("pt-BR")} · Atualizado em ${formatUpdatedAt(data?.updatedAt)}`,
+		margin,
+		24,
+	);
+	await addClusterLogo(pdf, { width: 24, height: 12, y: 8, marginRight: 12 });
 
-  if (selectedSections.includes("kpis")) {
-    drawTitle("Indicadores principais");
-    const kpis = (data?.kpis || []).slice(0, 10);
-    const cardWidth = 52;
-    const cardHeight = 24;
-    kpis.forEach((item, index) => {
-      const col = index % 5;
-      const row = Math.floor(index / 5);
-      const x = margin + col * (cardWidth + 4);
-      const cardY = y + row * (cardHeight + 4);
-      pdf.setFillColor(248, 250, 252);
-      pdf.roundedRect(x, cardY, cardWidth, cardHeight, 2, 2, "F");
-      pdf.setDrawColor(226, 232, 240);
-      pdf.roundedRect(x, cardY, cardWidth, cardHeight, 2, 2, "S");
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(6.8);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text(`${index + 1}. ${item.title}`.slice(0, 38), x + 3, cardY + 6);
-      pdf.setFontSize(12);
-      pdf.setTextColor(15, 23, 42);
-      pdf.text(formatValue(item.value, item.type), x + 3, cardY + 15);
-      pdf.setFontSize(6.5);
-      pdf.setTextColor(item.trend?.status === "negative" ? 220 : 22, item.trend?.status === "negative" ? 38 : 163, item.trend?.status === "negative" ? 38 : 74);
-      pdf.text(trendText(item.trend, item.trendLabel).slice(0, 30), x + 3, cardY + 21);
-    });
-    y += kpis.length > 5 ? 58 : 30;
-  }
+	if (selectedSections.includes("kpis")) {
+		drawTitle("Indicadores principais");
+		const kpis = (data?.kpis || []).slice(0, 10);
+		const cardWidth = 52;
+		const cardHeight = 24;
+		kpis.forEach((item, index) => {
+			const col = index % 5;
+			const row = Math.floor(index / 5);
+			const x = margin + col * (cardWidth + 4);
+			const cardY = y + row * (cardHeight + 4);
+			pdf.setFillColor(248, 250, 252);
+			pdf.roundedRect(x, cardY, cardWidth, cardHeight, 2, 2, "F");
+			pdf.setDrawColor(226, 232, 240);
+			pdf.roundedRect(x, cardY, cardWidth, cardHeight, 2, 2, "S");
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(6.8);
+			pdf.setTextColor(71, 85, 105);
+			pdf.text(`${index + 1}. ${item.title}`.slice(0, 38), x + 3, cardY + 6);
+			pdf.setFontSize(12);
+			pdf.setTextColor(15, 23, 42);
+			pdf.text(formatValue(item.value, item.type), x + 3, cardY + 15);
+			pdf.setFontSize(6.5);
+			pdf.setTextColor(
+				item.trend?.status === "negative" ? 220 : 22,
+				item.trend?.status === "negative" ? 38 : 163,
+				item.trend?.status === "negative" ? 38 : 74,
+			);
+			pdf.text(
+				trendText(item.trend, item.trendLabel).slice(0, 30),
+				x + 3,
+				cardY + 21,
+			);
+		});
+		y += kpis.length > 5 ? 58 : 30;
+	}
 
-  const tableConfigs = {
-    billing: { title: "Últimos faturamentos do mês", head: [["Data", "Faturamento"]] },
-    receivables: { title: "Previsão de contas a receber / recebidas", head: [["Dia", "Previsto", "Recebido"]] },
-    methods: { title: "Recebimentos por forma de pagamento", head: [["Forma", "Valor", "Participação"]] },
-    evolution: { title: "Evolução do recebimento no mês", head: [["Data", "Recebido acumulado"]] },
-    cities: { title: "Top cidades por faturamento", head: [["Cidade", "Faturamento"]] },
-    alerts: { title: "Alertas financeiros", head: [["Alerta", "Descrição", "Severidade"]] },
-    summary: { title: "Resumo operacional do dia", head: [["Indicador", "Valor"]] },
-    upcoming: { title: "Contas a vencer", head: [["Vencimento", "Cliente / Grupo", "Valor", "Dias"]] },
-  };
+	const tableConfigs = {
+		billing: {
+			title: "Últimos faturamentos do mês",
+			head: [["Data", "Faturamento"]],
+		},
+		receivables: {
+			title: "Previsão de contas a receber / recebidas",
+			head: [["Dia", "Previsto", "Recebido"]],
+		},
+		methods: {
+			title: "Recebimentos por forma de pagamento",
+			head: [["Forma", "Valor", "Participação"]],
+		},
+		evolution: {
+			title: "Evolução do recebimento no mês",
+			head: [["Data", "Recebido acumulado"]],
+		},
+		cities: {
+			title: "Top cidades por faturamento",
+			head: [["Cidade", "Faturamento"]],
+		},
+		alerts: {
+			title: "Alertas financeiros",
+			head: [["Alerta", "Descrição", "Severidade"]],
+		},
+		summary: {
+			title: "Resumo operacional do dia",
+			head: [["Indicador", "Valor"]],
+		},
+		upcoming: {
+			title: "Contas a vencer",
+			head: [["Vencimento", "Cliente / Grupo", "Valor", "Dias"]],
+		},
+	};
 
-  Object.entries(tableConfigs).forEach(([sectionId, config]) => {
-    if (!selectedSections.includes(sectionId)) return;
-    const body = buildFinanceiroRows(data, sectionId);
-    drawTitle(config.title);
-    if (["billing", "evolution", "cities"].includes(sectionId)) {
-      const source = sectionId === "billing" ? data?.lastBillings : sectionId === "evolution" ? data?.revenueEvolution : data?.citiesRanking;
-      drawMiniBars(source || []);
-    }
-    autoTable(pdf, {
-      startY: y,
-      head: config.head,
-      body: body.length ? body : [["Nenhum dado encontrado", "", "", ""].slice(0, config.head[0].length)],
-      theme: "grid",
-      margin: { left: margin, right: margin },
-      styles: { fontSize: 8, cellPadding: 2.2, overflow: "linebreak" },
-      headStyles: { fillColor: [5, 35, 75], textColor: 255, fontStyle: "bold" },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-    });
-    y = (pdf.lastAutoTable?.finalY || y) + 9;
-  });
+	Object.entries(tableConfigs).forEach(([sectionId, config]) => {
+		if (!selectedSections.includes(sectionId)) return;
+		const body = buildFinanceiroRows(data, sectionId);
+		drawTitle(config.title);
+		if (["billing", "evolution", "cities"].includes(sectionId)) {
+			const source =
+				sectionId === "billing"
+					? data?.lastBillings
+					: sectionId === "evolution"
+						? data?.revenueEvolution
+						: data?.citiesRanking;
+			drawMiniBars(source || []);
+		}
+		autoTable(pdf, {
+			startY: y,
+			head: config.head,
+			body: body.length
+				? body
+				: [
+						["Nenhum dado encontrado", "", "", ""].slice(
+							0,
+							config.head[0].length,
+						),
+					],
+			theme: "grid",
+			margin: {
+				top: headerHeight + 8,
+				bottom: footerHeight + 8,
+				left: margin,
+				right: margin,
+			},
+			styles: { fontSize: 8, cellPadding: 2.2, overflow: "linebreak" },
+			headStyles: { fillColor: [5, 35, 75], textColor: 255, fontStyle: "bold" },
+			alternateRowStyles: { fillColor: [248, 250, 252] },
+		});
+		y = (pdf.lastAutoTable?.finalY || y) + 9;
+	});
 
-  const pages = pdf.internal.getNumberOfPages();
-  for (let page = 1; page <= pages; page += 1) {
-    pdf.setPage(page);
-    pdf.setFillColor(248, 250, 252);
-    pdf.rect(0, pageHeight - 12, pageWidth, 12, "F");
-    pdf.setFontSize(7);
-    pdf.setTextColor(100, 116, 139);
-    pdf.text("Sistema de Retiradas | Cluster MG", margin, pageHeight - 5);
-    pdf.text(`Página ${page} de ${pages}`, pageWidth - margin, pageHeight - 5, { align: "right" });
-  }
+	const pages = pdf.internal.getNumberOfPages();
+	for (let page = 1; page <= pages; page += 1) {
+		pdf.setPage(page);
+		pdf.setFillColor(248, 250, 252);
+		pdf.rect(0, pageHeight - 12, pageWidth, 12, "F");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text("Sistema de Retiradas | Cluster MG", margin, pageHeight - 5);
+		pdf.text(`Página ${page} de ${pages}`, pageWidth - margin, pageHeight - 5, {
+			align: "right",
+		});
+	}
 
-  pdf.save(`painel-financeiro-${sanitizeFileName(periodLabel(period))}.pdf`);
+	pdf.save(`painel-financeiro-${sanitizeFileName(periodLabel(period))}.pdf`);
 }
 
 function ExportFinanceiroModal({ data, period, onClose }) {
-  const [selected, setSelected] = useState(() => EXPORT_OPTIONS.map((item) => item.id));
-  const [generating, setGenerating] = useState(false);
+	const [selected, setSelected] = useState(() =>
+		EXPORT_OPTIONS.map((item) => item.id),
+	);
+	const [generating, setGenerating] = useState(false);
 
-  const toggle = (id) => {
-    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  };
+	const toggle = (id) => {
+		setSelected((current) =>
+			current.includes(id)
+				? current.filter((item) => item !== id)
+				: [...current, id],
+		);
+	};
 
-  const handleExport = async () => {
-    setGenerating(true);
-    try {
-      await exportFinanceiroPdf(data, selected, period);
-      onClose();
-    } finally {
-      setGenerating(false);
-    }
-  };
+	const handleExport = async () => {
+		setGenerating(true);
+		try {
+			await exportFinanceiroPdf(data, selected, period);
+			onClose();
+		} finally {
+			setGenerating(false);
+		}
+	};
 
-  return (
-    <ModalShell
-      title="Exportar visão geral"
-      description="Selecione quais blocos do painel financeiro devem entrar no PDF."
-      size="3xl"
-      onClose={onClose}
-      icon={<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Download size={22} /></span>}
-      footer={(
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <button type="button" onClick={() => setSelected(EXPORT_OPTIONS.map((item) => item.id))} className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-            Selecionar todos
-          </button>
-          <button type="button" onClick={handleExport} disabled={!selected.length || generating} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-            {generating ? <Loader2 className="animate-spin" size={17} /> : <Download size={17} />}
-            {generating ? "Gerando..." : "Gerar PDF"}
-          </button>
-        </div>
-      )}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        {EXPORT_OPTIONS.map((option) => (
-          <label key={option.id} className="flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50">
-            <input
-              type="checkbox"
-              checked={selected.includes(option.id)}
-              onChange={() => toggle(option.id)}
-              className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            />
-            {option.label}
-          </label>
-        ))}
-      </div>
-    </ModalShell>
-  );
+	return (
+		<ModalShell
+			title="Exportar visão geral"
+			description="Selecione quais blocos do painel financeiro devem entrar no PDF."
+			size="3xl"
+			onClose={onClose}
+			icon={
+				<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+					<Download size={22} />
+				</span>
+			}
+			footer={
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<button
+						type="button"
+						onClick={() => setSelected(EXPORT_OPTIONS.map((item) => item.id))}
+						className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Selecionar todos
+					</button>
+					<button
+						type="button"
+						onClick={handleExport}
+						disabled={!selected.length || generating}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						{generating ? (
+							<Loader2 className="animate-spin" size={17} />
+						) : (
+							<Download size={17} />
+						)}
+						{generating ? "Gerando..." : "Gerar PDF"}
+					</button>
+				</div>
+			}
+		>
+			<div className="grid gap-3 sm:grid-cols-2">
+				{EXPORT_OPTIONS.map((option) => (
+					<label
+						key={option.id}
+						className="flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50"
+					>
+						<input
+							type="checkbox"
+							checked={selected.includes(option.id)}
+							onChange={() => toggle(option.id)}
+							className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+						/>
+						{option.label}
+					</label>
+				))}
+			</div>
+		</ModalShell>
+	);
 }
 
-function FinancialKpiCard({ item, loading, index }) {
-  const Icon = ICONS[item.icon] || BadgeDollarSign;
-  const positive = item.trend?.status === "positive";
-  const negative = item.trend?.status === "negative";
-  const accentClasses = negative
-    ? "from-orange-50/80 via-white to-white text-orange-600 ring-orange-100"
-    : "from-blue-50/90 via-white to-white text-blue-700 ring-blue-100";
-  return (
-    <article className="group relative min-h-[132px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_18px_42px_rgba(37,99,235,0.13)]">
-      <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${negative ? "from-orange-500 to-amber-300" : "from-blue-600 to-cyan-300"}`} />
-      <div className="flex items-start gap-3">
-        <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ring-1 ${accentClasses}`}>
-          <Icon size={25} strokeWidth={2.4} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 min-h-8 text-[12px] font-bold leading-tight text-slate-950">
-            {typeof index === "number" ? `${index + 1}. ` : ""}{item.title}
-          </p>
-          {loading ? (
-            <div className="mt-3 h-7 w-28 animate-pulse rounded-lg bg-slate-100" />
-          ) : (
-            <p className="mt-3 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[clamp(1.15rem,1.25vw,1.55rem)] font-bold leading-none tracking-tight text-slate-950">
-              {formatValue(item.value, item.type)}
-            </p>
-          )}
-          <p className={`mt-3 inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${positive ? "bg-emerald-50 text-emerald-700" : negative ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-500"}`}>
-            {trendText(item.trend, item.trendLabel)}
-          </p>
-          {item.helper ? <p className="mt-1 text-xs font-bold text-slate-500">{item.helper}</p> : null}
-        </div>
-      </div>
-    </article>
-  );
+let cachedSempreLogoDataUrl = "";
+
+async function getSempreLogoDataUrl() {
+	if (cachedSempreLogoDataUrl) return cachedSempreLogoDataUrl;
+	const response = await fetch("/sempre-logo-azul.png", {
+		cache: "force-cache",
+	});
+	if (!response.ok) return "";
+	const blob = await response.blob();
+	cachedSempreLogoDataUrl = await new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onloadend = () => resolve(String(reader.result || ""));
+		reader.onerror = reject;
+		reader.readAsDataURL(blob);
+	});
+	return cachedSempreLogoDataUrl;
 }
 
-function EmptyState({ text = "Nenhum dado encontrado para o período selecionado." }) {
-  return (
-    <div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">
-      {text}
-    </div>
-  );
+function budgetReportPeriodFromState(periodState = {}) {
+	const now = new Date();
+	const year = Number(periodState.referenceYear) || now.getFullYear();
+	const month = Number(periodState.referenceMonth) || now.getMonth() + 1;
+	if (periodState.mode === "last3") {
+		const end = new Date(year, month - 1, 1);
+		const start = new Date(end.getFullYear(), end.getMonth() - 2, 1);
+		const lastDay = new Date(
+			end.getFullYear(),
+			end.getMonth() + 1,
+			0,
+		).getDate();
+		return {
+			mode: "custom",
+			referenceYear: year,
+			referenceMonth: month,
+			startDate: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-01`,
+			endDate: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+		};
+	}
+	if (periodState.mode === "custom") {
+		return {
+			mode: "custom",
+			referenceYear: year,
+			referenceMonth: month,
+			startDate: periodState.startDate || "",
+			endDate: periodState.endDate || "",
+		};
+	}
+	return {
+		mode: periodState.mode || "month",
+		referenceYear: year,
+		referenceMonth: month,
+	};
+}
+
+function buildBudgetReportRows(config = {}, insights = {}) {
+	const accountById = new Map(
+		(config.accounts || []).map((account) => [account.id, account]),
+	);
+	const centerById = new Map(
+		(config.centers || []).map((center) => [center.id, center]),
+	);
+	const companyById = new Map(
+		(config.companies || []).map((company) => [company.id, company]),
+	);
+	const branchById = new Map(
+		(config.branches || []).map((branch) => [branch.id, branch]),
+	);
+	const analyticalCenterRows = (insights.centerRows || [])
+		.filter(({ center }) => center?.tipoPlano === "A")
+		.sort((a, b) => b.percent - a.percent);
+	const directorateByName = new Map(
+		(config.settings?.directorates || []).map((item) => [
+			String(item.nome || item.name || "")
+				.trim()
+				.toLowerCase(),
+			item,
+		]),
+	);
+	const directorates = (insights.centerSummary || []).reduce((map, item) => {
+		const rawName = String(
+			item.center?.diretoria || item.center?.directorate || "",
+		).trim();
+		const key = rawName.toLowerCase() || "sem-diretoria";
+		const directorate = directorateByName.get(key);
+		const current = map.get(key) || {
+			id: key,
+			nome: rawName || "Diretoria não informada",
+			diretor: directorate?.diretor || directorate?.director || "",
+			planned: 0,
+			realized: 0,
+			centers: 0,
+		};
+		current.planned += Number(item.planned || 0);
+		current.realized += Number(item.realized || 0);
+		current.centers += 1;
+		map.set(key, current);
+		return map;
+	}, new Map());
+	return {
+		accountById,
+		centerById,
+		companyById,
+		branchById,
+		analyticalCenterRows,
+		directorates: Array.from(directorates.values())
+			.map((item) => ({
+				...item,
+				available: Number(item.planned || 0) - Number(item.realized || 0),
+				percent: item.planned ? (item.realized / item.planned) * 100 : 0,
+			}))
+			.sort((left, right) => right.realized - left.realized),
+	};
+}
+
+async function exportBudgetManagementPdf({
+	config = {},
+	selectedSections = [],
+	periodState = {},
+}) {
+	const { default: jsPDF } = await import("jspdf");
+	const { default: autoTable } = await import("jspdf-autotable");
+	const selectedPeriod = budgetReportPeriodFromState(periodState);
+	const period = buildBudgetPeriod(selectedPeriod);
+	const insights = getBudgetInsights(config, selectedPeriod);
+	const rows = buildBudgetReportRows(config, insights);
+	const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const pageWidth = pdf.internal.pageSize.getWidth();
+	const pageHeight = pdf.internal.pageSize.getHeight();
+	const margin = 10;
+	const headerHeight = 26;
+	const footerHeight = 10;
+	let y = headerHeight + 8;
+
+	const lineChart = (items, options = {}) => {
+		const labels = items.map((item) => item.label);
+		const values = items.map((item) => Number(item.value || 0));
+		const forecast = items.map((item) => Number(item.forecast || 0));
+		const width = options.width || pageWidth - margin * 2;
+		const height = options.height || 46;
+		const x = options.x || margin;
+		const max = Math.max(...values, ...forecast, 1);
+		pdf.setDrawColor(226, 232, 240);
+		pdf.roundedRect(x, y, width, height, 2, 2, "S");
+		const plotX = x + 8;
+		const plotY = y + 7;
+		const plotW = width - 18;
+		const plotH = height - 18;
+		const drawSeries = (series, color, dashed = false) => {
+			pdf.setDrawColor(...color);
+			pdf.setLineWidth(0.8);
+			if (dashed) pdf.setLineDashPattern([2, 2], 0);
+			series.forEach((value, index) => {
+				const px =
+					plotX +
+					(series.length <= 1 ? 0 : (index / (series.length - 1)) * plotW);
+				const py = plotY + plotH - (value / max) * plotH;
+				if (index > 0) {
+					const prevX = plotX + ((index - 1) / (series.length - 1)) * plotW;
+					const prevY = plotY + plotH - (series[index - 1] / max) * plotH;
+					pdf.line(prevX, prevY, px, py);
+				}
+				pdf.setFillColor(...color);
+				pdf.circle(px, py, 1.2, "F");
+			});
+			pdf.setLineDashPattern([], 0);
+		};
+		drawSeries(values, [37, 99, 235]);
+		if (forecast.some(Boolean)) drawSeries(forecast, [249, 115, 22], true);
+		pdf.setFontSize(6.5);
+		pdf.setTextColor(100, 116, 139);
+		labels
+			.filter((_, index) => index % Math.ceil(labels.length / 6 || 1) === 0)
+			.forEach((label, index) => {
+				pdf.text(
+					String(label).slice(0, 10),
+					plotX + index * (plotW / 5),
+					y + height - 4,
+				);
+			});
+		y += height + 6;
+	};
+
+	const barChart = (items, options = {}) => {
+		const width = options.width || pageWidth - margin * 2;
+		const height =
+			options.height || Math.max(36, Math.min(72, items.length * 7 + 14));
+		const x = options.x || margin;
+		const max = Math.max(
+			...items.flatMap((item) => [
+				Number(item.value || 0),
+				Number(item.value2 || 0),
+			]),
+			1,
+		);
+		pdf.setDrawColor(226, 232, 240);
+		pdf.roundedRect(x, y, width, height, 2, 2, "S");
+		const rowH = Math.max(
+			5,
+			Math.min(8, (height - 8) / Math.max(items.length, 1)),
+		);
+		items.slice(0, Math.floor((height - 8) / rowH)).forEach((item, index) => {
+			const rowY = y + 6 + index * rowH;
+			const labelW = options.labelWidth || 62;
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(6.7);
+			pdf.setTextColor(51, 65, 85);
+			pdf.text(String(item.label || "-").slice(0, 38), x + 4, rowY + 2.4);
+			const barX = x + labelW;
+			const barW = width - labelW - 34;
+			pdf.setFillColor(226, 232, 240);
+			pdf.roundedRect(barX, rowY - 1.2, barW, 2.8, 1, 1, "F");
+			pdf.setFillColor(...(item.color || [37, 99, 235]));
+			pdf.roundedRect(
+				barX,
+				rowY - 1.2,
+				Math.max(1.8, (Number(item.value || 0) / max) * barW),
+				2.8,
+				1,
+				1,
+				"F",
+			);
+			if (Number(item.value2 || 0)) {
+				pdf.setFillColor(249, 115, 22);
+				pdf.roundedRect(
+					barX,
+					rowY + 2.1,
+					Math.max(1.8, (Number(item.value2 || 0) / max) * barW),
+					2.2,
+					1,
+					1,
+					"F",
+				);
+			}
+			pdf.setTextColor(15, 23, 42);
+			pdf.text(
+				brl.format(Number(item.value || 0)).slice(0, 16),
+				x + width - 31,
+				rowY + 2.5,
+			);
+		});
+		y += height + 6;
+	};
+
+	const groupedMonthlyChart = (items = []) => {
+		const width = pageWidth - margin * 2;
+		const height = 58;
+		const x = margin;
+		ensureSpace(height + 12);
+		const max = Math.max(
+			...items.flatMap((item) => [
+				Number(item.planned || 0),
+				Number(item.realized || 0),
+			]),
+			1,
+		);
+		pdf.setDrawColor(226, 232, 240);
+		pdf.roundedRect(x, y, width, height, 2, 2, "S");
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(7);
+		pdf.setTextColor(37, 99, 235);
+		pdf.setFillColor(37, 99, 235);
+		pdf.rect(x + 6, y + 5, 4, 3, "F");
+		pdf.text("Orçado", x + 12, y + 8);
+		pdf.setTextColor(249, 115, 22);
+		pdf.setFillColor(249, 115, 22);
+		pdf.rect(x + 35, y + 5, 4, 3, "F");
+		pdf.text("Realizado", x + 41, y + 8);
+		const plotX = x + 7;
+		const plotY = y + 13;
+		const plotW = width - 14;
+		const plotH = height - 24;
+		const groupW = plotW / Math.max(items.length, 1);
+		items.forEach((item, index) => {
+			const centerX = plotX + index * groupW + groupW / 2;
+			const barW = Math.min(5.5, Math.max(2.8, groupW / 4));
+			const plannedH = (Number(item.planned || 0) / max) * plotH;
+			const realizedH = (Number(item.realized || 0) / max) * plotH;
+			pdf.setFillColor(37, 99, 235);
+			pdf.roundedRect(
+				centerX - barW - 0.8,
+				plotY + plotH - plannedH,
+				barW,
+				Math.max(1, plannedH),
+				0.8,
+				0.8,
+				"F",
+			);
+			pdf.setFillColor(249, 115, 22);
+			pdf.roundedRect(
+				centerX + 0.8,
+				plotY + plotH - realizedH,
+				barW,
+				Math.max(1, realizedH),
+				0.8,
+				0.8,
+				"F",
+			);
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(6);
+			pdf.setTextColor(100, 116, 139);
+			pdf.text(String(item.label || "").slice(0, 3), centerX, y + height - 5, {
+				align: "center",
+			});
+		});
+		y += height + 6;
+	};
+
+	const table = (title, head, body, options = {}) => {
+		drawSectionTitle(title);
+		autoTable(pdf, {
+			startY: y,
+			head: [head],
+			body: body.length
+				? body
+				: [
+						[
+							"Nenhum dado encontrado",
+							...Array.from({ length: head.length - 1 }, () => ""),
+						],
+					],
+			theme: "grid",
+			margin: { left: margin, right: margin },
+			styles: {
+				fontSize: options.fontSize || 7,
+				cellPadding: options.cellPadding || 1.7,
+				overflow: "linebreak",
+			},
+			headStyles: {
+				fillColor: [15, 23, 42],
+				textColor: 255,
+				fontStyle: "bold",
+			},
+			alternateRowStyles: { fillColor: [248, 250, 252] },
+		});
+		y = (pdf.lastAutoTable?.finalY || y) + 6;
+	};
+
+	const ensureSpace = (height = 28) => {
+		if (y + height <= pageHeight - footerHeight - 6) return;
+		pdf.addPage();
+		y = headerHeight + 8;
+	};
+
+	function drawSectionTitle(title) {
+		ensureSpace(14);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(11);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text(title, margin, y);
+		y += 5;
+	}
+
+	const cardGrid = (items) => {
+		const cols = 4;
+		const gap = 4;
+		const cardW = (pageWidth - margin * 2 - gap * (cols - 1)) / cols;
+		const cardH = 22;
+		ensureSpace(Math.ceil(items.length / cols) * (cardH + gap) + 6);
+		items.forEach((item, index) => {
+			const col = index % cols;
+			const row = Math.floor(index / cols);
+			const x = margin + col * (cardW + gap);
+			const cy = y + row * (cardH + gap);
+			pdf.setFillColor(...(item.fill || [248, 250, 252]));
+			pdf.roundedRect(x, cy, cardW, cardH, 2, 2, "F");
+			pdf.setDrawColor(...(item.border || [226, 232, 240]));
+			pdf.roundedRect(x, cy, cardW, cardH, 2, 2, "S");
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(6.7);
+			pdf.setTextColor(71, 85, 105);
+			pdf.text(String(item.title).slice(0, 34), x + 3, cy + 5.5);
+			pdf.setFontSize(12);
+			pdf.setTextColor(...(item.color || [15, 23, 42]));
+			pdf.text(String(item.value).slice(0, 22), x + 3, cy + 14);
+			pdf.setFontSize(6);
+			pdf.setTextColor(100, 116, 139);
+			pdf.text(String(item.helper || "").slice(0, 42), x + 3, cy + 19);
+		});
+		y += Math.ceil(items.length / cols) * (cardH + gap) + 2;
+	};
+
+	const sections = {
+		summary: () => {
+			const deviation = budgetVarianceMeta(
+				insights.plannedMonth,
+				insights.realizedMonth + insights.committedMonth,
+			);
+			drawSectionTitle("Visão macro");
+			cardGrid([
+				{
+					title: "Orçado no período",
+					value: brl.format(insights.plannedMonth),
+					helper: period.displayLabel,
+					fill: [239, 246, 255],
+					border: [191, 219, 254],
+					color: [30, 64, 175],
+				},
+				{
+					title: "Realizado + comprometido",
+					value: brl.format(insights.realizedMonth + insights.committedMonth),
+					helper: `${decimal.format(insights.usedPercent)}% consumido`,
+					fill: [245, 243, 255],
+					border: [221, 214, 254],
+					color: [91, 33, 182],
+				},
+				{
+					title: "Saldo disponível",
+					value: brl.format(insights.availableMonth),
+					helper:
+						insights.availableMonth >= 0 ? "Dentro do orçamento" : "Estourado",
+					fill:
+						insights.availableMonth >= 0 ? [236, 253, 245] : [255, 241, 242],
+					border:
+						insights.availableMonth >= 0 ? [167, 243, 208] : [254, 205, 211],
+					color: insights.availableMonth >= 0 ? [4, 120, 87] : [190, 18, 60],
+				},
+				{
+					title: "Desvio",
+					value: brl.format(deviation.variance),
+					helper: `${decimal.format(deviation.percent)}%`,
+					fill: [248, 250, 252],
+					border: [226, 232, 240],
+					color: [15, 23, 42],
+				},
+			]);
+		},
+		burnRate: () => {
+			drawSectionTitle("Ritmo de consumo");
+			barChart(
+				[
+					{
+						label: "Ideal do período",
+						value: insights.idealPercent,
+						color: [37, 99, 235],
+					},
+					{
+						label: "Consumido",
+						value: insights.usedPercent,
+						color:
+							insights.usedPercent > 100
+								? [239, 68, 68]
+								: insights.usedPercent >= 80
+									? [245, 158, 11]
+									: [16, 185, 129],
+					},
+				],
+				{ height: 32, labelWidth: 52 },
+			);
+		},
+		villains: () => {
+			drawSectionTitle("Vilões do orçamento - centros analíticos");
+			barChart(
+				rows.analyticalCenterRows
+					.slice(0, 10)
+					.map(({ center, percent, deviation }) => ({
+						label: budgetCenterCompactLabel(center),
+						value: Math.max(0, percent),
+						color:
+							percent > 100
+								? [239, 68, 68]
+								: percent >= 80
+									? [245, 158, 11]
+									: [16, 185, 129],
+						helper: brl.format(Math.abs(deviation || 0)),
+					})),
+				{ height: 66, labelWidth: 70 },
+			);
+		},
+		monthly: () => {
+			drawSectionTitle("Orçado x realizado mensal");
+			const monthlyRows = (insights.monthlyEvolution || []).map((item) => ({
+				label: item.label,
+				planned: Number(item.planned || 0),
+				realized: Number(item.realized || 0),
+			}));
+			groupedMonthlyChart(monthlyRows);
+			autoTable(pdf, {
+				startY: y,
+				head: [["Mês", "Orçado", "Realizado", "Saldo", "Uso"]],
+				body: monthlyRows.map((item) => {
+					const balance = item.planned - item.realized;
+					const used = item.planned ? (item.realized / item.planned) * 100 : 0;
+					return [
+						item.label,
+						brl.format(item.planned),
+						brl.format(item.realized),
+						brl.format(balance),
+						`${decimal.format(used)}%`,
+					];
+				}),
+				theme: "grid",
+				margin: { left: margin, right: margin },
+				styles: { fontSize: 7, cellPadding: 1.5, overflow: "linebreak" },
+				headStyles: {
+					fillColor: [15, 23, 42],
+					textColor: 255,
+					fontStyle: "bold",
+				},
+				alternateRowStyles: { fillColor: [248, 250, 252] },
+			});
+			y = (pdf.lastAutoTable?.finalY || y) + 6;
+		},
+		forecast: () => {
+			drawSectionTitle("Tendência e forecast");
+			lineChart(
+				(insights.forecastRows || []).map((item) => ({
+					label: item.label,
+					value: item.cumulativeRealized,
+					forecast: item.forecast,
+				})),
+				{ height: 58 },
+			);
+		},
+		waterfall: () => {
+			drawSectionTitle("Cascata por conta financeira");
+			const body = [
+				["Orçamento do período", brl.format(insights.plannedMonth), "Base"],
+				...(insights.accountSummary || [])
+					.slice(0, 8)
+					.map((item) => [
+						budgetAccountLabel(item.account, item.id),
+						`- ${brl.format(item.realized)}`,
+						"Realizado",
+					]),
+				[
+					"Saldo após realizados",
+					brl.format(insights.availableMonth),
+					insights.availableMonth >= 0 ? "Positivo" : "Estourado",
+				],
+			];
+			table("Composição", ["Conta", "Valor", "Tipo"], body, { fontSize: 7 });
+		},
+		accounts: () => {
+			drawSectionTitle("Contas financeiras");
+			barChart(
+				(insights.accountSummary || []).slice(0, 10).map((item) => ({
+					label: budgetAccountLabel(item.account, item.id),
+					value: item.planned,
+					value2: item.realized,
+					color: [15, 118, 110],
+				})),
+				{ height: 76, labelWidth: 82 },
+			);
+		},
+		centers: () => {
+			drawSectionTitle("Centros de custo");
+			barChart(
+				(insights.centerSummary || []).slice(0, 10).map((item) => ({
+					label: budgetCenterCompactLabel(item.center),
+					value: Math.max(0, item.planned - item.realized),
+					value2: item.realized,
+					color: [191, 219, 254],
+				})),
+				{ height: 76, labelWidth: 78 },
+			);
+		},
+		suppliers: () => {
+			drawSectionTitle("Concentração por fornecedor");
+			barChart(
+				(insights.supplierSummary || []).slice(0, 12).map((item, index) => ({
+					label: item.supplier,
+					value: item.value,
+					color: index < 5 ? [37, 99, 235] : [96, 165, 250],
+				})),
+				{ height: 86, labelWidth: 92 },
+			);
+		},
+		directorates: () => {
+			table(
+				"Ranking por diretoria",
+				[
+					"Diretoria",
+					"Diretor",
+					"Centros",
+					"Orçado",
+					"Realizado",
+					"Saldo",
+					"Uso",
+				],
+				rows.directorates
+					.slice(0, 14)
+					.map((item) => [
+						item.nome,
+						item.diretor || "Não informado",
+						integer.format(item.centers),
+						brl.format(item.planned),
+						brl.format(item.realized),
+						brl.format(item.available),
+						`${decimal.format(item.percent)}%`,
+					]),
+			);
+		},
+		movements: () => {
+			table(
+				"Todas as movimentações do período",
+				["Fornecedor", "Conta", "Centro", "Matriz / filial", "Valor"],
+				(insights.movements || []).map((movement) => {
+					const account = rows.accountById.get(movement.accountId);
+					const center = rows.centerById.get(movement.centerId);
+					const company = rows.companyById.get(movement.companyId);
+					const branch = rows.branchById.get(movement.branchId);
+					return [
+						movementSupplierName(movement),
+						account
+							? budgetAccountLabel(account, movement.accountId)
+							: movement.accountName || movement.accountId || "-",
+						center
+							? budgetCenterCompactLabel(center, movement.centerId)
+							: movement.centerName || movement.centerId || "-",
+						[
+							company?.nome || movement.companyId,
+							branch?.nome || movement.branchId,
+						]
+							.filter(Boolean)
+							.join(" / ") || "-",
+						brl.format(movementValue(movement)),
+					];
+				}),
+				{ fontSize: 6.5, cellPadding: 1.4 },
+			);
+		},
+		approvals: () => {
+			const approvals = insights.approvalsAll || insights.approvals || [];
+			table(
+				"Aprovações do orçamento",
+				["Status", "Centro", "Responsável", "Usado / Orçado", "Motivo"],
+				approvals
+					.slice(0, 18)
+					.map((approval) => [
+						budgetApprovalStatusMeta(approval.status).label,
+						approval.center?.nome || approval.centerId || "-",
+						approval.center?.responsavel || "Não informado",
+						`${brl.format(approval.used || 0)} / ${brl.format(approval.centerPlanned || approval.budgeted || 0)}`,
+						approval.reason || "Estouro de orçamento",
+					]),
+				{ fontSize: 6.5, cellPadding: 1.4 },
+			);
+		},
+	};
+
+	pdf.setFont("helvetica", "bold");
+	pdf.setFontSize(16);
+	pdf.setTextColor(15, 23, 42);
+	pdf.text("Relatório de Gestão Orçamentária", margin, y);
+	y += 7;
+	pdf.setFont("helvetica", "normal");
+	pdf.setFontSize(8);
+	pdf.setTextColor(71, 85, 105);
+	pdf.text(
+		`${period.displayLabel} · Gerado em ${new Date().toLocaleString("pt-BR")} · Última importação: ${formatUpdatedAt(config.lastImportInfo?.importedAt)}`,
+		margin,
+		y,
+	);
+	y += 8;
+
+	selectedSections.forEach((sectionId) => {
+		const draw = sections[sectionId];
+		if (!draw) return;
+		ensureSpace(28);
+		draw();
+	});
+
+	const logo = await getSempreLogoDataUrl();
+	const pages = pdf.internal.getNumberOfPages();
+	for (let page = 1; page <= pages; page += 1) {
+		pdf.setPage(page);
+		pdf.setFillColor(255, 255, 255);
+		pdf.rect(0, 0, pageWidth, headerHeight, "F");
+		pdf.setFillColor(5, 35, 75);
+		pdf.rect(0, 0, pageWidth, 4, "F");
+		pdf.setDrawColor(226, 232, 240);
+		pdf.line(0, headerHeight, pageWidth, headerHeight);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(9);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text("Sempre Internet", margin, 13);
+		pdf.setFont("helvetica", "normal");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text("Gestão Orçamentária", margin, 19);
+		if (logo) {
+			const logoHeight = 16;
+			const logoWidth = logoHeight * 1.25;
+			pdf.addImage(
+				logo,
+				"PNG",
+				pageWidth - margin - logoWidth,
+				6,
+				logoWidth,
+				logoHeight,
+			);
+		}
+		pdf.setFillColor(248, 250, 252);
+		pdf.rect(0, pageHeight - footerHeight, pageWidth, footerHeight, "F");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text(
+			"Gestão Orçamentária - Sempre Internet 2026",
+			margin,
+			pageHeight - 4,
+		);
+		pdf.text(`Página ${page} de ${pages}`, pageWidth - margin, pageHeight - 4, {
+			align: "right",
+		});
+	}
+
+	pdf.save(
+		`relatorio-gestao-orcamentaria-${sanitizeFileName(period.displayLabel)}-${sanitizeFileName(new Date().toISOString().slice(0, 10))}.pdf`,
+	);
+}
+
+function BudgetReportExportModal({ config = {}, defaultPeriod = {}, onClose }) {
+	const now = new Date();
+	const initialYear = Number(
+		defaultPeriod.referenceYear ||
+			config.lastImportReference?.year ||
+			config.lastImportSummary?.referenceYear ||
+			now.getFullYear(),
+	);
+	const initialMonth = Number(
+		defaultPeriod.referenceMonth ||
+			config.lastImportReference?.month ||
+			config.lastImportSummary?.referenceMonth ||
+			now.getMonth() + 1,
+	);
+	const [selected, setSelected] = useState(() =>
+		BUDGET_REPORT_OPTIONS.map((item) => item.id),
+	);
+	const [periodState, setPeriodState] = useState(() => ({
+		mode: "month",
+		referenceYear: initialYear,
+		referenceMonth: Math.max(1, Math.min(12, initialMonth)),
+		startDate: "",
+		endDate: "",
+	}));
+	const [generating, setGenerating] = useState(false);
+	const effectivePeriod = buildBudgetPeriod(
+		budgetReportPeriodFromState(periodState),
+	);
+
+	const toggle = (id) => {
+		setSelected((current) =>
+			current.includes(id)
+				? current.filter((item) => item !== id)
+				: [...current, id],
+		);
+	};
+
+	const handleGenerate = async () => {
+		setGenerating(true);
+		try {
+			await exportBudgetManagementPdf({
+				config,
+				selectedSections: selected,
+				periodState,
+			});
+			onClose();
+		} finally {
+			setGenerating(false);
+		}
+	};
+
+	return (
+		<ModalShell
+			title="Gerar Relatório"
+			description="Escolha o período e os blocos que entram no PDF da gestão orçamentária."
+			size="4xl"
+			onClose={onClose}
+			icon={
+				<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+					<Download size={22} />
+				</span>
+			}
+			footer={
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<button
+						type="button"
+						onClick={() =>
+							setSelected(BUDGET_REPORT_OPTIONS.map((item) => item.id))
+						}
+						className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Selecionar todos
+					</button>
+					<button
+						type="button"
+						onClick={handleGenerate}
+						disabled={!selected.length || generating}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						{generating ? (
+							<Loader2 className="animate-spin" size={17} />
+						) : (
+							<Download size={17} />
+						)}
+						{generating ? "Gerando..." : "Gerar PDF"}
+					</button>
+				</div>
+			}
+		>
+			<div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+				<section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+					<h3 className="text-sm font-black text-slate-950">Período</h3>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						{effectivePeriod.displayLabel}
+					</p>
+					<div className="mt-4 grid gap-3">
+						<select
+							value={periodState.mode}
+							onChange={(event) =>
+								setPeriodState((current) => ({
+									...current,
+									mode: event.target.value,
+								}))
+							}
+							className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+						>
+							<option value="month">Mês selecionado</option>
+							<option value="last3">Últimos 3 meses</option>
+							<option value="year">Ano selecionado</option>
+							<option value="custom">Intervalo customizado</option>
+						</select>
+						{periodState.mode !== "custom" ? (
+							<div className="grid gap-3 sm:grid-cols-2">
+								<select
+									value={periodState.referenceMonth}
+									onChange={(event) =>
+										setPeriodState((current) => ({
+											...current,
+											referenceMonth: Number(event.target.value),
+										}))
+									}
+									disabled={periodState.mode === "year"}
+									className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none disabled:opacity-50"
+								>
+									{Array.from({ length: 12 }, (_, index) => index + 1).map(
+										(month) => (
+											<option key={month} value={month}>
+												{budgetMonthName(month)}
+											</option>
+										),
+									)}
+								</select>
+								<select
+									value={periodState.referenceYear}
+									onChange={(event) =>
+										setPeriodState((current) => ({
+											...current,
+											referenceYear: Number(event.target.value),
+										}))
+									}
+									className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none"
+								>
+									{Array.from({ length: 7 }, (_, index) => 2026 - index).map(
+										(year) => (
+											<option key={year} value={year}>
+												{year}
+											</option>
+										),
+									)}
+								</select>
+							</div>
+						) : (
+							<div className="grid gap-3 sm:grid-cols-2">
+								<input
+									type="date"
+									value={periodState.startDate}
+									onChange={(event) =>
+										setPeriodState((current) => ({
+											...current,
+											startDate: event.target.value,
+										}))
+									}
+									className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none"
+								/>
+								<input
+									type="date"
+									value={periodState.endDate}
+									onChange={(event) =>
+										setPeriodState((current) => ({
+											...current,
+											endDate: event.target.value,
+										}))
+									}
+									className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none"
+								/>
+							</div>
+						)}
+					</div>
+				</section>
+				<section className="rounded-2xl border border-slate-200 bg-white p-4">
+					<h3 className="text-sm font-black text-slate-950">Conteúdo do PDF</h3>
+					<div className="mt-3 grid max-h-[420px] gap-2 overflow-auto pr-1 sm:grid-cols-2">
+						{BUDGET_REPORT_OPTIONS.map((option) => (
+							<label
+								key={option.id}
+								className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-800 transition hover:border-blue-200 hover:bg-blue-50"
+							>
+								<input
+									type="checkbox"
+									checked={selected.includes(option.id)}
+									onChange={() => toggle(option.id)}
+									className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+								/>
+								{option.label}
+							</label>
+						))}
+					</div>
+				</section>
+			</div>
+		</ModalShell>
+	);
+}
+
+async function exportSerasaReportPdf({
+	selectedSections = [],
+	periodLabel: selectedPeriodLabel = "",
+	summary = {},
+	monthly = [],
+	clientTrend = [],
+	operationTotals = [],
+	rows = [],
+	importInfo = {},
+}) {
+	const { default: jsPDF } = await import("jspdf");
+	const { default: autoTable } = await import("jspdf-autotable");
+	const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const pageWidth = pdf.internal.pageSize.getWidth();
+	const pageHeight = pdf.internal.pageSize.getHeight();
+	const margin = 10;
+	const headerHeight = 25;
+	const footerHeight = 10;
+	let y = headerHeight + 8;
+
+	const ensureSpace = (height = 28) => {
+		if (y + height <= pageHeight - footerHeight - 6) return;
+		pdf.addPage();
+		y = headerHeight + 8;
+	};
+
+	const drawSectionTitle = (title) => {
+		ensureSpace(12);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(11);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text(title, margin, y);
+		y += 5;
+	};
+
+	const cardGrid = (items = []) => {
+		const cols = 3;
+		const gap = 4;
+		const cardW = (pageWidth - margin * 2 - gap * (cols - 1)) / cols;
+		const cardH = 20;
+		ensureSpace(Math.ceil(items.length / cols) * (cardH + gap) + 5);
+		items.forEach((item, index) => {
+			const col = index % cols;
+			const row = Math.floor(index / cols);
+			const x = margin + col * (cardW + gap);
+			const cy = y + row * (cardH + gap);
+			pdf.setFillColor(...(item.fill || [248, 250, 252]));
+			pdf.roundedRect(x, cy, cardW, cardH, 2, 2, "F");
+			pdf.setDrawColor(...(item.border || [226, 232, 240]));
+			pdf.roundedRect(x, cy, cardW, cardH, 2, 2, "S");
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(7);
+			pdf.setTextColor(71, 85, 105);
+			pdf.text(String(item.title).slice(0, 38), x + 3, cy + 6);
+			pdf.setFontSize(13);
+			pdf.setTextColor(...(item.color || [15, 23, 42]));
+			pdf.text(String(item.value).slice(0, 28), x + 3, cy + 15);
+		});
+		y += Math.ceil(items.length / cols) * (cardH + gap) + 2;
+	};
+
+	const barChart = (title, items = [], options = {}) => {
+		drawSectionTitle(title);
+		const width = options.width || pageWidth - margin * 2;
+		const height = options.height || Math.max(38, Math.min(78, items.length * 8 + 12));
+		const x = options.x || margin;
+		ensureSpace(height + 8);
+		const max = Math.max(...items.map((item) => Number(item.value || 0)), 1);
+		pdf.setDrawColor(226, 232, 240);
+		pdf.roundedRect(x, y, width, height, 2, 2, "S");
+		const rowH = Math.max(6, Math.min(9, (height - 8) / Math.max(items.length, 1)));
+		items.slice(0, Math.floor((height - 8) / rowH)).forEach((item, index) => {
+			const rowY = y + 6 + index * rowH;
+			const labelW = options.labelWidth || 58;
+			const barX = x + labelW;
+			const barW = width - labelW - 40;
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(6.8);
+			pdf.setTextColor(51, 65, 85);
+			pdf.text(String(item.label || "-").slice(0, 34), x + 4, rowY + 2.5);
+			pdf.setFillColor(226, 232, 240);
+			pdf.roundedRect(barX, rowY - 1.2, barW, 3, 1, 1, "F");
+			pdf.setFillColor(...(item.color || [37, 99, 235]));
+			pdf.roundedRect(barX, rowY - 1.2, Math.max(1.8, (Number(item.value || 0) / max) * barW), 3, 1, 1, "F");
+			pdf.setTextColor(15, 23, 42);
+			pdf.text(String(item.display || brl.format(Number(item.value || 0))).slice(0, 18), x + width - 36, rowY + 2.6);
+		});
+		y += height + 6;
+	};
+
+	const lineChart = (title, items = []) => {
+		drawSectionTitle(title);
+		const width = pageWidth - margin * 2;
+		const height = 52;
+		ensureSpace(height + 8);
+		const x = margin;
+		const values = items.map((item) => Number(item.value || 0));
+		const max = Math.max(...values, 1);
+		pdf.setDrawColor(226, 232, 240);
+		pdf.roundedRect(x, y, width, height, 2, 2, "S");
+		const plotX = x + 8;
+		const plotY = y + 7;
+		const plotW = width - 18;
+		const plotH = height - 18;
+		pdf.setDrawColor(124, 58, 237);
+		pdf.setFillColor(124, 58, 237);
+		values.forEach((value, index) => {
+			const px = plotX + (values.length <= 1 ? plotW / 2 : (index / (values.length - 1)) * plotW);
+			const py = plotY + plotH - (value / max) * plotH;
+			if (index > 0) {
+				const prevX = plotX + ((index - 1) / Math.max(values.length - 1, 1)) * plotW;
+				const prevY = plotY + plotH - (values[index - 1] / max) * plotH;
+				pdf.line(prevX, prevY, px, py);
+			}
+			pdf.circle(px, py, 1.3, "F");
+		});
+		pdf.setFontSize(6.5);
+		pdf.setTextColor(100, 116, 139);
+		items.forEach((item, index) => {
+			if (index % Math.ceil(items.length / 6 || 1) !== 0) return;
+			const px = plotX + (items.length <= 1 ? plotW / 2 : (index / (items.length - 1)) * plotW);
+			pdf.text(String(item.label || "").slice(0, 12), px, y + height - 4, { align: "center" });
+		});
+		y += height + 6;
+	};
+
+	const table = (title, head, body, options = {}) => {
+		drawSectionTitle(title);
+		autoTable(pdf, {
+			startY: y,
+			head: [head],
+			body: body.length ? body : [["Nenhum dado encontrado", ...Array.from({ length: head.length - 1 }, () => "")]],
+			theme: "grid",
+			margin: { left: margin, right: margin },
+			styles: { fontSize: options.fontSize || 7, cellPadding: options.cellPadding || 1.6, overflow: "linebreak" },
+			headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+			alternateRowStyles: { fillColor: [248, 250, 252] },
+		});
+		y = (pdf.lastAutoTable?.finalY || y) + 6;
+	};
+
+	const sections = {
+		kpis: () => {
+			drawSectionTitle("Indicadores principais");
+			cardGrid([
+				{ title: "Receita líquida", value: brl.format(summary.receitaLiquida || 0), fill: [239, 246, 255], border: [191, 219, 254], color: [30, 64, 175] },
+				{ title: "Entradas", value: brl.format(summary.totalEntradas || 0), fill: [236, 253, 245], border: [167, 243, 208], color: [4, 120, 87] },
+				{ title: "Saídas", value: brl.format(summary.totalSaidas || 0), fill: [255, 241, 242], border: [254, 205, 211], color: [190, 18, 60] },
+				{ title: "Comissão", value: brl.format(summary.comissao || 0), fill: [255, 251, 235], border: [253, 230, 138], color: [180, 83, 9] },
+				{ title: "Ticket médio", value: brl.format(summary.ticketMedio || 0), fill: [245, 243, 255], border: [221, 214, 254], color: [91, 33, 182] },
+				{ title: "Clientes na base", value: integer.format(summary.clientes || 0), fill: [248, 250, 252], border: [226, 232, 240], color: [15, 23, 42] },
+			]);
+		},
+		monthly: () => {
+			barChart(
+				"Evolução mensal Serasa",
+				monthly.flatMap((item) => [
+					{ label: `${item.label} entradas`, value: item.entradas, color: [16, 185, 129] },
+					{ label: `${item.label} saídas`, value: item.saidas, color: [239, 68, 68] },
+					{ label: `${item.label} receita`, value: item.receitaLiquida, color: [37, 99, 235] },
+				]),
+				{ height: 76, labelWidth: 78 },
+			);
+		},
+		clients: () => {
+			lineChart(
+				"Evolução mensal Clientes Base",
+				clientTrend.map((item) => ({ label: item.label || item.key, value: item.clientes })),
+			);
+		},
+		operations: () => {
+			barChart(
+				"Concentração por operação",
+				operationTotals.map((item) => ({
+					label: item.label,
+					value: item.value,
+					display: brl.format(item.value),
+					color: item.label === "Receita líquida" ? [37, 99, 235] : [16, 185, 129],
+				})),
+				{ height: 66, labelWidth: 86 },
+			);
+		},
+		movements: () => {
+			table(
+				"Movimentações do período",
+				["Data", "Tipo", "Descrição", "Operação", "Classificação", "Valor"],
+				rows.map((row) => [
+					row.date || "-",
+					row.type || "-",
+					row.description || "-",
+					row.operation || "-",
+					isSerasaNetRevenue(row) ? "Receita líquida" : Number(row.value || 0) < 0 ? "Saída" : "Entrada",
+					brl.format(Number(row.value || 0)),
+				]),
+				{ fontSize: 6.5, cellPadding: 1.35 },
+			);
+		},
+	};
+
+	pdf.setFont("helvetica", "bold");
+	pdf.setFontSize(16);
+	pdf.setTextColor(15, 23, 42);
+	pdf.text("Relatório Serasa", margin, y);
+	y += 7;
+	pdf.setFont("helvetica", "normal");
+	pdf.setFontSize(8);
+	pdf.setTextColor(71, 85, 105);
+	pdf.text(
+		`${selectedPeriodLabel} · Gerado em ${new Date().toLocaleString("pt-BR")} · Última atualização: ${formatUpdatedAt(importInfo.importedAt)}`,
+		margin,
+		y,
+	);
+	y += 8;
+
+	selectedSections.forEach((sectionId) => sections[sectionId]?.());
+
+	const logo = await getSempreLogoDataUrl();
+	const pages = pdf.internal.getNumberOfPages();
+	for (let page = 1; page <= pages; page += 1) {
+		pdf.setPage(page);
+		pdf.setFillColor(255, 255, 255);
+		pdf.rect(0, 0, pageWidth, headerHeight, "F");
+		pdf.setFillColor(5, 35, 75);
+		pdf.rect(0, 0, pageWidth, 4, "F");
+		pdf.setDrawColor(226, 232, 240);
+		pdf.line(0, headerHeight, pageWidth, headerHeight);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(9);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text("Sempre Internet", margin, 13);
+		pdf.setFont("helvetica", "normal");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text("Reports - Serasa", margin, 19);
+		if (logo) {
+			const logoHeight = 16;
+			const logoWidth = logoHeight * 1.25;
+			pdf.addImage(logo, "PNG", pageWidth - margin - logoWidth, 6, logoWidth, logoHeight);
+		}
+		pdf.setFillColor(248, 250, 252);
+		pdf.rect(0, pageHeight - footerHeight, pageWidth, footerHeight, "F");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text("Reports Serasa - Sempre Internet 2026", margin, pageHeight - 4);
+		pdf.text(`Página ${page} de ${pages}`, pageWidth - margin, pageHeight - 4, { align: "right" });
+	}
+
+	pdf.save(
+		`relatorio-serasa-${sanitizeFileName(selectedPeriodLabel)}-${sanitizeFileName(new Date().toISOString().slice(0, 10))}.pdf`,
+	);
+}
+
+function SerasaReportExportModal({
+	periodLabel: selectedPeriodLabel,
+	summary,
+	monthly,
+	clientTrend,
+	operationTotals,
+	rows,
+	importInfo,
+	onClose,
+}) {
+	const [selected, setSelected] = useState(() =>
+		SERASA_REPORT_OPTIONS.map((item) => item.id),
+	);
+	const [generating, setGenerating] = useState(false);
+	const toggle = (id) => {
+		setSelected((current) =>
+			current.includes(id)
+				? current.filter((item) => item !== id)
+				: [...current, id],
+		);
+	};
+	const handleGenerate = async () => {
+		setGenerating(true);
+		try {
+			await exportSerasaReportPdf({
+				selectedSections: selected,
+				periodLabel: selectedPeriodLabel,
+				summary,
+				monthly,
+				clientTrend,
+				operationTotals,
+				rows,
+				importInfo,
+			});
+			onClose();
+		} finally {
+			setGenerating(false);
+		}
+	};
+
+	return (
+		<ModalShell
+			title="Gerar Relatório"
+			description="Escolha os blocos que entram no PDF do Serasa."
+			size="3xl"
+			onClose={onClose}
+			icon={
+				<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+					<Download size={22} />
+				</span>
+			}
+			footer={
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<button
+						type="button"
+						onClick={() =>
+							setSelected(SERASA_REPORT_OPTIONS.map((item) => item.id))
+						}
+						className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Selecionar todos
+					</button>
+					<button
+						type="button"
+						onClick={handleGenerate}
+						disabled={generating || !selected.length}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						{generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+						Gerar PDF
+					</button>
+				</div>
+			}
+		>
+			<div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+				Período selecionado: {selectedPeriodLabel}
+			</div>
+			<div className="grid gap-3 sm:grid-cols-2">
+				{SERASA_REPORT_OPTIONS.map((option) => (
+					<label
+						key={option.id}
+						className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 hover:bg-slate-50"
+					>
+						<input
+							type="checkbox"
+							checked={selected.includes(option.id)}
+							onChange={() => toggle(option.id)}
+							className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+						/>
+						{option.label}
+					</label>
+				))}
+			</div>
+		</ModalShell>
+	);
+}
+
+async function exportTariffsReportPdf({
+	selectedSections = [],
+	periodLabel: selectedPeriodLabel = "",
+	insights = {},
+	importInfo = {},
+}) {
+	const { default: jsPDF } = await import("jspdf");
+	const { default: autoTable } = await import("jspdf-autotable");
+	const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const pageWidth = pdf.internal.pageSize.getWidth();
+	const pageHeight = pdf.internal.pageSize.getHeight();
+	const margin = 10;
+	const headerHeight = 25;
+	const footerHeight = 10;
+	let y = headerHeight + 8;
+	const ensureSpace = (height = 24) => {
+		if (y + height <= pageHeight - footerHeight - 6) return;
+		pdf.addPage();
+		y = headerHeight + 8;
+	};
+	const title = (text) => {
+		ensureSpace(10);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(11);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text(text, margin, y);
+		y += 5;
+	};
+	const fitText = (text, maxWidth, fontSize = 7) =>
+		pdf.splitTextToSize(String(text || "-"), maxWidth).slice(0, 2);
+	const cards = (items = []) => {
+		const cols = 3;
+		const gap = 4;
+		const cardW = (pageWidth - margin * 2 - gap * (cols - 1)) / cols;
+		const cardH = 19;
+		ensureSpace(Math.ceil(items.length / cols) * (cardH + gap) + 4);
+		items.forEach((item, index) => {
+			const x = margin + (index % cols) * (cardW + gap);
+			const cy = y + Math.floor(index / cols) * (cardH + gap);
+			pdf.setFillColor(...item.fill);
+			pdf.roundedRect(x, cy, cardW, cardH, 2, 2, "F");
+			pdf.setDrawColor(...item.border);
+			pdf.roundedRect(x, cy, cardW, cardH, 2, 2, "S");
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(7);
+			pdf.setTextColor(71, 85, 105);
+			pdf.text(item.title, x + 3, cy + 6);
+			pdf.setFontSize(12);
+			pdf.setTextColor(...item.color);
+			pdf.text(item.value, x + 3, cy + 14);
+		});
+		y += Math.ceil(items.length / cols) * (cardH + gap) + 2;
+	};
+	const bars = (sectionTitle, items = [], valueFormatter = brl.format) => {
+		title(sectionTitle);
+		const visibleItems = items.slice(0, 9);
+		const rowHeight = 8.5;
+		const height = Math.max(36, Math.min(90, visibleItems.length * rowHeight + 10));
+		ensureSpace(height + 6);
+		const max = Math.max(...items.map((item) => Number(item.value || 0)), 1);
+		pdf.setDrawColor(226, 232, 240);
+		pdf.roundedRect(margin, y, pageWidth - margin * 2, height, 2, 2, "S");
+		visibleItems.forEach((item, index) => {
+			const rowY = y + 6 + index * rowHeight;
+			const valueText = valueFormatter(Number(item.value || 0));
+			const labelW = 62;
+			const valueW = 35;
+			const barX = margin + labelW + 8;
+			const barW = pageWidth - margin * 2 - labelW - valueW - 16;
+			pdf.setFont("helvetica", "bold");
+			pdf.setFontSize(6.6);
+			pdf.setTextColor(51, 65, 85);
+			pdf.text(fitText(item.label, labelW, 6.6), margin + 4, rowY + 1.8);
+			pdf.setFillColor(226, 232, 240);
+			pdf.roundedRect(barX, rowY - 1, barW, 3, 1, 1, "F");
+			pdf.setFillColor(37, 99, 235);
+			pdf.roundedRect(barX, rowY - 1, Math.max(1.6, (Number(item.value || 0) / max) * barW), 3, 1, 1, "F");
+			pdf.setTextColor(15, 23, 42);
+			pdf.text(valueText, pageWidth - margin - 4, rowY + 2.3, { align: "right" });
+		});
+		y += height + 6;
+	};
+	const table = (sectionTitle, head, body, options = {}) => {
+		title(sectionTitle);
+		autoTable(pdf, {
+			startY: y,
+			head: [head],
+			body: body.length ? body : [["Nenhum dado encontrado", ...Array.from({ length: head.length - 1 }, () => "")]],
+			theme: "grid",
+			margin: { left: margin, right: margin },
+			tableWidth: "auto",
+			styles: {
+				fontSize: 6.5,
+				cellPadding: 1.4,
+				overflow: "linebreak",
+				valign: "middle",
+				minCellHeight: 5.5,
+			},
+			headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: "bold" },
+			alternateRowStyles: { fillColor: [248, 250, 252] },
+			columnStyles: options.columnStyles || {},
+			didDrawPage: () => {
+				y = headerHeight + 8;
+			},
+		});
+		y = (pdf.lastAutoTable?.finalY || y) + 6;
+	};
+	const sections = {
+		kpis: () => {
+			title("Indicadores principais");
+			cards([
+				{ title: "Receita diária total", value: brl.format(insights.kpis?.receitaTotal || 0), fill: [239, 246, 255], border: [191, 219, 254], color: [30, 64, 175] },
+				{ title: "Tarifas totais", value: brl.format(insights.kpis?.tarifasTotal || 0), fill: [255, 247, 237], border: [254, 215, 170], color: [194, 65, 12] },
+				{ title: "Custo médio cobrança", value: brl.format(insights.kpis?.custoMedioCobranca || 0), fill: [236, 253, 245], border: [167, 243, 208], color: [4, 120, 87] },
+				{ title: "Clientes por cobrança", value: integer.format(insights.kpis?.totalClientesCobranca || 0), fill: [245, 243, 255], border: [221, 214, 254], color: [91, 33, 182] },
+				{ title: "Pagamentos lidos", value: integer.format(insights.kpis?.totalPagamentos || 0), fill: [240, 253, 250], border: [153, 246, 228], color: [15, 118, 110] },
+				{ title: "Receita por cliente", value: brl.format(insights.kpis?.receitaClienteTotal || 0), fill: [248, 250, 252], border: [226, 232, 240], color: [15, 23, 42] },
+			]);
+		},
+		boletoTariffs: () => table(
+			"Tarifas de boletos por banco/forma de cobrança",
+			["Banco / forma de cobrança", "Tarifa", "Formas de pagamento"],
+			(insights.tarifasBoletos || []).map((item) => [
+				item.bank || item.label || "-",
+				formatTariffFee(item),
+				item.paymentTypes || "-",
+			]),
+			{
+				columnStyles: {
+					0: { cellWidth: 86 },
+					1: { cellWidth: 28, halign: "right" },
+					2: { cellWidth: 58 },
+				},
+			},
+		),
+		monthlyTariffs: () => bars("Tarifas por banco", (insights.bancos || []).slice(0, 12)),
+		paymentMix: () => bars("Formas de pagamento por valor", insights.pagamentoValor || []),
+		billingMethods: () => table(
+			"Clientes por forma de cobrança",
+			["Forma de cobrança", "Clientes", "Valor aprox. p/ cobrança"],
+			(insights.cobrancaClientes || []).map((item) => [
+				item.label || item.method || "-",
+				integer.format(Number(item.customers || item.value || 0)),
+				brl.format(Number(item.estimatedValue || 0)),
+			]),
+			{
+				columnStyles: {
+					0: { cellWidth: 88 },
+					1: { cellWidth: 34, halign: "right" },
+					2: { cellWidth: 50, halign: "right" },
+				},
+			},
+		),
+		topClients: () => table(
+			"Receita por cliente",
+			["Cliente", "Valor", "Registros"],
+			(insights.topClientes || []).slice(0, 20).map((item) => [item.label, brl.format(item.value), integer.format(item.count)]),
+			{
+				columnStyles: {
+					0: { cellWidth: 104 },
+					1: { cellWidth: 42, halign: "right" },
+					2: { cellWidth: 26, halign: "right" },
+				},
+			},
+		),
+		invoices: () => bars("Faturas por mês", insights.faturasMensais || [], integer.format),
+	};
+	pdf.setFont("helvetica", "bold");
+	pdf.setFontSize(16);
+	pdf.setTextColor(15, 23, 42);
+	pdf.text("Relatório de Tarifas", margin, y);
+	y += 7;
+	pdf.setFont("helvetica", "normal");
+	pdf.setFontSize(8);
+	pdf.setTextColor(71, 85, 105);
+	pdf.text(
+		`${selectedPeriodLabel} · Gerado em ${new Date().toLocaleString("pt-BR")} · Última atualização: ${formatUpdatedAt(importInfo.importedAt)}`,
+		margin,
+		y,
+	);
+	y += 8;
+	selectedSections.forEach((sectionId) => sections[sectionId]?.());
+	const logo = await getSempreLogoDataUrl();
+	const pages = pdf.internal.getNumberOfPages();
+	for (let page = 1; page <= pages; page += 1) {
+		pdf.setPage(page);
+		pdf.setFillColor(255, 255, 255);
+		pdf.rect(0, 0, pageWidth, headerHeight, "F");
+		pdf.setFillColor(5, 35, 75);
+		pdf.rect(0, 0, pageWidth, 4, "F");
+		pdf.setDrawColor(226, 232, 240);
+		pdf.line(0, headerHeight, pageWidth, headerHeight);
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(9);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text("Sempre Internet", margin, 13);
+		pdf.setFont("helvetica", "normal");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text("Reports - Tarifas", margin, 19);
+		if (logo) {
+			const logoHeight = 16;
+			const logoWidth = logoHeight * 1.25;
+			pdf.addImage(logo, "PNG", pageWidth - margin - logoWidth, 6, logoWidth, logoHeight);
+		}
+		pdf.setFillColor(248, 250, 252);
+		pdf.rect(0, pageHeight - footerHeight, pageWidth, footerHeight, "F");
+		pdf.setFontSize(7);
+		pdf.setTextColor(100, 116, 139);
+		pdf.text("Reports Tarifas - Sempre Internet 2026", margin, pageHeight - 4);
+		pdf.text(`Página ${page} de ${pages}`, pageWidth - margin, pageHeight - 4, { align: "right" });
+	}
+	pdf.save(
+		`relatorio-tarifas-${sanitizeFileName(selectedPeriodLabel)}-${sanitizeFileName(new Date().toISOString().slice(0, 10))}.pdf`,
+	);
+}
+
+function TariffsReportExportModal({ periodLabel, insights, importInfo, onClose }) {
+	const [selected, setSelected] = useState(() =>
+		TARIFFS_REPORT_OPTIONS.map((item) => item.id),
+	);
+	const [generating, setGenerating] = useState(false);
+	const toggle = (id) => {
+		setSelected((current) =>
+			current.includes(id)
+				? current.filter((item) => item !== id)
+				: [...current, id],
+		);
+	};
+	const handleGenerate = async () => {
+		setGenerating(true);
+		try {
+			await exportTariffsReportPdf({
+				selectedSections: selected,
+				periodLabel,
+				insights,
+				importInfo,
+			});
+			onClose();
+		} finally {
+			setGenerating(false);
+		}
+	};
+	return (
+		<ModalShell
+			title="Gerar Relatório"
+			description="Escolha os blocos que entram no PDF de Tarifas."
+			size="3xl"
+			onClose={onClose}
+			icon={
+				<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-700">
+					<Download size={22} />
+				</span>
+			}
+			footer={
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<button
+						type="button"
+						onClick={() =>
+							setSelected(TARIFFS_REPORT_OPTIONS.map((item) => item.id))
+						}
+						className="min-h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Selecionar todos
+					</button>
+					<button
+						type="button"
+						onClick={handleGenerate}
+						disabled={generating || !selected.length}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-orange-600 px-5 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-50"
+					>
+						{generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+						Gerar PDF
+					</button>
+				</div>
+			}
+		>
+			<div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 p-4 text-sm font-bold text-orange-800">
+				Período selecionado: {periodLabel}
+			</div>
+			<div className="grid gap-3 sm:grid-cols-2">
+				{TARIFFS_REPORT_OPTIONS.map((option) => (
+					<label
+						key={option.id}
+						className="flex min-h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 hover:bg-slate-50"
+					>
+						<input
+							type="checkbox"
+							checked={selected.includes(option.id)}
+							onChange={() => toggle(option.id)}
+							className="h-5 w-5 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+						/>
+						{option.label}
+					</label>
+				))}
+			</div>
+		</ModalShell>
+	);
+}
+
+function FinancialKpiCard({
+	item,
+	loading,
+	index,
+	compact = false,
+	centered = false,
+}) {
+	const Icon = ICONS[item.icon] || BadgeDollarSign;
+	const positive = item.trend?.status === "positive";
+	const negative = item.trend?.status === "negative";
+	const variants = {
+		blue: {
+			icon: "from-blue-50/90 via-white to-white text-blue-700 ring-blue-100",
+			stripe: "from-blue-600 to-cyan-300",
+			hover:
+				"hover:border-blue-200 hover:shadow-[0_18px_42px_rgba(37,99,235,0.13)]",
+		},
+		emerald: {
+			icon: "from-emerald-50/90 via-white to-white text-emerald-700 ring-emerald-100",
+			stripe: "from-emerald-500 to-lime-300",
+			hover:
+				"hover:border-emerald-200 hover:shadow-[0_18px_42px_rgba(16,185,129,0.13)]",
+		},
+		violet: {
+			icon: "from-violet-50/90 via-white to-white text-violet-700 ring-violet-100",
+			stripe: "from-violet-600 to-fuchsia-300",
+			hover:
+				"hover:border-violet-200 hover:shadow-[0_18px_42px_rgba(124,58,237,0.13)]",
+		},
+		amber: {
+			icon: "from-amber-50/90 via-white to-white text-amber-700 ring-amber-100",
+			stripe: "from-amber-500 to-yellow-300",
+			hover:
+				"hover:border-amber-200 hover:shadow-[0_18px_42px_rgba(245,158,11,0.13)]",
+		},
+		rose: {
+			icon: "from-rose-50/90 via-white to-white text-rose-700 ring-rose-100",
+			stripe: "from-rose-500 to-pink-300",
+			hover:
+				"hover:border-rose-200 hover:shadow-[0_18px_42px_rgba(244,63,94,0.13)]",
+		},
+		slate: {
+			icon: "from-slate-50/90 via-white to-white text-slate-700 ring-slate-100",
+			stripe: "from-slate-600 to-slate-300",
+			hover:
+				"hover:border-slate-300 hover:shadow-[0_18px_42px_rgba(15,23,42,0.10)]",
+		},
+	};
+	const colorVariant = negative
+		? variants.amber
+		: variants[item.color] || variants.blue;
+	return (
+		<article
+			className={`group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 ${compact ? "min-h-[104px] p-3" : "min-h-[132px] p-4"} ${centered ? "flex items-center" : ""} ${colorVariant.hover}`}
+		>
+			<div
+				className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${colorVariant.stripe}`}
+			/>
+			<div className={`w-full flex gap-3 ${centered ? "items-center justify-center text-center" : "items-start"}`}>
+				<span
+					className={`flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ring-1 ${compact ? "h-11 w-11" : "h-14 w-14"} ${colorVariant.icon}`}
+				>
+					<Icon size={compact ? 20 : 25} strokeWidth={2.4} />
+				</span>
+				<div className={`min-w-0 flex-1 ${centered ? "flex flex-col items-center" : ""}`}>
+					<p className={`line-clamp-2 font-bold leading-tight text-slate-950 ${compact ? "text-[11px]" : "min-h-8 text-[12px]"}`}>
+						{typeof index === "number" ? `${index + 1}. ` : ""}
+						{item.title}
+					</p>
+					{loading ? (
+						<div className="mt-3 h-7 w-28 animate-pulse rounded-lg bg-slate-100" />
+					) : (
+						<p className={`max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold leading-none tracking-tight text-slate-950 ${compact ? "mt-1.5 text-[clamp(1rem,1vw,1.25rem)]" : "mt-3 text-[clamp(1.15rem,1.25vw,1.55rem)]"}`}>
+							{formatValue(item.value, item.type)}
+						</p>
+					)}
+					{!item.hideTrend ? (
+						<p
+							className={`mt-3 inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${positive ? "bg-emerald-50 text-emerald-700" : negative ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-500"}`}
+						>
+							{trendText(item.trend, item.trendLabel)}
+						</p>
+					) : null}
+					{item.helper ? (
+						<p className="mt-1 text-xs font-bold text-slate-500">
+							{item.helper}
+						</p>
+					) : null}
+				</div>
+			</div>
+		</article>
+	);
+}
+
+function EmptyState({
+	text = "Nenhum dado encontrado para o período selecionado.",
+}) {
+	return (
+		<div className="flex min-h-44 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm font-bold text-slate-500">
+			{text}
+		</div>
+	);
+}
+
+function getVisibleError(
+	error,
+	fallback = "Não foi possível concluir a ação.",
+) {
+	const message = error?.message || fallback;
+	const detailParts = [
+		error?.status ? `HTTP ${error.status}` : "",
+		error?.details,
+		error?.data && typeof error.data === "object"
+			? JSON.stringify(error.data, null, 2)
+			: "",
+	].filter(Boolean);
+	return {
+		message,
+		details: detailParts.join("\n\n"),
+	};
+}
+
+function FeedbackModal({ feedback, onClose }) {
+	if (!feedback) return null;
+	const isError = feedback.type === "error";
+	return (
+		<ModalShell
+			title={feedback.title || (isError ? "Erro na operação" : "Aviso")}
+			description={feedback.description}
+			icon={isError ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+			onClose={onClose}
+			size="lg"
+			footer={
+				<button
+					type="button"
+					onClick={onClose}
+					className="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800"
+				>
+					Entendi
+				</button>
+			}
+		>
+			<div
+				className={`rounded-2xl border p-4 text-sm font-bold ${isError ? "border-red-200 bg-red-50 text-red-800" : "border-blue-200 bg-blue-50 text-blue-800"}`}
+			>
+				{feedback.message}
+			</div>
+			{feedback.details ? (
+				<pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-950 p-4 text-xs font-semibold text-slate-100">
+					{feedback.details}
+				</pre>
+			) : null}
+		</ModalShell>
+	);
+}
+
+function BudgetDateRangeModal({ value, onClose, onApply }) {
+	const today = new Date();
+	const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+		.toISOString()
+		.slice(0, 10);
+	const currentDay = today.toISOString().slice(0, 10);
+	const [form, setForm] = useState({
+		startDate: value?.startDate || firstDay,
+		endDate: value?.endDate || currentDay,
+	});
+	const [error, setError] = useState("");
+
+	const updateField = (field, fieldValue) => {
+		setError("");
+		setForm((current) => ({ ...current, [field]: fieldValue }));
+	};
+
+	const submit = () => {
+		if (!form.startDate || !form.endDate) {
+			setError("Informe a data inicial e a data final.");
+			return;
+		}
+		if (form.startDate > form.endDate) {
+			setError("A data inicial não pode ser maior que a data final.");
+			return;
+		}
+		onApply(form);
+	};
+
+	return (
+		<ModalShell
+			title="Selecionar datas"
+			description="Filtre a gestão orçamentária por um intervalo específico."
+			icon={<CalendarClock size={20} />}
+			onClose={onClose}
+			size="md"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={submit}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700"
+					>
+						Aplicar
+					</button>
+				</div>
+			}
+		>
+			<div className="grid gap-4 sm:grid-cols-2">
+				<label className="space-y-2 text-xs font-black uppercase text-slate-500">
+					Data inicial
+					<input
+						type="date"
+						value={form.startDate}
+						onChange={(event) => updateField("startDate", event.target.value)}
+						className="min-h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="space-y-2 text-xs font-black uppercase text-slate-500">
+					Data final
+					<input
+						type="date"
+						value={form.endDate}
+						onChange={(event) => updateField("endDate", event.target.value)}
+						className="min-h-11 w-full rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+					/>
+				</label>
+			</div>
+			{error ? (
+				<div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">
+					{error}
+				</div>
+			) : null}
+		</ModalShell>
+	);
+}
+
+function BudgetDropdownSection({
+	title,
+	description,
+	count,
+	action,
+	children,
+	items = [],
+	renderItem,
+	emptyText,
+	pageSize = 6,
+	className = "",
+	open = false,
+}) {
+	const [page, setPage] = useState(1);
+	const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+	const currentPage = Math.min(page, totalPages);
+	const visibleItems = items.slice(
+		(currentPage - 1) * pageSize,
+		currentPage * pageSize,
+	);
+
+	return (
+		<details
+			open={open}
+			className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm ${className}`}
+		>
+			<summary className="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<span>
+					<span className="flex items-center gap-2 text-sm font-black text-slate-950">
+						{title}
+						<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
+							{integer.format(count ?? items.length)}
+						</span>
+					</span>
+					{description ? (
+						<span className="mt-1 block text-xs font-bold text-slate-500">
+							{description}
+						</span>
+					) : null}
+				</span>
+			</summary>
+			<div className="mt-4">
+				{action ? <div className="mb-4 flex justify-end">{action}</div> : null}
+				{children ||
+					(items.length ? (
+						<>
+							<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+								{visibleItems.map((item, index) => renderItem(item, index))}
+							</div>
+							{totalPages > 1 ? (
+								<div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+									<span className="px-2 text-xs font-black text-slate-500">
+										Página {integer.format(currentPage)} de{" "}
+										{integer.format(totalPages)} ·{" "}
+										{integer.format(items.length)} registro(s)
+									</span>
+									<span className="flex gap-2">
+										<button
+											type="button"
+											onClick={() => setPage((value) => Math.max(1, value - 1))}
+											disabled={currentPage <= 1}
+											className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+										>
+											Anterior
+										</button>
+										<button
+											type="button"
+											onClick={() =>
+												setPage((value) => Math.min(totalPages, value + 1))
+											}
+											disabled={currentPage >= totalPages}
+											className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+										>
+											Próxima
+										</button>
+									</span>
+								</div>
+							) : null}
+						</>
+					) : (
+						<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
+							{emptyText || "Nenhum registro encontrado."}
+						</p>
+					))}
+			</div>
+		</details>
+	);
 }
 
 function CardFooterLink({ to, children }) {
-  return (
-    <Link to={to} className="mt-auto flex min-h-11 items-center justify-between rounded-xl border-t border-slate-100 pt-3 text-sm font-bold text-blue-700 hover:text-blue-800">
-      <span>{children}</span>
-      <ArrowRight size={18} />
-    </Link>
-  );
+	return (
+		<Link
+			to={to}
+			className="mt-auto flex min-h-11 items-center justify-between rounded-xl border-t border-slate-100 pt-3 text-sm font-bold text-blue-700 hover:text-blue-800"
+		>
+			<span>{children}</span>
+			<ArrowRight size={18} />
+		</Link>
+	);
 }
 
-function FinancePanel({ title, children, actionTo, actionLabel, className = "" }) {
-  return (
-    <section className={`flex h-full min-h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
-      {title ? <h2 className="text-sm font-bold text-slate-950">{title}</h2> : null}
-      {children}
-      {actionTo ? <CardFooterLink to={actionTo}>{actionLabel}</CardFooterLink> : null}
-    </section>
-  );
+function PanelActionButton({ onClick, label = "Ver mais" }) {
+	if (!onClick) return null;
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 text-xs font-black text-blue-700 hover:border-blue-200 hover:bg-blue-100"
+		>
+			<Eye size={15} />
+			{label}
+		</button>
+	);
 }
 
-function ChartCard({ title, children, empty, actionTo, actionLabel, headerExtra }) {
-  return (
-    <section className="flex h-full min-h-[360px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold text-slate-950">{title}</h2>
-        {headerExtra}
-      </div>
-      {empty ? <EmptyState /> : <div className="min-h-[250px] flex-1">{children}</div>}
-      {actionTo ? <CardFooterLink to={actionTo}>{actionLabel}</CardFooterLink> : null}
-    </section>
-  );
+function FinancePanel({
+	title,
+	children,
+	actionTo,
+	actionLabel,
+	headerExtra,
+	className = "",
+	onViewMore,
+	viewMoreLabel,
+}) {
+	return (
+		<section
+			className={`flex h-full min-h-[320px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}
+		>
+			{title || headerExtra ? (
+				<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+					{title ? (
+						<h2 className="text-sm font-bold text-slate-950">{title}</h2>
+					) : (
+						<span />
+					)}
+					<div className="flex flex-wrap items-center justify-end gap-2">
+						{headerExtra}
+						<PanelActionButton onClick={onViewMore} label={viewMoreLabel} />
+					</div>
+				</div>
+			) : null}
+			{children}
+			{actionTo ? (
+				<CardFooterLink to={actionTo}>{actionLabel}</CardFooterLink>
+			) : null}
+		</section>
+	);
+}
+
+function ChartCard({
+	title,
+	children,
+	empty,
+	actionTo,
+	actionLabel,
+	headerExtra,
+	onViewMore,
+	viewMoreLabel,
+	className = "",
+	bodyClassName = "",
+}) {
+	return (
+		<section
+			className={`flex h-full min-h-[360px] flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${className}`}
+		>
+			<div className="mb-4 flex items-center justify-between gap-3">
+				<h2 className="text-sm font-bold text-slate-950">{title}</h2>
+				<div className="flex flex-wrap items-center justify-end gap-2">
+					{headerExtra}
+					<PanelActionButton onClick={onViewMore} label={viewMoreLabel} />
+				</div>
+			</div>
+			{empty ? (
+				<EmptyState />
+			) : (
+				<div className={`min-h-[250px] flex-1 ${bodyClassName}`}>
+					{children}
+				</div>
+			)}
+			{actionTo ? (
+				<CardFooterLink to={actionTo}>{actionLabel}</CardFooterLink>
+			) : null}
+		</section>
+	);
+}
+
+function renderSupplierDetailTable(
+	rows = [],
+	centerById = new Map(),
+	accountById = new Map(),
+) {
+	return (
+		<div className="overflow-auto rounded-2xl border border-slate-200">
+			<table className="min-w-[860px] divide-y divide-slate-200 text-left text-xs font-bold">
+				<thead className="bg-slate-50 text-slate-500">
+					<tr>
+						<th className="px-3 py-2">Fornecedor</th>
+						<th className="px-3 py-2 text-right">Valor acumulado</th>
+						<th className="px-3 py-2 text-right">Participação</th>
+						<th className="px-3 py-2">Centros de custo</th>
+						<th className="px-3 py-2">Contas financeiras</th>
+					</tr>
+				</thead>
+				<tbody className="divide-y divide-slate-100">
+					{rows.length ? (
+						rows.map((supplier) => (
+							<tr key={supplier.supplier}>
+								<td className="px-3 py-2 font-black text-slate-950">
+									{supplier.supplier}
+								</td>
+								<td className="px-3 py-2 text-right font-black text-slate-900">
+									{brl.format(supplier.value)}
+								</td>
+								<td className="px-3 py-2 text-right text-slate-700">
+									{decimal.format(supplier.share)}%
+								</td>
+								<td className="px-3 py-2 text-slate-600">
+									{supplier.centers
+										.map((id) => centerById.get(id)?.nome || id)
+										.join(", ") || "-"}
+								</td>
+								<td className="px-3 py-2 text-slate-600">
+									{supplier.accounts
+										.map((id) => accountById.get(id)?.nome || id)
+										.join(", ") || "-"}
+								</td>
+							</tr>
+						))
+					) : (
+						<tr>
+							<td colSpan={5}>
+								<EmptyState text="Nenhum fornecedor encontrado no período." />
+							</td>
+						</tr>
+					)}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
+function renderMovementsDetailTable(
+	rows = [],
+	accountById = new Map(),
+	centerById = new Map(),
+	companyById = new Map(),
+	branchById = new Map(),
+) {
+	return (
+		<div className="overflow-auto rounded-2xl border border-slate-200">
+			<table className="min-w-[1040px] divide-y divide-slate-200 text-left text-xs font-bold">
+				<thead className="bg-slate-50 text-slate-500">
+					<tr>
+						<th className="px-3 py-2">Fornecedor</th>
+						<th className="px-3 py-2">Conta financeira</th>
+						<th className="px-3 py-2">Centro de custo</th>
+						<th className="px-3 py-2">Matriz / filial</th>
+						<th className="px-3 py-2">Referência</th>
+						<th className="px-3 py-2 text-right">Valor</th>
+					</tr>
+				</thead>
+				<tbody className="divide-y divide-slate-100">
+					{rows.length ? (
+						rows.map((movement) => {
+							const account = accountById.get(movement.accountId);
+							const center = centerById.get(movement.centerId);
+							const company = companyById.get(movement.companyId);
+							const branch = branchById.get(movement.branchId);
+							return (
+								<tr key={movement.id}>
+									<td className="px-3 py-2 font-black text-slate-950">
+										{movementSupplierName(movement)}
+									</td>
+									<td className="px-3 py-2 text-slate-600">
+										{account
+											? budgetAccountLabel(account, movement.accountId)
+											: movement.accountName || movement.accountId || "-"}
+									</td>
+									<td className="px-3 py-2 text-slate-600">
+										{center
+											? budgetCenterCompactLabel(center, movement.centerId)
+											: movement.centerName || movement.centerId || "-"}
+									</td>
+									<td className="px-3 py-2 text-slate-600">
+										{[
+											company?.nome || movement.companyId,
+											branch?.nome || movement.branchId,
+										]
+											.filter(Boolean)
+											.join(" / ") || "-"}
+									</td>
+									<td className="px-3 py-2 text-slate-600">
+										{[movement.year, budgetMonthName(movement.month)]
+											.filter(Boolean)
+											.join(" - ") || "-"}
+									</td>
+									<td className="px-3 py-2 text-right font-black text-slate-950">
+										{brl.format(movementValue(movement))}
+									</td>
+								</tr>
+							);
+						})
+					) : (
+						<tr>
+							<td colSpan={6}>
+								<EmptyState text="Nenhuma movimentação importada no período." />
+							</td>
+						</tr>
+					)}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
+function compactChartLabel(value, max = 36) {
+	const text = String(value || "").trim();
+	if (text.length <= max) return text;
+	return `${text.slice(0, max - 1).trim()}…`;
+}
+
+function smartCurrencyStep(maxValue = 0) {
+	const max = Math.max(0, Number(maxValue || 0));
+	if (max <= 0) return 1000;
+	const raw = max / 6;
+	const exponent = Math.floor(Math.log10(raw || 1));
+	const base = 10 ** exponent;
+	const normalized = raw / base;
+	const multiplier =
+		normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+	return Math.max(1000, multiplier * base);
+}
+
+function supplierBarOptions(labels = [], values = []) {
+	const maxValue = Math.max(...values.map((value) => Number(value || 0)), 0);
+	const step = smartCurrencyStep(maxValue);
+	return {
+		...barOptions(),
+		indexAxis: "y",
+		layout: { padding: { left: 8, right: 18 } },
+		plugins: {
+			...barOptions().plugins,
+			legend: { display: false },
+			tooltip: {
+				callbacks: {
+					title: (items) => labels[items?.[0]?.dataIndex] || "",
+					label: (context) =>
+						`Realizado: ${brl.format(Number(context.raw || 0))}`,
+				},
+			},
+		},
+		scales: {
+			x: {
+				beginAtZero: true,
+				suggestedMax: Math.ceil(maxValue / step) * step,
+				ticks: {
+					stepSize: step,
+					callback: (value) => brl.format(Number(value || 0)),
+					font: { weight: "bold" },
+				},
+				grid: { color: "rgba(148,163,184,.18)" },
+			},
+			y: {
+				ticks: {
+					autoSkip: false,
+					callback(value) {
+						return compactChartLabel(this.getLabelForValue(value), 42);
+					},
+					font: { size: 11, weight: "bold" },
+				},
+				grid: { display: false },
+			},
+		},
+	};
 }
 
 function barOptions(formatter = brl.format) {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: true, labels: { boxWidth: 10, font: { weight: "bold" } } },
-      tooltip: {
-        callbacks: {
-          label: (context) => `${context.dataset.label}: ${formatter(Number(context.raw || 0))}`,
-        },
-      },
-    },
-    scales: {
-      x: { grid: { display: false } },
-      y: { ticks: { callback: (value) => formatter(Number(value)) } },
-    },
-  };
+	return {
+		responsive: true,
+		maintainAspectRatio: false,
+		plugins: {
+			legend: {
+				display: true,
+				labels: { boxWidth: 10, font: { weight: "bold" } },
+			},
+			tooltip: {
+				callbacks: {
+					label: (context) =>
+						`${context.dataset.label}: ${formatter(Number(context.raw || 0))}`,
+				},
+			},
+		},
+		scales: {
+			x: { grid: { display: false } },
+			y: { ticks: { callback: (value) => formatter(Number(value)) } },
+		},
+	};
+}
+
+function lineOptions(formatter = decimal.format) {
+	return {
+		responsive: true,
+		maintainAspectRatio: false,
+		plugins: {
+			legend: {
+				display: true,
+				labels: { boxWidth: 10, font: { weight: "bold" } },
+			},
+			tooltip: {
+				callbacks: {
+					label: (context) =>
+						`${context.dataset.label}: ${formatter(Number(context.raw || 0))}%`,
+				},
+			},
+		},
+		scales: {
+			x: { grid: { display: false } },
+			y: {
+				ticks: { callback: (value) => `${formatter(Number(value))}%` },
+				suggestedMin: 0,
+			},
+		},
+	};
 }
 
 function DashboardContent({ data, loading }) {
-  const hasData = data?.source && data.source !== "empty";
-  const billingChart = useMemo(() => ({
-    labels: (data?.lastBillings || []).map((item) => item.label),
-    datasets: [{ label: "Faturamento", data: (data?.lastBillings || []).map((item) => item.value), backgroundColor: "#2563eb", borderRadius: 10 }],
-  }), [data?.lastBillings]);
-  const receivablesChart = useMemo(() => ({
-    labels: (data?.receivables || []).map((item) => item.label),
-    datasets: [
-      { label: "Previsto", data: (data?.receivables || []).map((item) => item.previsto), backgroundColor: "#1d4ed8", borderRadius: 10 },
-      { label: "Recebido", data: (data?.receivables || []).map((item) => item.recebido), backgroundColor: "#f97316", borderRadius: 10 },
-    ],
-  }), [data?.receivables]);
-  const methodsChart = useMemo(() => ({
-    labels: (data?.paymentMethods || []).map((item) => item.label),
-    datasets: [{ data: (data?.paymentMethods || []).map((item) => item.value), backgroundColor: ["#1d4ed8", "#f97316", "#10b981", "#8b5cf6", "#64748b"], borderWidth: 0 }],
-  }), [data?.paymentMethods]);
-  const paymentTotal = useMemo(
-    () => (data?.paymentMethods || []).reduce((sum, item) => sum + Number(item.value || 0), 0),
-    [data?.paymentMethods],
-  );
-  const evolutionChart = useMemo(() => ({
-    labels: (data?.revenueEvolution || []).map((item) => item.label),
-    datasets: [{
-      label: "Recebido acumulado",
-      data: (data?.revenueEvolution || []).map((item) => item.value),
-      borderColor: "#2563eb",
-      backgroundColor: "rgba(37, 99, 235, 0.12)",
-      fill: true,
-      tension: 0.35,
-    }],
-  }), [data?.revenueEvolution]);
-  const revenueTotal = Number((data?.revenueEvolution || []).at(-1)?.value || 0);
+	const hasData = data?.source && data.source !== "empty";
+	const billingChart = useMemo(
+		() => ({
+			labels: (data?.lastBillings || []).map((item) => item.label),
+			datasets: [
+				{
+					label: "Faturamento",
+					data: (data?.lastBillings || []).map((item) => item.value),
+					backgroundColor: "#2563eb",
+					borderRadius: 10,
+				},
+			],
+		}),
+		[data?.lastBillings],
+	);
+	const receivablesChart = useMemo(
+		() => ({
+			labels: (data?.receivables || []).map((item) => item.label),
+			datasets: [
+				{
+					label: "Previsto",
+					data: (data?.receivables || []).map((item) => item.previsto),
+					backgroundColor: "#1d4ed8",
+					borderRadius: 10,
+				},
+				{
+					label: "Recebido",
+					data: (data?.receivables || []).map((item) => item.recebido),
+					backgroundColor: "#f97316",
+					borderRadius: 10,
+				},
+			],
+		}),
+		[data?.receivables],
+	);
+	const methodsChart = useMemo(
+		() => ({
+			labels: (data?.paymentMethods || []).map((item) => item.label),
+			datasets: [
+				{
+					data: (data?.paymentMethods || []).map((item) => item.value),
+					backgroundColor: [
+						"#1d4ed8",
+						"#f97316",
+						"#10b981",
+						"#8b5cf6",
+						"#64748b",
+					],
+					borderWidth: 0,
+				},
+			],
+		}),
+		[data?.paymentMethods],
+	);
+	const paymentTotal = useMemo(
+		() =>
+			(data?.paymentMethods || []).reduce(
+				(sum, item) => sum + Number(item.value || 0),
+				0,
+			),
+		[data?.paymentMethods],
+	);
+	const evolutionChart = useMemo(
+		() => ({
+			labels: (data?.revenueEvolution || []).map((item) => item.label),
+			datasets: [
+				{
+					label: "Recebido acumulado",
+					data: (data?.revenueEvolution || []).map((item) => item.value),
+					borderColor: "#2563eb",
+					backgroundColor: "rgba(37, 99, 235, 0.12)",
+					fill: true,
+					tension: 0.35,
+				},
+			],
+		}),
+		[data?.revenueEvolution],
+	);
+	const revenueTotal = Number(
+		(data?.revenueEvolution || []).at(-1)?.value || 0,
+	);
 
-  return (
-    <>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {(data?.kpis || Array.from({ length: 10 }, (_, index) => ({ id: `loading-${index}`, title: "Indicador", value: 0 }))).map((item, index) => (
-          <FinancialKpiCard key={item.id} item={item} loading={loading} index={index} />
-        ))}
-      </section>
+	return (
+		<>
+			<section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+				{(
+					data?.kpis ||
+					Array.from({ length: 10 }, (_, index) => ({
+						id: `loading-${index}`,
+						title: "Indicador",
+						value: 0,
+					}))
+				).map((item, index) => (
+					<FinancialKpiCard
+						key={item.id}
+						item={item}
+						loading={loading}
+						index={index}
+					/>
+				))}
+			</section>
 
-      {!hasData && !loading ? (
-        <EmptyState text="Nenhum dado financeiro real disponível. Use Financeiro > Configurações > Carregar mockup para visualizar o layout com dados demonstrativos." />
-      ) : null}
+			{!hasData && !loading ? (
+				<EmptyState text="Nenhum dado financeiro real disponível. Configure as planilhas financeiras para alimentar esta visão." />
+			) : null}
 
-      <section className="grid gap-4 xl:grid-cols-4">
-        <ChartCard title="Últimos 5 faturamentos do mês" empty={!data?.lastBillings?.length} actionTo={ROUTES.FINANCEIRO_FATURAMENTO} actionLabel="Ver faturamento">
-          <Bar data={billingChart} options={barOptions()} />
-        </ChartCard>
-        <ChartCard title="Previsão de contas a receber / Recebidas" empty={!data?.receivables?.length} actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER} actionLabel="Ver contas a receber">
-          <Bar data={receivablesChart} options={barOptions()} />
-        </ChartCard>
-        <ChartCard title="Recebimentos por forma de pagamento" empty={!data?.paymentMethods?.length} actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER} actionLabel="Ver formas de pagamento">
-          <div className="grid h-full min-h-[250px] items-center gap-4 md:grid-cols-[0.9fr_1.1fr]">
-            <div className="h-[240px]">
-              <Doughnut
-                data={methodsChart}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  cutout: "62%",
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${brl.format(Number(ctx.raw || 0))}` } },
-                  },
-                }}
-              />
-            </div>
-            <div className="space-y-3">
-              {(data?.paymentMethods || []).map((method, index) => {
-                const colors = ["#1d4ed8", "#f97316", "#10b981", "#8b5cf6", "#64748b"];
-                const percent = paymentTotal ? (Number(method.value || 0) / paymentTotal) * 100 : 0;
-                return (
-                  <div key={method.label} className="flex items-start gap-3">
-                    <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-950">{method.label}</p>
-                      <p className="text-xs font-bold text-slate-600">{brl.format(Number(method.value || 0))} ({decimal.format(percent)}%)</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </ChartCard>
-        <ChartCard
-          title="Evolução do recebimento no mês"
-          empty={!data?.revenueEvolution?.length}
-          actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER}
-          actionLabel="Ver evolução completa"
-          headerExtra={revenueTotal ? (
-            <span className="rounded-xl bg-blue-50 px-3 py-2 text-right text-xs font-bold text-blue-700">
-              Total do mês<br />{brl.format(revenueTotal)}
-            </span>
-          ) : null}
-        >
-          <Line data={evolutionChart} options={barOptions()} />
-        </ChartCard>
-      </section>
+			<section className="grid gap-4 xl:grid-cols-4">
+				<ChartCard
+					title="Últimos 5 faturamentos do mês"
+					empty={!data?.lastBillings?.length}
+					actionTo={ROUTES.FINANCEIRO_FATURAMENTO}
+					actionLabel="Ver faturamento"
+				>
+					<Bar data={billingChart} options={barOptions()} />
+				</ChartCard>
+				<ChartCard
+					title="Previsão de contas a receber / Recebidas"
+					empty={!data?.receivables?.length}
+					actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER}
+					actionLabel="Ver contas a receber"
+				>
+					<Bar data={receivablesChart} options={barOptions()} />
+				</ChartCard>
+				<ChartCard
+					title="Recebimentos por forma de pagamento"
+					empty={!data?.paymentMethods?.length}
+					actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER}
+					actionLabel="Ver formas de pagamento"
+				>
+					<div className="grid h-full min-h-[250px] items-center gap-4 md:grid-cols-[0.9fr_1.1fr]">
+						<div className="h-[240px]">
+							<Doughnut
+								data={methodsChart}
+								options={{
+									responsive: true,
+									maintainAspectRatio: false,
+									cutout: "62%",
+									plugins: {
+										legend: { display: false },
+										tooltip: {
+											callbacks: {
+												label: (ctx) =>
+													`${ctx.label}: ${brl.format(Number(ctx.raw || 0))}`,
+											},
+										},
+									},
+								}}
+							/>
+						</div>
+						<div className="space-y-3">
+							{(data?.paymentMethods || []).map((method, index) => {
+								const colors = [
+									"#1d4ed8",
+									"#f97316",
+									"#10b981",
+									"#8b5cf6",
+									"#64748b",
+								];
+								const percent = paymentTotal
+									? (Number(method.value || 0) / paymentTotal) * 100
+									: 0;
+								return (
+									<div key={method.label} className="flex items-start gap-3">
+										<span
+											className="mt-1 h-3 w-3 shrink-0 rounded-full"
+											style={{ backgroundColor: colors[index % colors.length] }}
+										/>
+										<div className="min-w-0">
+											<p className="text-sm font-bold text-slate-950">
+												{method.label}
+											</p>
+											<p className="text-xs font-bold text-slate-600">
+												{brl.format(Number(method.value || 0))} (
+												{decimal.format(percent)}%)
+											</p>
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				</ChartCard>
+				<ChartCard
+					title="Evolução do recebimento no mês"
+					empty={!data?.revenueEvolution?.length}
+					actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER}
+					actionLabel="Ver evolução completa"
+					headerExtra={
+						revenueTotal ? (
+							<span className="rounded-xl bg-blue-50 px-3 py-2 text-right text-xs font-bold text-blue-700">
+								Total do mês
+								<br />
+								{brl.format(revenueTotal)}
+							</span>
+						) : null
+					}
+				>
+					<Line data={evolutionChart} options={barOptions()} />
+				</ChartCard>
+			</section>
 
-      <section className="grid gap-4 xl:grid-cols-4">
-        <FinancePanel title="Top cidades por faturamento" actionTo={ROUTES.FINANCEIRO_FATURAMENTO} actionLabel="Ver todas as cidades">
-          <div className="mt-4 flex flex-1 flex-col justify-between gap-3">
-            {(data?.citiesRanking || []).length ? data.citiesRanking.map((city) => {
-              const max = Math.max(...data.citiesRanking.map((item) => Number(item.value || 0)), 1);
-              return (
-                <div key={city.label} className="grid grid-cols-[minmax(90px,1fr)_minmax(80px,1fr)_auto] items-center gap-3 text-xs font-bold">
-                  <span className="truncate text-slate-700">{city.label}</span>
-                  <div className="h-3 rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max(8, (Number(city.value || 0) / max) * 100)}%` }} />
-                  </div>
-                  <span className="whitespace-nowrap text-slate-950">{brl.format(city.value)}</span>
-                </div>
-              );
-            }) : <EmptyState />}
-          </div>
-        </FinancePanel>
-        <FinancePanel title="Alertas financeiros" actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER} actionLabel="Ver todos os alertas">
-          <div className="mt-4 flex flex-1 flex-col gap-3">
-            {(data?.alerts || []).length ? data.alerts.map((alert) => (
-              <div key={alert.id} className={`flex-1 rounded-2xl border p-3 ${alert.severity === "critical" ? "border-red-200 bg-red-50" : alert.severity === "warning" ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50"}`}>
-                <p className="text-sm font-bold text-slate-950">{alert.title}</p>
-                <p className="mt-1 text-xs font-bold text-slate-600">{alert.description}</p>
-              </div>
-            )) : <EmptyState />}
-          </div>
-        </FinancePanel>
-        <FinancePanel title="Resumo operacional do dia" actionTo={ROUTES.FINANCEIRO_CHAMADOS} actionLabel="Ver relatório completo">
-          <dl className="mt-4 flex flex-1 flex-col justify-between divide-y divide-slate-100">
-            {[
-              ["Notas lançadas", data?.operationalSummary?.notasLancadas],
-              ["Pagamentos conciliados", data?.operationalSummary?.pagamentosConciliados],
-              ["Valor conciliado", brl.format(Number(data?.operationalSummary?.valorConciliado || 0))],
-              ["Tickets resolvidos", data?.operationalSummary?.ticketsResolvidos],
-              ["Pendências em aberto", data?.operationalSummary?.pendenciasAbertas],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-3 py-3">
-                <dt className="text-xs font-bold text-slate-600">{label}</dt>
-                <dd className="whitespace-nowrap text-sm font-bold text-slate-950">{value || 0}</dd>
-              </div>
-            ))}
-          </dl>
-        </FinancePanel>
-        <FinancePanel title="Contas a vencer" actionTo={ROUTES.FINANCEIRO_CONTAS_PAGAR} actionLabel="Ver todas as contas a vencer">
-          <div className="mt-4 flex-1">
-            <table className="w-full table-fixed text-left text-xs">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500">
-                <tr>
-                  <th className="w-[26%] px-2 py-3">Vencimento</th>
-                  <th className="w-[34%] px-2 py-3">Cliente / Grupo</th>
-                  <th className="w-[25%] px-2 py-3">Valor</th>
-                  <th className="w-[15%] px-2 py-3 text-center">Dias</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(data?.upcomingAccounts || []).length ? data.upcomingAccounts.map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-2 py-3 font-bold text-slate-700">{row.vencimento}</td>
-                    <td className="px-2 py-3 font-bold text-slate-900">{row.nome}</td>
-                    <td className="px-2 py-3 font-bold text-slate-950">{brl.format(Number(row.valor || 0))}</td>
-                    <td className="px-2 py-3 text-center font-bold text-slate-700">{row.dias}</td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={4}><EmptyState /></td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </FinancePanel>
-      </section>
-    </>
-  );
+			<section className="grid gap-4 xl:grid-cols-4">
+				<FinancePanel
+					title="Top cidades por faturamento"
+					actionTo={ROUTES.FINANCEIRO_FATURAMENTO}
+					actionLabel="Ver todas as cidades"
+				>
+					<div className="mt-4 flex flex-1 flex-col justify-between gap-3">
+						{(data?.citiesRanking || []).length ? (
+							data.citiesRanking.map((city) => {
+								const max = Math.max(
+									...data.citiesRanking.map((item) => Number(item.value || 0)),
+									1,
+								);
+								return (
+									<div
+										key={city.label}
+										className="grid grid-cols-[minmax(90px,1fr)_minmax(80px,1fr)_auto] items-center gap-3 text-xs font-bold"
+									>
+										<span className="truncate text-slate-700">
+											{city.label}
+										</span>
+										<div className="h-3 rounded-full bg-slate-100">
+											<div
+												className="h-full rounded-full bg-blue-600"
+												style={{
+													width: `${Math.max(8, (Number(city.value || 0) / max) * 100)}%`,
+												}}
+											/>
+										</div>
+										<span className="whitespace-nowrap text-slate-950">
+											{brl.format(city.value)}
+										</span>
+									</div>
+								);
+							})
+						) : (
+							<EmptyState />
+						)}
+					</div>
+				</FinancePanel>
+				<FinancePanel
+					title="Alertas financeiros"
+					actionTo={ROUTES.FINANCEIRO_CONTAS_RECEBER}
+					actionLabel="Ver todos os alertas"
+				>
+					<div className="mt-4 flex flex-1 flex-col gap-3">
+						{(data?.alerts || []).length ? (
+							data.alerts.map((alert) => (
+								<div
+									key={alert.id}
+									className={`flex-1 rounded-2xl border p-3 ${alert.severity === "critical" ? "border-red-200 bg-red-50" : alert.severity === "warning" ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50"}`}
+								>
+									<p className="text-sm font-bold text-slate-950">
+										{alert.title}
+									</p>
+									<p className="mt-1 text-xs font-bold text-slate-600">
+										{alert.description}
+									</p>
+								</div>
+							))
+						) : (
+							<EmptyState />
+						)}
+					</div>
+				</FinancePanel>
+				<FinancePanel
+					title="Resumo operacional do dia"
+					actionTo={ROUTES.FINANCEIRO_REPORTS_SERASA}
+					actionLabel="Ver relatório completo"
+				>
+					<dl className="mt-4 flex flex-1 flex-col justify-between divide-y divide-slate-100">
+						{[
+							["Notas lançadas", data?.operationalSummary?.notasLancadas],
+							[
+								"Pagamentos conciliados",
+								data?.operationalSummary?.pagamentosConciliados,
+							],
+							[
+								"Valor conciliado",
+								brl.format(
+									Number(data?.operationalSummary?.valorConciliado || 0),
+								),
+							],
+							[
+								"Tickets resolvidos",
+								data?.operationalSummary?.ticketsResolvidos,
+							],
+							[
+								"Pendências em aberto",
+								data?.operationalSummary?.pendenciasAbertas,
+							],
+						].map(([label, value]) => (
+							<div
+								key={label}
+								className="flex items-center justify-between gap-3 py-3"
+							>
+								<dt className="text-xs font-bold text-slate-600">{label}</dt>
+								<dd className="whitespace-nowrap text-sm font-bold text-slate-950">
+									{value || 0}
+								</dd>
+							</div>
+						))}
+					</dl>
+				</FinancePanel>
+				<FinancePanel
+					title="Contas a vencer"
+					actionTo={ROUTES.FINANCEIRO_CONTAS_PAGAR}
+					actionLabel="Ver todas as contas a vencer"
+				>
+					<div className="mt-4 flex-1">
+						<table className="w-full table-fixed text-left text-xs">
+							<thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500">
+								<tr>
+									<th className="w-[26%] px-2 py-3">Vencimento</th>
+									<th className="w-[34%] px-2 py-3">Cliente / Grupo</th>
+									<th className="w-[25%] px-2 py-3">Valor</th>
+									<th className="w-[15%] px-2 py-3 text-center">Dias</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{(data?.upcomingAccounts || []).length ? (
+									data.upcomingAccounts.map((row) => (
+										<tr key={row.id}>
+											<td className="px-2 py-3 font-bold text-slate-700">
+												{row.vencimento}
+											</td>
+											<td className="px-2 py-3 font-bold text-slate-900">
+												{row.nome}
+											</td>
+											<td className="px-2 py-3 font-bold text-slate-950">
+												{brl.format(Number(row.valor || 0))}
+											</td>
+											<td className="px-2 py-3 text-center font-bold text-slate-700">
+												{row.dias}
+											</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td colSpan={4}>
+											<EmptyState />
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</FinancePanel>
+			</section>
+		</>
+	);
 }
 
 function SectionPage({ page }) {
-  const cards = {
-    contasPagar: ["Total a pagar", "Vence hoje", "Vence esta semana", "Vencidas", "Pagas no mês"],
-    contasReceber: ["Total a receber", "Receber hoje", "Recebido hoje", "Vencidos", "Inadimplência"],
-    faturamento: ["Faturamento do mês", "Mês anterior", "Crescimento", "Receita recorrente", "Receita não recorrente"],
-    notas: ["Notas hoje", "Notas no mês", "Pendentes", "Com erro", "Valor total"],
-    chamados: ["Abertos", "Em andamento", "Encerrados no mês", "SLA vencido", "Tempo médio"],
-  }[page] || [];
-  return (
-    <>
-      <section className="grid gap-4 md:grid-cols-5">
-        {cards.map((card) => <FinancialKpiCard key={card} item={{ title: card, value: 0, type: "number", icon: "BadgeDollarSign" }} />)}
-      </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-bold text-slate-950">Estrutura preparada</h2>
-        <p className="mt-2 text-sm font-semibold text-slate-500">
-          Esta página já está integrada ao menu, RBAC e layout do sistema. A tabela e os filtros estão preparados para receber dados reais da integração financeira.
-        </p>
-        <EmptyState text="Nenhum dado real integrado ainda." />
-      </section>
-    </>
-  );
+	const cards =
+		{
+			contasPagar: [
+				"Total a pagar",
+				"Vence hoje",
+				"Vence esta semana",
+				"Vencidas",
+				"Pagas no mês",
+			],
+			contasReceber: [
+				"Total a receber",
+				"Receber hoje",
+				"Recebido hoje",
+				"Vencidos",
+				"Inadimplência",
+			],
+			faturamento: [
+				"Faturamento do mês",
+				"Mês anterior",
+				"Crescimento",
+				"Receita recorrente",
+				"Receita não recorrente",
+			],
+			notas: [
+				"Notas hoje",
+				"Notas no mês",
+				"Pendentes",
+				"Com erro",
+				"Valor total",
+			],
+			chamados: [
+				"Abertos",
+				"Em andamento",
+				"Encerrados no mês",
+				"SLA vencido",
+				"Tempo médio",
+			],
+			orcamentoDashboard: [
+				"Orçado no mês",
+				"Realizado",
+				"Saldo disponível",
+				"Desvio",
+				"Solicitações",
+			],
+			orcamentoCentrosCusto: [
+				"Centros ativos",
+				"Sem responsável",
+				"No limite",
+				"Acima do previsto",
+				"Novos no mês",
+			],
+			orcamentoRealizado: [
+				"Previsto",
+				"Realizado",
+				"Comprometido",
+				"Disponível",
+				"Variação",
+			],
+			orcamentoAprovacoes: [
+				"Pendentes",
+				"Aprovadas",
+				"Reprovadas",
+				"SLA vencido",
+				"Valor em análise",
+			],
+			orcamentoConfiguracoes: [
+				"Categorias",
+				"Alçadas",
+				"Responsáveis",
+				"Regras ativas",
+				"Integrações",
+			],
+		}[page] || [];
+	const isBudgetPage = String(page || "").startsWith("orcamento");
+	return (
+		<>
+			<section className="grid gap-4 md:grid-cols-5">
+				{cards.map((card) => (
+					<FinancialKpiCard
+						key={card}
+						item={{
+							title: card,
+							value: 0,
+							type: "number",
+							icon: "BadgeDollarSign",
+						}}
+					/>
+				))}
+			</section>
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<h2 className="text-lg font-bold text-slate-950">
+					{isBudgetPage ? "Módulo protegido por VPN" : "Estrutura preparada"}
+				</h2>
+				<p className="mt-2 text-sm font-semibold text-slate-500">
+					{isBudgetPage
+						? "Esta área já está integrada ao menu, RBAC e trava de VPN. Cadastre as faixas de IP em Configuração > VPN e ative a proteção antes de operar dados reais."
+						: "Esta página já está integrada ao menu, RBAC e layout do sistema. A tabela e os filtros estão preparados para receber dados reais da integração financeira."}
+				</p>
+				<div className="mt-5 grid gap-4 lg:grid-cols-3">
+					{[
+						[
+							"Filtros",
+							"Período, empresa, regional, centro de custo e categoria.",
+						],
+						[
+							"Auditoria",
+							"Histórico de alterações, aprovações e consumo do orçamento.",
+						],
+						[
+							"Integração",
+							"Preparado para receber dados financeiros reais por planilha/API.",
+						],
+					].map(([title, text]) => (
+						<div
+							key={title}
+							className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+						>
+							<h3 className="text-sm font-black text-slate-950">{title}</h3>
+							<p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">
+								{text}
+							</p>
+						</div>
+					))}
+				</div>
+				<EmptyState
+					text={
+						isBudgetPage
+							? "Nenhum orçamento cadastrado ainda."
+							: "Nenhum dado real integrado ainda."
+					}
+				/>
+			</section>
+		</>
+	);
 }
 
-function ConfiguracoesPage({ data, onMockup, onClearMockup, loadingAction, canManage }) {
-  const [sheetsConfig, setSheetsConfig] = useState(DEFAULT_SHEETS_CONFIG);
-  const [logs, setLogs] = useState([]);
-  const [sheetsLoading, setSheetsLoading] = useState(true);
-  const [sheetsAction, setSheetsAction] = useState("");
-  const [sheetsMessage, setSheetsMessage] = useState("");
+function dateFromInput(value) {
+	const parsed = new Date(`${value}T00:00:00`);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
-  const loadSheetsConfig = useCallback(async () => {
-    setSheetsLoading(true);
-    setSheetsMessage("");
-    try {
-      const [config, logsResponse] = await Promise.all([
-        buscarConfigPlanilhasFinanceiro(),
-        buscarLogsPlanilhasFinanceiro(8).catch(() => ({ items: [] })),
-      ]);
-      setSheetsConfig({ ...DEFAULT_SHEETS_CONFIG, ...config, sources: config.sources || DEFAULT_SHEETS_CONFIG.sources });
-      setLogs(logsResponse.items || []);
-    } catch (error) {
-      setSheetsMessage(error?.message || "Não foi possível carregar a configuração das planilhas.");
-    } finally {
-      setSheetsLoading(false);
-    }
-  }, []);
+function formatBudgetMonthYear({ year, month } = {}) {
+	const safeYear = Number(year) || new Date().getFullYear();
+	const safeMonth = Number(month) || new Date().getMonth() + 1;
+	return `${safeYear} - ${budgetMonthName(safeMonth)}`;
+}
 
-  useEffect(() => {
-    loadSheetsConfig();
-  }, [loadSheetsConfig]);
+function formatBudgetPeriodDisplay(
+	months = [],
+	fallbackYear = new Date().getFullYear(),
+) {
+	const validMonths = months.filter(
+		(item) => Number(item?.year) && Number(item?.month),
+	);
+	if (!validMonths.length) {
+		return formatBudgetMonthYear({
+			year: fallbackYear,
+			month: new Date().getMonth() + 1,
+		});
+	}
+	if (validMonths.length === 1) {
+		return formatBudgetMonthYear(validMonths[0]);
+	}
+	const first = validMonths[0];
+	const last = validMonths[validMonths.length - 1];
+	return `${formatBudgetMonthYear(first)} até ${formatBudgetMonthYear(last)}`;
+}
 
-  const updateSource = (sourceId, field, value) => {
-    setSheetsConfig((current) => ({
-      ...current,
-      sources: (current.sources || []).map((source) =>
-        source.id === sourceId ? { ...source, [field]: value } : source,
-      ),
-    }));
-  };
+function buildBudgetPeriod(selectedPeriod = {}) {
+	const now = new Date();
+	const currentYear = Number(selectedPeriod.referenceYear) || now.getFullYear();
+	const currentMonth =
+		Number(selectedPeriod.referenceMonth) || now.getMonth() + 1;
+	if (selectedPeriod.mode === "year") {
+		const months = Array.from({ length: 12 }, (_, index) => ({
+			year: currentYear,
+			month: index + 1,
+		}));
+		return {
+			label: "ano",
+			displayLabel: `${currentYear} - Ano`,
+			months,
+		};
+	}
+	if (selectedPeriod.mode === "custom") {
+		const start = dateFromInput(selectedPeriod.startDate);
+		const end = dateFromInput(selectedPeriod.endDate);
+		if (start && end && start <= end) {
+			const months = [];
+			const startIndex = start.getFullYear() * 12 + start.getMonth();
+			const endIndex = end.getFullYear() * 12 + end.getMonth();
+			for (
+				let monthIndex = startIndex;
+				monthIndex <= endIndex;
+				monthIndex += 1
+			) {
+				months.push({
+					year: Math.trunc(monthIndex / 12),
+					month: (monthIndex % 12) + 1,
+				});
+			}
+			return {
+				label: "período",
+				displayLabel: formatBudgetPeriodDisplay(months, currentYear),
+				months,
+			};
+		}
+	}
+	const months = [{ year: currentYear, month: currentMonth }];
+	return {
+		label: "mês",
+		displayLabel: formatBudgetPeriodDisplay(months, currentYear),
+		months,
+	};
+}
 
-  const handleSaveSheets = async () => {
-    setSheetsAction("save");
-    setSheetsMessage("");
-    try {
-      const response = await salvarConfigPlanilhasFinanceiro(sheetsConfig);
-      setSheetsConfig({ ...DEFAULT_SHEETS_CONFIG, ...response.config, sources: response.config?.sources || DEFAULT_SHEETS_CONFIG.sources });
-      setSheetsMessage("Configuração das Google Planilhas salva.");
-    } catch (error) {
-      setSheetsMessage(error?.message || "Falha ao salvar a configuração das planilhas.");
-    } finally {
-      setSheetsAction("");
-    }
-  };
+function getBudgetPeriodKey(item = {}) {
+	const year = Number(item.year || item.ano || 0);
+	const month = Number(item.month || item.numMes || item.mesNumero || 0);
+	return year && month ? `${year}-${month}` : "";
+}
 
-  const handleSyncSheets = async () => {
-    setSheetsAction("sync");
-    setSheetsMessage("");
-    try {
-      const response = await sincronizarPlanilhasFinanceiro();
-      setSheetsConfig({ ...DEFAULT_SHEETS_CONFIG, ...response.config, sources: response.config?.sources || DEFAULT_SHEETS_CONFIG.sources });
-      setSheetsMessage(response.message || "Leitura das planilhas concluída.");
-      await loadSheetsConfig();
-    } catch (error) {
-      setSheetsMessage(error?.message || "Falha ao ler as planilhas financeiras.");
-    } finally {
-      setSheetsAction("");
-    }
-  };
+function budgetPeriodMatches(item = {}, periodKeys = new Set()) {
+	return periodKeys.has(getBudgetPeriodKey(item));
+}
 
-  const handleTestSource = async (sourceId) => {
-    setSheetsAction(`test:${sourceId}`);
-    setSheetsMessage("");
-    try {
-      const saved = await salvarConfigPlanilhasFinanceiro(sheetsConfig);
-      setSheetsConfig({ ...DEFAULT_SHEETS_CONFIG, ...saved.config, sources: saved.config?.sources || DEFAULT_SHEETS_CONFIG.sources });
-      const response = await testarPlanilhaFinanceiro(sourceId);
-      const totalRows = response.result?.totalRows ?? 0;
-      setSheetsMessage(`Teste concluído: ${totalRows} linha(s) lida(s) na origem selecionada.`);
-    } catch (error) {
-      setSheetsMessage(error?.message || "Falha ao testar a planilha.");
-    } finally {
-      setSheetsAction("");
-    }
-  };
+function movementValue(movement = {}) {
+	return (
+		Number(
+			movement.value ??
+				movement.valor ??
+				movement.realized ??
+				movement.realizado ??
+				movement.total ??
+				0,
+		) || 0
+	);
+}
 
-  const handleCopyServiceAccount = async () => {
-    const email = sheetsConfig.serviceAccountEmail || "";
-    if (!email) return;
-    try {
-      await navigator.clipboard.writeText(email);
-      setSheetsMessage("E-mail da Service Account copiado.");
-    } catch {
-      setSheetsMessage("Não foi possível copiar automaticamente. Selecione o e-mail e copie manualmente.");
-    }
-  };
+function movementSupplierName(movement = {}, fallback = "") {
+	return (
+		String(
+			movement.supplier ||
+				movement.fornecedor ||
+				movement.partnerName ||
+				movement.nomeFornecedor ||
+				fallback ||
+				"",
+		).trim() || "Fornecedor não informado"
+	);
+}
 
-  return (
-    <section className="space-y-5">
-      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Settings size={20} /></span>
-            <div>
-              <h2 className="text-lg font-bold text-slate-950">Dados demonstrativos</h2>
-              <p className="text-sm font-semibold text-slate-500">Use mockup para validar o layout antes da integração real.</p>
-            </div>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" onClick={onMockup} disabled={!canManage || loadingAction} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-              {loadingAction === "mockup" ? <Loader2 className="animate-spin" size={17} /> : <BadgeDollarSign size={17} />} Carregar mockup
-            </button>
-            <button type="button" onClick={onClearMockup} disabled={!canManage || loadingAction} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">
-              {loadingAction === "clear" ? <Loader2 className="animate-spin" size={17} /> : <Trash2 size={17} />} Limpar mockup
-            </button>
-          </div>
-          {!canManage ? <p className="mt-3 text-xs font-bold text-amber-700">Você pode visualizar, mas precisa de permissão de gerenciamento para alterar dados de mockup.</p> : null}
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">Status atual</h2>
-          <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <dt className="text-xs font-bold uppercase text-slate-500">Origem dos dados</dt>
-              <dd className="mt-1 text-xl font-bold text-slate-950">{data?.source === "mockup" ? "Mockup" : "Sem dados reais"}</dd>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <dt className="text-xs font-bold uppercase text-slate-500">Última atualização</dt>
-              <dd className="mt-1 text-xl font-bold text-slate-950">{formatUpdatedAt(data?.updatedAt)}</dd>
-            </div>
-          </dl>
-        </div>
-      </div>
+function getConfiguredCenterBudget(
+	center = {},
+	selectedPeriod = {},
+	periodMonthCount = 1,
+) {
+	const monthly = Number(center.valorMensal || center.orcamentoMensal || 0);
+	if (selectedPeriod.mode === "year") return monthly * 12;
+	return monthly * Math.max(1, periodMonthCount);
+}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700"><TableProperties size={20} /></span>
-            <div>
-              <h2 className="text-lg font-bold text-slate-950">Google Planilhas</h2>
-              <p className="text-sm font-semibold text-slate-500">Configure a leitura automática das planilhas financeiras a cada intervalo definido.</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                Service Account: {sheetsConfig.serviceAccountConfigured ? "configurada" : "não configurada"} · Última leitura: {formatUpdatedAt(sheetsConfig.lastRunAt)} · Próxima: {formatUpdatedAt(sheetsConfig.nextRunAt)}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={loadSheetsConfig} disabled={sheetsLoading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-              <RefreshCw size={16} className={sheetsLoading ? "animate-spin" : ""} /> Atualizar
-            </button>
-            <button type="button" onClick={handleSaveSheets} disabled={!canManage || Boolean(sheetsAction)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-              {sheetsAction === "save" ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Salvar
-            </button>
-            <button type="button" onClick={handleSyncSheets} disabled={!canManage || Boolean(sheetsAction)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
-              {sheetsAction === "sync" ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />} Ler agora
-            </button>
-          </div>
-        </div>
+function centerParentKey(center = {}) {
+	return (
+		String(center.parentId || center.parentCodigo || "").replace(/\D+/g, "") ||
+		String(center.parentId || center.parentCodigo || "")
+	);
+}
 
-        {sheetsMessage ? <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-800">{sheetsMessage}</div> : null}
+function centerCodeKey(center = {}) {
+	return (
+		String(center.codigo || center.id || "").replace(/\D+/g, "") ||
+		String(center.codigo || center.id || "")
+	);
+}
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[260px_1fr]">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-900">
-              <span>Automação ativa</span>
-              <input type="checkbox" checked={Boolean(sheetsConfig.enabled)} disabled={!canManage} onChange={(event) => setSheetsConfig((current) => ({ ...current, enabled: event.target.checked }))} className="h-5 w-5 rounded border-slate-300 text-blue-600" />
-            </label>
-            <label className="mt-4 block text-xs font-bold uppercase text-slate-500">
-              Intervalo de leitura
-              <input
-                type="number"
-                min="5"
-                max="1440"
-                value={sheetsConfig.intervalMinutes || 30}
-                disabled={!canManage}
-                onChange={(event) => setSheetsConfig((current) => ({ ...current, intervalMinutes: event.target.value }))}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-              />
-            </label>
-            <p className="mt-3 text-xs font-semibold text-slate-500">A planilha precisa ser compartilhada com o e-mail da Service Account usada no Google Drive.</p>
-            <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
-              <p className="text-xs font-black uppercase tracking-wide text-emerald-700">Usuário de leitura</p>
-              <p className="mt-1 break-all text-sm font-black text-slate-950">
-                {sheetsConfig.serviceAccountEmail || "Service Account não identificada"}
-              </p>
-              {sheetsConfig.serviceAccountProjectId ? (
-                <p className="mt-1 break-all text-xs font-bold text-emerald-800">Projeto: {sheetsConfig.serviceAccountProjectId}</p>
-              ) : null}
-              {sheetsConfig.serviceAccountError ? (
-                <p className="mt-2 text-xs font-bold text-red-700">{sheetsConfig.serviceAccountError}</p>
-              ) : (
-                <p className="mt-2 text-xs font-semibold text-emerald-800">Compartilhe cada planilha com este e-mail como Leitor.</p>
-              )}
-              <button
-                type="button"
-                onClick={handleCopyServiceAccount}
-                disabled={!sheetsConfig.serviceAccountEmail}
-                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Copy size={14} /> Copiar e-mail
-              </button>
-            </div>
-          </div>
+function getBudgetInsights(config = {}, selectedPeriod = {}) {
+	const accounts = config.accounts || [];
+	const centers = config.centers || [];
+	const matrix = config.matrix || [];
+	const now = new Date();
+	const period = buildBudgetPeriod(selectedPeriod);
+	const referenceYear = Number(period.months[0]?.year) || now.getFullYear();
+	const periodKeys = new Set(
+		period.months.map((item) => `${item.year}-${item.month}`),
+	);
+	const isCurrentSingleMonth =
+		period.months.length === 1 &&
+		Number(period.months[0]?.year) === now.getFullYear() &&
+		Number(period.months[0]?.month) === now.getMonth() + 1;
+	const activeMonth = period.months[0] || {
+		year: now.getFullYear(),
+		month: now.getMonth() + 1,
+	};
+	const daysInMonth = new Date(
+		Number(activeMonth.year),
+		Number(activeMonth.month),
+		0,
+	).getDate();
+	const dayOfMonth = isCurrentSingleMonth ? now.getDate() : daysInMonth;
+	const rowPeriodTotal = (row) =>
+		period.months.reduce((sum, item) => {
+			if (Number(row.year || item.year) !== item.year) return sum;
+			return sum + Number(row.months?.[item.month - 1] || 0);
+		}, 0);
+	const periodMonthCount = Math.max(1, period.months.length);
+	const realizedForCenter = (center) => {
+		const breakdowns =
+			center.realizedByCompanyBranch || center.realizadoPorEmpresaFilial || [];
+		const matchingBreakdowns = breakdowns.filter((item) =>
+			periodKeys.has(getBudgetPeriodKey(item)),
+		);
+		const breakdownTotal = matchingBreakdowns.reduce(
+			(sum, item) => sum + Number(item.realized ?? item.realizado ?? 0),
+			0,
+		);
+		if (breakdowns.length) return breakdownTotal;
+		return 0;
+	};
+	const childrenByParentKey = new Map();
+	centers
+		.filter((center) => center.tipoPlano === "A")
+		.forEach((center) => {
+			const parentKey = centerParentKey(center);
+			if (!parentKey) return;
+			const current = childrenByParentKey.get(parentKey) || [];
+			current.push(center);
+			childrenByParentKey.set(parentKey, current);
+		});
+	const analyticChildrenForCenter = (center = {}) => {
+		if (center.tipoPlano !== "S") return [];
+		const key = centerCodeKey(center);
+		const byId = childrenByParentKey.get(center.id) || [];
+		const byCode = key ? childrenByParentKey.get(key) || [] : [];
+		return [...byId, ...byCode].filter(
+			(child, index, items) =>
+				items.findIndex((item) => item.id === child.id) === index,
+		);
+	};
+	const centersForTotals = centers.filter((center) => center.tipoPlano !== "S");
+	const configuredBudgetForCenter = (center) => {
+		if (center?.tipoPlano === "S") {
+			return analyticChildrenForCenter(center).reduce(
+				(sum, child) =>
+					sum +
+					getConfiguredCenterBudget(child, selectedPeriod, periodMonthCount),
+				0,
+			);
+		}
+		return getConfiguredCenterBudget(center, selectedPeriod, periodMonthCount);
+	};
+	const realizedTotalForCenter = (center) => {
+		if (center?.tipoPlano === "S") {
+			return analyticChildrenForCenter(center).reduce(
+				(sum, child) =>
+					sum + realizedForCenter(child) + Number(child.comprometidoMes || 0),
+				0,
+			);
+		}
+		return realizedForCenter(center) + Number(center?.comprometidoMes || 0);
+	};
+	const plannedMonthFromMatrix = matrix.reduce((sum, row) => {
+		const center = centers.find((item) => item.id === row.costCenterId);
+		if (center?.tipoPlano === "S") return sum;
+		return sum + rowPeriodTotal(row);
+	}, 0);
+	const plannedMonthFromCenters = centersForTotals.reduce((sum, center) => {
+		return (
+			sum + getConfiguredCenterBudget(center, selectedPeriod, periodMonthCount)
+		);
+	}, 0);
+	const currentYearMatrix = matrix.filter(
+		(row) => Number(row.year || referenceYear) === referenceYear,
+	);
+	const plannedYearFromMatrix = currentYearMatrix.reduce((sum, row) => {
+		const center = centers.find((item) => item.id === row.costCenterId);
+		if (center?.tipoPlano === "S") return sum;
+		return (
+			sum +
+			(row.months || []).reduce(
+				(monthSum, value) => monthSum + Number(value || 0),
+				0,
+			)
+		);
+	}, 0);
+	const plannedYearFromCenters = centersForTotals.reduce(
+		(sum, center) =>
+			sum + getConfiguredCenterBudget(center, { mode: "year" }, 12),
+		0,
+	);
+	const plannedMonth = plannedMonthFromCenters || plannedMonthFromMatrix;
+	const plannedYear = plannedYearFromCenters || plannedYearFromMatrix;
+	const realizedMonth = centersForTotals.reduce(
+		(sum, center) => sum + realizedForCenter(center),
+		0,
+	);
+	const committedMonth = centersForTotals.reduce(
+		(sum, center) => sum + Number(center.comprometidoMes || 0),
+		0,
+	);
+	const availableMonth = plannedMonth - realizedMonth - committedMonth;
+	const idealBurn = plannedMonth
+		? (plannedMonth / daysInMonth) * dayOfMonth
+		: 0;
+	const usedPercent = plannedMonth
+		? ((realizedMonth + committedMonth) / plannedMonth) * 100
+		: 0;
+	const idealPercent = plannedMonth ? (idealBurn / plannedMonth) * 100 : 0;
+	const computedApprovals = centers
+		.filter((center) => center.tipoPlano !== "S")
+		.map((center) => {
+			const centerPlanned =
+				configuredBudgetForCenter(center) ||
+				matrix
+					.filter((row) => row.costCenterId === center.id)
+					.reduce((sum, row) => sum + rowPeriodTotal(row), 0);
+			const used = realizedTotalForCenter(center);
+			const percent = centerPlanned ? (used / centerPlanned) * 100 : 0;
+			return {
+				id: `orcamento-estouro-${center.id}-${period.months[0]?.year || now.getFullYear()}-${period.months[0]?.month || now.getMonth() + 1}`,
+				type: "estouro_orcamento",
+				center,
+				centerPlanned,
+				budgeted: centerPlanned,
+				used,
+				realized: realizedForCenter(center),
+				committed: Number(center.comprometidoMes || 0),
+				percent,
+				overflow: used - centerPlanned,
+				reason: `Centro de custo consumiu ${decimal.format(percent)}% do orçamento.`,
+				status: "pendente",
+				source: "calculado",
+			};
+		})
+		.filter((item) => item.centerPlanned && item.percent > 100);
+	const approvalMap = new Map(
+		computedApprovals.map((approval) => [approval.id, approval]),
+	);
+	(config.approvals || []).forEach((approval) => {
+		const center = centers.find((item) => item.id === approval.centerId);
+		const used =
+			Number(approval.realized || 0) + Number(approval.committed || 0);
+		approvalMap.set(approval.id, {
+			...approvalMap.get(approval.id),
+			...approval,
+			center,
+			centerPlanned: Number(
+				approval.budgeted || approvalMap.get(approval.id)?.centerPlanned || 0,
+			),
+			budgeted: Number(
+				approval.budgeted || approvalMap.get(approval.id)?.budgeted || 0,
+			),
+			used: used || approvalMap.get(approval.id)?.used || 0,
+			overflow: Number(
+				approval.overflow || approvalMap.get(approval.id)?.overflow || 0,
+			),
+			percent: Number(
+				approval.percent || approvalMap.get(approval.id)?.percent || 0,
+			),
+		});
+	});
+	const approvalsAll = Array.from(approvalMap.values()).sort((left, right) => {
+		const leftPending = left.status === "pendente" ? 1 : 0;
+		const rightPending = right.status === "pendente" ? 1 : 0;
+		if (leftPending !== rightPending) return rightPending - leftPending;
+		return String(right.updatedAt || right.createdAt || "").localeCompare(
+			String(left.updatedAt || left.createdAt || ""),
+		);
+	});
+	const approvals = approvalsAll.filter(
+		(approval) => approval.status === "pendente",
+	);
+	const accountRows = matrix
+		.map((row) => {
+			const account = accounts.find((item) => item.id === row.accountId);
+			const center = centers.find((item) => item.id === row.costCenterId);
+			if (center?.tipoPlano === "S") return null;
+			const rawPlanned = rowPeriodTotal(row);
+			const breakdownRealized = (
+				center?.realizedByCompanyBranch ||
+				center?.realizadoPorEmpresaFilial ||
+				[]
+			)
+				.filter(
+					(item) =>
+						item.accountId === row.accountId &&
+						periodKeys.has(getBudgetPeriodKey(item)),
+				)
+				.reduce(
+					(sum, item) => sum + Number(item.realized ?? item.realizado ?? 0),
+					0,
+				);
+			const centerTotalPlanned = matrix
+				.filter((item) => item.costCenterId === row.costCenterId)
+				.reduce((sum, item) => sum + rowPeriodTotal(item), 0);
+			const configuredCenterPlanned = center
+				? configuredBudgetForCenter(center)
+				: 0;
+			const planned =
+				configuredCenterPlanned && centerTotalPlanned
+					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
+					: rawPlanned;
+			const centerRealized = realizedTotalForCenter(center || {});
+			const realized =
+				breakdownRealized ||
+				(configuredCenterPlanned && planned
+					? (planned / configuredCenterPlanned) * centerRealized
+					: centerTotalPlanned
+						? (rawPlanned / centerTotalPlanned) * centerRealized
+						: centerRealized);
+			return {
+				row,
+				account,
+				center,
+				planned,
+				realized,
+				deviation: realized - planned,
+			};
+		})
+		.filter((item) => item && (item.planned || item.realized));
+	const centerRows = centers.map((center) => {
+		const plannedFromCenter = configuredBudgetForCenter(center);
+		const planned =
+			plannedFromCenter ||
+			matrix
+				.filter((row) => row.costCenterId === center.id)
+				.reduce((sum, row) => sum + rowPeriodTotal(row), 0);
+		const realized = realizedTotalForCenter(center);
+		return {
+			center,
+			planned,
+			realized,
+			deviation: realized - planned,
+			percent: planned ? (realized / planned) * 100 : 0,
+		};
+	});
+	const movements = [];
+	centersForTotals.forEach((center) => {
+		const breakdowns =
+			center.realizedByCompanyBranch || center.realizadoPorEmpresaFilial || [];
+		breakdowns
+			.filter((breakdown) => budgetPeriodMatches(breakdown, periodKeys))
+			.forEach((breakdown) => {
+				const breakdownMovements = Array.isArray(
+					breakdown.movements || breakdown.movimentacoes,
+				)
+					? breakdown.movements || breakdown.movimentacoes
+					: [];
+				if (breakdownMovements.length) {
+					breakdownMovements.forEach((movement, index) => {
+						movements.push({
+							...movement,
+							id:
+								movement.id ||
+								`${center.id}-${breakdown.year || breakdown.ano}-${breakdown.month || breakdown.numMes}-${index}`,
+							centerId: center.id,
+							centerName: center.nome,
+							accountId: movement.accountId || breakdown.accountId,
+							companyId: movement.companyId || breakdown.companyId,
+							branchId: movement.branchId || breakdown.branchId,
+							supplier: movementSupplierName(
+								movement,
+								(breakdown.suppliers || breakdown.fornecedores || [])[0],
+							),
+							value: movementValue(movement),
+							year: Number(breakdown.year || breakdown.ano || 0),
+							month: Number(breakdown.month || breakdown.numMes || 0),
+						});
+					});
+					return;
+				}
+				const value =
+					Number(breakdown.realized ?? breakdown.realizado ?? 0) || 0;
+				movements.push({
+					id: `${center.id}-${breakdown.year || breakdown.ano}-${breakdown.month || breakdown.numMes}-${breakdown.accountId || "sem-conta"}`,
+					centerId: center.id,
+					centerName: center.nome,
+					accountId: breakdown.accountId,
+					companyId: breakdown.companyId,
+					branchId: breakdown.branchId,
+					supplier:
+						(breakdown.suppliers || breakdown.fornecedores || [])[0] ||
+						"Fornecedor não informado",
+					value,
+					year: Number(breakdown.year || breakdown.ano || 0),
+					month: Number(breakdown.month || breakdown.numMes || 0),
+				});
+			});
+	});
+	const monthlyEvolution = Array.from({ length: 12 }, (_, index) => {
+		const month = index + 1;
+		const planned = centersForTotals.reduce(
+			(sum, center) =>
+				sum + getConfiguredCenterBudget(center, { mode: "month" }, 1),
+			0,
+		);
+		const realized = centersForTotals.reduce((sum, center) => {
+			const breakdowns =
+				center.realizedByCompanyBranch ||
+				center.realizadoPorEmpresaFilial ||
+				[];
+			return (
+				sum +
+				breakdowns
+					.filter(
+						(item) =>
+							Number(item.year || item.ano || referenceYear) ===
+								referenceYear &&
+							Number(item.month || item.numMes || 0) === month,
+					)
+					.reduce(
+						(monthSum, item) =>
+							monthSum + Number(item.realized ?? item.realizado ?? 0),
+						0,
+					)
+			);
+		}, 0);
+		return {
+			month,
+			label: budgetMonthName(month).slice(0, 3),
+			planned,
+			realized,
+			percent: planned ? (realized / planned) * 100 : 0,
+		};
+	});
+	let cumulativeRealized = 0;
+	const forecastRows = monthlyEvolution.map((row, index) => {
+		cumulativeRealized += row.realized;
+		const elapsedWithData =
+			monthlyEvolution.slice(0, index + 1).filter((item) => item.realized > 0)
+				.length || index + 1;
+		const average = cumulativeRealized / Math.max(1, elapsedWithData);
+		return {
+			...row,
+			cumulativeRealized,
+			forecast: row.realized ? cumulativeRealized : average * (index + 1),
+		};
+	});
+	const accountSummaryMap = new Map();
+	accountRows.forEach((item) => {
+		const key = item.account?.id || item.row.accountId || "sem-conta";
+		const current = accountSummaryMap.get(key) || {
+			account: item.account,
+			id: key,
+			planned: 0,
+			realized: 0,
+		};
+		current.planned += Number(item.planned || 0);
+		current.realized += Number(item.realized || 0);
+		accountSummaryMap.set(key, current);
+	});
+	const accountSummary = Array.from(accountSummaryMap.values())
+		.map((item) => ({
+			...item,
+			deviation: item.realized - item.planned,
+			percent: item.planned ? (item.realized / item.planned) * 100 : 0,
+		}))
+		.sort((left, right) => right.realized - left.realized);
+	const centerSummary = centerRows
+		.filter(({ center }) => center?.tipoPlano === "A")
+		.map((item) => ({ ...item, id: item.center?.id }))
+		.sort((left, right) => right.realized - left.realized);
+	const supplierSummaryMap = new Map();
+	movements.forEach((movement) => {
+		const supplier = movementSupplierName(movement);
+		const current = supplierSummaryMap.get(supplier) || {
+			supplier,
+			value: 0,
+			rows: 0,
+			centers: new Set(),
+			accounts: new Set(),
+		};
+		current.value += movementValue(movement);
+		current.rows += 1;
+		if (movement.centerId) current.centers.add(movement.centerId);
+		if (movement.accountId) current.accounts.add(movement.accountId);
+		supplierSummaryMap.set(supplier, current);
+	});
+	const supplierSummary = Array.from(supplierSummaryMap.values())
+		.map((item) => ({
+			...item,
+			centers: Array.from(item.centers),
+			accounts: Array.from(item.accounts),
+			share: realizedMonth ? (item.value / realizedMonth) * 100 : 0,
+		}))
+		.sort((left, right) => right.value - left.value);
+	return {
+		accounts,
+		centers,
+		matrix,
+		plannedMonth,
+		plannedYear,
+		realizedMonth,
+		committedMonth,
+		availableMonth,
+		usedPercent,
+		idealPercent,
+		approvals,
+		approvalsAll,
+		accountRows,
+		centerRows,
+		movements,
+		monthlyEvolution,
+		forecastRows,
+		accountSummary,
+		centerSummary,
+		supplierSummary,
+		periodLabel: period.label,
+		periodDisplayLabel: period.displayLabel,
+	};
+}
 
-          <div className="space-y-4">
-            {(sheetsConfig.sources || []).map((source) => (
-              <div key={source.id} className="rounded-2xl border border-slate-200 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <label className="flex items-center gap-3 text-sm font-bold text-slate-950">
-                    <input type="checkbox" checked={Boolean(source.enabled)} disabled={!canManage} onChange={(event) => updateSource(source.id, "enabled", event.target.checked)} className="h-5 w-5 rounded border-slate-300 text-blue-600" />
-                    {source.label}
-                  </label>
-                  <button type="button" disabled={!canManage || Boolean(sheetsAction)} onClick={() => handleTestSource(source.id)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                    {sheetsAction === `test:${source.id}` ? <Loader2 className="animate-spin" size={14} /> : <TableProperties size={14} />} Testar
-                  </button>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <label className="text-xs font-bold uppercase text-slate-500">
-                    ID ou link da planilha
-                    <input value={source.spreadsheetUrl ?? source.spreadsheetId ?? ""} disabled={!canManage} onChange={(event) => updateSource(source.id, "spreadsheetUrl", event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-                  </label>
-                  <label className="text-xs font-bold uppercase text-slate-500">
-                    Aba
-                    <input value={source.sheetName || ""} disabled={!canManage} onChange={(event) => updateSource(source.id, "sheetName", event.target.value)} placeholder="Ex: Agosto" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-                  </label>
-                  <label className="text-xs font-bold uppercase text-slate-500">
-                    Range
-                    <input value={source.range || "A:Z"} disabled={!canManage} onChange={(event) => updateSource(source.id, "range", event.target.value)} placeholder="A:Z" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-                  </label>
-                  <label className="text-xs font-bold uppercase text-slate-500">
-                    Linha do cabeçalho
-                    <input type="number" min="1" value={source.headerRow || 1} disabled={!canManage} onChange={(event) => updateSource(source.id, "headerRow", event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-                  </label>
-                </div>
-                <p className="mt-3 text-xs font-bold text-slate-500">
-                  Última leitura: {formatUpdatedAt(source.lastReadAt)} · Status: {source.lastStatus || "-"} · Linhas: {source.lastRows || 0} · {source.lastMessage || "Sem leitura ainda."}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
+function budgetAccountLabel(account, fallback = "") {
+	if (!account) return fallback;
+	return [account.codigo, account.nome].filter(Boolean).join(" - ") || fallback;
+}
 
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <h3 className="text-sm font-bold text-slate-950">Últimos logs de leitura</h3>
-          <div className="mt-3 divide-y divide-slate-200">
-            {logs.length ? logs.map((item) => (
-              <div key={item.id} className="flex flex-col gap-1 py-3 text-xs font-bold text-slate-600 md:flex-row md:items-center md:justify-between">
-                <span>{formatUpdatedAt(item.createdAt)} · {item.status}</span>
-                <span className="text-slate-900">{item.message}</span>
-              </div>
-            )) : <p className="py-4 text-sm font-bold text-slate-500">Nenhum log de leitura registrado.</p>}
-          </div>
-        </div>
-      </section>
-    </section>
-  );
+function budgetCenterCompactLabel(center, fallback = "") {
+	if (!center) return fallback;
+	return (
+		[center.codigo || center.reduzida || center.id, center.nome]
+			.filter(Boolean)
+			.join(" ") || fallback
+	);
+}
+
+function isCenterInactive(center) {
+	return (
+		String(center?.status || "")
+			.toLowerCase()
+			.includes("inativo") ||
+		String(center?.nome || "")
+			.toUpperCase()
+			.includes("INATIVO")
+	);
+}
+
+function budgetConsumptionStatus(percent = 0) {
+	if (percent > 100) {
+		return {
+			label: "Estourado",
+			textClass: "text-red-600",
+			barClass: "bg-red-500",
+		};
+	}
+	if (percent >= 80) {
+		return {
+			label: "Atenção",
+			textClass: "text-amber-600",
+			barClass: "bg-amber-400",
+		};
+	}
+	return {
+		label: "Positivo",
+		textClass: "text-emerald-600",
+		barClass: "bg-emerald-500",
+	};
+}
+
+function budgetVarianceMeta(planned = 0, realized = 0) {
+	const variance = Number(planned || 0) - Number(realized || 0);
+	const percent = Number(planned || 0)
+		? (variance / Number(planned || 0)) * 100
+		: 0;
+	const favorable = variance >= 0;
+	return {
+		variance,
+		percent,
+		favorable,
+		textClass: favorable ? "text-emerald-600" : "text-red-600",
+	};
+}
+
+function budgetApprovalStatusMeta(status = "pendente") {
+	const normalized = String(status || "pendente").toLowerCase();
+	if (normalized === "aprovado")
+		return {
+			label: "Aprovado",
+			className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+		};
+	if (normalized === "reprovado")
+		return {
+			label: "Reprovado",
+			className: "bg-red-50 text-red-700 border-red-200",
+		};
+	if (normalized === "ajuste_solicitado")
+		return {
+			label: "Ajuste solicitado",
+			className: "bg-blue-50 text-blue-700 border-blue-200",
+		};
+	if (normalized === "expirado")
+		return {
+			label: "Expirado",
+			className: "bg-slate-100 text-slate-600 border-slate-200",
+		};
+	return {
+		label: "Pendente",
+		className: "bg-amber-50 text-amber-800 border-amber-200",
+	};
+}
+
+function normalizeBudgetEmail(value) {
+	return String(value || "")
+		.trim()
+		.toLowerCase();
+}
+
+function getCurrentUserBudgetEmail(user = {}) {
+	return normalizeBudgetEmail(
+		user.email || user.profile?.email || user.user?.email,
+	);
+}
+
+function isBudgetCenterResponsible(user, center = {}) {
+	const userEmail = getCurrentUserBudgetEmail(user);
+	return Boolean(
+		userEmail && normalizeBudgetEmail(center.emailResponsavel) === userEmail,
+	);
+}
+
+function BudgetApprovalDecisionModal({ approval, action, onClose, onConfirm }) {
+	const [note, setNote] = useState("");
+	const isReject = action === "reprovado";
+	const isAdjust = action === "ajuste_solicitado";
+	const title = isReject
+		? "Reprovar aprovação"
+		: isAdjust
+			? "Solicitar ajuste"
+			: "Aprovar solicitação";
+	const description = isReject
+		? "Informe o motivo da recusa para manter o histórico e preparar o e-mail ao responsável."
+		: isAdjust
+			? "Descreva o ajuste necessário antes de liberar esta despesa."
+			: "Registre uma observação opcional para auditoria.";
+
+	return (
+		<ModalShell
+			title={title}
+			description={description}
+			icon={isReject ? <X size={20} /> : <ClipboardCheck size={20} />}
+			onClose={onClose}
+			size="lg"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={() => onConfirm(note)}
+						className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-black text-white ${isReject ? "bg-red-600 hover:bg-red-700" : isAdjust ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
+					>
+						Confirmar
+					</button>
+				</div>
+			}
+		>
+			<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700">
+				<p className="font-black text-slate-950">
+					{approval.center?.nome || approval.centerId}
+				</p>
+				<p className="mt-1">
+					Estouro: {brl.format(approval.overflow || 0)} · Uso:{" "}
+					{decimal.format(approval.percent || 0)}%
+				</p>
+			</div>
+			<label className="mt-4 block space-y-2 text-xs font-black uppercase text-slate-500">
+				Observação / motivo
+				<textarea
+					value={note}
+					onChange={(event) => setNote(event.target.value)}
+					rows={5}
+					className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm normal-case font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+					placeholder={
+						isReject
+							? "Ex: Despesa recusada por ultrapassar o orçamento aprovado para o período."
+							: "Digite uma observação para auditoria."
+					}
+				/>
+			</label>
+		</ModalShell>
+	);
+}
+
+function BudgetApprovalEmailModal({ approval, onClose, onFakeSend }) {
+	const center = approval.center || {};
+	const recipient = center.emailResponsavel || "responsavel@empresa.com.br";
+	const subject = `Reprovação de despesa - ${center.nome || approval.centerId}`;
+	const body = [
+		`Olá, ${center.responsavel || "responsável"}.`,
+		"",
+		`A solicitação vinculada ao centro de custo ${center.nome || approval.centerId} foi reprovada na gestão orçamentária.`,
+		"",
+		`Orçado: ${brl.format(approval.budgeted || 0)}`,
+		`Realizado + comprometido: ${brl.format(approval.used || 0)}`,
+		`Estouro: ${brl.format(approval.overflow || 0)}`,
+		`Consumo: ${decimal.format(approval.percent || 0)}%`,
+		"",
+		`Motivo da recusa: ${approval.note || "Não informado."}`,
+		"",
+		"Por favor, revise o lançamento ou ajuste o orçamento antes de solicitar nova aprovação.",
+	].join("\n");
+
+	return (
+		<ModalShell
+			title="E-mail ao responsável"
+			description="Prévia do e-mail de recusa. Nesta fase de testes o envio real está bloqueado."
+			icon={<Mail size={20} />}
+			onClose={onClose}
+			size="2xl"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Fechar
+					</button>
+					<button
+						type="button"
+						onClick={onFakeSend}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700"
+					>
+						<Mail size={16} /> Enviar e-mail
+					</button>
+				</div>
+			}
+		>
+			<div className="grid gap-3 text-sm font-bold text-slate-700">
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+					<span className="font-black text-slate-950">Para:</span> {recipient}
+				</div>
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+					<span className="font-black text-slate-950">Assunto:</span> {subject}
+				</div>
+				<pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800">
+					{body}
+				</pre>
+			</div>
+		</ModalShell>
+	);
+}
+
+function BudgetCenterPendenciesModal({
+	center,
+	approvals = [],
+	saving,
+	onClose,
+	onSubmit,
+}) {
+	const [selectedId, setSelectedId] = useState(approvals[0]?.id || "");
+	const [note, setNote] = useState("");
+	const selectedApproval =
+		approvals.find((approval) => approval.id === selectedId) ||
+		approvals[0] ||
+		null;
+
+	return (
+		<ModalShell
+			title="Pendências do centro"
+			description="Revise a recusa ou solicitação de ajuste e reenvie para análise do financeiro."
+			icon={<AlertTriangle size={20} />}
+			onClose={onClose}
+			size="xl"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Fechar
+					</button>
+					<button
+						type="button"
+						onClick={() => selectedApproval && onSubmit(selectedApproval, note)}
+						disabled={!selectedApproval || saving}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						{saving ? (
+							<Loader2 size={16} className="animate-spin" />
+						) : (
+							<RefreshCw size={16} />
+						)}
+						Reenviar ajuste
+					</button>
+				</div>
+			}
+		>
+			<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+				<p className="text-xs font-black uppercase tracking-wide text-blue-700">
+					{center.codigo || center.id}
+				</p>
+				<h3 className="mt-1 text-lg font-black text-slate-950">
+					{center.nome}
+				</h3>
+				<p className="text-sm font-bold text-slate-500">
+					{center.responsavel || "Sem responsável"} ·{" "}
+					{center.emailResponsavel || "sem e-mail"}
+				</p>
+			</div>
+			<div className="mt-4 grid gap-3">
+				{approvals.map((approval) => {
+					const status = budgetApprovalStatusMeta(approval.status);
+					const isSelected = approval.id === selectedApproval?.id;
+					return (
+						<button
+							key={approval.id}
+							type="button"
+							onClick={() => setSelectedId(approval.id)}
+							className={`rounded-2xl border p-4 text-left transition ${isSelected ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+						>
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+									{approval.id}
+								</span>
+								<span
+									className={`rounded-full border px-3 py-1 text-xs font-black ${status.className}`}
+								>
+									{status.label}
+								</span>
+							</div>
+							<p className="mt-2 text-sm font-black text-slate-950">
+								Uso: {decimal.format(approval.percent || 0)}% · Estouro:{" "}
+								{brl.format(approval.overflow || 0)}
+							</p>
+							<p className="mt-1 text-xs font-bold text-slate-600">
+								Motivo:{" "}
+								{approval.note ||
+									approval.reason ||
+									"Ajuste solicitado pelo financeiro."}
+							</p>
+						</button>
+					);
+				})}
+			</div>
+			<label className="mt-4 block space-y-2 text-xs font-black uppercase text-slate-500">
+				O que foi ajustado?
+				<textarea
+					value={note}
+					onChange={(event) => setNote(event.target.value)}
+					rows={5}
+					className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm normal-case font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+					placeholder="Ex: Revisei o lançamento, anexei justificativa e solicito nova análise."
+				/>
+			</label>
+		</ModalShell>
+	);
+}
+
+function DreTransactionDrawer({
+	row,
+	movements = [],
+	accountById = new Map(),
+	centerById = new Map(),
+	onClose,
+}) {
+	const total = movements.reduce(
+		(sum, movement) => sum + movementValue(movement),
+		0,
+	);
+	return (
+		<div
+			className="fixed inset-0 z-layout-modal flex justify-end bg-slate-950/50 backdrop-blur-sm"
+			role="presentation"
+		>
+			<button
+				type="button"
+				className="absolute inset-0 cursor-default"
+				onClick={onClose}
+				aria-label="Fechar extrato"
+			/>
+			<aside className="relative flex h-full w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl">
+				<header className="shrink-0 border-b border-slate-100 bg-gradient-to-br from-blue-950 to-blue-700 p-5 text-white">
+					<div className="flex items-start justify-between gap-3">
+						<div>
+							<p className="text-xs font-black uppercase tracking-[0.2em] text-blue-100">
+								Extrato da linha
+							</p>
+							<h2 className="mt-2 text-xl font-black">
+								{budgetAccountLabel(row.account, row.row?.accountId)}
+							</h2>
+							<p className="mt-1 text-sm font-bold text-blue-100">
+								{budgetCenterCompactLabel(row.center, row.row?.costCenterId)}
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={onClose}
+							className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+							aria-label="Fechar"
+						>
+							<X size={22} />
+						</button>
+					</div>
+					<div className="mt-4 grid gap-3 sm:grid-cols-3">
+						<div className="rounded-2xl bg-white/10 p-3">
+							<p className="text-xs font-bold text-blue-100">Lançamentos</p>
+							<p className="text-lg font-black">
+								{integer.format(movements.length)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-white/10 p-3">
+							<p className="text-xs font-bold text-blue-100">Total</p>
+							<p className="text-lg font-black">{brl.format(total)}</p>
+						</div>
+						<div className="rounded-2xl bg-white/10 p-3">
+							<p className="text-xs font-bold text-blue-100">Orçado</p>
+							<p className="text-lg font-black">
+								{brl.format(row.planned || 0)}
+							</p>
+						</div>
+					</div>
+				</header>
+				<div className="min-h-0 flex-1 overflow-y-auto p-4">
+					<div className="grid gap-3">
+						{movements.length ? (
+							movements.map((movement, index) => {
+								const account = accountById.get(movement.accountId);
+								const center = centerById.get(movement.centerId);
+								return (
+									<article
+										key={movement.id || index}
+										className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+									>
+										<div className="flex flex-wrap items-start justify-between gap-3">
+											<div>
+												<p className="text-sm font-black text-slate-950">
+													{movement.supplier || "Fornecedor não informado"}
+												</p>
+												<p className="mt-1 text-xs font-bold text-slate-500">
+													{[movement.year, budgetMonthName(movement.month)]
+														.filter(Boolean)
+														.join(" - ") || "Sem data"}
+												</p>
+											</div>
+											<p className="text-base font-black text-blue-700">
+												{brl.format(movementValue(movement))}
+											</p>
+										</div>
+										<dl className="mt-3 grid gap-2 text-xs font-bold text-slate-600 sm:grid-cols-2">
+											<div className="rounded-xl bg-slate-50 p-2">
+												<dt className="text-slate-400">Conta</dt>
+												<dd>
+													{budgetAccountLabel(
+														account,
+														movement.accountId || "-",
+													)}
+												</dd>
+											</div>
+											<div className="rounded-xl bg-slate-50 p-2">
+												<dt className="text-slate-400">Centro</dt>
+												<dd>
+													{budgetCenterCompactLabel(
+														center,
+														movement.centerId || "-",
+													)}
+												</dd>
+											</div>
+											<div className="rounded-xl bg-slate-50 p-2">
+												<dt className="text-slate-400">Título</dt>
+												<dd>{movement.titulo || movement.title || "-"}</dd>
+											</div>
+											<div className="rounded-xl bg-slate-50 p-2">
+												<dt className="text-slate-400">Tipo</dt>
+												<dd>{movement.tipo || movement.type || "-"}</dd>
+											</div>
+										</dl>
+									</article>
+								);
+							})
+						) : (
+							<EmptyState text="Nenhum lançamento individual encontrado para esta linha no período." />
+						)}
+					</div>
+				</div>
+			</aside>
+		</div>
+	);
+}
+
+function DreAccountDetailModal({
+	group,
+	elapsedDays = 1,
+	daysInMonth = 31,
+	rowStatus,
+	sparklineFor,
+	onClose,
+	onExtract,
+	onTransfer,
+	onJustify,
+}) {
+	if (!group) return null;
+	return (
+		<ModalShell
+			title={budgetAccountLabel(group.account, group.id)}
+			description={`${integer.format(group.rows.length)} centro(s) de custo vinculados a esta conta financeira.`}
+			icon={<FileText size={20} />}
+			onClose={onClose}
+			size="full"
+			bodyClassName="py-3 sm:px-5"
+			headerClassName="py-3 sm:px-5"
+		>
+			<div className="grid gap-3 sm:grid-cols-4">
+				<div className="rounded-2xl border border-blue-100 bg-blue-50 p-3">
+					<p className="text-xs font-black uppercase text-blue-700">Orçado</p>
+					<p className="mt-1 text-lg font-black text-slate-950">
+						{brl.format(group.planned)}
+					</p>
+				</div>
+				<div className="rounded-2xl border border-violet-100 bg-violet-50 p-3">
+					<p className="text-xs font-black uppercase text-violet-700">
+						Realizado
+					</p>
+					<p className="mt-1 text-lg font-black text-slate-950">
+						{brl.format(group.realized)}
+					</p>
+				</div>
+				<div className="rounded-2xl border border-amber-100 bg-amber-50 p-3">
+					<p className="text-xs font-black uppercase text-amber-700">
+						Comprometido
+					</p>
+					<p className="mt-1 text-lg font-black text-slate-950">
+						{brl.format(group.committed)}
+					</p>
+				</div>
+				<div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+					<p className="text-xs font-black uppercase text-emerald-700">
+						Forecast
+					</p>
+					<p className="mt-1 text-lg font-black text-slate-950">
+						{brl.format(
+							elapsedDays
+								? ((group.realized + group.committed) / elapsedDays) *
+										daysInMonth
+								: group.realized + group.committed,
+						)}
+					</p>
+				</div>
+			</div>
+			<div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+				<table className="min-w-[1180px] text-left text-xs font-bold">
+					<thead className="bg-slate-50 uppercase text-slate-500">
+						<tr>
+							<th className="px-3 py-2">Centro</th>
+							<th className="px-3 py-2">Status</th>
+							<th className="px-3 py-2 text-right">Orçado</th>
+							<th className="px-3 py-2 text-right">Realiz.</th>
+							<th className="px-3 py-2 text-right">Comp.</th>
+							<th className="px-3 py-2 text-right">Forecast</th>
+							<th className="px-3 py-2 text-right">Run Rate</th>
+							<th className="px-3 py-2 text-right">Desvio</th>
+							<th className="px-3 py-2">6 meses</th>
+							<th className="px-3 py-2 text-right">Ações</th>
+						</tr>
+					</thead>
+					<tbody className="divide-y divide-slate-100">
+						{group.rows.map((item) => {
+							const committed = Number(item.center?.comprometidoMes || 0);
+							const used = Number(item.realized || 0) + committed;
+							const forecast = elapsedDays
+								? (used / elapsedDays) * daysInMonth
+								: used;
+							const runRate = used / Math.max(1, elapsedDays);
+							const variance = budgetVarianceMeta(item.planned, used);
+							const status = rowStatus({ ...item, realized: used });
+							const sparkline = sparklineFor(item);
+							const needsJustification =
+								item.planned && used > item.planned * 1.1;
+							return (
+								<tr key={item.row.id} className="bg-white hover:bg-blue-50/30">
+									<td className="px-3 py-2">
+										<button
+											type="button"
+											onClick={() => onExtract(item)}
+											className="max-w-[220px] truncate text-left font-black text-slate-900 hover:text-blue-700"
+										>
+											{budgetCenterCompactLabel(
+												item.center,
+												item.row.costCenterId,
+											)}
+										</button>
+										<p className="mt-0.5 max-w-[220px] truncate text-[11px] text-slate-500">
+											{item.center?.responsavel || "Responsável não informado"}
+										</p>
+									</td>
+									<td className="px-3 py-2">
+										<span
+											className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-black ring-1 ${status.className}`}
+										>
+											<span
+												className={`h-1.5 w-1.5 rounded-full ${status.dot}`}
+											/>{" "}
+											{status.label}
+										</span>
+									</td>
+									<td className="px-3 py-2 text-right text-slate-700">
+										{brl.format(item.planned)}
+									</td>
+									<td className="px-3 py-2 text-right text-slate-700">
+										{brl.format(item.realized)}
+									</td>
+									<td className="px-3 py-2 text-right text-slate-700">
+										{brl.format(committed)}
+									</td>
+									<td
+										className={`px-3 py-2 text-right font-black ${forecast > item.planned ? "text-red-600" : "text-emerald-600"}`}
+									>
+										{brl.format(forecast)}
+									</td>
+									<td className="px-3 py-2 text-right text-slate-700">
+										{brl.format(runRate)}
+									</td>
+									<td
+										className={`px-3 py-2 text-right font-black ${variance.textClass}`}
+									>
+										{brl.format(variance.variance)}
+										<br />
+										<span className="text-[10px]">
+											{decimal.format(variance.percent)}%
+										</span>
+									</td>
+									<td className="px-3 py-2">
+										<div className="flex h-9 items-end gap-1">
+											{sparkline.map((bar) => (
+												<span
+													key={bar.index}
+													title={brl.format(bar.value)}
+													className="w-2 rounded-t bg-gradient-to-t from-blue-600 to-cyan-300"
+													style={{ height: `${bar.height}px` }}
+												/>
+											))}
+										</div>
+									</td>
+									<td className="px-3 py-2">
+										<div className="flex justify-end gap-1.5">
+											<button
+												type="button"
+												onClick={() => onExtract(item)}
+												className="rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-black text-blue-700 hover:bg-blue-50"
+											>
+												Extrato
+											</button>
+											<button
+												type="button"
+												onClick={() => onTransfer(item)}
+												className="rounded-lg border border-emerald-200 px-2 py-1.5 text-[11px] font-black text-emerald-700 hover:bg-emerald-50"
+											>
+												Verba
+											</button>
+											{needsJustification ? (
+												<button
+													type="button"
+													onClick={() => onJustify(item)}
+													className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] font-black text-amber-800 hover:bg-amber-100"
+												>
+													Justificar
+												</button>
+											) : null}
+										</div>
+									</td>
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
+			</div>
+		</ModalShell>
+	);
+}
+
+function BudgetTransferRequestModal({ row, onClose }) {
+	const [amount, setAmount] = useState("");
+	const [fromAccount, setFromAccount] = useState("");
+	const [reason, setReason] = useState("");
+	return (
+		<ModalShell
+			title="Solicitar transferência de verba"
+			description="Registre uma solicitação para mover saldo de uma conta com folga para cobrir déficit desta linha."
+			icon={<Repeat2 size={20} />}
+			onClose={onClose}
+			size="2xl"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center rounded-xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700"
+					>
+						Registrar solicitação
+					</button>
+				</div>
+			}
+		>
+			<div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+				<p className="text-xs font-black uppercase text-emerald-700">Destino</p>
+				<p className="mt-1 text-base font-black text-slate-950">
+					{budgetAccountLabel(row.account, row.row?.accountId)}
+				</p>
+				<p className="text-sm font-bold text-slate-600">
+					{budgetCenterCompactLabel(row.center, row.row?.costCenterId)}
+				</p>
+			</div>
+			<div className="mt-4 grid gap-3 sm:grid-cols-2">
+				<label className="space-y-2 text-xs font-black uppercase text-slate-500">
+					Conta origem com folga
+					<input
+						value={fromAccount}
+						onChange={(event) => setFromAccount(event.target.value)}
+						className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+						placeholder="Ex: Financeiro"
+					/>
+				</label>
+				<label className="space-y-2 text-xs font-black uppercase text-slate-500">
+					Valor
+					<input
+						value={amount}
+						onChange={(event) => setAmount(event.target.value)}
+						className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+						placeholder="R$ 0,00"
+					/>
+				</label>
+			</div>
+			<label className="mt-4 block space-y-2 text-xs font-black uppercase text-slate-500">
+				Justificativa
+				<textarea
+					value={reason}
+					onChange={(event) => setReason(event.target.value)}
+					rows={4}
+					className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+					placeholder="Explique o motivo da transferência."
+				/>
+			</label>
+		</ModalShell>
+	);
+}
+
+function BudgetDeviationJustificationModal({ row, onClose }) {
+	const [text, setText] = useState("");
+	return (
+		<ModalShell
+			title="Justificativa de desvio"
+			description="Contas com desvio acima do limite tolerável precisam de uma justificativa para auditoria."
+			icon={<AlertTriangle size={20} />}
+			onClose={onClose}
+			size="2xl"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={onClose}
+						disabled={!text.trim()}
+						className="inline-flex min-h-11 items-center rounded-xl bg-amber-500 px-4 text-sm font-black text-white hover:bg-amber-600 disabled:opacity-50"
+					>
+						Salvar justificativa
+					</button>
+				</div>
+			}
+		>
+			<div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+				<p className="text-xs font-black uppercase text-amber-700">
+					Linha em alerta
+				</p>
+				<p className="mt-1 text-base font-black text-slate-950">
+					{budgetAccountLabel(row.account, row.row?.accountId)}
+				</p>
+				<p className="text-sm font-bold text-slate-600">
+					{budgetCenterCompactLabel(row.center, row.row?.costCenterId)}
+				</p>
+			</div>
+			<label className="mt-4 block space-y-2 text-xs font-black uppercase text-slate-500">
+				Justificativa obrigatória
+				<textarea
+					value={text}
+					onChange={(event) => setText(event.target.value)}
+					rows={6}
+					className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100"
+					placeholder="Ex: aumento pontual por ajuste de contrato, cobrança retroativa ou fatura represada."
+				/>
+			</label>
+		</ModalShell>
+	);
+}
+
+function BudgetOperationalPage({
+	page,
+	config,
+	loading,
+	canManage,
+	onConfigUpdated,
+	selectedPeriod,
+}) {
+	const { currentUser } = useAuthContext();
+	const insights = useMemo(
+		() => getBudgetInsights(config, selectedPeriod),
+		[config, selectedPeriod],
+	);
+	const [modalState, setModalState] = useState(null);
+	const [approvalDecision, setApprovalDecision] = useState(null);
+	const [approvalEmail, setApprovalEmail] = useState(null);
+	const [approvalListDetail, setApprovalListDetail] = useState(null);
+	const [pendenciesState, setPendenciesState] = useState(null);
+	const [analyticChildrenModal, setAnalyticChildrenModal] = useState(null);
+	const [dashboardDetail, setDashboardDetail] = useState(null);
+	const [dashboardDetailPage, setDashboardDetailPage] = useState(1);
+	const [centerPage, setCenterPage] = useState(1);
+	const [dreAccountDetail, setDreAccountDetail] = useState(null);
+	const [dreDrawer, setDreDrawer] = useState(null);
+	const [transferRequest, setTransferRequest] = useState(null);
+	const [deviationJustification, setDeviationJustification] = useState(null);
+	const [saving, setSaving] = useState(false);
+	const [feedback, setFeedback] = useState(null);
+	useEffect(() => {
+		setDashboardDetailPage(1);
+	}, [dashboardDetail]);
+	const saveOperationalConfig = async (nextConfig) => {
+		setSaving(true);
+		try {
+			const response = await salvarCentrosCustoOrcamentoFinanceiro(nextConfig);
+			onConfigUpdated?.(response.config || nextConfig);
+			setModalState(null);
+			return response.config || nextConfig;
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao salvar centro de custo.",
+			);
+			setFeedback({
+				type: "error",
+				title: "Erro ao salvar centro",
+				...visibleError,
+			});
+			return null;
+		} finally {
+			setSaving(false);
+		}
+	};
+	const upsertOperationalCenter = (center) => {
+		const currentCenters = config.centers || [];
+		const existingIndex = currentCenters.findIndex(
+			(item) => item.id === center.id || item.codigo === center.codigo,
+		);
+		const nextCenters =
+			existingIndex >= 0
+				? currentCenters.map((item, index) =>
+						index === existingIndex ? center : item,
+					)
+				: [...currentCenters, center];
+		saveOperationalConfig({ ...config, centers: nextCenters });
+	};
+	const removeOperationalCenter = (centerId) => {
+		if (!window.confirm("Deseja excluir este centro de custo?")) return;
+		saveOperationalConfig({
+			...config,
+			centers: (config.centers || []).filter(
+				(center) => center.id !== centerId,
+			),
+		});
+	};
+	const updateApprovalStatus = async (approval, nextStatus, note = "") => {
+		setSaving(true);
+		try {
+			const response = await atualizarAprovacaoOrcamentoFinanceiro(
+				approval.id,
+				{ status: nextStatus, action: nextStatus, note, approval },
+			);
+			const saved = response.config || config;
+			onConfigUpdated?.(saved);
+			setApprovalDecision(null);
+			setFeedback({
+				type: "success",
+				title: "Aprovação atualizada",
+				message:
+					nextStatus === "aprovado"
+						? "Solicitação aprovada com sucesso."
+						: nextStatus === "reprovado"
+							? "Solicitação reprovada com sucesso."
+							: "Ajuste solicitado com sucesso.",
+			});
+			if (nextStatus === "reprovado") {
+				const savedApproval =
+					(saved.approvals || []).find((item) => item.id === approval.id) ||
+					response.approval ||
+					approval;
+				setApprovalEmail({ ...savedApproval, center: approval.center });
+			}
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Não foi possível atualizar a aprovação.",
+			);
+			setFeedback({
+				type: "error",
+				title: "Erro na aprovação",
+				...visibleError,
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
+	const resendApprovalAdjustment = async (approval, note = "") => {
+		setSaving(true);
+		try {
+			const response = await atualizarAprovacaoOrcamentoFinanceiro(
+				approval.id,
+				{ status: "pendente", action: "ajuste_reenviado", note, approval },
+			);
+			onConfigUpdated?.(response.config || config);
+			setPendenciesState(null);
+			setFeedback({
+				type: "success",
+				title: "Pendência reenviada",
+				message: "O ajuste voltou para análise do financeiro.",
+			});
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Não foi possível reenviar a pendência.",
+			);
+			setFeedback({
+				type: "error",
+				title: "Erro ao reenviar pendência",
+				...visibleError,
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	if (loading) {
+		return (
+			<section className="grid gap-4 md:grid-cols-5">
+				{Array.from({ length: 5 }, (_, index) => (
+					<FinancialKpiCard
+						key={index}
+						item={{ title: "Carregando", value: 0, icon: "BadgeDollarSign" }}
+						loading
+					/>
+				))}
+			</section>
+		);
+	}
+
+	const hasData =
+		insights.accounts.length ||
+		insights.centers.length ||
+		insights.matrix.length;
+	if (!hasData) {
+		return (
+			<section className="rounded-2xl border border-blue-200 bg-blue-50 p-6 shadow-sm">
+				<h2 className="text-lg font-black text-slate-950">
+					Gestão Orçamento pronta para receber dados
+				</h2>
+				<p className="mt-2 max-w-3xl text-sm font-bold leading-relaxed text-blue-900">
+					Cadastre plano de contas, centros de custo e matriz anual em
+					Financeiro &gt; Gestão Orçamento &gt; Configurações. As páginas passam
+					a calcular dashboard, realizado, desvios e aprovações automaticamente
+					com base nesses cadastros.
+				</p>
+				<Link
+					to={ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES}
+					className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700"
+				>
+					Ir para configurações
+				</Link>
+			</section>
+		);
+	}
+
+	const kpis = [
+		{
+			id: "orcado",
+			title:
+				insights.periodLabel === "ano"
+					? "Orçado no ano"
+					: insights.periodLabel === "período"
+						? "Orçado no período"
+						: "Orçado no mês",
+			value: insights.plannedMonth,
+			type: "currency",
+			helper: `${insights.periodDisplayLabel} · ${integer.format(insights.matrix.length)} linha(s) na matriz`,
+			icon: "BadgeDollarSign",
+		},
+		{
+			id: "realizado",
+			title: "Realizado + comprometido",
+			value: insights.realizedMonth + insights.committedMonth,
+			type: "currency",
+			helper: `${insights.periodDisplayLabel} · ${decimal.format(insights.usedPercent)}% consumido`,
+			icon: "Wallet",
+		},
+		{
+			id: "saldo",
+			title: "Saldo disponível",
+			value: insights.availableMonth,
+			type: "currency",
+			helper: insights.availableMonth < 0 ? "Estourado" : "Dentro do orçamento",
+			icon: "CircleDollarSign",
+		},
+		{
+			id: "aprovacoes",
+			title: "Aprovações pendentes",
+			value: insights.approvals.length,
+			type: "integer",
+			helper: "Geradas por estouro/alerta",
+			icon: "ClipboardCheck",
+		},
+		{
+			id: "ano",
+			title: "Budget anual",
+			value: insights.plannedYear,
+			type: "currency",
+			helper: `${integer.format((config.versions || []).length)} versão(ões)`,
+			icon: "Landmark",
+		},
+	];
+	const budgetPeriod = buildBudgetPeriod(selectedPeriod);
+	const budgetPeriodMonths = budgetPeriod.months || [];
+	const firstBudgetMonth = budgetPeriodMonths[0] || {
+		year: new Date().getFullYear(),
+		month: new Date().getMonth() + 1,
+	};
+	const budgetReferenceYear = Number(
+		firstBudgetMonth.year || new Date().getFullYear(),
+	);
+	const budgetReferenceMonth = Math.max(
+		1,
+		Math.min(12, ...budgetPeriodMonths.map((item) => Number(item.month || 1))),
+	);
+	const budgetYtd = insights.monthlyEvolution
+		.filter((item) => Number(item.month || 0) <= budgetReferenceMonth)
+		.reduce((sum, item) => sum + Number(item.planned || 0), 0);
+	const currentDate = new Date();
+	const isCurrentBudgetMonth =
+		budgetPeriodMonths.length === 1 &&
+		budgetReferenceYear === currentDate.getFullYear() &&
+		budgetReferenceMonth === currentDate.getMonth() + 1;
+	const daysInBudgetMonth = new Date(
+		budgetReferenceYear,
+		budgetReferenceMonth,
+		0,
+	).getDate();
+	const elapsedBudgetDays = isCurrentBudgetMonth
+		? currentDate.getDate()
+		: daysInBudgetMonth;
+	const realizedCommitted = insights.realizedMonth + insights.committedMonth;
+	const forecastClosing =
+		isCurrentBudgetMonth && elapsedBudgetDays
+			? (realizedCommitted / elapsedBudgetDays) * daysInBudgetMonth
+			: realizedCommitted;
+	const forecastBalance = insights.plannedMonth - forecastClosing;
+	const expiringContracts = 0;
+	const ytdMonthLabel =
+		budgetMonthName(budgetReferenceMonth).slice(0, 3) || "Atual";
+	const costCenterTopCards = [
+		{
+			id: "cc-orcado",
+			title: "Orçado no Mês",
+			value: insights.plannedMonth,
+			type: "currency",
+			helper: insights.periodDisplayLabel,
+			icon: "BadgeDollarSign",
+			color: "blue",
+		},
+		{
+			id: "cc-realizado",
+			title: "Realizado + Comprometido",
+			value: realizedCommitted,
+			type: "currency",
+			helper: `${decimal.format(insights.usedPercent)}% vs. ${decimal.format(insights.idealPercent)}% do mês decorrido`,
+			icon: "Wallet",
+			color: "violet",
+		},
+		{
+			id: "cc-saldo",
+			title: "Saldo Disponível Mês",
+			value: insights.availableMonth,
+			type: "currency",
+			helper:
+				insights.availableMonth < 0
+					? "Orçamento estourado"
+					: "Dentro do orçamento",
+			icon: "CircleDollarSign",
+			color: insights.availableMonth < 0 ? "amber" : "emerald",
+		},
+		{
+			id: "cc-ytd",
+			title: `Orçamento Jan-${ytdMonthLabel}`,
+			value: budgetYtd,
+			type: "currency",
+			helper: `${brl.format(insights.plannedYear)} total anual`,
+			icon: "Landmark",
+			color: "slate",
+		},
+		{
+			id: "cc-forecast",
+			title: "Forecast de Fechamento",
+			value: forecastClosing,
+			type: "currency",
+			helper:
+				forecastBalance >= 0
+					? `Sobram ${brl.format(forecastBalance)}`
+					: `Estoura ${brl.format(Math.abs(forecastBalance))}`,
+			icon: "Repeat2",
+			color: forecastBalance < 0 ? "rose" : "emerald",
+			trend: {
+				status: forecastBalance < 0 ? "negative" : "positive",
+				direction: forecastBalance < 0 ? "down" : "up",
+				percent: insights.plannedMonth
+					? Math.abs(forecastBalance / insights.plannedMonth) * 100
+					: 0,
+			},
+			trendLabel: forecastBalance < 0 ? "risco" : "previsto",
+		},
+		{
+			id: "cc-alertas",
+			title: "Pendências & Alertas",
+			value: insights.approvals.length,
+			type: "integer",
+			helper: `${integer.format(insights.approvals.length)} aprovações / ${integer.format(expiringContracts)} contratos a vencer`,
+			icon: "AlertTriangle",
+			color:
+				insights.approvals.length || expiringContracts ? "amber" : "emerald",
+			trend: {
+				status:
+					insights.approvals.length || expiringContracts
+						? "negative"
+						: "positive",
+				direction:
+					insights.approvals.length || expiringContracts ? "up" : "down",
+				percent: insights.approvals.length + expiringContracts,
+			},
+			trendLabel:
+				insights.approvals.length || expiringContracts
+					? "atenção"
+					: "sem riscos",
+		},
+	];
+	const responsibleOnly = !canManage;
+	const visibleCenterRows = responsibleOnly
+		? insights.centerRows.filter(({ center }) =>
+				isBudgetCenterResponsible(currentUser, center),
+			)
+		: insights.centerRows;
+	const rowByCenterId = new Map(
+		visibleCenterRows.map((row) => [row.center?.id, row]),
+	);
+	const allRowByCenterId = new Map(
+		insights.centerRows.map((row) => [row.center?.id, row]),
+	);
+	const sortedOperationalCenters = [...(config.centers || [])].sort(
+		(left, right) => {
+			const leftInactive = isCenterInactive(left) ? 1 : 0;
+			const rightInactive = isCenterInactive(right) ? 1 : 0;
+			if (leftInactive !== rightInactive) return leftInactive - rightInactive;
+			return String(
+				left.classificacao || left.codigo || left.nome,
+			).localeCompare(
+				String(right.classificacao || right.codigo || right.nome),
+				"pt-BR",
+				{ numeric: true },
+			);
+		},
+	);
+	const operationalCenterByKey = new Map();
+	sortedOperationalCenters.forEach((center) => {
+		if (center.id) operationalCenterByKey.set(center.id, center);
+		if (center.codigo) operationalCenterByKey.set(center.codigo, center);
+		if (center.reduzida)
+			operationalCenterByKey.set(
+				String(center.reduzida).replace(/\D+/g, ""),
+				center,
+			);
+	});
+	const operationalCategoriesByCode = new Map(
+		sortedOperationalCenters
+			.filter((center) => Number(center.nivel || 0) === 2)
+			.map((center) => [center.codigo || center.id, center]),
+	);
+	const operationalChildrenByParent = new Map();
+	sortedOperationalCenters
+		.filter((center) => center.tipoPlano === "A")
+		.forEach((center) => {
+			const parentKey = center.parentId || center.parentCodigo;
+			if (!parentKey) return;
+			const currentChildren = operationalChildrenByParent.get(parentKey) || [];
+			currentChildren.push(center);
+			operationalChildrenByParent.set(parentKey, currentChildren);
+		});
+	const metricForCenter = (center, sourceMap = allRowByCenterId) => {
+		const row = sourceMap.get(center?.id);
+		if (row) return row;
+		const planned = Number(center?.valorMensal || center?.orcamentoMensal || 0);
+		const realized = Number(
+			center?.realizadoImportado || center?.realizadoMes || 0,
+		);
+		const deviation = realized - planned;
+		return {
+			center,
+			planned,
+			realized,
+			deviation,
+			percent: planned ? (realized / planned) * 100 : 0,
+		};
+	};
+	const visibleCenterIdSet = new Set(
+		visibleCenterRows.map(({ center }) => center?.id).filter(Boolean),
+	);
+	const operationalCenterGroups = sortedOperationalCenters
+		.filter(
+			(center) => center.tipoPlano === "S" && Number(center.nivel || 0) > 2,
+		)
+		.map((center) => {
+			const category =
+				operationalCategoriesByCode.get(center.categoriaCodigo) ||
+				operationalCenterByKey.get(center.categoriaCodigo);
+			const rawChildren = [
+				...(operationalChildrenByParent.get(center.id) || []),
+				...(center.codigo && center.codigo !== center.id
+					? operationalChildrenByParent.get(center.codigo) || []
+					: []),
+			]
+				.filter(
+					(child, index, items) =>
+						items.findIndex((item) => item.id === child.id) === index,
+				)
+				.sort((left, right) => {
+					const leftInactive = isCenterInactive(left) ? 1 : 0;
+					const rightInactive = isCenterInactive(right) ? 1 : 0;
+					if (leftInactive !== rightInactive)
+						return leftInactive - rightInactive;
+					return String(
+						left.classificacao || left.codigo || left.nome,
+					).localeCompare(
+						String(right.classificacao || right.codigo || right.nome),
+						"pt-BR",
+						{ numeric: true },
+					);
+				});
+			const children = responsibleOnly
+				? rawChildren.filter((child) => visibleCenterIdSet.has(child.id))
+				: rawChildren;
+			const parentVisible =
+				!responsibleOnly ||
+				visibleCenterIdSet.has(center.id) ||
+				children.length > 0;
+			if (!parentVisible) return null;
+			const aggregateSource = responsibleOnly ? children : rawChildren;
+			const aggregate = aggregateSource.reduce(
+				(acc, child) => {
+					const metric = metricForCenter(
+						child,
+						responsibleOnly ? rowByCenterId : allRowByCenterId,
+					);
+					acc.planned += Number(metric.planned || 0);
+					acc.realized += Number(metric.realized || 0);
+					return acc;
+				},
+				{ planned: 0, realized: 0 },
+			);
+			aggregate.deviation = aggregate.realized - aggregate.planned;
+			aggregate.percent = aggregate.planned
+				? (aggregate.realized / aggregate.planned) * 100
+				: 0;
+			return {
+				center,
+				category,
+				children,
+				aggregateChildren: rawChildren,
+				totalChildren: rawChildren.length,
+				aggregate,
+			};
+		})
+		.filter(Boolean);
+	const centerPageSize = 12;
+	const centerTotalPages = Math.max(
+		1,
+		Math.ceil(operationalCenterGroups.length / centerPageSize),
+	);
+	const safeCenterPage = Math.min(centerPage, centerTotalPages);
+	const paginatedOperationalGroups = operationalCenterGroups.slice(
+		(safeCenterPage - 1) * centerPageSize,
+		safeCenterPage * centerPageSize,
+	);
+
+	if (responsibleOnly && page !== "orcamentoCentrosCusto") {
+		return (
+			<section className="rounded-2xl border border-blue-200 bg-blue-50 p-6 shadow-sm">
+				<h2 className="text-lg font-black text-slate-950">
+					Acesso limitado aos seus centros de custo
+				</h2>
+				<p className="mt-2 max-w-3xl text-sm font-bold leading-relaxed text-blue-900">
+					Seu usuário pode acompanhar apenas os centros de custo vinculados ao
+					seu e-mail e reenviar pendências solicitadas pelo financeiro.
+				</p>
+				<Link
+					to={ROUTES.FINANCEIRO_ORCAMENTO_CENTROS_CUSTO}
+					className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700"
+				>
+					Ir para centros de custo
+				</Link>
+			</section>
+		);
+	}
+
+	if (page === "orcamentoAprovacoes") {
+		const approvalsToShow = insights.approvalsAll || insights.approvals;
+		const statusKey = (value) => String(value || "pendente").toLowerCase();
+		const acceptedApprovals = approvalsToShow.filter(
+			(item) => statusKey(item.status) === "aprovado",
+		);
+		const pendingApprovals = approvalsToShow.filter(
+			(item) => statusKey(item.status) === "pendente",
+		);
+		const refusedApprovals = approvalsToShow.filter((item) =>
+			["reprovado", "recusado", "ajuste_solicitado"].includes(
+				statusKey(item.status),
+			),
+		);
+		const approvalSummaryCards = [
+			{
+				id: "accepted",
+				title: "Aprovações aceitas",
+				value: acceptedApprovals.length,
+				type: "integer",
+				helper: "Solicitações aprovadas",
+				icon: "CheckCircle2",
+				color: "emerald",
+				hideTrend: true,
+			},
+			{
+				id: "pending",
+				title: "Aprovações pendentes",
+				value: pendingApprovals.length,
+				type: "integer",
+				helper: "Aguardando decisão",
+				icon: "ClipboardCheck",
+				color: pendingApprovals.length ? "amber" : "blue",
+				hideTrend: true,
+			},
+			{
+				id: "refused",
+				title: "Aprovações recusadas",
+				value: refusedApprovals.length,
+				type: "integer",
+				helper: "Reprovadas ou com ajuste solicitado",
+				icon: "AlertTriangle",
+				color: refusedApprovals.length ? "rose" : "slate",
+				hideTrend: true,
+			},
+		];
+		const renderApprovalCard = (item) => {
+			const status = budgetApprovalStatusMeta(item.status);
+			return (
+				<article
+					key={item.id}
+					className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+				>
+					<div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-start">
+						<div>
+							<div className="flex flex-wrap items-center gap-2">
+								<p className="text-xs font-black uppercase tracking-wide text-amber-700">
+									{item.id}
+								</p>
+								<span
+									className={`rounded-full border px-3 py-1 text-xs font-black ${status.className}`}
+								>
+									{status.label}
+								</span>
+							</div>
+							<h3 className="mt-2 text-base font-black text-slate-950">
+								{item.center?.nome || item.centerId}
+							</h3>
+							<p className="text-xs font-bold text-slate-600">
+								Responsável: {item.center?.responsavel || "Não informado"} ·
+								Motivo: {item.reason || "Estouro de orçamento"}
+							</p>
+						</div>
+						<div className="text-right text-sm font-black text-slate-950">
+							<p>
+								{brl.format(item.used || 0)} /{" "}
+								{brl.format(item.centerPlanned || item.budgeted || 0)}
+							</p>
+							<p className="text-xs text-red-600">
+								Estouro: {brl.format(item.overflow || 0)} ·{" "}
+								{decimal.format(item.percent || 0)}%
+							</p>
+						</div>
+					</div>
+					{item.note ? (
+						<p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600">
+							Motivo/observação: {item.note}
+						</p>
+					) : null}
+					<div className="mt-4 flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={() =>
+								setApprovalDecision({ approval: item, action: "aprovado" })
+							}
+							disabled={!canManage || saving || item.status !== "pendente"}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 px-3 text-xs font-black text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+						>
+							<CheckCircle2 size={14} /> Aprovar
+						</button>
+						<button
+							type="button"
+							onClick={() =>
+								setApprovalDecision({ approval: item, action: "reprovado" })
+							}
+							disabled={!canManage || saving || item.status !== "pendente"}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-red-200 px-3 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+						>
+							<X size={14} /> Reprovar
+						</button>
+						<button
+							type="button"
+							onClick={() =>
+								setApprovalDecision({
+									approval: item,
+									action: "ajuste_solicitado",
+								})
+							}
+							disabled={!canManage || saving || item.status !== "pendente"}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+						>
+							<Pencil size={14} /> Solicitar ajuste
+						</button>
+						{item.status === "reprovado" ? (
+							<button
+								type="button"
+								onClick={() => setApprovalEmail(item)}
+								className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50"
+							>
+								<Mail size={14} /> Enviar e-mail
+							</button>
+						) : null}
+					</div>
+				</article>
+			);
+		};
+		const approvalListSections = [
+			{
+				id: "pending",
+				title: "Aprovações geradas pelo orçamento",
+				description:
+					"Quando o realizado/comprometido atinge o alerta ou ultrapassa o limite do centro de custo, aparece aqui para aprovação.",
+				items: pendingApprovals,
+				empty: "Nenhuma aprovação pendente com os dados atuais.",
+				color: "amber",
+			},
+			{
+				id: "accepted",
+				title: "Aprovações aceitas",
+				description: "Solicitações já aprovadas pelo financeiro.",
+				items: acceptedApprovals,
+				empty: "Nenhuma aprovação aceita no período.",
+				color: "emerald",
+			},
+			{
+				id: "refused",
+				title: "Aprovações recusadas",
+				description: "Solicitações reprovadas ou devolvidas para ajuste.",
+				items: refusedApprovals,
+				empty: "Nenhuma aprovação recusada no período.",
+				color: "rose",
+			},
+		];
+		return (
+			<section className="space-y-4">
+				<section className="grid gap-4 md:grid-cols-3">
+					{approvalSummaryCards.map((item) => (
+						<FinancialKpiCard key={item.id} item={item} />
+					))}
+				</section>
+				{approvalListSections.map((section) => (
+					<section
+						key={section.id}
+						className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+					>
+						<div className="flex flex-wrap items-start justify-between gap-3">
+							<div>
+								<h2 className="text-lg font-black text-slate-950">
+									{section.title}
+								</h2>
+								<p className="mt-1 text-sm font-bold text-slate-500">
+									{section.description}
+								</p>
+							</div>
+							{section.items.length > 5 ? (
+								<button
+									type="button"
+									onClick={() => setApprovalListDetail(section)}
+									className="inline-flex min-h-10 items-center rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50"
+								>
+									Ver mais
+								</button>
+							) : null}
+						</div>
+						<div className="mt-4 grid gap-3">
+							{section.items.length ? (
+								section.items.slice(0, 5).map(renderApprovalCard)
+							) : (
+								<EmptyState text={section.empty} />
+							)}
+						</div>
+					</section>
+				))}
+				{approvalListDetail ? (
+					<ModalShell
+						title={approvalListDetail.title}
+						description={`${integer.format(approvalListDetail.items.length)} aprovação(ões) nesta lista.`}
+						icon={<ClipboardCheck size={20} />}
+						onClose={() => setApprovalListDetail(null)}
+						size="5xl"
+					>
+						<div className="grid gap-3">
+							{approvalListDetail.items.map(renderApprovalCard)}
+						</div>
+					</ModalShell>
+				) : null}
+				{approvalDecision ? (
+					<BudgetApprovalDecisionModal
+						approval={approvalDecision.approval}
+						action={approvalDecision.action}
+						onClose={() => setApprovalDecision(null)}
+						onConfirm={(note) =>
+							updateApprovalStatus(
+								approvalDecision.approval,
+								approvalDecision.action,
+								note,
+							)
+						}
+					/>
+				) : null}
+				{approvalEmail ? (
+					<BudgetApprovalEmailModal
+						approval={approvalEmail}
+						onClose={() => setApprovalEmail(null)}
+						onFakeSend={() => {
+							setApprovalEmail(null);
+							setFeedback({
+								type: "error",
+								title: "E-mail não enviado",
+								message: "Email não enviado devido ao sistema estar em testes.",
+							});
+						}}
+					/>
+				) : null}
+				<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+			</section>
+		);
+	}
+
+	if (page === "orcamentoCentrosCusto") {
+		return (
+			<section className="space-y-4">
+				<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+					{costCenterTopCards.map((item) => (
+						<FinancialKpiCard key={item.id} item={item} />
+					))}
+				</section>
+				<section className="grid gap-4 xl:grid-cols-2">
+					{paginatedOperationalGroups.map(
+						({ center, category, children, totalChildren, aggregate }) => {
+							const status = budgetConsumptionStatus(aggregate.percent);
+							const isOverBudget = aggregate.deviation > 0;
+							const previewChildren = children.slice(0, 2);
+							const directorate = findDirectorateByName(
+								getBudgetSettings(config.settings).directorates,
+								center.diretoria,
+							);
+							return (
+								<article
+									key={center.id}
+									className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+								>
+									<div className="flex items-start justify-between gap-3">
+										<div className="min-w-0">
+											<p className="text-xs font-black uppercase tracking-wide text-indigo-700">
+												{center.codigo || center.id}
+											</p>
+											<h2 className="mt-1 text-lg font-black text-slate-950">
+												{center.nome}
+											</h2>
+											<p className="text-sm font-bold text-slate-500">
+												Sintético · Diretoria:{" "}
+												{center.diretoria ||
+													center.categoriaPrincipal ||
+													"Não informada"}
+											</p>
+											<p className="text-sm font-bold text-slate-500">
+												Diretor:{" "}
+												{directorate?.diretor ||
+													center.responsavel ||
+													"Não informado"}
+											</p>
+											{category ? (
+												<p className="mt-1 text-xs font-bold text-slate-400">
+													Categoria: {category.codigo || category.id} -{" "}
+													{category.nome}
+												</p>
+											) : null}
+										</div>
+										<span
+											className={`rounded-full px-3 py-1 text-xs font-black ${isOverBudget ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
+										>
+											{isOverBudget ? "Estourado" : "Na meta"}
+										</span>
+									</div>
+									<div className="mt-4 h-3 rounded-full bg-slate-100">
+										<div
+											className={`h-full rounded-full ${status.barClass}`}
+											style={{
+												width: `${Math.min(100, Math.max(4, aggregate.percent))}%`,
+											}}
+										/>
+									</div>
+									<dl className="mt-4 grid gap-3 sm:grid-cols-4">
+										<div>
+											<dt className="text-xs font-bold text-slate-500">
+												Orçado
+											</dt>
+											<dd className="text-sm font-black text-slate-950">
+												{brl.format(aggregate.planned)}
+											</dd>
+										</div>
+										<div>
+											<dt className="text-xs font-bold text-slate-500">
+												Usado
+											</dt>
+											<dd className="text-sm font-black text-slate-950">
+												{brl.format(aggregate.realized)}
+											</dd>
+										</div>
+										<div>
+											<dt className="text-xs font-bold text-slate-500">
+												Desvio
+											</dt>
+											<dd
+												className={`text-sm font-black ${isOverBudget ? "text-red-600" : "text-emerald-600"}`}
+											>
+												{isOverBudget
+													? brl.format(aggregate.deviation)
+													: "Na meta"}
+											</dd>
+										</div>
+										<div>
+											<dt className="text-xs font-bold text-slate-500">Uso</dt>
+											<dd className={`text-sm font-black ${status.textClass}`}>
+												{decimal.format(aggregate.percent)}%
+											</dd>
+										</div>
+									</dl>
+									<div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+										<div className="flex flex-wrap items-center justify-between gap-2">
+											<p className="text-xs font-black uppercase tracking-wide text-slate-500">
+												Centros analíticos
+											</p>
+											<div className="flex flex-wrap items-center gap-2">
+												<span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-slate-600 ring-1 ring-slate-200">
+													{integer.format(children.length)} de{" "}
+													{integer.format(totalChildren)}
+												</span>
+												{children.length > 2 ? (
+													<button
+														type="button"
+														onClick={() =>
+															setAnalyticChildrenModal({
+																synthetic: center,
+																category,
+																children,
+															})
+														}
+														className="inline-flex min-h-8 items-center rounded-lg border border-blue-200 bg-white px-2.5 text-xs font-black text-blue-700 hover:bg-blue-50"
+													>
+														Ver mais
+													</button>
+												) : null}
+											</div>
+										</div>
+										<div className="mt-3 grid gap-2 sm:grid-cols-2">
+											{previewChildren.length ? (
+												previewChildren.map((child) => {
+													const childMetric = metricForCenter(
+														child,
+														responsibleOnly ? rowByCenterId : allRowByCenterId,
+													);
+													const childStatus = budgetConsumptionStatus(
+														childMetric.percent,
+													);
+													const childDeviation = Number(
+														childMetric.deviation || 0,
+													);
+													const childOverBudget = childDeviation > 0;
+													const childPendencies = (
+														insights.approvalsAll || []
+													).filter(
+														(approval) =>
+															approval.centerId === child.id &&
+															[
+																"reprovado",
+																"recusado",
+																"ajuste_solicitado",
+															].includes(
+																String(approval.status || "").toLowerCase(),
+															),
+													);
+													const canHandleChildPendencies =
+														isBudgetCenterResponsible(currentUser, child) &&
+														childPendencies.length > 0;
+													return (
+														<div
+															key={child.id}
+															className={`rounded-xl border p-3 ${isCenterInactive(child) ? "border-slate-200 bg-white/70 opacity-75" : "border-white bg-white"}`}
+														>
+															<div className="flex items-start justify-between gap-2">
+																<div className="min-w-0">
+																	<p className="text-[11px] font-black uppercase tracking-wide text-blue-700">
+																		{child.codigo || child.id}
+																	</p>
+																	<p
+																		className="mt-1 truncate text-sm font-black text-slate-950"
+																		title={child.nome}
+																	>
+																		{child.nome}
+																	</p>
+																	<p
+																		className="mt-1 truncate text-xs font-bold text-slate-500"
+																		title={child.responsavel || ""}
+																	>
+																		Responsável:{" "}
+																		{child.responsavel || "Não informado"}
+																	</p>
+																</div>
+																<span
+																	className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${childOverBudget ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
+																>
+																	{childOverBudget ? "Estourado" : "Na meta"}
+																</span>
+															</div>
+															<div className="mt-3 h-2 rounded-full bg-slate-100">
+																<div
+																	className={`h-full rounded-full ${childStatus.barClass}`}
+																	style={{
+																		width: `${Math.min(100, Math.max(4, childMetric.percent))}%`,
+																	}}
+																/>
+															</div>
+															<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+																<div>
+																	<p className="font-bold text-slate-500">
+																		Orçado
+																	</p>
+																	<p className="font-black text-slate-950">
+																		{brl.format(childMetric.planned || 0)}
+																	</p>
+																</div>
+																<div>
+																	<p className="font-bold text-slate-500">
+																		Usado
+																	</p>
+																	<p className="font-black text-slate-950">
+																		{brl.format(childMetric.realized || 0)}
+																	</p>
+																</div>
+															</div>
+															<div className="mt-3 flex flex-wrap gap-2">
+																<button
+																	type="button"
+																	onClick={() =>
+																		setModalState({
+																			mode: "view",
+																			center: child,
+																		})
+																	}
+																	className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[11px] font-black text-slate-700 hover:bg-slate-50"
+																>
+																	<Eye size={12} /> Ver
+																</button>
+																{canHandleChildPendencies ? (
+																	<button
+																		type="button"
+																		onClick={() =>
+																			setPendenciesState({
+																				center: child,
+																				approvals: childPendencies,
+																			})
+																		}
+																		className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 text-[11px] font-black text-amber-800 hover:bg-amber-100"
+																	>
+																		<AlertTriangle size={12} /> Pendências (
+																		{childPendencies.length})
+																	</button>
+																) : null}
+																<button
+																	type="button"
+																	onClick={() =>
+																		setModalState({
+																			mode: "edit",
+																			center: child,
+																		})
+																	}
+																	disabled={!canManage || saving}
+																	className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-200 px-2 text-[11px] font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+																>
+																	<Pencil size={12} /> Editar
+																</button>
+															</div>
+														</div>
+													);
+												})
+											) : (
+												<div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-xs font-bold text-slate-500 sm:col-span-2">
+													Nenhum centro analítico encontrado para este
+													sintético.
+												</div>
+											)}
+										</div>
+									</div>
+									<div className="mt-4 flex flex-wrap gap-2">
+										<button
+											type="button"
+											onClick={() => setModalState({ mode: "view", center })}
+											className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50"
+										>
+											<Eye size={14} /> Ver sintético
+										</button>
+										<button
+											type="button"
+											onClick={() => setModalState({ mode: "edit", center })}
+											disabled={!canManage || saving}
+											className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+										>
+											<Pencil size={14} /> Editar sintético
+										</button>
+										<button
+											type="button"
+											onClick={() => removeOperationalCenter(center.id)}
+											disabled={!canManage || saving}
+											className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-red-200 px-3 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+										>
+											<Trash2 size={14} /> Excluir
+										</button>
+									</div>
+								</article>
+							);
+						},
+					)}
+					{!operationalCenterGroups.length ? (
+						<EmptyState text="Nenhum centro de custo vinculado ao seu e-mail." />
+					) : null}
+				</section>
+				{centerTotalPages > 1 ? (
+					<div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+						<span className="px-2 text-xs font-black text-slate-500">
+							Página {integer.format(safeCenterPage)} de{" "}
+							{integer.format(centerTotalPages)} ·{" "}
+							{integer.format(operationalCenterGroups.length)} sintético(s)
+						</span>
+						<span className="flex gap-2">
+							<button
+								type="button"
+								onClick={() => setCenterPage((value) => Math.max(1, value - 1))}
+								disabled={safeCenterPage <= 1}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Anterior
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									setCenterPage((value) =>
+										Math.min(centerTotalPages, value + 1),
+									)
+								}
+								disabled={safeCenterPage >= centerTotalPages}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Próxima
+							</button>
+						</span>
+					</div>
+				) : null}
+				{analyticChildrenModal ? (
+					<CostCenterAnalyticChildrenModal
+						synthetic={analyticChildrenModal.synthetic}
+						category={analyticChildrenModal.category}
+						children={analyticChildrenModal.children}
+						canManage={canManage}
+						onClose={() => setAnalyticChildrenModal(null)}
+						onView={(center) => {
+							setAnalyticChildrenModal(null);
+							setModalState({ mode: "view", center });
+						}}
+						onEdit={(center) => {
+							setAnalyticChildrenModal(null);
+							setModalState({ mode: "edit", center });
+						}}
+					/>
+				) : null}
+				{modalState ? (
+					<CostCenterModal
+						center={modalState.center}
+						centers={config.centers || []}
+						accounts={config.accounts || []}
+						companies={config.companies || []}
+						branches={config.branches || []}
+						settings={getBudgetSettings(config.settings)}
+						readOnly={modalState.mode === "view"}
+						canManage={canManage}
+						onClose={() => setModalState(null)}
+						onSave={upsertOperationalCenter}
+					/>
+				) : null}
+				{pendenciesState ? (
+					<BudgetCenterPendenciesModal
+						center={pendenciesState.center}
+						approvals={pendenciesState.approvals}
+						saving={saving}
+						onClose={() => setPendenciesState(null)}
+						onSubmit={resendApprovalAdjustment}
+					/>
+				) : null}
+				<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+			</section>
+		);
+	}
+
+	if (page === "orcamentoRealizado") {
+		const drePeriod = buildBudgetPeriod(selectedPeriod);
+		const dreMonths = drePeriod.months || [];
+		const dreFirstMonth = dreMonths[0] || {
+			year: new Date().getFullYear(),
+			month: new Date().getMonth() + 1,
+		};
+		const dreYear = Number(dreFirstMonth.year || new Date().getFullYear());
+		const dreMonth = Number(dreFirstMonth.month || new Date().getMonth() + 1);
+		const dreNow = new Date();
+		const dreIsCurrentMonth =
+			dreMonths.length === 1 &&
+			dreYear === dreNow.getFullYear() &&
+			dreMonth === dreNow.getMonth() + 1;
+		const dreDaysInMonth = new Date(dreYear, dreMonth, 0).getDate();
+		const dreElapsedDays = dreIsCurrentMonth
+			? dreNow.getDate()
+			: dreDaysInMonth;
+		const dreElapsedPercent = dreDaysInMonth
+			? (dreElapsedDays / dreDaysInMonth) * 100
+			: 0;
+		const dreMovementsFor = (rowItem) =>
+			insights.movements.filter(
+				(movement) =>
+					String(movement.accountId || "") ===
+						String(rowItem.row.accountId || "") &&
+					String(movement.centerId || "") ===
+						String(rowItem.row.costCenterId || ""),
+			);
+		const dreSparkline = (rowItem) => {
+			const values = Array.from({ length: 6 }, (_, index) => {
+				const month = Math.max(1, dreMonth - 5 + index);
+				return insights.movements
+					.filter(
+						(movement) =>
+							String(movement.accountId || "") ===
+								String(rowItem.row.accountId || "") &&
+							String(movement.centerId || "") ===
+								String(rowItem.row.costCenterId || "") &&
+							Number(movement.month || 0) === month,
+					)
+					.reduce((sum, movement) => sum + movementValue(movement), 0);
+			});
+			const max = Math.max(...values, 1);
+			return values.map((value, index) => ({
+				index,
+				height: Math.max(8, (value / max) * 34),
+				value,
+			}));
+		};
+		const dreRowStatus = (rowItem) => {
+			const used = Number(rowItem.realized || 0);
+			const planned = Number(rowItem.planned || 0);
+			const percent = planned ? (used / planned) * 100 : 0;
+			if (percent > 100)
+				return {
+					label: "Estouro / Alerta",
+					className: "bg-red-50 text-red-700 ring-red-100",
+					dot: "bg-red-500",
+				};
+			if (
+				planned > 0 &&
+				(used <= 0 ||
+					(dreElapsedPercent >= 75 && percent < dreElapsedPercent * 0.45))
+			)
+				return {
+					label: "Perto do prazo / Sem lançamento",
+					className: "bg-amber-50 text-amber-700 ring-amber-100",
+					dot: "bg-amber-400",
+				};
+			return {
+				label: "Dentro do previsto",
+				className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+				dot: "bg-emerald-500",
+			};
+		};
+		const dreGroupedAccounts = Array.from(
+			insights.accountRows
+				.reduce((map, item) => {
+					const key = item.account?.id || item.row.accountId || "sem-conta";
+					const current = map.get(key) || {
+						id: key,
+						account: item.account,
+						rows: [],
+						planned: 0,
+						realized: 0,
+						committed: 0,
+					};
+					const committed = Number(item.center?.comprometidoMes || 0);
+					current.rows.push(item);
+					current.planned += Number(item.planned || 0);
+					current.realized += Number(item.realized || 0);
+					current.committed += committed;
+					map.set(key, current);
+					return map;
+				}, new Map())
+				.values(),
+		).sort((left, right) => right.realized - left.realized);
+		return (
+			<section className="space-y-4">
+				<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+					<div className="border-b border-slate-200 p-4">
+						<h2 className="text-lg font-black text-slate-950">
+							DRE Orçado x Realizado
+						</h2>
+						<p className="text-sm font-bold text-slate-500">
+							Contas financeiras agrupadas com drill-down por centro de custo,
+							forecast e alertas de desvio.
+						</p>
+					</div>
+					<div className="overflow-x-auto">
+						<table className="min-w-full table-fixed text-left text-xs font-bold">
+							<thead className="bg-slate-50 text-xs uppercase text-slate-500">
+								<tr>
+									<th className="w-[30%] px-3 py-3">Conta</th>
+									<th className="w-[7%] px-2 py-3 text-right">CC</th>
+									<th className="w-[11%] px-2 py-3 text-right">Orçado</th>
+									<th className="w-[11%] px-2 py-3 text-right">Realiz.</th>
+									<th className="w-[11%] px-2 py-3 text-right">Comp.</th>
+									<th className="w-[11%] px-2 py-3 text-right">Forecast</th>
+									<th className="w-[10%] px-2 py-3 text-right">Desvio</th>
+									<th className="w-[9%] px-3 py-3 text-right">Ação</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{dreGroupedAccounts.map((group) => {
+									const groupForecast = dreElapsedDays
+										? ((group.realized + group.committed) / dreElapsedDays) *
+											dreDaysInMonth
+										: group.realized + group.committed;
+									const groupVariance = budgetVarianceMeta(
+										group.planned,
+										group.realized + group.committed,
+									);
+									return (
+										<tr key={group.id} className="bg-white hover:bg-blue-50/30">
+											<td className="px-3 py-3">
+												<button
+													type="button"
+													onClick={() => setDreAccountDetail(group)}
+													className="block max-w-full truncate text-left font-black text-slate-950 hover:text-blue-700"
+													title={budgetAccountLabel(group.account, group.id)}
+												>
+													{budgetAccountLabel(group.account, group.id)}
+												</button>
+												<p className="mt-1 truncate text-[11px] font-bold text-slate-500">
+													Detalhar centros
+												</p>
+											</td>
+											<td className="px-2 py-3 text-right text-slate-700">
+												{integer.format(group.rows.length)}
+											</td>
+											<td className="px-2 py-3 text-right text-slate-700">
+												{brl.format(group.planned)}
+											</td>
+											<td className="px-2 py-3 text-right text-slate-700">
+												{brl.format(group.realized)}
+											</td>
+											<td className="px-2 py-3 text-right text-slate-700">
+												{brl.format(group.committed)}
+											</td>
+											<td className="px-2 py-3 text-right font-black text-slate-900">
+												{brl.format(groupForecast)}
+											</td>
+											<td
+												className={`px-2 py-3 text-right font-black ${groupVariance.textClass}`}
+											>
+												{brl.format(groupVariance.variance)}
+											</td>
+											<td className="px-3 py-3 text-right">
+												<button
+													type="button"
+													onClick={() => setDreAccountDetail(group)}
+													className="rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-black text-blue-700 hover:bg-blue-50"
+												>
+													Ver
+												</button>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+				</section>
+				{dreAccountDetail ? (
+					<DreAccountDetailModal
+						group={dreAccountDetail}
+						elapsedDays={dreElapsedDays}
+						daysInMonth={dreDaysInMonth}
+						rowStatus={dreRowStatus}
+						sparklineFor={dreSparkline}
+						movementsFor={dreMovementsFor}
+						onClose={() => setDreAccountDetail(null)}
+						onExtract={(item) =>
+							setDreDrawer({ row: item, movements: dreMovementsFor(item) })
+						}
+						onTransfer={setTransferRequest}
+						onJustify={setDeviationJustification}
+					/>
+				) : null}
+				{dreDrawer ? (
+					<DreTransactionDrawer
+						row={dreDrawer.row}
+						movements={dreDrawer.movements}
+						accountById={
+							new Map(
+								(config.accounts || []).map((account) => [account.id, account]),
+							)
+						}
+						centerById={
+							new Map(
+								(config.centers || []).map((center) => [center.id, center]),
+							)
+						}
+						onClose={() => setDreDrawer(null)}
+					/>
+				) : null}
+				{transferRequest ? (
+					<BudgetTransferRequestModal
+						row={transferRequest}
+						onClose={() => setTransferRequest(null)}
+					/>
+				) : null}
+				{deviationJustification ? (
+					<BudgetDeviationJustificationModal
+						row={deviationJustification}
+						onClose={() => setDeviationJustification(null)}
+					/>
+				) : null}
+			</section>
+		);
+	}
+
+	const pareto = insights.centerRows
+		.filter(({ center }) => center?.tipoPlano === "A")
+		.sort((a, b) => b.percent - a.percent)
+		.slice(0, 8);
+	const accountById = new Map(
+		(config.accounts || []).map((account) => [account.id, account]),
+	);
+	const centerById = new Map(
+		(config.centers || []).map((center) => [center.id, center]),
+	);
+	const companyById = new Map(
+		(config.companies || []).map((company) => [company.id, company]),
+	);
+	const branchById = new Map(
+		(config.branches || []).map((branch) => [branch.id, branch]),
+	);
+	const budgetDeviation = budgetVarianceMeta(
+		insights.plannedMonth,
+		insights.realizedMonth + insights.committedMonth,
+	);
+	const monthlyChart = {
+		labels: insights.monthlyEvolution.map((item) => item.label),
+		datasets: [
+			{
+				label: "Orçado",
+				data: insights.monthlyEvolution.map((item) => item.planned),
+				backgroundColor: "#2563eb",
+				borderRadius: 8,
+			},
+			{
+				label: "Realizado",
+				data: insights.monthlyEvolution.map((item) => item.realized),
+				backgroundColor: "#f97316",
+				borderRadius: 8,
+			},
+		],
+	};
+	const forecastChart = {
+		labels: insights.forecastRows.map((item) => item.label),
+		datasets: [
+			{
+				label: "Realizado acumulado",
+				data: insights.forecastRows.map((item) => item.cumulativeRealized),
+				borderColor: "#2563eb",
+				backgroundColor: "rgba(37,99,235,.14)",
+				fill: true,
+				tension: 0.35,
+			},
+			{
+				label: "Forecast",
+				data: insights.forecastRows.map((item) => item.forecast),
+				borderColor: "#f97316",
+				backgroundColor: "rgba(249,115,22,.08)",
+				borderDash: [6, 4],
+				fill: false,
+				tension: 0.35,
+			},
+		],
+	};
+	const topAccounts = insights.accountSummary.slice(0, 8);
+	const accountChart = {
+		labels: topAccounts.map((item) =>
+			budgetAccountLabel(item.account, item.id),
+		),
+		datasets: [
+			{
+				label: "Orçado",
+				data: topAccounts.map((item) => item.planned),
+				backgroundColor: "#0f766e",
+				borderRadius: 8,
+			},
+			{
+				label: "Realizado",
+				data: topAccounts.map((item) => item.realized),
+				backgroundColor: "#f97316",
+				borderRadius: 8,
+			},
+		],
+	};
+	const waterfallRows = topAccounts.slice(0, 6);
+	const topCenters = insights.centerSummary.slice(0, 8);
+	const centerChart = {
+		labels: topCenters.map((item) => budgetCenterCompactLabel(item.center)),
+		datasets: [
+			{
+				label: "Disponível",
+				data: topCenters.map((item) =>
+					Math.max(0, item.planned - item.realized),
+				),
+				backgroundColor: "#bfdbfe",
+				borderRadius: 8,
+			},
+			{
+				label: "Consumido",
+				data: topCenters.map((item) => item.realized),
+				backgroundColor: "#2563eb",
+				borderRadius: 8,
+			},
+		],
+	};
+	const treemapItems = topCenters.slice(0, 12);
+	const topSuppliers = insights.supplierSummary.slice(0, 10);
+	const supplierTotalTop = topSuppliers.reduce(
+		(sum, item) => sum + Number(item.value || 0),
+		0,
+	);
+	const supplierChart = {
+		labels: topSuppliers.map((item) => item.supplier),
+		datasets: [
+			{
+				data: topSuppliers.map((item) => item.value),
+				backgroundColor: [
+					"#2563eb",
+					"#f97316",
+					"#10b981",
+					"#8b5cf6",
+					"#ef4444",
+					"#14b8a6",
+					"#f59e0b",
+					"#6366f1",
+					"#84cc16",
+					"#64748b",
+				],
+				borderWidth: 0,
+			},
+		],
+	};
+	const directorateByName = new Map(
+		(config.settings?.directorates || []).map((item) => [
+			String(item.nome || item.name || "")
+				.trim()
+				.toLowerCase(),
+			item,
+		]),
+	);
+	const directorateSummary = insights.centerSummary.reduce((map, item) => {
+		const rawName = String(
+			item.center?.diretoria || item.center?.directorate || "",
+		).trim();
+		const key = rawName.toLowerCase() || "sem-diretoria";
+		const directorate = directorateByName.get(key);
+		const current = map.get(key) || {
+			id: key,
+			nome: rawName || "Diretoria não informada",
+			diretor: directorate?.diretor || directorate?.director || "",
+			email: directorate?.emailDiretor || directorate?.directorEmail || "",
+			planned: 0,
+			realized: 0,
+			centers: 0,
+		};
+		current.planned += Number(item.planned || 0);
+		current.realized += Number(item.realized || 0);
+		current.centers += 1;
+		map.set(key, current);
+		return map;
+	}, new Map());
+	const directorateRows = Array.from(directorateSummary.values())
+		.map((item) => ({
+			...item,
+			available: Number(item.planned || 0) - Number(item.realized || 0),
+			percent: item.planned ? (item.realized / item.planned) * 100 : 0,
+		}))
+		.sort((left, right) => right.realized - left.realized);
+	const directorateTopRows = directorateRows.slice(0, 4);
+	const fullAccountChart = {
+		labels: insights.accountSummary.map((item) =>
+			budgetAccountLabel(item.account, item.id),
+		),
+		datasets: [
+			{
+				label: "Orçado",
+				data: insights.accountSummary.map((item) => item.planned),
+				backgroundColor: "#0f766e",
+				borderRadius: 8,
+			},
+			{
+				label: "Realizado",
+				data: insights.accountSummary.map((item) => item.realized),
+				backgroundColor: "#f97316",
+				borderRadius: 8,
+			},
+		],
+	};
+	const fullCenterChart = {
+		labels: insights.centerSummary.map((item) =>
+			budgetCenterCompactLabel(item.center),
+		),
+		datasets: [
+			{
+				label: "Disponível",
+				data: insights.centerSummary.map((item) =>
+					Math.max(0, item.planned - item.realized),
+				),
+				backgroundColor: "#bfdbfe",
+				borderRadius: 8,
+			},
+			{
+				label: "Consumido",
+				data: insights.centerSummary.map((item) => item.realized),
+				backgroundColor: "#2563eb",
+				borderRadius: 8,
+			},
+		],
+	};
+	const fullSupplierChart = {
+		labels: insights.supplierSummary.map((item) => item.supplier),
+		datasets: [
+			{
+				label: "Realizado",
+				data: insights.supplierSummary.map((item) => item.value),
+				backgroundColor: insights.supplierSummary.map((item, index) =>
+					index < 5 ? "#2563eb" : "#60a5fa",
+				),
+				borderRadius: 8,
+				barThickness: 18,
+			},
+		],
+	};
+	const fullPareto = insights.centerRows
+		.filter(({ center }) => center?.tipoPlano === "A")
+		.sort((a, b) => b.percent - a.percent);
+	const fullTreemapItems = insights.centerSummary;
+	const detailTitles = {
+		ritmo: "Ritmo de consumo completo",
+		viloes: "Todos os centros analíticos por consumo",
+		mensal: "Orçado x realizado mensal completo",
+		forecast: "Tendência e forecast completo",
+		cascata: "Cascata completa por conta financeira",
+		contas: "Todas as contas financeiras",
+		centros: "Todos os centros de custo analíticos",
+		treemap: "Treemap completo de centros de custo",
+		fornecedores: "Concentração completa por fornecedor",
+		diretorias: "Ranking completo por diretoria",
+		movimentacoes: "Todas as movimentações do período",
+	};
+	const detailChartHeight = (rows, min = 360) =>
+		Math.max(min, Math.min(1200, Number(rows || 0) * 34));
+	const supplierChartHeight = (rows) =>
+		Math.max(520, Math.min(4200, Number(rows || 0) * 44));
+	const renderDashboardDetail = () => {
+		if (!dashboardDetail) return null;
+		if (dashboardDetail === "ritmo") {
+			return (
+				<div className="space-y-4">
+					<div className="h-[420px] rounded-2xl border border-slate-200 p-4">
+						<Line
+							data={{
+								labels: ["Ideal hoje", "Realizado + comprometido"],
+								datasets: [
+									{
+										label: "Consumo %",
+										data: [insights.idealPercent, insights.usedPercent],
+										borderColor: "#2563eb",
+										backgroundColor: "rgba(37,99,235,.16)",
+										fill: true,
+										tension: 0.35,
+									},
+								],
+							}}
+							options={lineOptions()}
+						/>
+					</div>
+					<div className="grid gap-3 sm:grid-cols-3">
+						<FinancialKpiCard
+							item={{
+								title: "Ideal do período",
+								value: insights.idealPercent,
+								type: "percent",
+								helper: insights.periodDisplayLabel,
+								icon: "TrendingUp",
+							}}
+						/>
+						<FinancialKpiCard
+							item={{
+								title: "Consumido",
+								value: insights.usedPercent,
+								type: "percent",
+								helper: brl.format(
+									insights.realizedMonth + insights.committedMonth,
+								),
+								icon: "Wallet",
+							}}
+						/>
+						<FinancialKpiCard
+							item={{
+								title: "Saldo",
+								value: insights.availableMonth,
+								type: "currency",
+								helper:
+									insights.availableMonth >= 0
+										? "Dentro do orçamento"
+										: "Estourado",
+								icon: "CircleDollarSign",
+							}}
+						/>
+					</div>
+				</div>
+			);
+		}
+		if (dashboardDetail === "viloes") {
+			return (
+				<div className="space-y-3">
+					{fullPareto.map(({ center, deviation, percent }) => {
+						const status = budgetConsumptionStatus(percent);
+						return (
+							<div
+								key={center.id}
+								className="rounded-2xl border border-slate-200 p-3"
+							>
+								<div className="flex flex-wrap items-center justify-between gap-3 text-sm font-black">
+									<span className="text-slate-800">
+										{budgetCenterCompactLabel(center)}
+									</span>
+									<span className={status.textClass}>
+										{decimal.format(percent)}% ·{" "}
+										{brl.format(Math.abs(deviation))}
+									</span>
+								</div>
+								<div className="mt-2 h-3 rounded-full bg-slate-100">
+									<div
+										className={`h-full rounded-full ${status.barClass}`}
+										style={{ width: `${Math.min(100, Math.max(4, percent))}%` }}
+									/>
+								</div>
+							</div>
+						);
+					})}
+					{!fullPareto.length ? (
+						<EmptyState text="Nenhum centro analítico encontrado no período." />
+					) : null}
+				</div>
+			);
+		}
+		if (dashboardDetail === "mensal") {
+			return (
+				<div className="h-[520px]">
+					<Bar data={monthlyChart} options={barOptions()} />
+				</div>
+			);
+		}
+		if (dashboardDetail === "forecast") {
+			return (
+				<div className="h-[520px]">
+					<Line data={forecastChart} options={barOptions()} />
+				</div>
+			);
+		}
+		if (dashboardDetail === "cascata") {
+			return (
+				<div className="space-y-3">
+					<div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+						<p className="text-xs font-black uppercase text-emerald-700">
+							Orçamento do período
+						</p>
+						<p className="mt-1 text-xl font-black text-emerald-950">
+							{brl.format(insights.plannedMonth)}
+						</p>
+					</div>
+					{insights.accountSummary.map((item) => {
+						const width = insights.plannedMonth
+							? Math.min(
+									100,
+									Math.max(4, (item.realized / insights.plannedMonth) * 100),
+								)
+							: 4;
+						return (
+							<div
+								key={item.id}
+								className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+							>
+								<div className="flex items-center justify-between gap-3 text-xs font-black">
+									<span className="text-slate-700">
+										{budgetAccountLabel(item.account, item.id)}
+									</span>
+									<span className="text-red-600">
+										- {brl.format(item.realized)}
+									</span>
+								</div>
+								<div className="mt-2 h-2 rounded-full bg-white">
+									<div
+										className="h-full rounded-full bg-red-400"
+										style={{ width: `${width}%` }}
+									/>
+								</div>
+							</div>
+						);
+					})}
+					<div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+						<p className="text-xs font-black uppercase text-blue-700">
+							Saldo após realizados
+						</p>
+						<p className="mt-1 text-xl font-black text-blue-950">
+							{brl.format(insights.availableMonth)}
+						</p>
+					</div>
+				</div>
+			);
+		}
+		if (dashboardDetail === "contas") {
+			return (
+				<div
+					style={{ height: detailChartHeight(insights.accountSummary.length) }}
+				>
+					<Bar
+						data={fullAccountChart}
+						options={{ ...barOptions(), indexAxis: "y" }}
+					/>
+				</div>
+			);
+		}
+		if (dashboardDetail === "centros") {
+			return (
+				<div
+					style={{ height: detailChartHeight(insights.centerSummary.length) }}
+				>
+					<Bar
+						data={fullCenterChart}
+						options={{
+							...barOptions(),
+							indexAxis: "y",
+							scales: {
+								x: {
+									stacked: true,
+									ticks: { callback: (value) => brl.format(Number(value)) },
+								},
+								y: { stacked: true, grid: { display: false } },
+							},
+						}}
+					/>
+				</div>
+			);
+		}
+		if (dashboardDetail === "treemap") {
+			return (
+				<div className="grid auto-rows-[minmax(88px,auto)] grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					{fullTreemapItems.map((item) => {
+						const status = budgetConsumptionStatus(item.percent);
+						return (
+							<div
+								key={item.center.id}
+								className={`rounded-2xl p-3 text-white shadow-sm ${item.percent > 100 ? "bg-red-500" : item.percent >= 80 ? "bg-amber-400" : "bg-emerald-500"}`}
+							>
+								<p className="text-xs font-black uppercase">
+									{budgetCenterCompactLabel(item.center)}
+								</p>
+								<p className="mt-2 text-lg font-black">
+									{brl.format(item.realized)}
+								</p>
+								<p className="text-xs font-black opacity-90">
+									{decimal.format(item.percent)}% · {status.label}
+								</p>
+							</div>
+						);
+					})}
+					{!fullTreemapItems.length ? (
+						<EmptyState text="Nenhum centro analítico com movimentação no período." />
+					) : null}
+				</div>
+			);
+		}
+		if (dashboardDetail === "fornecedores") {
+			return (
+				<div className="space-y-4">
+					<div className="rounded-2xl border border-slate-200 bg-white p-4">
+						<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+							<p className="text-xs font-black uppercase text-slate-500">
+								{integer.format(insights.supplierSummary.length)} fornecedor(es)
+								· maior para menor
+							</p>
+							<p className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
+								Escala automática em{" "}
+								{brl.format(
+									smartCurrencyStep(
+										Math.max(
+											...insights.supplierSummary.map((item) =>
+												Number(item.value || 0),
+											),
+											0,
+										),
+									),
+								)}
+							</p>
+						</div>
+						<div
+							style={{
+								height: supplierChartHeight(insights.supplierSummary.length),
+							}}
+						>
+							<Bar
+								data={fullSupplierChart}
+								options={supplierBarOptions(
+									insights.supplierSummary.map((item) => item.supplier),
+									insights.supplierSummary.map((item) => item.value),
+								)}
+							/>
+						</div>
+					</div>
+					{renderSupplierDetailTable(
+						insights.supplierSummary,
+						centerById,
+						accountById,
+					)}
+				</div>
+			);
+		}
+		if (dashboardDetail === "diretorias") {
+			return (
+				<div className="overflow-auto rounded-2xl border border-slate-200">
+					<table className="min-w-[720px] divide-y divide-slate-200 text-left text-xs font-bold">
+						<thead className="bg-slate-50 text-slate-500">
+							<tr>
+								<th className="px-3 py-2">Diretoria</th>
+								<th className="px-3 py-2">Diretor</th>
+								<th className="px-3 py-2 text-right">Centros</th>
+								<th className="px-3 py-2 text-right">Orçado</th>
+								<th className="px-3 py-2 text-right">Realizado</th>
+								<th className="px-3 py-2 text-right">Saldo</th>
+								<th className="px-3 py-2 text-right">Uso</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{directorateRows.length ? (
+								directorateRows.map((item) => {
+									const status = budgetConsumptionStatus(item.percent);
+									return (
+										<tr key={item.id}>
+											<td className="px-3 py-2 font-black text-slate-950">
+												{item.nome}
+											</td>
+											<td className="px-3 py-2 text-slate-600">
+												{item.diretor || "Diretor não informado"}
+											</td>
+											<td className="px-3 py-2 text-right text-slate-700">
+												{integer.format(item.centers)}
+											</td>
+											<td className="px-3 py-2 text-right text-slate-700">
+												{brl.format(item.planned)}
+											</td>
+											<td className="px-3 py-2 text-right font-black text-slate-900">
+												{brl.format(item.realized)}
+											</td>
+											<td
+												className={`px-3 py-2 text-right font-black ${item.available >= 0 ? "text-emerald-600" : "text-red-600"}`}
+											>
+												{brl.format(item.available)}
+											</td>
+											<td
+												className={`px-3 py-2 text-right font-black ${status.textClass}`}
+											>
+												{decimal.format(item.percent)}%
+											</td>
+										</tr>
+									);
+								})
+							) : (
+								<tr>
+									<td colSpan={7}>
+										<EmptyState text="Nenhuma diretoria vinculada aos centros analíticos do período." />
+									</td>
+								</tr>
+							)}
+						</tbody>
+					</table>
+				</div>
+			);
+		}
+		if (dashboardDetail === "movimentacoes") {
+			const pageSize = 25;
+			const totalPages = Math.max(
+				1,
+				Math.ceil(insights.movements.length / pageSize),
+			);
+			const safePage = Math.min(dashboardDetailPage, totalPages);
+			const visibleMovements = insights.movements.slice(
+				(safePage - 1) * pageSize,
+				safePage * pageSize,
+			);
+			return (
+				<div className="space-y-3">
+					{renderMovementsDetailTable(
+						visibleMovements,
+						accountById,
+						centerById,
+						companyById,
+						branchById,
+					)}
+					{insights.movements.length ? (
+						<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+							<p className="text-xs font-black text-slate-600">
+								Página {integer.format(safePage)} de{" "}
+								{integer.format(totalPages)} ·{" "}
+								{integer.format(insights.movements.length)} movimentação(ões)
+							</p>
+							<div className="flex gap-2">
+								<button
+									type="button"
+									onClick={() =>
+										setDashboardDetailPage((value) => Math.max(1, value - 1))
+									}
+									disabled={safePage <= 1}
+									className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+								>
+									Anterior
+								</button>
+								<button
+									type="button"
+									onClick={() =>
+										setDashboardDetailPage((value) =>
+											Math.min(totalPages, value + 1),
+										)
+									}
+									disabled={safePage >= totalPages}
+									className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+								>
+									Próxima
+								</button>
+							</div>
+						</div>
+					) : null}
+				</div>
+			);
+		}
+		return null;
+	};
+	return (
+		<section className="space-y-4">
+			<section className="grid gap-4 md:grid-cols-5">
+				{kpis.map((item) => (
+					<FinancialKpiCard key={item.id} item={item} />
+				))}
+			</section>
+			<section className="grid gap-4 md:grid-cols-3">
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Orçado x realizado total
+					</p>
+					<p className="mt-2 text-xl font-black text-slate-950">
+						{brl.format(insights.plannedMonth)} /{" "}
+						{brl.format(insights.realizedMonth + insights.committedMonth)}
+					</p>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						{insights.periodDisplayLabel}
+					</p>
+				</div>
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Desvio absoluto
+					</p>
+					<p className={`mt-2 text-xl font-black ${budgetDeviation.textClass}`}>
+						{brl.format(budgetDeviation.variance)}
+					</p>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						Realizado + comprometido contra orçamento
+					</p>
+				</div>
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Desvio percentual
+					</p>
+					<p className={`mt-2 text-xl font-black ${budgetDeviation.textClass}`}>
+						{decimal.format(budgetDeviation.percent)}%
+					</p>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						{decimal.format(insights.usedPercent)}% consumido no período
+					</p>
+				</div>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+				<ChartCard
+					title="Ritmo de consumo do mês"
+					empty={!insights.plannedMonth}
+					onViewMore={() => setDashboardDetail("ritmo")}
+				>
+					<Line
+						data={{
+							labels: ["Ideal hoje", "Realizado + comprometido"],
+							datasets: [
+								{
+									label: "Consumo %",
+									data: [insights.idealPercent, insights.usedPercent],
+									borderColor: "#2563eb",
+									backgroundColor: "rgba(37,99,235,.16)",
+									fill: true,
+									tension: 0.35,
+								},
+							],
+						}}
+						options={lineOptions()}
+					/>
+				</ChartCard>
+				<FinancePanel
+					title="Vilões do orçamento"
+					onViewMore={() => setDashboardDetail("viloes")}
+					headerExtra={
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-black">
+							<span className="inline-flex items-center gap-1 text-emerald-700">
+								<span className="h-2 w-2 rounded-full bg-emerald-500" />{" "}
+								Positivo - Verde
+							</span>
+							<span className="inline-flex items-center gap-1 text-amber-700">
+								<span className="h-2 w-2 rounded-full bg-amber-400" /> Atenção -
+								Amarelo
+							</span>
+							<span className="inline-flex items-center gap-1 text-red-700">
+								<span className="h-2 w-2 rounded-full bg-red-500" /> Estourado -
+								Vermelho
+							</span>
+						</div>
+					}
+				>
+					<div className="flex flex-1 flex-col gap-3">
+						{pareto.length ? (
+							pareto.map(({ center, deviation, percent }) => {
+								const status = budgetConsumptionStatus(percent);
+								return (
+									<div key={center.id}>
+										<div className="flex items-center justify-between gap-3 text-sm font-black">
+											<span className="text-slate-700">
+												{budgetCenterCompactLabel(center)}
+											</span>
+											<span className={status.textClass}>
+												{decimal.format(percent)}% ·{" "}
+												{brl.format(Math.abs(deviation))}
+											</span>
+										</div>
+										<div className="mt-2 h-3 rounded-full bg-slate-100">
+											<div
+												className={`h-full rounded-full ${status.barClass}`}
+												title={status.label}
+												style={{
+													width: `${Math.min(100, Math.max(4, percent))}%`,
+												}}
+											/>
+										</div>
+									</div>
+								);
+							})
+						) : (
+							<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
+								Nenhum centro de custo analítico encontrado para o período
+								selecionado.
+							</p>
+						)}
+					</div>
+				</FinancePanel>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-2">
+				<ChartCard
+					title="Orçado x Realizado mensal"
+					empty={
+						!insights.monthlyEvolution.some(
+							(item) => item.planned || item.realized,
+						)
+					}
+					onViewMore={() => setDashboardDetail("mensal")}
+				>
+					<Bar data={monthlyChart} options={barOptions()} />
+				</ChartCard>
+				<ChartCard
+					title="Tendência e forecast até o fim do exercício"
+					empty={
+						!insights.forecastRows.some(
+							(item) => item.cumulativeRealized || item.forecast,
+						)
+					}
+					onViewMore={() => setDashboardDetail("forecast")}
+				>
+					<Line data={forecastChart} options={barOptions()} />
+				</ChartCard>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+				<FinancePanel
+					title="Cascata por conta financeira"
+					onViewMore={() => setDashboardDetail("cascata")}
+				>
+					<div className="space-y-3">
+						<div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+							<p className="text-xs font-black uppercase text-emerald-700">
+								Orçamento do período
+							</p>
+							<p className="mt-1 text-xl font-black text-emerald-950">
+								{brl.format(insights.plannedMonth)}
+							</p>
+						</div>
+						{waterfallRows.length ? (
+							waterfallRows.map((item) => {
+								const width = insights.plannedMonth
+									? Math.min(
+											100,
+											Math.max(
+												4,
+												(item.realized / insights.plannedMonth) * 100,
+											),
+										)
+									: 4;
+								return (
+									<div
+										key={item.id}
+										className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+									>
+										<div className="flex items-center justify-between gap-3 text-xs font-black">
+											<span className="truncate text-slate-700">
+												{budgetAccountLabel(item.account, item.id)}
+											</span>
+											<span className="text-red-600">
+												- {brl.format(item.realized)}
+											</span>
+										</div>
+										<div className="mt-2 h-2 rounded-full bg-white">
+											<div
+												className="h-full rounded-full bg-red-400"
+												style={{ width: `${width}%` }}
+											/>
+										</div>
+									</div>
+								);
+							})
+						) : (
+							<EmptyState text="Nenhuma conta financeira com movimentação no período." />
+						)}
+						<div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+							<p className="text-xs font-black uppercase text-blue-700">
+								Saldo após realizados
+							</p>
+							<p className="mt-1 text-xl font-black text-blue-950">
+								{brl.format(insights.availableMonth)}
+							</p>
+						</div>
+					</div>
+				</FinancePanel>
+				<ChartCard
+					title="Orçado x Realizado por conta financeira"
+					empty={!topAccounts.length}
+					onViewMore={() => setDashboardDetail("contas")}
+				>
+					<Bar
+						data={accountChart}
+						options={{ ...barOptions(), indexAxis: "y" }}
+					/>
+				</ChartCard>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+				<ChartCard
+					title="Distribuição por centro de custo analítico"
+					empty={!topCenters.length}
+					onViewMore={() => setDashboardDetail("centros")}
+				>
+					<Bar
+						data={centerChart}
+						options={{
+							...barOptions(),
+							indexAxis: "y",
+							scales: {
+								x: {
+									stacked: true,
+									ticks: { callback: (value) => brl.format(Number(value)) },
+								},
+								y: { stacked: true, grid: { display: false } },
+							},
+						}}
+					/>
+				</ChartCard>
+				<FinancePanel
+					title="Treemap de peso orçamentário"
+					onViewMore={() => setDashboardDetail("treemap")}
+				>
+					<div className="grid auto-rows-[minmax(88px,auto)] grid-cols-2 gap-2">
+						{treemapItems.length ? (
+							treemapItems.map((item) => {
+								const status = budgetConsumptionStatus(item.percent);
+								const basis = Math.max(
+									34,
+									Math.min(
+										100,
+										insights.realizedMonth
+											? (item.realized / insights.realizedMonth) * 100
+											: item.percent,
+									),
+								);
+								return (
+									<div
+										key={item.center.id}
+										className={`rounded-2xl p-3 text-white shadow-sm ${item.percent > 100 ? "bg-red-500" : item.percent >= 80 ? "bg-amber-400" : "bg-emerald-500"}`}
+										style={{ minHeight: `${basis}px` }}
+									>
+										<p className="text-xs font-black uppercase">
+											{budgetCenterCompactLabel(item.center)}
+										</p>
+										<p className="mt-2 text-lg font-black">
+											{brl.format(item.realized)}
+										</p>
+										<p className="text-xs font-black opacity-90">
+											{decimal.format(item.percent)}% · {status.label}
+										</p>
+									</div>
+								);
+							})
+						) : (
+							<EmptyState text="Nenhum centro analítico com movimentação no período." />
+						)}
+					</div>
+				</FinancePanel>
+			</section>
+			<section className="grid gap-4 2xl:grid-cols-[0.9fr_1.1fr]">
+				<ChartCard
+					title="Concentração por fornecedor"
+					empty={!topSuppliers.length}
+					onViewMore={() => setDashboardDetail("fornecedores")}
+					headerExtra={
+						<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
+							Top {integer.format(topSuppliers.length)} ·{" "}
+							{brl.format(supplierTotalTop)}
+						</span>
+					}
+					className="min-h-[440px]"
+					bodyClassName="flex items-center justify-center"
+				>
+					<div className="h-[340px] w-full max-w-[520px]">
+						<Doughnut
+							data={supplierChart}
+							options={{
+								responsive: true,
+								maintainAspectRatio: false,
+								plugins: {
+									legend: {
+										position: "bottom",
+										labels: { boxWidth: 10, font: { weight: "bold" } },
+									},
+									tooltip: {
+										callbacks: {
+											label: (context) =>
+												`${context.label}: ${brl.format(Number(context.raw || 0))}`,
+										},
+									},
+									centerText: {
+										title: `Top ${integer.format(topSuppliers.length)}`,
+										value: brl.format(supplierTotalTop),
+									},
+								},
+								cutout: "66%",
+							}}
+						/>
+					</div>
+				</ChartCard>
+				<FinancePanel
+					title="Ranking diretoria"
+					onViewMore={() => setDashboardDetail("diretorias")}
+					className="min-h-[440px]"
+				>
+					<div className="grid flex-1 gap-3 md:grid-cols-2 2xl:grid-cols-1">
+						{directorateTopRows.length ? (
+							directorateTopRows.map((item) => {
+								const status = budgetConsumptionStatus(item.percent);
+								return (
+									<div
+										key={item.id}
+										className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+									>
+										<div className="flex flex-wrap items-start justify-between gap-3">
+											<div>
+												<p className="text-sm font-black text-slate-950">
+													{item.nome}
+												</p>
+												<p className="text-xs font-bold text-slate-500">
+													{item.diretor || "Diretor não informado"} ·{" "}
+													{integer.format(item.centers)} centro(s)
+												</p>
+											</div>
+											<span
+												className={`text-sm font-black ${status.textClass}`}
+											>
+												{decimal.format(item.percent)}%
+											</span>
+										</div>
+										<div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs font-black text-slate-600">
+											<span>Orçado: {brl.format(item.planned)}</span>
+											<span>Realizado: {brl.format(item.realized)}</span>
+										</div>
+										<div className="mt-2 h-2 rounded-full bg-white">
+											<div
+												className={`h-full rounded-full ${status.barClass}`}
+												style={{
+													width: `${Math.min(100, Math.max(4, item.percent))}%`,
+												}}
+											/>
+										</div>
+									</div>
+								);
+							})
+						) : (
+							<EmptyState text="Nenhuma diretoria vinculada aos centros analíticos do período." />
+						)}
+					</div>
+				</FinancePanel>
+			</section>
+			<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+				<div className="border-b border-slate-200 p-4">
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<h2 className="text-lg font-black text-slate-950">
+								Últimas movimentações importadas
+							</h2>
+							<p className="text-sm font-bold text-slate-500">
+								Leitura direta dos dados importados e salvos no orçamento.
+							</p>
+						</div>
+						<PanelActionButton
+							onClick={() => setDashboardDetail("movimentacoes")}
+						/>
+					</div>
+				</div>
+				<div className="overflow-auto">
+					<table className="min-w-[980px] divide-y divide-slate-200 text-left text-xs font-bold">
+						<thead className="bg-slate-50 text-slate-500">
+							<tr>
+								<th className="px-3 py-2">Fornecedor</th>
+								<th className="px-3 py-2">Conta financeira</th>
+								<th className="px-3 py-2">Centro de custo</th>
+								<th className="px-3 py-2">Matriz / filial</th>
+								<th className="px-3 py-2 text-right">Valor</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{insights.movements.slice(0, 12).map((movement) => {
+								const account = accountById.get(movement.accountId);
+								const center = centerById.get(movement.centerId);
+								const company = companyById.get(movement.companyId);
+								const branch = branchById.get(movement.branchId);
+								return (
+									<tr key={movement.id}>
+										<td className="px-3 py-2 font-black text-slate-950">
+											{movementSupplierName(movement)}
+										</td>
+										<td className="px-3 py-2 text-slate-600">
+											{account
+												? budgetAccountLabel(account, movement.accountId)
+												: movement.accountName || movement.accountId || "-"}
+										</td>
+										<td className="px-3 py-2 text-slate-600">
+											{center
+												? budgetCenterCompactLabel(center, movement.centerId)
+												: movement.centerName || movement.centerId || "-"}
+										</td>
+										<td className="px-3 py-2 text-slate-600">
+											{[
+												company?.nome || movement.companyId,
+												branch?.nome || movement.branchId,
+											]
+												.filter(Boolean)
+												.join(" / ") || "-"}
+										</td>
+										<td className="px-3 py-2 text-right font-black text-slate-950">
+											{brl.format(movementValue(movement))}
+										</td>
+									</tr>
+								);
+							})}
+							{!insights.movements.length ? (
+								<tr>
+									<td colSpan={5}>
+										<EmptyState text="Nenhuma movimentação importada no período." />
+									</td>
+								</tr>
+							) : null}
+						</tbody>
+					</table>
+				</div>
+			</section>
+			{dashboardDetail ? (
+				<ModalShell
+					title={detailTitles[dashboardDetail] || "Detalhamento"}
+					description={`${insights.periodDisplayLabel} · dados completos do período selecionado.`}
+					size={dashboardDetail === "diretorias" ? "5xl" : "full"}
+					onClose={() => setDashboardDetail(null)}
+					icon={
+						<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+							<Eye size={22} />
+						</span>
+					}
+					bodyClassName={dashboardDetail === "diretorias" ? "py-3 sm:px-5" : ""}
+					headerClassName={
+						dashboardDetail === "diretorias" ? "py-3 sm:px-5" : ""
+					}
+				>
+					{renderDashboardDetail()}
+				</ModalShell>
+			) : null}
+		</section>
+	);
+}
+const EMPTY_COST_CENTER = {
+	id: "",
+	codigo: "",
+	nome: "",
+	parentId: "",
+	tipoCentro: "departamento",
+	companies: [],
+	branches: [],
+	contasFinanceiras: [],
+	contaFinanceiraPadrao: "",
+	responsavel: "",
+	telefoneResponsavel: "",
+	emailResponsavel: "",
+	tipoDespesa: "opex",
+	categoriaPrincipal: "",
+	diretoria: "",
+	contaContabil: "",
+	valorMensal: "",
+	valorAnual: "",
+	comprometidoMes: "",
+	realizadoMes: "",
+	alertaPercentual: 85,
+	prioridade: "normal",
+	status: "ativo",
+	finalidade: "",
+	observacoes: "",
+};
+
+const EMPTY_BUDGET_COMPANY = {
+	id: "",
+	codigo: "",
+	nome: "",
+	nomeFantasia: "",
+	razaoSocial: "",
+	cidade: "",
+	cnpj: "",
+	filialId: "",
+	filiais: [],
+	responsavel: "",
+	telefoneResponsavel: "",
+	emailResponsavel: "",
+	status: "ativo",
+	observacoes: "",
+};
+
+const EMPTY_BUDGET_BRANCH = {
+	id: "",
+	codigo: "",
+	empresaId: "",
+	nome: "",
+	nomeFantasia: "",
+	razaoSocial: "",
+	cidade: "",
+	cnpj: "",
+	estado: "",
+	responsavel: "",
+	telefoneResponsavel: "",
+	emailResponsavel: "",
+	status: "ativo",
+	observacoes: "",
+};
+
+const EMPTY_BUDGET_PARTNER = {
+	id: "",
+	codigo: "",
+	nome: "",
+	razaoSocial: "",
+	cnpj: "",
+	tipo: "fornecedor",
+	contaPadraoId: "",
+	centroCustoPadraoId: "",
+	centrosCusto: [],
+	empresas: [],
+	filiais: [],
+	email: "",
+	telefone: "",
+	status: "ativo",
+	observacoes: "",
+};
+
+const EMPTY_FINANCIAL_ACCOUNT = {
+	id: "",
+	codigo: "",
+	nome: "",
+	parentId: "",
+	tipo: "despesa",
+	natureza: "opex",
+	grupo: "",
+	dreGroup: "",
+	contaContabil: "",
+	status: "ativo",
+	descricao: "",
+};
+
+const BUDGET_MONTHS = [
+	"Jan",
+	"Fev",
+	"Mar",
+	"Abr",
+	"Mai",
+	"Jun",
+	"Jul",
+	"Ago",
+	"Set",
+	"Out",
+	"Nov",
+	"Dez",
+];
+
+const COST_CENTER_TYPES = {
+	capex: "CAPEX",
+	opex: "OPEX",
+	misto: "CAPEX/OPEX",
+};
+
+const DEFAULT_BUDGET_SETTINGS = {
+	centerTypes: ["sintetico", "analitico"],
+	mainCategories: [
+		"11 - DEPARTAMENTO",
+		"12 - INATIVO - DEPARTAMENTO ADMINISTRATIVO",
+		"13 - INATIVO - DEPARTAMENTO COMERCIAL",
+		"14 - INATIVO - DEPARTAMENTO EXPERIENCIA DO CLIENTE",
+		"15 - INATIVO - DEPARTAMENTO DSO",
+		"16 - INATIVO - DEPARTAMENTO FINANCEIRO",
+		"17 - INATIVO - DEPARTAMENTO PESSOAL",
+		"18 - INATIVO - DEPARTAMENTO SIS/TD",
+		"19 - INATIVO - DEPARTAMENTO T.I",
+		"21 - Lancamentos reclassificar - INATIVAR",
+		"22 - PROJETOS",
+	],
+	directorates: [],
+	accountGroups: [
+		"11 - RECEITAS",
+		"12 - CUSTOS",
+		"13 - DESPESAS",
+		"14 - IMPOSTOS",
+		"15 - DISTRIBUIÇÃO",
+		"16 - CONTA TRANSITÓRIA",
+		"17 - DEDUÇÕES",
+		"18 - AÇÕES",
+	],
+	dreGroups: [
+		"Receita Bruta",
+		"Despesas administrativas",
+		"Despesas operacionais",
+		"CAPEX",
+		"Impostos",
+	],
+	centerStatuses: ["ativo", "em_observacao", "bloqueado", "inativo"],
+};
+
+const EMPTY_DIRECTORATE = {
+	id: "",
+	nome: "",
+	diretor: "",
+	emailDiretor: "",
+	numeroDiretor: "",
+};
+
+function normalizeList(value, fallback = []) {
+	if (value === undefined || value === null) return fallback;
+	const rawSource = Array.isArray(value)
+		? value
+		: String(value || "").split(/[,;\n]+/);
+	const source = rawSource.flatMap((item) =>
+		String(item || "")
+			.replace(
+				/(respons[áa]vel|financeiro|operacional|administrativo|comercial|t[.\s-]*i|tiago|diretor[a-z\s]*)\s*(?=Diretoria\s)/gi,
+				"$1\n",
+			)
+			.split(/\n+/),
+	);
+	const normalized = source
+		.map((item) => String(item || "").trim())
+		.filter(Boolean);
+	return [...new Set(normalized)];
+}
+
+function parseLegacyDirectorate(value = "") {
+	const text = String(value || "").trim();
+	if (!text || text.toLowerCase() === "[object object]")
+		return { nome: "", diretor: "", emailDiretor: "", numeroDiretor: "" };
+	const [nome = "", diretor = "", emailDiretor = "", numeroDiretor = ""] = text
+		.split("|")
+		.map((item) => item.trim());
+	return { nome, diretor, emailDiretor, numeroDiretor };
+}
+
+function normalizeDirectorates(value, fallback = []) {
+	const source = value === undefined || value === null ? fallback : value;
+	const rawItems = Array.isArray(source)
+		? source
+		: String(source || "").split(/[,;\n]+/);
+	const seen = new Set();
+	return rawItems
+		.map((item) => {
+			const parsed =
+				typeof item === "object" && item !== null
+					? {
+							id: String(item.id || item.nome || item.name || "").trim(),
+							nome: String(
+								item.nome || item.name || item.diretoria || "",
+							).trim(),
+							diretor: String(
+								item.diretor || item.director || item.responsavel || "",
+							).trim(),
+							emailDiretor: String(
+								item.emailDiretor || item.directorEmail || item.email || "",
+							).trim(),
+							numeroDiretor: String(
+								item.numeroDiretor ||
+									item.telefoneDiretor ||
+									item.directorPhone ||
+									item.telefone ||
+									item.numero ||
+									"",
+							).trim(),
+						}
+					: parseLegacyDirectorate(item);
+			const nome = String(parsed.nome || "").trim();
+			if (!nome || nome.toLowerCase() === "[object object]") return null;
+			const id = budgetEntityId(parsed.id || nome, `diretoria-${nome}`);
+			return {
+				id,
+				nome,
+				diretor: String(parsed.diretor || "").trim(),
+				emailDiretor: String(parsed.emailDiretor || "").trim(),
+				numeroDiretor: String(parsed.numeroDiretor || "").trim(),
+			};
+		})
+		.filter(Boolean)
+		.filter((item) => {
+			const key = normalizeImportHeader(item.nome);
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+}
+
+function findDirectorateByName(directorates = [], name = "") {
+	const key = normalizeImportHeader(name);
+	return (
+		normalizeDirectorates(directorates).find(
+			(item) => normalizeImportHeader(item.nome) === key,
+		) || null
+	);
+}
+
+function getBudgetSettings(settings = {}) {
+	return {
+		centerTypes: normalizeList(
+			settings.centerTypes,
+			DEFAULT_BUDGET_SETTINGS.centerTypes,
+		),
+		mainCategories: normalizeList(
+			settings.mainCategories,
+			DEFAULT_BUDGET_SETTINGS.mainCategories,
+		),
+		directorates: normalizeDirectorates(
+			settings.directorates,
+			DEFAULT_BUDGET_SETTINGS.directorates,
+		),
+		accountGroups: normalizeList(
+			settings.accountGroups,
+			DEFAULT_BUDGET_SETTINGS.accountGroups,
+		),
+		dreGroups: normalizeList(
+			settings.dreGroups,
+			DEFAULT_BUDGET_SETTINGS.dreGroups,
+		),
+		centerStatuses: normalizeList(
+			settings.centerStatuses,
+			DEFAULT_BUDGET_SETTINGS.centerStatuses,
+		),
+	};
+}
+
+function formatOptionLabel(value) {
+	return String(value || "")
+		.replace(/_/g, " ")
+		.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function parseMoneyInput(value) {
+	const text = String(value || "")
+		.replace(/[^\d,.-]/g, "")
+		.trim();
+	const normalized = text.includes(",")
+		? text.replace(/\./g, "").replace(",", ".")
+		: text;
+	const number = Number(normalized || 0);
+	return Number.isFinite(number) ? number : 0;
+}
+
+function budgetEntityId(value, fallback = "item") {
+	return (
+		String(value || "")
+			.trim()
+			.normalize("NFD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "") || fallback
+	);
+}
+
+function MoneyInput({ value, disabled, onChange }) {
+	return (
+		<div className="mt-2 flex overflow-hidden rounded-xl border border-emerald-200 bg-white ring-0 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
+			<span className="flex min-h-11 items-center bg-emerald-50 px-3 text-sm font-black text-emerald-800">
+				R$
+			</span>
+			<input
+				value={value ?? ""}
+				disabled={disabled}
+				inputMode="decimal"
+				onChange={onChange}
+				placeholder="0,00"
+				className="min-w-0 flex-1 border-0 bg-white px-3 py-2 text-left text-sm font-bold tabular-nums text-slate-950 outline-none"
+			/>
+		</div>
+	);
+}
+
+function ListConfigInput({ label, value = [], onChange, disabled, helper }) {
+	const [draft, setDraft] = useState("");
+	const items = normalizeList(value, []);
+
+	const addItem = () => {
+		const nextItem = String(draft || "").trim();
+		if (!nextItem) return;
+		onChange([...new Set([...items, nextItem])]);
+		setDraft("");
+	};
+
+	const removeItem = (itemToRemove) => {
+		onChange(items.filter((item) => item !== itemToRemove));
+	};
+
+	return (
+		<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+			<div className="flex items-start justify-between gap-3">
+				<div>
+					<p className="text-xs font-black uppercase tracking-wide text-slate-500">
+						{label}
+					</p>
+					{helper ? (
+						<p className="mt-1 text-xs font-bold normal-case text-slate-400">
+							{helper}
+						</p>
+					) : null}
+				</div>
+				<span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">
+					{items.length}
+				</span>
+			</div>
+			<div className="mt-2 flex gap-2">
+				<input
+					value={draft}
+					disabled={disabled}
+					onChange={(event) => setDraft(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							addItem();
+						}
+					}}
+					placeholder="Digite e adicione"
+					className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+				/>
+				<button
+					type="button"
+					disabled={disabled || !String(draft || "").trim()}
+					onClick={addItem}
+					className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-black normal-case text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<Plus size={16} />
+					Adicionar e salvar
+				</button>
+			</div>
+			{items.length ? (
+				<div className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-y-auto pr-1">
+					{items.map((item) => (
+						<span
+							key={item}
+							className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-black normal-case text-blue-700"
+						>
+							<span className="truncate">{item}</span>
+							<button
+								type="button"
+								disabled={disabled}
+								onClick={() => removeItem(item)}
+								className="rounded-full text-blue-500 transition hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+								aria-label={`Remover ${item}`}
+							>
+								<X size={13} />
+							</button>
+						</span>
+					))}
+				</div>
+			) : (
+				<div className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs font-bold normal-case text-slate-400">
+					Nenhum item cadastrado.
+				</div>
+			)}
+		</div>
+	);
+}
+
+function DirectoratesDropdownSection({
+	value = [],
+	centers = [],
+	onChange,
+	disabled,
+}) {
+	const [form, setForm] = useState(EMPTY_DIRECTORATE);
+	const [viewDirectorate, setViewDirectorate] = useState(null);
+	const directorates = normalizeDirectorates(value);
+	const update = (field, nextValue) =>
+		setForm((current) => ({ ...current, [field]: nextValue }));
+	const resetForm = () => setForm(EMPTY_DIRECTORATE);
+	const isEditing = Boolean(form.id);
+
+	const saveDirectorate = () => {
+		const normalized = normalizeDirectorates([form])[0];
+		if (!normalized) return;
+		const next = directorates.some(
+			(item) =>
+				item.id === normalized.id ||
+				normalizeImportHeader(item.nome) ===
+					normalizeImportHeader(normalized.nome),
+		)
+			? directorates.map((item) =>
+					item.id === normalized.id ||
+					normalizeImportHeader(item.nome) ===
+						normalizeImportHeader(normalized.nome)
+						? normalized
+						: item,
+				)
+			: [...directorates, normalized];
+		onChange(next);
+		resetForm();
+	};
+
+	const removeDirectorate = (directorate) => {
+		onChange(directorates.filter((item) => item.id !== directorate.id));
+		if (form.id === directorate.id) resetForm();
+	};
+
+	const metricsForDirectorate = (directorate) => {
+		const linkedCenters = (centers || []).filter(
+			(center) =>
+				normalizeImportHeader(center.diretoria) ===
+				normalizeImportHeader(directorate.nome),
+		);
+		const synthetics = linkedCenters.filter(
+			(center) => center.tipoPlano === "S",
+		);
+		const analytics = linkedCenters.filter(
+			(center) => center.tipoPlano === "A",
+		);
+		const budgetSource = analytics.length
+			? analytics
+			: linkedCenters.filter((center) => center.tipoPlano !== "S");
+		const realizedSource = analytics.length
+			? analytics
+			: linkedCenters.filter((center) => center.tipoPlano !== "S");
+		const budget = budgetSource.reduce(
+			(sum, center) =>
+				sum + Number(center.valorMensal || center.orcamentoMensal || 0),
+			0,
+		);
+		const realized = realizedSource.reduce(
+			(sum, center) =>
+				sum + Number(center.realizadoImportado || center.realizadoMes || 0),
+			0,
+		);
+		const used = budget ? (realized / budget) * 100 : 0;
+		return { linkedCenters, synthetics, analytics, budget, realized, used };
+	};
+
+	const viewMetrics = viewDirectorate
+		? metricsForDirectorate(viewDirectorate)
+		: null;
+
+	return (
+		<>
+			<BudgetDropdownSection
+				title="Diretorias"
+				count={directorates.length}
+				className="mt-5 border-indigo-200 bg-indigo-50"
+				open={false}
+				action={
+					<div className="grid w-full gap-3 rounded-2xl border border-indigo-100 bg-white p-4 md:grid-cols-2 xl:grid-cols-4">
+						<label className="text-xs font-black uppercase text-slate-500">
+							Nome diretoria
+							<input
+								value={form.nome}
+								disabled={disabled}
+								onChange={(event) => update("nome", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Diretor
+							<input
+								value={form.diretor}
+								disabled={disabled}
+								onChange={(event) => update("diretor", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							E-mail diretor
+							<input
+								type="email"
+								value={form.emailDiretor}
+								disabled={disabled}
+								onChange={(event) => update("emailDiretor", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Número diretor
+							<input
+								value={form.numeroDiretor}
+								disabled={disabled}
+								onChange={(event) =>
+									update("numeroDiretor", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+							/>
+						</label>
+						<div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-4">
+							<button
+								type="button"
+								onClick={saveDirectorate}
+								disabled={disabled || !String(form.nome || "").trim()}
+								className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-indigo-600 px-4 text-xs font-black text-white hover:bg-indigo-700 disabled:opacity-50"
+							>
+								<Plus size={14} />{" "}
+								{isEditing ? "Salvar diretoria" : "Adicionar diretoria"}
+							</button>
+							{isEditing ? (
+								<button
+									type="button"
+									onClick={resetForm}
+									disabled={disabled}
+									className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+								>
+									Cancelar edição
+								</button>
+							) : null}
+						</div>
+					</div>
+				}
+			>
+				{directorates.length ? (
+					<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+						{directorates.map((directorate) => {
+							const metrics = metricsForDirectorate(directorate);
+							return (
+								<article
+									key={directorate.id}
+									className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm"
+								>
+									<div className="flex items-start justify-between gap-3">
+										<div className="min-w-0">
+											<p className="text-xs font-black uppercase tracking-wide text-indigo-700">
+												{directorate.nome}
+											</p>
+											<h3
+												className="mt-1 truncate text-base font-black text-slate-950"
+												title={directorate.diretor || ""}
+											>
+												{directorate.diretor || "Diretor não informado"}
+											</h3>
+											<p
+												className="mt-1 truncate text-xs font-bold text-slate-500"
+												title={directorate.emailDiretor || ""}
+											>
+												{directorate.emailDiretor || "E-mail não informado"}
+											</p>
+											<p className="mt-1 text-xs font-bold text-slate-500">
+												{directorate.numeroDiretor || "Número não informado"}
+											</p>
+										</div>
+										<span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-black text-indigo-700">
+											{integer.format(metrics.synthetics.length)} sint.
+										</span>
+									</div>
+									<div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+										<div className="rounded-xl bg-slate-50 p-3">
+											<p className="font-bold text-slate-500">Centros</p>
+											<p className="font-black text-slate-950">
+												{integer.format(metrics.synthetics.length)} sint. ·{" "}
+												{integer.format(metrics.analytics.length)} anal.
+											</p>
+										</div>
+										<div className="rounded-xl bg-slate-50 p-3">
+											<p className="font-bold text-slate-500">Uso</p>
+											<p className="font-black text-slate-950">
+												{decimal.format(metrics.used)}%
+											</p>
+										</div>
+										<div className="rounded-xl bg-slate-50 p-3">
+											<p className="font-bold text-slate-500">
+												Orçamento mensal
+											</p>
+											<p className="font-black text-slate-950">
+												{brl.format(metrics.budget)}
+											</p>
+										</div>
+										<div className="rounded-xl bg-slate-50 p-3">
+											<p className="font-bold text-slate-500">Utilizado</p>
+											<p className="font-black text-slate-950">
+												{brl.format(metrics.realized)}
+											</p>
+										</div>
+									</div>
+									<div className="mt-3 flex flex-wrap gap-2">
+										{metrics.linkedCenters.slice(0, 4).map((center) => (
+											<span
+												key={center.id}
+												className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600"
+											>
+												{center.codigo || center.id} · {center.nome}
+											</span>
+										))}
+										{metrics.linkedCenters.length > 4 ? (
+											<span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-600">
+												+{metrics.linkedCenters.length - 4}
+											</span>
+										) : null}
+									</div>
+									<div className="mt-4 flex flex-wrap gap-2">
+										<button
+											type="button"
+											onClick={() => setViewDirectorate(directorate)}
+											className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-indigo-200 px-3 text-xs font-black text-indigo-700 hover:bg-indigo-50"
+										>
+											<Eye size={14} /> Ver centros
+										</button>
+										<button
+											type="button"
+											onClick={() => setForm(directorate)}
+											disabled={disabled}
+											className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+										>
+											<Pencil size={14} /> Editar
+										</button>
+										<button
+											type="button"
+											onClick={() => removeDirectorate(directorate)}
+											disabled={disabled}
+											className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-red-200 px-3 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+										>
+											<Trash2 size={14} /> Excluir
+										</button>
+									</div>
+								</article>
+							);
+						})}
+					</div>
+				) : (
+					<p className="rounded-xl border border-dashed border-indigo-200 bg-white/70 p-4 text-sm font-bold text-slate-500">
+						Nenhuma diretoria cadastrada.
+					</p>
+				)}
+			</BudgetDropdownSection>
+			{viewDirectorate ? (
+				<ModalShell
+					title={`Centros de ${viewDirectorate.nome}`}
+					description={`${viewDirectorate.diretor || "Diretor não informado"} · ${integer.format(viewMetrics?.linkedCenters.length || 0)} centro(s) vinculado(s)`}
+					onClose={() => setViewDirectorate(null)}
+					size="4xl"
+				>
+					<div className="grid gap-3 md:grid-cols-4">
+						<div className="rounded-2xl bg-indigo-50 p-4">
+							<p className="text-xs font-black uppercase text-indigo-700">
+								Sintéticos
+							</p>
+							<p className="mt-1 text-xl font-black text-indigo-950">
+								{integer.format(viewMetrics?.synthetics.length || 0)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-blue-50 p-4">
+							<p className="text-xs font-black uppercase text-blue-700">
+								Analíticos
+							</p>
+							<p className="mt-1 text-xl font-black text-blue-950">
+								{integer.format(viewMetrics?.analytics.length || 0)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-emerald-50 p-4">
+							<p className="text-xs font-black uppercase text-emerald-700">
+								Orçamento mensal
+							</p>
+							<p className="mt-1 text-xl font-black text-emerald-950">
+								{brl.format(viewMetrics?.budget || 0)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-amber-50 p-4">
+							<p className="text-xs font-black uppercase text-amber-700">
+								Utilizado
+							</p>
+							<p className="mt-1 text-xl font-black text-amber-950">
+								{brl.format(viewMetrics?.realized || 0)}
+							</p>
+						</div>
+					</div>
+					<div className="mt-4 max-h-[520px] overflow-auto rounded-2xl border border-slate-200 bg-white">
+						<table className="min-w-full divide-y divide-slate-100 text-sm">
+							<thead className="sticky top-0 bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+								<tr>
+									<th className="px-4 py-3">Centro</th>
+									<th className="px-4 py-3">Tipo</th>
+									<th className="px-4 py-3">Responsável</th>
+									<th className="px-4 py-3 text-right">Mensal</th>
+									<th className="px-4 py-3 text-right">Realizado</th>
+									<th className="px-4 py-3 text-right">Uso</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{(viewMetrics?.linkedCenters || []).map((center) => {
+									const monthly = Number(
+										center.tipoPlano === "S"
+											? 0
+											: center.valorMensal || center.orcamentoMensal || 0,
+									);
+									const realized = Number(
+										center.tipoPlano === "S"
+											? 0
+											: center.realizadoImportado || center.realizadoMes || 0,
+									);
+									const used = monthly ? (realized / monthly) * 100 : 0;
+									return (
+										<tr key={center.id} className="align-top">
+											<td className="px-4 py-3">
+												<p className="font-black text-slate-950">
+													{center.codigo || center.id} - {center.nome}
+												</p>
+												<p className="mt-1 text-xs font-bold text-slate-500">
+													{center.classificacao ||
+														center.categoriaPrincipal ||
+														"-"}
+												</p>
+											</td>
+											<td className="px-4 py-3">
+												<span
+													className={`rounded-full px-2.5 py-1 text-xs font-black ${center.tipoPlano === "S" ? "bg-indigo-50 text-indigo-700" : "bg-blue-50 text-blue-700"}`}
+												>
+													{center.tipoPlano === "S" ? "Sintético" : "Analítico"}
+												</span>
+											</td>
+											<td className="px-4 py-3 font-bold text-slate-600">
+												{center.responsavel || "-"}
+											</td>
+											<td className="px-4 py-3 text-right font-black text-slate-950">
+												{center.tipoPlano === "S"
+													? "Consolidado"
+													: brl.format(monthly)}
+											</td>
+											<td className="px-4 py-3 text-right font-black text-slate-950">
+												{center.tipoPlano === "S"
+													? "Consolidado"
+													: brl.format(realized)}
+											</td>
+											<td className="px-4 py-3 text-right font-black text-slate-950">
+												{center.tipoPlano === "S"
+													? "-"
+													: `${decimal.format(used)}%`}
+											</td>
+										</tr>
+									);
+								})}
+								{!(viewMetrics?.linkedCenters || []).length ? (
+									<tr>
+										<td
+											colSpan={6}
+											className="px-4 py-8 text-center text-sm font-bold text-slate-500"
+										>
+											Nenhum centro de custo vinculado a esta diretoria.
+										</td>
+									</tr>
+								) : null}
+							</tbody>
+						</table>
+					</div>
+				</ModalShell>
+			) : null}
+		</>
+	);
+}
+
+function EntityMultiSelectInput({
+	label,
+	value = [],
+	onChange,
+	options = [],
+	disabled,
+	helper,
+	placeholder = "Digite para buscar",
+}) {
+	const [draft, setDraft] = useState("");
+	const selected = Array.isArray(value) ? value : [];
+	const datalistId = `datalist-${budgetEntityId(label)}`;
+	const optionLabel = (option) =>
+		`${option.codigo ? `${option.codigo} - ` : ""}${option.nome || option.name || option.id}`;
+	const selectedOptions = selected
+		.map((id) => options.find((option) => option.id === id))
+		.filter(Boolean);
+	const findMatch = () => {
+		const text = String(draft || "")
+			.trim()
+			.toLowerCase();
+		if (!text) return null;
+		return (
+			options.find((option) =>
+				[option.id, option.codigo, option.nome, optionLabel(option)].some(
+					(candidate) =>
+						String(candidate || "")
+							.trim()
+							.toLowerCase() === text,
+				),
+			) ||
+			options.find((option) => optionLabel(option).toLowerCase().includes(text))
+		);
+	};
+	const addItem = () => {
+		const match = findMatch();
+		if (!match) return;
+		onChange([...new Set([...selected, match.id])]);
+		setDraft("");
+	};
+	const removeItem = (id) => onChange(selected.filter((item) => item !== id));
+
+	return (
+		<div className="text-xs font-black uppercase text-slate-500">
+			<span>{label}</span>
+			<div className="mt-2 flex gap-2">
+				<input
+					list={datalistId}
+					value={draft}
+					disabled={disabled}
+					onChange={(event) => setDraft(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							addItem();
+						}
+					}}
+					placeholder={placeholder}
+					className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+				/>
+				<datalist id={datalistId}>
+					{options.map((option) => (
+						<option key={option.id} value={optionLabel(option)} />
+					))}
+				</datalist>
+				<button
+					type="button"
+					disabled={disabled || !findMatch()}
+					onClick={addItem}
+					className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-black normal-case text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<Plus size={16} />
+					Adicionar
+				</button>
+			</div>
+			{selectedOptions.length ? (
+				<div className="mt-2 flex flex-wrap gap-2">
+					{selectedOptions.map((option) => (
+						<span
+							key={option.id}
+							className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-black normal-case text-blue-700"
+						>
+							{optionLabel(option)}
+							<button
+								type="button"
+								disabled={disabled}
+								onClick={() => removeItem(option.id)}
+								className="rounded-full text-blue-500 transition hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+								aria-label={`Remover ${optionLabel(option)}`}
+							>
+								<X size={13} />
+							</button>
+						</span>
+					))}
+				</div>
+			) : null}
+			{helper ? (
+				<span className="mt-1 block text-[11px] font-bold normal-case text-slate-400">
+					{helper}
+				</span>
+			) : null}
+		</div>
+	);
+}
+
+function CostCenterModal({
+	center,
+	centers = [],
+	accounts = [],
+	companies = [],
+	branches = [],
+	settings = DEFAULT_BUDGET_SETTINGS,
+	onClose,
+	onSave,
+	canManage,
+	readOnly = false,
+}) {
+	const initialMonthlyBudget =
+		center?.valorMensal ??
+		center?.orcamentoMensal ??
+		(center?.valorAnual || center?.orcamentoAnual
+			? Number(center?.valorAnual || center?.orcamentoAnual || 0) / 12
+			: "");
+	const [activeTab, setActiveTab] = useState("cadastro");
+	const [form, setForm] = useState({
+		...EMPTY_COST_CENTER,
+		...center,
+		valorMensal: initialMonthlyBudget,
+		valorAnual: initialMonthlyBudget
+			? parseMoneyInput(initialMonthlyBudget) * 12
+			: "",
+		realizadoMes: center?.realizadoMes || "",
+		companies: Array.isArray(center?.companies || center?.empresas)
+			? center.companies || center.empresas
+			: [],
+		branches: Array.isArray(center?.branches || center?.filiais)
+			? center.branches || center.filiais
+			: [],
+		contasFinanceiras: Array.isArray(center?.contasFinanceiras)
+			? center.contasFinanceiras
+			: [],
+	});
+	const [validationMessage, setValidationMessage] = useState("");
+	const [accountSearchInCenter, setAccountSearchInCenter] = useState("");
+	const [branchSearchInCenter, setBranchSearchInCenter] = useState("");
+	const [companySearchInCenter, setCompanySearchInCenter] = useState("");
+	const isEditing = Boolean(center?.id);
+	const budgetSettings = getBudgetSettings(settings);
+	const directorateOptions = budgetSettings.directorates || [];
+	const accountById = new Map(accounts.map((account) => [account.id, account]));
+	const companyById = new Map(
+		companies.map((company) => [company.id, company]),
+	);
+	const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+	const movementsByMonth = useMemo(() => {
+		const groups = new Map();
+		const breakdowns =
+			form.realizedByCompanyBranch || form.realizadoPorEmpresaFilial || [];
+		breakdowns.forEach((breakdown) => {
+			const year = Number(breakdown.year || breakdown.ano || 0) || "";
+			const month = Number(breakdown.month || breakdown.numMes || 0) || "";
+			const key =
+				year && month
+					? `${year}-${String(month).padStart(2, "0")}`
+					: "sem-periodo";
+			const label =
+				year && month ? `${year} - ${budgetMonthName(month)}` : "Sem período";
+			const group = groups.get(key) || { key, label, total: 0, rows: [] };
+			const movements = Array.isArray(
+				breakdown.movements || breakdown.movimentacoes,
+			)
+				? breakdown.movements || breakdown.movimentacoes
+				: [];
+			if (movements.length) {
+				movements.forEach((movement) => {
+					const value = Number(
+						movement.value ??
+							movement.valor ??
+							movement.realized ??
+							movement.realizado ??
+							0,
+					);
+					group.total += value;
+					group.rows.push({
+						...movement,
+						value,
+						accountId: movement.accountId || breakdown.accountId,
+						companyId: movement.companyId || breakdown.companyId,
+						branchId: movement.branchId || breakdown.branchId,
+					});
+				});
+			} else {
+				const value = Number(breakdown.realized ?? breakdown.realizado ?? 0);
+				group.total += value;
+				group.rows.push({
+					id: breakdown.id,
+					date: "",
+					supplier: (breakdown.suppliers || breakdown.fornecedores || []).join(
+						", ",
+					),
+					accountId: breakdown.accountId,
+					companyId: breakdown.companyId,
+					branchId: breakdown.branchId,
+					document: "",
+					type: "",
+					notes: "",
+					value,
+				});
+			}
+			groups.set(key, group);
+		});
+		return Array.from(groups.values()).sort((left, right) =>
+			String(right.key).localeCompare(String(left.key)),
+		);
+	}, [form.realizedByCompanyBranch, form.realizadoPorEmpresaFilial]);
+	const [activeMovementMonth, setActiveMovementMonth] = useState("");
+	const selectedMovementMonth =
+		movementsByMonth.find((group) => group.key === activeMovementMonth) ||
+		movementsByMonth[0];
+
+	const update = (field, value) =>
+		setForm((current) => ({ ...current, [field]: value }));
+	const selectedCenterAccounts = (form.contasFinanceiras || [])
+		.map((accountId) => accountById.get(accountId))
+		.filter(Boolean);
+	const normalizedCenterAccountSearch = normalizeImportHeader(
+		accountSearchInCenter,
+	);
+	const centerAccountResults = normalizedCenterAccountSearch
+		? accounts
+				.filter(
+					(account) => !(form.contasFinanceiras || []).includes(account.id),
+				)
+				.filter((account) =>
+					normalizeImportHeader(
+						[
+							account.codigo,
+							account.reduzida,
+							account.classificacao,
+							account.nome,
+							account.id,
+						]
+							.filter(Boolean)
+							.join(" "),
+					).includes(normalizedCenterAccountSearch),
+				)
+				.slice(0, 8)
+		: [];
+	const addCenterAccount = (accountId) => {
+		const nextAccounts = [
+			...new Set([...(form.contasFinanceiras || []), accountId]),
+		];
+		update("contasFinanceiras", nextAccounts);
+		setAccountSearchInCenter("");
+	};
+	const removeCenterAccount = (accountId) => {
+		const nextAccounts = (form.contasFinanceiras || []).filter(
+			(item) => item !== accountId,
+		);
+		update("contasFinanceiras", nextAccounts);
+		if (!nextAccounts.includes(form.contaFinanceiraPadrao))
+			update("contaFinanceiraPadrao", "");
+	};
+	const selectedCenterBranches = (form.branches || [])
+		.map((branchId) => branchById.get(branchId))
+		.filter(Boolean);
+	const selectedCenterCompanies = (form.companies || [])
+		.map((companyId) => companyById.get(companyId))
+		.filter(Boolean);
+	const normalizedCenterBranchSearch =
+		normalizeImportHeader(branchSearchInCenter);
+	const normalizedCenterCompanySearch = normalizeImportHeader(
+		companySearchInCenter,
+	);
+	const centerBranchResults = normalizedCenterBranchSearch
+		? branches
+				.filter((branch) => !(form.branches || []).includes(branch.id))
+				.filter((branch) =>
+					normalizeImportHeader(
+						[branch.codigo, branch.id, branch.nome, branch.cidade, branch.uf]
+							.filter(Boolean)
+							.join(" "),
+					).includes(normalizedCenterBranchSearch),
+				)
+				.slice(0, 8)
+		: [];
+	const centerCompanyResults = normalizedCenterCompanySearch
+		? companies
+				.filter((company) => !(form.companies || []).includes(company.id))
+				.filter((company) => {
+					const branch = branchById.get(
+						company.filialId || company.branchId || company.filiais?.[0],
+					);
+					return normalizeImportHeader(
+						[
+							company.codigo,
+							company.id,
+							company.nome,
+							company.razaoSocial,
+							company.cnpj,
+							branch?.codigo,
+							branch?.nome,
+						]
+							.filter(Boolean)
+							.join(" "),
+					).includes(normalizedCenterCompanySearch);
+				})
+				.slice(0, 8)
+		: [];
+	const addCenterBranch = (branchId) => {
+		update("branches", [...new Set([...(form.branches || []), branchId])]);
+		setBranchSearchInCenter("");
+	};
+	const removeCenterBranch = (branchId) => {
+		update(
+			"branches",
+			(form.branches || []).filter((item) => item !== branchId),
+		);
+	};
+	const addCenterCompany = (company) => {
+		const branchId =
+			company.filialId || company.branchId || company.filiais?.[0] || "";
+		update("companies", [...new Set([...(form.companies || []), company.id])]);
+		if (branchId)
+			update("branches", [...new Set([...(form.branches || []), branchId])]);
+		setCompanySearchInCenter("");
+	};
+	const removeCenterCompany = (companyId) => {
+		update(
+			"companies",
+			(form.companies || []).filter((item) => item !== companyId),
+		);
+	};
+	const updateDirectorate = (value) => {
+		const selected = findDirectorateByName(directorateOptions, value);
+		setForm((current) => ({
+			...current,
+			diretoria: value,
+			responsavel: selected?.diretor || current.responsavel || "",
+			emailResponsavel:
+				selected?.emailDiretor || current.emailResponsavel || "",
+			telefoneResponsavel:
+				selected?.numeroDiretor || current.telefoneResponsavel || "",
+		}));
+	};
+	const save = () => {
+		const isSyntheticCenter = form.tipoPlano === "S";
+		const monthlyBudget = isSyntheticCenter
+			? 0
+			: parseMoneyInput(form.valorMensal);
+		const next = {
+			...form,
+			companies: Array.isArray(form.companies) ? form.companies : [],
+			branches: Array.isArray(form.branches) ? form.branches : [],
+			contasFinanceiras: Array.isArray(form.contasFinanceiras)
+				? form.contasFinanceiras
+				: [],
+			contaFinanceiraPadrao: form.contaFinanceiraPadrao || "",
+			valorMensal: monthlyBudget,
+			valorAnual: monthlyBudget * 12,
+			orcamentoMensal: monthlyBudget,
+			orcamentoAnual: monthlyBudget * 12,
+			comprometidoMes: isSyntheticCenter
+				? 0
+				: parseMoneyInput(form.comprometidoMes),
+			realizadoImportado: isSyntheticCenter ? 0 : form.realizadoImportado,
+			orcadoImportado: isSyntheticCenter ? 0 : form.orcadoImportado,
+			saldoImportado: isSyntheticCenter ? 0 : form.saldoImportado,
+			realizedByCompanyBranch: isSyntheticCenter
+				? []
+				: form.realizedByCompanyBranch,
+			realizadoPorEmpresaFilial: isSyntheticCenter
+				? []
+				: form.realizadoPorEmpresaFilial,
+			linhasImportadas: isSyntheticCenter ? 0 : form.linhasImportadas,
+			alertaPercentual: Number(form.alertaPercentual || 85),
+		};
+		delete next.realizadoMes;
+		setValidationMessage("");
+		onSave(next);
+	};
+
+	const monthlyBudgetPreview = parseMoneyInput(form.valorMensal);
+	const annualBudgetPreview = monthlyBudgetPreview * 12;
+	const saldoMes = monthlyBudgetPreview - parseMoneyInput(form.comprometidoMes);
+	const usoPercentual = monthlyBudgetPreview
+		? (parseMoneyInput(form.comprometidoMes) / monthlyBudgetPreview) * 100
+		: 0;
+
+	return (
+		<ModalShell
+			title={
+				readOnly
+					? form.nome || "Centro de custo"
+					: isEditing
+						? "Editar centro de custo"
+						: "Novo centro de custo"
+			}
+			description="Plano hierárquico de centro de custo com controle de CAPEX/OPEX, responsáveis e limites de orçamento."
+			onClose={onClose}
+			size="5xl"
+			footer={
+				!readOnly ? (
+					<div className="flex justify-end gap-3">
+						<button
+							type="button"
+							onClick={onClose}
+							className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+						>
+							Cancelar
+						</button>
+						<button
+							type="button"
+							onClick={save}
+							disabled={!canManage}
+							className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+						>
+							Salvar centro
+						</button>
+					</div>
+				) : null
+			}
+		>
+			{validationMessage ? (
+				<div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+					{validationMessage}
+				</div>
+			) : null}
+			<div className="mb-5 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+				{[
+					["cadastro", "Cadastro"],
+					[
+						"movimentacoes",
+						`Movimentações (${movementsByMonth.reduce((sum, group) => sum + group.rows.length, 0)})`,
+					],
+				].map(([tab, label]) => (
+					<button
+						key={tab}
+						type="button"
+						onClick={() => setActiveTab(tab)}
+						className={`min-h-10 rounded-xl px-4 text-sm font-black ${activeTab === tab ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-100"}`}
+					>
+						{label}
+					</button>
+				))}
+			</div>
+			{activeTab === "movimentacoes" ? (
+				<section className="space-y-4">
+					<div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:flex-row lg:items-center lg:justify-between">
+						<div>
+							<h3 className="text-base font-black text-slate-950">
+								Movimentações por mês
+							</h3>
+							<p className="text-sm font-bold text-slate-500">
+								Linhas importadas da planilha para este centro de custo.
+							</p>
+						</div>
+						<div className="flex flex-wrap gap-2">
+							{movementsByMonth.length
+								? movementsByMonth.map((group) => (
+										<button
+											key={group.key}
+											type="button"
+											onClick={() => setActiveMovementMonth(group.key)}
+											className={`rounded-xl border px-3 py-2 text-xs font-black ${selectedMovementMonth?.key === group.key ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+										>
+											{group.label}
+										</button>
+									))
+								: null}
+						</div>
+					</div>
+					{selectedMovementMonth ? (
+						<div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+							<div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+								<div>
+									<p className="text-xs font-black uppercase tracking-wide text-blue-700">
+										{selectedMovementMonth.label}
+									</p>
+									<h4 className="text-lg font-black text-slate-950">
+										{brl.format(selectedMovementMonth.total)}
+									</h4>
+								</div>
+								<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+									{integer.format(selectedMovementMonth.rows.length)}{" "}
+									movimentação(ões)
+								</span>
+							</div>
+							<div className="max-h-[460px] overflow-auto">
+								<table className="min-w-full divide-y divide-slate-100 text-sm">
+									<thead className="sticky top-0 bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+										<tr>
+											<th className="px-4 py-3">Data</th>
+											<th className="px-4 py-3">Fornecedor</th>
+											<th className="px-4 py-3">Conta</th>
+											<th className="px-4 py-3">Matriz / Filial</th>
+											<th className="px-4 py-3">Documento</th>
+											<th className="px-4 py-3 text-right">Valor</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-slate-100">
+										{selectedMovementMonth.rows.map((movement, index) => {
+											const account = accountById.get(movement.accountId);
+											const company = companyById.get(movement.companyId);
+											const branch = branchById.get(movement.branchId);
+											return (
+												<tr
+													key={
+														movement.id ||
+														`${selectedMovementMonth.key}-${index}`
+													}
+													className="align-top"
+												>
+													<td className="px-4 py-3 font-bold text-slate-700">
+														{movement.date || "-"}
+													</td>
+													<td className="px-4 py-3 font-bold text-slate-900">
+														{movement.supplier || movement.fornecedor || "-"}
+													</td>
+													<td className="px-4 py-3 text-slate-600">
+														{account
+															? `${account.codigo || account.id} - ${account.nome}`
+															: movement.accountName ||
+																movement.accountId ||
+																"-"}
+													</td>
+													<td className="px-4 py-3 text-slate-600">
+														<span className="block font-bold">
+															{company
+																? `${company.codigo || company.id} - ${company.nome}`
+																: movement.companyId || "-"}
+														</span>
+														<span className="block text-xs font-bold text-slate-400">
+															{branch
+																? `${branch.codigo || branch.id} - ${branch.nome}`
+																: movement.branchId || "-"}
+														</span>
+													</td>
+													<td className="px-4 py-3 text-slate-600">
+														<span className="block font-bold">
+															{movement.document || movement.titulo || "-"}
+														</span>
+														{movement.notes ? (
+															<span className="block text-xs text-slate-400">
+																{movement.notes}
+															</span>
+														) : null}
+													</td>
+													<td className="px-4 py-3 text-right font-black text-slate-950">
+														{brl.format(Number(movement.value || 0))}
+													</td>
+												</tr>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					) : (
+						<div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm font-bold text-slate-500">
+							Nenhuma movimentação importada para este centro de custo.
+						</div>
+					)}
+				</section>
+			) : (
+				<>
+					<div className="grid gap-4 md:grid-cols-2">
+						<label className="text-xs font-black uppercase text-slate-500">
+							ID / Código
+							<input
+								value={form.codigo || form.id || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("codigo", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Nome do centro
+							<input
+								value={form.nome || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("nome", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Centro pai
+							<select
+								value={form.parentId || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("parentId", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="">Raiz / sem centro pai</option>
+								{centers
+									.filter((item) => item.id !== form.id)
+									.map((item) => (
+										<option key={item.id} value={item.id}>
+											{item.nome}
+										</option>
+									))}
+							</select>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Tipo do centro
+							<select
+								value={form.tipoCentro || "departamento"}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("tipoCentro", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								{budgetSettings.centerTypes.map((type) => (
+									<option key={type} value={type}>
+										{formatOptionLabel(type)}
+									</option>
+								))}
+							</select>
+						</label>
+						<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+							<p className="text-xs font-black uppercase text-slate-500">
+								Plano reduzido
+							</p>
+							<div className="mt-3 grid gap-3 sm:grid-cols-4">
+								<div className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+									<p className="text-[11px] font-black uppercase text-slate-400">
+										Tipo
+									</p>
+									<p className="mt-1 text-sm font-black text-slate-900">
+										{form.tipoPlano === "S"
+											? "Sintético"
+											: form.tipoPlano === "A"
+												? "Analítico"
+												: "-"}
+									</p>
+								</div>
+								<div className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+									<p className="text-[11px] font-black uppercase text-slate-400">
+										Nível
+									</p>
+									<p className="mt-1 text-sm font-black text-slate-900">
+										{form.nivel || "-"}
+									</p>
+								</div>
+								<div className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+									<p className="text-[11px] font-black uppercase text-slate-400">
+										Classificação
+									</p>
+									<p className="mt-1 text-sm font-black text-slate-900">
+										{form.classificacao || "-"}
+									</p>
+								</div>
+								<div className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+									<p className="text-[11px] font-black uppercase text-slate-400">
+										Reduzida
+									</p>
+									<p className="mt-1 text-sm font-black text-slate-900">
+										{form.reduzida || form.codigo || "-"}
+									</p>
+								</div>
+							</div>
+						</div>
+						<fieldset className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+							<legend className="px-1 text-xs font-black uppercase text-slate-500">
+								Matrizes e filiais vinculadas
+							</legend>
+							<p className="mt-1 text-xs font-bold text-slate-500">
+								A importação alimenta esse vínculo automaticamente quando a
+								planilha traz Empresa e Filial.
+							</p>
+							<div className="mt-3 grid gap-3 lg:grid-cols-2">
+								<div className="space-y-3">
+									<label className="block text-xs font-black uppercase text-slate-500">
+										Buscar filial para adicionar
+										<input
+											value={branchSearchInCenter}
+											disabled={readOnly || !canManage}
+											onChange={(event) =>
+												setBranchSearchInCenter(event.target.value)
+											}
+											placeholder="Digite código, nome, cidade ou UF"
+											className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+										/>
+									</label>
+									{centerBranchResults.length ? (
+										<div className="grid gap-2">
+											{centerBranchResults.map((branch) => {
+												const branchCompanies = companies.filter(
+													(item) =>
+														item.filialId === branch.id ||
+														item.branchId === branch.id ||
+														(item.filiais || []).includes(branch.id) ||
+														(
+															branch.empresas ||
+															branch.companies ||
+															[]
+														).includes(item.id),
+												);
+												return (
+													<button
+														key={branch.id}
+														type="button"
+														onClick={() => addCenterBranch(branch.id)}
+														disabled={readOnly || !canManage}
+														className="flex min-h-12 items-start justify-between gap-3 rounded-xl border border-blue-100 bg-white px-3 py-2 text-left text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-60"
+													>
+														<span className="min-w-0">
+															<span className="block truncate text-slate-950">
+																{branch.codigo || branch.id} - {branch.nome}
+															</span>
+															<span className="block text-xs text-slate-500">
+																{[branch.cidade, branch.uf]
+																	.filter(Boolean)
+																	.join(" / ") || "Sem cidade"}{" "}
+																· {branchCompanies.length} matriz(es)
+															</span>
+														</span>
+														<Plus
+															size={14}
+															className="mt-1 shrink-0 text-blue-600"
+														/>
+													</button>
+												);
+											})}
+										</div>
+									) : branchSearchInCenter.trim() ? (
+										<p className="rounded-xl border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-500">
+											Nenhuma filial encontrada.
+										</p>
+									) : null}
+									{selectedCenterBranches.length ? (
+										<div className="flex flex-wrap gap-2">
+											{selectedCenterBranches.map((branch) => (
+												<span
+													key={branch.id}
+													className="inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-cyan-50 px-3 py-1 text-xs font-black text-cyan-700"
+												>
+													{branch.codigo || branch.id} - {branch.nome}
+													<button
+														type="button"
+														disabled={readOnly || !canManage}
+														onClick={() => removeCenterBranch(branch.id)}
+														className="rounded-full text-cyan-500 hover:text-red-600 disabled:opacity-40"
+														aria-label={`Remover ${branch.nome}`}
+													>
+														<X size={13} />
+													</button>
+												</span>
+											))}
+										</div>
+									) : (
+										<p className="rounded-xl bg-white p-3 text-sm font-bold text-slate-500 ring-1 ring-slate-200">
+											Nenhuma filial vinculada a este centro.
+										</p>
+									)}
+								</div>
+								<div className="space-y-3">
+									<label className="block text-xs font-black uppercase text-slate-500">
+										Buscar empresa para adicionar
+										<input
+											value={companySearchInCenter}
+											disabled={readOnly || !canManage}
+											onChange={(event) =>
+												setCompanySearchInCenter(event.target.value)
+											}
+											placeholder="Digite código, nome, CNPJ ou filial"
+											className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+										/>
+									</label>
+									{centerCompanyResults.length ? (
+										<div className="grid gap-2">
+											{centerCompanyResults.map((company) => {
+												const branch = branchById.get(
+													company.filialId ||
+														company.branchId ||
+														company.filiais?.[0],
+												);
+												return (
+													<button
+														key={company.id}
+														type="button"
+														onClick={() => addCenterCompany(company)}
+														disabled={readOnly || !canManage}
+														className="flex min-h-12 items-start justify-between gap-3 rounded-xl border border-purple-100 bg-white px-3 py-2 text-left text-sm font-bold text-slate-700 hover:border-purple-300 hover:bg-purple-50 disabled:opacity-60"
+													>
+														<span className="min-w-0">
+															<span className="block truncate text-slate-950">
+																{company.codigo || company.id} - {company.nome}
+															</span>
+															<span className="block text-xs text-slate-500">
+																Filial:{" "}
+																{branch
+																	? `${branch.codigo || branch.id} - ${branch.nome}`
+																	: "não vinculada"}
+															</span>
+														</span>
+														<Plus
+															size={14}
+															className="mt-1 shrink-0 text-purple-600"
+														/>
+													</button>
+												);
+											})}
+										</div>
+									) : companySearchInCenter.trim() ? (
+										<p className="rounded-xl border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-500">
+											Nenhuma empresa encontrada.
+										</p>
+									) : null}
+									{selectedCenterCompanies.length ? (
+										<div className="flex flex-wrap gap-2">
+											{selectedCenterCompanies.map((company) => {
+												const branch = branchById.get(
+													company.filialId ||
+														company.branchId ||
+														company.filiais?.[0],
+												);
+												return (
+													<span
+														key={company.id}
+														className="inline-flex items-center gap-2 rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-xs font-black text-purple-700"
+													>
+														{company.codigo || company.id} - {company.nome}
+														{branch ? ` · ${branch.nome}` : ""}
+														<button
+															type="button"
+															disabled={readOnly || !canManage}
+															onClick={() => removeCenterCompany(company.id)}
+															className="rounded-full text-purple-500 hover:text-red-600 disabled:opacity-40"
+															aria-label={`Remover ${company.nome}`}
+														>
+															<X size={13} />
+														</button>
+													</span>
+												);
+											})}
+										</div>
+									) : (
+										<p className="rounded-xl bg-white p-3 text-sm font-bold text-slate-500 ring-1 ring-slate-200">
+											Nenhuma matriz vinculada a este centro.
+										</p>
+									)}
+								</div>
+							</div>
+						</fieldset>
+						<fieldset className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+							<legend className="px-1 text-xs font-black uppercase text-slate-500">
+								Contas financeiras permitidas
+							</legend>
+							{accounts.length ? (
+								<div className="mt-3 space-y-3">
+									<label className="block text-xs font-black uppercase text-slate-500">
+										Buscar conta para adicionar
+										<input
+											value={accountSearchInCenter}
+											disabled={readOnly || !canManage}
+											onChange={(event) =>
+												setAccountSearchInCenter(event.target.value)
+											}
+											placeholder="Digite código, reduzida ou nome da conta"
+											className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+										/>
+									</label>
+									{centerAccountResults.length ? (
+										<div className="grid gap-2 lg:grid-cols-2">
+											{centerAccountResults.map((account) => (
+												<button
+													key={account.id}
+													type="button"
+													onClick={() => addCenterAccount(account.id)}
+													disabled={readOnly || !canManage}
+													className="flex min-h-12 items-start justify-between gap-3 rounded-xl border border-blue-100 bg-white px-3 py-2 text-left text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-60"
+												>
+													<span className="min-w-0">
+														<span className="block truncate text-slate-950">
+															{account.codigo || account.reduzida || account.id}{" "}
+															- {account.nome}
+														</span>
+														<span className="block text-xs text-slate-500">
+															{account.tipo === "receita"
+																? "Receita"
+																: "Despesa"}{" "}
+															· {COST_CENTER_TYPES[account.natureza] || "OPEX"}
+														</span>
+													</span>
+													<Plus
+														size={14}
+														className="mt-1 shrink-0 text-blue-600"
+													/>
+												</button>
+											))}
+										</div>
+									) : accountSearchInCenter.trim() ? (
+										<p className="rounded-xl border border-dashed border-slate-200 bg-white p-3 text-sm font-bold text-slate-500">
+											Nenhuma conta encontrada com esse código ou nome.
+										</p>
+									) : null}
+									{selectedCenterAccounts.length ? (
+										<div className="flex flex-wrap gap-2">
+											{selectedCenterAccounts.map((account) => (
+												<span
+													key={account.id}
+													className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700"
+												>
+													{account.codigo || account.reduzida || account.id} -{" "}
+													{account.nome}
+													<button
+														type="button"
+														disabled={readOnly || !canManage}
+														onClick={() => removeCenterAccount(account.id)}
+														className="rounded-full text-blue-500 hover:text-red-600 disabled:opacity-40"
+														aria-label={`Remover ${account.nome}`}
+													>
+														<X size={13} />
+													</button>
+												</span>
+											))}
+										</div>
+									) : (
+										<p className="rounded-xl bg-white p-3 text-sm font-bold text-slate-500 ring-1 ring-slate-200">
+											Nenhuma conta financeira vinculada a este centro.
+										</p>
+									)}
+								</div>
+							) : (
+								<p className="mt-2 text-sm font-bold text-amber-700">
+									Cadastre contas financeiras para vincular a natureza dos
+									lançamentos.
+								</p>
+							)}
+						</fieldset>
+						<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+							Conta financeira padrão
+							<select
+								value={form.contaFinanceiraPadrao || ""}
+								disabled={
+									readOnly ||
+									!canManage ||
+									!(form.contasFinanceiras || []).length
+								}
+								onChange={(event) =>
+									update("contaFinanceiraPadrao", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="">Sem padrão</option>
+								{accounts
+									.filter((account) =>
+										(form.contasFinanceiras || []).includes(account.id),
+									)
+									.map((account) => (
+										<option key={account.id} value={account.id}>
+											{account.nome}
+										</option>
+									))}
+							</select>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Responsável
+							<input
+								value={form.responsavel || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("responsavel", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Número do responsável
+							<input
+								value={form.telefoneResponsavel || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) =>
+									update("telefoneResponsavel", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							E-mail do responsável
+							<input
+								value={form.emailResponsavel || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) =>
+									update("emailResponsavel", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Classificação
+							<select
+								value={form.tipoDespesa || "opex"}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("tipoDespesa", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="opex">OPEX - despesa operacional</option>
+								<option value="capex">CAPEX - investimento</option>
+								<option value="misto">Misto - CAPEX e OPEX</option>
+							</select>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Categoria principal
+							<select
+								value={form.categoriaPrincipal || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) =>
+									update("categoriaPrincipal", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="">Selecione a categoria</option>
+								{budgetSettings.mainCategories.map((category) => (
+									<option key={category} value={category}>
+										{category}
+									</option>
+								))}
+							</select>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Diretoria
+							<select
+								value={form.diretoria || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => updateDirectorate(event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="">Selecione a diretoria</option>
+								{directorateOptions.map((directorate) => (
+									<option
+										key={directorate.id || directorate.nome}
+										value={directorate.nome}
+									>
+										{directorate.nome}
+									</option>
+								))}
+							</select>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Conta contábil / GL
+							<input
+								value={form.contaContabil || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) =>
+									update("contaContabil", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						{form.tipoPlano === "S" ? (
+							<div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold normal-case text-blue-900 md:col-span-2">
+								Centro sintético não recebe orçamento, comprometido ou realizado
+								próprio. Esses valores são calculados automaticamente pela soma
+								dos centros analíticos filhos.
+							</div>
+						) : (
+							<>
+								<label className="text-xs font-black uppercase text-slate-500">
+									Orçamento mensal
+									<MoneyInput
+										value={form.valorMensal}
+										disabled={readOnly || !canManage}
+										onChange={(event) =>
+											update("valorMensal", event.target.value)
+										}
+									/>
+								</label>
+								<label className="text-xs font-black uppercase text-slate-500">
+									Orçamento anual
+									<div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-black normal-case text-slate-800">
+										{brl.format(annualBudgetPreview)}
+										<span className="ml-2 text-xs font-bold text-slate-500">
+											calculado pelo mensal x 12
+										</span>
+									</div>
+								</label>
+								<label className="text-xs font-black uppercase text-slate-500">
+									Realizado no mês
+									<div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black normal-case text-slate-600">
+										Calculado pela planilha importada, conforme o mês do campo
+										Data Pagamento.
+									</div>
+								</label>
+								<label className="text-xs font-black uppercase text-slate-500">
+									Comprometido no mês
+									<MoneyInput
+										value={form.comprometidoMes}
+										disabled={readOnly || !canManage}
+										onChange={(event) =>
+											update("comprometidoMes", event.target.value)
+										}
+									/>
+								</label>
+							</>
+						)}
+						<label className="text-xs font-black uppercase text-slate-500">
+							Alerta ao atingir (%)
+							<input
+								type="number"
+								min="1"
+								max="100"
+								value={form.alertaPercentual || 85}
+								disabled={readOnly || !canManage}
+								onChange={(event) =>
+									update("alertaPercentual", event.target.value)
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Status
+							<select
+								value={form.status || "ativo"}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("status", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								{budgetSettings.centerStatuses.map((status) => (
+									<option key={status} value={status}>
+										{formatOptionLabel(status)}
+									</option>
+								))}
+							</select>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+							Finalidade
+							<textarea
+								rows={3}
+								value={form.finalidade || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("finalidade", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+							Observações
+							<textarea
+								rows={3}
+								value={form.observacoes || ""}
+								disabled={readOnly || !canManage}
+								onChange={(event) => update("observacoes", event.target.value)}
+								className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+					</div>
+					{form.tipoPlano === "S" ? null : (
+						<dl className="mt-5 grid gap-3 md:grid-cols-3">
+							<div className="rounded-2xl bg-slate-50 p-4">
+								<dt className="text-xs font-black uppercase text-slate-500">
+									Uso do mês
+								</dt>
+								<dd className="mt-1 text-xl font-black text-slate-950">
+									{decimal.format(usoPercentual)}%
+								</dd>
+							</div>
+							<div className="rounded-2xl bg-slate-50 p-4">
+								<dt className="text-xs font-black uppercase text-slate-500">
+									Saldo mensal
+								</dt>
+								<dd className="mt-1 text-xl font-black text-slate-950">
+									{brl.format(saldoMes)}
+								</dd>
+							</div>
+							<div className="rounded-2xl bg-slate-50 p-4">
+								<dt className="text-xs font-black uppercase text-slate-500">
+									Tipo
+								</dt>
+								<dd className="mt-1 text-xl font-black text-slate-950">
+									{COST_CENTER_TYPES[form.tipoDespesa] || "OPEX"}
+								</dd>
+							</div>
+						</dl>
+					)}
+				</>
+			)}
+		</ModalShell>
+	);
+}
+
+function CostCenterAnalyticChildrenModal({
+	synthetic,
+	category,
+	children = [],
+	onClose,
+	onView,
+	onEdit,
+	canManage,
+}) {
+	const [page, setPage] = useState(1);
+	const syntheticDirectorate = findDirectorateByName(
+		[
+			synthetic?.diretoria
+				? {
+						nome: synthetic.diretoria,
+						diretor: synthetic.responsavel,
+						emailDiretor: synthetic.emailResponsavel,
+						numeroDiretor: synthetic.telefoneResponsavel,
+					}
+				: null,
+		].filter(Boolean),
+		synthetic?.diretoria,
+	);
+	const pageSize = 10;
+	const totalPages = Math.max(1, Math.ceil(children.length / pageSize));
+	const safePage = Math.min(page, totalPages);
+	const visibleChildren = children.slice(
+		(safePage - 1) * pageSize,
+		safePage * pageSize,
+	);
+
+	return (
+		<ModalShell
+			title={`Analíticos de ${synthetic?.nome || "centro sintético"}`}
+			description={`${synthetic?.codigo || synthetic?.id || "-"} · ${category ? `Categoria: ${category.codigo || category.id} - ${category.nome}` : "Sem categoria informada"}`}
+			onClose={onClose}
+			size="5xl"
+		>
+			<div className="space-y-4">
+				<div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-500">
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						{integer.format(children.length)} centro(s) analítico(s)
+					</span>
+					<span className="rounded-full bg-indigo-50 px-3 py-1 text-indigo-700">
+						Diretoria:{" "}
+						{synthetic?.diretoria ||
+							synthetic?.categoriaPrincipal ||
+							"Não informada"}
+					</span>
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						Diretor:{" "}
+						{syntheticDirectorate?.diretor ||
+							synthetic?.responsavel ||
+							"Não informado"}
+					</span>
+				</div>
+
+				<div className="grid gap-3 md:grid-cols-2">
+					{visibleChildren.map((child) => {
+						const childInactive =
+							String(child.status || "")
+								.toLowerCase()
+								.includes("inativo") ||
+							normalizeImportHeader(child.nome || "").includes("inativo");
+						const childBudget = Number(
+							child.valorMensal || child.orcamentoMensal || 0,
+						);
+						const childRealized = Number(child.realizadoImportado || 0);
+						return (
+							<article
+								key={child.id}
+								className={`rounded-2xl border p-4 shadow-sm ${childInactive ? "border-slate-200 bg-slate-50 opacity-80" : "border-slate-200 bg-white"}`}
+							>
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0">
+										<p className="text-xs font-black uppercase tracking-wide text-blue-700">
+											{child.codigo || child.id}
+										</p>
+										<h3
+											className="mt-1 truncate text-base font-black text-slate-950"
+											title={child.nome}
+										>
+											{child.nome}
+										</h3>
+										<p
+											className="mt-1 truncate text-xs font-bold text-slate-500"
+											title={child.responsavel || ""}
+										>
+											Responsável: {child.responsavel || "Não informado"}
+										</p>
+									</div>
+									<span
+										className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${childInactive ? "bg-slate-200 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}
+									>
+										{child.status || "ativo"}
+									</span>
+								</div>
+								<div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+									<div className="rounded-xl bg-slate-50 p-3">
+										<p className="font-bold text-slate-500">Mensal</p>
+										<p className="font-black text-slate-950">
+											{brl.format(childBudget)}
+										</p>
+									</div>
+									<div className="rounded-xl bg-slate-50 p-3">
+										<p className="font-bold text-slate-500">Realizado</p>
+										<p className="font-black text-slate-950">
+											{brl.format(childRealized)}
+										</p>
+									</div>
+								</div>
+								<div className="mt-4 flex flex-wrap gap-2">
+									<button
+										type="button"
+										onClick={() => onView(child)}
+										className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50"
+									>
+										<Eye size={14} /> Ver
+									</button>
+									<button
+										type="button"
+										onClick={() => onEdit(child)}
+										disabled={!canManage}
+										className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+									>
+										<Pencil size={14} /> Editar
+									</button>
+								</div>
+							</article>
+						);
+					})}
+				</div>
+
+				{totalPages > 1 ? (
+					<div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+						<span className="px-2 text-xs font-black text-slate-500">
+							Página {integer.format(safePage)} de {integer.format(totalPages)}
+						</span>
+						<span className="flex gap-2">
+							<button
+								type="button"
+								onClick={() => setPage((value) => Math.max(1, value - 1))}
+								disabled={safePage <= 1}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Anterior
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									setPage((value) => Math.min(totalPages, value + 1))
+								}
+								disabled={safePage >= totalPages}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Próxima
+							</button>
+						</span>
+					</div>
+				) : null}
+			</div>
+		</ModalShell>
+	);
+}
+
+function FinancialAccountAnalyticChildrenModal({
+	synthetic,
+	category,
+	children = [],
+	onClose,
+	onView,
+	onEdit,
+	canManage,
+}) {
+	const [page, setPage] = useState(1);
+	const pageSize = 10;
+	const totalPages = Math.max(1, Math.ceil(children.length / pageSize));
+	const safePage = Math.min(page, totalPages);
+	const visibleChildren = children.slice(
+		(safePage - 1) * pageSize,
+		safePage * pageSize,
+	);
+
+	return (
+		<ModalShell
+			title={`Analíticas de ${synthetic?.nome || "conta sintética"}`}
+			description={`${synthetic?.codigo || synthetic?.id || "-"} · ${category ? `Categoria: ${category.codigo || category.id} - ${category.nome}` : "Sem categoria informada"}`}
+			onClose={onClose}
+			size="5xl"
+		>
+			<div className="space-y-4">
+				<div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-500">
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						{integer.format(children.length)} conta(s) analítica(s)
+					</span>
+					<span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+						{synthetic?.naturezaPlano === "C" ? "Receita" : "Despesa"}
+					</span>
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						Rateio: {synthetic?.rateio || "-"}
+					</span>
+				</div>
+
+				<div className="grid gap-3 md:grid-cols-2">
+					{visibleChildren.map((child) => {
+						const childInactive =
+							String(child.status || "")
+								.toLowerCase()
+								.includes("inativo") ||
+							normalizeImportHeader(child.nome || "").includes("inativo");
+						return (
+							<article
+								key={child.id}
+								className={`rounded-2xl border p-4 shadow-sm ${childInactive ? "border-slate-200 bg-slate-50 opacity-80" : "border-slate-200 bg-white"}`}
+							>
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0">
+										<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+											{child.codigo || child.id} ·{" "}
+											{child.reduzida || child.classificacao}
+										</p>
+										<h3
+											className="mt-1 truncate text-base font-black text-slate-950"
+											title={child.nome}
+										>
+											{child.nome}
+										</h3>
+										<p className="mt-1 truncate text-xs font-bold text-slate-500">
+											{child.naturezaPlano === "C" ? "Receita" : "Despesa"} ·
+											Nível {child.nivel || "-"} · Rateio {child.rateio || "-"}
+										</p>
+									</div>
+									<span
+										className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${childInactive ? "bg-slate-200 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}
+									>
+										{child.status || "ativo"}
+									</span>
+								</div>
+								<div className="mt-4 flex flex-wrap gap-2">
+									<button
+										type="button"
+										onClick={() => onView(child)}
+										className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50"
+									>
+										<Eye size={14} /> Ver
+									</button>
+									<button
+										type="button"
+										onClick={() => onEdit(child)}
+										disabled={!canManage}
+										className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+									>
+										<Pencil size={14} /> Editar
+									</button>
+								</div>
+							</article>
+						);
+					})}
+				</div>
+
+				{totalPages > 1 ? (
+					<div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+						<span className="px-2 text-xs font-black text-slate-500">
+							Página {integer.format(safePage)} de {integer.format(totalPages)}
+						</span>
+						<span className="flex gap-2">
+							<button
+								type="button"
+								onClick={() => setPage((value) => Math.max(1, value - 1))}
+								disabled={safePage <= 1}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Anterior
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									setPage((value) => Math.min(totalPages, value + 1))
+								}
+								disabled={safePage >= totalPages}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Próxima
+							</button>
+						</span>
+					</div>
+				) : null}
+			</div>
+		</ModalShell>
+	);
+}
+
+function FinancialAccountViewModal({
+	account,
+	accounts = [],
+	centers = [],
+	companies = [],
+	branches = [],
+	onClose,
+}) {
+	const accountById = new Map(
+		accounts.flatMap((item) => {
+			const keys = [item.id, item.codigo, item.reduzida]
+				.filter(Boolean)
+				.map((key) => String(key).replace(/\D+/g, "") || String(key));
+			return keys.map((key) => [key, item]);
+		}),
+	);
+	const companyById = new Map(
+		companies.map((company) => [company.id, company]),
+	);
+	const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+	const childrenByParent = new Map();
+	accounts.forEach((item) => {
+		const parentKeys = [item.parentId, item.parentCodigo]
+			.filter(Boolean)
+			.map((key) => String(key).replace(/\D+/g, "") || String(key));
+		parentKeys.forEach((parentKey) => {
+			const current = childrenByParent.get(parentKey) || [];
+			current.push(item);
+			childrenByParent.set(parentKey, current);
+		});
+	});
+	const collectAccountKeys = (root) => {
+		const keys = new Set();
+		const queue = [root].filter(Boolean);
+		while (queue.length) {
+			const item = queue.shift();
+			[item.id, item.codigo, item.reduzida].filter(Boolean).forEach((key) => {
+				const normalized = String(key).replace(/\D+/g, "") || String(key);
+				if (normalized) keys.add(normalized);
+			});
+			const childKeys = [item.id, item.codigo, item.reduzida]
+				.filter(Boolean)
+				.map((key) => String(key).replace(/\D+/g, "") || String(key));
+			childKeys.forEach((key) => {
+				(childrenByParent.get(key) || []).forEach((child) => {
+					const childKey =
+						String(child.id || child.codigo || "").replace(/\D+/g, "") ||
+						String(child.id || child.codigo || "");
+					if (childKey && !keys.has(childKey)) queue.push(child);
+				});
+			});
+		}
+		return keys;
+	};
+	const accountKeys = collectAccountKeys(account);
+	const movementsByMonth = useMemo(() => {
+		const groups = new Map();
+		centers.forEach((center) => {
+			const breakdowns =
+				center.realizedByCompanyBranch ||
+				center.realizadoPorEmpresaFilial ||
+				[];
+			breakdowns.forEach((breakdown) => {
+				const movements = Array.isArray(
+					breakdown.movements || breakdown.movimentacoes,
+				)
+					? breakdown.movements || breakdown.movimentacoes
+					: [];
+				const rows = movements.length
+					? movements
+					: [
+							{
+								id: breakdown.id,
+								date: "",
+								supplier: (
+									breakdown.suppliers ||
+									breakdown.fornecedores ||
+									[]
+								).join(", "),
+								accountId: breakdown.accountId,
+								companyId: breakdown.companyId,
+								branchId: breakdown.branchId,
+								document: "",
+								type: "",
+								notes: "",
+								value: Number(breakdown.realized ?? breakdown.realizado ?? 0),
+							},
+						];
+				rows.forEach((movement) => {
+					const movementAccountKey =
+						String(movement.accountId || breakdown.accountId || "").replace(
+							/\D+/g,
+							"",
+						) || String(movement.accountId || breakdown.accountId || "");
+					if (!movementAccountKey || !accountKeys.has(movementAccountKey))
+						return;
+					const year =
+						Number(
+							movement.year ||
+								movement.ano ||
+								breakdown.year ||
+								breakdown.ano ||
+								0,
+						) || "";
+					const month =
+						Number(
+							movement.month ||
+								movement.numMes ||
+								breakdown.month ||
+								breakdown.numMes ||
+								0,
+						) || "";
+					const key =
+						year && month
+							? `${year}-${String(month).padStart(2, "0")}`
+							: "sem-periodo";
+					const label =
+						year && month
+							? `${year} - ${budgetMonthName(month)}`
+							: "Sem período";
+					const group = groups.get(key) || { key, label, total: 0, rows: [] };
+					const value = Number(
+						movement.value ??
+							movement.valor ??
+							movement.realized ??
+							movement.realizado ??
+							0,
+					);
+					group.total += value;
+					group.rows.push({
+						...movement,
+						value,
+						accountId: movement.accountId || breakdown.accountId,
+						companyId: movement.companyId || breakdown.companyId,
+						branchId: movement.branchId || breakdown.branchId,
+						centerId: center.id,
+						centerName: center.nome,
+					});
+					groups.set(key, group);
+				});
+			});
+		});
+		return Array.from(groups.values()).sort((left, right) =>
+			String(right.key).localeCompare(String(left.key)),
+		);
+	}, [accountKeys, centers]);
+	const [activeMonth, setActiveMonth] = useState("");
+	const selectedMonth =
+		movementsByMonth.find((group) => group.key === activeMonth) ||
+		movementsByMonth[0];
+	const total = movementsByMonth.reduce((sum, group) => sum + group.total, 0);
+	const rowsCount = movementsByMonth.reduce(
+		(sum, group) => sum + group.rows.length,
+		0,
+	);
+
+	return (
+		<ModalShell
+			title={`${account?.codigo || account?.id || "-"} - ${account?.nome || "Conta financeira"}`}
+			description={`${account?.tipoPlano === "S" ? "Conta sintética" : "Conta analítica"} · ${account?.naturezaPlano === "C" ? "Crédito/Receita" : "Débito/Despesa"} · Movimentações importadas vinculadas à conta.`}
+			onClose={onClose}
+			size="6xl"
+		>
+			<div className="space-y-4">
+				<div className="grid gap-3 md:grid-cols-4">
+					<div className="rounded-2xl bg-emerald-50 p-4">
+						<p className="text-xs font-black uppercase text-emerald-700">
+							Total movimentado
+						</p>
+						<p className="mt-1 text-xl font-black text-emerald-950">
+							{brl.format(total)}
+						</p>
+					</div>
+					<div className="rounded-2xl bg-slate-50 p-4">
+						<p className="text-xs font-black uppercase text-slate-500">
+							Movimentações
+						</p>
+						<p className="mt-1 text-xl font-black text-slate-950">
+							{integer.format(rowsCount)}
+						</p>
+					</div>
+					<div className="rounded-2xl bg-slate-50 p-4">
+						<p className="text-xs font-black uppercase text-slate-500">Grupo</p>
+						<p className="mt-1 text-sm font-black text-slate-950">
+							{account?.grupo || "-"}
+						</p>
+					</div>
+					<div className="rounded-2xl bg-slate-50 p-4">
+						<p className="text-xs font-black uppercase text-slate-500">
+							Grupo DRE
+						</p>
+						<p className="mt-1 text-sm font-black text-slate-950">
+							{account?.dreGroup || "-"}
+						</p>
+					</div>
+				</div>
+
+				<div className="flex flex-wrap gap-2">
+					{movementsByMonth.length
+						? movementsByMonth.map((group) => (
+								<button
+									key={group.key}
+									type="button"
+									onClick={() => setActiveMonth(group.key)}
+									className={`rounded-xl border px-3 py-2 text-xs font-black ${selectedMonth?.key === group.key ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+								>
+									{group.label}
+								</button>
+							))
+						: null}
+				</div>
+
+				{selectedMonth ? (
+					<div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+						<div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+									{selectedMonth.label}
+								</p>
+								<h4 className="text-lg font-black text-slate-950">
+									{brl.format(selectedMonth.total)}
+								</h4>
+							</div>
+							<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+								{integer.format(selectedMonth.rows.length)} movimentação(ões)
+							</span>
+						</div>
+						<div className="max-h-[520px] overflow-auto">
+							<table className="min-w-full divide-y divide-slate-100 text-sm">
+								<thead className="sticky top-0 bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+									<tr>
+										<th className="px-4 py-3">Data</th>
+										<th className="px-4 py-3">Fornecedor</th>
+										<th className="px-4 py-3">Centro</th>
+										<th className="px-4 py-3">Conta analítica</th>
+										<th className="px-4 py-3">Matriz / Filial</th>
+										<th className="px-4 py-3 text-right">Valor</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-slate-100">
+									{selectedMonth.rows.map((movement, index) => {
+										const movementAccountKey =
+											String(movement.accountId || "").replace(/\D+/g, "") ||
+											String(movement.accountId || "");
+										const movementAccount = accountById.get(movementAccountKey);
+										const company = companyById.get(movement.companyId);
+										const branch = branchById.get(movement.branchId);
+										return (
+											<tr
+												key={movement.id || `${selectedMonth.key}-${index}`}
+												className="align-top"
+											>
+												<td className="px-4 py-3 font-bold text-slate-700">
+													{movement.date || "-"}
+												</td>
+												<td className="px-4 py-3 font-bold text-slate-900">
+													{movement.supplier || movement.fornecedor || "-"}
+												</td>
+												<td className="px-4 py-3 text-slate-600">
+													{movement.centerName || movement.centerId || "-"}
+												</td>
+												<td className="px-4 py-3 text-slate-600">
+													{movementAccount
+														? `${movementAccount.codigo || movementAccount.id} - ${movementAccount.nome}`
+														: movement.accountName || movement.accountId || "-"}
+												</td>
+												<td className="px-4 py-3 text-slate-600">
+													<span className="block font-bold">
+														{company
+															? `${company.codigo || company.id} - ${company.nome}`
+															: movement.companyId || "-"}
+													</span>
+													<span className="block text-xs font-bold text-slate-400">
+														{branch
+															? `${branch.codigo || branch.id} - ${branch.nome}`
+															: movement.branchId || "-"}
+													</span>
+												</td>
+												<td className="px-4 py-3 text-right font-black text-slate-950">
+													{brl.format(Number(movement.value || 0))}
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				) : (
+					<div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm font-bold text-slate-500">
+						Nenhuma movimentação importada para esta conta financeira.
+					</div>
+				)}
+			</div>
+		</ModalShell>
+	);
+}
+
+function FinancialAccountModal({
+	account,
+	accounts = [],
+	settings = DEFAULT_BUDGET_SETTINGS,
+	onClose,
+	onSave,
+	canManage,
+}) {
+	const [form, setForm] = useState({ ...EMPTY_FINANCIAL_ACCOUNT, ...account });
+	const [message, setMessage] = useState("");
+	const budgetSettings = getBudgetSettings(settings);
+	const planAccountGroups = accounts
+		.filter((item) => Number(item.nivel || 0) === 2)
+		.map(
+			(item) =>
+				`${String(item.codigo || item.id || "").replace(/\D+/g, "")} - ${item.nome}`,
+		)
+		.filter((item) => item.trim() !== " -");
+	const accountGroupOptions = [
+		...new Set(
+			[...planAccountGroups, ...(budgetSettings.accountGroups || [])].filter(
+				Boolean,
+			),
+		),
+	];
+	const dreGroupOptions = [
+		...new Set(
+			[...planAccountGroups, ...(budgetSettings.dreGroups || [])].filter(
+				Boolean,
+			),
+		),
+	];
+	const matchConfiguredOption = (value, options) => {
+		const normalizedValue = normalizeImportHeader(value);
+		if (!normalizedValue) return "";
+		return (
+			options.find(
+				(option) => normalizeImportHeader(option) === normalizedValue,
+			) ||
+			options.find((option) =>
+				normalizeImportHeader(option).endsWith(` ${normalizedValue}`),
+			) ||
+			""
+		);
+	};
+	const selectedGroupValue = matchConfiguredOption(
+		form.grupo,
+		accountGroupOptions,
+	);
+	const selectedDreGroupValue = matchConfiguredOption(
+		form.dreGroup,
+		dreGroupOptions,
+	);
+
+	const update = (field, value) =>
+		setForm((current) => ({ ...current, [field]: value }));
+	const save = () => {
+		if (!String(form.nome || "").trim()) {
+			setMessage("Informe o nome da conta financeira.");
+			return;
+		}
+		setMessage("");
+		onSave({
+			...form,
+			grupo: selectedGroupValue || form.grupo || "",
+			dreGroup: selectedDreGroupValue || form.dreGroup || "",
+		});
+	};
+
+	return (
+		<ModalShell
+			title={account?.id ? "Editar conta financeira" : "Nova conta financeira"}
+			description="Conta financeira define a natureza do lançamento, como Água/Luz/Telefone, Materiais, Frota ou Sistemas."
+			onClose={onClose}
+			size="2xl"
+			footer={
+				<div className="flex justify-end gap-3">
+					<button
+						type="button"
+						onClick={onClose}
+						className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={save}
+						disabled={!canManage}
+						className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+					>
+						Salvar conta
+					</button>
+				</div>
+			}
+		>
+			{message ? (
+				<div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+					{message}
+				</div>
+			) : null}
+			<div className="grid gap-4 md:grid-cols-2">
+				<label className="text-xs font-black uppercase text-slate-500">
+					Código / ID
+					<input
+						value={form.codigo || form.id || ""}
+						disabled={!canManage}
+						onChange={(event) => update("codigo", event.target.value)}
+						placeholder="Ex: 3.1.02"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Nome da conta
+					<input
+						value={form.nome || ""}
+						disabled={!canManage}
+						onChange={(event) => update("nome", event.target.value)}
+						placeholder="Ex: Água, Luz e Telefone"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+					Conta pai
+					<select
+						value={form.parentId || ""}
+						disabled={!canManage}
+						onChange={(event) => update("parentId", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="">Raiz / sem conta pai</option>
+						{accounts
+							.filter((item) => item.id !== form.id)
+							.map((item) => (
+								<option key={item.id} value={item.id}>
+									{item.codigo ? `${item.codigo} - ` : ""}
+									{item.nome}
+								</option>
+							))}
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Tipo
+					<select
+						value={form.tipo || "despesa"}
+						disabled={!canManage}
+						onChange={(event) => update("tipo", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="despesa">Despesa</option>
+						<option value="receita">Receita</option>
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Natureza
+					<select
+						value={form.natureza || "opex"}
+						disabled={!canManage}
+						onChange={(event) => update("natureza", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="opex">OPEX - operacional</option>
+						<option value="capex">CAPEX - investimento</option>
+						<option value="misto">Misto</option>
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Grupo
+					<select
+						value={selectedGroupValue || ""}
+						disabled={!canManage}
+						onChange={(event) => update("grupo", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="">Selecione o grupo</option>
+						{accountGroupOptions.map((group) => (
+							<option key={group} value={group}>
+								{group}
+							</option>
+						))}
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Grupo DRE
+					<select
+						value={selectedDreGroupValue || ""}
+						disabled={!canManage}
+						onChange={(event) => update("dreGroup", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="">Selecione o grupo DRE</option>
+						{dreGroupOptions.map((group) => (
+							<option key={group} value={group}>
+								{group}
+							</option>
+						))}
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Conta contábil / GL
+					<input
+						value={form.contaContabil || ""}
+						disabled={!canManage}
+						onChange={(event) => update("contaContabil", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Status
+					<select
+						value={form.status || "ativo"}
+						disabled={!canManage}
+						onChange={(event) => update("status", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="ativo">Ativo</option>
+						<option value="inativo">Inativo</option>
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+					Descrição
+					<textarea
+						rows={3}
+						value={form.descricao || ""}
+						disabled={!canManage}
+						onChange={(event) => update("descricao", event.target.value)}
+						placeholder="Explique quando essa conta deve ser usada."
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+			</div>
+		</ModalShell>
+	);
+}
+
+function BudgetCompanyBranchModal({
+	type = "company",
+	item,
+	companies = [],
+	onClose,
+	onSave,
+	canManage,
+}) {
+	const isBranch = type === "branch";
+	const [form, setForm] = useState({
+		...(isBranch ? EMPTY_BUDGET_BRANCH : EMPTY_BUDGET_COMPANY),
+		...item,
+		empresaId:
+			item?.empresaId ||
+			item?.companyId ||
+			item?.empresas?.[0] ||
+			item?.companies?.[0] ||
+			"",
+	});
+	const [message, setMessage] = useState("");
+	const update = (field, value) =>
+		setForm((current) => ({ ...current, [field]: value }));
+
+	const save = () => {
+		if (!String(form.codigo || "").trim()) {
+			setMessage(
+				isBranch
+					? "Informe o ID da filial igual aparece na coluna Empresa da planilha."
+					: "Informe o ID da matriz igual aparece na coluna Filial da planilha.",
+			);
+			return;
+		}
+		if (!String(form.nome || "").trim()) {
+			setMessage(
+				isBranch ? "Informe o nome da filial." : "Informe o nome da matriz.",
+			);
+			return;
+		}
+		if (isBranch && !form.empresaId) {
+			setMessage("Selecione a matriz dessa filial.");
+			return;
+		}
+		setMessage("");
+		onSave(
+			isBranch
+				? { ...form, empresas: form.empresaId ? [form.empresaId] : [] }
+				: form,
+			type,
+		);
+	};
+
+	return (
+		<ModalShell
+			title={isBranch ? "Cadastro de filial" : "Cadastro de matriz"}
+			description={
+				isBranch
+					? "Filial usa o campo Empresa da planilha e fica vinculada a uma matriz."
+					: "Matriz usa o campo Filial da planilha e pode ter várias filiais com IDs repetidos em outras matrizes."
+			}
+			onClose={onClose}
+			size="2xl"
+			footer={
+				<div className="flex justify-end gap-3">
+					<button
+						type="button"
+						onClick={onClose}
+						className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={save}
+						disabled={!canManage}
+						className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						Salvar
+					</button>
+				</div>
+			}
+		>
+			{message ? (
+				<div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+					{message}
+				</div>
+			) : null}
+			<div className="grid gap-4 md:grid-cols-2">
+				{isBranch ? (
+					<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+						Matriz
+						<select
+							value={form.empresaId || ""}
+							disabled={!canManage}
+							onChange={(event) => update("empresaId", event.target.value)}
+							className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+						>
+							<option value="">Selecione a matriz</option>
+							{companies.map((company) => (
+								<option key={company.id} value={company.id}>
+									{company.codigo ? `${company.codigo} - ` : ""}
+									{company.nome}
+								</option>
+							))}
+						</select>
+					</label>
+				) : null}
+				<label className="text-xs font-black uppercase text-slate-500">
+					ID da {isBranch ? "filial" : "matriz"}
+					<input
+						value={form.codigo || ""}
+						disabled={!canManage}
+						onChange={(event) => update("codigo", event.target.value)}
+						placeholder={isBranch ? "Ex: 2" : "Ex: 1"}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Nome
+					<input
+						value={form.nome || ""}
+						disabled={!canManage}
+						onChange={(event) => update("nome", event.target.value)}
+						placeholder={
+							isBranch
+								? "Ex: Filial Ribeirão Vermelho"
+								: "Ex: Sempre Telecomunicacoes LTDA"
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Nome fantasia
+					<input
+						value={form.nomeFantasia || ""}
+						disabled={!canManage}
+						onChange={(event) => update("nomeFantasia", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Cidade
+					<input
+						value={form.cidade || ""}
+						disabled={!canManage}
+						onChange={(event) => update("cidade", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					CNPJ
+					<input
+						value={form.cnpj || ""}
+						disabled={!canManage}
+						onChange={(event) => update("cnpj", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Status
+					<select
+						value={form.status || "ativo"}
+						disabled={!canManage}
+						onChange={(event) => update("status", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="ativo">Ativo</option>
+						<option value="inativo">Inativo</option>
+						<option value="bloqueado">Bloqueado</option>
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+					Observações
+					<textarea
+						rows={3}
+						value={form.observacoes || ""}
+						disabled={!canManage}
+						onChange={(event) => update("observacoes", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+			</div>
+		</ModalShell>
+	);
+}
+
+function BudgetPartnerModal({
+	partner,
+	accounts = [],
+	centers = [],
+	companies = [],
+	branches = [],
+	onClose,
+	onSave,
+	canManage,
+}) {
+	const [form, setForm] = useState({
+		...EMPTY_BUDGET_PARTNER,
+		...partner,
+		centrosCusto: Array.isArray(partner?.centrosCusto)
+			? partner.centrosCusto
+			: [partner?.centroCustoPadraoId].filter(Boolean),
+		empresas: Array.isArray(partner?.empresas) ? partner.empresas : [],
+		filiais: Array.isArray(partner?.filiais) ? partner.filiais : [],
+	});
+	const [message, setMessage] = useState("");
+	const isEditing = Boolean(partner?.id);
+	const update = (field, value) =>
+		setForm((current) => ({ ...current, [field]: value }));
+	const toggleList = (field, value, checked) => {
+		update(
+			field,
+			checked
+				? [...new Set([...(form[field] || []), value])]
+				: (form[field] || []).filter((item) => item !== value),
+		);
+	};
+	const save = () => {
+		if (!String(form.nome || "").trim()) {
+			setMessage("Informe o nome do fornecedor/cliente.");
+			return;
+		}
+		setMessage("");
+		onSave({
+			...form,
+			centroCustoPadraoId: (form.centrosCusto || [])[0] || "",
+		});
+	};
+
+	return (
+		<ModalShell
+			title={
+				isEditing ? "Editar fornecedor / cliente" : "Novo fornecedor / cliente"
+			}
+			description="Vincule conta financeira, centro de custo, empresa e filial para automatizar lançamentos futuros."
+			onClose={onClose}
+			size="4xl"
+			footer={
+				<div className="flex justify-end gap-3">
+					<button
+						type="button"
+						onClick={onClose}
+						className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={save}
+						disabled={!canManage}
+						className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						Salvar fornecedor
+					</button>
+				</div>
+			}
+		>
+			{message ? (
+				<div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+					{message}
+				</div>
+			) : null}
+			<div className="grid gap-4 md:grid-cols-2">
+				<label className="text-xs font-black uppercase text-slate-500">
+					Código / ID
+					<input
+						value={form.codigo || form.id || ""}
+						disabled={!canManage}
+						onChange={(event) => update("codigo", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Tipo
+					<select
+						value={form.tipo || "fornecedor"}
+						disabled={!canManage}
+						onChange={(event) => update("tipo", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="fornecedor">Fornecedor</option>
+						<option value="cliente">Cliente</option>
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Nome
+					<input
+						value={form.nome || ""}
+						disabled={!canManage}
+						onChange={(event) => update("nome", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Razão social
+					<input
+						value={form.razaoSocial || ""}
+						disabled={!canManage}
+						onChange={(event) => update("razaoSocial", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					CNPJ
+					<input
+						value={form.cnpj || ""}
+						disabled={!canManage}
+						onChange={(event) => update("cnpj", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Status
+					<select
+						value={form.status || "ativo"}
+						disabled={!canManage}
+						onChange={(event) => update("status", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="ativo">Ativo</option>
+						<option value="inativo">Inativo</option>
+						<option value="bloqueado">Bloqueado</option>
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Conta financeira padrão
+					<select
+						value={form.contaPadraoId || ""}
+						disabled={!canManage}
+						onChange={(event) => update("contaPadraoId", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option value="">Sem conta padrão</option>
+						{accounts.map((account) => (
+							<option key={account.id} value={account.id}>
+								{account.codigo ? `${account.codigo} - ` : ""}
+								{account.nome}
+							</option>
+						))}
+					</select>
+				</label>
+				<div className="md:col-span-2">
+					<EntityMultiSelectInput
+						label="Centros de custo vinculados"
+						value={form.centrosCusto || []}
+						options={centers}
+						disabled={!canManage}
+						onChange={(value) => update("centrosCusto", value)}
+						helper="Digite o código ou nome do centro e clique em adicionar. O primeiro centro será usado como padrão quando necessário."
+						placeholder="Ex: 110701 ou ROT"
+					/>
+				</div>
+				<label className="text-xs font-black uppercase text-slate-500">
+					E-mail
+					<input
+						value={form.email || ""}
+						disabled={!canManage}
+						onChange={(event) => update("email", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500">
+					Telefone
+					<input
+						value={form.telefone || ""}
+						disabled={!canManage}
+						onChange={(event) => update("telefone", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+				<fieldset className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+					<legend className="px-1 text-xs font-black uppercase text-slate-500">
+						Matrizes e filiais vinculadas
+					</legend>
+					<div className="mt-3 grid gap-3 md:grid-cols-2">
+						<div>
+							<p className="text-xs font-black uppercase text-slate-500">
+								Filiais
+							</p>
+							<div className="mt-2 grid max-h-56 gap-2 overflow-auto pr-1">
+								{branches.length ? (
+									branches.map((branch) => (
+										<label
+											key={branch.id}
+											className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200"
+										>
+											<input
+												type="checkbox"
+												checked={(form.filiais || []).includes(branch.id)}
+												disabled={!canManage}
+												onChange={(event) =>
+													toggleList("filiais", branch.id, event.target.checked)
+												}
+												className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+											/>
+											{branch.codigo ? `${branch.codigo} - ` : ""}
+											{branch.nome}
+										</label>
+									))
+								) : (
+									<p className="rounded-xl bg-white p-3 text-sm font-bold text-slate-500">
+										Nenhuma filial cadastrada.
+									</p>
+								)}
+							</div>
+						</div>
+						<div>
+							<p className="text-xs font-black uppercase text-slate-500">
+								Matrizes
+							</p>
+							<div className="mt-2 grid max-h-56 gap-2 overflow-auto pr-1">
+								{companies.length ? (
+									companies.map((company) => (
+										<label
+											key={company.id}
+											className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 ring-1 ring-slate-200"
+										>
+											<input
+												type="checkbox"
+												checked={(form.empresas || []).includes(company.id)}
+												disabled={!canManage}
+												onChange={(event) =>
+													toggleList(
+														"empresas",
+														company.id,
+														event.target.checked,
+													)
+												}
+												className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+											/>
+											{company.codigo ? `${company.codigo} - ` : ""}
+											{company.nome}
+										</label>
+									))
+								) : (
+									<p className="rounded-xl bg-white p-3 text-sm font-bold text-slate-500">
+										Nenhuma matriz cadastrada.
+									</p>
+								)}
+							</div>
+						</div>
+					</div>
+				</fieldset>
+				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+					Observações
+					<textarea
+						rows={3}
+						value={form.observacoes || ""}
+						disabled={!canManage}
+						onChange={(event) => update("observacoes", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					/>
+				</label>
+			</div>
+		</ModalShell>
+	);
+}
+
+function BudgetPartnerViewModal({
+	partner,
+	accounts = [],
+	centers = [],
+	companies = [],
+	branches = [],
+	onClose,
+}) {
+	const accountById = useMemo(
+		() => new Map(accounts.map((account) => [account.id, account])),
+		[accounts],
+	);
+	const centerById = useMemo(
+		() => new Map(centers.map((center) => [center.id, center])),
+		[centers],
+	);
+	const companyById = useMemo(
+		() => new Map(companies.map((company) => [company.id, company])),
+		[companies],
+	);
+	const branchById = useMemo(
+		() => new Map(branches.map((branch) => [branch.id, branch])),
+		[branches],
+	);
+	const movementsByMonth = useMemo(() => {
+		const groups = new Map();
+		const movements = Array.isArray(
+			partner?.movements || partner?.movimentacoes,
+		)
+			? partner.movements || partner.movimentacoes
+			: [];
+		movements.forEach((movement, index) => {
+			const date = String(movement.date || movement.data || "").slice(0, 10);
+			const parsed = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+			const year = Number(parsed?.[1] || 0);
+			const month = Number(
+				parsed?.[2] || movement.month || movement.numMes || 0,
+			);
+			const key =
+				year && month
+					? `${year}-${String(month).padStart(2, "0")}`
+					: "sem-periodo";
+			const label =
+				year && month ? `${year} - ${budgetMonthName(month)}` : "Sem período";
+			const group = groups.get(key) || { key, label, total: 0, rows: [] };
+			const value = Number(
+				movement.value ??
+					movement.valor ??
+					movement.realized ??
+					movement.realizado ??
+					0,
+			);
+			group.total += value;
+			group.rows.push({
+				...movement,
+				id: movement.id || `${key}-${index}`,
+				value,
+			});
+			groups.set(key, group);
+		});
+		return Array.from(groups.values()).sort((left, right) =>
+			String(right.key).localeCompare(String(left.key)),
+		);
+	}, [partner]);
+	const [activeMonth, setActiveMonth] = useState("");
+	const [activeCenter, setActiveCenter] = useState("");
+	const selectedMonth =
+		movementsByMonth.find((group) => group.key === activeMonth) ||
+		movementsByMonth[0];
+	const centersInSelectedMonth = useMemo(() => {
+		const centerIds = new Set(
+			(selectedMonth?.rows || [])
+				.map((movement) => movement.centerId || movement.centroCustoId)
+				.filter(Boolean),
+		);
+		return Array.from(centerIds)
+			.map(
+				(centerId) =>
+					centerById.get(centerId) || {
+						id: centerId,
+						codigo: centerId,
+						nome: centerId,
+					},
+			)
+			.sort((left, right) =>
+				String(left.nome || left.id).localeCompare(
+					String(right.nome || right.id),
+					"pt-BR",
+				),
+			);
+	}, [centerById, selectedMonth]);
+	const filteredRows = activeCenter
+		? (selectedMonth?.rows || []).filter(
+				(movement) =>
+					(movement.centerId || movement.centroCustoId) === activeCenter,
+			)
+		: selectedMonth?.rows || [];
+	const filteredTotal = filteredRows.reduce(
+		(sum, movement) => sum + Number(movement.value || 0),
+		0,
+	);
+
+	return (
+		<ModalShell
+			title={partner?.nome || "Fornecedor"}
+			description="Consulta de dados e movimentações importadas para este fornecedor."
+			icon={<Eye size={20} />}
+			onClose={onClose}
+			size="5xl"
+			footer={
+				<div className="flex justify-end">
+					<button
+						type="button"
+						onClick={onClose}
+						className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Fechar
+					</button>
+				</div>
+			}
+		>
+			<div className="grid gap-3 md:grid-cols-4">
+				<div className="rounded-2xl bg-purple-50 p-4">
+					<p className="text-xs font-black uppercase text-purple-700">Código</p>
+					<p className="mt-1 text-lg font-black text-purple-950">
+						{partner?.codigo || partner?.id || "-"}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-slate-50 p-4">
+					<p className="text-xs font-black uppercase text-slate-500">Tipo</p>
+					<p className="mt-1 text-lg font-black text-slate-950">
+						{partner?.tipo === "cliente" ? "Cliente" : "Fornecedor"}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-emerald-50 p-4">
+					<p className="text-xs font-black uppercase text-emerald-700">
+						Realizado
+					</p>
+					<p className="mt-1 text-lg font-black text-emerald-950">
+						{brl.format(partner?.totalRealizado || 0)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-blue-50 p-4">
+					<p className="text-xs font-black uppercase text-blue-700">
+						Linhas importadas
+					</p>
+					<p className="mt-1 text-lg font-black text-blue-950">
+						{integer.format(
+							partner?.linhasImportadas ||
+								movementsByMonth.reduce(
+									(sum, group) => sum + group.rows.length,
+									0,
+								),
+						)}
+					</p>
+				</div>
+			</div>
+
+			<section className="mt-5 space-y-4">
+				<div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:flex-row lg:items-center lg:justify-between">
+					<div>
+						<h3 className="text-base font-black text-slate-950">
+							Movimentações por mês
+						</h3>
+						<p className="text-sm font-bold text-slate-500">
+							Mostra cada lançamento, centro de custo, conta financeira, empresa
+							e filial.
+						</p>
+					</div>
+					<div className="flex flex-col gap-2 lg:items-end">
+						<div className="flex flex-wrap gap-2">
+							{movementsByMonth.map((group) => (
+								<button
+									key={group.key}
+									type="button"
+									onClick={() => {
+										setActiveMonth(group.key);
+										setActiveCenter("");
+									}}
+									className={`rounded-xl border px-3 py-2 text-xs font-black ${selectedMonth?.key === group.key ? "border-purple-600 bg-purple-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+								>
+									{group.label}
+								</button>
+							))}
+						</div>
+						{selectedMonth ? (
+							<label className="flex flex-col gap-1 text-xs font-black uppercase text-slate-500 sm:min-w-72">
+								Ver por centro de custo
+								<select
+									value={activeCenter}
+									onChange={(event) => setActiveCenter(event.target.value)}
+									className="min-h-10 rounded-xl border border-purple-200 bg-white px-3 text-sm font-bold normal-case text-slate-900 outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
+								>
+									<option value="">Todos os centros</option>
+									{centersInSelectedMonth.map((center) => (
+										<option key={center.id} value={center.id}>
+											{center.codigo ? `${center.codigo} - ` : ""}
+											{center.nome || center.id}
+										</option>
+									))}
+								</select>
+							</label>
+						) : null}
+					</div>
+				</div>
+
+				{selectedMonth ? (
+					<div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+						<div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="text-xs font-black uppercase tracking-wide text-purple-700">
+									{selectedMonth.label}
+								</p>
+								<h4 className="text-lg font-black text-slate-950">
+									{brl.format(filteredTotal)}
+								</h4>
+								{activeCenter ? (
+									<p className="text-xs font-bold text-slate-500">
+										Filtrado por{" "}
+										{centersInSelectedMonth.find(
+											(center) => center.id === activeCenter,
+										)?.nome || activeCenter}
+									</p>
+								) : null}
+							</div>
+							<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+								{integer.format(filteredRows.length)} movimentação(ões)
+							</span>
+						</div>
+						<div className="max-h-[460px] overflow-auto">
+							<table className="min-w-full divide-y divide-slate-100 text-sm">
+								<thead className="sticky top-0 bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+									<tr>
+										<th className="px-4 py-3">Data</th>
+										<th className="px-4 py-3">Centro de custo</th>
+										<th className="px-4 py-3">Conta</th>
+										<th className="px-4 py-3">Matriz / Filial</th>
+										<th className="px-4 py-3">Documento</th>
+										<th className="px-4 py-3 text-right">Valor</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-slate-100">
+									{filteredRows.map((movement) => {
+										const center = centerById.get(
+											movement.centerId || movement.centroCustoId,
+										);
+										const account = accountById.get(
+											movement.accountId || movement.contaId,
+										);
+										const company = companyById.get(
+											movement.companyId || movement.empresaId,
+										);
+										const branch = branchById.get(
+											movement.branchId || movement.filialId,
+										);
+										return (
+											<tr key={movement.id} className="align-top">
+												<td className="px-4 py-3 font-bold text-slate-700">
+													{movement.date || movement.data || "-"}
+												</td>
+												<td className="px-4 py-3 font-bold text-slate-900">
+													{center
+														? `${center.codigo || center.id} - ${center.nome}`
+														: movement.centerName || movement.centerId || "-"}
+												</td>
+												<td className="px-4 py-3 text-slate-600">
+													{account
+														? `${account.codigo || account.id} - ${account.nome}`
+														: movement.accountName || movement.accountId || "-"}
+												</td>
+												<td className="px-4 py-3 text-slate-600">
+													<span className="block font-bold">
+														{company
+															? `${company.codigo || company.id} - ${company.nome}`
+															: movement.companyId || "-"}
+													</span>
+													<span className="block text-xs font-bold text-slate-400">
+														{branch
+															? `${branch.codigo || branch.id} - ${branch.nome}`
+															: movement.branchId || "-"}
+													</span>
+												</td>
+												<td className="px-4 py-3 text-slate-600">
+													<span className="block font-bold">
+														{movement.document || movement.titulo || "-"}
+													</span>
+													{movement.notes ? (
+														<span className="block text-xs text-slate-400">
+															{movement.notes}
+														</span>
+													) : null}
+												</td>
+												<td className="px-4 py-3 text-right font-black text-slate-950">
+													{brl.format(Number(movement.value || 0))}
+												</td>
+											</tr>
+										);
+									})}
+									{!filteredRows.length ? (
+										<tr>
+											<td
+												colSpan={6}
+												className="px-4 py-6 text-center text-sm font-bold text-slate-500"
+											>
+												Nenhuma movimentação encontrada para este centro de
+												custo no mês selecionado.
+											</td>
+										</tr>
+									) : null}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				) : (
+					<div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm font-bold text-slate-500">
+						Nenhuma movimentação importada para este fornecedor.
+					</div>
+				)}
+			</section>
+		</ModalShell>
+	);
+}
+
+function CostCentersConfigSection({ canManage }) {
+	const [config, setConfig] = useState({
+		clusters: [],
+		accounts: [],
+		centers: [],
+		partners: [],
+		companies: [],
+		branches: [],
+		matrix: [],
+		versions: [],
+		allocationRules: [],
+		settings: DEFAULT_BUDGET_SETTINGS,
+	});
+	const configRef = useRef(config);
+	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
+	const [message, setMessage] = useState("");
+	const [feedback, setFeedback] = useState(null);
+	const [accountModal, setAccountModal] = useState(null);
+	const [accountViewModal, setAccountViewModal] = useState(null);
+	const [accountChildrenModal, setAccountChildrenModal] = useState(null);
+	const [accountSearch, setAccountSearch] = useState("");
+	const [accountStatusFilter, setAccountStatusFilter] = useState("ativos");
+	const [accountPage, setAccountPage] = useState(1);
+	const [companyBranchModal, setCompanyBranchModal] = useState(null);
+	const [partnerModal, setPartnerModal] = useState(null);
+	const [partnerViewModal, setPartnerViewModal] = useState(null);
+	const [modalState, setModalState] = useState(null);
+	const [analyticChildrenModal, setAnalyticChildrenModal] = useState(null);
+	const [matrixCenterFilter, setMatrixCenterFilter] = useState("");
+	const [partnerSearch, setPartnerSearch] = useState("");
+	const [centerSearch, setCenterSearch] = useState("");
+	const [centerStatusFilter, setCenterStatusFilter] = useState("ativos");
+	const [centerPage, setCenterPage] = useState(1);
+	const [parametersOpen, setParametersOpen] = useState(false);
+
+	const applyConfigState = useCallback((nextConfig) => {
+		const sanitized = {
+			clusters: [],
+			accounts: [],
+			centers: [],
+			partners: [],
+			companies: [],
+			branches: [],
+			matrix: [],
+			versions: [],
+			allocationRules: [],
+			...(nextConfig || {}),
+			settings: getBudgetSettings(nextConfig?.settings),
+		};
+		configRef.current = sanitized;
+		setConfig(sanitized);
+		return sanitized;
+	}, []);
+
+	const loadCostCenters = useCallback(async () => {
+		setLoading(true);
+		setMessage("");
+		try {
+			const response = await buscarCentrosCustoOrcamentoFinanceiro();
+			const nextConfig = response.config || {};
+			applyConfigState(nextConfig);
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Não foi possível carregar os centros de custo.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao carregar configurações",
+				...visibleError,
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, [applyConfigState]);
+
+	useEffect(() => {
+		loadCostCenters();
+	}, [loadCostCenters]);
+
+	const saveConfig = async (
+		nextConfig,
+		successMessage = "Centros de custo salvos.",
+	) => {
+		setSaving(true);
+		setMessage("");
+		try {
+			const sanitizedConfig = {
+				...(nextConfig || {}),
+				settings: getBudgetSettings(nextConfig?.settings),
+			};
+			const response =
+				await salvarCentrosCustoOrcamentoFinanceiro(sanitizedConfig);
+			const savedConfig = response.config || sanitizedConfig;
+			const isSettingsSave =
+				successMessage === "Parâmetros configuráveis salvos.";
+			applyConfigState({
+				...savedConfig,
+				settings: isSettingsSave
+					? sanitizedConfig.settings
+					: savedConfig.settings,
+			});
+			setMessage(successMessage);
+			setModalState(null);
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao salvar centros de custo.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao salvar configuração",
+				...visibleError,
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const upsertAccount = (account) => {
+		const rawId = String(
+			account.id || account.codigo || account.nome || "",
+		).trim();
+		const id =
+			rawId
+				.normalize("NFD")
+				.replace(/[\u0300-\u036f]/g, "")
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-")
+				.replace(/^-+|-+$/g, "") || `conta-${Date.now()}`;
+		const nextAccount = { ...account, id };
+		const currentAccounts = config.accounts || [];
+		const existingIndex = currentAccounts.findIndex(
+			(item) => item.id === id || item.codigo === account.codigo,
+		);
+		const nextAccounts =
+			existingIndex >= 0
+				? currentAccounts.map((item, index) =>
+						index === existingIndex ? nextAccount : item,
+					)
+				: [...currentAccounts, nextAccount];
+		const previousId =
+			existingIndex >= 0 ? currentAccounts[existingIndex].id : "";
+		const nextCenters = (config.centers || []).map((center) => ({
+			...center,
+			contasFinanceiras: (center.contasFinanceiras || []).map((item) =>
+				item === previousId ? id : item,
+			),
+			contaFinanceiraPadrao:
+				center.contaFinanceiraPadrao === previousId
+					? id
+					: center.contaFinanceiraPadrao,
+		}));
+		setAccountModal(null);
+		saveConfig({ ...config, accounts: nextAccounts, centers: nextCenters });
+	};
+
+	const removeAccount = (accountId) => {
+		saveConfig({
+			...config,
+			accounts: (config.accounts || []).filter(
+				(account) => account.id !== accountId,
+			),
+			centers: (config.centers || []).map((center) => ({
+				...center,
+				contasFinanceiras: (center.contasFinanceiras || []).filter(
+					(item) => item !== accountId,
+				),
+				contaFinanceiraPadrao:
+					center.contaFinanceiraPadrao === accountId
+						? ""
+						: center.contaFinanceiraPadrao,
+			})),
+		});
+	};
+
+	const upsertPartner = (partner) => {
+		const rawId = String(
+			partner.id || partner.codigo || partner.cnpj || partner.nome || "",
+		).trim();
+		const id = budgetEntityId(rawId, `fornecedor-${Date.now()}`);
+		const centrosCusto = [
+			...new Set(
+				[...(partner.centrosCusto || []), partner.centroCustoPadraoId].filter(
+					Boolean,
+				),
+			),
+		];
+		const nextPartner = {
+			...partner,
+			id,
+			centrosCusto,
+			centroCustoPadraoId: centrosCusto[0] || "",
+		};
+		const currentPartners = config.partners || [];
+		const existingIndex = currentPartners.findIndex(
+			(item) =>
+				item.id === id ||
+				(partner.codigo && item.codigo === partner.codigo) ||
+				(partner.cnpj && item.cnpj === partner.cnpj),
+		);
+		const previousId =
+			existingIndex >= 0 ? currentPartners[existingIndex].id : "";
+		const nextPartners =
+			existingIndex >= 0
+				? currentPartners.map((item, index) =>
+						index === existingIndex ? nextPartner : item,
+					)
+				: [...currentPartners, nextPartner];
+		const nextCenters = (config.centers || []).map((center) => ({
+			...center,
+			fornecedores: (center.fornecedores || []).map((partnerId) =>
+				partnerId === previousId ? id : partnerId,
+			),
+		}));
+		setPartnerModal(null);
+		saveConfig({ ...config, partners: nextPartners, centers: nextCenters });
+	};
+
+	const removePartner = (partnerId) => {
+		saveConfig({
+			...config,
+			partners: (config.partners || []).filter(
+				(partner) => partner.id !== partnerId,
+			),
+			centers: (config.centers || []).map((center) => ({
+				...center,
+				fornecedores: (center.fornecedores || []).filter(
+					(item) => item !== partnerId,
+				),
+			})),
+		});
+	};
+
+	const upsertCompanyOrBranch = (item, type) => {
+		const isBranch = type === "branch";
+		const rawId = String(item.id || item.codigo || item.nome || "").trim();
+		const matrixId =
+			item.empresaId ||
+			item.companyId ||
+			item.empresas?.[0] ||
+			item.companies?.[0] ||
+			"";
+		const id = isBranch
+			? budgetEntityId(
+					`${matrixId || "matriz"}-${item.codigo || rawId}`,
+					`filial-${Date.now()}`,
+				)
+			: budgetEntityId(rawId, `matriz-${Date.now()}`);
+		const nextItem = isBranch
+			? {
+					...item,
+					id,
+					empresaId: matrixId,
+					companyId: matrixId,
+					empresas: matrixId ? [matrixId] : [],
+					companies: matrixId ? [matrixId] : [],
+				}
+			: {
+					...item,
+					id,
+					filialId: item.filialId || item.branchId || item.filiais?.[0] || "",
+					branchId: item.branchId || item.filialId || item.filiais?.[0] || "",
+					filiais: item.filiais || [],
+				};
+
+		if (isBranch) {
+			const currentBranches = config.branches || [];
+			const existingIndex = currentBranches.findIndex(
+				(branch) =>
+					branch.id === id ||
+					(branch.codigo === item.codigo &&
+						(branch.empresaId ||
+							branch.empresas?.[0] ||
+							branch.companies?.[0] ||
+							"") === matrixId),
+			);
+			const previousId =
+				existingIndex >= 0 ? currentBranches[existingIndex].id : "";
+			const nextBranches =
+				existingIndex >= 0
+					? currentBranches.map((branch, index) =>
+							index === existingIndex ? nextItem : branch,
+						)
+					: [...currentBranches, nextItem];
+			const nextCompanies = (config.companies || []).map((company) => ({
+				...company,
+				filialId:
+					company.id === matrixId
+						? company.filialId || id
+						: company.filialId === previousId
+							? id
+							: company.filialId,
+				branchId:
+					company.id === matrixId
+						? company.branchId || id
+						: company.branchId === previousId
+							? id
+							: company.branchId,
+				filiais:
+					company.id === matrixId
+						? [
+								...new Set([
+									...(company.filiais || []).filter(
+										(branchId) => branchId !== previousId,
+									),
+									id,
+								]),
+							]
+						: (company.filiais || []).map((branchId) =>
+								branchId === previousId ? id : branchId,
+							),
+			}));
+			const nextCenters = (config.centers || []).map((center) => ({
+				...center,
+				branches: (center.branches || center.filiais || []).map((branchId) =>
+					branchId === previousId ? id : branchId,
+				),
+			}));
+			setCompanyBranchModal(null);
+			saveConfig({
+				...config,
+				branches: nextBranches,
+				companies: nextCompanies,
+				centers: nextCenters,
+			});
+			return;
+		}
+
+		const currentCompanies = config.companies || [];
+		const existingIndex = currentCompanies.findIndex(
+			(company) => company.id === id || company.codigo === item.codigo,
+		);
+		const previousId =
+			existingIndex >= 0 ? currentCompanies[existingIndex].id : "";
+		const nextCompanies =
+			existingIndex >= 0
+				? currentCompanies.map((company, index) =>
+						index === existingIndex
+							? { ...nextItem, filiais: company.filiais || [] }
+							: company,
+					)
+				: [...currentCompanies, nextItem];
+		const nextBranches = (config.branches || []).map((branch) => {
+			const companiesInBranch = [
+				...new Set(
+					[...(branch.empresas || branch.companies || [])]
+						.map((companyId) => (companyId === previousId ? id : companyId))
+						.filter(Boolean),
+				),
+			];
+			return {
+				...branch,
+				empresas: [...new Set(companiesInBranch)],
+				companies: [...new Set(companiesInBranch)],
+				empresaId: branch.empresaId === previousId ? id : branch.empresaId,
+			};
+		});
+		const nextCenters = (config.centers || []).map((center) => ({
+			...center,
+			companies: (center.companies || center.empresas || []).map((companyId) =>
+				companyId === previousId ? id : companyId,
+			),
+		}));
+		setCompanyBranchModal(null);
+		saveConfig({
+			...config,
+			companies: nextCompanies,
+			branches: nextBranches,
+			centers: nextCenters,
+		});
+	};
+
+	const removeCompany = (companyId) => {
+		saveConfig({
+			...config,
+			companies: (config.companies || []).filter(
+				(company) => company.id !== companyId,
+			),
+			branches: (config.branches || []).map((branch) => {
+				const companiesInBranch = (
+					branch.empresas ||
+					branch.companies ||
+					[]
+				).filter((item) => item !== companyId);
+				return {
+					...branch,
+					empresas: companiesInBranch,
+					companies: companiesInBranch,
+					empresaId:
+						branch.empresaId === companyId
+							? companiesInBranch[0] || ""
+							: branch.empresaId,
+				};
+			}),
+			centers: (config.centers || []).map((center) => ({
+				...center,
+				companies: (center.companies || center.empresas || []).filter(
+					(item) => item !== companyId,
+				),
+			})),
+		});
+	};
+
+	const removeBranch = (branchId) => {
+		saveConfig({
+			...config,
+			branches: (config.branches || []).filter(
+				(branch) => branch.id !== branchId,
+			),
+			companies: (config.companies || []).map((company) => ({
+				...company,
+				filialId: company.filialId === branchId ? "" : company.filialId,
+				branchId: company.branchId === branchId ? "" : company.branchId,
+				filiais: (company.filiais || []).filter((item) => item !== branchId),
+			})),
+			centers: (config.centers || []).map((center) => ({
+				...center,
+				branches: (center.branches || center.filiais || []).filter(
+					(item) => item !== branchId,
+				),
+			})),
+		});
+	};
+
+	const upsertCenter = (center) => {
+		const currentCenters = config.centers || [];
+		const rawId = String(
+			center.id || center.codigo || center.nome || "",
+		).trim();
+		const id =
+			rawId
+				.normalize("NFD")
+				.replace(/[\u0300-\u036f]/g, "")
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, "-")
+				.replace(/^-+|-+$/g, "") || `centro-${Date.now()}`;
+		const selectedDirectorate = findDirectorateByName(
+			budgetSettings.directorates,
+			center.diretoria,
+		);
+		const parentCenter = currentCenters.find(
+			(item) =>
+				item.id === center.parentId ||
+				item.codigo === center.parentCodigo ||
+				item.codigo === center.parentId,
+		);
+		const inheritedDirectorate =
+			center.tipoPlano === "A" && !center.diretoria
+				? parentCenter?.diretoria || ""
+				: center.diretoria || "";
+		const nextCenter = {
+			...center,
+			id,
+			diretoria: inheritedDirectorate,
+			responsavel:
+				center.tipoPlano === "S" && selectedDirectorate?.diretor
+					? selectedDirectorate.diretor
+					: center.responsavel,
+			emailResponsavel:
+				center.tipoPlano === "S" && selectedDirectorate?.emailDiretor
+					? selectedDirectorate.emailDiretor
+					: center.emailResponsavel,
+			telefoneResponsavel:
+				center.tipoPlano === "S" && selectedDirectorate?.numeroDiretor
+					? selectedDirectorate.numeroDiretor
+					: center.telefoneResponsavel,
+		};
+		const existingIndex = currentCenters.findIndex(
+			(item) => item.id === id || item.codigo === center.codigo,
+		);
+		const nextCenters =
+			existingIndex >= 0
+				? currentCenters.map((item, index) => {
+						if (index === existingIndex) return nextCenter;
+						const isChild =
+							nextCenter.tipoPlano === "S" &&
+							(item.parentId === nextCenter.id ||
+								item.parentId === nextCenter.codigo ||
+								item.parentCodigo === nextCenter.codigo);
+						return isChild
+							? { ...item, diretoria: nextCenter.diretoria }
+							: item;
+					})
+				: [...currentCenters, nextCenter];
+		saveConfig({ ...config, centers: nextCenters });
+	};
+
+	const removeCenter = (centerId) => {
+		saveConfig({
+			...config,
+			centers: (config.centers || []).filter(
+				(center) => center.id !== centerId,
+			),
+		});
+	};
+
+	const budgetSettings = getBudgetSettings(config.settings);
+	const updateSettings = async (field, value) => {
+		const normalizedValue =
+			field === "directorates"
+				? normalizeDirectorates(value, [])
+				: normalizeList(value, []);
+		const nextConfig = {
+			...configRef.current,
+			settings: {
+				...getBudgetSettings(configRef.current?.settings),
+				[field]: normalizedValue,
+			},
+		};
+		applyConfigState(nextConfig);
+		setSaving(true);
+		setMessage("");
+		try {
+			const response = await salvarCentrosCustoOrcamentoFinanceiro(nextConfig);
+			const savedConfig = response.config || {
+				...configRef.current,
+				settings: response.settings || nextConfig.settings,
+			};
+			applyConfigState({
+				...savedConfig,
+				settings: {
+					...getBudgetSettings(savedConfig.settings),
+					[field]: normalizedValue,
+				},
+			});
+			setMessage("Parâmetros configuráveis salvos.");
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao salvar parâmetros configuráveis.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao salvar parâmetros",
+				...visibleError,
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const budgetableCenters = (config.centers || []).filter(
+		(center) => center.tipoPlano !== "S",
+	);
+	const totals = budgetableCenters.reduce(
+		(acc, center) => {
+			const monthlyBudget = Number(
+				center.valorMensal || center.orcamentoMensal || 0,
+			);
+			acc.mensal += monthlyBudget;
+			acc.anual += monthlyBudget * 12;
+			acc.capex +=
+				center.tipoDespesa === "capex" || center.tipoDespesa === "misto"
+					? monthlyBudget
+					: 0;
+			acc.opex +=
+				center.tipoDespesa === "opex" || center.tipoDespesa === "misto"
+					? monthlyBudget
+					: 0;
+			return acc;
+		},
+		{ mensal: 0, anual: 0, capex: 0, opex: 0 },
+	);
+	const matrixTotal = (config.matrix || []).reduce(
+		(sum, row) =>
+			sum +
+			(Array.isArray(row.months)
+				? row.months.reduce(
+						(monthSum, value) => monthSum + Number(value || 0),
+						0,
+					)
+				: Number(row.total || 0)),
+		0,
+	);
+	const syntheticCenterIds = new Set(
+		(config.centers || [])
+			.filter((center) => center.tipoPlano === "S")
+			.map((center) => center.id),
+	);
+	const matrixRows = (
+		matrixCenterFilter
+			? (config.matrix || []).filter(
+					(row) => row.costCenterId === matrixCenterFilter,
+				)
+			: config.matrix || []
+	).filter((row) => !syntheticCenterIds.has(row.costCenterId));
+	const normalizedPartnerSearch = normalizeImportHeader(partnerSearch);
+	const filteredPartners = normalizedPartnerSearch
+		? (config.partners || []).filter((partner) => {
+				const haystack = normalizeImportHeader(
+					[
+						partner.codigo,
+						partner.id,
+						partner.nome,
+						partner.razaoSocial,
+						partner.cnpj,
+					]
+						.filter(Boolean)
+						.join(" "),
+				);
+				return haystack.includes(normalizedPartnerSearch);
+			})
+		: config.partners || [];
+	const normalizedAccountSearch = normalizeImportHeader(accountSearch);
+	const isAccountInactive = (account) => {
+		const status = String(account?.status || "").toLowerCase();
+		const name = normalizeImportHeader(account?.nome || "");
+		return status.includes("inativo") || name.includes("inativo");
+	};
+	const isAccountStatusVisible = (account) => {
+		const inactive = isAccountInactive(account);
+		if (accountStatusFilter === "ativos") return !inactive;
+		if (accountStatusFilter === "inativos") return inactive;
+		return true;
+	};
+	const accountTextMatches = (account, related = []) => {
+		if (!normalizedAccountSearch) return true;
+		const haystack = normalizeImportHeader(
+			[
+				account?.codigo,
+				account?.reduzida,
+				account?.classificacao,
+				account?.nome,
+				account?.tipoPlano,
+				account?.naturezaPlano,
+				account?.status,
+				...related.flatMap((item) => [
+					item?.codigo,
+					item?.reduzida,
+					item?.classificacao,
+					item?.nome,
+				]),
+			]
+				.filter(Boolean)
+				.join(" "),
+		);
+		return haystack.includes(normalizedAccountSearch);
+	};
+	const sortedAccounts = [...(config.accounts || [])].sort((left, right) => {
+		const leftInactive = isAccountInactive(left) ? 1 : 0;
+		const rightInactive = isAccountInactive(right) ? 1 : 0;
+		if (leftInactive !== rightInactive) return leftInactive - rightInactive;
+		return String(left.classificacao || left.codigo || left.nome).localeCompare(
+			String(right.classificacao || right.codigo || right.nome),
+			"pt-BR",
+			{ numeric: true },
+		);
+	});
+	const accountByKey = new Map();
+	sortedAccounts.forEach((account) => {
+		if (account.id) accountByKey.set(account.id, account);
+		if (account.codigo)
+			accountByKey.set(String(account.codigo).replace(/\D+/g, ""), account);
+		if (account.reduzida)
+			accountByKey.set(String(account.reduzida).replace(/\D+/g, ""), account);
+	});
+	const accountCategoriesByCode = new Map(
+		sortedAccounts
+			.filter((account) => Number(account.nivel || 0) === 2)
+			.map((account) => [
+				String(account.codigo || account.id).replace(/\D+/g, ""),
+				account,
+			]),
+	);
+	const accountChildrenByParent = new Map();
+	sortedAccounts
+		.filter((account) => account.tipoPlano === "A")
+		.forEach((account) => {
+			const parentKey = String(
+				account.parentId || account.parentCodigo || "",
+			).replace(/\D+/g, "");
+			if (!parentKey) return;
+			const currentChildren = accountChildrenByParent.get(parentKey) || [];
+			currentChildren.push(account);
+			accountChildrenByParent.set(parentKey, currentChildren);
+		});
+	const accountGroups = sortedAccounts
+		.filter(
+			(account) => account.tipoPlano === "S" && Number(account.nivel || 0) > 2,
+		)
+		.map((account) => {
+			const categoryCode = String(account.categoriaCodigo || "").replace(
+				/\D+/g,
+				"",
+			);
+			const category =
+				accountCategoriesByCode.get(categoryCode) ||
+				accountByKey.get(categoryCode);
+			const accountCode = String(account.codigo || account.id || "").replace(
+				/\D+/g,
+				"",
+			);
+			const rawChildren = [
+				...(accountChildrenByParent.get(account.id) || []),
+				...(accountChildrenByParent.get(accountCode) || []),
+			]
+				.filter(
+					(child, index, items) =>
+						items.findIndex((item) => item.id === child.id) === index,
+				)
+				.sort((left, right) => {
+					const leftInactive = isAccountInactive(left) ? 1 : 0;
+					const rightInactive = isAccountInactive(right) ? 1 : 0;
+					if (leftInactive !== rightInactive)
+						return leftInactive - rightInactive;
+					return String(
+						left.classificacao || left.codigo || left.nome,
+					).localeCompare(
+						String(right.classificacao || right.codigo || right.nome),
+						"pt-BR",
+						{ numeric: true },
+					);
+				});
+			const visibleChildrenByStatus = rawChildren.filter(
+				isAccountStatusVisible,
+			);
+			const parentMatches = accountTextMatches(account, [category]);
+			const matchingChildren = visibleChildrenByStatus.filter((child) =>
+				accountTextMatches(child, [account, category]),
+			);
+			const visibleChildren = normalizedAccountSearch
+				? parentMatches
+					? visibleChildrenByStatus
+					: matchingChildren
+				: visibleChildrenByStatus;
+			const groupVisibleByStatus =
+				isAccountStatusVisible(account) || visibleChildren.length > 0;
+			if (!groupVisibleByStatus) return null;
+			if (normalizedAccountSearch && !parentMatches && !visibleChildren.length)
+				return null;
+			return {
+				account,
+				category,
+				children: visibleChildren,
+				totalChildren: rawChildren.length,
+			};
+		})
+		.filter(Boolean);
+	const accountPageSize = 12;
+	const accountTotalPages = Math.max(
+		1,
+		Math.ceil(accountGroups.length / accountPageSize),
+	);
+	const safeAccountPage = Math.min(accountPage, accountTotalPages);
+	const paginatedAccountGroups = accountGroups.slice(
+		(safeAccountPage - 1) * accountPageSize,
+		safeAccountPage * accountPageSize,
+	);
+	const totalSyntheticAccountCount = sortedAccounts.filter(
+		(account) => account.tipoPlano === "S" && Number(account.nivel || 0) > 2,
+	).length;
+	const totalAnalyticAccountCount = sortedAccounts.filter(
+		(account) => account.tipoPlano === "A",
+	).length;
+	const normalizedCenterSearch = normalizeImportHeader(centerSearch);
+	const isCenterInactive = (center) => {
+		const status = String(center?.status || "").toLowerCase();
+		const name = normalizeImportHeader(center?.nome || "");
+		return status.includes("inativo") || name.includes("inativo");
+	};
+	const isStatusVisible = (center) => {
+		const inactive = isCenterInactive(center);
+		if (centerStatusFilter === "ativos") return !inactive;
+		if (centerStatusFilter === "inativos") return inactive;
+		return true;
+	};
+	const centerTextMatches = (center, related = []) => {
+		if (!normalizedCenterSearch) return true;
+		const haystack = normalizeImportHeader(
+			[
+				center?.codigo,
+				center?.reduzida,
+				center?.classificacao,
+				center?.nome,
+				center?.tipoPlano,
+				center?.status,
+				...related.flatMap((item) => [
+					item?.codigo,
+					item?.reduzida,
+					item?.classificacao,
+					item?.nome,
+				]),
+			]
+				.filter(Boolean)
+				.join(" "),
+		);
+		return haystack.includes(normalizedCenterSearch);
+	};
+	const sortedCenters = [...(config.centers || [])].sort((left, right) => {
+		const leftInactive = isCenterInactive(left) ? 1 : 0;
+		const rightInactive = isCenterInactive(right) ? 1 : 0;
+		if (leftInactive !== rightInactive) return leftInactive - rightInactive;
+		return String(left.classificacao || left.codigo || left.nome).localeCompare(
+			String(right.classificacao || right.codigo || right.nome),
+			"pt-BR",
+			{ numeric: true },
+		);
+	});
+	const centerByKey = new Map();
+	sortedCenters.forEach((center) => {
+		if (center.id) centerByKey.set(center.id, center);
+		if (center.codigo) centerByKey.set(center.codigo, center);
+		if (center.reduzida)
+			centerByKey.set(String(center.reduzida).replace(/\D+/g, ""), center);
+	});
+	const categoriesByCode = new Map(
+		sortedCenters
+			.filter((center) => Number(center.nivel || 0) === 2)
+			.map((center) => [center.codigo || center.id, center]),
+	);
+	const childrenByParent = new Map();
+	sortedCenters
+		.filter((center) => center.tipoPlano === "A")
+		.forEach((center) => {
+			const parentKey = center.parentId || center.parentCodigo;
+			if (!parentKey) return;
+			const currentChildren = childrenByParent.get(parentKey) || [];
+			currentChildren.push(center);
+			childrenByParent.set(parentKey, currentChildren);
+		});
+	const syntheticGroups = sortedCenters
+		.filter(
+			(center) => center.tipoPlano === "S" && Number(center.nivel || 0) > 2,
+		)
+		.map((center) => {
+			const category =
+				categoriesByCode.get(center.categoriaCodigo) ||
+				centerByKey.get(center.categoriaCodigo);
+			const rawChildren = [
+				...(childrenByParent.get(center.id) || []),
+				...(center.codigo && center.codigo !== center.id
+					? childrenByParent.get(center.codigo) || []
+					: []),
+			]
+				.filter(
+					(child, index, items) =>
+						items.findIndex((item) => item.id === child.id) === index,
+				)
+				.sort((left, right) => {
+					const leftInactive = isCenterInactive(left) ? 1 : 0;
+					const rightInactive = isCenterInactive(right) ? 1 : 0;
+					if (leftInactive !== rightInactive)
+						return leftInactive - rightInactive;
+					return String(
+						left.classificacao || left.codigo || left.nome,
+					).localeCompare(
+						String(right.classificacao || right.codigo || right.nome),
+						"pt-BR",
+						{ numeric: true },
+					);
+				});
+			const visibleChildrenByStatus = rawChildren.filter(isStatusVisible);
+			const parentMatches = centerTextMatches(center, [category]);
+			const matchingChildren = visibleChildrenByStatus.filter((child) =>
+				centerTextMatches(child, [center, category]),
+			);
+			const visibleChildren = normalizedCenterSearch
+				? parentMatches
+					? visibleChildrenByStatus
+					: matchingChildren
+				: visibleChildrenByStatus;
+			const groupVisibleByStatus =
+				isStatusVisible(center) || visibleChildren.length > 0;
+			if (!groupVisibleByStatus) return null;
+			if (normalizedCenterSearch && !parentMatches && !visibleChildren.length)
+				return null;
+			return {
+				center,
+				category,
+				children: visibleChildren,
+				aggregateChildren: rawChildren,
+				totalChildren: rawChildren.length,
+			};
+		})
+		.filter(Boolean);
+	const filteredCenters = syntheticGroups;
+	const visibleAnalyticCount = filteredCenters.reduce(
+		(sum, group) => sum + group.children.length,
+		0,
+	);
+	const totalSyntheticCount = sortedCenters.filter(
+		(center) => center.tipoPlano === "S" && Number(center.nivel || 0) > 2,
+	).length;
+	const totalAnalyticCount = sortedCenters.filter(
+		(center) => center.tipoPlano === "A",
+	).length;
+	const centerPageSize = 12;
+	const centerTotalPages = Math.max(
+		1,
+		Math.ceil(filteredCenters.length / centerPageSize),
+	);
+	const safeCenterPage = Math.min(centerPage, centerTotalPages);
+	const paginatedCenterGroups = filteredCenters.slice(
+		(safeCenterPage - 1) * centerPageSize,
+		safeCenterPage * centerPageSize,
+	);
+
+	useEffect(() => {
+		setCenterPage(1);
+	}, [centerSearch, centerStatusFilter]);
+
+	useEffect(() => {
+		if (centerPage > centerTotalPages) setCenterPage(centerTotalPages);
+	}, [centerPage, centerTotalPages]);
+
+	useEffect(() => {
+		setAccountPage(1);
+	}, [accountSearch, accountStatusFilter]);
+
+	useEffect(() => {
+		if (accountPage > accountTotalPages) setAccountPage(accountTotalPages);
+	}, [accountPage, accountTotalPages]);
+
+	return (
+		<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-3">
+					<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+						<Landmark size={20} />
+					</span>
+					<div>
+						<h2 className="text-lg font-bold text-slate-950">
+							Plano de centros de custo
+						</h2>
+						<p className="mt-1 text-xs font-bold text-slate-500">
+							Última atualização: {formatUpdatedAt(config.updatedAt)} ·{" "}
+							{config.centers?.length || 0} centro(s)
+						</p>
+					</div>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					<button
+						type="button"
+						onClick={loadCostCenters}
+						disabled={loading || saving}
+						className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+					>
+						<RefreshCw size={16} className={loading ? "animate-spin" : ""} />{" "}
+						Atualizar
+					</button>
+					<button
+						type="button"
+						onClick={() =>
+							saveConfig(configRef.current, "Configurações salvas.")
+						}
+						disabled={!canManage || saving}
+						className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						{saving ? (
+							<Loader2 className="animate-spin" size={16} />
+						) : (
+							<CheckCircle2 size={16} />
+						)}{" "}
+						Salvar
+					</button>
+				</div>
+			</div>
+
+			{message ? (
+				<div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-800">
+					{message}
+				</div>
+			) : null}
+
+			<details
+				open={parametersOpen}
+				onToggle={(event) => setParametersOpen(event.currentTarget.open)}
+				className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+			>
+				<summary className="flex cursor-pointer list-none items-start gap-3">
+					<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200">
+						<Settings size={18} />
+					</span>
+					<span>
+						<span className="block text-sm font-black text-slate-950">
+							Parâmetros configuráveis
+						</span>
+					</span>
+				</summary>
+				<div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+					<ListConfigInput
+						label="Tipos de centro"
+						value={budgetSettings.centerTypes}
+						disabled={!canManage || saving}
+						onChange={(value) => updateSettings("centerTypes", value)}
+					/>
+					<ListConfigInput
+						label="Categorias principais"
+						value={budgetSettings.mainCategories}
+						disabled={!canManage || saving}
+						onChange={(value) => updateSettings("mainCategories", value)}
+					/>
+					<ListConfigInput
+						label="Grupos de conta"
+						value={budgetSettings.accountGroups}
+						disabled={!canManage || saving}
+						onChange={(value) => updateSettings("accountGroups", value)}
+					/>
+					<ListConfigInput
+						label="Grupos DRE"
+						value={budgetSettings.dreGroups}
+						disabled={!canManage || saving}
+						onChange={(value) => updateSettings("dreGroups", value)}
+					/>
+					<ListConfigInput
+						label="Status do centro"
+						value={budgetSettings.centerStatuses}
+						disabled={!canManage || saving}
+						onChange={(value) => updateSettings("centerStatuses", value)}
+					/>
+				</div>
+			</details>
+
+			<DirectoratesDropdownSection
+				value={budgetSettings.directorates}
+				centers={config.centers || []}
+				disabled={!canManage || saving}
+				onChange={(value) => updateSettings("directorates", value)}
+			/>
+
+			<div className="mt-5 grid gap-3 md:grid-cols-4">
+				<div className="rounded-2xl bg-slate-50 p-4">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Orçamento mensal
+					</p>
+					<p className="mt-1 text-xl font-black text-slate-950">
+						{brl.format(totals.mensal)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-slate-50 p-4">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Orçamento anual
+					</p>
+					<p className="mt-1 text-xl font-black text-slate-950">
+						{brl.format(totals.anual)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-blue-50 p-4">
+					<p className="text-xs font-black uppercase text-blue-700">
+						CAPEX mensal
+					</p>
+					<p className="mt-1 text-xl font-black text-blue-950">
+						{brl.format(totals.capex)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-emerald-50 p-4">
+					<p className="text-xs font-black uppercase text-emerald-700">
+						OPEX mensal
+					</p>
+					<p className="mt-1 text-xl font-black text-emerald-950">
+						{brl.format(totals.opex)}
+					</p>
+				</div>
+			</div>
+			<div className="mt-3 grid gap-3 md:grid-cols-4">
+				<div className="rounded-2xl bg-amber-50 p-4">
+					<p className="text-xs font-black uppercase text-amber-700">
+						Plano de contas
+					</p>
+					<p className="mt-1 text-xl font-black text-amber-950">
+						{integer.format((config.accounts || []).length)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-purple-50 p-4">
+					<p className="text-xs font-black uppercase text-purple-700">
+						Fornec./Clientes
+					</p>
+					<p className="mt-1 text-xl font-black text-purple-950">
+						{integer.format((config.partners || []).length)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-rose-50 p-4">
+					<p className="text-xs font-black uppercase text-rose-700">
+						Matriz anual
+					</p>
+					<p className="mt-1 text-xl font-black text-rose-950">
+						{brl.format(matrixTotal)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-cyan-50 p-4">
+					<p className="text-xs font-black uppercase text-cyan-700">
+						Budget/Forecast
+					</p>
+					<p className="mt-1 text-xl font-black text-cyan-950">
+						{integer.format((config.versions || []).length)}
+					</p>
+				</div>
+			</div>
+
+			<BudgetDropdownSection
+				title="Matrizes e filiais orçamentárias"
+				count={(config.companies || []).length + (config.branches || []).length}
+				className="mt-5 border-cyan-200 bg-cyan-50"
+				action={
+					<div className="flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={() =>
+								setCompanyBranchModal({
+									type: "company",
+									item: EMPTY_BUDGET_COMPANY,
+								})
+							}
+							disabled={!canManage || saving}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-cyan-700 px-3 text-xs font-black text-white hover:bg-cyan-800 disabled:opacity-50"
+						>
+							<Plus size={14} /> Nova matriz
+						</button>
+						<button
+							type="button"
+							onClick={() =>
+								setCompanyBranchModal({
+									type: "branch",
+									item: EMPTY_BUDGET_BRANCH,
+								})
+							}
+							disabled={
+								!canManage || saving || !(config.companies || []).length
+							}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-cyan-200 bg-white px-3 text-xs font-black text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
+						>
+							<Plus size={14} /> Nova filial
+						</button>
+					</div>
+				}
+			>
+				<div className="grid gap-4 xl:grid-cols-2">
+					<BudgetDropdownSection
+						title="Matrizes"
+						count={(config.companies || []).length}
+						items={config.companies || []}
+						pageSize={6}
+						emptyText="Nenhuma matriz cadastrada."
+						renderItem={(company) => (
+							<article
+								key={company.id}
+								className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+							>
+								<div className="flex items-start justify-between gap-3">
+									<div>
+										<p className="text-xs font-black uppercase text-cyan-700">
+											ID {company.codigo || company.id}
+										</p>
+										<h4 className="text-sm font-black text-slate-950">
+											{company.nome}
+										</h4>
+										<p className="text-xs font-bold text-slate-500">
+											{(company.filiais || []).length} filial(is) vinculada(s)
+										</p>
+										{(company.filiais || []).length ? (
+											<p className="mt-1 text-[11px] font-bold text-cyan-700">
+												{(company.filiais || [])
+													.slice(0, 3)
+													.map(
+														(branchId) =>
+															(config.branches || []).find(
+																(branch) => branch.id === branchId,
+															)?.nome || branchId,
+													)
+													.join(", ")}
+												{(company.filiais || []).length > 3
+													? ` +${(company.filiais || []).length - 3}`
+													: ""}
+											</p>
+										) : null}
+									</div>
+									<span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700">
+										{company.status || "ativo"}
+									</span>
+								</div>
+								<div className="mt-3 flex flex-wrap gap-2">
+									<button
+										type="button"
+										onClick={() =>
+											setCompanyBranchModal({ type: "company", item: company })
+										}
+										disabled={!canManage || saving}
+										className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-200 px-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+									>
+										<Pencil size={12} /> Editar
+									</button>
+									<button
+										type="button"
+										onClick={() => removeCompany(company.id)}
+										disabled={!canManage || saving}
+										className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-red-200 px-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+									>
+										<Trash2 size={12} /> Excluir
+									</button>
+								</div>
+							</article>
+						)}
+					/>
+					<BudgetDropdownSection
+						title="Filiais"
+						count={(config.branches || []).length}
+						items={config.branches || []}
+						pageSize={6}
+						emptyText="Nenhuma filial cadastrada."
+						renderItem={(branch) => {
+							const branchCompanies = (config.companies || []).filter(
+								(item) =>
+									item.filialId === branch.id ||
+									item.branchId === branch.id ||
+									(item.filiais || []).includes(branch.id) ||
+									(branch.empresas || branch.companies || []).includes(item.id),
+							);
+							return (
+								<article
+									key={branch.id}
+									className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+								>
+									<div className="flex items-start justify-between gap-3">
+										<div>
+											<p className="text-xs font-black uppercase text-cyan-700">
+												ID {branch.codigo || branch.id}
+											</p>
+											<h4 className="text-sm font-black text-slate-950">
+												{branch.nome}
+											</h4>
+											<p className="text-xs font-bold text-slate-500">
+												Matriz: {branchCompanies[0]?.nome || "não vinculada"}
+												{branch.cidade ? ` · ${branch.cidade}` : ""}
+											</p>
+										</div>
+										<span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700">
+											{branch.status || "ativo"}
+										</span>
+									</div>
+									<div className="mt-3 flex flex-wrap gap-2">
+										<button
+											type="button"
+											onClick={() =>
+												setCompanyBranchModal({ type: "branch", item: branch })
+											}
+											disabled={!canManage || saving}
+											className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-200 px-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+										>
+											<Pencil size={12} /> Editar
+										</button>
+										<button
+											type="button"
+											onClick={() => removeBranch(branch.id)}
+											disabled={!canManage || saving}
+											className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-red-200 px-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+										>
+											<Trash2 size={12} /> Excluir
+										</button>
+									</div>
+								</article>
+							);
+						}}
+					/>
+				</div>
+			</BudgetDropdownSection>
+
+			<BudgetDropdownSection
+				title="Contas financeiras"
+				count={sortedAccounts.length}
+				className="mt-5 border-emerald-200 bg-emerald-50"
+				action={
+					<div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+						<input
+							value={accountSearch}
+							onChange={(event) => setAccountSearch(event.target.value)}
+							placeholder="Buscar por código ou nome"
+							className="min-h-10 w-full min-w-64 rounded-xl border border-emerald-200 bg-white px-3 text-sm font-bold normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+						/>
+						<select
+							value={accountStatusFilter}
+							onChange={(event) => setAccountStatusFilter(event.target.value)}
+							className="min-h-10 min-w-28 shrink-0 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-black text-slate-700 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+						>
+							<option value="ativos">Ativos</option>
+							<option value="inativos">Inativos</option>
+							<option value="todos">Todos</option>
+						</select>
+						<button
+							type="button"
+							onClick={() =>
+								setAccountModal({ account: EMPTY_FINANCIAL_ACCOUNT })
+							}
+							disabled={!canManage || saving}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+						>
+							<Plus size={14} /> Nova conta financeira
+						</button>
+					</div>
+				}
+			>
+				<div className="mb-4 grid gap-3 md:grid-cols-3">
+					<div className="rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
+						<p className="text-xs font-black uppercase text-emerald-700">
+							Sintéticas
+						</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">
+							{integer.format(totalSyntheticAccountCount)}
+						</p>
+					</div>
+					<div className="rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
+						<p className="text-xs font-black uppercase text-emerald-700">
+							Analíticas
+						</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">
+							{integer.format(totalAnalyticAccountCount)}
+						</p>
+					</div>
+					<div className="rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
+						<p className="text-xs font-black uppercase text-emerald-700">
+							Categorias
+						</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">
+							{integer.format(accountCategoriesByCode.size)}
+						</p>
+					</div>
+				</div>
+				{paginatedAccountGroups.length ? (
+					<>
+						<div className="grid gap-4 xl:grid-cols-2">
+							{paginatedAccountGroups.map(
+								({ account, category, children, totalChildren }) => {
+									const inactive = isAccountInactive(account);
+									const firstChildren = children.slice(0, 2);
+									return (
+										<article
+											key={account.id}
+											className={`rounded-2xl border bg-white p-4 shadow-sm ${inactive ? "border-slate-200 opacity-75" : "border-emerald-100"}`}
+										>
+											<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+												<div>
+													<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+														{account.codigo || account.id} ·{" "}
+														{account.reduzida || account.classificacao}
+													</p>
+													<h3 className="text-base font-black text-slate-950">
+														{account.nome}
+													</h3>
+													<p className="mt-1 text-xs font-bold text-slate-500">
+														{category?.nome || "Sem categoria"} ·{" "}
+														{account.naturezaPlano === "C"
+															? "Crédito/Receita"
+															: "Débito/Despesa"}{" "}
+														· Nível {account.nivel || "-"}
+													</p>
+												</div>
+												<div className="flex flex-wrap gap-2">
+													<span
+														className={`rounded-full px-2.5 py-1 text-[11px] font-black ${inactive ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}
+													>
+														{account.status || "ativo"}
+													</span>
+													<span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-700">
+														{integer.format(totalChildren)} analítica(s)
+													</span>
+												</div>
+											</div>
+											<div className="mt-3 grid gap-2">
+												{firstChildren.length ? (
+													firstChildren.map((child) => (
+														<div
+															key={child.id}
+															className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+														>
+															<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+																<div>
+																	<p className="text-[11px] font-black uppercase text-slate-500">
+																		{child.codigo || child.id} ·{" "}
+																		{child.reduzida || child.classificacao}
+																	</p>
+																	<p className="text-sm font-black text-slate-950">
+																		{child.nome}
+																	</p>
+																	<p className="text-[11px] font-bold text-slate-500">
+																		{child.naturezaPlano === "C"
+																			? "Receita"
+																			: "Despesa"}{" "}
+																		· Rateio {child.rateio || "-"}
+																	</p>
+																</div>
+																<span
+																	className={`rounded-full px-2 py-1 text-[10px] font-black ${isAccountInactive(child) ? "bg-slate-200 text-slate-600" : "bg-white text-emerald-700 ring-1 ring-emerald-100"}`}
+																>
+																	{child.status || "ativo"}
+																</span>
+															</div>
+														</div>
+													))
+												) : (
+													<div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-500">
+														Nenhuma conta analítica visível neste filtro.
+													</div>
+												)}
+											</div>
+											<div className="mt-2 flex flex-wrap items-center gap-2">
+												{children.length > firstChildren.length ? (
+													<button
+														type="button"
+														onClick={() =>
+															setAccountChildrenModal({
+																synthetic: account,
+																category,
+																children,
+															})
+														}
+														className="inline-flex min-h-8 items-center rounded-lg border border-emerald-200 bg-white px-2.5 text-xs font-black text-emerald-700 hover:bg-emerald-50"
+													>
+														Ver mais
+													</button>
+												) : null}
+												{children.length > firstChildren.length ? (
+													<span className="text-xs font-bold text-slate-500">
+														+{" "}
+														{integer.format(
+															children.length - firstChildren.length,
+														)}{" "}
+														conta(s) analítica(s)
+													</span>
+												) : null}
+											</div>
+											<div className="mt-3 flex flex-wrap gap-2">
+												<button
+													type="button"
+													onClick={() => setAccountViewModal({ account })}
+													className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-slate-200 px-2 text-xs font-black text-slate-700 hover:bg-slate-50"
+												>
+													<Eye size={13} /> Ver
+												</button>
+												<button
+													type="button"
+													onClick={() => setAccountModal({ account })}
+													disabled={!canManage || saving}
+													className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-blue-200 px-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+												>
+													<Pencil size={13} /> Editar sintética
+												</button>
+												<button
+													type="button"
+													onClick={() => removeAccount(account.id)}
+													disabled={!canManage || saving}
+													className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-red-200 px-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+												>
+													<Trash2 size={13} /> Excluir
+												</button>
+											</div>
+										</article>
+									);
+								},
+							)}
+						</div>
+						{accountTotalPages > 1 ? (
+							<div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-100 bg-white p-2">
+								<span className="px-2 text-xs font-black text-slate-500">
+									Página {integer.format(safeAccountPage)} de{" "}
+									{integer.format(accountTotalPages)} ·{" "}
+									{integer.format(accountGroups.length)} grupo(s)
+								</span>
+								<span className="flex gap-2">
+									<button
+										type="button"
+										onClick={() =>
+											setAccountPage((value) => Math.max(1, value - 1))
+										}
+										disabled={safeAccountPage <= 1}
+										className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+									>
+										Anterior
+									</button>
+									<button
+										type="button"
+										onClick={() =>
+											setAccountPage((value) =>
+												Math.min(accountTotalPages, value + 1),
+											)
+										}
+										disabled={safeAccountPage >= accountTotalPages}
+										className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+									>
+										Próxima
+									</button>
+								</span>
+							</div>
+						) : null}
+					</>
+				) : (
+					<p className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm font-bold text-slate-500">
+						Nenhuma conta financeira encontrada com os filtros atuais.
+					</p>
+				)}
+			</BudgetDropdownSection>
+
+			<details className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<summary className="flex cursor-pointer list-none flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<span className="flex items-center gap-2 text-sm font-black text-slate-950">
+							Centros de custo
+							<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
+								{integer.format(totalSyntheticCount)} sintético(s)
+							</span>
+						</span>
+					</div>
+				</summary>
+				<div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+					<div>
+						<p className="text-sm font-black text-slate-950">
+							Plano de centros
+						</p>
+					</div>
+					<div className="flex flex-col gap-2 lg:min-w-[520px]">
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+							<input
+								value={centerSearch}
+								onChange={(event) => setCenterSearch(event.target.value)}
+								placeholder="Buscar por código, reduzida, nome ou classificação"
+								className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+							<button
+								type="button"
+								onClick={() =>
+									setModalState({ mode: "edit", center: EMPTY_COST_CENTER })
+								}
+								disabled={!canManage || saving}
+								className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50"
+							>
+								<Plus size={14} /> Novo centro
+							</button>
+						</div>
+						<div className="flex flex-wrap justify-end gap-2">
+							{[
+								["ativos", "Ativos"],
+								["inativos", "Inativos"],
+								["todos", "Todos"],
+							].map(([value, label]) => (
+								<button
+									key={value}
+									type="button"
+									onClick={() => setCenterStatusFilter(value)}
+									className={`min-h-9 rounded-xl border px-3 text-xs font-black ${centerStatusFilter === value ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+								>
+									{label}
+								</button>
+							))}
+						</div>
+					</div>
+				</div>
+
+				<div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-black text-slate-500">
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						{integer.format(filteredCenters.length)} sintético(s) exibido(s)
+					</span>
+					<span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+						{integer.format(visibleAnalyticCount)} analítico(s) exibido(s)
+					</span>
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						{integer.format(totalAnalyticCount)} analítico(s) no plano
+					</span>
+					<span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+						{integer.format(
+							(config.centers || []).filter(
+								(center) => !isCenterInactive(center),
+							).length,
+						)}{" "}
+						ativo(s)
+					</span>
+					<span className="rounded-full bg-slate-100 px-3 py-1">
+						{integer.format(
+							(config.centers || []).filter(isCenterInactive).length,
+						)}{" "}
+						inativo(s)
+					</span>
+				</div>
+
+				<div className="mt-4 grid gap-4 xl:grid-cols-2">
+					{loading ? (
+						<div className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm font-bold text-slate-500 xl:col-span-2">
+							Carregando centros de custo...
+						</div>
+					) : paginatedCenterGroups.length ? (
+						paginatedCenterGroups.map(
+							({
+								center,
+								category,
+								children,
+								aggregateChildren = children,
+								totalChildren,
+							}) => {
+								const aggregateSource =
+									center.tipoPlano === "S" ? aggregateChildren : [center];
+								const centerBudget = aggregateSource.reduce(
+									(sum, item) =>
+										sum + Number(item.valorMensal || item.orcamentoMensal || 0),
+									0,
+								);
+								const centerRealized = aggregateSource.reduce(
+									(sum, item) => sum + Number(item.realizadoImportado || 0),
+									0,
+								);
+								const centerCommitted = aggregateSource.reduce(
+									(sum, item) => sum + Number(item.comprometidoMes || 0),
+									0,
+								);
+								const used = centerBudget
+									? ((centerRealized + centerCommitted) / centerBudget) * 100
+									: 0;
+								const isInactive = isCenterInactive(center);
+								const previewChildren = children.slice(0, 2);
+								const directorate = findDirectorateByName(
+									budgetSettings.directorates,
+									center.diretoria,
+								);
+								const directorName =
+									directorate?.diretor || center.responsavel || "Não informado";
+								return (
+									<article
+										key={center.id}
+										className={`rounded-2xl border p-4 shadow-sm ${isInactive ? "border-slate-200 bg-slate-50 opacity-80" : "border-slate-200 bg-white"}`}
+									>
+										<div className="flex items-start justify-between gap-3">
+											<div className="min-w-0">
+												<p className="text-xs font-black uppercase tracking-wide text-indigo-700">
+													{center.codigo || center.id}
+												</p>
+												<h3
+													className="mt-1 truncate text-lg font-black text-slate-950"
+													title={center.nome}
+												>
+													{center.nome}
+												</h3>
+												<p className="mt-1 text-sm font-bold text-slate-500">
+													Sintético · Diretoria:{" "}
+													{center.diretoria ||
+														center.categoriaPrincipal ||
+														"Não informada"}
+												</p>
+												<p className="mt-1 text-sm font-bold text-slate-500">
+													Diretor: {directorName} ·{" "}
+													{COST_CENTER_TYPES[center.tipoDespesa] || "OPEX"}
+												</p>
+												{directorate?.emailDiretor ||
+												directorate?.numeroDiretor ? (
+													<p
+														className="mt-1 truncate text-xs font-bold text-slate-400"
+														title={[
+															directorate.emailDiretor,
+															directorate.numeroDiretor,
+														]
+															.filter(Boolean)
+															.join(" · ")}
+													>
+														{[
+															directorate.emailDiretor,
+															directorate.numeroDiretor,
+														]
+															.filter(Boolean)
+															.join(" · ")}
+													</p>
+												) : null}
+												{category ? (
+													<p
+														className="mt-1 truncate text-xs font-bold text-slate-400"
+														title={`${category.codigo || category.id} - ${category.nome}`}
+													>
+														Categoria: {category.codigo || category.id} -{" "}
+														{category.nome}
+													</p>
+												) : null}
+											</div>
+											<span
+												className={`rounded-full px-3 py-1 text-xs font-black ${isInactive ? "bg-slate-200 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}
+											>
+												{center.status || "ativo"}
+											</span>
+										</div>
+										<div className="mt-4 h-3 rounded-full bg-slate-100">
+											<div
+												className={`h-full rounded-full ${used > 100 ? "bg-red-500" : used >= Number(center.alertaPercentual || 85) ? "bg-amber-400" : "bg-emerald-500"}`}
+												style={{
+													width: `${Math.min(100, Math.max(4, used))}%`,
+												}}
+											/>
+										</div>
+										<div className="mt-4 grid gap-3 sm:grid-cols-3">
+											<div>
+												<p className="text-xs font-bold text-slate-500">
+													Mensal
+												</p>
+												<p className="text-sm font-black text-slate-950">
+													{brl.format(centerBudget)}
+												</p>
+											</div>
+											<div>
+												<p className="text-xs font-bold text-slate-500">
+													Realizado
+												</p>
+												<p className="text-sm font-black text-slate-950">
+													{brl.format(centerRealized)}
+												</p>
+											</div>
+											<div>
+												<p className="text-xs font-bold text-slate-500">Uso</p>
+												<p className="text-sm font-black text-slate-950">
+													{decimal.format(used)}%
+												</p>
+											</div>
+										</div>
+										<div className="mt-3 flex flex-wrap gap-2">
+											{center.classificacao ? (
+												<span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-600">
+													{center.classificacao}
+												</span>
+											) : null}
+											{center.reduzida ? (
+												<span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+													Reduzida {center.reduzida}
+												</span>
+											) : null}
+											{center.nivel ? (
+												<span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-black text-purple-700">
+													Nível {center.nivel}
+												</span>
+											) : null}
+										</div>
+										<div className="mt-3 flex flex-wrap gap-2">
+											{(center.contasFinanceiras || []).length ? (
+												(center.contasFinanceiras || [])
+													.slice(0, 3)
+													.map((accountId) => {
+														const account = (config.accounts || []).find(
+															(item) => item.id === accountId,
+														);
+														return account ? (
+															<span
+																key={accountId}
+																className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700"
+															>
+																{account.nome}
+															</span>
+														) : null;
+													})
+											) : (
+												<span className="text-xs font-bold text-slate-400">
+													Sem conta financeira vinculada.
+												</span>
+											)}
+										</div>
+										<div className="mt-4 flex flex-wrap gap-2">
+											<button
+												type="button"
+												onClick={() => setModalState({ mode: "view", center })}
+												className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50"
+											>
+												<Eye size={14} /> Ver
+											</button>
+											<button
+												type="button"
+												onClick={() => setModalState({ mode: "edit", center })}
+												disabled={!canManage}
+												className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+											>
+												<Pencil size={14} /> Editar
+											</button>
+											<button
+												type="button"
+												onClick={() => removeCenter(center.id)}
+												disabled={!canManage || saving}
+												className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-red-200 px-3 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+											>
+												<Trash2 size={14} /> Excluir
+											</button>
+										</div>
+										<div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												<p className="text-xs font-black uppercase tracking-wide text-slate-500">
+													Centros analíticos
+												</p>
+												<div className="flex flex-wrap items-center gap-2">
+													<span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-slate-600 ring-1 ring-slate-200">
+														{integer.format(children.length)} de{" "}
+														{integer.format(totalChildren)}
+													</span>
+													{children.length > 2 ? (
+														<button
+															type="button"
+															onClick={() =>
+																setAnalyticChildrenModal({
+																	synthetic: center,
+																	category,
+																	children,
+																})
+															}
+															className="inline-flex min-h-8 items-center rounded-lg border border-blue-200 bg-white px-2.5 text-xs font-black text-blue-700 hover:bg-blue-50"
+														>
+															Ver mais
+														</button>
+													) : null}
+												</div>
+											</div>
+											<div className="mt-3 grid gap-2 sm:grid-cols-2">
+												{previewChildren.length ? (
+													previewChildren.map((child) => {
+														const childInactive = isCenterInactive(child);
+														const childBudget = Number(
+															child.valorMensal || child.orcamentoMensal || 0,
+														);
+														const childRealized = Number(
+															child.realizadoImportado || 0,
+														);
+														return (
+															<div
+																key={child.id}
+																className={`rounded-xl border p-3 ${childInactive ? "border-slate-200 bg-white/70 opacity-75" : "border-white bg-white"}`}
+															>
+																<div className="flex items-start justify-between gap-2">
+																	<div className="min-w-0">
+																		<p className="text-[11px] font-black uppercase tracking-wide text-blue-700">
+																			{child.codigo || child.id}
+																		</p>
+																		<p
+																			className="mt-1 truncate text-sm font-black text-slate-950"
+																			title={child.nome}
+																		>
+																			{child.nome}
+																		</p>
+																		<p
+																			className="mt-1 truncate text-xs font-bold text-slate-500"
+																			title={child.responsavel || ""}
+																		>
+																			Responsável:{" "}
+																			{child.responsavel || "Não informado"}
+																		</p>
+																	</div>
+																	<span
+																		className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-black ${childInactive ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700"}`}
+																	>
+																		{child.status || "ativo"}
+																	</span>
+																</div>
+																<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+																	<div>
+																		<p className="font-bold text-slate-500">
+																			Mensal
+																		</p>
+																		<p className="font-black text-slate-950">
+																			{brl.format(childBudget)}
+																		</p>
+																	</div>
+																	<div>
+																		<p className="font-bold text-slate-500">
+																			Realizado
+																		</p>
+																		<p className="font-black text-slate-950">
+																			{brl.format(childRealized)}
+																		</p>
+																	</div>
+																</div>
+																<div className="mt-3 flex flex-wrap gap-2">
+																	<button
+																		type="button"
+																		onClick={() =>
+																			setModalState({
+																				mode: "view",
+																				center: child,
+																			})
+																		}
+																		className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[11px] font-black text-slate-700 hover:bg-slate-50"
+																	>
+																		<Eye size={12} /> Ver
+																	</button>
+																	<button
+																		type="button"
+																		onClick={() =>
+																			setModalState({
+																				mode: "edit",
+																				center: child,
+																			})
+																		}
+																		disabled={!canManage}
+																		className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-200 px-2 text-[11px] font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+																	>
+																		<Pencil size={12} /> Editar
+																	</button>
+																</div>
+															</div>
+														);
+													})
+												) : (
+													<div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-xs font-bold text-slate-500 sm:col-span-2">
+														Nenhum centro analítico encontrado para este filtro.
+													</div>
+												)}
+											</div>
+										</div>
+									</article>
+								);
+							},
+						)
+					) : (
+						<div className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm font-bold text-slate-500 xl:col-span-2">
+							Nenhum centro de custo encontrado com os filtros atuais.
+						</div>
+					)}
+				</div>
+
+				{centerTotalPages > 1 ? (
+					<div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+						<span className="px-2 text-xs font-black text-slate-500">
+							Página {integer.format(safeCenterPage)} de{" "}
+							{integer.format(centerTotalPages)} ·{" "}
+							{integer.format(filteredCenters.length)} sintético(s)
+						</span>
+						<span className="flex gap-2">
+							<button
+								type="button"
+								onClick={() => setCenterPage((value) => Math.max(1, value - 1))}
+								disabled={safeCenterPage <= 1}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Anterior
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									setCenterPage((value) =>
+										Math.min(centerTotalPages, value + 1),
+									)
+								}
+								disabled={safeCenterPage >= centerTotalPages}
+								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+							>
+								Próxima
+							</button>
+						</span>
+					</div>
+				) : null}
+			</details>
+
+			<BudgetDropdownSection
+				title="Fornecedores / Clientes"
+				count={filteredPartners.length}
+				items={filteredPartners}
+				pageSize={9}
+				className="mt-5 border-purple-200 bg-purple-50"
+				emptyText="Nenhum fornecedor ou cliente cadastrado."
+				action={
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<input
+							value={partnerSearch}
+							onChange={(event) => setPartnerSearch(event.target.value)}
+							placeholder="Pesquisar por código ou nome"
+							className="min-h-10 w-full min-w-64 rounded-xl border border-purple-200 bg-white px-3 text-sm font-bold normal-case text-slate-900 outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
+						/>
+						<button
+							type="button"
+							onClick={() => setPartnerModal({ partner: EMPTY_BUDGET_PARTNER })}
+							disabled={!canManage || saving}
+							className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-purple-700 px-3 text-xs font-black text-white hover:bg-purple-800 disabled:opacity-50"
+						>
+							<Plus size={14} /> Novo fornecedor
+						</button>
+					</div>
+				}
+				renderItem={(partner) => {
+					const account = (config.accounts || []).find(
+						(item) => item.id === partner.contaPadraoId,
+					);
+					const partnerCenters = (
+						partner.centrosCusto ||
+						[partner.centroCustoPadraoId].filter(Boolean)
+					)
+						.map((centerId) =>
+							(config.centers || []).find((item) => item.id === centerId),
+						)
+						.filter(Boolean);
+					return (
+						<article
+							key={partner.id}
+							className="rounded-2xl border border-purple-100 bg-white p-3 shadow-sm"
+						>
+							<div className="flex items-start justify-between gap-3">
+								<div className="min-w-0">
+									<p className="text-xs font-black uppercase tracking-wide text-purple-700">
+										{partner.codigo || partner.cnpj || partner.id}
+									</p>
+									<h3
+										className="truncate text-base font-black text-slate-950"
+										title={partner.nome}
+									>
+										{partner.nome}
+									</h3>
+									<p className="mt-1 text-xs font-bold text-slate-500">
+										{partner.tipo === "cliente" ? "Cliente" : "Fornecedor"} ·{" "}
+										{partner.status || "ativo"}
+									</p>
+								</div>
+								<span className="rounded-full bg-purple-50 px-2 py-1 text-[11px] font-black text-purple-700">
+									{integer.format(partner.linhasImportadas || 0)} linha(s)
+								</span>
+							</div>
+							<dl className="mt-3 grid gap-2 text-xs font-bold text-slate-600">
+								<div className="rounded-xl bg-slate-50 p-2">
+									<dt className="text-slate-400">Conta padrão</dt>
+									<dd className="truncate text-slate-800">
+										{account?.nome || "-"}
+									</dd>
+								</div>
+								<div className="rounded-xl bg-slate-50 p-2">
+									<dt className="text-slate-400">Centros de custo</dt>
+									<dd className="line-clamp-2 text-slate-800">
+										{partnerCenters.length
+											? partnerCenters.map((center) => center.nome).join(", ")
+											: "-"}
+									</dd>
+								</div>
+								<div className="rounded-xl bg-emerald-50 p-2">
+									<dt className="text-emerald-700">Realizado</dt>
+									<dd className="break-words font-black text-emerald-950">
+										{brl.format(partner.totalRealizado || 0)}
+									</dd>
+								</div>
+							</dl>
+							<div className="mt-3 flex flex-wrap gap-2">
+								<button
+									type="button"
+									onClick={() => setPartnerViewModal({ partner })}
+									className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-purple-200 px-2 text-xs font-black text-purple-700 hover:bg-purple-50"
+								>
+									<Eye size={13} /> Ver
+								</button>
+								<button
+									type="button"
+									onClick={() => setPartnerModal({ partner })}
+									disabled={!canManage || saving}
+									className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-blue-200 px-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+								>
+									<Pencil size={13} /> Editar
+								</button>
+								<button
+									type="button"
+									onClick={() => removePartner(partner.id)}
+									disabled={!canManage || saving}
+									className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-red-200 px-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+								>
+									<Trash2 size={13} /> Excluir
+								</button>
+							</div>
+						</article>
+					);
+				}}
+			/>
+
+			<div className="mt-5 grid gap-4 xl:grid-cols-2">
+				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h3 className="text-sm font-black text-slate-950">
+						Rateio e aprovação
+					</h3>
+					<div className="mt-3 grid gap-2">
+						{(config.allocationRules || []).slice(0, 3).map((rule) => (
+							<div
+								key={rule.id}
+								className="rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-600"
+							>
+								<span className="block text-sm font-black text-slate-950">
+									{rule.nome}
+								</span>
+								{(rule.splits || [])
+									.map(
+										(split) =>
+											`${(config.centers || []).find((item) => item.id === split.costCenterId)?.nome || split.costCenterId}: ${split.percent}%`,
+									)
+									.join(" · ")}
+							</div>
+						))}
+						<p className="rounded-xl bg-blue-50 p-3 text-xs font-black text-blue-800">
+							Workflow: {config.workflow?.enabled ? "ativo" : "inativo"} ·
+							Aprovador: {config.workflow?.approverName || "não configurado"}
+						</p>
+					</div>
+				</section>
+				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h3 className="text-sm font-black text-slate-950">
+						Caixa e previsibilidade
+					</h3>
+					<dl className="mt-3 grid gap-2">
+						<div className="rounded-xl bg-slate-50 p-3">
+							<dt className="text-xs font-bold text-slate-500">
+								Saldo inicial
+							</dt>
+							<dd className="text-sm font-black text-slate-950">
+								{brl.format(config.cashSettings?.bankBalance || 0)}
+							</dd>
+						</div>
+						<div className="rounded-xl bg-slate-50 p-3">
+							<dt className="text-xs font-bold text-slate-500">Projeção</dt>
+							<dd className="text-sm font-black text-slate-950">
+								D+{config.cashSettings?.projectionDays || 90}
+							</dd>
+						</div>
+						<div className="rounded-xl bg-slate-50 p-3">
+							<dt className="text-xs font-bold text-slate-500">Rollover</dt>
+							<dd className="text-sm font-black text-slate-950">
+								{config.cashSettings?.rolloverHour || "00:15"}
+							</dd>
+						</div>
+					</dl>
+				</section>
+			</div>
+
+			<BudgetDropdownSection
+				title="Matriz de orçamento anual"
+				count={matrixRows.length}
+				className="mt-5"
+				action={
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<label className="text-xs font-black uppercase text-slate-500">
+							Centro de custo
+							<select
+								value={matrixCenterFilter}
+								onChange={(event) => setMatrixCenterFilter(event.target.value)}
+								className="mt-1 min-h-10 min-w-64 rounded-xl border border-slate-200 bg-white px-3 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="">Todos os centros</option>
+								{(config.centers || []).map((center) => (
+									<option key={center.id} value={center.id}>
+										{center.codigo ? `${center.codigo} - ` : ""}
+										{center.nome}
+									</option>
+								))}
+							</select>
+						</label>
+						<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+							{matrixRows.length} linha(s)
+						</span>
+					</div>
+				}
+			>
+				<div className="overflow-x-auto">
+					<table className="min-w-full text-left text-xs font-bold">
+						<thead className="bg-slate-50 text-slate-500">
+							<tr>
+								<th className="px-4 py-3">Conta</th>
+								<th className="px-4 py-3">Centro</th>
+								{BUDGET_MONTHS.map((month) => (
+									<th key={month} className="px-3 py-3 text-right">
+										{month}
+									</th>
+								))}
+								<th className="px-4 py-3 text-right">Total</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{matrixRows.slice(0, 8).map((row) => {
+								const rowTotal = (row.months || []).reduce(
+									(sum, value) => sum + Number(value || 0),
+									0,
+								);
+								return (
+									<tr key={row.id}>
+										<td className="px-4 py-3 text-slate-800">
+											{budgetAccountLabel(
+												(config.accounts || []).find(
+													(item) => item.id === row.accountId,
+												),
+												row.accountId,
+											)}
+										</td>
+										<td className="px-4 py-3 text-slate-600">
+											{(config.centers || []).find(
+												(item) => item.id === row.costCenterId,
+											)?.nome || row.costCenterId}
+										</td>
+										{BUDGET_MONTHS.map((month, index) => (
+											<td
+												key={month}
+												className="px-3 py-3 text-right text-slate-600"
+											>
+												{integer.format(row.months?.[index] || 0)}
+											</td>
+										))}
+										<td className="px-4 py-3 text-right font-black text-slate-950">
+											{brl.format(rowTotal)}
+										</td>
+									</tr>
+								);
+							})}
+							{!matrixRows.length ? (
+								<tr>
+									<td
+										colSpan={15}
+										className="px-4 py-6 text-center text-sm text-slate-500"
+									>
+										Nenhuma matriz anual cadastrada.
+									</td>
+								</tr>
+							) : null}
+						</tbody>
+					</table>
+				</div>
+			</BudgetDropdownSection>
+
+			{accountModal ? (
+				<FinancialAccountModal
+					account={accountModal.account}
+					accounts={config.accounts || []}
+					settings={budgetSettings}
+					canManage={canManage}
+					onClose={() => setAccountModal(null)}
+					onSave={upsertAccount}
+				/>
+			) : null}
+			{accountViewModal ? (
+				<FinancialAccountViewModal
+					account={accountViewModal.account}
+					accounts={config.accounts || []}
+					centers={config.centers || []}
+					companies={config.companies || []}
+					branches={config.branches || []}
+					onClose={() => setAccountViewModal(null)}
+				/>
+			) : null}
+			{accountChildrenModal ? (
+				<FinancialAccountAnalyticChildrenModal
+					synthetic={accountChildrenModal.synthetic}
+					category={accountChildrenModal.category}
+					children={accountChildrenModal.children}
+					canManage={canManage}
+					onClose={() => setAccountChildrenModal(null)}
+					onView={(account) => {
+						setAccountChildrenModal(null);
+						setAccountViewModal({ account });
+					}}
+					onEdit={(account) => {
+						setAccountChildrenModal(null);
+						setAccountModal({ account });
+					}}
+				/>
+			) : null}
+			{companyBranchModal ? (
+				<BudgetCompanyBranchModal
+					type={companyBranchModal.type}
+					item={companyBranchModal.item}
+					companies={config.companies || []}
+					branches={config.branches || []}
+					canManage={canManage}
+					onClose={() => setCompanyBranchModal(null)}
+					onSave={upsertCompanyOrBranch}
+				/>
+			) : null}
+			{partnerModal ? (
+				<BudgetPartnerModal
+					partner={partnerModal.partner}
+					accounts={config.accounts || []}
+					centers={config.centers || []}
+					companies={config.companies || []}
+					branches={config.branches || []}
+					canManage={canManage}
+					onClose={() => setPartnerModal(null)}
+					onSave={upsertPartner}
+				/>
+			) : null}
+			{partnerViewModal ? (
+				<BudgetPartnerViewModal
+					partner={partnerViewModal.partner}
+					accounts={config.accounts || []}
+					centers={config.centers || []}
+					companies={config.companies || []}
+					branches={config.branches || []}
+					onClose={() => setPartnerViewModal(null)}
+				/>
+			) : null}
+			{modalState ? (
+				<CostCenterModal
+					center={modalState.center}
+					centers={config.centers || []}
+					accounts={config.accounts || []}
+					companies={config.companies || []}
+					branches={config.branches || []}
+					settings={budgetSettings}
+					readOnly={modalState.mode === "view"}
+					canManage={canManage}
+					onClose={() => setModalState(null)}
+					onSave={upsertCenter}
+				/>
+			) : null}
+			{analyticChildrenModal ? (
+				<CostCenterAnalyticChildrenModal
+					synthetic={analyticChildrenModal.synthetic}
+					category={analyticChildrenModal.category}
+					children={analyticChildrenModal.children}
+					canManage={canManage}
+					onClose={() => setAnalyticChildrenModal(null)}
+					onView={(center) => {
+						setAnalyticChildrenModal(null);
+						setModalState({ mode: "view", center });
+					}}
+					onEdit={(center) => {
+						setAnalyticChildrenModal(null);
+						setModalState({ mode: "edit", center });
+					}}
+				/>
+			) : null}
+			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+		</section>
+	);
+}
+
+function ConfiguracoesPage({ canManage }) {
+	const [sheetsConfig, setSheetsConfig] = useState(DEFAULT_SHEETS_CONFIG);
+	const [logs, setLogs] = useState([]);
+	const [sheetsLoading, setSheetsLoading] = useState(true);
+	const [sheetsAction, setSheetsAction] = useState("");
+	const [sheetsMessage, setSheetsMessage] = useState("");
+	const [sheetsFeedback, setSheetsFeedback] = useState(null);
+
+	const loadSheetsConfig = useCallback(async () => {
+		setSheetsLoading(true);
+		setSheetsMessage("");
+		try {
+			const [config, logsResponse] = await Promise.all([
+				buscarConfigPlanilhasFinanceiro(),
+				buscarLogsPlanilhasFinanceiro(8).catch(() => ({ items: [] })),
+			]);
+			setSheetsConfig({
+				...DEFAULT_SHEETS_CONFIG,
+				...config,
+				sources: config.sources || DEFAULT_SHEETS_CONFIG.sources,
+			});
+			setLogs(logsResponse.items || []);
+		} catch (error) {
+			setSheetsMessage(
+				error?.message ||
+					"Não foi possível carregar a configuração das planilhas.",
+			);
+		} finally {
+			setSheetsLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		loadSheetsConfig();
+	}, [loadSheetsConfig]);
+
+	const updateSource = (sourceId, field, value) => {
+		setSheetsConfig((current) => ({
+			...current,
+			sources: (current.sources || []).map((source) =>
+				source.id === sourceId ? { ...source, [field]: value } : source,
+			),
+		}));
+	};
+
+	const handleSaveSheets = async () => {
+		setSheetsAction("save");
+		setSheetsMessage("");
+		try {
+			const response = await salvarConfigPlanilhasFinanceiro(sheetsConfig);
+			setSheetsConfig({
+				...DEFAULT_SHEETS_CONFIG,
+				...response.config,
+				sources: response.config?.sources || DEFAULT_SHEETS_CONFIG.sources,
+			});
+			setSheetsMessage("Configuração das Google Planilhas salva.");
+		} catch (error) {
+			setSheetsMessage(
+				error?.message || "Falha ao salvar a configuração das planilhas.",
+			);
+		} finally {
+			setSheetsAction("");
+		}
+	};
+
+	const handleSyncSheets = async () => {
+		setSheetsAction("sync");
+		setSheetsMessage("");
+		try {
+			const response = await sincronizarPlanilhasFinanceiro();
+			setSheetsConfig({
+				...DEFAULT_SHEETS_CONFIG,
+				...response.config,
+				sources: response.config?.sources || DEFAULT_SHEETS_CONFIG.sources,
+			});
+			setSheetsMessage(response.message || "Leitura das planilhas concluída.");
+			setSheetsFeedback({
+				type: response.ok ? "success" : "error",
+				title: response.ok ? "Leitura concluída" : "Leitura com falhas",
+				message: response.message || "Leitura das planilhas concluída.",
+				details: (response.results || [])
+					.map(
+						(item) =>
+							`${item.label}: ${item.status} · ${integer.format(item.totalRows || 0)} linha(s)${item.message ? ` · ${item.message}` : ""}`,
+					)
+					.join("\n"),
+			});
+			await loadSheetsConfig();
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao ler as planilhas financeiras.",
+			);
+			setSheetsMessage(visibleError.message);
+			setSheetsFeedback({
+				type: "error",
+				title: "Erro na leitura",
+				...visibleError,
+			});
+		} finally {
+			setSheetsAction("");
+		}
+	};
+
+	const handleTestSource = async (sourceId) => {
+		setSheetsAction(`test:${sourceId}`);
+		setSheetsMessage("");
+		try {
+			const saved = await salvarConfigPlanilhasFinanceiro(sheetsConfig);
+			setSheetsConfig({
+				...DEFAULT_SHEETS_CONFIG,
+				...saved.config,
+				sources: saved.config?.sources || DEFAULT_SHEETS_CONFIG.sources,
+			});
+			const response = await testarPlanilhaFinanceiro(sourceId);
+			const totalRows = response.result?.totalRows ?? 0;
+			setSheetsMessage(
+				`Teste concluído: ${totalRows} linha(s) lida(s) na origem selecionada.`,
+			);
+			setSheetsFeedback({
+				type: "success",
+				title: "Teste concluído",
+				message: `${integer.format(totalRows)} linha(s) lida(s) na origem selecionada.`,
+				details: `Range: ${response.result?.range || "-"}\nColunas: ${integer.format(response.result?.totalColumns || 0)}`,
+			});
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao testar a planilha.",
+			);
+			setSheetsMessage(visibleError.message);
+			setSheetsFeedback({
+				type: "error",
+				title: "Erro no teste",
+				...visibleError,
+			});
+		} finally {
+			setSheetsAction("");
+		}
+	};
+
+	const handleCopyServiceAccount = async () => {
+		const email = sheetsConfig.serviceAccountEmail || "";
+		if (!email) return;
+		try {
+			await navigator.clipboard.writeText(email);
+			setSheetsMessage("E-mail da Service Account copiado.");
+		} catch {
+			setSheetsMessage(
+				"Não foi possível copiar automaticamente. Selecione o e-mail e copie manualmente.",
+			);
+		}
+	};
+
+	return (
+		<section className="space-y-5">
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+					<div className="flex items-start gap-3">
+						<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+							<TableProperties size={20} />
+						</span>
+						<div>
+							<h2 className="text-lg font-bold text-slate-950">
+								Google Planilhas
+							</h2>
+							<p className="text-sm font-semibold text-slate-500">
+								Configure a leitura automática das planilhas financeiras a cada
+								intervalo definido.
+							</p>
+							<p className="mt-1 text-xs font-bold text-slate-500">
+								Service Account:{" "}
+								{sheetsConfig.serviceAccountConfigured
+									? "configurada"
+									: "não configurada"}{" "}
+								· Última leitura: {formatUpdatedAt(sheetsConfig.lastRunAt)} ·
+								Próxima: {formatUpdatedAt(sheetsConfig.nextRunAt)}
+							</p>
+						</div>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={loadSheetsConfig}
+							disabled={sheetsLoading}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							<RefreshCw
+								size={16}
+								className={sheetsLoading ? "animate-spin" : ""}
+							/>{" "}
+							Atualizar
+						</button>
+						<button
+							type="button"
+							onClick={handleSaveSheets}
+							disabled={!canManage || Boolean(sheetsAction)}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+						>
+							{sheetsAction === "save" ? (
+								<Loader2 className="animate-spin" size={16} />
+							) : (
+								<CheckCircle2 size={16} />
+							)}{" "}
+							Salvar
+						</button>
+						<button
+							type="button"
+							onClick={handleSyncSheets}
+							disabled={!canManage || Boolean(sheetsAction)}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+						>
+							{sheetsAction === "sync" ? (
+								<Loader2 className="animate-spin" size={16} />
+							) : (
+								<RefreshCw size={16} />
+							)}{" "}
+							Ler agora
+						</button>
+					</div>
+				</div>
+
+				{sheetsMessage ? (
+					<div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-800">
+						{sheetsMessage}
+					</div>
+				) : null}
+
+				<div className="mt-5 grid gap-4 lg:grid-cols-[260px_1fr]">
+					<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+						<label className="flex items-center justify-between gap-3 text-sm font-bold text-slate-900">
+							<span>Automação ativa</span>
+							<input
+								type="checkbox"
+								checked={Boolean(sheetsConfig.enabled)}
+								disabled={!canManage}
+								onChange={(event) =>
+									setSheetsConfig((current) => ({
+										...current,
+										enabled: event.target.checked,
+									}))
+								}
+								className="h-5 w-5 rounded border-slate-300 text-blue-600"
+							/>
+						</label>
+						<label className="mt-4 block text-xs font-bold uppercase text-slate-500">
+							Intervalo de leitura
+							<input
+								type="number"
+								min="5"
+								max="1440"
+								value={sheetsConfig.intervalMinutes || 30}
+								disabled={!canManage}
+								onChange={(event) =>
+									setSheetsConfig((current) => ({
+										...current,
+										intervalMinutes: event.target.value,
+									}))
+								}
+								className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+							/>
+						</label>
+						<p className="mt-3 text-xs font-semibold text-slate-500">
+							A planilha precisa ser compartilhada com o e-mail da Service
+							Account usada no Google Drive.
+						</p>
+						<div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+							<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+								Usuário de leitura
+							</p>
+							<p className="mt-1 break-all text-sm font-black text-slate-950">
+								{sheetsConfig.serviceAccountEmail ||
+									"Service Account não identificada"}
+							</p>
+							{sheetsConfig.serviceAccountProjectId ? (
+								<p className="mt-1 break-all text-xs font-bold text-emerald-800">
+									Projeto: {sheetsConfig.serviceAccountProjectId}
+								</p>
+							) : null}
+							{sheetsConfig.serviceAccountError ? (
+								<p className="mt-2 text-xs font-bold text-red-700">
+									{sheetsConfig.serviceAccountError}
+								</p>
+							) : (
+								<p className="mt-2 text-xs font-semibold text-emerald-800">
+									Compartilhe cada planilha com este e-mail como Leitor.
+								</p>
+							)}
+							<button
+								type="button"
+								onClick={handleCopyServiceAccount}
+								disabled={!sheetsConfig.serviceAccountEmail}
+								className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 text-xs font-black text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<Copy size={14} /> Copiar e-mail
+							</button>
+						</div>
+					</div>
+
+					<div className="space-y-4">
+						{(sheetsConfig.sources || []).map((source) => (
+							<div
+								key={source.id}
+								className="rounded-2xl border border-slate-200 p-4"
+							>
+								<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+									<label className="flex items-center gap-3 text-sm font-bold text-slate-950">
+										<input
+											type="checkbox"
+											checked={Boolean(source.enabled)}
+											disabled={!canManage}
+											onChange={(event) =>
+												updateSource(source.id, "enabled", event.target.checked)
+											}
+											className="h-5 w-5 rounded border-slate-300 text-blue-600"
+										/>
+										{source.label}
+									</label>
+									<button
+										type="button"
+										disabled={!canManage || Boolean(sheetsAction)}
+										onClick={() => handleTestSource(source.id)}
+										className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+									>
+										{sheetsAction === `test:${source.id}` ? (
+											<Loader2 className="animate-spin" size={14} />
+										) : (
+											<TableProperties size={14} />
+										)}{" "}
+										Testar
+									</button>
+								</div>
+								<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+									<label className="text-xs font-bold uppercase text-slate-500">
+										ID ou link da planilha
+										<input
+											value={
+												source.spreadsheetUrl ?? source.spreadsheetId ?? ""
+											}
+											disabled={!canManage}
+											onChange={(event) =>
+												updateSource(
+													source.id,
+													"spreadsheetUrl",
+													event.target.value,
+												)
+											}
+											placeholder="https://docs.google.com/spreadsheets/d/..."
+											className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+										/>
+									</label>
+									<label className="text-xs font-bold uppercase text-slate-500">
+										Aba
+										<input
+											value={source.sheetName || ""}
+											disabled={!canManage}
+											onChange={(event) =>
+												updateSource(source.id, "sheetName", event.target.value)
+											}
+											placeholder="Ex: Agosto"
+											className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+										/>
+									</label>
+									<label className="text-xs font-bold uppercase text-slate-500">
+										Linha do cabeçalho
+										<input
+											type="number"
+											min="1"
+											value={source.headerRow || 1}
+											disabled={!canManage}
+											onChange={(event) =>
+												updateSource(source.id, "headerRow", event.target.value)
+											}
+											className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+										/>
+									</label>
+									{source.id === "serasa" ? (
+										<label className="text-xs font-bold uppercase text-slate-500">
+											Atualizar a cada
+											<select
+												value={source.intervalMinutes || 60}
+												disabled={!canManage}
+												onChange={(event) =>
+													updateSource(
+														source.id,
+														"intervalMinutes",
+														event.target.value,
+													)
+												}
+												className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+											>
+												<option value="30">30 minutos</option>
+												<option value="60">1 hora</option>
+												<option value="120">2 horas</option>
+												<option value="240">4 horas</option>
+												<option value="720">12 horas</option>
+											</select>
+										</label>
+									) : null}
+								</div>
+								<p className="mt-3 text-xs font-bold text-slate-500">
+									Última leitura: {formatUpdatedAt(source.lastReadAt)} · Status:{" "}
+									{source.lastStatus || "-"} · Linhas: {source.lastRows || 0} ·{" "}
+									{source.lastMessage || "Sem leitura ainda."}
+								</p>
+							</div>
+						))}
+					</div>
+				</div>
+
+				<div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+					<h3 className="text-sm font-bold text-slate-950">
+						Últimos logs de leitura
+					</h3>
+					<div className="mt-3 divide-y divide-slate-200">
+						{logs.length ? (
+							logs.map((item) => (
+								<div
+									key={item.id}
+									className="flex flex-col gap-1 py-3 text-xs font-bold text-slate-600 md:flex-row md:items-center md:justify-between"
+								>
+									<span>
+										{formatUpdatedAt(item.createdAt)} · {item.status}
+									</span>
+									<span className="text-slate-900">{item.message}</span>
+								</div>
+							))
+						) : (
+							<p className="py-4 text-sm font-bold text-slate-500">
+								Nenhum log de leitura registrado.
+							</p>
+						)}
+					</div>
+				</div>
+			</section>
+			<FeedbackModal
+				feedback={sheetsFeedback}
+				onClose={() => setSheetsFeedback(null)}
+			/>
+		</section>
+	);
+}
+
+function OrcamentoConfiguracoesPage({
+	canManage,
+	config = {},
+	selectedPeriod = {},
+}) {
+	const [reportOpen, setReportOpen] = useState(false);
+	return (
+		<section className="space-y-5">
+			<section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+				<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Relatório de gestão orçamentária
+						</h2>
+						<p className="mt-1 text-sm font-bold text-blue-900">
+							Gere um PDF compacto usando os mesmos dados da Visão Geral, com
+							seleção de blocos e período.
+						</p>
+					</div>
+					<button
+						type="button"
+						onClick={() => setReportOpen(true)}
+						className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700"
+					>
+						<Download size={16} /> Gerar Relatório
+					</button>
+				</div>
+			</section>
+			<CostCentersConfigSection canManage={canManage} />
+			{reportOpen ? (
+				<BudgetReportExportModal
+					config={config}
+					defaultPeriod={selectedPeriod}
+					onClose={() => setReportOpen(false)}
+				/>
+			) : null}
+		</section>
+	);
+}
+
+function BudgetDataImportPage({ canManage }) {
+	const [dataState, setDataState] = useState(null);
+	const [parsedRows, setParsedRows] = useState([]);
+	const [detectedFields, setDetectedFields] = useState([]);
+	const [fileMeta, setFileMeta] = useState({ fileName: "", sheetName: "" });
+	const [loading, setLoading] = useState(true);
+	const [reading, setReading] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [message, setMessage] = useState("");
+	const [feedback, setFeedback] = useState(null);
+
+	const loadBudgetData = useCallback(async () => {
+		setLoading(true);
+		setMessage("");
+		try {
+			const response = await buscarDadosOrcamentoFinanceiro();
+			setDataState(response.data || {});
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Não foi possível carregar os dados importados.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao carregar dados",
+				...visibleError,
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		loadBudgetData();
+	}, [loadBudgetData]);
+
+	const handleFileChange = async (event) => {
+		const files = Array.from(event.target.files || []);
+		if (!files.length) return;
+		setReading(true);
+		setMessage("");
+		try {
+			const allRows = [];
+			const fieldSet = new Set();
+			const sheetLabels = [];
+			for (const file of files) {
+				const buffer = await file.arrayBuffer();
+				const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+				const sheetName = workbook.SheetNames[0];
+				const worksheet = workbook.Sheets[sheetName];
+				const rawRows = XLSX.utils.sheet_to_json(worksheet, {
+					raw: false,
+					defval: "",
+				});
+				const normalized = normalizeBudgetImportRows(rawRows);
+				normalized.rows.forEach((row) =>
+					allRows.push({
+						...row,
+						arquivoOrigem: file.name,
+						abaOrigem: sheetName,
+					}),
+				);
+				normalized.detectedFields.forEach((field) => fieldSet.add(field));
+				sheetLabels.push(`${file.name}:${sheetName}`);
+			}
+			setParsedRows(allRows);
+			setDetectedFields(Array.from(fieldSet));
+			setFileMeta({
+				fileName: files.map((file) => file.name).join(", "),
+				sheetName: sheetLabels.join(", "),
+			});
+			setMessage(
+				`${integer.format(files.length)} arquivo(s) lido(s): ${integer.format(allRows.length)} linha(s) prontas para importar.`,
+			);
+		} catch (error) {
+			setParsedRows([]);
+			setDetectedFields([]);
+			const visibleError = getVisibleError(
+				error,
+				"Não foi possível ler o XLSX selecionado.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao ler XLSX",
+				...visibleError,
+			});
+		} finally {
+			setReading(false);
+			event.target.value = "";
+		}
+	};
+
+	const submitImport = async () => {
+		if (!parsedRows.length) {
+			const visibleError = {
+				message: "Selecione um XLSX válido antes de importar.",
+				details: "",
+			};
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Arquivo obrigatório",
+				...visibleError,
+			});
+			return;
+		}
+		setSaving(true);
+		setMessage("");
+		try {
+			const response = await importarDadosOrcamentoFinanceiro({
+				fileName: fileMeta.fileName,
+				sheetName: fileMeta.sheetName,
+				detectedFields,
+				rows: parsedRows,
+			});
+			setDataState(response.data || {});
+			setParsedRows([]);
+			setDetectedFields([]);
+			setMessage(
+				`Importação concluída: ${integer.format(response.data?.summary?.totalRows || 0)} linha(s) salvas e cadastros orçamentários atualizados.`,
+			);
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao importar dados orçamentários.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao importar dados",
+				...visibleError,
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const clearImport = async () => {
+		if (
+			!canManage ||
+			!window.confirm(
+				"Zerar somente os Dados importados para teste? Clusters, filiais, empresas, centros de custo, contas financeiras e fornecedores serão mantidos.",
+			)
+		)
+			return;
+		setSaving(true);
+		setMessage("");
+		try {
+			const response = await limparDadosOrcamentoFinanceiro();
+			setDataState(response.data || {});
+			setParsedRows([]);
+			setDetectedFields([]);
+			setMessage("Dados importados zerados. Cadastros orçamentários mantidos.");
+		} catch (error) {
+			const visibleError = getVisibleError(
+				error,
+				"Falha ao limpar a leitura importada.",
+			);
+			setMessage(visibleError.message);
+			setFeedback({
+				type: "error",
+				title: "Erro ao limpar leitura",
+				...visibleError,
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const summary = dataState?.summary || {};
+	const importInfo = dataState?.importInfo || {};
+	const savedRows = dataState?.rows || [];
+	const activeFields = new Set(
+		parsedRows.length ? detectedFields : dataState?.detectedFields || [],
+	);
+	const previewRows = (parsedRows.length ? parsedRows : savedRows).slice(0, 20);
+
+	return (
+		<section className="space-y-5">
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+					<div className="flex items-start gap-3">
+						<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+							<Upload size={20} />
+						</span>
+						<div>
+							<h2 className="text-lg font-black text-slate-950">
+								Importador de dados XLSX
+							</h2>
+							<p className="mt-1 text-sm font-semibold text-slate-500">
+								Use a planilha orçamentária para gerar leitura, centro de custo,
+								conta financeira, matriz anual, fornecedores e realizado.
+							</p>
+							<p className="mt-1 text-xs font-bold text-slate-500">
+								Última importação: {formatUpdatedAt(importInfo.importedAt)} ·
+								Arquivo: {importInfo.fileName || "-"} · Aba:{" "}
+								{importInfo.sheetName || "-"}
+							</p>
+						</div>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<label
+							className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 ${!canManage || reading || saving ? "pointer-events-none opacity-50" : ""}`}
+						>
+							{reading ? (
+								<Loader2 size={16} className="animate-spin" />
+							) : (
+								<Upload size={16} />
+							)}{" "}
+							Ler XLSX
+							<input
+								type="file"
+								accept=".xlsx"
+								multiple
+								className="hidden"
+								disabled={!canManage || reading || saving}
+								onChange={handleFileChange}
+							/>
+						</label>
+						<button
+							type="button"
+							onClick={submitImport}
+							disabled={!canManage || saving || !parsedRows.length}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+						>
+							{saving ? (
+								<Loader2 size={16} className="animate-spin" />
+							) : (
+								<CheckCircle2 size={16} />
+							)}{" "}
+							Importar
+						</button>
+						<button
+							type="button"
+							onClick={loadBudgetData}
+							disabled={loading || saving}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							<RefreshCw size={16} className={loading ? "animate-spin" : ""} />{" "}
+							Atualizar
+						</button>
+						<button
+							type="button"
+							onClick={clearImport}
+							disabled={!canManage || saving || !savedRows.length}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 hover:bg-red-100 disabled:opacity-50"
+						>
+							<Trash2 size={16} /> Zerar dados teste
+						</button>
+					</div>
+				</div>
+
+				{message ? (
+					<div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-800">
+						{message}
+					</div>
+				) : null}
+
+				<div className="mt-5 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
+					{[
+						["Linhas", summary.totalRows || parsedRows.length || 0, "number"],
+						["Orçado", summary.totalOrcado || 0, "currency"],
+						["Realizado", summary.totalRealizado || 0, "currency"],
+						["Contas", summary.uniqueAccounts || 0, "number"],
+						["Centros", summary.uniqueCostCenters || 0, "number"],
+						["Fornecedores", summary.uniqueSuppliers || 0, "number"],
+						["Matrizes", summary.uniqueCompanies || 0, "number"],
+						["Filiais", summary.uniqueBranches || 0, "number"],
+					].map(([label, value, type]) => (
+						<div key={label} className="rounded-2xl bg-slate-50 p-4">
+							<p className="text-xs font-black uppercase text-slate-500">
+								{label}
+							</p>
+							<p className="mt-1 min-w-0 break-words text-[clamp(0.95rem,1.2vw,1.25rem)] font-black leading-tight text-slate-950">
+								{type === "currency"
+									? brl.format(Number(value || 0))
+									: integer.format(Number(value || 0))}
+							</p>
+						</div>
+					))}
+				</div>
+			</section>
+
+			<section className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+					<h3 className="text-base font-black text-slate-950">
+						Campos esperados
+					</h3>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						A importação reconhece os cabeçalhos abaixo. Campos sem leitura
+						ficam marcados para ajuste da planilha.
+					</p>
+					<div className="mt-4 grid gap-2 sm:grid-cols-2">
+						{BUDGET_IMPORT_FIELDS.map((field) => (
+							<div
+								key={field.key}
+								className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-xs font-black ${activeFields.has(field.key) ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-50 text-slate-500"}`}
+							>
+								<span>{field.label}</span>
+								<span>{activeFields.has(field.key) ? "Lido" : "Pendente"}</span>
+							</div>
+						))}
+					</div>
+				</div>
+
+				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+					<h3 className="text-base font-black text-slate-950">
+						Resumo por período
+					</h3>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						Esse resumo será usado para alimentar dashboard, realizado e
+						desvios.
+					</p>
+					<div className="mt-4 max-h-96 overflow-auto rounded-2xl border border-slate-200">
+						<table className="min-w-full divide-y divide-slate-200 text-sm">
+							<thead className="bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+								<tr>
+									<th className="px-3 py-2">Período</th>
+									<th className="px-3 py-2">Linhas</th>
+									<th className="px-3 py-2">Orçado</th>
+									<th className="px-3 py-2">Realizado</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{(summary.byMonth || []).length ? (
+									summary.byMonth.map((row) => (
+										<tr key={row.key}>
+											<td className="px-3 py-2 font-black text-slate-900">
+												{row.key}
+											</td>
+											<td className="px-3 py-2 font-bold text-slate-600">
+												{integer.format(row.rows || 0)}
+											</td>
+											<td className="px-3 py-2 font-black text-slate-950">
+												{brl.format(row.orcado || 0)}
+											</td>
+											<td className="px-3 py-2 font-black text-slate-950">
+												{brl.format(row.realizado || 0)}
+											</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td colSpan={4}>
+											<EmptyState text="Nenhum período importado ainda." />
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
+
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+					<div>
+						<h3 className="text-base font-black text-slate-950">
+							Prévia da leitura
+						</h3>
+						<p className="mt-1 text-xs font-bold text-slate-500">
+							Mostrando até 20 linhas da planilha lida ou da última importação
+							salva.
+						</p>
+					</div>
+					{dataState?.appliedConfig ? (
+						<p className="text-xs font-black text-blue-700">
+							Criados/atualizados: {dataState.appliedConfig.accounts || 0}{" "}
+							conta(s), {dataState.appliedConfig.centers || 0} centro(s),{" "}
+							{dataState.appliedConfig.partners || 0} fornecedor(es),{" "}
+							{dataState.appliedConfig.companies || 0} matriz(es),{" "}
+							{dataState.appliedConfig.branches || 0} filial(is)
+						</p>
+					) : null}
+				</div>
+				<div className="mt-4 overflow-auto rounded-2xl border border-slate-200">
+					<table className="min-w-[1200px] divide-y divide-slate-200 text-xs">
+						<thead className="bg-slate-50 text-left font-black uppercase text-slate-500">
+							<tr>
+								{BUDGET_IMPORT_FIELDS.slice(0, 14).map((field) => (
+									<th key={field.key} className="px-3 py-2">
+										{field.label}
+									</th>
+								))}
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{previewRows.length ? (
+								previewRows.map((row, index) => (
+									<tr key={`${row.seqMov || row.id || index}-${index}`}>
+										{BUDGET_IMPORT_FIELDS.slice(0, 14).map((field) => (
+											<td
+												key={field.key}
+												className="max-w-48 truncate px-3 py-2 font-bold text-slate-700"
+												title={String(row[field.key] || "")}
+											>
+												{field.key === "orcado" || field.key === "realizado"
+													? formatBudgetCurrency(row[field.key])
+													: row[field.key] || "-"}
+											</td>
+										))}
+									</tr>
+								))
+							) : (
+								<tr>
+									<td colSpan={14}>
+										<EmptyState text="Leia um XLSX para visualizar a prévia." />
+									</td>
+								</tr>
+							)}
+						</tbody>
+					</table>
+				</div>
+			</section>
+			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+		</section>
+	);
+}
+
+function SerasaReportPage({ canManage }) {
+	const [report, setReport] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [action, setAction] = useState("");
+	const [feedback, setFeedback] = useState(null);
+	const currentDate = new Date();
+	const [periodMode, setPeriodMode] = useState("month");
+	const [monthMenuOpen, setMonthMenuOpen] = useState(false);
+	const [yearMenuOpen, setYearMenuOpen] = useState(false);
+	const [dateModalOpen, setDateModalOpen] = useState(false);
+	const [searchTerm, setSearchTerm] = useState("");
+	const [pageSize, setPageSize] = useState(50);
+	const [currentPage, setCurrentPage] = useState(1);
+	const [selectedOperationIndex, setSelectedOperationIndex] = useState(null);
+	const [reportModalOpen, setReportModalOpen] = useState(false);
+	const [selectedReference, setSelectedReference] = useState({
+		referenceYear: currentDate.getFullYear(),
+		referenceMonth: currentDate.getMonth() + 1,
+	});
+	const [dateRange, setDateRange] = useState({ startDate: "", endDate: "" });
+
+	const loadSerasa = useCallback(async () => {
+		setLoading(true);
+		try {
+			const response = await buscarSerasaReportFinanceiro();
+			setReport(response.data || {});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao carregar Serasa",
+				...getVisibleError(
+					error,
+					"Não foi possível carregar o report Serasa.",
+				),
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		loadSerasa();
+	}, [loadSerasa]);
+
+	const handleUpload = async (event) => {
+		const file = event.target.files?.[0];
+		if (!file) return;
+		setAction("upload");
+		try {
+			const buffer = await file.arrayBuffer();
+			const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+			const sheetName =
+				workbook.SheetNames.find((name) =>
+					/MOVIMENTA[CÇ][AÃ]O SERASA/i.test(name),
+				) || workbook.SheetNames[0];
+			const worksheet = workbook.Sheets[sheetName];
+			const clientCount = extractWorksheetNumberCell(worksheet, "P5");
+			const rawRows = XLSX.utils.sheet_to_json(worksheet, {
+				raw: false,
+				defval: "",
+			});
+			const rows = normalizeSerasaUploadRows(rawRows);
+			const response = await salvarSerasaReportFinanceiro({
+				fileName: file.name,
+				sheetName,
+				rows,
+				clientCount,
+			});
+			setReport(response.data || {});
+			setFeedback({
+				type: "success",
+				title: "Leitura Serasa concluída",
+				message: `${integer.format(response.data?.summary?.totalRows || 0)} movimentação(ões) importada(s).`,
+				details: `Arquivo: ${file.name}\nAba: ${sheetName}`,
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro na leitura Serasa",
+				...getVisibleError(
+					error,
+					"Não foi possível ler/importar a planilha Serasa.",
+				),
+			});
+		} finally {
+			setAction("");
+			event.target.value = "";
+		}
+	};
+
+	const handleForceSync = async () => {
+		setAction("sync");
+		try {
+			const response = await sincronizarPlanilhasFinanceiro({ sourceId: "serasa" });
+			await loadSerasa();
+			setFeedback({
+				type: response.ok ? "success" : "error",
+				title: response.ok ? "Atualização forçada" : "Atualização com falhas",
+				message:
+					response.message ||
+					"Leitura automática das planilhas financeiras concluída.",
+				details: (response.results || [])
+					.filter((item) => item.sourceId === "serasa")
+					.map(
+						(item) =>
+							`${item.label}: ${item.status} · ${integer.format(item.totalRows || 0)} linha(s)${
+								item.message ? ` · ${item.message}` : ""
+							}`,
+					)
+					.join("\n"),
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao forçar atualização",
+				...getVisibleError(
+					error,
+					"Não foi possível forçar a atualização do Serasa.",
+				),
+			});
+		} finally {
+			setAction("");
+		}
+	};
+
+	const handleClearSerasa = async () => {
+		if (
+			!canManage ||
+			!window.confirm(
+				"Zerar somente os dados importados do Serasa? A configuração da planilha será mantida.",
+			)
+		)
+			return;
+		setAction("clear");
+		try {
+			const response = await limparSerasaReportFinanceiro();
+			setReport(response.data || {});
+			setFeedback({
+				type: "success",
+				title: "Dados Serasa zerados",
+				message:
+					"Os dados importados do Serasa foram limpos. A configuração da origem foi mantida.",
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao zerar Serasa",
+				...getVisibleError(error, "Não foi possível zerar os dados Serasa."),
+			});
+		} finally {
+			setAction("");
+		}
+	};
+
+	const rows = report?.rows || EMPTY_SERASA_LIST;
+	const clientesHistory = report?.clientesHistory || EMPTY_SERASA_LIST;
+	const yearOptions = Array.from({ length: 7 }, (_, index) => 2026 - index);
+	const selectedPeriod = useMemo(
+		() => ({
+			mode: periodMode,
+			...dateRange,
+			...selectedReference,
+		}),
+		[dateRange, periodMode, selectedReference],
+	);
+	const periodLabel = useMemo(
+		() => formatSerasaPeriodLabel(selectedPeriod),
+		[selectedPeriod],
+	);
+	const periodRows = useMemo(
+		() =>
+			dedupeSerasaRows(
+				rows.filter(
+					(row) =>
+						serasaRowMatchesPeriod(row, selectedPeriod) &&
+						!isSerasaClientMarker(row),
+				),
+			),
+		[rows, selectedPeriod],
+	);
+	useEffect(() => {
+		setCurrentPage(1);
+	}, [periodMode, selectedReference, dateRange, searchTerm, pageSize]);
+	const filteredRows = useMemo(() => {
+		const term = searchTerm.trim().toLowerCase();
+		if (!term) return periodRows;
+		return periodRows.filter((row) =>
+			[row.description, row.operation, row.type]
+				.join(" ")
+				.toLowerCase()
+				.includes(term),
+		);
+	}, [periodRows, searchTerm]);
+	const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+	const paginatedRows = filteredRows.slice(
+		(currentPage - 1) * pageSize,
+		currentPage * pageSize,
+	);
+	const periodData = useMemo(
+		() => summarizeSerasaRows(periodRows, clientesHistory, selectedPeriod),
+		[clientesHistory, periodRows, selectedPeriod],
+	);
+	const summary = periodData.summary;
+	const monthly = periodData.monthly;
+	const operationTotals = periodData.operationTotals;
+	const monthlyChart = useMemo(
+		() => ({
+			labels: monthly.map((item) => item.label),
+			datasets: [
+				{
+					label: "Entradas",
+					data: monthly.map((item) => Number(item.entradas || 0)),
+					backgroundColor: "#10b981",
+					borderRadius: 8,
+				},
+				{
+					label: "Saídas",
+					data: monthly.map((item) => Number(item.saidas || 0)),
+					backgroundColor: "#ef4444",
+					borderRadius: 8,
+				},
+				{
+					label: "Receita líquida",
+					data: monthly.map((item) => Number(item.receitaLiquida || 0)),
+					backgroundColor: "#2563eb",
+					borderRadius: 8,
+				},
+			],
+		}),
+		[monthly],
+	);
+	const clientTrend = useMemo(() => {
+		const filtered = clientesHistory
+			.filter((item) => serasaClientHistoryMatchesPeriod(item, selectedPeriod))
+			.sort((a, b) => String(a.key || "").localeCompare(String(b.key || "")));
+		if (filtered.length) return filtered;
+		return summary.clientes
+			? [
+					{
+						key: periodLabel,
+						label: periodLabel,
+						clientes: summary.clientes,
+					},
+				]
+			: [];
+	}, [clientesHistory, periodLabel, selectedPeriod, summary.clientes]);
+	const clientsChart = useMemo(
+		() => ({
+			labels: clientTrend.map((item) => item.label || item.key),
+			datasets: [
+				{
+					label: "Clientes Base",
+					data: clientTrend.map((item) => Number(item.clientes || 0)),
+					borderColor: "#7c3aed",
+					backgroundColor: "rgba(124,58,237,0.14)",
+					borderWidth: 3,
+					pointRadius: 4,
+					fill: true,
+					tension: 0.35,
+				},
+			],
+		}),
+		[clientTrend],
+	);
+	const clientsChartOptions = useMemo(
+		() => ({
+			responsive: true,
+			maintainAspectRatio: false,
+			plugins: {
+				legend: {
+					display: true,
+					labels: { boxWidth: 10, font: { weight: "bold" } },
+				},
+				tooltip: {
+					callbacks: {
+						label: (context) =>
+							`${context.dataset.label}: ${integer.format(Number(context.raw || 0))}`,
+					},
+				},
+			},
+			scales: {
+				x: { grid: { display: false } },
+				y: {
+					ticks: { callback: (value) => integer.format(Number(value)) },
+					suggestedMin: 0,
+				},
+			},
+		}),
+		[],
+	);
+	const operationChart = useMemo(
+		() => ({
+			labels: operationTotals.map((item) => item.label),
+			datasets: [
+				{
+					data: operationTotals.map((item) => item.value),
+					backgroundColor: [
+						"#2563eb",
+						"#10b981",
+						"#f97316",
+						"#8b5cf6",
+						"#ef4444",
+						"#64748b",
+					],
+					borderWidth: 0,
+				},
+			],
+		}),
+		[operationTotals],
+	);
+	useEffect(() => {
+		if (!operationTotals.length) {
+			setSelectedOperationIndex(null);
+			return;
+		}
+		setSelectedOperationIndex((current) =>
+			Number.isInteger(current) && operationTotals[current] ? current : 0,
+		);
+	}, [operationTotals]);
+	const selectedOperation = Number.isInteger(selectedOperationIndex)
+		? operationTotals[selectedOperationIndex]
+		: null;
+	const operationCenterLabel = selectedOperation?.label || "Selecione";
+	const operationCenterValue = Number(selectedOperation?.value || 0);
+	const selectOperationFromChart = (_event, elements = []) => {
+		const nextIndex = elements?.[0]?.index;
+		if (Number.isInteger(nextIndex)) setSelectedOperationIndex(nextIndex);
+	};
+	const periodSelector = (
+		<div className="-mt-4 flex justify-end">
+			<div className="relative flex rounded-xl border border-slate-200 bg-white shadow-sm">
+				<div className="relative">
+					<button
+						type="button"
+						onClick={() => {
+							setPeriodMode("month");
+							setYearMenuOpen(false);
+							setMonthMenuOpen((current) => !current);
+						}}
+						className={`min-h-11 rounded-l-xl px-5 text-sm font-bold ${periodMode === "month" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+					>
+						{periodMode === "month" ? periodLabel : "Mês"}
+					</button>
+					{monthMenuOpen ? (
+						<div className="absolute right-0 top-[calc(100%+8px)] z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+							<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase text-slate-500">
+								{selectedReference.referenceYear}
+							</p>
+							<div className="grid grid-cols-2 gap-1">
+								{Array.from({ length: 12 }, (_, index) => {
+									const month = index + 1;
+									const active =
+										Number(selectedReference.referenceMonth) === month &&
+										periodMode === "month";
+									return (
+										<button
+											key={month}
+											type="button"
+											onClick={() => {
+												setSelectedReference((current) => ({
+													...current,
+													referenceMonth: month,
+												}));
+												setPeriodMode("month");
+												setMonthMenuOpen(false);
+											}}
+											className={`rounded-xl px-3 py-2 text-left text-xs font-black ${active ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+										>
+											{budgetMonthName(month)}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					) : null}
+				</div>
+				<div className="relative">
+					<button
+						type="button"
+						onClick={() => {
+							setPeriodMode("year");
+							setMonthMenuOpen(false);
+							setYearMenuOpen((current) => !current);
+						}}
+						className={`min-h-11 border-l border-slate-200 px-5 text-sm font-bold ${periodMode === "year" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+					>
+						Ano
+					</button>
+					{yearMenuOpen ? (
+						<div className="absolute right-0 top-[calc(100%+8px)] z-40 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+							{yearOptions.map((year) => (
+								<button
+									key={year}
+									type="button"
+									onClick={() => {
+										setSelectedReference((current) => ({
+											...current,
+											referenceYear: year,
+										}));
+										setPeriodMode("year");
+										setYearMenuOpen(false);
+									}}
+									className={`block w-full rounded-xl px-3 py-2 text-left text-xs font-black ${Number(selectedReference.referenceYear) === year && periodMode === "year" ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+								>
+									{year}
+								</button>
+							))}
+						</div>
+					) : null}
+				</div>
+				<button
+					type="button"
+					onClick={() => {
+						setMonthMenuOpen(false);
+						setYearMenuOpen(false);
+						setDateModalOpen(true);
+					}}
+					className={`min-h-11 rounded-r-xl border-l border-slate-200 px-5 text-sm font-bold ${periodMode === "custom" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+				>
+					Datas
+				</button>
+			</div>
+		</div>
+	);
+
+	return (
+		<section className="space-y-5">
+			{periodSelector}
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Dashboard Serasa
+						</h2>
+						<p className="mt-1 text-sm font-bold text-slate-500">
+							Aba MOVIMENTAÇÃO SERASA · Período: {periodLabel}
+						</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<label
+							className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 ${!canManage || action ? "pointer-events-none opacity-50" : ""}`}
+						>
+							{action === "upload" ? (
+								<Loader2 size={16} className="animate-spin" />
+							) : (
+								<Upload size={16} />
+							)}
+							Ler XLSX Serasa
+							<input
+								type="file"
+								accept=".xlsx"
+								className="hidden"
+								disabled={!canManage || Boolean(action)}
+								onChange={handleUpload}
+							/>
+						</label>
+						<button
+							type="button"
+							onClick={handleForceSync}
+							disabled={loading || Boolean(action)}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+						>
+							<RefreshCw
+								size={16}
+								className={action === "sync" ? "animate-spin" : ""}
+							/>
+							Forçar atualização
+						</button>
+						<button
+							type="button"
+							onClick={loadSerasa}
+							disabled={loading || Boolean(action)}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							<RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+							Atualizar
+						</button>
+						<button
+							type="button"
+							onClick={() => setReportModalOpen(true)}
+							disabled={loading || Boolean(action) || !periodRows.length}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50"
+						>
+							<Download size={16} />
+							Gerar Relatório
+						</button>
+						<span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-500">
+							<CalendarClock size={16} className="text-slate-700" />
+							<span>
+								<span className="block leading-tight">Última atualização</span>
+								<span className="block text-sm text-slate-950">
+									{formatUpdatedAt(report?.importInfo?.importedAt)}
+								</span>
+							</span>
+						</span>
+						<button
+							type="button"
+							onClick={handleClearSerasa}
+							disabled={!canManage || loading || Boolean(action) || !rows.length}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 hover:bg-red-100 disabled:opacity-50"
+						>
+							<Trash2 size={16} />
+							Zerar dados
+						</button>
+					</div>
+				</div>
+			</section>
+
+			<section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+				{SERASA_KPI_CONFIG.map((item, index) => (
+					<FinancialKpiCard
+						key={item.id}
+						index={index}
+						loading={loading}
+						compact
+						centered
+						item={{
+							id: item.id,
+							title: item.title,
+							value: summary[item.id] || 0,
+							type: item.type || "currency",
+							icon: item.icon,
+							color: item.color,
+						}}
+					/>
+				))}
+			</section>
+
+			<section className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]">
+				<div className="grid gap-4">
+					<ChartCard title="Evolução mensal Serasa" empty={!monthly.length}>
+						<Bar data={monthlyChart} options={barOptions()} />
+					</ChartCard>
+					<ChartCard
+						title="Evolução mensal Clientes Base"
+						empty={!clientTrend.length}
+					>
+						<Line data={clientsChart} options={clientsChartOptions} />
+					</ChartCard>
+				</div>
+				<ChartCard
+					title="Concentração por operação"
+					empty={!operationTotals.length}
+				>
+					<Doughnut
+						data={operationChart}
+						options={{
+							responsive: true,
+							maintainAspectRatio: false,
+							cutout: "62%",
+							onClick: selectOperationFromChart,
+							onHover: (event, elements) => {
+								event.native.target.style.cursor = elements.length ? "pointer" : "default";
+							},
+							plugins: {
+								legend: {
+									position: "bottom",
+									labels: { boxWidth: 10, font: { weight: "bold" } },
+								},
+								tooltip: {
+									callbacks: {
+										label: (ctx) =>
+											`${ctx.label}: ${brl.format(Number(ctx.raw || 0))}`,
+									},
+								},
+								centerText: {
+									title: operationCenterLabel,
+									value: brl.format(operationCenterValue),
+									maxWidth: 130,
+								},
+							},
+						}}
+					/>
+				</ChartCard>
+			</section>
+
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+					<div>
+						<h3 className="text-lg font-black text-slate-950">
+							Movimentações Serasa
+						</h3>
+						<p className="mt-1 text-xs font-bold text-slate-500">
+							{integer.format(filteredRows.length)} registro(s) em {periodLabel}
+						</p>
+					</div>
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+						<label className="relative block">
+							<Search
+								size={16}
+								className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+							/>
+							<input
+								value={searchTerm}
+								onChange={(event) => setSearchTerm(event.target.value)}
+								placeholder="Buscar nome ou operação"
+								className="min-h-11 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 sm:w-72"
+							/>
+						</label>
+						<select
+							value={pageSize}
+							onChange={(event) => setPageSize(Number(event.target.value))}
+							className="min-h-11 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-700 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+						>
+							{[50, 100, 150, 200].map((option) => (
+								<option key={option} value={option}>
+									{option} por página
+								</option>
+							))}
+						</select>
+					</div>
+				</div>
+				<div className="mt-4 overflow-auto rounded-2xl border border-slate-200">
+					<table className="w-full table-fixed divide-y divide-slate-200 text-left text-xs font-bold">
+						<thead className="bg-slate-50 text-slate-500">
+							<tr>
+								<th className="w-[110px] px-3 py-2">Data</th>
+								<th className="w-[130px] px-3 py-2">Tipo</th>
+								<th className="px-3 py-2">Descrição</th>
+								<th className="w-[180px] px-3 py-2">Operação</th>
+								<th className="w-[150px] px-3 py-2 text-right">Valor</th>
+								<th className="w-[150px] px-3 py-2">Classificação</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{paginatedRows.length ? (
+								paginatedRows.map((row) => (
+									<tr key={row.id}>
+										<td className="px-3 py-2 text-slate-600">{row.date}</td>
+										<td className="truncate px-3 py-2 text-slate-600" title={row.type}>
+											{row.type}
+										</td>
+										<td className="truncate px-3 py-2 font-black text-slate-950" title={row.description || ""}>
+											{row.description || "-"}
+										</td>
+										<td className="truncate px-3 py-2 text-slate-600" title={row.operation || ""}>
+											{row.operation || "-"}
+										</td>
+										<td
+											className={`px-3 py-2 text-right font-black ${
+												isSerasaNetRevenue(row)
+													? "text-blue-700"
+													: Number(row.value || 0) < 0
+														? "text-red-700"
+														: "text-emerald-700"
+											}`}
+										>
+											{brl.format(Number(row.value || 0))}
+										</td>
+										<td className="px-3 py-2">
+											<span
+												className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${
+													isSerasaNetRevenue(row)
+														? "bg-blue-50 text-blue-700"
+														: Number(row.value || 0) < 0
+															? "bg-red-50 text-red-700"
+															: "bg-emerald-50 text-emerald-700"
+												}`}
+											>
+												{isSerasaNetRevenue(row)
+													? "Receita líquida"
+													: Number(row.value || 0) < 0
+														? "Saída"
+														: "Entrada"}
+											</span>
+										</td>
+									</tr>
+								))
+							) : (
+								<tr>
+									<td colSpan={6}>
+										<EmptyState text="Nenhuma movimentação Serasa encontrada para os filtros atuais." />
+									</td>
+								</tr>
+							)}
+						</tbody>
+					</table>
+				</div>
+				<div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<p className="text-xs font-bold text-slate-500">
+						Página {integer.format(currentPage)} de {integer.format(totalPages)}
+					</p>
+					<div className="flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+							disabled={currentPage <= 1}
+							className="min-h-10 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							Anterior
+						</button>
+						<button
+							type="button"
+							onClick={() =>
+								setCurrentPage((page) => Math.min(totalPages, page + 1))
+							}
+							disabled={currentPage >= totalPages}
+							className="min-h-10 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							Próxima
+						</button>
+					</div>
+				</div>
+			</section>
+			{reportModalOpen ? (
+				<SerasaReportExportModal
+					periodLabel={periodLabel}
+					summary={summary}
+					monthly={monthly}
+					clientTrend={clientTrend}
+					operationTotals={operationTotals}
+					rows={periodRows}
+					importInfo={report?.importInfo || {}}
+					onClose={() => setReportModalOpen(false)}
+				/>
+			) : null}
+			{dateModalOpen ? (
+				<BudgetDateRangeModal
+					value={dateRange}
+					onClose={() => setDateModalOpen(false)}
+					onApply={(range) => {
+						setDateRange(range);
+						setPeriodMode("custom");
+						setDateModalOpen(false);
+					}}
+				/>
+			) : null}
+			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+		</section>
+	);
+}
+
+function BankBadge({ item = {} }) {
+	return (
+		<span className="inline-flex items-center gap-2">
+			<span
+				className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-black text-white shadow-sm"
+				style={{ backgroundColor: item.bankColor || "#0f766e" }}
+			>
+				{item.bankInitials || String(item.label || item.bank || "?").slice(0, 2)}
+			</span>
+			<span className="truncate">{item.label || item.bank || item.method || "-"}</span>
+		</span>
+	);
+}
+
+function getTariffsAvailableYears(report = {}) {
+	const arrays = [
+		report.receitasDiarias,
+		report.tarifasMensais,
+		report.formasPagamentoQuantidade,
+		report.formasPagamentoValor,
+		report.formasCobrancaValor,
+		report.faturas,
+		report.receitaPorCliente,
+	];
+	const years = arrays
+		.flatMap((items) => items || [])
+		.map((item) => Number(item.year || 0))
+		.filter(Boolean);
+	const unique = [...new Set(years)].sort((a, b) => b - a);
+	return unique.length ? unique : [new Date().getFullYear()];
+}
+
+function filterTariffsByYear(items = [], year) {
+	return (items || []).filter((item) => Number(item.year || 0) === Number(year));
+}
+
+function filterTariffsByYearMonth(items = [], year, month = 0) {
+	return filterTariffsByYear(items, year).filter(
+		(item) => !month || Number(item.month || 0) === Number(month),
+	);
+}
+
+function aggregateTariffsMonthlySeries(items = [], labelField, valueField = "value") {
+	const labels = Array.from({ length: 12 }, (_, index) => ({
+		month: index + 1,
+		label: budgetMonthName(index + 1),
+	}));
+	const grouped = new Map();
+	(items || []).forEach((item) => {
+		const label = String(item[labelField] || "Sem identificação").trim();
+		const month = Number(item.month || 0);
+		if (!month) return;
+		const current = grouped.get(label) || Array(12).fill(0);
+		current[month - 1] += Number(item[valueField] || 0);
+		grouped.set(label, current);
+	});
+	const palette = [
+		"#2563eb",
+		"#10b981",
+		"#f97316",
+		"#8b5cf6",
+		"#ef4444",
+		"#06b6d4",
+		"#84cc16",
+		"#64748b",
+	];
+	const datasets = [...grouped.entries()].slice(0, 8).map(([label, data], index) => ({
+		label,
+		data,
+		borderColor: palette[index % palette.length],
+		backgroundColor: palette[index % palette.length],
+		fill: false,
+		tension: 0.35,
+		pointRadius: 3,
+	}));
+	return { labels: labels.map((item) => item.label), datasets };
+}
+
+function addTariffsPercentOfTotal(items = [], valueField = "value") {
+	const total = (items || []).reduce(
+		(sum, item) => sum + Number(item[valueField] || 0),
+		0,
+	);
+	return (items || []).map((item) => ({
+		...item,
+		percentOfTotal: total ? (Number(item[valueField] || 0) / total) * 100 : 0,
+	}));
+}
+
+function invoiceMetricType(metric) {
+	const text = String(metric || "");
+	if (/cancelad|outros lan/i.test(text)) return "Canceladas";
+	if (/ativa|faturamento/i.test(text)) return "Ativas";
+	return "";
+}
+
+function isRelevantTariffInvoiceRecord(item = {}) {
+	const type = invoiceMetricType(item.metric);
+	if (!type) return false;
+	const year = Number(item.year || 0);
+	const month = Number(item.month || 0);
+	if (!year || !month) return false;
+	const now = new Date();
+	return !(year === now.getFullYear() && month > now.getMonth() + 1);
+}
+
+function aggregateInvoiceMetrics(rows = []) {
+	const metrics = [
+		{ label: "Ativas", value: 0 },
+		{ label: "Canceladas", value: 0 },
+	];
+	rows.forEach((item) => {
+		const type = invoiceMetricType(item.metric);
+		if (!type) return;
+		const target = metrics.find((metric) => metric.label === type);
+		if (target) target.value += Number(item.value || 0);
+	});
+	return metrics.filter((item) => item.value > 0);
+}
+
+function buildInvoiceMonthlySeries(rows = []) {
+	const monthly = new Map();
+	rows.forEach((item) => {
+		const month = Number(item.month || 0);
+		if (month < 1 || month > 12) return;
+		const type = invoiceMetricType(item.metric);
+		if (!type) return;
+		const key = String(month).padStart(2, "0");
+		const current = monthly.get(key) || {
+			month,
+			label: budgetMonthName(month),
+			active: 0,
+			canceled: 0,
+		};
+		const value = Number(item.value || 0);
+		if (type === "Ativas") current.active += value;
+		if (type === "Canceladas") current.canceled += value;
+		monthly.set(key, current);
+	});
+	const values = [...monthly.values()]
+		.filter((item) => item.active > 0 || item.canceled > 0)
+		.sort((a, b) => a.month - b.month);
+	return {
+		labels: values.map((item) => item.label),
+		datasets: [
+			{
+				label: "Ativas",
+				data: values.map((item) => item.active),
+				backgroundColor: "#10b981",
+				borderRadius: 8,
+			},
+			{
+				label: "Canceladas",
+				data: values.map((item) => item.canceled),
+				backgroundColor: "#ef4444",
+				borderRadius: 8,
+			},
+		],
+	};
+}
+
+function chartHasValues(chart = {}) {
+	return (chart.datasets || []).some((dataset) =>
+		(dataset.data || []).some((value) => Number(value || 0) > 0),
+	);
+}
+
+function buildTariffsDetailInsights(report = {}, year, month, type) {
+	const byYear = (items) => filterTariffsByYear(items, year);
+	const byPeriod = (items) => filterTariffsByYearMonth(items, year, month);
+	if (type === "faturas") {
+		const invoiceRows = (report.faturas || []).filter(
+			isRelevantTariffInvoiceRecord,
+		);
+		const rows = byPeriod(invoiceRows);
+		const yearRows = byYear(invoiceRows);
+		const ativas = rows.filter((item) => invoiceMetricType(item.metric) === "Ativas");
+		const canceladas = rows.filter((item) => invoiceMetricType(item.metric) === "Canceladas");
+		return {
+			rows,
+			monthly: buildInvoiceMonthlySeries(yearRows),
+			metrics: aggregateInvoiceMetrics(rows),
+			kpis: {
+				ativas: ativas.reduce((sum, item) => sum + Number(item.value || 0), 0),
+				canceladas: canceladas.reduce((sum, item) => sum + Number(item.value || 0), 0),
+				months: new Set(rows.map((item) => item.month).filter(Boolean)).size,
+			},
+		};
+	}
+	if (type === "recCliente") {
+		const rows = byPeriod(report.receitaPorCliente);
+		const monthly = aggregateTariffsByMonth(byYear(report.receitaPorCliente));
+		const clients = aggregateTariffsByLabel(rows, "clientName");
+		return {
+			rows,
+			monthly,
+			clients,
+			kpis: {
+				total: rows.reduce((sum, item) => sum + Number(item.value || 0), 0),
+				clients: new Set(rows.map((item) => item.clientCode || item.clientName)).size,
+				average: clients.length
+					? clients.reduce((sum, item) => sum + Number(item.value || 0), 0) /
+						clients.length
+					: 0,
+				bestClient: clients[0]?.label || "-",
+			},
+		};
+	}
+	const yearPaymentValue = byYear(report.formasPagamentoValor);
+	const paymentQuantity = byPeriod(report.formasPagamentoQuantidade);
+	const paymentValue = byPeriod(report.formasPagamentoValor);
+	const collectionValue = byPeriod(report.formasCobrancaValor);
+	const monthly = aggregateTariffsMonthlySeries(yearPaymentValue, "method");
+	const methods = addTariffsPercentOfTotal(aggregateTariffsByLabel(paymentValue, "method"));
+	const quantities = aggregateTariffsByLabel(
+		paymentQuantity,
+		"method",
+		"quantity",
+	);
+	const collection = addTariffsPercentOfTotal(
+		aggregateTariffsByLabel(collectionValue, "method"),
+	);
+	const totalQuantity = paymentQuantity.reduce(
+		(sum, item) => sum + Number(item.quantity || 0),
+		0,
+	);
+	const totalValue = paymentValue.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	return {
+		rows: [...paymentValue, ...collectionValue, ...paymentQuantity],
+		monthly,
+		methods,
+		quantities,
+		collection,
+		kpis: {
+			totalValue,
+			totalQuantity,
+			averageTicket: totalQuantity ? totalValue / totalQuantity : 0,
+			topMethod: methods[0]?.label || "-",
+		},
+	};
+}
+
+function TariffsYearSelector({ year, years = [], onChange }) {
+	return (
+		<div className="flex flex-wrap items-center justify-end gap-2">
+			<span className="text-xs font-black uppercase text-slate-400">Ano</span>
+			<select
+				value={year}
+				onChange={(event) => onChange(Number(event.target.value))}
+				className="min-h-11 rounded-xl border border-orange-200 bg-white px-4 text-sm font-black text-slate-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+			>
+				{years.map((item) => (
+					<option key={item} value={item}>
+						{item}
+					</option>
+				))}
+			</select>
+		</div>
+	);
+}
+
+function TariffsDetailPage({ type = "faturas" }) {
+	const [report, setReport] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [feedback, setFeedback] = useState(null);
+	const loadTariffs = useCallback(async () => {
+		setLoading(true);
+		try {
+			const response = await buscarTarifasReportFinanceiro();
+			setReport(response.data || {});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao carregar Tarifas",
+				...getVisibleError(error, "Não foi possível carregar os dados de Tarifas."),
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+	useEffect(() => {
+		loadTariffs();
+	}, [loadTariffs]);
+	const years = useMemo(() => getTariffsAvailableYears(report || {}), [report]);
+	const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+	const [selectedMonth, setSelectedMonth] = useState(0);
+	const [searchTerm, setSearchTerm] = useState("");
+	const [pageSize, setPageSize] = useState(50);
+	const [pageIndex, setPageIndex] = useState(1);
+	const [selectedInvoiceMetricIndex, setSelectedInvoiceMetricIndex] =
+		useState(null);
+	useEffect(() => {
+		if (!years.includes(selectedYear)) setSelectedYear(years[0]);
+	}, [selectedYear, years]);
+	const insights = useMemo(
+		() =>
+			buildTariffsDetailInsights(
+				report || {},
+				selectedYear,
+				selectedMonth,
+				type,
+			),
+		[report, selectedMonth, selectedYear, type],
+	);
+	const isFaturas = type === "faturas";
+	const isRecCliente = type === "recCliente";
+	const title = isFaturas
+		? "Faturas"
+		: isRecCliente
+			? "Receita Cliente"
+			: "Formas de Pagamento";
+	const subtitle = isFaturas
+		? "Faturas ativas e canceladas por ano e mês."
+		: isRecCliente
+			? "Receita por cliente com ranking anual e evolução mensal."
+			: "Valores, quantidades, cobrança e ticket médio por forma de pagamento.";
+	const monthlyChart = isFaturas
+		? insights.monthly
+		: isRecCliente
+			? {
+				labels: insights.monthly.map((item) => item.label),
+				datasets: [
+					{
+						label: title,
+						data: insights.monthly.map((item) => item.value),
+						backgroundColor: "#10b981",
+						borderColor: "#10b981",
+						borderRadius: 8,
+						fill: false,
+						tension: 0.35,
+					},
+				],
+			}
+			: insights.monthly;
+	const doughnutRows = isFaturas
+		? insights.metrics || []
+		: isRecCliente
+			? insights.clients || []
+			: insights.methods || [];
+	const doughnutChart = {
+		labels: doughnutRows.slice(0, 8).map((item) => item.label),
+		datasets: [
+			{
+				data: doughnutRows.slice(0, 8).map((item) => item.value),
+				backgroundColor: [
+					"#2563eb",
+					"#10b981",
+					"#f97316",
+					"#8b5cf6",
+					"#ef4444",
+					"#06b6d4",
+					"#84cc16",
+					"#64748b",
+				],
+				borderWidth: 0,
+			},
+		],
+	};
+	const kpis = isFaturas
+		? [
+				{ title: "Ativas", value: insights.kpis.ativas, type: "number", icon: "FileText", color: "emerald" },
+				{ title: "Canceladas", value: insights.kpis.canceladas, type: "number", icon: "AlertTriangle", color: "rose" },
+				{ title: "Meses lidos", value: insights.kpis.months, type: "number", icon: "CalendarClock", color: "violet" },
+			]
+		: isRecCliente
+			? [
+					{ title: "Receita anual", value: insights.kpis.total, type: "currency", icon: "CircleDollarSign", color: "emerald" },
+					{ title: "Clientes", value: insights.kpis.clients, type: "number", icon: "Users", color: "blue" },
+					{ title: "Média por cliente", value: insights.kpis.average, type: "currency", icon: "BadgeDollarSign", color: "amber" },
+					{ title: "Maior cliente", value: insights.kpis.bestClient, type: "text", icon: "Landmark", color: "violet" },
+				]
+			: [
+					{ title: "Valor recebido", value: insights.kpis.totalValue, type: "currency", icon: "CircleDollarSign", color: "emerald" },
+					{ title: "Quantidade", value: insights.kpis.totalQuantity, type: "number", icon: "ReceiptText", color: "blue" },
+					{ title: "Ticket médio", value: insights.kpis.averageTicket, type: "currency", icon: "BadgeDollarSign", color: "amber" },
+					{ title: "Principal forma", value: insights.kpis.topMethod, type: "text", icon: "Wallet", color: "violet" },
+				];
+	const rankingTitle = isFaturas
+		? "Indicadores de faturas"
+		: isRecCliente
+			? "Ranking de clientes"
+			: "Ranking por forma de pagamento";
+	const selectedInvoiceMetric =
+		isFaturas && Number.isInteger(selectedInvoiceMetricIndex)
+			? doughnutRows[selectedInvoiceMetricIndex]
+			: null;
+	const doughnutTotal = isFaturas
+		? Number(insights.kpis.ativas || 0) - Number(insights.kpis.canceladas || 0)
+		: doughnutRows
+			.slice(0, 8)
+			.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	const centerTextTitle = isFaturas
+		? selectedInvoiceMetric?.label || "Líquido"
+		: "Total";
+	const centerTextValue = isFaturas
+		? integer.format(Number(selectedInvoiceMetric?.value ?? doughnutTotal))
+		: brl.format(doughnutTotal);
+	const selectInvoiceMetricFromChart = (_, elements = []) => {
+		if (!isFaturas) return;
+		const nextIndex = elements[0]?.index;
+		setSelectedInvoiceMetricIndex(
+			Number.isInteger(nextIndex) ? nextIndex : null,
+		);
+	};
+	const searchedRows = insights.rows.filter((item) => {
+		const text = [
+			item.clientCode,
+			item.clientName,
+			item.method,
+			item.metric,
+			item.monthName,
+			item.value,
+			item.quantity,
+		]
+			.join(" ")
+			.toLowerCase();
+		return text.includes(searchTerm.trim().toLowerCase());
+	});
+	const totalPages = Math.max(1, Math.ceil(searchedRows.length / pageSize));
+	const safePageIndex = Math.min(pageIndex, totalPages);
+	const pagedRows = searchedRows.slice(
+		(safePageIndex - 1) * pageSize,
+		safePageIndex * pageSize,
+	);
+	useEffect(() => {
+		setPageIndex(1);
+		setSelectedInvoiceMetricIndex(null);
+	}, [searchTerm, selectedMonth, selectedYear, type]);
+	return (
+		<section className="space-y-4">
+			<div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+				<div>
+					<h2 className="text-lg font-black text-slate-950">{title}</h2>
+					<p className="mt-1 text-sm font-bold text-slate-500">{subtitle}</p>
+				</div>
+				<div className="flex flex-wrap items-center justify-end gap-2">
+					<TariffsYearSelector
+						year={selectedYear}
+						years={years}
+						onChange={setSelectedYear}
+					/>
+					<select
+						value={selectedMonth}
+						onChange={(event) => setSelectedMonth(Number(event.target.value))}
+						className="min-h-11 rounded-xl border border-orange-200 bg-white px-4 text-sm font-black text-slate-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+					>
+						<option value={0}>Ano completo</option>
+						{Array.from({ length: 12 }, (_, index) => (
+							<option key={index + 1} value={index + 1}>
+								{budgetMonthName(index + 1)}
+							</option>
+						))}
+					</select>
+					<button
+						type="button"
+						onClick={loadTariffs}
+						disabled={loading}
+						className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+					>
+						<RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+						Atualizar
+					</button>
+				</div>
+			</div>
+			<section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+				{kpis.map((item) => (
+					<FinancialKpiCard key={item.title} loading={loading} compact centered item={item} />
+				))}
+			</section>
+			<section className="grid gap-4 xl:grid-cols-2">
+				<ChartCard
+					title={`Evolução mensal ${selectedYear}`}
+					empty={
+						isFaturas
+							? !chartHasValues(insights.monthly)
+							: isRecCliente
+								? !insights.monthly.length
+							: !insights.monthly.datasets?.length
+					}
+				>
+					{isFaturas ? (
+						<Bar
+							data={monthlyChart}
+							options={barOptions((value) =>
+								integer.format(Number(value || 0)),
+							)}
+						/>
+					) : (
+						<Line data={monthlyChart} options={barOptions()} />
+					)}
+				</ChartCard>
+				<ChartCard title={rankingTitle} empty={!doughnutRows.length}>
+					<Doughnut
+						data={doughnutChart}
+						options={{
+							responsive: true,
+							maintainAspectRatio: false,
+							cutout: "58%",
+							onClick: isFaturas ? selectInvoiceMetricFromChart : undefined,
+							plugins: {
+								centerText: {
+									title: centerTextTitle,
+									value: centerTextValue,
+								},
+								legend: {
+									position: "bottom",
+									labels: { boxWidth: 10, font: { weight: "bold" } },
+								},
+								tooltip: {
+									callbacks: {
+										label: (ctx) =>
+											`${ctx.label}: ${isFaturas ? integer.format(Number(ctx.raw || 0)) : brl.format(Number(ctx.raw || 0))}`,
+									},
+								},
+							},
+						}}
+					/>
+				</ChartCard>
+			</section>
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<h3 className="text-lg font-black text-slate-950">{rankingTitle}</h3>
+				<div className="mt-4 grid gap-2 lg:grid-cols-2">
+					{doughnutRows.slice(0, 20).map((item, index) => (
+						<div
+							key={`${item.label}-${index}`}
+							className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+						>
+							<span className="truncate font-bold text-slate-700">
+								{isFaturas ? item.label : <BankBadge item={item} />}
+							</span>
+							<span className="shrink-0 font-black text-slate-950">
+								{isFaturas ? integer.format(item.value) : brl.format(item.value)}
+								{!isFaturas && !isRecCliente ? (
+									<span className="ml-2 text-xs font-black text-slate-400">
+										{decimal.format(item.percentOfTotal || 0)}%
+									</span>
+								) : null}
+							</span>
+						</div>
+					))}
+				</div>
+				{!doughnutRows.length ? (
+					<div className="mt-4">
+						<EmptyState text="Nenhum dado encontrado para o ano selecionado." />
+					</div>
+				) : null}
+			</section>
+			{isRecCliente || !isFaturas ? (
+				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+					<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+						<div>
+							<h3 className="text-lg font-black text-slate-950">
+								{isRecCliente
+									? "Clientes e receita do período"
+									: "Amostra por ano e mês"}
+							</h3>
+							<p className="mt-1 text-sm font-bold text-slate-500">
+								{integer.format(searchedRows.length)} registro(s)
+							</p>
+						</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<div className="relative">
+								<Search
+									size={16}
+									className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+								/>
+								<input
+									value={searchTerm}
+									onChange={(event) => setSearchTerm(event.target.value)}
+									placeholder={
+										isRecCliente
+											? "Buscar cliente ou código"
+											: "Buscar forma, cobrança ou mês"
+									}
+									className="min-h-11 w-72 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-bold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+								/>
+							</div>
+							<select
+								value={pageSize}
+								onChange={(event) => setPageSize(Number(event.target.value))}
+								className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-700"
+							>
+								{[50, 100, 150, 200].map((size) => (
+									<option key={size} value={size}>
+										{size}
+									</option>
+								))}
+							</select>
+						</div>
+					</div>
+					<div className="mt-4 overflow-x-auto">
+						<table className="min-w-full text-left text-sm">
+							<thead>
+								<tr className="border-b border-slate-100 text-xs font-black uppercase text-slate-400">
+									{isRecCliente ? (
+										<>
+											<th className="px-3 py-2">Código</th>
+											<th className="px-3 py-2">Cliente</th>
+											<th className="px-3 py-2">Mês</th>
+											<th className="px-3 py-2 text-right">Receita</th>
+											<th className="px-3 py-2 text-right">Total anual</th>
+										</>
+									) : (
+										<>
+											<th className="px-3 py-2">Ano</th>
+											<th className="px-3 py-2">Mês</th>
+											<th className="px-3 py-2">Forma</th>
+											<th className="px-3 py-2">Tipo</th>
+											<th className="px-3 py-2 text-right">Quantidade</th>
+											<th className="px-3 py-2 text-right">Valor</th>
+											<th className="px-3 py-2 text-right">% valor total</th>
+										</>
+									)}
+								</tr>
+							</thead>
+							<tbody>
+								{pagedRows.map((item, index) => (
+									<tr
+										key={`${item.id || item.clientCode || item.method}-${index}`}
+										className="border-b border-slate-50 font-bold text-slate-700"
+									>
+										{isRecCliente ? (
+											<>
+												<td className="px-3 py-2">{item.clientCode || "-"}</td>
+												<td className="max-w-[420px] truncate px-3 py-2">
+													{item.clientName || "-"}
+												</td>
+												<td className="px-3 py-2">
+													{item.year} -{" "}
+													{item.monthName || budgetMonthName(item.month)}
+												</td>
+												<td className="px-3 py-2 text-right">
+													{brl.format(Number(item.value || 0))}
+												</td>
+												<td className="px-3 py-2 text-right">
+													{brl.format(Number(item.total || 0))}
+												</td>
+											</>
+										) : (
+											<>
+												<td className="px-3 py-2">{item.year || "-"}</td>
+												<td className="px-3 py-2">
+													{item.monthName || budgetMonthName(item.month)}
+												</td>
+												<td className="max-w-[320px] truncate px-3 py-2">
+													{item.method || "-"}
+												</td>
+												<td className="px-3 py-2">
+													{item.quantity !== undefined
+														? "Quantidade"
+														: item.value !== undefined
+															? "Valor"
+															: "Cobrança"}
+												</td>
+												<td className="px-3 py-2 text-right">
+													{item.quantity !== undefined
+														? integer.format(Number(item.quantity || 0))
+														: "-"}
+												</td>
+												<td className="px-3 py-2 text-right">
+													{item.value !== undefined
+														? brl.format(Number(item.value || 0))
+														: "-"}
+												</td>
+												<td className="px-3 py-2 text-right">
+													{item.percent !== undefined
+														? `${decimal.format(Number(item.percent || 0))}%`
+														: "-"}
+												</td>
+											</>
+										)}
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+					<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-bold text-slate-500">
+						<span>
+							Página {safePageIndex} de {totalPages}
+						</span>
+						<div className="flex gap-2">
+							<button
+								type="button"
+								onClick={() =>
+									setPageIndex((current) => Math.max(1, current - 1))
+								}
+								disabled={safePageIndex <= 1}
+								className="rounded-xl border border-slate-200 px-3 py-2 font-black text-slate-700 disabled:opacity-40"
+							>
+								Anterior
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									setPageIndex((current) => Math.min(totalPages, current + 1))
+								}
+								disabled={safePageIndex >= totalPages}
+								className="rounded-xl border border-slate-200 px-3 py-2 font-black text-slate-700 disabled:opacity-40"
+							>
+								Próxima
+							</button>
+						</div>
+					</div>
+				</section>
+			) : null}
+			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+		</section>
+	);
+}
+
+function TariffsReportPage({ canManage }) {
+	const [report, setReport] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [action, setAction] = useState("");
+	const [feedback, setFeedback] = useState(null);
+	const [reportModalOpen, setReportModalOpen] = useState(false);
+	const [monthMenuOpen, setMonthMenuOpen] = useState(false);
+	const [yearMenuOpen, setYearMenuOpen] = useState(false);
+	const [dateModalOpen, setDateModalOpen] = useState(false);
+	const [periodMode, setPeriodMode] = useState("year");
+	const [dateRange, setDateRange] = useState({ startDate: "", endDate: "" });
+	const [selectedReference, setSelectedReference] = useState({
+		referenceYear: 2026,
+		referenceMonth: 8,
+	});
+	const loadTariffs = useCallback(async () => {
+		setLoading(true);
+		try {
+			const response = await buscarTarifasReportFinanceiro();
+			setReport(response.data || {});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao carregar Tarifas",
+				...getVisibleError(error, "Não foi possível carregar o report Tarifas."),
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+	useEffect(() => {
+		loadTariffs();
+	}, [loadTariffs]);
+	const handleUpload = async (event) => {
+		const file = event.target.files?.[0];
+		if (!file) return;
+		setAction("upload");
+		try {
+			const buffer = await file.arrayBuffer();
+			const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+			const sheets = workbook.SheetNames.map((sheetName) => ({
+				sheetName,
+				rows: XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+					header: 1,
+					raw: false,
+					defval: "",
+				}),
+			}));
+			const response = await salvarTarifasReportFinanceiro({
+				fileName: file.name,
+				sheets,
+			});
+			setReport(response.data || {});
+			const summary = response.data?.summary || {};
+			setFeedback({
+				type: "success",
+				title: "Leitura de Tarifas concluída",
+				message: `${integer.format(summary.blocosDetectados || 0)} bloco(s) detectado(s) em ${integer.format(sheets.length)} aba(s).`,
+				details: `Receitas diárias: ${integer.format(response.data?.receitasDiarias?.length || 0)}\nTarifas mensais: ${integer.format(response.data?.tarifasMensais?.length || 0)}\nFormas de pagamento: ${integer.format(response.data?.formasPagamentoValor?.length || 0)}\nReceita por cliente: ${integer.format(response.data?.receitaPorCliente?.length || 0)}\nBlocos não mapeados: ${integer.format(summary.blocosNaoMapeados || 0)}`,
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro na leitura de Tarifas",
+				...getVisibleError(error, "Não foi possível ler/importar a planilha de Tarifas."),
+			});
+		} finally {
+			setAction("");
+			event.target.value = "";
+		}
+	};
+	const handleClear = async () => {
+		if (
+			!canManage ||
+			!window.confirm("Zerar somente os dados importados de Tarifas?")
+		)
+			return;
+		setAction("clear");
+		try {
+			const response = await limparTarifasReportFinanceiro();
+			setReport(response.data || {});
+			setFeedback({
+				type: "success",
+				title: "Dados de Tarifas zerados",
+				message: "Os dados importados de Tarifas foram limpos.",
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao zerar Tarifas",
+				...getVisibleError(error, "Não foi possível zerar os dados de Tarifas."),
+			});
+		} finally {
+			setAction("");
+		}
+	};
+	const yearOptions = Array.from({ length: 7 }, (_, index) => 2026 - index);
+	const selectedPeriod = useMemo(
+		() => ({
+			mode: periodMode,
+			...dateRange,
+			...selectedReference,
+		}),
+		[dateRange, periodMode, selectedReference],
+	);
+	const periodLabel = useMemo(
+		() => formatTariffsPeriodLabel(selectedPeriod),
+		[selectedPeriod],
+	);
+	const insights = useMemo(
+		() => buildTariffsInsights(report || {}, selectedPeriod),
+		[report, selectedPeriod],
+	);
+	const monthlyTariffsChart = useMemo(
+		() => ({
+			labels: insights.tarifasPorMes.map((item) => item.label),
+			datasets: [
+				{
+					label: "Tarifas",
+					data: insights.tarifasPorMes.map((item) => item.value),
+					borderColor: "#f97316",
+					backgroundColor: "rgba(249,115,22,0.14)",
+					fill: true,
+					tension: 0.35,
+					pointRadius: 3,
+				},
+			],
+		}),
+		[insights.tarifasPorMes],
+	);
+	const paymentChart = useMemo(
+		() => ({
+			labels: insights.pagamentoValor.slice(0, 6).map((item) => item.label),
+			datasets: [
+				{
+					data: insights.pagamentoValor.slice(0, 6).map((item) => item.value),
+					backgroundColor: ["#2563eb", "#10b981", "#f97316", "#8b5cf6", "#ef4444", "#64748b"],
+					borderWidth: 0,
+				},
+			],
+		}),
+		[insights.pagamentoValor],
+	);
+	const periodSelector = (
+		<div className="-mt-4 flex justify-end">
+			<div className="relative flex rounded-xl border border-slate-200 bg-white shadow-sm">
+				<div className="relative">
+					<button
+						type="button"
+						onClick={() => {
+							setPeriodMode("month");
+							setYearMenuOpen(false);
+							setMonthMenuOpen((current) => !current);
+						}}
+						className={`min-h-11 rounded-l-xl px-5 text-sm font-bold ${periodMode === "month" ? "bg-orange-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+					>
+						{periodMode === "month" ? periodLabel : "Mês"}
+					</button>
+					{monthMenuOpen ? (
+						<div className="absolute right-0 top-[calc(100%+8px)] z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+							<div className="grid grid-cols-2 gap-1">
+								{Array.from({ length: 12 }, (_, index) => {
+									const month = index + 1;
+									return (
+										<button
+											key={month}
+											type="button"
+											onClick={() => {
+												setSelectedReference((current) => ({ ...current, referenceMonth: month }));
+												setPeriodMode("month");
+												setMonthMenuOpen(false);
+											}}
+											className="rounded-xl px-3 py-2 text-left text-xs font-black text-slate-700 hover:bg-slate-50"
+										>
+											{budgetMonthName(month)}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					) : null}
+				</div>
+				<div className="relative">
+					<button
+						type="button"
+						onClick={() => {
+							setPeriodMode("year");
+							setMonthMenuOpen(false);
+							setYearMenuOpen((current) => !current);
+						}}
+						className={`min-h-11 border-l border-slate-200 px-5 text-sm font-bold ${periodMode === "year" ? "bg-orange-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+					>
+						Ano
+					</button>
+					{yearMenuOpen ? (
+						<div className="absolute right-0 top-[calc(100%+8px)] z-40 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+							{yearOptions.map((year) => (
+								<button
+									key={year}
+									type="button"
+									onClick={() => {
+										setSelectedReference((current) => ({ ...current, referenceYear: year }));
+										setPeriodMode("year");
+										setYearMenuOpen(false);
+									}}
+									className="block w-full rounded-xl px-3 py-2 text-left text-xs font-black text-slate-700 hover:bg-slate-50"
+								>
+									{year}
+								</button>
+							))}
+						</div>
+					) : null}
+				</div>
+				<button
+					type="button"
+					onClick={() => {
+						setMonthMenuOpen(false);
+						setYearMenuOpen(false);
+						setDateModalOpen(true);
+					}}
+					className={`min-h-11 rounded-r-xl border-l border-slate-200 px-5 text-sm font-bold ${periodMode === "custom" ? "bg-orange-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+				>
+					Datas
+				</button>
+			</div>
+		</div>
+	);
+	return (
+		<section className="space-y-4">
+			{periodSelector}
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+					<div>
+						<h2 className="text-lg font-black text-slate-950">Dashboard Tarifas</h2>
+						<p className="mt-1 text-sm font-bold text-slate-500">
+							Todas as abas da planilha · Período: {periodLabel}
+						</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<label className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-orange-600 px-4 text-sm font-black text-white hover:bg-orange-700 ${!canManage || action ? "pointer-events-none opacity-50" : ""}`}>
+							{action === "upload" ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+							Ler XLSX Tarifas
+							<input type="file" accept=".xlsx" className="hidden" disabled={!canManage || Boolean(action)} onChange={handleUpload} />
+						</label>
+						<button type="button" onClick={loadTariffs} disabled={loading || Boolean(action)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+							<RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+							Atualizar
+						</button>
+						<button type="button" onClick={() => setReportModalOpen(true)} disabled={loading || !report} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50">
+							<Download size={16} />
+							Gerar Relatório
+						</button>
+						<span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-500">
+							<CalendarClock size={16} className="text-slate-700" />
+							<span>
+								<span className="block leading-tight">Última atualização</span>
+								<span className="block text-sm text-slate-950">{formatUpdatedAt(report?.importInfo?.importedAt)}</span>
+							</span>
+						</span>
+						<button type="button" onClick={handleClear} disabled={!canManage || loading || Boolean(action)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 hover:bg-red-100 disabled:opacity-50">
+							<Trash2 size={16} />
+							Zerar dados
+						</button>
+					</div>
+				</div>
+			</section>
+			<section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+				<FinancialKpiCard loading={loading} compact centered item={{ title: "Receita diária", value: insights.kpis.receitaTotal, type: "currency", icon: "CircleDollarSign", color: "blue" }} />
+				<FinancialKpiCard loading={loading} compact centered item={{ title: "Tarifas", value: insights.kpis.tarifasTotal, type: "currency", icon: "ReceiptText", color: "amber" }} />
+				<FinancialKpiCard loading={loading} compact centered item={{ title: "Custo médio", value: insights.kpis.custoMedioCobranca, type: "currency", icon: "BadgeDollarSign", color: "emerald" }} />
+				<FinancialKpiCard loading={loading} compact centered item={{ title: "Clientes cobrança", value: insights.kpis.totalClientesCobranca, type: "number", icon: "Users", color: "violet" }} />
+				<FinancialKpiCard loading={loading} compact centered item={{ title: "Pagamentos", value: insights.kpis.totalPagamentos, type: "number", icon: "Wallet", color: "emerald" }} />
+				<FinancialKpiCard loading={loading} compact centered item={{ title: "Receita cliente", value: insights.kpis.receitaClienteTotal, type: "currency", icon: "Landmark", color: "slate" }} />
+			</section>
+			<section className="grid gap-4 xl:grid-cols-2">
+				<ChartCard title="Tarifas de boletos por banco/forma de cobrança" empty={!insights.tarifasBoletos.length}>
+					<div className="grid max-h-[320px] gap-2 overflow-auto pr-1">
+						{insights.tarifasBoletos.map((item) => (
+							<div
+								key={item.id || item.bank}
+								className="grid gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
+							>
+								<BankBadge item={item} />
+								<span className="rounded-full bg-white px-3 py-1 text-center font-black text-slate-950 shadow-sm">
+									{formatTariffFee(item)}
+								</span>
+								<span className="text-xs font-black uppercase tracking-normal text-slate-500 md:text-right">
+									{item.paymentTypes || "-"}
+								</span>
+							</div>
+						))}
+					</div>
+				</ChartCard>
+				<ChartCard title="Tarifas mensais" empty={!insights.tarifasPorMes.length}>
+					<Line data={monthlyTariffsChart} options={barOptions()} />
+				</ChartCard>
+				<ChartCard title="Formas de pagamento por valor" empty={!insights.pagamentoValor.length}>
+					<Doughnut
+						data={paymentChart}
+						options={{
+							responsive: true,
+							maintainAspectRatio: false,
+							cutout: "62%",
+							plugins: {
+								centerText: {
+									title: "Total",
+									value: brl.format(
+										insights.pagamentoValor
+											.slice(0, 6)
+											.reduce((sum, item) => sum + Number(item.value || 0), 0),
+									),
+								},
+								legend: {
+									position: "bottom",
+									labels: { boxWidth: 10, font: { weight: "bold" } },
+								},
+								tooltip: {
+									callbacks: {
+										label: (ctx) =>
+											`${ctx.label}: ${brl.format(Number(ctx.raw || 0))}`,
+									},
+								},
+							},
+						}}
+					/>
+				</ChartCard>
+				<ChartCard title="Clientes por forma de cobrança" empty={!insights.cobrancaClientes.length}>
+					<div className="space-y-3 overflow-auto pr-1">
+						{insights.cobrancaClientes.slice(0, 8).map((item) => (
+							<div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+								<BankBadge item={item} />
+								<span className="shrink-0 text-right">
+									<span className="block font-black text-slate-950">{integer.format(item.customers || item.value)}</span>
+									<span className="block text-xs font-black text-emerald-700">
+										{brl.format(Number(item.estimatedValue || 0))}
+									</span>
+								</span>
+							</div>
+						))}
+					</div>
+				</ChartCard>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-2">
+				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+					<h3 className="text-lg font-black text-slate-950">Bancos com maior tarifa</h3>
+					<div className="mt-4 space-y-2">
+						{insights.bancos.slice(0, 10).map((item) => (
+							<div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
+								<BankBadge item={item} />
+								<span className="font-black text-slate-950">{brl.format(item.value)}</span>
+							</div>
+						))}
+					</div>
+				</section>
+				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+					<h3 className="text-lg font-black text-slate-950">Top clientes por receita</h3>
+					<div className="mt-4 space-y-2">
+						{insights.topClientes.slice(0, 10).map((item) => (
+							<div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm">
+								<span className="truncate font-bold text-slate-700">{item.label}</span>
+								<span className="font-black text-slate-950">{brl.format(item.value)}</span>
+							</div>
+						))}
+					</div>
+				</section>
+			</section>
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<h3 className="text-lg font-black text-slate-950">Blocos lidos da planilha</h3>
+				<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+					{(report?.blocosDetectados || []).slice(0, 12).map((block, index) => (
+						<div key={`${block.sheetName}-${block.type}-${index}`} className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
+							<p className="font-black">{block.label}</p>
+							<p className="mt-1 text-xs">{block.sheetName} · {block.type}</p>
+						</div>
+					))}
+					{(report?.blocosNaoMapeados || []).map((block) => (
+						<div key={block.sheetName} className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm font-bold text-amber-800">
+							<p className="font-black">{block.sheetName}</p>
+							<p className="mt-1 text-xs">Bloco salvo como não mapeado para ajuste futuro.</p>
+						</div>
+					))}
+				</div>
+			</section>
+			{reportModalOpen ? (
+				<TariffsReportExportModal
+					periodLabel={periodLabel}
+					insights={insights}
+					importInfo={report?.importInfo || {}}
+					onClose={() => setReportModalOpen(false)}
+				/>
+			) : null}
+			{dateModalOpen ? (
+				<BudgetDateRangeModal
+					value={dateRange}
+					onClose={() => setDateModalOpen(false)}
+					onApply={(range) => {
+						setDateRange(range);
+						setPeriodMode("custom");
+						setDateModalOpen(false);
+					}}
+				/>
+			) : null}
+			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+		</section>
+	);
 }
 
 export default function FinanceiroPage({ page = "dashboard" }) {
-  const { currentUser } = useAuthContext();
-  const [period, setPeriod] = useState("month");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingAction, setLoadingAction] = useState("");
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [message, setMessage] = useState("");
-  const meta = PAGE_META[page] || PAGE_META.dashboard;
-  const canManage = hasPermission(currentUser, "financeiro.configuracoes.manage");
+	const { currentUser } = useAuthContext();
+	const [period, setPeriod] = useState("month");
+	const [budgetPeriodMode, setBudgetPeriodMode] = useState("month");
+	const [budgetMonthMenuOpen, setBudgetMonthMenuOpen] = useState(false);
+	const [budgetYearMenuOpen, setBudgetYearMenuOpen] = useState(false);
+	const [budgetMonthOverride, setBudgetMonthOverride] = useState(null);
+	const [budgetDateRange, setBudgetDateRange] = useState({
+		startDate: "",
+		endDate: "",
+	});
+	const [budgetDateModalOpen, setBudgetDateModalOpen] = useState(false);
+	const [data, setData] = useState(null);
+	const [budgetConfig, setBudgetConfig] = useState(null);
+	const [budgetLoading, setBudgetLoading] = useState(false);
+	const [loading, setLoading] = useState(true);
+	const [exportModalOpen, setExportModalOpen] = useState(false);
+	const [message, setMessage] = useState("");
+	const meta = PAGE_META[page] || PAGE_META.dashboard;
+	const canManage =
+		hasPermission(currentUser, "financeiro.configuracoes.manage") ||
+		hasPermission(currentUser, "financeiro.gestao_orcamento.manage");
+	const isBudgetPage = String(page || "").startsWith("orcamento");
+	const isBudgetOperationalPage = [
+		"orcamentoDashboard",
+		"orcamentoCentrosCusto",
+		"orcamentoRealizado",
+		"orcamentoAprovacoes",
+	].includes(page);
+	const hideHeaderControls = [
+		"orcamentoDados",
+		"orcamentoConfiguracoes",
+		"reportsSerasa",
+		"reportsTarifas",
+		"reportsTarifasFaturas",
+		"reportsTarifasRecCliente",
+		"reportsTarifasFormasPagamento",
+	].includes(page);
+	const isCompactReportPage = [
+		"reportsSerasa",
+		"reportsTarifas",
+		"reportsTarifasFaturas",
+		"reportsTarifasRecCliente",
+		"reportsTarifasFormasPagamento",
+	].includes(page);
+	const budgetReference = {
+		referenceYear:
+			Number(
+				budgetConfig?.lastImportReference?.year ||
+					budgetConfig?.lastImportSummary?.referenceYear ||
+					0,
+			) || undefined,
+		referenceMonth:
+			Number(
+				budgetConfig?.lastImportReference?.month ||
+					budgetConfig?.lastImportSummary?.referenceMonth ||
+					0,
+			) || undefined,
+	};
+	const selectedBudgetReference = budgetMonthOverride || budgetReference;
+	const budgetMonthSelectorYear = Number(
+		selectedBudgetReference.referenceYear ||
+			budgetReference.referenceYear ||
+			new Date().getFullYear(),
+	);
+	const budgetYearOptions = Array.from(
+		{ length: 7 },
+		(_, index) => 2026 - index,
+	);
+	const budgetPeriodDisplayLabel = isBudgetOperationalPage
+		? buildBudgetPeriod({
+				mode: budgetPeriodMode,
+				...budgetDateRange,
+				...selectedBudgetReference,
+			}).displayLabel
+		: "";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMessage("");
-    try {
-      const response = await buscarDashboardFinanceiro({ period });
-      setData(response.data);
-    } catch (error) {
-      setMessage(error?.message || "Não foi possível carregar os dados financeiros.");
-    } finally {
-      setLoading(false);
-    }
-  }, [period]);
+	const load = useCallback(async () => {
+		setLoading(true);
+		setMessage("");
+		try {
+			const response = await buscarDashboardFinanceiro({ period });
+			setData(response.data);
+		} catch (error) {
+			setMessage(
+				error?.message || "Não foi possível carregar os dados financeiros.",
+			);
+		} finally {
+			setLoading(false);
+		}
+	}, [period]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+	const loadBudgetConfig = useCallback(async ({ silent = false } = {}) => {
+		if (!silent) setBudgetLoading(true);
+		try {
+			const response = await buscarCentrosCustoOrcamentoFinanceiro();
+			const nextConfig = response.config || {};
+			setBudgetConfig(nextConfig);
+		} catch (error) {
+			setMessage(
+				error?.message || "Não foi possível carregar a gestão orçamentária.",
+			);
+		} finally {
+			if (!silent) setBudgetLoading(false);
+		}
+	}, []);
 
-  const handleMockup = async () => {
-    setLoadingAction("mockup");
-    setMessage("");
-    try {
-      const response = await carregarMockupFinanceiro();
-      setData(response.data);
-      setMessage("Mockup financeiro carregado.");
-    } catch (error) {
-      setMessage(error?.message || "Falha ao carregar mockup financeiro.");
-    } finally {
-      setLoadingAction("");
-    }
-  };
+	useEffect(() => {
+		load();
+	}, [load]);
 
-  const handleClearMockup = async () => {
-    setLoadingAction("clear");
-    setMessage("");
-    try {
-      const response = await limparMockupFinanceiro();
-      setData(response.data);
-      setMessage("Mockup financeiro removido.");
-    } catch (error) {
-      setMessage(error?.message || "Falha ao limpar mockup financeiro.");
-    } finally {
-      setLoadingAction("");
-    }
-  };
+	useEffect(() => {
+		if (isBudgetPage) {
+			loadBudgetConfig({ silent: page === "orcamentoConfiguracoes" }).catch(
+				() => {},
+			);
+		}
+	}, [isBudgetPage, loadBudgetConfig, page]);
 
-  return (
-    <main className="space-y-5" style={{ fontFamily: FINANCE_FONT_STACK }}>
-      <header>
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h1 className="text-3xl font-extrabold text-slate-950 md:text-4xl">{meta.title}</h1>
-            <p className="mt-1 text-base font-semibold text-slate-600">{meta.subtitle}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <span className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold text-slate-500">
-              <CalendarClock size={18} className="text-slate-700" />
-              <span>
-                <span className="block leading-tight">Última atualização:</span>
-                <span className="block text-sm text-slate-950">{formatUpdatedAt(data?.updatedAt)}</span>
-              </span>
-            </span>
-            <div className="flex overflow-hidden rounded-xl border border-slate-200">
-              {["today", "month", "year"].map((option) => (
-                <button key={option} type="button" onClick={() => setPeriod(option)} className={`min-h-11 px-5 text-sm font-bold ${period === option ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}>
-                  {option === "today" ? "Hoje" : option === "month" ? "Mês" : "Ano"}
-                </button>
-              ))}
-            </div>
-            {page === "dashboard" ? (
-              <button
-                type="button"
-                onClick={() => setExportModalOpen(true)}
-                disabled={loading || !data}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-              >
-                <Download size={16} /> Exportar
-              </button>
-            ) : null}
-            <button type="button" onClick={load} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Atualizar
-            </button>
-          </div>
-        </div>
-      </header>
-      {message ? <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">{message}</div> : null}
-      {page === "dashboard" ? <DashboardContent data={data} loading={loading} /> : null}
-      {exportModalOpen ? <ExportFinanceiroModal data={data} period={period} onClose={() => setExportModalOpen(false)} /> : null}
-      {["contasPagar", "contasReceber", "faturamento", "notas", "chamados"].includes(page) ? <SectionPage page={page} /> : null}
-      {page === "configuracoes" ? (
-        <ConfiguracoesPage
-          data={data}
-          canManage={canManage}
-          loadingAction={loadingAction}
-          onMockup={handleMockup}
-          onClearMockup={handleClearMockup}
-        />
-      ) : null}
-    </main>
-  );
+	return (
+		<main
+			className={isCompactReportPage ? "space-y-3" : "space-y-5"}
+			style={{ fontFamily: FINANCE_FONT_STACK }}
+		>
+			<header>
+				<div
+					className={`flex flex-col xl:flex-row xl:items-center xl:justify-between ${
+						isCompactReportPage ? "gap-2" : "gap-4"
+					}`}
+				>
+					<div>
+						<h1
+							className={`font-extrabold text-slate-950 ${
+								isCompactReportPage
+									? "text-2xl md:text-3xl"
+									: "text-3xl md:text-4xl"
+							}`}
+						>
+							{meta.title}
+						</h1>
+						<p
+							className={`font-semibold text-slate-600 ${
+								isCompactReportPage ? "mt-0 text-sm" : "mt-1 text-base"
+							}`}
+						>
+							{meta.subtitle}
+						</p>
+					</div>
+					{!hideHeaderControls ? (
+						<div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+							<span className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold text-slate-500">
+								<CalendarClock size={18} className="text-slate-700" />
+								<span>
+									<span className="block leading-tight">
+										{isBudgetOperationalPage
+											? "Última importação:"
+											: "Última atualização:"}
+									</span>
+									<span className="block text-sm text-slate-950">
+										{formatUpdatedAt(
+											isBudgetOperationalPage
+												? budgetConfig?.lastImportInfo?.importedAt
+												: data?.updatedAt,
+										)}
+									</span>
+									{isBudgetOperationalPage ? (
+										<span className="block text-[11px] font-black text-blue-700">
+											{budgetPeriodDisplayLabel}
+										</span>
+									) : null}
+								</span>
+							</span>
+							{isBudgetOperationalPage ? (
+								<div className="relative flex rounded-xl border border-slate-200">
+									<div className="relative">
+										<button
+											type="button"
+											onClick={() => {
+												setBudgetPeriodMode("month");
+												setBudgetYearMenuOpen(false);
+												setBudgetMonthMenuOpen((current) => !current);
+											}}
+											className={`min-h-11 rounded-l-xl px-5 text-sm font-bold ${budgetPeriodMode === "month" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+										>
+											Mês
+										</button>
+										{budgetMonthMenuOpen ? (
+											<div className="absolute left-0 top-[calc(100%+8px)] z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+												<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
+													{budgetMonthSelectorYear}
+												</p>
+												<div className="grid grid-cols-2 gap-1">
+													{Array.from({ length: 12 }, (_, index) => {
+														const month = index + 1;
+														const activeMonth =
+															Number(
+																selectedBudgetReference.referenceMonth || 0,
+															) === month && budgetPeriodMode === "month";
+														return (
+															<button
+																key={month}
+																type="button"
+																onClick={() => {
+																	setBudgetMonthOverride({
+																		referenceYear: budgetMonthSelectorYear,
+																		referenceMonth: month,
+																	});
+																	setBudgetPeriodMode("month");
+																	setBudgetMonthMenuOpen(false);
+																	setBudgetYearMenuOpen(false);
+																}}
+																className={`rounded-xl px-3 py-2 text-left text-xs font-black ${activeMonth ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+															>
+																{budgetMonthName(month)}
+															</button>
+														);
+													})}
+												</div>
+											</div>
+										) : null}
+									</div>
+									<div className="relative">
+										<button
+											type="button"
+											onClick={() => {
+												setBudgetPeriodMode("year");
+												setBudgetMonthMenuOpen(false);
+												setBudgetYearMenuOpen((current) => !current);
+											}}
+											className={`min-h-11 border-l border-slate-200 px-5 text-sm font-bold ${budgetPeriodMode === "year" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+										>
+											Ano
+										</button>
+										{budgetYearMenuOpen ? (
+											<div className="absolute left-0 top-[calc(100%+8px)] z-40 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+												<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
+													Ano
+												</p>
+												<div className="grid gap-1">
+													{budgetYearOptions.map((year) => {
+														const activeYear =
+															Number(
+																selectedBudgetReference.referenceYear || 0,
+															) === year && budgetPeriodMode === "year";
+														return (
+															<button
+																key={year}
+																type="button"
+																onClick={() => {
+																	setBudgetMonthOverride({
+																		referenceYear: year,
+																		referenceMonth:
+																			selectedBudgetReference.referenceMonth ||
+																			1,
+																	});
+																	setBudgetPeriodMode("year");
+																	setBudgetYearMenuOpen(false);
+																	setBudgetMonthMenuOpen(false);
+																}}
+																className={`rounded-xl px-3 py-2 text-left text-xs font-black ${activeYear ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+															>
+																{year}
+															</button>
+														);
+													})}
+												</div>
+											</div>
+										) : null}
+									</div>
+									<button
+										type="button"
+										onClick={() => {
+											setBudgetMonthMenuOpen(false);
+											setBudgetYearMenuOpen(false);
+											setBudgetDateModalOpen(true);
+										}}
+										className={`min-h-11 rounded-r-xl border-l border-slate-200 px-5 text-sm font-bold ${budgetPeriodMode === "custom" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+									>
+										Datas
+									</button>
+								</div>
+							) : (
+								<div className="flex overflow-hidden rounded-xl border border-slate-200">
+									{["month", "year"].map((option) => (
+										<button
+											key={option}
+											type="button"
+											onClick={() => setPeriod(option)}
+											className={`min-h-11 px-5 text-sm font-bold ${period === option ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+										>
+											{option === "month" ? "Mês" : "Ano"}
+										</button>
+									))}
+								</div>
+							)}
+							{page === "dashboard" ? (
+								<button
+									type="button"
+									onClick={() => setExportModalOpen(true)}
+									disabled={loading || !data}
+									className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+								>
+									<Download size={16} /> Exportar
+								</button>
+							) : null}
+							<button
+								type="button"
+								onClick={
+									isBudgetOperationalPage ? () => loadBudgetConfig() : load
+								}
+								disabled={isBudgetOperationalPage ? budgetLoading : loading}
+								className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+							>
+								<RefreshCw
+									size={16}
+									className={
+										(isBudgetOperationalPage ? budgetLoading : loading)
+											? "animate-spin"
+											: ""
+									}
+								/>{" "}
+								Atualizar
+							</button>
+						</div>
+					) : null}
+				</div>
+			</header>
+			{message ? (
+				<div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+					{message}
+				</div>
+			) : null}
+			{page === "dashboard" ? (
+				<DashboardContent data={data} loading={loading} />
+			) : null}
+			{exportModalOpen ? (
+				<ExportFinanceiroModal
+					data={data}
+					period={period}
+					onClose={() => setExportModalOpen(false)}
+				/>
+			) : null}
+			{[
+				"contasPagar",
+				"contasReceber",
+				"faturamento",
+				"notas",
+			].includes(page) ? (
+				<SectionPage page={page} />
+			) : null}
+			{page === "reportsSerasa" ? (
+				<SerasaReportPage canManage={canManage} />
+			) : null}
+			{page === "reportsTarifas" ? (
+				<TariffsReportPage canManage={canManage} />
+			) : null}
+			{page === "reportsTarifasFaturas" ? (
+				<TariffsDetailPage type="faturas" />
+			) : null}
+			{page === "reportsTarifasRecCliente" ? (
+				<TariffsDetailPage type="recCliente" />
+			) : null}
+			{page === "reportsTarifasFormasPagamento" ? (
+				<TariffsDetailPage type="formasPagamento" />
+			) : null}
+			{[
+				"orcamentoDashboard",
+				"orcamentoCentrosCusto",
+				"orcamentoRealizado",
+				"orcamentoAprovacoes",
+			].includes(page) ? (
+				<BudgetOperationalPage
+					page={page}
+					config={budgetConfig || {}}
+					loading={budgetLoading}
+					canManage={canManage}
+					onConfigUpdated={setBudgetConfig}
+					selectedPeriod={{
+						mode: budgetPeriodMode,
+						...budgetDateRange,
+						...selectedBudgetReference,
+					}}
+				/>
+			) : null}
+			{budgetDateModalOpen ? (
+				<BudgetDateRangeModal
+					value={budgetDateRange}
+					onClose={() => setBudgetDateModalOpen(false)}
+					onApply={(range) => {
+						setBudgetDateRange(range);
+						setBudgetPeriodMode("custom");
+						setBudgetDateModalOpen(false);
+					}}
+				/>
+			) : null}
+			{page === "orcamentoDados" ? (
+				<BudgetDataImportPage canManage={canManage} />
+			) : null}
+			{page === "orcamentoConfiguracoes" ? (
+				<OrcamentoConfiguracoesPage
+					canManage={canManage}
+					config={budgetConfig || {}}
+					selectedPeriod={{
+						mode: budgetPeriodMode,
+						...budgetDateRange,
+						...selectedBudgetReference,
+					}}
+				/>
+			) : null}
+			{page === "configuracoes" ? (
+				<ConfiguracoesPage canManage={canManage} />
+			) : null}
+		</main>
+	);
 }
-
