@@ -6,7 +6,6 @@ export default function CostCentersTreeConfigSection({
 	EMPTY_COST_CENTER,
 	budgetSettings,
 	canManage,
-	centerPage,
 	centerSearch,
 	centerStatusFilter,
 	centerTotalPages,

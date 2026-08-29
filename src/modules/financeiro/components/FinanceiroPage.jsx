@@ -8966,7 +8966,6 @@ function CostCentersConfigSection({ canManage }) {
 				EMPTY_COST_CENTER={EMPTY_COST_CENTER}
 				budgetSettings={budgetSettings}
 				canManage={canManage}
-				centerPage={centerPage}
 				centerSearch={centerSearch}
 				centerStatusFilter={centerStatusFilter}
 				centerTotalPages={centerTotalPages}
