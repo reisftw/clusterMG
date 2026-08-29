@@ -91,6 +91,10 @@ import {
 	buildBudgetSupplierChart,
 } from "../utils/budgetCharts";
 import {
+	buildCostCenterMovementsByMonth,
+	getSelectedCostCenterMovementMonth,
+} from "../utils/costCenterMovements";
+import {
 	brl,
 	decimal,
 	formatBudgetCurrency,
@@ -6559,70 +6563,14 @@ function CostCenterModal({
 		findDirectorateByName,
 		onSave,
 	});
-	const movementsByMonth = useMemo(() => {
-		const groups = new Map();
-		const breakdowns =
-			form.realizedByCompanyBranch || form.realizadoPorEmpresaFilial || [];
-		breakdowns.forEach((breakdown) => {
-			const year = Number(breakdown.year || breakdown.ano || 0) || "";
-			const month = Number(breakdown.month || breakdown.numMes || 0) || "";
-			const key =
-				year && month
-					? `${year}-${String(month).padStart(2, "0")}`
-					: "sem-periodo";
-			const label =
-				year && month ? `${year} - ${budgetMonthName(month)}` : "Sem período";
-			const group = groups.get(key) || { key, label, total: 0, rows: [] };
-			const movements = Array.isArray(
-				breakdown.movements || breakdown.movimentacoes,
-			)
-				? breakdown.movements || breakdown.movimentacoes
-				: [];
-			if (movements.length) {
-				movements.forEach((movement) => {
-					const value = Number(
-						movement.value ??
-							movement.valor ??
-							movement.realized ??
-							movement.realizado ??
-							0,
-					);
-					group.total += value;
-					group.rows.push({
-						...movement,
-						value,
-						accountId: movement.accountId || breakdown.accountId,
-						companyId: movement.companyId || breakdown.companyId,
-						branchId: movement.branchId || breakdown.branchId,
-					});
-				});
-			} else {
-				const value = Number(breakdown.realized ?? breakdown.realizado ?? 0);
-				group.total += value;
-				group.rows.push({
-					id: breakdown.id,
-					date: "",
-					supplier: (breakdown.suppliers || breakdown.fornecedores || []).join(
-						", ",
-					),
-					accountId: breakdown.accountId,
-					companyId: breakdown.companyId,
-					branchId: breakdown.branchId,
-					document: "",
-					type: "",
-					notes: "",
-					value,
-				});
-			}
-			groups.set(key, group);
-		});
-		return Array.from(groups.values()).sort((left, right) =>
-			String(right.key).localeCompare(String(left.key)),
-		);
-	}, [form.realizedByCompanyBranch, form.realizadoPorEmpresaFilial]);
-	const selectedMovementMonth =
-		movementsByMonth.find((group) => group.key === activeMovementMonth) ||
-		movementsByMonth[0];
+	const movementsByMonth = useMemo(
+		() => buildCostCenterMovementsByMonth(form),
+		[form],
+	);
+	const selectedMovementMonth = getSelectedCostCenterMovementMonth(
+		movementsByMonth,
+		activeMovementMonth,
+	);
 	return (
 		<ModalShell
 			title={
