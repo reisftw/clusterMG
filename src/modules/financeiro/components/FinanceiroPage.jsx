@@ -68,7 +68,6 @@ import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalAction
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
 import { useTariffsReport } from "../hooks/useTariffsReport";
 import {
-	atualizarAprovacaoOrcamentoFinanceiro,
 	buscarCentrosCustoOrcamentoFinanceiro,
 	buscarConfigPlanilhasFinanceiro,
 	buscarDadosOrcamentoFinanceiro,
@@ -124,8 +123,6 @@ import {
 	formatBudgetCurrency,
 	formatValue,
 	integer,
-	parseBudgetCurrency,
-	parseMoneyInput,
 } from "../utils/financeiroFormatters";
 import {
 	getTariffsAvailableYears as getTariffsDetailAvailableYears,
@@ -657,46 +654,6 @@ function formatSerasaPeriodLabel(selectedPeriod = {}) {
 	return `Mês ${budgetMonthName(selectedPeriod.referenceMonth)}`;
 }
 
-function aggregateTariffsByMonth(items = [], valueField = "value") {
-	const map = new Map();
-	items.forEach((item) => {
-		const year = Number(item.year || 0);
-		const month = Number(item.month || 0);
-		if (!year || !month) return;
-		const key = `${year}-${String(month).padStart(2, "0")}`;
-		const current = map.get(key) || {
-			key,
-			year,
-			month,
-			label: `${year} - ${budgetMonthName(month)}`,
-			value: 0,
-			count: 0,
-		};
-		current.value += Number(item[valueField] || 0);
-		current.count += 1;
-		map.set(key, current);
-	});
-	return [...map.values()].sort((a, b) => String(a.key).localeCompare(String(b.key)));
-}
-
-function aggregateTariffsByLabel(items = [], labelField, valueField = "value") {
-	const map = new Map();
-	items.forEach((item) => {
-		const label = String(item[labelField] || "Sem identificação").trim();
-		const current = map.get(label) || {
-			label,
-			value: 0,
-			count: 0,
-			bankColor: item.bankColor,
-			bankInitials: item.bankInitials,
-		};
-		current.value += Number(item[valueField] || 0);
-		current.count += 1;
-		map.set(label, current);
-	});
-	return [...map.values()].sort((a, b) => b.value - a.value);
-}
-
 function formatTariffFee(item = {}) {
 	const label = String(item.valueLabel || "").trim();
 	if (label && /%/.test(label)) return label;
@@ -876,6 +833,8 @@ async function exportFinanceiroPdf(data, selectedSections, period) {
 	const pageWidth = pdf.internal.pageSize.getWidth();
 	const pageHeight = pdf.internal.pageSize.getHeight();
 	const margin = 12;
+	const headerHeight = 34;
+	const footerHeight = 12;
 	let y = 46;
 
 	const ensureSpace = (height = 30) => {
@@ -2436,7 +2395,7 @@ async function exportTariffsReportPdf({
 		pdf.text(text, margin, y);
 		y += 5;
 	};
-	const fitText = (text, maxWidth, fontSize = 7) =>
+	const fitText = (text, maxWidth) =>
 		pdf.splitTextToSize(String(text || "-"), maxWidth).slice(0, 2);
 	const cards = (items = []) => {
 		const cols = 3;
@@ -5242,7 +5201,6 @@ function BudgetOperationalPage({
 	});
 	const responsibleOnly = !canManage;
 	const {
-		visibleCenterRows,
 		rowByCenterId,
 		allRowByCenterId,
 		operationalCenterGroups,
@@ -10109,6 +10067,21 @@ function SerasaReportPage({ canManage }) {
 		}
 	};
 
+	const applyDateRange = (nextRange = {}) => {
+		setDateRange({
+			startDate: nextRange.startDate || "",
+			endDate: nextRange.endDate || "",
+		});
+		setSelectedReference((current) => ({
+			...current,
+			referenceYear:
+				Number(String(nextRange.startDate || "").slice(0, 4)) ||
+				current.referenceYear,
+		}));
+		setPeriodMode("custom");
+		setDateModalOpen(false);
+	};
+
 	const rows = report?.rows || EMPTY_SERASA_LIST;
 	const clientesHistory = report?.clientesHistory || EMPTY_SERASA_LIST;
 	const yearOptions = Array.from({ length: 7 }, (_, index) => 2026 - index);
@@ -10695,234 +10668,6 @@ function BankBadge({ item = {} }) {
 			<span className="truncate">{item.label || item.bank || item.method || "-"}</span>
 		</span>
 	);
-}
-
-function getTariffsAvailableYears(report = {}) {
-	const arrays = [
-		report.receitasDiarias,
-		report.tarifasMensais,
-		report.formasPagamentoQuantidade,
-		report.formasPagamentoValor,
-		report.formasCobrancaValor,
-		report.faturas,
-		report.receitaPorCliente,
-	];
-	const years = arrays
-		.flatMap((items) => items || [])
-		.map((item) => Number(item.year || 0))
-		.filter(Boolean);
-	const unique = [...new Set(years)].sort((a, b) => b - a);
-	return unique.length ? unique : [new Date().getFullYear()];
-}
-
-function filterTariffsByYear(items = [], year) {
-	return (items || []).filter((item) => Number(item.year || 0) === Number(year));
-}
-
-function filterTariffsByYearMonth(items = [], year, month = 0) {
-	return filterTariffsByYear(items, year).filter(
-		(item) => !month || Number(item.month || 0) === Number(month),
-	);
-}
-
-function aggregateTariffsMonthlySeries(items = [], labelField, valueField = "value") {
-	const labels = Array.from({ length: 12 }, (_, index) => ({
-		month: index + 1,
-		label: budgetMonthName(index + 1),
-	}));
-	const grouped = new Map();
-	(items || []).forEach((item) => {
-		const label = String(item[labelField] || "Sem identificação").trim();
-		const month = Number(item.month || 0);
-		if (!month) return;
-		const current = grouped.get(label) || Array(12).fill(0);
-		current[month - 1] += Number(item[valueField] || 0);
-		grouped.set(label, current);
-	});
-	const palette = [
-		"#2563eb",
-		"#10b981",
-		"#f97316",
-		"#8b5cf6",
-		"#ef4444",
-		"#06b6d4",
-		"#84cc16",
-		"#64748b",
-	];
-	const datasets = [...grouped.entries()].slice(0, 8).map(([label, data], index) => ({
-		label,
-		data,
-		borderColor: palette[index % palette.length],
-		backgroundColor: palette[index % palette.length],
-		fill: false,
-		tension: 0.35,
-		pointRadius: 3,
-	}));
-	return { labels: labels.map((item) => item.label), datasets };
-}
-
-function addTariffsPercentOfTotal(items = [], valueField = "value") {
-	const total = (items || []).reduce(
-		(sum, item) => sum + Number(item[valueField] || 0),
-		0,
-	);
-	return (items || []).map((item) => ({
-		...item,
-		percentOfTotal: total ? (Number(item[valueField] || 0) / total) * 100 : 0,
-	}));
-}
-
-function invoiceMetricType(metric) {
-	const text = String(metric || "");
-	if (/cancelad|outros lan/i.test(text)) return "Canceladas";
-	if (/ativa|faturamento/i.test(text)) return "Ativas";
-	return "";
-}
-
-function isRelevantTariffInvoiceRecord(item = {}) {
-	const type = invoiceMetricType(item.metric);
-	if (!type) return false;
-	const year = Number(item.year || 0);
-	const month = Number(item.month || 0);
-	if (!year || !month) return false;
-	const now = new Date();
-	return !(year === now.getFullYear() && month > now.getMonth() + 1);
-}
-
-function aggregateInvoiceMetrics(rows = []) {
-	const metrics = [
-		{ label: "Ativas", value: 0 },
-		{ label: "Canceladas", value: 0 },
-	];
-	rows.forEach((item) => {
-		const type = invoiceMetricType(item.metric);
-		if (!type) return;
-		const target = metrics.find((metric) => metric.label === type);
-		if (target) target.value += Number(item.value || 0);
-	});
-	return metrics.filter((item) => item.value > 0);
-}
-
-function buildInvoiceMonthlySeries(rows = []) {
-	const monthly = new Map();
-	rows.forEach((item) => {
-		const month = Number(item.month || 0);
-		if (month < 1 || month > 12) return;
-		const type = invoiceMetricType(item.metric);
-		if (!type) return;
-		const key = String(month).padStart(2, "0");
-		const current = monthly.get(key) || {
-			month,
-			label: budgetMonthName(month),
-			active: 0,
-			canceled: 0,
-		};
-		const value = Number(item.value || 0);
-		if (type === "Ativas") current.active += value;
-		if (type === "Canceladas") current.canceled += value;
-		monthly.set(key, current);
-	});
-	const values = [...monthly.values()]
-		.filter((item) => item.active > 0 || item.canceled > 0)
-		.sort((a, b) => a.month - b.month);
-	return {
-		labels: values.map((item) => item.label),
-		datasets: [
-			{
-				label: "Ativas",
-				data: values.map((item) => item.active),
-				backgroundColor: "#10b981",
-				borderRadius: 8,
-			},
-			{
-				label: "Canceladas",
-				data: values.map((item) => item.canceled),
-				backgroundColor: "#ef4444",
-				borderRadius: 8,
-			},
-		],
-	};
-}
-
-function chartHasValues(chart = {}) {
-	return (chart.datasets || []).some((dataset) =>
-		(dataset.data || []).some((value) => Number(value || 0) > 0),
-	);
-}
-
-function buildTariffsDetailInsights(report = {}, year, month, type) {
-	const byYear = (items) => filterTariffsByYear(items, year);
-	const byPeriod = (items) => filterTariffsByYearMonth(items, year, month);
-	if (type === "faturas") {
-		const invoiceRows = (report.faturas || []).filter(
-			isRelevantTariffInvoiceRecord,
-		);
-		const rows = byPeriod(invoiceRows);
-		const yearRows = byYear(invoiceRows);
-		const ativas = rows.filter((item) => invoiceMetricType(item.metric) === "Ativas");
-		const canceladas = rows.filter((item) => invoiceMetricType(item.metric) === "Canceladas");
-		return {
-			rows,
-			monthly: buildInvoiceMonthlySeries(yearRows),
-			metrics: aggregateInvoiceMetrics(rows),
-			kpis: {
-				ativas: ativas.reduce((sum, item) => sum + Number(item.value || 0), 0),
-				canceladas: canceladas.reduce((sum, item) => sum + Number(item.value || 0), 0),
-				months: new Set(rows.map((item) => item.month).filter(Boolean)).size,
-			},
-		};
-	}
-	if (type === "recCliente") {
-		const rows = byPeriod(report.receitaPorCliente);
-		const monthly = aggregateTariffsByMonth(byYear(report.receitaPorCliente));
-		const clients = aggregateTariffsByLabel(rows, "clientName");
-		return {
-			rows,
-			monthly,
-			clients,
-			kpis: {
-				total: rows.reduce((sum, item) => sum + Number(item.value || 0), 0),
-				clients: new Set(rows.map((item) => item.clientCode || item.clientName)).size,
-				average: clients.length
-					? clients.reduce((sum, item) => sum + Number(item.value || 0), 0) /
-						clients.length
-					: 0,
-				bestClient: clients[0]?.label || "-",
-			},
-		};
-	}
-	const yearPaymentValue = byYear(report.formasPagamentoValor);
-	const paymentQuantity = byPeriod(report.formasPagamentoQuantidade);
-	const paymentValue = byPeriod(report.formasPagamentoValor);
-	const collectionValue = byPeriod(report.formasCobrancaValor);
-	const monthly = aggregateTariffsMonthlySeries(yearPaymentValue, "method");
-	const methods = addTariffsPercentOfTotal(aggregateTariffsByLabel(paymentValue, "method"));
-	const quantities = aggregateTariffsByLabel(
-		paymentQuantity,
-		"method",
-		"quantity",
-	);
-	const collection = addTariffsPercentOfTotal(
-		aggregateTariffsByLabel(collectionValue, "method"),
-	);
-	const totalQuantity = paymentQuantity.reduce(
-		(sum, item) => sum + Number(item.quantity || 0),
-		0,
-	);
-	const totalValue = paymentValue.reduce((sum, item) => sum + Number(item.value || 0), 0);
-	return {
-		rows: [...paymentValue, ...collectionValue, ...paymentQuantity],
-		monthly,
-		methods,
-		quantities,
-		collection,
-		kpis: {
-			totalValue,
-			totalQuantity,
-			averageTicket: totalQuantity ? totalValue / totalQuantity : 0,
-			topMethod: methods[0]?.label || "-",
-		},
-	};
 }
 
 function TariffsYearSelector({ year, years = [], onChange }) {
