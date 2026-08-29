@@ -657,30 +657,6 @@ function formatSerasaPeriodLabel(selectedPeriod = {}) {
 	return `Mês ${budgetMonthName(selectedPeriod.referenceMonth)}`;
 }
 
-function tariffItemMatchesPeriod(item = {}, selectedPeriod = {}) {
-	const year = Number(item.year || 0);
-	const month = Number(item.month || 0);
-	if (!year || !month) return true;
-	if (selectedPeriod.mode === "year") return year === Number(selectedPeriod.referenceYear);
-	if (selectedPeriod.mode === "custom") {
-		const date = dateFromInput(`${year}-${String(month).padStart(2, "0")}-01`);
-		const start = dateFromInput(selectedPeriod.startDate);
-		const end = dateFromInput(selectedPeriod.endDate);
-		if (!date || !start || !end) return true;
-		return date >= start && date <= end;
-	}
-	return (
-		year === Number(selectedPeriod.referenceYear) &&
-		month === Number(selectedPeriod.referenceMonth)
-	);
-}
-
-function formatTariffsPeriodLabel(selectedPeriod = {}) {
-	if (selectedPeriod.mode === "year") return `Ano ${selectedPeriod.referenceYear}`;
-	if (selectedPeriod.mode === "custom") return "Datas selecionadas";
-	return `Mês ${budgetMonthName(selectedPeriod.referenceMonth)}`;
-}
-
 function aggregateTariffsByMonth(items = [], valueField = "value") {
 	const map = new Map();
 	items.forEach((item) => {
@@ -703,40 +679,6 @@ function aggregateTariffsByMonth(items = [], valueField = "value") {
 	return [...map.values()].sort((a, b) => String(a.key).localeCompare(String(b.key)));
 }
 
-function aggregateInvoiceNetByMonth(items = []) {
-	const map = new Map();
-	items.forEach((item) => {
-		const year = Number(item.year || 0);
-		const month = Number(item.month || 0);
-		if (!year || !month) return;
-		const type = invoiceMetricType(item.metric);
-		if (!type) return;
-		const key = `${year}-${String(month).padStart(2, "0")}`;
-		const current = map.get(key) || {
-			key,
-			year,
-			month,
-			label: `${year} - ${budgetMonthName(month)}`,
-			value: 0,
-			active: 0,
-			canceled: 0,
-			count: 0,
-		};
-		const value = Number(item.value || 0);
-		if (type === "Ativas") {
-			current.active += value;
-			current.value += value;
-		}
-		if (type === "Canceladas") {
-			current.canceled += value;
-			current.value -= value;
-		}
-		current.count += 1;
-		map.set(key, current);
-	});
-	return [...map.values()].sort((a, b) => String(a.key).localeCompare(String(b.key)));
-}
-
 function aggregateTariffsByLabel(items = [], labelField, valueField = "value") {
 	const map = new Map();
 	items.forEach((item) => {
@@ -753,84 +695,6 @@ function aggregateTariffsByLabel(items = [], labelField, valueField = "value") {
 		map.set(label, current);
 	});
 	return [...map.values()].sort((a, b) => b.value - a.value);
-}
-
-function aggregateBillingClients(items = []) {
-	const map = new Map();
-	items.forEach((item) => {
-		const label = String(item.method || "Sem identificação").trim();
-		const current = map.get(label) || {
-			label,
-			method: label,
-			value: 0,
-			customers: 0,
-			estimatedValue: 0,
-			count: 0,
-			bankColor: item.bankColor,
-			bankInitials: item.bankInitials,
-		};
-		current.value += Number(item.customers || 0);
-		current.customers += Number(item.customers || 0);
-		current.estimatedValue += Number(item.estimatedValue || 0);
-		current.count += 1;
-		map.set(label, current);
-	});
-	return [...map.values()].sort((a, b) => b.customers - a.customers);
-}
-
-function buildTariffsInsights(report = {}, selectedPeriod = {}) {
-	const filter = (items = []) =>
-		(items || []).filter((item) => tariffItemMatchesPeriod(item, selectedPeriod));
-	const receitasDiarias = filter(report.receitasDiarias);
-	const tarifasMensais = filter(report.tarifasMensais);
-	const formasPagamentoQuantidade = filter(report.formasPagamentoQuantidade);
-	const formasPagamentoValor = filter(report.formasPagamentoValor);
-	const formasCobrancaValor = filter(report.formasCobrancaValor);
-	const faturas = filter(report.faturas).filter(isRelevantTariffInvoiceRecord);
-	const receitaPorCliente = filter(report.receitaPorCliente);
-	const formasCobrancaClientes = report.formasCobrancaClientes || [];
-	const tarifasBoletos = report.tarifasBoletos || [];
-	const receitaMensal = aggregateTariffsByMonth(receitasDiarias);
-	const tarifasPorMes = aggregateTariffsByMonth(tarifasMensais);
-	const bancos = aggregateTariffsByLabel(tarifasMensais, "bank");
-	const pagamentoValor = aggregateTariffsByLabel(formasPagamentoValor, "method");
-	const pagamentoQuantidade = aggregateTariffsByLabel(formasPagamentoQuantidade, "method", "quantity");
-	const cobrancaClientes = aggregateBillingClients(formasCobrancaClientes);
-	const topClientes = aggregateTariffsByLabel(receitaPorCliente, "clientName").slice(0, 10);
-	const faturasMensais = aggregateInvoiceNetByMonth(faturas);
-	const receitaTotal = receitaMensal.reduce((sum, item) => sum + item.value, 0);
-	const tarifasTotal = tarifasMensais.reduce((sum, item) => sum + Number(item.value || 0), 0);
-	const receitaClienteTotal = receitaPorCliente.reduce((sum, item) => sum + Number(item.value || 0), 0);
-	const totalClientesCobranca = formasCobrancaClientes.reduce((sum, item) => sum + Number(item.customers || 0), 0);
-	const totalPagamentos = formasPagamentoQuantidade.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-	const custoMedioCobranca = totalClientesCobranca ? tarifasTotal / totalClientesCobranca : 0;
-	return {
-		receitasDiarias,
-		tarifasMensais,
-		formasPagamentoQuantidade,
-		formasPagamentoValor,
-		formasCobrancaValor,
-		formasCobrancaClientes,
-		tarifasBoletos,
-		faturas,
-		receitaPorCliente,
-		receitaMensal,
-		tarifasPorMes,
-		bancos,
-		pagamentoValor,
-		pagamentoQuantidade,
-		cobrancaClientes,
-		topClientes,
-		faturasMensais,
-		kpis: {
-			receitaTotal,
-			tarifasTotal,
-			custoMedioCobranca,
-			totalClientesCobranca,
-			totalPagamentos,
-			receitaClienteTotal,
-		},
-	};
 }
 
 function formatTariffFee(item = {}) {
