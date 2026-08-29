@@ -1,12 +1,15 @@
+import { getAppBuildInfo } from "../../utils/appBuildInfo";
+
 const MELZ_LINK = "https://www.linkedin.com/in/reisftw/";
 
 const MelzFooter = ({ className = "", variant = "default" }) => {
 	const isDark = variant === "dark";
+	const { environment, version } = getAppBuildInfo();
 
 	return (
 		<footer
 			className={[
-				"flex shrink-0 items-center justify-center gap-2 px-4 py-2 text-[11px] font-semibold",
+				"flex shrink-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 py-2 text-[11px] font-semibold",
 				isDark
 					? "border-t border-white/10 bg-slate-950/25 text-white/75"
 					: "border-t border-slate-200 bg-white/85 text-slate-500",
@@ -33,6 +36,12 @@ const MelzFooter = ({ className = "", variant = "default" }) => {
 					Melz Tech
 				</span>
 			</a>
+			<span aria-hidden="true" className="opacity-50">
+				•
+			</span>
+			<span title={`Versão ${version} · ${environment}`}>
+				v{version} · {environment}
+			</span>
 		</footer>
 	);
 };
