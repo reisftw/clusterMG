@@ -1,270 +1,268 @@
 ﻿import { useMemo, useState } from "react";
 import {
-  diasUteisDoMes,
-  diasUteisRestantesNoMes,
+	diasUteisDoMes,
+	diasUteisRestantesNoMes,
 } from "../../../utils/diaUtil";
 
 const META_INDIVIDUAL = 110;
 const MONTHS = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
+	"Janeiro",
+	"Fevereiro",
+	"Março",
+	"Abril",
+	"Maio",
+	"Junho",
+	"Julho",
+	"Agosto",
+	"Setembro",
+	"Outubro",
+	"Novembro",
+	"Dezembro",
 ];
 
 function getCardState(total) {
-  if (total >= META_INDIVIDUAL) return "done";
-  if (total >= META_INDIVIDUAL * 0.8) return "on-track";
-  return "at-risk";
+	if (total >= META_INDIVIDUAL) return "done";
+	if (total >= META_INDIVIDUAL * 0.8) return "on-track";
+	return "at-risk";
 }
 
 function normalizeMonthName(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.trim();
 }
 
 function getMonthContext(
-  month,
-  {
-    feriadosSet = new Set(),
-    lastDayWithData = 0,
-    year = new Date().getFullYear(),
-    now = new Date(),
-  } = {},
+	month,
+	{
+		feriadosSet = new Set(),
+		lastDayWithData = 0,
+		year = new Date().getFullYear(),
+		now = new Date(),
+	} = {},
 ) {
-  const currentMonthIndex = now.getMonth();
-  const selectedMonthIndex = MONTHS.findIndex(
-    (item) => normalizeMonthName(item) === normalizeMonthName(month),
-  );
+	const currentMonthIndex = now.getMonth();
+	const selectedMonthIndex = MONTHS.findIndex(
+		(item) => normalizeMonthName(item) === normalizeMonthName(month),
+	);
 
-  if (selectedMonthIndex < 0) {
-    return {
-      isCurrentMonth: false,
-      isPastMonth: false,
-      isFutureMonth: false,
-      daysRemaining: 0,
-    };
-  }
+	if (selectedMonthIndex < 0) {
+		return {
+			isCurrentMonth: false,
+			isPastMonth: false,
+			isFutureMonth: false,
+			daysRemaining: 0,
+		};
+	}
 
-  if (selectedMonthIndex === currentMonthIndex) {
-    return {
-      isCurrentMonth: true,
-      isPastMonth: false,
-      isFutureMonth: false,
-      daysRemaining: diasUteisRestantesNoMes(
-        month,
-        feriadosSet,
-        lastDayWithData,
-        year,
-      ),
-    };
-  }
+	if (selectedMonthIndex === currentMonthIndex) {
+		return {
+			isCurrentMonth: true,
+			isPastMonth: false,
+			isFutureMonth: false,
+			daysRemaining: diasUteisRestantesNoMes(
+				month,
+				feriadosSet,
+				lastDayWithData,
+				year,
+			),
+		};
+	}
 
-  if (selectedMonthIndex < currentMonthIndex) {
-    return {
-      isCurrentMonth: false,
-      isPastMonth: true,
-      isFutureMonth: false,
-      daysRemaining: 0,
-    };
-  }
+	if (selectedMonthIndex < currentMonthIndex) {
+		return {
+			isCurrentMonth: false,
+			isPastMonth: true,
+			isFutureMonth: false,
+			daysRemaining: 0,
+		};
+	}
 
-  return {
-    isCurrentMonth: false,
-    isPastMonth: false,
-    isFutureMonth: true,
-    daysRemaining: diasUteisDoMes(month, feriadosSet, year),
-  };
+	return {
+		isCurrentMonth: false,
+		isPastMonth: false,
+		isFutureMonth: true,
+		daysRemaining: diasUteisDoMes(month, feriadosSet, year),
+	};
 }
 
 function getStatusText(total, meta, monthContext) {
-  const faltam = Math.max(0, meta - total);
-  if (monthContext.isFutureMonth) return "Mês ainda não iniciado";
-  if (faltam === 0) return "Meta atingida no mês";
-  if (monthContext.isCurrentMonth) return `Em andamento: faltam ${faltam} O.S`;
-  if (monthContext.isPastMonth) return `Fechado: faltaram ${faltam} O.S`;
-  return `Faltam ${faltam} O.S`;
+	const faltam = Math.max(0, meta - total);
+	if (monthContext.isFutureMonth) return "Mês ainda não iniciado";
+	if (faltam === 0) return "Meta atingida no mês";
+	if (monthContext.isCurrentMonth) return `Em andamento: faltam ${faltam} O.S`;
+	if (monthContext.isPastMonth) return `Fechado: faltaram ${faltam} O.S`;
+	return `Faltam ${faltam} O.S`;
 }
 
 function getDailyNeeded(faltam, meta, monthContext) {
-  if (monthContext.isPastMonth) return null;
-  if (faltam === 0) return "0.0";
+	if (monthContext.isPastMonth) return null;
+	if (faltam === 0) return "0.0";
 
-  const diasBase =
-    monthContext.daysRemaining > 0 ? monthContext.daysRemaining : 1;
-  const base = monthContext.isFutureMonth ? meta : faltam;
+	const diasBase =
+		monthContext.daysRemaining > 0 ? monthContext.daysRemaining : 1;
+	const base = monthContext.isFutureMonth ? meta : faltam;
 
-  return (base / diasBase).toFixed(1);
+	return (base / diasBase).toFixed(1);
 }
 
 function getDailyNeededText(dailyNeeded, monthContext) {
-  if (dailyNeeded === null) return null;
-  if (monthContext.isFutureMonth) return `Meta media: ${dailyNeeded} O.S/dia`;
-  if (Number(dailyNeeded) === 0) return "Meta diaria cumprida";
-  return `Precisa de ${dailyNeeded} O.S/dia`;
+	if (dailyNeeded === null) return null;
+	if (monthContext.isFutureMonth) return `Meta media: ${dailyNeeded} O.S/dia`;
+	if (Number(dailyNeeded) === 0) return "Meta diaria cumprida";
+	return `Precisa de ${dailyNeeded} O.S/dia`;
 }
 
 export default function TecIndividual({
-  title,
-  icon,
-  items = [],
-  meta = META_INDIVIDUAL,
-  month,
-  feriadosSet = new Set(),
-  lastDayWithData = 0,
-  defaultCollapsed = true,
-  fullWidth = true,
+	title,
+	icon,
+	items = [],
+	meta = META_INDIVIDUAL,
+	month,
+	feriadosSet = new Set(),
+	lastDayWithData = 0,
+	defaultCollapsed = true,
+	fullWidth = true,
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const monthContext = useMemo(
-    () => getMonthContext(month, { feriadosSet, lastDayWithData }),
-    [feriadosSet, lastDayWithData, month],
-  );
+	const [collapsed, setCollapsed] = useState(defaultCollapsed);
+	const monthContext = useMemo(
+		() => getMonthContext(month, { feriadosSet, lastDayWithData }),
+		[feriadosSet, lastDayWithData, month],
+	);
 
-  const normalizedItems = useMemo(
-    () =>
-      (Array.isArray(items) ? items : []).map((item) => {
-        const realizado = Number(item?.total) || 0;
-        const faltam = Math.max(0, meta - realizado);
-        const pct = Math.min((realizado / meta) * 100, 100);
-        const state = getCardState(realizado);
-        const dailyNeeded = getDailyNeeded(faltam, meta, monthContext);
+	const normalizedItems = useMemo(
+		() =>
+			(Array.isArray(items) ? items : []).map((item) => {
+				const realizado = Number(item?.total) || 0;
+				const faltam = Math.max(0, meta - realizado);
+				const pct = Math.min((realizado / meta) * 100, 100);
+				const state = getCardState(realizado);
+				const dailyNeeded = getDailyNeeded(faltam, meta, monthContext);
 
-        return {
-          name: item?.name || "-",
-          realizado,
-          meta,
-          faltam,
-          diasRestantes: monthContext.daysRemaining,
-          pct,
-          state,
-          statusText: getStatusText(realizado, meta, monthContext),
-          dailyNeededText: getDailyNeededText(dailyNeeded, monthContext),
-        };
-      }),
-    [items, meta, monthContext],
-  );
+				return {
+					name: item?.name || "-",
+					realizado,
+					meta,
+					faltam,
+					diasRestantes: monthContext.daysRemaining,
+					pct,
+					state,
+					statusText: getStatusText(realizado, meta, monthContext),
+					dailyNeededText: getDailyNeededText(dailyNeeded, monthContext),
+				};
+			}),
+		[items, meta, monthContext],
+	);
 
-  return (
-    <div className={`card ${fullWidth ? "grid-full" : ""}`}>
-      <div
-        className="card-title"
-        style={{ justifyContent: "space-between", cursor: "pointer" }}
-        onClick={() => setCollapsed((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setCollapsed((current) => !current);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-      >
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-          <span>{icon}</span>
-          <span>{title}</span>
-        </span>
-        <span className={`dropdown-icon ${collapsed ? "" : "open"}`}>^</span>
-      </div>
+	return (
+		<div className={`card ${fullWidth ? "grid-full" : ""}`}>
+			<div
+				className="card-title"
+				style={{ justifyContent: "space-between", cursor: "pointer" }}
+				onClick={() => setCollapsed((current) => !current)}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						setCollapsed((current) => !current);
+					}
+				}}
+				role="button"
+				tabIndex={0}
+			>
+				<span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+					<span>{icon}</span>
+					<span>{title}</span>
+				</span>
+				<span className={`dropdown-icon ${collapsed ? "" : "open"}`}>^</span>
+			</div>
 
-      {!collapsed && (
-        <div className="tec-grid">
-          {normalizedItems.map((item) => (
-            <div key={item.name} className={`tec-card ${item.state}`}>
-              <div className="tec-name">{item.name}</div>
+			{!collapsed && (
+				<div className="tec-grid">
+					{normalizedItems.map((item) => (
+						<div key={item.name} className={`tec-card ${item.state}`}>
+							<div className="tec-name">{item.name}</div>
 
-              <div className="tec-numbers">
-                <div className="tec-num">
-                  <div
-                    className="tec-num-val"
-                    style={{ color: "var(--orange)" }}
-                  >
-                    {item.realizado}
-                  </div>
-                  <div className="tec-num-lbl">Realizado</div>
-                </div>
+							<div className="tec-numbers">
+								<div className="tec-num">
+									<div
+										className="tec-num-val"
+										style={{ color: "var(--orange)" }}
+									>
+										{item.realizado}
+									</div>
+									<div className="tec-num-lbl">Realizado</div>
+								</div>
 
-                <div className="tec-num">
-                  <div className="tec-num-val" style={{ color: "var(--blue)" }}>
-                    {item.meta}
-                  </div>
-                  <div className="tec-num-lbl">Meta</div>
-                </div>
+								<div className="tec-num">
+									<div className="tec-num-val" style={{ color: "var(--blue)" }}>
+										{item.meta}
+									</div>
+									<div className="tec-num-lbl">Meta</div>
+								</div>
 
-                <div className="tec-num">
-                  <div
-                    className="tec-num-val"
-                    style={{
-                      color:
-                        item.faltam === 0 ? "var(--green)" : "var(--red)",
-                    }}
-                  >
-                    {item.faltam}
-                  </div>
-                  <div className="tec-num-lbl">Faltam</div>
-                </div>
+								<div className="tec-num">
+									<div
+										className="tec-num-val"
+										style={{
+											color: item.faltam === 0 ? "var(--green)" : "var(--red)",
+										}}
+									>
+										{item.faltam}
+									</div>
+									<div className="tec-num-lbl">Faltam</div>
+								</div>
 
-                <div className="tec-num">
-                  <div
-                    className="tec-num-val"
-                    style={{ color: "var(--muted)" }}
-                  >
-                    {item.diasRestantes}
-                  </div>
-                  <div className="tec-num-lbl">Dias Rest.</div>
-                </div>
-              </div>
+								<div className="tec-num">
+									<div
+										className="tec-num-val"
+										style={{ color: "var(--muted)" }}
+									>
+										{item.diasRestantes}
+									</div>
+									<div className="tec-num-lbl">Dias Rest.</div>
+								</div>
+							</div>
 
-              <div className="tec-progress">
-                <div
-                  className="tec-progress-fill"
-                  style={{
-                    width: `${item.pct}%`,
-                    background:
-                      item.faltam === 0
-                        ? "linear-gradient(90deg, var(--green), #36B37E)"
-                        : "linear-gradient(90deg, var(--orange), #FF8B00)",
-                  }}
-                />
-              </div>
+							<div className="tec-progress">
+								<div
+									className="tec-progress-fill"
+									style={{
+										width: `${item.pct}%`,
+										background:
+											item.faltam === 0
+												? "linear-gradient(90deg, var(--green), #36B37E)"
+												: "linear-gradient(90deg, var(--orange), #FF8B00)",
+									}}
+								/>
+							</div>
 
-              <div
-                className="tec-status"
-                style={{
-                  color: item.faltam === 0 ? "var(--green)" : "var(--orange)",
-                }}
-              >
-                {item.faltam === 0 ? "OK " : "! "}
-                {item.statusText}
-              </div>
+							<div
+								className="tec-status"
+								style={{
+									color: item.faltam === 0 ? "var(--green)" : "var(--orange)",
+								}}
+							>
+								{item.faltam === 0 ? "OK " : "! "}
+								{item.statusText}
+							</div>
 
-              {item.dailyNeededText ? (
-                <div
-                  className="tec-status"
-                  style={{
-                    marginTop: 4,
-                    color: item.faltam === 0 ? "var(--green)" : "var(--blue)",
-                  }}
-                >
-                  OS/dia: {item.dailyNeededText}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+							{item.dailyNeededText ? (
+								<div
+									className="tec-status"
+									style={{
+										marginTop: 4,
+										color: item.faltam === 0 ? "var(--green)" : "var(--blue)",
+									}}
+								>
+									OS/dia: {item.dailyNeededText}
+								</div>
+							) : null}
+						</div>
+					))}
+				</div>
+			)}
+		</div>
+	);
 }
-

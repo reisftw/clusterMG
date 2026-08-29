@@ -2,5 +2,5 @@
    O isolamento agora é feito pelo escopo .painel-classico no CSS global. */
 
 .mapa-os-root * {
-  box-sizing: border-box;
+	box-sizing: border-box;
 }

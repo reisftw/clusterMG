@@ -1,86 +1,88 @@
 /* Ajuste final do topo para ficar fiel ao painel de referência */
 .header {
-  min-height: 124px;
-  padding: 20px 24px;
-  border-radius: 0 0 28px 28px;
+	min-height: 124px;
+	padding: 20px 24px;
+	border-radius: 0 0 28px 28px;
 }
 
 .header-left {
-  flex: 0 0 auto;
-  min-width: 300px;
+	flex: 0 0 auto;
+	min-width: 300px;
 }
 
 .header-left h1 {
-  margin: 0;
-  white-space: nowrap;
+	margin: 0;
+	white-space: nowrap;
 }
 
 .header-left #last-update-txt,
 .header-left .fb-status {
-  display: none;
+	display: none;
 }
 
 .header-right {
-  gap: 12px;
+	gap: 12px;
 }
 
 .painel-tabs {
-  align-items: center;
-  flex-wrap: nowrap;
+	align-items: center;
+	flex-wrap: nowrap;
 }
 
 .painel-tab,
 .public-header-btn {
-  height: 38px;
-  white-space: nowrap;
+	height: 38px;
+	white-space: nowrap;
 }
 
 .public-header-btn {
-  background: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
+	background: transparent !important;
+	border-color: transparent !important;
+	box-shadow: none !important;
 }
 
 .public-header-btn:hover,
 .painel-tab:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
+	background: rgba(255, 255, 255, 0.12) !important;
 }
 
 .month-selector {
-  height: 40px;
+	height: 40px;
 }
 
 .header-avatar {
-  width: 42px;
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #fff;
-  font: 900 13px/1 Inter, system-ui, sans-serif;
-  letter-spacing: 0.02em;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+	width: 42px;
+	height: 42px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 14px;
+	background: rgba(255, 255, 255, 0.14);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	color: #fff;
+	font:
+		900 13px / 1 Inter,
+		system-ui,
+		sans-serif;
+	letter-spacing: 0.02em;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 @media (max-width: 1180px) {
-  .header {
-    border-radius: 0 0 24px 24px;
-  }
+	.header {
+		border-radius: 0 0 24px 24px;
+	}
 
-  .header-left {
-    min-width: 0;
-  }
+	.header-left {
+		min-width: 0;
+	}
 
-  .painel-tabs {
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
+	.painel-tabs {
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
 
-  .painel-tabs::-webkit-scrollbar {
-    display: none;
-  }
+	.painel-tabs::-webkit-scrollbar {
+		display: none;
+	}
 }
-

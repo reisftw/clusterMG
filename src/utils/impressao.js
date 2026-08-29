@@ -7,16 +7,16 @@
  * @returns {string}
  */
 export function formatarDataGeracao(
-  data = new Date(),
-  options = { incluirPreposicao: false },
+	data = new Date(),
+	options = { incluirPreposicao: false },
 ) {
-  const prefixo = options.incluirPreposicao ? " as " : " ";
-  const dia = String(data.getDate()).padStart(2, "0");
-  const mes = String(data.getMonth() + 1).padStart(2, "0");
-  const ano = data.getFullYear();
-  const hora = String(data.getHours()).padStart(2, "0");
-  const minuto = String(data.getMinutes()).padStart(2, "0");
-  return `${dia}/${mes}/${ano}${prefixo}${hora}:${minuto}`;
+	const prefixo = options.incluirPreposicao ? " as " : " ";
+	const dia = String(data.getDate()).padStart(2, "0");
+	const mes = String(data.getMonth() + 1).padStart(2, "0");
+	const ano = data.getFullYear();
+	const hora = String(data.getHours()).padStart(2, "0");
+	const minuto = String(data.getMinutes()).padStart(2, "0");
+	return `${dia}/${mes}/${ano}${prefixo}${hora}:${minuto}`;
 }
 
 /**
@@ -26,22 +26,22 @@ export function formatarDataGeracao(
  * @returns {void}
  */
 export function imprimirHtml(
-  conteudo,
-  options = { areaId: "print-area", styleId: "print-style" },
+	conteudo,
+	options = { areaId: "print-area", styleId: "print-style" },
 ) {
-  const areaId = options.areaId ?? "print-area";
-  const styleId = options.styleId ?? "print-style";
+	const areaId = options.areaId ?? "print-area";
+	const styleId = options.styleId ?? "print-style";
 
-  const existingArea = document.getElementById(areaId);
-  if (existingArea) existingArea.remove();
+	const existingArea = document.getElementById(areaId);
+	if (existingArea) existingArea.remove();
 
-  const existingStyle = document.getElementById(styleId);
-  if (existingStyle) existingStyle.remove();
+	const existingStyle = document.getElementById(styleId);
+	if (existingStyle) existingStyle.remove();
 
-  const printArea = document.createElement("div");
-  printArea.id = areaId;
-  printArea.innerHTML = sanitizeHtml(conteudo);
-  printArea.style.cssText = `
+	const printArea = document.createElement("div");
+	printArea.id = areaId;
+	printArea.innerHTML = sanitizeHtml(conteudo);
+	printArea.style.cssText = `
     display: none;
     position: fixed;
     inset: 0;
@@ -49,23 +49,22 @@ export function imprimirHtml(
     z-index: 99999;
     overflow: auto;
   `;
-  document.body.appendChild(printArea);
+	document.body.appendChild(printArea);
 
-  const style = document.createElement("style");
-  style.id = styleId;
-  style.textContent = `
+	const style = document.createElement("style");
+	style.id = styleId;
+	style.textContent = `
     @media print {
       body > *:not(#${areaId}) { display: none !important; }
       #${areaId} { display: block !important; position: static !important; }
     }
   `;
-  document.head.appendChild(style);
+	document.head.appendChild(style);
 
-  window.print();
+	window.print();
 
-  setTimeout(() => {
-    printArea.remove();
-    style.remove();
-  }, 1000);
+	setTimeout(() => {
+		printArea.remove();
+		style.remove();
+	}, 1000);
 }
-

@@ -9,6 +9,8 @@ with permissions(id, section_id, section_label, feature_id, feature_label, actio
     ('financeiro.faturamento.view', 'financeiro', 'Financeiro', 'faturamento', 'Faturamento', 'view', 1330, null, 'Visualizar faturamento.'),
     ('financeiro.notas.view', 'financeiro', 'Financeiro', 'notas', 'Notas', 'view', 1340, null, 'Visualizar notas financeiras.'),
     ('financeiro.chamados.view', 'financeiro', 'Financeiro', 'chamados', 'Chamados', 'view', 1350, null, 'Visualizar chamados financeiros.'),
+    ('financeiro.gestao_orcamento.view', 'financeiro', 'Financeiro', 'gestao_orcamento', 'Gestão Orçamento', 'view', 1370, null, 'Visualizar gestão de orçamento.'),
+    ('financeiro.gestao_orcamento.manage', 'financeiro', 'Financeiro', 'gestao_orcamento', 'Gestão Orçamento', 'manage', 1371, null, 'Gerenciar gestão de orçamento e dados de mockup.'),
     ('financeiro.configuracoes.view', 'financeiro', 'Financeiro', 'configuracoes', 'Configurações', 'view', 1360, null, 'Visualizar configurações financeiras.'),
     ('financeiro.configuracoes.manage', 'financeiro', 'Financeiro', 'configuracoes', 'Configurações', 'manage', 1361, null, 'Gerenciar configurações financeiras e dados de mockup.')
 )

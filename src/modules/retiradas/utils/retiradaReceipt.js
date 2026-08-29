@@ -1,95 +1,103 @@
-﻿function text(value) {
-  return String(value || "").trim();
+function text(value) {
+	return String(value || "").trim();
 }
 
 function escapeHtml(value) {
-  return text(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+	return text(value)
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
 }
 
 function asDate(value) {
-  const date =
-    typeof value?.toDate === "function" ? value.toDate() : value ? new Date(value) : null;
-  return date && !Number.isNaN(date.getTime()) ? date : null;
+	const date =
+		typeof value?.toDate === "function"
+			? value.toDate()
+			: value
+				? new Date(value)
+				: null;
+	return date && !Number.isNaN(date.getTime()) ? date : null;
 }
 
 function formatDate(value) {
-  const date = asDate(value);
-  if (!date) return "-";
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "America/Sao_Paulo",
-  });
+	const date = asDate(value);
+	if (!date) return "-";
+	return date.toLocaleDateString("pt-BR", {
+		day: "2-digit",
+		month: "2-digit",
+		year: "numeric",
+		timeZone: "America/Sao_Paulo",
+	});
 }
 
 function formatTime(value) {
-  const date = asDate(value);
-  if (!date) return "-";
-  return date.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "America/Sao_Paulo",
-  });
+	const date = asDate(value);
+	if (!date) return "-";
+	return date.toLocaleTimeString("pt-BR", {
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: "America/Sao_Paulo",
+	});
 }
 
 function formatDateTime(value) {
-  const date = asDate(value);
-  if (!date) return "-";
-  return date.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "America/Sao_Paulo",
-  });
+	const date = asDate(value);
+	if (!date) return "-";
+	return date.toLocaleString("pt-BR", {
+		day: "2-digit",
+		month: "2-digit",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZone: "America/Sao_Paulo",
+	});
 }
 
 function getCompletionDate(retirada) {
-  return (
-    retirada?.concluidoEm ||
-    retirada?.tratativaAtualizadaEm ||
-    retirada?.updatedAt ||
-    retirada?.createdAt ||
-    null
-  );
+	return (
+		retirada?.concluidoEm ||
+		retirada?.tratativaAtualizadaEm ||
+		retirada?.updatedAt ||
+		retirada?.createdAt ||
+		null
+	);
 }
 
 function getDeliveryMode(retirada) {
-  return retirada?.metodo === "ponto" ? "Entrega em unidade Sempre" : "Coleta no endereco";
+	return retirada?.metodo === "ponto"
+		? "Entrega em unidade Sempre"
+		: "Coleta no endereco";
 }
 
 function getLocation(retirada) {
-  if (retirada?.metodo === "ponto") {
-    return retirada?.lojaSelecionadaEndereco || retirada?.lojaSelecionadaNome || "-";
-  }
+	if (retirada?.metodo === "ponto") {
+		return (
+			retirada?.lojaSelecionadaEndereco || retirada?.lojaSelecionadaNome || "-"
+		);
+	}
 
-  return [
-    retirada?.endereco,
-    retirada?.numero,
-    retirada?.bairro,
-    retirada?.cidade,
-  ]
-    .filter(Boolean)
-    .join(", ");
+	return [
+		retirada?.endereco,
+		retirada?.numero,
+		retirada?.bairro,
+		retirada?.cidade,
+	]
+		.filter(Boolean)
+		.join(", ");
 }
 
 function getAssetUrl(path) {
-  if (typeof window === "undefined") return path;
-  return `${window.location.origin}${path}`;
+	if (typeof window === "undefined") return path;
+	return `${window.location.origin}${path}`;
 }
 
 export function buildRetiradaReceiptHtml(retirada) {
-  const completionDate = getCompletionDate(retirada);
-  const emittedAt = new Date();
+	const completionDate = getCompletionDate(retirada);
+	const emittedAt = new Date();
 
-  return `<!doctype html>
+	return `<!doctype html>
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
@@ -462,42 +470,41 @@ export function buildRetiradaReceiptHtml(retirada) {
 }
 
 export function openRetiradaReceiptWindow(retirada) {
-  if (typeof window === "undefined") return false;
+	if (typeof window === "undefined") return false;
 
-  const html = buildRetiradaReceiptHtml(retirada);
+	const html = buildRetiradaReceiptHtml(retirada);
 
-  try {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = window.URL.createObjectURL(blob);
+	try {
+		const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+		const url = window.URL.createObjectURL(blob);
 
-    const receiptWindow = window.open(url, "_blank");
-    if (receiptWindow) {
-      receiptWindow.focus();
-      window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-      return true;
-    }
+		const receiptWindow = window.open(url, "_blank");
+		if (receiptWindow) {
+			receiptWindow.focus();
+			window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+			return true;
+		}
 
-    const link = document.createElement("a");
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-    return true;
-  } catch {
-    try {
-      const receiptWindow = window.open("", "_blank");
-      if (!receiptWindow) return false;
-      receiptWindow.document.open();
-      receiptWindow.document.write(html);
-      receiptWindow.document.close();
-      receiptWindow.focus();
-      return true;
-    } catch {
-      return false;
-    }
-  }
+		const link = document.createElement("a");
+		link.href = url;
+		link.target = "_blank";
+		link.rel = "noopener";
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+		return true;
+	} catch {
+		try {
+			const receiptWindow = window.open("", "_blank");
+			if (!receiptWindow) return false;
+			receiptWindow.document.open();
+			receiptWindow.document.write(html);
+			receiptWindow.document.close();
+			receiptWindow.focus();
+			return true;
+		} catch {
+			return false;
+		}
+	}
 }
-

@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 *.tgz
+*.zip
 
 # Generated reports and local tool output
 coverage
@@ -24,10 +25,17 @@ tmp
 output
 outputs
 uploads
+reports
+deploy-*/
+package-*/
+jdk*_temp/
+jdk*.zip
+api-src-security.zip
 RELATORIO_QUALIDADE.*
 relatorio_*.csv
 relatorio_*.pdf
 relatorio-avaliacao-sistema.pdf
+docs/apresentacao-sistema.pdf
 sonar-project.properties.txt
 
 # Editor directories and files

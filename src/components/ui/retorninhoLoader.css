@@ -1,130 +1,137 @@
 .retorninho-loader {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 14px;
+	text-align: center;
 }
 
 .retorninho-loader--fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: var(--bg, #f4f6fa);
-  padding: 24px;
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+	background: var(--bg, #f4f6fa);
+	padding: 24px;
 }
 
 .retorninho-loader--card {
-  width: 100%;
-  border-radius: 24px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
-  padding: 28px 20px;
+	width: 100%;
+	border-radius: 24px;
+	border: 1px solid rgba(148, 163, 184, 0.22);
+	background: rgba(255, 255, 255, 0.96);
+	box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+	padding: 28px 20px;
 }
 
 .retorninho-loader--compact {
-  gap: 10px;
-  padding: 12px 0;
+	gap: 10px;
+	padding: 12px 0;
 }
 
 .retorninho-loader__stage {
-  position: relative;
-  display: grid;
-  place-items: center;
+	position: relative;
+	display: grid;
+	place-items: center;
 }
 
 .retorninho-loader__stage::after {
-  content: "";
-  position: absolute;
-  width: 76%;
-  height: 18px;
-  bottom: -6px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.12);
-  filter: blur(10px);
-  animation: retorninho-shadow 1.9s ease-in-out infinite;
+	content: "";
+	position: absolute;
+	width: 76%;
+	height: 18px;
+	bottom: -6px;
+	border-radius: 999px;
+	background: rgba(15, 23, 42, 0.12);
+	filter: blur(10px);
+	animation: retorninho-shadow 1.9s ease-in-out infinite;
 }
 
 .retorninho-loader__halo {
-  position: absolute;
-  inset: 10% 12%;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle, rgba(255, 107, 0, 0.2) 0%, rgba(0, 82, 204, 0.12) 42%, rgba(255, 255, 255, 0) 72%);
-  filter: blur(4px);
-  animation: retorninho-halo 1.9s ease-in-out infinite;
+	position: absolute;
+	inset: 10% 12%;
+	border-radius: 999px;
+	background: radial-gradient(
+		circle,
+		rgba(255, 107, 0, 0.2) 0%,
+		rgba(0, 82, 204, 0.12) 42%,
+		rgba(255, 255, 255, 0) 72%
+	);
+	filter: blur(4px);
+	animation: retorninho-halo 1.9s ease-in-out infinite;
 }
 
 .retorninho-loader__image {
-  position: relative;
-  display: block;
-  width: 108px;
-  max-width: 100%;
-  height: auto;
-  animation: retorninho-float 1.9s ease-in-out infinite;
-  transform-origin: center bottom;
-  user-select: none;
-  -webkit-user-drag: none;
+	position: relative;
+	display: block;
+	width: 108px;
+	max-width: 100%;
+	height: auto;
+	animation: retorninho-float 1.9s ease-in-out infinite;
+	transform-origin: center bottom;
+	user-select: none;
+	-webkit-user-drag: none;
 }
 
 .retorninho-loader__image--sm {
-  width: 64px;
+	width: 64px;
 }
 
 .retorninho-loader__image--lg {
-  width: 132px;
+	width: 132px;
 }
 
 .retorninho-loader__title {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--text, #0f172a);
+	font-size: 1rem;
+	font-weight: 800;
+	color: var(--text, #0f172a);
 }
 
 .retorninho-loader__description {
-  max-width: 32rem;
-  font-size: 0.9rem;
-  line-height: 1.6;
-  color: var(--muted, #64748b);
+	max-width: 32rem;
+	font-size: 0.9rem;
+	line-height: 1.6;
+	color: var(--muted, #64748b);
 }
 
 .retorninho-loader--compact .retorninho-loader__title {
-  font-size: 0.92rem;
+	font-size: 0.92rem;
 }
 
 .retorninho-loader--compact .retorninho-loader__description {
-  font-size: 0.8rem;
+	font-size: 0.8rem;
 }
 
 @keyframes retorninho-float {
-  0%, 100% {
-    transform: translateY(0) rotate(-2deg) scale(1);
-  }
-  50% {
-    transform: translateY(-8px) rotate(2deg) scale(1.02);
-  }
+	0%,
+	100% {
+		transform: translateY(0) rotate(-2deg) scale(1);
+	}
+	50% {
+		transform: translateY(-8px) rotate(2deg) scale(1.02);
+	}
 }
 
 @keyframes retorninho-halo {
-  0%, 100% {
-    transform: scale(0.94);
-    opacity: 0.82;
-  }
-  50% {
-    transform: scale(1.04);
-    opacity: 1;
-  }
+	0%,
+	100% {
+		transform: scale(0.94);
+		opacity: 0.82;
+	}
+	50% {
+		transform: scale(1.04);
+		opacity: 1;
+	}
 }
 
 @keyframes retorninho-shadow {
-  0%, 100% {
-    transform: scaleX(0.92);
-    opacity: 0.2;
-  }
-  50% {
-    transform: scaleX(1.02);
-    opacity: 0.14;
-  }
+	0%,
+	100% {
+		transform: scaleX(0.92);
+		opacity: 0.2;
+	}
+	50% {
+		transform: scaleX(1.02);
+		opacity: 0.14;
+	}
 }

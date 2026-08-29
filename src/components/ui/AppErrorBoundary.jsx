@@ -2,24 +2,23 @@
 import ErrorPage from "./ErrorPage";
 
 class AppErrorBoundary extends Component {
-  state = { hasError: false };
+	state = { hasError: false };
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
+	static getDerivedStateFromError() {
+		return { hasError: true };
+	}
 
-  componentDidCatch(error, info) {
-    console.error("[AppErrorBoundary]", error, info);
-  }
+	componentDidCatch(error, info) {
+		console.error("[AppErrorBoundary]", error, info);
+	}
 
-  render() {
-    if (this.state.hasError) {
-      return <ErrorPage code="500" />;
-    }
+	render() {
+		if (this.state.hasError) {
+			return <ErrorPage code="500" />;
+		}
 
-    return this.props.children;
-  }
+		return this.props.children;
+	}
 }
 
 export default AppErrorBoundary;
-

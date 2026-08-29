@@ -1,89 +1,95 @@
-﻿import { formatarDataGeracao, imprimirHtml } from "../../../utils/impressao";
-import { resolveVpsDate } from "../../../services/vpsDate";
+﻿import { resolveVpsDate } from "../../../services/vpsDate";
+import { formatarDataGeracao, imprimirHtml } from "../../../utils/impressao";
 
 export function gerarPDFMapa(ordens, ultimaAtualizacao) {
-  const formatData = (meta) => {
-    if (!meta?.data) return "Não informado";
-    const d = resolveVpsDate(meta);
-    if (!d) return "Nao informado";
-    return d.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+	const formatData = (meta) => {
+		if (!meta?.data) return "Não informado";
+		const d = resolveVpsDate(meta);
+		if (!d) return "Nao informado";
+		return d.toLocaleDateString("pt-BR", {
+			day: "2-digit",
+			month: "2-digit",
+			year: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
+	};
 
-  const dataGeracao = formatarDataGeracao();
+	const dataGeracao = formatarDataGeracao();
 
-  const total = ordens.length;
-  const pendente = ordens.filter((o) => o.status === "Pendente").length;
-  const aguardando = ordens.filter((o) => o.status === "Aguardando Agendamento").length;
-  const totalRegional = ordens.filter((o) => !o.agente).length;
-  const totalAgente = ordens.filter((o) => o.agente).length;
+	const total = ordens.length;
+	const pendente = ordens.filter((o) => o.status === "Pendente").length;
+	const aguardando = ordens.filter(
+		(o) => o.status === "Aguardando Agendamento",
+	).length;
+	const totalRegional = ordens.filter((o) => !o.agente).length;
+	const totalAgente = ordens.filter((o) => o.agente).length;
 
-  const mapaRegionais = {};
-  ordens
-    .filter((o) => !o.agente)
-    .forEach((os) => {
-      const reg = os.regional || "Sem Regional";
-      if (!mapaRegionais[reg]) mapaRegionais[reg] = {};
-      const cidade = os.cidade || "Desconhecida";
-      if (!mapaRegionais[reg][cidade]) {
-        mapaRegionais[reg][cidade] = { pendente: {}, aguardando: {} };
-      }
-      const sk = os.status === "Pendente" ? "pendente" : "aguardando";
-      mapaRegionais[reg][cidade][sk][os.tipo] =
-        (mapaRegionais[reg][cidade][sk][os.tipo] || 0) + 1;
-    });
+	const mapaRegionais = {};
+	ordens
+		.filter((o) => !o.agente)
+		.forEach((os) => {
+			const reg = os.regional || "Sem Regional";
+			if (!mapaRegionais[reg]) mapaRegionais[reg] = {};
+			const cidade = os.cidade || "Desconhecida";
+			if (!mapaRegionais[reg][cidade]) {
+				mapaRegionais[reg][cidade] = { pendente: {}, aguardando: {} };
+			}
+			const sk = os.status === "Pendente" ? "pendente" : "aguardando";
+			mapaRegionais[reg][cidade][sk][os.tipo] =
+				(mapaRegionais[reg][cidade][sk][os.tipo] || 0) + 1;
+		});
 
-  const mapaAgentes = {};
-  ordens
-    .filter((o) => o.agente)
-    .forEach((os) => {
-      const cidade = os.cidade || "Desconhecida";
-      if (!mapaAgentes[cidade]) {
-        mapaAgentes[cidade] = {
-          pendente: {},
-          aguardando: {},
-          regional: os.regional || "",
-        };
-      }
-      const sk = os.status === "Pendente" ? "pendente" : "aguardando";
-      mapaAgentes[cidade][sk][os.tipo] = (mapaAgentes[cidade][sk][os.tipo] || 0) + 1;
-    });
+	const mapaAgentes = {};
+	ordens
+		.filter((o) => o.agente)
+		.forEach((os) => {
+			const cidade = os.cidade || "Desconhecida";
+			if (!mapaAgentes[cidade]) {
+				mapaAgentes[cidade] = {
+					pendente: {},
+					aguardando: {},
+					regional: os.regional || "",
+				};
+			}
+			const sk = os.status === "Pendente" ? "pendente" : "aguardando";
+			mapaAgentes[cidade][sk][os.tipo] =
+				(mapaAgentes[cidade][sk][os.tipo] || 0) + 1;
+		});
 
-  const totalCidade = (d) =>
-    Object.values(d.pendente || {}).reduce((a, b) => a + b, 0) +
-    Object.values(d.aguardando || {}).reduce((a, b) => a + b, 0);
+	const totalCidade = (d) =>
+		Object.values(d.pendente || {}).reduce((a, b) => a + b, 0) +
+		Object.values(d.aguardando || {}).reduce((a, b) => a + b, 0);
 
-  let regionaisHtml = "";
-  Object.entries(mapaRegionais)
-    .sort((a, b) => {
-      const tA = Object.values(a[1]).reduce((s, d) => s + totalCidade(d), 0);
-      const tB = Object.values(b[1]).reduce((s, d) => s + totalCidade(d), 0);
-      return tB - tA;
-    })
-    .forEach(([regional, cidades]) => {
-      const totalReg = Object.values(cidades).reduce((s, d) => s + totalCidade(d), 0);
-      let cidadesHtml = "";
-      Object.entries(cidades)
-        .sort((a, b) => totalCidade(b[1]) - totalCidade(a[1]))
-        .forEach(([cidade, data]) => {
-          const tot = totalCidade(data);
-          const badges = [
-            ...Object.entries(data.pendente || {}).map(
-              ([tipo, qtd]) =>
-                `<span style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
-            ),
-            ...Object.entries(data.aguardando || {}).map(
-              ([tipo, qtd]) =>
-                `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
-            ),
-          ].join("");
+	let regionaisHtml = "";
+	Object.entries(mapaRegionais)
+		.sort((a, b) => {
+			const tA = Object.values(a[1]).reduce((s, d) => s + totalCidade(d), 0);
+			const tB = Object.values(b[1]).reduce((s, d) => s + totalCidade(d), 0);
+			return tB - tA;
+		})
+		.forEach(([regional, cidades]) => {
+			const totalReg = Object.values(cidades).reduce(
+				(s, d) => s + totalCidade(d),
+				0,
+			);
+			let cidadesHtml = "";
+			Object.entries(cidades)
+				.sort((a, b) => totalCidade(b[1]) - totalCidade(a[1]))
+				.forEach(([cidade, data]) => {
+					const tot = totalCidade(data);
+					const badges = [
+						...Object.entries(data.pendente || {}).map(
+							([tipo, qtd]) =>
+								`<span style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
+						),
+						...Object.entries(data.aguardando || {}).map(
+							([tipo, qtd]) =>
+								`<span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
+						),
+					].join("");
 
-          cidadesHtml += `
+					cidadesHtml += `
             <div style="border-bottom:1px solid #f1f5f9;padding:8px 16px;display:flex;flex-direction:column;gap:4px">
               <div style="display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:12px;font-weight:600;color:#374151">${cidade}</span>
@@ -91,9 +97,9 @@ export function gerarPDFMapa(ordens, ultimaAtualizacao) {
               </div>
               <div>${badges}</div>
             </div>`;
-        });
+				});
 
-      regionaisHtml += `
+			regionaisHtml += `
         <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:12px">
           <div style="background:#eff6ff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #dbeafe">
             <div style="display:flex;align-items:center;gap:8px">
@@ -104,25 +110,25 @@ export function gerarPDFMapa(ordens, ultimaAtualizacao) {
           </div>
           ${cidadesHtml}
         </div>`;
-    });
+		});
 
-  let agentesHtml = "";
-  Object.entries(mapaAgentes)
-    .sort((a, b) => totalCidade(b[1]) - totalCidade(a[1]))
-    .forEach(([cidade, data]) => {
-      const tot = totalCidade(data);
-      const badges = [
-        ...Object.entries(data.pendente || {}).map(
-          ([tipo, qtd]) =>
-            `<span style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
-        ),
-        ...Object.entries(data.aguardando || {}).map(
-          ([tipo, qtd]) =>
-            `<span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
-        ),
-      ].join("");
+	let agentesHtml = "";
+	Object.entries(mapaAgentes)
+		.sort((a, b) => totalCidade(b[1]) - totalCidade(a[1]))
+		.forEach(([cidade, data]) => {
+			const tot = totalCidade(data);
+			const badges = [
+				...Object.entries(data.pendente || {}).map(
+					([tipo, qtd]) =>
+						`<span style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
+				),
+				...Object.entries(data.aguardando || {}).map(
+					([tipo, qtd]) =>
+						`<span style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:4px;padding:1px 7px;font-size:10px;font-weight:600;margin-right:4px">${tipo}: ${qtd}</span>`,
+				),
+			].join("");
 
-      agentesHtml += `
+			agentesHtml += `
         <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:10px">
           <div style="background:#fffbeb;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #fde68a">
             <div style="display:flex;align-items:center;gap:8px">
@@ -133,9 +139,9 @@ export function gerarPDFMapa(ordens, ultimaAtualizacao) {
           </div>
           <div style="padding:10px 16px">${badges}</div>
         </div>`;
-    });
+		});
 
-  const conteudo = `
+	const conteudo = `
 <div style="font-family:Arial,sans-serif;color:#111827;font-size:12px;padding:20px;background:#fff">
 
   <div style="background:linear-gradient(135deg,#1e3a8a,#2563eb);padding:20px 24px;border-radius:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
@@ -187,9 +193,8 @@ export function gerarPDFMapa(ordens, ultimaAtualizacao) {
   </div>
 </div>`;
 
-  imprimirHtml(conteudo, {
-    areaId: "mapa-print-area",
-    styleId: "mapa-print-style",
-  });
+	imprimirHtml(conteudo, {
+		areaId: "mapa-print-area",
+		styleId: "mapa-print-style",
+	});
 }
-

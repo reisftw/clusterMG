@@ -244,7 +244,7 @@ const NAV_ITEMS = [
 		permission: ["financeiro.faturamento.view"],
 	},
 	{
-		label: "Notas",
+		label: "Notas Fiscais",
 		path: ROUTES.FINANCEIRO_NOTAS,
 		icon: FileCheck2,
 		permission: ["financeiro.notas.view"],
@@ -325,13 +325,13 @@ const NAV_ITEMS = [
 		],
 	},
 	{
-		label: "Gestão Orçamento - Configurações",
+		label: "Gestão Orçamento - Configurações Orçamentárias",
 		path: ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES,
 		icon: Settings,
 		permission: ["financeiro.gestao_orcamento.manage"],
 	},
 	{
-		label: "Configurações",
+		label: "Configurações Gerais",
 		path: ROUTES.FINANCEIRO_CONFIGURACOES,
 		icon: Settings,
 		permission: [
@@ -1018,6 +1018,22 @@ const stripFinanceiroOrcamentoLabel = (label) =>
 		.replace(/^Gestão\s+Orçamento\s+-\s+/i, "")
 		.replace(/^Gestão\s+Orçamento\s+/i, "");
 
+const getFinanceiroOrcamentoLabel = (label, item) =>
+	item.path === ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES
+		? "Configurações Orçamentárias"
+		: stripFinanceiroOrcamentoLabel(label);
+
+const getTarifasReportLabel = (item) => {
+	if (item.path === ROUTES.FINANCEIRO_REPORTS_TARIFAS) return "Visão Geral";
+	if (item.path === ROUTES.FINANCEIRO_REPORTS_TARIFAS_REC_CLIENTE) {
+		return "Receitas";
+	}
+	return String(item.label || "").replace(
+		/^Reports\s*-\s*Tarifas\s*-\s*/i,
+		"",
+	);
+};
+
 function SidebarNavLink({
 	item,
 	className,
@@ -1121,6 +1137,7 @@ function AdminNestedSection({
 	submenuWrapClass,
 	onNavigate,
 	displayLabel,
+	labelClass = "min-w-0 flex-1 truncate text-left",
 }) {
 	if (!items.length) return null;
 	return (
@@ -1138,7 +1155,7 @@ function AdminNestedSection({
 				title={title}
 			>
 				<Icon size={15} className="shrink-0" />
-				<span className="min-w-0 flex-1 truncate text-left">{title}</span>
+				<span className={labelClass}>{title}</span>
 				<ChevronDown
 					size={14}
 					className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
@@ -1156,8 +1173,8 @@ function AdminNestedSection({
 								className={submenuClass}
 							>
 								<ChildIcon size={15} className="shrink-0" />
-								<span className="truncate">
-									{displayLabel(labelFormatter(item.label), item.path)}
+								<span className={labelClass}>
+									{displayLabel(labelFormatter(item.label, item), item.path)}
 								</span>
 							</NavLink>
 						);
@@ -1336,6 +1353,38 @@ function FinanceiroGroupItems({
 	displayLabel,
 }) {
 	const submenuWrapClass = getSubmenuWrapClass(isModernLayout);
+	const financeSectionClass = isModernLayout
+		? "mb-2 mt-5 px-3 text-[10px] font-bold uppercase tracking-[0.06em] text-slate-400"
+		: "mb-2 mt-5 px-3 text-[10px] font-bold uppercase tracking-[0.06em] text-gray-400";
+	const financeLinkLabelClass =
+		"min-w-0 flex-1 whitespace-normal break-words text-left leading-tight";
+	const financeSubmenuClass = ({ isActive }) =>
+		`${submenuClass({ isActive })} ${isActive ? "font-black" : ""}`;
+	const renderSectionTitle = (title) => (
+		<p key={`section-${title}`} className={financeSectionClass}>
+			{title}
+		</p>
+	);
+	const renderFinanceLink = (item, label = item.label, level = 1) => {
+		if (!item) return null;
+		const ChildIcon = item.icon;
+		const levelClass =
+			level === 3 ? "pl-4 text-[13px]" : level === 2 ? "pl-3" : "";
+		return (
+			<NavLink
+				key={item.path}
+				to={item.path}
+				onClick={onNavigate}
+				className={(state) => `${financeSubmenuClass(state)} ${levelClass}`}
+				title={typeof label === "string" ? label : item.label}
+			>
+				<ChildIcon size={level === 3 ? 14 : 15} className="shrink-0" />
+				<span className={financeLinkLabelClass}>
+					{displayLabel(label, item.path)}
+				</span>
+			</NavLink>
+		);
+	};
 	const orcamentoItems = group.items.filter((item) =>
 		FINANCEIRO_ORCAMENTO_PATHS.includes(item.path),
 	);
@@ -1353,11 +1402,20 @@ function FinanceiroGroupItems({
 	const tarifasReportItem = reportsItems.find(
 		(item) => item.path === ROUTES.FINANCEIRO_REPORTS_TARIFAS,
 	);
-	const nestedPaths = new Set([
-		...FINANCEIRO_ORCAMENTO_PATHS,
-		...FINANCEIRO_REPORTS_PATHS,
-	]);
-	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
+	const dashboardItem = group.items.find(
+		(item) => item.path === ROUTES.FINANCEIRO,
+	);
+	const operationItems = [
+		ROUTES.FINANCEIRO_CONTAS_PAGAR,
+		ROUTES.FINANCEIRO_CONTAS_RECEBER,
+		ROUTES.FINANCEIRO_FATURAMENTO,
+		ROUTES.FINANCEIRO_NOTAS,
+	]
+		.map((path) => group.items.find((item) => item.path === path))
+		.filter(Boolean);
+	const configItem = group.items.find(
+		(item) => item.path === ROUTES.FINANCEIRO_CONFIGURACOES,
+	);
 	const orcamentoActive = orcamentoItems.some((item) =>
 		isMenuPathActive(pathname, item),
 	);
@@ -1367,143 +1425,127 @@ function FinanceiroGroupItems({
 	const tarifasReportsActive =
 		Boolean(tarifasReportItem && isMenuPathActive(pathname, tarifasReportItem)) ||
 		tarifasReportItems.some((item) => isMenuPathActive(pathname, item));
-	const reportsOpen = Boolean(clickedGroups.financeiro_reports);
-	const tarifasReportsOpen = Boolean(clickedGroups.financeiro_reports_tarifas);
+	const reportsOpen =
+		Boolean(clickedGroups.financeiro_reports) || reportsActive;
+	const tarifasReportsOpen =
+		Boolean(clickedGroups.financeiro_reports_tarifas) || tarifasReportsActive;
+	const orcamentoOpen =
+		Boolean(clickedGroups.financeiro_orcamento) || orcamentoActive;
 
 	return (
 		<>
-			{directItems.map((item) => {
-				const ChildIcon = item.icon;
-				return (
-					<NavLink
-						key={item.path}
-						to={item.path}
-						onClick={onNavigate}
-						className={submenuClass}
-					>
-						<ChildIcon size={15} className="shrink-0" />
-						<span className="truncate">
-							{displayLabel(item.label, item.path)}
-						</span>
-					</NavLink>
-				);
-			})}
-			<div>
-				<button
-					type="button"
-					onClick={() =>
-						setClickedGroups((current) => ({
-							...current,
-							financeiro_reports: !current.financeiro_reports,
-						}))
-					}
-					className={nestedButtonClass(reportsActive, reportsOpen)}
-					aria-expanded={reportsOpen}
-					title="Reports"
-				>
-					<BarChart3 size={15} className="shrink-0" />
-					<span className="min-w-0 flex-1 truncate text-left">Reports</span>
-					<ChevronDown
-						size={14}
-						className={`shrink-0 transition-transform ${reportsOpen ? "rotate-180" : ""}`}
-					/>
-				</button>
-				{reportsOpen ? (
-					<div className={submenuWrapClass}>
-						{directReportItems.map((item) => {
-							const ChildIcon = item.icon;
-							return (
-								<NavLink
-									key={item.path}
-									to={item.path}
-									onClick={onNavigate}
-									className={submenuClass}
-								>
-									<ChildIcon size={15} className="shrink-0" />
-									<span className="truncate">
-										{displayLabel(
-											String(item.label || "").replace(/^Reports\s*-\s*/i, ""),
-											item.path,
-										)}
-									</span>
-								</NavLink>
-							);
-						})}
-						{tarifasReportItem ? (
-							<>
-								<button
-									type="button"
-									onClick={() =>
-										setClickedGroups((current) => ({
-											...current,
-											financeiro_reports_tarifas:
-												!current.financeiro_reports_tarifas,
-										}))
-									}
-									className={nestedButtonClass(
-										tarifasReportsActive,
-										tarifasReportsOpen,
-									)}
-									aria-expanded={tarifasReportsOpen}
-									title="Tarifas"
-								>
-									<BarChart3 size={15} className="shrink-0" />
-									<span className="min-w-0 flex-1 truncate text-left">
-										Tarifas
-									</span>
-									<ChevronDown
-										size={14}
-										className={`shrink-0 transition-transform ${tarifasReportsOpen ? "rotate-180" : ""}`}
-									/>
-								</button>
-								{tarifasReportsOpen ? (
-									<div className={submenuWrapClass}>
-										{[tarifasReportItem, ...tarifasReportItems].map((item) => {
-											const ChildIcon = item.icon;
-											return (
-												<NavLink
-													key={item.path}
-													to={item.path}
-													onClick={onNavigate}
-													className={submenuClass}
-												>
-													<ChildIcon size={15} className="shrink-0" />
-													<span className="truncate">
-														{item.path === ROUTES.FINANCEIRO_REPORTS_TARIFAS
-															? "Visão Geral"
-															: displayLabel(
-																	String(item.label || "").replace(
-																		/^Reports\s*-\s*Tarifas\s*-\s*/i,
-																		"",
-																	),
-																	item.path,
-																)}
-													</span>
-												</NavLink>
-											);
-										})}
-									</div>
+			{dashboardItem ? renderFinanceLink(dashboardItem, "Visão Geral") : null}
+			{operationItems.length ? renderSectionTitle("Operação") : null}
+			{operationItems.map((item) =>
+				renderFinanceLink(
+					item,
+					item.path === ROUTES.FINANCEIRO_NOTAS ? "Notas Fiscais" : item.label,
+				),
+			)}
+			{reportsItems.length ? (
+				<>
+					{renderSectionTitle("Análises")}
+					<div>
+						<button
+							type="button"
+							onClick={() =>
+								setClickedGroups((current) => ({
+									...current,
+									financeiro_reports: !current.financeiro_reports,
+								}))
+							}
+							className={nestedButtonClass(reportsActive, reportsOpen)}
+							aria-expanded={reportsOpen}
+							aria-controls="financeiro-reports-submenu"
+							title="Reports"
+						>
+							<BarChart3 size={15} className="shrink-0" />
+							<span className={financeLinkLabelClass}>Reports</span>
+							<ChevronDown
+								size={14}
+								className={`shrink-0 transition-transform ${reportsOpen ? "rotate-180" : ""}`}
+							/>
+						</button>
+						{reportsOpen ? (
+							<div id="financeiro-reports-submenu" className={submenuWrapClass}>
+								{directReportItems.map((item) =>
+									renderFinanceLink(
+										item,
+										String(item.label || "").replace(/^Reports\s*-\s*/i, ""),
+										2,
+									),
+								)}
+								{tarifasReportItem ? (
+									<>
+										<button
+											type="button"
+											onClick={() =>
+												setClickedGroups((current) => ({
+													...current,
+													financeiro_reports_tarifas:
+														!current.financeiro_reports_tarifas,
+												}))
+											}
+											className={nestedButtonClass(
+												tarifasReportsActive,
+												tarifasReportsOpen,
+											)}
+											aria-expanded={tarifasReportsOpen}
+											aria-controls="financeiro-tarifas-submenu"
+											title="Tarifas"
+										>
+											<BarChart3 size={15} className="shrink-0" />
+											<span className={financeLinkLabelClass}>Tarifas</span>
+											<ChevronDown
+												size={14}
+												className={`shrink-0 transition-transform ${tarifasReportsOpen ? "rotate-180" : ""}`}
+											/>
+										</button>
+										{tarifasReportsOpen ? (
+											<div
+												id="financeiro-tarifas-submenu"
+												className={submenuWrapClass}
+											>
+												{[tarifasReportItem, ...tarifasReportItems].map(
+													(item) =>
+														renderFinanceLink(
+															item,
+															getTarifasReportLabel(item),
+															3,
+														),
+												)}
+											</div>
+										) : null}
+									</>
 								) : null}
-							</>
+							</div>
 						) : null}
 					</div>
-				) : null}
-			</div>
+				</>
+			) : null}
+			{orcamentoItems.length ? renderSectionTitle("Planejamento") : null}
 			<AdminNestedSection
-				title="Gestão Orçamento"
+				title="Gestão Orçamentária"
 				icon={Target}
 				items={orcamentoItems}
-				open={Boolean(clickedGroups.financeiro_orcamento)}
+				open={orcamentoOpen}
 				active={orcamentoActive}
 				toggleKey="financeiro_orcamento"
-				labelFormatter={stripFinanceiroOrcamentoLabel}
+				labelFormatter={getFinanceiroOrcamentoLabel}
 				setClickedGroups={setClickedGroups}
 				nestedButtonClass={nestedButtonClass}
 				submenuClass={submenuClass}
 				submenuWrapClass={submenuWrapClass}
 				onNavigate={onNavigate}
 				displayLabel={displayLabel}
+				labelClass={financeLinkLabelClass}
 			/>
+			{configItem ? (
+				<>
+					{renderSectionTitle("Sistema")}
+					{renderFinanceLink(configItem, "Configurações Gerais")}
+				</>
+			) : null}
 		</>
 	);
 }
@@ -1633,34 +1675,34 @@ function getGroupButtonClass({ active, open, isModernLayout }) {
 
 function getSubmenuWrapClass(isModernLayout) {
 	return isModernLayout
-		? "ml-4 mt-1 space-y-1 border-l border-white/10 pl-3"
-		: "ml-4 mt-1 space-y-1 border-l border-gray-100 pl-3";
+		? "ml-3 mt-1 space-y-1 border-l border-white/10 pl-3 transition-all duration-200"
+		: "ml-3 mt-1 space-y-1 border-l border-gray-100 pl-3 transition-all duration-200";
 }
 
 function getSubmenuClass({ isActive, isModernLayout }) {
 	if (!isModernLayout) {
-		return `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+		return `relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
 			isActive
-				? "bg-blue-50 text-blue-700"
+				? "bg-blue-50 text-blue-700 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r-full before:bg-blue-600"
 				: "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
 		}`;
 	}
-	return `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+	return `relative flex min-h-9 min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
 		isActive
-			? "bg-white/12 text-white"
+			? "bg-white/12 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r-full before:bg-orange-400"
 			: "text-slate-300 hover:bg-white/10 hover:text-white"
 	}`;
 }
 
 function getNestedButtonClass({ active, open, isModernLayout }) {
 	if (!isModernLayout) {
-		return `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+		return `flex min-h-9 w-full min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
 			active || open
 				? "bg-blue-50 text-blue-700"
 				: "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
 		}`;
 	}
-	return `flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+	return `flex min-h-9 w-full min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${
 		active || open
 			? "bg-white/12 text-white"
 			: "text-slate-300 hover:bg-white/10 hover:text-white"
@@ -1982,7 +2024,7 @@ const Sidebar = ({
 						group={group}
 						collapsed={collapsed}
 						active={isGroupActive(group)}
-						open={Boolean(clickedGroups[group.id])}
+						open={Boolean(clickedGroups[group.id]) || isGroupActive(group)}
 						clickedGroups={clickedGroups}
 						setClickedGroups={setClickedGroups}
 						isModernLayout={isModernLayout}

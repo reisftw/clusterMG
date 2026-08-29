@@ -104,6 +104,8 @@ with permissions(id, section_id, section_label, feature_id, feature_label, actio
     ('configuracao.banco_dados.manage', 'configuracao', 'Configuração', 'banco_dados', 'Banco de Dados', 'manage', 1101, 'manage_database_backups', 'Gerenciar banco de dados.'),
     ('configuracao.email.view', 'configuracao', 'Configuração', 'email', 'E-mail', 'view', 1110, 'manage_email', 'Visualizar e-mail.'),
     ('configuracao.email.manage', 'configuracao', 'Configuração', 'email', 'E-mail', 'manage', 1111, 'manage_email', 'Gerenciar e-mail.'),
+    ('configuracao.vpn.view', 'configuracao', 'Configuração', 'vpn', 'VPN', 'view', 1120, null, 'Visualizar configurações e logs de VPN.'),
+    ('configuracao.vpn.manage', 'configuracao', 'Configuração', 'vpn', 'VPN', 'manage', 1121, null, 'Gerenciar rotas protegidas, faixas de IP e ativação da VPN.'),
 
     ('publico.painel_publico.view', 'publico', 'Público', 'painel_publico', 'Painel Público', 'view', 1200, null, 'Painéis públicos continuam sem exigir cargo, mas ficam catalogados para auditoria.')
 )
