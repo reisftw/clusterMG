@@ -68,7 +68,7 @@ import {
 	sincronizarPlanilhasFinanceiro,
 	testarPlanilhaFinanceiro,
 } from "../services/financeiroService";
-import { normalizeBudgetImportDate } from "../utils/budgetImportDate";
+import { normalizeBudgetImportRows } from "../utils/budgetImportRows";
 
 const FINANCE_FONT_STACK =
 	"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -246,52 +246,6 @@ const BUDGET_IMPORT_FIELDS = [
 	{ key: "grupo", label: "Grupo" },
 ];
 
-const BUDGET_IMPORT_HEADER_MAP = {
-	area: "quebra",
-	quebra: "quebra",
-	data: "data",
-	datapagamento: "data",
-	data_pagamento: "data",
-	fornecedor: "fornecedor",
-	cf: "cf",
-	codconta: "codConta",
-	cod_conta: "codConta",
-	nomeconta: "nomeConta",
-	nome_conta: "nomeConta",
-	cc: "cc",
-	codcc: "codCc",
-	cod_cc: "codCc",
-	nomecc: "nomeCc",
-	nome_cc: "nomeCc",
-	orcado: "orcado",
-	realizado: "realizado",
-	valor: "realizado",
-	empresa: "empresa",
-	filial: "filial",
-	banco: "conta",
-	conta: "conta",
-	seq: "seqMov",
-	seqmov: "seqMov",
-	titulo: "titulo",
-	tipo: "tipo",
-	observacoes: "observacoes",
-	historico: "observacoes",
-	__empty_8: "observacoes",
-	ano: "ano",
-	nummes: "numMes",
-	num_mes: "numMes",
-	mes: "mes",
-	categoria: "categoria",
-	gestor: "gestor",
-	quebra2: "quebra2",
-	entidade: "entidade",
-	diretoria: "diretoria",
-	diretor: "diretor",
-	statusprojetos: "statusProjetos",
-	status_projetos: "statusProjetos",
-	grupo: "grupo",
-};
-
 function normalizeImportHeader(value) {
 	return String(value || "")
 		.trim()
@@ -324,17 +278,6 @@ function formatBudgetCurrency(value) {
 	return brl.format(parseBudgetCurrency(value));
 }
 
-function splitBudgetCodeName(value) {
-	const text = String(value || "").trim();
-	if (!text) return { code: "", name: "" };
-	const match = text.match(/^\s*([^-–—]+?)\s*[-–—]\s*(.+)\s*$/);
-	if (!match) return { code: "", name: text };
-	return {
-		code: String(match[1] || "").trim(),
-		name: String(match[2] || "").trim(),
-	};
-}
-
 function budgetMonthName(month) {
 	return (
 		[
@@ -353,86 +296,6 @@ function budgetMonthName(month) {
 			"Dezembro",
 		][Number(month) || 0] || ""
 	);
-}
-
-function normalizeBudgetImportRows(rows = []) {
-	const detectedFields = new Set();
-	const normalizedRows = rows
-		.map((row) => {
-			const normalized = {};
-			Object.entries(row || {}).forEach(([header, value]) => {
-				const mappedKey =
-					BUDGET_IMPORT_HEADER_MAP[normalizeImportHeader(header)];
-				if (mappedKey) {
-					const formattedValue = formatSpreadsheetValue(value);
-					if (mappedKey === "cf") {
-						const account = splitBudgetCodeName(formattedValue);
-						if (account.code) {
-							detectedFields.add("codConta");
-							normalized.codConta = account.code;
-						}
-						if (account.name) {
-							detectedFields.add("nomeConta");
-							normalized.nomeConta = account.name;
-						}
-						normalized.cf = formattedValue;
-						return;
-					}
-					if (mappedKey === "cc") {
-						const costCenter = splitBudgetCodeName(formattedValue);
-						if (costCenter.code) {
-							detectedFields.add("codCc");
-							normalized.codCc = costCenter.code;
-						}
-						if (costCenter.name) {
-							detectedFields.add("nomeCc");
-							normalized.nomeCc = costCenter.name;
-						}
-						normalized.cc = formattedValue;
-						return;
-					}
-					if (mappedKey === "data") {
-						const dateInfo = normalizeBudgetImportDate(value) || {};
-						detectedFields.add("data");
-						normalized.data = dateInfo.data || formattedValue;
-						if (dateInfo.ano) {
-							detectedFields.add("ano");
-							normalized.ano = dateInfo.ano;
-						}
-						if (dateInfo.numMes) {
-							detectedFields.add("numMes");
-							normalized.numMes = dateInfo.numMes;
-						}
-						if (dateInfo.mes) {
-							detectedFields.add("mes");
-							normalized.mes = dateInfo.mes;
-						}
-						return;
-					}
-					if (mappedKey === "orcado" || mappedKey === "realizado") {
-						detectedFields.add(mappedKey);
-						normalized[mappedKey] = parseBudgetCurrency(formattedValue);
-						return;
-					}
-					if (mappedKey === "numMes") {
-						const month = Number(formattedValue || 0) || 0;
-						if (month >= 1 && month <= 12 && !normalized.numMes) {
-							detectedFields.add(mappedKey);
-							normalized[mappedKey] = month;
-						}
-						return;
-					}
-					detectedFields.add(mappedKey);
-					normalized[mappedKey] = formattedValue;
-				}
-			});
-			return normalized;
-		})
-		.filter((row) =>
-			Object.values(row).some((value) => String(value ?? "").trim()),
-		);
-
-	return { rows: normalizedRows, detectedFields: Array.from(detectedFields) };
 }
 
 const DEFAULT_SHEETS_CONFIG = {
