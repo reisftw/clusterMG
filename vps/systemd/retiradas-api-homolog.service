@@ -1,0 +1,19 @@
+[Unit]
+Description=Retiradas VPS API - Homologacao
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/retiradas/vps
+EnvironmentFile=/etc/retiradas/api-homolog.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run api:start
+Restart=always
+RestartSec=5
+User=www-data
+Group=www-data
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

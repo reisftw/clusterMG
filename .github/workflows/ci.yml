@@ -93,14 +93,16 @@ jobs:
         run: |
           if [ "${GITHUB_REF_NAME}" = "homolog-dev" ]; then
             export VITE_APP_ENV_LABEL="Homologação"
+            export VITE_API_BASE_URL="${{ secrets.HOMOLOG_PUBLIC_API_URL || 'https://homolog.retiradas.tech/api' }}"
           else
             export VITE_APP_ENV_LABEL="Produção"
+            export VITE_API_BASE_URL="${{ secrets.PROD_PUBLIC_API_URL || 'https://retiradas.tech/api' }}"
           fi
           export VITE_APP_VERSION="${GITHUB_SHA::7}"
           npm run build
 
       - name: Upload frontend build artifact
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/homolog-dev')
         uses: actions/upload-artifact@v4
         with:
           name: retiradas-dist
@@ -153,6 +155,66 @@ jobs:
         run: |
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             retiradas-dist.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_PACKAGE"
+
+      - name: Publish package on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             deploy_path='$VPS_DEPLOY_PATH'
+             package='$REMOTE_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$deploy_path\"
+             \$SUDO tar -xzf \"\$package\" -C \"\$deploy_path\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             rm -f \"\$package\" || \$SUDO rm -f \"\$package\""
+
+  deploy-homolog-vps:
+    name: Deploy homolog frontend to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/homolog-dev'
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST }}
+      VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || 'root' }}
+      VPS_DEPLOY_PATH: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH || '/var/www/retiradas-homolog/dist' }}
+      REMOTE_PACKAGE: /tmp/retiradas-homolog-dist-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: retiradas-dist
+          path: dist
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOMOLOG_VPS_SSH_KEY || secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret HOMOLOG_VPS_HOST or VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret HOMOLOG_VPS_SSH_KEY or VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package homolog frontend build
+        run: tar -czf retiradas-homolog-dist.tar.gz -C dist .
+
+      - name: Upload package to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-homolog-dist.tar.gz \
             "$VPS_USER@$VPS_HOST:$REMOTE_PACKAGE"
 
       - name: Publish package on VPS
