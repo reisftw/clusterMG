@@ -50,6 +50,7 @@ import BudgetDreView from "./budget/BudgetDreView";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
+import { useCostCenterForm } from "../hooks/useCostCenterForm";
 import {
 	atualizarAprovacaoOrcamentoFinanceiro,
 	buscarCentrosCustoOrcamentoFinanceiro,
@@ -6512,43 +6513,52 @@ function CostCenterModal({
 	canManage,
 	readOnly = false,
 }) {
-	const initialMonthlyBudget =
-		center?.valorMensal ??
-		center?.orcamentoMensal ??
-		(center?.valorAnual || center?.orcamentoAnual
-			? Number(center?.valorAnual || center?.orcamentoAnual || 0) / 12
-			: "");
 	const [activeTab, setActiveTab] = useState("cadastro");
-	const [form, setForm] = useState({
-		...EMPTY_COST_CENTER,
-		...center,
-		valorMensal: initialMonthlyBudget,
-		valorAnual: initialMonthlyBudget
-			? parseMoneyInput(initialMonthlyBudget) * 12
-			: "",
-		realizadoMes: center?.realizadoMes || "",
-		companies: Array.isArray(center?.companies || center?.empresas)
-			? center.companies || center.empresas
-			: [],
-		branches: Array.isArray(center?.branches || center?.filiais)
-			? center.branches || center.filiais
-			: [],
-		contasFinanceiras: Array.isArray(center?.contasFinanceiras)
-			? center.contasFinanceiras
-			: [],
-	});
-	const [validationMessage, setValidationMessage] = useState("");
-	const [accountSearchInCenter, setAccountSearchInCenter] = useState("");
-	const [branchSearchInCenter, setBranchSearchInCenter] = useState("");
-	const [companySearchInCenter, setCompanySearchInCenter] = useState("");
 	const isEditing = Boolean(center?.id);
 	const budgetSettings = getBudgetSettings(settings);
-	const directorateOptions = budgetSettings.directorates || [];
-	const accountById = new Map(accounts.map((account) => [account.id, account]));
-	const companyById = new Map(
-		companies.map((company) => [company.id, company]),
-	);
-	const branchById = new Map(branches.map((branch) => [branch.id, branch]));
+	const {
+		accountById,
+		accountSearchInCenter,
+		activeMovementMonth,
+		addCenterAccount,
+		addCenterBranch,
+		addCenterCompany,
+		annualBudgetPreview,
+		branchById,
+		branchSearchInCenter,
+		centerAccountResults,
+		centerBranchResults,
+		centerCompanyResults,
+		companyById,
+		companySearchInCenter,
+		directorateOptions,
+		form,
+		removeCenterAccount,
+		removeCenterBranch,
+		removeCenterCompany,
+		saldoMes,
+		save,
+		selectedCenterAccounts,
+		selectedCenterBranches,
+		selectedCenterCompanies,
+		setAccountSearchInCenter,
+		setActiveMovementMonth,
+		setBranchSearchInCenter,
+		setCompanySearchInCenter,
+		update,
+		updateDirectorate,
+		usoPercentual,
+		validationMessage,
+	} = useCostCenterForm({
+		center,
+		accounts,
+		companies,
+		branches,
+		budgetSettings,
+		emptyCostCenter: EMPTY_COST_CENTER,
+		findDirectorateByName,
+		onSave,
+	});
 	const movementsByMonth = useMemo(() => {
 		const groups = new Map();
 		const breakdowns =
@@ -6610,180 +6620,9 @@ function CostCenterModal({
 			String(right.key).localeCompare(String(left.key)),
 		);
 	}, [form.realizedByCompanyBranch, form.realizadoPorEmpresaFilial]);
-	const [activeMovementMonth, setActiveMovementMonth] = useState("");
 	const selectedMovementMonth =
 		movementsByMonth.find((group) => group.key === activeMovementMonth) ||
 		movementsByMonth[0];
-
-	const update = (field, value) =>
-		setForm((current) => ({ ...current, [field]: value }));
-	const selectedCenterAccounts = (form.contasFinanceiras || [])
-		.map((accountId) => accountById.get(accountId))
-		.filter(Boolean);
-	const normalizedCenterAccountSearch = normalizeImportHeader(
-		accountSearchInCenter,
-	);
-	const centerAccountResults = normalizedCenterAccountSearch
-		? accounts
-				.filter(
-					(account) => !(form.contasFinanceiras || []).includes(account.id),
-				)
-				.filter((account) =>
-					normalizeImportHeader(
-						[
-							account.codigo,
-							account.reduzida,
-							account.classificacao,
-							account.nome,
-							account.id,
-						]
-							.filter(Boolean)
-							.join(" "),
-					).includes(normalizedCenterAccountSearch),
-				)
-				.slice(0, 8)
-		: [];
-	const addCenterAccount = (accountId) => {
-		const nextAccounts = [
-			...new Set([...(form.contasFinanceiras || []), accountId]),
-		];
-		update("contasFinanceiras", nextAccounts);
-		setAccountSearchInCenter("");
-	};
-	const removeCenterAccount = (accountId) => {
-		const nextAccounts = (form.contasFinanceiras || []).filter(
-			(item) => item !== accountId,
-		);
-		update("contasFinanceiras", nextAccounts);
-		if (!nextAccounts.includes(form.contaFinanceiraPadrao))
-			update("contaFinanceiraPadrao", "");
-	};
-	const selectedCenterBranches = (form.branches || [])
-		.map((branchId) => branchById.get(branchId))
-		.filter(Boolean);
-	const selectedCenterCompanies = (form.companies || [])
-		.map((companyId) => companyById.get(companyId))
-		.filter(Boolean);
-	const normalizedCenterBranchSearch =
-		normalizeImportHeader(branchSearchInCenter);
-	const normalizedCenterCompanySearch = normalizeImportHeader(
-		companySearchInCenter,
-	);
-	const centerBranchResults = normalizedCenterBranchSearch
-		? branches
-				.filter((branch) => !(form.branches || []).includes(branch.id))
-				.filter((branch) =>
-					normalizeImportHeader(
-						[branch.codigo, branch.id, branch.nome, branch.cidade, branch.uf]
-							.filter(Boolean)
-							.join(" "),
-					).includes(normalizedCenterBranchSearch),
-				)
-				.slice(0, 8)
-		: [];
-	const centerCompanyResults = normalizedCenterCompanySearch
-		? companies
-				.filter((company) => !(form.companies || []).includes(company.id))
-				.filter((company) => {
-					const branch = branchById.get(
-						company.filialId || company.branchId || company.filiais?.[0],
-					);
-					return normalizeImportHeader(
-						[
-							company.codigo,
-							company.id,
-							company.nome,
-							company.razaoSocial,
-							company.cnpj,
-							branch?.codigo,
-							branch?.nome,
-						]
-							.filter(Boolean)
-							.join(" "),
-					).includes(normalizedCenterCompanySearch);
-				})
-				.slice(0, 8)
-		: [];
-	const addCenterBranch = (branchId) => {
-		update("branches", [...new Set([...(form.branches || []), branchId])]);
-		setBranchSearchInCenter("");
-	};
-	const removeCenterBranch = (branchId) => {
-		update(
-			"branches",
-			(form.branches || []).filter((item) => item !== branchId),
-		);
-	};
-	const addCenterCompany = (company) => {
-		const branchId =
-			company.filialId || company.branchId || company.filiais?.[0] || "";
-		update("companies", [...new Set([...(form.companies || []), company.id])]);
-		if (branchId)
-			update("branches", [...new Set([...(form.branches || []), branchId])]);
-		setCompanySearchInCenter("");
-	};
-	const removeCenterCompany = (companyId) => {
-		update(
-			"companies",
-			(form.companies || []).filter((item) => item !== companyId),
-		);
-	};
-	const updateDirectorate = (value) => {
-		const selected = findDirectorateByName(directorateOptions, value);
-		setForm((current) => ({
-			...current,
-			diretoria: value,
-			responsavel: selected?.diretor || current.responsavel || "",
-			emailResponsavel:
-				selected?.emailDiretor || current.emailResponsavel || "",
-			telefoneResponsavel:
-				selected?.numeroDiretor || current.telefoneResponsavel || "",
-		}));
-	};
-	const save = () => {
-		const isSyntheticCenter = form.tipoPlano === "S";
-		const monthlyBudget = isSyntheticCenter
-			? 0
-			: parseMoneyInput(form.valorMensal);
-		const next = {
-			...form,
-			companies: Array.isArray(form.companies) ? form.companies : [],
-			branches: Array.isArray(form.branches) ? form.branches : [],
-			contasFinanceiras: Array.isArray(form.contasFinanceiras)
-				? form.contasFinanceiras
-				: [],
-			contaFinanceiraPadrao: form.contaFinanceiraPadrao || "",
-			valorMensal: monthlyBudget,
-			valorAnual: monthlyBudget * 12,
-			orcamentoMensal: monthlyBudget,
-			orcamentoAnual: monthlyBudget * 12,
-			comprometidoMes: isSyntheticCenter
-				? 0
-				: parseMoneyInput(form.comprometidoMes),
-			realizadoImportado: isSyntheticCenter ? 0 : form.realizadoImportado,
-			orcadoImportado: isSyntheticCenter ? 0 : form.orcadoImportado,
-			saldoImportado: isSyntheticCenter ? 0 : form.saldoImportado,
-			realizedByCompanyBranch: isSyntheticCenter
-				? []
-				: form.realizedByCompanyBranch,
-			realizadoPorEmpresaFilial: isSyntheticCenter
-				? []
-				: form.realizadoPorEmpresaFilial,
-			linhasImportadas: isSyntheticCenter ? 0 : form.linhasImportadas,
-			alertaPercentual: Number(form.alertaPercentual || 85),
-		};
-		delete next.realizadoMes;
-		setValidationMessage("");
-		onSave(next);
-	};
-
-	const monthlyBudgetPreview = parseMoneyInput(form.valorMensal);
-	const annualBudgetPreview = monthlyBudgetPreview * 12;
-	const saldoMes = monthlyBudgetPreview - parseMoneyInput(form.comprometidoMes);
-	const usoPercentual = monthlyBudgetPreview
-		? (parseMoneyInput(form.comprometidoMes) / monthlyBudgetPreview) * 100
-		: 0;
-
 	return (
 		<ModalShell
 			title={
