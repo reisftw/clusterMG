@@ -51,6 +51,7 @@ import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
+import { useBudgetConfig } from "../hooks/useBudgetConfig";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
 import {
@@ -66,7 +67,6 @@ import {
 	limparDadosOrcamentoFinanceiro,
 	limparSerasaReportFinanceiro,
 	limparTarifasReportFinanceiro,
-	salvarCentrosCustoOrcamentoFinanceiro,
 	salvarConfigPlanilhasFinanceiro,
 	salvarSerasaReportFinanceiro,
 	salvarTarifasReportFinanceiro,
@@ -8305,126 +8305,58 @@ function BudgetPartnerViewModal({
 }
 
 function CostCentersConfigSection({ canManage }) {
-	const [config, setConfig] = useState({
-		clusters: [],
-		accounts: [],
-		centers: [],
-		partners: [],
-		companies: [],
-		branches: [],
-		matrix: [],
-		versions: [],
-		allocationRules: [],
-		settings: DEFAULT_BUDGET_SETTINGS,
+	const {
+		config,
+		configRef,
+		loading,
+		saving,
+		message,
+		feedback,
+		accountModal,
+		accountViewModal,
+		accountChildrenModal,
+		accountSearch,
+		accountStatusFilter,
+		accountPage,
+		companyBranchModal,
+		partnerModal,
+		partnerViewModal,
+		modalState,
+		analyticChildrenModal,
+		matrixCenterFilter,
+		partnerSearch,
+		centerSearch,
+		centerStatusFilter,
+		centerPage,
+		parametersOpen,
+		loadCostCenters,
+		saveConfig,
+		updateSettings,
+		setFeedback,
+		setAccountModal,
+		setAccountViewModal,
+		setAccountChildrenModal,
+		setAccountSearch,
+		setAccountStatusFilter,
+		setAccountPage,
+		setCompanyBranchModal,
+		setPartnerModal,
+		setPartnerViewModal,
+		setModalState,
+		setAnalyticChildrenModal,
+		setMatrixCenterFilter,
+		setPartnerSearch,
+		setCenterSearch,
+		setCenterStatusFilter,
+		setCenterPage,
+		setParametersOpen,
+	} = useBudgetConfig({
+		defaultSettings: DEFAULT_BUDGET_SETTINGS,
+		getBudgetSettings,
+		getVisibleError,
+		normalizeDirectorates,
+		normalizeList,
 	});
-	const configRef = useRef(config);
-	const [loading, setLoading] = useState(true);
-	const [saving, setSaving] = useState(false);
-	const [message, setMessage] = useState("");
-	const [feedback, setFeedback] = useState(null);
-	const [accountModal, setAccountModal] = useState(null);
-	const [accountViewModal, setAccountViewModal] = useState(null);
-	const [accountChildrenModal, setAccountChildrenModal] = useState(null);
-	const [accountSearch, setAccountSearch] = useState("");
-	const [accountStatusFilter, setAccountStatusFilter] = useState("ativos");
-	const [accountPage, setAccountPage] = useState(1);
-	const [companyBranchModal, setCompanyBranchModal] = useState(null);
-	const [partnerModal, setPartnerModal] = useState(null);
-	const [partnerViewModal, setPartnerViewModal] = useState(null);
-	const [modalState, setModalState] = useState(null);
-	const [analyticChildrenModal, setAnalyticChildrenModal] = useState(null);
-	const [matrixCenterFilter, setMatrixCenterFilter] = useState("");
-	const [partnerSearch, setPartnerSearch] = useState("");
-	const [centerSearch, setCenterSearch] = useState("");
-	const [centerStatusFilter, setCenterStatusFilter] = useState("ativos");
-	const [centerPage, setCenterPage] = useState(1);
-	const [parametersOpen, setParametersOpen] = useState(false);
-
-	const applyConfigState = useCallback((nextConfig) => {
-		const sanitized = {
-			clusters: [],
-			accounts: [],
-			centers: [],
-			partners: [],
-			companies: [],
-			branches: [],
-			matrix: [],
-			versions: [],
-			allocationRules: [],
-			...(nextConfig || {}),
-			settings: getBudgetSettings(nextConfig?.settings),
-		};
-		configRef.current = sanitized;
-		setConfig(sanitized);
-		return sanitized;
-	}, []);
-
-	const loadCostCenters = useCallback(async () => {
-		setLoading(true);
-		setMessage("");
-		try {
-			const response = await buscarCentrosCustoOrcamentoFinanceiro();
-			const nextConfig = response.config || {};
-			applyConfigState(nextConfig);
-		} catch (error) {
-			const visibleError = getVisibleError(
-				error,
-				"Não foi possível carregar os centros de custo.",
-			);
-			setMessage(visibleError.message);
-			setFeedback({
-				type: "error",
-				title: "Erro ao carregar configurações",
-				...visibleError,
-			});
-		} finally {
-			setLoading(false);
-		}
-	}, [applyConfigState]);
-
-	useEffect(() => {
-		loadCostCenters();
-	}, [loadCostCenters]);
-
-	const saveConfig = async (
-		nextConfig,
-		successMessage = "Centros de custo salvos.",
-	) => {
-		setSaving(true);
-		setMessage("");
-		try {
-			const sanitizedConfig = {
-				...(nextConfig || {}),
-				settings: getBudgetSettings(nextConfig?.settings),
-			};
-			const response =
-				await salvarCentrosCustoOrcamentoFinanceiro(sanitizedConfig);
-			const savedConfig = response.config || sanitizedConfig;
-			const isSettingsSave =
-				successMessage === "Parâmetros configuráveis salvos.";
-			applyConfigState({
-				...savedConfig,
-				settings: isSettingsSave
-					? sanitizedConfig.settings
-					: savedConfig.settings,
-			});
-			setMessage(successMessage);
-			setModalState(null);
-		} catch (error) {
-			const visibleError = getVisibleError(
-				error,
-				"Falha ao salvar centros de custo.",
-			);
-			setMessage(visibleError.message);
-			setFeedback({
-				type: "error",
-				title: "Erro ao salvar configuração",
-				...visibleError,
-			});
-		} finally {
-			setSaving(false);
-		}
-	};
 
 	const upsertAccount = (account) => {
 		setAccountModal(null);
@@ -8466,51 +8398,6 @@ function CostCentersConfigSection({ canManage }) {
 	};
 
 	const budgetSettings = getBudgetSettings(config.settings);
-	const updateSettings = async (field, value) => {
-		const normalizedValue =
-			field === "directorates"
-				? normalizeDirectorates(value, [])
-				: normalizeList(value, []);
-		const nextConfig = {
-			...configRef.current,
-			settings: {
-				...getBudgetSettings(configRef.current?.settings),
-				[field]: normalizedValue,
-			},
-		};
-		applyConfigState(nextConfig);
-		setSaving(true);
-		setMessage("");
-		try {
-			const response = await salvarCentrosCustoOrcamentoFinanceiro(nextConfig);
-			const savedConfig = response.config || {
-				...configRef.current,
-				settings: response.settings || nextConfig.settings,
-			};
-			applyConfigState({
-				...savedConfig,
-				settings: {
-					...getBudgetSettings(savedConfig.settings),
-					[field]: normalizedValue,
-				},
-			});
-			setMessage("Parâmetros configuráveis salvos.");
-		} catch (error) {
-			const visibleError = getVisibleError(
-				error,
-				"Falha ao salvar parâmetros configuráveis.",
-			);
-			setMessage(visibleError.message);
-			setFeedback({
-				type: "error",
-				title: "Erro ao salvar parâmetros",
-				...visibleError,
-			});
-		} finally {
-			setSaving(false);
-		}
-	};
-
 	const budgetableCenters = (config.centers || []).filter(
 		(center) => center.tipoPlano !== "S",
 	);
