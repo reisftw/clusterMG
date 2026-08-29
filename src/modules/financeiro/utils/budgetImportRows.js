@@ -1,4 +1,5 @@
 import { normalizeBudgetImportDate } from "./budgetImportDate";
+import { parseBudgetCurrency } from "./financeiroFormatters";
 
 export const BUDGET_IMPORT_HEADER_MAP = {
 	area: "quebra",
@@ -60,18 +61,6 @@ export function formatSpreadsheetValue(value) {
 		return value.toLocaleDateString("pt-BR");
 	}
 	return value ?? "";
-}
-
-export function parseBudgetCurrency(value) {
-	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-	const text = String(value || "").trim();
-	if (!text) return 0;
-	const withoutCurrency = text.replace(/[R$\s]/g, "");
-	const normalized = withoutCurrency.includes(",")
-		? withoutCurrency.replace(/\./g, "").replace(",", ".")
-		: withoutCurrency;
-	const number = Number(normalized || 0);
-	return Number.isFinite(number) ? number : 0;
 }
 
 export function splitBudgetCodeName(value) {

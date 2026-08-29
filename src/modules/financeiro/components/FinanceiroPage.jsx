@@ -69,6 +69,15 @@ import {
 	testarPlanilhaFinanceiro,
 } from "../services/financeiroService";
 import { normalizeBudgetImportRows } from "../utils/budgetImportRows";
+import {
+	brl,
+	decimal,
+	formatBudgetCurrency,
+	formatValue,
+	integer,
+	parseBudgetCurrency,
+	parseMoneyInput,
+} from "../utils/financeiroFormatters";
 
 const FINANCE_FONT_STACK =
 	"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -121,12 +130,6 @@ ChartJS.defaults.font.family = FINANCE_FONT_STACK;
 ChartJS.defaults.font.weight = "600";
 ChartJS.defaults.color = "#334155";
 
-const brl = new Intl.NumberFormat("pt-BR", {
-	style: "currency",
-	currency: "BRL",
-});
-const integer = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-const decimal = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 const EMPTY_SERASA_LIST = [];
 
 const ICONS = {
@@ -260,22 +263,6 @@ function formatSpreadsheetValue(value) {
 		return value.toLocaleDateString("pt-BR");
 	}
 	return value ?? "";
-}
-
-function parseBudgetCurrency(value) {
-	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-	const text = String(value || "").trim();
-	if (!text) return 0;
-	const withoutCurrency = text.replace(/[R$\s]/g, "");
-	const normalized = withoutCurrency.includes(",")
-		? withoutCurrency.replace(/\./g, "").replace(",", ".")
-		: withoutCurrency;
-	const number = Number(normalized || 0);
-	return Number.isFinite(number) ? number : 0;
-}
-
-function formatBudgetCurrency(value) {
-	return brl.format(parseBudgetCurrency(value));
 }
 
 function budgetMonthName(month) {
@@ -800,13 +787,6 @@ function buildTariffsInsights(report = {}, selectedPeriod = {}) {
 			receitaClienteTotal,
 		},
 	};
-}
-
-function formatValue(value, type = "number") {
-	if (type === "text") return value || "-";
-	if (type === "currency") return brl.format(Number(value || 0));
-	if (type === "percent") return `${decimal.format(Number(value || 0))}%`;
-	return integer.format(Number(value || 0));
 }
 
 function formatTariffFee(item = {}) {
@@ -8095,17 +8075,6 @@ function formatOptionLabel(value) {
 	return String(value || "")
 		.replace(/_/g, " ")
 		.replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function parseMoneyInput(value) {
-	const text = String(value || "")
-		.replace(/[^\d,.-]/g, "")
-		.trim();
-	const normalized = text.includes(",")
-		? text.replace(/\./g, "").replace(",", ".")
-		: text;
-	const number = Number(normalized || 0);
-	return Number.isFinite(number) ? number : 0;
 }
 
 function budgetEntityId(value, fallback = "item") {
