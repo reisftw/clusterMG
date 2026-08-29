@@ -58,6 +58,11 @@ import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistratio
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
 import TariffsDetailLayout from "./tariffs/TariffsDetailLayout";
+import TariffsDetectedBlocks from "./tariffs/TariffsDetectedBlocks";
+import TariffsOverviewCharts from "./tariffs/TariffsOverviewCharts";
+import TariffsOverviewKpis from "./tariffs/TariffsOverviewKpis";
+import TariffsPeriodSelector from "./tariffs/TariffsPeriodSelector";
+import TariffsUploadActions from "./tariffs/TariffsUploadActions";
 import { useBudgetConfig } from "../hooks/useBudgetConfig";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
@@ -11203,246 +11208,65 @@ function TariffsReportPage({ canManage }) {
 		yearMenuOpen,
 	} = useTariffsReport({ canManage, getVisibleError });
 	const yearOptions = Array.from({ length: 7 }, (_, index) => 2026 - index);
-	const periodSelector = (
-		<div className="-mt-4 flex justify-end">
-			<div className="relative flex rounded-xl border border-slate-200 bg-white shadow-sm">
-				<div className="relative">
-					<button
-						type="button"
-						onClick={() => {
-							setPeriodMode("month");
-							setYearMenuOpen(false);
-							setMonthMenuOpen((current) => !current);
-						}}
-						className={`min-h-11 rounded-l-xl px-5 text-sm font-bold ${periodMode === "month" ? "bg-orange-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-					>
-						{periodMode === "month" ? periodLabel : "Mês"}
-					</button>
-					{monthMenuOpen ? (
-						<div className="absolute right-0 top-[calc(100%+8px)] z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-							<div className="grid grid-cols-2 gap-1">
-								{Array.from({ length: 12 }, (_, index) => {
-									const month = index + 1;
-									return (
-										<button
-											key={month}
-											type="button"
-											onClick={() => {
-												setSelectedReference((current) => ({ ...current, referenceMonth: month }));
-												setPeriodMode("month");
-												setMonthMenuOpen(false);
-											}}
-											className="rounded-xl px-3 py-2 text-left text-xs font-black text-slate-700 hover:bg-slate-50"
-										>
-											{budgetMonthName(month)}
-										</button>
-									);
-								})}
-							</div>
-						</div>
-					) : null}
-				</div>
-				<div className="relative">
-					<button
-						type="button"
-						onClick={() => {
-							setPeriodMode("year");
-							setMonthMenuOpen(false);
-							setYearMenuOpen((current) => !current);
-						}}
-						className={`min-h-11 border-l border-slate-200 px-5 text-sm font-bold ${periodMode === "year" ? "bg-orange-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-					>
-						Ano
-					</button>
-					{yearMenuOpen ? (
-						<div className="absolute right-0 top-[calc(100%+8px)] z-40 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-							{yearOptions.map((year) => (
-								<button
-									key={year}
-									type="button"
-									onClick={() => {
-										setSelectedReference((current) => ({ ...current, referenceYear: year }));
-										setPeriodMode("year");
-										setYearMenuOpen(false);
-									}}
-									className="block w-full rounded-xl px-3 py-2 text-left text-xs font-black text-slate-700 hover:bg-slate-50"
-								>
-									{year}
-								</button>
-							))}
-						</div>
-					) : null}
-				</div>
-				<button
-					type="button"
-					onClick={() => {
-						setMonthMenuOpen(false);
-						setYearMenuOpen(false);
-						setDateModalOpen(true);
-					}}
-					className={`min-h-11 rounded-r-xl border-l border-slate-200 px-5 text-sm font-bold ${periodMode === "custom" ? "bg-orange-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-				>
-					Datas
-				</button>
-			</div>
-		</div>
-	);
 	return (
 		<section className="space-y-4">
-			{periodSelector}
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-					<div>
-						<h2 className="text-lg font-black text-slate-950">Dashboard Tarifas</h2>
-						<p className="mt-1 text-sm font-bold text-slate-500">
-							Todas as abas da planilha · Período: {periodLabel}
-						</p>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						<label className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-orange-600 px-4 text-sm font-black text-white hover:bg-orange-700 ${!canManage || action ? "pointer-events-none opacity-50" : ""}`}>
-							{action === "upload" ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-							Ler XLSX Tarifas
-							<input type="file" accept=".xlsx" className="hidden" disabled={!canManage || Boolean(action)} onChange={handleUpload} />
-						</label>
-						<button type="button" onClick={loadTariffs} disabled={loading || Boolean(action)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-							<RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-							Atualizar
-						</button>
-						<button type="button" onClick={() => setReportModalOpen(true)} disabled={loading || !report} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50">
-							<Download size={16} />
-							Gerar Relatório
-						</button>
-						<span className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-500">
-							<CalendarClock size={16} className="text-slate-700" />
-							<span>
-								<span className="block leading-tight">Última atualização</span>
-								<span className="block text-sm text-slate-950">{formatUpdatedAt(report?.importInfo?.importedAt)}</span>
-							</span>
-						</span>
-						<button type="button" onClick={handleClear} disabled={!canManage || loading || Boolean(action)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-black text-red-700 hover:bg-red-100 disabled:opacity-50">
-							<Trash2 size={16} />
-							Zerar dados
-						</button>
-					</div>
-				</div>
-			</section>
-			<section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-				<FinancialKpiCard loading={loading} compact centered item={{ title: "Receita diária", value: insights.kpis.receitaTotal, type: "currency", icon: "CircleDollarSign", color: "blue" }} />
-				<FinancialKpiCard loading={loading} compact centered item={{ title: "Tarifas", value: insights.kpis.tarifasTotal, type: "currency", icon: "ReceiptText", color: "amber" }} />
-				<FinancialKpiCard loading={loading} compact centered item={{ title: "Custo médio", value: insights.kpis.custoMedioCobranca, type: "currency", icon: "BadgeDollarSign", color: "emerald" }} />
-				<FinancialKpiCard loading={loading} compact centered item={{ title: "Clientes cobrança", value: insights.kpis.totalClientesCobranca, type: "number", icon: "Users", color: "violet" }} />
-				<FinancialKpiCard loading={loading} compact centered item={{ title: "Pagamentos", value: insights.kpis.totalPagamentos, type: "number", icon: "Wallet", color: "emerald" }} />
-				<FinancialKpiCard loading={loading} compact centered item={{ title: "Receita cliente", value: insights.kpis.receitaClienteTotal, type: "currency", icon: "Landmark", color: "slate" }} />
-			</section>
-			<section className="grid gap-4 xl:grid-cols-2">
-				<ChartCard title="Tarifas de boletos por banco/forma de cobrança" empty={!insights.tarifasBoletos.length}>
-					<div className="grid max-h-[320px] gap-2 overflow-auto pr-1">
-						{insights.tarifasBoletos.map((item) => (
-							<div
-								key={item.id || item.bank}
-								className="grid gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
-							>
-								<BankBadge item={item} />
-								<span className="rounded-full bg-white px-3 py-1 text-center font-black text-slate-950 shadow-sm">
-									{formatTariffFee(item)}
-								</span>
-								<span className="text-xs font-black uppercase tracking-normal text-slate-500 md:text-right">
-									{item.paymentTypes || "-"}
-								</span>
-							</div>
-						))}
-					</div>
-				</ChartCard>
-				<ChartCard title="Tarifas mensais" empty={!insights.tarifasPorMes.length}>
-					<Line data={monthlyTariffsChart} options={barOptions()} />
-				</ChartCard>
-				<ChartCard title="Formas de pagamento por valor" empty={!insights.pagamentoValor.length}>
-					<Doughnut
-						data={paymentChart}
-						options={{
-							responsive: true,
-							maintainAspectRatio: false,
-							cutout: "62%",
-							plugins: {
-								centerText: {
-									title: "Total",
-									value: brl.format(
-										insights.pagamentoValor
-											.slice(0, 6)
-											.reduce((sum, item) => sum + Number(item.value || 0), 0),
-									),
-								},
-								legend: {
-									position: "bottom",
-									labels: { boxWidth: 10, font: { weight: "bold" } },
-								},
-								tooltip: {
-									callbacks: {
-										label: (ctx) =>
-											`${ctx.label}: ${brl.format(Number(ctx.raw || 0))}`,
-									},
-								},
-							},
-						}}
-					/>
-				</ChartCard>
-				<ChartCard title="Clientes por forma de cobrança" empty={!insights.cobrancaClientes.length}>
-					<div className="space-y-3 overflow-auto pr-1">
-						{insights.cobrancaClientes.slice(0, 8).map((item) => (
-							<div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-								<BankBadge item={item} />
-								<span className="shrink-0 text-right">
-									<span className="block font-black text-slate-950">{integer.format(item.customers || item.value)}</span>
-									<span className="block text-xs font-black text-emerald-700">
-										{brl.format(Number(item.estimatedValue || 0))}
-									</span>
-								</span>
-							</div>
-						))}
-					</div>
-				</ChartCard>
-			</section>
-			<section className="grid gap-4 xl:grid-cols-2">
-				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-					<h3 className="text-lg font-black text-slate-950">Bancos com maior tarifa</h3>
-					<div className="mt-4 space-y-2">
-						{insights.bancos.slice(0, 10).map((item) => (
-							<div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
-								<BankBadge item={item} />
-								<span className="font-black text-slate-950">{brl.format(item.value)}</span>
-							</div>
-						))}
-					</div>
-				</section>
-				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-					<h3 className="text-lg font-black text-slate-950">Top clientes por receita</h3>
-					<div className="mt-4 space-y-2">
-						{insights.topClientes.slice(0, 10).map((item) => (
-							<div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2 text-sm">
-								<span className="truncate font-bold text-slate-700">{item.label}</span>
-								<span className="font-black text-slate-950">{brl.format(item.value)}</span>
-							</div>
-						))}
-					</div>
-				</section>
-			</section>
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<h3 className="text-lg font-black text-slate-950">Blocos lidos da planilha</h3>
-				<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-					{(report?.blocosDetectados || []).slice(0, 12).map((block, index) => (
-						<div key={`${block.sheetName}-${block.type}-${index}`} className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
-							<p className="font-black">{block.label}</p>
-							<p className="mt-1 text-xs">{block.sheetName} · {block.type}</p>
-						</div>
-					))}
-					{(report?.blocosNaoMapeados || []).map((block) => (
-						<div key={block.sheetName} className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm font-bold text-amber-800">
-							<p className="font-black">{block.sheetName}</p>
-							<p className="mt-1 text-xs">Bloco salvo como não mapeado para ajuste futuro.</p>
-						</div>
-					))}
-				</div>
-			</section>
+			<TariffsPeriodSelector
+				monthMenuOpen={monthMenuOpen}
+				onDateClick={() => {
+					setMonthMenuOpen(false);
+					setYearMenuOpen(false);
+					setDateModalOpen(true);
+				}}
+				onMonthSelect={(month) => {
+					setSelectedReference((current) => ({
+						...current,
+						referenceMonth: month,
+					}));
+					setPeriodMode("month");
+					setMonthMenuOpen(false);
+				}}
+				onMonthToggle={() => {
+					setPeriodMode("month");
+					setYearMenuOpen(false);
+					setMonthMenuOpen((current) => !current);
+				}}
+				onYearSelect={(year) => {
+					setSelectedReference((current) => ({
+						...current,
+						referenceYear: year,
+					}));
+					setPeriodMode("year");
+					setYearMenuOpen(false);
+				}}
+				onYearToggle={() => {
+					setPeriodMode("year");
+					setMonthMenuOpen(false);
+					setYearMenuOpen((current) => !current);
+				}}
+				periodLabel={periodLabel}
+				periodMode={periodMode}
+				selectedReference={selectedReference}
+				yearMenuOpen={yearMenuOpen}
+				yearOptions={yearOptions}
+			/>
+			<TariffsUploadActions
+				action={action}
+				canManage={canManage}
+				lastUpdatedLabel={formatUpdatedAt(report?.importInfo?.importedAt)}
+				loading={loading}
+				onClear={handleClear}
+				onOpenReport={() => setReportModalOpen(true)}
+				onRefresh={loadTariffs}
+				onUpload={handleUpload}
+				report={report}
+			/>
+			<TariffsOverviewKpis insights={insights} loading={loading} />
+			<TariffsOverviewCharts
+				insights={insights}
+				monthlyTariffsChart={monthlyTariffsChart}
+				paymentChart={paymentChart}
+			/>
+			<TariffsDetectedBlocks report={report} />
 			{reportModalOpen ? (
 				<TariffsReportExportModal
 					periodLabel={periodLabel}
