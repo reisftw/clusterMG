@@ -5271,6 +5271,7 @@ function BudgetOperationalPage({
 		dashboardDetail,
 		setDashboardDetail,
 		dashboardDetailPage,
+		setDashboardDetailPage,
 		centerPage,
 		setCenterPage,
 		dreAccountDetail,
