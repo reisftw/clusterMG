@@ -224,6 +224,12 @@ const PAGE_META = {
 	},
 };
 
+const BUDGET_OPERATIONAL_PAGE_VIEWS = {
+	orcamentoAprovacoes: BudgetApprovalsView,
+	orcamentoCentrosCusto: BudgetCostCentersView,
+	orcamentoRealizado: BudgetDreView,
+};
+
 const BUDGET_IMPORT_FIELDS = [
 	{ key: "quebra", label: "Quebra" },
 	{ key: "data", label: "Data" },
@@ -5376,46 +5382,34 @@ function BudgetOperationalPage({
 		);
 	}
 
-	if (page === "orcamentoAprovacoes") {
+	const BudgetPageView = BUDGET_OPERATIONAL_PAGE_VIEWS[page];
+
+	if (BudgetPageView) {
 		return (
-			<BudgetApprovalsView
+			<BudgetPageView
 				BudgetApprovalDecisionModal={BudgetApprovalDecisionModal}
 				BudgetApprovalEmailModal={BudgetApprovalEmailModal}
-				EmptyState={EmptyState}
-				FeedbackModal={FeedbackModal}
-				approvalDecision={approvalDecision}
-				approvalEmail={approvalEmail}
-				approvalListDetail={approvalListDetail}
-				brl={brl}
-				budgetApprovalStatusMeta={budgetApprovalStatusMeta}
-				canManage={canManage}
-				decimal={decimal}
-				feedback={feedback}
-				insights={insights}
-				integer={integer}
-				saving={saving}
-				setApprovalDecision={setApprovalDecision}
-				setApprovalEmail={setApprovalEmail}
-				setApprovalListDetail={setApprovalListDetail}
-				setFeedback={setFeedback}
-				updateApprovalStatus={updateApprovalStatus}
-			/>
-		);
-	}
-
-	if (page === "orcamentoCentrosCusto") {
-		return (
-			<BudgetCostCentersView
 				BudgetCenterPendenciesModal={BudgetCenterPendenciesModal}
+				BudgetDeviationJustificationModal={BudgetDeviationJustificationModal}
+				BudgetTransferRequestModal={BudgetTransferRequestModal}
 				CostCenterAnalyticChildrenModal={CostCenterAnalyticChildrenModal}
 				CostCenterModal={CostCenterModal}
+				DreAccountDetailModal={DreAccountDetailModal}
+				DreTransactionDrawer={DreTransactionDrawer}
 				EmptyState={EmptyState}
 				FeedbackModal={FeedbackModal}
 				allRowByCenterId={allRowByCenterId}
 				analyticChildrenModal={analyticChildrenModal}
+				approvalDecision={approvalDecision}
+				approvalEmail={approvalEmail}
+				approvalListDetail={approvalListDetail}
 				brl={brl}
+				budgetAccountLabel={budgetAccountLabel}
+				budgetApprovalStatusMeta={budgetApprovalStatusMeta}
 				budgetCenterCompactLabel={budgetCenterCompactLabel}
 				budgetConsumptionStatus={budgetConsumptionStatus}
+				budgetVarianceMeta={budgetVarianceMeta}
+				buildBudgetPeriod={buildBudgetPeriod}
 				canManage={canManage}
 				centerPage={centerPage}
 				centerTotalPages={centerTotalPages}
@@ -5423,6 +5417,9 @@ function BudgetOperationalPage({
 				costCenterTopCards={costCenterTopCards}
 				currentUser={currentUser}
 				decimal={decimal}
+				deviationJustification={deviationJustification}
+				dreAccountDetail={dreAccountDetail}
+				dreDrawer={dreDrawer}
 				feedback={feedback}
 				findDirectorateByName={findDirectorateByName}
 				getBudgetSettings={getBudgetSettings}
@@ -5432,6 +5429,7 @@ function BudgetOperationalPage({
 				isCenterInactive={isCenterInactive}
 				metricForCenter={metricForCenter}
 				modalState={modalState}
+				movementValue={movementValue}
 				operationalCenterGroups={operationalCenterGroups}
 				paginatedOperationalGroups={paginatedOperationalGroups}
 				pendenciesState={pendenciesState}
@@ -5441,40 +5439,22 @@ function BudgetOperationalPage({
 				rowByCenterId={rowByCenterId}
 				safeCenterPage={safeCenterPage}
 				saving={saving}
-				setAnalyticChildrenModal={setAnalyticChildrenModal}
-				setCenterPage={setCenterPage}
-				setFeedback={setFeedback}
-				setModalState={setModalState}
-				setPendenciesState={setPendenciesState}
-				upsertOperationalCenter={upsertOperationalCenter}
-			/>
-		);
-	}
-
-	if (page === "orcamentoRealizado") {
-		return (
-			<BudgetDreView
-				BudgetDeviationJustificationModal={BudgetDeviationJustificationModal}
-				BudgetTransferRequestModal={BudgetTransferRequestModal}
-				DreAccountDetailModal={DreAccountDetailModal}
-				DreTransactionDrawer={DreTransactionDrawer}
-				brl={brl}
-				budgetAccountLabel={budgetAccountLabel}
-				budgetVarianceMeta={budgetVarianceMeta}
-				buildBudgetPeriod={buildBudgetPeriod}
-				config={config}
-				deviationJustification={deviationJustification}
-				dreAccountDetail={dreAccountDetail}
-				dreDrawer={dreDrawer}
-				insights={insights}
-				integer={integer}
-				movementValue={movementValue}
 				selectedPeriod={selectedPeriod}
+				setAnalyticChildrenModal={setAnalyticChildrenModal}
+				setApprovalDecision={setApprovalDecision}
+				setApprovalEmail={setApprovalEmail}
+				setApprovalListDetail={setApprovalListDetail}
+				setCenterPage={setCenterPage}
 				setDeviationJustification={setDeviationJustification}
 				setDreAccountDetail={setDreAccountDetail}
 				setDreDrawer={setDreDrawer}
+				setFeedback={setFeedback}
+				setModalState={setModalState}
+				setPendenciesState={setPendenciesState}
 				setTransferRequest={setTransferRequest}
 				transferRequest={transferRequest}
+				updateApprovalStatus={updateApprovalStatus}
+				upsertOperationalCenter={upsertOperationalCenter}
 			/>
 		);
 	}
