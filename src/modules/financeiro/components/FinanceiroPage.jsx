@@ -61,6 +61,7 @@ import TariffsDetailLayout from "./tariffs/TariffsDetailLayout";
 import { useBudgetConfig } from "../hooks/useBudgetConfig";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
+import { useTariffsReport } from "../hooks/useTariffsReport";
 import {
 	atualizarAprovacaoOrcamentoFinanceiro,
 	buscarCentrosCustoOrcamentoFinanceiro,
@@ -73,10 +74,8 @@ import {
 	importarDadosOrcamentoFinanceiro,
 	limparDadosOrcamentoFinanceiro,
 	limparSerasaReportFinanceiro,
-	limparTarifasReportFinanceiro,
 	salvarConfigPlanilhasFinanceiro,
 	salvarSerasaReportFinanceiro,
-	salvarTarifasReportFinanceiro,
 	sincronizarPlanilhasFinanceiro,
 	testarPlanilhaFinanceiro,
 } from "../services/financeiroService";
@@ -10807,11 +10806,7 @@ function SerasaReportPage({ canManage }) {
 				<BudgetDateRangeModal
 					value={dateRange}
 					onClose={() => setDateModalOpen(false)}
-					onApply={(range) => {
-						setDateRange(range);
-						setPeriodMode("custom");
-						setDateModalOpen(false);
-					}}
+					onApply={applyDateRange}
 				/>
 			) : null}
 			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
@@ -11179,148 +11174,35 @@ function TariffsDetailPage({ type = "faturas" }) {
 }
 
 function TariffsReportPage({ canManage }) {
-	const [report, setReport] = useState(null);
-	const [loading, setLoading] = useState(true);
-	const [action, setAction] = useState("");
-	const [feedback, setFeedback] = useState(null);
-	const [reportModalOpen, setReportModalOpen] = useState(false);
-	const [monthMenuOpen, setMonthMenuOpen] = useState(false);
-	const [yearMenuOpen, setYearMenuOpen] = useState(false);
-	const [dateModalOpen, setDateModalOpen] = useState(false);
-	const [periodMode, setPeriodMode] = useState("year");
-	const [dateRange, setDateRange] = useState({ startDate: "", endDate: "" });
-	const [selectedReference, setSelectedReference] = useState({
-		referenceYear: 2026,
-		referenceMonth: 8,
-	});
-	const loadTariffs = useCallback(async () => {
-		setLoading(true);
-		try {
-			const response = await buscarTarifasReportFinanceiro();
-			setReport(response.data || {});
-		} catch (error) {
-			setFeedback({
-				type: "error",
-				title: "Erro ao carregar Tarifas",
-				...getVisibleError(error, "Não foi possível carregar o report Tarifas."),
-			});
-		} finally {
-			setLoading(false);
-		}
-	}, []);
-	useEffect(() => {
-		loadTariffs();
-	}, [loadTariffs]);
-	const handleUpload = async (event) => {
-		const file = event.target.files?.[0];
-		if (!file) return;
-		setAction("upload");
-		try {
-			const buffer = await file.arrayBuffer();
-			const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-			const sheets = workbook.SheetNames.map((sheetName) => ({
-				sheetName,
-				rows: XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-					header: 1,
-					raw: false,
-					defval: "",
-				}),
-			}));
-			const response = await salvarTarifasReportFinanceiro({
-				fileName: file.name,
-				sheets,
-			});
-			setReport(response.data || {});
-			const summary = response.data?.summary || {};
-			setFeedback({
-				type: "success",
-				title: "Leitura de Tarifas concluída",
-				message: `${integer.format(summary.blocosDetectados || 0)} bloco(s) detectado(s) em ${integer.format(sheets.length)} aba(s).`,
-				details: `Receitas diárias: ${integer.format(response.data?.receitasDiarias?.length || 0)}\nTarifas mensais: ${integer.format(response.data?.tarifasMensais?.length || 0)}\nFormas de pagamento: ${integer.format(response.data?.formasPagamentoValor?.length || 0)}\nReceita por cliente: ${integer.format(response.data?.receitaPorCliente?.length || 0)}\nBlocos não mapeados: ${integer.format(summary.blocosNaoMapeados || 0)}`,
-			});
-		} catch (error) {
-			setFeedback({
-				type: "error",
-				title: "Erro na leitura de Tarifas",
-				...getVisibleError(error, "Não foi possível ler/importar a planilha de Tarifas."),
-			});
-		} finally {
-			setAction("");
-			event.target.value = "";
-		}
-	};
-	const handleClear = async () => {
-		if (
-			!canManage ||
-			!window.confirm("Zerar somente os dados importados de Tarifas?")
-		)
-			return;
-		setAction("clear");
-		try {
-			const response = await limparTarifasReportFinanceiro();
-			setReport(response.data || {});
-			setFeedback({
-				type: "success",
-				title: "Dados de Tarifas zerados",
-				message: "Os dados importados de Tarifas foram limpos.",
-			});
-		} catch (error) {
-			setFeedback({
-				type: "error",
-				title: "Erro ao zerar Tarifas",
-				...getVisibleError(error, "Não foi possível zerar os dados de Tarifas."),
-			});
-		} finally {
-			setAction("");
-		}
-	};
+	const {
+		action,
+		applyDateRange,
+		dateModalOpen,
+		dateRange,
+		feedback,
+		handleClear,
+		handleUpload,
+		insights,
+		loadTariffs,
+		loading,
+		monthMenuOpen,
+		monthlyTariffsChart,
+		paymentChart,
+		periodLabel,
+		periodMode,
+		report,
+		reportModalOpen,
+		selectedReference,
+		setDateModalOpen,
+		setFeedback,
+		setMonthMenuOpen,
+		setPeriodMode,
+		setReportModalOpen,
+		setSelectedReference,
+		setYearMenuOpen,
+		yearMenuOpen,
+	} = useTariffsReport({ canManage, getVisibleError });
 	const yearOptions = Array.from({ length: 7 }, (_, index) => 2026 - index);
-	const selectedPeriod = useMemo(
-		() => ({
-			mode: periodMode,
-			...dateRange,
-			...selectedReference,
-		}),
-		[dateRange, periodMode, selectedReference],
-	);
-	const periodLabel = useMemo(
-		() => formatTariffsPeriodLabel(selectedPeriod),
-		[selectedPeriod],
-	);
-	const insights = useMemo(
-		() => buildTariffsInsights(report || {}, selectedPeriod),
-		[report, selectedPeriod],
-	);
-	const monthlyTariffsChart = useMemo(
-		() => ({
-			labels: insights.tarifasPorMes.map((item) => item.label),
-			datasets: [
-				{
-					label: "Tarifas",
-					data: insights.tarifasPorMes.map((item) => item.value),
-					borderColor: "#f97316",
-					backgroundColor: "rgba(249,115,22,0.14)",
-					fill: true,
-					tension: 0.35,
-					pointRadius: 3,
-				},
-			],
-		}),
-		[insights.tarifasPorMes],
-	);
-	const paymentChart = useMemo(
-		() => ({
-			labels: insights.pagamentoValor.slice(0, 6).map((item) => item.label),
-			datasets: [
-				{
-					data: insights.pagamentoValor.slice(0, 6).map((item) => item.value),
-					backgroundColor: ["#2563eb", "#10b981", "#f97316", "#8b5cf6", "#ef4444", "#64748b"],
-					borderWidth: 0,
-				},
-			],
-		}),
-		[insights.pagamentoValor],
-	);
 	const periodSelector = (
 		<div className="-mt-4 flex justify-end">
 			<div className="relative flex rounded-xl border border-slate-200 bg-white shadow-sm">

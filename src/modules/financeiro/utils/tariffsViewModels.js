@@ -121,6 +121,36 @@ export function addTariffsPercentOfTotal(items = [], valueField = "value") {
 	}));
 }
 
+function dateFromTariffInput(value) {
+	if (!value) return null;
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function tariffItemMatchesPeriod(item = {}, selectedPeriod = {}) {
+	const year = Number(item.year || 0);
+	const month = Number(item.month || 0);
+	if (!year || !month) return true;
+	if (selectedPeriod.mode === "year") return year === Number(selectedPeriod.referenceYear);
+	if (selectedPeriod.mode === "custom") {
+		const date = dateFromTariffInput(`${year}-${String(month).padStart(2, "0")}-01`);
+		const start = dateFromTariffInput(selectedPeriod.startDate);
+		const end = dateFromTariffInput(selectedPeriod.endDate);
+		if (!date || !start || !end) return true;
+		return date >= start && date <= end;
+	}
+	return (
+		year === Number(selectedPeriod.referenceYear) &&
+		month === Number(selectedPeriod.referenceMonth)
+	);
+}
+
+export function formatTariffsPeriodLabel(selectedPeriod = {}) {
+	if (selectedPeriod.mode === "year") return `Ano ${selectedPeriod.referenceYear}`;
+	if (selectedPeriod.mode === "custom") return "Datas selecionadas";
+	return `Mês ${tariffBudgetMonthName(selectedPeriod.referenceMonth)}`;
+}
+
 export function invoiceMetricType(metric) {
 	const text = String(metric || "");
 	if (/cancelad|outros lan/i.test(text)) return "Canceladas";
@@ -136,6 +166,130 @@ export function isRelevantTariffInvoiceRecord(item = {}) {
 	if (!year || !month) return false;
 	const now = new Date();
 	return !(year === now.getFullYear() && month > now.getMonth() + 1);
+}
+
+export function aggregateInvoiceNetByMonth(items = []) {
+	const map = new Map();
+	items.forEach((item) => {
+		const year = Number(item.year || 0);
+		const month = Number(item.month || 0);
+		if (!year || !month) return;
+		const type = invoiceMetricType(item.metric);
+		if (!type) return;
+		const key = `${year}-${String(month).padStart(2, "0")}`;
+		const current = map.get(key) || {
+			key,
+			year,
+			month,
+			label: `${year} - ${tariffBudgetMonthName(month)}`,
+			value: 0,
+			active: 0,
+			canceled: 0,
+			count: 0,
+		};
+		const value = Number(item.value || 0);
+		if (type === "Ativas") {
+			current.active += value;
+			current.value += value;
+		}
+		if (type === "Canceladas") {
+			current.canceled += value;
+			current.value -= value;
+		}
+		current.count += 1;
+		map.set(key, current);
+	});
+	return [...map.values()].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+}
+
+export function aggregateBillingClients(items = []) {
+	const map = new Map();
+	items.forEach((item) => {
+		const label = String(item.method || "Sem identificação").trim();
+		const current = map.get(label) || {
+			label,
+			method: label,
+			value: 0,
+			customers: 0,
+			estimatedValue: 0,
+			count: 0,
+			bankColor: item.bankColor,
+			bankInitials: item.bankInitials,
+		};
+		current.value += Number(item.customers || 0);
+		current.customers += Number(item.customers || 0);
+		current.estimatedValue += Number(item.estimatedValue || 0);
+		current.count += 1;
+		map.set(label, current);
+	});
+	return [...map.values()].sort((a, b) => b.customers - a.customers);
+}
+
+export function buildTariffsInsights(report = {}, selectedPeriod = {}) {
+	const filter = (items = []) =>
+		(items || []).filter((item) => tariffItemMatchesPeriod(item, selectedPeriod));
+	const receitasDiarias = filter(report.receitasDiarias);
+	const tarifasMensais = filter(report.tarifasMensais);
+	const formasPagamentoQuantidade = filter(report.formasPagamentoQuantidade);
+	const formasPagamentoValor = filter(report.formasPagamentoValor);
+	const formasCobrancaValor = filter(report.formasCobrancaValor);
+	const faturas = filter(report.faturas).filter(isRelevantTariffInvoiceRecord);
+	const receitaPorCliente = filter(report.receitaPorCliente);
+	const formasCobrancaClientes = report.formasCobrancaClientes || [];
+	const tarifasBoletos = report.tarifasBoletos || [];
+	const receitaMensal = aggregateTariffsByMonth(receitasDiarias);
+	const tarifasPorMes = aggregateTariffsByMonth(tarifasMensais);
+	const bancos = aggregateTariffsByLabel(tarifasMensais, "bank");
+	const pagamentoValor = aggregateTariffsByLabel(formasPagamentoValor, "method");
+	const pagamentoQuantidade = aggregateTariffsByLabel(
+		formasPagamentoQuantidade,
+		"method",
+		"quantity",
+	);
+	const cobrancaClientes = aggregateBillingClients(formasCobrancaClientes);
+	const topClientes = aggregateTariffsByLabel(receitaPorCliente, "clientName").slice(0, 10);
+	const faturasMensais = aggregateInvoiceNetByMonth(faturas);
+	const receitaTotal = receitaMensal.reduce((sum, item) => sum + item.value, 0);
+	const tarifasTotal = tarifasMensais.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	const receitaClienteTotal = receitaPorCliente.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	const totalClientesCobranca = formasCobrancaClientes.reduce((sum, item) => sum + Number(item.customers || 0), 0);
+	const totalPagamentos = formasPagamentoQuantidade.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+	const custoMedioCobranca = totalClientesCobranca ? tarifasTotal / totalClientesCobranca : 0;
+	return {
+		receitasDiarias,
+		tarifasMensais,
+		formasPagamentoQuantidade,
+		formasPagamentoValor,
+		formasCobrancaValor,
+		formasCobrancaClientes,
+		tarifasBoletos,
+		faturas,
+		receitaPorCliente,
+		receitaMensal,
+		tarifasPorMes,
+		bancos,
+		pagamentoValor,
+		pagamentoQuantidade,
+		cobrancaClientes,
+		topClientes,
+		faturasMensais,
+		kpis: {
+			receitaTotal,
+			tarifasTotal,
+			custoMedioCobranca,
+			totalClientesCobranca,
+			totalPagamentos,
+			receitaClienteTotal,
+		},
+	};
+}
+
+export function formatTariffFee(item = {}) {
+	const label = String(item.valueLabel || "").trim();
+	if (label && /%/.test(label)) return label;
+	const numericLabel = Number(label.replace(",", "."));
+	if (label && Number.isNaN(numericLabel)) return label;
+	return brl.format(Number(item.value || numericLabel || 0));
 }
 
 export function aggregateInvoiceMetrics(rows = []) {
