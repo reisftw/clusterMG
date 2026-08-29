@@ -67,6 +67,24 @@ import {
 } from "../services/financeiroService";
 import { normalizeBudgetImportRows } from "../utils/budgetImportRows";
 import {
+	buildBudgetOperationalKpis,
+	buildCostCenterTopCards,
+	buildDirectorateRows,
+	buildOperationalCenterGroups,
+	budgetVarianceMeta as budgetVarianceMetaFromInsights,
+	findBudgetParetoRows,
+	getBudgetInsights as getBudgetInsightsFromUtils,
+	paginateBudgetGroups,
+} from "../utils/budgetInsights";
+import {
+	buildBudgetAccountChart,
+	buildBudgetCenterChart,
+	buildBudgetForecastChart,
+	buildBudgetFullSupplierChart,
+	buildBudgetMonthlyChart,
+	buildBudgetSupplierChart,
+} from "../utils/budgetCharts";
+import {
 	brl,
 	decimal,
 	formatBudgetCurrency,
@@ -5223,7 +5241,7 @@ function BudgetOperationalPage({
 }) {
 	const { currentUser } = useAuthContext();
 	const insights = useMemo(
-		() => getBudgetInsights(config, selectedPeriod),
+		() => getBudgetInsightsFromUtils(config, selectedPeriod),
 		[config, selectedPeriod],
 	);
 	const [modalState, setModalState] = useState(null);
@@ -5398,321 +5416,33 @@ function BudgetOperationalPage({
 		);
 	}
 
-	const kpis = [
-		{
-			id: "orcado",
-			title:
-				insights.periodLabel === "ano"
-					? "Orçado no ano"
-					: insights.periodLabel === "período"
-						? "Orçado no período"
-						: "Orçado no mês",
-			value: insights.plannedMonth,
-			type: "currency",
-			helper: `${insights.periodDisplayLabel} · ${integer.format(insights.matrix.length)} linha(s) na matriz`,
-			icon: "BadgeDollarSign",
-		},
-		{
-			id: "realizado",
-			title: "Realizado + comprometido",
-			value: insights.realizedMonth + insights.committedMonth,
-			type: "currency",
-			helper: `${insights.periodDisplayLabel} · ${decimal.format(insights.usedPercent)}% consumido`,
-			icon: "Wallet",
-		},
-		{
-			id: "saldo",
-			title: "Saldo disponível",
-			value: insights.availableMonth,
-			type: "currency",
-			helper: insights.availableMonth < 0 ? "Estourado" : "Dentro do orçamento",
-			icon: "CircleDollarSign",
-		},
-		{
-			id: "aprovacoes",
-			title: "Aprovações pendentes",
-			value: insights.approvals.length,
-			type: "integer",
-			helper: "Geradas por estouro/alerta",
-			icon: "ClipboardCheck",
-		},
-		{
-			id: "ano",
-			title: "Budget anual",
-			value: insights.plannedYear,
-			type: "currency",
-			helper: `${integer.format((config.versions || []).length)} versão(ões)`,
-			icon: "Landmark",
-		},
-	];
-	const budgetPeriod = buildBudgetPeriod(selectedPeriod);
-	const budgetPeriodMonths = budgetPeriod.months || [];
-	const firstBudgetMonth = budgetPeriodMonths[0] || {
-		year: new Date().getFullYear(),
-		month: new Date().getMonth() + 1,
-	};
-	const budgetReferenceYear = Number(
-		firstBudgetMonth.year || new Date().getFullYear(),
-	);
-	const budgetReferenceMonth = Math.max(
-		1,
-		Math.min(12, ...budgetPeriodMonths.map((item) => Number(item.month || 1))),
-	);
-	const budgetYtd = insights.monthlyEvolution
-		.filter((item) => Number(item.month || 0) <= budgetReferenceMonth)
-		.reduce((sum, item) => sum + Number(item.planned || 0), 0);
-	const currentDate = new Date();
-	const isCurrentBudgetMonth =
-		budgetPeriodMonths.length === 1 &&
-		budgetReferenceYear === currentDate.getFullYear() &&
-		budgetReferenceMonth === currentDate.getMonth() + 1;
-	const daysInBudgetMonth = new Date(
-		budgetReferenceYear,
-		budgetReferenceMonth,
-		0,
-	).getDate();
-	const elapsedBudgetDays = isCurrentBudgetMonth
-		? currentDate.getDate()
-		: daysInBudgetMonth;
-	const realizedCommitted = insights.realizedMonth + insights.committedMonth;
-	const forecastClosing =
-		isCurrentBudgetMonth && elapsedBudgetDays
-			? (realizedCommitted / elapsedBudgetDays) * daysInBudgetMonth
-			: realizedCommitted;
-	const forecastBalance = insights.plannedMonth - forecastClosing;
 	const expiringContracts = 0;
-	const ytdMonthLabel =
-		budgetMonthName(budgetReferenceMonth).slice(0, 3) || "Atual";
-	const costCenterTopCards = [
-		{
-			id: "cc-orcado",
-			title: "Orçado no Mês",
-			value: insights.plannedMonth,
-			type: "currency",
-			helper: insights.periodDisplayLabel,
-			icon: "BadgeDollarSign",
-			color: "blue",
-		},
-		{
-			id: "cc-realizado",
-			title: "Realizado + Comprometido",
-			value: realizedCommitted,
-			type: "currency",
-			helper: `${decimal.format(insights.usedPercent)}% vs. ${decimal.format(insights.idealPercent)}% do mês decorrido`,
-			icon: "Wallet",
-			color: "violet",
-		},
-		{
-			id: "cc-saldo",
-			title: "Saldo Disponível Mês",
-			value: insights.availableMonth,
-			type: "currency",
-			helper:
-				insights.availableMonth < 0
-					? "Orçamento estourado"
-					: "Dentro do orçamento",
-			icon: "CircleDollarSign",
-			color: insights.availableMonth < 0 ? "amber" : "emerald",
-		},
-		{
-			id: "cc-ytd",
-			title: `Orçamento Jan-${ytdMonthLabel}`,
-			value: budgetYtd,
-			type: "currency",
-			helper: `${brl.format(insights.plannedYear)} total anual`,
-			icon: "Landmark",
-			color: "slate",
-		},
-		{
-			id: "cc-forecast",
-			title: "Forecast de Fechamento",
-			value: forecastClosing,
-			type: "currency",
-			helper:
-				forecastBalance >= 0
-					? `Sobram ${brl.format(forecastBalance)}`
-					: `Estoura ${brl.format(Math.abs(forecastBalance))}`,
-			icon: "Repeat2",
-			color: forecastBalance < 0 ? "rose" : "emerald",
-			trend: {
-				status: forecastBalance < 0 ? "negative" : "positive",
-				direction: forecastBalance < 0 ? "down" : "up",
-				percent: insights.plannedMonth
-					? Math.abs(forecastBalance / insights.plannedMonth) * 100
-					: 0,
-			},
-			trendLabel: forecastBalance < 0 ? "risco" : "previsto",
-		},
-		{
-			id: "cc-alertas",
-			title: "Pendências & Alertas",
-			value: insights.approvals.length,
-			type: "integer",
-			helper: `${integer.format(insights.approvals.length)} aprovações / ${integer.format(expiringContracts)} contratos a vencer`,
-			icon: "AlertTriangle",
-			color:
-				insights.approvals.length || expiringContracts ? "amber" : "emerald",
-			trend: {
-				status:
-					insights.approvals.length || expiringContracts
-						? "negative"
-						: "positive",
-				direction:
-					insights.approvals.length || expiringContracts ? "up" : "down",
-				percent: insights.approvals.length + expiringContracts,
-			},
-			trendLabel:
-				insights.approvals.length || expiringContracts
-					? "atenção"
-					: "sem riscos",
-		},
-	];
-	const responsibleOnly = !canManage;
-	const visibleCenterRows = responsibleOnly
-		? insights.centerRows.filter(({ center }) =>
-				isBudgetCenterResponsible(currentUser, center),
-			)
-		: insights.centerRows;
-	const rowByCenterId = new Map(
-		visibleCenterRows.map((row) => [row.center?.id, row]),
-	);
-	const allRowByCenterId = new Map(
-		insights.centerRows.map((row) => [row.center?.id, row]),
-	);
-	const sortedOperationalCenters = [...(config.centers || [])].sort(
-		(left, right) => {
-			const leftInactive = isCenterInactive(left) ? 1 : 0;
-			const rightInactive = isCenterInactive(right) ? 1 : 0;
-			if (leftInactive !== rightInactive) return leftInactive - rightInactive;
-			return String(
-				left.classificacao || left.codigo || left.nome,
-			).localeCompare(
-				String(right.classificacao || right.codigo || right.nome),
-				"pt-BR",
-				{ numeric: true },
-			);
-		},
-	);
-	const operationalCenterByKey = new Map();
-	sortedOperationalCenters.forEach((center) => {
-		if (center.id) operationalCenterByKey.set(center.id, center);
-		if (center.codigo) operationalCenterByKey.set(center.codigo, center);
-		if (center.reduzida)
-			operationalCenterByKey.set(
-				String(center.reduzida).replace(/\D+/g, ""),
-				center,
-			);
+	const kpis = buildBudgetOperationalKpis(insights, config);
+	const costCenterTopCards = buildCostCenterTopCards({
+		insights,
+		config,
+		selectedPeriod,
+		expiringContracts,
 	});
-	const operationalCategoriesByCode = new Map(
-		sortedOperationalCenters
-			.filter((center) => Number(center.nivel || 0) === 2)
-			.map((center) => [center.codigo || center.id, center]),
-	);
-	const operationalChildrenByParent = new Map();
-	sortedOperationalCenters
-		.filter((center) => center.tipoPlano === "A")
-		.forEach((center) => {
-			const parentKey = center.parentId || center.parentCodigo;
-			if (!parentKey) return;
-			const currentChildren = operationalChildrenByParent.get(parentKey) || [];
-			currentChildren.push(center);
-			operationalChildrenByParent.set(parentKey, currentChildren);
-		});
-	const metricForCenter = (center, sourceMap = allRowByCenterId) => {
-		const row = sourceMap.get(center?.id);
-		if (row) return row;
-		const planned = Number(center?.valorMensal || center?.orcamentoMensal || 0);
-		const realized = Number(
-			center?.realizadoImportado || center?.realizadoMes || 0,
-		);
-		const deviation = realized - planned;
-		return {
-			center,
-			planned,
-			realized,
-			deviation,
-			percent: planned ? (realized / planned) * 100 : 0,
-		};
-	};
-	const visibleCenterIdSet = new Set(
-		visibleCenterRows.map(({ center }) => center?.id).filter(Boolean),
-	);
-	const operationalCenterGroups = sortedOperationalCenters
-		.filter(
-			(center) => center.tipoPlano === "S" && Number(center.nivel || 0) > 2,
-		)
-		.map((center) => {
-			const category =
-				operationalCategoriesByCode.get(center.categoriaCodigo) ||
-				operationalCenterByKey.get(center.categoriaCodigo);
-			const rawChildren = [
-				...(operationalChildrenByParent.get(center.id) || []),
-				...(center.codigo && center.codigo !== center.id
-					? operationalChildrenByParent.get(center.codigo) || []
-					: []),
-			]
-				.filter(
-					(child, index, items) =>
-						items.findIndex((item) => item.id === child.id) === index,
-				)
-				.sort((left, right) => {
-					const leftInactive = isCenterInactive(left) ? 1 : 0;
-					const rightInactive = isCenterInactive(right) ? 1 : 0;
-					if (leftInactive !== rightInactive)
-						return leftInactive - rightInactive;
-					return String(
-						left.classificacao || left.codigo || left.nome,
-					).localeCompare(
-						String(right.classificacao || right.codigo || right.nome),
-						"pt-BR",
-						{ numeric: true },
-					);
-				});
-			const children = responsibleOnly
-				? rawChildren.filter((child) => visibleCenterIdSet.has(child.id))
-				: rawChildren;
-			const parentVisible =
-				!responsibleOnly ||
-				visibleCenterIdSet.has(center.id) ||
-				children.length > 0;
-			if (!parentVisible) return null;
-			const aggregateSource = responsibleOnly ? children : rawChildren;
-			const aggregate = aggregateSource.reduce(
-				(acc, child) => {
-					const metric = metricForCenter(
-						child,
-						responsibleOnly ? rowByCenterId : allRowByCenterId,
-					);
-					acc.planned += Number(metric.planned || 0);
-					acc.realized += Number(metric.realized || 0);
-					return acc;
-				},
-				{ planned: 0, realized: 0 },
-			);
-			aggregate.deviation = aggregate.realized - aggregate.planned;
-			aggregate.percent = aggregate.planned
-				? (aggregate.realized / aggregate.planned) * 100
-				: 0;
-			return {
-				center,
-				category,
-				children,
-				aggregateChildren: rawChildren,
-				totalChildren: rawChildren.length,
-				aggregate,
-			};
-		})
-		.filter(Boolean);
+	const responsibleOnly = !canManage;
+	const {
+		visibleCenterRows,
+		rowByCenterId,
+		allRowByCenterId,
+		operationalCenterGroups,
+		metricForCenter,
+	} = buildOperationalCenterGroups({
+		config,
+		insights,
+		currentUser,
+		responsibleOnly,
+	});
 	const centerPageSize = 12;
-	const centerTotalPages = Math.max(
-		1,
-		Math.ceil(operationalCenterGroups.length / centerPageSize),
-	);
-	const safeCenterPage = Math.min(centerPage, centerTotalPages);
-	const paginatedOperationalGroups = operationalCenterGroups.slice(
-		(safeCenterPage - 1) * centerPageSize,
-		safeCenterPage * centerPageSize,
-	);
+	const {
+		totalPages: centerTotalPages,
+		safePage: safeCenterPage,
+		rows: paginatedOperationalGroups,
+	} = paginateBudgetGroups(operationalCenterGroups, centerPage, centerPageSize);
 
 	if (responsibleOnly && page !== "orcamentoCentrosCusto") {
 		return (
@@ -6592,10 +6322,7 @@ function BudgetOperationalPage({
 		);
 	}
 
-	const pareto = insights.centerRows
-		.filter(({ center }) => center?.tipoPlano === "A")
-		.sort((a, b) => b.percent - a.percent)
-		.slice(0, 8);
+	const pareto = findBudgetParetoRows(insights, 8);
 	const accountById = new Map(
 		(config.accounts || []).map((account) => [account.id, account]),
 	);
@@ -6608,211 +6335,45 @@ function BudgetOperationalPage({
 	const branchById = new Map(
 		(config.branches || []).map((branch) => [branch.id, branch]),
 	);
-	const budgetDeviation = budgetVarianceMeta(
+	const budgetDeviation = budgetVarianceMetaFromInsights(
 		insights.plannedMonth,
 		insights.realizedMonth + insights.committedMonth,
 	);
-	const monthlyChart = {
-		labels: insights.monthlyEvolution.map((item) => item.label),
-		datasets: [
-			{
-				label: "Orçado",
-				data: insights.monthlyEvolution.map((item) => item.planned),
-				backgroundColor: "#2563eb",
-				borderRadius: 8,
-			},
-			{
-				label: "Realizado",
-				data: insights.monthlyEvolution.map((item) => item.realized),
-				backgroundColor: "#f97316",
-				borderRadius: 8,
-			},
-		],
-	};
-	const forecastChart = {
-		labels: insights.forecastRows.map((item) => item.label),
-		datasets: [
-			{
-				label: "Realizado acumulado",
-				data: insights.forecastRows.map((item) => item.cumulativeRealized),
-				borderColor: "#2563eb",
-				backgroundColor: "rgba(37,99,235,.14)",
-				fill: true,
-				tension: 0.35,
-			},
-			{
-				label: "Forecast",
-				data: insights.forecastRows.map((item) => item.forecast),
-				borderColor: "#f97316",
-				backgroundColor: "rgba(249,115,22,.08)",
-				borderDash: [6, 4],
-				fill: false,
-				tension: 0.35,
-			},
-		],
-	};
-	const topAccounts = insights.accountSummary.slice(0, 8);
-	const accountChart = {
-		labels: topAccounts.map((item) =>
-			budgetAccountLabel(item.account, item.id),
-		),
-		datasets: [
-			{
-				label: "Orçado",
-				data: topAccounts.map((item) => item.planned),
-				backgroundColor: "#0f766e",
-				borderRadius: 8,
-			},
-			{
-				label: "Realizado",
-				data: topAccounts.map((item) => item.realized),
-				backgroundColor: "#f97316",
-				borderRadius: 8,
-			},
-		],
-	};
+	const monthlyChart = buildBudgetMonthlyChart(insights);
+	const forecastChart = buildBudgetForecastChart(insights);
+	const { rows: topAccounts, chart: accountChart } = buildBudgetAccountChart(
+		insights.accountSummary,
+		budgetAccountLabel,
+		8,
+	);
 	const waterfallRows = topAccounts.slice(0, 6);
-	const topCenters = insights.centerSummary.slice(0, 8);
-	const centerChart = {
-		labels: topCenters.map((item) => budgetCenterCompactLabel(item.center)),
-		datasets: [
-			{
-				label: "Disponível",
-				data: topCenters.map((item) =>
-					Math.max(0, item.planned - item.realized),
-				),
-				backgroundColor: "#bfdbfe",
-				borderRadius: 8,
-			},
-			{
-				label: "Consumido",
-				data: topCenters.map((item) => item.realized),
-				backgroundColor: "#2563eb",
-				borderRadius: 8,
-			},
-		],
-	};
+	const { rows: topCenters, chart: centerChart } = buildBudgetCenterChart(
+		insights.centerSummary,
+		budgetCenterCompactLabel,
+		8,
+	);
 	const treemapItems = topCenters.slice(0, 12);
-	const topSuppliers = insights.supplierSummary.slice(0, 10);
-	const supplierTotalTop = topSuppliers.reduce(
-		(sum, item) => sum + Number(item.value || 0),
-		0,
-	);
-	const supplierChart = {
-		labels: topSuppliers.map((item) => item.supplier),
-		datasets: [
-			{
-				data: topSuppliers.map((item) => item.value),
-				backgroundColor: [
-					"#2563eb",
-					"#f97316",
-					"#10b981",
-					"#8b5cf6",
-					"#ef4444",
-					"#14b8a6",
-					"#f59e0b",
-					"#6366f1",
-					"#84cc16",
-					"#64748b",
-				],
-				borderWidth: 0,
-			},
-		],
-	};
-	const directorateByName = new Map(
-		(config.settings?.directorates || []).map((item) => [
-			String(item.nome || item.name || "")
-				.trim()
-				.toLowerCase(),
-			item,
-		]),
-	);
-	const directorateSummary = insights.centerSummary.reduce((map, item) => {
-		const rawName = String(
-			item.center?.diretoria || item.center?.directorate || "",
-		).trim();
-		const key = rawName.toLowerCase() || "sem-diretoria";
-		const directorate = directorateByName.get(key);
-		const current = map.get(key) || {
-			id: key,
-			nome: rawName || "Diretoria não informada",
-			diretor: directorate?.diretor || directorate?.director || "",
-			email: directorate?.emailDiretor || directorate?.directorEmail || "",
-			planned: 0,
-			realized: 0,
-			centers: 0,
-		};
-		current.planned += Number(item.planned || 0);
-		current.realized += Number(item.realized || 0);
-		current.centers += 1;
-		map.set(key, current);
-		return map;
-	}, new Map());
-	const directorateRows = Array.from(directorateSummary.values())
-		.map((item) => ({
-			...item,
-			available: Number(item.planned || 0) - Number(item.realized || 0),
-			percent: item.planned ? (item.realized / item.planned) * 100 : 0,
-		}))
-		.sort((left, right) => right.realized - left.realized);
+	const {
+		rows: topSuppliers,
+		total: supplierTotalTop,
+		chart: supplierChart,
+	} = buildBudgetSupplierChart(insights.supplierSummary, 10);
+	const directorateRows = buildDirectorateRows(insights, config);
 	const directorateTopRows = directorateRows.slice(0, 4);
-	const fullAccountChart = {
-		labels: insights.accountSummary.map((item) =>
-			budgetAccountLabel(item.account, item.id),
-		),
-		datasets: [
-			{
-				label: "Orçado",
-				data: insights.accountSummary.map((item) => item.planned),
-				backgroundColor: "#0f766e",
-				borderRadius: 8,
-			},
-			{
-				label: "Realizado",
-				data: insights.accountSummary.map((item) => item.realized),
-				backgroundColor: "#f97316",
-				borderRadius: 8,
-			},
-		],
-	};
-	const fullCenterChart = {
-		labels: insights.centerSummary.map((item) =>
-			budgetCenterCompactLabel(item.center),
-		),
-		datasets: [
-			{
-				label: "Disponível",
-				data: insights.centerSummary.map((item) =>
-					Math.max(0, item.planned - item.realized),
-				),
-				backgroundColor: "#bfdbfe",
-				borderRadius: 8,
-			},
-			{
-				label: "Consumido",
-				data: insights.centerSummary.map((item) => item.realized),
-				backgroundColor: "#2563eb",
-				borderRadius: 8,
-			},
-		],
-	};
-	const fullSupplierChart = {
-		labels: insights.supplierSummary.map((item) => item.supplier),
-		datasets: [
-			{
-				label: "Realizado",
-				data: insights.supplierSummary.map((item) => item.value),
-				backgroundColor: insights.supplierSummary.map((item, index) =>
-					index < 5 ? "#2563eb" : "#60a5fa",
-				),
-				borderRadius: 8,
-				barThickness: 18,
-			},
-		],
-	};
-	const fullPareto = insights.centerRows
-		.filter(({ center }) => center?.tipoPlano === "A")
-		.sort((a, b) => b.percent - a.percent);
+	const fullAccountChart = buildBudgetAccountChart(
+		insights.accountSummary,
+		budgetAccountLabel,
+		Infinity,
+	).chart;
+	const fullCenterChart = buildBudgetCenterChart(
+		insights.centerSummary,
+		budgetCenterCompactLabel,
+		Infinity,
+	).chart;
+	const fullSupplierChart = buildBudgetFullSupplierChart(
+		insights.supplierSummary,
+	);
+	const fullPareto = findBudgetParetoRows(insights, Infinity);
 	const fullTreemapItems = insights.centerSummary;
 	const detailTitles = {
 		ritmo: "Ritmo de consumo completo",
