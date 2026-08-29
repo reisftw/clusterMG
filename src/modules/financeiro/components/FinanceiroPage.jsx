@@ -13,10 +13,8 @@ import {
 import {
 	AlertTriangle,
 	ArrowRight,
-	BadgeDollarSign,
 	CalendarClock,
 	CheckCircle2,
-	CircleDollarSign,
 	ClipboardCheck,
 	Copy,
 	Download,
@@ -27,7 +25,6 @@ import {
 	Mail,
 	Pencil,
 	Plus,
-	ReceiptText,
 	RefreshCw,
 	Repeat2,
 	Search,
@@ -35,8 +32,6 @@ import {
 	TableProperties,
 	Trash2,
 	Upload,
-	Users,
-	Wallet,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +43,7 @@ import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
 import { addClusterLogo } from "../../../utils/pdfBranding";
+import FinancialKpiCard from "./kpi/FinancialKpiCard";
 import {
 	atualizarAprovacaoOrcamentoFinanceiro,
 	buscarCentrosCustoOrcamentoFinanceiro,
@@ -131,21 +127,6 @@ ChartJS.defaults.font.weight = "600";
 ChartJS.defaults.color = "#334155";
 
 const EMPTY_SERASA_LIST = [];
-
-const ICONS = {
-	AlertTriangle,
-	BadgeDollarSign,
-	CalendarClock,
-	CheckCircle2,
-	CircleDollarSign,
-	ClipboardCheck,
-	FileText,
-	Landmark,
-	ReceiptText,
-	Repeat2,
-	Users,
-	Wallet,
-};
 
 const PAGE_META = {
 	dashboard: {
@@ -2797,100 +2778,6 @@ function TariffsReportExportModal({ periodLabel, insights, importInfo, onClose }
 				))}
 			</div>
 		</ModalShell>
-	);
-}
-
-function FinancialKpiCard({
-	item,
-	loading,
-	index,
-	compact = false,
-	centered = false,
-}) {
-	const Icon = ICONS[item.icon] || BadgeDollarSign;
-	const positive = item.trend?.status === "positive";
-	const negative = item.trend?.status === "negative";
-	const variants = {
-		blue: {
-			icon: "from-blue-50/90 via-white to-white text-blue-700 ring-blue-100",
-			stripe: "from-blue-600 to-cyan-300",
-			hover:
-				"hover:border-blue-200 hover:shadow-[0_18px_42px_rgba(37,99,235,0.13)]",
-		},
-		emerald: {
-			icon: "from-emerald-50/90 via-white to-white text-emerald-700 ring-emerald-100",
-			stripe: "from-emerald-500 to-lime-300",
-			hover:
-				"hover:border-emerald-200 hover:shadow-[0_18px_42px_rgba(16,185,129,0.13)]",
-		},
-		violet: {
-			icon: "from-violet-50/90 via-white to-white text-violet-700 ring-violet-100",
-			stripe: "from-violet-600 to-fuchsia-300",
-			hover:
-				"hover:border-violet-200 hover:shadow-[0_18px_42px_rgba(124,58,237,0.13)]",
-		},
-		amber: {
-			icon: "from-amber-50/90 via-white to-white text-amber-700 ring-amber-100",
-			stripe: "from-amber-500 to-yellow-300",
-			hover:
-				"hover:border-amber-200 hover:shadow-[0_18px_42px_rgba(245,158,11,0.13)]",
-		},
-		rose: {
-			icon: "from-rose-50/90 via-white to-white text-rose-700 ring-rose-100",
-			stripe: "from-rose-500 to-pink-300",
-			hover:
-				"hover:border-rose-200 hover:shadow-[0_18px_42px_rgba(244,63,94,0.13)]",
-		},
-		slate: {
-			icon: "from-slate-50/90 via-white to-white text-slate-700 ring-slate-100",
-			stripe: "from-slate-600 to-slate-300",
-			hover:
-				"hover:border-slate-300 hover:shadow-[0_18px_42px_rgba(15,23,42,0.10)]",
-		},
-	};
-	const colorVariant = negative
-		? variants.amber
-		: variants[item.color] || variants.blue;
-	return (
-		<article
-			className={`group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.07)] transition hover:-translate-y-0.5 ${compact ? "min-h-[104px] p-3" : "min-h-[132px] p-4"} ${centered ? "flex items-center" : ""} ${colorVariant.hover}`}
-		>
-			<div
-				className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${colorVariant.stripe}`}
-			/>
-			<div className={`w-full flex gap-3 ${centered ? "items-center justify-center text-center" : "items-start"}`}>
-				<span
-					className={`flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ring-1 ${compact ? "h-11 w-11" : "h-14 w-14"} ${colorVariant.icon}`}
-				>
-					<Icon size={compact ? 20 : 25} strokeWidth={2.4} />
-				</span>
-				<div className={`min-w-0 flex-1 ${centered ? "flex flex-col items-center" : ""}`}>
-					<p className={`line-clamp-2 font-bold leading-tight text-slate-950 ${compact ? "text-[11px]" : "min-h-8 text-[12px]"}`}>
-						{typeof index === "number" ? `${index + 1}. ` : ""}
-						{item.title}
-					</p>
-					{loading ? (
-						<div className="mt-3 h-7 w-28 animate-pulse rounded-lg bg-slate-100" />
-					) : (
-						<p className={`max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold leading-none tracking-tight text-slate-950 ${compact ? "mt-1.5 text-[clamp(1rem,1vw,1.25rem)]" : "mt-3 text-[clamp(1.15rem,1.25vw,1.55rem)]"}`}>
-							{formatValue(item.value, item.type)}
-						</p>
-					)}
-					{!item.hideTrend ? (
-						<p
-							className={`mt-3 inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${positive ? "bg-emerald-50 text-emerald-700" : negative ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-500"}`}
-						>
-							{trendText(item.trend, item.trendLabel)}
-						</p>
-					) : null}
-					{item.helper ? (
-						<p className="mt-1 text-xs font-bold text-slate-500">
-							{item.helper}
-						</p>
-					) : null}
-				</div>
-			</div>
-		</article>
 	);
 }
 
