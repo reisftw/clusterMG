@@ -43,6 +43,7 @@ import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
 import { addClusterLogo } from "../../../utils/pdfBranding";
+import { getBudgetDashboardDetailRenderer } from "./budget/details";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
 import {
 	atualizarAprovacaoOrcamentoFinanceiro,
@@ -6832,388 +6833,39 @@ function BudgetOperationalPage({
 		Math.max(520, Math.min(4200, Number(rows || 0) * 44));
 	const renderDashboardDetail = () => {
 		if (!dashboardDetail) return null;
-		if (dashboardDetail === "ritmo") {
-			return (
-				<div className="space-y-4">
-					<div className="h-[420px] rounded-2xl border border-slate-200 p-4">
-						<Line
-							data={{
-								labels: ["Ideal hoje", "Realizado + comprometido"],
-								datasets: [
-									{
-										label: "Consumo %",
-										data: [insights.idealPercent, insights.usedPercent],
-										borderColor: "#2563eb",
-										backgroundColor: "rgba(37,99,235,.16)",
-										fill: true,
-										tension: 0.35,
-									},
-								],
-							}}
-							options={lineOptions()}
-						/>
-					</div>
-					<div className="grid gap-3 sm:grid-cols-3">
-						<FinancialKpiCard
-							item={{
-								title: "Ideal do período",
-								value: insights.idealPercent,
-								type: "percent",
-								helper: insights.periodDisplayLabel,
-								icon: "TrendingUp",
-							}}
-						/>
-						<FinancialKpiCard
-							item={{
-								title: "Consumido",
-								value: insights.usedPercent,
-								type: "percent",
-								helper: brl.format(
-									insights.realizedMonth + insights.committedMonth,
-								),
-								icon: "Wallet",
-							}}
-						/>
-						<FinancialKpiCard
-							item={{
-								title: "Saldo",
-								value: insights.availableMonth,
-								type: "currency",
-								helper:
-									insights.availableMonth >= 0
-										? "Dentro do orçamento"
-										: "Estourado",
-								icon: "CircleDollarSign",
-							}}
-						/>
-					</div>
-				</div>
-			);
-		}
-		if (dashboardDetail === "viloes") {
-			return (
-				<div className="space-y-3">
-					{fullPareto.map(({ center, deviation, percent }) => {
-						const status = budgetConsumptionStatus(percent);
-						return (
-							<div
-								key={center.id}
-								className="rounded-2xl border border-slate-200 p-3"
-							>
-								<div className="flex flex-wrap items-center justify-between gap-3 text-sm font-black">
-									<span className="text-slate-800">
-										{budgetCenterCompactLabel(center)}
-									</span>
-									<span className={status.textClass}>
-										{decimal.format(percent)}% ·{" "}
-										{brl.format(Math.abs(deviation))}
-									</span>
-								</div>
-								<div className="mt-2 h-3 rounded-full bg-slate-100">
-									<div
-										className={`h-full rounded-full ${status.barClass}`}
-										style={{ width: `${Math.min(100, Math.max(4, percent))}%` }}
-									/>
-								</div>
-							</div>
-						);
-					})}
-					{!fullPareto.length ? (
-						<EmptyState text="Nenhum centro analítico encontrado no período." />
-					) : null}
-				</div>
-			);
-		}
-		if (dashboardDetail === "mensal") {
-			return (
-				<div className="h-[520px]">
-					<Bar data={monthlyChart} options={barOptions()} />
-				</div>
-			);
-		}
-		if (dashboardDetail === "forecast") {
-			return (
-				<div className="h-[520px]">
-					<Line data={forecastChart} options={barOptions()} />
-				</div>
-			);
-		}
-		if (dashboardDetail === "cascata") {
-			return (
-				<div className="space-y-3">
-					<div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-						<p className="text-xs font-black uppercase text-emerald-700">
-							Orçamento do período
-						</p>
-						<p className="mt-1 text-xl font-black text-emerald-950">
-							{brl.format(insights.plannedMonth)}
-						</p>
-					</div>
-					{insights.accountSummary.map((item) => {
-						const width = insights.plannedMonth
-							? Math.min(
-									100,
-									Math.max(4, (item.realized / insights.plannedMonth) * 100),
-								)
-							: 4;
-						return (
-							<div
-								key={item.id}
-								className="rounded-xl border border-slate-100 bg-slate-50 p-3"
-							>
-								<div className="flex items-center justify-between gap-3 text-xs font-black">
-									<span className="text-slate-700">
-										{budgetAccountLabel(item.account, item.id)}
-									</span>
-									<span className="text-red-600">
-										- {brl.format(item.realized)}
-									</span>
-								</div>
-								<div className="mt-2 h-2 rounded-full bg-white">
-									<div
-										className="h-full rounded-full bg-red-400"
-										style={{ width: `${width}%` }}
-									/>
-								</div>
-							</div>
-						);
-					})}
-					<div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-						<p className="text-xs font-black uppercase text-blue-700">
-							Saldo após realizados
-						</p>
-						<p className="mt-1 text-xl font-black text-blue-950">
-							{brl.format(insights.availableMonth)}
-						</p>
-					</div>
-				</div>
-			);
-		}
-		if (dashboardDetail === "contas") {
-			return (
-				<div
-					style={{ height: detailChartHeight(insights.accountSummary.length) }}
-				>
-					<Bar
-						data={fullAccountChart}
-						options={{ ...barOptions(), indexAxis: "y" }}
-					/>
-				</div>
-			);
-		}
-		if (dashboardDetail === "centros") {
-			return (
-				<div
-					style={{ height: detailChartHeight(insights.centerSummary.length) }}
-				>
-					<Bar
-						data={fullCenterChart}
-						options={{
-							...barOptions(),
-							indexAxis: "y",
-							scales: {
-								x: {
-									stacked: true,
-									ticks: { callback: (value) => brl.format(Number(value)) },
-								},
-								y: { stacked: true, grid: { display: false } },
-							},
-						}}
-					/>
-				</div>
-			);
-		}
-		if (dashboardDetail === "treemap") {
-			return (
-				<div className="grid auto-rows-[minmax(88px,auto)] grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-					{fullTreemapItems.map((item) => {
-						const status = budgetConsumptionStatus(item.percent);
-						return (
-							<div
-								key={item.center.id}
-								className={`rounded-2xl p-3 text-white shadow-sm ${item.percent > 100 ? "bg-red-500" : item.percent >= 80 ? "bg-amber-400" : "bg-emerald-500"}`}
-							>
-								<p className="text-xs font-black uppercase">
-									{budgetCenterCompactLabel(item.center)}
-								</p>
-								<p className="mt-2 text-lg font-black">
-									{brl.format(item.realized)}
-								</p>
-								<p className="text-xs font-black opacity-90">
-									{decimal.format(item.percent)}% · {status.label}
-								</p>
-							</div>
-						);
-					})}
-					{!fullTreemapItems.length ? (
-						<EmptyState text="Nenhum centro analítico com movimentação no período." />
-					) : null}
-				</div>
-			);
-		}
-		if (dashboardDetail === "fornecedores") {
-			return (
-				<div className="space-y-4">
-					<div className="rounded-2xl border border-slate-200 bg-white p-4">
-						<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-							<p className="text-xs font-black uppercase text-slate-500">
-								{integer.format(insights.supplierSummary.length)} fornecedor(es)
-								· maior para menor
-							</p>
-							<p className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
-								Escala automática em{" "}
-								{brl.format(
-									smartCurrencyStep(
-										Math.max(
-											...insights.supplierSummary.map((item) =>
-												Number(item.value || 0),
-											),
-											0,
-										),
-									),
-								)}
-							</p>
-						</div>
-						<div
-							style={{
-								height: supplierChartHeight(insights.supplierSummary.length),
-							}}
-						>
-							<Bar
-								data={fullSupplierChart}
-								options={supplierBarOptions(
-									insights.supplierSummary.map((item) => item.supplier),
-									insights.supplierSummary.map((item) => item.value),
-								)}
-							/>
-						</div>
-					</div>
-					{renderSupplierDetailTable(
-						insights.supplierSummary,
-						centerById,
-						accountById,
-					)}
-				</div>
-			);
-		}
-		if (dashboardDetail === "diretorias") {
-			return (
-				<div className="overflow-auto rounded-2xl border border-slate-200">
-					<table className="min-w-[720px] divide-y divide-slate-200 text-left text-xs font-bold">
-						<thead className="bg-slate-50 text-slate-500">
-							<tr>
-								<th className="px-3 py-2">Diretoria</th>
-								<th className="px-3 py-2">Diretor</th>
-								<th className="px-3 py-2 text-right">Centros</th>
-								<th className="px-3 py-2 text-right">Orçado</th>
-								<th className="px-3 py-2 text-right">Realizado</th>
-								<th className="px-3 py-2 text-right">Saldo</th>
-								<th className="px-3 py-2 text-right">Uso</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-slate-100">
-							{directorateRows.length ? (
-								directorateRows.map((item) => {
-									const status = budgetConsumptionStatus(item.percent);
-									return (
-										<tr key={item.id}>
-											<td className="px-3 py-2 font-black text-slate-950">
-												{item.nome}
-											</td>
-											<td className="px-3 py-2 text-slate-600">
-												{item.diretor || "Diretor não informado"}
-											</td>
-											<td className="px-3 py-2 text-right text-slate-700">
-												{integer.format(item.centers)}
-											</td>
-											<td className="px-3 py-2 text-right text-slate-700">
-												{brl.format(item.planned)}
-											</td>
-											<td className="px-3 py-2 text-right font-black text-slate-900">
-												{brl.format(item.realized)}
-											</td>
-											<td
-												className={`px-3 py-2 text-right font-black ${item.available >= 0 ? "text-emerald-600" : "text-red-600"}`}
-											>
-												{brl.format(item.available)}
-											</td>
-											<td
-												className={`px-3 py-2 text-right font-black ${status.textClass}`}
-											>
-												{decimal.format(item.percent)}%
-											</td>
-										</tr>
-									);
-								})
-							) : (
-								<tr>
-									<td colSpan={7}>
-										<EmptyState text="Nenhuma diretoria vinculada aos centros analíticos do período." />
-									</td>
-								</tr>
-							)}
-						</tbody>
-					</table>
-				</div>
-			);
-		}
-		if (dashboardDetail === "movimentacoes") {
-			const pageSize = 25;
-			const totalPages = Math.max(
-				1,
-				Math.ceil(insights.movements.length / pageSize),
-			);
-			const safePage = Math.min(dashboardDetailPage, totalPages);
-			const visibleMovements = insights.movements.slice(
-				(safePage - 1) * pageSize,
-				safePage * pageSize,
-			);
-			return (
-				<div className="space-y-3">
-					{renderMovementsDetailTable(
-						visibleMovements,
-						accountById,
-						centerById,
-						companyById,
-						branchById,
-					)}
-					{insights.movements.length ? (
-						<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-							<p className="text-xs font-black text-slate-600">
-								Página {integer.format(safePage)} de{" "}
-								{integer.format(totalPages)} ·{" "}
-								{integer.format(insights.movements.length)} movimentação(ões)
-							</p>
-							<div className="flex gap-2">
-								<button
-									type="button"
-									onClick={() =>
-										setDashboardDetailPage((value) => Math.max(1, value - 1))
-									}
-									disabled={safePage <= 1}
-									className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-								>
-									Anterior
-								</button>
-								<button
-									type="button"
-									onClick={() =>
-										setDashboardDetailPage((value) =>
-											Math.min(totalPages, value + 1),
-										)
-									}
-									disabled={safePage >= totalPages}
-									className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-								>
-									Próxima
-								</button>
-							</div>
-						</div>
-					) : null}
-				</div>
-			);
-		}
-		return null;
+		const DetailComponent = getBudgetDashboardDetailRenderer(dashboardDetail);
+		if (!DetailComponent) return null;
+		return (
+			<DetailComponent
+				EmptyState={EmptyState}
+				accountById={accountById}
+				barOptions={barOptions}
+				branchById={branchById}
+				budgetAccountLabel={budgetAccountLabel}
+				budgetCenterCompactLabel={budgetCenterCompactLabel}
+				budgetConsumptionStatus={budgetConsumptionStatus}
+				centerById={centerById}
+				companyById={companyById}
+				dashboardDetailPage={dashboardDetailPage}
+				detailChartHeight={detailChartHeight}
+				directorateRows={directorateRows}
+				forecastChart={forecastChart}
+				fullAccountChart={fullAccountChart}
+				fullCenterChart={fullCenterChart}
+				fullPareto={fullPareto}
+				fullSupplierChart={fullSupplierChart}
+				fullTreemapItems={fullTreemapItems}
+				insights={insights}
+				lineOptions={lineOptions}
+				monthlyChart={monthlyChart}
+				renderMovementsDetailTable={renderMovementsDetailTable}
+				renderSupplierDetailTable={renderSupplierDetailTable}
+				setDashboardDetailPage={setDashboardDetailPage}
+				smartCurrencyStep={smartCurrencyStep}
+				supplierBarOptions={supplierBarOptions}
+				supplierChartHeight={supplierChartHeight}
+			/>
+		);
 	};
 	return (
 		<section className="space-y-4">
