@@ -1,29 +1,30 @@
 {
-  "name": "retiradas-vps",
-  "version": "0.1.0",
-  "private": true,
-  "type": "commonjs",
-  "scripts": {
-    "api:start": "node api/src/index.js",
-    "api:dev": "node --watch api/src/index.js",
-    "auth:seed-users": "node scripts/seed-local-auth-users.js",
-    "backup:database": "node scripts/database-backup.js",
-    "documentos:cobranca": "node scripts/documentos-cobranca.js",
-    "reconcile:agendamentos-mapa": "node scripts/reconcile-agendamentos-mapa.js",
-    "acerto:migrate-empresas": "node scripts/migrate-acerto-empresas-tecnicos.js",
-    "import:documents": "node scripts/import-documents-jsonl.js"
-  },
-  "dependencies": {
-    "archiver": "^8.0.0",
-    "argon2": "^0.45.1",
-    "cors": "^2.8.5",
-    "express": "^4.22.2",
-    "express-rate-limit": "^8.6.1",
-    "google-auth-library": "^10.5.0",
-    "googleapis": "^174.0.1",
-    "helmet": "^8.1.0",
-    "multer": "^2.2.0",
-    "nodemailer": "^9.0.5",
-    "pg": "^8.16.3"
-  }
+	"name": "retiradas-vps",
+	"version": "0.1.0",
+	"private": true,
+	"type": "commonjs",
+	"scripts": {
+		"api:start": "node api/src/index.js",
+		"api:dev": "node --watch api/src/index.js",
+		"auth:seed-users": "node scripts/seed-local-auth-users.js",
+		"backup:database": "node scripts/database-backup.js",
+		"documentos:cobranca": "node scripts/documentos-cobranca.js",
+		"reconcile:agendamentos-mapa": "node scripts/reconcile-agendamentos-mapa.js",
+		"acerto:migrate-empresas": "node scripts/migrate-acerto-empresas-tecnicos.js",
+		"import:documents": "node scripts/import-documents-jsonl.js"
+	},
+	"dependencies": {
+		"archiver": "^8.0.0",
+		"argon2": "^0.45.1",
+		"compression": "^1.8.1",
+		"cors": "^2.8.5",
+		"express": "^4.22.2",
+		"express-rate-limit": "^8.6.1",
+		"google-auth-library": "^10.5.0",
+		"googleapis": "^174.0.1",
+		"helmet": "^8.1.0",
+		"multer": "^2.2.0",
+		"nodemailer": "^9.0.5",
+		"pg": "^8.16.3"
+	}
 }
