@@ -47,6 +47,7 @@ import BudgetApprovalsView from "./budget/BudgetApprovalsView";
 import BudgetCostCentersView from "./budget/BudgetCostCentersView";
 import BudgetDashboardView from "./budget/BudgetDashboardView";
 import BudgetDreView from "./budget/BudgetDreView";
+import CompaniesBranchesConfigSection from "./budget/config/CompaniesBranchesConfigSection";
 import BudgetMatrixConfigSection from "./budget/config/BudgetMatrixConfigSection";
 import BudgetParametersSection from "./budget/config/BudgetParametersSection";
 import PartnersConfigSection from "./budget/config/PartnersConfigSection";
@@ -8905,172 +8906,33 @@ function CostCentersConfigSection({ canManage }) {
 				</div>
 			</div>
 
-			<BudgetDropdownSection
-				title="Matrizes e filiais orçamentárias"
-				count={(config.companies || []).length + (config.branches || []).length}
-				className="mt-5 border-cyan-200 bg-cyan-50"
-				action={
-					<div className="flex flex-wrap gap-2">
-						<button
-							type="button"
-							onClick={() =>
-								setCompanyBranchModal({
-									type: "company",
-									item: EMPTY_BUDGET_COMPANY,
-								})
-							}
-							disabled={!canManage || saving}
-							className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-cyan-700 px-3 text-xs font-black text-white hover:bg-cyan-800 disabled:opacity-50"
-						>
-							<Plus size={14} /> Nova matriz
-						</button>
-						<button
-							type="button"
-							onClick={() =>
-								setCompanyBranchModal({
-									type: "branch",
-									item: EMPTY_BUDGET_BRANCH,
-								})
-							}
-							disabled={
-								!canManage || saving || !(config.companies || []).length
-							}
-							className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-cyan-200 bg-white px-3 text-xs font-black text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
-						>
-							<Plus size={14} /> Nova filial
-						</button>
-					</div>
+			<CompaniesBranchesConfigSection
+				BudgetDropdownSection={BudgetDropdownSection}
+				branches={config.branches || []}
+				canManage={canManage}
+				companies={config.companies || []}
+				onCreateBranch={() =>
+					setCompanyBranchModal({
+						type: "branch",
+						item: EMPTY_BUDGET_BRANCH,
+					})
 				}
-			>
-				<div className="grid gap-4 xl:grid-cols-2">
-					<BudgetDropdownSection
-						title="Matrizes"
-						count={(config.companies || []).length}
-						items={config.companies || []}
-						pageSize={6}
-						emptyText="Nenhuma matriz cadastrada."
-						renderItem={(company) => (
-							<article
-								key={company.id}
-								className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-							>
-								<div className="flex items-start justify-between gap-3">
-									<div>
-										<p className="text-xs font-black uppercase text-cyan-700">
-											ID {company.codigo || company.id}
-										</p>
-										<h4 className="text-sm font-black text-slate-950">
-											{company.nome}
-										</h4>
-										<p className="text-xs font-bold text-slate-500">
-											{(company.filiais || []).length} filial(is) vinculada(s)
-										</p>
-										{(company.filiais || []).length ? (
-											<p className="mt-1 text-[11px] font-bold text-cyan-700">
-												{(company.filiais || [])
-													.slice(0, 3)
-													.map(
-														(branchId) =>
-															(config.branches || []).find(
-																(branch) => branch.id === branchId,
-															)?.nome || branchId,
-													)
-													.join(", ")}
-												{(company.filiais || []).length > 3
-													? ` +${(company.filiais || []).length - 3}`
-													: ""}
-											</p>
-										) : null}
-									</div>
-									<span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700">
-										{company.status || "ativo"}
-									</span>
-								</div>
-								<div className="mt-3 flex flex-wrap gap-2">
-									<button
-										type="button"
-										onClick={() =>
-											setCompanyBranchModal({ type: "company", item: company })
-										}
-										disabled={!canManage || saving}
-										className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-200 px-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-									>
-										<Pencil size={12} /> Editar
-									</button>
-									<button
-										type="button"
-										onClick={() => removeCompany(company.id)}
-										disabled={!canManage || saving}
-										className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-red-200 px-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
-									>
-										<Trash2 size={12} /> Excluir
-									</button>
-								</div>
-							</article>
-						)}
-					/>
-					<BudgetDropdownSection
-						title="Filiais"
-						count={(config.branches || []).length}
-						items={config.branches || []}
-						pageSize={6}
-						emptyText="Nenhuma filial cadastrada."
-						renderItem={(branch) => {
-							const branchCompanies = (config.companies || []).filter(
-								(item) =>
-									item.filialId === branch.id ||
-									item.branchId === branch.id ||
-									(item.filiais || []).includes(branch.id) ||
-									(branch.empresas || branch.companies || []).includes(item.id),
-							);
-							return (
-								<article
-									key={branch.id}
-									className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-								>
-									<div className="flex items-start justify-between gap-3">
-										<div>
-											<p className="text-xs font-black uppercase text-cyan-700">
-												ID {branch.codigo || branch.id}
-											</p>
-											<h4 className="text-sm font-black text-slate-950">
-												{branch.nome}
-											</h4>
-											<p className="text-xs font-bold text-slate-500">
-												Matriz: {branchCompanies[0]?.nome || "não vinculada"}
-												{branch.cidade ? ` · ${branch.cidade}` : ""}
-											</p>
-										</div>
-										<span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-slate-700">
-											{branch.status || "ativo"}
-										</span>
-									</div>
-									<div className="mt-3 flex flex-wrap gap-2">
-										<button
-											type="button"
-											onClick={() =>
-												setCompanyBranchModal({ type: "branch", item: branch })
-											}
-											disabled={!canManage || saving}
-											className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-blue-200 px-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-										>
-											<Pencil size={12} /> Editar
-										</button>
-										<button
-											type="button"
-											onClick={() => removeBranch(branch.id)}
-											disabled={!canManage || saving}
-											className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-red-200 px-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
-										>
-											<Trash2 size={12} /> Excluir
-										</button>
-									</div>
-								</article>
-							);
-						}}
-					/>
-				</div>
-			</BudgetDropdownSection>
+				onCreateCompany={() =>
+					setCompanyBranchModal({
+						type: "company",
+						item: EMPTY_BUDGET_COMPANY,
+					})
+				}
+				onEditBranch={(branch) =>
+					setCompanyBranchModal({ type: "branch", item: branch })
+				}
+				onEditCompany={(company) =>
+					setCompanyBranchModal({ type: "company", item: company })
+				}
+				onRemoveBranch={removeBranch}
+				onRemoveCompany={removeCompany}
+				saving={saving}
+			/>
 
 			<BudgetDropdownSection
 				title="Contas financeiras"
