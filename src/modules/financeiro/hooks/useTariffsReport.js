@@ -203,6 +203,49 @@ export function useTariffsReport({
 		setPeriodMode("custom");
 		setDateModalOpen(false);
 	}, []);
+	const openDateRangeModal = useCallback(() => {
+		setMonthMenuOpen(false);
+		setYearMenuOpen(false);
+		setDateModalOpen(true);
+	}, []);
+	const closeDateRangeModal = useCallback(() => {
+		setDateModalOpen(false);
+	}, []);
+	const openReportModal = useCallback(() => {
+		setReportModalOpen(true);
+	}, []);
+	const closeReportModal = useCallback(() => {
+		setReportModalOpen(false);
+	}, []);
+	const closeFeedback = useCallback(() => {
+		setFeedback(null);
+	}, []);
+	const selectMonth = useCallback((month) => {
+		setSelectedReference((current) => ({
+			...current,
+			referenceMonth: month,
+		}));
+		setPeriodMode("month");
+		setMonthMenuOpen(false);
+	}, []);
+	const selectYear = useCallback((year) => {
+		setSelectedReference((current) => ({
+			...current,
+			referenceYear: year,
+		}));
+		setPeriodMode("year");
+		setYearMenuOpen(false);
+	}, []);
+	const toggleMonthMenu = useCallback(() => {
+		setPeriodMode("month");
+		setYearMenuOpen(false);
+		setMonthMenuOpen((current) => !current);
+	}, []);
+	const toggleYearMenu = useCallback(() => {
+		setPeriodMode("year");
+		setMonthMenuOpen(false);
+		setYearMenuOpen((current) => !current);
+	}, []);
 
 	return {
 		action,
@@ -216,6 +259,8 @@ export function useTariffsReport({
 		loading,
 		monthMenuOpen,
 		monthlyTariffsChart,
+		openDateRangeModal,
+		openReportModal,
 		paymentChart,
 		periodLabel,
 		periodMode,
@@ -224,6 +269,11 @@ export function useTariffsReport({
 		selectedReference,
 		yearMenuOpen,
 		applyDateRange,
+		closeFeedback,
+		closeDateRangeModal,
+		closeReportModal,
+		selectMonth,
+		selectYear,
 		setDateModalOpen,
 		setFeedback,
 		setMonthMenuOpen,
@@ -231,5 +281,7 @@ export function useTariffsReport({
 		setReportModalOpen,
 		setSelectedReference,
 		setYearMenuOpen,
+		toggleMonthMenu,
+		toggleYearMenu,
 	};
 }

@@ -11192,19 +11192,21 @@ function TariffsReportPage({ canManage }) {
 		loading,
 		monthMenuOpen,
 		monthlyTariffsChart,
+		openDateRangeModal,
+		openReportModal,
 		paymentChart,
 		periodLabel,
 		periodMode,
 		report,
 		reportModalOpen,
 		selectedReference,
-		setDateModalOpen,
-		setFeedback,
-		setMonthMenuOpen,
-		setPeriodMode,
-		setReportModalOpen,
-		setSelectedReference,
-		setYearMenuOpen,
+		closeDateRangeModal,
+		closeFeedback,
+		closeReportModal,
+		selectMonth,
+		selectYear,
+		toggleMonthMenu,
+		toggleYearMenu,
 		yearMenuOpen,
 	} = useTariffsReport({ canManage, getVisibleError });
 	const yearOptions = Array.from({ length: 7 }, (_, index) => 2026 - index);
@@ -11212,37 +11214,11 @@ function TariffsReportPage({ canManage }) {
 		<section className="space-y-4">
 			<TariffsPeriodSelector
 				monthMenuOpen={monthMenuOpen}
-				onDateClick={() => {
-					setMonthMenuOpen(false);
-					setYearMenuOpen(false);
-					setDateModalOpen(true);
-				}}
-				onMonthSelect={(month) => {
-					setSelectedReference((current) => ({
-						...current,
-						referenceMonth: month,
-					}));
-					setPeriodMode("month");
-					setMonthMenuOpen(false);
-				}}
-				onMonthToggle={() => {
-					setPeriodMode("month");
-					setYearMenuOpen(false);
-					setMonthMenuOpen((current) => !current);
-				}}
-				onYearSelect={(year) => {
-					setSelectedReference((current) => ({
-						...current,
-						referenceYear: year,
-					}));
-					setPeriodMode("year");
-					setYearMenuOpen(false);
-				}}
-				onYearToggle={() => {
-					setPeriodMode("year");
-					setMonthMenuOpen(false);
-					setYearMenuOpen((current) => !current);
-				}}
+				onDateClick={openDateRangeModal}
+				onMonthSelect={selectMonth}
+				onMonthToggle={toggleMonthMenu}
+				onYearSelect={selectYear}
+				onYearToggle={toggleYearMenu}
 				periodLabel={periodLabel}
 				periodMode={periodMode}
 				selectedReference={selectedReference}
@@ -11255,7 +11231,7 @@ function TariffsReportPage({ canManage }) {
 				lastUpdatedLabel={formatUpdatedAt(report?.importInfo?.importedAt)}
 				loading={loading}
 				onClear={handleClear}
-				onOpenReport={() => setReportModalOpen(true)}
+				onOpenReport={openReportModal}
 				onRefresh={loadTariffs}
 				onUpload={handleUpload}
 				report={report}
@@ -11272,21 +11248,17 @@ function TariffsReportPage({ canManage }) {
 					periodLabel={periodLabel}
 					insights={insights}
 					importInfo={report?.importInfo || {}}
-					onClose={() => setReportModalOpen(false)}
+					onClose={closeReportModal}
 				/>
 			) : null}
 			{dateModalOpen ? (
 				<BudgetDateRangeModal
 					value={dateRange}
-					onClose={() => setDateModalOpen(false)}
-					onApply={(range) => {
-						setDateRange(range);
-						setPeriodMode("custom");
-						setDateModalOpen(false);
-					}}
+					onClose={closeDateRangeModal}
+					onApply={applyDateRange}
 				/>
 			) : null}
-			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+			<FeedbackModal feedback={feedback} onClose={closeFeedback} />
 		</section>
 	);
 }
