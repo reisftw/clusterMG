@@ -47,6 +47,7 @@ import BudgetApprovalsView from "./budget/BudgetApprovalsView";
 import BudgetCostCentersView from "./budget/BudgetCostCentersView";
 import BudgetDashboardView from "./budget/BudgetDashboardView";
 import BudgetDreView from "./budget/BudgetDreView";
+import BudgetParametersSection from "./budget/config/BudgetParametersSection";
 import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
@@ -8821,60 +8822,16 @@ function CostCentersConfigSection({ canManage }) {
 				</div>
 			) : null}
 
-			<details
-				open={parametersOpen}
-				onToggle={(event) => setParametersOpen(event.currentTarget.open)}
-				className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"
-			>
-				<summary className="flex cursor-pointer list-none items-start gap-3">
-					<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-700 ring-1 ring-slate-200">
-						<Settings size={18} />
-					</span>
-					<span>
-						<span className="block text-sm font-black text-slate-950">
-							Parâmetros configuráveis
-						</span>
-					</span>
-				</summary>
-				<div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-					<ListConfigInput
-						label="Tipos de centro"
-						value={budgetSettings.centerTypes}
-						disabled={!canManage || saving}
-						onChange={(value) => updateSettings("centerTypes", value)}
-					/>
-					<ListConfigInput
-						label="Categorias principais"
-						value={budgetSettings.mainCategories}
-						disabled={!canManage || saving}
-						onChange={(value) => updateSettings("mainCategories", value)}
-					/>
-					<ListConfigInput
-						label="Grupos de conta"
-						value={budgetSettings.accountGroups}
-						disabled={!canManage || saving}
-						onChange={(value) => updateSettings("accountGroups", value)}
-					/>
-					<ListConfigInput
-						label="Grupos DRE"
-						value={budgetSettings.dreGroups}
-						disabled={!canManage || saving}
-						onChange={(value) => updateSettings("dreGroups", value)}
-					/>
-					<ListConfigInput
-						label="Status do centro"
-						value={budgetSettings.centerStatuses}
-						disabled={!canManage || saving}
-						onChange={(value) => updateSettings("centerStatuses", value)}
-					/>
-				</div>
-			</details>
-
-			<DirectoratesDropdownSection
-				value={budgetSettings.directorates}
+			<BudgetParametersSection
+				budgetSettings={budgetSettings}
+				canManage={canManage}
 				centers={config.centers || []}
 				disabled={!canManage || saving}
-				onChange={(value) => updateSettings("directorates", value)}
+				DirectoratesDropdownSection={DirectoratesDropdownSection}
+				ListConfigInput={ListConfigInput}
+				onChangeSettings={updateSettings}
+				open={parametersOpen}
+				setOpen={setParametersOpen}
 			/>
 
 			<div className="mt-5 grid gap-3 md:grid-cols-4">
