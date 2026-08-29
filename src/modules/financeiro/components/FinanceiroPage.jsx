@@ -34,7 +34,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -8760,19 +8760,19 @@ function CostCentersConfigSection({ canManage }) {
 
 	useEffect(() => {
 		setCenterPage(1);
-	}, [centerSearch, centerStatusFilter]);
+	}, [centerSearch, centerStatusFilter, setCenterPage]);
 
 	useEffect(() => {
 		if (centerPage > centerTotalPages) setCenterPage(centerTotalPages);
-	}, [centerPage, centerTotalPages]);
+	}, [centerPage, centerTotalPages, setCenterPage]);
 
 	useEffect(() => {
 		setAccountPage(1);
-	}, [accountSearch, accountStatusFilter]);
+	}, [accountSearch, accountStatusFilter, setAccountPage]);
 
 	useEffect(() => {
 		if (accountPage > accountTotalPages) setAccountPage(accountTotalPages);
-	}, [accountPage, accountTotalPages]);
+	}, [accountPage, accountTotalPages, setAccountPage]);
 
 	return (
 		<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
