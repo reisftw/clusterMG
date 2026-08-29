@@ -160,6 +160,324 @@ function centerCodeKey(center = {}) {
 	);
 }
 
+function sumBy(items = [], mapper = () => 0) {
+	return items.reduce((sum, item, index) => sum + Number(mapper(item, index) || 0), 0);
+}
+
+function isSyntheticCenter(center = {}) {
+	return center?.tipoPlano === "S";
+}
+
+function centerBreakdowns(center = {}) {
+	return center.realizedByCompanyBranch || center.realizadoPorEmpresaFilial || [];
+}
+
+function breakdownRealizedValue(item = {}) {
+	return Number(item.realized ?? item.realizado ?? 0) || 0;
+}
+
+function buildChildrenByParentKey(centers = [], parentKeyResolver = centerParentKey) {
+	const childrenByParentKey = new Map();
+	centers
+		.filter((center) => center.tipoPlano === "A")
+		.forEach((center) => {
+			const parentKey = parentKeyResolver(center);
+			if (!parentKey) return;
+			const current = childrenByParentKey.get(parentKey) || [];
+			current.push(center);
+			childrenByParentKey.set(parentKey, current);
+		});
+	return childrenByParentKey;
+}
+
+function uniqueById(items = []) {
+	return items.filter(
+		(item, index, allItems) =>
+			allItems.findIndex((current) => current.id === item.id) === index,
+	);
+}
+
+function createAnalyticChildrenResolver(centers = []) {
+	const childrenByParentKey = buildChildrenByParentKey(centers);
+	return (center = {}) => {
+		if (!isSyntheticCenter(center)) return [];
+		const key = centerCodeKey(center);
+		const byId = childrenByParentKey.get(center.id) || [];
+		const byCode = key ? childrenByParentKey.get(key) || [] : [];
+		return uniqueById([...byId, ...byCode]);
+	};
+}
+
+function rawCenterParentKey(center = {}) {
+	return center.parentId || center.parentCodigo;
+}
+
+function createMatrixPeriodTotal(periodMonths = []) {
+	return (row) =>
+		periodMonths.reduce((sum, item) => {
+			if (Number(row.year || item.year) !== item.year) return sum;
+			return sum + Number(row.months?.[item.month - 1] || 0);
+		}, 0);
+}
+
+function sumMatrixRows(rows = [], centers = [], rowTotal = () => 0) {
+	return sumBy(rows, (row) => {
+		const center = centers.find((item) => item.id === row.costCenterId);
+		return isSyntheticCenter(center) ? 0 : rowTotal(row);
+	});
+}
+
+function sumCenterConfiguredBudget(centers = [], selectedPeriod = {}, monthCount = 1) {
+	return sumBy(centers, (center) =>
+		getConfiguredCenterBudget(center, selectedPeriod, monthCount),
+	);
+}
+
+function createRealizedForCenter(periodKeys = new Set()) {
+	return (center) => {
+		const breakdowns = centerBreakdowns(center);
+		if (!breakdowns.length) return 0;
+		return sumBy(
+			breakdowns.filter((item) => periodKeys.has(getBudgetPeriodKey(item))),
+			breakdownRealizedValue,
+		);
+	};
+}
+
+function buildMovementFromDetail(center = {}, breakdown = {}, movement = {}, index = 0) {
+	return {
+		...movement,
+		id:
+			movement.id ||
+			`${center.id}-${breakdown.year || breakdown.ano}-${breakdown.month || breakdown.numMes}-${index}`,
+		centerId: center.id,
+		centerName: center.nome,
+		accountId: movement.accountId || breakdown.accountId,
+		companyId: movement.companyId || breakdown.companyId,
+		branchId: movement.branchId || breakdown.branchId,
+		supplier: movementSupplierName(
+			movement,
+			(breakdown.suppliers || breakdown.fornecedores || [])[0],
+		),
+		value: movementValue(movement),
+		year: Number(breakdown.year || breakdown.ano || 0),
+		month: Number(breakdown.month || breakdown.numMes || 0),
+	};
+}
+
+function buildMovementFromBreakdown(center = {}, breakdown = {}) {
+	return {
+		id: `${center.id}-${breakdown.year || breakdown.ano}-${breakdown.month || breakdown.numMes}-${breakdown.accountId || "sem-conta"}`,
+		centerId: center.id,
+		centerName: center.nome,
+		accountId: breakdown.accountId,
+		companyId: breakdown.companyId,
+		branchId: breakdown.branchId,
+		supplier:
+			(breakdown.suppliers || breakdown.fornecedores || [])[0] ||
+			"Fornecedor não informado",
+		value: breakdownRealizedValue(breakdown),
+		year: Number(breakdown.year || breakdown.ano || 0),
+		month: Number(breakdown.month || breakdown.numMes || 0),
+	};
+}
+
+function buildPeriodMovements(centers = [], periodKeys = new Set()) {
+	return centers.flatMap((center) =>
+		centerBreakdowns(center)
+			.filter((breakdown) => budgetPeriodMatches(breakdown, periodKeys))
+			.flatMap((breakdown) => {
+				const breakdownMovements = Array.isArray(
+					breakdown.movements || breakdown.movimentacoes,
+				)
+					? breakdown.movements || breakdown.movimentacoes
+					: [];
+				return breakdownMovements.length
+					? breakdownMovements.map((movement, index) =>
+							buildMovementFromDetail(center, breakdown, movement, index),
+						)
+					: [buildMovementFromBreakdown(center, breakdown)];
+			}),
+	);
+}
+
+function buildMonthlyEvolutionRows({
+	centers = [],
+	referenceYear,
+	plannedForMonth = () => 0,
+} = {}) {
+	return Array.from({ length: 12 }, (_, index) => {
+		const month = index + 1;
+		const realized = sumBy(centers, (center) =>
+			sumBy(
+				centerBreakdowns(center).filter(
+					(item) =>
+						Number(item.year || item.ano || referenceYear) === referenceYear &&
+						Number(item.month || item.numMes || 0) === month,
+				),
+				breakdownRealizedValue,
+			),
+		);
+		const planned = plannedForMonth(month);
+		return {
+			month,
+			label: budgetMonthName(month).slice(0, 3),
+			planned,
+			realized,
+			percent: planned ? (realized / planned) * 100 : 0,
+		};
+	});
+}
+
+function buildForecastRows(monthlyEvolution = []) {
+	let cumulativeRealized = 0;
+	return monthlyEvolution.map((row, index) => {
+		cumulativeRealized += row.realized;
+		const elapsedWithData =
+			monthlyEvolution.slice(0, index + 1).filter((item) => item.realized > 0)
+				.length || index + 1;
+		const average = cumulativeRealized / Math.max(1, elapsedWithData);
+		return {
+			...row,
+			cumulativeRealized,
+			forecast: row.realized ? cumulativeRealized : average * (index + 1),
+		};
+	});
+}
+
+function buildAccountSummary(accountRows = []) {
+	const accountSummaryMap = new Map();
+	accountRows.forEach((item) => {
+		const key = item.account?.id || item.row.accountId || "sem-conta";
+		const current = accountSummaryMap.get(key) || {
+			account: item.account,
+			id: key,
+			planned: 0,
+			realized: 0,
+		};
+		current.planned += Number(item.planned || 0);
+		current.realized += Number(item.realized || 0);
+		accountSummaryMap.set(key, current);
+	});
+	return Array.from(accountSummaryMap.values())
+		.map((item) => ({
+			...item,
+			deviation: item.realized - item.planned,
+			percent: item.planned ? (item.realized / item.planned) * 100 : 0,
+		}))
+		.sort((left, right) => right.realized - left.realized);
+}
+
+function buildSupplierSummary(movements = [], realizedMonth = 0) {
+	const supplierSummaryMap = new Map();
+	movements.forEach((movement) => {
+		const supplier = movementSupplierName(movement);
+		const current = supplierSummaryMap.get(supplier) || {
+			supplier,
+			value: 0,
+			rows: 0,
+			centers: new Set(),
+			accounts: new Set(),
+		};
+		current.value += movementValue(movement);
+		current.rows += 1;
+		if (movement.centerId) current.centers.add(movement.centerId);
+		if (movement.accountId) current.accounts.add(movement.accountId);
+		supplierSummaryMap.set(supplier, current);
+	});
+	return Array.from(supplierSummaryMap.values())
+		.map((item) => ({
+			...item,
+			centers: Array.from(item.centers),
+			accounts: Array.from(item.accounts),
+			share: realizedMonth ? (item.value / realizedMonth) * 100 : 0,
+		}))
+		.sort((left, right) => right.value - left.value);
+}
+
+function budgetMetric(planned = 0, realized = 0) {
+	return {
+		planned,
+		realized,
+		deviation: realized - planned,
+		percent: planned ? (realized / planned) * 100 : 0,
+	};
+}
+
+function buildAccountRows({
+	accounts = [],
+	centers = [],
+	matrix = [],
+	periodKeys = new Set(),
+	rowPeriodTotal = () => 0,
+	configuredBudgetForCenter = () => 0,
+	realizedTotalForCenter = () => 0,
+} = {}) {
+	return matrix
+		.map((row) => {
+			const account = accounts.find((item) => item.id === row.accountId);
+			const center = centers.find((item) => item.id === row.costCenterId);
+			if (isSyntheticCenter(center)) return null;
+			const rawPlanned = rowPeriodTotal(row);
+			const breakdownRealized = sumBy(
+				centerBreakdowns(center).filter(
+					(item) =>
+						item.accountId === row.accountId &&
+						periodKeys.has(getBudgetPeriodKey(item)),
+				),
+				breakdownRealizedValue,
+			);
+			const centerTotalPlanned = sumBy(
+				matrix.filter((item) => item.costCenterId === row.costCenterId),
+				rowPeriodTotal,
+			);
+			const configuredCenterPlanned = center
+				? configuredBudgetForCenter(center)
+				: 0;
+			const planned =
+				configuredCenterPlanned && centerTotalPlanned
+					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
+					: rawPlanned;
+			const centerRealized = realizedTotalForCenter(center || {});
+			const realized =
+				breakdownRealized ||
+				(configuredCenterPlanned && planned
+					? (planned / configuredCenterPlanned) * centerRealized
+					: centerTotalPlanned
+						? (rawPlanned / centerTotalPlanned) * centerRealized
+						: centerRealized);
+			return {
+				row,
+				account,
+				center,
+				...budgetMetric(planned, realized),
+			};
+		})
+		.filter((item) => item && (item.planned || item.realized));
+}
+
+function buildCenterRows({
+	centers = [],
+	matrix = [],
+	rowPeriodTotal = () => 0,
+	configuredBudgetForCenter = () => 0,
+	realizedTotalForCenter = () => 0,
+} = {}) {
+	return centers.map((center) => {
+		const plannedFromCenter = configuredBudgetForCenter(center);
+		const planned =
+			plannedFromCenter ||
+			sumBy(
+				matrix.filter((row) => row.costCenterId === center.id),
+				rowPeriodTotal,
+			);
+		return {
+			center,
+			...budgetMetric(planned, realizedTotalForCenter(center)),
+		};
+	});
+}
+
 export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const accounts = config.accounts || [];
 	const centers = config.centers || [];
@@ -184,105 +502,55 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		0,
 	).getDate();
 	const dayOfMonth = isCurrentSingleMonth ? now.getDate() : daysInMonth;
-	const rowPeriodTotal = (row) =>
-		period.months.reduce((sum, item) => {
-			if (Number(row.year || item.year) !== item.year) return sum;
-			return sum + Number(row.months?.[item.month - 1] || 0);
-		}, 0);
+	const rowPeriodTotal = createMatrixPeriodTotal(period.months);
 	const periodMonthCount = Math.max(1, period.months.length);
-	const realizedForCenter = (center) => {
-		const breakdowns =
-			center.realizedByCompanyBranch || center.realizadoPorEmpresaFilial || [];
-		const matchingBreakdowns = breakdowns.filter((item) =>
-			periodKeys.has(getBudgetPeriodKey(item)),
-		);
-		const breakdownTotal = matchingBreakdowns.reduce(
-			(sum, item) => sum + Number(item.realized ?? item.realizado ?? 0),
-			0,
-		);
-		if (breakdowns.length) return breakdownTotal;
-		return 0;
-	};
-	const childrenByParentKey = new Map();
-	centers
-		.filter((center) => center.tipoPlano === "A")
-		.forEach((center) => {
-			const parentKey = centerParentKey(center);
-			if (!parentKey) return;
-			const current = childrenByParentKey.get(parentKey) || [];
-			current.push(center);
-			childrenByParentKey.set(parentKey, current);
-		});
-	const analyticChildrenForCenter = (center = {}) => {
-		if (center.tipoPlano !== "S") return [];
-		const key = centerCodeKey(center);
-		const byId = childrenByParentKey.get(center.id) || [];
-		const byCode = key ? childrenByParentKey.get(key) || [] : [];
-		return [...byId, ...byCode].filter(
-			(child, index, items) =>
-				items.findIndex((item) => item.id === child.id) === index,
-		);
-	};
-	const centersForTotals = centers.filter((center) => center.tipoPlano !== "S");
+	const realizedForCenter = createRealizedForCenter(periodKeys);
+	const analyticChildrenForCenter = createAnalyticChildrenResolver(centers);
+	const centersForTotals = centers.filter((center) => !isSyntheticCenter(center));
 	const configuredBudgetForCenter = (center) => {
-		if (center?.tipoPlano === "S") {
-			return analyticChildrenForCenter(center).reduce(
-				(sum, child) =>
-					sum +
-					getConfiguredCenterBudget(child, selectedPeriod, periodMonthCount),
-				0,
+		if (isSyntheticCenter(center)) {
+			return sumCenterConfiguredBudget(
+				analyticChildrenForCenter(center),
+				selectedPeriod,
+				periodMonthCount,
 			);
 		}
 		return getConfiguredCenterBudget(center, selectedPeriod, periodMonthCount);
 	};
 	const realizedTotalForCenter = (center) => {
-		if (center?.tipoPlano === "S") {
-			return analyticChildrenForCenter(center).reduce(
-				(sum, child) =>
-					sum + realizedForCenter(child) + Number(child.comprometidoMes || 0),
-				0,
+		if (isSyntheticCenter(center)) {
+			return sumBy(
+				analyticChildrenForCenter(center),
+				(child) => realizedForCenter(child) + Number(child.comprometidoMes || 0),
 			);
 		}
 		return realizedForCenter(center) + Number(center?.comprometidoMes || 0);
 	};
-	const plannedMonthFromMatrix = matrix.reduce((sum, row) => {
-		const center = centers.find((item) => item.id === row.costCenterId);
-		if (center?.tipoPlano === "S") return sum;
-		return sum + rowPeriodTotal(row);
-	}, 0);
-	const plannedMonthFromCenters = centersForTotals.reduce((sum, center) => {
-		return (
-			sum + getConfiguredCenterBudget(center, selectedPeriod, periodMonthCount)
-		);
-	}, 0);
+	const plannedMonthFromMatrix = sumMatrixRows(matrix, centers, rowPeriodTotal);
+	const plannedMonthFromCenters = sumCenterConfiguredBudget(
+		centersForTotals,
+		selectedPeriod,
+		periodMonthCount,
+	);
 	const currentYearMatrix = matrix.filter(
 		(row) => Number(row.year || referenceYear) === referenceYear,
 	);
-	const plannedYearFromMatrix = currentYearMatrix.reduce((sum, row) => {
-		const center = centers.find((item) => item.id === row.costCenterId);
-		if (center?.tipoPlano === "S") return sum;
-		return (
-			sum +
-			(row.months || []).reduce(
-				(monthSum, value) => monthSum + Number(value || 0),
-				0,
-			)
-		);
-	}, 0);
-	const plannedYearFromCenters = centersForTotals.reduce(
-		(sum, center) =>
-			sum + getConfiguredCenterBudget(center, { mode: "year" }, 12),
-		0,
+	const plannedYearFromMatrix = sumMatrixRows(
+		currentYearMatrix,
+		centers,
+		(row) => sumBy(row.months || [], (value) => value),
+	);
+	const plannedYearFromCenters = sumCenterConfiguredBudget(
+		centersForTotals,
+		{ mode: "year" },
+		12,
 	);
 	const plannedMonth = plannedMonthFromCenters || plannedMonthFromMatrix;
 	const plannedYear = plannedYearFromCenters || plannedYearFromMatrix;
-	const realizedMonth = centersForTotals.reduce(
-		(sum, center) => sum + realizedForCenter(center),
-		0,
-	);
-	const committedMonth = centersForTotals.reduce(
-		(sum, center) => sum + Number(center.comprometidoMes || 0),
-		0,
+	const realizedMonth = sumBy(centersForTotals, realizedForCenter);
+	const committedMonth = sumBy(
+		centersForTotals,
+		(center) => center.comprometidoMes,
 	);
 	const availableMonth = plannedMonth - realizedMonth - committedMonth;
 	const idealBurn = plannedMonth
@@ -356,220 +624,36 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const approvals = approvalsAll.filter(
 		(approval) => approval.status === "pendente",
 	);
-	const accountRows = matrix
-		.map((row) => {
-			const account = accounts.find((item) => item.id === row.accountId);
-			const center = centers.find((item) => item.id === row.costCenterId);
-			if (center?.tipoPlano === "S") return null;
-			const rawPlanned = rowPeriodTotal(row);
-			const breakdownRealized = (
-				center?.realizedByCompanyBranch ||
-				center?.realizadoPorEmpresaFilial ||
-				[]
-			)
-				.filter(
-					(item) =>
-						item.accountId === row.accountId &&
-						periodKeys.has(getBudgetPeriodKey(item)),
-				)
-				.reduce(
-					(sum, item) => sum + Number(item.realized ?? item.realizado ?? 0),
-					0,
-				);
-			const centerTotalPlanned = matrix
-				.filter((item) => item.costCenterId === row.costCenterId)
-				.reduce((sum, item) => sum + rowPeriodTotal(item), 0);
-			const configuredCenterPlanned = center
-				? configuredBudgetForCenter(center)
-				: 0;
-			const planned =
-				configuredCenterPlanned && centerTotalPlanned
-					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
-					: rawPlanned;
-			const centerRealized = realizedTotalForCenter(center || {});
-			const realized =
-				breakdownRealized ||
-				(configuredCenterPlanned && planned
-					? (planned / configuredCenterPlanned) * centerRealized
-					: centerTotalPlanned
-						? (rawPlanned / centerTotalPlanned) * centerRealized
-						: centerRealized);
-			return {
-				row,
-				account,
-				center,
-				planned,
-				realized,
-				deviation: realized - planned,
-			};
-		})
-		.filter((item) => item && (item.planned || item.realized));
-	const centerRows = centers.map((center) => {
-		const plannedFromCenter = configuredBudgetForCenter(center);
-		const planned =
-			plannedFromCenter ||
-			matrix
-				.filter((row) => row.costCenterId === center.id)
-				.reduce((sum, row) => sum + rowPeriodTotal(row), 0);
-		const realized = realizedTotalForCenter(center);
-		return {
-			center,
-			planned,
-			realized,
-			deviation: realized - planned,
-			percent: planned ? (realized / planned) * 100 : 0,
-		};
+	const accountRows = buildAccountRows({
+		accounts,
+		centers,
+		matrix,
+		periodKeys,
+		rowPeriodTotal,
+		configuredBudgetForCenter,
+		realizedTotalForCenter,
 	});
-	const movements = [];
-	centersForTotals.forEach((center) => {
-		const breakdowns =
-			center.realizedByCompanyBranch || center.realizadoPorEmpresaFilial || [];
-		breakdowns
-			.filter((breakdown) => budgetPeriodMatches(breakdown, periodKeys))
-			.forEach((breakdown) => {
-				const breakdownMovements = Array.isArray(
-					breakdown.movements || breakdown.movimentacoes,
-				)
-					? breakdown.movements || breakdown.movimentacoes
-					: [];
-				if (breakdownMovements.length) {
-					breakdownMovements.forEach((movement, index) => {
-						movements.push({
-							...movement,
-							id:
-								movement.id ||
-								`${center.id}-${breakdown.year || breakdown.ano}-${breakdown.month || breakdown.numMes}-${index}`,
-							centerId: center.id,
-							centerName: center.nome,
-							accountId: movement.accountId || breakdown.accountId,
-							companyId: movement.companyId || breakdown.companyId,
-							branchId: movement.branchId || breakdown.branchId,
-							supplier: movementSupplierName(
-								movement,
-								(breakdown.suppliers || breakdown.fornecedores || [])[0],
-							),
-							value: movementValue(movement),
-							year: Number(breakdown.year || breakdown.ano || 0),
-							month: Number(breakdown.month || breakdown.numMes || 0),
-						});
-					});
-					return;
-				}
-				const value =
-					Number(breakdown.realized ?? breakdown.realizado ?? 0) || 0;
-				movements.push({
-					id: `${center.id}-${breakdown.year || breakdown.ano}-${breakdown.month || breakdown.numMes}-${breakdown.accountId || "sem-conta"}`,
-					centerId: center.id,
-					centerName: center.nome,
-					accountId: breakdown.accountId,
-					companyId: breakdown.companyId,
-					branchId: breakdown.branchId,
-					supplier:
-						(breakdown.suppliers || breakdown.fornecedores || [])[0] ||
-						"Fornecedor não informado",
-					value,
-					year: Number(breakdown.year || breakdown.ano || 0),
-					month: Number(breakdown.month || breakdown.numMes || 0),
-				});
-			});
+	const centerRows = buildCenterRows({
+		centers,
+		matrix,
+		rowPeriodTotal,
+		configuredBudgetForCenter,
+		realizedTotalForCenter,
 	});
-	const monthlyEvolution = Array.from({ length: 12 }, (_, index) => {
-		const month = index + 1;
-		const planned = centersForTotals.reduce(
-			(sum, center) =>
-				sum + getConfiguredCenterBudget(center, { mode: "month" }, 1),
-			0,
-		);
-		const realized = centersForTotals.reduce((sum, center) => {
-			const breakdowns =
-				center.realizedByCompanyBranch ||
-				center.realizadoPorEmpresaFilial ||
-				[];
-			return (
-				sum +
-				breakdowns
-					.filter(
-						(item) =>
-							Number(item.year || item.ano || referenceYear) ===
-								referenceYear &&
-							Number(item.month || item.numMes || 0) === month,
-					)
-					.reduce(
-						(monthSum, item) =>
-							monthSum + Number(item.realized ?? item.realizado ?? 0),
-						0,
-					)
-			);
-		}, 0);
-		return {
-			month,
-			label: budgetMonthName(month).slice(0, 3),
-			planned,
-			realized,
-			percent: planned ? (realized / planned) * 100 : 0,
-		};
+	const movements = buildPeriodMovements(centersForTotals, periodKeys);
+	const monthlyEvolution = buildMonthlyEvolutionRows({
+		centers: centersForTotals,
+		referenceYear,
+		plannedForMonth: () =>
+			sumCenterConfiguredBudget(centersForTotals, { mode: "month" }, 1),
 	});
-	let cumulativeRealized = 0;
-	const forecastRows = monthlyEvolution.map((row, index) => {
-		cumulativeRealized += row.realized;
-		const elapsedWithData =
-			monthlyEvolution.slice(0, index + 1).filter((item) => item.realized > 0)
-				.length || index + 1;
-		const average = cumulativeRealized / Math.max(1, elapsedWithData);
-		return {
-			...row,
-			cumulativeRealized,
-			forecast: row.realized ? cumulativeRealized : average * (index + 1),
-		};
-	});
-	const accountSummaryMap = new Map();
-	accountRows.forEach((item) => {
-		const key = item.account?.id || item.row.accountId || "sem-conta";
-		const current = accountSummaryMap.get(key) || {
-			account: item.account,
-			id: key,
-			planned: 0,
-			realized: 0,
-		};
-		current.planned += Number(item.planned || 0);
-		current.realized += Number(item.realized || 0);
-		accountSummaryMap.set(key, current);
-	});
-	const accountSummary = Array.from(accountSummaryMap.values())
-		.map((item) => ({
-			...item,
-			deviation: item.realized - item.planned,
-			percent: item.planned ? (item.realized / item.planned) * 100 : 0,
-		}))
-		.sort((left, right) => right.realized - left.realized);
+	const forecastRows = buildForecastRows(monthlyEvolution);
+	const accountSummary = buildAccountSummary(accountRows);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")
 		.map((item) => ({ ...item, id: item.center?.id }))
 		.sort((left, right) => right.realized - left.realized);
-	const supplierSummaryMap = new Map();
-	movements.forEach((movement) => {
-		const supplier = movementSupplierName(movement);
-		const current = supplierSummaryMap.get(supplier) || {
-			supplier,
-			value: 0,
-			rows: 0,
-			centers: new Set(),
-			accounts: new Set(),
-		};
-		current.value += movementValue(movement);
-		current.rows += 1;
-		if (movement.centerId) current.centers.add(movement.centerId);
-		if (movement.accountId) current.accounts.add(movement.accountId);
-		supplierSummaryMap.set(supplier, current);
-	});
-	const supplierSummary = Array.from(supplierSummaryMap.values())
-		.map((item) => ({
-			...item,
-			centers: Array.from(item.centers),
-			accounts: Array.from(item.accounts),
-			share: realizedMonth ? (item.value / realizedMonth) * 100 : 0,
-		}))
-		.sort((left, right) => right.value - left.value);
+	const supplierSummary = buildSupplierSummary(movements, realizedMonth);
 	return {
 		accounts,
 		centers,
@@ -741,7 +825,6 @@ export function calculateBudgetReference(selectedPeriod = {}, now = new Date()) 
 
 export function buildCostCenterTopCards({
 	insights = {},
-	config = {},
 	selectedPeriod = {},
 	now = new Date(),
 	expiringContracts = 0,
@@ -873,14 +956,44 @@ function metricForCenter(center, sourceMap) {
 	if (row) return row;
 	const planned = Number(center?.valorMensal || center?.orcamentoMensal || 0);
 	const realized = Number(center?.realizadoImportado || center?.realizadoMes || 0);
-	const deviation = realized - planned;
 	return {
 		center,
-		planned,
-		realized,
-		deviation,
-		percent: planned ? (realized / planned) * 100 : 0,
+		...budgetMetric(planned, realized),
 	};
+}
+
+function buildCenterLookup(centers = []) {
+	const lookup = new Map();
+	centers.forEach((center) => {
+		if (center.id) lookup.set(center.id, center);
+		if (center.codigo) lookup.set(center.codigo, center);
+		if (center.reduzida) {
+			lookup.set(String(center.reduzida).replace(/\D+/g, ""), center);
+		}
+	});
+	return lookup;
+}
+
+function childCentersForParent(parent = {}, childrenByParent = new Map()) {
+	return uniqueById([
+		...(childrenByParent.get(parent.id) || []),
+		...(parent.codigo && parent.codigo !== parent.id
+			? childrenByParent.get(parent.codigo) || []
+			: []),
+	]).sort(sortBudgetCenters);
+}
+
+function aggregateCenterMetrics(centers = [], sourceMap = new Map()) {
+	const aggregate = centers.reduce(
+		(acc, center) => {
+			const metric = metricForCenter(center, sourceMap);
+			acc.planned += Number(metric.planned || 0);
+			acc.realized += Number(metric.realized || 0);
+			return acc;
+		},
+		{ planned: 0, realized: 0 },
+	);
+	return budgetMetric(aggregate.planned, aggregate.realized);
 }
 
 export function buildOperationalCenterGroups({
@@ -903,32 +1016,17 @@ export function buildOperationalCenterGroups({
 	const sortedOperationalCenters = [...(config.centers || [])].sort(
 		sortBudgetCenters,
 	);
-	const operationalCenterByKey = new Map();
-	sortedOperationalCenters.forEach((center) => {
-		if (center.id) operationalCenterByKey.set(center.id, center);
-		if (center.codigo) operationalCenterByKey.set(center.codigo, center);
-		if (center.reduzida) {
-			operationalCenterByKey.set(
-				String(center.reduzida).replace(/\D+/g, ""),
-				center,
-			);
-		}
-	});
+	const operationalCenterByKey = buildCenterLookup(sortedOperationalCenters);
 	const operationalCategoriesByCode = new Map(
 		sortedOperationalCenters
 			.filter((center) => Number(center.nivel || 0) === 2)
 			.map((center) => [center.codigo || center.id, center]),
 	);
-	const operationalChildrenByParent = new Map();
-	sortedOperationalCenters
-		.filter((center) => center.tipoPlano === "A")
-		.forEach((center) => {
-			const parentKey = center.parentId || center.parentCodigo;
-			if (!parentKey) return;
-			const currentChildren = operationalChildrenByParent.get(parentKey) || [];
-			currentChildren.push(center);
-			operationalChildrenByParent.set(parentKey, currentChildren);
-		});
+	// A árvore operacional usa a chave crua para preservar vínculos já salvos.
+	const operationalChildrenByParent = buildChildrenByParentKey(
+		sortedOperationalCenters,
+		rawCenterParentKey,
+	);
 	const visibleCenterIdSet = new Set(
 		visibleCenterRows.map(({ center }) => center?.id).filter(Boolean),
 	);
@@ -940,17 +1038,10 @@ export function buildOperationalCenterGroups({
 			const category =
 				operationalCategoriesByCode.get(center.categoriaCodigo) ||
 				operationalCenterByKey.get(center.categoriaCodigo);
-			const rawChildren = [
-				...(operationalChildrenByParent.get(center.id) || []),
-				...(center.codigo && center.codigo !== center.id
-					? operationalChildrenByParent.get(center.codigo) || []
-					: []),
-			]
-				.filter(
-					(child, index, items) =>
-						items.findIndex((item) => item.id === child.id) === index,
-				)
-				.sort(sortBudgetCenters);
+			const rawChildren = childCentersForParent(
+				center,
+				operationalChildrenByParent,
+			);
 			const children = responsibleOnly
 				? rawChildren.filter((child) => visibleCenterIdSet.has(child.id))
 				: rawChildren;
@@ -960,22 +1051,10 @@ export function buildOperationalCenterGroups({
 				children.length > 0;
 			if (!parentVisible) return null;
 			const aggregateSource = responsibleOnly ? children : rawChildren;
-			const aggregate = aggregateSource.reduce(
-				(acc, child) => {
-					const metric = metricForCenter(
-						child,
-						responsibleOnly ? rowByCenterId : allRowByCenterId,
-					);
-					acc.planned += Number(metric.planned || 0);
-					acc.realized += Number(metric.realized || 0);
-					return acc;
-				},
-				{ planned: 0, realized: 0 },
+			const aggregate = aggregateCenterMetrics(
+				aggregateSource,
+				responsibleOnly ? rowByCenterId : allRowByCenterId,
 			);
-			aggregate.deviation = aggregate.realized - aggregate.planned;
-			aggregate.percent = aggregate.planned
-				? (aggregate.realized / aggregate.planned) * 100
-				: 0;
 			return {
 				center,
 				category,
