@@ -72,6 +72,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install VPS API dependencies
+        run: npm ci --prefix vps
+
       - name: Run lint
         run: npm run lint
 
