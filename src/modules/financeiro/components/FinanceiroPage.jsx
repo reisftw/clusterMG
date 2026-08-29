@@ -57,6 +57,7 @@ import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
+import TariffsDetailLayout from "./tariffs/TariffsDetailLayout";
 import { useBudgetConfig } from "../hooks/useBudgetConfig";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
@@ -122,6 +123,10 @@ import {
 	parseBudgetCurrency,
 	parseMoneyInput,
 } from "../utils/financeiroFormatters";
+import {
+	getTariffsAvailableYears as getTariffsDetailAvailableYears,
+	TARIFFS_DETAIL_BUILDERS,
+} from "../utils/tariffsViewModels";
 
 const FINANCE_FONT_STACK =
 	"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -11097,7 +11102,10 @@ function TariffsDetailPage({ type = "faturas" }) {
 	useEffect(() => {
 		loadTariffs();
 	}, [loadTariffs]);
-	const years = useMemo(() => getTariffsAvailableYears(report || {}), [report]);
+	const years = useMemo(
+		() => getTariffsDetailAvailableYears(report || {}),
+		[report],
+	);
 	const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 	const [selectedMonth, setSelectedMonth] = useState(0);
 	const [searchTerm, setSearchTerm] = useState("");
@@ -11108,419 +11116,65 @@ function TariffsDetailPage({ type = "faturas" }) {
 	useEffect(() => {
 		if (!years.includes(selectedYear)) setSelectedYear(years[0]);
 	}, [selectedYear, years]);
-	const insights = useMemo(
-		() =>
-			buildTariffsDetailInsights(
-				report || {},
-				selectedYear,
-				selectedMonth,
-				type,
-			),
-		[report, selectedMonth, selectedYear, type],
-	);
-	const isFaturas = type === "faturas";
-	const isRecCliente = type === "recCliente";
-	const title = isFaturas
-		? "Faturas"
-		: isRecCliente
-			? "Receita Cliente"
-			: "Formas de Pagamento";
-	const subtitle = isFaturas
-		? "Faturas ativas e canceladas por ano e mês."
-		: isRecCliente
-			? "Receita por cliente com ranking anual e evolução mensal."
-			: "Valores, quantidades, cobrança e ticket médio por forma de pagamento.";
-	const monthlyChart = isFaturas
-		? insights.monthly
-		: isRecCliente
-			? {
-				labels: insights.monthly.map((item) => item.label),
-				datasets: [
-					{
-						label: title,
-						data: insights.monthly.map((item) => item.value),
-						backgroundColor: "#10b981",
-						borderColor: "#10b981",
-						borderRadius: 8,
-						fill: false,
-						tension: 0.35,
-					},
-				],
-			}
-			: insights.monthly;
-	const doughnutRows = isFaturas
-		? insights.metrics || []
-		: isRecCliente
-			? insights.clients || []
-			: insights.methods || [];
-	const doughnutChart = {
-		labels: doughnutRows.slice(0, 8).map((item) => item.label),
-		datasets: [
-			{
-				data: doughnutRows.slice(0, 8).map((item) => item.value),
-				backgroundColor: [
-					"#2563eb",
-					"#10b981",
-					"#f97316",
-					"#8b5cf6",
-					"#ef4444",
-					"#06b6d4",
-					"#84cc16",
-					"#64748b",
-				],
-				borderWidth: 0,
-			},
-		],
-	};
-	const kpis = isFaturas
-		? [
-				{ title: "Ativas", value: insights.kpis.ativas, type: "number", icon: "FileText", color: "emerald" },
-				{ title: "Canceladas", value: insights.kpis.canceladas, type: "number", icon: "AlertTriangle", color: "rose" },
-				{ title: "Meses lidos", value: insights.kpis.months, type: "number", icon: "CalendarClock", color: "violet" },
-			]
-		: isRecCliente
-			? [
-					{ title: "Receita anual", value: insights.kpis.total, type: "currency", icon: "CircleDollarSign", color: "emerald" },
-					{ title: "Clientes", value: insights.kpis.clients, type: "number", icon: "Users", color: "blue" },
-					{ title: "Média por cliente", value: insights.kpis.average, type: "currency", icon: "BadgeDollarSign", color: "amber" },
-					{ title: "Maior cliente", value: insights.kpis.bestClient, type: "text", icon: "Landmark", color: "violet" },
-				]
-			: [
-					{ title: "Valor recebido", value: insights.kpis.totalValue, type: "currency", icon: "CircleDollarSign", color: "emerald" },
-					{ title: "Quantidade", value: insights.kpis.totalQuantity, type: "number", icon: "ReceiptText", color: "blue" },
-					{ title: "Ticket médio", value: insights.kpis.averageTicket, type: "currency", icon: "BadgeDollarSign", color: "amber" },
-					{ title: "Principal forma", value: insights.kpis.topMethod, type: "text", icon: "Wallet", color: "violet" },
-				];
-	const rankingTitle = isFaturas
-		? "Indicadores de faturas"
-		: isRecCliente
-			? "Ranking de clientes"
-			: "Ranking por forma de pagamento";
-	const selectedInvoiceMetric =
-		isFaturas && Number.isInteger(selectedInvoiceMetricIndex)
-			? doughnutRows[selectedInvoiceMetricIndex]
-			: null;
-	const doughnutTotal = isFaturas
-		? Number(insights.kpis.ativas || 0) - Number(insights.kpis.canceladas || 0)
-		: doughnutRows
-			.slice(0, 8)
-			.reduce((sum, item) => sum + Number(item.value || 0), 0);
-	const centerTextTitle = isFaturas
-		? selectedInvoiceMetric?.label || "Líquido"
-		: "Total";
-	const centerTextValue = isFaturas
-		? integer.format(Number(selectedInvoiceMetric?.value ?? doughnutTotal))
-		: brl.format(doughnutTotal);
+	const viewModel = useMemo(() => {
+		const builder =
+			TARIFFS_DETAIL_BUILDERS[type] || TARIFFS_DETAIL_BUILDERS.faturas;
+		return builder({
+			report: report || {},
+			year: selectedYear,
+			month: selectedMonth,
+			searchTerm,
+			pageIndex,
+			pageSize,
+			selectedInvoiceMetricIndex,
+		});
+	}, [
+		pageIndex,
+		pageSize,
+		report,
+		searchTerm,
+		selectedInvoiceMetricIndex,
+		selectedMonth,
+		selectedYear,
+		type,
+	]);
 	const selectInvoiceMetricFromChart = (_, elements = []) => {
-		if (!isFaturas) return;
+		if (type !== "faturas") return;
 		const nextIndex = elements[0]?.index;
 		setSelectedInvoiceMetricIndex(
 			Number.isInteger(nextIndex) ? nextIndex : null,
 		);
 	};
-	const searchedRows = insights.rows.filter((item) => {
-		const text = [
-			item.clientCode,
-			item.clientName,
-			item.method,
-			item.metric,
-			item.monthName,
-			item.value,
-			item.quantity,
-		]
-			.join(" ")
-			.toLowerCase();
-		return text.includes(searchTerm.trim().toLowerCase());
-	});
-	const totalPages = Math.max(1, Math.ceil(searchedRows.length / pageSize));
-	const safePageIndex = Math.min(pageIndex, totalPages);
-	const pagedRows = searchedRows.slice(
-		(safePageIndex - 1) * pageSize,
-		safePageIndex * pageSize,
-	);
 	useEffect(() => {
 		setPageIndex(1);
 		setSelectedInvoiceMetricIndex(null);
 	}, [searchTerm, selectedMonth, selectedYear, type]);
 	return (
-		<section className="space-y-4">
-			<div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-				<div>
-					<h2 className="text-lg font-black text-slate-950">{title}</h2>
-					<p className="mt-1 text-sm font-bold text-slate-500">{subtitle}</p>
-				</div>
-				<div className="flex flex-wrap items-center justify-end gap-2">
-					<TariffsYearSelector
-						year={selectedYear}
-						years={years}
-						onChange={setSelectedYear}
-					/>
-					<select
-						value={selectedMonth}
-						onChange={(event) => setSelectedMonth(Number(event.target.value))}
-						className="min-h-11 rounded-xl border border-orange-200 bg-white px-4 text-sm font-black text-slate-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-					>
-						<option value={0}>Ano completo</option>
-						{Array.from({ length: 12 }, (_, index) => (
-							<option key={index + 1} value={index + 1}>
-								{budgetMonthName(index + 1)}
-							</option>
-						))}
-					</select>
-					<button
-						type="button"
-						onClick={loadTariffs}
-						disabled={loading}
-						className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-					>
-						<RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-						Atualizar
-					</button>
-				</div>
-			</div>
-			<section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				{kpis.map((item) => (
-					<FinancialKpiCard key={item.title} loading={loading} compact centered item={item} />
-				))}
-			</section>
-			<section className="grid gap-4 xl:grid-cols-2">
-				<ChartCard
-					title={`Evolução mensal ${selectedYear}`}
-					empty={
-						isFaturas
-							? !chartHasValues(insights.monthly)
-							: isRecCliente
-								? !insights.monthly.length
-							: !insights.monthly.datasets?.length
-					}
-				>
-					{isFaturas ? (
-						<Bar
-							data={monthlyChart}
-							options={barOptions((value) =>
-								integer.format(Number(value || 0)),
-							)}
-						/>
-					) : (
-						<Line data={monthlyChart} options={barOptions()} />
-					)}
-				</ChartCard>
-				<ChartCard title={rankingTitle} empty={!doughnutRows.length}>
-					<Doughnut
-						data={doughnutChart}
-						options={{
-							responsive: true,
-							maintainAspectRatio: false,
-							cutout: "58%",
-							onClick: isFaturas ? selectInvoiceMetricFromChart : undefined,
-							plugins: {
-								centerText: {
-									title: centerTextTitle,
-									value: centerTextValue,
-								},
-								legend: {
-									position: "bottom",
-									labels: { boxWidth: 10, font: { weight: "bold" } },
-								},
-								tooltip: {
-									callbacks: {
-										label: (ctx) =>
-											`${ctx.label}: ${isFaturas ? integer.format(Number(ctx.raw || 0)) : brl.format(Number(ctx.raw || 0))}`,
-									},
-								},
-							},
-						}}
-					/>
-				</ChartCard>
-			</section>
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<h3 className="text-lg font-black text-slate-950">{rankingTitle}</h3>
-				<div className="mt-4 grid gap-2 lg:grid-cols-2">
-					{doughnutRows.slice(0, 20).map((item, index) => (
-						<div
-							key={`${item.label}-${index}`}
-							className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
-						>
-							<span className="truncate font-bold text-slate-700">
-								{isFaturas ? item.label : <BankBadge item={item} />}
-							</span>
-							<span className="shrink-0 font-black text-slate-950">
-								{isFaturas ? integer.format(item.value) : brl.format(item.value)}
-								{!isFaturas && !isRecCliente ? (
-									<span className="ml-2 text-xs font-black text-slate-400">
-										{decimal.format(item.percentOfTotal || 0)}%
-									</span>
-								) : null}
-							</span>
-						</div>
-					))}
-				</div>
-				{!doughnutRows.length ? (
-					<div className="mt-4">
-						<EmptyState text="Nenhum dado encontrado para o ano selecionado." />
-					</div>
-				) : null}
-			</section>
-			{isRecCliente || !isFaturas ? (
-				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-						<div>
-							<h3 className="text-lg font-black text-slate-950">
-								{isRecCliente
-									? "Clientes e receita do período"
-									: "Amostra por ano e mês"}
-							</h3>
-							<p className="mt-1 text-sm font-bold text-slate-500">
-								{integer.format(searchedRows.length)} registro(s)
-							</p>
-						</div>
-						<div className="flex flex-wrap items-center gap-2">
-							<div className="relative">
-								<Search
-									size={16}
-									className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-								/>
-								<input
-									value={searchTerm}
-									onChange={(event) => setSearchTerm(event.target.value)}
-									placeholder={
-										isRecCliente
-											? "Buscar cliente ou código"
-											: "Buscar forma, cobrança ou mês"
-									}
-									className="min-h-11 w-72 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-bold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-								/>
-							</div>
-							<select
-								value={pageSize}
-								onChange={(event) => setPageSize(Number(event.target.value))}
-								className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-700"
-							>
-								{[50, 100, 150, 200].map((size) => (
-									<option key={size} value={size}>
-										{size}
-									</option>
-								))}
-							</select>
-						</div>
-					</div>
-					<div className="mt-4 overflow-x-auto">
-						<table className="min-w-full text-left text-sm">
-							<thead>
-								<tr className="border-b border-slate-100 text-xs font-black uppercase text-slate-400">
-									{isRecCliente ? (
-										<>
-											<th className="px-3 py-2">Código</th>
-											<th className="px-3 py-2">Cliente</th>
-											<th className="px-3 py-2">Mês</th>
-											<th className="px-3 py-2 text-right">Receita</th>
-											<th className="px-3 py-2 text-right">Total anual</th>
-										</>
-									) : (
-										<>
-											<th className="px-3 py-2">Ano</th>
-											<th className="px-3 py-2">Mês</th>
-											<th className="px-3 py-2">Forma</th>
-											<th className="px-3 py-2">Tipo</th>
-											<th className="px-3 py-2 text-right">Quantidade</th>
-											<th className="px-3 py-2 text-right">Valor</th>
-											<th className="px-3 py-2 text-right">% valor total</th>
-										</>
-									)}
-								</tr>
-							</thead>
-							<tbody>
-								{pagedRows.map((item, index) => (
-									<tr
-										key={`${item.id || item.clientCode || item.method}-${index}`}
-										className="border-b border-slate-50 font-bold text-slate-700"
-									>
-										{isRecCliente ? (
-											<>
-												<td className="px-3 py-2">{item.clientCode || "-"}</td>
-												<td className="max-w-[420px] truncate px-3 py-2">
-													{item.clientName || "-"}
-												</td>
-												<td className="px-3 py-2">
-													{item.year} -{" "}
-													{item.monthName || budgetMonthName(item.month)}
-												</td>
-												<td className="px-3 py-2 text-right">
-													{brl.format(Number(item.value || 0))}
-												</td>
-												<td className="px-3 py-2 text-right">
-													{brl.format(Number(item.total || 0))}
-												</td>
-											</>
-										) : (
-											<>
-												<td className="px-3 py-2">{item.year || "-"}</td>
-												<td className="px-3 py-2">
-													{item.monthName || budgetMonthName(item.month)}
-												</td>
-												<td className="max-w-[320px] truncate px-3 py-2">
-													{item.method || "-"}
-												</td>
-												<td className="px-3 py-2">
-													{item.quantity !== undefined
-														? "Quantidade"
-														: item.value !== undefined
-															? "Valor"
-															: "Cobrança"}
-												</td>
-												<td className="px-3 py-2 text-right">
-													{item.quantity !== undefined
-														? integer.format(Number(item.quantity || 0))
-														: "-"}
-												</td>
-												<td className="px-3 py-2 text-right">
-													{item.value !== undefined
-														? brl.format(Number(item.value || 0))
-														: "-"}
-												</td>
-												<td className="px-3 py-2 text-right">
-													{item.percent !== undefined
-														? `${decimal.format(Number(item.percent || 0))}%`
-														: "-"}
-												</td>
-											</>
-										)}
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-					<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-bold text-slate-500">
-						<span>
-							Página {safePageIndex} de {totalPages}
-						</span>
-						<div className="flex gap-2">
-							<button
-								type="button"
-								onClick={() =>
-									setPageIndex((current) => Math.max(1, current - 1))
-								}
-								disabled={safePageIndex <= 1}
-								className="rounded-xl border border-slate-200 px-3 py-2 font-black text-slate-700 disabled:opacity-40"
-							>
-								Anterior
-							</button>
-							<button
-								type="button"
-								onClick={() =>
-									setPageIndex((current) => Math.min(totalPages, current + 1))
-								}
-								disabled={safePageIndex >= totalPages}
-								className="rounded-xl border border-slate-200 px-3 py-2 font-black text-slate-700 disabled:opacity-40"
-							>
-								Próxima
-							</button>
-						</div>
-					</div>
-				</section>
-			) : null}
-			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
-		</section>
+		<TariffsDetailLayout
+			feedbackModal={
+				<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
+			}
+			filters={{
+				month: selectedMonth,
+				onMonthChange: setSelectedMonth,
+				onRefresh: loadTariffs,
+				onYearChange: setSelectedYear,
+				year: selectedYear,
+				years,
+			}}
+			loading={loading}
+			onSelectInvoiceMetric={selectInvoiceMetricFromChart}
+			pagination={{
+				pageSize,
+				onPageChange: setPageIndex,
+				onPageSizeChange: setPageSize,
+			}}
+			search={{
+				value: searchTerm,
+				onChange: setSearchTerm,
+			}}
+			viewModel={viewModel}
+		/>
 	);
 }
 
