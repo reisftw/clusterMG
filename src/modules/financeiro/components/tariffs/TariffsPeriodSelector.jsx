@@ -9,7 +9,6 @@ export default function TariffsPeriodSelector({
 	onYearSelect,
 	periodLabel,
 	periodMode,
-	selectedReference,
 	yearMenuOpen,
 	yearOptions = [],
 }) {

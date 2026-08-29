@@ -11063,7 +11063,6 @@ function TariffsReportPage({ canManage }) {
 		periodMode,
 		report,
 		reportModalOpen,
-		selectedReference,
 		closeDateRangeModal,
 		closeFeedback,
 		closeReportModal,
@@ -11085,7 +11084,6 @@ function TariffsReportPage({ canManage }) {
 				onYearToggle={toggleYearMenu}
 				periodLabel={periodLabel}
 				periodMode={periodMode}
-				selectedReference={selectedReference}
 				yearMenuOpen={yearMenuOpen}
 				yearOptions={yearOptions}
 			/>
