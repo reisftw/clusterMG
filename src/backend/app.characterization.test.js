@@ -374,10 +374,10 @@ beforeEach(() => {
 		LOGIN_RATE_LIMIT_MAX: "2",
 		PUBLIC_WRITE_RATE_LIMIT_MAX: "100",
 		REALTIME_RATE_LIMIT_MAX: "100",
-		INTERNAL_API_TOKEN: "internal-token-12345678901234567890",
-		EVOLUTION_WEBHOOK_SECRET: "evolution-secret-12345678901234567890",
-		CVORTEX_WEBHOOK_SECRET: "cvortex-secret-12345678901234567890",
-		WHATSAPP_OFFICIAL_WEBHOOK_SECRET: "official-secret-12345678901234567890",
+		INTERNAL_API_TOKEN: "test-internal-token-for-suite",
+		EVOLUTION_WEBHOOK_SECRET: "test-evolution-secret-for-suite",
+		CVORTEX_WEBHOOK_SECRET: "test-cvortex-secret-for-suite",
+		WHATSAPP_OFFICIAL_WEBHOOK_SECRET: "test-official-secret-for-suite",
 	};
 	mockedModules = [];
 });
