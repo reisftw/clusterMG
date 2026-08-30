@@ -1,6 +1,7 @@
 import { Bell, Camera, CheckCheck, LogOut, Menu, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import UserAvatar from "../ui/UserAvatar";
 import { getRoleLabel } from "../../constants/roles";
 import { useAuthContext } from "../../context/AuthContext";
 import { atualizarAvatarPerfil } from "../../modules/auth/services/authService";
@@ -304,15 +305,13 @@ const Topbar = ({ onOpenMobileMenu }) => {
 						title="Conta"
 						aria-label="Conta"
 					>
-						{avatarSrc ? (
-							<img
-								src={avatarSrc}
-								alt="Avatar"
-								className="h-full w-full object-cover"
-							/>
-						) : (
-							<span>{displayUser?.nome?.charAt(0)?.toUpperCase() ?? "U"}</span>
-						)}
+						<UserAvatar
+							src={avatarSrc}
+							name={displayUser?.nome}
+							email={displayUser?.email}
+							alt="Avatar"
+							className="flex h-full w-full items-center justify-center"
+						/>
 					</button>
 					{mobileAccountOpen ? (
 						<div className="absolute right-0 top-12 z-layout-dropdown w-[min(88vw,320px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
@@ -367,15 +366,13 @@ const Topbar = ({ onOpenMobileMenu }) => {
 						title="Alterar avatar"
 						aria-label="Alterar avatar"
 					>
-						{avatarSrc ? (
-							<img
-								src={avatarSrc}
-								alt="Avatar"
-								className="h-full w-full object-cover"
-							/>
-						) : (
-							<span>{displayUser?.nome?.charAt(0)?.toUpperCase() ?? "U"}</span>
-						)}
+						<UserAvatar
+							src={avatarSrc}
+							name={displayUser?.nome}
+							email={displayUser?.email}
+							alt="Avatar"
+							className="flex h-full w-full items-center justify-center"
+						/>
 						<span className="absolute inset-0 hidden items-center justify-center bg-slate-950/55 text-white group-hover:flex">
 							<Camera size={13} />
 						</span>

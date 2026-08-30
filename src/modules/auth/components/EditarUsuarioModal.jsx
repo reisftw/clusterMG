@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
+import UserAvatar from "../../../components/ui/UserAvatar";
 import {
 	CARGOS_RETIRADAS,
 	getRoleLabel,
@@ -298,19 +299,13 @@ const EditarUsuarioModal = ({
 					) : null}
 
 					<div className="mt-5 flex items-center gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-						<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-black text-white">
-							{form.avatarUrl || usuario.avatarDataUrl ? (
-								<img
-									src={form.avatarUrl || usuario.avatarDataUrl}
-									alt="Avatar do usuário"
-									className="h-full w-full object-cover"
-								/>
-							) : (
-								String(form.nome || form.email || "U")
-									.charAt(0)
-									.toUpperCase()
-							)}
-						</div>
+						<UserAvatar
+							src={form.avatarUrl || usuario.avatarDataUrl}
+							name={form.nome}
+							email={form.email}
+							alt="Avatar do usuário"
+							className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-black text-white"
+						/>
 						<div className="min-w-0 flex-1">
 							<p className="text-sm font-black text-slate-950">
 								Avatar do usuário

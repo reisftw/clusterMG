@@ -23,6 +23,7 @@ import { useCallback, useEffect, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import ResponsiveDataView from "../../../components/ui/ResponsiveDataView";
 import Spinner from "../../../components/ui/Spinner";
+import UserAvatar from "../../../components/ui/UserAvatar";
 import {
 	CARGOS_RETIRADAS,
 	getRoleLabel,
@@ -515,19 +516,13 @@ const NovoUsuarioModal = ({
 					) : null}
 
 					<div className="mt-5 flex items-center gap-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
-						<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-black text-white">
-							{form.avatarUrl ? (
-								<img
-									src={form.avatarUrl}
-									alt="Avatar do usuário"
-									className="h-full w-full object-cover"
-								/>
-							) : (
-								String(form.nome || form.email || "U")
-									.charAt(0)
-									.toUpperCase()
-							)}
-						</div>
+						<UserAvatar
+							src={form.avatarUrl}
+							name={form.nome}
+							email={form.email}
+							alt="Avatar do usuário"
+							className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-blue-600 text-lg font-black text-white"
+						/>
 						<div className="min-w-0 flex-1">
 							<p className="text-sm font-black text-slate-950">
 								Avatar do usuário
@@ -903,21 +898,13 @@ const UsuariosPage = () => {
 			header: "Usuário",
 			render: (usuario) => (
 				<div className="flex min-w-0 items-center gap-3">
-					<div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50 text-sm font-black text-blue-700">
-						{usuario.avatarUrl || usuario.avatarDataUrl || defaultAvatarUrl ? (
-							<img
-								src={
-									usuario.avatarUrl || usuario.avatarDataUrl || defaultAvatarUrl
-								}
-								alt={usuario.nome || "Avatar"}
-								className="h-full w-full object-cover"
-							/>
-						) : (
-							String(usuario.nome || usuario.email || "U")
-								.charAt(0)
-								.toUpperCase()
-						)}
-					</div>
+					<UserAvatar
+						src={usuario.avatarUrl || usuario.avatarDataUrl || defaultAvatarUrl}
+						name={usuario.nome}
+						email={usuario.email}
+						alt={usuario.nome || "Avatar"}
+						className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-50 text-sm font-black text-blue-700"
+					/>
 					<div className="min-w-0">
 						<p className="break-anywhere font-black text-slate-900">
 							{usuario.nome || "-"}
