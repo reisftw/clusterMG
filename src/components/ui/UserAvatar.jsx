@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 function getInitials(name, email) {
 	const source = String(name || email || "U").trim();
@@ -25,13 +25,9 @@ const UserAvatar = ({
 	initialsClassName = "",
 	children,
 }) => {
-	const [imageFailed, setImageFailed] = useState(false);
+	const [failedSrc, setFailedSrc] = useState("");
 	const normalizedSrc = String(src || "").trim();
-	const showImage = normalizedSrc && !imageFailed;
-
-	useEffect(() => {
-		setImageFailed(false);
-	}, [normalizedSrc]);
+	const showImage = normalizedSrc && failedSrc !== normalizedSrc;
 
 	return (
 		<span className={className}>
@@ -40,7 +36,7 @@ const UserAvatar = ({
 					src={normalizedSrc}
 					alt={alt}
 					className="h-full w-full object-cover"
-					onError={() => setImageFailed(true)}
+					onError={() => setFailedSrc(normalizedSrc)}
 				/>
 			) : (
 				<span className={initialsClassName}>{getInitials(name, email)}</span>

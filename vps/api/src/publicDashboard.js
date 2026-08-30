@@ -55,12 +55,12 @@ async function getDocumentData(path) {
 
 async function listCollectionData(collectionPath, { limit = 10000 } = {}) {
 	if (ordensRepository.isOrdersCollection(collectionPath)) {
-		return (await ordensRepository.listDocuments({ collectionPath, limit })).map(
-			(record) => ({
+		return (await ordensRepository.listAllDocuments(collectionPath))
+			.slice(0, Number(limit) || 10000)
+			.map((record) => ({
 				documentId: record.documentId,
 				data: record.data || {},
-			}),
-		);
+			}));
 	}
 	const result = await db.query(
 		`select document_id as "documentId", data
@@ -270,17 +270,23 @@ async function buildCollectionFallback(
 	metaPath,
 	{ limit = 50000 } = {},
 ) {
-	const [rows, meta] = await Promise.all([
+	const [rows, meta, latestUpdatedAt] = await Promise.all([
 		listCollectionData(collectionPath, { limit }),
 		getDocumentData(metaPath),
+		ordensRepository.getCollectionLatestUpdatedAt(collectionPath),
 	]);
 
 	if (!rows.length) return null;
+	const latestIso = latestUpdatedAt
+		? new Date(latestUpdatedAt).toISOString()
+		: null;
 
 	return {
 		ordens: rows.map(rowToDocument),
-		meta: meta || {
-			generatedAt: new Date().toISOString(),
+		meta: {
+			...(meta || {}),
+			data: latestIso || meta?.data || null,
+			generatedAt: latestIso || meta?.generatedAt || meta?.data || null,
 			source: collectionPath,
 		},
 	};

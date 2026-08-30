@@ -56,6 +56,7 @@ describe("publicDashboard", () => {
 				return null;
 			}),
 			getCollectionLatestUpdatedAt: vi.fn(async () => null),
+			listAllDocuments: vi.fn(async () => []),
 			listDocuments: vi.fn(async () => []),
 		};
 		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
@@ -118,7 +119,7 @@ describe("publicDashboard", () => {
 			getCollectionLatestUpdatedAt: vi.fn(async () =>
 				new Date("2026-08-30T17:22:37.000Z"),
 			),
-			listDocuments: vi.fn(async ({ collectionPath }) => [
+			listAllDocuments: vi.fn(async (collectionPath) => [
 				{
 					documentId: `${collectionPath}-1`,
 					data: {
@@ -135,13 +136,11 @@ describe("publicDashboard", () => {
 
 		expect(payload.mapa.ordens).toHaveLength(1);
 		expect(payload.matchOS.ordens).toHaveLength(1);
-		expect(ordensRepository.listDocuments).toHaveBeenCalledWith({
-			collectionPath: "ordens_abertas",
-			limit: 50000,
-		});
-		expect(ordensRepository.listDocuments).toHaveBeenCalledWith({
-			collectionPath: "match_os_abertas",
-			limit: 50000,
-		});
+		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
+			"ordens_abertas",
+		);
+		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
+			"match_os_abertas",
+		);
 	});
 });
