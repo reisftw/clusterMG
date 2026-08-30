@@ -194,6 +194,9 @@ jobs:
              \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
              cd \"\$api_path\"
              \$SUDO npm ci --omit=dev
+             \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
+             \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
+             \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
              if [ -f \"\$api_env_file\" ]; then
                set -a
                . \"\$api_env_file\"
@@ -290,6 +293,9 @@ jobs:
              \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
              cd \"\$api_path\"
              \$SUDO npm ci --omit=dev
+             \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
+             \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
+             \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
              if [ -f \"\$api_env_file\" ]; then
                set -a
                . \"\$api_env_file\"

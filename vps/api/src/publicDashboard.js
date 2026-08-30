@@ -1,4 +1,5 @@
 const db = require("./db");
+const ordensRepository = require("./ordensRepository");
 
 const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 10_000;
 
@@ -38,6 +39,11 @@ function rowsToDocumentMap(rows = []) {
 }
 
 async function getDocumentData(path) {
+	const collectionPath = String(path || "").split("/").filter(Boolean)[0] || "";
+	if (ordensRepository.isOrdersCollection(collectionPath)) {
+		const normalizedRecord = await ordensRepository.getDocument(path);
+		if (normalizedRecord?.data) return normalizedRecord.data;
+	}
 	const result = await db.query(
 		`select data
        from app_documents
@@ -48,6 +54,14 @@ async function getDocumentData(path) {
 }
 
 async function listCollectionData(collectionPath, { limit = 10000 } = {}) {
+	if (ordensRepository.isOrdersCollection(collectionPath)) {
+		return (await ordensRepository.listDocuments({ collectionPath, limit })).map(
+			(record) => ({
+				documentId: record.documentId,
+				data: record.data || {},
+			}),
+		);
+	}
 	const result = await db.query(
 		`select document_id as "documentId", data
        from app_documents
