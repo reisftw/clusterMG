@@ -105,7 +105,8 @@ function normalizeRegionalDocument(regional, cidades = [], responsaveis = []) {
 }
 
 async function fetchNormalizedRegionalDocuments({ limit = null, offset = 0 } = {}) {
-	const limitSql = Number.isFinite(Number(limit)) ? " limit $1 offset $2" : "";
+	const hasLimit = limit !== null && limit !== undefined && limit !== "";
+	const limitSql = hasLimit && Number.isFinite(Number(limit)) ? " limit $1 offset $2" : "";
 	const params = limitSql ? [Math.max(Number(limit), 1), Math.max(Number(offset), 0)] : [];
 	const regionaisResult = await db.query(
 		`select id, nome, uf, ativo, legacy_path, legacy_document_id,
