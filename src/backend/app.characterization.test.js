@@ -549,6 +549,66 @@ describe("vps api app characterization - roles", () => {
 	});
 });
 
+describe("vps api app characterization - users audit", () => {
+	it("PUT /api/admin/users/:uid registra auditoria quando usuario e alterado", async () => {
+		const app = loadApp({
+			db: {
+				...baseMocks().db,
+				query: vi
+					.fn()
+					.mockResolvedValueOnce({
+						rows: [
+							{
+								uid: "user-1",
+								email: "user@example.com",
+								display_name: "Joao",
+								role: "backoffice",
+								regional: "Regional A",
+								disabled: false,
+								must_change_password: false,
+								profile_data: {},
+							},
+						],
+					})
+					.mockResolvedValueOnce({
+						rows: [
+							{
+								uid: "user-1",
+								email: "user@example.com",
+								display_name: "Joao Silva",
+								role: "backoffice",
+								regional: "Regional A",
+								disabled: false,
+								must_change_password: false,
+								profile_data: {},
+							},
+						],
+					}),
+			},
+			auditLog: {
+				...baseMocks().auditLog,
+				calculateChangedFields: vi.fn(() => ["nome"]),
+			},
+		});
+
+		const response = await request(app)
+			.put("/api/admin/users/user-1")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({ nome: "Joao Silva" });
+
+		expect(response.status).toBe(200);
+		expect(currentMocks.auditLog.recordAuditLog).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "update",
+				entity: "app_users",
+				recordId: "user-1",
+				changedFields: ["nome"],
+			}),
+		);
+	});
+});
+
 describe("vps api app characterization - auth", () => {
 	it("POST /api/auth/login autentica credenciais validas e define cookies", async () => {
 		const app = loadApp();

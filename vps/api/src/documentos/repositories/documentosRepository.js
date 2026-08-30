@@ -1,4 +1,22 @@
 const db = require("../../db");
+const auditLog = require("../../auditLog");
+
+function recordSqlAudit({ action, entity, recordId, beforeData, afterData }) {
+	const changedFields = auditLog.calculateChangedFields(beforeData, afterData);
+	if (action === "update" && !changedFields.length) return;
+	auditLog.recordAuditLog({
+		action,
+		module: "documentos",
+		entity,
+		recordId: String(recordId || ""),
+		beforeData: beforeData || null,
+		afterData: afterData || null,
+		changedFields:
+			action === "delete" && !changedFields.length
+				? ["id", "nome"]
+				: changedFields,
+	});
+}
 
 function mapFolder(row) {
 	if (!row) return null;
@@ -107,6 +125,7 @@ async function getClientFolder(empresaId) {
 }
 
 async function upsertClientFolder(folder) {
+	const before = await getClientFolder(folder.empresaId);
 	const result = await db.query(
 		`insert into document_client_folders (
        empresa_id, empresa_nome, supervisor_id, supervisor_nome, regional,
@@ -132,7 +151,15 @@ async function upsertClientFolder(folder) {
 			folder.createdBy || null,
 		],
 	);
-	return mapFolder(result.rows[0]);
+	const after = mapFolder(result.rows[0]);
+	recordSqlAudit({
+		action: before ? "update" : "create",
+		entity: "document_client_folders",
+		recordId: after?.empresaId,
+		beforeData: before,
+		afterData: after,
+	});
+	return after;
 }
 
 async function createFile(record) {
@@ -170,7 +197,15 @@ async function createFile(record) {
 			record.mesReferencia || null,
 		],
 	);
-	return mapFile(result.rows[0]);
+	const after = mapFile(result.rows[0]);
+	recordSqlAudit({
+		action: "create",
+		entity: "document_files",
+		recordId: after?.id,
+		beforeData: null,
+		afterData: after,
+	});
+	return after;
 }
 
 async function listRequiredFields({ includeInactive = false } = {}) {
@@ -195,7 +230,15 @@ async function createRequiredField(field = {}) {
 			field.ativo !== false,
 		],
 	);
-	return mapRequiredField(result.rows[0]);
+	const after = mapRequiredField(result.rows[0]);
+	recordSqlAudit({
+		action: "create",
+		entity: "document_required_fields",
+		recordId: after?.id,
+		beforeData: null,
+		afterData: after,
+	});
+	return after;
 }
 
 async function updateRequiredField(id, field = {}) {
@@ -224,7 +267,15 @@ async function updateRequiredField(id, field = {}) {
 			next.ativo !== false,
 		],
 	);
-	return mapRequiredField(result.rows[0]);
+	const after = mapRequiredField(result.rows[0]);
+	recordSqlAudit({
+		action: "update",
+		entity: "document_required_fields",
+		recordId: id,
+		beforeData: mapRequiredField(current.rows[0]),
+		afterData: after,
+	});
+	return after;
 }
 
 async function createSubmission(record = {}) {
@@ -248,7 +299,15 @@ async function createSubmission(record = {}) {
 			record.submittedByEmail || null,
 		],
 	);
-	return mapSubmission(result.rows[0]);
+	const after = mapSubmission(result.rows[0]);
+	recordSqlAudit({
+		action: "create",
+		entity: "document_submissions",
+		recordId: after?.id,
+		beforeData: null,
+		afterData: after,
+	});
+	return after;
 }
 
 async function listSubmissions({
@@ -373,7 +432,15 @@ async function updateSubmissionStatus(id, changes = {}) {
 			next.adminReviewedAt || null,
 		],
 	);
-	return mapSubmission(result.rows[0]);
+	const after = mapSubmission(result.rows[0]);
+	recordSqlAudit({
+		action: "update",
+		entity: "document_submissions",
+		recordId: id,
+		beforeData: current,
+		afterData: after,
+	});
+	return after;
 }
 
 async function updateSubmissionOnly(id, changes = {}) {
@@ -405,7 +472,15 @@ async function updateSubmissionOnly(id, changes = {}) {
 			next.adminReviewedAt || null,
 		],
 	);
-	return mapSubmission(result.rows[0]);
+	const after = mapSubmission(result.rows[0]);
+	recordSqlAudit({
+		action: "update",
+		entity: "document_submissions",
+		recordId: id,
+		beforeData: current,
+		afterData: after,
+	});
+	return after;
 }
 
 async function markSubmissionPending(id, changes = {}) {
@@ -436,7 +511,15 @@ async function markSubmissionPending(id, changes = {}) {
 			next.submittedByEmail || null,
 		],
 	);
-	return mapSubmission(result.rows[0]);
+	const after = mapSubmission(result.rows[0]);
+	recordSqlAudit({
+		action: "update",
+		entity: "document_submissions",
+		recordId: id,
+		beforeData: current,
+		afterData: after,
+	});
+	return after;
 }
 
 async function listFiles({
@@ -528,7 +611,15 @@ async function updateFile(id, changes = {}) {
 				: Number(next.valor || 0),
 		],
 	);
-	return mapFile(result.rows[0]);
+	const after = mapFile(result.rows[0]);
+	recordSqlAudit({
+		action: "update",
+		entity: "document_files",
+		recordId: id,
+		beforeData: current,
+		afterData: after,
+	});
+	return after;
 }
 
 async function deleteFile(id) {
@@ -536,7 +627,15 @@ async function deleteFile(id) {
 		`delete from document_files where id = $1 returning *`,
 		[id],
 	);
-	return mapFile(result.rows[0]);
+	const before = mapFile(result.rows[0]);
+	recordSqlAudit({
+		action: "delete",
+		entity: "document_files",
+		recordId: id,
+		beforeData: before,
+		afterData: null,
+	});
+	return before;
 }
 
 async function purgeDocumentHistory({ resetFolders = false } = {}) {
@@ -559,11 +658,19 @@ async function purgeDocumentHistory({ resetFolders = false } = {}) {
 		[Boolean(resetFolders)],
 	);
 	const row = result.rows[0] || {};
-	return {
+	const summary = {
 		filesDeleted: Number(row.files_deleted || 0),
 		submissionsDeleted: Number(row.submissions_deleted || 0),
 		foldersDeleted: Number(row.folders_deleted || 0),
 	};
+	recordSqlAudit({
+		action: "delete",
+		entity: "document_submissions",
+		recordId: "purge-history",
+		beforeData: null,
+		afterData: summary,
+	});
+	return summary;
 }
 
 module.exports = {

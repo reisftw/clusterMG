@@ -18,6 +18,7 @@ const IGNORED_DOCUMENT_COLLECTIONS = new Set([
 	"metrics_requests",
 	"password_reset_tokens",
 	"static_snapshots",
+	"usuarios",
 ]);
 const SYSTEM_FIELD_NAMES = new Set([
 	"atualizado_em",
@@ -52,6 +53,11 @@ const FIELD_LABELS = {
 const COLLECTION_LABELS = {
 	app_roles: "cargo",
 	app_users: "usuário",
+	document_client_folders: "pasta de documentos",
+	document_files: "documento",
+	document_required_fields: "campo obrigatório",
+	document_submissions: "envio mensal",
+	usuarios: "usuário",
 	financeiro_config: "configuração financeira",
 };
 

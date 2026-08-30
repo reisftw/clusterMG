@@ -1654,6 +1654,23 @@ async function listManagedUsersForAdmin(user) {
 	return filteredItems.map((item) => item.data);
 }
 
+async function getManagedUserForAudit(uid) {
+	const result = await db.query(
+		`select au.uid, au.email, au.display_name, au.role, au.regional,
+            au.disabled, au.must_change_password, au.last_login_at,
+            au.last_login_ip, au.last_login_user_agent,
+            au.created_at,
+            coalesce(ad.data, '{}'::jsonb) as profile_data
+       from app_users au
+       left join app_documents ad on ad.path = 'usuarios/' || au.uid
+      where au.uid = $1
+      limit 1`,
+		[String(uid || "").trim()],
+	);
+	const row = result.rows[0];
+	return row ? mapAdminUserRow(row) : null;
+}
+
 async function getUserProfileDocument(uid) {
 	const item = await documents.getDocument(`usuarios/${uid}`);
 	return item?.data ? { id: uid, ...item.data } : null;
@@ -3650,6 +3667,16 @@ function createApp() {
 					throw error;
 				}
 				await mergeUserProfileExtras(user.uid, req.body || {});
+				const afterUser = await getManagedUserForAudit(user.uid);
+				auditLog.recordAuditLog({
+					action: "create",
+					module: "configuracao",
+					entity: "app_users",
+					recordId: user.uid,
+					beforeData: null,
+					afterData: afterUser,
+					changedFields: auditLog.calculateChangedFields(null, afterUser),
+				});
 
 				let passwordResetLink = "";
 				let emailStatus = "nao_enviado";
@@ -3831,8 +3858,25 @@ function createApp() {
 					return;
 				}
 
+				const beforeUser = await getManagedUserForAudit(uid);
 				await updateLocalUser(uid, nextBody);
 				await mergeUserProfileExtras(uid, nextBody);
+				const afterUser = await getManagedUserForAudit(uid);
+				const changedFields = auditLog.calculateChangedFields(
+					beforeUser,
+					afterUser,
+				);
+				if (changedFields.length) {
+					auditLog.recordAuditLog({
+						action: "update",
+						module: "configuracao",
+						entity: "app_users",
+						recordId: uid,
+						beforeData: beforeUser,
+						afterData: afterUser,
+						changedFields,
+					});
+				}
 				res.json({ ok: true, uid });
 			} catch (error) {
 				next(error);
@@ -3853,7 +3897,17 @@ function createApp() {
 					return;
 				}
 
+				const beforeUser = await getManagedUserForAudit(uid);
 				await deleteLocalUser(uid);
+				auditLog.recordAuditLog({
+					action: "delete",
+					module: "configuracao",
+					entity: "app_users",
+					recordId: uid,
+					beforeData: beforeUser,
+					afterData: null,
+					changedFields: ["uid", "nome", "email", "role"],
+				});
 				res.json({ ok: true });
 			} catch (error) {
 				next(error);
