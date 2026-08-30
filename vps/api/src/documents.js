@@ -3,6 +3,7 @@ const auditLog = require("./auditLog");
 const agendamentosRepository = require("./agendamentosRepository");
 const imoveisRepository = require("./imoveisRepository");
 const mensageriaRepository = require("./mensageriaRepository");
+const ordensRepository = require("./ordensRepository");
 const normalizedDualWrite = require("./normalizedDualWrite");
 const { broadcastRealtime } = require("./realtime");
 const { invalidatePublicDashboardCache } = require("./publicDashboard");
@@ -94,6 +95,9 @@ async function listDocuments({ collectionPath, limit, offset }) {
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return imoveisRepository.listDocuments({ collectionPath, limit, offset });
 	}
+	if (ordensRepository.isOrdersCollection(collectionPath)) {
+		return ordensRepository.listDocuments({ collectionPath, limit, offset });
+	}
 	const normalizedLimit = normalizeLimit(limit);
 	const normalizedOffset = Math.max(Number(offset || 0), 0);
 	return getOrSetDocumentsCache(
@@ -123,6 +127,9 @@ async function getDocument(documentPath) {
 	}
 	if (imoveisRepository.isImoveisCollection(getCollectionPath(documentPath))) {
 		return imoveisRepository.getDocument(documentPath);
+	}
+	if (ordensRepository.isOrdersCollection(getCollectionPath(documentPath))) {
+		return ordensRepository.getDocument(documentPath);
 	}
 	return getOrSetDocumentsCache(`path:${documentPath}`, async () => {
 		const result = await db.query(
@@ -188,6 +195,21 @@ async function upsertDocument(record) {
 	if (imoveisRepository.isImoveisCollection(record.collectionPath)) {
 		const beforeRecord = await imoveisRepository.getDocument(record.path);
 		await imoveisRepository.upsertDocument(record);
+		invalidateDocumentsCache({
+			collectionPath: record.collectionPath,
+			documentPath: record.path,
+		});
+		broadcastDocumentChange("upsert", record);
+		auditLog.recordDocumentAuditLog({
+			action: beforeRecord ? "update" : "create",
+			beforeRecord,
+			record,
+		});
+		return;
+	}
+	if (ordensRepository.isOrdersCollection(record.collectionPath)) {
+		const beforeRecord = await ordensRepository.getDocument(record.path);
+		await ordensRepository.upsertDocument(record);
 		invalidateDocumentsCache({
 			collectionPath: record.collectionPath,
 			documentPath: record.path,
@@ -309,6 +331,32 @@ async function deleteDocument(path) {
 		});
 		return;
 	}
+	if (ordensRepository.isOrdersCollection(getCollectionPath(path))) {
+		const beforeRecord = await ordensRepository.getDocument(path);
+		await ordensRepository.deleteDocument(path);
+		const parts = String(path || "")
+			.split("/")
+			.filter(Boolean);
+		invalidateDocumentsCache({
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentPath: path,
+		});
+		broadcastDocumentChange("delete", {
+			path,
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentId: parts.at(-1),
+		});
+		auditLog.recordDocumentAuditLog({
+			action: "delete",
+			beforeRecord,
+			record: {
+				path,
+				collectionPath: parts.slice(0, -1).join("/"),
+				documentId: parts.at(-1),
+			},
+		});
+		return;
+	}
 	const beforeRecord = await getDocumentSnapshot(path);
 	if (["regionais", "usuarios"].includes(beforeRecord?.collectionPath)) {
 		throw new Error(
@@ -376,6 +424,28 @@ async function deleteDocumentsByCollectionAndSources(
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return 0;
 	}
+	if (ordensRepository.isOrdersCollection(collectionPath)) {
+		const normalizedSources = sources
+			.map((source) => String(source || "").trim())
+			.filter(Boolean);
+		const deleted = await ordensRepository.deleteDocumentsByCollectionAndSources(
+			collectionPath,
+			normalizedSources,
+		);
+		invalidateDocumentsCache({ collectionPath });
+		auditLog.recordAuditLog({
+			action: "delete",
+			module:
+				String(collectionPath || "").split("/").filter(Boolean)[0] ||
+				"documentos",
+			entity: collectionPath,
+			recordId: "bulk",
+			beforeData: { sources: normalizedSources, deletedCount: deleted || 0 },
+			afterData: null,
+			changedFields: ["deletedCount", "sources"],
+		});
+		return deleted;
+	}
 	const normalizedSources = sources
 		.map((source) => String(source || "").trim())
 		.filter(Boolean);
@@ -410,6 +480,9 @@ async function listAllDocuments(collectionPath) {
 	}
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return imoveisRepository.listAllDocuments(collectionPath);
+	}
+	if (ordensRepository.isOrdersCollection(collectionPath)) {
+		return ordensRepository.listAllDocuments(collectionPath);
 	}
 	const result = await db.query(
 		`select path, collection_path as "collectionPath", document_id as "documentId",
