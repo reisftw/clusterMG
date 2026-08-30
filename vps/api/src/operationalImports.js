@@ -872,6 +872,32 @@ async function getImportJob(jobId) {
 	return doc?.data || null;
 }
 
+async function markInterruptedImportJobs() {
+	const now = new Date().toISOString();
+	const result = await db.query(
+		`update app_documents
+		    set data = data
+		      || jsonb_build_object(
+		           'status', 'failed',
+		           'stage', 'Interrompido',
+		           'percent', 100,
+		           'error', 'Importacao interrompida por reinicio da API. Envie o arquivo novamente.',
+		           'finishedAt', $1,
+		           'updatedAt', $1
+		         )
+		  where collection_path = $2
+		    and data->>'status' = 'running'
+		  returning document_id`,
+		[now, IMPORT_JOB_COLLECTION],
+	);
+	if (result.rowCount) {
+		console.warn(
+			`[operationalImports] ${result.rowCount} job(s) interrompido(s) marcado(s) como falha.`,
+		);
+	}
+	return result.rowCount || 0;
+}
+
 async function updateImportJob(jobId, patch = {}) {
 	const current = (await getImportJob(jobId)) || { id: jobId };
 	return saveImportJobStatus({
@@ -2028,6 +2054,7 @@ module.exports = {
 	createImportJob,
 	getImportJob,
 	getMatchConfig,
+	markInterruptedImportJobs,
 	persistMapaImport,
 	persistMatchImport,
 	persistMetasImport,

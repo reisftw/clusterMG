@@ -4,6 +4,7 @@ const apiStatus = require("./apiStatus");
 const evolutionMessaging = require("./evolutionMessaging");
 const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const financeiro = require("./financeiro");
+const operationalImports = require("./operationalImports");
 const { closeRealtimeClients } = require("./realtime");
 
 const port = Number(process.env.PORT || 3001);
@@ -14,6 +15,12 @@ const server = app.listen(port, () => {
 	evolutionMessaging.startWorker();
 	agendamentoConfirmacao.startWorker();
 	financeiro.startWorker();
+	operationalImports.markInterruptedImportJobs().catch((error) => {
+		console.error(
+			"[retiradas-api] Falha ao recuperar jobs de importacao:",
+			error?.message || error,
+		);
+	});
 	apiStatus.recordRuntimeEvent("startup", {
 		port,
 		reason: "process_started",
