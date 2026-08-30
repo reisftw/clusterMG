@@ -12,6 +12,7 @@ const apiStatus = require("./apiStatus");
 const databaseBackups = require("./databaseBackups");
 const documents = require("./documents");
 const regionaisRepository = require("./regionaisRepository");
+const usersRepository = require("./usersRepository");
 const auditLog = require("./auditLog");
 const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
@@ -1285,16 +1286,9 @@ async function mergeUserProfileExtras(uid, body = {}) {
 	}
 	if (!Object.keys(allowed).length) return;
 
-	const current = await documents.getDocument(`usuarios/${uid}`);
-	await documents.upsertDocument({
-		path: `usuarios/${uid}`,
-		collectionPath: "usuarios",
-		documentId: uid,
-		data: {
-			...(current?.data || {}),
-			...allowed,
-			atualizado_em: new Date().toISOString(),
-		},
+	await usersRepository.updateUserProfileExtras(uid, {
+		...allowed,
+		atualizado_em: new Date().toISOString(),
 	});
 }
 
@@ -1599,37 +1593,10 @@ async function filterUserDocumentsForManager(user, collectionPath, items = []) {
 }
 
 function mapAdminUserRow(row = {}) {
-	const profile = row.profile_data || {};
-	return {
-		id: row.uid,
-		uid: row.uid,
-		email: row.email || profile.email || "",
-		nome:
-			row.display_name ||
-			profile.nome ||
-			profile.displayName ||
-			row.email ||
-			"",
-		role: normalizeUserRole(row.role || profile.role),
-		regional: row.regional || profile.regional || "",
-		disabled: Boolean(row.disabled),
-		trocar_senha: Boolean(row.must_change_password),
-		must_change_password: Boolean(row.must_change_password),
-		ultimo_login: row.last_login_at || profile.ultimo_login || null,
-		last_login_at: row.last_login_at || profile.last_login_at || null,
-		ultimo_login_ip: row.last_login_ip || profile.ultimo_login_ip || "",
-		ultimo_login_navegador:
-			row.last_login_user_agent || profile.ultimo_login_navegador || "",
-		login_provider: profile.login_provider || "local",
-		criado_por_oauth: Boolean(profile.criado_por_oauth),
-		status_oauth: profile.status_oauth || "",
-		empresaId: profile.empresaId || profile.empresa_id || "",
-		empresaNome: profile.empresaNome || profile.empresa_nome || "",
-		avatarUrl: profile.avatarUrl || profile.avatar_url || "",
-		avatarDataUrl: profile.avatarDataUrl || profile.avatar_data_url || "",
-		criado_em: profile.criado_em || row.created_at || null,
-		atualizado_em: profile.atualizado_em || null,
-	};
+	return usersRepository.mapAppUserRowToProfile({
+		...row,
+		role: normalizeUserRole(row.role || row.imported_profile?.role),
+	});
 }
 
 async function listManagedUsersForAdmin(user) {
@@ -1637,10 +1604,10 @@ async function listManagedUsersForAdmin(user) {
 		`select au.uid, au.email, au.display_name, au.role, au.regional,
             au.disabled, au.must_change_password, au.last_login_at,
             au.last_login_ip, au.last_login_user_agent,
-            au.created_at,
-            coalesce(ad.data, '{}'::jsonb) as profile_data
+            au.empresa_id, au.empresa_nome, au.insumos_base_id,
+            au.insumos_base_nome, au.imported_profile,
+            au.created_at, au.updated_at
        from app_users au
-       left join app_documents ad on ad.path = 'usuarios/' || au.uid
       order by coalesce(au.display_name, au.email) asc`,
 	);
 
@@ -1660,10 +1627,10 @@ async function getManagedUserForAudit(uid) {
 		`select au.uid, au.email, au.display_name, au.role, au.regional,
             au.disabled, au.must_change_password, au.last_login_at,
             au.last_login_ip, au.last_login_user_agent,
-            au.created_at,
-            coalesce(ad.data, '{}'::jsonb) as profile_data
+            au.empresa_id, au.empresa_nome, au.insumos_base_id,
+            au.insumos_base_nome, au.imported_profile,
+            au.created_at, au.updated_at
        from app_users au
-       left join app_documents ad on ad.path = 'usuarios/' || au.uid
       where au.uid = $1
       limit 1`,
 		[String(uid || "").trim()],
@@ -1673,7 +1640,7 @@ async function getManagedUserForAudit(uid) {
 }
 
 async function getUserProfileDocument(uid) {
-	const item = await documents.getDocument(`usuarios/${uid}`);
+	const item = await usersRepository.getUserDocument(uid);
 	return item?.data ? { id: uid, ...item.data } : null;
 }
 
@@ -2671,17 +2638,10 @@ function createApp() {
 					`user-${req.user.uid}`,
 				);
 
-				const current = await documents.getDocument(`usuarios/${req.user.uid}`);
-				await documents.upsertDocument({
-					path: `usuarios/${req.user.uid}`,
-					collectionPath: "usuarios",
-					documentId: req.user.uid,
-					data: {
-						...(current?.data || {}),
-						avatarUrl,
-						avatarDataUrl: "",
-						atualizado_em: new Date().toISOString(),
-					},
+				await usersRepository.updateUserProfileExtras(req.user.uid, {
+					avatarUrl,
+					avatarDataUrl: "",
+					atualizado_em: new Date().toISOString(),
 				});
 
 				const csrfToken = createCsrfToken(req.authToken);
@@ -3414,11 +3374,16 @@ function createApp() {
 							limit: req.query.limit,
 							offset: req.query.offset,
 						})
-					: await documents.listDocuments({
-							collectionPath,
-							limit: req.query.limit,
-							offset: req.query.offset,
-						});
+					: collectionPath === "usuarios"
+						? await usersRepository.listUserDocuments({
+								limit: req.query.limit,
+								offset: req.query.offset,
+							})
+						: await documents.listDocuments({
+								collectionPath,
+								limit: req.query.limit,
+								offset: req.query.offset,
+							});
 			const visibleItems = await filterUserDocumentsForManager(
 				req.user,
 				collectionPath,
@@ -3443,6 +3408,8 @@ function createApp() {
 			const item =
 				documentCollectionPath === "regionais"
 					? await regionaisRepository.getRegionalDocument(documentPath)
+					: documentCollectionPath === "usuarios"
+						? await usersRepository.getUserDocument(documentPath)
 					: await documents.getDocument(documentPath);
 			if (!item) {
 				res.status(404).json({ error: "Documento nao encontrado." });
@@ -4430,6 +4397,11 @@ function createApp() {
 						documentId,
 						data,
 					});
+				} else if (collectionPath === "usuarios") {
+					await usersRepository.upsertUserDocument({
+						documentId,
+						data,
+					});
 				} else {
 					await documents.upsertDocument({
 						path,
@@ -4479,6 +4451,8 @@ function createApp() {
 				const existing =
 					collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
+						: collectionPath === "usuarios"
+							? await usersRepository.getUserDocument(documentPath)
 						: await documents.getDocument(documentPath);
 				if (
 					existing &&
@@ -4534,6 +4508,11 @@ function createApp() {
 						documentId: parts.at(-1),
 						data,
 					});
+				} else if (collectionPath === "usuarios") {
+					await usersRepository.upsertUserDocument({
+						documentId: parts.at(-1),
+						data,
+					});
 				} else {
 					await documents.upsertDocument({
 						path: documentPath,
@@ -4578,6 +4557,8 @@ function createApp() {
 				const item =
 					collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
+						: collectionPath === "usuarios"
+							? await usersRepository.getUserDocument(documentPath)
 						: await documents.getDocument(documentPath);
 				if (
 					item &&
@@ -4604,6 +4585,8 @@ function createApp() {
 				}
 				if (collectionPath === "regionais") {
 					await regionaisRepository.deleteRegionalDocument(documentPath);
+				} else if (collectionPath === "usuarios") {
+					await usersRepository.deleteUserDocument(documentPath);
 				} else {
 					await documents.deleteDocument(documentPath);
 				}

@@ -2,8 +2,8 @@ const crypto = require("node:crypto");
 const argon2 = require("argon2");
 const { OAuth2Client } = require("google-auth-library");
 const db = require("./db");
-const normalizedDualWrite = require("./normalizedDualWrite");
 const rolePermissions = require("./rolePermissions");
+const usersRepository = require("./usersRepository");
 
 const DEFAULT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 365;
 const TOKEN_TTL_SECONDS = Number(
@@ -288,20 +288,11 @@ function verifyCsrfToken(req) {
 }
 
 async function getImportedUserProfile(uid) {
-	const result = await db.query(
-		`select path, document_id as "id", data
-       from app_documents
-      where path = $1`,
-		[`usuarios/${uid}`],
-	);
-
-	const item = result.rows[0] || null;
-	if (!item) return null;
-
+	const profile = await usersRepository.getUserProfile(uid);
+	if (!profile) return null;
 	return rolePermissions.enrichUserWithPermissions({
-		id: item.id,
-		...item.data,
-		role: normalizeRole(item.data?.role),
+		...profile,
+		role: normalizeRole(profile.role),
 	});
 }
 
@@ -309,7 +300,9 @@ async function getLocalUserByEmail(email) {
 	const result = await db.query(
 		`select uid, email, display_name, role, regional, password_hash, password_salt,
             password_algorithm, session_version, disabled, must_change_password,
-            last_login_at, last_login_ip, last_login_user_agent
+            last_login_at, last_login_ip, last_login_user_agent,
+            empresa_id, empresa_nome, insumos_base_id, insumos_base_nome,
+            imported_profile
        from app_users
       where lower(trim(email)) = lower(trim($1))`,
 		[normalizeEmail(email)],
@@ -400,7 +393,9 @@ async function getOktaOAuthConfig() {
 async function getLocalUserByUid(uid) {
 	const result = await db.query(
 		`select uid, email, display_name, role, regional, session_version, disabled, must_change_password,
-            last_login_at, last_login_ip, last_login_user_agent
+            last_login_at, last_login_ip, last_login_user_agent,
+            empresa_id, empresa_nome, insumos_base_id, insumos_base_nome,
+            imported_profile
        from app_users
       where uid = $1`,
 		[uid],
@@ -561,17 +556,8 @@ async function syncProfileDocument(user, extra = {}) {
 
 	if (!current?.criado_em) data.criado_em = new Date().toISOString();
 
-	await db.query(
-		`insert into app_documents (path, collection_path, document_id, parent_path, data)
-     values ($1, 'usuarios', $2, null, $3::jsonb)
-     on conflict (path) do update set data = excluded.data`,
-		[`usuarios/${user.uid}`, user.uid, JSON.stringify(data)],
-	);
-	await normalizedDualWrite.upsert({
-		path: `usuarios/${user.uid}`,
-		collectionPath: "usuarios",
+	await usersRepository.upsertUserDocument({
 		documentId: user.uid,
-		parentPath: null,
 		data,
 	});
 
@@ -868,14 +854,6 @@ async function updateLocalUser(uid, data = {}) {
 
 async function deleteLocalUser(uid) {
 	await db.query("delete from app_users where uid = $1", [uid]);
-	await db.query("delete from app_documents where path = $1", [
-		`usuarios/${uid}`,
-	]);
-	await normalizedDualWrite.remove({
-		path: `usuarios/${uid}`,
-		collectionPath: "usuarios",
-		documentId: uid,
-	});
 }
 
 async function resetLocalUserPassword(uid, password = makeTemporaryPassword()) {

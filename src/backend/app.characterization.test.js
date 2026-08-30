@@ -183,6 +183,50 @@ function baseMocks(overrides = {}) {
 			]),
 			saveRole: vi.fn(async () => undefined),
 		},
+		usersRepository: {
+			deleteUserDocument: vi.fn(async () => true),
+			getUserDocument: vi.fn(async () => ({
+				path: "usuarios/admin-1",
+				collectionPath: "usuarios",
+				documentId: "admin-1",
+				data: {
+					uid: "admin-1",
+					email: "admin@example.com",
+					nome: "Admin",
+					role: "admin",
+				},
+			})),
+			listUserDocuments: vi.fn(async () => []),
+			mapAppUserRowToProfile: vi.fn((row = {}) => ({
+				id: row.uid,
+				uid: row.uid,
+				email: row.email || "",
+				nome: row.display_name || row.email || "",
+				role: row.role || "",
+				regional: row.regional || "",
+				disabled: Boolean(row.disabled),
+				trocar_senha: Boolean(row.must_change_password),
+				must_change_password: Boolean(row.must_change_password),
+			})),
+			updateUserProfileExtras: vi.fn(async (_uid, extras = {}) => ({
+				path: "usuarios/admin-1",
+				collectionPath: "usuarios",
+				documentId: "admin-1",
+				data: {
+					uid: "admin-1",
+					email: "admin@example.com",
+					nome: "Admin",
+					role: "admin",
+					...extras,
+				},
+			})),
+			upsertUserDocument: vi.fn(async ({ documentId, data = {} }) => ({
+				path: `usuarios/${documentId}`,
+				collectionPath: "usuarios",
+				documentId,
+				data,
+			})),
+		},
 		documents,
 		evolutionMessaging,
 		agendamentoConfirmacao,
@@ -319,6 +363,7 @@ function installMocks(overrides = {}) {
 	setMock("./realtime", currentMocks.realtime);
 	setMock("./publicDashboard", currentMocks.publicDashboard);
 	setMock("./auth", currentMocks.auth);
+	setMock("./usersRepository", currentMocks.usersRepository);
 	setMock("./rolePermissions", currentMocks.rolePermissions);
 	delete require.cache[appPath];
 	return currentMocks;
