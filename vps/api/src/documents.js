@@ -1,6 +1,7 @@
 const db = require("./db");
 const auditLog = require("./auditLog");
 const agendamentosRepository = require("./agendamentosRepository");
+const imoveisRepository = require("./imoveisRepository");
 const mensageriaRepository = require("./mensageriaRepository");
 const normalizedDualWrite = require("./normalizedDualWrite");
 const { broadcastRealtime } = require("./realtime");
@@ -90,6 +91,9 @@ async function listDocuments({ collectionPath, limit, offset }) {
 	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
 		return mensageriaRepository.listDocuments({ collectionPath, limit, offset });
 	}
+	if (imoveisRepository.isImoveisCollection(collectionPath)) {
+		return imoveisRepository.listDocuments({ collectionPath, limit, offset });
+	}
 	const normalizedLimit = normalizeLimit(limit);
 	const normalizedOffset = Math.max(Number(offset || 0), 0);
 	return getOrSetDocumentsCache(
@@ -116,6 +120,9 @@ async function getDocument(documentPath) {
 	}
 	if (mensageriaRepository.isMessagingCollection(getCollectionPath(documentPath))) {
 		return mensageriaRepository.getDocument(documentPath);
+	}
+	if (imoveisRepository.isImoveisCollection(getCollectionPath(documentPath))) {
+		return imoveisRepository.getDocument(documentPath);
 	}
 	return getOrSetDocumentsCache(`path:${documentPath}`, async () => {
 		const result = await db.query(
@@ -166,6 +173,21 @@ async function upsertDocument(record) {
 	if (mensageriaRepository.isMessagingCollection(record.collectionPath)) {
 		const beforeRecord = await mensageriaRepository.getDocument(record.path);
 		await mensageriaRepository.upsertDocument(record);
+		invalidateDocumentsCache({
+			collectionPath: record.collectionPath,
+			documentPath: record.path,
+		});
+		broadcastDocumentChange("upsert", record);
+		auditLog.recordDocumentAuditLog({
+			action: beforeRecord ? "update" : "create",
+			beforeRecord,
+			record,
+		});
+		return;
+	}
+	if (imoveisRepository.isImoveisCollection(record.collectionPath)) {
+		const beforeRecord = await imoveisRepository.getDocument(record.path);
+		await imoveisRepository.upsertDocument(record);
 		invalidateDocumentsCache({
 			collectionPath: record.collectionPath,
 			documentPath: record.path,
@@ -261,6 +283,32 @@ async function deleteDocument(path) {
 		});
 		return;
 	}
+	if (imoveisRepository.isImoveisCollection(getCollectionPath(path))) {
+		const beforeRecord = await imoveisRepository.getDocument(path);
+		await imoveisRepository.deleteDocument(path);
+		const parts = String(path || "")
+			.split("/")
+			.filter(Boolean);
+		invalidateDocumentsCache({
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentPath: path,
+		});
+		broadcastDocumentChange("delete", {
+			path,
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentId: parts.at(-1),
+		});
+		auditLog.recordDocumentAuditLog({
+			action: "delete",
+			beforeRecord,
+			record: {
+				path,
+				collectionPath: parts.slice(0, -1).join("/"),
+				documentId: parts.at(-1),
+			},
+		});
+		return;
+	}
 	const beforeRecord = await getDocumentSnapshot(path);
 	if (["regionais", "usuarios"].includes(beforeRecord?.collectionPath)) {
 		throw new Error(
@@ -325,6 +373,9 @@ async function deleteDocumentsByCollectionAndSources(
 		});
 		return deleted;
 	}
+	if (imoveisRepository.isImoveisCollection(collectionPath)) {
+		return 0;
+	}
 	const normalizedSources = sources
 		.map((source) => String(source || "").trim())
 		.filter(Boolean);
@@ -356,6 +407,9 @@ async function listAllDocuments(collectionPath) {
 	}
 	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
 		return mensageriaRepository.listAllDocuments(collectionPath);
+	}
+	if (imoveisRepository.isImoveisCollection(collectionPath)) {
+		return imoveisRepository.listAllDocuments(collectionPath);
 	}
 	const result = await db.query(
 		`select path, collection_path as "collectionPath", document_id as "documentId",
