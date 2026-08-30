@@ -29,13 +29,31 @@ function normalizeStreet(value) {
 		.trim();
 }
 
-function isValidCoordinate(value) {
-	return typeof value === "number" && Number.isFinite(value);
+function isValidLatitude(value) {
+	return (
+		typeof value === "number" &&
+		Number.isFinite(value) &&
+		value >= -90 &&
+		value <= 90
+	);
+}
+
+function isValidLongitude(value) {
+	return (
+		typeof value === "number" &&
+		Number.isFinite(value) &&
+		value >= -180 &&
+		value <= 180
+	);
 }
 
 function hasCoordinates(ordem) {
-	return (
-		isValidCoordinate(ordem?.latitude) && isValidCoordinate(ordem?.longitude)
+	if (!isValidLatitude(ordem?.latitude) || !isValidLongitude(ordem?.longitude)) {
+		return false;
+	}
+	return !(
+		Math.abs(ordem.latitude) < 0.000001 &&
+		Math.abs(ordem.longitude) < 0.000001
 	);
 }
 
@@ -177,7 +195,7 @@ function buildLegacyCidadeMatches(
 					const sameStreet =
 						ruaPrincipal && ruaPrincipal === normalizeStreet(ordem.endereco);
 
-					if (!sameStreet && distanceMeters > MATCH_DISTANCE_METERS) {
+					if (distanceMeters > MATCH_DISTANCE_METERS) {
 						return null;
 					}
 

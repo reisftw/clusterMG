@@ -609,12 +609,21 @@ function normalizeStreet(value) {
 }
 
 function hasCoordinates(order) {
-	return (
-		typeof order?.latitude === "number" &&
-		Number.isFinite(order.latitude) &&
-		typeof order?.longitude === "number" &&
-		Number.isFinite(order.longitude)
-	);
+	const latitude = order?.latitude;
+	const longitude = order?.longitude;
+	if (
+		typeof latitude !== "number" ||
+		!Number.isFinite(latitude) ||
+		latitude < -90 ||
+		latitude > 90 ||
+		typeof longitude !== "number" ||
+		!Number.isFinite(longitude) ||
+		longitude < -180 ||
+		longitude > 180
+	) {
+		return false;
+	}
+	return !(Math.abs(latitude) < 0.000001 && Math.abs(longitude) < 0.000001);
 }
 
 function calcDistanceMeters(a, b) {
@@ -690,7 +699,7 @@ function buildMatchData(ordens = []) {
 										);
 										const sameStreet =
 											street && street === normalizeStreet(order.endereco);
-										if (!sameStreet && distanceMeters > 120) return null;
+										if (distanceMeters > 120) return null;
 										return { ...order, sameStreet, distanceMeters };
 									})
 									.filter(Boolean)
