@@ -1,5 +1,6 @@
 const documents = require("./documents");
 const db = require("./db");
+const regionaisRepository = require("./regionaisRepository");
 const { broadcastRealtime } = require("./realtime");
 const {
 	reconcileAppointmentsWithMapa,
@@ -288,7 +289,7 @@ function buildAddress({ endereco, numero, bairro }) {
 }
 
 async function loadCityMap() {
-	const rows = await documents.listAllDocuments("regionais");
+	const rows = await regionaisRepository.listAllRegionalDocuments();
 	const toolRows = await documents.listAllDocuments("ferramentas_regionais");
 	const cityMap = {};
 

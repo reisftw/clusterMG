@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const documents = require("../documents");
+const regionaisRepository = require("../regionaisRepository");
 const evolutionMessaging = require("../evolutionMessaging");
 const notificationsService = require("../notificationsService");
 const sempreIntegration = require("../sempreIntegration");
@@ -1194,8 +1195,8 @@ async function findRegionalByCity(city) {
 	const target = normalizeText(city);
 	if (!target) return null;
 
-	const regionais = await documents
-		.listAllDocuments("regionais")
+	const regionais = await regionaisRepository
+		.listAllRegionalDocuments()
 		.catch(() => []);
 	for (const row of regionais) {
 		const data = row.data || {};

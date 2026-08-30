@@ -6,6 +6,7 @@ const require = createRequire(path.join(process.cwd(), "vps/package.json"));
 const authPath = require.resolve("./api/src/auth.js");
 const dbPath = require.resolve("./api/src/db.js");
 const rolePermissionsPath = require.resolve("./api/src/rolePermissions.js");
+const usersRepositoryPath = require.resolve("./api/src/usersRepository.js");
 
 const originalEnv = { ...process.env };
 
@@ -41,6 +42,7 @@ function clearAuthModules() {
 	delete require.cache[authPath];
 	delete require.cache[dbPath];
 	delete require.cache[rolePermissionsPath];
+	delete require.cache[usersRepositoryPath];
 }
 
 function loadAuthWithDb(dbQuery) {
@@ -71,25 +73,18 @@ function loadAuthWithDb(dbQuery) {
 function buildDbQuery({ user, profile, sessionActive = true }) {
 	return vi.fn(async (sql, params = []) => {
 		const text = String(sql).replace(/\s+/g, " ").toLowerCase();
+		const normalizedUser = {
+			...user,
+			imported_profile: profile,
+		};
 		if (
 			text.includes("from app_users") &&
 			text.includes("lower(trim(email))")
 		) {
-			return { rows: params[0] === user.email ? [user] : [] };
+			return { rows: params[0] === user.email ? [normalizedUser] : [] };
 		}
 		if (text.includes("from app_users") && text.includes("where uid = $1")) {
-			return { rows: params[0] === user.uid ? [user] : [] };
-		}
-		if (
-			text.includes("from app_documents") &&
-			text.includes("where path = $1")
-		) {
-			return {
-				rows:
-					params[0] === `usuarios/${user.uid}`
-						? [{ id: user.uid, data: profile }]
-						: [],
-			};
+			return { rows: params[0] === user.uid ? [normalizedUser] : [] };
 		}
 		if (text.includes("update app_users") && text.includes("last_login_at")) {
 			return {

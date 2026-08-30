@@ -1,4 +1,5 @@
 const documents = require("./documents");
+const regionaisRepository = require("./regionaisRepository");
 const notificationsService = require("./notificationsService");
 const evolutionMessaging = require("./evolutionMessaging");
 const { broadcastRealtime } = require("./realtime");
@@ -417,6 +418,9 @@ async function configureEvolutionWebhook(webhookUrl = "") {
 }
 
 async function listAll(collectionPath) {
+	if (collectionPath === REGIONAL_COLLECTION) {
+		return regionaisRepository.listAllRegionalDocuments();
+	}
 	return documents.listAllDocuments(collectionPath);
 }
 

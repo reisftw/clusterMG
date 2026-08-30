@@ -11,6 +11,9 @@ const db = require("./db");
 const apiStatus = require("./apiStatus");
 const databaseBackups = require("./databaseBackups");
 const documents = require("./documents");
+const agendamentosRepository = require("./agendamentosRepository");
+const regionaisRepository = require("./regionaisRepository");
+const usersRepository = require("./usersRepository");
 const auditLog = require("./auditLog");
 const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
@@ -1284,16 +1287,9 @@ async function mergeUserProfileExtras(uid, body = {}) {
 	}
 	if (!Object.keys(allowed).length) return;
 
-	const current = await documents.getDocument(`usuarios/${uid}`);
-	await documents.upsertDocument({
-		path: `usuarios/${uid}`,
-		collectionPath: "usuarios",
-		documentId: uid,
-		data: {
-			...(current?.data || {}),
-			...allowed,
-			atualizado_em: new Date().toISOString(),
-		},
+	await usersRepository.updateUserProfileExtras(uid, {
+		...allowed,
+		atualizado_em: new Date().toISOString(),
 	});
 }
 
@@ -1598,37 +1594,10 @@ async function filterUserDocumentsForManager(user, collectionPath, items = []) {
 }
 
 function mapAdminUserRow(row = {}) {
-	const profile = row.profile_data || {};
-	return {
-		id: row.uid,
-		uid: row.uid,
-		email: row.email || profile.email || "",
-		nome:
-			row.display_name ||
-			profile.nome ||
-			profile.displayName ||
-			row.email ||
-			"",
-		role: normalizeUserRole(row.role || profile.role),
-		regional: row.regional || profile.regional || "",
-		disabled: Boolean(row.disabled),
-		trocar_senha: Boolean(row.must_change_password),
-		must_change_password: Boolean(row.must_change_password),
-		ultimo_login: row.last_login_at || profile.ultimo_login || null,
-		last_login_at: row.last_login_at || profile.last_login_at || null,
-		ultimo_login_ip: row.last_login_ip || profile.ultimo_login_ip || "",
-		ultimo_login_navegador:
-			row.last_login_user_agent || profile.ultimo_login_navegador || "",
-		login_provider: profile.login_provider || "local",
-		criado_por_oauth: Boolean(profile.criado_por_oauth),
-		status_oauth: profile.status_oauth || "",
-		empresaId: profile.empresaId || profile.empresa_id || "",
-		empresaNome: profile.empresaNome || profile.empresa_nome || "",
-		avatarUrl: profile.avatarUrl || profile.avatar_url || "",
-		avatarDataUrl: profile.avatarDataUrl || profile.avatar_data_url || "",
-		criado_em: profile.criado_em || row.created_at || null,
-		atualizado_em: profile.atualizado_em || null,
-	};
+	return usersRepository.mapAppUserRowToProfile({
+		...row,
+		role: normalizeUserRole(row.role || row.imported_profile?.role),
+	});
 }
 
 async function listManagedUsersForAdmin(user) {
@@ -1636,10 +1605,10 @@ async function listManagedUsersForAdmin(user) {
 		`select au.uid, au.email, au.display_name, au.role, au.regional,
             au.disabled, au.must_change_password, au.last_login_at,
             au.last_login_ip, au.last_login_user_agent,
-            au.created_at,
-            coalesce(ad.data, '{}'::jsonb) as profile_data
+            au.empresa_id, au.empresa_nome, au.insumos_base_id,
+            au.insumos_base_nome, au.imported_profile,
+            au.created_at, au.updated_at
        from app_users au
-       left join app_documents ad on ad.path = 'usuarios/' || au.uid
       order by coalesce(au.display_name, au.email) asc`,
 	);
 
@@ -1659,10 +1628,10 @@ async function getManagedUserForAudit(uid) {
 		`select au.uid, au.email, au.display_name, au.role, au.regional,
             au.disabled, au.must_change_password, au.last_login_at,
             au.last_login_ip, au.last_login_user_agent,
-            au.created_at,
-            coalesce(ad.data, '{}'::jsonb) as profile_data
+            au.empresa_id, au.empresa_nome, au.insumos_base_id,
+            au.insumos_base_nome, au.imported_profile,
+            au.created_at, au.updated_at
        from app_users au
-       left join app_documents ad on ad.path = 'usuarios/' || au.uid
       where au.uid = $1
       limit 1`,
 		[String(uid || "").trim()],
@@ -1672,7 +1641,7 @@ async function getManagedUserForAudit(uid) {
 }
 
 async function getUserProfileDocument(uid) {
-	const item = await documents.getDocument(`usuarios/${uid}`);
+	const item = await usersRepository.getUserDocument(uid);
 	return item?.data ? { id: uid, ...item.data } : null;
 }
 
@@ -2670,17 +2639,10 @@ function createApp() {
 					`user-${req.user.uid}`,
 				);
 
-				const current = await documents.getDocument(`usuarios/${req.user.uid}`);
-				await documents.upsertDocument({
-					path: `usuarios/${req.user.uid}`,
-					collectionPath: "usuarios",
-					documentId: req.user.uid,
-					data: {
-						...(current?.data || {}),
-						avatarUrl,
-						avatarDataUrl: "",
-						atualizado_em: new Date().toISOString(),
-					},
+				await usersRepository.updateUserProfileExtras(req.user.uid, {
+					avatarUrl,
+					avatarDataUrl: "",
+					atualizado_em: new Date().toISOString(),
 				});
 
 				const csrfToken = createCsrfToken(req.authToken);
@@ -3407,11 +3369,22 @@ function createApp() {
 				return;
 			}
 
-			const items = await documents.listDocuments({
-				collectionPath,
-				limit: req.query.limit,
-				offset: req.query.offset,
-			});
+			const items =
+				collectionPath === "regionais"
+					? await regionaisRepository.listRegionalDocuments({
+							limit: req.query.limit,
+							offset: req.query.offset,
+						})
+					: collectionPath === "usuarios"
+						? await usersRepository.listUserDocuments({
+								limit: req.query.limit,
+								offset: req.query.offset,
+							})
+						: await documents.listDocuments({
+								collectionPath,
+								limit: req.query.limit,
+								offset: req.query.offset,
+							});
 			const visibleItems = await filterUserDocumentsForManager(
 				req.user,
 				collectionPath,
@@ -3432,7 +3405,13 @@ function createApp() {
 	app.get("/api/documents/*", requireAuthenticated, async (req, res, next) => {
 		try {
 			const documentPath = req.params[0];
-			const item = await documents.getDocument(documentPath);
+			const documentCollectionPath = documentPath.split("/").slice(0, -1).join("/");
+			const item =
+				documentCollectionPath === "regionais"
+					? await regionaisRepository.getRegionalDocument(documentPath)
+					: documentCollectionPath === "usuarios"
+						? await usersRepository.getUserDocument(documentPath)
+					: await documents.getDocument(documentPath);
 			if (!item) {
 				res.status(404).json({ error: "Documento nao encontrado." });
 				return;
@@ -4028,8 +4007,7 @@ function createApp() {
 		requireRoles(FULL_OPERATION_ROLES),
 		async (req, res, next) => {
 			try {
-				const items = await documents.listDocuments({
-					collectionPath: "regionais",
+				const items = await regionaisRepository.listRegionalDocuments({
 					limit: 1000,
 					offset: 0,
 				});
@@ -4415,13 +4393,25 @@ function createApp() {
 					documentId,
 					scopedRegionalData,
 				);
-				await documents.upsertDocument({
-					path,
-					collectionPath,
-					documentId,
-					parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
-					data,
-				});
+				if (collectionPath === "regionais") {
+					await regionaisRepository.upsertRegionalDocument({
+						documentId,
+						data,
+					});
+				} else if (collectionPath === "usuarios") {
+					await usersRepository.upsertUserDocument({
+						documentId,
+						data,
+					});
+				} else {
+					await documents.upsertDocument({
+						path,
+						collectionPath,
+						documentId,
+						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+						data,
+					});
+				}
 				await ensureEmpresaDriveFolderIfConfigured(
 					collectionPath,
 					documentId,
@@ -4459,7 +4449,12 @@ function createApp() {
 				}
 
 				const collectionPath = parts.slice(0, -1).join("/");
-				const existing = await documents.getDocument(documentPath);
+				const existing =
+					collectionPath === "regionais"
+						? await regionaisRepository.getRegionalDocument(documentPath)
+						: collectionPath === "usuarios"
+							? await usersRepository.getUserDocument(documentPath)
+						: await documents.getDocument(documentPath);
 				if (
 					existing &&
 					isAcertoEstoqueCollection(collectionPath) &&
@@ -4509,13 +4504,25 @@ function createApp() {
 					parts.at(-1),
 					scopedRegionalData,
 				);
-				await documents.upsertDocument({
-					path: documentPath,
-					collectionPath,
-					documentId: parts.at(-1),
-					parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
-					data,
-				});
+				if (collectionPath === "regionais") {
+					await regionaisRepository.upsertRegionalDocument({
+						documentId: parts.at(-1),
+						data,
+					});
+				} else if (collectionPath === "usuarios") {
+					await usersRepository.upsertUserDocument({
+						documentId: parts.at(-1),
+						data,
+					});
+				} else {
+					await documents.upsertDocument({
+						path: documentPath,
+						collectionPath,
+						documentId: parts.at(-1),
+						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+						data,
+					});
+				}
 				await ensureEmpresaDriveFolderIfConfigured(
 					collectionPath,
 					parts.at(-1),
@@ -4546,7 +4553,14 @@ function createApp() {
 					res.status(403).json({ error: "Permissao insuficiente." });
 					return;
 				}
-				const item = await documents.getDocument(documentPath);
+				const parts = documentPath.split("/").filter(Boolean);
+				const collectionPath = parts.slice(0, -1).join("/");
+				const item =
+					collectionPath === "regionais"
+						? await regionaisRepository.getRegionalDocument(documentPath)
+						: collectionPath === "usuarios"
+							? await usersRepository.getUserDocument(documentPath)
+						: await documents.getDocument(documentPath);
 				if (
 					item &&
 					isAcertoEstoqueCollection(item.collectionPath) &&
@@ -4570,7 +4584,13 @@ function createApp() {
 						.json({ error: "Lider Empresa nao pode excluir empresa." });
 					return;
 				}
-				await documents.deleteDocument(documentPath);
+				if (collectionPath === "regionais") {
+					await regionaisRepository.deleteRegionalDocument(documentPath);
+				} else if (collectionPath === "usuarios") {
+					await usersRepository.deleteUserDocument(documentPath);
+				} else {
+					await documents.deleteDocument(documentPath);
+				}
 				res.json({ ok: true });
 			} catch (error) {
 				next(error);
@@ -4672,16 +4692,16 @@ function createApp() {
             order by case collection_path
               when 'ordens_abertas' then 1
               when 'match_os_abertas' then 2
-              when 'agendamentos' then 3
               else 9
             end,
             updated_at desc
             limit 1`,
-					[codigo, ["ordens_abertas", "match_os_abertas", "agendamentos"]],
+					[codigo, ["ordens_abertas", "match_os_abertas"]],
 				);
 
 				const cliente = normalizeAgendamentoClienteRecord(
-					result.rows[0] || null,
+					result.rows[0] ||
+						(await agendamentosRepository.findClienteByCodigo(codigo)),
 				);
 				if (!cliente) {
 					res

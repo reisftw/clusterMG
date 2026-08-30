@@ -1,4 +1,5 @@
 const documents = require("../../documents");
+const regionaisRepository = require("../../regionaisRepository");
 const emailService = require("../../emailService");
 const notificationsService = require("../../notificationsService");
 const repository = require("../repositories/documentosRepository");
@@ -147,13 +148,7 @@ async function getEmpresa(empresaId) {
 async function getRegionalByName(regionalName) {
 	const target = normalize(regionalName);
 	if (!target) return null;
-	const regionais = await documents
-		.listAllDocuments("regionais")
-		.catch(() => []);
-	const match = regionais.find(
-		(item) => normalize(item?.data?.nome || item?.documentId) === target,
-	);
-	return match?.data || null;
+	return regionaisRepository.getRegionalByName(target).catch(() => null);
 }
 
 async function enrichSubmission(submission, { files = null } = {}) {
