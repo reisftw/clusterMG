@@ -15,7 +15,8 @@
 		"import:documents": "node scripts/import-documents-jsonl.js",
 		"migrate:regionais-usuarios": "node scripts/migrate-regionais-usuarios.js",
 		"migrate:mensageria": "node scripts/migrate-mensageria.js",
-		"migrate:agendamentos-esteira": "node scripts/migrate-agendamentos-esteira.js"
+		"migrate:agendamentos-esteira": "node scripts/migrate-agendamentos-esteira.js",
+		"migrate:financeiro-reports": "node scripts/migrate-financeiro-reports.js"
 	},
 	"dependencies": {
 		"archiver": "^8.0.0",

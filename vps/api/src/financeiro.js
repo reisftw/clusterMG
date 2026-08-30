@@ -1,4 +1,5 @@
 const documents = require("./documents");
+const financeiroReportsRepository = require("./financeiroReportsRepository");
 const { google } = require("googleapis");
 const crypto = require("node:crypto");
 const fs = require("fs");
@@ -10,10 +11,7 @@ const {
 const DASHBOARD_PATH = "financeiro_config/dashboard";
 const BUDGET_COST_CENTERS_PATH = "financeiro_config/orcamento_centros_custo";
 const BUDGET_DATA_PATH = "financeiro_config/orcamento_dados";
-const SERASA_DATA_PATH = "financeiro_reports/serasa";
-const TARIFAS_DATA_PATH = "financeiro_reports/tarifas";
 const SHEETS_CONFIG_PATH = "financeiro_config/google_sheets";
-const SHEETS_LOG_COLLECTION = "financeiro_import_logs";
 const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 const SHEET_TYPES = [
 	{ id: "contas_pagar", label: "Contas a pagar", defaultRange: "A:ZZ" },
@@ -748,18 +746,10 @@ async function readTariffsSheetSource(source = {}) {
 }
 
 async function appendImportLog(data = {}) {
-	const id = `fin_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-	await documents.upsertDocument({
-		path: `${SHEETS_LOG_COLLECTION}/${id}`,
-		collectionPath: SHEETS_LOG_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data: {
-			...data,
-			createdAt: nowIso(),
-		},
+	return financeiroReportsRepository.appendImportLog({
+		...data,
+		createdAt: nowIso(),
 	});
-	return id;
 }
 
 function normalizeSerasaHeader(value) {
@@ -1018,21 +1008,23 @@ function mergeSerasaClientHistory(previous = [], reference = {}, clientCount = 0
 
 async function saveSerasaData(payload = {}, user = {}) {
 	const normalized = normalizeSerasaRows(payload.rows || [], payload.headers || []);
-	const previousDoc = await documents.getDocument(SERASA_DATA_PATH).catch(() => null);
+	const previousData = await financeiroReportsRepository
+		.getSerasaReport()
+		.catch(() => null);
 	const reference = resolveSerasaReference(normalized.rows);
 	const clientCount = Math.max(
 		0,
 		Math.trunc(Number(payload.clientCount || payload.clientes || 0)),
 	);
 	const clientesHistory = mergeSerasaClientHistory(
-		previousDoc?.data?.clientesHistory,
+		previousData?.clientesHistory,
 		reference,
 		clientCount,
 	);
 	const now = nowIso();
 	const data = {
 		...normalized,
-		clientes: clientCount || previousDoc?.data?.clientes || 0,
+		clientes: clientCount || previousData?.clientes || 0,
 		clientesHistory,
 		importInfo: {
 			fileName: cleanText(payload.fileName),
@@ -1042,21 +1034,15 @@ async function saveSerasaData(payload = {}, user = {}) {
 			importedByName: user?.profile?.nome || user?.nome || user?.email || "",
 		},
 	};
-	await documents.upsertDocument({
-		path: SERASA_DATA_PATH,
-		collectionPath: "financeiro_reports",
-		documentId: "serasa",
-		parentPath: null,
-		data,
-	});
+	await financeiroReportsRepository.saveSerasaReport(data);
 	return { ok: true, data };
 }
 
 async function getSerasaReport() {
-	const doc = await documents.getDocument(SERASA_DATA_PATH).catch(() => null);
+	const data = await financeiroReportsRepository.getSerasaReport().catch(() => null);
 	return {
 		ok: true,
-		data: doc?.data || {
+		data: data || {
 			rows: [],
 			daily: [],
 			monthly: [],
@@ -1100,13 +1086,7 @@ async function clearSerasaReport(user = {}) {
 			cleared: true,
 		},
 	};
-	await documents.upsertDocument({
-		path: SERASA_DATA_PATH,
-		collectionPath: "financeiro_reports",
-		documentId: "serasa",
-		parentPath: null,
-		data,
-	});
+	await financeiroReportsRepository.clearSerasaReport(data);
 	return { ok: true, data };
 }
 
@@ -1588,19 +1568,14 @@ async function saveTariffsReport(payload = {}, user = {}) {
 			totalSheets: Array.isArray(payload.sheets) ? payload.sheets.length : 0,
 		},
 	};
-	await documents.upsertDocument({
-		path: TARIFAS_DATA_PATH,
-		collectionPath: "financeiro_reports",
-		documentId: "tarifas",
-		parentPath: null,
-		data,
-	});
+	await financeiroReportsRepository.saveTariffsReport(data);
 	return { ok: true, data };
 }
 
 async function getTariffsReport() {
-	const doc = await documents.getDocument(TARIFAS_DATA_PATH).catch(() => null);
-	const savedData = doc?.data || null;
+	const savedData = await financeiroReportsRepository
+		.getTariffsReport()
+		.catch(() => null);
 	const data = savedData
 		? {
 				...savedData,
@@ -1666,25 +1641,15 @@ async function clearTariffsReport(user = {}) {
 			cleared: true,
 		},
 	};
-	await documents.upsertDocument({
-		path: TARIFAS_DATA_PATH,
-		collectionPath: "financeiro_reports",
-		documentId: "tarifas",
-		parentPath: null,
-		data,
-	});
+	await financeiroReportsRepository.clearTariffsReport(data);
 	return { ok: true, data };
 }
 
 async function listImportLogs(limit = 20) {
-	const result = await documents.listDocuments({
-		collectionPath: SHEETS_LOG_COLLECTION,
-		limit: Math.max(1, Math.min(100, Number(limit || 20))),
-		offset: 0,
-	});
+	const result = await financeiroReportsRepository.listImportLogs(limit);
 	return {
 		ok: true,
-		items: (result.items || [])
+		items: result
 			.map((item) => ({ id: item.documentId, ...(item.data || {}) }))
 			.sort((a, b) =>
 				String(b.createdAt || "").localeCompare(String(a.createdAt || "")),
