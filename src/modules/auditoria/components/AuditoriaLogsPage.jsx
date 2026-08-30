@@ -44,6 +44,10 @@ function normalizeChangedFields(log = {}) {
 	return Array.isArray(log.changedFields) ? log.changedFields : [];
 }
 
+function normalizeChangeDescriptions(log = {}) {
+	return Array.isArray(log.changeDescriptions) ? log.changeDescriptions : [];
+}
+
 function DetailValue({ title, value }) {
 	return (
 		<div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -60,6 +64,7 @@ function DetailValue({ title, value }) {
 function AuditLogDetailModal({ log, loading, onClose }) {
 	if (!log && !loading) return null;
 	const fields = normalizeChangedFields(log);
+	const changeDescriptions = normalizeChangeDescriptions(log);
 
 	return (
 		<ModalShell
@@ -102,6 +107,22 @@ function AuditLogDetailModal({ log, loading, onClose }) {
 								{log.ipAddress || "-"}
 							</p>
 						</div>
+					</div>
+
+					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+						<p className="text-xs font-black uppercase tracking-wide text-blue-500">
+							O que foi feito
+						</p>
+						<p className="mt-1 text-base font-black text-blue-950">
+							{log.summary || "Alteração registrada."}
+						</p>
+						{changeDescriptions.length ? (
+							<ul className="mt-3 space-y-2 text-sm font-semibold text-blue-900">
+								{changeDescriptions.map((description) => (
+									<li key={description}>- {description}</li>
+								))}
+							</ul>
+						) : null}
 					</div>
 
 					{fields.length ? (
@@ -366,7 +387,7 @@ export default function AuditoriaLogsPage() {
 								<th className="px-4 py-3">Data</th>
 								<th className="px-4 py-3">Usuário</th>
 								<th className="px-4 py-3">Setor</th>
-								<th className="px-4 py-3">Módulo</th>
+								<th className="px-4 py-3">O que foi feito</th>
 								<th className="px-4 py-3">Ação</th>
 								<th className="px-4 py-3">IP</th>
 								<th className="px-4 py-3 text-right">Ver</th>
@@ -397,8 +418,12 @@ export default function AuditoriaLogsPage() {
 											{log.setorId || log.departmentId || "-"}
 										</td>
 										<td className="px-4 py-3">
-											<p className="font-bold text-slate-900">{log.module || "-"}</p>
-											<p className="text-xs text-slate-500">{log.entity || "-"}</p>
+											<p className="font-bold text-slate-900">
+												{log.summary || `${log.module || "-"} · ${log.entity || "-"}`}
+											</p>
+											<p className="text-xs text-slate-500">
+												{log.module || "-"} · {log.entity || "-"}
+											</p>
 										</td>
 										<td className="px-4 py-3">
 											<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">

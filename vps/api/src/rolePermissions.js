@@ -212,6 +212,30 @@ async function listPermissionCatalog() {
 	}
 }
 
+async function getRoleById(id) {
+	const roleId = normalizeRole(id);
+	if (!roleId) return null;
+	const result = await db.query(
+		`select r.id, r.name, r.description, r.system_role, r.active,
+            coalesce(array_agg(rp.permission order by rp.permission) filter (where rp.permission is not null), '{}') as permissions
+       from app_roles r
+       left join app_role_permissions rp on rp.role_id = r.id
+      where r.id = $1
+      group by r.id`,
+		[roleId],
+	);
+	const row = result.rows[0];
+	if (!row) return null;
+	return {
+		id: row.id,
+		name: row.name,
+		description: row.description || "",
+		systemRole: Boolean(row.system_role),
+		active: Boolean(row.active),
+		permissions: normalizePermissions(row.permissions || []),
+	};
+}
+
 async function getRolePermissions(role) {
 	const roleId = normalizeRole(role);
 	if (!roleId) return [];
@@ -246,6 +270,47 @@ async function enrichUserWithPermissions(user) {
 		permissions,
 		isAdmin: role === ADMIN_ROLE || permissions.includes("*"),
 	};
+}
+
+async function deleteRole(id) {
+	const roleId = normalizeRole(id);
+	if (!roleId || roleId === ADMIN_ROLE) {
+		const error = new Error("Este cargo nao pode ser excluido.");
+		error.statusCode = 400;
+		throw error;
+	}
+
+	await db.query("begin");
+	try {
+		const current = await getRoleById(roleId);
+		if (!current) {
+			const error = new Error("Cargo nao encontrado.");
+			error.statusCode = 404;
+			throw error;
+		}
+		if (current.systemRole) {
+			const error = new Error("Cargos do sistema nao podem ser excluidos.");
+			error.statusCode = 400;
+			throw error;
+		}
+		const users = await db.query(
+			"select count(*)::int as total from app_users where lower(role) = $1",
+			[roleId],
+		);
+		if (Number(users.rows[0]?.total || 0) > 0) {
+			const error = new Error("Nao e possivel excluir cargo vinculado a usuarios.");
+			error.statusCode = 409;
+			throw error;
+		}
+
+		await db.query("delete from app_role_permissions where role_id = $1", [roleId]);
+		await db.query("delete from app_roles where id = $1", [roleId]);
+		await db.query("commit");
+		return current;
+	} catch (error) {
+		await db.query("rollback").catch(() => {});
+		throw error;
+	}
 }
 
 async function saveRole({
@@ -308,7 +373,9 @@ async function saveRole({
 }
 
 module.exports = {
+	deleteRole,
 	enrichUserWithPermissions,
+	getRoleById,
 	getRolePermissions,
 	listPermissionCatalog,
 	listRoles,

@@ -17,6 +17,8 @@ const auditLog = require(path.join(process.cwd(), "vps/api/src/auditLog.js"));
 
 describe("auditLog helpers", () => {
 	const {
+		buildAuditSummary,
+		buildChangeDescriptions,
 		calculateChangedFields,
 		getClientIpFromRequest,
 		sanitizeAuditValue,
@@ -52,6 +54,42 @@ describe("auditLog helpers", () => {
 		).toEqual(["nome"]);
 	});
 
+	it("ignora campos tecnicos de atualizacao no calculo de mudancas", () => {
+		expect(
+			calculateChangedFields(
+				{ atualizado_em: "2026-08-30T01:24:39.717Z", nome: "Cargo" },
+				{ atualizado_em: "2026-08-30T01:24:39.722Z", nome: "Cargo" },
+			),
+		).toEqual([]);
+	});
+
+	it("resume mudancas em listas grandes por item alterado", () => {
+		const changes = buildChangeDescriptions({
+			beforeData: {
+				accounts: [{ id: "11", nome: "Receitas", status: "ativo" }],
+			},
+			afterData: {
+				accounts: [{ id: "11", nome: "Receitas", status: "inativo" }],
+			},
+			changedFields: ["accounts"],
+		});
+
+		expect(changes).toEqual([
+			"alterou Receitas: status de ativo para inativo",
+		]);
+	});
+
+	it("gera resumo humano da acao feita pelo usuario", () => {
+		expect(
+			buildAuditSummary({
+				action: "create",
+				entity: "app_roles",
+				userName: "Rodrigo",
+				afterData: { name: "Financeiro" },
+			}),
+		).toBe("Rodrigo criou cargo Financeiro.");
+	});
+
 	it("usa o primeiro IP do x-forwarded-for", () => {
 		const req = {
 			get: (header) =>
@@ -65,6 +103,8 @@ describe("auditLog helpers", () => {
 	it("ignora colecoes internas e audita colecoes de negocio", () => {
 		expect(shouldAuditDocument("audit_logs")).toBe(false);
 		expect(shouldAuditDocument("password_reset_tokens")).toBe(false);
+		expect(shouldAuditDocument("email_logs")).toBe(false);
+		expect(shouldAuditDocument("integracoes_api")).toBe(false);
 		expect(shouldAuditDocument("financeiro_config")).toBe(true);
 	});
 });

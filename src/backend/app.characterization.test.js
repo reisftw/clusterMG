@@ -154,10 +154,34 @@ function baseMocks(overrides = {}) {
 			query: vi.fn(),
 		},
 		auditLog: {
+			calculateChangedFields: vi.fn(() => ["name"]),
 			captureAuditRequestContext: vi.fn((_req, _res, next) => next()),
 			getAuditLog: vi.fn(async () => null),
 			listAuditLogOptions: vi.fn(async () => ({ modules: [], setores: [] })),
 			listAuditLogs: vi.fn(async () => ({ items: [], limit: 50, offset: 0, total: 0 })),
+			recordAuditLog: vi.fn(() => Promise.resolve()),
+		},
+		rolePermissions: {
+			deleteRole: vi.fn(async () => ({
+				id: "cargo_teste",
+				name: "Cargo teste",
+				systemRole: false,
+				active: true,
+				permissions: [],
+			})),
+			getRoleById: vi.fn(async () => null),
+			getRolePermissions: vi.fn(async () => ["*"]),
+			listPermissionCatalog: vi.fn(async () => []),
+			listRoles: vi.fn(async () => [
+				{
+					id: "cargo_teste",
+					name: "Cargo teste",
+					systemRole: false,
+					active: true,
+					permissions: [],
+				},
+			]),
+			saveRole: vi.fn(async () => undefined),
 		},
 		documents,
 		evolutionMessaging,
@@ -295,6 +319,7 @@ function installMocks(overrides = {}) {
 	setMock("./realtime", currentMocks.realtime);
 	setMock("./publicDashboard", currentMocks.publicDashboard);
 	setMock("./auth", currentMocks.auth);
+	setMock("./rolePermissions", currentMocks.rolePermissions);
 	delete require.cache[appPath];
 	return currentMocks;
 }
@@ -471,6 +496,55 @@ describe("vps api app characterization - audit logs", () => {
 		expect(response.status).toBe(404);
 		expect(response.body).toMatchObject({
 			error: "Log de auditoria nao encontrado.",
+		});
+	});
+});
+
+describe("vps api app characterization - roles", () => {
+	it("DELETE /api/admin/roles/:roleId exclui cargo customizado", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.delete("/api/admin/roles/cargo_teste")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf");
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({ ok: true, role: "cargo_teste" });
+		expect(currentMocks.rolePermissions.deleteRole).toHaveBeenCalledWith(
+			"cargo_teste",
+		);
+		expect(currentMocks.auditLog.recordAuditLog).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "delete",
+				entity: "app_roles",
+				recordId: "cargo_teste",
+			}),
+		);
+	});
+
+	it("DELETE /api/admin/roles/:roleId bloqueia cargo vinculado a usuario", async () => {
+		const linkedRoleError = new Error(
+			"Nao e possivel excluir cargo vinculado a usuarios.",
+		);
+		linkedRoleError.statusCode = 409;
+		const app = loadApp({
+			rolePermissions: {
+				...baseMocks().rolePermissions,
+				deleteRole: vi.fn(async () => {
+					throw linkedRoleError;
+				}),
+			},
+		});
+
+		const response = await request(app)
+			.delete("/api/admin/roles/cargo_teste")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf");
+
+		expect(response.status).toBe(409);
+		expect(response.body).toMatchObject({
+			error: "Nao e possivel excluir cargo vinculado a usuarios.",
 		});
 	});
 });

@@ -8,6 +8,7 @@ import {
 	Save,
 	ShieldCheck,
 	SlidersHorizontal,
+	Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
@@ -19,6 +20,7 @@ import {
 } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import {
+	excluirCargoPermissoes,
 	listarCargosPermissoes,
 	salvarCargoPermissoes,
 } from "../services/rolesService";
@@ -201,6 +203,7 @@ export default function CargosPermissoesPage() {
 	const [draft, setDraft] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
+	const [deleting, setDeleting] = useState(false);
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 
@@ -269,6 +272,8 @@ export default function CargosPermissoesPage() {
 
 	const isAdminRole = draft?.id === ROLES.ADMIN;
 	const canEditDraft = canManage && !isAdminRole;
+	const canDeleteDraft =
+		canManage && Boolean(draft) && !isAdminRole && !draft?.systemRole;
 
 	const selectedPermissions = useMemo(
 		() => draft?.permissions || [],
@@ -354,6 +359,37 @@ export default function CargosPermissoesPage() {
 			setError(err?.message || "Não foi possível salvar o cargo.");
 		} finally {
 			setSaving(false);
+		}
+	};
+
+	const handleDelete = async () => {
+		if (!canDeleteDraft || !draft) return;
+		const roleId = normalizeId(draft.id || draft.name);
+		if (draft.isNew) {
+			setRoles((current) => current.filter((role) => role.id !== draft.id));
+			const nextRole = roles.find((role) => role.id !== draft.id) || null;
+			setSelectedId(nextRole?.id || "");
+			setDraft(nextRole);
+			return;
+		}
+		const confirmed = window.confirm(
+			`Excluir o cargo "${draft.name || roleId}"? Essa ação não pode ser desfeita.`,
+		);
+		if (!confirmed) return;
+		setDeleting(true);
+		setError("");
+		setMessage("");
+		try {
+			await excluirCargoPermissoes(roleId);
+			setMessage("Cargo excluído com sucesso.");
+			const remainingRoles = roles.filter((role) => role.id !== roleId);
+			setSelectedId(remainingRoles[0]?.id || "");
+			await loadRoles();
+			window.dispatchEvent(new Event("retiradas:roles-updated"));
+		} catch (err) {
+			setError(err?.message || "Não foi possível excluir o cargo.");
+		} finally {
+			setDeleting(false);
 		}
 	};
 
@@ -668,6 +704,19 @@ export default function CargosPermissoesPage() {
 							</div>
 
 							<div className="mt-5 flex flex-wrap justify-end gap-2">
+								<button
+									type="button"
+									onClick={handleDelete}
+									disabled={deleting || !canDeleteDraft}
+									className="inline-flex h-11 items-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-black text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									{deleting ? (
+										<RefreshCw size={17} className="animate-spin" />
+									) : (
+										<Trash2 size={17} />
+									)}
+									Excluir cargo
+								</button>
 								<button
 									type="button"
 									onClick={handleClone}

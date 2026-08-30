@@ -3749,12 +3749,52 @@ function createApp() {
 					roleId,
 					req.body?.permissions || [],
 				);
+				const beforeRole = await rolePermissions.getRoleById(roleId);
 				await rolePermissions.saveRole({
 					id: roleId,
 					name: req.body?.name,
 					description: req.body?.description,
 					active: req.body?.active !== false,
 					permissions: req.body?.permissions || [],
+				});
+				const afterRole = await rolePermissions.getRoleById(roleId);
+				auditLog.recordAuditLog({
+					action: beforeRole ? "update" : "create",
+					module: "configuracao",
+					entity: "app_roles",
+					recordId: roleId,
+					beforeData: beforeRole,
+					afterData: afterRole,
+					changedFields: auditLog.calculateChangedFields(beforeRole, afterRole),
+				});
+				res.json({ ok: true, role: roleId });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.delete(
+		"/api/admin/roles/:roleId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAnyPermission(
+			["configuracao.cargos_permissoes.manage", "manage_roles"],
+			ADMIN_ROLES,
+		),
+		async (req, res, next) => {
+			try {
+				const roleId = normalizeUserRole(req.params.roleId);
+				await assertCanSaveRoleForUser(req.user, roleId, []);
+				const beforeRole = await rolePermissions.deleteRole(roleId);
+				auditLog.recordAuditLog({
+					action: "delete",
+					module: "configuracao",
+					entity: "app_roles",
+					recordId: roleId,
+					beforeData: beforeRole,
+					afterData: null,
+					changedFields: ["id", "name"],
 				});
 				res.json({ ok: true, role: roleId });
 			} catch (error) {

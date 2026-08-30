@@ -11,12 +11,49 @@ const SENSITIVE_KEY_PATTERN =
 const IGNORED_DOCUMENT_COLLECTIONS = new Set([
 	"audit_logs",
 	"app_sessions",
+	"email_logs",
 	"email_mfa_challenges",
+	"integracoes_api",
 	"metrics_queries",
 	"metrics_requests",
 	"password_reset_tokens",
 	"static_snapshots",
 ]);
+const SYSTEM_FIELD_NAMES = new Set([
+	"atualizado_em",
+	"atualizadoem",
+	"updated_at",
+	"updatedat",
+	"criado_em",
+	"criadoem",
+	"created_at",
+	"createdat",
+	"last_read_at",
+	"lastreadat",
+	"ultima_leitura",
+	"ultimaleitura",
+	"ultima_atualizacao",
+	"ultimaatualizacao",
+]);
+const FIELD_LABELS = {
+	accounts: "contas financeiras",
+	active: "status",
+	budgetMatrix: "matriz orçamentária",
+	centers: "centros de custo",
+	costCenters: "centros de custo",
+	description: "descrição",
+	email: "e-mail",
+	name: "nome",
+	nome: "nome",
+	permissions: "permissões",
+	role: "cargo",
+	setorId: "setor",
+};
+const COLLECTION_LABELS = {
+	app_roles: "cargo",
+	app_users: "usuário",
+	financeiro_config: "configuração financeira",
+};
 
 function normalizeText(value) {
 	return String(value || "").trim();
@@ -53,15 +90,37 @@ function sanitizeAuditValue(value) {
 	}, {});
 }
 
+function isSystemField(field) {
+	return SYSTEM_FIELD_NAMES.has(
+		String(field || "")
+			.replace(/[-\s]/g, "_")
+			.toLowerCase(),
+	);
+}
+
+function removeSystemFields(value) {
+	if (Array.isArray(value)) return value.map(removeSystemFields);
+	if (!value || typeof value !== "object") return value;
+	return Object.entries(value).reduce((clean, [key, entryValue]) => {
+		if (!isSystemField(key)) clean[key] = removeSystemFields(entryValue);
+		return clean;
+	}, {});
+}
+
+function normalizeComparableValue(value) {
+	return removeSystemFields(sanitizeAuditValue(value));
+}
+
 function stableSerialize(value) {
 	return JSON.stringify(value ?? null);
 }
 
 function calculateChangedFields(beforeValue, afterValue) {
-	const before = sanitizeAuditValue(beforeValue || {});
-	const after = sanitizeAuditValue(afterValue || {});
+	const before = normalizeComparableValue(beforeValue || {});
+	const after = normalizeComparableValue(afterValue || {});
 	const fields = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
 	return [...fields]
+		.filter((field) => !isSystemField(field))
 		.filter((field) => stableSerialize(before[field]) !== stableSerialize(after[field]))
 		.sort((left, right) => left.localeCompare(right, "pt-BR"));
 }
@@ -127,6 +186,8 @@ function shouldAuditDocument(collectionPath) {
 	const collection = normalizeText(collectionPath);
 	if (!collection) return false;
 	if (IGNORED_DOCUMENT_COLLECTIONS.has(collection)) return false;
+	if (collection.endsWith("_logs") || collection.endsWith("_log")) return false;
+	if (collection.includes("mfa")) return false;
 	return !collection.startsWith("audit_logs/");
 }
 
@@ -195,7 +256,126 @@ function recordAuditLog(entry = {}) {
 function recordDocumentAuditLog(payload) {
 	const source = payload?.afterRecord || payload?.beforeRecord || payload?.record || {};
 	if (!shouldAuditDocument(source.collectionPath)) return Promise.resolve();
-	return recordAuditLog(buildDocumentAuditPayload(payload));
+	const entry = buildDocumentAuditPayload(payload);
+	if (entry.action === "update" && !entry.changedFields.length) {
+		return Promise.resolve();
+	}
+	return recordAuditLog(entry);
+}
+
+function formatShortValue(value) {
+	if (value === null || value === undefined || value === "") return "vazio";
+	if (typeof value === "boolean") return value ? "ativo" : "inativo";
+	if (Array.isArray(value)) return `${value.length} item(ns)`;
+	if (typeof value === "object") {
+		return pickFirstText(value.nome, value.name, value.label, value.id, value.codigo) || "objeto";
+	}
+	const text = String(value);
+	return text.length > 80 ? `${text.slice(0, 77)}...` : text;
+}
+
+function getFieldLabel(field) {
+	return FIELD_LABELS[field] || String(field || "").replace(/_/g, " ");
+}
+
+function getEntityLabel(row = {}) {
+	const entity = normalizeText(row.entity);
+	return COLLECTION_LABELS[entity] || entity || row.module || "registro";
+}
+
+function getRecordLabel(data = {}) {
+	return pickFirstText(
+		data.nome,
+		data.name,
+		data.label,
+		data.titulo,
+		data.title,
+		data.codigo && data.nome ? `${data.codigo} ${data.nome}` : "",
+		data.codigo,
+		data.id,
+	);
+}
+
+function getArrayItemKey(item = {}) {
+	return pickFirstText(item.id, item.codigo, item.code, item.nome, item.name);
+}
+
+function buildArrayChangeDescriptions(field, beforeValue, afterValue) {
+	if (!Array.isArray(beforeValue) || !Array.isArray(afterValue)) return [];
+	const beforeMap = new Map(beforeValue.map((item) => [getArrayItemKey(item), item]).filter(([key]) => key));
+	const afterMap = new Map(afterValue.map((item) => [getArrayItemKey(item), item]).filter(([key]) => key));
+	const label = getFieldLabel(field);
+	const descriptions = [];
+
+	for (const [key, item] of afterMap.entries()) {
+		if (!beforeMap.has(key)) {
+			descriptions.push(`adicionou ${label}: ${getRecordLabel(item) || key}`);
+		}
+	}
+	for (const [key, item] of beforeMap.entries()) {
+		if (!afterMap.has(key)) {
+			descriptions.push(`removeu ${label}: ${getRecordLabel(item) || key}`);
+		}
+	}
+	for (const [key, afterItem] of afterMap.entries()) {
+		const beforeItem = beforeMap.get(key);
+		if (!beforeItem) continue;
+		const fields = calculateChangedFields(beforeItem, afterItem);
+		fields.slice(0, 3).forEach((changedField) => {
+			descriptions.push(
+				`alterou ${getRecordLabel(afterItem) || key}: ${getFieldLabel(changedField)} de ${formatShortValue(beforeItem[changedField])} para ${formatShortValue(afterItem[changedField])}`,
+			);
+		});
+		if (fields.length > 3) {
+			descriptions.push(`alterou ${getRecordLabel(afterItem) || key}: mais ${fields.length - 3} campo(s)`);
+		}
+	}
+	return descriptions;
+}
+
+function buildChangeDescriptions(row = {}) {
+	const beforeData = normalizeComparableValue(row.beforeData || {});
+	const afterData = normalizeComparableValue(row.afterData || {});
+	const changedFields = Array.isArray(row.changedFields)
+		? row.changedFields.filter((field) => !isSystemField(field))
+		: calculateChangedFields(beforeData, afterData);
+
+	const descriptions = changedFields.flatMap((field) => {
+		const beforeValue = beforeData?.[field];
+		const afterValue = afterData?.[field];
+		const arrayDescriptions = buildArrayChangeDescriptions(field, beforeValue, afterValue);
+		if (arrayDescriptions.length) return arrayDescriptions;
+		return [
+			`alterou ${getFieldLabel(field)} de ${formatShortValue(beforeValue)} para ${formatShortValue(afterValue)}`,
+		];
+	});
+
+	return descriptions.slice(0, 10);
+}
+
+function buildAuditSummary(row = {}) {
+	const actor = pickFirstText(row.userName, row.userEmail, row.userId) || "Usuário";
+	const entityLabel = getEntityLabel(row);
+	const afterLabel = getRecordLabel(row.afterData || {});
+	const beforeLabel = getRecordLabel(row.beforeData || {});
+	const target = afterLabel || beforeLabel;
+	if (row.action === "create") return `${actor} criou ${entityLabel}${target ? ` ${target}` : ""}.`;
+	if (row.action === "delete") return `${actor} removeu ${entityLabel}${target ? ` ${target}` : ""}.`;
+	const changes = buildChangeDescriptions(row);
+	if (changes.length) return `${actor} ${changes[0]}.`;
+	return `${actor} atualizou ${entityLabel}${target ? ` ${target}` : ""}.`;
+}
+
+function decorateAuditLog(row = {}) {
+	const changeDescriptions = buildChangeDescriptions(row);
+	return {
+		...row,
+		changeDescriptions,
+		changedFields: Array.isArray(row.changedFields)
+			? row.changedFields.filter((field) => !isSystemField(field))
+			: [],
+		summary: buildAuditSummary({ ...row, changeDescriptions }),
+	};
 }
 
 function buildWhereClauses(filters = {}) {
@@ -209,6 +389,13 @@ function buildWhereClauses(filters = {}) {
 		});
 		clauses.push(clause);
 	};
+
+	[...IGNORED_DOCUMENT_COLLECTIONS].forEach((collection) => {
+		addClause("coalesce(entity, '') <> ?", collection);
+	});
+	addClause("coalesce(entity, '') not ilike ?", "%mfa%");
+	addClause("coalesce(entity, '') not ilike ? escape '\\'", "%\\_logs");
+	addClause("coalesce(entity, '') not ilike ? escape '\\'", "%\\_log");
 
 	if (filters.userId) {
 		const userSearch = `%${filters.userId}%`;
@@ -256,6 +443,7 @@ async function listAuditLogs(query = {}) {
             department_id as "departmentId", module, entity, action,
             record_id as "recordId", ip_address as "ipAddress",
             user_agent as "userAgent", changed_fields as "changedFields",
+            before_data as "beforeData", after_data as "afterData",
             created_at as "createdAt", count(*) over()::int as "totalCount"
        from audit_logs
        ${whereSql}
@@ -265,7 +453,15 @@ async function listAuditLogs(query = {}) {
 	);
 
 	return {
-		items: result.rows.map(({ totalCount: _totalCount, ...row }) => row),
+		items: result.rows.map(({ totalCount: _totalCount, beforeData: _beforeData, afterData: _afterData, ...row }) => {
+			const decorated = decorateAuditLog({
+				...row,
+				beforeData: _beforeData,
+				afterData: _afterData,
+			});
+			const { beforeData: _listBeforeData, afterData: _listAfterData, ...summaryRow } = decorated;
+			return summaryRow;
+		}),
 		limit,
 		offset,
 		total: result.rows[0]?.totalCount || 0,
@@ -277,9 +473,16 @@ async function listAuditLogOptions() {
 		`select distinct nullif(coalesce(setor_id, department_id, ''), '') as setor,
 		        nullif(module, '') as module
 		   from audit_logs
-		  where nullif(coalesce(setor_id, department_id, ''), '') is not null
-		     or nullif(module, '') is not null
+		  where (
+		          nullif(coalesce(setor_id, department_id, ''), '') is not null
+		       or nullif(module, '') is not null
+		        )
+		    and coalesce(entity, '') <> all($1::text[])
+		    and coalesce(entity, '') not ilike '%mfa%'
+		    and right(coalesce(entity, ''), 5) <> '_logs'
+		    and right(coalesce(entity, ''), 4) <> '_log'
 		  order by setor nulls last, module nulls last`,
+		[[...IGNORED_DOCUMENT_COLLECTIONS]],
 	);
 	const setores = new Set();
 	const modules = new Set();
@@ -306,16 +509,19 @@ async function getAuditLog(id) {
       where id = $1`,
 		[normalizeText(id)],
 	);
-	return result.rows[0] || null;
+	return result.rows[0] ? decorateAuditLog(result.rows[0]) : null;
 }
 
 module.exports = {
 	__testables: {
 		calculateChangedFields,
+		buildAuditSummary,
+		buildChangeDescriptions,
 		getClientIpFromRequest,
 		sanitizeAuditValue,
 		shouldAuditDocument,
 	},
+	calculateChangedFields,
 	captureAuditRequestContext,
 	getAuditLog,
 	listAuditLogOptions,

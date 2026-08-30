@@ -22,3 +22,12 @@ export async function salvarCargoPermissoes(role) {
 		}),
 	});
 }
+
+export async function excluirCargoPermissoes(id) {
+	const roleId = String(id || "")
+		.trim()
+		.toLowerCase();
+	return requestVpsApi(`/admin/roles/${encodeURIComponent(roleId)}`, {
+		method: "DELETE",
+	});
+}
