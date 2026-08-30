@@ -405,7 +405,7 @@ async function buildOperationalDomain() {
 	};
 }
 
-async function buildPublicDashboard() {
+async function buildPublicDashboard({ matchDetail = false } = {}) {
 	const [
 		dashboardRows,
 		agentesRows,
@@ -429,8 +429,10 @@ async function buildPublicDashboard() {
 		agentesMatchOSRaw,
 		matchOSFull,
 	);
-	const matchOS = compactMatchSlice(matchOSFull);
-	const agentesMatchOS = compactMatchSlice(agentesMatchOSFull);
+	const matchOS = matchDetail ? matchOSFull : compactMatchSlice(matchOSFull);
+	const agentesMatchOS = matchDetail
+		? agentesMatchOSFull
+		: compactMatchSlice(agentesMatchOSFull);
 
 	return {
 		generatedAt: new Date().toISOString(),
@@ -453,7 +455,16 @@ async function buildPublicDashboard() {
 	};
 }
 
-async function getCachedPublicDashboard() {
+async function getCachedPublicDashboard(options = {}) {
+	const matchDetail = Boolean(options.matchDetail);
+	if (matchDetail) {
+		return {
+			data: await buildPublicDashboard({ matchDetail }),
+			cacheStatus: "BYPASS_DETAIL",
+			cacheAgeMs: 0,
+		};
+	}
+
 	const ttlMs = getPublicDashboardCacheTtlMs();
 	const now = Date.now();
 	const cacheAgeMs = now - publicDashboardCache.cachedAt;

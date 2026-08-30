@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { listAllPublicVpsDocuments } from "../../../services/vpsApiClient";
+import { getApiBaseUrl } from "../../../services/vpsApiClient";
 import { buildMatchOSData } from "../../Mapa/utils/matchOs";
 import { useDashboardData } from "./useDashboardData";
 
@@ -80,9 +80,10 @@ function isCompactMatchData(matchData) {
 export function useMatchPublico(options = {}) {
 	const detail = Boolean(options.detail);
 	const { data, loading } = useDashboardData();
-	const [fallbackState, setFallbackState] = useState({
+	const [detailState, setDetailState] = useState({
 		version: "",
 		data: null,
+		loading: false,
 	});
 	const matchVersion =
 		data?.matchOS?.meta?.generatedAt ||
@@ -101,54 +102,73 @@ export function useMatchPublico(options = {}) {
 
 	useEffect(() => {
 		let active = true;
-		const hasEnoughData =
-			hasMatches(matchData) && (!detail || !isCompactMatchData(matchData));
-		const shouldLoadDetailFallback =
-			detail && isCompactMatchData(matchData) && !hasEnoughData;
-		if (loading || hasEnoughData || !shouldLoadDetailFallback) {
+		if (!detail || loading) {
 			return () => {
 				active = false;
 			};
 		}
-		listAllPublicVpsDocuments("match_os_abertas", {
-			pageSize: 1000,
-			max: 50000,
-		})
-			.then((ordens) => {
-				if (!active) return;
-				setFallbackState({
+
+		const versionParam = encodeURIComponent(matchVersion || "latest");
+		Promise.resolve()
+			.then(() => {
+				if (!active) return null;
+				setDetailState((current) => ({
+					...current,
+					loading: current.version !== matchVersion,
+				}));
+				return fetch(
+					`${getApiBaseUrl()}/public/dashboard?detail=match&v=${versionParam}`,
+					{
+						cache: "no-store",
+						credentials: "include",
+					},
+				);
+			})
+			.then((response) => {
+				if (!response) return null;
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
+				return response.json();
+			})
+			.then((payload) => {
+				if (!active || !payload) return;
+				const fullMatchData = mergeMatchAgentes(
+					normalizeMatchSlice(payload?.matchOS),
+					normalizeMatchSlice(payload?.agentesMatchOS || payload?.matchAgentes),
+				);
+				setDetailState({
 					version: matchVersion,
-					data: ordens.length ? buildMatchOSData(ordens) : null,
+					data: fullMatchData,
+					loading: false,
 				});
 			})
 			.catch(() => {
 				if (!active) return;
+				setDetailState((current) => ({ ...current, loading: false }));
 			});
 
 		return () => {
 			active = false;
 		};
-	}, [detail, loading, matchData, matchVersion]);
+	}, [detail, loading, matchVersion]);
 
 	const ultimaAtualizacao = useMemo(
 		() => data?.matchOS?.meta || data?.matchOS?.data?.meta || null,
 		[data],
 	);
 
-	const fallbackData =
-		fallbackState.version === matchVersion ? fallbackState.data : null;
+	const detailData =
+		detailState.version === matchVersion ? detailState.data : null;
 
 	const resolvedData =
-		detail && isCompactMatchData(matchData)
-			? fallbackData
+		detail
+			? detailData || (isCompactMatchData(matchData) ? null : matchData)
 			: hasMatches(matchData)
 				? matchData
-				: fallbackData;
+				: null;
 
 	return {
 		data: resolvedData,
 		ultimaAtualizacao,
-		loading:
-			loading || (detail && isCompactMatchData(matchData) && !fallbackData),
+		loading: loading || (detail && (detailState.loading || !resolvedData)),
 	};
 }

@@ -2267,7 +2267,10 @@ function createApp() {
 
 	app.get("/api/public/dashboard", async (req, res, next) => {
 		try {
-			const dashboard = await getCachedPublicDashboard();
+			const detail = String(req.query.detail || "").toLowerCase();
+			const dashboard = await getCachedPublicDashboard({
+				matchDetail: detail === "match",
+			});
 			res.set("X-Retiradas-Cache", dashboard.cacheStatus);
 			res.set(
 				"X-Retiradas-Cache-Age-Ms",
