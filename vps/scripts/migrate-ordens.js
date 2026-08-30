@@ -350,7 +350,9 @@ async function upsertImportRuns(client, rows) {
 			   legacy_document_id = excluded.legacy_document_id,
 			   updated_at = excluded.updated_at,
 			   payload = excluded.payload,
-			   source_payload = excluded.source_payload`,
+			   source_payload = excluded.source_payload
+			 where ordens_import_runs.updated_at is null
+			    or ordens_import_runs.updated_at <= excluded.updated_at`,
 			[
 				row.id,
 				row.tipo,

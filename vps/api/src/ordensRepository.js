@@ -273,6 +273,15 @@ async function listDocuments({ collectionPath, limit, offset }) {
 	return rows.slice(normalizedOffset, normalizedOffset + normalizedLimit);
 }
 
+async function getCollectionLatestUpdatedAt(collectionPath) {
+	if (!ORDER_COLLECTIONS.has(collectionPath)) return null;
+	const result = await db.query(
+		"select max(updated_at) as latest from ordens_servico where source_collection = $1",
+		[collectionPath],
+	);
+	return result.rows[0]?.latest || null;
+}
+
 async function listAllDocuments(collectionPath) {
 	if (ORDER_COLLECTIONS.has(collectionPath)) {
 		const result = await db.query(
@@ -483,6 +492,7 @@ module.exports = {
 	deleteDocument,
 	deleteDocumentsByCollectionAndSources,
 	getDocument,
+	getCollectionLatestUpdatedAt,
 	isOrdersCollection,
 	listAllDocuments,
 	listDocuments,

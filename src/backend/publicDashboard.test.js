@@ -55,6 +55,7 @@ describe("publicDashboard", () => {
 				}
 				return null;
 			}),
+			getCollectionLatestUpdatedAt: vi.fn(async () => null),
 			listDocuments: vi.fn(async () => []),
 		};
 		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
@@ -72,5 +73,75 @@ describe("publicDashboard", () => {
 			expect.stringContaining("from app_documents"),
 			["public_dashboard/mapa_os"],
 		);
+	});
+
+	it("reconstroi mapa e match por colecao quando snapshot normalizado esta antigo", async () => {
+		const dbQuery = vi.fn(async (_sql, params = []) => {
+			const key = params[0];
+			if (key === "mapa_meta/ultima_atualizacao") {
+				return { rows: [{ data: { data: "2026-08-30T17:00:00.000Z" } }] };
+			}
+			if (key === "match_os_meta/ultima_atualizacao") {
+				return { rows: [{ data: { data: "2026-08-30T17:00:00.000Z" } }] };
+			}
+			return { rows: [] };
+		});
+		const ordensRepository = {
+			isOrdersCollection: vi.fn((collectionPath) =>
+				[
+					"ordens_abertas",
+					"match_os_abertas",
+					"public_dashboard",
+					"mapa_meta",
+					"match_os_meta",
+				].includes(collectionPath),
+			),
+			getDocument: vi.fn(async (documentPath) => {
+				if (documentPath === "public_dashboard/mapa_os") {
+					return {
+						data: {
+							summary: { totalOrdens: 1 },
+							meta: { data: "2026-08-28T11:13:43.211Z" },
+						},
+					};
+				}
+				if (documentPath === "public_dashboard/match_os") {
+					return {
+						data: {
+							data: { resumo: { totalMatches: 1 } },
+							meta: { data: "2026-08-28T12:34:17.649Z" },
+						},
+					};
+				}
+				return null;
+			}),
+			getCollectionLatestUpdatedAt: vi.fn(async () =>
+				new Date("2026-08-30T17:22:37.000Z"),
+			),
+			listDocuments: vi.fn(async ({ collectionPath }) => [
+				{
+					documentId: `${collectionPath}-1`,
+					data: {
+						num_os: "123",
+						cidade: "Belo Horizonte",
+						regional: "METROPOLITANA",
+					},
+				},
+			]),
+		};
+		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
+
+		const payload = await publicDashboard.buildPublicDashboard();
+
+		expect(payload.mapa.ordens).toHaveLength(1);
+		expect(payload.matchOS.ordens).toHaveLength(1);
+		expect(ordensRepository.listDocuments).toHaveBeenCalledWith({
+			collectionPath: "ordens_abertas",
+			limit: 50000,
+		});
+		expect(ordensRepository.listDocuments).toHaveBeenCalledWith({
+			collectionPath: "match_os_abertas",
+			limit: 50000,
+		});
 	});
 });
