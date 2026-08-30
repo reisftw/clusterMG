@@ -47,11 +47,6 @@ function getVersionToken() {
 	return window.localStorage.getItem(STATIC_DATA_VERSION_KEY) || "initial";
 }
 
-function buildDataJsonUrl() {
-	const version = encodeURIComponent(getVersionToken());
-	return `${DATA_JSON_URL}?v=${version}`;
-}
-
 function buildVpsDashboardUrl() {
 	const version = encodeURIComponent(getVersionToken());
 	return `${getApiBaseUrl()}${VPS_PUBLIC_DASHBOARD_PATH}?v=${version}`;
@@ -153,7 +148,7 @@ export function invalidateDashboardDataCache(versionToken = null) {
 async function fetchDataJSON({ force = false } = {}) {
 	const generationAtStart = cacheGeneration;
 	if (!force && cache) return cache;
-	if (pendingRequest && !force) return pendingRequest;
+	if (pendingRequest) return pendingRequest;
 
 	pendingRequest = Promise.resolve()
 		.then(async () => {
@@ -169,23 +164,10 @@ async function fetchDataJSON({ force = false } = {}) {
 
 			return fetch(buildVpsDashboardUrl(), {
 				cache: force ? "reload" : "no-store",
-			})
-				.then((res) => {
-					if (!res.ok) throw new Error(`VPS HTTP ${res.status}`);
-					return res.json();
-				})
-				.catch((error) => {
-					logger.warn(
-						"[useDashboardData] VPS indisponivel, usando JSON publico legado.",
-						error,
-					);
-					return fetch(buildDataJsonUrl(), {
-						cache: force ? "reload" : "default",
-					}).then((res) => {
-						if (!res.ok) throw new Error(`HTTP ${res.status}`);
-						return res.json();
-					});
-				});
+			}).then((res) => {
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				return res.json();
+			});
 		})
 		.then((json) => {
 			if (generationAtStart !== cacheGeneration) {
@@ -260,7 +242,6 @@ export function useDashboardData(options = {}) {
 				invalidateDashboardDataCache(
 					event?.emittedAt || new Date().toISOString(),
 				);
-				loadData(true, { silent: true });
 			},
 			{ debounceMs: 250 },
 		);

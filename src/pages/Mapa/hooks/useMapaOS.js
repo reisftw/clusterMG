@@ -4,19 +4,6 @@ import {
 	INTERNAL_STATIC_DATA_UPDATED_EVENT,
 	SNAPSHOT_DOMAINS,
 } from "../../../services/internalStaticDataService";
-import { listAllPublicVpsDocuments } from "../../../services/vpsApiClient";
-
-async function loadOrdensFromVps() {
-	try {
-		return await listAllPublicVpsDocuments("ordens_abertas", {
-			pageSize: 1000,
-			max: 50000,
-		});
-	} catch (error) {
-		console.warn("[useMapaOS] Falha ao buscar ordens_abertas na VPS.", error);
-		return [];
-	}
-}
 
 export function useMapaOS() {
 	const [ordens, setOrdens] = useState([]);
@@ -55,16 +42,6 @@ export function useMapaOS() {
 				setUltimaAtualizacao(
 					staticSlice.mapa?.meta || staticSlice?.meta || null,
 				);
-				setLoading(false);
-				return;
-			}
-
-			const vpsOrdens = await loadOrdensFromVps();
-			if (vpsOrdens.length > 0) {
-				if (!active) return;
-
-				setOrdens(vpsOrdens);
-				setUltimaAtualizacao(staticSlice?.meta || null);
 				setLoading(false);
 				return;
 			}

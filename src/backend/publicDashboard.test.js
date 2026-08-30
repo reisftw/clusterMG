@@ -76,7 +76,7 @@ describe("publicDashboard", () => {
 		);
 	});
 
-	it("preserva snapshot oficial do mapa e reconstroi match desatualizado", async () => {
+	it("preserva snapshots publicados sem reconstruir colecoes operacionais", async () => {
 		const dbQuery = vi.fn(async (_sql, params = []) => {
 			const key = params[0];
 			if (key === "mapa_meta/ultima_atualizacao") {
@@ -119,28 +119,21 @@ describe("publicDashboard", () => {
 			getCollectionLatestUpdatedAt: vi.fn(async () =>
 				new Date("2026-08-30T17:22:37.000Z"),
 			),
-			listAllDocuments: vi.fn(async (collectionPath) => [
-				{
-					documentId: `${collectionPath}-1`,
-					data: {
-						num_os: "123",
-						cidade: "Belo Horizonte",
-						regional: "METROPOLITANA",
-					},
-				},
-			]),
+			listAllDocuments: vi.fn(async () => {
+				throw new Error("nao deve varrer colecao operacional");
+			}),
 		};
 		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
 
 		const payload = await publicDashboard.buildPublicDashboard();
 
 		expect(payload.mapa.summary.totalOrdens).toBe(1);
-		expect(payload.matchOS.ordens).toHaveLength(1);
-		expect(payload.matchOS.meta.generatedAt).toBe("2026-08-30T17:22:37.000Z");
+		expect(payload.matchOS.data.resumo.totalMatches).toBe(1);
+		expect(payload.matchOS.meta.data).toBe("2026-08-28T12:34:17.649Z");
 		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalledWith(
 			"ordens_abertas",
 		);
-		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
+		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalledWith(
 			"match_os_abertas",
 		);
 	});

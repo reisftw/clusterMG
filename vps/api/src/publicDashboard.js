@@ -86,72 +86,6 @@ function invalidatePublicDashboardCache() {
 	publicDashboardCache.pending = null;
 }
 
-function rowToDocument(row = {}) {
-	return {
-		id: row.documentId,
-		documentId: row.documentId,
-		...(row.data || {}),
-	};
-}
-
-function hasArrayData(value) {
-	return Array.isArray(value) && value.length > 0;
-}
-
-function hasMapaData(slice) {
-	if (!slice) return false;
-	if (
-		Number(
-			slice.totalOrdens ||
-				slice.data?.totalOrdens ||
-				slice.summary?.totalOrdens ||
-				slice.data?.summary?.totalOrdens ||
-				0,
-		) > 0
-	)
-		return true;
-	return hasArrayData(slice.ordens) || hasArrayData(slice.data?.ordens);
-}
-
-function hasMatchData(slice) {
-	if (!slice) return false;
-	if (
-		Number(
-			slice.resumo?.totalMatches ||
-				slice.data?.resumo?.totalMatches ||
-				slice.summary?.totalMatches ||
-				slice.data?.summary?.totalMatches ||
-				0,
-		) > 0
-	)
-		return true;
-	return hasArrayData(slice.ordens) || hasArrayData(slice.data?.ordens);
-}
-
-function readSnapshotDate(slice) {
-	const value =
-		slice?.meta?.generatedAt ||
-		slice?.data?.meta?.generatedAt ||
-		slice?.meta?.data ||
-		slice?.data?.meta?.data ||
-		slice?.generatedAt ||
-		slice?.data?.generatedAt ||
-		null;
-	const date = value ? new Date(value) : null;
-	return date && !Number.isNaN(date.getTime()) ? date : null;
-}
-
-async function isSnapshotCurrent(collectionPath, slice) {
-	if (!slice) return false;
-	const latestUpdatedAt =
-		await ordensRepository.getCollectionLatestUpdatedAt(collectionPath);
-	if (!latestUpdatedAt) return true;
-	const latest = new Date(latestUpdatedAt);
-	const snapshotDate = readSnapshotDate(slice);
-	if (!snapshotDate || Number.isNaN(latest.getTime())) return false;
-	return snapshotDate.getTime() >= latest.getTime();
-}
-
 function compactMatchCity(cidade = {}) {
 	return {
 		cidade: cidade.cidade,
@@ -266,73 +200,6 @@ function compactSnapshotDomain(domain, snapshot) {
 	};
 }
 
-async function buildCollectionFallback(
-	collectionPath,
-	metaPath,
-	{ limit = 50000 } = {},
-) {
-	const [rows, meta, latestUpdatedAt] = await Promise.all([
-		listCollectionData(collectionPath, { limit }),
-		getDocumentData(metaPath),
-		ordensRepository.getCollectionLatestUpdatedAt(collectionPath),
-	]);
-
-	if (!rows.length) return null;
-	const latestIso = latestUpdatedAt
-		? new Date(latestUpdatedAt).toISOString()
-		: null;
-
-	return {
-		ordens: rows.map(rowToDocument),
-		meta: {
-			...(meta || {}),
-			data: latestIso || meta?.data || null,
-			generatedAt: latestIso || meta?.generatedAt || meta?.data || null,
-			source: collectionPath,
-		},
-	};
-}
-
-async function resolveMapaSlice(mapa) {
-	if (hasMapaData(mapa)) return mapa;
-	return buildCollectionFallback(
-		"ordens_abertas",
-		"mapa_meta/ultima_atualizacao",
-	);
-}
-
-async function resolveMatchSlice(matchOS) {
-	if (
-		hasMatchData(matchOS) &&
-		(await isSnapshotCurrent("match_os_abertas", matchOS))
-	) {
-		return matchOS;
-	}
-	return buildCollectionFallback(
-		"match_os_abertas",
-		"match_os_meta/ultima_atualizacao",
-	);
-}
-
-async function resolveAgentesMatchSlice(agentesMatchOS, matchOS) {
-	if (
-		hasMatchData(agentesMatchOS) &&
-		(await isSnapshotCurrent("match_os_abertas", agentesMatchOS))
-	) {
-		return agentesMatchOS;
-	}
-	if (
-		hasMatchData(matchOS) &&
-		(await isSnapshotCurrent("match_os_abertas", matchOS))
-	) {
-		return matchOS;
-	}
-	return buildCollectionFallback(
-		"match_os_abertas",
-		"match_os_meta/ultima_atualizacao",
-	);
-}
-
 function normalizeHoliday(item = {}) {
 	return {
 		...item,
@@ -428,19 +295,13 @@ async function buildOperationalDomain() {
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
-	const mapa = await resolveMapaSlice(mapaRaw);
-	const matchOS = await resolveMatchSlice(matchOSRaw);
-	const agentesMatchOS = await resolveAgentesMatchSlice(
-		agentesMatchOSRaw,
-		matchOS,
-	);
 
 	return {
 		domain: "operacional",
 		generatedAt: new Date().toISOString(),
-		mapa,
-		matchOS,
-		agentesMatchOS,
+		mapa: mapaRaw,
+		matchOS: matchOSRaw,
+		agentesMatchOS: agentesMatchOSRaw,
 	};
 }
 
@@ -462,12 +323,9 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
-	const mapa = await resolveMapaSlice(mapaRaw);
-	const matchOSFull = await resolveMatchSlice(matchOSRaw);
-	const agentesMatchOSFull = await resolveAgentesMatchSlice(
-		agentesMatchOSRaw,
-		matchOSFull,
-	);
+	const mapa = mapaRaw;
+	const matchOSFull = matchOSRaw;
+	const agentesMatchOSFull = agentesMatchOSRaw;
 	const matchOS = matchDetail ? matchOSFull : compactMatchSlice(matchOSFull);
 	const agentesMatchOS = matchDetail
 		? agentesMatchOSFull
