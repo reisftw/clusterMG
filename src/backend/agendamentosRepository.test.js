@@ -40,7 +40,7 @@ describe("agendamentosRepository", () => {
 					cliente_nome: "Cliente Teste",
 					cidade: "Belo Horizonte",
 					regional: "METROPOLITANA",
-					data: "2026-08-30",
+					data: new Date("2026-08-30T00:00:00.000Z"),
 					hora: "08:30:00",
 					status: "Aguardando dia",
 					created_at: "2026-08-30T10:00:00.000Z",
@@ -71,6 +71,7 @@ describe("agendamentosRepository", () => {
 			},
 		});
 		expect(rows[0].data.hora).toBe("08:30");
+		expect(rows[0].data.data).toBe("2026-08-30");
 		expect(dbQuery.mock.calls[0][0]).toContain("from agendamentos");
 	});
 

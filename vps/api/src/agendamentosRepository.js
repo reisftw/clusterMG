@@ -63,6 +63,10 @@ function dateValue(value) {
 	return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
 
+function dateToYmd(value) {
+	return dateValue(value) || "";
+}
+
 function timeValue(value) {
 	const normalized = text(value);
 	if (!normalized) return null;
@@ -246,7 +250,7 @@ function mapAppointment(row = {}) {
 				cidade: row.cidade || "",
 				regional: row.regional || "",
 				empresa: row.empresa || "",
-				data: row.data || "",
+				data: dateToYmd(row.data),
 				hora: row.hora ? String(row.hora).slice(0, 5) : "",
 				turno: row.turno || "",
 				status: row.status || "",
@@ -304,7 +308,7 @@ function mapAppointmentLog(row = {}) {
 			codigo_cliente: row.codigo_cliente || "",
 			cliente_nome: row.cliente_nome || "",
 			cidade: row.cidade || "",
-			data_agendamento: row.data_agendamento || "",
+			data_agendamento: dateToYmd(row.data_agendamento),
 			hora: row.hora ? String(row.hora).slice(0, 5) : "",
 			origem: row.origem || "",
 			criterio: row.criterio || "",
@@ -335,7 +339,7 @@ function mapEsteiraLog(row = {}) {
 		cidade: row.cidade || "",
 		regional: row.regional || "",
 		empresa: row.empresa || "",
-		data: row.data || "",
+		data: dateToYmd(row.data),
 		hora: row.hora ? String(row.hora).slice(0, 5) : "",
 		turno: row.turno || "",
 		tentativa: row.tentativa,
