@@ -55,6 +55,7 @@ import {
 import "./AcompanhamentoPage.css";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const BACKGROUND_REFRESH_INTERVAL_MS = 30 * 1000;
 const SCENE_INTERVAL_MS = 14 * 1000;
 const CURSOR_IDLE_TIMEOUT_MS = 60 * 1000;
 const CONFIG_STORAGE_KEY = "acompanhamento-panel-config";
@@ -2590,7 +2591,7 @@ export default function AcompanhamentoPage() {
 		carregar: carregarAgenda,
 	} = useAgenda({ preferStatic: false });
 	const { data: publicData, loading: loadingPublicData } = useDashboardData({
-		refreshIntervalMs: 5000,
+		refreshIntervalMs: BACKGROUND_REFRESH_INTERVAL_MS,
 		refreshKey: dashboardRefreshKey,
 	});
 	const { data: matchPublicoData, loading: loadingMatchPublico } =
@@ -2721,7 +2722,7 @@ export default function AcompanhamentoPage() {
 		loadNewAppointments().catch(console.error);
 		const timer = window.setInterval(() => {
 			loadNewAppointments().catch(console.error);
-		}, 5000);
+		}, BACKGROUND_REFRESH_INTERVAL_MS);
 
 		return () => {
 			active = false;
@@ -2877,7 +2878,7 @@ export default function AcompanhamentoPage() {
 			}
 		};
 		load();
-		const timer = window.setInterval(load, 5000);
+		const timer = window.setInterval(load, BACKGROUND_REFRESH_INTERVAL_MS);
 		const unsubscribeRealtime = subscribeRealtimeTopics(
 			["acompanhamento", "diario", "metas", "mapa", "match"],
 			(event) => {
@@ -2943,18 +2944,6 @@ export default function AcompanhamentoPage() {
 			}
 		};
 	}, [forceDashboardRefresh, showAppointmentNotice]);
-
-	useEffect(() => {
-		const unsubscribeAppointments = subscribeRealtimeTopics(
-			"acompanhamento",
-			(event) => {
-				if (event?.collectionPath === COLLECTIONS.AGENDAMENTOS) {
-					showAppointmentNotice(event);
-				}
-			},
-		);
-		return () => unsubscribeAppointments();
-	}, [showAppointmentNotice]);
 
 	const showAdNow = useCallback(() => {
 		const ads = {
