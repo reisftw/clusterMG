@@ -1,5 +1,6 @@
 const db = require("./db");
 const auditLog = require("./auditLog");
+const agendamentosRepository = require("./agendamentosRepository");
 const mensageriaRepository = require("./mensageriaRepository");
 const normalizedDualWrite = require("./normalizedDualWrite");
 const { broadcastRealtime } = require("./realtime");
@@ -83,6 +84,9 @@ function getCollectionPath(documentPath) {
 }
 
 async function listDocuments({ collectionPath, limit, offset }) {
+	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
+		return agendamentosRepository.listDocuments({ collectionPath, limit, offset });
+	}
 	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
 		return mensageriaRepository.listDocuments({ collectionPath, limit, offset });
 	}
@@ -107,6 +111,9 @@ async function listDocuments({ collectionPath, limit, offset }) {
 }
 
 async function getDocument(documentPath) {
+	if (agendamentosRepository.isSchedulingCollection(getCollectionPath(documentPath))) {
+		return agendamentosRepository.getDocument(documentPath);
+	}
 	if (mensageriaRepository.isMessagingCollection(getCollectionPath(documentPath))) {
 		return mensageriaRepository.getDocument(documentPath);
 	}
@@ -140,6 +147,21 @@ async function upsertDocument(record) {
 		throw new Error(
 			`Colecao ${record.collectionPath} migrada para tabelas normalizadas.`,
 		);
+	}
+	if (agendamentosRepository.isSchedulingCollection(record.collectionPath)) {
+		const beforeRecord = await agendamentosRepository.getDocument(record.path);
+		await agendamentosRepository.upsertDocument(record);
+		invalidateDocumentsCache({
+			collectionPath: record.collectionPath,
+			documentPath: record.path,
+		});
+		broadcastDocumentChange("upsert", record);
+		auditLog.recordDocumentAuditLog({
+			action: beforeRecord ? "update" : "create",
+			beforeRecord,
+			record,
+		});
+		return;
 	}
 	if (mensageriaRepository.isMessagingCollection(record.collectionPath)) {
 		const beforeRecord = await mensageriaRepository.getDocument(record.path);
@@ -187,6 +209,32 @@ async function upsertDocument(record) {
 }
 
 async function deleteDocument(path) {
+	if (agendamentosRepository.isSchedulingCollection(getCollectionPath(path))) {
+		const beforeRecord = await agendamentosRepository.getDocument(path);
+		await agendamentosRepository.deleteDocument(path);
+		const parts = String(path || "")
+			.split("/")
+			.filter(Boolean);
+		invalidateDocumentsCache({
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentPath: path,
+		});
+		broadcastDocumentChange("delete", {
+			path,
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentId: parts.at(-1),
+		});
+		auditLog.recordDocumentAuditLog({
+			action: "delete",
+			beforeRecord,
+			record: {
+				path,
+				collectionPath: parts.slice(0, -1).join("/"),
+				documentId: parts.at(-1),
+			},
+		});
+		return;
+	}
 	if (mensageriaRepository.isMessagingCollection(getCollectionPath(path))) {
 		const beforeRecord = await mensageriaRepository.getDocument(path);
 		await mensageriaRepository.deleteDocument(path);
@@ -252,6 +300,9 @@ async function deleteDocumentsByCollectionAndSources(
 	collectionPath,
 	sources = [],
 ) {
+	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
+		return 0;
+	}
 	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
 		const normalizedSources = sources
 			.map((source) => String(source || "").trim())
@@ -300,6 +351,9 @@ async function deleteDocumentsByCollectionAndSources(
 }
 
 async function listAllDocuments(collectionPath) {
+	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
+		return agendamentosRepository.listAllDocuments(collectionPath);
+	}
 	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
 		return mensageriaRepository.listAllDocuments(collectionPath);
 	}

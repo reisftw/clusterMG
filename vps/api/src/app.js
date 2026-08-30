@@ -11,6 +11,7 @@ const db = require("./db");
 const apiStatus = require("./apiStatus");
 const databaseBackups = require("./databaseBackups");
 const documents = require("./documents");
+const agendamentosRepository = require("./agendamentosRepository");
 const regionaisRepository = require("./regionaisRepository");
 const usersRepository = require("./usersRepository");
 const auditLog = require("./auditLog");
@@ -4691,16 +4692,16 @@ function createApp() {
             order by case collection_path
               when 'ordens_abertas' then 1
               when 'match_os_abertas' then 2
-              when 'agendamentos' then 3
               else 9
             end,
             updated_at desc
             limit 1`,
-					[codigo, ["ordens_abertas", "match_os_abertas", "agendamentos"]],
+					[codigo, ["ordens_abertas", "match_os_abertas"]],
 				);
 
 				const cliente = normalizeAgendamentoClienteRecord(
-					result.rows[0] || null,
+					result.rows[0] ||
+						(await agendamentosRepository.findClienteByCodigo(codigo)),
 				);
 				if (!cliente) {
 					res

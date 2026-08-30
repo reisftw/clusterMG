@@ -1,4 +1,4 @@
-const db = require("./db");
+const agendamentosRepository = require("./agendamentosRepository");
 const documents = require("./documents");
 const notifications = require("./notificationsService");
 
@@ -141,15 +141,7 @@ function findMatchingOrder(appointment = {}, indexes) {
 }
 
 async function listCollection(collectionPath) {
-	const result = await db.query(
-		`select path, collection_path as "collectionPath", document_id as "documentId",
-            parent_path as "parentPath", data, updated_at as "updatedAt"
-       from app_documents
-      where collection_path = $1
-      order by document_id`,
-		[collectionPath],
-	);
-	return result.rows;
+	return documents.listAllDocuments(collectionPath);
 }
 
 function shouldEvaluateAppointment(data = {}, { today, minDate }) {
@@ -223,12 +215,7 @@ async function updateAppointment(record, nextData) {
 }
 
 async function clearPreviousReconciliationLogs() {
-	await db.query(
-		`delete from app_documents
-      where collection_path = $1
-        and data->>'tipo' = 'verificacao_mapa'`,
-		[LOG_COLLECTION],
-	);
+	await agendamentosRepository.deleteAppointmentLogsByType("verificacao_mapa");
 }
 
 async function saveReconciliationLog({

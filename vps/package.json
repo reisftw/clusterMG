@@ -14,7 +14,8 @@
 		"acerto:migrate-empresas": "node scripts/migrate-acerto-empresas-tecnicos.js",
 		"import:documents": "node scripts/import-documents-jsonl.js",
 		"migrate:regionais-usuarios": "node scripts/migrate-regionais-usuarios.js",
-		"migrate:mensageria": "node scripts/migrate-mensageria.js"
+		"migrate:mensageria": "node scripts/migrate-mensageria.js",
+		"migrate:agendamentos-esteira": "node scripts/migrate-agendamentos-esteira.js"
 	},
 	"dependencies": {
 		"archiver": "^8.0.0",
