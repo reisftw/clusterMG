@@ -882,8 +882,8 @@ async function markInterruptedImportJobs() {
 		           'stage', 'Interrompido',
 		           'percent', 100,
 		           'error', 'Importacao interrompida por reinicio da API. Envie o arquivo novamente.',
-		           'finishedAt', $1,
-		           'updatedAt', $1
+		           'finishedAt', $1::text,
+		           'updatedAt', $1::text
 		         )
 		  where collection_path = $2
 		    and data->>'status' = 'running'

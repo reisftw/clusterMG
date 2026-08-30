@@ -26,8 +26,9 @@ export const useDashboard = () => {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
 
-	const carregar = useCallback(async (force = false) => {
-		setLoading(true);
+	const carregar = useCallback(async (force = false, options = {}) => {
+		const silent = Boolean(options.silent);
+		if (!silent) setLoading(true);
 		setError(null);
 
 		try {
@@ -51,7 +52,7 @@ export const useDashboard = () => {
 				invalidateCache("metas-auditoria");
 				invalidateInternalStaticDataCache(token);
 				invalidateDashboardDataCache(token);
-				carregar(true);
+				carregar(false, { silent: true });
 			},
 			{ debounceMs: 250 },
 		);
