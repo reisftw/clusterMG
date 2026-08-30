@@ -90,6 +90,39 @@ describe("auditLog helpers", () => {
 		).toBe("Rodrigo criou cargo Financeiro.");
 	});
 
+	it("resume limpeza de relatorio financeiro como acao humana", () => {
+		const row = {
+			action: "update",
+			entity: "financeiro_reports",
+			recordId: "serasa",
+			userName: "Rodrigo",
+			beforeData: { clientes: 6825 },
+			afterData: { clientes: 0, importInfo: { cleared: true } },
+			changedFields: ["clientes", "importInfo"],
+		};
+
+		expect(buildAuditSummary(row)).toBe("Rodrigo apagou dados do Serasa.");
+		expect(buildChangeDescriptions(row)).toEqual(["apagou dados do Serasa"]);
+	});
+
+	it("resume alteracao de cargo de usuario sem expor campo tecnico", () => {
+		const row = {
+			action: "update",
+			entity: "app_users",
+			userName: "Rodrigo",
+			beforeData: { nome: "Maria", role: "atendimento" },
+			afterData: { nome: "Maria", role: "financeiro" },
+			changedFields: ["role", "empresaId"],
+		};
+
+		expect(buildAuditSummary(row)).toBe(
+			"Rodrigo alterou cargo de Maria de atendimento para financeiro.",
+		);
+		expect(buildChangeDescriptions(row)).toEqual([
+			"alterou cargo de Maria de atendimento para financeiro",
+		]);
+	});
+
 	it("usa o primeiro IP do x-forwarded-for", () => {
 		const req = {
 			get: (header) =>

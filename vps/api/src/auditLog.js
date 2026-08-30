@@ -43,7 +43,11 @@ const FIELD_LABELS = {
 	centers: "centros de custo",
 	costCenters: "centros de custo",
 	description: "descrição",
+	displayName: "nome",
+	display_name: "nome",
 	email: "e-mail",
+	empresaId: "empresa",
+	empresa_id: "empresa",
 	name: "nome",
 	nome: "nome",
 	permissions: "permissões",
@@ -306,6 +310,54 @@ function getArrayItemKey(item = {}) {
 	return pickFirstText(item.id, item.codigo, item.code, item.nome, item.name);
 }
 
+function getFinanceiroReportLabel(row = {}) {
+	const recordId = normalizeText(row.recordId).toLowerCase();
+	const beforeData = row.beforeData || {};
+	const afterData = row.afterData || {};
+	const sheetName = pickFirstText(
+		afterData.importInfo?.sheetName,
+		beforeData.importInfo?.sheetName,
+	);
+	if (recordId === "serasa" || /serasa/i.test(sheetName)) return "Serasa";
+	if (recordId === "tarifas" || /tarifa/i.test(sheetName)) return "Tarifas";
+	if (recordId === "budget" || recordId === "orcamento") return "orçamento";
+	return "relatório financeiro";
+}
+
+function isFinanceiroReportClear(row = {}) {
+	return (
+		normalizeText(row.entity) === "financeiro_reports" &&
+		row.action === "update" &&
+		row.afterData?.importInfo?.cleared === true
+	);
+}
+
+function getUserTargetLabel(row = {}) {
+	return (
+		getRecordLabel(row.afterData || {}) ||
+		getRecordLabel(row.beforeData || {}) ||
+		pickFirstText(row.recordId)
+	);
+}
+
+function buildUserAccessChangeDescription(row = {}) {
+	if (normalizeText(row.entity) !== "app_users" || row.action !== "update") return "";
+	const changedFields = Array.isArray(row.changedFields) ? row.changedFields : [];
+	const changed = new Set(changedFields.map((field) => normalizeText(field)));
+	const target = getUserTargetLabel(row);
+	const beforeRole = formatShortValue(row.beforeData?.role);
+	const afterRole = formatShortValue(row.afterData?.role);
+
+	if (changed.has("role") && beforeRole !== afterRole) {
+		return `alterou cargo de ${target} de ${beforeRole} para ${afterRole}`;
+	}
+	if (changed.has("role")) return `alterou cargo de ${target}`;
+	if (changed.has("empresaId") || changed.has("empresa_id")) {
+		return `alterou cargo de ${target}`;
+	}
+	return "";
+}
+
 function buildArrayChangeDescriptions(field, beforeValue, afterValue) {
 	if (!Array.isArray(beforeValue) || !Array.isArray(afterValue)) return [];
 	const beforeMap = new Map(beforeValue.map((item) => [getArrayItemKey(item), item]).filter(([key]) => key));
@@ -340,6 +392,12 @@ function buildArrayChangeDescriptions(field, beforeValue, afterValue) {
 }
 
 function buildChangeDescriptions(row = {}) {
+	if (isFinanceiroReportClear(row)) {
+		return [`apagou dados do ${getFinanceiroReportLabel(row)}`];
+	}
+	const userAccessChange = buildUserAccessChangeDescription(row);
+	if (userAccessChange) return [userAccessChange];
+
 	const beforeData = normalizeComparableValue(row.beforeData || {});
 	const afterData = normalizeComparableValue(row.afterData || {});
 	const changedFields = Array.isArray(row.changedFields)
@@ -361,6 +419,9 @@ function buildChangeDescriptions(row = {}) {
 
 function buildAuditSummary(row = {}) {
 	const actor = pickFirstText(row.userName, row.userEmail, row.userId) || "Usuário";
+	if (isFinanceiroReportClear(row)) {
+		return `${actor} apagou dados do ${getFinanceiroReportLabel(row)}.`;
+	}
 	const entityLabel = getEntityLabel(row);
 	const afterLabel = getRecordLabel(row.afterData || {});
 	const beforeLabel = getRecordLabel(row.beforeData || {});
