@@ -11,6 +11,7 @@ const db = require("./db");
 const apiStatus = require("./apiStatus");
 const databaseBackups = require("./databaseBackups");
 const documents = require("./documents");
+const regionaisRepository = require("./regionaisRepository");
 const auditLog = require("./auditLog");
 const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
@@ -4028,8 +4029,7 @@ function createApp() {
 		requireRoles(FULL_OPERATION_ROLES),
 		async (req, res, next) => {
 			try {
-				const items = await documents.listDocuments({
-					collectionPath: "regionais",
+				const items = await regionaisRepository.listRegionalDocuments({
 					limit: 1000,
 					offset: 0,
 				});
