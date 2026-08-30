@@ -15,6 +15,7 @@ import {
 	Database,
 	FileCheck2,
 	FileClock,
+	FileSearch,
 	FileText,
 	Files,
 	LayoutDashboard,
@@ -583,6 +584,12 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Logs de Auditoria",
+		path: ROUTES.AUDITORIA_LOGS,
+		icon: FileSearch,
+		permission: ["configuracao.auditoria.view"],
+	},
+	{
 		label: "Cadastro",
 		path: ROUTES.EMPRESAS_TECNICOS,
 		icon: Building2,
@@ -782,6 +789,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.SENIOR_SETTINGS,
 	ROUTES.DATABASE_BACKUPS,
 	ROUTES.EMAIL_SETTINGS,
+	ROUTES.AUDITORIA_LOGS,
 ];
 
 const ADMINISTRATIVO_DOCUMENTOS_PATHS = [
@@ -851,6 +859,8 @@ const FINANCEIRO_TARIFAS_REPORTS_PATHS = [
 	ROUTES.FINANCEIRO_REPORTS_TARIFAS_REC_CLIENTE,
 	ROUTES.FINANCEIRO_REPORTS_TARIFAS_FORMAS_PAGAMENTO,
 ];
+
+const DIRECT_MENU_DUPLICATE_PATHS = new Set([ROUTES.AUDITORIA_LOGS]);
 
 const ATENDIMENTO_PATHS = [
 	ROUTES.ATENDIMENTO_CASOS,
@@ -977,6 +987,7 @@ const MENU_GROUPS = [
 			ROUTES.SENIOR_SETTINGS,
 			ROUTES.DATABASE_BACKUPS,
 			ROUTES.EMAIL_SETTINGS,
+			ROUTES.AUDITORIA_LOGS,
 		],
 	},
 ];
@@ -1852,7 +1863,12 @@ const Sidebar = ({
 		[],
 	);
 	const otherMenuItems = useMemo(
-		() => menuItems.filter((item) => !groupedPaths.has(item.path)),
+		() =>
+			menuItems.filter(
+				(item) =>
+					!groupedPaths.has(item.path) ||
+					DIRECT_MENU_DUPLICATE_PATHS.has(item.path),
+			),
 		[groupedPaths, menuItems],
 	);
 	const isGroupActive = (group) =>

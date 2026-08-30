@@ -1,4 +1,5 @@
 const db = require("./db");
+const auditLog = require("./auditLog");
 const { broadcastRealtime } = require("./realtime");
 const { invalidatePublicDashboardCache } = require("./publicDashboard");
 
@@ -106,7 +107,20 @@ async function getDocument(documentPath) {
 	});
 }
 
+async function getDocumentSnapshot(documentPath) {
+	const result = await db.query(
+		`select path, collection_path as "collectionPath", document_id as "documentId",
+            parent_path as "parentPath", data, exported_at as "exportedAt",
+            imported_at as "importedAt", updated_at as "updatedAt"
+       from app_documents
+      where path = $1`,
+		[documentPath],
+	);
+	return result.rows[0] || null;
+}
+
 async function upsertDocument(record) {
+	const beforeRecord = await getDocumentSnapshot(record.path);
 	invalidateDocumentsCache({
 		collectionPath: record.collectionPath,
 		documentPath: record.path,
@@ -128,9 +142,15 @@ async function upsertDocument(record) {
 		],
 	);
 	broadcastDocumentChange("upsert", record);
+	auditLog.recordDocumentAuditLog({
+		action: beforeRecord ? "update" : "create",
+		beforeRecord,
+		record,
+	});
 }
 
 async function deleteDocument(path) {
+	const beforeRecord = await getDocumentSnapshot(path);
 	await db.query(`delete from app_documents where path = $1`, [path]);
 	const parts = String(path || "")
 		.split("/")
@@ -143,6 +163,15 @@ async function deleteDocument(path) {
 		path,
 		collectionPath: parts.slice(0, -1).join("/"),
 		documentId: parts.at(-1),
+	});
+	auditLog.recordDocumentAuditLog({
+		action: "delete",
+		beforeRecord,
+		record: {
+			path,
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentId: parts.at(-1),
+		},
 	});
 }
 
@@ -162,6 +191,15 @@ async function deleteDocumentsByCollectionAndSources(
 		[collectionPath, normalizedSources],
 	);
 	invalidateDocumentsCache({ collectionPath });
+	auditLog.recordAuditLog({
+		action: "delete",
+		module: String(collectionPath || "").split("/").filter(Boolean)[0] || "documentos",
+		entity: collectionPath,
+		recordId: "bulk",
+		beforeData: { sources: normalizedSources, deletedCount: result.rowCount || 0 },
+		afterData: null,
+		changedFields: ["deletedCount", "sources"],
+	});
 
 	return result.rowCount || 0;
 }

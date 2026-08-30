@@ -79,6 +79,7 @@ export const ROUTES = {
 	DATABASE_BACKUPS: "/configuracoes/banco-de-dados",
 	EMAIL_SETTINGS: "/configuracoes/email",
 	VPN_SETTINGS: "/configuracoes/vpn",
+	AUDITORIA_LOGS: "/logs",
 	EMPRESAS_TECNICOS: "/empresas",
 	EMPRESA_PERFIL: "/empresas/:slug",
 	DOCUMENTOS_PENDENTES: "/documentos/pendentes",

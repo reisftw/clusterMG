@@ -81,6 +81,7 @@ function normalizeContextUser(user = {}) {
 		uid: String(user.uid || profile.uid || ""),
 		role: String(user.role || profile.role || ""),
 		email: String(user.email || profile.email || ""),
+		nome: String(user.nome || user.name || user.displayName || profile.nome || profile.name || ""),
 		regional: String(profile.regional || user.regional || ""),
 	};
 }
@@ -191,6 +192,7 @@ async function closePool() {
 module.exports = {
 	connect,
 	closePool,
+	getRequestContext,
 	healthcheck,
 	query,
 	rawQuery,

@@ -111,7 +111,7 @@ jobs:
           retention-days: 7
 
   deploy-vps:
-    name: Deploy frontend to VPS
+    name: Deploy frontend and backend to VPS
     runs-on: ubuntu-latest
     needs:
       - security
@@ -126,9 +126,16 @@ jobs:
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || '/var/www/retiradas/dist' }}
-      REMOTE_PACKAGE: /tmp/retiradas-dist-${{ github.sha }}.tar.gz
+      VPS_API_PATH: ${{ secrets.VPS_API_PATH || '/opt/retiradas/vps' }}
+      VPS_API_SERVICE: ${{ secrets.VPS_API_SERVICE || 'retiradas-api' }}
+      VPS_API_ENV_FILE: ${{ secrets.VPS_API_ENV_FILE || '/etc/retiradas/api.env' }}
+      REMOTE_FRONTEND_PACKAGE: /tmp/retiradas-dist-${{ github.sha }}.tar.gz
+      REMOTE_BACKEND_PACKAGE: /tmp/retiradas-vps-${{ github.sha }}.tar.gz
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Download frontend build artifact
         uses: actions/download-artifact@v4
         with:
@@ -151,27 +158,55 @@ jobs:
       - name: Package frontend build
         run: tar -czf retiradas-dist.tar.gz -C dist .
 
-      - name: Upload package to VPS
+      - name: Package backend source
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='uploads' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -czf retiradas-vps.tar.gz \
+            -C vps .
+
+      - name: Upload packages to VPS
         run: |
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             retiradas-dist.tar.gz \
-            "$VPS_USER@$VPS_HOST:$REMOTE_PACKAGE"
+            "$VPS_USER@$VPS_HOST:$REMOTE_FRONTEND_PACKAGE"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-vps.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_BACKEND_PACKAGE"
 
-      - name: Publish package on VPS
+      - name: Publish packages on VPS
         run: |
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "set -e
              deploy_path='$VPS_DEPLOY_PATH'
-             package='$REMOTE_PACKAGE'
+             api_path='$VPS_API_PATH'
+             api_service='$VPS_API_SERVICE'
+             api_env_file='$VPS_API_ENV_FILE'
+             frontend_package='$REMOTE_FRONTEND_PACKAGE'
+             backend_package='$REMOTE_BACKEND_PACKAGE'
              if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
              \$SUDO mkdir -p \"\$deploy_path\"
-             \$SUDO tar -xzf \"\$package\" -C \"\$deploy_path\"
+             \$SUDO mkdir -p \"\$api_path\"
+             \$SUDO tar -xzf \"\$frontend_package\" -C \"\$deploy_path\"
+             \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
+             cd \"\$api_path\"
+             \$SUDO npm ci --omit=dev
+             if [ -f \"\$api_env_file\" ]; then
+               set -a
+               . \"\$api_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate:sql
+             \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
-             rm -f \"\$package\" || \$SUDO rm -f \"\$package\""
+             rm -f \"\$frontend_package\" \"\$backend_package\" || \$SUDO rm -f \"\$frontend_package\" \"\$backend_package\""
 
   deploy-homolog-vps:
-    name: Deploy homolog frontend to VPS
+    name: Deploy homolog frontend and backend to VPS
     runs-on: ubuntu-latest
     needs:
       - security
@@ -186,9 +221,16 @@ jobs:
       VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH || '/var/www/retiradas-homolog/dist' }}
-      REMOTE_PACKAGE: /tmp/retiradas-homolog-dist-${{ github.sha }}.tar.gz
+      VPS_API_PATH: ${{ secrets.HOMOLOG_VPS_API_PATH || '/opt/retiradas/vps-homolog' }}
+      VPS_API_SERVICE: ${{ secrets.HOMOLOG_VPS_API_SERVICE || 'retiradas-api-homolog' }}
+      VPS_API_ENV_FILE: ${{ secrets.HOMOLOG_VPS_API_ENV_FILE || '/etc/retiradas/api-homolog.env' }}
+      REMOTE_FRONTEND_PACKAGE: /tmp/retiradas-homolog-dist-${{ github.sha }}.tar.gz
+      REMOTE_BACKEND_PACKAGE: /tmp/retiradas-homolog-vps-${{ github.sha }}.tar.gz
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Download frontend build artifact
         uses: actions/download-artifact@v4
         with:
@@ -211,21 +253,49 @@ jobs:
       - name: Package homolog frontend build
         run: tar -czf retiradas-homolog-dist.tar.gz -C dist .
 
-      - name: Upload package to VPS
+      - name: Package homolog backend source
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='uploads' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -czf retiradas-homolog-vps.tar.gz \
+            -C vps .
+
+      - name: Upload packages to VPS
         run: |
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             retiradas-homolog-dist.tar.gz \
-            "$VPS_USER@$VPS_HOST:$REMOTE_PACKAGE"
+            "$VPS_USER@$VPS_HOST:$REMOTE_FRONTEND_PACKAGE"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-homolog-vps.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_BACKEND_PACKAGE"
 
-      - name: Publish package on VPS
+      - name: Publish packages on VPS
         run: |
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "set -e
              deploy_path='$VPS_DEPLOY_PATH'
-             package='$REMOTE_PACKAGE'
+             api_path='$VPS_API_PATH'
+             api_service='$VPS_API_SERVICE'
+             api_env_file='$VPS_API_ENV_FILE'
+             frontend_package='$REMOTE_FRONTEND_PACKAGE'
+             backend_package='$REMOTE_BACKEND_PACKAGE'
              if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
              \$SUDO mkdir -p \"\$deploy_path\"
-             \$SUDO tar -xzf \"\$package\" -C \"\$deploy_path\"
+             \$SUDO mkdir -p \"\$api_path\"
+             \$SUDO tar -xzf \"\$frontend_package\" -C \"\$deploy_path\"
+             \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
+             cd \"\$api_path\"
+             \$SUDO npm ci --omit=dev
+             if [ -f \"\$api_env_file\" ]; then
+               set -a
+               . \"\$api_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate:sql
+             \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
-             rm -f \"\$package\" || \$SUDO rm -f \"\$package\""
+             rm -f \"\$frontend_package\" \"\$backend_package\" || \$SUDO rm -f \"\$frontend_package\" \"\$backend_package\""

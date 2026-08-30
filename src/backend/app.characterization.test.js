@@ -153,6 +153,11 @@ function baseMocks(overrides = {}) {
 			healthcheck: vi.fn(async () => ({ now: "2026-08-16T00:00:00.000Z" })),
 			query: vi.fn(),
 		},
+		auditLog: {
+			captureAuditRequestContext: vi.fn((_req, _res, next) => next()),
+			getAuditLog: vi.fn(async () => null),
+			listAuditLogs: vi.fn(async () => ({ items: [], limit: 50, offset: 0, total: 0 })),
+		},
 		documents,
 		evolutionMessaging,
 		agendamentoConfirmacao,
@@ -256,6 +261,7 @@ function baseMocks(overrides = {}) {
 function installMocks(overrides = {}) {
 	currentMocks = baseMocks(overrides);
 	setMock("./db", currentMocks.db);
+	setMock("./auditLog", currentMocks.auditLog);
 	setMock("./apiStatus", currentMocks.apiStatus);
 	setMock("./databaseBackups", currentMocks.databaseBackups);
 	setMock("./documents", currentMocks.documents);
@@ -403,6 +409,46 @@ describe("vps api app characterization - health/realtime", () => {
 			databaseTime: "2026-08-16T00:00:00.000Z",
 		});
 	}, 15000);
+});
+
+describe("vps api app characterization - audit logs", () => {
+	it("GET /api/admin/audit-logs lista logs para usuario autenticado com permissao", async () => {
+		const app = loadApp({
+			auditLog: {
+				...baseMocks().auditLog,
+				listAuditLogs: vi.fn(async () => ({
+					items: [{ id: "audit-1", action: "update" }],
+					limit: 50,
+					offset: 0,
+					total: 1,
+				})),
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/admin/audit-logs")
+			.set("Authorization", "Bearer valid");
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({
+			items: [{ id: "audit-1", action: "update" }],
+			total: 1,
+		});
+		expect(currentMocks.auditLog.listAuditLogs).toHaveBeenCalled();
+	});
+
+	it("GET /api/admin/audit-logs/:id retorna 404 quando log nao existe", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.get("/api/admin/audit-logs/inexistente")
+			.set("Authorization", "Bearer valid");
+
+		expect(response.status).toBe(404);
+		expect(response.body).toMatchObject({
+			error: "Log de auditoria nao encontrado.",
+		});
+	});
 });
 
 describe("vps api app characterization - auth", () => {

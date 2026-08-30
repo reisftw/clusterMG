@@ -6,6 +6,7 @@ producao.
 ## Estrutura
 
 - Frontend: `/var/www/retiradas-homolog/dist`
+- Backend: `/opt/retiradas/vps-homolog`
 - API: `retiradas-api-homolog.service`
 - Porta API: `3002`
 - Banco: `retiradas_homolog`
@@ -24,6 +25,7 @@ pg_dump -h 127.0.0.1 -U retorninho -d retiradas --no-owner --no-acl | psql -h 12
 ## Configurar API de homologacao
 
 ```bash
+mkdir -p /opt/retiradas/vps-homolog
 cp /opt/retiradas/vps/api/api-homolog.env.example /etc/retiradas/api-homolog.env
 nano /etc/retiradas/api-homolog.env
 cp /opt/retiradas/vps/systemd/retiradas-api-homolog.service /etc/systemd/system/retiradas-api-homolog.service
@@ -49,4 +51,6 @@ Todo push na branch `homolog-dev` gera build com:
 
 - `v<commit> · Homologação` no rodape
 - API em `https://homolog.retiradas.tech/api`
-- deploy em `/var/www/retiradas-homolog/dist`
+- deploy frontend em `/var/www/retiradas-homolog/dist`
+- deploy backend em `/opt/retiradas/vps-homolog`
+- migrations SQL pendentes aplicadas por `npm run migrate:sql`

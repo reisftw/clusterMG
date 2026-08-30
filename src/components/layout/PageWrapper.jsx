@@ -69,6 +69,7 @@ const PAGE_TITLES = {
 	[ROUTES.DATABASE_BACKUPS]: "Banco de Dados",
 	[ROUTES.EMAIL_SETTINGS]: "E-mail do Sistema",
 	[ROUTES.VPN_SETTINGS]: "VPN",
+	[ROUTES.AUDITORIA_LOGS]: "Logs de Auditoria",
 	[ROUTES.EMPRESAS_TECNICOS]: "Empresas",
 	[ROUTES.METAS]: "Metas",
 	[ROUTES.NOTIFICACOES]: "Notificações",

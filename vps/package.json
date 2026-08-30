@@ -9,6 +9,7 @@
 		"auth:seed-users": "node scripts/seed-local-auth-users.js",
 		"backup:database": "node scripts/database-backup.js",
 		"documentos:cobranca": "node scripts/documentos-cobranca.js",
+		"migrate:sql": "node scripts/run-sql-migrations.js",
 		"reconcile:agendamentos-mapa": "node scripts/reconcile-agendamentos-mapa.js",
 		"acerto:migrate-empresas": "node scripts/migrate-acerto-empresas-tecnicos.js",
 		"import:documents": "node scripts/import-documents-jsonl.js"

@@ -183,6 +183,9 @@ const ConfiguracoesGerais = lazy(
 const ConfiguracoesVpn = lazy(
 	() => import("../modules/configuracoes/components/ConfiguracoesVpnPage"),
 );
+const AuditoriaLogs = lazy(
+	() => import("../modules/auditoria/components/AuditoriaLogsPage"),
+);
 const EmpresasTecnicos = lazy(
 	() => import("../modules/empresasTecnicos/components/EmpresasTecnicosPage"),
 );
@@ -968,6 +971,14 @@ const AppRouter = () => (
 									]}
 								>
 									<ConfiguracoesVpn />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.AUDITORIA_LOGS}
+							element={
+								<ProtectedRoute requiredPermission={["configuracao.auditoria.view"]}>
+									<AuditoriaLogs />
 								</ProtectedRoute>
 							}
 						/>

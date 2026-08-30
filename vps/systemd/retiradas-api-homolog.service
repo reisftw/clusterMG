@@ -4,7 +4,7 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/retiradas/vps
+WorkingDirectory=/opt/retiradas/vps-homolog
 EnvironmentFile=/etc/retiradas/api-homolog.env
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/npm run api:start

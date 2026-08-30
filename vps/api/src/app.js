@@ -11,6 +11,7 @@ const db = require("./db");
 const apiStatus = require("./apiStatus");
 const databaseBackups = require("./databaseBackups");
 const documents = require("./documents");
+const auditLog = require("./auditLog");
 const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
 const evolutionMessaging = require("./evolutionMessaging");
@@ -2072,6 +2073,7 @@ function createApp() {
 		console.error("[metrics] Falha ao inicializar metricas:", error);
 	});
 	app.use(metrics.metricsMiddleware);
+	app.use(auditLog.captureAuditRequestContext);
 	app.get(
 		"/api/admin/metrics",
 		requireInternalToken,
@@ -2093,6 +2095,37 @@ function createApp() {
 	app.use("/api/public/visits", rejectLargePublicVisit);
 	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
 	app.use(vpnAccess.createMiddleware());
+
+	app.get(
+		"/api/admin/audit-logs",
+		requireAuthenticated,
+		requireAnyPermission(["configuracao.auditoria.view"], ADMIN_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await auditLog.listAuditLogs(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/admin/audit-logs/:id",
+		requireAuthenticated,
+		requireAnyPermission(["configuracao.auditoria.view"], ADMIN_ROLES),
+		async (req, res, next) => {
+			try {
+				const item = await auditLog.getAuditLog(req.params.id);
+				if (!item) {
+					res.status(404).json({ error: "Log de auditoria nao encontrado." });
+					return;
+				}
+				res.json({ item });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 
 	app.get(
 		"/api/admin/vpn/config",
