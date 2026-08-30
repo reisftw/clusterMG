@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getApiBaseUrl } from "../../../services/vpsApiClient";
 import { buildMatchOSData } from "../../Mapa/utils/matchOs";
 import { useDashboardData } from "./useDashboardData";
 
@@ -59,27 +60,91 @@ function isCompactMatchData(matchData) {
 export function useAgentesMatchPublico(options = {}) {
 	const detail = Boolean(options.detail);
 	const { data, loading } = useDashboardData();
+	const [detailState, setDetailState] = useState({
+		version: "",
+		data: null,
+		loading: false,
+	});
+	const matchVersion =
+		data?.agentesMatchOS?.meta?.generatedAt ||
+		data?.agentesMatchOS?.data?.meta?.generatedAt ||
+		data?.agentesMatchOS?.meta?.data ||
+		data?.agentesMatchOS?.data?.meta?.data ||
+		data?.generatedAt ||
+		"";
 
 	const matchData = useMemo(() => {
 		const slice = data?.agentesMatchOS || data?.matchAgentes || null;
 		return normalizeAgentesSlice(slice);
 	}, [data]);
 
+	useEffect(() => {
+		let active = true;
+		if (!detail || loading) {
+			return () => {
+				active = false;
+			};
+		}
+
+		const versionParam = encodeURIComponent(matchVersion || "latest");
+		Promise.resolve()
+			.then(() => {
+				if (!active) return null;
+				setDetailState((current) => ({
+					...current,
+					loading: current.version !== matchVersion,
+				}));
+				return fetch(
+					`${getApiBaseUrl()}/public/dashboard?detail=match&v=${versionParam}`,
+					{
+						cache: "no-store",
+						credentials: "include",
+					},
+				);
+			})
+			.then((response) => {
+				if (!response) return null;
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
+				return response.json();
+			})
+			.then((payload) => {
+				if (!active || !payload) return;
+				const fullAgentesData = normalizeAgentesSlice(
+					payload?.agentesMatchOS || payload?.matchAgentes,
+				);
+				setDetailState({
+					version: matchVersion,
+					data: fullAgentesData,
+					loading: false,
+				});
+			})
+			.catch(() => {
+				if (!active) return;
+				setDetailState((current) => ({ ...current, loading: false }));
+			});
+
+		return () => {
+			active = false;
+		};
+	}, [detail, loading, matchVersion]);
+
 	const ultimaAtualizacao = useMemo(() => {
 		const slice = data?.agentesMatchOS || data?.matchAgentes || null;
 		return slice?.meta || slice?.data?.meta || null;
 	}, [data]);
 
-	const resolvedData =
-		detail && isCompactMatchData(matchData)
-			? null
-			: hasMatches(matchData)
-				? matchData
-				: null;
+	const detailData =
+		detailState.version === matchVersion ? detailState.data : null;
+
+	const resolvedData = detail
+		? detailData || (isCompactMatchData(matchData) ? null : matchData)
+		: hasMatches(matchData)
+			? matchData
+			: null;
 
 	return {
 		data: resolvedData,
 		ultimaAtualizacao,
-		loading,
+		loading: loading || (detail && (detailState.loading || !resolvedData)),
 	};
 }
