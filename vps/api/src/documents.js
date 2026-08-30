@@ -121,6 +121,9 @@ async function getDocumentSnapshot(documentPath) {
 }
 
 async function upsertDocument(record) {
+	if (record.collectionPath === "regionais") {
+		throw new Error("Colecao regionais migrada para tabelas normalizadas.");
+	}
 	const beforeRecord = await getDocumentSnapshot(record.path);
 	invalidateDocumentsCache({
 		collectionPath: record.collectionPath,
@@ -153,6 +156,9 @@ async function upsertDocument(record) {
 
 async function deleteDocument(path) {
 	const beforeRecord = await getDocumentSnapshot(path);
+	if (beforeRecord?.collectionPath === "regionais") {
+		throw new Error("Colecao regionais migrada para tabelas normalizadas.");
+	}
 	await db.query(`delete from app_documents where path = $1`, [path]);
 	const parts = String(path || "")
 		.split("/")

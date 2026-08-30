@@ -3408,11 +3408,17 @@ function createApp() {
 				return;
 			}
 
-			const items = await documents.listDocuments({
-				collectionPath,
-				limit: req.query.limit,
-				offset: req.query.offset,
-			});
+			const items =
+				collectionPath === "regionais"
+					? await regionaisRepository.listRegionalDocuments({
+							limit: req.query.limit,
+							offset: req.query.offset,
+						})
+					: await documents.listDocuments({
+							collectionPath,
+							limit: req.query.limit,
+							offset: req.query.offset,
+						});
 			const visibleItems = await filterUserDocumentsForManager(
 				req.user,
 				collectionPath,
@@ -3433,7 +3439,11 @@ function createApp() {
 	app.get("/api/documents/*", requireAuthenticated, async (req, res, next) => {
 		try {
 			const documentPath = req.params[0];
-			const item = await documents.getDocument(documentPath);
+			const documentCollectionPath = documentPath.split("/").slice(0, -1).join("/");
+			const item =
+				documentCollectionPath === "regionais"
+					? await regionaisRepository.getRegionalDocument(documentPath)
+					: await documents.getDocument(documentPath);
 			if (!item) {
 				res.status(404).json({ error: "Documento nao encontrado." });
 				return;
@@ -4415,13 +4425,20 @@ function createApp() {
 					documentId,
 					scopedRegionalData,
 				);
-				await documents.upsertDocument({
-					path,
-					collectionPath,
-					documentId,
-					parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
-					data,
-				});
+				if (collectionPath === "regionais") {
+					await regionaisRepository.upsertRegionalDocument({
+						documentId,
+						data,
+					});
+				} else {
+					await documents.upsertDocument({
+						path,
+						collectionPath,
+						documentId,
+						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+						data,
+					});
+				}
 				await ensureEmpresaDriveFolderIfConfigured(
 					collectionPath,
 					documentId,
@@ -4459,7 +4476,10 @@ function createApp() {
 				}
 
 				const collectionPath = parts.slice(0, -1).join("/");
-				const existing = await documents.getDocument(documentPath);
+				const existing =
+					collectionPath === "regionais"
+						? await regionaisRepository.getRegionalDocument(documentPath)
+						: await documents.getDocument(documentPath);
 				if (
 					existing &&
 					isAcertoEstoqueCollection(collectionPath) &&
@@ -4509,13 +4529,20 @@ function createApp() {
 					parts.at(-1),
 					scopedRegionalData,
 				);
-				await documents.upsertDocument({
-					path: documentPath,
-					collectionPath,
-					documentId: parts.at(-1),
-					parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
-					data,
-				});
+				if (collectionPath === "regionais") {
+					await regionaisRepository.upsertRegionalDocument({
+						documentId: parts.at(-1),
+						data,
+					});
+				} else {
+					await documents.upsertDocument({
+						path: documentPath,
+						collectionPath,
+						documentId: parts.at(-1),
+						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+						data,
+					});
+				}
 				await ensureEmpresaDriveFolderIfConfigured(
 					collectionPath,
 					parts.at(-1),
@@ -4546,7 +4573,12 @@ function createApp() {
 					res.status(403).json({ error: "Permissao insuficiente." });
 					return;
 				}
-				const item = await documents.getDocument(documentPath);
+				const parts = documentPath.split("/").filter(Boolean);
+				const collectionPath = parts.slice(0, -1).join("/");
+				const item =
+					collectionPath === "regionais"
+						? await regionaisRepository.getRegionalDocument(documentPath)
+						: await documents.getDocument(documentPath);
 				if (
 					item &&
 					isAcertoEstoqueCollection(item.collectionPath) &&
@@ -4570,7 +4602,11 @@ function createApp() {
 						.json({ error: "Lider Empresa nao pode excluir empresa." });
 					return;
 				}
-				await documents.deleteDocument(documentPath);
+				if (collectionPath === "regionais") {
+					await regionaisRepository.deleteRegionalDocument(documentPath);
+				} else {
+					await documents.deleteDocument(documentPath);
+				}
 				res.json({ ok: true });
 			} catch (error) {
 				next(error);
