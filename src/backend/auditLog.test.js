@@ -177,6 +177,12 @@ describe("auditLog helpers", () => {
 		expect(shouldAuditDocument("integracoes_api")).toBe(false);
 		expect(shouldAuditDocument("api_runtime_events")).toBe(false);
 		expect(shouldAuditDocument("system_notifications")).toBe(false);
+		expect(shouldAuditDocument("operational_import_jobs")).toBe(false);
+		expect(shouldAuditDocument("ordens_abertas")).toBe(false);
+		expect(shouldAuditDocument("match_os_abertas")).toBe(false);
+		expect(shouldAuditDocument("ordens_legadas")).toBe(false);
+		expect(shouldAuditDocument("os_acumuladas")).toBe(false);
+		expect(shouldAuditDocument("public_dashboard")).toBe(false);
 		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_config")).toBe(false);
 		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_jobs")).toBe(false);
 		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_movements")).toBe(false);

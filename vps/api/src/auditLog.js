@@ -17,9 +17,17 @@ const IGNORED_DOCUMENT_COLLECTIONS = new Set([
 	"integracoes_api",
 	"metrics_queries",
 	"metrics_requests",
+	"operational_import_jobs",
+	"ordens_abertas",
+	"ordens_legadas",
+	"os_acumuladas",
 	"password_reset_tokens",
+	"public_dashboard",
 	"static_snapshots",
 	"usuarios",
+	"mapa_meta",
+	"match_os_abertas",
+	"match_os_meta",
 ]);
 const IGNORED_DOCUMENT_COLLECTION_PREFIXES = [
 	"audit_logs/",
