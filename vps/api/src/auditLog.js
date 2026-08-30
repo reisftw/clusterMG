@@ -11,6 +11,7 @@ const SENSITIVE_KEY_PATTERN =
 const IGNORED_DOCUMENT_COLLECTIONS = new Set([
 	"audit_logs",
 	"app_sessions",
+	"api_runtime_events",
 	"email_logs",
 	"email_mfa_challenges",
 	"integracoes_api",
@@ -20,6 +21,11 @@ const IGNORED_DOCUMENT_COLLECTIONS = new Set([
 	"static_snapshots",
 	"usuarios",
 ]);
+const IGNORED_DOCUMENT_COLLECTION_PREFIXES = [
+	"audit_logs/",
+	"system_",
+	"tecnicos_bolsa_auditoria_",
+];
 const SYSTEM_FIELD_NAMES = new Set([
 	"atualizado_em",
 	"atualizadoem",
@@ -194,11 +200,18 @@ function extractSetorId(user = {}, beforeData = {}, afterData = {}) {
 
 function shouldAuditDocument(collectionPath) {
 	const collection = normalizeText(collectionPath);
-	if (!collection) return false;
-	if (IGNORED_DOCUMENT_COLLECTIONS.has(collection)) return false;
-	if (collection.endsWith("_logs") || collection.endsWith("_log")) return false;
-	if (collection.includes("mfa")) return false;
-	return !collection.startsWith("audit_logs/");
+	return Boolean(collection && !shouldIgnoreAuditEntity(collection));
+}
+
+function shouldIgnoreAuditEntity(entity) {
+	const normalized = normalizeText(entity);
+	if (!normalized) return false;
+	if (IGNORED_DOCUMENT_COLLECTIONS.has(normalized)) return true;
+	if (normalized.endsWith("_logs") || normalized.endsWith("_log")) return true;
+	if (normalized.includes("mfa")) return true;
+	return IGNORED_DOCUMENT_COLLECTION_PREFIXES.some((prefix) =>
+		normalized.startsWith(prefix),
+	);
 }
 
 function getAuditModule(collectionPath) {
@@ -258,6 +271,7 @@ async function writeAuditLog(entry = {}) {
 }
 
 function recordAuditLog(entry = {}) {
+	if (shouldIgnoreAuditEntity(entry.entity)) return Promise.resolve();
 	return writeAuditLog(entry).catch((error) => {
 		console.error("[audit-log] Falha ao gravar auditoria:", error?.message || error);
 	});
@@ -533,6 +547,9 @@ function buildWhereClauses(filters = {}) {
 	[...IGNORED_DOCUMENT_COLLECTIONS].forEach((collection) => {
 		addClause("coalesce(entity, '') <> ?", collection);
 	});
+	IGNORED_DOCUMENT_COLLECTION_PREFIXES.forEach((prefix) => {
+		addClause("coalesce(entity, '') not ilike ?", `${prefix}%`);
+	});
 	addClause("coalesce(entity, '') not ilike ?", "%mfa%");
 	addClause("coalesce(entity, '') not ilike ? escape '\\'", "%\\_logs");
 	addClause("coalesce(entity, '') not ilike ? escape '\\'", "%\\_log");
@@ -618,11 +635,16 @@ async function listAuditLogOptions() {
 		       or nullif(module, '') is not null
 		        )
 		    and coalesce(entity, '') <> all($1::text[])
+		    and not exists (
+		      select 1
+		        from unnest($2::text[]) ignored_prefix(prefix)
+		       where coalesce(entity, '') ilike ignored_prefix.prefix || '%'
+		    )
 		    and coalesce(entity, '') not ilike '%mfa%'
 		    and right(coalesce(entity, ''), 5) <> '_logs'
 		    and right(coalesce(entity, ''), 4) <> '_log'
 		  order by setor nulls last, module nulls last`,
-		[[...IGNORED_DOCUMENT_COLLECTIONS]],
+		[[...IGNORED_DOCUMENT_COLLECTIONS], IGNORED_DOCUMENT_COLLECTION_PREFIXES],
 	);
 	const setores = new Set();
 	const modules = new Set();
@@ -659,6 +681,7 @@ module.exports = {
 		buildChangeDescriptions,
 		getClientIpFromRequest,
 		sanitizeAuditValue,
+		shouldIgnoreAuditEntity,
 		shouldAuditDocument,
 	},
 	calculateChangedFields,

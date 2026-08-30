@@ -22,6 +22,7 @@ describe("auditLog helpers", () => {
 		calculateChangedFields,
 		getClientIpFromRequest,
 		sanitizeAuditValue,
+		shouldIgnoreAuditEntity,
 		shouldAuditDocument,
 	} = auditLog.__testables;
 
@@ -174,6 +175,21 @@ describe("auditLog helpers", () => {
 		expect(shouldAuditDocument("password_reset_tokens")).toBe(false);
 		expect(shouldAuditDocument("email_logs")).toBe(false);
 		expect(shouldAuditDocument("integracoes_api")).toBe(false);
+		expect(shouldAuditDocument("api_runtime_events")).toBe(false);
+		expect(shouldAuditDocument("system_notifications")).toBe(false);
+		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_config")).toBe(false);
+		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_jobs")).toBe(false);
+		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_movements")).toBe(false);
+		expect(shouldAuditDocument("tecnicos_bolsa_auditoria_snapshots")).toBe(false);
 		expect(shouldAuditDocument("financeiro_config")).toBe(true);
+	});
+
+	it("identifica entidades internas que nao devem aparecer na listagem", () => {
+		expect(shouldIgnoreAuditEntity("tecnicos_bolsa_auditoria_movements")).toBe(
+			true,
+		);
+		expect(shouldIgnoreAuditEntity("system_email_logs")).toBe(true);
+		expect(shouldIgnoreAuditEntity("app_users")).toBe(false);
+		expect(shouldIgnoreAuditEntity("financeiro_config")).toBe(false);
 	});
 });
