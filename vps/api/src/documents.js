@@ -1,5 +1,6 @@
 const db = require("./db");
 const auditLog = require("./auditLog");
+const mensageriaRepository = require("./mensageriaRepository");
 const normalizedDualWrite = require("./normalizedDualWrite");
 const { broadcastRealtime } = require("./realtime");
 const { invalidatePublicDashboardCache } = require("./publicDashboard");
@@ -73,7 +74,18 @@ function normalizeLimit(value) {
 	return Math.min(Math.max(Math.trunc(parsed), 1), MAX_LIMIT);
 }
 
+function getCollectionPath(documentPath) {
+	return String(documentPath || "")
+		.split("/")
+		.filter(Boolean)
+		.slice(0, -1)
+		.join("/");
+}
+
 async function listDocuments({ collectionPath, limit, offset }) {
+	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
+		return mensageriaRepository.listDocuments({ collectionPath, limit, offset });
+	}
 	const normalizedLimit = normalizeLimit(limit);
 	const normalizedOffset = Math.max(Number(offset || 0), 0);
 	return getOrSetDocumentsCache(
@@ -95,6 +107,9 @@ async function listDocuments({ collectionPath, limit, offset }) {
 }
 
 async function getDocument(documentPath) {
+	if (mensageriaRepository.isMessagingCollection(getCollectionPath(documentPath))) {
+		return mensageriaRepository.getDocument(documentPath);
+	}
 	return getOrSetDocumentsCache(`path:${documentPath}`, async () => {
 		const result = await db.query(
 			`select path, collection_path as "collectionPath", document_id as "documentId",
@@ -125,6 +140,21 @@ async function upsertDocument(record) {
 		throw new Error(
 			`Colecao ${record.collectionPath} migrada para tabelas normalizadas.`,
 		);
+	}
+	if (mensageriaRepository.isMessagingCollection(record.collectionPath)) {
+		const beforeRecord = await mensageriaRepository.getDocument(record.path);
+		await mensageriaRepository.upsertDocument(record);
+		invalidateDocumentsCache({
+			collectionPath: record.collectionPath,
+			documentPath: record.path,
+		});
+		broadcastDocumentChange("upsert", record);
+		auditLog.recordDocumentAuditLog({
+			action: beforeRecord ? "update" : "create",
+			beforeRecord,
+			record,
+		});
+		return;
 	}
 	const beforeRecord = await getDocumentSnapshot(record.path);
 	invalidateDocumentsCache({
@@ -157,6 +187,32 @@ async function upsertDocument(record) {
 }
 
 async function deleteDocument(path) {
+	if (mensageriaRepository.isMessagingCollection(getCollectionPath(path))) {
+		const beforeRecord = await mensageriaRepository.getDocument(path);
+		await mensageriaRepository.deleteDocument(path);
+		const parts = String(path || "")
+			.split("/")
+			.filter(Boolean);
+		invalidateDocumentsCache({
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentPath: path,
+		});
+		broadcastDocumentChange("delete", {
+			path,
+			collectionPath: parts.slice(0, -1).join("/"),
+			documentId: parts.at(-1),
+		});
+		auditLog.recordDocumentAuditLog({
+			action: "delete",
+			beforeRecord,
+			record: {
+				path,
+				collectionPath: parts.slice(0, -1).join("/"),
+				documentId: parts.at(-1),
+			},
+		});
+		return;
+	}
 	const beforeRecord = await getDocumentSnapshot(path);
 	if (["regionais", "usuarios"].includes(beforeRecord?.collectionPath)) {
 		throw new Error(
@@ -196,6 +252,28 @@ async function deleteDocumentsByCollectionAndSources(
 	collectionPath,
 	sources = [],
 ) {
+	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
+		const normalizedSources = sources
+			.map((source) => String(source || "").trim())
+			.filter(Boolean);
+		const deleted = await mensageriaRepository.deleteDocumentsByCollectionAndSources(
+			collectionPath,
+			normalizedSources,
+		);
+		invalidateDocumentsCache({ collectionPath });
+		auditLog.recordAuditLog({
+			action: "delete",
+			module:
+				String(collectionPath || "").split("/").filter(Boolean)[0] ||
+				"documentos",
+			entity: collectionPath,
+			recordId: "bulk",
+			beforeData: { sources: normalizedSources, deletedCount: deleted || 0 },
+			afterData: null,
+			changedFields: ["deletedCount", "sources"],
+		});
+		return deleted;
+	}
 	const normalizedSources = sources
 		.map((source) => String(source || "").trim())
 		.filter(Boolean);
@@ -222,6 +300,9 @@ async function deleteDocumentsByCollectionAndSources(
 }
 
 async function listAllDocuments(collectionPath) {
+	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
+		return mensageriaRepository.listAllDocuments(collectionPath);
+	}
 	const result = await db.query(
 		`select path, collection_path as "collectionPath", document_id as "documentId",
             parent_path as "parentPath", data, exported_at as "exportedAt",

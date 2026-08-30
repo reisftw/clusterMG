@@ -1,4 +1,5 @@
 const documents = require("./documents");
+const mensageriaRepository = require("./mensageriaRepository");
 const notificationsService = require("./notificationsService");
 const cvortexIntegration = require("./cvortexIntegration");
 const { broadcastRealtime } = require("./realtime");
@@ -1437,24 +1438,15 @@ async function acquireQueueSendLock(item, config, now = new Date()) {
 	}
 
 	const lockId = randomId("send-lock");
-	const lockedAt = nowIso();
-	const lockedItem = {
-		...current,
-		status: "enviando",
-		envioLockId: lockId,
-		envioLockEm: lockedAt,
-		atualizadoEm: lockedAt,
-	};
-	await upsertQueueItem(current.id, lockedItem);
-
-	await sleep(250);
-	const confirmed = await getQueueItem(current.id);
-	if (
-		confirmed?.envioLockId !== lockId ||
-		String(confirmed?.status || "") !== "enviando"
-	) {
-		return { locked: false, reason: "lock_not_confirmed", item: confirmed };
-	}
+	const locked = await mensageriaRepository.acquireQueueItemLock(
+		current.id,
+		lockId,
+		{ ttlSeconds: Math.ceil(QUEUE_SEND_LOCK_TTL_MS / 1000) },
+	);
+	const confirmed = locked?.data
+		? { id: locked.documentId || current.id, ...(locked.data || {}) }
+		: null;
+	if (!confirmed) return { locked: false, reason: "already_locked", item: null };
 	return { locked: true, lockId, item: confirmed };
 }
 
