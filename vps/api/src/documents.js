@@ -143,7 +143,7 @@ async function getDocumentSnapshot(documentPath) {
 }
 
 async function upsertDocument(record) {
-	if (["regionais", "usuarios"].includes(record.collectionPath)) {
+	if (["regionais", "usuarios", "financeiro_config"].includes(record.collectionPath)) {
 		throw new Error(
 			`Colecao ${record.collectionPath} migrada para tabelas normalizadas.`,
 		);

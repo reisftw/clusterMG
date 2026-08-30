@@ -1,4 +1,4 @@
-const documents = require("./documents");
+const financeiroBudgetConfigRepository = require("./financeiroBudgetConfigRepository");
 const financeiroReportsRepository = require("./financeiroReportsRepository");
 const { google } = require("googleapis");
 const crypto = require("node:crypto");
@@ -8,10 +8,6 @@ const {
 	DEFAULT_FINANCIAL_ACCOUNT_PLAN,
 } = require("./financeiroFinancialAccountPlan");
 
-const DASHBOARD_PATH = "financeiro_config/dashboard";
-const BUDGET_COST_CENTERS_PATH = "financeiro_config/orcamento_centros_custo";
-const BUDGET_DATA_PATH = "financeiro_config/orcamento_dados";
-const SHEETS_CONFIG_PATH = "financeiro_config/google_sheets";
 const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 const SHEET_TYPES = [
 	{ id: "contas_pagar", label: "Contas a pagar", defaultRange: "A:ZZ" },
@@ -453,8 +449,10 @@ function mergeSheetsConfig(data = {}) {
 }
 
 async function getSheetsConfig() {
-	const doc = await documents.getDocument(SHEETS_CONFIG_PATH).catch(() => null);
-	return mergeSheetsConfig(doc?.data || {});
+	const config = await financeiroBudgetConfigRepository
+		.getConfig("google_sheets")
+		.catch(() => ({}));
+	return mergeSheetsConfig(config || {});
 }
 
 async function saveSheetsConfig(payload = {}, user = {}) {
@@ -468,13 +466,7 @@ async function saveSheetsConfig(payload = {}, user = {}) {
 		updatedByName: user?.profile?.nome || user?.nome || user?.email || "",
 	});
 
-	await documents.upsertDocument({
-		path: SHEETS_CONFIG_PATH,
-		collectionPath: "financeiro_config",
-		documentId: "google_sheets",
-		parentPath: null,
-		data: next,
-	});
+	await financeiroBudgetConfigRepository.saveConfig("google_sheets", next, user);
 	return { ok: true, config: next };
 }
 
@@ -1833,8 +1825,10 @@ function stopWorker() {
 }
 
 async function getDashboard() {
-	const doc = await documents.getDocument(DASHBOARD_PATH);
-	return { ok: true, data: doc?.data || emptyDashboard() };
+	const data = await financeiroBudgetConfigRepository
+		.getConfig("dashboard")
+		.catch(() => ({}));
+	return { ok: true, data: data || emptyDashboard() };
 }
 
 function normalizeCostCenterType(value) {
@@ -4158,8 +4152,9 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 }
 
 async function getBudgetCostCenters() {
-	const doc = await documents.getDocument(BUDGET_COST_CENTERS_PATH);
-	const config = doc?.data || {
+	const config = await financeiroBudgetConfigRepository
+		.getBudgetCostCenters()
+		.catch(() => ({
 		clusters: [],
 		accounts: [],
 		centers: [],
@@ -4174,7 +4169,7 @@ async function getBudgetCostCenters() {
 		updatedAt: "",
 		updatedBy: "",
 		updatedByName: "",
-	};
+	}));
 	const normalizedConfig = normalizeCostCentersConfig(config, {});
 	const rawAccounts = Array.isArray(config.accounts) ? config.accounts : [];
 	const rawAccountsByCode = new Map(
@@ -4201,13 +4196,7 @@ async function getBudgetCostCenters() {
 			);
 		});
 	if (needsFinancialPlanRefresh) {
-		await documents.upsertDocument({
-			path: BUDGET_COST_CENTERS_PATH,
-			collectionPath: "financeiro_config",
-			documentId: "orcamento_centros_custo",
-			parentPath: null,
-			data: normalizedConfig,
-		});
+		await financeiroBudgetConfigRepository.saveBudgetCostCenters(normalizedConfig);
 	}
 	return {
 		ok: true,
@@ -4216,8 +4205,9 @@ async function getBudgetCostCenters() {
 }
 
 async function saveBudgetCostCenters(payload = {}, user = {}) {
-	const existingDoc = await documents.getDocument(BUDGET_COST_CENTERS_PATH);
-	const existingConfig = existingDoc?.data || {};
+	const existingConfig = await financeiroBudgetConfigRepository
+		.getBudgetCostCenters()
+		.catch(() => ({}));
 	const nextPayload = {
 		...(existingConfig || {}),
 		...(payload || {}),
@@ -4227,13 +4217,7 @@ async function saveBudgetCostCenters(payload = {}, user = {}) {
 		},
 	};
 	const config = normalizeCostCentersConfig(nextPayload, user);
-	await documents.upsertDocument({
-		path: BUDGET_COST_CENTERS_PATH,
-		collectionPath: "financeiro_config",
-		documentId: "orcamento_centros_custo",
-		parentPath: null,
-		data: config,
-	});
+	await financeiroBudgetConfigRepository.saveBudgetCostCenters(config, user);
 	return { ok: true, config };
 }
 
@@ -4327,12 +4311,14 @@ function emptyBudgetData() {
 }
 
 async function getBudgetData() {
-	const doc = await documents.getDocument(BUDGET_DATA_PATH);
+	const savedData = await financeiroBudgetConfigRepository
+		.getBudgetData()
+		.catch(() => ({}));
 	return {
 		ok: true,
 		data: {
 			...emptyBudgetData(),
-			...(doc?.data || {}),
+			...(savedData || {}),
 			fields: BUDGET_DATA_FIELDS,
 		},
 	};
@@ -4383,13 +4369,7 @@ async function saveBudgetData(payload = {}, user = {}) {
 		appliedConfig: merged.created,
 	};
 
-	await documents.upsertDocument({
-		path: BUDGET_DATA_PATH,
-		collectionPath: "financeiro_config",
-		documentId: "orcamento_dados",
-		parentPath: null,
-		data,
-	});
+	await financeiroBudgetConfigRepository.saveBudgetData(data, user);
 
 	return { ok: true, data, config: merged.config };
 }
@@ -4412,13 +4392,7 @@ async function clearBudgetData(user = {}) {
 			cleared: true,
 		},
 	};
-	await documents.upsertDocument({
-		path: BUDGET_DATA_PATH,
-		collectionPath: "financeiro_config",
-		documentId: "orcamento_dados",
-		parentPath: null,
-		data,
-	});
+	await financeiroBudgetConfigRepository.saveBudgetData(data, user);
 	return { ok: true, data };
 }
 
