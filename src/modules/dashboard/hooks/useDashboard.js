@@ -46,12 +46,18 @@ export const useDashboard = () => {
 		return subscribeRealtimeTopics(
 			["dashboard", "metas", "mapa", "match", "acompanhamento"],
 			(event) => {
-				const topic = String(event?.topic || event?.source || "");
-				if (topic && !["dashboard", "metas"].includes(topic)) return;
+				const topic = String(event?.topic || "");
+				const source = String(event?.source || "");
+				const isMetasEvent = topic === "metas" || source === "metas";
+				const isDashboardEvent =
+					topic === "dashboard" && (!source || source === "dashboard");
+				if (!isMetasEvent && !isDashboardEvent) return;
 				const token =
 					event?.generatedAt || event?.emittedAt || new Date().toISOString();
-				invalidateCache("metas");
-				invalidateCache("metas-auditoria");
+				if (isMetasEvent) {
+					invalidateCache("metas");
+					invalidateCache("metas-auditoria");
+				}
 				invalidateInternalStaticDataCache(token);
 				invalidateDashboardDataCache(token);
 				carregar(false, { silent: true });

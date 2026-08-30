@@ -731,14 +731,23 @@ async function getDocument(documentPath) {
 	const config = tableConfig(collectionPath);
 	const documentId = documentIdFromPath(documentPath);
 	const hashedId = hashPath(documentPath);
-	const result = await db.query(
-		`select * from ${config.table}
-		  where legacy_path = $1 or ${config.pk} = $2 or ${config.pk} = $3
-		  limit 1`,
-		[String(documentPath || "").trim(), documentId, hashedId],
+	const legacyPath = String(documentPath || "").trim();
+	const byLegacyPath = await db.query(
+		`select * from ${config.table} where legacy_path = $1 limit 1`,
+		[legacyPath],
 	);
-	const row = result.rows[0];
-	return row ? config.mapper(row) : null;
+	if (byLegacyPath.rows[0]) return config.mapper(byLegacyPath.rows[0]);
+
+	const idCandidates = [...new Set([documentId, hashedId].filter(Boolean))];
+	for (const candidate of idCandidates) {
+		const byId = await db.query(
+			`select * from ${config.table} where ${config.pk} = $1 limit 1`,
+			[candidate],
+		);
+		if (byId.rows[0]) return config.mapper(byId.rows[0]);
+	}
+
+	return null;
 }
 
 async function upsertDocument(record = {}) {
@@ -774,12 +783,23 @@ async function deleteDocument(documentPath) {
 	const config = tableConfig(collectionPath);
 	const documentId = documentIdFromPath(documentPath);
 	const hashedId = hashPath(documentPath);
-	const result = await db.query(
-		`delete from ${config.table}
-		  where legacy_path = $1 or ${config.pk} = $2 or ${config.pk} = $3`,
-		[String(documentPath || "").trim(), documentId, hashedId],
+	const legacyPath = String(documentPath || "").trim();
+	const byLegacyPath = await db.query(
+		`delete from ${config.table} where legacy_path = $1`,
+		[legacyPath],
 	);
-	return result.rowCount || 0;
+	if (byLegacyPath.rowCount) return byLegacyPath.rowCount;
+
+	const idCandidates = [...new Set([documentId, hashedId].filter(Boolean))];
+	for (const candidate of idCandidates) {
+		const byId = await db.query(
+			`delete from ${config.table} where ${config.pk} = $1`,
+			[candidate],
+		);
+		if (byId.rowCount) return byId.rowCount;
+	}
+
+	return 0;
 }
 
 async function deleteAppointmentLogsByType(type) {

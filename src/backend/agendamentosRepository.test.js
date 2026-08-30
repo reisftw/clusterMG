@@ -112,8 +112,49 @@ describe("agendamentosRepository", () => {
 		});
 
 		expect(dbQuery.mock.calls[0][0]).toContain("insert into agendamentos");
+		expect(dbQuery.mock.calls[1][0]).toContain("where legacy_path = $1");
+		expect(dbQuery.mock.calls[1][0]).not.toContain(" or ");
 		expect(saved.documentId).toBe("ag-2");
 		expect(saved.data.cliente_nome).toBe("Cliente Novo");
+	});
+
+	it("busca agendamento por id somente depois de tentar legacy_path", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "ag-3",
+						document_id_original: "ag-3",
+						legacy_path: "agendamentos/ag-3",
+						legacy_document_id: "ag-3",
+						cliente_nome: "Cliente por ID",
+						source_payload: { cliente_nome: "Cliente por ID" },
+					},
+				],
+			});
+		const repository = loadRepository(dbQuery);
+
+		const found = await repository.getDocument("agendamentos/ag-3");
+
+		expect(found.documentId).toBe("ag-3");
+		expect(dbQuery.mock.calls[0][0]).toContain("where legacy_path = $1");
+		expect(dbQuery.mock.calls[1][0]).toContain("where id = $1");
+		expect(dbQuery.mock.calls[0][0]).not.toContain(" or ");
+		expect(dbQuery.mock.calls[1][0]).not.toContain(" or ");
+	});
+
+	it("remove agendamento com consultas indexaveis separadas", async () => {
+		const dbQuery = vi.fn().mockResolvedValueOnce({ rowCount: 1, rows: [] });
+		const repository = loadRepository(dbQuery);
+
+		const deleted = await repository.deleteDocument("agendamentos/ag-4");
+
+		expect(deleted).toBe(1);
+		expect(dbQuery).toHaveBeenCalledTimes(1);
+		expect(dbQuery.mock.calls[0][0]).toContain("where legacy_path = $1");
+		expect(dbQuery.mock.calls[0][0]).not.toContain(" or ");
 	});
 
 	it("remove logs de verificacao de mapa direto da tabela normalizada", async () => {
