@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import {
 	listarLogsAuditoria,
+	listarOpcoesLogsAuditoria,
 	obterLogAuditoria,
 } from "../services/auditoriaService";
 
@@ -156,6 +157,29 @@ function FilterInput({ icon: Icon, label, value, onChange, placeholder, type = "
 	);
 }
 
+function FilterSelect({ icon: Icon, label, value, onChange, options, placeholder }) {
+	return (
+		<label className="flex min-w-0 flex-col gap-1 text-xs font-bold uppercase text-slate-500">
+			{label}
+			<span className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+				<Icon className="h-4 w-4 shrink-0 text-slate-400" />
+				<select
+					value={value}
+					onChange={(event) => onChange(event.target.value)}
+					className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+				>
+					<option value="">{placeholder}</option>
+					{options.map((option) => (
+						<option key={option} value={option}>
+							{option}
+						</option>
+					))}
+				</select>
+			</span>
+		</label>
+	);
+}
+
 export default function AuditoriaLogsPage() {
 	const [filters, setFilters] = useState({
 		action: "",
@@ -174,6 +198,10 @@ export default function AuditoriaLogsPage() {
 	const [error, setError] = useState("");
 	const [selectedLog, setSelectedLog] = useState(null);
 	const [detailLoading, setDetailLoading] = useState(false);
+	const [filterOptions, setFilterOptions] = useState({
+		modules: [],
+		setores: [],
+	});
 
 	const page = Math.floor(filters.offset / filters.limit) + 1;
 	const totalPages = Math.max(1, Math.ceil(total / filters.limit));
@@ -203,6 +231,24 @@ export default function AuditoriaLogsPage() {
 	useEffect(() => {
 		fetchLogs();
 	}, [fetchLogs]);
+
+	useEffect(() => {
+		let active = true;
+		listarOpcoesLogsAuditoria()
+			.then((options) => {
+				if (!active) return;
+				setFilterOptions({
+					modules: Array.isArray(options?.modules) ? options.modules : [],
+					setores: Array.isArray(options?.setores) ? options.setores : [],
+				});
+			})
+			.catch(() => {
+				if (active) setFilterOptions({ modules: [], setores: [] });
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	const openDetail = async (id) => {
 		setDetailLoading(true);
@@ -277,8 +323,8 @@ export default function AuditoriaLogsPage() {
 				</div>
 				<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 					<FilterInput icon={User} label="Usuário" value={filters.userId} onChange={(value) => setFilter("userId", value)} placeholder="ID, nome ou e-mail" />
-					<FilterInput icon={ShieldCheck} label="Setor" value={filters.setorId} onChange={(value) => setFilter("setorId", value)} placeholder="Setor/departamento" />
-					<FilterInput icon={Monitor} label="Módulo" value={filters.module} onChange={(value) => setFilter("module", value)} placeholder="financeiro, usuarios..." />
+					<FilterSelect icon={ShieldCheck} label="Setor" value={filters.setorId} onChange={(value) => setFilter("setorId", value)} options={filterOptions.setores} placeholder="Todos os setores" />
+					<FilterSelect icon={Monitor} label="Módulo" value={filters.module} onChange={(value) => setFilter("module", value)} options={filterOptions.modules} placeholder="Todos os módulos" />
 					<FilterInput icon={FileSearch} label="Entidade" value={filters.entity} onChange={(value) => setFilter("entity", value)} placeholder="Coleção/documento" />
 					<label className="flex min-w-0 flex-col gap-1 text-xs font-bold uppercase text-slate-500">
 						Ação

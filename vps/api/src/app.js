@@ -2110,6 +2110,19 @@ function createApp() {
 	);
 
 	app.get(
+		"/api/admin/audit-logs/options",
+		requireAuthenticated,
+		requireAnyPermission(["configuracao.auditoria.view"], ADMIN_ROLES),
+		async (_req, res, next) => {
+			try {
+				res.json(await auditLog.listAuditLogOptions());
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
 		"/api/admin/audit-logs/:id",
 		requireAuthenticated,
 		requireAnyPermission(["configuracao.auditoria.view"], ADMIN_ROLES),

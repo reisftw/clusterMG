@@ -156,6 +156,7 @@ function baseMocks(overrides = {}) {
 		auditLog: {
 			captureAuditRequestContext: vi.fn((_req, _res, next) => next()),
 			getAuditLog: vi.fn(async () => null),
+			listAuditLogOptions: vi.fn(async () => ({ modules: [], setores: [] })),
 			listAuditLogs: vi.fn(async () => ({ items: [], limit: 50, offset: 0, total: 0 })),
 		},
 		documents,
@@ -435,6 +436,29 @@ describe("vps api app characterization - audit logs", () => {
 			total: 1,
 		});
 		expect(currentMocks.auditLog.listAuditLogs).toHaveBeenCalled();
+	});
+
+	it("GET /api/admin/audit-logs/options lista filtros existentes", async () => {
+		const app = loadApp({
+			auditLog: {
+				...baseMocks().auditLog,
+				listAuditLogOptions: vi.fn(async () => ({
+					modules: ["app_documents"],
+					setores: ["financeiro"],
+				})),
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/admin/audit-logs/options")
+			.set("Authorization", "Bearer valid");
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({
+			modules: ["app_documents"],
+			setores: ["financeiro"],
+		});
+		expect(currentMocks.auditLog.listAuditLogOptions).toHaveBeenCalled();
 	});
 
 	it("GET /api/admin/audit-logs/:id retorna 404 quando log nao existe", async () => {

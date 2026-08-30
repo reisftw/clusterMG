@@ -26,3 +26,7 @@ export async function obterLogAuditoria(id) {
 	);
 	return response?.item || null;
 }
+
+export async function listarOpcoesLogsAuditoria() {
+	return requestVpsApi("/admin/audit-logs/options");
+}

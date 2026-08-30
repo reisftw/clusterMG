@@ -272,6 +272,27 @@ async function listAuditLogs(query = {}) {
 	};
 }
 
+async function listAuditLogOptions() {
+	const result = await db.query(
+		`select distinct nullif(coalesce(setor_id, department_id, ''), '') as setor,
+		        nullif(module, '') as module
+		   from audit_logs
+		  where nullif(coalesce(setor_id, department_id, ''), '') is not null
+		     or nullif(module, '') is not null
+		  order by setor nulls last, module nulls last`,
+	);
+	const setores = new Set();
+	const modules = new Set();
+	result.rows.forEach((row) => {
+		if (row.setor) setores.add(row.setor);
+		if (row.module) modules.add(row.module);
+	});
+	return {
+		modules: [...modules].sort((left, right) => left.localeCompare(right, "pt-BR")),
+		setores: [...setores].sort((left, right) => left.localeCompare(right, "pt-BR")),
+	};
+}
+
 async function getAuditLog(id) {
 	const result = await db.query(
 		`select id, user_id as "userId", user_name as "userName",
@@ -297,6 +318,7 @@ module.exports = {
 	},
 	captureAuditRequestContext,
 	getAuditLog,
+	listAuditLogOptions,
 	listAuditLogs,
 	recordAuditLog,
 	recordDocumentAuditLog,
