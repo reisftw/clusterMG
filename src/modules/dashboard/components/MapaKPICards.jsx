@@ -30,16 +30,22 @@ const CARDS = [
 	},
 ];
 
-export default function MapaKPICards({ ordens = [], variant = "classic" }) {
-	const kpis = ordens.reduce(
-		(acc, os) => {
-			acc.total++;
-			if (os.status === "Pendente") acc.pendente++;
-			if (os.status === "Aguardando Agendamento") acc.aguardando++;
-			return acc;
-		},
-		{ total: 0, pendente: 0, aguardando: 0 },
-	);
+export default function MapaKPICards({
+	ordens = [],
+	variant = "classic",
+	kpisOverride = null,
+}) {
+	const kpis =
+		kpisOverride ||
+		ordens.reduce(
+			(acc, os) => {
+				acc.total++;
+				if (os.status === "Pendente") acc.pendente++;
+				if (os.status === "Aguardando Agendamento") acc.aguardando++;
+				return acc;
+			},
+			{ total: 0, pendente: 0, aguardando: 0 },
+		);
 
 	const isModern = variant === "modern";
 

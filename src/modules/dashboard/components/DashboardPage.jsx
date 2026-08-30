@@ -17,6 +17,7 @@ import { ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { useLayoutMode } from "../../../context/LayoutModeContext";
 import { useMapaOS } from "../../../pages/Mapa/hooks/useMapaOS";
+import { useMapaOS as usePublicMapaOS } from "../../../pages/PainelPublico/hooks/useMapaOS";
 import ProximasAgendas from "../../agenda/components/ProximasAgendas";
 import AgendamentosHojeCard from "../../agendamentos/components/AgendamentosHojeCard";
 import { listarEnviosDocumentos } from "../../documentos/services/documentosService";
@@ -686,6 +687,7 @@ function DocumentosPendentesCard({ currentUser }) {
 const OperationalDashboardContent = ({ currentUser }) => {
 	const { resumo, loading, error } = useDashboard();
 	const { ordens } = useMapaOS();
+	const publicMapa = usePublicMapaOS(true);
 	const { isModernLayout } = useLayoutMode();
 	const currentRole = normalizeRole(currentUser?.role);
 	const isLimitedDashboardRole = [
@@ -700,6 +702,8 @@ const OperationalDashboardContent = ({ currentUser }) => {
 	if (isLimitedDashboardRole) kpiHiddenKeys.push("ferias");
 	const summaryHiddenKeys = ["visitasNoMes"];
 	if (isLimitedDashboardRole) summaryHiddenKeys.push("tecnicosEmFerias");
+	const mapaKpisOverride =
+		publicMapa.allData?.Janeiro?.summary?.kpis || null;
 
 	if (loading) return <Spinner fullScreen />;
 
@@ -728,6 +732,7 @@ const OperationalDashboardContent = ({ currentUser }) => {
 				<ModernKpiGrid
 					resumo={resumo}
 					ordens={ordens}
+					mapaKpisOverride={mapaKpisOverride}
 					hiddenKeys={kpiHiddenKeys}
 				/>
 
@@ -780,7 +785,7 @@ const OperationalDashboardContent = ({ currentUser }) => {
 				<AgendamentosHojeCard />
 			)}
 
-			<MapaKPICards ordens={ordens} />
+			<MapaKPICards ordens={ordens} kpisOverride={mapaKpisOverride} />
 			<SummaryCards resumo={resumo} hiddenKeys={summaryHiddenKeys} />
 
 			<div className="columns-1 gap-6 lg:columns-2 xl:columns-3">

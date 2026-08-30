@@ -1035,10 +1035,12 @@ async function publishAcompanhamentoUpdate(source, payload = {}) {
 	});
 }
 
-async function refreshDashboardSnapshot(
+async function refreshStaticSnapshot(
+	domain,
 	generatedAt = new Date().toISOString(),
 ) {
-	const snapshot = await buildSnapshotDomain("dashboard");
+	const snapshot = await buildSnapshotDomain(domain);
+	if (!snapshot) return;
 	await db.query(
 		`insert into static_snapshots (domain, data, generated_at)
      values ($1, $2, $3)
@@ -1046,8 +1048,18 @@ async function refreshDashboardSnapshot(
      do update set
        data = excluded.data,
        generated_at = excluded.generated_at`,
-		["dashboard", JSON.stringify(snapshot), generatedAt],
+		[domain, JSON.stringify(snapshot), generatedAt],
 	);
+}
+
+async function refreshDashboardSnapshot(generatedAt = new Date().toISOString()) {
+	await refreshStaticSnapshot("dashboard", generatedAt);
+}
+
+async function refreshOperationalSnapshot(
+	generatedAt = new Date().toISOString(),
+) {
+	await refreshStaticSnapshot("operacional", generatedAt);
 }
 
 async function getMensageriaConfig() {
@@ -1292,6 +1304,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		parentPath: null,
 		data: { summary: buildMapaSnapshot(finalOrders), meta },
 	});
+	await refreshOperationalSnapshot(meta.data);
 	const importRunId = await saveImportRun(
 		"mapa",
 		{ total: Object.keys(incoming).length, totalGeral, fontes },
@@ -1510,6 +1523,7 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 		parentPath: null,
 		data: { data: agentesData, meta },
 	});
+	await refreshOperationalSnapshot(meta.data);
 	const importRunId = await saveImportRun(
 		"match",
 		{ total: Object.keys(incoming).length, totalGeral, fontes },

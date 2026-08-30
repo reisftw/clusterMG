@@ -480,9 +480,27 @@ async function deleteDocumentsByCollectionAndSources(collectionPath, sources = [
 	if (!ORDER_COLLECTIONS.has(collectionPath)) return 0;
 	const normalizedSources = sources.map((source) => normalizeSource(source)).filter(Boolean);
 	if (!normalizedSources.length) return 0;
+	const deleteSempre = normalizedSources.includes("sempre");
+	const deleteOnnet = normalizedSources.includes("onnet");
 	const result = await db.query(
-		"delete from ordens_servico where source_collection = $1 and source = any($2::text[])",
-		[collectionPath, normalizedSources],
+		`delete from ordens_servico
+		  where source_collection = $1
+		    and (
+		      source = any($2::text[])
+		      or (
+		        $3 = true
+		        and coalesce(source, '') in ('', $1, 'sempre')
+		        and lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) not like '%onnet%'
+		      )
+		      or (
+		        $4 = true
+		        and (
+		          source = 'onnet'
+		          or lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) like '%onnet%'
+		        )
+		      )
+		    )`,
+		[collectionPath, normalizedSources, deleteSempre, deleteOnnet],
 	);
 	return result.rowCount || 0;
 }

@@ -17,6 +17,8 @@ import { useMapaLegado } from "./hooks/useMapaLegado";
 import { useMapaOS } from "./hooks/useMapaOS";
 import { useMatchOS } from "./hooks/useMatchOS";
 import { gerarPDFMapa } from "./utils/mapaPDF";
+import { useMapaOS as usePublicMapaOS } from "../PainelPublico/hooks/useMapaOS";
+import { buildEmptyPublicMapaSnapshot } from "./utils/mapaUtils";
 
 function filtrarOrdensPorData(ordens, filtro) {
 	if (filtro === "tudo") return ordens;
@@ -130,7 +132,32 @@ function CurrentMapaContent({
 	ordens,
 	ordensFiltradas,
 	alertaThreshold,
+	summaryOverride = null,
 }) {
+	if (summaryOverride) {
+		return (
+			<>
+				<MapaGrafico seriesOverride={summaryOverride.chartRegionais} />
+				<div className="mb-8 flex flex-wrap gap-4">
+					<RankingRegionais rankingOverride={summaryOverride.rankingRegionais} />
+					<RankingAgentes rankingOverride={summaryOverride.rankingAgentes} />
+				</div>
+				<div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+					<MapaRegionais
+						ordens={[]}
+						dataOverride={summaryOverride.regionais}
+						alertaThreshold={alertaThreshold}
+					/>
+					<MapaAgentes
+						ordens={[]}
+						dataOverride={summaryOverride.agentes}
+						alertaThreshold={alertaThreshold}
+					/>
+				</div>
+			</>
+		);
+	}
+
 	if (loading) {
 		return (
 			<div className="flex justify-center py-20">
@@ -166,6 +193,7 @@ function CurrentMapaContent({
 
 export default function MapaPage() {
 	const { ordens, ultimaAtualizacao, loading } = useMapaOS();
+	const publicMapa = usePublicMapaOS(true);
 	const { mensagens: mensagensMatch } = useMatchOS();
 	const legado = useMapaLegado(true);
 	const [filtroData, setFiltroData] = useState("tudo");
@@ -176,6 +204,16 @@ export default function MapaPage() {
 		() => filtrarOrdensPorData(ordens, filtroData),
 		[ordens, filtroData],
 	);
+	const publicSummary = useMemo(
+		() =>
+			publicMapa.allData?.Janeiro?.summary || buildEmptyPublicMapaSnapshot(),
+		[publicMapa.allData],
+	);
+	const summaryOverride =
+		filtroData === "tudo" && Number(publicSummary.totalOrdens || 0) > 0
+			? publicSummary
+			: null;
+	const displayLastUpdate = publicMapa.lastUpdate || ultimaAtualizacao;
 
 	const isLegacyView = activeView === "legado";
 
@@ -216,7 +254,8 @@ export default function MapaPage() {
 				<>
 					<MapaHeader
 						ordens={ordensFiltradas}
-						ultimaAtualizacao={ultimaAtualizacao}
+						ultimaAtualizacao={displayLastUpdate}
+						kpisOverride={summaryOverride?.kpis || null}
 					/>
 
 					<MapaFiltros
@@ -228,10 +267,11 @@ export default function MapaPage() {
 					/>
 
 					<CurrentMapaContent
-						loading={loading}
+						loading={loading && !summaryOverride}
 						ordens={ordens}
 						ordensFiltradas={ordensFiltradas}
 						alertaThreshold={alertaThreshold}
+						summaryOverride={summaryOverride}
 					/>
 				</>
 			)}

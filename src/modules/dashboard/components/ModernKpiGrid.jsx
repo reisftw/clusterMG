@@ -175,7 +175,12 @@ function buildMonthTrend(current, previous) {
 	};
 }
 
-const ModernKpiGrid = ({ resumo, ordens = [], hiddenKeys = [] }) => {
+const ModernKpiGrid = ({
+	resumo,
+	ordens = [],
+	hiddenKeys = [],
+	mapaKpisOverride = null,
+}) => {
 	const [agendamentos, setAgendamentos] = useState([]);
 	const mesAtual = useMemo(() => getMonthKey(), []);
 	const mesAnterior = useMemo(() => getPreviousMonthKey(), []);
@@ -209,15 +214,17 @@ const ModernKpiGrid = ({ resumo, ordens = [], hiddenKeys = [] }) => {
 		[agendamentos, mesAnterior],
 	);
 
-	const mapaKpis = ordens.reduce(
-		(acc, os) => {
-			acc.total += 1;
-			if (os.status === "Pendente") acc.pendente += 1;
-			if (os.status === "Aguardando Agendamento") acc.aguardando += 1;
-			return acc;
-		},
-		{ total: 0, pendente: 0, aguardando: 0 },
-	);
+	const mapaKpis =
+		mapaKpisOverride ||
+		ordens.reduce(
+			(acc, os) => {
+				acc.total += 1;
+				if (os.status === "Pendente") acc.pendente += 1;
+				if (os.status === "Aguardando Agendamento") acc.aguardando += 1;
+				return acc;
+			},
+			{ total: 0, pendente: 0, aguardando: 0 },
+		);
 
 	const agendamentosMesValue = agendamentosMesAtual;
 	const agendamentosMesPrevious = agendamentosMesAnterior;

@@ -128,6 +128,30 @@ function hasMatchData(slice) {
 	return hasArrayData(slice.ordens) || hasArrayData(slice.data?.ordens);
 }
 
+function readSnapshotDate(slice) {
+	const value =
+		slice?.meta?.generatedAt ||
+		slice?.data?.meta?.generatedAt ||
+		slice?.meta?.data ||
+		slice?.data?.meta?.data ||
+		slice?.generatedAt ||
+		slice?.data?.generatedAt ||
+		null;
+	const date = value ? new Date(value) : null;
+	return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+async function isSnapshotCurrent(collectionPath, slice) {
+	if (!slice) return false;
+	const latestUpdatedAt =
+		await ordensRepository.getCollectionLatestUpdatedAt(collectionPath);
+	if (!latestUpdatedAt) return true;
+	const latest = new Date(latestUpdatedAt);
+	const snapshotDate = readSnapshotDate(slice);
+	if (!snapshotDate || Number.isNaN(latest.getTime())) return false;
+	return snapshotDate.getTime() >= latest.getTime();
+}
+
 function compactMatchCity(cidade = {}) {
 	return {
 		cidade: cidade.cidade,
@@ -278,7 +302,12 @@ async function resolveMapaSlice(mapa) {
 }
 
 async function resolveMatchSlice(matchOS) {
-	if (hasMatchData(matchOS)) return matchOS;
+	if (
+		hasMatchData(matchOS) &&
+		(await isSnapshotCurrent("match_os_abertas", matchOS))
+	) {
+		return matchOS;
+	}
 	return buildCollectionFallback(
 		"match_os_abertas",
 		"match_os_meta/ultima_atualizacao",
@@ -286,8 +315,18 @@ async function resolveMatchSlice(matchOS) {
 }
 
 async function resolveAgentesMatchSlice(agentesMatchOS, matchOS) {
-	if (hasMatchData(agentesMatchOS)) return agentesMatchOS;
-	if (hasMatchData(matchOS)) return matchOS;
+	if (
+		hasMatchData(agentesMatchOS) &&
+		(await isSnapshotCurrent("match_os_abertas", agentesMatchOS))
+	) {
+		return agentesMatchOS;
+	}
+	if (
+		hasMatchData(matchOS) &&
+		(await isSnapshotCurrent("match_os_abertas", matchOS))
+	) {
+		return matchOS;
+	}
 	return buildCollectionFallback(
 		"match_os_abertas",
 		"match_os_meta/ultima_atualizacao",

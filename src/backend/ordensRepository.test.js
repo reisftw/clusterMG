@@ -117,9 +117,14 @@ describe("ordensRepository", () => {
 		);
 
 		expect(deleted).toBe(12);
-		expect(dbQuery).toHaveBeenCalledWith(
-			"delete from ordens_servico where source_collection = $1 and source = any($2::text[])",
-			["match_os_abertas", ["sempre", "onnet"]],
-		);
+		expect(dbQuery.mock.calls[0][0]).toContain("delete from ordens_servico");
+		expect(dbQuery.mock.calls[0][0]).toContain("source = any($2::text[])");
+		expect(dbQuery.mock.calls[0][0]).toContain("source_payload->>'fonte'");
+		expect(dbQuery.mock.calls[0][1]).toEqual([
+			"match_os_abertas",
+			["sempre", "onnet"],
+			true,
+			true,
+		]);
 	});
 });
