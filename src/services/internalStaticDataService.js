@@ -123,7 +123,7 @@ export async function getInternalSnapshot(domain, { force = false } = {}) {
 		return cacheByDomain.get(domain);
 	}
 
-	if (!force && pendingByDomain.has(domain)) {
+	if (pendingByDomain.has(domain)) {
 		return pendingByDomain.get(domain);
 	}
 

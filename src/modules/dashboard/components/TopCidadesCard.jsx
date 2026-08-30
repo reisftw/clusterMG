@@ -28,8 +28,12 @@ function rankingCidadesAgentes(ordens, top = 20) {
 		.map(([cidade, total]) => ({ cidade, total }));
 }
 
-export default function TopCidadesCard({ ordens }) {
+export default function TopCidadesCard({ ordens, rankingOverride = null }) {
 	const top10 = useMemo(() => {
+		if (Array.isArray(rankingOverride) && rankingOverride.length > 0) {
+			return rankingOverride.slice(0, 10);
+		}
+
 		if (!ordens?.length) return [];
 
 		const regionais = rankingCidadesRegionais(ordens, 20).map((r) => ({
@@ -44,7 +48,7 @@ export default function TopCidadesCard({ ordens }) {
 		return [...regionais, ...agentes]
 			.sort((a, b) => b.total - a.total)
 			.slice(0, 10);
-	}, [ordens]);
+	}, [ordens, rankingOverride]);
 
 	const maxTotal = top10[0]?.total || 1;
 

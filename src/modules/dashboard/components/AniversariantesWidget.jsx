@@ -24,7 +24,7 @@ const formatarData = (d) =>
 	d.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" });
 
 const AniversariantesWidget = () => {
-	const { colaboradores } = useColaboradores({ preferStatic: true });
+	const { colaboradores } = useColaboradores();
 
 	const lista = useMemo(() => {
 		return colaboradores

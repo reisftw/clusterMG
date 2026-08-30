@@ -16,7 +16,6 @@ import Spinner from "../../../components/ui/Spinner";
 import { ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { useLayoutMode } from "../../../context/LayoutModeContext";
-import { useMapaOS } from "../../../pages/Mapa/hooks/useMapaOS";
 import { useMapaOS as usePublicMapaOS } from "../../../pages/PainelPublico/hooks/useMapaOS";
 import ProximasAgendas from "../../agenda/components/ProximasAgendas";
 import AgendamentosHojeCard from "../../agendamentos/components/AgendamentosHojeCard";
@@ -686,7 +685,6 @@ function DocumentosPendentesCard({ currentUser }) {
 
 const OperationalDashboardContent = ({ currentUser }) => {
 	const { resumo, loading, error } = useDashboard();
-	const { ordens } = useMapaOS();
 	const publicMapa = usePublicMapaOS(true);
 	const { isModernLayout } = useLayoutMode();
 	const currentRole = normalizeRole(currentUser?.role);
@@ -702,8 +700,17 @@ const OperationalDashboardContent = ({ currentUser }) => {
 	if (isLimitedDashboardRole) kpiHiddenKeys.push("ferias");
 	const summaryHiddenKeys = ["visitasNoMes"];
 	if (isLimitedDashboardRole) summaryHiddenKeys.push("tecnicosEmFerias");
-	const mapaKpisOverride =
-		publicMapa.allData?.Janeiro?.summary?.kpis || null;
+	const mapaSummaryOverride = publicMapa.allData?.Janeiro?.summary || null;
+	const mapaKpisOverride = mapaSummaryOverride?.kpis || null;
+	const topCidadesOverride = [
+		...(mapaSummaryOverride?.rankingRegionais || []),
+		...(mapaSummaryOverride?.rankingAgentes || []).map((item) => ({
+			...item,
+			tipo: "agente",
+		})),
+	]
+		.sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
+		.slice(0, 10);
 
 	if (loading) return <Spinner fullScreen />;
 
@@ -731,14 +738,17 @@ const OperationalDashboardContent = ({ currentUser }) => {
 
 				<ModernKpiGrid
 					resumo={resumo}
-					ordens={ordens}
+					ordens={[]}
 					mapaKpisOverride={mapaKpisOverride}
 					hiddenKeys={kpiHiddenKeys}
 				/>
 
 				<div className="columns-1 gap-5 lg:columns-2 xl:columns-3">
 					<div className="mb-5 break-inside-avoid">
-						<TopCidadesCard ordens={ordens} />
+						<TopCidadesCard
+							ordens={[]}
+							rankingOverride={topCidadesOverride}
+						/>
 					</div>
 					{!isLimitedDashboardRole ? (
 						<div className="mb-5 break-inside-avoid">
@@ -785,7 +795,7 @@ const OperationalDashboardContent = ({ currentUser }) => {
 				<AgendamentosHojeCard />
 			)}
 
-			<MapaKPICards ordens={ordens} kpisOverride={mapaKpisOverride} />
+			<MapaKPICards ordens={[]} kpisOverride={mapaKpisOverride} />
 			<SummaryCards resumo={resumo} hiddenKeys={summaryHiddenKeys} />
 
 			<div className="columns-1 gap-6 lg:columns-2 xl:columns-3">
@@ -815,7 +825,10 @@ const OperationalDashboardContent = ({ currentUser }) => {
 					<TendenciaMensalWidget />
 				</div>
 				<div className="mb-6 break-inside-avoid">
-					<TopCidadesCard ordens={ordens} />
+					<TopCidadesCard
+						ordens={[]}
+						rankingOverride={topCidadesOverride}
+					/>
 				</div>
 				<div className="mb-6 break-inside-avoid">
 					<MetasCidadesCriticasWidget />

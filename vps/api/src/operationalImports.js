@@ -825,8 +825,23 @@ function buildMatchMessages(matchData = {}) {
 	};
 }
 
-async function upsertMany(collectionPath, docsMap) {
+function shouldReportImportProgress(processed, total, step = 1000) {
+	return processed === 1 || processed === total || processed % step === 0;
+}
+
+function calculateImportProgressPercent(processed, total, startPercent, endPercent) {
+	if (!total) return endPercent;
+	const progress = processed / total;
+	return Math.min(
+		endPercent,
+		Math.round(startPercent + (endPercent - startPercent) * progress),
+	);
+}
+
+async function upsertMany(collectionPath, docsMap, progress = null) {
 	const entries = Object.entries(docsMap || {});
+	const total = entries.length;
+	let processed = 0;
 	for (const [documentId, data] of entries) {
 		await documents.upsertDocument({
 			path: `${collectionPath}/${documentId}`,
@@ -835,6 +850,23 @@ async function upsertMany(collectionPath, docsMap) {
 			parentPath: null,
 			data,
 		});
+		processed += 1;
+		if (
+			progress?.update &&
+			shouldReportImportProgress(processed, total, progress.step)
+		) {
+			await progress.update({
+				stage: `${progress.stage} (${processed}/${total})`,
+				percent: calculateImportProgressPercent(
+					processed,
+					total,
+					progress.startPercent,
+					progress.endPercent,
+				),
+				processedDocuments: processed,
+				totalDocuments: total,
+			});
+		}
 	}
 }
 
@@ -1258,7 +1290,18 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		percent: 55,
 		totalDocuments: Object.keys(incoming).length,
 	});
-	await upsertMany("ordens_abertas", incoming);
+	await upsertMany("ordens_abertas", incoming, {
+		update: context.update,
+		stage: "Salvando ordens do mapa no PostgreSQL",
+		startPercent: 55,
+		endPercent: 72,
+		step: 1000,
+	});
+	await context.update?.({
+		stage: "Montando snapshot atualizado do mapa",
+		percent: 74,
+		totalDocuments: Object.keys(incoming).length,
+	});
 
 	const finalMap = {
 		...Object.fromEntries(
@@ -1313,7 +1356,15 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		parentPath: null,
 		data: { summary: buildMapaSnapshot(finalOrders), meta },
 	});
+	await context.update?.({
+		stage: "Atualizando snapshot operacional do mapa",
+		percent: 84,
+	});
 	await refreshOperationalSnapshot(meta.data);
+	await context.update?.({
+		stage: "Registrando importacao do mapa",
+		percent: 86,
+	});
 	const importRunId = await saveImportRun(
 		"mapa",
 		{ total: Object.keys(incoming).length, totalGeral, fontes },
@@ -1437,7 +1488,18 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 		percent: 50,
 		totalDocuments: Object.keys(incoming).length,
 	});
-	await upsertMany("match_os_abertas", incoming);
+	await upsertMany("match_os_abertas", incoming, {
+		update: context.update,
+		stage: "Salvando ordens do match no PostgreSQL",
+		startPercent: 50,
+		endPercent: 62,
+		step: 1000,
+	});
+	await context.update?.({
+		stage: "Montando base final do match",
+		percent: 64,
+		totalDocuments: Object.keys(incoming).length,
+	});
 
 	const finalMap = {
 		...Object.fromEntries(
@@ -1532,7 +1594,15 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 		parentPath: null,
 		data: { data: agentesData, meta },
 	});
+	await context.update?.({
+		stage: "Atualizando snapshot operacional do match",
+		percent: 88,
+	});
 	await refreshOperationalSnapshot(meta.data);
+	await context.update?.({
+		stage: "Registrando importacao do match",
+		percent: 90,
+	});
 	const importRunId = await saveImportRun(
 		"match",
 		{ total: Object.keys(incoming).length, totalGeral, fontes },
