@@ -76,7 +76,7 @@ describe("publicDashboard", () => {
 		);
 	});
 
-	it("reconstroi mapa e match por colecao quando snapshot normalizado esta antigo", async () => {
+	it("preserva snapshot oficial mesmo quando a colecao normalizada esta mais recente", async () => {
 		const dbQuery = vi.fn(async (_sql, params = []) => {
 			const key = params[0];
 			if (key === "mapa_meta/ultima_atualizacao") {
@@ -134,12 +134,12 @@ describe("publicDashboard", () => {
 
 		const payload = await publicDashboard.buildPublicDashboard();
 
-		expect(payload.mapa.ordens).toHaveLength(1);
-		expect(payload.matchOS.ordens).toHaveLength(1);
-		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
+		expect(payload.mapa.summary.totalOrdens).toBe(1);
+		expect(payload.matchOS.data.resumo.totalMatches).toBe(1);
+		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalledWith(
 			"ordens_abertas",
 		);
-		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
+		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalledWith(
 			"match_os_abertas",
 		);
 	});

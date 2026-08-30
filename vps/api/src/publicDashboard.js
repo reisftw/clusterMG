@@ -98,29 +98,6 @@ function hasArrayData(value) {
 	return Array.isArray(value) && value.length > 0;
 }
 
-function getSliceUpdatedAt(slice) {
-	const value =
-		slice?.meta?.generatedAt ||
-		slice?.data?.meta?.generatedAt ||
-		slice?.meta?.data ||
-		slice?.data?.meta?.data ||
-		slice?.generatedAt ||
-		slice?.data?.generatedAt ||
-		null;
-	if (!value) return null;
-	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? null : date;
-}
-
-async function isSliceOlderThanCollection(slice, collectionPath) {
-	const [sliceDate, latestUpdatedAt] = await Promise.all([
-		Promise.resolve(getSliceUpdatedAt(slice)),
-		ordensRepository.getCollectionLatestUpdatedAt(collectionPath),
-	]);
-	if (!sliceDate || !latestUpdatedAt) return false;
-	return sliceDate.getTime() < new Date(latestUpdatedAt).getTime();
-}
-
 function hasMapaData(slice) {
 	if (!slice) return false;
 	if (
@@ -293,12 +270,7 @@ async function buildCollectionFallback(
 }
 
 async function resolveMapaSlice(mapa) {
-	if (
-		hasMapaData(mapa) &&
-		!(await isSliceOlderThanCollection(mapa, "ordens_abertas"))
-	) {
-		return mapa;
-	}
+	if (hasMapaData(mapa)) return mapa;
 	return buildCollectionFallback(
 		"ordens_abertas",
 		"mapa_meta/ultima_atualizacao",
@@ -306,12 +278,7 @@ async function resolveMapaSlice(mapa) {
 }
 
 async function resolveMatchSlice(matchOS) {
-	if (
-		hasMatchData(matchOS) &&
-		!(await isSliceOlderThanCollection(matchOS, "match_os_abertas"))
-	) {
-		return matchOS;
-	}
+	if (hasMatchData(matchOS)) return matchOS;
 	return buildCollectionFallback(
 		"match_os_abertas",
 		"match_os_meta/ultima_atualizacao",
@@ -319,12 +286,7 @@ async function resolveMatchSlice(matchOS) {
 }
 
 async function resolveAgentesMatchSlice(agentesMatchOS, matchOS) {
-	if (
-		hasMatchData(agentesMatchOS) &&
-		!(await isSliceOlderThanCollection(agentesMatchOS, "match_os_abertas"))
-	) {
-		return agentesMatchOS;
-	}
+	if (hasMatchData(agentesMatchOS)) return agentesMatchOS;
 	if (hasMatchData(matchOS)) return matchOS;
 	return buildCollectionFallback(
 		"match_os_abertas",
