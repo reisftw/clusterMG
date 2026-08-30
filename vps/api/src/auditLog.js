@@ -332,6 +332,27 @@ function isFinanceiroReportClear(row = {}) {
 	);
 }
 
+function getChangedFieldSet(row = {}) {
+	const changedFields = Array.isArray(row.changedFields) ? row.changedFields : [];
+	return new Set(
+		changedFields.map((field) =>
+			normalizeText(field)
+				.replace(/[_\-\s]/g, "")
+				.toLowerCase(),
+		),
+	);
+}
+
+function hasChangedField(changed, ...fields) {
+	return fields.some((field) =>
+		changed.has(
+			normalizeText(field)
+				.replace(/[_\-\s]/g, "")
+				.toLowerCase(),
+		),
+	);
+}
+
 function getUserTargetLabel(row = {}) {
 	return (
 		getRecordLabel(row.afterData || {}) ||
@@ -340,22 +361,72 @@ function getUserTargetLabel(row = {}) {
 	);
 }
 
-function buildUserAccessChangeDescription(row = {}) {
-	if (normalizeText(row.entity) !== "app_users" || row.action !== "update") return "";
-	const changedFields = Array.isArray(row.changedFields) ? row.changedFields : [];
-	const changed = new Set(changedFields.map((field) => normalizeText(field)));
+function buildUserChangeDescriptions(row = {}) {
+	if (normalizeText(row.entity) !== "app_users" || row.action !== "update") return [];
+	const changed = getChangedFieldSet(row);
 	const target = getUserTargetLabel(row);
+	const descriptions = [];
 	const beforeRole = formatShortValue(row.beforeData?.role);
 	const afterRole = formatShortValue(row.afterData?.role);
 
-	if (changed.has("role") && beforeRole !== afterRole) {
-		return `alterou cargo de ${target} de ${beforeRole} para ${afterRole}`;
+	if (hasChangedField(changed, "role") && beforeRole !== afterRole) {
+		descriptions.push(`alterou cargo de ${target} de ${beforeRole} para ${afterRole}`);
+	} else if (
+		hasChangedField(changed, "role", "empresaId", "empresa_id")
+	) {
+		descriptions.push(`alterou cargo de ${target}`);
 	}
-	if (changed.has("role")) return `alterou cargo de ${target}`;
-	if (changed.has("empresaId") || changed.has("empresa_id")) {
-		return `alterou cargo de ${target}`;
+
+	if (hasChangedField(changed, "nome", "name", "displayName", "display_name")) {
+		descriptions.push(
+			`alterou nome do usuário de ${formatShortValue(row.beforeData?.nome || row.beforeData?.name || row.beforeData?.displayName)} para ${formatShortValue(row.afterData?.nome || row.afterData?.name || row.afterData?.displayName)}`,
+		);
 	}
-	return "";
+	if (hasChangedField(changed, "email")) {
+		descriptions.push(
+			`alterou e-mail de ${target} de ${formatShortValue(row.beforeData?.email)} para ${formatShortValue(row.afterData?.email)}`,
+		);
+	}
+	if (hasChangedField(changed, "regional")) {
+		descriptions.push(
+			`alterou regional de ${target} de ${formatShortValue(row.beforeData?.regional)} para ${formatShortValue(row.afterData?.regional)}`,
+		);
+	}
+	if (hasChangedField(changed, "disabled")) {
+		descriptions.push(
+			row.afterData?.disabled
+				? `bloqueou acesso de ${target}`
+				: `liberou acesso de ${target}`,
+		);
+	}
+	return descriptions;
+}
+
+function buildRoleChangeDescriptions(row = {}) {
+	if (normalizeText(row.entity) !== "app_roles" || row.action !== "update") return [];
+	const changed = getChangedFieldSet(row);
+	const target = getRecordLabel(row.afterData || {}) || getRecordLabel(row.beforeData || {}) || pickFirstText(row.recordId);
+	const descriptions = [];
+
+	if (hasChangedField(changed, "permissions")) {
+		descriptions.push(`alterou permissões do cargo ${target}`);
+	}
+	if (hasChangedField(changed, "active")) {
+		descriptions.push(
+			row.afterData?.active === false
+				? `desativou o cargo ${target}`
+				: `ativou o cargo ${target}`,
+		);
+	}
+	if (hasChangedField(changed, "name", "nome")) {
+		descriptions.push(
+			`renomeou cargo de ${formatShortValue(row.beforeData?.name || row.beforeData?.nome)} para ${formatShortValue(row.afterData?.name || row.afterData?.nome)}`,
+		);
+	}
+	if (hasChangedField(changed, "description")) {
+		descriptions.push(`alterou descrição do cargo ${target}`);
+	}
+	return descriptions;
 }
 
 function buildArrayChangeDescriptions(field, beforeValue, afterValue) {
@@ -395,8 +466,10 @@ function buildChangeDescriptions(row = {}) {
 	if (isFinanceiroReportClear(row)) {
 		return [`apagou dados do ${getFinanceiroReportLabel(row)}`];
 	}
-	const userAccessChange = buildUserAccessChangeDescription(row);
-	if (userAccessChange) return [userAccessChange];
+	const roleChanges = buildRoleChangeDescriptions(row);
+	if (roleChanges.length) return roleChanges.slice(0, 10);
+	const userChanges = buildUserChangeDescriptions(row);
+	if (userChanges.length) return userChanges.slice(0, 10);
 
 	const beforeData = normalizeComparableValue(row.beforeData || {});
 	const afterData = normalizeComparableValue(row.afterData || {});

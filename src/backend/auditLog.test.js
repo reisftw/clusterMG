@@ -123,6 +123,42 @@ describe("auditLog helpers", () => {
 		]);
 	});
 
+	it("resume troca de nome de usuario como acao legivel", () => {
+		const row = {
+			action: "update",
+			entity: "app_users",
+			userName: "Rodrigo",
+			beforeData: { nome: "Maria Souza", role: "atendimento" },
+			afterData: { nome: "Maria Silva", role: "atendimento" },
+			changedFields: ["nome"],
+		};
+
+		expect(buildAuditSummary(row)).toBe(
+			"Rodrigo alterou nome do usuário de Maria Souza para Maria Silva.",
+		);
+	});
+
+	it("resume alteracao de permissoes de cargo sem listar json tecnico", () => {
+		const row = {
+			action: "update",
+			entity: "app_roles",
+			userName: "Rodrigo",
+			beforeData: { name: "Financeiro", permissions: ["financeiro.read"] },
+			afterData: {
+				name: "Financeiro",
+				permissions: ["financeiro.read", "financeiro.manage"],
+			},
+			changedFields: ["permissions"],
+		};
+
+		expect(buildAuditSummary(row)).toBe(
+			"Rodrigo alterou permissões do cargo Financeiro.",
+		);
+		expect(buildChangeDescriptions(row)).toEqual([
+			"alterou permissões do cargo Financeiro",
+		]);
+	});
+
 	it("usa o primeiro IP do x-forwarded-for", () => {
 		const req = {
 			get: (header) =>
