@@ -200,6 +200,7 @@ jobs:
                set +a
              fi
              \$SUDO npm run migrate:sql
+             \$SUDO npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
@@ -295,6 +296,7 @@ jobs:
                set +a
              fi
              \$SUDO npm run migrate:sql
+             \$SUDO npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx

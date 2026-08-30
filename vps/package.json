@@ -16,7 +16,11 @@
 		"migrate:regionais-usuarios": "node scripts/migrate-regionais-usuarios.js",
 		"migrate:mensageria": "node scripts/migrate-mensageria.js",
 		"migrate:agendamentos-esteira": "node scripts/migrate-agendamentos-esteira.js",
-		"migrate:financeiro-reports": "node scripts/migrate-financeiro-reports.js"
+		"migrate:financeiro-reports": "node scripts/migrate-financeiro-reports.js",
+		"migrate:financeiro-budget-config": "node scripts/migrate-financeiro-budget-config.js",
+		"migrate:imoveis": "node scripts/migrate-imoveis.js",
+		"migrate:ordens": "node scripts/migrate-ordens.js",
+		"migrate:normalized:apply": "node scripts/run-normalized-migrations.js"
 	},
 	"dependencies": {
 		"archiver": "^8.0.0",
