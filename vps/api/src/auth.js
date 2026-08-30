@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const argon2 = require("argon2");
 const { OAuth2Client } = require("google-auth-library");
 const db = require("./db");
+const normalizedDualWrite = require("./normalizedDualWrite");
 const rolePermissions = require("./rolePermissions");
 
 const DEFAULT_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 365;
@@ -566,6 +567,13 @@ async function syncProfileDocument(user, extra = {}) {
      on conflict (path) do update set data = excluded.data`,
 		[`usuarios/${user.uid}`, user.uid, JSON.stringify(data)],
 	);
+	await normalizedDualWrite.upsert({
+		path: `usuarios/${user.uid}`,
+		collectionPath: "usuarios",
+		documentId: user.uid,
+		parentPath: null,
+		data,
+	});
 
 	return { id: user.uid, ...data };
 }
@@ -863,6 +871,11 @@ async function deleteLocalUser(uid) {
 	await db.query("delete from app_documents where path = $1", [
 		`usuarios/${uid}`,
 	]);
+	await normalizedDualWrite.remove({
+		path: `usuarios/${uid}`,
+		collectionPath: "usuarios",
+		documentId: uid,
+	});
 }
 
 async function resetLocalUserPassword(uid, password = makeTemporaryPassword()) {

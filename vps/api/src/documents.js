@@ -1,5 +1,6 @@
 const db = require("./db");
 const auditLog = require("./auditLog");
+const normalizedDualWrite = require("./normalizedDualWrite");
 const { broadcastRealtime } = require("./realtime");
 const { invalidatePublicDashboardCache } = require("./publicDashboard");
 
@@ -141,6 +142,7 @@ async function upsertDocument(record) {
 			JSON.stringify(record.data || {}),
 		],
 	);
+	await normalizedDualWrite.upsert(record);
 	broadcastDocumentChange("upsert", record);
 	auditLog.recordDocumentAuditLog({
 		action: beforeRecord ? "update" : "create",
@@ -155,6 +157,11 @@ async function deleteDocument(path) {
 	const parts = String(path || "")
 		.split("/")
 		.filter(Boolean);
+	await normalizedDualWrite.remove({
+		path,
+		collectionPath: parts.slice(0, -1).join("/"),
+		documentId: parts.at(-1),
+	});
 	invalidateDocumentsCache({
 		collectionPath: parts.slice(0, -1).join("/"),
 		documentPath: path,
