@@ -3,6 +3,8 @@ import { requestVpsApi } from "./vpsApiClient";
 
 const JOB_POLL_INTERVAL_MS = 1500;
 const JOB_TIMEOUT_MS = 30 * 60 * 1000;
+const JOB_POLL_NETWORK_RETRY_LIMIT = 20;
+const JOB_POLL_NETWORK_RETRY_DELAY_MS = 3000;
 
 function wait(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,11 +19,32 @@ function emitImportRealtime(source, result) {
 
 async function pollImportJob(jobId, { onProgress } = {}) {
 	const startedAt = Date.now();
+	let networkFailures = 0;
 
 	while (Date.now() - startedAt < JOB_TIMEOUT_MS) {
-		const job = await requestVpsApi(
-			`/imports/jobs/${encodeURIComponent(jobId)}`,
-		);
+		let job = null;
+		try {
+			job = await requestVpsApi(`/imports/jobs/${encodeURIComponent(jobId)}`);
+			networkFailures = 0;
+		} catch (error) {
+			const isTransientNetworkError =
+				!error?.status || /failed to fetch|network/i.test(error?.message || "");
+			if (
+				isTransientNetworkError &&
+				networkFailures < JOB_POLL_NETWORK_RETRY_LIMIT
+			) {
+				networkFailures += 1;
+				onProgress?.({
+					id: jobId,
+					status: "running",
+					stage: "Reconectando ao processamento...",
+					error: null,
+				});
+				await wait(JOB_POLL_NETWORK_RETRY_DELAY_MS);
+				continue;
+			}
+			throw error;
+		}
 		onProgress?.(job);
 
 		if (job.status === "completed") {

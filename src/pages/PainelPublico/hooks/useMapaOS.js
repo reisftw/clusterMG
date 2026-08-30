@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { listAllPublicVpsDocuments } from "../../../services/vpsApiClient";
+import { useMemo } from "react";
 import { buildPublicMapaSnapshot } from "../../Mapa/utils/mapaUtils";
 import { useDashboardData } from "./useDashboardData";
 
@@ -36,42 +35,16 @@ function hasMapaOrders(summary) {
 
 export function useMapaOS(enabled = true) {
 	const { data, loading, error } = useDashboardData();
-	const [fallbackSummary, setFallbackSummary] = useState(null);
 
 	const dashboardSummary = useMemo(() => {
 		if (!enabled || !data?.mapa) return null;
 		return resolveMapaSummary(data.mapa);
 	}, [data, enabled]);
 
-	useEffect(() => {
-		let active = true;
-		if (!enabled || loading || hasMapaOrders(dashboardSummary)) {
-			return () => {
-				active = false;
-			};
-		}
-		listAllPublicVpsDocuments("ordens_abertas", { pageSize: 1000, max: 50000 })
-			.then((ordens) => {
-				if (!active) return;
-				setFallbackSummary(
-					ordens.length ? buildPublicMapaSnapshot(ordens) : null,
-				);
-			})
-			.catch(() => {
-				if (!active) return;
-			});
-
-		return () => {
-			active = false;
-		};
-	}, [dashboardSummary, enabled, loading]);
-
 	const allData = useMemo(() => {
 		if (!enabled) return {};
 
-		const summary = hasMapaOrders(dashboardSummary)
-			? dashboardSummary
-			: fallbackSummary;
+		const summary = hasMapaOrders(dashboardSummary) ? dashboardSummary : null;
 		if (!summary) return {};
 
 		const replicated = {};
@@ -79,7 +52,7 @@ export function useMapaOS(enabled = true) {
 			replicated[month] = { summary };
 		});
 		return replicated;
-	}, [dashboardSummary, enabled, fallbackSummary]);
+	}, [dashboardSummary, enabled]);
 
 	const lastUpdate = useMemo(
 		() => data?.mapa?.meta || data?.mapa?.data?.meta || null,

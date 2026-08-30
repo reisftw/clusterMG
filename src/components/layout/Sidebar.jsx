@@ -518,12 +518,6 @@ const NAV_ITEMS = [
 		],
 	},
 	{
-		label: "VPN",
-		path: ROUTES.VPN_SETTINGS,
-		icon: ShieldCheck,
-		permission: ["configuracao.vpn.view", "configuracao.vpn.manage"],
-	},
-	{
 		label: "APIs",
 		path: ROUTES.API_STATUS,
 		icon: Server,
@@ -777,7 +771,6 @@ const MODERN_MENU_ORDER = [
 	ROUTES.MENSAGERIA_API,
 	ROUTES.MENSAGERIA,
 	ROUTES.CONFIGURACOES_GERAIS,
-	ROUTES.VPN_SETTINGS,
 	ROUTES.NOTIFICACOES,
 	ROUTES.REGIONAIS,
 	ROUTES.USUARIOS,
@@ -974,7 +967,6 @@ const MENU_GROUPS = [
 		icon: Settings,
 		paths: [
 			ROUTES.CONFIGURACOES_GERAIS,
-			ROUTES.VPN_SETTINGS,
 			ROUTES.NOTIFICACOES,
 			ROUTES.REGIONAIS,
 			ROUTES.USUARIOS,

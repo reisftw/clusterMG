@@ -180,9 +180,6 @@ const EmailSettings = lazy(
 const ConfiguracoesGerais = lazy(
 	() => import("../modules/configuracoes/components/ConfiguracoesGeraisPage"),
 );
-const ConfiguracoesVpn = lazy(
-	() => import("../modules/configuracoes/components/ConfiguracoesVpnPage"),
-);
 const AuditoriaLogs = lazy(
 	() => import("../modules/auditoria/components/AuditoriaLogsPage"),
 );
@@ -958,19 +955,6 @@ const AppRouter = () => (
 									]}
 								>
 									<EmailSettings />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.VPN_SETTINGS}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"configuracao.vpn.view",
-										"configuracao.vpn.manage",
-									]}
-								>
-									<ConfiguracoesVpn />
 								</ProtectedRoute>
 							}
 						/>

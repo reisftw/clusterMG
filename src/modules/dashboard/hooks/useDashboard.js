@@ -46,6 +46,8 @@ export const useDashboard = () => {
 		return subscribeRealtimeTopics(
 			["dashboard", "metas", "mapa", "match", "acompanhamento"],
 			(event) => {
+				const topic = String(event?.topic || event?.source || "");
+				if (topic && !["dashboard", "metas"].includes(topic)) return;
 				const token =
 					event?.generatedAt || event?.emittedAt || new Date().toISOString();
 				invalidateCache("metas");

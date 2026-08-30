@@ -103,7 +103,9 @@ export function useMatchPublico(options = {}) {
 		let active = true;
 		const hasEnoughData =
 			hasMatches(matchData) && (!detail || !isCompactMatchData(matchData));
-		if (loading || hasEnoughData) {
+		const shouldLoadDetailFallback =
+			detail && isCompactMatchData(matchData) && !hasEnoughData;
+		if (loading || hasEnoughData || !shouldLoadDetailFallback) {
 			return () => {
 				active = false;
 			};

@@ -5,7 +5,6 @@ import { useAuthContext } from "../../context/AuthContext";
 import { useLayoutMode } from "../../context/LayoutModeContext";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
 import { ROUTES } from "../../router/routes";
-import { verificarAcessoVpn } from "../../services/vpnAccessService";
 import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -68,7 +67,6 @@ const PAGE_TITLES = {
 	[ROUTES.SENIOR_SETTINGS]: "Senior / Sapiens",
 	[ROUTES.DATABASE_BACKUPS]: "Banco de Dados",
 	[ROUTES.EMAIL_SETTINGS]: "E-mail do Sistema",
-	[ROUTES.VPN_SETTINGS]: "VPN",
 	[ROUTES.AUDITORIA_LOGS]: "Logs de Auditoria",
 	[ROUTES.EMPRESAS_TECNICOS]: "Empresas",
 	[ROUTES.METAS]: "Metas",
@@ -86,12 +84,6 @@ const PageWrapper = ({ children }) => {
 	const title = PAGE_TITLES[pathname] ?? "Gestão Retiradas";
 	const { trocarSenhaObrigatorio } = useAuthContext();
 	const { isModernLayout } = useLayoutMode();
-	const bypassVpnCheck = pathname === ROUTES.VPN_SETTINGS;
-	const [vpnCheck, setVpnCheck] = useState({
-		route: "",
-		blocked: false,
-		ip: "",
-	});
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
 		try {
@@ -112,49 +104,7 @@ const PageWrapper = ({ children }) => {
 		}
 	}, [sidebarCollapsed]);
 
-	useEffect(() => {
-		let active = true;
-		if (bypassVpnCheck) return undefined;
-		verificarAcessoVpn(pathname)
-			.then((result) => {
-				if (!active) return;
-				setVpnCheck({
-					route: pathname,
-					blocked: Boolean(result?.protected && !result?.allowed),
-					ip: result?.ip || "",
-				});
-			})
-			.catch(() => {
-				if (active) setVpnCheck({ route: pathname, blocked: false, ip: "" });
-			});
-		return () => {
-			active = false;
-		};
-	}, [bypassVpnCheck, pathname]);
-
-	const vpnCheckPending = !bypassVpnCheck && vpnCheck.route !== pathname;
-	const content =
-		!bypassVpnCheck && vpnCheck.blocked ? (
-			<div className="mx-auto mt-10 max-w-2xl rounded-3xl border border-red-100 bg-white p-8 text-center shadow-sm">
-				<div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-					<X size={26} />
-				</div>
-				<h1 className="mt-5 text-2xl font-black text-slate-950">
-					Acesso permitido apenas pela VPN
-				</h1>
-				<p className="mt-2 text-sm font-semibold leading-relaxed text-slate-500">
-					Esta área está protegida por faixa de IP. Conecte-se à VPN corporativa
-					e atualize a página.
-				</p>
-				{vpnCheck.ip ? (
-					<p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 font-mono text-sm font-bold text-slate-700">
-						IP detectado: {vpnCheck.ip}
-					</p>
-				) : null}
-			</div>
-		) : (
-			children || <Outlet />
-		);
+	const content = children || <Outlet />;
 
 	return (
 		<div
@@ -221,13 +171,7 @@ const PageWrapper = ({ children }) => {
 							: "min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6"
 					}
 				>
-					{vpnCheckPending ? (
-						<div className="py-10 text-center text-sm font-black text-slate-500">
-							Verificando acesso VPN...
-						</div>
-					) : (
-						content
-					)}
+					{content}
 				</main>
 				<MelzFooter
 					className={isModernLayout ? "" : "border-gray-100 bg-white"}

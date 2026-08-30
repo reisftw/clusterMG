@@ -103,10 +103,6 @@ function isCsrfError(response, data) {
 	);
 }
 
-function isAuthExpired(response) {
-	return response.status === 401;
-}
-
 export async function requestVpsApi(path, options = {}) {
 	let { data, response } = await fetchVpsApi(path, options);
 
@@ -116,9 +112,6 @@ export async function requestVpsApi(path, options = {}) {
 	}
 
 	if (!response.ok) {
-		if (isAuthExpired(response)) {
-			clearVpsAuthSession();
-		}
 		const message = data?.error || `Erro HTTP ${response.status}.`;
 		const error = new Error(message);
 		error.status = response.status;
