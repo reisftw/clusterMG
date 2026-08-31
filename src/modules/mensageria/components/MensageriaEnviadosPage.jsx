@@ -269,6 +269,10 @@ const MensageriaEnviadosPage = () => {
 		setPage(0);
 	};
 
+	const openConversationModal = (item, responses = [], sentItems = []) => {
+		setConversationModal({ item, responses, sentItems });
+	};
+
 	return (
 		<div className="space-y-6">
 			<PageHeader
@@ -347,13 +351,20 @@ const MensageriaEnviadosPage = () => {
 								<p className="mt-2 text-sm font-semibold text-slate-900">
 									{callback.cliente || callback.os || "Cliente não localizado"}
 								</p>
-								<p className="mt-2 line-clamp-3 text-sm text-slate-700">
-									{readCallbackMessage(callback) ||
-										"Mensagem sem texto legível"}
-								</p>
-								<p className="mt-2 text-xs font-bold text-blue-700">
-									{callback.status || "-"}
-								</p>
+								<div className="mt-2 flex items-center justify-between gap-2">
+									<p className="text-xs font-bold text-blue-700">
+										{callback.status || "-"}
+									</p>
+									<button
+										type="button"
+										onClick={() =>
+											openConversationModal(callback, [callback], [])
+										}
+										className="inline-flex min-h-9 items-center justify-center rounded-lg border border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-100"
+									>
+										Ver resposta
+									</button>
+								</div>
 							</div>
 						))
 					) : (
@@ -496,38 +507,31 @@ const MensageriaEnviadosPage = () => {
 														<MessageCircleReply size={13} />
 														{formatDateTime(latestResponse.criado_em)}
 													</div>
-													<p className="mt-1 text-sm font-medium text-slate-800">
-														{readCallbackMessage(latestResponse) || "-"}
-													</p>
 													<p className="mt-1 text-xs text-slate-500">
 														{latestResponse.status || "-"}
 													</p>
-													{responses.length > 1 ? (
-														<button
-															type="button"
-															onClick={() =>
-																setConversationModal({
-																	item,
-																	responses,
-																	sentItems: relatedItems,
-																})
-															}
-															className="mt-2 min-h-11 text-xs font-bold text-blue-700 underline-offset-2 hover:underline"
-														>
-															Ver mais {responses.length - 1} mensagem(ns)
-														</button>
-													) : null}
+													<button
+														type="button"
+														onClick={() =>
+															openConversationModal(
+																item,
+																responses,
+																relatedItems,
+															)
+														}
+														className="mt-2 inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-200 bg-white px-3 text-xs font-bold text-blue-700 hover:bg-blue-100"
+													>
+														{responses.length > 1
+															? `Ver ${responses.length} respostas`
+															: "Ver resposta"}
+													</button>
 												</div>
 											</div>
 										) : (
 											<button
 												type="button"
 												onClick={() =>
-													setConversationModal({
-														item,
-														responses,
-														sentItems: relatedItems,
-													})
+													openConversationModal(item, responses, relatedItems)
 												}
 												className="min-h-11 text-xs font-semibold text-slate-400 underline-offset-2 hover:text-blue-700 hover:underline"
 											>
@@ -570,7 +574,7 @@ const MensageriaEnviadosPage = () => {
 													{response.status || "-"}
 												</span>
 											</div>
-											<p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-800">
+											<p className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-sm font-medium text-slate-800">
 												{readCallbackMessage(response) ||
 													"Mensagem sem texto legível"}
 											</p>
@@ -609,7 +613,7 @@ const MensageriaEnviadosPage = () => {
 												{sentItem.status || "enviado"}
 											</span>
 										</div>
-										<p className="mt-2 whitespace-pre-wrap text-sm font-medium text-slate-800">
+										<p className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words text-sm font-medium text-slate-800">
 											{sentItem.mensagem ||
 												"Mensagem enviada sem corpo registrado."}
 										</p>
