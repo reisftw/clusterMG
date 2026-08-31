@@ -153,7 +153,7 @@ async function resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw) {
 			: null,
 	};
 
-	return {
+	const rebuilt = {
 		matchOS: {
 			data: {
 				regionais: matchData.regionais,
@@ -182,6 +182,33 @@ async function resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw) {
 			meta,
 		},
 	};
+	await persistRebuiltMatchSnapshots(rebuilt).catch((error) => {
+		console.error(
+			"[publicDashboard] Falha ao persistir snapshot reconstruido do match:",
+			error,
+		);
+	});
+	return rebuilt;
+}
+
+async function persistRebuiltMatchSnapshots({ matchOS, agentesMatchOS } = {}) {
+	if (typeof ordensRepository.upsertDocument !== "function") return;
+	await Promise.all([
+		ordensRepository.upsertDocument({
+			path: "public_dashboard/match_os",
+			collectionPath: "public_dashboard",
+			documentId: "match_os",
+			parentPath: null,
+			data: matchOS,
+		}),
+		ordensRepository.upsertDocument({
+			path: "public_dashboard/agentes_match_os",
+			collectionPath: "public_dashboard",
+			documentId: "agentes_match_os",
+			parentPath: null,
+			data: agentesMatchOS,
+		}),
+	]);
 }
 
 function compactMatchCity(cidade = {}) {
