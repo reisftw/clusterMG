@@ -318,9 +318,10 @@ async function getDocument(documentPath) {
 		const result = await db.query(
 			`select * from ordens_import_runs
 			  where source_collection = $1
-			    and (legacy_path = $2 or legacy_document_id = $3)
+			    and legacy_path = $2
+			  order by updated_at desc, created_at desc
 			  limit 1`,
-			[collectionPath, documentPath, documentId],
+			[collectionPath, documentPath],
 		);
 		return result.rows[0] ? mapImportRun(result.rows[0]) : null;
 	}
