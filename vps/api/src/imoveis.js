@@ -1,8 +1,8 @@
 const express = require("express");
 const multer = require("multer");
 const crypto = require("node:crypto");
-const documents = require("./documents");
 const drive = require("./documentos/services/googleDriveService");
+const imoveisRepository = require("./imoveisRepository");
 
 const COLLECTIONS = Object.freeze({
 	imoveis: "imoveis_administrativos",
@@ -132,21 +132,6 @@ function userName(user = {}) {
 	return (
 		user?.profile?.nome || user?.nome || user?.email || user?.uid || "Sistema"
 	);
-}
-
-function mapDocument(row) {
-	if (!row) return null;
-	return {
-		id: row.documentId,
-		path: row.path,
-		updatedAt: row.updatedAt,
-		...(row.data || {}),
-	};
-}
-
-async function listCollection(collectionPath) {
-	const rows = await documents.listAllDocuments(collectionPath);
-	return rows.map(mapDocument);
 }
 
 function buildImovelPayload(body = {}, user = {}, existing = {}) {
@@ -360,36 +345,20 @@ function buildImovelPayload(body = {}, user = {}, existing = {}) {
 	};
 }
 
-async function upsertDocument(collectionPath, documentId, data) {
-	await documents.upsertDocument({
-		path: `${collectionPath}/${documentId}`,
-		collectionPath,
-		documentId,
-		parentPath: null,
-		data,
-	});
-	return { id: documentId, ...data };
-}
-
 async function getImovelOrThrow(id) {
 	const documentId = normalizeId(id);
-	const row = await documents.getDocument(
-		`${COLLECTIONS.imoveis}/${documentId}`,
-	);
-	if (!row) {
+	const imovel = await imoveisRepository.getImovel(documentId);
+	if (!imovel) {
 		const error = new Error("Imovel nao encontrado.");
 		error.statusCode = 404;
 		throw error;
 	}
-	return mapDocument(row);
+	return imovel;
 }
 
 async function getContratoOrThrow(imovelId, contratoId) {
 	const documentId = normalizeId(contratoId);
-	const row = await documents.getDocument(
-		`${COLLECTIONS.contratos}/${documentId}`,
-	);
-	const contrato = mapDocument(row);
+	const contrato = await imoveisRepository.getContrato(documentId);
 	if (!contrato || contrato.imovelId !== normalizeId(imovelId)) {
 		const error = new Error("Contrato nao encontrado.");
 		error.statusCode = 404;
@@ -399,12 +368,10 @@ async function getContratoOrThrow(imovelId, contratoId) {
 }
 
 async function getImoveisConfig() {
-	const row = await documents
-		.getDocument(`${COLLECTIONS.config}/geral`)
-		.catch(() => null);
+	const row = await imoveisRepository.getConfig().catch(() => null);
 	return {
 		...DEFAULT_CONFIG,
-		...(row?.data || {}),
+		...(row || {}),
 	};
 }
 
@@ -425,7 +392,7 @@ async function saveImoveisConfig(data = {}, user = {}) {
 		updatedAt: nowIso(),
 		updatedByName: userName(user),
 	};
-	await upsertDocument(COLLECTIONS.config, "geral", next);
+	await imoveisRepository.saveConfig(next);
 	return next;
 }
 
@@ -444,7 +411,7 @@ async function ensureImovelFolder(imovel) {
 		driveFolderName: folder.name,
 		updatedAt: nowIso(),
 	};
-	await upsertDocument(COLLECTIONS.imoveis, imovel.id, next);
+	await imoveisRepository.saveImovel(next);
 	return { root, folder, imovel: next };
 }
 
@@ -480,7 +447,10 @@ async function uploadImovelAttachment({
 		createdAt: nowIso(),
 		createdByName: userName(metadata.user),
 	};
-	return upsertDocument(collectionPath, documentId, data);
+	if (collectionPath === COLLECTIONS.contratos) {
+		return imoveisRepository.upsertContrato(imovel.id, { id: documentId, ...data });
+	}
+	return imoveisRepository.addAnexo(imovel.id, { id: documentId, ...data });
 }
 
 async function deleteDriveFileIfExists(fileId) {
@@ -492,26 +462,25 @@ async function deleteDriveFileIfExists(fileId) {
 
 async function deleteImovelCascade(id) {
 	const imovel = await getImovelOrThrow(id);
-	const relatedCollections = [
-		COLLECTIONS.contratos,
-		COLLECTIONS.reajustes,
-		COLLECTIONS.iptu,
-		COLLECTIONS.alugueis,
-		COLLECTIONS.anexos,
-		COLLECTIONS.aditivos,
+	const relatedLoaders = [
+		{ list: imoveisRepository.listContratos, remove: imoveisRepository.removeContrato },
+		{ list: imoveisRepository.listReajustes, remove: imoveisRepository.removeReajuste },
+		{ list: imoveisRepository.listIptu, remove: imoveisRepository.removeIptu },
+		{ list: imoveisRepository.listAlugueis, remove: imoveisRepository.removeAluguel },
+		{ list: imoveisRepository.listAnexos, remove: imoveisRepository.removeAnexo },
+		{ list: imoveisRepository.listAditivos, remove: imoveisRepository.removeAditivo },
 	];
 	let deletedRelated = 0;
-	for (const collectionPath of relatedCollections) {
-		const rows = await listCollection(collectionPath);
-		const related = rows.filter((item) => item.imovelId === imovel.id);
+	for (const relatedLoader of relatedLoaders) {
+		const related = await relatedLoader.list(imovel.id);
 		for (const item of related) {
 			await deleteDriveFileIfExists(item.driveFileId);
-			await documents.deleteDocument(`${collectionPath}/${item.id}`);
+			await relatedLoader.remove(item.id);
 			deletedRelated += 1;
 		}
 	}
 	await deleteDriveFileIfExists(imovel.driveFolderId);
-	await documents.deleteDocument(`${COLLECTIONS.imoveis}/${imovel.id}`);
+	await imoveisRepository.deleteImovel(imovel.id);
 	return { id: imovel.id, deletedRelated };
 }
 
@@ -664,17 +633,14 @@ function createImoveisRouter({
 							item.endereco ||
 							`${Date.now()}_${index}`,
 					);
-					const existingRow = await documents
-						.getDocument(`${COLLECTIONS.imoveis}/${id}`)
-						.catch(() => null);
-					const existing = mapDocument(existingRow) || {};
+					const existing = (await imoveisRepository.getImovel(id).catch(() => null)) || {};
 					const payload = buildImovelPayload(
 						{ ...item, seniorId: id },
 						req.user,
 						existing,
 					);
-					await upsertDocument(COLLECTIONS.imoveis, payload.seniorId, payload);
-					if (existingRow) atualizados += 1;
+					await imoveisRepository.saveImovel(payload);
+					if (existing.id) atualizados += 1;
 					else criados += 1;
 				} catch (error) {
 					erros.push({ linha: index + 2, erro: error.message });
@@ -713,15 +679,11 @@ function createImoveisRouter({
 
 	router.get("/", async (req, res, next) => {
 		try {
-			const imoveis = await listCollection(COLLECTIONS.imoveis);
-			const status = text(req.query.status);
-			const items =
-				status === "historico"
-					? imoveis.filter((item) => item.ativo === false)
-					: status === "ativos"
-						? imoveis.filter((item) => item.ativo !== false)
-						: imoveis;
-			res.json({ items });
+			res.json({
+				items: await imoveisRepository.listImoveis({
+					status: text(req.query.status),
+				}),
+			});
 		} catch (error) {
 			next(error);
 		}
@@ -730,11 +692,7 @@ function createImoveisRouter({
 	router.post("/", requireCsrfToken, async (req, res, next) => {
 		try {
 			const payload = buildImovelPayload(req.body || {}, req.user);
-			const imovel = await upsertDocument(
-				COLLECTIONS.imoveis,
-				payload.seniorId,
-				payload,
-			);
+			const imovel = await imoveisRepository.saveImovel(payload);
 			const folder = await ensureImovelFolder(imovel).catch(() => null);
 			res.json({
 				ok: true,
@@ -750,11 +708,10 @@ function createImoveisRouter({
 		try {
 			const current = await getImovelOrThrow(req.params.id);
 			const payload = buildImovelPayload(req.body || {}, req.user, current);
-			const imovel = await upsertDocument(
-				COLLECTIONS.imoveis,
-				current.id,
-				payload,
-			);
+			const imovel = await imoveisRepository.saveImovel({
+				...payload,
+				id: current.id,
+			});
 			res.json({ ok: true, imovel });
 		} catch (error) {
 			next(error);
@@ -813,7 +770,10 @@ function createImoveisRouter({
 					createdAt: nowIso(),
 					createdByName: userName(req.user),
 				};
-				await upsertDocument(COLLECTIONS.reajustes, documentId, data);
+				await imoveisRepository.addReajuste(imovel.id, {
+					id: documentId,
+					...data,
+				});
 				const updated = {
 					...imovel,
 					valorAluguel: data.valorNovo,
@@ -821,7 +781,7 @@ function createImoveisRouter({
 					updatedAt: nowIso(),
 					updatedByName: userName(req.user),
 				};
-				await upsertDocument(COLLECTIONS.imoveis, imovel.id, updated);
+				await imoveisRepository.saveImovel(updated);
 				res.json({
 					ok: true,
 					item: { id: documentId, ...data },
@@ -869,7 +829,10 @@ function createImoveisRouter({
 				};
 				res.json({
 					ok: true,
-					item: await upsertDocument(COLLECTIONS.iptu, documentId, data),
+					item: await imoveisRepository.upsertIptu(imovel.id, {
+						id: documentId,
+						...data,
+					}),
 				});
 			} catch (error) {
 				next(error);
@@ -894,7 +857,10 @@ function createImoveisRouter({
 			};
 			res.json({
 				ok: true,
-				item: await upsertDocument(COLLECTIONS.alugueis, documentId, data),
+				item: await imoveisRepository.registerAluguel(imovel.id, {
+					id: documentId,
+					...data,
+				}),
 			});
 		} catch (error) {
 			next(error);
@@ -903,23 +869,13 @@ function createImoveisRouter({
 
 	router.get("/:id/registros", async (req, res, next) => {
 		try {
-			const imovel = await getImovelOrThrow(req.params.id);
-			const [reajustes, iptus, alugueis, contratos] = await Promise.all([
-				listCollection(COLLECTIONS.reajustes),
-				listCollection(COLLECTIONS.iptu),
-				listCollection(COLLECTIONS.alugueis),
-				listCollection(COLLECTIONS.contratos),
-			]);
-			const byImovel = (item) => item.imovelId === imovel.id;
-			res.json({
-				imovel,
-				reajustes: reajustes.filter(byImovel),
-				iptus: iptus.filter(byImovel),
-				alugueis: alugueis.filter(byImovel),
-				contratos: contratos.filter(byImovel),
-				anexos: (await listCollection(COLLECTIONS.anexos)).filter(byImovel),
-				aditivos: (await listCollection(COLLECTIONS.aditivos)).filter(byImovel),
-			});
+			const historico = await imoveisRepository.getImovelHistorico(req.params.id);
+			if (!historico) {
+				const error = new Error("Imovel nao encontrado.");
+				error.statusCode = 404;
+				throw error;
+			}
+			res.json(historico);
 		} catch (error) {
 			next(error);
 		}
@@ -978,7 +934,10 @@ function createImoveisRouter({
 				};
 				res.json({
 					ok: true,
-					item: await upsertDocument(COLLECTIONS.aditivos, documentId, data),
+					item: await imoveisRepository.addAditivo(imovel.id, {
+						id: documentId,
+						...data,
+					}),
 				});
 			} catch (error) {
 				next(error);
@@ -1009,7 +968,10 @@ function createImoveisRouter({
 				}
 				res.json({
 					ok: true,
-					item: await upsertDocument(COLLECTIONS.contratos, documentId, data),
+					item: await imoveisRepository.upsertContrato(imovel.id, {
+						id: documentId,
+						...data,
+					}),
 				});
 			} catch (error) {
 				next(error);
@@ -1050,7 +1012,10 @@ function createImoveisRouter({
 				};
 				res.json({
 					ok: true,
-					item: await upsertDocument(COLLECTIONS.contratos, documentId, data),
+					item: await imoveisRepository.upsertContrato(imovel.id, {
+						id: documentId,
+						...data,
+					}),
 				});
 			} catch (error) {
 				next(error);
@@ -1087,11 +1052,7 @@ function createImoveisRouter({
 				};
 				res.json({
 					ok: true,
-					item: await upsertDocument(
-						COLLECTIONS.contratos,
-						contrato.id,
-						updated,
-					),
+					item: await imoveisRepository.upsertContrato(req.params.id, updated),
 				});
 			} catch (error) {
 				next(error);
@@ -1114,9 +1075,7 @@ function createImoveisRouter({
 						if (error?.code !== 404 && error?.status !== 404) throw error;
 					});
 				}
-				await documents.deleteDocument(
-					`${COLLECTIONS.contratos}/${contrato.id}`,
-				);
+				await imoveisRepository.removeContrato(contrato.id);
 				res.json({ ok: true });
 			} catch (error) {
 				next(error);
@@ -1126,21 +1085,7 @@ function createImoveisRouter({
 
 	router.get("/relatorios/dados", async (req, res, next) => {
 		try {
-			const [imoveis, reajustes, iptus, alugueis] = await Promise.all([
-				listCollection(COLLECTIONS.imoveis),
-				listCollection(COLLECTIONS.reajustes),
-				listCollection(COLLECTIONS.iptu),
-				listCollection(COLLECTIONS.alugueis),
-			]);
-			res.json(
-				buildReports({
-					imoveis,
-					reajustes,
-					iptus,
-					alugueis,
-					query: req.query || {},
-				}),
-			);
+			res.json(await imoveisRepository.getRelatorioFinanceiroImoveis(req.query || {}));
 		} catch (error) {
 			next(error);
 		}

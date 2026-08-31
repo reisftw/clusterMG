@@ -109,6 +109,42 @@ describe("imoveisRepository", () => {
 		expect(saved.data.nome).toBe("Site Norte");
 	});
 
+	it("salva imovel pela interface de dominio", async () => {
+		const dbQuery = vi.fn(async (sql) => {
+			if (String(sql).includes("select * from imoveis")) {
+				return {
+					rows: [
+						{
+							id: "senior-domain",
+							senior_id: "senior-domain",
+							legacy_path: "imoveis_administrativos/senior-domain",
+							legacy_document_id: "senior-domain",
+							nome: "Loja Dominio",
+							source_payload: {
+								seniorId: "senior-domain",
+								nome: "Loja Dominio",
+							},
+						},
+					],
+				};
+			}
+			return { rows: [] };
+		});
+		const repository = loadRepository(dbQuery);
+
+		const saved = await repository.saveImovel({
+			seniorId: "senior-domain",
+			nome: "Loja Dominio",
+		});
+
+		expect(dbQuery.mock.calls[0][0]).toContain("insert into imoveis");
+		expect(saved).toMatchObject({
+			id: "senior-domain",
+			seniorId: "senior-domain",
+			nome: "Loja Dominio",
+		});
+	});
+
 	it("grava eventos financeiros separados por collection original", async () => {
 		const dbQuery = vi
 			.fn()
@@ -143,5 +179,86 @@ describe("imoveisRepository", () => {
 		);
 		expect(saved.collectionPath).toBe("imoveis_administrativos_iptu");
 		expect(saved.data.valor).toBe(100.25);
+	});
+
+	it("registra reajuste pela interface de dominio", async () => {
+		const dbQuery = vi.fn(async (sql) => {
+			if (String(sql).includes("select * from imoveis_eventos_financeiros")) {
+				return {
+					rows: [
+						{
+							id: "reajuste-1",
+							source_collection: "imoveis_administrativos_reajustes",
+							legacy_path: "imoveis_administrativos_reajustes/reajuste-1",
+							legacy_document_id: "reajuste-1",
+							imovel_id: "senior-1",
+							tipo: "reajuste",
+							valor_anterior: "1000",
+							valor_novo: "1200",
+							source_payload: {
+								id: "reajuste-1",
+								imovelId: "senior-1",
+							},
+						},
+					],
+				};
+			}
+			return { rows: [] };
+		});
+		const repository = loadRepository(dbQuery);
+
+		const saved = await repository.addReajuste("senior-1", {
+			id: "reajuste-1",
+			valorAnterior: 1000,
+			valorNovo: 1200,
+		});
+
+		expect(dbQuery.mock.calls[0][0]).toContain(
+			"insert into imoveis_eventos_financeiros",
+		);
+		expect(saved).toMatchObject({
+			id: "reajuste-1",
+			imovelId: "senior-1",
+			valorNovo: 1200,
+		});
+	});
+
+	it("lista contratos pela interface de dominio", async () => {
+		const dbQuery = vi.fn(async () => ({
+			rows: [
+				{
+					id: "contrato-1",
+					source_collection: "imoveis_administrativos_contratos",
+					legacy_path: "imoveis_administrativos_contratos/contrato-1",
+					legacy_document_id: "contrato-1",
+					imovel_id: "senior-1",
+					tipo: "link",
+					nome: "Contrato Principal",
+					url: "https://example.com/contrato.pdf",
+					source_payload: { imovelId: "senior-1" },
+				},
+				{
+					id: "contrato-2",
+					source_collection: "imoveis_administrativos_contratos",
+					legacy_path: "imoveis_administrativos_contratos/contrato-2",
+					legacy_document_id: "contrato-2",
+					imovel_id: "senior-2",
+					tipo: "link",
+					nome: "Contrato Outro Imovel",
+					source_payload: { imovelId: "senior-2" },
+				},
+			],
+		}));
+		const repository = loadRepository(dbQuery);
+
+		const contratos = await repository.listContratos("senior-1");
+
+		expect(dbQuery.mock.calls[0][0]).toContain("from imoveis_anexos");
+		expect(contratos).toHaveLength(1);
+		expect(contratos[0]).toMatchObject({
+			id: "contrato-1",
+			imovelId: "senior-1",
+			nome: "Contrato Principal",
+		});
 	});
 });

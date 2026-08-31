@@ -98,6 +98,12 @@ function documentIdFromPath(documentPath) {
 	return String(documentPath || "").split("/").filter(Boolean).at(-1) || "";
 }
 
+function normalizeId(value) {
+	return text(value)
+		.replace(/[^\w.-]/g, "_")
+		.slice(0, 120);
+}
+
 function normalizeLimit(value, fallback = 50) {
 	const parsed = Number(value || fallback);
 	if (!Number.isFinite(parsed)) return fallback;
@@ -626,12 +632,339 @@ async function deleteDocument(documentPath) {
 	}
 }
 
+function mapDomainRecord(row) {
+	if (!row) return null;
+	return {
+		id: row.documentId,
+		path: row.path,
+		updatedAt: row.updatedAt,
+		...(row.data || {}),
+	};
+}
+
+async function listDomainCollection(collectionPath) {
+	const rows = await listAllDocuments(collectionPath);
+	return rows.map(mapDomainRecord);
+}
+
+async function getDomainRecord(collectionPath, id) {
+	const documentId = normalizeId(id);
+	if (!documentId) return null;
+	return mapDomainRecord(await getDocument(`${collectionPath}/${documentId}`));
+}
+
+async function saveDomainRecord(collectionPath, id, data = {}) {
+	const documentId = normalizeId(id || data.id || data.seniorId || data.idSenior);
+	await upsertDocument({
+		path: `${collectionPath}/${documentId}`,
+		collectionPath,
+		documentId,
+		parentPath: null,
+		data,
+	});
+	return { id: documentId, ...data };
+}
+
+async function listImoveis({ status = "" } = {}) {
+	const imoveis = await listDomainCollection(COLLECTIONS.imoveis);
+	if (status === "historico") return imoveis.filter((item) => item.ativo === false);
+	if (status === "ativos") return imoveis.filter((item) => item.ativo !== false);
+	return imoveis;
+}
+
+async function getImovel(id) {
+	return getDomainRecord(COLLECTIONS.imoveis, id);
+}
+
+async function saveImovel(data = {}) {
+	return saveDomainRecord(
+		COLLECTIONS.imoveis,
+		data.seniorId || data.idSenior || data.id,
+		data,
+	);
+}
+
+async function deleteImovel(id) {
+	return deleteDocument(`${COLLECTIONS.imoveis}/${normalizeId(id)}`);
+}
+
+async function getConfig() {
+	const record = await getDomainRecord(COLLECTIONS.config, "geral");
+	if (!record) return null;
+	const { id: _id, path: _path, updatedAt: _updatedAt, ...data } = record;
+	return data;
+}
+
+async function saveConfig(data = {}) {
+	return saveDomainRecord(COLLECTIONS.config, "geral", data);
+}
+
+async function listReajustes(imovelId) {
+	const rows = await listDomainCollection(COLLECTIONS.reajustes);
+	return rows.filter((item) => item.imovelId === normalizeId(imovelId));
+}
+
+async function addReajuste(imovelId, data = {}) {
+	const documentId = normalizeId(data.id) || `${normalizeId(imovelId)}_${Date.now()}`;
+	return saveDomainRecord(COLLECTIONS.reajustes, documentId, {
+		...data,
+		imovelId: normalizeId(imovelId),
+	});
+}
+
+async function removeReajuste(id) {
+	return deleteDocument(`${COLLECTIONS.reajustes}/${normalizeId(id)}`);
+}
+
+async function listIptu(imovelId) {
+	const rows = await listDomainCollection(COLLECTIONS.iptu);
+	return rows.filter((item) => item.imovelId === normalizeId(imovelId));
+}
+
+async function upsertIptu(imovelId, data = {}) {
+	const documentId = normalizeId(data.id) || `${normalizeId(imovelId)}_${Date.now()}`;
+	return saveDomainRecord(COLLECTIONS.iptu, documentId, {
+		...data,
+		imovelId: normalizeId(imovelId),
+	});
+}
+
+async function removeIptu(id) {
+	return deleteDocument(`${COLLECTIONS.iptu}/${normalizeId(id)}`);
+}
+
+async function listAlugueis(imovelId) {
+	const rows = await listDomainCollection(COLLECTIONS.alugueis);
+	return rows.filter((item) => item.imovelId === normalizeId(imovelId));
+}
+
+async function registerAluguel(imovelId, data = {}) {
+	const documentId = normalizeId(data.id) || `${normalizeId(imovelId)}_${Date.now()}`;
+	return saveDomainRecord(COLLECTIONS.alugueis, documentId, {
+		...data,
+		imovelId: normalizeId(imovelId),
+	});
+}
+
+async function removeAluguel(id) {
+	return deleteDocument(`${COLLECTIONS.alugueis}/${normalizeId(id)}`);
+}
+
+async function listContratos(imovelId) {
+	const rows = await listDomainCollection(COLLECTIONS.contratos);
+	return rows.filter((item) => item.imovelId === normalizeId(imovelId));
+}
+
+async function getContrato(id) {
+	return getDomainRecord(COLLECTIONS.contratos, id);
+}
+
+async function upsertContrato(imovelId, data = {}) {
+	const documentId = normalizeId(data.id) || `${normalizeId(imovelId)}_${Date.now()}`;
+	return saveDomainRecord(COLLECTIONS.contratos, documentId, {
+		...data,
+		imovelId: normalizeId(imovelId),
+	});
+}
+
+async function removeContrato(id) {
+	return deleteDocument(`${COLLECTIONS.contratos}/${normalizeId(id)}`);
+}
+
+async function listAnexos(imovelId) {
+	const rows = await listDomainCollection(COLLECTIONS.anexos);
+	return rows.filter((item) => item.imovelId === normalizeId(imovelId));
+}
+
+async function addAnexo(imovelId, data = {}) {
+	const documentId = normalizeId(data.id) || `${normalizeId(imovelId)}_${Date.now()}`;
+	return saveDomainRecord(COLLECTIONS.anexos, documentId, {
+		...data,
+		imovelId: normalizeId(imovelId),
+	});
+}
+
+async function removeAnexo(id) {
+	return deleteDocument(`${COLLECTIONS.anexos}/${normalizeId(id)}`);
+}
+
+async function listAditivos(imovelId) {
+	const rows = await listDomainCollection(COLLECTIONS.aditivos);
+	return rows.filter((item) => item.imovelId === normalizeId(imovelId));
+}
+
+async function addAditivo(imovelId, data = {}) {
+	const documentId = normalizeId(data.id) || `${normalizeId(imovelId)}_${Date.now()}`;
+	return saveDomainRecord(COLLECTIONS.aditivos, documentId, {
+		...data,
+		imovelId: normalizeId(imovelId),
+	});
+}
+
+async function removeAditivo(id) {
+	return deleteDocument(`${COLLECTIONS.aditivos}/${normalizeId(id)}`);
+}
+
+async function getImovelHistorico(imovelId) {
+	const imovel = await getImovel(imovelId);
+	if (!imovel) return null;
+	const [reajustes, iptus, alugueis, contratos, anexos, aditivos] =
+		await Promise.all([
+			listReajustes(imovel.id),
+			listIptu(imovel.id),
+			listAlugueis(imovel.id),
+			listContratos(imovel.id),
+			listAnexos(imovel.id),
+			listAditivos(imovel.id),
+		]);
+	return { imovel, reajustes, iptus, alugueis, contratos, anexos, aditivos };
+}
+
+function createPeriodFilter(query = {}) {
+	const mes = text(query.mes);
+	const ano = text(query.ano);
+	return (item = {}, dateKeys = ["data", "vencimento", "createdAt"]) => {
+		const source = dateKeys.map((key) => item[key]).find(Boolean);
+		if (!source) return !mes && !ano;
+		const date = new Date(source);
+		if (Number.isNaN(date.getTime())) return !mes && !ano;
+		if (ano && String(date.getFullYear()) !== String(ano)) return false;
+		if (
+			mes &&
+			String(date.getMonth() + 1).padStart(2, "0") !==
+				String(mes).padStart(2, "0")
+		)
+			return false;
+		return true;
+	};
+}
+
+function isDateWithinDays(value, days = 30) {
+	if (!value) return false;
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return false;
+	const today = new Date();
+	today.setHours(0, 0, 0, 0);
+	const limit = new Date(today);
+	limit.setDate(limit.getDate() + days);
+	return date >= today && date <= limit;
+}
+
+function buildMonthlyDueDate(day, baseDate = new Date()) {
+	const date = new Date(
+		baseDate.getFullYear(),
+		baseDate.getMonth(),
+		Math.min(Math.max(Number(day || 1), 1), 28),
+	);
+	return date.toISOString().slice(0, 10);
+}
+
+function buildFinancialReport({ imoveis, iptus, alugueis, reajustes, query }) {
+	const inPeriod = createPeriodFilter(query);
+	const periodIptus = iptus.filter((item) =>
+		inPeriod(item, ["vencimento", "dataPagamento", "createdAt"]),
+	);
+	const periodAlugueis = alugueis.filter((item) =>
+		inPeriod(item, ["vencimento", "dataPagamento", "createdAt"]),
+	);
+	const imoveisAlugadosAtivos = imoveis.filter(
+		(item) => item.ativo !== false && item.tipoContrato === "alugado",
+	);
+	const gastosIptu = periodIptus.reduce(
+		(sum, item) => sum + numberValue(item.valor),
+		0,
+	);
+	const gastosAluguel = periodAlugueis.length
+		? periodAlugueis.reduce((sum, item) => sum + numberValue(item.valor), 0)
+		: imoveisAlugadosAtivos.reduce(
+				(sum, item) => sum + numberValue(item.valorAluguel),
+				0,
+			);
+	const contratosProximos = imoveis.filter(
+		(item) => item.ativo !== false && isDateWithinDays(item.contratoFim, 60),
+	);
+	const contratosFinalizados = imoveis.filter(
+		(item) =>
+			inPeriod({ data: item.contratoFim }, ["data"]) || item.ativo === false,
+	);
+	const iptuProximo = iptus.filter(
+		(item) => !item.pago && isDateWithinDays(item.vencimento, 30),
+	);
+	const aluguelProximo = imoveis
+		.filter((item) => item.ativo !== false && item.tipoContrato === "alugado")
+		.map((item) => ({
+			...item,
+			vencimentoAluguel: buildMonthlyDueDate(item.vencimentoAluguelDia),
+		}))
+		.filter((item) => isDateWithinDays(item.vencimentoAluguel, 30));
+
+	return {
+		resumo: {
+			totalImoveis: imoveis.length,
+			ativos: imoveis.filter((item) => item.ativo !== false).length,
+			alugados: imoveis.filter((item) => item.tipoContrato === "alugado")
+				.length,
+			proprios: imoveis.filter((item) => item.tipoContrato !== "alugado")
+				.length,
+			gastosIptu,
+			gastosAluguel,
+		},
+		gastosIptu: periodIptus,
+		gastosAluguel: periodAlugueis,
+		contratosProximos,
+		contratosFinalizados,
+		iptuProximo,
+		aluguelProximo,
+		reajustes: reajustes.filter((item) =>
+			inPeriod(item, ["data", "createdAt"]),
+		),
+	};
+}
+
+async function getRelatorioFinanceiroImoveis(query = {}) {
+	const [imoveis, reajustes, iptus, alugueis] = await Promise.all([
+		listImoveis(),
+		listDomainCollection(COLLECTIONS.reajustes),
+		listDomainCollection(COLLECTIONS.iptu),
+		listDomainCollection(COLLECTIONS.alugueis),
+	]);
+	return buildFinancialReport({ imoveis, reajustes, iptus, alugueis, query });
+}
+
 module.exports = {
 	COLLECTIONS,
+	addAditivo,
+	addAnexo,
+	addReajuste,
+	buildFinancialReport,
 	deleteDocument,
+	deleteImovel,
+	getConfig,
+	getContrato,
 	getDocument,
+	getImovel,
+	getImovelHistorico,
+	getRelatorioFinanceiroImoveis,
 	isImoveisCollection,
+	listAditivos,
+	listAlugueis,
 	listAllDocuments,
+	listAnexos,
+	listContratos,
 	listDocuments,
+	listImoveis,
+	listIptu,
+	listReajustes,
+	registerAluguel,
+	removeAditivo,
+	removeAluguel,
+	removeAnexo,
+	removeContrato,
+	removeIptu,
+	removeReajuste,
+	saveConfig,
+	saveImovel,
+	upsertContrato,
 	upsertDocument,
+	upsertIptu,
 };

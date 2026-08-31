@@ -594,6 +594,26 @@ describe("vps api app characterization - roles", () => {
 	});
 });
 
+describe("vps api app characterization - domain route only collections", () => {
+	it("POST /api/admin/documents bloqueia colecoes de imoveis migradas", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.post("/api/admin/documents")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				collectionPath: "imoveis_administrativos",
+				documentId: "imovel-1",
+				data: { nome: "Loja Centro" },
+			});
+
+		expect(response.status).toBe(410);
+		expect(response.body.error).toContain("/api/imoveis");
+		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
+	});
+});
+
 describe("vps api app characterization - users audit", () => {
 	it("PUT /api/admin/users/:uid registra auditoria quando usuario e alterado", async () => {
 		const app = loadApp({

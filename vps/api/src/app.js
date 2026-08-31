@@ -300,6 +300,9 @@ const IMOVEIS_ADMINISTRATIVOS_COLLECTIONS = new Set([
 	"imoveis_administrativos_iptu",
 	"imoveis_administrativos_alugueis",
 	"imoveis_administrativos_contratos",
+	"imoveis_administrativos_anexos",
+	"imoveis_administrativos_aditivos",
+	"imoveis_administrativos_config",
 ]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
@@ -1936,6 +1939,15 @@ function canWriteDocumentPath(user, documentPath) {
 	return canWriteCollection(user, collectionPath);
 }
 
+function rejectDomainRouteOnlyCollection(res, collectionPath) {
+	const collection = String(collectionPath || "").trim();
+	if (!IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return false;
+	res.status(410).json({
+		error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/imoveis.`,
+	});
+	return true;
+}
+
 function pickFirstText(data = {}, keys = []) {
 	for (const key of keys) {
 		const value = data?.[key];
@@ -3367,6 +3379,7 @@ function createApp() {
 				res.status(400).json({ error: "Parametro collection obrigatorio." });
 				return;
 			}
+			if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 			if (!canReadCollection(req.user, collectionPath)) {
 				res.status(403).json({ error: "Permissao insuficiente." });
 				return;
@@ -3409,6 +3422,7 @@ function createApp() {
 		try {
 			const documentPath = req.params[0];
 			const documentCollectionPath = documentPath.split("/").slice(0, -1).join("/");
+			if (rejectDomainRouteOnlyCollection(res, documentCollectionPath)) return;
 			const item =
 				documentCollectionPath === "regionais"
 					? await regionaisRepository.getRegionalDocument(documentPath)
@@ -4375,6 +4389,7 @@ function createApp() {
 					res.status(400).json({ error: "collectionPath obrigatorio." });
 					return;
 				}
+				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				if (!canWriteCollection(req.user, collectionPath)) {
 					res.status(403).json({ error: "Permissao insuficiente." });
 					return;
@@ -4452,6 +4467,7 @@ function createApp() {
 				}
 
 				const collectionPath = parts.slice(0, -1).join("/");
+				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				const existing =
 					collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
@@ -4558,6 +4574,7 @@ function createApp() {
 				}
 				const parts = documentPath.split("/").filter(Boolean);
 				const collectionPath = parts.slice(0, -1).join("/");
+				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				const item =
 					collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
@@ -4916,9 +4933,11 @@ function createApp() {
 				return;
 			}
 
+			const collectionPath = parts.slice(0, -1).join("/");
+			if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 			await documents.upsertDocument({
 				path: documentPath,
-				collectionPath: parts.slice(0, -1).join("/"),
+				collectionPath,
 				documentId: parts.at(-1),
 				parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
 				data: req.body || {},
