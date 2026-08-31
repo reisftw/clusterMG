@@ -1,5 +1,6 @@
 const financeiroBudgetConfigRepository = require("./financeiroBudgetConfigRepository");
 const financeiroReportsRepository = require("./financeiroReportsRepository");
+const financeiroStatement = require("./financeiroStatement");
 const { google } = require("googleapis");
 const crypto = require("node:crypto");
 const fs = require("fs");
@@ -4397,23 +4398,19 @@ async function clearBudgetData(user = {}) {
 }
 
 async function getDreStatement(filters = {}) {
-	return financeiroReportsRepository.listDreLancamentos({
-		ano: filters.ano || filters.year,
-		mes: filters.mes || filters.month,
-		isFake: toBool(filters.isFake || filters.fake),
-	});
+	return financeiroStatement.getDreStatement(filters);
 }
 
 async function saveDreStatement(payload = {}, user = {}) {
-	return financeiroReportsRepository.replaceDreLancamentos(payload, user);
+	return financeiroStatement.saveDreStatement(payload, user);
 }
 
 async function createFakeDreData(user = {}) {
-	return financeiroReportsRepository.createFakeDreLancamentos(user);
+	return financeiroStatement.createFakeDreData(user);
 }
 
 async function deleteFakeDreData(user = {}) {
-	return financeiroReportsRepository.deleteFakeDreLancamentos(user);
+	return financeiroStatement.deleteFakeDreData(user);
 }
 
 module.exports = {
