@@ -17,15 +17,14 @@
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
-import { COLLECTIONS } from "../../../constants/dataCollections";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
-import { listAllVpsDocuments } from "../../../services/vpsApiClient";
 import { useColaboradores } from "../../colaboradores/hooks/useColaboradores";
 import { getConfig } from "../../ferramentas/services/ferramentasService";
 import { buscarRegionais } from "../../regionais/services/regionaisService";
 import { AGENDAMENTO_STATUS, STATUS_STYLES } from "../constants";
 import { useAgendamentos } from "../hooks/useAgendamentos";
+import { buscarLogsAgendamentos } from "../services/agendamentosService";
 import {
 	registrarNaoRecolhido,
 	registrarRecolhido,
@@ -482,10 +481,7 @@ const AgendamentosPage = () => {
 
 	const carregarLogsMapa = async () => {
 		try {
-			const logs = await listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS_LOGS, {
-				pageSize: 500,
-				max: 3000,
-			});
+			const logs = await buscarLogsAgendamentos({ max: 3000 });
 			setLogsMapa(filterLatestMapCheckLogs(logs));
 		} catch {
 			setLogsMapa([]);

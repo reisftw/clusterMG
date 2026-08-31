@@ -582,13 +582,53 @@ async function listImportLogs(limit = 20) {
 	}));
 }
 
+async function saveSerasaFinancialReport(data = {}) {
+	return saveSerasaReport(data);
+}
+
+async function getSerasaFinancialReport() {
+	return getSerasaReport();
+}
+
+async function clearSerasaFinancialReport(data = {}) {
+	return clearSerasaReport(data);
+}
+
+async function saveTariffsFinancialReport(data = {}) {
+	return saveTariffsReport(data);
+}
+
+async function getTariffsFinancialReport() {
+	return getTariffsReport();
+}
+
+async function clearTariffsFinancialReport(data = {}) {
+	return clearTariffsReport(data);
+}
+
+async function recordFinanceiroImportLog(data = {}) {
+	return appendImportLog(data);
+}
+
+async function listFinanceiroImportLogs(limit = 20) {
+	return listImportLogs(limit);
+}
+
 module.exports = {
 	appendImportLog,
 	clearSerasaReport,
+	clearSerasaFinancialReport,
 	clearTariffsReport,
+	clearTariffsFinancialReport,
 	getSerasaReport,
+	getSerasaFinancialReport,
 	getTariffsReport,
+	getTariffsFinancialReport,
+	listFinanceiroImportLogs,
 	listImportLogs,
+	recordFinanceiroImportLog,
 	saveSerasaReport,
+	saveSerasaFinancialReport,
 	saveTariffsReport,
+	saveTariffsFinancialReport,
 };

@@ -1,15 +1,4 @@
-﻿import { COLLECTIONS } from "../../../constants/dataCollections";
-import {
-	createVpsDocument,
-	getVpsDocument,
-	listAllVpsDocuments,
-	listVpsDocuments,
-	requestVpsApi,
-	setVpsDocument,
-	updateVpsDocument,
-} from "../../../services/vpsApiClient";
-
-const CONFIG_DOC_ID = "global";
+import { requestVpsApi } from "../../../services/vpsApiClient";
 const HISTORY_LIMIT = 120;
 const QUEUE_LIMIT = 1000;
 const CALLBACK_LIST_LIMIT = 250;
@@ -210,27 +199,27 @@ export function normalizeTemplateMensageria(template = {}) {
 }
 
 export async function buscarConfigMensageria() {
-	const config = await getVpsDocument(
-		`${COLLECTIONS.MENSAGERIA_CONFIG}/${CONFIG_DOC_ID}`,
-	).catch(() => null);
+	const config = await requestVpsApi("/mensageria/config").catch(() => null);
 	return config
 		? normalizeMensageriaConfig(config)
 		: normalizeMensageriaConfig();
 }
 
 export async function salvarConfigMensageria(config) {
-	await updateVpsDocument(`${COLLECTIONS.MENSAGERIA_CONFIG}/${CONFIG_DOC_ID}`, {
-		...normalizeMensageriaConfig(config),
-		atualizadoEm: new Date().toISOString(),
+	await requestVpsApi("/mensageria/config", {
+		method: "PUT",
+		body: JSON.stringify({
+			...normalizeMensageriaConfig(config),
+			atualizadoEm: new Date().toISOString(),
+		}),
 	});
 }
 
 export async function buscarTemplatesMensageria() {
-	const templates = (
-		await listVpsDocuments(COLLECTIONS.MENSAGERIA_TEMPLATES, {
-			limit: 500,
-		})
-	).sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || "")));
+	const response = await requestVpsApi("/mensageria/templates?limit=500");
+	const templates = (response.items || []).sort((a, b) =>
+		String(a.nome || "").localeCompare(String(b.nome || "")),
+	);
 
 	if (!templates.length)
 		return DEFAULT_TEMPLATES.map(normalizeTemplateMensageria);
@@ -240,20 +229,20 @@ export async function buscarTemplatesMensageria() {
 export async function salvarTemplateMensageria(template) {
 	const id = template.id || crypto.randomUUID();
 	const normalizedTemplate = normalizeTemplateMensageria(template);
-	await setVpsDocument(`${COLLECTIONS.MENSAGERIA_TEMPLATES}/${id}`, {
-		...normalizedTemplate,
-		id,
-		atualizadoEm: new Date().toISOString(),
+	await requestVpsApi(`/mensageria/templates/${encodeURIComponent(id)}`, {
+		method: "PUT",
+		body: JSON.stringify({
+			...normalizedTemplate,
+			id,
+			atualizadoEm: new Date().toISOString(),
+		}),
 	});
 	return id;
 }
 
 export async function buscarFilaMensageria() {
-	return (
-		await listVpsDocuments(COLLECTIONS.MENSAGERIA_FILA, {
-			limit: QUEUE_LIMIT,
-		})
-	).sort((a, b) => {
+	const response = await requestVpsApi(`/mensageria/fila?limit=${QUEUE_LIMIT}`);
+	return (response.items || []).sort((a, b) => {
 		const statusWeight = {
 			aprovado: 0,
 			novo: 1,
@@ -278,34 +267,40 @@ export async function buscarFilaMensageria() {
 }
 
 export async function criarItemFilaMensageria(item) {
-	return createVpsDocument(COLLECTIONS.MENSAGERIA_FILA, {
-		...item,
-		telefone_digits: String(item.telefone || "").replace(/\D/g, ""),
-		requiredCentralButton: false,
-		centralButtonText: CENTRAL_WHATSAPP_BUTTON_TEXT,
-		centralButtonPhone: CENTRAL_WHATSAPP_PHONE,
-		centralButtonMessage:
-			item.centralButtonMessage || DEFAULT_MENSAGERIA_CONFIG.buttonMessage,
-		status: item.status || "novo",
-		tentativas: Number(item.tentativas || 0),
-		criadoEm: new Date().toISOString(),
-		atualizadoEm: new Date().toISOString(),
+	const response = await requestVpsApi("/mensageria/fila", {
+		method: "POST",
+		body: JSON.stringify({
+			...item,
+			telefone_digits: String(item.telefone || "").replace(/\D/g, ""),
+			requiredCentralButton: false,
+			centralButtonText: CENTRAL_WHATSAPP_BUTTON_TEXT,
+			centralButtonPhone: CENTRAL_WHATSAPP_PHONE,
+			centralButtonMessage:
+				item.centralButtonMessage || DEFAULT_MENSAGERIA_CONFIG.buttonMessage,
+			status: item.status || "novo",
+			tentativas: Number(item.tentativas || 0),
+			criadoEm: new Date().toISOString(),
+			atualizadoEm: new Date().toISOString(),
+		}),
 	});
+	return response.item || response;
 }
 
 export async function atualizarItemFilaMensageria(id, updates) {
-	await updateVpsDocument(`${COLLECTIONS.MENSAGERIA_FILA}/${id}`, {
-		...updates,
-		atualizadoEm: new Date().toISOString(),
+	await requestVpsApi(`/mensageria/fila/${encodeURIComponent(id)}`, {
+		method: "PATCH",
+		body: JSON.stringify({
+			...updates,
+			atualizadoEm: new Date().toISOString(),
+		}),
 	});
 }
 
 export async function buscarHistoricoMensageria() {
-	return (
-		await listVpsDocuments(COLLECTIONS.MENSAGERIA_HISTORICO, {
-			limit: HISTORY_LIMIT,
-		})
-	).sort((a, b) =>
+	const response = await requestVpsApi(
+		`/mensageria/historico?limit=${HISTORY_LIMIT}`,
+	);
+	return (response.items || []).sort((a, b) =>
 		String(b.criadoEm || "").localeCompare(String(a.criadoEm || "")),
 	);
 }
@@ -314,79 +309,38 @@ export async function buscarHistoricoMensageriaPaginado({
 	limit = 20,
 	offset = 0,
 } = {}) {
-	return (
-		await listVpsDocuments(COLLECTIONS.MENSAGERIA_HISTORICO, {
-			limit,
-			offset,
-		})
-	).sort((a, b) =>
+	const response = await requestVpsApi(
+		`/mensageria/historico?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`,
+	);
+	return (response.items || []).sort((a, b) =>
 		String(b.criadoEm || "").localeCompare(String(a.criadoEm || "")),
 	);
 }
 
 export async function registrarHistoricoMensageria(item) {
-	return createVpsDocument(COLLECTIONS.MENSAGERIA_HISTORICO, {
-		...item,
-		criadoEm: new Date().toISOString(),
+	const response = await requestVpsApi("/mensageria/historico", {
+		method: "POST",
+		body: JSON.stringify({
+			...item,
+			criadoEm: new Date().toISOString(),
+		}),
 	});
+	return response.item || response;
 }
 
 export async function buscarCallbacksMensageria() {
-	const callbacks = await listAllVpsDocuments(
-		COLLECTIONS.MENSAGERIA_CALLBACKS,
-		{
-			pageSize: 1000,
-			max: 5000,
-		},
+	const response = await requestVpsApi(
+		`/mensageria/callbacks?limit=${CALLBACK_LIST_LIMIT}`,
 	);
-	return sortCallbacksByDateDesc(callbacks).slice(0, CALLBACK_LIST_LIMIT);
+	return sortCallbacksByDateDesc(response.items || []).slice(0, CALLBACK_LIST_LIMIT);
 }
 
 export async function buscarMensageriaEnviados() {
-	const [historicoResumo, callbacks] = await Promise.all([
-		listAllVpsDocuments(COLLECTIONS.MENSAGERIA_HISTORICO, {
-			pageSize: 1000,
-			max: 10000,
-		}),
-		listAllVpsDocuments(COLLECTIONS.MENSAGERIA_CALLBACKS, {
-			pageSize: 1000,
-			max: 10000,
-		}),
-	]);
-	const historicoOrdenado = historicoResumo.sort((a, b) =>
-		String(b.criadoEm || "").localeCompare(String(a.criadoEm || "")),
-	);
-	const pagina = historicoOrdenado;
-	const callbacksOrdenados = sortCallbacksByDateDesc(callbacks);
-	const enviados = historicoResumo.filter(
-		(item) => String(item.status || "") === "enviado",
-	);
-	return {
-		items: pagina,
-		hasNext: false,
-		resumo: {
-			enviados: enviados.length,
-			falhas: historicoResumo.filter(
-				(item) => String(item.status || "") === "falhou",
-			).length,
-			respostas: callbacks.length,
-		},
-		callbacks: callbacksOrdenados,
-	};
+	return requestVpsApi("/mensageria/enviados");
 }
 
 export async function buscarDadosRelatorioMensageria() {
-	const [historico, callbacks, fila, agendamentos] = await Promise.all([
-		listAllVpsDocuments(COLLECTIONS.MENSAGERIA_HISTORICO, { pageSize: 1000 }),
-		listAllVpsDocuments(COLLECTIONS.MENSAGERIA_CALLBACKS, { pageSize: 1000 }),
-		listAllVpsDocuments(COLLECTIONS.MENSAGERIA_FILA, { pageSize: 1000 }),
-		listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS, {
-			pageSize: 1000,
-			max: 2000,
-		}),
-	]);
-
-	return { historico, callbacks, fila, agendamentos };
+	return requestVpsApi("/mensageria/relatorios/dados");
 }
 
 export async function registrarCallbackMensageria(payload) {
@@ -439,3 +393,4 @@ export async function pausarEvolutionMensageria() {
 export async function retomarEvolutionMensageria() {
 	return requestVpsApi("/mensageria/evolution/resume", { method: "POST" });
 }
+

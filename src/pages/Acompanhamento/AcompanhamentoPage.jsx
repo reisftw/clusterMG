@@ -21,6 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COLLECTIONS } from "../../constants/dataCollections";
 import { useAgenda } from "../../modules/agenda/hooks/useAgenda";
+import { buscarAgendamentosDominio } from "../../modules/agendamentos/services/agendamentosService";
 import { useDiarioEntries } from "../../modules/diario/hooks/useDiarioEntries";
 import {
 	DIARIO_HORARIOS,
@@ -29,10 +30,7 @@ import {
 import { invalidateCache } from "../../services/dataCache";
 import { invalidateInternalStaticDataCache } from "../../services/internalStaticDataService";
 import { subscribeRealtimeTopics } from "../../services/realtimeEvents";
-import {
-	getVpsDocument,
-	listAllVpsDocuments,
-} from "../../services/vpsApiClient";
+import { getVpsDocument } from "../../services/vpsApiClient";
 import { obterMesAtual } from "../../utils/mes";
 import {
 	buildMetaDiariaSchedule,
@@ -405,9 +403,7 @@ function useRealtimeAcompanhamento(now, onLiveUpdate) {
 	useEffect(() => {
 		let active = true;
 		const load = async () => {
-			const items = await listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS, {
-				pageSize: 1000,
-			});
+			const items = await buscarAgendamentosDominio();
 			if (!active) return;
 			setMonthlyAppointments(
 				items
@@ -440,9 +436,7 @@ function useRealtimeAcompanhamento(now, onLiveUpdate) {
 	useEffect(() => {
 		let active = true;
 		const load = async () => {
-			const items = await listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS, {
-				pageSize: 1000,
-			});
+			const items = await buscarAgendamentosDominio();
 			if (!active) return;
 			setUpcomingAppointments(
 				items
@@ -2680,9 +2674,7 @@ export default function AcompanhamentoPage() {
 		let active = true;
 
 		const loadNewAppointments = async () => {
-			const items = await listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS, {
-				pageSize: 1000,
-			});
+			const items = await buscarAgendamentosDominio();
 			if (!active) return;
 
 			const currentIds = new Set(

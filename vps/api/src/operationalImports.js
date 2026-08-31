@@ -1,5 +1,6 @@
 const documents = require("./documents");
 const db = require("./db");
+const mensageriaRepository = require("./mensageriaRepository");
 const regionaisRepository = require("./regionaisRepository");
 const { broadcastRealtime } = require("./realtime");
 const {
@@ -46,7 +47,6 @@ const MONTHORDER = [
 const DEFAULT_MATCH_IGNORED_TYPES = [];
 const IMPORT_JOB_COLLECTION = "operational_import_jobs";
 const importJobPromises = new Map();
-const MENSAGERIA_CONFIG_PATH = "mensageria_config/global";
 
 function normalizeText(value) {
 	return String(value || "")
@@ -1104,21 +1104,15 @@ async function refreshOperationalSnapshot(
 }
 
 async function getMensageriaConfig() {
-	const doc = await documents
-		.getDocument(MENSAGERIA_CONFIG_PATH)
-		.catch(() => null);
-	return doc?.data || {};
+	return mensageriaRepository.getMessagingConfig().catch(() => ({}));
 }
 
 async function getMensageriaQueueKeys() {
-	const items = await documents
-		.listAllDocuments("mensageria_fila")
-		.catch(() => []);
+	const items = await mensageriaRepository.listAllQueueMessages().catch(() => []);
 	return new Set(
 		items
 			.map((item) => {
-				const data = item.data || {};
-				return `${String(data.os || "").trim()}|${normalizeMensageriaPhone(data.telefone)}`;
+				return `${String(item.os || "").trim()}|${normalizeMensageriaPhone(item.telefone)}`;
 			})
 			.filter((key) => key !== "|"),
 	);
@@ -1234,16 +1228,13 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 		}
 		queueKeys.add(key);
 		const docId = `mapa_${sanitizeId(item.os || id)}_${Date.now()}_${created}`;
-		await documents.upsertDocument({
-			path: `mensageria_fila/${docId}`,
-			collectionPath: "mensageria_fila",
-			documentId: docId,
-			parentPath: null,
-			data: {
+		await mensageriaRepository.enqueueMessage(
+			{
 				...item,
 				criadoPor: user.uid || null,
 			},
-		});
+			{ id: docId },
+		);
 		created += 1;
 	}
 

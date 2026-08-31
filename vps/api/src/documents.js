@@ -1,14 +1,39 @@
 const db = require("./db");
 const auditLog = require("./auditLog");
-const agendamentosRepository = require("./agendamentosRepository");
 const imoveisRepository = require("./imoveisRepository");
-const mensageriaRepository = require("./mensageriaRepository");
 const ordensRepository = require("./ordensRepository");
 const normalizedDualWrite = require("./normalizedDualWrite");
 const { broadcastRealtime } = require("./realtime");
 const { invalidatePublicDashboardCache } = require("./publicDashboard");
 
 const MAX_LIMIT = 1000;
+const NORMALIZED_ONLY_COLLECTIONS = new Set([
+	"regionais",
+	"usuarios",
+	"financeiro_config",
+	"financeiro_reports",
+	"financeiro_import_logs",
+	"api_runtime_events",
+	"api_service_events",
+	"documentos_config",
+	"documentos_cobranca_logs",
+	"documentos_notas_fiscais_campos",
+	"system_google_drive",
+	"mensageria_config",
+	"mensageria_templates",
+	"mensageria_fila",
+	"mensageria_historico",
+	"mensageria_callbacks",
+	"mensageria_agendamento_conversas",
+	"agendamentos",
+	"agendamentos_logs",
+	"agendamento_esteira_blocos",
+	"agendamento_esteira_clientes",
+	"agendamento_esteira_cliente_index",
+	"agendamento_esteira_logs",
+	"agendamento_esteira_metricas",
+	"agendamento_esteira_catalogo",
+]);
 const DOCUMENTS_READ_CACHE_TTL_MS = Math.max(
 	Number(process.env.DOCUMENTS_READ_CACHE_TTL_MS || 5000),
 	0,
@@ -85,13 +110,17 @@ function getCollectionPath(documentPath) {
 		.join("/");
 }
 
+function assertLegacyCollectionAllowed(collectionPath) {
+	if (!NORMALIZED_ONLY_COLLECTIONS.has(String(collectionPath || "").trim())) {
+		return;
+	}
+	throw new Error(
+		`Colecao ${collectionPath} migrada para tabelas normalizadas.`,
+	);
+}
+
 async function listDocuments({ collectionPath, limit, offset }) {
-	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
-		return agendamentosRepository.listDocuments({ collectionPath, limit, offset });
-	}
-	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
-		return mensageriaRepository.listDocuments({ collectionPath, limit, offset });
-	}
+	assertLegacyCollectionAllowed(collectionPath);
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return imoveisRepository.listDocuments({ collectionPath, limit, offset });
 	}
@@ -119,12 +148,7 @@ async function listDocuments({ collectionPath, limit, offset }) {
 }
 
 async function getDocument(documentPath) {
-	if (agendamentosRepository.isSchedulingCollection(getCollectionPath(documentPath))) {
-		return agendamentosRepository.getDocument(documentPath);
-	}
-	if (mensageriaRepository.isMessagingCollection(getCollectionPath(documentPath))) {
-		return mensageriaRepository.getDocument(documentPath);
-	}
+	assertLegacyCollectionAllowed(getCollectionPath(documentPath));
 	if (imoveisRepository.isImoveisCollection(getCollectionPath(documentPath))) {
 		return imoveisRepository.getDocument(documentPath);
 	}
@@ -157,41 +181,7 @@ async function getDocumentSnapshot(documentPath) {
 }
 
 async function upsertDocument(record) {
-	if (["regionais", "usuarios", "financeiro_config"].includes(record.collectionPath)) {
-		throw new Error(
-			`Colecao ${record.collectionPath} migrada para tabelas normalizadas.`,
-		);
-	}
-	if (agendamentosRepository.isSchedulingCollection(record.collectionPath)) {
-		const beforeRecord = await agendamentosRepository.getDocument(record.path);
-		await agendamentosRepository.upsertDocument(record);
-		invalidateDocumentsCache({
-			collectionPath: record.collectionPath,
-			documentPath: record.path,
-		});
-		broadcastDocumentChange("upsert", record);
-		auditLog.recordDocumentAuditLog({
-			action: beforeRecord ? "update" : "create",
-			beforeRecord,
-			record,
-		});
-		return;
-	}
-	if (mensageriaRepository.isMessagingCollection(record.collectionPath)) {
-		const beforeRecord = await mensageriaRepository.getDocument(record.path);
-		await mensageriaRepository.upsertDocument(record);
-		invalidateDocumentsCache({
-			collectionPath: record.collectionPath,
-			documentPath: record.path,
-		});
-		broadcastDocumentChange("upsert", record);
-		auditLog.recordDocumentAuditLog({
-			action: beforeRecord ? "update" : "create",
-			beforeRecord,
-			record,
-		});
-		return;
-	}
+	assertLegacyCollectionAllowed(record.collectionPath);
 	if (imoveisRepository.isImoveisCollection(record.collectionPath)) {
 		const beforeRecord = await imoveisRepository.getDocument(record.path);
 		await imoveisRepository.upsertDocument(record);
@@ -253,58 +243,7 @@ async function upsertDocument(record) {
 }
 
 async function deleteDocument(path) {
-	if (agendamentosRepository.isSchedulingCollection(getCollectionPath(path))) {
-		const beforeRecord = await agendamentosRepository.getDocument(path);
-		await agendamentosRepository.deleteDocument(path);
-		const parts = String(path || "")
-			.split("/")
-			.filter(Boolean);
-		invalidateDocumentsCache({
-			collectionPath: parts.slice(0, -1).join("/"),
-			documentPath: path,
-		});
-		broadcastDocumentChange("delete", {
-			path,
-			collectionPath: parts.slice(0, -1).join("/"),
-			documentId: parts.at(-1),
-		});
-		auditLog.recordDocumentAuditLog({
-			action: "delete",
-			beforeRecord,
-			record: {
-				path,
-				collectionPath: parts.slice(0, -1).join("/"),
-				documentId: parts.at(-1),
-			},
-		});
-		return;
-	}
-	if (mensageriaRepository.isMessagingCollection(getCollectionPath(path))) {
-		const beforeRecord = await mensageriaRepository.getDocument(path);
-		await mensageriaRepository.deleteDocument(path);
-		const parts = String(path || "")
-			.split("/")
-			.filter(Boolean);
-		invalidateDocumentsCache({
-			collectionPath: parts.slice(0, -1).join("/"),
-			documentPath: path,
-		});
-		broadcastDocumentChange("delete", {
-			path,
-			collectionPath: parts.slice(0, -1).join("/"),
-			documentId: parts.at(-1),
-		});
-		auditLog.recordDocumentAuditLog({
-			action: "delete",
-			beforeRecord,
-			record: {
-				path,
-				collectionPath: parts.slice(0, -1).join("/"),
-				documentId: parts.at(-1),
-			},
-		});
-		return;
-	}
+	assertLegacyCollectionAllowed(getCollectionPath(path));
 	if (imoveisRepository.isImoveisCollection(getCollectionPath(path))) {
 		const beforeRecord = await imoveisRepository.getDocument(path);
 		await imoveisRepository.deleteDocument(path);
@@ -396,31 +335,7 @@ async function deleteDocumentsByCollectionAndSources(
 	collectionPath,
 	sources = [],
 ) {
-	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
-		return 0;
-	}
-	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
-		const normalizedSources = sources
-			.map((source) => String(source || "").trim())
-			.filter(Boolean);
-		const deleted = await mensageriaRepository.deleteDocumentsByCollectionAndSources(
-			collectionPath,
-			normalizedSources,
-		);
-		invalidateDocumentsCache({ collectionPath });
-		auditLog.recordAuditLog({
-			action: "delete",
-			module:
-				String(collectionPath || "").split("/").filter(Boolean)[0] ||
-				"documentos",
-			entity: collectionPath,
-			recordId: "bulk",
-			beforeData: { sources: normalizedSources, deletedCount: deleted || 0 },
-			afterData: null,
-			changedFields: ["deletedCount", "sources"],
-		});
-		return deleted;
-	}
+	assertLegacyCollectionAllowed(collectionPath);
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return 0;
 	}
@@ -472,12 +387,7 @@ async function deleteDocumentsByCollectionAndSources(
 }
 
 async function listAllDocuments(collectionPath) {
-	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
-		return agendamentosRepository.listAllDocuments(collectionPath);
-	}
-	if (mensageriaRepository.isMessagingCollection(collectionPath)) {
-		return mensageriaRepository.listAllDocuments(collectionPath);
-	}
+	assertLegacyCollectionAllowed(collectionPath);
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return imoveisRepository.listAllDocuments(collectionPath);
 	}

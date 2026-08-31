@@ -31,6 +31,7 @@ const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
 const createAgendamentoConfirmacaoAdminRouter = require("./agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes");
+const createAgendamentosRouter = require("./agendamentos/routes/agendamentosRoutes");
 const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes");
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
@@ -39,6 +40,7 @@ const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
+const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
@@ -300,6 +302,42 @@ const IMOVEIS_ADMINISTRATIVOS_COLLECTIONS = new Set([
 	"imoveis_administrativos_iptu",
 	"imoveis_administrativos_alugueis",
 	"imoveis_administrativos_contratos",
+	"imoveis_administrativos_anexos",
+	"imoveis_administrativos_aditivos",
+	"imoveis_administrativos_config",
+]);
+const MENSAGERIA_COLLECTIONS = new Set([
+	"mensageria_config",
+	"mensageria_templates",
+	"mensageria_fila",
+	"mensageria_historico",
+	"mensageria_callbacks",
+	"mensageria_agendamento_conversas",
+]);
+const AGENDAMENTOS_COLLECTIONS = new Set([
+	"agendamentos",
+	"agendamentos_logs",
+	"agendamento_esteira_blocos",
+	"agendamento_esteira_clientes",
+	"agendamento_esteira_cliente_index",
+	"agendamento_esteira_logs",
+	"agendamento_esteira_metricas",
+	"agendamento_esteira_catalogo",
+]);
+const FINANCEIRO_COLLECTIONS = new Set([
+	"financeiro_config",
+	"financeiro_reports",
+	"financeiro_import_logs",
+]);
+const OPERATIONAL_EVENT_COLLECTIONS = new Set([
+	"api_runtime_events",
+	"api_service_events",
+]);
+const DOCUMENTOS_AUXILIARY_COLLECTIONS = new Set([
+	"documentos_config",
+	"documentos_cobranca_logs",
+	"documentos_notas_fiscais_campos",
+	"system_google_drive",
 ]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
@@ -363,6 +401,11 @@ const COLLECTION_READ_PERMISSIONS = Object.freeze({
 		"view_diario",
 	],
 	acompanhamento_diario_logs: [
+		"destaque.diario.view",
+		"destaque.diario.manage",
+		"view_diario",
+	],
+	acompanhamento_diario_metas_historico: [
 		"destaque.diario.view",
 		"destaque.diario.manage",
 		"view_diario",
@@ -564,6 +607,7 @@ const COLLECTION_WRITE_PERMISSIONS = Object.freeze({
 	agendamentos_logs: ["cliente.agendamentos.manage", "manage_agendamentos"],
 	acompanhamento_diario: ["destaque.diario.manage"],
 	acompanhamento_diario_logs: ["destaque.diario.manage"],
+	acompanhamento_diario_metas_historico: ["destaque.diario.manage"],
 	feriados: ["equipe.feriados.manage", "manage_feriados"],
 	regionais: ["configuracao.regionais.manage", "manage_regionais"],
 	agentes: ["configuracao.agentes.manage", "manage_agentes"],
@@ -1936,6 +1980,47 @@ function canWriteDocumentPath(user, documentPath) {
 	return canWriteCollection(user, collectionPath);
 }
 
+function rejectDomainRouteOnlyCollection(res, collectionPath) {
+	const collection = String(collectionPath || "").trim();
+	if (IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/imoveis.`,
+		});
+		return true;
+	}
+	if (MENSAGERIA_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/mensageria.`,
+		});
+		return true;
+	}
+	if (AGENDAMENTOS_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/agendamentos.`,
+		});
+		return true;
+	}
+	if (FINANCEIRO_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/financeiro.`,
+		});
+		return true;
+	}
+	if (OPERATIONAL_EVENT_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada para tabelas operacionais normalizadas.`,
+		});
+		return true;
+	}
+	if (DOCUMENTOS_AUXILIARY_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/documentos.`,
+		});
+		return true;
+	}
+	return false;
+}
+
 function pickFirstText(data = {}, keys = []) {
 	for (const key of keys) {
 		const value = data?.[key];
@@ -2239,6 +2324,26 @@ function createApp() {
 			financeiroManagePermissions: FINANCEIRO_MANAGE_PERMISSIONS,
 			financeiroRoles: FINANCEIRO_ROLES,
 			financeiroViewPermissions: FINANCEIRO_VIEW_PERMISSIONS,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/mensageria",
+		createMensageriaRouter({
+			adminRoles: ADMIN_ROLES,
+			documents,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/agendamentos",
+		createAgendamentosRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
@@ -3367,6 +3472,7 @@ function createApp() {
 				res.status(400).json({ error: "Parametro collection obrigatorio." });
 				return;
 			}
+			if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 			if (!canReadCollection(req.user, collectionPath)) {
 				res.status(403).json({ error: "Permissao insuficiente." });
 				return;
@@ -3409,6 +3515,7 @@ function createApp() {
 		try {
 			const documentPath = req.params[0];
 			const documentCollectionPath = documentPath.split("/").slice(0, -1).join("/");
+			if (rejectDomainRouteOnlyCollection(res, documentCollectionPath)) return;
 			const item =
 				documentCollectionPath === "regionais"
 					? await regionaisRepository.getRegionalDocument(documentPath)
@@ -4375,6 +4482,7 @@ function createApp() {
 					res.status(400).json({ error: "collectionPath obrigatorio." });
 					return;
 				}
+				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				if (!canWriteCollection(req.user, collectionPath)) {
 					res.status(403).json({ error: "Permissao insuficiente." });
 					return;
@@ -4452,6 +4560,7 @@ function createApp() {
 				}
 
 				const collectionPath = parts.slice(0, -1).join("/");
+				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				const existing =
 					collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
@@ -4558,6 +4667,7 @@ function createApp() {
 				}
 				const parts = documentPath.split("/").filter(Boolean);
 				const collectionPath = parts.slice(0, -1).join("/");
+				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				const item =
 					collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
@@ -4916,9 +5026,11 @@ function createApp() {
 				return;
 			}
 
+			const collectionPath = parts.slice(0, -1).join("/");
+			if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 			await documents.upsertDocument({
 				path: documentPath,
-				collectionPath: parts.slice(0, -1).join("/"),
+				collectionPath,
 				documentId: parts.at(-1),
 				parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
 				data: req.body || {},

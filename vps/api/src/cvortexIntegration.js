@@ -1,9 +1,9 @@
 const crypto = require("node:crypto");
 const documents = require("./documents");
+const mensageriaRepository = require("./mensageriaRepository");
 const { randomId } = require("./secureRandom");
 
 const CONFIG_PATH = "cvortex_config/global";
-const MESSAGING_CONFIG_PATH = "mensageria_config/global";
 const DEFAULT_SEND_ENDPOINT = "/messages/send";
 const DEFAULT_STATUS_ENDPOINT = "/health";
 
@@ -331,21 +331,11 @@ async function associateCvortex(user = {}) {
 		},
 		user,
 	);
-	const messaging = await documents
-		.getDocument(MESSAGING_CONFIG_PATH)
-		.catch(() => null);
-	await documents.upsertDocument({
-		path: MESSAGING_CONFIG_PATH,
-		collectionPath: "mensageria_config",
-		documentId: "global",
-		parentPath: null,
-		data: {
-			...(messaging?.data || {}),
-			whatsappProvider: "cvortex",
-			cvortexEnabled: true,
-			cvortexAssociatedAt: new Date().toISOString(),
-			cvortexAssociatedBy: user?.nome || user?.email || user?.uid || "",
-		},
+	await mensageriaRepository.saveMessagingConfigPatch({
+		whatsappProvider: "cvortex",
+		cvortexEnabled: true,
+		cvortexAssociatedAt: new Date().toISOString(),
+		cvortexAssociatedBy: user?.nome || user?.email || user?.uid || "",
 	});
 	return saved;
 }
@@ -417,12 +407,8 @@ async function registerWebhook(payload = {}, meta = {}) {
 			"data.body",
 		]),
 	);
-	await documents.upsertDocument({
-		path: `mensageria_callbacks/${id}`,
-		collectionPath: "mensageria_callbacks",
-		documentId: id,
-		parentPath: null,
-		data: {
+	await mensageriaRepository.recordCallback(
+		{
 			id,
 			provider: "cvortex",
 			origem: "cvortex",
@@ -433,7 +419,8 @@ async function registerWebhook(payload = {}, meta = {}) {
 			createdAt,
 			raw: payload,
 		},
-	});
+		{ id },
+	);
 	return {
 		ok: true,
 		id,

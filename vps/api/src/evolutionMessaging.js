@@ -1,17 +1,13 @@
 const documents = require("./documents");
+const agendamentosRepository = require("./agendamentosRepository");
 const mensageriaRepository = require("./mensageriaRepository");
 const notificationsService = require("./notificationsService");
 const cvortexIntegration = require("./cvortexIntegration");
 const { broadcastRealtime } = require("./realtime");
 const { randomFloat, randomId, randomIntInclusive } = require("./secureRandom");
 
-const CONFIG_PATH = "mensageria_config/global";
-const QUEUE_COLLECTION = "mensageria_fila";
-const TEMPLATE_COLLECTION = "mensageria_templates";
-const HISTORY_COLLECTION = "mensageria_historico";
 const CALLBACK_COLLECTION = "mensageria_callbacks";
 const DISCONNECT_LOG_COLLECTION = "mensageria_evolution_disconnect_logs";
-const SCHEDULE_CONVERSATION_COLLECTION = "mensageria_agendamento_conversas";
 const APPOINTMENT_COLLECTION = "agendamentos";
 const SUPPORTED_WHATSAPP_PROVIDERS = new Set([
 	"evolution",
@@ -451,8 +447,8 @@ function getLocalDateKey(value = new Date()) {
 }
 
 async function getConfig() {
-	const doc = await documents.getDocument(CONFIG_PATH).catch(() => null);
-	const config = { ...DEFAULT_CONFIG, ...(doc?.data || {}) };
+	const savedConfig = await mensageriaRepository.getMessagingConfig();
+	const config = { ...DEFAULT_CONFIG, ...savedConfig };
 	if (!SUPPORTED_WHATSAPP_PROVIDERS.has(config.whatsappProvider)) {
 		config.whatsappProvider = "evolution";
 	}
@@ -463,21 +459,16 @@ async function getConfig() {
 
 async function saveConfigPatch(patch = {}) {
 	const current = await getConfig();
-	await documents.upsertDocument({
-		path: CONFIG_PATH,
-		collectionPath: "mensageria_config",
-		documentId: "global",
-		parentPath: null,
-		data: { ...current, ...patch, atualizadoEm: nowIso() },
+	await mensageriaRepository.saveMessagingConfigPatch({
+		...current,
+		...patch,
+		atualizadoEm: nowIso(),
 	});
 }
 
 async function getTemplate(templateId) {
 	const id = String(templateId || "cancelamento");
-	const doc = await documents
-		.getDocument(`${TEMPLATE_COLLECTION}/${id}`)
-		.catch(() => null);
-	const template = doc?.data || {
+	const template = (await mensageriaRepository.getMessageTemplate(id)) || {
 		id,
 		conteudo: DEFAULT_TEMPLATES[id] || DEFAULT_TEMPLATES.cancelamento,
 	};
@@ -485,9 +476,7 @@ async function getTemplate(templateId) {
 }
 
 async function listQueue(limit = 20) {
-	const result = await documents.listAllDocuments(QUEUE_COLLECTION);
-	return result
-		.map((item) => ({ id: item.documentId, ...(item.data || {}) }))
+	return (await mensageriaRepository.listAllQueueMessages())
 		.sort((left, right) => {
 			const leftIsMapDiff =
 				left.origemTipo === "mapa_diff" ||
@@ -522,41 +511,24 @@ async function listQueue(limit = 20) {
 }
 
 async function upsertQueueItem(id, data) {
-	await documents.upsertDocument({
-		path: `${QUEUE_COLLECTION}/${id}`,
-		collectionPath: QUEUE_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data,
-	});
+	await mensageriaRepository.saveQueueMessage(id, data);
 }
 
 async function createHistory(data) {
 	const id = randomId("evo");
-	await documents.upsertDocument({
-		path: `${HISTORY_COLLECTION}/${id}`,
-		collectionPath: HISTORY_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data: { id, ...data, criadoEm: nowIso() },
-	});
+	await mensageriaRepository.createHistoryEntry(
+		{ id, ...data, criadoEm: nowIso() },
+		{ id },
+	);
 	return id;
 }
 
 async function getQueueItem(id) {
-	const doc = await documents
-		.getDocument(`${QUEUE_COLLECTION}/${id}`)
-		.catch(() => null);
-	return doc?.data ? { id: doc.documentId || id, ...(doc.data || {}) } : null;
+	return mensageriaRepository.getQueueMessage(id);
 }
 
 async function listHistory(limit = 1000) {
-	const result = await documents.listDocuments({
-		collectionPath: HISTORY_COLLECTION,
-		limit,
-		offset: 0,
-	});
-	return result.map((item) => ({ id: item.documentId, ...(item.data || {}) }));
+	return mensageriaRepository.listHistoryEntries({ limit, offset: 0 });
 }
 
 async function findRecentDuplicateSent({ filaId, telefone, mensagem }) {
@@ -600,12 +572,7 @@ async function countQueueMessagesSentToday() {
 }
 
 async function listCallbacks(limit = 500) {
-	const result = await documents.listDocuments({
-		collectionPath: CALLBACK_COLLECTION,
-		limit,
-		offset: 0,
-	});
-	return result.map((item) => ({ id: item.documentId, ...(item.data || {}) }));
+	return mensageriaRepository.listCallbacks({ limit, offset: 0 });
 }
 
 function getFirstName(name) {
@@ -2213,17 +2180,11 @@ async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
 	const dateKey = dateKeyFromValue(schedule.date);
 	if (!dateKey) return;
 	const month = dateKey.slice(0, 7);
-	const metricPath = `agendamento_esteira_metricas/${month}`;
-	const metricRecord = await documents.getDocument(metricPath).catch(() => null);
-	const metricData = metricRecord?.data || { mes: month };
+	const metricData =
+		(await agendamentosRepository.getPipelineMetrics(month)) || { mes: month };
 	const userKey = safeKey(AUTOMATION_ATTENDANT_ID);
 	const cityKey = safeKey(item?.cidade);
-	await documents.upsertDocument({
-		path: metricPath,
-		collectionPath: "agendamento_esteira_metricas",
-		documentId: month,
-		parentPath: null,
-		data: {
+	await agendamentosRepository.savePipelineMetrics(month, {
 			...metricData,
 			mes: month,
 			agendamentos: Number(metricData.agendamentos || 0) + 1,
@@ -2246,7 +2207,6 @@ async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
 				[cityKey]: item?.cidade || "",
 			},
 			atualizado_em: nowIso(),
-		},
 	});
 }
 
@@ -2329,10 +2289,7 @@ function getConversationId(phone) {
 async function getScheduleConversation(phone) {
 	const id = getConversationId(phone);
 	if (!id) return null;
-	const doc = await documents
-		.getDocument(`${SCHEDULE_CONVERSATION_COLLECTION}/${id}`)
-		.catch(() => null);
-	return doc?.data || null;
+	return mensageriaRepository.getScheduleConversation(id);
 }
 
 async function saveScheduleConversation(phone, data = {}) {
@@ -2346,14 +2303,7 @@ async function saveScheduleConversation(phone, data = {}) {
 		telefone: id,
 		atualizado_em: nowIso(),
 	};
-	await documents.upsertDocument({
-		path: `${SCHEDULE_CONVERSATION_COLLECTION}/${id}`,
-		collectionPath: SCHEDULE_CONVERSATION_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data: next,
-	});
-	return next;
+	return mensageriaRepository.upsertScheduleConversation(id, next);
 }
 
 async function clearScheduleConversation(phone, patch = {}) {
@@ -2479,13 +2429,7 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 		atualizado_em: createdAt,
 	};
 
-	await documents.upsertDocument({
-		path: `${APPOINTMENT_COLLECTION}/${id}`,
-		collectionPath: APPOINTMENT_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data: appointmentData,
-	});
+	await agendamentosRepository.createAppointment(appointmentData, { id });
 	broadcastRealtime("acompanhamento", {
 		action: "upsert",
 		collectionPath: APPOINTMENT_COLLECTION,
@@ -3171,12 +3115,8 @@ async function registerCallback(payload = {}) {
 		}
 	}
 
-	await documents.upsertDocument({
-		path: `${CALLBACK_COLLECTION}/${callbackId}`,
-		collectionPath: CALLBACK_COLLECTION,
-		documentId: callbackId,
-		parentPath: null,
-		data: {
+	await mensageriaRepository.recordCallback(
+		{
 			id: callbackId,
 			telefone,
 			codigo_cliente: codigoCliente || item?.codigo_cliente || "",
@@ -3196,7 +3136,8 @@ async function registerCallback(payload = {}) {
 			criado_em: nowIso(),
 			recebido_em: recebidoEm,
 		},
-	});
+		{ id: callbackId },
+	);
 
 	broadcastRealtime("mensageria", { action: "callback", status });
 	broadcastRealtime("acompanhamento", { collectionPath: CALLBACK_COLLECTION });

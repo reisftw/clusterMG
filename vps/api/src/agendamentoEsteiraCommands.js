@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const documents = require("./documents");
+const agendamentosRepository = require("./agendamentosRepository");
 
 function normalizeDate(value, fieldName = "Data") {
 	const date = String(value || "").trim();
@@ -80,16 +80,13 @@ async function handleSchedule(payload = {}, user = {}) {
 	}
 
 	const schedule = normalizeSchedule(payload);
-	const blockRecord = await documents.getDocument(
-		`agendamento_esteira_blocos/${blockId}`,
-	);
-	if (!blockRecord?.data) {
+	const block = await agendamentosRepository.getPipelineBlock(blockId);
+	if (!block) {
 		const error = new Error("Bloco nao encontrado.");
 		error.statusCode = 404;
 		throw error;
 	}
 
-	const block = blockRecord.data || {};
 	if (block.atendente_id && block.atendente_id !== user.uid) {
 		forbidden("Bloco pertence a outro atendente.");
 	}
@@ -118,12 +115,8 @@ async function handleSchedule(payload = {}, user = {}) {
 		(item) => item.status === "agendado",
 	).length;
 
-	await documents.upsertDocument({
-		path: `agendamentos/${appointmentId}`,
-		collectionPath: "agendamentos",
-		documentId: appointmentId,
-		parentPath: null,
-		data: {
+	await agendamentosRepository.createAppointment(
+		{
 			codigo_cliente: String(customer.codigo_cliente || ""),
 			cliente_nome: String(customer.nome || customer.cliente_nome || ""),
 			cidade: String(customer.cidade || ""),
@@ -146,25 +139,21 @@ async function handleSchedule(payload = {}, user = {}) {
 			criado_em: now,
 			atualizado_em: now,
 		},
-	});
+		{ id: appointmentId },
+	);
 
-	await documents.upsertDocument({
-		...blockRecord,
-		data: {
+	await agendamentosRepository.savePipelineBlock(blockId, {
 			...block,
 			clientes: updatedCustomers,
 			pendentes: pending,
 			agendados: scheduled,
 			atualizado_em: now,
-		},
 	});
 
-	const catalogRecord = await documents.getDocument(
-		"agendamento_esteira_catalogo/ativo",
-	);
-	if (catalogRecord?.data) {
-		const summaries = Array.isArray(catalogRecord.data.blocos)
-			? catalogRecord.data.blocos.map((item) =>
+	const catalog = await agendamentosRepository.getPipelineCatalog("ativo");
+	if (catalog) {
+		const summaries = Array.isArray(catalog.blocos)
+			? catalog.blocos.map((item) =>
 					item.id === blockId
 						? {
 								...item,
@@ -175,28 +164,19 @@ async function handleSchedule(payload = {}, user = {}) {
 						: item,
 				)
 			: [];
-		await documents.upsertDocument({
-			...catalogRecord,
-			data: {
-				...catalogRecord.data,
+		await agendamentosRepository.savePipelineCatalog("ativo", {
+				...catalog,
 				blocos: summaries,
 				atualizado_em: now,
-			},
 		});
 	}
 
 	const month = schedule.date.slice(0, 7);
-	const metricPath = `agendamento_esteira_metricas/${month}`;
-	const metricRecord = await documents.getDocument(metricPath);
-	const metricData = metricRecord?.data || { mes: month };
+	const metricData =
+		(await agendamentosRepository.getPipelineMetrics(month)) || { mes: month };
 	const userKey = safeKey(user.uid);
 	const cityKey = safeKey(customer.cidade);
-	await documents.upsertDocument({
-		path: metricPath,
-		collectionPath: "agendamento_esteira_metricas",
-		documentId: month,
-		parentPath: null,
-		data: {
+	await agendamentosRepository.savePipelineMetrics(month, {
 			...metricData,
 			mes: month,
 			agendamentos: Number(metricData.agendamentos || 0) + 1,
@@ -219,16 +199,11 @@ async function handleSchedule(payload = {}, user = {}) {
 				[cityKey]: customer.cidade || "",
 			},
 			atualizado_em: now,
-		},
 	});
 
 	const requestId = String(payload.requestId || crypto.randomUUID()).trim();
-	await documents.upsertDocument({
-		path: `agendamento_esteira_logs/${requestId}`,
-		collectionPath: "agendamento_esteira_logs",
-		documentId: requestId,
-		parentPath: null,
-		data: {
+	await agendamentosRepository.recordPipelineLog(
+		{
 			tipo: "agendamento",
 			schema_version: 2,
 			request_id: requestId,
@@ -245,7 +220,8 @@ async function handleSchedule(payload = {}, user = {}) {
 			hora: schedule.time || null,
 			criado_em: now,
 		},
-	});
+		{ id: requestId },
+	);
 
 	return {
 		data: {

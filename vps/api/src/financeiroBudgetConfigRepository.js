@@ -559,12 +559,32 @@ async function getBudgetData() {
 	};
 }
 
+async function getBudgetConfiguration() {
+	return getBudgetCostCenters();
+}
+
+async function saveBudgetConfiguration(config = {}, user = {}) {
+	return saveBudgetCostCenters(config, user);
+}
+
+async function getImportedBudgetRows() {
+	return getBudgetData();
+}
+
+async function saveImportedBudgetRows(data = {}, user = {}) {
+	return saveBudgetData(data, user);
+}
+
 module.exports = {
+	getBudgetConfiguration,
 	getBudgetCostCenters,
 	getBudgetData,
+	getImportedBudgetRows,
 	getConfig: getMeta,
+	saveBudgetConfiguration,
 	saveBudgetCostCenters,
 	saveBudgetData,
+	saveImportedBudgetRows,
 	saveConfig,
 	ids: {
 		COST_CENTERS_ID,
