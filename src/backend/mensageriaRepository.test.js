@@ -123,6 +123,34 @@ describe("mensageriaRepository", () => {
 		expect(saved.data.cliente).toBe("Cliente Novo");
 	});
 
+	it("normaliza selected_date de conversas para string yyyy-mm-dd", async () => {
+		const dbQuery = vi.fn(async () => ({
+			rows: [
+				{
+					id: "5531999990000",
+					telefone: "5531999990000",
+					selected_date: new Date("2026-09-01T00:00:00.000Z"),
+					selected_time: "14:30",
+					stage: "awaiting_time",
+					legacy_path: "mensageria_agendamento_conversas/5531999990000",
+					legacy_document_id: "5531999990000",
+					source_payload: {},
+				},
+			],
+		}));
+		const repository = loadRepository({ dbQuery });
+
+		const conversation = await repository.getDocument(
+			"mensageria_agendamento_conversas/5531999990000",
+		);
+
+		expect(conversation.data).toMatchObject({
+			selectedDate: "2026-09-01",
+			selectedTime: "14:30",
+			stage: "awaiting_time",
+		});
+	});
+
 	it("adquire lock de fila com update atomico e retorna o item travado", async () => {
 		const dbQuery = vi.fn(async () => ({
 			rows: [

@@ -201,6 +201,10 @@ function normalizeText(value) {
 		.trim();
 }
 
+function safeKey(value) {
+	return normalizeText(value).replace(/[^a-z0-9]+/g, "_") || "nao_informado";
+}
+
 function fixMojibakeText(value) {
 	return String(value || "")
 		.replace(/Ã¡/g, "á")
@@ -2155,8 +2159,19 @@ function dateKeyFromDate(date) {
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function dateKeyFromValue(value) {
+	if (!value) return "";
+	if (typeof value === "object" && value.value) return dateKeyFromValue(value.value);
+	if (value instanceof Date) return value.toISOString().slice(0, 10);
+	const normalized = String(value || "").trim();
+	if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+	const date = new Date(normalized);
+	return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
 function formatDateLabel(dateKey, { withWeekday = false } = {}) {
-	const [year, month, day] = String(dateKey || "")
+	const normalizedDateKey = dateKeyFromValue(dateKey);
+	const [year, month, day] = String(normalizedDateKey || "")
 		.split("-")
 		.map(Number);
 	const date = new Date(year, month - 1, day);
@@ -2166,6 +2181,47 @@ function formatDateLabel(dateKey, { withWeekday = false } = {}) {
 		...(withWeekday ? { weekday: "long" } : {}),
 		day: "2-digit",
 		month: "2-digit",
+	});
+}
+
+async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
+	const dateKey = dateKeyFromValue(schedule.date);
+	if (!dateKey) return;
+	const month = dateKey.slice(0, 7);
+	const metricPath = `agendamento_esteira_metricas/${month}`;
+	const metricRecord = await documents.getDocument(metricPath).catch(() => null);
+	const metricData = metricRecord?.data || { mes: month };
+	const userKey = safeKey(AUTOMATION_ATTENDANT_ID);
+	const cityKey = safeKey(item?.cidade);
+	await documents.upsertDocument({
+		path: metricPath,
+		collectionPath: "agendamento_esteira_metricas",
+		documentId: month,
+		parentPath: null,
+		data: {
+			...metricData,
+			mes: month,
+			agendamentos: Number(metricData.agendamentos || 0) + 1,
+			agendamentos_por_usuario: {
+				...(metricData.agendamentos_por_usuario || {}),
+				[userKey]:
+					Number(metricData.agendamentos_por_usuario?.[userKey] || 0) + 1,
+			},
+			agendamentos_por_cidade: {
+				...(metricData.agendamentos_por_cidade || {}),
+				[cityKey]:
+					Number(metricData.agendamentos_por_cidade?.[cityKey] || 0) + 1,
+			},
+			usuarios: {
+				...(metricData.usuarios || {}),
+				[userKey]: AUTOMATION_ATTENDANT_NAME,
+			},
+			cidades: {
+				...(metricData.cidades || {}),
+				[cityKey]: item?.cidade || "",
+			},
+			atualizado_em: nowIso(),
+		},
 	});
 }
 
@@ -2369,12 +2425,13 @@ function chooseCallbackItem(queueItem, historyItem) {
 async function createAppointmentFromCallback(item, schedule, callbackId) {
 	const id = randomId("wa");
 	const createdAt = nowIso();
+	const scheduleDate = dateKeyFromValue(schedule.date);
 	const appointmentData = {
 		tecnico_nome: item?.tecnico || "A definir",
 		codigo_cliente: String(item?.codigo_cliente || ""),
 		cliente_nome: item?.cliente || "",
 		cidade: item?.cidade || "",
-		data: schedule.date,
+		data: scheduleDate,
 		turno:
 			schedule.time && Number(schedule.time.slice(0, 2)) >= 12
 				? "Tarde"
@@ -2415,12 +2472,9 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 		.createNotification({
 			type: "whatsapp_agendamento_auto",
 			title: "Agendamento automático",
-			message: `${AUTOMATION_ATTENDANT_NAME} agendou ${item?.cliente || "cliente"} para ${String(
-				schedule.date || "",
-			)
-				.split("-")
-				.reverse()
-				.join("/")} ${schedule.time || ""}.`,
+			message: `${AUTOMATION_ATTENDANT_NAME} agendou ${item?.cliente || "cliente"} para ${formatDateLabel(
+				scheduleDate,
+			)} ${schedule.time || ""}.`,
 			targetPath: "/agendamentos",
 			severity: "success",
 			user: {
@@ -2437,7 +2491,7 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 				os: item?.os || "",
 				cliente: item?.cliente || "",
 				cidade: item?.cidade || "",
-				data: schedule.date,
+				data: scheduleDate,
 				hora: schedule.time || "",
 			},
 		})
@@ -2447,6 +2501,14 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 				error?.message || error,
 			);
 		});
+	await incrementAutomaticScheduleMetrics({ ...schedule, date: scheduleDate }, item).catch(
+		(error) => {
+			console.warn(
+				"[evolution] Falha ao contabilizar agendamento automatico:",
+				error?.message || error,
+			);
+		},
+	);
 	return id;
 }
 
@@ -2771,7 +2833,7 @@ async function continueGuidedScheduleFlow(
 			phone,
 			{
 				...conversationItem,
-				data_agendamento: schedule.date.split("-").reverse().join("/"),
+				data_agendamento: formatDateLabel(schedule.date),
 				hora_agendamento: schedule.time || "",
 			},
 			config.replyScheduledConfirmationMessage ||
@@ -3072,7 +3134,7 @@ async function registerCallback(payload = {}) {
 					telefone,
 					{
 						...item,
-						data_agendamento: schedule.date.split("-").reverse().join("/"),
+						data_agendamento: formatDateLabel(schedule.date),
 						hora_agendamento: schedule.time || "",
 					},
 					config.replyScheduledConfirmationMessage ||

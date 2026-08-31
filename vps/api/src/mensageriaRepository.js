@@ -53,6 +53,16 @@ function timestampToIso(value) {
 	return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
 }
 
+function dateToYmd(value) {
+	if (!value) return "";
+	if (typeof value === "object" && value.value) return dateToYmd(value.value);
+	if (value instanceof Date) return value.toISOString().slice(0, 10);
+	const normalized = text(value);
+	if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+	const date = new Date(normalized);
+	return Number.isNaN(date.getTime()) ? normalized : date.toISOString().slice(0, 10);
+}
+
 function buildDocument(collectionPath, row = {}, data = {}) {
 	const id = row.id || row.legacy_document_id || "";
 	return {
@@ -202,7 +212,7 @@ function mapConversation(row = {}) {
 			stage: row.stage || "",
 			agendamentoId: row.agendamento_id || "",
 			agendamento_id: row.agendamento_id || "",
-			selectedDate: row.selected_date || "",
+			selectedDate: dateToYmd(row.selected_date),
 			selectedTime: row.selected_time || "",
 			startedAt: timestampToIso(row.started_at),
 			completedAt: timestampToIso(row.completed_at),
