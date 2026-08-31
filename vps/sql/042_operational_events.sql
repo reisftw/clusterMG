@@ -61,8 +61,8 @@ select
   data as payload,
   path as legacy_path,
   document_id as legacy_document_id,
-  coalesce(created_at, now()) as created_at,
-  coalesce(updated_at, created_at, now()) as updated_at
+  coalesce(imported_at, now()) as created_at,
+  coalesce(updated_at, imported_at, now()) as updated_at
 from app_documents
 where collection_path = 'api_runtime_events'
 on conflict (id) do update set
@@ -100,8 +100,8 @@ select
   data as payload,
   path as legacy_path,
   document_id as legacy_document_id,
-  coalesce(created_at, now()) as created_at,
-  coalesce(updated_at, created_at, now()) as updated_at
+  coalesce(imported_at, now()) as created_at,
+  coalesce(updated_at, imported_at, now()) as updated_at
 from app_documents
 where collection_path = 'api_service_events'
 on conflict (id) do update set
