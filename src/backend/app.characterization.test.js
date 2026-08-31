@@ -304,6 +304,7 @@ function baseMocks(overrides = {}) {
 			listSyncRuns: vi.fn(async () => ({ items: [] })),
 		},
 		documentosService: {},
+		createAgendamentosRouter: vi.fn(() => require("express").Router()),
 		createImoveisRouter: vi.fn(() => require("express").Router()),
 		createMensageriaRouter: vi.fn(() => require("express").Router()),
 		metrics: {
@@ -353,6 +354,10 @@ function installMocks(overrides = {}) {
 	setMock("./imoveis", {
 		createImoveisRouter: currentMocks.createImoveisRouter,
 	});
+	setMock(
+		"./agendamentos/routes/agendamentosRoutes",
+		currentMocks.createAgendamentosRouter,
+	);
 	setMock(
 		"./mensageria/routes/mensageriaRoutes",
 		currentMocks.createMensageriaRouter,
@@ -633,6 +638,24 @@ describe("vps api app characterization - domain route only collections", () => {
 
 		expect(response.status).toBe(410);
 		expect(response.body.error).toContain("/api/mensageria");
+		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
+	});
+
+	it("POST /api/admin/documents bloqueia colecoes de agendamentos migradas", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.post("/api/admin/documents")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				collectionPath: "agendamentos",
+				documentId: "ag-1",
+				data: { cliente_nome: "Cliente" },
+			});
+
+		expect(response.status).toBe(410);
+		expect(response.body.error).toContain("/api/agendamentos");
 		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
 	});
 });

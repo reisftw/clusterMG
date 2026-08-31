@@ -31,6 +31,7 @@ const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
 const createAgendamentoConfirmacaoAdminRouter = require("./agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes");
+const createAgendamentosRouter = require("./agendamentos/routes/agendamentosRoutes");
 const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes");
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
@@ -312,6 +313,16 @@ const MENSAGERIA_COLLECTIONS = new Set([
 	"mensageria_historico",
 	"mensageria_callbacks",
 	"mensageria_agendamento_conversas",
+]);
+const AGENDAMENTOS_COLLECTIONS = new Set([
+	"agendamentos",
+	"agendamentos_logs",
+	"agendamento_esteira_blocos",
+	"agendamento_esteira_clientes",
+	"agendamento_esteira_cliente_index",
+	"agendamento_esteira_logs",
+	"agendamento_esteira_metricas",
+	"agendamento_esteira_catalogo",
 ]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
@@ -1962,6 +1973,12 @@ function rejectDomainRouteOnlyCollection(res, collectionPath) {
 		});
 		return true;
 	}
+	if (AGENDAMENTOS_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/agendamentos.`,
+		});
+		return true;
+	}
 	return false;
 }
 
@@ -2279,6 +2296,15 @@ function createApp() {
 		createMensageriaRouter({
 			adminRoles: ADMIN_ROLES,
 			documents,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/agendamentos",
+		createAgendamentosRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,

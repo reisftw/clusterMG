@@ -1,12 +1,6 @@
-﻿import { COLLECTIONS } from "../../../constants/dataCollections";
+import { COLLECTIONS } from "../../../constants/dataCollections";
 import { emitRealtimeUpdate } from "../../../services/realtimeEvents";
-import {
-	createVpsDocument,
-	deleteVpsDocument,
-	listAllVpsDocuments,
-	requestVpsApi,
-	updateVpsDocument,
-} from "../../../services/vpsApiClient";
+import { requestVpsApi } from "../../../services/vpsApiClient";
 
 function emitAgendamentoUpsert(id, data) {
 	emitRealtimeUpdate("acompanhamento", {
@@ -18,13 +12,22 @@ function emitAgendamentoUpsert(id, data) {
 	});
 }
 
+export const buscarAgendamentosDominio = async ({ max = 10000 } = {}) => {
+	const params = new URLSearchParams({ max: String(max) });
+	const response = await requestVpsApi(`/agendamentos?${params.toString()}`);
+	return response.items || [];
+};
+
 export const buscarAgendamentos = async () =>
-	(
-		await listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS, {
-			pageSize: 1000,
-			max: 10000,
-		})
-	).sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
+	(await buscarAgendamentosDominio()).sort((a, b) =>
+		String(a.data || "").localeCompare(String(b.data || "")),
+	);
+
+export const buscarLogsAgendamentos = async ({ max = 3000 } = {}) => {
+	const params = new URLSearchParams({ max: String(max) });
+	const response = await requestVpsApi(`/agendamentos/logs?${params.toString()}`);
+	return response.items || [];
+};
 
 export const buscarClienteAgendamentoPorCodigo = async (codigo) => {
 	const normalized = String(codigo || "").replace(/\D/g, "");
@@ -42,9 +45,11 @@ export const criarAgendamento = async (dados) => {
 		criado_em: now,
 		atualizado_em: now,
 	};
-	const result = await createVpsDocument(COLLECTIONS.AGENDAMENTOS, {
-		...data,
+	const response = await requestVpsApi("/agendamentos", {
+		method: "POST",
+		body: JSON.stringify(data),
 	});
+	const result = response.item || { id: response.id };
 	emitAgendamentoUpsert(result?.id, data);
 	return result;
 };
@@ -54,15 +59,19 @@ export const atualizarAgendamento = async (id, dados) => {
 		...dados,
 		atualizado_em: new Date().toISOString(),
 	};
-	const result = await updateVpsDocument(`${COLLECTIONS.AGENDAMENTOS}/${id}`, {
-		...data,
+	const response = await requestVpsApi(`/agendamentos/${encodeURIComponent(id)}`, {
+		method: "PUT",
+		body: JSON.stringify(data),
 	});
+	const result = response.item || { id: response.id || id };
 	emitAgendamentoUpsert(id, data);
 	return result;
 };
 
 export const excluirAgendamento = async (id) => {
-	await deleteVpsDocument(`${COLLECTIONS.AGENDAMENTOS}/${id}`);
+	await requestVpsApi(`/agendamentos/${encodeURIComponent(id)}`, {
+		method: "DELETE",
+	});
 	emitRealtimeUpdate("acompanhamento", {
 		collectionPath: COLLECTIONS.AGENDAMENTOS,
 		documentId: id,

@@ -1,6 +1,5 @@
 const db = require("./db");
 const auditLog = require("./auditLog");
-const agendamentosRepository = require("./agendamentosRepository");
 const imoveisRepository = require("./imoveisRepository");
 const ordensRepository = require("./ordensRepository");
 const normalizedDualWrite = require("./normalizedDualWrite");
@@ -18,6 +17,14 @@ const NORMALIZED_ONLY_COLLECTIONS = new Set([
 	"mensageria_historico",
 	"mensageria_callbacks",
 	"mensageria_agendamento_conversas",
+	"agendamentos",
+	"agendamentos_logs",
+	"agendamento_esteira_blocos",
+	"agendamento_esteira_clientes",
+	"agendamento_esteira_cliente_index",
+	"agendamento_esteira_logs",
+	"agendamento_esteira_metricas",
+	"agendamento_esteira_catalogo",
 ]);
 const DOCUMENTS_READ_CACHE_TTL_MS = Math.max(
 	Number(process.env.DOCUMENTS_READ_CACHE_TTL_MS || 5000),
@@ -106,9 +113,6 @@ function assertLegacyCollectionAllowed(collectionPath) {
 
 async function listDocuments({ collectionPath, limit, offset }) {
 	assertLegacyCollectionAllowed(collectionPath);
-	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
-		return agendamentosRepository.listDocuments({ collectionPath, limit, offset });
-	}
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return imoveisRepository.listDocuments({ collectionPath, limit, offset });
 	}
@@ -137,9 +141,6 @@ async function listDocuments({ collectionPath, limit, offset }) {
 
 async function getDocument(documentPath) {
 	assertLegacyCollectionAllowed(getCollectionPath(documentPath));
-	if (agendamentosRepository.isSchedulingCollection(getCollectionPath(documentPath))) {
-		return agendamentosRepository.getDocument(documentPath);
-	}
 	if (imoveisRepository.isImoveisCollection(getCollectionPath(documentPath))) {
 		return imoveisRepository.getDocument(documentPath);
 	}
@@ -173,21 +174,6 @@ async function getDocumentSnapshot(documentPath) {
 
 async function upsertDocument(record) {
 	assertLegacyCollectionAllowed(record.collectionPath);
-	if (agendamentosRepository.isSchedulingCollection(record.collectionPath)) {
-		const beforeRecord = await agendamentosRepository.getDocument(record.path);
-		await agendamentosRepository.upsertDocument(record);
-		invalidateDocumentsCache({
-			collectionPath: record.collectionPath,
-			documentPath: record.path,
-		});
-		broadcastDocumentChange("upsert", record);
-		auditLog.recordDocumentAuditLog({
-			action: beforeRecord ? "update" : "create",
-			beforeRecord,
-			record,
-		});
-		return;
-	}
 	if (imoveisRepository.isImoveisCollection(record.collectionPath)) {
 		const beforeRecord = await imoveisRepository.getDocument(record.path);
 		await imoveisRepository.upsertDocument(record);
@@ -250,32 +236,6 @@ async function upsertDocument(record) {
 
 async function deleteDocument(path) {
 	assertLegacyCollectionAllowed(getCollectionPath(path));
-	if (agendamentosRepository.isSchedulingCollection(getCollectionPath(path))) {
-		const beforeRecord = await agendamentosRepository.getDocument(path);
-		await agendamentosRepository.deleteDocument(path);
-		const parts = String(path || "")
-			.split("/")
-			.filter(Boolean);
-		invalidateDocumentsCache({
-			collectionPath: parts.slice(0, -1).join("/"),
-			documentPath: path,
-		});
-		broadcastDocumentChange("delete", {
-			path,
-			collectionPath: parts.slice(0, -1).join("/"),
-			documentId: parts.at(-1),
-		});
-		auditLog.recordDocumentAuditLog({
-			action: "delete",
-			beforeRecord,
-			record: {
-				path,
-				collectionPath: parts.slice(0, -1).join("/"),
-				documentId: parts.at(-1),
-			},
-		});
-		return;
-	}
 	if (imoveisRepository.isImoveisCollection(getCollectionPath(path))) {
 		const beforeRecord = await imoveisRepository.getDocument(path);
 		await imoveisRepository.deleteDocument(path);
@@ -368,9 +328,6 @@ async function deleteDocumentsByCollectionAndSources(
 	sources = [],
 ) {
 	assertLegacyCollectionAllowed(collectionPath);
-	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
-		return 0;
-	}
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return 0;
 	}
@@ -423,9 +380,6 @@ async function deleteDocumentsByCollectionAndSources(
 
 async function listAllDocuments(collectionPath) {
 	assertLegacyCollectionAllowed(collectionPath);
-	if (agendamentosRepository.isSchedulingCollection(collectionPath)) {
-		return agendamentosRepository.listAllDocuments(collectionPath);
-	}
 	if (imoveisRepository.isImoveisCollection(collectionPath)) {
 		return imoveisRepository.listAllDocuments(collectionPath);
 	}

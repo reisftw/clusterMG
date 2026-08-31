@@ -1,4 +1,5 @@
 const documents = require("./documents");
+const agendamentosRepository = require("./agendamentosRepository");
 const mensageriaRepository = require("./mensageriaRepository");
 const notificationsService = require("./notificationsService");
 const cvortexIntegration = require("./cvortexIntegration");
@@ -2179,17 +2180,11 @@ async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
 	const dateKey = dateKeyFromValue(schedule.date);
 	if (!dateKey) return;
 	const month = dateKey.slice(0, 7);
-	const metricPath = `agendamento_esteira_metricas/${month}`;
-	const metricRecord = await documents.getDocument(metricPath).catch(() => null);
-	const metricData = metricRecord?.data || { mes: month };
+	const metricData =
+		(await agendamentosRepository.getPipelineMetrics(month)) || { mes: month };
 	const userKey = safeKey(AUTOMATION_ATTENDANT_ID);
 	const cityKey = safeKey(item?.cidade);
-	await documents.upsertDocument({
-		path: metricPath,
-		collectionPath: "agendamento_esteira_metricas",
-		documentId: month,
-		parentPath: null,
-		data: {
+	await agendamentosRepository.savePipelineMetrics(month, {
 			...metricData,
 			mes: month,
 			agendamentos: Number(metricData.agendamentos || 0) + 1,
@@ -2212,7 +2207,6 @@ async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
 				[cityKey]: item?.cidade || "",
 			},
 			atualizado_em: nowIso(),
-		},
 	});
 }
 
@@ -2435,13 +2429,7 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 		atualizado_em: createdAt,
 	};
 
-	await documents.upsertDocument({
-		path: `${APPOINTMENT_COLLECTION}/${id}`,
-		collectionPath: APPOINTMENT_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data: appointmentData,
-	});
+	await agendamentosRepository.createAppointment(appointmentData, { id });
 	broadcastRealtime("acompanhamento", {
 		action: "upsert",
 		collectionPath: APPOINTMENT_COLLECTION,

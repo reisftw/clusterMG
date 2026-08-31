@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const agendamentosRepository = require("../agendamentosRepository");
 const documents = require("../documents");
 const regionaisRepository = require("../regionaisRepository");
 const evolutionMessaging = require("../evolutionMessaging");
@@ -938,7 +939,9 @@ function getDocumentDateKey(item = {}) {
 
 async function buildTeamAppointmentsSummary() {
 	const ranges = getCurrentRanges();
-	const rows = await documents.listAllDocuments("agendamentos").catch(() => []);
+	const rows = await agendamentosRepository
+		.listAllAppointmentDocuments()
+		.catch(() => []);
 	const dates = rows
 		.map((row) => getDocumentDateKey(row.data || {}))
 		.filter(Boolean);

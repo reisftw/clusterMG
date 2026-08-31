@@ -4,7 +4,6 @@ const notifications = require("./notificationsService");
 
 const APPOINTMENTS_COLLECTION = "agendamentos";
 const MAP_COLLECTION = "ordens_abertas";
-const LOG_COLLECTION = "agendamentos_logs";
 const STATUS_WAITING = "Aguardando dia";
 const STATUS_COLLECTED = "Concluido";
 const STATUS_NOT_COLLECTED = "Nao recolhido";
@@ -141,6 +140,9 @@ function findMatchingOrder(appointment = {}, indexes) {
 }
 
 async function listCollection(collectionPath) {
+	if (collectionPath === APPOINTMENTS_COLLECTION) {
+		return agendamentosRepository.listAllAppointmentDocuments();
+	}
 	return documents.listAllDocuments(collectionPath);
 }
 
@@ -205,13 +207,7 @@ async function notifyNotCollected({ appointment, documentId, match, user }) {
 }
 
 async function updateAppointment(record, nextData) {
-	await documents.upsertDocument({
-		path: record.path,
-		collectionPath: APPOINTMENTS_COLLECTION,
-		documentId: record.documentId,
-		parentPath: record.parentPath || null,
-		data: nextData,
-	});
+	await agendamentosRepository.saveAppointment(record.documentId, nextData);
 }
 
 async function clearPreviousReconciliationLogs() {
@@ -227,12 +223,8 @@ async function saveReconciliationLog({
 	checkedAt,
 }) {
 	const id = `mapa_${checkedAt.replace(/\D/g, "")}_${record.documentId}`;
-	await documents.upsertDocument({
-		path: `${LOG_COLLECTION}/${id}`,
-		collectionPath: LOG_COLLECTION,
-		documentId: id,
-		parentPath: null,
-		data: {
+	await agendamentosRepository.recordAppointmentLog(
+		{
 			tipo: "verificacao_mapa",
 			origem: reason,
 			agendamento_id: record.documentId,
@@ -264,7 +256,8 @@ async function saveReconciliationLog({
 			]),
 			criado_em: checkedAt,
 		},
-	});
+		{ id },
+	);
 }
 
 async function reconcileAppointmentsWithMapa({

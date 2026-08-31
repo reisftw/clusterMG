@@ -118,6 +118,132 @@ describe("agendamentosRepository", () => {
 		expect(saved.data.cliente_nome).toBe("Cliente Novo");
 	});
 
+	it("cria agendamento pela interface de dominio", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "pk-domain",
+						document_id_original: "ag-domain",
+						legacy_path: "agendamentos/ag-domain",
+						legacy_document_id: "ag-domain",
+						codigo_cliente: "789",
+						cliente_nome: "Cliente Dominio",
+						status: "Aguardando dia",
+						source_payload: {
+							codigo_cliente: "789",
+							cliente_nome: "Cliente Dominio",
+							status: "Aguardando dia",
+						},
+					},
+				],
+			});
+		const repository = loadRepository(dbQuery);
+
+		const saved = await repository.createAppointment(
+			{
+				codigo_cliente: "789",
+				cliente_nome: "Cliente Dominio",
+				status: "Aguardando dia",
+			},
+			{ id: "ag-domain" },
+		);
+
+		expect(dbQuery.mock.calls[0][0]).toContain("insert into agendamentos");
+		expect(saved).toMatchObject({
+			id: "ag-domain",
+			codigo_cliente: "789",
+			cliente_nome: "Cliente Dominio",
+		});
+	});
+
+	it("atualiza agendamento pela interface de dominio preservando dados existentes", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "pk-update",
+						document_id_original: "ag-update",
+						legacy_path: "agendamentos/ag-update",
+						legacy_document_id: "ag-update",
+						cliente_nome: "Cliente Atual",
+						status: "Aguardando dia",
+						source_payload: {
+							cliente_nome: "Cliente Atual",
+							status: "Aguardando dia",
+						},
+					},
+				],
+			})
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "pk-update",
+						document_id_original: "ag-update",
+						legacy_path: "agendamentos/ag-update",
+						legacy_document_id: "ag-update",
+						cliente_nome: "Cliente Atual",
+						status: "Concluido",
+						source_payload: {
+							cliente_nome: "Cliente Atual",
+							status: "Concluido",
+						},
+					},
+				],
+			});
+		const repository = loadRepository(dbQuery);
+
+		const saved = await repository.updateAppointment("ag-update", {
+			status: "Concluido",
+		});
+
+		expect(dbQuery.mock.calls[1][0]).toContain("insert into agendamentos");
+		expect(saved).toMatchObject({
+			id: "ag-update",
+			cliente_nome: "Cliente Atual",
+			status: "Concluido",
+		});
+	});
+
+	it("registra log de agendamento pela interface de dominio", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "log-1",
+						document_id_original: "log-1",
+						legacy_path: "agendamentos_logs/log-1",
+						legacy_document_id: "log-1",
+						tipo: "verificacao_mapa",
+						agendamento_document_id_original: "ag-1",
+						source_payload: {
+							tipo: "verificacao_mapa",
+							agendamento_id: "ag-1",
+						},
+					},
+				],
+			});
+		const repository = loadRepository(dbQuery);
+
+		const saved = await repository.recordAppointmentLog(
+			{ tipo: "verificacao_mapa", agendamento_id: "ag-1" },
+			{ id: "log-1" },
+		);
+
+		expect(dbQuery.mock.calls[0][0]).toContain("insert into agendamentos_logs");
+		expect(saved).toMatchObject({
+			id: "log-1",
+			tipo: "verificacao_mapa",
+			agendamento_id: "ag-1",
+		});
+	});
+
 	it("busca agendamento por id somente depois de tentar legacy_path", async () => {
 		const dbQuery = vi
 			.fn()

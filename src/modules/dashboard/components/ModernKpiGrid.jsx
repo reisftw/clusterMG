@@ -10,8 +10,7 @@
 	Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { COLLECTIONS } from "../../../constants/dataCollections";
-import { listAllVpsDocuments } from "../../../services/vpsApiClient";
+import { buscarAgendamentosDominio } from "../../agendamentos/services/agendamentosService";
 
 const KPI_CONFIG = [
 	{
@@ -189,10 +188,7 @@ const ModernKpiGrid = ({
 		let active = true;
 
 		const carregarAgendamentos = async () => {
-			const items = await listAllVpsDocuments(COLLECTIONS.AGENDAMENTOS, {
-				pageSize: 1000,
-				max: 10000,
-			});
+			const items = await buscarAgendamentosDominio({ max: 10000 });
 			if (active) setAgendamentos(items);
 		};
 

@@ -1,3 +1,4 @@
+const agendamentosRepository = require("./agendamentosRepository");
 const documents = require("./documents");
 const regionaisRepository = require("./regionaisRepository");
 const notificationsService = require("./notificationsService");
@@ -418,6 +419,9 @@ async function configureEvolutionWebhook(webhookUrl = "") {
 }
 
 async function listAll(collectionPath) {
+	if (collectionPath === APPOINTMENT_COLLECTION) {
+		return agendamentosRepository.listAllAppointmentDocuments();
+	}
 	if (collectionPath === REGIONAL_COLLECTION) {
 		return regionaisRepository.listAllRegionalDocuments();
 	}

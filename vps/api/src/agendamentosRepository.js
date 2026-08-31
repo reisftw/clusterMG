@@ -93,6 +93,10 @@ function documentIdFromPath(documentPath) {
 	return parts.at(-1) || "";
 }
 
+function randomDocumentId(prefix = "ag") {
+	return `${prefix}_${Date.now()}_${crypto.randomUUID()}`;
+}
+
 function normalizeLimit(value, fallback = 50) {
 	const parsed = Number(value || fallback);
 	if (!Number.isFinite(parsed)) return fallback;
@@ -720,6 +724,149 @@ async function listDocuments({ collectionPath, limit, offset } = {}) {
 	return result.rows.map(config.mapper);
 }
 
+function dataFromDocument(document) {
+	return document?.data ? { id: document.documentId, ...document.data } : null;
+}
+
+function dataListFromDocuments(documents = []) {
+	return documents.map(dataFromDocument).filter(Boolean);
+}
+
+async function listAppointmentDocuments({ limit = 1000, offset = 0 } = {}) {
+	return listDocuments({
+		collectionPath: COLLECTIONS.appointments,
+		limit,
+		offset,
+	});
+}
+
+async function listAllAppointmentDocuments() {
+	return listAllDocuments(COLLECTIONS.appointments);
+}
+
+async function listAppointments({ limit = 1000, offset = 0 } = {}) {
+	return dataListFromDocuments(await listAppointmentDocuments({ limit, offset }));
+}
+
+async function listAllAppointments() {
+	return dataListFromDocuments(await listAllDocuments(COLLECTIONS.appointments));
+}
+
+async function getAppointment(id) {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.appointments}/${text(id)}`));
+}
+
+async function saveAppointment(id, payload = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("agendamento");
+	const saved = await upsertDocument({
+		path: `${COLLECTIONS.appointments}/${documentId}`,
+		collectionPath: COLLECTIONS.appointments,
+		documentId,
+		parentPath: null,
+		data: { ...payload, id: documentId },
+	});
+	return dataFromDocument(saved);
+}
+
+async function createAppointment(payload = {}, { id } = {}) {
+	return saveAppointment(id, payload);
+}
+
+async function updateAppointment(id, patch = {}) {
+	const current = (await getAppointment(id)) || {};
+	return saveAppointment(id, { ...current, ...patch, id: text(id) });
+}
+
+async function deleteAppointment(id) {
+	return deleteDocument(`${COLLECTIONS.appointments}/${text(id)}`);
+}
+
+async function listAppointmentLogs({ limit = 1000, offset = 0 } = {}) {
+	return dataListFromDocuments(
+		await listDocuments({
+			collectionPath: COLLECTIONS.appointmentLogs,
+			limit,
+			offset,
+		}),
+	);
+}
+
+async function listAllAppointmentLogs() {
+	return dataListFromDocuments(await listAllDocuments(COLLECTIONS.appointmentLogs));
+}
+
+async function recordAppointmentLog(payload = {}, { id } = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("agendamento_log");
+	const saved = await upsertDocument({
+		path: `${COLLECTIONS.appointmentLogs}/${documentId}`,
+		collectionPath: COLLECTIONS.appointmentLogs,
+		documentId,
+		parentPath: null,
+		data: { ...payload, id: documentId },
+	});
+	return dataFromDocument(saved);
+}
+
+async function getPipelineBlock(id) {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.blocks}/${text(id)}`));
+}
+
+async function savePipelineBlock(id, payload = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("bloco");
+	const saved = await upsertDocument({
+		path: `${COLLECTIONS.blocks}/${documentId}`,
+		collectionPath: COLLECTIONS.blocks,
+		documentId,
+		parentPath: null,
+		data: { ...payload, id: documentId },
+	});
+	return dataFromDocument(saved);
+}
+
+async function getPipelineCatalog(id = "ativo") {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.catalog}/${text(id)}`));
+}
+
+async function savePipelineCatalog(id = "ativo", payload = {}) {
+	const documentId = text(id) || "ativo";
+	const saved = await upsertDocument({
+		path: `${COLLECTIONS.catalog}/${documentId}`,
+		collectionPath: COLLECTIONS.catalog,
+		documentId,
+		parentPath: null,
+		data: { ...payload, id: documentId },
+	});
+	return dataFromDocument(saved);
+}
+
+async function getPipelineMetrics(month) {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.metrics}/${text(month)}`));
+}
+
+async function savePipelineMetrics(month, payload = {}) {
+	const documentId = text(month || payload.mes);
+	const saved = await upsertDocument({
+		path: `${COLLECTIONS.metrics}/${documentId}`,
+		collectionPath: COLLECTIONS.metrics,
+		documentId,
+		parentPath: null,
+		data: { ...payload, mes: documentId },
+	});
+	return dataFromDocument(saved);
+}
+
+async function recordPipelineLog(payload = {}, { id } = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("esteira_log");
+	const saved = await upsertDocument({
+		path: `${COLLECTIONS.esteiraLogs}/${documentId}`,
+		collectionPath: COLLECTIONS.esteiraLogs,
+		documentId,
+		parentPath: null,
+		data: { ...payload, id: documentId },
+	});
+	return dataFromDocument(saved);
+}
+
 async function listAllDocuments(collectionPath) {
 	const config = tableConfig(collectionPath);
 	const result = await db.query(`select * from ${config.table} order by ${config.orderBy}`);
@@ -826,12 +973,31 @@ async function findClienteByCodigo(codigo) {
 
 module.exports = {
 	COLLECTIONS,
+	createAppointment,
 	deleteAppointmentLogsByType,
+	deleteAppointment,
 	deleteDocument,
 	findClienteByCodigo,
+	getAppointment,
 	getDocument,
+	getPipelineBlock,
+	getPipelineCatalog,
+	getPipelineMetrics,
 	isSchedulingCollection,
+	listAllAppointmentLogs,
+	listAllAppointmentDocuments,
+	listAllAppointments,
 	listAllDocuments,
+	listAppointmentDocuments,
+	listAppointmentLogs,
+	listAppointments,
 	listDocuments,
+	recordAppointmentLog,
+	recordPipelineLog,
+	saveAppointment,
+	savePipelineBlock,
+	savePipelineCatalog,
+	savePipelineMetrics,
+	updateAppointment,
 	upsertDocument,
 };
