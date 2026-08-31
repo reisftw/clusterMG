@@ -1,12 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	buildDiarioBoardData,
 	buildDiarioMonthlyGoalsSnapshot,
 	compareDiarioMonthlyGoals,
+	listDiarioMonthlyGoalsSnapshots,
 	normalizeDiarioEntry,
 } from "./diarioService";
 
+vi.mock("../../../services/vpsApiClient", () => ({
+	createVpsDocument: vi.fn(),
+	listVpsDocuments: vi.fn(),
+	setVpsDocument: vi.fn(),
+	updateVpsDocument: vi.fn(),
+}));
+
+const { listVpsDocuments } = await import("../../../services/vpsApiClient");
+
 describe("diarioService monthly goals history", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
 	it("cria snapshot mensal com totais e semanas do diario", () => {
 		const boardData = buildDiarioBoardData(
 			[
@@ -69,6 +83,42 @@ describe("diarioService monthly goals history", () => {
 				{ week: 3, deliveredDiff: 0, finesDiff: 0 },
 				{ week: 4, deliveredDiff: 0, finesDiff: 0 },
 			],
+		});
+	});
+
+	it("reconstroi meses antigos a partir dos lancamentos diarios quando nao ha snapshot salvo", async () => {
+		listVpsDocuments
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([
+				{
+					id: "2026-07-01",
+					date: "2026-07-01",
+					horarios: { "11h": 80, "14h": 20 },
+					fines: 1,
+				},
+				{
+					id: "2026-08-03",
+					date: "2026-08-03",
+					horarios: { "16h": 150 },
+					fines: 0,
+				},
+			]);
+
+		const snapshots = await listDiarioMonthlyGoalsSnapshots();
+
+		expect(snapshots.map((item) => item.monthKey)).toEqual([
+			"2026-08",
+			"2026-07",
+		]);
+		expect(snapshots[0]).toMatchObject({
+			monthKey: "2026-08",
+			generatedFromEntries: true,
+			totals: { monthDelivered: 150, monthFines: 0 },
+		});
+		expect(snapshots[1]).toMatchObject({
+			monthKey: "2026-07",
+			generatedFromEntries: true,
+			totals: { monthDelivered: 100, monthFines: 1 },
 		});
 	});
 });

@@ -426,11 +426,52 @@ export async function saveDiarioMonthlyGoalsSnapshot(boardData, audit = {}) {
 }
 
 export async function listDiarioMonthlyGoalsSnapshots() {
-	const snapshots = await listVpsDocuments(
-		COLLECTIONS.ACOMPANHAMENTO_DIARIO_METAS_HISTORICO,
-		{ limit: 120 },
-	);
-	return snapshots
+	const [savedSnapshots, diarioEntries] = await Promise.all([
+		listVpsDocuments(COLLECTIONS.ACOMPANHAMENTO_DIARIO_METAS_HISTORICO, {
+			limit: 120,
+		}).catch(() => []),
+		listVpsDocuments(COLLECTIONS.ACOMPANHAMENTO_DIARIO, {
+			limit: 1000,
+		}).catch(() => []),
+	]);
+	const snapshotsByMonth = new Map();
+
+	diarioEntries
+		.map((entry) => normalizeDiarioEntry(entry))
+		.forEach((entry) => {
+			const list = snapshotsByMonth.get(entry.monthKey) || [];
+			list.push(entry);
+			snapshotsByMonth.set(entry.monthKey, list);
+		});
+
+	for (const [monthKey, entries] of snapshotsByMonth.entries()) {
+		const virtualSnapshot = buildDiarioMonthlyGoalsSnapshot(
+			buildDiarioBoardData(entries, `${monthKey}-15`),
+			{
+				savedBy: null,
+				savedByName: "Sistema",
+			},
+		);
+		snapshotsByMonth.set(monthKey, {
+			...virtualSnapshot,
+			savedAt: null,
+			generatedFromEntries: true,
+		});
+	}
+
+	savedSnapshots.forEach((snapshot) => {
+		const monthKey = snapshot.monthKey || snapshot.id;
+		if (!monthKey) return;
+		snapshotsByMonth.set(monthKey, {
+			...snapshot,
+			monthKey,
+			weeks: Array.isArray(snapshot.weeks) ? snapshot.weeks : [],
+			totals: snapshot.totals || {},
+			generatedFromEntries: false,
+		});
+	});
+
+	return [...snapshotsByMonth.values()]
 		.map((snapshot) => ({
 			...snapshot,
 			monthKey: snapshot.monthKey || snapshot.id,
