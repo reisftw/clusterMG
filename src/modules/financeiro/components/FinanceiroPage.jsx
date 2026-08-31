@@ -75,6 +75,8 @@ import {
 	buscarLogsPlanilhasFinanceiro,
 	buscarSerasaReportFinanceiro,
 	buscarTarifasReportFinanceiro,
+	criarDadosFicticiosDreFinanceiro,
+	apagarDadosFicticiosDreFinanceiro,
 	importarDadosOrcamentoFinanceiro,
 	limparDadosOrcamentoFinanceiro,
 	limparSerasaReportFinanceiro,
@@ -236,9 +238,9 @@ const PAGE_META = {
 		title: "Centros de Custo",
 		subtitle: "Organize áreas, responsáveis e limites orçamentários.",
 	},
-	orcamentoRealizado: {
-		title: "Orçado x Realizado",
-		subtitle: "Compare previsto, realizado e saldo por período.",
+	orcamentoDre: {
+		title: "DRE",
+		subtitle: "Demonstração de Resultado do Exercício por competência.",
 	},
 	orcamentoAprovacoes: {
 		title: "Aprovações de Orçamento",
@@ -257,7 +259,7 @@ const PAGE_META = {
 const BUDGET_OPERATIONAL_PAGE_VIEWS = {
 	orcamentoAprovacoes: BudgetApprovalsView,
 	orcamentoCentrosCusto: BudgetCostCentersView,
-	orcamentoRealizado: BudgetDreView,
+	orcamentoDre: BudgetDreView,
 };
 
 const BUDGET_IMPORT_FIELDS = [
@@ -3646,7 +3648,7 @@ function SectionPage({ page }) {
 				"Acima do previsto",
 				"Novos no mês",
 			],
-			orcamentoRealizado: [
+			orcamentoDre: [
 				"Previsto",
 				"Realizado",
 				"Comprometido",
@@ -8141,7 +8143,12 @@ function BudgetPartnerViewModal({
 	);
 }
 
-function CostCentersConfigSection({ canManage }) {
+function CostCentersConfigSection({
+	canManage,
+	onCreateFakeDreData,
+	onDeleteFakeDreData,
+	dreFakeLoading = false,
+}) {
 	const {
 		config,
 		configRef,
@@ -8663,9 +8670,12 @@ function CostCentersConfigSection({ canManage }) {
 				canManage={canManage}
 				centers={config.centers || []}
 				disabled={!canManage || saving}
+				dreFakeLoading={dreFakeLoading}
 				DirectoratesDropdownSection={DirectoratesDropdownSection}
 				ListConfigInput={ListConfigInput}
 				onChangeSettings={updateSettings}
+				onCreateFakeDreData={onCreateFakeDreData}
+				onDeleteFakeDreData={onDeleteFakeDreData}
 				open={parametersOpen}
 				setOpen={setParametersOpen}
 			/>
@@ -9458,6 +9468,48 @@ function OrcamentoConfiguracoesPage({
 	selectedPeriod = {},
 }) {
 	const [reportOpen, setReportOpen] = useState(false);
+	const [feedback, setFeedback] = useState(null);
+	const [dreFakeLoading, setDreFakeLoading] = useState(false);
+	const createFakeDreData = async () => {
+		if (!window.confirm("Criar dados fictícios de DRE para teste?")) return;
+		setDreFakeLoading(true);
+		try {
+			await criarDadosFicticiosDreFinanceiro();
+			setFeedback({
+				type: "success",
+				title: "Dados fictícios criados",
+				message: "A DRE de teste foi criada com sucesso.",
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao criar dados fictícios",
+				...getVisibleError(error, "Não foi possível criar a DRE fictícia."),
+			});
+		} finally {
+			setDreFakeLoading(false);
+		}
+	};
+	const deleteFakeDreData = async () => {
+		if (!window.confirm("Apagar somente os dados fictícios de DRE?")) return;
+		setDreFakeLoading(true);
+		try {
+			await apagarDadosFicticiosDreFinanceiro();
+			setFeedback({
+				type: "success",
+				title: "Dados fictícios apagados",
+				message: "Somente os dados fictícios da DRE foram apagados.",
+			});
+		} catch (error) {
+			setFeedback({
+				type: "error",
+				title: "Erro ao apagar dados fictícios",
+				...getVisibleError(error, "Não foi possível apagar a DRE fictícia."),
+			});
+		} finally {
+			setDreFakeLoading(false);
+		}
+	};
 	return (
 		<section className="space-y-5">
 			<section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
@@ -9480,7 +9532,13 @@ function OrcamentoConfiguracoesPage({
 					</button>
 				</div>
 			</section>
-			<CostCentersConfigSection canManage={canManage} />
+			<CostCentersConfigSection
+				canManage={canManage}
+				dreFakeLoading={dreFakeLoading}
+				onCreateFakeDreData={createFakeDreData}
+				onDeleteFakeDreData={deleteFakeDreData}
+			/>
+			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
 			{reportOpen ? (
 				<BudgetReportExportModal
 					config={config}
@@ -10896,7 +10954,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 	const isBudgetOperationalPage = [
 		"orcamentoDashboard",
 		"orcamentoCentrosCusto",
-		"orcamentoRealizado",
+		"orcamentoDre",
 		"orcamentoAprovacoes",
 	].includes(page);
 	const hideHeaderControls = [
@@ -11238,7 +11296,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 			{[
 				"orcamentoDashboard",
 				"orcamentoCentrosCusto",
-				"orcamentoRealizado",
+				"orcamentoDre",
 				"orcamentoAprovacoes",
 			].includes(page) ? (
 				<BudgetOperationalPage

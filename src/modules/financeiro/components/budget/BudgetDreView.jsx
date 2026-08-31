@@ -1,251 +1,489 @@
-export default function BudgetDreView({
-	BudgetDeviationJustificationModal,
-	BudgetTransferRequestModal,
-	DreAccountDetailModal,
-	DreTransactionDrawer,
-	brl,
-	budgetAccountLabel,
-	budgetVarianceMeta,
-	buildBudgetPeriod,
-	config,
-	insights,
-	integer,
-	movementValue,
-	selectedPeriod,
-	deviationJustification,
-	dreAccountDetail,
-	dreDrawer,
-	setDeviationJustification,
-	setDreAccountDetail,
-	setDreDrawer,
-	setTransferRequest,
-	transferRequest,
-}) {
-	const drePeriod = buildBudgetPeriod(selectedPeriod);
-	const dreMonths = drePeriod.months || [];
-	const dreFirstMonth = dreMonths[0] || {
-		year: new Date().getFullYear(),
-		month: new Date().getMonth() + 1,
-	};
-	const dreYear = Number(dreFirstMonth.year || new Date().getFullYear());
-	const dreMonth = Number(dreFirstMonth.month || new Date().getMonth() + 1);
-	const dreNow = new Date();
-	const dreIsCurrentMonth =
-		dreMonths.length === 1 &&
-		dreYear === dreNow.getFullYear() &&
-		dreMonth === dreNow.getMonth() + 1;
-	const dreDaysInMonth = new Date(dreYear, dreMonth, 0).getDate();
-	const dreElapsedDays = dreIsCurrentMonth ? dreNow.getDate() : dreDaysInMonth;
-	const dreElapsedPercent = dreDaysInMonth
-		? (dreElapsedDays / dreDaysInMonth) * 100
-		: 0;
-	const dreMovementsFor = (rowItem) =>
-		insights.movements.filter(
-			(movement) =>
-				String(movement.accountId || "") === String(rowItem.row.accountId || "") &&
-				String(movement.centerId || "") ===
-					String(rowItem.row.costCenterId || ""),
+import {
+	AlertTriangle,
+	CheckCircle2,
+	FileSpreadsheet,
+	Loader2,
+	RefreshCw,
+	Upload,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+import {
+	buscarDreOrcamentoFinanceiro,
+	importarDreOrcamentoFinanceiro,
+} from "../../services/financeiroService";
+import {
+	calculateDreStatement,
+	classifyDreCategory,
+	DRE_LINE_IDS,
+	DRE_STATEMENT_LINES,
+} from "../../utils/dreStatement";
+import { brl, integer } from "../../utils/financeiroFormatters";
+
+const DRE_VALUE_HEADERS = ["valor", "realizado", "saldo", "total", "vlr"];
+const DRE_CATEGORY_HEADERS = [
+	"linha",
+	"linhadre",
+	"categoria",
+	"classificacao",
+	"classificacaodre",
+	"grupo",
+	"conta",
+];
+const DRE_DESCRIPTION_HEADERS = ["descricao", "historico", "nome", "detalhe"];
+
+function normalizeHeader(value) {
+	return String(value || "")
+		.trim()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "");
+}
+
+function firstValue(row = {}, headers = []) {
+	for (const header of headers) {
+		const value = row[header];
+		if (value !== undefined && value !== null && String(value).trim()) {
+			return value;
+		}
+	}
+	return "";
+}
+
+function money(value) {
+	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+	const normalized = String(value || "")
+		.replace(/[R$\s]/g, "")
+		.replace(/\.(?=\d{3}(\D|$))/g, "")
+		.replace(",", ".");
+	const parsed = Number(normalized || 0);
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseCompetencia(value, fallback = {}) {
+	if (value instanceof Date && !Number.isNaN(value.getTime())) {
+		return { ano: value.getFullYear(), mes: value.getMonth() + 1 };
+	}
+	const text = String(value || "").trim();
+	const br = text.match(/(\d{1,2})[/-](\d{4})/);
+	if (br) return { mes: Number(br[1]), ano: Number(br[2]) };
+	const iso = text.match(/(\d{4})[/-](\d{1,2})/);
+	if (iso) return { ano: Number(iso[1]), mes: Number(iso[2]) };
+	return fallback;
+}
+
+function normalizeSheetRow(row = {}) {
+	return Object.fromEntries(
+		Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]),
+	);
+}
+
+function parseDreWorkbook(file, buffer) {
+	const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+	const sheetName = workbook.SheetNames[0];
+	const sheet = workbook.Sheets[sheetName];
+	const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+	const current = new Date();
+	const rows = rawRows.map((rawRow, index) => {
+		const row = normalizeSheetRow(rawRow);
+		const competencia = parseCompetencia(
+			firstValue(row, ["competencia", "mesano", "periodo", "data"]),
+			{
+				ano: Number(row.ano) || current.getFullYear(),
+				mes: Number(row.mes || row.nummes) || current.getMonth() + 1,
+			},
 		);
-	const dreSparkline = (rowItem) => {
-		const values = Array.from({ length: 6 }, (_, index) => {
-			const month = Math.max(1, dreMonth - 5 + index);
-			return insights.movements
-				.filter(
-					(movement) =>
-						String(movement.accountId || "") ===
-							String(rowItem.row.accountId || "") &&
-						String(movement.centerId || "") ===
-							String(rowItem.row.costCenterId || "") &&
-						Number(movement.month || 0) === month,
-				)
-				.reduce((sum, movement) => sum + movementValue(movement), 0);
-		});
-		const max = Math.max(...values, 1);
-		return values.map((value, index) => ({
-			index,
-			height: Math.max(8, (value / max) * 34),
-			value,
-		}));
-	};
-	const dreRowStatus = (rowItem) => {
-		const used = Number(rowItem.realized || 0);
-		const planned = Number(rowItem.planned || 0);
-		const percent = planned ? (used / planned) * 100 : 0;
-		if (percent > 100) {
-			return {
-				label: "Estouro / Alerta",
-				className: "bg-red-50 text-red-700 ring-red-100",
-				dot: "bg-red-500",
-			};
-		}
-		if (
-			planned > 0 &&
-			(used <= 0 ||
-				(dreElapsedPercent >= 75 && percent < dreElapsedPercent * 0.45))
-		) {
-			return {
-				label: "Perto do prazo / Sem lançamento",
-				className: "bg-amber-50 text-amber-700 ring-amber-100",
-				dot: "bg-amber-400",
-			};
-		}
+		const categoriaOriginal = firstValue(row, DRE_CATEGORY_HEADERS);
+		const linhaDre = classifyDreCategory(categoriaOriginal);
 		return {
-			label: "Dentro do previsto",
-			className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-			dot: "bg-emerald-500",
+			index: index + 2,
+			competenciaAno: competencia.ano,
+			competenciaMes: competencia.mes,
+			linhaDre,
+			categoriaOriginal,
+			descricao: firstValue(row, DRE_DESCRIPTION_HEADERS),
+			valor: money(firstValue(row, DRE_VALUE_HEADERS)),
+			origemArquivo: file.name,
+			raw: rawRow,
 		};
+	});
+	return {
+		fileName: file.name,
+		sheetName,
+		rows: rows.filter(
+			(row) =>
+				row.categoriaOriginal ||
+				row.descricao ||
+				row.valor ||
+				row.competenciaAno ||
+				row.competenciaMes,
+		),
 	};
-	const dreGroupedAccounts = Array.from(
-		insights.accountRows
-			.reduce((map, item) => {
-				const key = item.account?.id || item.row.accountId || "sem-conta";
-				const current = map.get(key) || {
-					id: key,
-					account: item.account,
-					rows: [],
-					planned: 0,
-					realized: 0,
-					committed: 0,
-				};
-				const committed = Number(item.center?.comprometidoMes || 0);
-				current.rows.push(item);
-				current.planned += Number(item.planned || 0);
-				current.realized += Number(item.realized || 0);
-				current.committed += committed;
-				map.set(key, current);
-				return map;
-			}, new Map())
-			.values(),
-	).sort((left, right) => right.realized - left.realized);
+}
+
+function DreLineBadge({ type }) {
+	const className =
+		type === "result"
+			? "bg-blue-50 text-blue-700 ring-blue-100"
+			: "bg-slate-50 text-slate-600 ring-slate-100";
+	return (
+		<span
+			className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ring-1 ${className}`}
+		>
+			{type === "result" ? "Calculado" : "Base"}
+		</span>
+	);
+}
+
+export default function BudgetDreView({ canManage, setFeedback }) {
+	const now = new Date();
+	const [ano, setAno] = useState(now.getFullYear());
+	const [mes, setMes] = useState(now.getMonth() + 1);
+	const [isFake, setIsFake] = useState(false);
+	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
+	const [data, setData] = useState({
+		totalsByLine: {},
+		rows: [],
+		competencias: [],
+	});
+	const [preview, setPreview] = useState(null);
+
+	const loadDre = useCallback(async () => {
+		setLoading(true);
+		try {
+			const response = await buscarDreOrcamentoFinanceiro({ ano, mes, isFake });
+			setData(response || { totalsByLine: {}, rows: [], competencias: [] });
+		} catch (error) {
+			setFeedback?.({
+				type: "error",
+				title: "Erro ao carregar DRE",
+				message: error?.message || "Não foi possível carregar a DRE.",
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, [ano, isFake, mes, setFeedback]);
+
+	useEffect(() => {
+		loadDre();
+	}, [loadDre]);
+
+	const statement = useMemo(
+		() => calculateDreStatement(data.totalsByLine || {}),
+		[data.totalsByLine],
+	);
+	const byId = useMemo(
+		() => new Map(statement.map((line) => [line.id, line])),
+		[statement],
+	);
+	const classifiedRows = (preview?.rows || []).filter((row) => row.linhaDre);
+	const unclassifiedRows = (preview?.rows || []).filter((row) => !row.linhaDre);
+
+	const handleFile = async (event) => {
+		const file = event.target.files?.[0];
+		event.target.value = "";
+		if (!file) return;
+		try {
+			const buffer = await file.arrayBuffer();
+			const parsed = parseDreWorkbook(file, buffer);
+			setPreview(parsed);
+			const first = parsed.rows.find(
+				(row) => row.competenciaAno && row.competenciaMes,
+			);
+			if (first) {
+				setAno(first.competenciaAno);
+				setMes(first.competenciaMes);
+			}
+		} catch (error) {
+			setFeedback?.({
+				type: "error",
+				title: "Erro ao ler XLSX",
+				message: error?.message || "Não foi possível ler a planilha DRE.",
+			});
+		}
+	};
+
+	const confirmImport = async () => {
+		if (!classifiedRows.length || unclassifiedRows.length) return;
+		setSaving(true);
+		try {
+			await importarDreOrcamentoFinanceiro({
+				fileName: preview.fileName,
+				sheetName: preview.sheetName,
+				rows: classifiedRows,
+				isFake: false,
+			});
+			setPreview(null);
+			setIsFake(false);
+			await loadDre();
+		} catch (error) {
+			setFeedback?.({
+				type: "error",
+				title: "Erro ao importar DRE",
+				message: error?.message || "Não foi possível salvar a DRE.",
+			});
+		} finally {
+			setSaving(false);
+		}
+	};
 
 	return (
 		<section className="space-y-4">
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+					<div>
+						<h2 className="text-lg font-black text-slate-950">DRE</h2>
+						<p className="mt-1 text-sm font-bold text-slate-500">
+							Importe as linhas-base e confira os resultados calculados pela
+							tela.
+						</p>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						<select
+							value={mes}
+							onChange={(event) => setMes(Number(event.target.value))}
+							className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700"
+						>
+							{Array.from({ length: 12 }, (_, index) => index + 1).map(
+								(month) => (
+									<option key={month} value={month}>
+										{String(month).padStart(2, "0")}
+									</option>
+								),
+							)}
+						</select>
+						<input
+							type="number"
+							value={ano}
+							onChange={(event) => setAno(Number(event.target.value))}
+							className="min-h-11 w-28 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-700"
+						/>
+						<label className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-700">
+							<input
+								type="checkbox"
+								checked={isFake}
+								onChange={(event) => setIsFake(event.target.checked)}
+							/>
+							Dados fictícios
+						</label>
+						<button
+							type="button"
+							onClick={loadDre}
+							disabled={loading}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							<RefreshCw
+								size={16}
+								className={loading ? "animate-spin" : ""}
+							/>{" "}
+							Atualizar
+						</button>
+						<label
+							className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 ${
+								!canManage ? "pointer-events-none opacity-50" : ""
+							}`}
+						>
+							<Upload size={16} /> Importar XLSX
+							<input
+								type="file"
+								accept=".xlsx,.xls"
+								onChange={handleFile}
+								disabled={!canManage || saving}
+								className="hidden"
+							/>
+						</label>
+					</div>
+				</div>
+			</section>
+
+			<section className="grid gap-4 md:grid-cols-4">
+				{[
+					[
+						"Receita Líquida",
+						byId.get(DRE_LINE_IDS.RECEITA_LIQUIDA)?.value || 0,
+					],
+					["Lucro Bruto", byId.get(DRE_LINE_IDS.LUCRO_BRUTO)?.value || 0],
+					[
+						"Resultado Antes IRPJ/CSLL",
+						byId.get(DRE_LINE_IDS.RESULTADO_ANTES_IRPJ_CSLL)?.value || 0,
+					],
+					[
+						"Resultado Líquido",
+						byId.get(DRE_LINE_IDS.RESULTADO_LIQUIDO)?.value || 0,
+					],
+				].map(([label, value]) => (
+					<div
+						key={label}
+						className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+					>
+						<p className="text-xs font-black uppercase text-slate-500">
+							{label}
+						</p>
+						<p
+							className={`mt-2 text-2xl font-black ${
+								value < 0 ? "text-red-600" : "text-slate-950"
+							}`}
+						>
+							{brl.format(value)}
+						</p>
+					</div>
+				))}
+			</section>
+
+			{preview ? (
+				<section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+					<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+						<div>
+							<h3 className="flex items-center gap-2 text-sm font-black text-slate-950">
+								<FileSpreadsheet size={16} /> Prévia da importação
+							</h3>
+							<p className="mt-1 text-xs font-bold text-blue-900">
+								{preview.fileName} · {integer.format(classifiedRows.length)}{" "}
+								linha(s) classificadas
+								{unclassifiedRows.length
+									? ` · ${integer.format(unclassifiedRows.length)} revisar`
+									: ""}
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={confirmImport}
+							disabled={
+								saving || !classifiedRows.length || unclassifiedRows.length
+							}
+							className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
+						>
+							{saving ? (
+								<Loader2 className="animate-spin" size={16} />
+							) : (
+								<CheckCircle2 size={16} />
+							)}
+							Confirmar importação
+						</button>
+					</div>
+					{unclassifiedRows.length ? (
+						<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+							<AlertTriangle className="mr-2 inline" size={16} />
+							Existem categorias sem correspondência DRE. A importação fica
+							bloqueada para evitar descarte silencioso.
+						</div>
+					) : null}
+				</section>
+			) : null}
+
 			<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 				<div className="border-b border-slate-200 p-4">
-					<h2 className="text-lg font-black text-slate-950">
-						DRE Orçado x Realizado
-					</h2>
-					<p className="text-sm font-bold text-slate-500">
-						Contas financeiras agrupadas com drill-down por centro de custo,
-						forecast e alertas de desvio.
+					<h3 className="text-base font-black text-slate-950">
+						Demonstrativo de Resultado
+					</h3>
+					<p className="text-xs font-bold text-slate-500">
+						Linhas de resultado calculadas automaticamente a partir dos
+						lançamentos base.
 					</p>
 				</div>
 				<div className="overflow-x-auto">
-					<table className="min-w-full table-fixed text-left text-xs font-bold">
-						<thead className="bg-slate-50 text-xs uppercase text-slate-500">
+					<table className="min-w-full table-fixed text-left text-sm">
+						<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
 							<tr>
-								<th className="w-[30%] px-3 py-3">Conta</th>
-								<th className="w-[7%] px-2 py-3 text-right">CC</th>
-								<th className="w-[11%] px-2 py-3 text-right">Orçado</th>
-								<th className="w-[11%] px-2 py-3 text-right">Realiz.</th>
-								<th className="w-[11%] px-2 py-3 text-right">Comp.</th>
-								<th className="w-[11%] px-2 py-3 text-right">Forecast</th>
-								<th className="w-[10%] px-2 py-3 text-right">Desvio</th>
-								<th className="w-[9%] px-3 py-3 text-right">Ação</th>
+								<th className="w-20 px-4 py-3">Ordem</th>
+								<th className="px-4 py-3">Linha DRE</th>
+								<th className="w-32 px-4 py-3">Tipo</th>
+								<th className="w-48 px-4 py-3 text-right">Valor</th>
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100">
-							{dreGroupedAccounts.map((group) => {
-								const groupForecast = dreElapsedDays
-									? ((group.realized + group.committed) / dreElapsedDays) *
-										dreDaysInMonth
-									: group.realized + group.committed;
-								const groupVariance = budgetVarianceMeta(
-									group.planned,
-									group.realized + group.committed,
-								);
-								return (
-									<tr key={group.id} className="bg-white hover:bg-blue-50/30">
-										<td className="px-3 py-3">
-											<button
-												type="button"
-												onClick={() => setDreAccountDetail(group)}
-												className="block max-w-full truncate text-left font-black text-slate-950 hover:text-blue-700"
-												title={budgetAccountLabel(group.account, group.id)}
-											>
-												{budgetAccountLabel(group.account, group.id)}
-											</button>
-											<p className="mt-1 truncate text-[11px] font-bold text-slate-500">
-												Detalhar centros
-											</p>
+							{loading ? (
+								<tr>
+									<td
+										colSpan={4}
+										className="px-4 py-10 text-center text-sm font-bold text-slate-500"
+									>
+										Carregando DRE...
+									</td>
+								</tr>
+							) : (
+								statement.map((line) => (
+									<tr
+										key={line.id}
+										className={
+											line.type === "result" ? "bg-blue-50/40" : "bg-white"
+										}
+									>
+										<td className="px-4 py-3 font-black text-slate-500">
+											{line.order}
 										</td>
-										<td className="px-2 py-3 text-right text-slate-700">
-											{integer.format(group.rows.length)}
+										<td className="px-4 py-3 font-black text-slate-950">
+											{line.label}
 										</td>
-										<td className="px-2 py-3 text-right text-slate-700">
-											{brl.format(group.planned)}
-										</td>
-										<td className="px-2 py-3 text-right text-slate-700">
-											{brl.format(group.realized)}
-										</td>
-										<td className="px-2 py-3 text-right text-slate-700">
-											{brl.format(group.committed)}
-										</td>
-										<td className="px-2 py-3 text-right font-black text-slate-900">
-											{brl.format(groupForecast)}
+										<td className="px-4 py-3">
+											<DreLineBadge type={line.type} />
 										</td>
 										<td
-											className={`px-2 py-3 text-right font-black ${groupVariance.textClass}`}
+											className={`px-4 py-3 text-right font-black ${
+												line.value < 0 ? "text-red-600" : "text-slate-950"
+											}`}
 										>
-											{brl.format(groupVariance.variance)}
-										</td>
-										<td className="px-3 py-3 text-right">
-											<button
-												type="button"
-												onClick={() => setDreAccountDetail(group)}
-												className="rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-black text-blue-700 hover:bg-blue-50"
-											>
-												Ver
-											</button>
+											{brl.format(line.value)}
 										</td>
 									</tr>
-								);
-							})}
+								))
+							)}
 						</tbody>
 					</table>
 				</div>
 			</section>
-			{dreAccountDetail ? (
-				<DreAccountDetailModal
-					group={dreAccountDetail}
-					elapsedDays={dreElapsedDays}
-					daysInMonth={dreDaysInMonth}
-					rowStatus={dreRowStatus}
-					sparklineFor={dreSparkline}
-					movementsFor={dreMovementsFor}
-					onClose={() => setDreAccountDetail(null)}
-					onExtract={(item) =>
-						setDreDrawer({ row: item, movements: dreMovementsFor(item) })
-					}
-					onTransfer={setTransferRequest}
-					onJustify={setDeviationJustification}
-				/>
-			) : null}
-			{dreDrawer ? (
-				<DreTransactionDrawer
-					row={dreDrawer.row}
-					movements={dreDrawer.movements}
-					accountById={
-						new Map((config.accounts || []).map((account) => [account.id, account]))
-					}
-					centerById={
-						new Map((config.centers || []).map((center) => [center.id, center]))
-					}
-					onClose={() => setDreDrawer(null)}
-				/>
-			) : null}
-			{transferRequest ? (
-				<BudgetTransferRequestModal
-					row={transferRequest}
-					onClose={() => setTransferRequest(null)}
-				/>
-			) : null}
-			{deviationJustification ? (
-				<BudgetDeviationJustificationModal
-					row={deviationJustification}
-					onClose={() => setDeviationJustification(null)}
-				/>
-			) : null}
+
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<h3 className="text-base font-black text-slate-950">
+					Lançamentos lidos
+				</h3>
+				<div className="mt-3 max-h-80 overflow-auto rounded-xl border border-slate-200">
+					<table className="min-w-full text-left text-xs font-bold">
+						<thead className="sticky top-0 bg-slate-50 text-slate-500">
+							<tr>
+								<th className="px-3 py-2">Categoria</th>
+								<th className="px-3 py-2">Descrição</th>
+								<th className="px-3 py-2">Arquivo</th>
+								<th className="px-3 py-2 text-right">Valor</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{(data.rows || []).length ? (
+								data.rows.map((row) => (
+									<tr key={row.id}>
+										<td className="px-3 py-2 text-slate-950">
+											{DRE_STATEMENT_LINES.find(
+												(line) => line.id === row.linhaDre,
+											)?.label || row.categoriaOriginal}
+										</td>
+										<td className="px-3 py-2 text-slate-600">
+											{row.descricao || "-"}
+										</td>
+										<td className="px-3 py-2 text-slate-600">
+											{row.origemArquivo || "-"}
+										</td>
+										<td className="px-3 py-2 text-right text-slate-950">
+											{brl.format(Number(row.valor || 0))}
+										</td>
+									</tr>
+								))
+							) : (
+								<tr>
+									<td
+										colSpan={4}
+										className="px-3 py-8 text-center text-sm text-slate-500"
+									>
+										Nenhum lançamento DRE encontrado para a competência
+										selecionada.
+									</td>
+								</tr>
+							)}
+						</tbody>
+					</table>
+				</div>
+			</section>
 		</section>
 	);
 }

@@ -3,6 +3,15 @@ const db = require("./db");
 
 const SERASA_REPORT_ID = "serasa";
 const TARIFAS_REPORT_ID = "tarifas";
+const DRE_LINE_IDS = new Set([
+	"receita_bruta",
+	"deducoes_abatimentos",
+	"cpv_cmv",
+	"despesas_vendas",
+	"despesas_administrativas",
+	"despesas_financeiras",
+	"provisoes_irpj_csll",
+]);
 
 function stableStringify(value) {
 	if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -582,6 +591,205 @@ async function listImportLogs(limit = 20) {
 	}));
 }
 
+function normalizeDreLancamento(item = {}, index = 0, context = {}) {
+	const lineId = text(item.linhaDre || item.linha_dre || item.lineId);
+	if (!DRE_LINE_IDS.has(lineId)) return null;
+	const ano = integer(item.competenciaAno || item.competencia_ano || item.ano);
+	const mes = integer(item.competenciaMes || item.competencia_mes || item.mes);
+	if (ano < 2000 || mes < 1 || mes > 12) return null;
+	const payload = {
+		...item,
+		competenciaAno: ano,
+		competenciaMes: mes,
+		linhaDre: lineId,
+	};
+	return {
+		id:
+			text(item.id) ||
+			idFor("dre", {
+				context,
+				index,
+				payload,
+			}),
+		competencia_mes: mes,
+		competencia_ano: ano,
+		linha_dre: lineId,
+		categoria_original: text(item.categoriaOriginal || item.categoria_original),
+		descricao: text(item.descricao || item.description),
+		valor: number(item.valor || item.value),
+		origem_arquivo: text(item.origemArquivo || item.origem_arquivo || context.fileName),
+		is_fake: Boolean(item.isFake ?? item.is_fake ?? context.isFake),
+		criado_por: text(context.createdBy || item.criadoPor || item.criado_por),
+		source_payload: payload,
+	};
+}
+
+async function listDreLancamentos({ ano, mes, isFake = false } = {}) {
+	const params = [Boolean(isFake)];
+	const conditions = ["is_fake = $1"];
+	if (ano) {
+		params.push(integer(ano));
+		conditions.push(`competencia_ano = $${params.length}`);
+	}
+	if (mes) {
+		params.push(integer(mes));
+		conditions.push(`competencia_mes = $${params.length}`);
+	}
+	const result = await db.query(
+		`select competencia_ano, competencia_mes, linha_dre,
+		        coalesce(sum(valor), 0) as total,
+		        count(*)::int as quantidade,
+		        max(criado_em) as atualizado_em
+		   from dre_lancamentos
+		  where ${conditions.join(" and ")}
+		  group by competencia_ano, competencia_mes, linha_dre
+		  order by competencia_ano desc, competencia_mes desc, linha_dre`,
+		params,
+	);
+	const detailResult = await db.query(
+		`select id, competencia_ano, competencia_mes, linha_dre, categoria_original,
+		        descricao, valor, origem_arquivo, is_fake, criado_em, criado_por
+		   from dre_lancamentos
+		  where ${conditions.join(" and ")}
+		  order by competencia_ano desc, competencia_mes desc, linha_dre, categoria_original, id
+		  limit 500`,
+		params,
+	);
+	const periods = new Map();
+	const totalsByLine = {};
+	for (const row of result.rows) {
+		const key = `${row.competencia_ano}-${String(row.competencia_mes).padStart(2, "0")}`;
+		periods.set(key, {
+			ano: Number(row.competencia_ano),
+			mes: Number(row.competencia_mes),
+			key,
+		});
+		if (
+			(!ano || Number(row.competencia_ano) === Number(ano)) &&
+			(!mes || Number(row.competencia_mes) === Number(mes))
+		) {
+			totalsByLine[row.linha_dre] =
+				Number(totalsByLine[row.linha_dre] || 0) + number(row.total);
+		}
+	}
+	return {
+		ok: true,
+		isFake: Boolean(isFake),
+		competencias: Array.from(periods.values()),
+		totalsByLine,
+		rows: detailResult.rows.map((row) => ({
+			id: row.id,
+			competenciaAno: Number(row.competencia_ano),
+			competenciaMes: Number(row.competencia_mes),
+			linhaDre: row.linha_dre,
+			categoriaOriginal: row.categoria_original,
+			descricao: row.descricao,
+			valor: number(row.valor),
+			origemArquivo: row.origem_arquivo,
+			isFake: row.is_fake,
+			criadoEm: row.criado_em,
+			criadoPor: row.criado_por,
+		})),
+	};
+}
+
+async function replaceDreLancamentos(data = {}, user = {}) {
+	const context = {
+		fileName: text(data.fileName),
+		isFake: Boolean(data.isFake),
+		createdBy: text(user.uid || user.email || data.createdBy),
+		importedAt: new Date().toISOString(),
+	};
+	const rows = (Array.isArray(data.rows) ? data.rows : [])
+		.map((row, index) => normalizeDreLancamento(row, index, context))
+		.filter(Boolean);
+	if (!rows.length) {
+		throw new Error("Nenhum lançamento DRE válido foi informado.");
+	}
+	const periods = Array.from(
+		new Map(
+			rows.map((row) => [
+				`${row.competencia_ano}-${row.competencia_mes}`,
+				{
+					ano: row.competencia_ano,
+					mes: row.competencia_mes,
+					isFake: row.is_fake,
+				},
+			]),
+		).values(),
+	);
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		for (const period of periods) {
+			await client.query(
+				`delete from dre_lancamentos
+				  where competencia_ano = $1
+				    and competencia_mes = $2
+				    and is_fake = $3`,
+				[period.ano, period.mes, period.isFake],
+			);
+		}
+		await upsertMany(client, "dre_lancamentos", rows, ["id"]);
+		await appendImportLog({
+			sourceId: "dre",
+			label: "DRE",
+			status: "ok",
+			message: context.isFake
+				? "Dados fictícios de DRE criados."
+				: "DRE importada.",
+			importedRows: rows.length,
+			fileName: context.fileName,
+			isFake: context.isFake,
+		});
+		await client.query("commit");
+		return { ok: true, importedRows: rows.length, periods };
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+}
+
+async function createFakeDreLancamentos(user = {}) {
+	const now = new Date();
+	const rows = [];
+	for (let index = 5; index >= 0; index -= 1) {
+		const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
+		const ano = date.getFullYear();
+		const mes = date.getMonth() + 1;
+		const base = 920000 + (5 - index) * 38500;
+		rows.push(
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "receita_bruta", categoriaOriginal: "Receita Bruta", valor: base },
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "deducoes_abatimentos", categoriaOriginal: "Deduções e Abatimentos", valor: base * 0.082 },
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "cpv_cmv", categoriaOriginal: "CPV/CMV", valor: base * 0.34 },
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "despesas_vendas", categoriaOriginal: "Despesas com Vendas", valor: base * 0.11 },
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "despesas_administrativas", categoriaOriginal: "Despesas Administrativas", valor: base * 0.16 },
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "despesas_financeiras", categoriaOriginal: "Despesas Financeiras", valor: base * 0.028 },
+			{ competenciaAno: ano, competenciaMes: mes, linhaDre: "provisoes_irpj_csll", categoriaOriginal: "Provisões IRPJ e CSLL", valor: base * 0.045 },
+		);
+	}
+	return replaceDreLancamentos(
+		{ rows, fileName: "dados-ficticios-dre", isFake: true },
+		user,
+	);
+}
+
+async function deleteFakeDreLancamentos(user = {}) {
+	const result = await db.query("delete from dre_lancamentos where is_fake = true");
+	await appendImportLog({
+		sourceId: "dre",
+		label: "DRE",
+		status: "ok",
+		message: "Dados fictícios de DRE apagados.",
+		importedRows: 0,
+		deletedRows: result.rowCount || 0,
+		userId: text(user.uid || user.email),
+	});
+	return { ok: true, deletedRows: result.rowCount || 0 };
+}
+
 async function saveSerasaFinancialReport(data = {}) {
 	return saveSerasaReport(data);
 }
@@ -624,9 +832,13 @@ module.exports = {
 	getSerasaFinancialReport,
 	getTariffsReport,
 	getTariffsFinancialReport,
+	listDreLancamentos,
 	listFinanceiroImportLogs,
 	listImportLogs,
 	recordFinanceiroImportLog,
+	replaceDreLancamentos,
+	createFakeDreLancamentos,
+	deleteFakeDreLancamentos,
 	saveSerasaReport,
 	saveSerasaFinancialReport,
 	saveTariffsReport,
