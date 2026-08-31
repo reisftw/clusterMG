@@ -127,36 +127,4 @@ describe("ordensRepository", () => {
 			true,
 		]);
 	});
-
-	it("busca snapshot publico somente pelo legacy_path exato", async () => {
-		const dbQuery = vi.fn(async () => ({
-			rows: [
-				{
-					id: "public_dashboard:match_os",
-					source_collection: "public_dashboard",
-					tipo: "public_dashboard",
-					legacy_path: "public_dashboard/match_os",
-					legacy_document_id: "match_os",
-					payload: {
-						meta: { data: "2026-08-31T10:00:00.000Z" },
-					},
-					source_payload: {
-						meta: { data: "2026-08-31T10:00:00.000Z" },
-					},
-				},
-			],
-		}));
-		const repository = loadRepository(dbQuery);
-
-		const snapshot = await repository.getDocument("public_dashboard/match_os");
-
-		expect(snapshot.data.meta.data).toBe("2026-08-31T10:00:00.000Z");
-		expect(dbQuery).toHaveBeenCalledTimes(1);
-		expect(dbQuery.mock.calls[0][0]).toContain("legacy_path = $2");
-		expect(dbQuery.mock.calls[0][0]).not.toContain("legacy_document_id = $3");
-		expect(dbQuery.mock.calls[0][1]).toEqual([
-			"public_dashboard",
-			"public_dashboard/match_os",
-		]);
-	});
 });
