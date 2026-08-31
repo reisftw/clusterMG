@@ -4,6 +4,7 @@ const databaseBackups = require("./databaseBackups");
 const sempreIntegration = require("./sempreIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
+const mensageriaRepository = require("./mensageriaRepository");
 const API_PROCESS_STARTED_AT = new Date();
 const SERVICE_EVENTS_COLLECTION = "api_service_events";
 const API_STATUS_CACHE_TTL_MS = Math.max(
@@ -201,16 +202,8 @@ async function countTable(tableName) {
 	return Number(result.rows[0]?.total || 0);
 }
 
-async function getDocumentData(path) {
-	const result = await db.query(
-		`select data from app_documents where path = $1`,
-		[path],
-	);
-	return result.rows[0]?.data || null;
-}
-
 async function checkEvolutionStatus() {
-	const config = (await getDocumentData("mensageria_config/global")) || {};
+	const config = await mensageriaRepository.getMessagingConfig();
 	const baseUrl = String(config.evolutionBaseUrl || "").replace(/\/+$/, "");
 	const apiKey = String(config.evolutionApiKey || "");
 	const instance = String(config.evolutionInstance || "");

@@ -305,6 +305,7 @@ function baseMocks(overrides = {}) {
 		},
 		documentosService: {},
 		createImoveisRouter: vi.fn(() => require("express").Router()),
+		createMensageriaRouter: vi.fn(() => require("express").Router()),
 		metrics: {
 			initMetrics: vi.fn(async () => undefined),
 			metricsMiddleware: vi.fn((_req, _res, next) => next()),
@@ -352,6 +353,10 @@ function installMocks(overrides = {}) {
 	setMock("./imoveis", {
 		createImoveisRouter: currentMocks.createImoveisRouter,
 	});
+	setMock(
+		"./mensageria/routes/mensageriaRoutes",
+		currentMocks.createMensageriaRouter,
+	);
 	setMock(
 		"./documentos/routes/documentosRoutes",
 		currentMocks.createDocumentosRouter,
@@ -610,6 +615,24 @@ describe("vps api app characterization - domain route only collections", () => {
 
 		expect(response.status).toBe(410);
 		expect(response.body.error).toContain("/api/imoveis");
+		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
+	});
+
+	it("POST /api/admin/documents bloqueia colecoes de mensageria migradas", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.post("/api/admin/documents")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				collectionPath: "mensageria_fila",
+				documentId: "fila-1",
+				data: { cliente: "Cliente" },
+			});
+
+		expect(response.status).toBe(410);
+		expect(response.body.error).toContain("/api/mensageria");
 		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
 	});
 });

@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const db = require("./db");
 const normalizedDualWrite = require("./normalizedDualWrite");
 
@@ -28,6 +29,10 @@ function documentIdFromPath(documentPath) {
 		.split("/")
 		.filter(Boolean);
 	return parts.at(-1) || "";
+}
+
+function randomDocumentId(prefix = "msg") {
+	return `${prefix}_${Date.now()}_${crypto.randomUUID()}`;
 }
 
 function normalizeLimit(value, fallback = 50) {
@@ -313,6 +318,185 @@ async function upsertDocument(record = {}) {
 	return getDocument(record.path || `${record.collectionPath}/${record.documentId}`);
 }
 
+function dataFromDocument(document) {
+	return document?.data ? { id: document.documentId, ...document.data } : null;
+}
+
+function dataListFromDocuments(documents = []) {
+	return documents.map(dataFromDocument).filter(Boolean);
+}
+
+async function getMessagingConfig() {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.config}/global`)) || {};
+}
+
+async function saveMessagingConfigPatch(patch = {}) {
+	const current = await getMessagingConfig();
+	const next = { ...current, ...patch };
+	await upsertDocument({
+		path: `${COLLECTIONS.config}/global`,
+		collectionPath: COLLECTIONS.config,
+		documentId: "global",
+		parentPath: null,
+		data: next,
+	});
+	return next;
+}
+
+async function listMessageTemplates({ limit = 500, offset = 0 } = {}) {
+	return dataListFromDocuments(
+		await listDocuments({
+			collectionPath: COLLECTIONS.templates,
+			limit,
+			offset,
+		}),
+	);
+}
+
+async function getMessageTemplate(id) {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.templates}/${text(id)}`));
+}
+
+async function saveMessageTemplate(template = {}) {
+	const id = text(template.id) || randomDocumentId("template");
+	const data = { ...template, id };
+	await upsertDocument({
+		path: `${COLLECTIONS.templates}/${id}`,
+		collectionPath: COLLECTIONS.templates,
+		documentId: id,
+		parentPath: null,
+		data,
+	});
+	return data;
+}
+
+async function listQueueMessages({ limit = 1000, offset = 0, status = "" } = {}) {
+	const items = dataListFromDocuments(
+		await listDocuments({
+			collectionPath: COLLECTIONS.fila,
+			limit,
+			offset,
+		}),
+	);
+	if (!status) return items;
+	return items.filter((item) => String(item.status || "") === String(status));
+}
+
+async function listAllQueueMessages() {
+	return dataListFromDocuments(await listAllDocuments(COLLECTIONS.fila));
+}
+
+async function getQueueMessage(id) {
+	return dataFromDocument(await getDocument(`${COLLECTIONS.fila}/${text(id)}`));
+}
+
+async function saveQueueMessage(id, payload = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("fila");
+	const data = { ...payload, id: documentId };
+	await upsertDocument({
+		path: `${COLLECTIONS.fila}/${documentId}`,
+		collectionPath: COLLECTIONS.fila,
+		documentId,
+		parentPath: null,
+		data,
+	});
+	return data;
+}
+
+async function enqueueMessage(payload = {}, { id } = {}) {
+	return saveQueueMessage(id, payload);
+}
+
+async function updateQueueMessage(id, updates = {}) {
+	const current = (await getQueueMessage(id)) || {};
+	return saveQueueMessage(id, { ...current, ...updates, id: text(id) });
+}
+
+async function listHistoryEntries({ limit = 1000, offset = 0 } = {}) {
+	return dataListFromDocuments(
+		await listDocuments({
+			collectionPath: COLLECTIONS.historico,
+			limit,
+			offset,
+		}),
+	);
+}
+
+async function listAllHistoryEntries() {
+	return dataListFromDocuments(await listAllDocuments(COLLECTIONS.historico));
+}
+
+async function createHistoryEntry(payload = {}, { id } = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("evo");
+	const data = { ...payload, id: documentId };
+	await upsertDocument({
+		path: `${COLLECTIONS.historico}/${documentId}`,
+		collectionPath: COLLECTIONS.historico,
+		documentId,
+		parentPath: null,
+		data,
+	});
+	return data;
+}
+
+async function listCallbacks({ limit = 500, offset = 0 } = {}) {
+	return dataListFromDocuments(
+		await listDocuments({
+			collectionPath: COLLECTIONS.callbacks,
+			limit,
+			offset,
+		}),
+	);
+}
+
+async function listAllCallbacks() {
+	return dataListFromDocuments(await listAllDocuments(COLLECTIONS.callbacks));
+}
+
+async function recordCallback(payload = {}, { id } = {}) {
+	const documentId = text(id || payload.id) || randomDocumentId("callback");
+	const data = { ...payload, id: documentId };
+	await upsertDocument({
+		path: `${COLLECTIONS.callbacks}/${documentId}`,
+		collectionPath: COLLECTIONS.callbacks,
+		documentId,
+		parentPath: null,
+		data,
+	});
+	return data;
+}
+
+async function getScheduleConversation(phone) {
+	const id = text(phone);
+	if (!id) return null;
+	return dataFromDocument(await getDocument(`${COLLECTIONS.conversas}/${id}`));
+}
+
+async function upsertScheduleConversation(phone, payload = {}) {
+	const id = text(phone || payload.id || payload.telefone);
+	if (!id) return null;
+	const current = (await getScheduleConversation(id)) || {};
+	const data = { ...current, ...payload, id, telefone: id };
+	await upsertDocument({
+		path: `${COLLECTIONS.conversas}/${id}`,
+		collectionPath: COLLECTIONS.conversas,
+		documentId: id,
+		parentPath: null,
+		data,
+	});
+	return data;
+}
+
+async function completeScheduleConversation(phone, patch = {}) {
+	const current = await getScheduleConversation(phone);
+	if (!current) return null;
+	return upsertScheduleConversation(phone, {
+		...patch,
+		stage: "completed",
+		completedAt: new Date().toISOString(),
+	});
+}
+
 async function deleteDocument(documentPath) {
 	const collectionPath = collectionFromPath(documentPath);
 	const config = getTableConfig(collectionPath);
@@ -372,13 +556,33 @@ async function releaseQueueItemLock(id, lockId) {
 
 module.exports = {
 	COLLECTIONS,
-	isMessagingCollection,
 	acquireQueueItemLock,
+	completeScheduleConversation,
+	createHistoryEntry,
 	deleteDocument,
 	deleteDocumentsByCollectionAndSources,
 	getDocument,
+	getMessageTemplate,
+	getMessagingConfig,
+	getQueueMessage,
+	getScheduleConversation,
+	isMessagingCollection,
+	listAllCallbacks,
+	listCallbacks,
+	listAllHistoryEntries,
+	listAllQueueMessages,
 	listAllDocuments,
 	listDocuments,
+	listHistoryEntries,
+	listMessageTemplates,
+	listQueueMessages,
+	recordCallback,
 	releaseQueueItemLock,
+	saveMessageTemplate,
+	saveMessagingConfigPatch,
+	saveQueueMessage,
+	enqueueMessage,
 	upsertDocument,
+	updateQueueMessage,
+	upsertScheduleConversation,
 };

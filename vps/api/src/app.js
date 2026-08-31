@@ -39,6 +39,7 @@ const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
+const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
@@ -303,6 +304,14 @@ const IMOVEIS_ADMINISTRATIVOS_COLLECTIONS = new Set([
 	"imoveis_administrativos_anexos",
 	"imoveis_administrativos_aditivos",
 	"imoveis_administrativos_config",
+]);
+const MENSAGERIA_COLLECTIONS = new Set([
+	"mensageria_config",
+	"mensageria_templates",
+	"mensageria_fila",
+	"mensageria_historico",
+	"mensageria_callbacks",
+	"mensageria_agendamento_conversas",
 ]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
@@ -1941,11 +1950,19 @@ function canWriteDocumentPath(user, documentPath) {
 
 function rejectDomainRouteOnlyCollection(res, collectionPath) {
 	const collection = String(collectionPath || "").trim();
-	if (!IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) return false;
-	res.status(410).json({
-		error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/imoveis.`,
-	});
-	return true;
+	if (IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/imoveis.`,
+		});
+		return true;
+	}
+	if (MENSAGERIA_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/mensageria.`,
+		});
+		return true;
+	}
+	return false;
 }
 
 function pickFirstText(data = {}, keys = []) {
@@ -2251,6 +2268,17 @@ function createApp() {
 			financeiroManagePermissions: FINANCEIRO_MANAGE_PERMISSIONS,
 			financeiroRoles: FINANCEIRO_ROLES,
 			financeiroViewPermissions: FINANCEIRO_VIEW_PERMISSIONS,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/mensageria",
+		createMensageriaRouter({
+			adminRoles: ADMIN_ROLES,
+			documents,
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
