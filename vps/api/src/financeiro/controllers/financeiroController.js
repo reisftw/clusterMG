@@ -136,6 +136,52 @@ function createFinanceiroController() {
 		}
 	}
 
+	async function getDreStatement(req, res, next) {
+		try {
+			res.json(
+				await getOrSetFinanceiroCache(
+					`dre:${req.query?.ano || ""}:${req.query?.mes || ""}:${req.query?.isFake || req.query?.fake || ""}`,
+					() => financeiro.getDreStatement(req.query || {}),
+				),
+			);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function saveDreStatement(req, res, next) {
+		try {
+			clearFinanceiroReadCache();
+			const result = await financeiro.saveDreStatement(req.body || {}, req.user);
+			clearFinanceiroReadCache();
+			res.json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function createFakeDreData(req, res, next) {
+		try {
+			clearFinanceiroReadCache();
+			const result = await financeiro.createFakeDreData(req.user);
+			clearFinanceiroReadCache();
+			res.json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function deleteFakeDreData(req, res, next) {
+		try {
+			clearFinanceiroReadCache();
+			const result = await financeiro.deleteFakeDreData(req.user);
+			clearFinanceiroReadCache();
+			res.json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function getSheetsConfig(_req, res, next) {
 		try {
 			res.json(
@@ -254,11 +300,14 @@ function createFinanceiroController() {
 
 	return {
 		clearBudgetData,
+		createFakeDreData,
 		clearSerasaReport,
 		clearTariffsReport,
+		deleteFakeDreData,
 		getBudgetCostCenters,
 		getBudgetData,
 		getDashboard,
+		getDreStatement,
 		getSerasaReport,
 		getTariffsReport,
 		getSheetsConfig,
@@ -266,6 +315,7 @@ function createFinanceiroController() {
 		runSheetsImport,
 		saveBudgetData,
 		saveBudgetCostCenters,
+		saveDreStatement,
 		saveSerasaData,
 		saveTariffsReport,
 		saveSheetsConfig,

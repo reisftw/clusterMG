@@ -86,6 +86,33 @@ function createFinanceiroRouter({
 		controller.clearBudgetData,
 	);
 	router.get(
+		"/gestao-orcamento/dre",
+		requireAuthenticated,
+		requireBudgetConfigView,
+		controller.getDreStatement,
+	);
+	router.post(
+		"/gestao-orcamento/dre/import",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBudgetConfigManage,
+		controller.saveDreStatement,
+	);
+	router.post(
+		"/gestao-orcamento/dre/fake-data",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBudgetConfigManage,
+		controller.createFakeDreData,
+	);
+	router.delete(
+		"/gestao-orcamento/dre/fake-data",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBudgetConfigManage,
+		controller.deleteFakeDreData,
+	);
+	router.get(
 		"/sheets-config",
 		requireAuthenticated,
 		requireConfigView,

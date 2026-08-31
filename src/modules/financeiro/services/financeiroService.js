@@ -55,6 +55,39 @@ export async function limparDadosOrcamentoFinanceiro() {
 	});
 }
 
+export async function buscarDreOrcamentoFinanceiro(params = {}) {
+	const search = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && String(value).trim()) {
+			search.set(key, String(value));
+		}
+	});
+	return requestVpsApi(
+		`${BASE_PATH}/gestao-orcamento/dre${search.size ? `?${search.toString()}` : ""}`,
+	);
+}
+
+export async function importarDreOrcamentoFinanceiro(payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/gestao-orcamento/dre/import`, {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function criarDadosFicticiosDreFinanceiro() {
+	return requestVpsApi(`${BASE_PATH}/gestao-orcamento/dre/fake-data`, {
+		method: "POST",
+		body: "{}",
+	});
+}
+
+export async function apagarDadosFicticiosDreFinanceiro() {
+	return requestVpsApi(`${BASE_PATH}/gestao-orcamento/dre/fake-data`, {
+		method: "DELETE",
+		body: "{}",
+	});
+}
+
 export async function buscarConfigPlanilhasFinanceiro() {
 	return requestVpsApi(`${BASE_PATH}/sheets-config`);
 }

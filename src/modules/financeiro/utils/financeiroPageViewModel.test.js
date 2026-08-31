@@ -7,7 +7,7 @@ import {
 
 describe("financeiroPageViewModel", () => {
 	it("identifica paginas operacionais e paginas compactas sem depender do componente", () => {
-		expect(getFinanceiroPageFlags("orcamentoRealizado")).toMatchObject({
+		expect(getFinanceiroPageFlags("orcamentoDre")).toMatchObject({
 			isBudgetPage: true,
 			isBudgetOperationalPage: true,
 			hideHeaderControls: false,

@@ -154,4 +154,92 @@ describe("financeiroReportsRepository", () => {
 		expect(id).toMatch(/^fin_/);
 		expect(query.mock.calls[0][0]).toContain("insert into financeiro_import_logs");
 	});
+
+	it("lista lancamentos DRE filtrando dados reais ou ficticios", async () => {
+		const query = vi
+			.fn()
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						competencia_ano: 2026,
+						competencia_mes: 8,
+						linha_dre: "receita_bruta",
+						total: "1000.50",
+						quantidade: 2,
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "dre-1",
+						competencia_ano: 2026,
+						competencia_mes: 8,
+						linha_dre: "receita_bruta",
+						categoria_original: "Receita Bruta",
+						descricao: "Venda",
+						valor: "1000.50",
+						origem_arquivo: "dre.xlsx",
+						is_fake: false,
+						criado_em: "2026-08-31T10:00:00.000Z",
+					},
+				],
+			});
+		const repository = loadRepository({ query });
+
+		const report = await repository.listDreLancamentos({
+			ano: 2026,
+			mes: 8,
+			isFake: false,
+		});
+
+		expect(report.totalsByLine.receita_bruta).toBe(1000.5);
+		expect(report.rows[0]).toMatchObject({
+			linhaDre: "receita_bruta",
+			isFake: false,
+		});
+		expect(query.mock.calls[0][1]).toEqual([false, 2026, 8]);
+	});
+
+	it("substitui a competencia ao importar DRE para evitar duplicidade", async () => {
+		const query = vi.fn(async () => ({ rows: [], rowCount: 1 }));
+		const release = vi.fn();
+		const connect = vi.fn(async () => ({ query, release }));
+		const repository = loadRepository({ query, connect });
+
+		const result = await repository.replaceDreLancamentos(
+			{
+				fileName: "dre.xlsx",
+				rows: [
+					{
+						competenciaAno: 2026,
+						competenciaMes: 8,
+						linhaDre: "receita_bruta",
+						categoriaOriginal: "Receita Bruta",
+						valor: 1500,
+					},
+				],
+			},
+			{ uid: "user-1" },
+		);
+
+		expect(result).toMatchObject({ ok: true, importedRows: 1 });
+		expect(query.mock.calls.some(([sql]) => sql === "begin")).toBe(true);
+		expect(query.mock.calls.some(([sql]) => String(sql).includes("delete from dre_lancamentos"))).toBe(true);
+		expect(query.mock.calls.some(([sql]) => String(sql).includes("insert into dre_lancamentos"))).toBe(true);
+		expect(query.mock.calls.some(([sql]) => sql === "commit")).toBe(true);
+		expect(release).toHaveBeenCalled();
+	});
+
+	it("apaga somente dados ficticios da DRE", async () => {
+		const query = vi.fn(async () => ({ rows: [], rowCount: 14 }));
+		const repository = loadRepository({ query });
+
+		const result = await repository.deleteFakeDreLancamentos({ uid: "admin" });
+
+		expect(result).toEqual({ ok: true, deletedRows: 14 });
+		expect(query.mock.calls[0][0]).toBe(
+			"delete from dre_lancamentos where is_fake = true",
+		);
+	});
 });

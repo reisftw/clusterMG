@@ -1,7 +1,7 @@
 export const BUDGET_OPERATIONAL_PAGES = [
 	"orcamentoDashboard",
 	"orcamentoCentrosCusto",
-	"orcamentoRealizado",
+	"orcamentoDre",
 	"orcamentoAprovacoes",
 ];
 

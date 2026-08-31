@@ -4396,13 +4396,36 @@ async function clearBudgetData(user = {}) {
 	return { ok: true, data };
 }
 
+async function getDreStatement(filters = {}) {
+	return financeiroReportsRepository.listDreLancamentos({
+		ano: filters.ano || filters.year,
+		mes: filters.mes || filters.month,
+		isFake: toBool(filters.isFake || filters.fake),
+	});
+}
+
+async function saveDreStatement(payload = {}, user = {}) {
+	return financeiroReportsRepository.replaceDreLancamentos(payload, user);
+}
+
+async function createFakeDreData(user = {}) {
+	return financeiroReportsRepository.createFakeDreLancamentos(user);
+}
+
+async function deleteFakeDreData(user = {}) {
+	return financeiroReportsRepository.deleteFakeDreLancamentos(user);
+}
+
 module.exports = {
 	clearBudgetData,
+	createFakeDreData,
 	clearSerasaReport,
 	clearTariffsReport,
+	deleteFakeDreData,
 	getBudgetCostCenters,
 	getBudgetData,
 	getDashboard,
+	getDreStatement,
 	getSerasaReport,
 	getSheetsConfig,
 	getTariffsReport,
@@ -4410,6 +4433,7 @@ module.exports = {
 	runSheetsImport,
 	saveBudgetData,
 	saveBudgetCostCenters,
+	saveDreStatement,
 	saveSerasaData,
 	saveSheetsConfig,
 	saveTariffsReport,

@@ -49,8 +49,7 @@ export const ROUTES = {
 	FINANCEIRO_ORCAMENTO_DADOS: "/financeiro/gestao-orcamento/dados",
 	FINANCEIRO_ORCAMENTO_CENTROS_CUSTO:
 		"/financeiro/gestao-orcamento/centros-custo",
-	FINANCEIRO_ORCAMENTO_REALIZADO:
-		"/financeiro/gestao-orcamento/orcado-realizado",
+	FINANCEIRO_ORCAMENTO_DRE: "/financeiro/gestao-orcamento/dre",
 	FINANCEIRO_ORCAMENTO_APROVACOES: "/financeiro/gestao-orcamento/aprovacoes",
 	FINANCEIRO_ORCAMENTO_CONFIGURACOES:
 		"/financeiro/gestao-orcamento/configuracoes",

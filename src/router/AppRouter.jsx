@@ -613,7 +613,7 @@ const AppRouter = () => (
 							}
 						/>
 						<Route
-							path={ROUTES.FINANCEIRO_ORCAMENTO_REALIZADO}
+							path={ROUTES.FINANCEIRO_ORCAMENTO_DRE}
 							element={
 								<ProtectedRoute
 									requiredPermission={[
@@ -621,7 +621,7 @@ const AppRouter = () => (
 										"financeiro.gestao_orcamento.manage",
 									]}
 								>
-									<Financeiro page="orcamentoRealizado" />
+									<Financeiro page="orcamentoDre" />
 								</ProtectedRoute>
 							}
 						/>
