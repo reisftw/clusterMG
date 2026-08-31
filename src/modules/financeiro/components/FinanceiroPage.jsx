@@ -68,6 +68,18 @@ import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalAction
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
 import { useTariffsReport } from "../hooks/useTariffsReport";
 import {
+	buildBudgetOperationalKpis,
+	buildCostCenterTopCards,
+	buildDirectorateRows,
+	buildOperationalCenterGroups,
+	budgetVarianceMeta as budgetVarianceMetaFromStatement,
+	findBudgetParetoRows,
+	getBudgetInsights as getBudgetInsightsFromStatement,
+	getTariffsAvailableYears as getTariffsDetailAvailableYears,
+	TARIFFS_DETAIL_BUILDERS,
+	paginateBudgetGroups,
+} from "../domain/financialStatement";
+import {
 	buscarCentrosCustoOrcamentoFinanceiro,
 	buscarConfigPlanilhasFinanceiro,
 	buscarDadosOrcamentoFinanceiro,
@@ -86,16 +98,6 @@ import {
 	testarPlanilhaFinanceiro,
 } from "../services/financeiroService";
 import { normalizeBudgetImportRows } from "../utils/budgetImportRows";
-import {
-	buildBudgetOperationalKpis,
-	buildCostCenterTopCards,
-	buildDirectorateRows,
-	buildOperationalCenterGroups,
-	budgetVarianceMeta as budgetVarianceMetaFromInsights,
-	findBudgetParetoRows,
-	getBudgetInsights as getBudgetInsightsFromUtils,
-	paginateBudgetGroups,
-} from "../utils/budgetInsights";
 import {
 	buildBudgetAccountChart,
 	buildBudgetCenterChart,
@@ -132,10 +134,6 @@ import {
 	getBudgetReference,
 	getFinanceiroPageFlags,
 } from "../utils/financeiroPageViewModel";
-import {
-	getTariffsAvailableYears as getTariffsDetailAvailableYears,
-	TARIFFS_DETAIL_BUILDERS,
-} from "../utils/tariffsViewModels";
 
 const FINANCE_FONT_STACK =
 	"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -5115,7 +5113,7 @@ function BudgetOperationalPage({
 	selectedPeriod,
 }) {
 	const insights = useMemo(
-		() => getBudgetInsightsFromUtils(config, selectedPeriod),
+		() => getBudgetInsightsFromStatement(config, selectedPeriod),
 		[config, selectedPeriod],
 	);
 	const {
@@ -5336,7 +5334,7 @@ function BudgetOperationalPage({
 	const branchById = new Map(
 		(config.branches || []).map((branch) => [branch.id, branch]),
 	);
-	const budgetDeviation = budgetVarianceMetaFromInsights(
+	const budgetDeviation = budgetVarianceMetaFromStatement(
 		insights.plannedMonth,
 		insights.realizedMonth + insights.committedMonth,
 	);

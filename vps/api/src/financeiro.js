@@ -1,5 +1,6 @@
 const financeiroBudgetConfigRepository = require("./financeiroBudgetConfigRepository");
 const financeiroReportsRepository = require("./financeiroReportsRepository");
+const financeiroStatement = require("./financeiroStatement");
 const { google } = require("googleapis");
 const crypto = require("node:crypto");
 const fs = require("fs");
@@ -1000,8 +1001,8 @@ function mergeSerasaClientHistory(previous = [], reference = {}, clientCount = 0
 
 async function saveSerasaData(payload = {}, user = {}) {
 	const normalized = normalizeSerasaRows(payload.rows || [], payload.headers || []);
-	const previousData = await financeiroReportsRepository
-		.getSerasaReport()
+	const previousData = await financeiroStatement
+		.getSerasaStatement()
 		.catch(() => null);
 	const reference = resolveSerasaReference(normalized.rows);
 	const clientCount = Math.max(
@@ -1026,12 +1027,12 @@ async function saveSerasaData(payload = {}, user = {}) {
 			importedByName: user?.profile?.nome || user?.nome || user?.email || "",
 		},
 	};
-	await financeiroReportsRepository.saveSerasaFinancialReport(data);
+	await financeiroStatement.saveSerasaStatement(data);
 	return { ok: true, data };
 }
 
 async function getSerasaReport() {
-	const data = await financeiroReportsRepository.getSerasaFinancialReport().catch(() => null);
+	const data = await financeiroStatement.getSerasaStatement().catch(() => null);
 	return {
 		ok: true,
 		data: data || {
@@ -1078,7 +1079,7 @@ async function clearSerasaReport(user = {}) {
 			cleared: true,
 		},
 	};
-	await financeiroReportsRepository.clearSerasaFinancialReport(data);
+	await financeiroStatement.clearSerasaStatement(data);
 	return { ok: true, data };
 }
 
@@ -1560,13 +1561,13 @@ async function saveTariffsReport(payload = {}, user = {}) {
 			totalSheets: Array.isArray(payload.sheets) ? payload.sheets.length : 0,
 		},
 	};
-	await financeiroReportsRepository.saveTariffsFinancialReport(data);
+	await financeiroStatement.saveTariffsStatement(data);
 	return { ok: true, data };
 }
 
 async function getTariffsReport() {
-	const savedData = await financeiroReportsRepository
-		.getTariffsReport()
+	const savedData = await financeiroStatement
+		.getTariffsStatement()
 		.catch(() => null);
 	const data = savedData
 		? {
@@ -1633,7 +1634,7 @@ async function clearTariffsReport(user = {}) {
 			cleared: true,
 		},
 	};
-	await financeiroReportsRepository.clearTariffsFinancialReport(data);
+	await financeiroStatement.clearTariffsStatement(data);
 	return { ok: true, data };
 }
 
@@ -4152,8 +4153,8 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 }
 
 async function getBudgetCostCenters() {
-	const config = await financeiroBudgetConfigRepository
-		.getBudgetCostCenters()
+	const config = await financeiroStatement
+		.getBudgetConfigurationStatement()
 		.catch(() => ({
 		clusters: [],
 		accounts: [],
@@ -4196,7 +4197,7 @@ async function getBudgetCostCenters() {
 			);
 		});
 	if (needsFinancialPlanRefresh) {
-		await financeiroBudgetConfigRepository.saveBudgetConfiguration(normalizedConfig);
+		await financeiroStatement.saveBudgetConfigurationStatement(normalizedConfig);
 	}
 	return {
 		ok: true,
@@ -4205,8 +4206,8 @@ async function getBudgetCostCenters() {
 }
 
 async function saveBudgetCostCenters(payload = {}, user = {}) {
-	const existingConfig = await financeiroBudgetConfigRepository
-		.getBudgetCostCenters()
+	const existingConfig = await financeiroStatement
+		.getBudgetConfigurationStatement()
 		.catch(() => ({}));
 	const nextPayload = {
 		...(existingConfig || {}),
@@ -4217,7 +4218,7 @@ async function saveBudgetCostCenters(payload = {}, user = {}) {
 		},
 	};
 	const config = normalizeCostCentersConfig(nextPayload, user);
-	await financeiroBudgetConfigRepository.saveBudgetConfiguration(config, user);
+	await financeiroStatement.saveBudgetConfigurationStatement(config, user);
 	return { ok: true, config };
 }
 
@@ -4311,8 +4312,8 @@ function emptyBudgetData() {
 }
 
 async function getBudgetData() {
-	const savedData = await financeiroBudgetConfigRepository
-		.getBudgetData()
+	const savedData = await financeiroStatement
+		.getBudgetDataStatement()
 		.catch(() => ({}));
 	return {
 		ok: true,
@@ -4369,7 +4370,7 @@ async function saveBudgetData(payload = {}, user = {}) {
 		appliedConfig: merged.created,
 	};
 
-	await financeiroBudgetConfigRepository.saveImportedBudgetRows(data, user);
+	await financeiroStatement.saveBudgetDataStatement(data, user);
 
 	return { ok: true, data, config: merged.config };
 }
@@ -4392,28 +4393,24 @@ async function clearBudgetData(user = {}) {
 			cleared: true,
 		},
 	};
-	await financeiroBudgetConfigRepository.saveImportedBudgetRows(data, user);
+	await financeiroStatement.saveBudgetDataStatement(data, user);
 	return { ok: true, data };
 }
 
 async function getDreStatement(filters = {}) {
-	return financeiroReportsRepository.listDreLancamentos({
-		ano: filters.ano || filters.year,
-		mes: filters.mes || filters.month,
-		isFake: toBool(filters.isFake || filters.fake),
-	});
+	return financeiroStatement.getDreStatement(filters);
 }
 
 async function saveDreStatement(payload = {}, user = {}) {
-	return financeiroReportsRepository.replaceDreLancamentos(payload, user);
+	return financeiroStatement.saveDreStatement(payload, user);
 }
 
 async function createFakeDreData(user = {}) {
-	return financeiroReportsRepository.createFakeDreLancamentos(user);
+	return financeiroStatement.createFakeDreData(user);
 }
 
 async function deleteFakeDreData(user = {}) {
-	return financeiroReportsRepository.deleteFakeDreLancamentos(user);
+	return financeiroStatement.deleteFakeDreData(user);
 }
 
 module.exports = {

@@ -1,4 +1,5 @@
 const financeiro = require("../../financeiro");
+const financeiroStatement = require("../../financeiroStatement");
 
 const FINANCEIRO_READ_CACHE_TTL_MS = Math.max(
 	Number(process.env.FINANCEIRO_READ_CACHE_TTL_MS || 10000),
@@ -140,7 +141,7 @@ function createFinanceiroController() {
 		try {
 			res.json(
 				await getOrSetFinanceiroCache(
-					`dre:${req.query?.ano || ""}:${req.query?.mes || ""}:${req.query?.isFake || req.query?.fake || ""}`,
+					financeiroStatement.buildDreStatementCacheKey(req.query || {}),
 					() => financeiro.getDreStatement(req.query || {}),
 				),
 			);
