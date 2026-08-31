@@ -86,6 +86,15 @@ const getProviderLabel = (config = {}) => {
 	return "Evolution API";
 };
 
+const getQueueItemLabel = (item = {}) => {
+	if (!item) return "-";
+	const codigo =
+		item.codigoCliente || item.codigo_cliente || item.codigo || item.contrato || "";
+	const cliente = item.cliente || item.cliente_nome || "";
+	if (codigo && cliente) return `${codigo} - ${cliente}`;
+	return cliente || codigo || item.telefone || item.os || "-";
+};
+
 const MensageriaFilaPage = () => {
 	const { currentUser } = useAuthContext();
 	const canManage =
@@ -182,6 +191,15 @@ const MensageriaFilaPage = () => {
 	const pageItems = filteredFila.slice(
 		(currentPage - 1) * pageSize,
 		currentPage * pageSize,
+	);
+	const nextQueueItem = useMemo(
+		() =>
+			fila.find((item) =>
+				["aprovado", "novo", "aguardando_janela", "enviando"].includes(
+					String(item.status || "novo"),
+				),
+			) || null,
+		[fila],
 	);
 
 	const stats = useMemo(
@@ -485,6 +503,9 @@ const MensageriaFilaPage = () => {
 						<p className="mt-1 text-sm font-black text-slate-900">
 							{formatDateTime(status?.worker?.nextRunAt)}
 						</p>
+						<p className="mt-1 truncate text-xs font-semibold text-slate-500">
+							{getQueueItemLabel(status?.worker?.nextItem || nextQueueItem)}
+						</p>
 					</div>
 					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
 						<p className="text-xs font-bold uppercase text-slate-500">
@@ -492,6 +513,9 @@ const MensageriaFilaPage = () => {
 						</p>
 						<p className="mt-1 text-sm font-black text-slate-900">
 							{formatDateTime(status?.worker?.lastRun)}
+						</p>
+						<p className="mt-1 truncate text-xs font-semibold text-slate-500">
+							{getQueueItemLabel(status?.worker?.lastItem)}
 						</p>
 					</div>
 				</div>

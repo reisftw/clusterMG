@@ -98,6 +98,8 @@ let lastRun = null;
 let lastError = "";
 let lastSkipped = "";
 let nextRunAt = null;
+let lastQueueExecutionItem = null;
+let nextQueueExecutionItem = null;
 let lastConnectionAlertKey = "";
 const recentInboundCallbacks = new Map();
 const RECENT_INBOUND_TTL_MS = 10 * 60 * 1000;
@@ -291,6 +293,18 @@ function calculateQueueDelayMs(
 	const delayMs = Math.round(baseMs * jitterFactor);
 
 	return Math.max(minMs, Math.min(dynamicMaxMs, delayMs));
+}
+
+function summarizeQueueExecutionItem(item = {}) {
+	if (!item) return null;
+	return {
+		id: item.id || "",
+		codigoCliente: item.codigoCliente || item.codigo_cliente || "",
+		cliente: item.cliente || item.cliente_nome || "",
+		telefone: item.telefone || "",
+		os: item.os || "",
+		cidade: item.cidade || "",
+	};
 }
 
 function getZonedDateParts(date = new Date()) {
@@ -1510,6 +1524,7 @@ async function processQueueOnce({ manual = false } = {}) {
 	const candidates = items
 		.filter((item) => canSendItem(item, config))
 		.slice(0, batchSize);
+	nextQueueExecutionItem = summarizeQueueExecutionItem(candidates[0]);
 	const sent = [];
 	const failed = [];
 
@@ -1595,6 +1610,7 @@ async function processQueueOnce({ manual = false } = {}) {
 				evolutionMode: response.mode,
 				evolutionButtonError: response.buttonError || "",
 			});
+			lastQueueExecutionItem = summarizeQueueExecutionItem(lockedItem);
 			sent.push(lockedItem.id);
 			broadcastRealtime("mensageria", { action: "sent", id: lockedItem.id });
 		} catch (error) {
@@ -1638,6 +1654,13 @@ async function processQueueOnce({ manual = false } = {}) {
 	} else if (!manual) {
 		nextRunAt = new Date(Date.now() + 30000).toISOString();
 	}
+	const handledIds = new Set([
+		...sent,
+		...failed.map((item) => item.id).filter(Boolean),
+	]);
+	nextQueueExecutionItem = summarizeQueueExecutionItem(
+		items.find((item) => !handledIds.has(item.id) && canSendItem(item, config)),
+	);
 
 	return {
 		ok: true,
@@ -1746,6 +1769,8 @@ function getStatus() {
 		lastError,
 		lastSkipped,
 		nextRunAt,
+		lastItem: lastQueueExecutionItem,
+		nextItem: nextQueueExecutionItem,
 		sendTimeZone: SEND_TIME_ZONE,
 		sendLocalTime: `${String(localParts.hour).padStart(2, "0")}:${String(localParts.minute).padStart(2, "0")}:${String(localParts.second).padStart(2, "0")}`,
 	};
