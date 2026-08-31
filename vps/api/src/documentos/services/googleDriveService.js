@@ -1,9 +1,8 @@
 const { Readable } = require("node:stream");
 const { google } = require("googleapis");
-const documents = require("../../documents");
+const repository = require("../repositories/documentosRepository");
 
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
-const OAUTH_CONFIG_PATH = "system_google_drive/oauth_config";
 const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 let driveClient = null;
@@ -39,22 +38,11 @@ function resetDriveClient() {
 }
 
 async function getStoredOAuthConfig() {
-	const doc = await documents.getDocument(OAUTH_CONFIG_PATH).catch(() => null);
-	return doc?.data || {};
+	return repository.getDriveOAuthConfig();
 }
 
 async function saveStoredOAuthConfig(data = {}) {
-	await documents.upsertDocument({
-		path: OAUTH_CONFIG_PATH,
-		collectionPath: "system_google_drive",
-		documentId: "oauth_config",
-		parentPath: null,
-		data: {
-			...(await getStoredOAuthConfig()),
-			...data,
-			updatedAt: new Date().toISOString(),
-		},
-	});
+	await repository.saveDriveOAuthConfig(data);
 }
 
 function cleanText(value) {

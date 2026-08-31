@@ -676,6 +676,42 @@ describe("vps api app characterization - domain route only collections", () => {
 		expect(response.body.error).toContain("/api/financeiro");
 		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
 	});
+
+	it("POST /api/admin/documents bloqueia eventos operacionais migrados", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.post("/api/admin/documents")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				collectionPath: "api_runtime_events",
+				documentId: "runtime-1",
+				data: { type: "startup" },
+			});
+
+		expect(response.status).toBe(410);
+		expect(response.body.error).toContain("tabelas operacionais");
+		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
+	});
+
+	it("POST /api/admin/documents bloqueia auxiliares de documentos migrados", async () => {
+		const app = loadApp();
+
+		const response = await request(app)
+			.post("/api/admin/documents")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				collectionPath: "documentos_config",
+				documentId: "cobranca",
+				data: { enabled: true },
+			});
+
+		expect(response.status).toBe(410);
+		expect(response.body.error).toContain("/api/documentos");
+		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
+	});
 });
 
 describe("vps api app characterization - users audit", () => {

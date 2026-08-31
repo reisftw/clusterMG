@@ -329,6 +329,16 @@ const FINANCEIRO_COLLECTIONS = new Set([
 	"financeiro_reports",
 	"financeiro_import_logs",
 ]);
+const OPERATIONAL_EVENT_COLLECTIONS = new Set([
+	"api_runtime_events",
+	"api_service_events",
+]);
+const DOCUMENTOS_AUXILIARY_COLLECTIONS = new Set([
+	"documentos_config",
+	"documentos_cobranca_logs",
+	"documentos_notas_fiscais_campos",
+	"system_google_drive",
+]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
 	...ADMINISTRATIVO_DOCUMENTOS_ROLES,
@@ -1987,6 +1997,18 @@ function rejectDomainRouteOnlyCollection(res, collectionPath) {
 	if (FINANCEIRO_COLLECTIONS.has(collection)) {
 		res.status(410).json({
 			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/financeiro.`,
+		});
+		return true;
+	}
+	if (OPERATIONAL_EVENT_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada para tabelas operacionais normalizadas.`,
+		});
+		return true;
+	}
+	if (DOCUMENTOS_AUXILIARY_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/documentos.`,
 		});
 		return true;
 	}

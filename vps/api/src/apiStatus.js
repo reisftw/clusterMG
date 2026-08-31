@@ -5,8 +5,8 @@ const sempreIntegration = require("./sempreIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
 const mensageriaRepository = require("./mensageriaRepository");
+const operationalEventsRepository = require("./operationalEventsRepository");
 const API_PROCESS_STARTED_AT = new Date();
-const SERVICE_EVENTS_COLLECTION = "api_service_events";
 const API_STATUS_CACHE_TTL_MS = Math.max(
 	Number(process.env.API_STATUS_CACHE_TTL_MS || 30000),
 	0,
@@ -28,28 +28,9 @@ function formatDuration(secondsRaw) {
 }
 
 async function recordRuntimeEvent(type, details = {}) {
-	const createdAt = new Date().toISOString();
-	const id = `${createdAt.replace(/\D/g, "")}_${process.pid}_${type}`;
+	const event = operationalEventsRepository.buildRuntimeEvent(type, details);
 	try {
-		await db.query(
-			`insert into app_documents (path, collection_path, document_id, parent_path, data)
-       values ($1, $2, $3, null, $4::jsonb)
-       on conflict (path) do update set data = excluded.data`,
-			[
-				`api_runtime_events/${id}`,
-				"api_runtime_events",
-				id,
-				JSON.stringify({
-					id,
-					type,
-					pid: process.pid,
-					nodeVersion: process.version,
-					uptimeSeconds: Math.floor(process.uptime()),
-					createdAt,
-					details,
-				}),
-			],
-		);
+		await operationalEventsRepository.recordRuntimeEvent(event);
 	} catch (error) {
 		console.error(
 			"[apiStatus] Falha ao registrar evento de runtime:",
@@ -59,73 +40,23 @@ async function recordRuntimeEvent(type, details = {}) {
 }
 
 async function listRuntimeEvents() {
-	const result = await db.query(
-		`select document_id as id, data
-       from app_documents
-      where collection_path = 'api_runtime_events'
-      order by data->>'createdAt' desc
-      limit 30`,
-	);
-	return result.rows.map((row) => ({ id: row.id, ...(row.data || {}) }));
+	return operationalEventsRepository.listRuntimeEvents(30);
 }
 
 async function listServiceEvents() {
-	const result = await db.query(
-		`select document_id as id, data
-       from app_documents
-      where collection_path = $1
-      order by data->>'createdAt' desc
-      limit 50`,
-		[SERVICE_EVENTS_COLLECTION],
-	);
-	return result.rows.map((row) => ({ id: row.id, ...(row.data || {}) }));
+	return operationalEventsRepository.listServiceEvents(50);
 }
 
 async function getLastServiceStatuses() {
-	const result = await db.query(
-		`select data
-       from app_documents
-      where collection_path = $1
-      order by data->>'createdAt' desc
-      limit 300`,
-		[SERVICE_EVENTS_COLLECTION],
-	);
-	const map = new Map();
-	result.rows.forEach((row) => {
-		const data = row.data || {};
-		if (data.serviceId && !map.has(data.serviceId)) {
-			map.set(data.serviceId, data);
-		}
-	});
-	return map;
+	return operationalEventsRepository.getLastServiceStatuses(300);
 }
 
 async function recordServiceEvent(service, previousStatus = "") {
-	const createdAt = nowIso();
-	const id = `${createdAt.replace(/\D/g, "")}_${service.id}_${service.status}`;
-	const data = {
-		id,
-		type: previousStatus ? "status_change" : "initial",
-		serviceId: service.id,
-		serviceName: service.name,
-		status: service.status,
+	const data = operationalEventsRepository.buildServiceEvent(
+		service,
 		previousStatus,
-		reason: service.reason || "",
-		responseMs: service.details?.responseMs ?? null,
-		checkedAt: service.checkedAt,
-		createdAt,
-	};
-	await db.query(
-		`insert into app_documents (path, collection_path, document_id, parent_path, data)
-     values ($1, $2, $3, null, $4::jsonb)
-     on conflict (path) do update set data = excluded.data, updated_at = now()`,
-		[
-			`${SERVICE_EVENTS_COLLECTION}/${id}`,
-			SERVICE_EVENTS_COLLECTION,
-			id,
-			JSON.stringify(data),
-		],
 	);
+	await operationalEventsRepository.recordServiceEvent(data);
 	return data;
 }
 

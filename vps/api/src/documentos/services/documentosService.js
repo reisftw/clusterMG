@@ -6,7 +6,6 @@ const repository = require("../repositories/documentosRepository");
 const drive = require("./googleDriveService");
 const archiverModule = require("archiver");
 
-const INVOICE_FIELDS_COLLECTION = "documentos_notas_fiscais_campos";
 const DOCUMENTOS_LIST_CACHE_TTL_MS = Math.max(
 	Number(process.env.DOCUMENTOS_LIST_CACHE_TTL_MS || 5000),
 	0,
@@ -969,8 +968,8 @@ function normalizeBillingConfig(input = {}) {
 }
 
 async function getBillingConfig() {
-	const doc = await documents.getDocument("documentos_config/cobranca");
-	return { ...DEFAULT_BILLING_CONFIG, ...(doc?.data || {}) };
+	const config = await repository.getDocumentosConfig("cobranca");
+	return { ...DEFAULT_BILLING_CONFIG, ...(config || {}) };
 }
 
 async function saveBillingConfig(config = {}, user) {
@@ -979,12 +978,7 @@ async function saveBillingConfig(config = {}, user) {
 		updatedBy: userId(user),
 		updatedByName: userName(user),
 	};
-	await documents.upsertDocument({
-		path: "documentos_config/cobranca",
-		collectionPath: "documentos_config",
-		documentId: "cobranca",
-		data: next,
-	});
+	await repository.saveDocumentosConfig("cobranca", next);
 	return next;
 }
 
@@ -1048,8 +1042,8 @@ async function runBillingNotifications({
 		};
 		if (!empresa.responsavelEmail) continue;
 
-		const logPath = `documentos_cobranca_logs/${empresa.id}_${month}_${stamp}`;
-		const existingLog = await documents.getDocument(logPath).catch(() => null);
+		const logId = `${empresa.id}_${month}_${stamp}`;
+		const existingLog = await repository.getBillingLog(logId);
 		if (existingLog && !force) continue;
 
 		const submission = await repository.getLatestSubmissionByEmpresaMes(
@@ -1092,18 +1086,13 @@ async function runBillingNotifications({
 					mesReferencia: month,
 				},
 			});
-			await documents.upsertDocument({
-				path: logPath,
-				collectionPath: "documentos_cobranca_logs",
-				documentId: `${empresa.id}_${month}_${stamp}`,
-				data: {
-					empresaId: empresa.id,
-					empresaNome: empresa.nome,
-					email: empresa.responsavelEmail,
-					mesReferencia: month,
-					pendencias: pendingFields.map((item) => item.nome),
-					sentAt: new Date().toISOString(),
-				},
+			await repository.recordBillingLog(logId, {
+				empresaId: empresa.id,
+				empresaNome: empresa.nome,
+				email: empresa.responsavelEmail,
+				mesReferencia: month,
+				pendencias: pendingFields.map((item) => item.nome),
+				sentAt: new Date().toISOString(),
 			});
 			sent += 1;
 		} catch (error) {
@@ -1318,26 +1307,8 @@ async function createMonthlySubmission({
 	return { ...(updatedSubmission || submission), files: uploadedFiles };
 }
 
-function mapInvoiceFieldDocument(doc) {
-	if (!doc?.data) return null;
-	const data = doc.data || {};
-	return {
-		id: doc.documentId,
-		nome: text(data.nome),
-		ordem: Number(data.ordem || 0),
-		ativo: data.ativo !== false,
-		createdAt: data.createdAt || doc.importedAt,
-		updatedAt: data.updatedAt || doc.updatedAt,
-	};
-}
-
 async function listInvoiceFields({ includeInactive = false } = {}) {
-	const docs = await documents.listAllDocuments(INVOICE_FIELDS_COLLECTION);
-	return docs
-		.map(mapInvoiceFieldDocument)
-		.filter(Boolean)
-		.filter((field) => includeInactive || field.ativo)
-		.sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome));
+	return repository.listInvoiceFields({ includeInactive });
 }
 
 async function saveInvoiceField(field = {}, user) {
@@ -1350,11 +1321,9 @@ async function saveInvoiceField(field = {}, user) {
 	}
 	const id = text(field.id) || safeSlug(nome);
 	const now = new Date().toISOString();
-	const current = await documents
-		.getDocument(`${INVOICE_FIELDS_COLLECTION}/${id}`)
-		.catch(() => null);
+	const current = await repository.getInvoiceField(id);
 	const data = {
-		...(current?.data || {}),
+		...(current || {}),
 		nome,
 		ordem: Number(field.ordem || 0),
 		ativo: field.ativo !== false,
@@ -1363,13 +1332,7 @@ async function saveInvoiceField(field = {}, user) {
 		updatedByName: userName(user),
 	};
 	if (!data.createdAt) data.createdAt = now;
-	await documents.upsertDocument({
-		path: `${INVOICE_FIELDS_COLLECTION}/${id}`,
-		collectionPath: INVOICE_FIELDS_COLLECTION,
-		documentId: id,
-		data,
-	});
-	return mapInvoiceFieldDocument({ documentId: id, data });
+	return repository.upsertInvoiceField(id, data);
 }
 
 function canUploadInvoices(user, submission) {

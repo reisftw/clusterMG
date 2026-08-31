@@ -116,6 +116,185 @@ function mapSubmission(row) {
 	};
 }
 
+function mapDocumentosConfig(row) {
+	if (!row) return {};
+	return row.data || {};
+}
+
+function mapBillingLog(row) {
+	if (!row) return null;
+	return {
+		id: row.id,
+		...(row.payload || {}),
+		empresaId: row.empresa_id || row.payload?.empresaId,
+		empresaNome: row.empresa_nome || row.payload?.empresaNome,
+		email: row.email || row.payload?.email,
+		mesReferencia: row.mes_referencia || row.payload?.mesReferencia,
+		pendencias: row.pendencias || row.payload?.pendencias || [],
+		sentAt: row.payload?.sentAt || row.created_at,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+	};
+}
+
+function mapInvoiceField(row) {
+	if (!row) return null;
+	return {
+		id: row.id,
+		nome: row.nome,
+		ordem: Number(row.ordem || 0),
+		ativo: row.ativo !== false,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+	};
+}
+
+async function getDocumentosConfig(id) {
+	const result = await db.query(
+		`select data from documentos_configuracoes where id = $1`,
+		[id],
+	);
+	return mapDocumentosConfig(result.rows[0]);
+}
+
+async function saveDocumentosConfig(id, data = {}) {
+	const result = await db.query(
+		`insert into documentos_configuracoes (
+       id, data, legacy_path, legacy_document_id, source_payload
+     ) values ($1, $2::jsonb, $3, $4, $2::jsonb)
+     on conflict (id) do update set
+       data = excluded.data,
+       updated_at = now(),
+       source_payload = excluded.source_payload
+     returning data`,
+		[id, JSON.stringify(data || {}), `documentos_config/${id}`, id],
+	);
+	return mapDocumentosConfig(result.rows[0]);
+}
+
+async function getDriveOAuthConfig() {
+	const result = await db.query(
+		`select data from documentos_configuracoes where id = 'google_drive_oauth'`,
+	);
+	return mapDocumentosConfig(result.rows[0]);
+}
+
+async function saveDriveOAuthConfig(data = {}) {
+	const current = await getDriveOAuthConfig();
+	const next = {
+		...current,
+		...(data || {}),
+		updatedAt: new Date().toISOString(),
+	};
+	const result = await db.query(
+		`insert into documentos_configuracoes (
+       id, data, legacy_path, legacy_document_id, source_payload
+     ) values ('google_drive_oauth', $1::jsonb, 'system_google_drive/oauth_config', 'oauth_config', $1::jsonb)
+     on conflict (id) do update set
+       data = excluded.data,
+       updated_at = now(),
+       source_payload = excluded.source_payload
+     returning data`,
+		[JSON.stringify(next)],
+	);
+	return mapDocumentosConfig(result.rows[0]);
+}
+
+async function getBillingLog(id) {
+	const result = await db.query(
+		`select * from documentos_cobranca_logs where id = $1`,
+		[id],
+	);
+	return mapBillingLog(result.rows[0]);
+}
+
+async function recordBillingLog(id, data = {}) {
+	const result = await db.query(
+		`insert into documentos_cobranca_logs (
+       id, empresa_id, empresa_nome, email, mes_referencia, pendencias, payload,
+       legacy_path, legacy_document_id, source_payload
+     ) values ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$1,$7::jsonb)
+     on conflict (id) do update set
+       empresa_id = excluded.empresa_id,
+       empresa_nome = excluded.empresa_nome,
+       email = excluded.email,
+       mes_referencia = excluded.mes_referencia,
+       pendencias = excluded.pendencias,
+       payload = excluded.payload,
+       updated_at = now(),
+       source_payload = excluded.source_payload
+     returning *`,
+		[
+			id,
+			data.empresaId || null,
+			data.empresaNome || null,
+			data.email || null,
+			data.mesReferencia || null,
+			JSON.stringify(data.pendencias || []),
+			JSON.stringify(data || {}),
+			`documentos_cobranca_logs/${id}`,
+		],
+	);
+	return mapBillingLog(result.rows[0]);
+}
+
+async function listInvoiceFields({ includeInactive = false } = {}) {
+	const result = await db.query(
+		`select * from documentos_notas_fiscais_campos
+      ${includeInactive ? "" : "where ativo = true"}
+      order by ordem asc, nome asc`,
+	);
+	return result.rows.map(mapInvoiceField);
+}
+
+async function getInvoiceField(id) {
+	const result = await db.query(
+		`select * from documentos_notas_fiscais_campos where id = $1`,
+		[id],
+	);
+	return mapInvoiceField(result.rows[0]);
+}
+
+async function upsertInvoiceField(id, field = {}) {
+	const current = await getInvoiceField(id);
+	const next = { ...(current || {}), ...(field || {}) };
+	const result = await db.query(
+		`insert into documentos_notas_fiscais_campos (
+       id, nome, ordem, ativo, created_at, updated_at, updated_by, updated_by_name,
+       legacy_path, legacy_document_id, source_payload
+     ) values ($1,$2,$3,$4,$5,now(),$6,$7,$8,$1,$9::jsonb)
+     on conflict (id) do update set
+       nome = excluded.nome,
+       ordem = excluded.ordem,
+       ativo = excluded.ativo,
+       updated_at = now(),
+       updated_by = excluded.updated_by,
+       updated_by_name = excluded.updated_by_name,
+       source_payload = excluded.source_payload
+     returning *`,
+		[
+			id,
+			next.nome,
+			Number(next.ordem || 0),
+			next.ativo !== false,
+			next.createdAt || new Date().toISOString(),
+			next.updatedBy || null,
+			next.updatedByName || null,
+			`documentos_notas_fiscais_campos/${id}`,
+			JSON.stringify(next),
+		],
+	);
+	const after = mapInvoiceField(result.rows[0]);
+	recordSqlAudit({
+		action: current ? "update" : "create",
+		entity: "documentos_notas_fiscais_campos",
+		recordId: id,
+		beforeData: current,
+		afterData: after,
+	});
+	return after;
+}
+
 async function getClientFolder(empresaId) {
 	const result = await db.query(
 		`select * from document_client_folders where empresa_id = $1`,
@@ -679,18 +858,27 @@ module.exports = {
 	createSubmission,
 	deleteFile,
 	getClientFolder,
+	getBillingLog,
+	getDocumentosConfig,
+	getDriveOAuthConfig,
 	getFile,
+	getInvoiceField,
 	getLatestSubmissionByEmpresaMes,
 	getSubmission,
 	listAllFilesForPurge,
 	listFiles,
+	listInvoiceFields,
 	listRequiredFields,
 	listSubmissionFiles,
 	listSubmissionFilesBySubmissionIds,
 	listSubmissions,
 	markSubmissionPending,
 	purgeDocumentHistory,
+	recordBillingLog,
+	saveDocumentosConfig,
+	saveDriveOAuthConfig,
 	upsertClientFolder,
+	upsertInvoiceField,
 	updateFile,
 	updateRequiredField,
 	updateSubmissionOnly,
