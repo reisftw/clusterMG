@@ -117,7 +117,7 @@ describe("publicDashboard", () => {
 				return null;
 			}),
 			getCollectionLatestUpdatedAt: vi.fn(async () =>
-				new Date("2026-08-30T17:22:37.000Z"),
+				new Date("2026-08-28T12:34:17.000Z"),
 			),
 			listAllDocuments: vi.fn(async () => {
 				throw new Error("nao deve varrer colecao operacional");
@@ -134,6 +134,85 @@ describe("publicDashboard", () => {
 			"ordens_abertas",
 		);
 		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalledWith(
+			"match_os_abertas",
+		);
+	});
+
+	it("reconstroi match publico quando snapshot salvo esta mais antigo que a tabela normalizada", async () => {
+		const dbQuery = vi.fn(async () => ({ rows: [] }));
+		const ordensRepository = {
+			COLLECTIONS: { match: "match_os_abertas" },
+			isOrdersCollection: vi.fn((collectionPath) =>
+				["match_os_abertas", "public_dashboard"].includes(collectionPath),
+			),
+			getDocument: vi.fn(async (documentPath) => {
+				if (documentPath === "public_dashboard/match_os") {
+					return {
+						data: {
+							data: { resumo: { totalMatches: 99 } },
+							meta: { data: "2026-08-28T12:34:17.649Z" },
+						},
+					};
+				}
+				if (documentPath === "public_dashboard/agentes_match_os") {
+					return {
+						data: {
+							data: { resumo: { totalMatches: 99 } },
+							meta: { data: "2026-08-28T12:34:17.649Z" },
+						},
+					};
+				}
+				return null;
+			}),
+			getCollectionLatestUpdatedAt: vi.fn(async () =>
+				new Date("2026-08-31T18:00:00.000Z"),
+			),
+			listAllDocuments: vi.fn(async (collectionPath) => {
+				if (collectionPath !== "match_os_abertas") return [];
+				return [
+					{
+						documentId: "servico-1",
+						data: {
+							id: "servico-1",
+							num_os: "1",
+							tipo: "INSTALACAO",
+							cidade: "Belo Horizonte",
+							regional: "METROPOLITANA",
+							endereco: "Rua A, 10",
+							latitude: -19.92,
+							longitude: -43.94,
+							fonte: "sempre",
+						},
+					},
+					{
+						documentId: "retirada-1",
+						data: {
+							id: "retirada-1",
+							num_os: "2",
+							tipo: "RETIRADA FTTH",
+							cidade: "Belo Horizonte",
+							regional: "METROPOLITANA",
+							endereco: "Rua A, 12",
+							latitude: -19.9201,
+							longitude: -43.9401,
+							fonte: "onnet",
+						},
+					},
+				];
+			}),
+		};
+		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
+
+		const payload = await publicDashboard.buildPublicDashboard({
+			matchDetail: true,
+		});
+
+		expect(payload.matchOS.data.resumo.totalMatches).toBe(1);
+		expect(payload.matchOS.meta.data).toBe("2026-08-31T18:00:00.000Z");
+		expect(payload.matchOS.meta.rebuiltFrom).toBe("match_os_abertas");
+		expect(payload.matchOS.meta.totalSempre).toBe(1);
+		expect(payload.matchOS.meta.totalOnnet).toBe(1);
+		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
 			"match_os_abertas",
 		);
 	});

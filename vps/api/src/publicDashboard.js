@@ -1,5 +1,9 @@
 const db = require("./db");
 const ordensRepository = require("./ordensRepository");
+const {
+	buildMatchData,
+	buildMatchMessages,
+} = require("./operationalMatchSnapshot");
 
 const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 10_000;
 
@@ -84,6 +88,100 @@ function invalidatePublicDashboardCache() {
 	publicDashboardCache.data = null;
 	publicDashboardCache.cachedAt = 0;
 	publicDashboardCache.pending = null;
+}
+
+function toTime(value) {
+	if (!value) return 0;
+	const time = new Date(value).getTime();
+	return Number.isFinite(time) ? time : 0;
+}
+
+function getSnapshotMetaTime(snapshot) {
+	return toTime(
+		snapshot?.meta?.data ||
+			snapshot?.meta?.generatedAt ||
+			snapshot?.generatedAt ||
+			snapshot?.updatedAt,
+	);
+}
+
+function normalizeOrderSource(order = {}) {
+	const text = String(order.fonte || order.empresa || order.source || "")
+		.trim()
+		.toLowerCase();
+	if (text.includes("onnet")) return "onnet";
+	return "sempre";
+}
+
+async function resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw) {
+	const matchCollection =
+		ordensRepository.COLLECTIONS?.match || "match_os_abertas";
+	const latestUpdatedAt = await ordensRepository.getCollectionLatestUpdatedAt(
+		matchCollection,
+	);
+	const latestTime = toTime(latestUpdatedAt);
+	const currentSnapshotTime = Math.max(
+		getSnapshotMetaTime(matchOSRaw),
+		getSnapshotMetaTime(agentesMatchOSRaw),
+	);
+	if (!latestTime || currentSnapshotTime >= latestTime) {
+		return { matchOS: matchOSRaw, agentesMatchOS: agentesMatchOSRaw };
+	}
+
+	const rows = await listCollectionData(matchCollection, {
+		limit: 100000,
+	});
+	const orders = rows.map((row) => ({ id: row.documentId, ...row.data }));
+	const matchData = buildMatchData(orders);
+	const mensagens = buildMatchMessages(matchData);
+	const totalSempre = orders.filter(
+		(order) => normalizeOrderSource(order) === "sempre",
+	).length;
+	const totalOnnet = orders.filter(
+		(order) => normalizeOrderSource(order) === "onnet",
+	).length;
+	const meta = {
+		...(matchOSRaw?.meta || agentesMatchOSRaw?.meta || {}),
+		data: new Date(latestTime).toISOString(),
+		totalOS: orders.length,
+		totalSempre,
+		totalOnnet,
+		mensagens,
+		rebuiltFrom: "match_os_abertas",
+		staleSnapshotAt: currentSnapshotTime
+			? new Date(currentSnapshotTime).toISOString()
+			: null,
+	};
+
+	return {
+		matchOS: {
+			data: {
+				regionais: matchData.regionais,
+				agentes: [],
+				resumo: matchData.resumo,
+			},
+			meta,
+		},
+		agentesMatchOS: {
+			data: {
+				agentes: matchData.agentes,
+				regionais: [],
+				resumo: {
+					...matchData.resumo,
+					totalRegionais: 0,
+					totalCidades: matchData.agentes.reduce(
+						(sum, item) => sum + item.totalCidades,
+						0,
+					),
+					totalMatches: matchData.agentes.reduce(
+						(sum, item) => sum + item.totalMatches,
+						0,
+					),
+				},
+			},
+			meta,
+		},
+	};
 }
 
 function compactMatchCity(cidade = {}) {
@@ -295,13 +393,17 @@ async function buildOperationalDomain() {
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
+	const { matchOS, agentesMatchOS } = await resolveMatchSnapshots(
+		matchOSRaw,
+		agentesMatchOSRaw,
+	);
 
 	return {
 		domain: "operacional",
 		generatedAt: new Date().toISOString(),
 		mapa: mapaRaw,
-		matchOS: matchOSRaw,
-		agentesMatchOS: agentesMatchOSRaw,
+		matchOS,
+		agentesMatchOS,
 	};
 }
 
@@ -324,8 +426,8 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
 	const mapa = mapaRaw;
-	const matchOSFull = matchOSRaw;
-	const agentesMatchOSFull = agentesMatchOSRaw;
+	const { matchOS: matchOSFull, agentesMatchOS: agentesMatchOSFull } =
+		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw);
 	const matchOS = matchDetail ? matchOSFull : compactMatchSlice(matchOSFull);
 	const agentesMatchOS = matchDetail
 		? agentesMatchOSFull
