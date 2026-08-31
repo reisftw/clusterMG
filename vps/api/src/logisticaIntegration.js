@@ -37,6 +37,93 @@ function cleanText(value) {
 	return String(value || "").trim();
 }
 
+function normalizeComparableText(value) {
+	return cleanText(value)
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.replace(/[^\w\s]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function uniqueTexts(values = []) {
+	const seen = new Set();
+	return values
+		.map(cleanText)
+		.filter(Boolean)
+		.filter((value) => {
+			const key = normalizeComparableText(value);
+			if (!key || seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		});
+}
+
+function buildGeocodeCandidates(payload = {}) {
+	const estado = cleanText(payload.estado || "MG");
+	const pais = cleanText(payload.pais || "Brasil");
+	const endereco = cleanText(payload.endereco);
+	const numero = cleanText(payload.numero);
+	const bairro = cleanText(payload.bairro);
+	const cidade = cleanText(payload.cidade);
+	const enderecoComNumero = [endereco, numero].filter(Boolean).join(", ");
+	return uniqueTexts([
+		payload.query,
+		[endereco, numero, bairro, cidade, estado, pais].filter(Boolean).join(", "),
+		[enderecoComNumero, bairro, cidade, estado, pais].filter(Boolean).join(", "),
+		[enderecoComNumero, cidade, estado, pais].filter(Boolean).join(", "),
+		[endereco, bairro, cidade, estado, pais].filter(Boolean).join(", "),
+		[endereco, cidade, estado, pais].filter(Boolean).join(", "),
+		[bairro, cidade, estado, pais].filter(Boolean).join(", "),
+		[cidade, estado, pais].filter(Boolean).join(", "),
+	]);
+}
+
+function getGeocodeAddressText(result = {}) {
+	const address = result.address || {};
+	return [
+		result.display_name,
+		address.road,
+		address.pedestrian,
+		address.neighbourhood,
+		address.suburb,
+		address.city,
+		address.town,
+		address.village,
+		address.municipality,
+		address.state,
+		address.country,
+	]
+		.filter(Boolean)
+		.join(" ");
+}
+
+function scoreGeocodeResult(result = {}, payload = {}) {
+	const address = result.address || {};
+	const haystack = normalizeComparableText(getGeocodeAddressText(result));
+	const expectedCity = normalizeComparableText(payload.cidade);
+	const expectedState = normalizeComparableText(payload.estado || "MG");
+	const expectedCountry = normalizeComparableText(payload.pais || "Brasil");
+	let score = Number(result.importance || 0) * 10;
+	if (expectedCity && haystack.includes(expectedCity)) score += 50;
+	if (expectedState && haystack.includes(expectedState)) score += 20;
+	if (expectedCountry && haystack.includes(expectedCountry)) score += 10;
+	if (String(address.country_code || "").toLowerCase() === "br") score += 15;
+	if (["house", "building", "residential", "road"].includes(result.type))
+		score += 8;
+	return score;
+}
+
+function pickBestGeocodeResult(results = [], payload = {}) {
+	return results
+		.filter((item) => item?.lat && item?.lon)
+		.sort(
+			(a, b) =>
+				scoreGeocodeResult(b, payload) - scoreGeocodeResult(a, payload),
+		)[0];
+}
+
 function normalizeProvider(provider = {}, currentProvider = {}) {
 	const id = cleanText(provider.id || currentProvider.id || provider.nome)
 		.toLowerCase()
@@ -253,20 +340,8 @@ function buildLalamoveError(data, responseText, status) {
 }
 
 async function geocodeAddress(payload = {}) {
-	const query = cleanText(
-		payload.query ||
-			[
-				payload.endereco,
-				payload.numero,
-				payload.bairro,
-				payload.cidade,
-				payload.estado || "MG",
-				payload.pais || "Brasil",
-			]
-				.filter(Boolean)
-				.join(", "),
-	);
-	if (!query) {
+	const queries = buildGeocodeCandidates(payload);
+	if (!queries.length) {
 		const error = new Error(
 			"Informe um endereço para buscar latitude e longitude.",
 		);
@@ -278,49 +353,54 @@ async function geocodeAddress(payload = {}) {
 		process.env.LOGISTICA_GEOCODER_URL ||
 			"https://nominatim.openstreetmap.org/search",
 	);
-	const url = new URL(baseUrl);
-	url.searchParams.set("format", "jsonv2");
-	url.searchParams.set("limit", "1");
-	url.searchParams.set("addressdetails", "1");
-	url.searchParams.set("q", query);
+	let lastHttpStatus = null;
+	let lastQuery = queries[0];
+	let result = null;
+	for (const query of queries) {
+		lastQuery = query;
+		const url = new URL(baseUrl);
+		url.searchParams.set("format", "jsonv2");
+		url.searchParams.set("limit", "5");
+		url.searchParams.set("addressdetails", "1");
+		url.searchParams.set("countrycodes", "br");
+		url.searchParams.set("accept-language", "pt-BR,pt;q=0.9");
+		url.searchParams.set("q", query);
 
-	const response = await fetch(url.toString(), {
-		headers: {
-			Accept: "application/json",
-			"User-Agent": cleanText(
-				process.env.LOGISTICA_GEOCODER_USER_AGENT ||
-					"retiradas.tech logística/1.0",
-			),
-		},
-	});
-	const responseText = await response.text();
-	let data = null;
-	try {
-		data = responseText ? JSON.parse(responseText) : null;
-	} catch {
-		data = null;
-	}
-	if (!response.ok) {
-		const error = new Error(
-			`Falha ao consultar coordenadas: HTTP ${response.status}.`,
-		);
-		error.statusCode = 502;
-		throw error;
+		const response = await fetch(url.toString(), {
+			headers: {
+				Accept: "application/json",
+				"User-Agent": cleanText(
+					process.env.LOGISTICA_GEOCODER_USER_AGENT ||
+						"retiradas.tech logística/1.0",
+				),
+			},
+		});
+		lastHttpStatus = response.status;
+		const responseText = await response.text();
+		let data = null;
+		try {
+			data = responseText ? JSON.parse(responseText) : null;
+		} catch {
+			data = null;
+		}
+		if (!response.ok) continue;
+		result = Array.isArray(data) ? pickBestGeocodeResult(data, payload) : null;
+		if (result) break;
 	}
 
-	const result = Array.isArray(data) ? data[0] : null;
 	if (!result?.lat || !result?.lon) {
-		const error = new Error(`Não encontrei coordenadas para: ${query}`);
-		error.statusCode = 404;
+		const error = new Error(`Não encontrei coordenadas para: ${lastQuery}`);
+		error.statusCode = lastHttpStatus && lastHttpStatus >= 500 ? 502 : 404;
 		throw error;
 	}
 
 	return {
 		lat: result.lat,
 		lng: result.lon,
-		displayName: result.display_name || query,
+		displayName: result.display_name || lastQuery,
 		provider: "nominatim",
-		query,
+		query: lastQuery,
+		attempts: queries.length,
 	};
 }
 
