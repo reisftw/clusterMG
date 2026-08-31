@@ -124,6 +124,12 @@ import {
 	formatValue,
 	integer,
 } from "../utils/financeiroFormatters";
+import { splitPdfTextToTwoLines } from "../utils/financeiroPdfText";
+import {
+	getBudgetMonthSelectorYear,
+	getBudgetReference,
+	getFinanceiroPageFlags,
+} from "../utils/financeiroPageViewModel";
 import {
 	getTariffsAvailableYears as getTariffsDetailAvailableYears,
 	TARIFFS_DETAIL_BUILDERS,
@@ -2396,7 +2402,7 @@ async function exportTariffsReportPdf({
 		y += 5;
 	};
 	const fitText = (text, maxWidth) =>
-		pdf.splitTextToSize(String(text || "-"), maxWidth).slice(0, 2);
+		splitPdfTextToTwoLines(pdf, text, maxWidth);
 	const cards = (items = []) => {
 		const cols = 3;
 		const gap = 4;
@@ -2439,7 +2445,7 @@ async function exportTariffsReportPdf({
 			pdf.setFont("helvetica", "bold");
 			pdf.setFontSize(6.6);
 			pdf.setTextColor(51, 65, 85);
-			pdf.text(fitText(item.label, labelW, 6.6), margin + 4, rowY + 1.8);
+			pdf.text(fitText(item.label, labelW), margin + 4, rowY + 1.8);
 			pdf.setFillColor(226, 232, 240);
 			pdf.roundedRect(barX, rowY - 1, barW, 3, 1, 1, "F");
 			pdf.setFillColor(37, 99, 235);
@@ -10870,6 +10876,352 @@ function TariffsReportPage({ canManage }) {
 	);
 }
 
+function BudgetPeriodSelector({
+	budgetMonthMenuOpen,
+	budgetMonthSelectorYear,
+	budgetPeriodMode,
+	budgetYearMenuOpen,
+	budgetYearOptions,
+	selectedBudgetReference,
+	setBudgetDateModalOpen,
+	setBudgetMonthMenuOpen,
+	setBudgetMonthOverride,
+	setBudgetPeriodMode,
+	setBudgetYearMenuOpen,
+}) {
+	const closeMenus = () => {
+		setBudgetMonthMenuOpen(false);
+		setBudgetYearMenuOpen(false);
+	};
+	return (
+		<div className="relative flex rounded-xl border border-slate-200">
+			<div className="relative">
+				<button
+					type="button"
+					onClick={() => {
+						setBudgetPeriodMode("month");
+						setBudgetYearMenuOpen(false);
+						setBudgetMonthMenuOpen((current) => !current);
+					}}
+					className={`min-h-11 rounded-l-xl px-5 text-sm font-bold ${budgetPeriodMode === "month" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+				>
+					Mês
+				</button>
+				{budgetMonthMenuOpen ? (
+					<div className="absolute left-0 top-[calc(100%+8px)] z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+						<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
+							{budgetMonthSelectorYear}
+						</p>
+						<div className="grid grid-cols-2 gap-1">
+							{Array.from({ length: 12 }, (_, index) => index + 1).map(
+								(month) => {
+									const activeMonth =
+										Number(selectedBudgetReference.referenceMonth || 0) ===
+											month && budgetPeriodMode === "month";
+									return (
+										<button
+											key={month}
+											type="button"
+											onClick={() => {
+												setBudgetMonthOverride({
+													referenceYear: budgetMonthSelectorYear,
+													referenceMonth: month,
+												});
+												setBudgetPeriodMode("month");
+												closeMenus();
+											}}
+											className={`rounded-xl px-3 py-2 text-left text-xs font-black ${activeMonth ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+										>
+											{budgetMonthName(month)}
+										</button>
+									);
+								},
+							)}
+						</div>
+					</div>
+				) : null}
+			</div>
+			<div className="relative">
+				<button
+					type="button"
+					onClick={() => {
+						setBudgetPeriodMode("year");
+						setBudgetMonthMenuOpen(false);
+						setBudgetYearMenuOpen((current) => !current);
+					}}
+					className={`min-h-11 border-l border-slate-200 px-5 text-sm font-bold ${budgetPeriodMode === "year" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+				>
+					Ano
+				</button>
+				{budgetYearMenuOpen ? (
+					<div className="absolute left-0 top-[calc(100%+8px)] z-40 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+						<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
+							Ano
+						</p>
+						<div className="grid gap-1">
+							{budgetYearOptions.map((year) => {
+								const activeYear =
+									Number(selectedBudgetReference.referenceYear || 0) === year &&
+									budgetPeriodMode === "year";
+								return (
+									<button
+										key={year}
+										type="button"
+										onClick={() => {
+											setBudgetMonthOverride({
+												referenceYear: year,
+												referenceMonth:
+													selectedBudgetReference.referenceMonth || 1,
+											});
+											setBudgetPeriodMode("year");
+											closeMenus();
+										}}
+										className={`rounded-xl px-3 py-2 text-left text-xs font-black ${activeYear ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+									>
+										{year}
+									</button>
+								);
+							})}
+						</div>
+					</div>
+				) : null}
+			</div>
+			<button
+				type="button"
+				onClick={() => {
+					closeMenus();
+					setBudgetDateModalOpen(true);
+				}}
+				className={`min-h-11 rounded-r-xl border-l border-slate-200 px-5 text-sm font-bold ${budgetPeriodMode === "custom" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+			>
+				Datas
+			</button>
+		</div>
+	);
+}
+
+function GeneralPeriodSelector({ period, setPeriod }) {
+	return (
+		<div className="flex overflow-hidden rounded-xl border border-slate-200">
+			{["month", "year"].map((option) => (
+				<button
+					key={option}
+					type="button"
+					onClick={() => setPeriod(option)}
+					className={`min-h-11 px-5 text-sm font-bold ${period === option ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+				>
+					{option === "month" ? "Mês" : "Ano"}
+				</button>
+			))}
+		</div>
+	);
+}
+
+function FinanceiroPageHeader({
+	budgetConfig,
+	budgetLoading,
+	budgetMonthMenuOpen,
+	budgetMonthSelectorYear,
+	budgetPeriodDisplayLabel,
+	budgetPeriodMode,
+	budgetYearMenuOpen,
+	budgetYearOptions,
+	data,
+	hideHeaderControls,
+	isBudgetOperationalPage,
+	isCompactReportPage,
+	load,
+	loadBudgetConfig,
+	loading,
+	meta,
+	page,
+	period,
+	selectedBudgetReference,
+	setBudgetDateModalOpen,
+	setBudgetMonthMenuOpen,
+	setBudgetMonthOverride,
+	setBudgetPeriodMode,
+	setBudgetYearMenuOpen,
+	setExportModalOpen,
+	setPeriod,
+}) {
+	const refreshLoading = isBudgetOperationalPage ? budgetLoading : loading;
+	return (
+		<header>
+			<div
+				className={`flex flex-col xl:flex-row xl:items-center xl:justify-between ${
+					isCompactReportPage ? "gap-2" : "gap-4"
+				}`}
+			>
+				<div>
+					<h1
+						className={`font-extrabold text-slate-950 ${
+							isCompactReportPage ? "text-2xl md:text-3xl" : "text-3xl md:text-4xl"
+						}`}
+					>
+						{meta.title}
+					</h1>
+					<p
+						className={`font-semibold text-slate-600 ${
+							isCompactReportPage ? "mt-0 text-sm" : "mt-1 text-base"
+						}`}
+					>
+						{meta.subtitle}
+					</p>
+				</div>
+				{hideHeaderControls ? null : (
+					<div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+						<span className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold text-slate-500">
+							<CalendarClock size={18} className="text-slate-700" />
+							<span>
+								<span className="block leading-tight">
+									{isBudgetOperationalPage
+										? "Última importação:"
+										: "Última atualização:"}
+								</span>
+								<span className="block text-sm text-slate-950">
+									{formatUpdatedAt(
+										isBudgetOperationalPage
+											? budgetConfig?.lastImportInfo?.importedAt
+											: data?.updatedAt,
+									)}
+								</span>
+								{isBudgetOperationalPage ? (
+									<span className="block text-[11px] font-black text-blue-700">
+										{budgetPeriodDisplayLabel}
+									</span>
+								) : null}
+							</span>
+						</span>
+						{isBudgetOperationalPage ? (
+							<BudgetPeriodSelector
+								budgetMonthMenuOpen={budgetMonthMenuOpen}
+								budgetMonthSelectorYear={budgetMonthSelectorYear}
+								budgetPeriodMode={budgetPeriodMode}
+								budgetYearMenuOpen={budgetYearMenuOpen}
+								budgetYearOptions={budgetYearOptions}
+								selectedBudgetReference={selectedBudgetReference}
+								setBudgetDateModalOpen={setBudgetDateModalOpen}
+								setBudgetMonthMenuOpen={setBudgetMonthMenuOpen}
+								setBudgetMonthOverride={setBudgetMonthOverride}
+								setBudgetPeriodMode={setBudgetPeriodMode}
+								setBudgetYearMenuOpen={setBudgetYearMenuOpen}
+							/>
+						) : (
+							<GeneralPeriodSelector period={period} setPeriod={setPeriod} />
+						)}
+						{page === "dashboard" ? (
+							<button
+								type="button"
+								onClick={() => setExportModalOpen(true)}
+								disabled={loading || !data}
+								className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+							>
+								<Download size={16} /> Exportar
+							</button>
+						) : null}
+						<button
+							type="button"
+							onClick={isBudgetOperationalPage ? () => loadBudgetConfig() : load}
+							disabled={refreshLoading}
+							className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							<RefreshCw
+								size={16}
+								className={refreshLoading ? "animate-spin" : ""}
+							/>{" "}
+							Atualizar
+						</button>
+					</div>
+				)}
+			</div>
+		</header>
+	);
+}
+
+function FinanceiroPageContent({
+	budgetConfig,
+	budgetDateRange,
+	budgetLoading,
+	budgetPeriodMode,
+	canManage,
+	data,
+	exportModalOpen,
+	loading,
+	page,
+	period,
+	selectedBudgetReference,
+	setBudgetConfig,
+	setExportModalOpen,
+}) {
+	const selectedPeriod = {
+		mode: budgetPeriodMode,
+		...budgetDateRange,
+		...selectedBudgetReference,
+	};
+	const tariffDetailTypes = {
+		reportsTarifasFaturas: "faturas",
+		reportsTarifasRecCliente: "recCliente",
+		reportsTarifasFormasPagamento: "formasPagamento",
+	};
+	return (
+		<>
+			{page === "dashboard" ? (
+				<DashboardContent data={data} loading={loading} />
+			) : null}
+			{exportModalOpen ? (
+				<ExportFinanceiroModal
+					data={data}
+					period={period}
+					onClose={() => setExportModalOpen(false)}
+				/>
+			) : null}
+			{["contasPagar", "contasReceber", "faturamento", "notas"].includes(
+				page,
+			) ? (
+				<SectionPage page={page} />
+			) : null}
+			{page === "reportsSerasa" ? (
+				<SerasaReportPage canManage={canManage} />
+			) : null}
+			{page === "reportsTarifas" ? (
+				<TariffsReportPage canManage={canManage} />
+			) : null}
+			{tariffDetailTypes[page] ? (
+				<TariffsDetailPage type={tariffDetailTypes[page]} />
+			) : null}
+			{[
+				"orcamentoDashboard",
+				"orcamentoCentrosCusto",
+				"orcamentoRealizado",
+				"orcamentoAprovacoes",
+			].includes(page) ? (
+				<BudgetOperationalPage
+					page={page}
+					config={budgetConfig || {}}
+					loading={budgetLoading}
+					canManage={canManage}
+					onConfigUpdated={setBudgetConfig}
+					selectedPeriod={selectedPeriod}
+				/>
+			) : null}
+			{page === "orcamentoDados" ? (
+				<BudgetDataImportPage canManage={canManage} />
+			) : null}
+			{page === "orcamentoConfiguracoes" ? (
+				<OrcamentoConfiguracoesPage
+					canManage={canManage}
+					config={budgetConfig || {}}
+					selectedPeriod={selectedPeriod}
+				/>
+			) : null}
+			{page === "configuracoes" ? (
+				<ConfiguracoesPage canManage={canManage} />
+			) : null}
+		</>
+	);
+}
+
 export default function FinanceiroPage({ page = "dashboard" }) {
 	const { currentUser } = useAuthContext();
 	const [period, setPeriod] = useState("month");
@@ -10892,48 +11244,17 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 	const canManage =
 		hasPermission(currentUser, "financeiro.configuracoes.manage") ||
 		hasPermission(currentUser, "financeiro.gestao_orcamento.manage");
-	const isBudgetPage = String(page || "").startsWith("orcamento");
-	const isBudgetOperationalPage = [
-		"orcamentoDashboard",
-		"orcamentoCentrosCusto",
-		"orcamentoRealizado",
-		"orcamentoAprovacoes",
-	].includes(page);
-	const hideHeaderControls = [
-		"orcamentoDados",
-		"orcamentoConfiguracoes",
-		"reportsSerasa",
-		"reportsTarifas",
-		"reportsTarifasFaturas",
-		"reportsTarifasRecCliente",
-		"reportsTarifasFormasPagamento",
-	].includes(page);
-	const isCompactReportPage = [
-		"reportsSerasa",
-		"reportsTarifas",
-		"reportsTarifasFaturas",
-		"reportsTarifasRecCliente",
-		"reportsTarifasFormasPagamento",
-	].includes(page);
-	const budgetReference = {
-		referenceYear:
-			Number(
-				budgetConfig?.lastImportReference?.year ||
-					budgetConfig?.lastImportSummary?.referenceYear ||
-					0,
-			) || undefined,
-		referenceMonth:
-			Number(
-				budgetConfig?.lastImportReference?.month ||
-					budgetConfig?.lastImportSummary?.referenceMonth ||
-					0,
-			) || undefined,
-	};
+	const {
+		hideHeaderControls,
+		isBudgetOperationalPage,
+		isBudgetPage,
+		isCompactReportPage,
+	} = getFinanceiroPageFlags(page);
+	const budgetReference = getBudgetReference(budgetConfig);
 	const selectedBudgetReference = budgetMonthOverride || budgetReference;
-	const budgetMonthSelectorYear = Number(
-		selectedBudgetReference.referenceYear ||
-			budgetReference.referenceYear ||
-			new Date().getFullYear(),
+	const budgetMonthSelectorYear = getBudgetMonthSelectorYear(
+		selectedBudgetReference,
+		budgetReference,
 	);
 	const budgetYearOptions = Array.from(
 		{ length: 7 },
@@ -10994,266 +11315,54 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 			className={isCompactReportPage ? "space-y-3" : "space-y-5"}
 			style={{ fontFamily: FINANCE_FONT_STACK }}
 		>
-			<header>
-				<div
-					className={`flex flex-col xl:flex-row xl:items-center xl:justify-between ${
-						isCompactReportPage ? "gap-2" : "gap-4"
-					}`}
-				>
-					<div>
-						<h1
-							className={`font-extrabold text-slate-950 ${
-								isCompactReportPage
-									? "text-2xl md:text-3xl"
-									: "text-3xl md:text-4xl"
-							}`}
-						>
-							{meta.title}
-						</h1>
-						<p
-							className={`font-semibold text-slate-600 ${
-								isCompactReportPage ? "mt-0 text-sm" : "mt-1 text-base"
-							}`}
-						>
-							{meta.subtitle}
-						</p>
-					</div>
-					{!hideHeaderControls ? (
-						<div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-							<span className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-50 px-3 text-xs font-bold text-slate-500">
-								<CalendarClock size={18} className="text-slate-700" />
-								<span>
-									<span className="block leading-tight">
-										{isBudgetOperationalPage
-											? "Última importação:"
-											: "Última atualização:"}
-									</span>
-									<span className="block text-sm text-slate-950">
-										{formatUpdatedAt(
-											isBudgetOperationalPage
-												? budgetConfig?.lastImportInfo?.importedAt
-												: data?.updatedAt,
-										)}
-									</span>
-									{isBudgetOperationalPage ? (
-										<span className="block text-[11px] font-black text-blue-700">
-											{budgetPeriodDisplayLabel}
-										</span>
-									) : null}
-								</span>
-							</span>
-							{isBudgetOperationalPage ? (
-								<div className="relative flex rounded-xl border border-slate-200">
-									<div className="relative">
-										<button
-											type="button"
-											onClick={() => {
-												setBudgetPeriodMode("month");
-												setBudgetYearMenuOpen(false);
-												setBudgetMonthMenuOpen((current) => !current);
-											}}
-											className={`min-h-11 rounded-l-xl px-5 text-sm font-bold ${budgetPeriodMode === "month" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-										>
-											Mês
-										</button>
-										{budgetMonthMenuOpen ? (
-											<div className="absolute left-0 top-[calc(100%+8px)] z-40 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-												<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
-													{budgetMonthSelectorYear}
-												</p>
-												<div className="grid grid-cols-2 gap-1">
-													{Array.from({ length: 12 }, (_, index) => {
-														const month = index + 1;
-														const activeMonth =
-															Number(
-																selectedBudgetReference.referenceMonth || 0,
-															) === month && budgetPeriodMode === "month";
-														return (
-															<button
-																key={month}
-																type="button"
-																onClick={() => {
-																	setBudgetMonthOverride({
-																		referenceYear: budgetMonthSelectorYear,
-																		referenceMonth: month,
-																	});
-																	setBudgetPeriodMode("month");
-																	setBudgetMonthMenuOpen(false);
-																	setBudgetYearMenuOpen(false);
-																}}
-																className={`rounded-xl px-3 py-2 text-left text-xs font-black ${activeMonth ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
-															>
-																{budgetMonthName(month)}
-															</button>
-														);
-													})}
-												</div>
-											</div>
-										) : null}
-									</div>
-									<div className="relative">
-										<button
-											type="button"
-											onClick={() => {
-												setBudgetPeriodMode("year");
-												setBudgetMonthMenuOpen(false);
-												setBudgetYearMenuOpen((current) => !current);
-											}}
-											className={`min-h-11 border-l border-slate-200 px-5 text-sm font-bold ${budgetPeriodMode === "year" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-										>
-											Ano
-										</button>
-										{budgetYearMenuOpen ? (
-											<div className="absolute left-0 top-[calc(100%+8px)] z-40 w-36 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-												<p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-wide text-slate-500">
-													Ano
-												</p>
-												<div className="grid gap-1">
-													{budgetYearOptions.map((year) => {
-														const activeYear =
-															Number(
-																selectedBudgetReference.referenceYear || 0,
-															) === year && budgetPeriodMode === "year";
-														return (
-															<button
-																key={year}
-																type="button"
-																onClick={() => {
-																	setBudgetMonthOverride({
-																		referenceYear: year,
-																		referenceMonth:
-																			selectedBudgetReference.referenceMonth ||
-																			1,
-																	});
-																	setBudgetPeriodMode("year");
-																	setBudgetYearMenuOpen(false);
-																	setBudgetMonthMenuOpen(false);
-																}}
-																className={`rounded-xl px-3 py-2 text-left text-xs font-black ${activeYear ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-50"}`}
-															>
-																{year}
-															</button>
-														);
-													})}
-												</div>
-											</div>
-										) : null}
-									</div>
-									<button
-										type="button"
-										onClick={() => {
-											setBudgetMonthMenuOpen(false);
-											setBudgetYearMenuOpen(false);
-											setBudgetDateModalOpen(true);
-										}}
-										className={`min-h-11 rounded-r-xl border-l border-slate-200 px-5 text-sm font-bold ${budgetPeriodMode === "custom" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-									>
-										Datas
-									</button>
-								</div>
-							) : (
-								<div className="flex overflow-hidden rounded-xl border border-slate-200">
-									{["month", "year"].map((option) => (
-										<button
-											key={option}
-											type="button"
-											onClick={() => setPeriod(option)}
-											className={`min-h-11 px-5 text-sm font-bold ${period === option ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50"}`}
-										>
-											{option === "month" ? "Mês" : "Ano"}
-										</button>
-									))}
-								</div>
-							)}
-							{page === "dashboard" ? (
-								<button
-									type="button"
-									onClick={() => setExportModalOpen(true)}
-									disabled={loading || !data}
-									className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
-								>
-									<Download size={16} /> Exportar
-								</button>
-							) : null}
-							<button
-								type="button"
-								onClick={
-									isBudgetOperationalPage ? () => loadBudgetConfig() : load
-								}
-								disabled={isBudgetOperationalPage ? budgetLoading : loading}
-								className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-							>
-								<RefreshCw
-									size={16}
-									className={
-										(isBudgetOperationalPage ? budgetLoading : loading)
-											? "animate-spin"
-											: ""
-									}
-								/>{" "}
-								Atualizar
-							</button>
-						</div>
-					) : null}
-				</div>
-			</header>
+			<FinanceiroPageHeader
+				budgetConfig={budgetConfig}
+				budgetLoading={budgetLoading}
+				budgetMonthMenuOpen={budgetMonthMenuOpen}
+				budgetMonthSelectorYear={budgetMonthSelectorYear}
+				budgetPeriodDisplayLabel={budgetPeriodDisplayLabel}
+				budgetPeriodMode={budgetPeriodMode}
+				budgetYearMenuOpen={budgetYearMenuOpen}
+				budgetYearOptions={budgetYearOptions}
+				data={data}
+				hideHeaderControls={hideHeaderControls}
+				isBudgetOperationalPage={isBudgetOperationalPage}
+				isCompactReportPage={isCompactReportPage}
+				load={load}
+				loadBudgetConfig={loadBudgetConfig}
+				loading={loading}
+				meta={meta}
+				page={page}
+				period={period}
+				selectedBudgetReference={selectedBudgetReference}
+				setBudgetDateModalOpen={setBudgetDateModalOpen}
+				setBudgetMonthMenuOpen={setBudgetMonthMenuOpen}
+				setBudgetMonthOverride={setBudgetMonthOverride}
+				setBudgetPeriodMode={setBudgetPeriodMode}
+				setBudgetYearMenuOpen={setBudgetYearMenuOpen}
+				setExportModalOpen={setExportModalOpen}
+				setPeriod={setPeriod}
+			/>
 			{message ? (
 				<div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
 					{message}
 				</div>
 			) : null}
-			{page === "dashboard" ? (
-				<DashboardContent data={data} loading={loading} />
-			) : null}
-			{exportModalOpen ? (
-				<ExportFinanceiroModal
-					data={data}
-					period={period}
-					onClose={() => setExportModalOpen(false)}
-				/>
-			) : null}
-			{[
-				"contasPagar",
-				"contasReceber",
-				"faturamento",
-				"notas",
-			].includes(page) ? (
-				<SectionPage page={page} />
-			) : null}
-			{page === "reportsSerasa" ? (
-				<SerasaReportPage canManage={canManage} />
-			) : null}
-			{page === "reportsTarifas" ? (
-				<TariffsReportPage canManage={canManage} />
-			) : null}
-			{page === "reportsTarifasFaturas" ? (
-				<TariffsDetailPage type="faturas" />
-			) : null}
-			{page === "reportsTarifasRecCliente" ? (
-				<TariffsDetailPage type="recCliente" />
-			) : null}
-			{page === "reportsTarifasFormasPagamento" ? (
-				<TariffsDetailPage type="formasPagamento" />
-			) : null}
-			{[
-				"orcamentoDashboard",
-				"orcamentoCentrosCusto",
-				"orcamentoRealizado",
-				"orcamentoAprovacoes",
-			].includes(page) ? (
-				<BudgetOperationalPage
-					page={page}
-					config={budgetConfig || {}}
-					loading={budgetLoading}
-					canManage={canManage}
-					onConfigUpdated={setBudgetConfig}
-					selectedPeriod={{
-						mode: budgetPeriodMode,
-						...budgetDateRange,
-						...selectedBudgetReference,
-					}}
-				/>
-			) : null}
+			<FinanceiroPageContent
+				budgetConfig={budgetConfig}
+				budgetDateRange={budgetDateRange}
+				budgetLoading={budgetLoading}
+				budgetPeriodMode={budgetPeriodMode}
+				canManage={canManage}
+				data={data}
+				exportModalOpen={exportModalOpen}
+				loading={loading}
+				page={page}
+				period={period}
+				selectedBudgetReference={selectedBudgetReference}
+				setBudgetConfig={setBudgetConfig}
+				setExportModalOpen={setExportModalOpen}
+			/>
 			{budgetDateModalOpen ? (
 				<BudgetDateRangeModal
 					value={budgetDateRange}
@@ -11264,23 +11373,6 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 						setBudgetDateModalOpen(false);
 					}}
 				/>
-			) : null}
-			{page === "orcamentoDados" ? (
-				<BudgetDataImportPage canManage={canManage} />
-			) : null}
-			{page === "orcamentoConfiguracoes" ? (
-				<OrcamentoConfiguracoesPage
-					canManage={canManage}
-					config={budgetConfig || {}}
-					selectedPeriod={{
-						mode: budgetPeriodMode,
-						...budgetDateRange,
-						...selectedBudgetReference,
-					}}
-				/>
-			) : null}
-			{page === "configuracoes" ? (
-				<ConfiguracoesPage canManage={canManage} />
 			) : null}
 		</main>
 	);
