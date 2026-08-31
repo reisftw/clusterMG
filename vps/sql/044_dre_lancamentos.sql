@@ -24,6 +24,14 @@ create index if not exists idx_dre_lancamentos_linha
 create index if not exists idx_dre_lancamentos_fake
 	on dre_lancamentos (is_fake);
 
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+	new.updated_at = now();
+	return new;
+end;
+$$ language plpgsql;
+
 drop trigger if exists dre_lancamentos_touch_updated_at on dre_lancamentos;
 create trigger dre_lancamentos_touch_updated_at
 before update on dre_lancamentos
