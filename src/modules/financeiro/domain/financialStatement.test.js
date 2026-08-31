@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import {
 	buildDreStatementViewModel,
+	buildTariffsInsights,
+	getBudgetInsights,
+	getTariffsAvailableYears,
 	parseDreWorkbook,
 	parseFinancialStatementCompetencia,
 	parseFinancialStatementMoney,
@@ -81,5 +84,54 @@ describe("financialStatement", () => {
 		expect(viewModel.statement.some((line) => line.id === "lucro_bruto")).toBe(
 			true,
 		);
+	});
+
+	it("expõe orçamento pela interface de demonstrativo financeiro", () => {
+		const insights = getBudgetInsights(
+			{
+				centers: [
+					{
+						id: "cc-1",
+						nome: "Centro 1",
+						tipoPlano: "A",
+						orcamentoMensal: 1000,
+						realizadoPorEmpresaFilial: [
+							{ year: 2026, month: 8, realizado: 250 },
+						],
+					},
+				],
+				matrix: [],
+				accounts: [],
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+
+		expect(insights.plannedMonth).toBe(1000);
+		expect(insights.realizedMonth).toBe(250);
+		expect(insights.availableMonth).toBe(750);
+	});
+
+	it("expõe Serasa/Tarifas pela interface de demonstrativo financeiro", () => {
+		const report = {
+			tarifasMensais: [{ year: 2026, month: 8, bank: "Banco A", value: 12 }],
+			formasPagamentoQuantidade: [
+				{ year: 2026, month: 8, method: "Boleto", quantity: 3 },
+			],
+			formasPagamentoValor: [
+				{ year: 2026, month: 8, method: "Boleto", value: 300 },
+			],
+		};
+
+		expect(getTariffsAvailableYears(report)).toContain(2026);
+		expect(
+			buildTariffsInsights(report, {
+				mode: "month",
+				referenceYear: 2026,
+				referenceMonth: 8,
+			}).kpis,
+		).toMatchObject({
+			tarifasTotal: 12,
+			totalPagamentos: 3,
+		});
 	});
 });

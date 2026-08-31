@@ -4,6 +4,27 @@ import {
 	classifyDreCategory,
 	DRE_LINE_IDS,
 } from "../utils/dreStatement";
+export {
+	buildBudgetOperationalKpis,
+	buildCostCenterTopCards,
+	buildDirectorateRows,
+	buildOperationalCenterGroups,
+	budgetConsumptionStatus,
+	budgetVarianceMeta,
+	findBudgetParetoRows,
+	getBudgetInsights,
+	isBudgetCenterResponsible,
+	paginateBudgetGroups,
+} from "../utils/budgetInsights";
+export {
+	buildClientRevenueDetailViewModel,
+	buildInvoicesDetailViewModel,
+	buildPaymentMethodsDetailViewModel,
+	buildTariffsInsights,
+	formatTariffsPeriodLabel,
+	getTariffsAvailableYears,
+	TARIFFS_DETAIL_BUILDERS,
+} from "../utils/tariffsViewModels";
 
 const DRE_VALUE_HEADERS = ["valor", "realizado", "saldo", "total", "vlr"];
 const DRE_CATEGORY_HEADERS = [

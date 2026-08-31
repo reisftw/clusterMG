@@ -7,13 +7,17 @@ const statementPath = require.resolve("./api/src/financeiroStatement.js");
 const reportsRepositoryPath = require.resolve(
 	"./api/src/financeiroReportsRepository.js",
 );
+const budgetRepositoryPath = require.resolve(
+	"./api/src/financeiroBudgetConfigRepository.js",
+);
 
 function clearModules() {
 	delete require.cache[statementPath];
 	delete require.cache[reportsRepositoryPath];
+	delete require.cache[budgetRepositoryPath];
 }
 
-function loadStatement(repository = {}) {
+function loadStatement(reportsRepository = {}, budgetRepository = {}) {
 	clearModules();
 	require.cache[reportsRepositoryPath] = {
 		id: reportsRepositoryPath,
@@ -22,9 +26,27 @@ function loadStatement(repository = {}) {
 		exports: {
 			createFakeDreLancamentos: vi.fn(),
 			deleteFakeDreLancamentos: vi.fn(),
+			clearSerasaFinancialReport: vi.fn(),
+			clearTariffsFinancialReport: vi.fn(),
+			getSerasaFinancialReport: vi.fn(),
+			getTariffsFinancialReport: vi.fn(),
 			listDreLancamentos: vi.fn(),
 			replaceDreLancamentos: vi.fn(),
-			...repository,
+			saveSerasaFinancialReport: vi.fn(),
+			saveTariffsFinancialReport: vi.fn(),
+			...reportsRepository,
+		},
+	};
+	require.cache[budgetRepositoryPath] = {
+		id: budgetRepositoryPath,
+		filename: budgetRepositoryPath,
+		loaded: true,
+		exports: {
+			getBudgetCostCenters: vi.fn(),
+			getBudgetData: vi.fn(),
+			saveBudgetCostCenters: vi.fn(),
+			saveBudgetData: vi.fn(),
+			...budgetRepository,
 		},
 	};
 	return require("./api/src/financeiroStatement.js");
@@ -84,5 +106,65 @@ describe("financeiroStatement", () => {
 		expect(repository.deleteFakeDreLancamentos).toHaveBeenCalledWith({
 			uid: "u1",
 		});
+	});
+
+	it("delega Serasa e Tarifas para o repositorio de reports", async () => {
+		const repository = {
+			clearSerasaFinancialReport: vi.fn(async () => ({ ok: true })),
+			clearTariffsFinancialReport: vi.fn(async () => ({ ok: true })),
+			getSerasaFinancialReport: vi.fn(async () => ({ rows: [] })),
+			getTariffsFinancialReport: vi.fn(async () => ({ faturas: [] })),
+			saveSerasaFinancialReport: vi.fn(async () => ({ ok: true })),
+			saveTariffsFinancialReport: vi.fn(async () => ({ ok: true })),
+		};
+		const statement = loadStatement(repository);
+
+		await statement.getSerasaStatement();
+		await statement.saveSerasaStatement({ rows: [{ id: "serasa-1" }] });
+		await statement.clearSerasaStatement({ rows: [] });
+		await statement.getTariffsStatement();
+		await statement.saveTariffsStatement({ faturas: [{ id: "fat-1" }] });
+		await statement.clearTariffsStatement({ faturas: [] });
+
+		expect(repository.getSerasaFinancialReport).toHaveBeenCalled();
+		expect(repository.saveSerasaFinancialReport).toHaveBeenCalledWith({
+			rows: [{ id: "serasa-1" }],
+		});
+		expect(repository.clearSerasaFinancialReport).toHaveBeenCalledWith({
+			rows: [],
+		});
+		expect(repository.getTariffsFinancialReport).toHaveBeenCalled();
+		expect(repository.saveTariffsFinancialReport).toHaveBeenCalledWith({
+			faturas: [{ id: "fat-1" }],
+		});
+		expect(repository.clearTariffsFinancialReport).toHaveBeenCalledWith({
+			faturas: [],
+		});
+	});
+
+	it("delega orcamento/config para o repositorio de budget", async () => {
+		const repository = {
+			getBudgetCostCenters: vi.fn(async () => ({ centers: [] })),
+			getBudgetData: vi.fn(async () => ({ rows: [] })),
+			saveBudgetCostCenters: vi.fn(async () => ({ ok: true })),
+			saveBudgetData: vi.fn(async () => ({ ok: true })),
+		};
+		const statement = loadStatement({}, repository);
+
+		await statement.getBudgetConfigurationStatement();
+		await statement.saveBudgetConfigurationStatement({ centers: [] }, { uid: "u1" });
+		await statement.getBudgetDataStatement();
+		await statement.saveBudgetDataStatement({ rows: [] }, { uid: "u1" });
+
+		expect(repository.getBudgetCostCenters).toHaveBeenCalled();
+		expect(repository.saveBudgetCostCenters).toHaveBeenCalledWith(
+			{ centers: [] },
+			{ uid: "u1" },
+		);
+		expect(repository.getBudgetData).toHaveBeenCalled();
+		expect(repository.saveBudgetData).toHaveBeenCalledWith(
+			{ rows: [] },
+			{ uid: "u1" },
+		);
 	});
 });

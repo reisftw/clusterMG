@@ -1,3 +1,4 @@
+const financeiroBudgetConfigRepository = require("./financeiroBudgetConfigRepository");
 const financeiroReportsRepository = require("./financeiroReportsRepository");
 
 function toBool(value) {
@@ -37,11 +38,61 @@ async function deleteFakeDreData(user = {}) {
 	return financeiroReportsRepository.deleteFakeDreLancamentos(user);
 }
 
+async function getSerasaStatement() {
+	return financeiroReportsRepository.getSerasaFinancialReport();
+}
+
+async function saveSerasaStatement(data = {}) {
+	return financeiroReportsRepository.saveSerasaFinancialReport(data);
+}
+
+async function clearSerasaStatement(data = {}) {
+	return financeiroReportsRepository.clearSerasaFinancialReport(data);
+}
+
+async function getTariffsStatement() {
+	return financeiroReportsRepository.getTariffsFinancialReport();
+}
+
+async function saveTariffsStatement(data = {}) {
+	return financeiroReportsRepository.saveTariffsFinancialReport(data);
+}
+
+async function clearTariffsStatement(data = {}) {
+	return financeiroReportsRepository.clearTariffsFinancialReport(data);
+}
+
+async function getBudgetConfigurationStatement() {
+	return financeiroBudgetConfigRepository.getBudgetCostCenters();
+}
+
+async function saveBudgetConfigurationStatement(config = {}, user = {}) {
+	return financeiroBudgetConfigRepository.saveBudgetCostCenters(config, user);
+}
+
+async function getBudgetDataStatement() {
+	return financeiroBudgetConfigRepository.getBudgetData();
+}
+
+async function saveBudgetDataStatement(data = {}, user = {}) {
+	return financeiroBudgetConfigRepository.saveBudgetData(data, user);
+}
+
 module.exports = {
 	buildDreStatementCacheKey,
+	clearSerasaStatement,
+	clearTariffsStatement,
 	createFakeDreData,
 	deleteFakeDreData,
+	getBudgetConfigurationStatement,
+	getBudgetDataStatement,
 	getDreStatement,
+	getSerasaStatement,
+	getTariffsStatement,
 	normalizeStatementFilters,
+	saveBudgetConfigurationStatement,
+	saveBudgetDataStatement,
 	saveDreStatement,
+	saveSerasaStatement,
+	saveTariffsStatement,
 };

@@ -2,7 +2,7 @@
 
 ## Financeiro
 
-- O conceito de demonstrativo financeiro concentra regras de DRE, importacao de planilhas, periodos, agrupamentos e totais seguros para exibicao.
-- A interface backend inicial fica em `vps/api/src/financeiroStatement.js` e deve crescer como ponto de entrada para regras de demonstrativo, em vez de espalhar filtros e calculos entre controller, repository e tela.
-- A interface frontend inicial fica em `src/modules/financeiro/domain/financialStatement.js` e deve receber regras puras de montagem de view model/importacao antes que elas cheguem aos componentes React.
-- `FinanceiroPage.jsx` e componentes filhos devem orquestrar telas e chamadas, nao duplicar matematica de DRE ou parsing de importacao quando houver funcao de dominio disponivel.
+- O conceito de demonstrativo financeiro concentra regras de DRE, importacao de planilhas, periodos, agrupamentos, orcado x realizado, Serasa/Tarifas e totais seguros para exibicao.
+- A interface backend fica em `vps/api/src/financeiroStatement.js` e e o ponto de entrada para DRE, Serasa, Tarifas e configuracao/dados de orcamento antes de delegar para os repositories normalizados.
+- A interface frontend fica em `src/modules/financeiro/domain/financialStatement.js` e e o ponto de entrada para regras puras de DRE, budget insights e view models de tarifas antes que elas cheguem aos componentes React.
+- `FinanceiroPage.jsx` e componentes filhos devem orquestrar telas e chamadas, nao duplicar matematica de DRE, budget, tarifas ou parsing de importacao quando houver funcao de dominio disponivel.
