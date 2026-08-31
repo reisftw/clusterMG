@@ -13,6 +13,8 @@ export const COLLECTIONS = {
 	AGENDAMENTOS_LOGS: "agendamentos_logs",
 	ACOMPANHAMENTO_DIARIO: "acompanhamento_diario",
 	ACOMPANHAMENTO_DIARIO_LOGS: "acompanhamento_diario_logs",
+	ACOMPANHAMENTO_DIARIO_METAS_HISTORICO:
+		"acompanhamento_diario_metas_historico",
 	VISITAS: "visitas",
 	VISITAS_TECNICOS: "visitas_tecnicos",
 	VISITAS_CONFIG: "visitas_config",

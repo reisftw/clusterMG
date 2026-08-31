@@ -556,6 +556,92 @@
 	background: #dbeafe;
 }
 
+.diario-goals-modal {
+	width: min(780px, 100%);
+}
+
+.diario-goals-content {
+	display: grid;
+	gap: 16px;
+	overflow: auto;
+	padding: 16px;
+}
+
+.diario-goals-select {
+	display: grid;
+	gap: 8px;
+	color: #475569;
+	font-size: 12px;
+	font-weight: 900;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.diario-goals-select select {
+	width: 100%;
+	border: 1px solid #cbd5e1;
+	border-radius: 12px;
+	background: #f8fafc;
+	padding: 12px;
+	color: #0f172a;
+	font-size: 15px;
+	font-weight: 850;
+	outline: none;
+}
+
+.diario-goals-comparison-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.diario-goals-comparison-grid > div {
+	border: 1px solid #e2e8f0;
+	border-radius: 16px;
+	background: #f8fafc;
+	padding: 14px;
+}
+
+.diario-goals-comparison-grid span,
+.diario-goals-comparison-grid small {
+	display: block;
+	color: #64748b;
+	font-size: 12px;
+	font-weight: 850;
+	text-transform: uppercase;
+}
+
+.diario-goals-comparison-grid strong {
+	display: block;
+	margin: 6px 0;
+	color: #0f172a;
+	font-size: 26px;
+	font-weight: 950;
+	line-height: 1;
+}
+
+.diario-goals-week-table {
+	display: grid;
+	gap: 8px;
+}
+
+.diario-goals-week-row {
+	display: grid;
+	grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(80px, auto));
+	align-items: center;
+	gap: 12px;
+	border-radius: 12px;
+	background: #f8fafc;
+	padding: 10px 12px;
+	color: #0f172a;
+	font-size: 13px;
+	font-weight: 850;
+}
+
+.diario-goals-week-row strong {
+	font-weight: 950;
+}
+
 @media (max-width: 1024px) {
 	.diario-header,
 	.diario-form-footer {
@@ -575,6 +661,8 @@
 	.diario-layout,
 	.diario-time-grid,
 	.diario-form-row,
+	.diario-goals-comparison-grid,
+	.diario-goals-week-row,
 	.diario-log-entry-head,
 	.diario-log-change-list p {
 		grid-template-columns: 1fr;

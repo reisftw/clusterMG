@@ -1,6 +1,7 @@
 ﻿import {
 	CalendarDays,
 	ClipboardList,
+	History,
 	Save,
 	Settings,
 	ShieldAlert,
@@ -13,12 +14,16 @@ import { registrarAtividade } from "../../../services/activityLogService";
 import { useDiarioEntries } from "../hooks/useDiarioEntries";
 import {
 	classifyWeeklyProduction,
+	compareDiarioMonthlyGoals,
+	buildDiarioBoardData,
 	DIARIO_AFTER_HOURS_HORARIO,
 	DIARIO_CADASTRO_HORARIOS,
 	formatDateLabel,
 	localDateKey,
+	listDiarioMonthlyGoalsSnapshots,
 	monthKeyFromDateKey,
 	normalizeDiarioEntry,
+	saveDiarioMonthlyGoalsSnapshot,
 	saveDiarioEntry,
 	subscribeDiarioLogsByMonth,
 } from "../services/diarioService";
@@ -218,6 +223,125 @@ function DiarioLogPanel({ logs, monthKey, open, onClose }) {
 	);
 }
 
+function DiarioGoalsHistoryModal({
+	currentSnapshot,
+	history,
+	open,
+	selectedMonth,
+	onChangeMonth,
+	onClose,
+}) {
+	const selectedSnapshot =
+		history.find((item) => item.monthKey === selectedMonth) || null;
+	const comparison =
+		currentSnapshot && selectedSnapshot
+			? compareDiarioMonthlyGoals(currentSnapshot, selectedSnapshot)
+			: null;
+
+	if (!open) return null;
+	return (
+		<div className="diario-log-overlay" role="dialog" aria-modal="true">
+			<section className="diario-log-modal diario-goals-modal">
+				<header className="diario-log-modal-header">
+					<div>
+						<span>Comparativo</span>
+						<h2>Metas do mês salvas</h2>
+						<p>
+							{formatMonthNameFromKey(currentSnapshot?.monthKey)} comparado com
+							o histórico salvo
+						</p>
+					</div>
+					<button type="button" onClick={onClose} title="Fechar comparativo">
+						<X size={18} />
+					</button>
+				</header>
+
+				<div className="diario-goals-content">
+					<label className="diario-goals-select">
+						<span>Mês para comparar</span>
+						<select
+							value={selectedMonth}
+							onChange={(event) => onChangeMonth(event.target.value)}
+						>
+							<option value="">Selecione um mês salvo</option>
+							{history.map((snapshot) => (
+								<option key={snapshot.monthKey} value={snapshot.monthKey}>
+									{formatMonthNameFromKey(snapshot.monthKey)}
+								</option>
+							))}
+						</select>
+					</label>
+
+					{selectedSnapshot ? (
+						<>
+							<div className="diario-goals-comparison-grid">
+								<div>
+									<span>Mês atual</span>
+									<strong>
+										{formatValue(currentSnapshot?.totals?.monthDelivered)}
+									</strong>
+									<small>
+										{formatValue(currentSnapshot?.totals?.monthFines)} multa(s)
+									</small>
+								</div>
+								<div>
+									<span>Mês salvo</span>
+									<strong>
+										{formatValue(selectedSnapshot?.totals?.monthDelivered)}
+									</strong>
+									<small>
+										{formatValue(selectedSnapshot?.totals?.monthFines)} multa(s)
+									</small>
+								</div>
+								<div>
+									<span>Diferença</span>
+									<strong>
+										{comparison.deliveredDiff >= 0 ? "+" : ""}
+										{formatValue(comparison.deliveredDiff)}
+									</strong>
+									<small>
+										{comparison.deliveredPercent === null
+											? "Sem base anterior"
+											: `${comparison.deliveredPercent >= 0 ? "+" : ""}${comparison.deliveredPercent}%`}
+									</small>
+								</div>
+							</div>
+
+							<div className="diario-goals-week-table">
+								{currentSnapshot.weeks.map((week) => {
+									const savedWeek =
+										selectedSnapshot.weeks.find(
+											(item) => Number(item.week) === Number(week.week),
+										) || {};
+									const diff =
+										comparison.weeks.find(
+											(item) => Number(item.week) === Number(week.week),
+										)?.deliveredDiff || 0;
+									return (
+										<div key={week.week} className="diario-goals-week-row">
+											<strong>Semana {week.week}</strong>
+											<span>{formatValue(week.delivered)}</span>
+											<span>{formatValue(savedWeek.delivered)}</span>
+											<span>
+												{diff >= 0 ? "+" : ""}
+												{formatValue(diff)}
+											</span>
+										</div>
+									);
+								})}
+							</div>
+						</>
+					) : (
+						<p className="diario-muted">
+							Nenhum mês selecionado para comparação.
+						</p>
+					)}
+				</div>
+			</section>
+		</div>
+	);
+}
+
 function MonthName({ dateKey }) {
 	const [year, month] = monthKeyFromDateKey(dateKey).split("-");
 	const date = new Date(Number(year), Number(month) - 1, 1);
@@ -252,6 +376,9 @@ export default function DiarioPage() {
 	const [logs, setLogs] = useState([]);
 	const [logOpen, setLogOpen] = useState(false);
 	const [logPanelKey, setLogPanelKey] = useState(0);
+	const [goalsHistory, setGoalsHistory] = useState([]);
+	const [goalsHistoryOpen, setGoalsHistoryOpen] = useState(false);
+	const [selectedHistoryMonth, setSelectedHistoryMonth] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState("");
 
@@ -266,6 +393,15 @@ export default function DiarioPage() {
 	}, [selectedDate]);
 
 	const preview = normalizeDiarioEntry(form);
+	const currentGoalsSnapshot = useMemo(
+		() =>
+			({
+				...boardData,
+				weeks: boardData.weeks,
+				totals: boardData.totals,
+			}),
+		[boardData],
+	);
 	const currentWeekStatus = classifyWeeklyProduction(
 		boardData.currentWeek.delivered,
 	);
@@ -285,6 +421,29 @@ export default function DiarioPage() {
 		setLogOpen(true);
 	};
 
+	const handleOpenGoalsHistory = async () => {
+		try {
+			const snapshots = await listDiarioMonthlyGoalsSnapshots();
+			setGoalsHistory(snapshots);
+			setSelectedHistoryMonth((current) => {
+				if (current && snapshots.some((item) => item.monthKey === current)) {
+					return current;
+				}
+				return (
+					snapshots.find(
+						(item) => item.monthKey !== monthKeyFromDateKey(selectedDate),
+					)?.monthKey ||
+					snapshots[0]?.monthKey ||
+					""
+				);
+			});
+		} catch {
+			setGoalsHistory([]);
+			setSelectedHistoryMonth("");
+		}
+		setGoalsHistoryOpen(true);
+	};
+
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setSaving(true);
@@ -297,6 +456,17 @@ export default function DiarioPage() {
 				userName: currentUser?.nome || "Sistema",
 				previousEntry: currentEntry,
 			});
+			const nextEntries = [
+				...entries.filter((entry) => entry.date !== saved.date),
+				saved,
+			];
+			await saveDiarioMonthlyGoalsSnapshot(
+				buildDiarioBoardData(nextEntries, selectedDate),
+				{
+					userId: currentUser?.id,
+					userName: currentUser?.nome || "Sistema",
+				},
+			);
 			await registrarAtividade({
 				usuarioId: currentUser?.id,
 				nome: currentUser?.nome || "Sistema",
@@ -333,6 +503,14 @@ export default function DiarioPage() {
 						<CalendarDays size={18} />
 						<MonthName dateKey={selectedDate} />
 					</div>
+					<button
+						type="button"
+						className="diario-log-button"
+						onClick={handleOpenGoalsHistory}
+						title="Comparar metas salvas"
+					>
+						<History size={18} />
+					</button>
 					<button
 						type="button"
 						className="diario-log-button"
@@ -501,6 +679,14 @@ export default function DiarioPage() {
 				monthKey={monthKeyFromDateKey(selectedDate)}
 				open={logOpen}
 				onClose={() => setLogOpen(false)}
+			/>
+			<DiarioGoalsHistoryModal
+				currentSnapshot={currentGoalsSnapshot}
+				history={goalsHistory}
+				open={goalsHistoryOpen}
+				selectedMonth={selectedHistoryMonth}
+				onChangeMonth={setSelectedHistoryMonth}
+				onClose={() => setGoalsHistoryOpen(false)}
 			/>
 		</div>
 	);

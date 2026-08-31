@@ -6,6 +6,7 @@ import {
 import {
 	createVpsDocument,
 	listVpsDocuments,
+	setVpsDocument,
 	updateVpsDocument,
 } from "../../../services/vpsApiClient";
 
@@ -338,4 +339,103 @@ export function buildDiarioBoardData(
 			),
 		},
 	};
+}
+
+export function buildDiarioMonthlyGoalsSnapshot(
+	boardData,
+	{ savedBy = null, savedByName = "Sistema" } = {},
+) {
+	const monthKey = boardData?.monthKey || monthKeyFromDateKey();
+	const weeks = (Array.isArray(boardData?.weeks) ? boardData.weeks : []).map(
+		(week) => ({
+			week: Number(week.week || 0),
+			delivered: Number(week.delivered || 0),
+			fines: Number(week.fines || 0),
+			status: week.status || classifyWeeklyProduction(week.delivered),
+		}),
+	);
+	const monthDelivered = weeks.reduce(
+		(sum, week) => sum + Number(week.delivered || 0),
+		0,
+	);
+	const monthFines = weeks.reduce(
+		(sum, week) => sum + Number(week.fines || 0),
+		0,
+	);
+
+	return {
+		monthKey,
+		referenceDateKey: boardData?.referenceDateKey || localDateKey(),
+		monthRange: boardData?.monthRange || monthRangeFromDateKey(),
+		weeks,
+		totals: {
+			monthDelivered,
+			monthFines,
+		},
+		savedBy,
+		savedByName,
+		savedAt: new Date().toISOString(),
+	};
+}
+
+export function compareDiarioMonthlyGoals(current, previous) {
+	const currentTotals = current?.totals || {};
+	const previousTotals = previous?.totals || {};
+	const deliveredDiff =
+		Number(currentTotals.monthDelivered || 0) -
+		Number(previousTotals.monthDelivered || 0);
+	const finesDiff =
+		Number(currentTotals.monthFines || 0) -
+		Number(previousTotals.monthFines || 0);
+	const previousDelivered = Number(previousTotals.monthDelivered || 0);
+
+	return {
+		deliveredDiff,
+		finesDiff,
+		deliveredPercent:
+			previousDelivered > 0
+				? Number(((deliveredDiff / previousDelivered) * 100).toFixed(1))
+				: null,
+		weeks: [1, 2, 3, 4].map((weekNumber) => {
+			const currentWeek =
+				current?.weeks?.find((week) => Number(week.week) === weekNumber) || {};
+			const previousWeek =
+				previous?.weeks?.find((week) => Number(week.week) === weekNumber) || {};
+			return {
+				week: weekNumber,
+				deliveredDiff:
+					Number(currentWeek.delivered || 0) -
+					Number(previousWeek.delivered || 0),
+				finesDiff:
+					Number(currentWeek.fines || 0) - Number(previousWeek.fines || 0),
+			};
+		}),
+	};
+}
+
+export async function saveDiarioMonthlyGoalsSnapshot(boardData, audit = {}) {
+	const snapshot = buildDiarioMonthlyGoalsSnapshot(boardData, {
+		savedBy: audit.userId || null,
+		savedByName: audit.userName || "Sistema",
+	});
+	await setVpsDocument(
+		`${COLLECTIONS.ACOMPANHAMENTO_DIARIO_METAS_HISTORICO}/${snapshot.monthKey}`,
+		snapshot,
+	);
+	return snapshot;
+}
+
+export async function listDiarioMonthlyGoalsSnapshots() {
+	const snapshots = await listVpsDocuments(
+		COLLECTIONS.ACOMPANHAMENTO_DIARIO_METAS_HISTORICO,
+		{ limit: 120 },
+	);
+	return snapshots
+		.map((snapshot) => ({
+			...snapshot,
+			monthKey: snapshot.monthKey || snapshot.id,
+			weeks: Array.isArray(snapshot.weeks) ? snapshot.weeks : [],
+			totals: snapshot.totals || {},
+		}))
+		.sort((a, b) => String(b.monthKey || "").localeCompare(a.monthKey || ""));
 }

@@ -405,6 +405,11 @@ const COLLECTION_READ_PERMISSIONS = Object.freeze({
 		"destaque.diario.manage",
 		"view_diario",
 	],
+	acompanhamento_diario_metas_historico: [
+		"destaque.diario.view",
+		"destaque.diario.manage",
+		"view_diario",
+	],
 	feriados: [
 		"equipe.feriados.view",
 		"equipe.feriados.manage",
@@ -602,6 +607,7 @@ const COLLECTION_WRITE_PERMISSIONS = Object.freeze({
 	agendamentos_logs: ["cliente.agendamentos.manage", "manage_agendamentos"],
 	acompanhamento_diario: ["destaque.diario.manage"],
 	acompanhamento_diario_logs: ["destaque.diario.manage"],
+	acompanhamento_diario_metas_historico: ["destaque.diario.manage"],
 	feriados: ["equipe.feriados.manage", "manage_feriados"],
 	regionais: ["configuracao.regionais.manage", "manage_regionais"],
 	agentes: ["configuracao.agentes.manage", "manage_agentes"],
