@@ -11,6 +11,8 @@ const NORMALIZED_ONLY_COLLECTIONS = new Set([
 	"regionais",
 	"usuarios",
 	"financeiro_config",
+	"financeiro_reports",
+	"financeiro_import_logs",
 	"mensageria_config",
 	"mensageria_templates",
 	"mensageria_fila",

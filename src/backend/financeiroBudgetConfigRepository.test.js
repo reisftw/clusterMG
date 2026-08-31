@@ -111,7 +111,7 @@ describe("financeiroBudgetConfigRepository", () => {
 			});
 		const repository = loadRepository({ query });
 
-		const config = await repository.getBudgetCostCenters();
+		const config = await repository.getBudgetConfiguration();
 
 		expect(config.accounts[0]).toMatchObject({
 			id: "1211",
@@ -190,7 +190,7 @@ describe("financeiroBudgetConfigRepository", () => {
 			connect: vi.fn(async () => client),
 		});
 
-		await repository.saveBudgetCostCenters({
+		await repository.saveBudgetConfiguration({
 			accounts: [{ id: "1211", nome: "Energia" }],
 			centers: [],
 			partners: [],

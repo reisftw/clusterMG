@@ -738,7 +738,7 @@ async function readTariffsSheetSource(source = {}) {
 }
 
 async function appendImportLog(data = {}) {
-	return financeiroReportsRepository.appendImportLog({
+	return financeiroReportsRepository.recordFinanceiroImportLog({
 		...data,
 		createdAt: nowIso(),
 	});
@@ -1026,12 +1026,12 @@ async function saveSerasaData(payload = {}, user = {}) {
 			importedByName: user?.profile?.nome || user?.nome || user?.email || "",
 		},
 	};
-	await financeiroReportsRepository.saveSerasaReport(data);
+	await financeiroReportsRepository.saveSerasaFinancialReport(data);
 	return { ok: true, data };
 }
 
 async function getSerasaReport() {
-	const data = await financeiroReportsRepository.getSerasaReport().catch(() => null);
+	const data = await financeiroReportsRepository.getSerasaFinancialReport().catch(() => null);
 	return {
 		ok: true,
 		data: data || {
@@ -1078,7 +1078,7 @@ async function clearSerasaReport(user = {}) {
 			cleared: true,
 		},
 	};
-	await financeiroReportsRepository.clearSerasaReport(data);
+	await financeiroReportsRepository.clearSerasaFinancialReport(data);
 	return { ok: true, data };
 }
 
@@ -1560,7 +1560,7 @@ async function saveTariffsReport(payload = {}, user = {}) {
 			totalSheets: Array.isArray(payload.sheets) ? payload.sheets.length : 0,
 		},
 	};
-	await financeiroReportsRepository.saveTariffsReport(data);
+	await financeiroReportsRepository.saveTariffsFinancialReport(data);
 	return { ok: true, data };
 }
 
@@ -1633,12 +1633,12 @@ async function clearTariffsReport(user = {}) {
 			cleared: true,
 		},
 	};
-	await financeiroReportsRepository.clearTariffsReport(data);
+	await financeiroReportsRepository.clearTariffsFinancialReport(data);
 	return { ok: true, data };
 }
 
 async function listImportLogs(limit = 20) {
-	const result = await financeiroReportsRepository.listImportLogs(limit);
+	const result = await financeiroReportsRepository.listFinanceiroImportLogs(limit);
 	return {
 		ok: true,
 		items: result
@@ -4196,7 +4196,7 @@ async function getBudgetCostCenters() {
 			);
 		});
 	if (needsFinancialPlanRefresh) {
-		await financeiroBudgetConfigRepository.saveBudgetCostCenters(normalizedConfig);
+		await financeiroBudgetConfigRepository.saveBudgetConfiguration(normalizedConfig);
 	}
 	return {
 		ok: true,
@@ -4217,7 +4217,7 @@ async function saveBudgetCostCenters(payload = {}, user = {}) {
 		},
 	};
 	const config = normalizeCostCentersConfig(nextPayload, user);
-	await financeiroBudgetConfigRepository.saveBudgetCostCenters(config, user);
+	await financeiroBudgetConfigRepository.saveBudgetConfiguration(config, user);
 	return { ok: true, config };
 }
 
@@ -4369,7 +4369,7 @@ async function saveBudgetData(payload = {}, user = {}) {
 		appliedConfig: merged.created,
 	};
 
-	await financeiroBudgetConfigRepository.saveBudgetData(data, user);
+	await financeiroBudgetConfigRepository.saveImportedBudgetRows(data, user);
 
 	return { ok: true, data, config: merged.config };
 }
@@ -4392,7 +4392,7 @@ async function clearBudgetData(user = {}) {
 			cleared: true,
 		},
 	};
-	await financeiroBudgetConfigRepository.saveBudgetData(data, user);
+	await financeiroBudgetConfigRepository.saveImportedBudgetRows(data, user);
 	return { ok: true, data };
 }
 

@@ -324,6 +324,11 @@ const AGENDAMENTOS_COLLECTIONS = new Set([
 	"agendamento_esteira_metricas",
 	"agendamento_esteira_catalogo",
 ]);
+const FINANCEIRO_COLLECTIONS = new Set([
+	"financeiro_config",
+	"financeiro_reports",
+	"financeiro_import_logs",
+]);
 const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
 	...ADMINISTRATIVO_DOCUMENTOS_ROLES,
@@ -1976,6 +1981,12 @@ function rejectDomainRouteOnlyCollection(res, collectionPath) {
 	if (AGENDAMENTOS_COLLECTIONS.has(collection)) {
 		res.status(410).json({
 			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/agendamentos.`,
+		});
+		return true;
+	}
+	if (FINANCEIRO_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/financeiro.`,
 		});
 		return true;
 	}

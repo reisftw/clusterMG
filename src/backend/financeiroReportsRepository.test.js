@@ -80,7 +80,7 @@ describe("financeiroReportsRepository", () => {
 			});
 		const repository = loadRepository({ query });
 
-		const report = await repository.getSerasaReport();
+		const report = await repository.getSerasaFinancialReport();
 
 		expect(report.rows[0]).toMatchObject({
 			date: "2026-08-24",
@@ -127,7 +127,7 @@ describe("financeiroReportsRepository", () => {
 			});
 		const repository = loadRepository({ query });
 
-		const report = await repository.getTariffsReport();
+		const report = await repository.getTariffsFinancialReport();
 
 		expect(report.formasPagamentoQuantidade[0]).toMatchObject({
 			method: "PAGAMENTO VIA TED",
@@ -144,7 +144,7 @@ describe("financeiroReportsRepository", () => {
 		const query = vi.fn(async () => ({ rows: [], rowCount: 1 }));
 		const repository = loadRepository({ query });
 
-		const id = await repository.appendImportLog({
+		const id = await repository.recordFinanceiroImportLog({
 			sourceId: "serasa",
 			label: "Serasa",
 			status: "ok",
