@@ -247,28 +247,42 @@ function mergeRowsWithOptions(rows = [], options = []) {
 
 function DailyGrid({ row, dayCount, onChangeDay }) {
 	const values = rowDaily(row, dayCount);
+	const weeks = [];
+	for (let index = 0; index < values.length; index += 10) {
+		weeks.push(values.slice(index, index + 10));
+	}
 	return (
-		<div className="overflow-x-auto rounded-xl border border-gray-200 bg-white p-3">
-			<div
-				className="grid min-w-max gap-2"
-				style={{
-					gridTemplateColumns: `repeat(${dayCount}, minmax(58px, 1fr))`,
-				}}
-			>
-				{values.map((value, index) => (
-					<label key={index} className="space-y-1">
-						<span className="block text-center text-[10px] font-black uppercase text-gray-400">
-							Dia {index + 1}
-						</span>
-						<input
-							type="number"
-							min="0"
-							value={value || ""}
-							onChange={(event) => onChangeDay(index, event.target.value)}
-							className="h-10 w-[58px] rounded-lg border border-gray-200 bg-gray-50 px-2 text-center text-sm font-black text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-							placeholder="0"
-						/>
-					</label>
+		<div className="rounded-xl border border-gray-200 bg-white p-3">
+			<div className="space-y-3">
+				{weeks.map((weekValues, weekIndex) => (
+					<div
+						key={weekIndex}
+						className="grid grid-cols-5 gap-2 sm:grid-cols-10"
+					>
+						{weekValues.map((value, dayOffset) => {
+							const dayIndex = weekIndex * 10 + dayOffset;
+							return (
+								<label
+									key={dayIndex}
+									className="min-w-0 rounded-lg border border-gray-100 bg-gray-50 p-1.5"
+								>
+									<span className="block text-center text-[10px] font-black uppercase text-gray-400">
+										Dia {dayIndex + 1}
+									</span>
+									<input
+										type="number"
+										min="0"
+										value={value || ""}
+										onChange={(event) =>
+											onChangeDay(dayIndex, event.target.value)
+										}
+										className="mt-1 h-9 w-full rounded-md border border-gray-200 bg-white px-1 text-center text-sm font-black text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+										placeholder="0"
+									/>
+								</label>
+							);
+						})}
+					</div>
 				))}
 			</div>
 		</div>
