@@ -1,5 +1,5 @@
 import { ChevronDown, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { listarRegionaisAdmin } from "../../auth/services/authService";
 import { buscarAgentes } from "../../regionais/services/agentesService";
@@ -312,10 +312,18 @@ function SectionEditor({
 	allowAdd = true,
 	allowRemove = true,
 	onDirty,
+	onSaveCard,
+	savingCard = false,
 }) {
 	const [open, setOpen] = useState(false);
 	const [editingRowId, setEditingRowId] = useState(null);
 	const editingRow = rows.find((row) => row.id === editingRowId) || null;
+	const openEditor = (row) => {
+		setEditingRowId(row.id);
+	};
+	const closeEditor = () => {
+		setEditingRowId(null);
+	};
 	const updateRow = (id, patch) => {
 		onDirty?.();
 		setRows((current) =>
@@ -359,6 +367,10 @@ function SectionEditor({
 	};
 	const getRowGoal = (row = {}) =>
 		Math.round(Number(row.cancelamentos || 0) * (Number(goalPercent || 0) / 100));
+	const saveCard = async () => {
+		await onSaveCard?.();
+		closeEditor();
+	};
 
 	return (
 		<section className="rounded-2xl border border-gray-100 bg-white p-4">
@@ -438,7 +450,7 @@ function SectionEditor({
 							</div>
 							<button
 								type="button"
-								onClick={() => setEditingRowId(row.id)}
+								onClick={() => openEditor(row)}
 								className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700"
 							>
 								Preencher
@@ -460,8 +472,27 @@ function SectionEditor({
 					open
 					title={editingRow.name || title}
 					description={`Preencha os lançamentos diarios de ${title.toLowerCase()}.`}
-					onClose={() => setEditingRowId(null)}
+					onClose={closeEditor}
 					size="6xl"
+					footer={
+						<div className="flex justify-end gap-2">
+							<button
+								type="button"
+								onClick={closeEditor}
+								className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								onClick={saveCard}
+								disabled={savingCard}
+								className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								{savingCard ? "Salvando..." : "Salvar card"}
+							</button>
+						</div>
+					}
 				>
 					<div className="space-y-4">
 						<div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_120px]">
@@ -590,10 +621,6 @@ export default function MetasLancamentoManual({
 	canManage,
 }) {
 	const [year, setYear] = useState(new Date().getFullYear());
-	const dirtyRef = useRef(false);
-	const autosaveTimerRef = useRef(null);
-	const skipNextHydrationRef = useRef(false);
-	const currentHydratedMonthRef = useRef(month);
 	const initialState = useMemo(
 		() => buildInitialState(allData, agentesData, month),
 		[agentesData, allData, month],
@@ -631,8 +658,7 @@ export default function MetasLancamentoManual({
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 	const [publishResult, setPublishResult] = useState(null);
-	const [autosaveMessage, setAutosaveMessage] = useState("");
-	const [savingDraft, setSavingDraft] = useState(false);
+	const [savingCard, setSavingCard] = useState(false);
 	const dayCount = getDaysInMetaMonth(month, year);
 	const normalizedConfig = useMemo(
 		() => normalizeMetasBaseConfig(metasBaseConfig),
@@ -674,17 +700,11 @@ export default function MetasLancamentoManual({
 	const totalPreview = totalSemprePreview + totalOnnetPreview;
 
 	const markDirty = useCallback(() => {
-		dirtyRef.current = true;
-		setAutosaveMessage("");
+		setMessage("");
+		setError("");
 	}, []);
 
 	useEffect(() => {
-		if (currentHydratedMonthRef.current !== month) {
-			currentHydratedMonthRef.current = month;
-			skipNextHydrationRef.current = false;
-		}
-		if (skipNextHydrationRef.current) return;
-		dirtyRef.current = false;
 		setCancelamentosSempre(initialState.cancelamentosSempre);
 		setCancelamentosOnnet(initialState.cancelamentosOnnet);
 		setTecnicosSempre(initialState.tecnicosSempre);
@@ -708,7 +728,6 @@ export default function MetasLancamentoManual({
 		]);
 		setMessage("");
 		setError("");
-		setAutosaveMessage("");
 	}, [initialState, month]);
 
 	const loadOptions = useCallback(async (force = false) => {
@@ -793,43 +812,28 @@ export default function MetasLancamentoManual({
 		],
 	);
 
-	const saveDraft = useCallback(async () => {
-		if (!canManage || !dirtyRef.current || saving || savingDraft) return;
-		setSavingDraft(true);
+	const saveCurrentCard = useCallback(async () => {
+		if (!canManage || saving || savingCard) return;
+		setSavingCard(true);
+		setError("");
 		try {
-			skipNextHydrationRef.current = true;
 			await onSave(buildSavePayload());
-			dirtyRef.current = false;
-			setAutosaveMessage("Salvo automaticamente.");
+			setMessage("Card salvo.");
 		} catch (err) {
-			setError(err?.message || "Não foi possível salvar automaticamente.");
+			setError(err?.message || "Não foi possível salvar o card.");
+			throw err;
 		} finally {
-			setSavingDraft(false);
+			setSavingCard(false);
 		}
-	}, [buildSavePayload, canManage, onSave, saving, savingDraft]);
-
-	const scheduleAutosave = useCallback(() => {
-		if (!canManage || !dirtyRef.current) return;
-		window.clearTimeout(autosaveTimerRef.current);
-		autosaveTimerRef.current = window.setTimeout(() => {
-			saveDraft();
-		}, 500);
-	}, [canManage, saveDraft]);
-
-	useEffect(() => {
-		return () => window.clearTimeout(autosaveTimerRef.current);
-	}, []);
+	}, [buildSavePayload, canManage, onSave, saving, savingCard]);
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
-		window.clearTimeout(autosaveTimerRef.current);
 		setMessage("");
 		setError("");
 		setPublishResult(null);
 		try {
-			skipNextHydrationRef.current = true;
 			await onSave(buildSavePayload());
-			dirtyRef.current = false;
 			const successMessage =
 				"Lançamento publicado no /acompanhamento, /painel e AA.";
 			setMessage(successMessage);
@@ -852,11 +856,7 @@ export default function MetasLancamentoManual({
 
 	return (
 		<>
-		<form
-			className="space-y-4"
-			onSubmit={handleSubmit}
-			onBlurCapture={scheduleAutosave}
-		>
+		<form className="space-y-4" onSubmit={handleSubmit}>
 			<section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
 				<div className="flex flex-wrap items-start justify-between gap-4">
 					<div>
@@ -972,10 +972,6 @@ export default function MetasLancamentoManual({
 					<span>
 						{dayCount} dias disponíveis para lançamento diário neste mês.
 					</span>
-					{savingDraft ? <span>Salvando automaticamente...</span> : null}
-					{autosaveMessage ? (
-						<span className="text-emerald-700">{autosaveMessage}</span>
-					) : null}
 					<button
 						type="button"
 						onClick={() => loadOptions(true)}
@@ -994,6 +990,8 @@ export default function MetasLancamentoManual({
 				setRows={setTecnicosSempre}
 				dayCount={dayCount}
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<SectionEditor
@@ -1003,6 +1001,8 @@ export default function MetasLancamentoManual({
 				setRows={setTecnicosOnnet}
 				dayCount={dayCount}
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<SectionEditor
@@ -1015,6 +1015,8 @@ export default function MetasLancamentoManual({
 				allowCustomName={false}
 				showSourceScope
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<SectionEditor
@@ -1029,6 +1031,8 @@ export default function MetasLancamentoManual({
 				showGoalFields
 				goalPercent={metaPercentSempre}
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<SectionEditor
@@ -1041,6 +1045,8 @@ export default function MetasLancamentoManual({
 				nameOptions={agenteOptions}
 				allowCustomName={false}
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<SectionEditor
@@ -1052,6 +1058,8 @@ export default function MetasLancamentoManual({
 				allowAdd={false}
 				allowRemove={false}
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<SectionEditor
@@ -1063,6 +1071,8 @@ export default function MetasLancamentoManual({
 				allowAdd={false}
 				allowRemove={false}
 				onDirty={markDirty}
+				onSaveCard={saveCurrentCard}
+				savingCard={savingCard}
 			/>
 
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4">
