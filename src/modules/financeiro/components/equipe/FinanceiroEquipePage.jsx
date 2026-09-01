@@ -58,14 +58,33 @@ function getSetorBadgeClass(setor = "") {
 
 async function loadImageDataUrl(src) {
 	const response = await fetch(src, { cache: "force-cache" });
-	if (!response.ok) return "";
+	if (!response.ok) return null;
 	const blob = await response.blob();
 	return new Promise((resolve) => {
 		const reader = new FileReader();
-		reader.onload = () => resolve(String(reader.result || ""));
-		reader.onerror = () => resolve("");
+		reader.onload = () => {
+			const dataUrl = String(reader.result || "");
+			const image = new Image();
+			image.onload = () =>
+				resolve({
+					dataUrl,
+					width: image.naturalWidth || image.width || 1,
+					height: image.naturalHeight || image.height || 1,
+				});
+			image.onerror = () => resolve({ dataUrl, width: 1, height: 1 });
+			image.src = dataUrl;
+		};
+		reader.onerror = () => resolve(null);
 		reader.readAsDataURL(blob);
 	});
+}
+
+function fitImageInsideBox(image, maxWidth, maxHeight) {
+	const ratio = Math.min(maxWidth / image.width, maxHeight / image.height);
+	return {
+		width: image.width * ratio,
+		height: image.height * ratio,
+	};
 }
 
 function buildTreeLayout(colaboradores = []) {
@@ -422,8 +441,18 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		const pageWidth = pdf.internal.pageSize.getWidth();
 		const pageHeight = pdf.internal.pageSize.getHeight();
 		const margin = 38;
-		const logo = await loadImageDataUrl("/sempre-logo-azul.png");
-		if (logo) pdf.addImage(logo, "PNG", pageWidth - margin - 96, 22, 96, 42);
+		const logo = await loadImageDataUrl("/sempre-logo-documento.png");
+		if (logo) {
+			const logoSize = fitImageInsideBox(logo, 118, 42);
+			pdf.addImage(
+				logo.dataUrl,
+				"PNG",
+				pageWidth - margin - logoSize.width,
+				22,
+				logoSize.width,
+				logoSize.height,
+			);
+		}
 		pdf.setFont("helvetica", "bold");
 		pdf.setFontSize(18);
 		pdf.setTextColor(15, 23, 42);
