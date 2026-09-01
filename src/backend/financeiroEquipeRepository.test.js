@@ -126,6 +126,44 @@ describe("financeiroEquipeRepository", () => {
 		);
 	});
 
+	it("desvincula colaboradores inativos antes de excluir cargo", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [{ total: 0 }] })
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [{ id: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed" }],
+			});
+		const repository = loadRepository(dbQuery);
+
+		await expect(
+			repository.deleteCargo("7f5f0f68-4d5e-4994-8a77-14fd1169b1ed"),
+		).resolves.toEqual({
+			ok: true,
+			id: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
+		});
+		expect(dbQuery.mock.calls[1][0]).toContain("set cargo_id = null");
+		expect(dbQuery.mock.calls[2][0]).toContain(
+			"delete from financeiro_equipe_cargos",
+		);
+	});
+
+	it("retorna 409 quando o banco ainda impede excluir cargo por vínculo", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [{ total: 0 }] })
+			.mockResolvedValueOnce({ rows: [] })
+			.mockRejectedValueOnce({ code: "23503" });
+		const repository = loadRepository(dbQuery);
+
+		await expect(
+			repository.deleteCargo("7f5f0f68-4d5e-4994-8a77-14fd1169b1ed"),
+		).rejects.toMatchObject({
+			statusCode: 409,
+			message: "Este cargo ainda possui vínculos e não pode ser excluído.",
+		});
+	});
+
 	it("cria colaborador sem aceitar cadastro sem cargo", async () => {
 		const repository = loadRepository(vi.fn());
 

@@ -209,10 +209,28 @@ async function deleteCargo(id) {
 			409,
 		);
 	}
-	const result = await db.query(
-		"delete from financeiro_equipe_cargos where id = $1 returning id",
+	await db.query(
+		`update financeiro_equipe_colaboradores
+		    set cargo_id = null
+		  where cargo_id = $1
+		    and ativo = false`,
 		[cargoId],
 	);
+	let result;
+	try {
+		result = await db.query(
+			"delete from financeiro_equipe_cargos where id = $1 returning id",
+			[cargoId],
+		);
+	} catch (error) {
+		if (error?.code === "23503") {
+			throw new FinanceiroEquipeError(
+				"Este cargo ainda possui vínculos e não pode ser excluído.",
+				409,
+			);
+		}
+		throw error;
+	}
 	if (!result.rows.length) {
 		throw new FinanceiroEquipeError("Cargo não encontrado.", 404);
 	}
