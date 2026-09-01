@@ -1030,84 +1030,48 @@ export function calculateBudgetReference(selectedPeriod = {}, now = new Date()) 
 
 export function buildCostCenterTopCards({
 	insights = {},
-	selectedPeriod = {},
-	now = new Date(),
 	expiringContracts = 0,
 } = {}) {
-	const reference = calculateBudgetReference(selectedPeriod, now);
-	const budgetYtd = (insights.monthlyEvolution || [])
-		.filter((item) => Number(item.month || 0) <= reference.budgetReferenceMonth)
-		.reduce((sum, item) => sum + Number(item.planned || 0), 0);
-	const realizedCommitted =
-		Number(insights.realizedMonth || 0) + Number(insights.committedMonth || 0);
-	const forecastClosing =
-		reference.isCurrentBudgetMonth && reference.elapsedBudgetDays
-			? (realizedCommitted / reference.elapsedBudgetDays) *
-				reference.daysInBudgetMonth
-			: realizedCommitted;
-	const forecastBalance = Number(insights.plannedMonth || 0) - forecastClosing;
-	const ytdMonthLabel =
-		budgetMonthName(reference.budgetReferenceMonth).slice(0, 3) || "Atual";
-	return [
-		{
-			id: "cc-orcado",
-			title: "Orçado no Mês",
-			value: insights.plannedMonth,
+	const basal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.BASAL,
+	);
+	const nonBasal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	);
+	const buildCategoryBudgetCard = (group, fallback) => {
+		const planned = Number(group?.planned || 0);
+		const realized = Number(group?.realized || 0);
+		const available = planned - realized;
+		const percent = planned ? (realized / planned) * 100 : 0;
+		return {
+			id: `cc-${fallback.id}`,
+			title: `Orçamento ${fallback.label}`,
+			value: planned,
 			type: "currency",
-			helper: insights.periodDisplayLabel,
+			helper: `Saldo disponível: ${brl.format(available)} · Realizado + comprometido: ${brl.format(realized)}`,
+			icon: fallback.icon,
+			color: available < 0 ? "amber" : fallback.color,
+			trend: {
+				status: available < 0 ? "negative" : "positive",
+				direction: available < 0 ? "up" : "down",
+				percent,
+			},
+			trendLabel: "consumido",
+		};
+	};
+	return [
+		buildCategoryBudgetCard(basal, {
+			id: "basal",
+			label: "BASAL",
 			icon: "BadgeDollarSign",
 			color: "blue",
-		},
-		{
-			id: "cc-realizado",
-			title: "Realizado + Comprometido",
-			value: realizedCommitted,
-			type: "currency",
-			helper: `${decimal.format(insights.usedPercent || 0)}% vs. ${decimal.format(insights.idealPercent || 0)}% do mês decorrido`,
-			icon: "Wallet",
-			color: "violet",
-		},
-		{
-			id: "cc-saldo",
-			title: "Saldo Disponível Mês",
-			value: insights.availableMonth,
-			type: "currency",
-			helper:
-				Number(insights.availableMonth || 0) < 0
-					? "Orçamento estourado"
-					: "Dentro do orçamento",
-			icon: "CircleDollarSign",
-			color: Number(insights.availableMonth || 0) < 0 ? "amber" : "emerald",
-		},
-		{
-			id: "cc-ytd",
-			title: `Orçamento Jan-${ytdMonthLabel}`,
-			value: budgetYtd,
-			type: "currency",
-			helper: `${brl.format(insights.plannedYear || 0)} total anual`,
+		}),
+		buildCategoryBudgetCard(nonBasal, {
+			id: "nao-basal",
+			label: "NÃO BASAL",
 			icon: "Landmark",
-			color: "slate",
-		},
-		{
-			id: "cc-forecast",
-			title: "Forecast de Fechamento",
-			value: forecastClosing,
-			type: "currency",
-			helper:
-				forecastBalance >= 0
-					? `Sobram ${brl.format(forecastBalance)}`
-					: `Estoura ${brl.format(Math.abs(forecastBalance))}`,
-			icon: "Repeat2",
-			color: forecastBalance < 0 ? "rose" : "emerald",
-			trend: {
-				status: forecastBalance < 0 ? "negative" : "positive",
-				direction: forecastBalance < 0 ? "down" : "up",
-				percent: insights.plannedMonth
-					? Math.abs(forecastBalance / insights.plannedMonth) * 100
-					: 0,
-			},
-			trendLabel: forecastBalance < 0 ? "risco" : "previsto",
-		},
+			color: "violet",
+		}),
 		{
 			id: "cc-alertas",
 			title: "Pendências & Alertas",
