@@ -7,24 +7,27 @@ function BudgetCategoryClassPanel({
 	group,
 	brl,
 	decimal,
+	integer,
 	budgetAccountLabel,
 	budgetCenterCompactLabel,
 }) {
 	const categories = group.categories || [];
 	return (
-		<article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+		<article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 			<div className="flex flex-wrap items-start justify-between gap-3">
-				<div>
+				<div className="min-w-0">
 					<p className="text-xs font-black uppercase text-slate-500">
 						Categoria
 					</p>
-					<h3 className="text-xl font-black text-slate-950">{group.label}</h3>
+					<h3 className="break-words text-xl font-black text-slate-950">
+						{group.label}
+					</h3>
 				</div>
-				<div className="text-right">
+				<div className="min-w-[170px] text-left sm:text-right">
 					<p className="text-xs font-black uppercase text-slate-500">
 						Orçado / realizado
 					</p>
-					<p className="text-sm font-black text-slate-950">
+					<p className="break-words text-sm font-black text-slate-950">
 						{brl.format(group.planned || 0)} / {brl.format(group.realized || 0)}
 					</p>
 					<p className="text-xs font-bold text-slate-500">
@@ -40,15 +43,15 @@ function BudgetCategoryClassPanel({
 							className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
 						>
 							<div className="flex flex-wrap items-start justify-between gap-2">
-								<div>
-									<p className="text-sm font-black text-slate-950">
+								<div className="min-w-0">
+									<p className="break-words text-sm font-black text-slate-950">
 										{category.name}
 									</p>
 									<p className="text-xs font-bold text-slate-500">
 										{category.accounts.length} conta(s) financeira(s)
 									</p>
 								</div>
-								<p className="text-right text-xs font-black text-slate-700">
+								<p className="min-w-[120px] break-words text-left text-xs font-black text-slate-700 sm:text-right">
 									{brl.format(category.planned || 0)}
 									<span className="block text-slate-500">
 										{brl.format(category.realized || 0)}
@@ -62,7 +65,7 @@ function BudgetCategoryClassPanel({
 										className="rounded-xl border border-white bg-white p-2"
 									>
 										<div className="flex flex-wrap items-start justify-between gap-2">
-											<p className="text-xs font-black text-slate-800">
+											<p className="min-w-0 break-words text-xs font-black text-slate-800">
 												{budgetAccountLabel(accountRow.account, accountRow.id)}
 											</p>
 											<p className="text-xs font-black text-slate-600">
@@ -71,15 +74,22 @@ function BudgetCategoryClassPanel({
 											</p>
 										</div>
 										<div className="mt-2 flex flex-wrap gap-1.5">
-											{accountRow.centers.map(({ center, realized }) => (
-												<span
-													key={`${accountRow.id}-${center.id}`}
-													className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600"
-												>
-													{budgetCenterCompactLabel(center)} ·{" "}
-													{brl.format(realized || 0)}
+											{accountRow.centers
+												.slice(0, 4)
+												.map(({ center, realized }) => (
+													<span
+														key={`${accountRow.id}-${center.id}`}
+														className="max-w-full break-words rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600"
+													>
+														{budgetCenterCompactLabel(center)} ·{" "}
+														{brl.format(realized || 0)}
+													</span>
+												))}
+											{accountRow.centers.length > 4 ? (
+												<span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700">
+													+{integer.format(accountRow.centers.length - 4)}
 												</span>
-											))}
+											) : null}
 										</div>
 									</div>
 								))}
@@ -139,29 +149,30 @@ export default function BudgetDashboardView({
 }) {
 	return (
 		<section className="space-y-4">
-			<section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
+			<section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
 				{kpis.map((item) => (
 					<FinancialKpiCard key={item.id} item={item} />
 				))}
 			</section>
-			<section className="grid gap-4 xl:grid-cols-2">
+			<section className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
 				{(insights.budgetCategoryGroups || []).map((group) => (
 					<BudgetCategoryClassPanel
 						key={group.id}
 						group={group}
 						brl={brl}
 						decimal={decimal}
+						integer={integer}
 						budgetAccountLabel={budgetAccountLabel}
 						budgetCenterCompactLabel={budgetCenterCompactLabel}
 					/>
 				))}
 			</section>
-			<section className="grid gap-4 md:grid-cols-3">
+			<section className="grid grid-cols-1 gap-4 md:grid-cols-3">
 				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 					<p className="text-xs font-black uppercase text-slate-500">
 						Orçado x realizado total
 					</p>
-					<p className="mt-2 text-xl font-black text-slate-950">
+					<p className="mt-2 break-words text-xl font-black text-slate-950">
 						{brl.format(insights.plannedMonth)} /{" "}
 						{brl.format(insights.realizedMonth + insights.committedMonth)}
 					</p>
@@ -173,7 +184,7 @@ export default function BudgetDashboardView({
 					<p className="text-xs font-black uppercase text-slate-500">
 						Desvio absoluto
 					</p>
-					<p className={`mt-2 text-xl font-black ${budgetDeviation.textClass}`}>
+					<p className={`mt-2 break-words text-xl font-black ${budgetDeviation.textClass}`}>
 						{brl.format(budgetDeviation.variance)}
 					</p>
 					<p className="mt-1 text-xs font-bold text-slate-500">
@@ -184,7 +195,7 @@ export default function BudgetDashboardView({
 					<p className="text-xs font-black uppercase text-slate-500">
 						Desvio percentual
 					</p>
-					<p className={`mt-2 text-xl font-black ${budgetDeviation.textClass}`}>
+					<p className={`mt-2 break-words text-xl font-black ${budgetDeviation.textClass}`}>
 						{decimal.format(budgetDeviation.percent)}%
 					</p>
 					<p className="mt-1 text-xs font-bold text-slate-500">

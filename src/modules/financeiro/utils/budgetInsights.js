@@ -521,9 +521,9 @@ function buildBudgetCategoryGroups(accountRows = []) {
 						.map((account) => ({
 							...account,
 							...budgetMetric(account.planned, account.realized),
-							centers: account.centers
-								.sort((left, right) => right.realized - left.realized)
-								.slice(0, 4),
+							centers: account.centers.sort(
+								(left, right) => right.realized - left.realized,
+							),
 						}))
 						.sort((left, right) => right.realized - left.realized),
 				}))
