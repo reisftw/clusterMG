@@ -1,6 +1,11 @@
-import { buildCacheKey, invalidateCache } from "../../../services/dataCache";
+import {
+	buildCacheKey,
+	getOrLoadCachedValue,
+	invalidateCache,
+} from "../../../services/dataCache";
 import {
 	deleteVpsDocument,
+	getVpsDocument,
 	setVpsDocument,
 } from "../../../services/vpsApiClient";
 
@@ -51,6 +56,59 @@ const MONTHORDER = [
 	"Novembro",
 	"Dezembro",
 ];
+
+const CACHE_KEYS = {
+	todos: "metas-dashboard-agentes:todos",
+};
+
+function normalizeDashboardAgenteRow(row = {}) {
+	const cidade = normalizaCidade(row.cidade || row.nome || row.name);
+	return {
+		...row,
+		cidade,
+		name: cidade,
+		total: Number(row.total ?? row.realizado ?? 0),
+		meta: Number(row.meta ?? row.meta80 ?? 0),
+		pct: Number(row.pct ?? row.percent ?? 0),
+		daily: Array.isArray(row.daily) ? row.daily : [],
+		lojaAgentesTotal: Number(row.lojaAgentesTotal || 0),
+		lojaAgentesDaily: Array.isArray(row.lojaAgentesDaily)
+			? row.lojaAgentesDaily
+			: [],
+	};
+}
+
+export async function buscarTodosDashboardAgentes(force = false) {
+	const { data } = await getOrLoadCachedValue(
+		CACHE_KEYS.todos,
+		async () => {
+			const entries = await Promise.all(
+				MONTHORDER.map(async (mes) => {
+					const doc = await getVpsDocument(`dashboardagentes/${mes}`).catch(
+						() => null,
+					);
+					const cidades = Array.isArray(doc?.cidades)
+						? doc.cidades
+						: Array.isArray(doc?.cidadesRanking)
+							? doc.cidadesRanking
+							: [];
+					return [
+						mes,
+						deduplicarCidades(cidades).map(normalizeDashboardAgenteRow),
+					];
+				}),
+			);
+			return Object.fromEntries(entries.filter(([, rows]) => rows.length > 0));
+		},
+		{ ttlMs: 10 * 60 * 1000, force },
+	);
+
+	return data || {};
+}
+
+export function invalidateDashboardAgentesCache() {
+	invalidateCache(CACHE_KEYS.todos);
+}
 
 export async function salvarDashboardAgentes(agentesData) {
 	try {
@@ -121,5 +179,6 @@ export async function salvarDashboardAgentes(agentesData) {
 	} finally {
 		invalidateCache(buildCacheKey(["painel-publico", "agentes"]));
 		invalidateCache(buildCacheKey(["painel-publico", "agentes", "v2"]));
+		invalidateCache(CACHE_KEYS.todos);
 	}
 }

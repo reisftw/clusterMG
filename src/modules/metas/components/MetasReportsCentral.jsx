@@ -1,4 +1,4 @@
-import { Download, FileSpreadsheet } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import {
@@ -81,7 +81,7 @@ export default function MetasReportsCentral({
 						: "Sem meses salvos para gerar relatório"
 				}
 			>
-				<FileSpreadsheet size={16} />
+				<FileText size={16} />
 				Central de relatório
 			</button>
 
@@ -89,7 +89,7 @@ export default function MetasReportsCentral({
 				<ModalShell
 					open
 					title="Central de relatório"
-					description="Escolha o mês e os blocos que serão baixados em um arquivo XLSX."
+					description="Escolha o mês e os blocos que serão baixados em PDF."
 					onClose={() => setOpen(false)}
 					size="3xl"
 					footer={
@@ -100,7 +100,7 @@ export default function MetasReportsCentral({
 								</p>
 							) : (
 								<p className="text-xs font-semibold text-slate-500">
-									Cada item selecionado vira uma aba dentro do arquivo.
+									Cada item selecionado vira uma seção do PDF.
 								</p>
 							)}
 							<div className="flex justify-end gap-2">

@@ -1,5 +1,3 @@
-import ExcelJS from "exceljs";
-
 export const METAS_CENTRAL_REPORT_ITEMS = [
 	{ id: "resumo", label: "Resumo do mês" },
 	{ id: "tecnicos_sempre", label: "Técnicos Sempre" },
@@ -47,29 +45,6 @@ function sheetName(value) {
 	return String(value || "Relatório").slice(0, 31);
 }
 
-function triggerWorkbookDownload(buffer, fileName) {
-	const blob = new Blob([buffer], {
-		type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-	});
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
-	link.href = url;
-	link.download = fileName;
-	document.body.appendChild(link);
-	link.click();
-	link.remove();
-	URL.revokeObjectURL(url);
-}
-
-function styleHeader(row) {
-	row.font = { bold: true, color: { argb: "FFFFFFFF" } };
-	row.fill = {
-		type: "pattern",
-		pattern: "solid",
-		fgColor: { argb: "FF1D4ED8" },
-	};
-}
-
 function daysCount(records = []) {
 	return Math.max(
 		31,
@@ -88,19 +63,12 @@ function dayHeaders(totalDays) {
 	return Array.from({ length: totalDays }, (_, index) => `Dia ${index + 1}`);
 }
 
-function addSheet(workbook, name, headers, rows) {
-	const sheet = workbook.addWorksheet(sheetName(name));
-	sheet.addRow(headers);
-	styleHeader(sheet.getRow(1));
-	rows.forEach((row) => sheet.addRow(row));
-	sheet.views = [{ state: "frozen", ySplit: 1 }];
-	sheet.autoFilter = {
-		from: { row: 1, column: 1 },
-		to: { row: 1, column: headers.length },
-	};
-	sheet.columns = headers.map((header, index) => ({
-		width: index === 0 ? 34 : Math.max(12, String(header).length + 2),
-	}));
+function addReportSection(sections, name, headers, rows) {
+	sections.push({
+		name: sheetName(name),
+		headers,
+		rows: rows.map((row) => row.map((value) => String(value ?? ""))),
+	});
 }
 
 function getRecord(allData = {}, month, source) {
@@ -221,12 +189,12 @@ function normalizeAgentsRows(items = []) {
 	};
 }
 
-function addResumoSheet(workbook, month, allData) {
+function addResumoSection(sections, month, allData) {
 	const sempre = getRecord(allData, month, "sempre");
 	const onnet = getRecord(allData, month, "onnet");
 	const todos = getRecord(allData, month, "todos");
-	addSheet(
-		workbook,
+	addReportSection(
+		sections,
 		"Resumo",
 		["Fonte", "Cancelamentos", "Meta", "Lançado", "%", "Loja", "Agente", "Regionais"],
 		[
@@ -252,73 +220,73 @@ function addResumoSheet(workbook, month, allData) {
 }
 
 const REPORT_BUILDERS = {
-	resumo: ({ workbook, month, allData }) => addResumoSheet(workbook, month, allData),
-	tecnicos_sempre: ({ workbook, month, allData }) => {
+	resumo: ({ sections, month, allData }) => addResumoSection(sections, month, allData),
+	tecnicos_sempre: ({ sections, month, allData }) => {
 		const data = normalizePerformanceRows(
 			getRecord(allData, month, "sempre")?.technicians,
 			"Técnico",
 		);
-		addSheet(workbook, "Técnicos Sempre", data.headers, data.rows);
+		addReportSection(sections, "Técnicos Sempre", data.headers, data.rows);
 	},
-	tecnicos_onnet: ({ workbook, month, allData }) => {
+	tecnicos_onnet: ({ sections, month, allData }) => {
 		const data = normalizePerformanceRows(
 			getRecord(allData, month, "onnet")?.technicians,
 			"Técnico",
 		);
-		addSheet(workbook, "Técnicos Onnet", data.headers, data.rows);
+		addReportSection(sections, "Técnicos Onnet", data.headers, data.rows);
 	},
-	regionais_sempre: ({ workbook, month, allData }) => {
+	regionais_sempre: ({ sections, month, allData }) => {
 		const data = normalizePerformanceRows(
 			getRecord(allData, month, "sempre")?.regionais,
 			"Regional",
 		);
-		addSheet(workbook, "Regionais Sempre", data.headers, data.rows);
+		addReportSection(sections, "Regionais Sempre", data.headers, data.rows);
 	},
-	regionais_onnet: ({ workbook, month, allData }) => {
+	regionais_onnet: ({ sections, month, allData }) => {
 		const data = normalizePerformanceRows(
 			getRecord(allData, month, "onnet")?.regionais,
 			"Regional",
 		);
-		addSheet(workbook, "Regionais Onnet", data.headers, data.rows);
+		addReportSection(sections, "Regionais Onnet", data.headers, data.rows);
 	},
-	regionais_todos: ({ workbook, month, allData }) => {
+	regionais_todos: ({ sections, month, allData }) => {
 		const data = normalizePerformanceRows(
 			getRecord(allData, month, "todos")?.regionais,
 			"Regional",
 		);
-		addSheet(workbook, "Regionais Todos", data.headers, data.rows);
+		addReportSection(sections, "Regionais Todos", data.headers, data.rows);
 	},
-	agentes: ({ workbook, month, agentesData }) => {
+	agentes: ({ sections, month, agentesData }) => {
 		const data = normalizeAgentsRows(getAgentMonthRows(agentesData, month));
-		addSheet(workbook, "Agentes Sempre", data.headers, data.rows);
+		addReportSection(sections, "Agentes Sempre", data.headers, data.rows);
 	},
-	loja_agente: ({ workbook, month, agentesData }) => {
+	loja_agente: ({ sections, month, agentesData }) => {
 		const data = normalizeAgentStoreRows(getAgentMonthRows(agentesData, month));
-		addSheet(workbook, "Loja Agente", data.headers, data.rows);
+		addReportSection(sections, "Loja Agente", data.headers, data.rows);
 	},
-	loja_sempre: ({ workbook, month, allData }) => {
+	loja_sempre: ({ sections, month, allData }) => {
 		const data = normalizeStoreRows([
 			{ label: "Entregue em loja Sempre", record: getRecord(allData, month, "sempre") },
 		]);
-		addSheet(workbook, "Loja Sempre", data.headers, data.rows);
+		addReportSection(sections, "Loja Sempre", data.headers, data.rows);
 	},
-	loja_onnet: ({ workbook, month, allData }) => {
+	loja_onnet: ({ sections, month, allData }) => {
 		const data = normalizeStoreRows([
 			{ label: "Entregue em loja Onnet", record: getRecord(allData, month, "onnet") },
 		]);
-		addSheet(workbook, "Loja Onnet", data.headers, data.rows);
+		addReportSection(sections, "Loja Onnet", data.headers, data.rows);
 	},
-	loja_todos: ({ workbook, month, allData }) => {
+	loja_todos: ({ sections, month, allData }) => {
 		const data = normalizeStoreRows([
 			{ label: "Sempre", record: getRecord(allData, month, "sempre") },
 			{ label: "Onnet", record: getRecord(allData, month, "onnet") },
 			{ label: "Todos", record: getRecord(allData, month, "todos") },
 		]);
-		addSheet(workbook, "Loja Todos", data.headers, data.rows);
+		addReportSection(sections, "Loja Todos", data.headers, data.rows);
 	},
-	diario_todos: ({ workbook, month, allData }) => {
+	diario_todos: ({ sections, month, allData }) => {
 		const data = normalizeDailyRows(getRecord(allData, month, "todos"));
-		addSheet(workbook, "Diário Todos", data.headers, data.rows);
+		addReportSection(sections, "Diário Todos", data.headers, data.rows);
 	},
 };
 
@@ -345,22 +313,59 @@ export async function exportMetasCentralReport({
 	const itemIds = selectedItems.length
 		? selectedItems
 		: METAS_CENTRAL_REPORT_ITEMS.map((item) => item.id);
-	const workbook = new ExcelJS.Workbook();
-	workbook.creator = "Cluster MG";
-	workbook.created = new Date();
+	const sections = [];
 
 	itemIds.forEach((itemId) => {
-		REPORT_BUILDERS[itemId]?.({ workbook, month, allData, agentesData });
+		REPORT_BUILDERS[itemId]?.({ sections, month, allData, agentesData });
 	});
 
-	if (!workbook.worksheets.length) {
+	if (!sections.length) {
 		throw new Error("Selecione pelo menos um item para baixar.");
 	}
 
-	const buffer = await workbook.xlsx.writeBuffer();
-	triggerWorkbookDownload(
-		buffer,
-		`relatorio-metas-${slugify(month)}-${new Date().getFullYear()}.xlsx`,
-	);
-	return { worksheets: workbook.worksheets.length };
+	const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+		import("jspdf"),
+		import("jspdf-autotable"),
+	]);
+	const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+	const generatedAt = new Date().toLocaleString("pt-BR");
+	let y = 14;
+
+	doc.setFont("helvetica", "bold");
+	doc.setFontSize(16);
+	doc.text(`Relatório de Metas - ${month}`, 14, y);
+	doc.setFont("helvetica", "normal");
+	doc.setFontSize(9);
+	doc.text(`Gerado em ${generatedAt}`, 14, y + 6);
+	y += 14;
+
+	sections.forEach((section, index) => {
+		if (index > 0) {
+			doc.addPage();
+			y = 14;
+		}
+		doc.setFont("helvetica", "bold");
+		doc.setFontSize(12);
+		doc.text(section.name, 14, y);
+		autoTable(doc, {
+			startY: y + 5,
+			head: [section.headers],
+			body: section.rows,
+			styles: {
+				fontSize: section.headers.length > 16 ? 6 : 8,
+				cellPadding: 1.4,
+				overflow: "linebreak",
+			},
+			headStyles: {
+				fillColor: [29, 78, 216],
+				textColor: 255,
+				fontStyle: "bold",
+			},
+			alternateRowStyles: { fillColor: [248, 250, 252] },
+			margin: { left: 10, right: 10 },
+		});
+	});
+
+	doc.save(`relatorio-metas-${slugify(month)}-${new Date().getFullYear()}.pdf`);
+	return { sections: sections.length };
 }

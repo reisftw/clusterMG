@@ -17,6 +17,8 @@ const metasMocks = vi.hoisted(() => ({
 	persistMetasImport: vi.fn(),
 	saveMetasForceTaskConfig: vi.fn(),
 	salvarAuditoriaAgentes: vi.fn(),
+	buscarTodosDashboardAgentes: vi.fn(),
+	invalidateDashboardAgentesCache: vi.fn(),
 	parseAgentesWorkbook: vi.fn(),
 	salvarDashboard: vi.fn(),
 	salvarDashboardAgentes: vi.fn(),
@@ -58,6 +60,8 @@ vi.mock("../services/dashboardService", () => ({
 }));
 
 vi.mock("../services/dashboardAgentesService", () => ({
+	buscarTodosDashboardAgentes: metasMocks.buscarTodosDashboardAgentes,
+	invalidateDashboardAgentesCache: metasMocks.invalidateDashboardAgentesCache,
 	salvarDashboardAgentes: metasMocks.salvarDashboardAgentes,
 }));
 
@@ -171,6 +175,7 @@ describe("useMetas", () => {
 			generatedAt: "2026-01-15T10:30:00.000Z",
 		});
 		metasMocks.salvarAuditoriaAgentes.mockResolvedValue(undefined);
+		metasMocks.buscarTodosDashboardAgentes.mockResolvedValue({});
 		metasMocks.parseAgentesWorkbook.mockReturnValue({});
 		metasMocks.salvarDashboard.mockResolvedValue(undefined);
 		metasMocks.salvarDashboardAgentes.mockResolvedValue(undefined);
@@ -763,6 +768,33 @@ describe("useMetas", () => {
 		expect(result.current.dadosMes).toEqual(
 			expect.objectContaining({ totalOS: 80, meta: 120 }),
 		);
+	});
+
+	it("carrega os lancamentos salvos de agentes para reabrir o formulario sem zerar", async () => {
+		metasMocks.buscarTodosDashboardAgentes.mockResolvedValue({
+			Setembro: [
+				{
+					cidade: "Aguanil",
+					total: 7,
+					cancelamentos: 10,
+					meta: 8,
+					daily: [7],
+				},
+			],
+		});
+
+		const { result } = renderHook(() => useMetas());
+
+		await waitFor(() => expect(result.current.loading).toBe(false));
+
+		expect(result.current.agentesData.Setembro).toEqual([
+			expect.objectContaining({
+				cidade: "Aguanil",
+				total: 7,
+				cancelamentos: 10,
+				meta: 8,
+			}),
+		]);
 	});
 
 	it("continua carregando com feriados vazios quando a consulta de feriados falha", async () => {

@@ -1,5 +1,5 @@
 import { ChevronDown, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { listarRegionaisAdmin } from "../../auth/services/authService";
 import { buscarAgentes } from "../../regionais/services/agentesService";
@@ -108,11 +108,11 @@ function rowsFromAgents(items = []) {
 		id: createRowId(),
 		name: item.cidade || item.name || "",
 		sourceScope: MANUAL_META_SOURCES.SEMPRE,
-		total: item.total || "",
+		total: item.total ?? item.realizado ?? "",
 		daily: Array.isArray(item.daily) ? item.daily : parseDailyMetaValues(""),
 		dailyText: dailyToText(item.daily),
 		cancelamentos: item.cancelamentos || "",
-		meta: item.meta || "",
+		meta: item.meta ?? item.meta80 ?? "",
 	}));
 }
 
@@ -126,7 +126,7 @@ function rowsFromAgentStore(items = []) {
 		)
 		.map((item) => ({
 			id: createRowId(),
-			name: item.cidade || item.name || "",
+			name: item.cidade || item.name || item.nome || "",
 			sourceScope: MANUAL_META_SOURCES.SEMPRE,
 			total: item.lojaAgentesTotal || "",
 			daily: Array.isArray(item.lojaAgentesDaily)
@@ -166,6 +166,14 @@ function mergeRegionalRows(sempreRows = [], onnetRows = []) {
 	return [...merged.values()];
 }
 
+function getAgentMonthRows(agentesData = {}, month) {
+	const monthData = agentesData?.[month];
+	if (Array.isArray(monthData)) return monthData;
+	if (Array.isArray(monthData?.cidades)) return monthData.cidades;
+	if (Array.isArray(monthData?.cidadesRanking)) return monthData.cidadesRanking;
+	return [];
+}
+
 function buildInitialState(allData, agentesData, month) {
 	const sempreData = sourceMonthData(allData, month, MANUAL_META_SOURCES.SEMPRE);
 	const onnetData = sourceMonthData(allData, month, MANUAL_META_SOURCES.ONNET);
@@ -193,8 +201,8 @@ function buildInitialState(allData, agentesData, month) {
 			MANUAL_META_SOURCES.ONNET,
 		),
 		regionais: mergeRegionalRows(sempreRegionais, onnetRegionais),
-		agentes: rowsFromAgents(agentesData?.[month] || []),
-		agentesLoja: rowsFromAgentStore(agentesData?.[month] || []),
+		agentes: rowsFromAgents(getAgentMonthRows(agentesData, month)),
+		agentesLoja: rowsFromAgentStore(getAgentMonthRows(agentesData, month)),
 		lojaSempre: {
 			total: sempreData?.lojaTotal || "",
 			daily: (sempreData?.rawDays || sempreData?.saldoDiario || []).map(
@@ -303,19 +311,23 @@ function SectionEditor({
 	showSourceScope = false,
 	allowAdd = true,
 	allowRemove = true,
+	onDirty,
 }) {
 	const [open, setOpen] = useState(false);
 	const [editingRowId, setEditingRowId] = useState(null);
 	const editingRow = rows.find((row) => row.id === editingRowId) || null;
 	const updateRow = (id, patch) => {
+		onDirty?.();
 		setRows((current) =>
 			current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
 		);
 	};
 	const removeRow = (id) => {
+		onDirty?.();
 		setRows((current) => current.filter((row) => row.id !== id));
 	};
 	const addRow = () => {
+		onDirty?.();
 		setRows((current) => [
 			...current,
 			{
@@ -578,6 +590,10 @@ export default function MetasLancamentoManual({
 	canManage,
 }) {
 	const [year, setYear] = useState(new Date().getFullYear());
+	const dirtyRef = useRef(false);
+	const autosaveTimerRef = useRef(null);
+	const skipNextHydrationRef = useRef(false);
+	const currentHydratedMonthRef = useRef(month);
 	const initialState = useMemo(
 		() => buildInitialState(allData, agentesData, month),
 		[agentesData, allData, month],
@@ -615,6 +631,8 @@ export default function MetasLancamentoManual({
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 	const [publishResult, setPublishResult] = useState(null);
+	const [autosaveMessage, setAutosaveMessage] = useState("");
+	const [savingDraft, setSavingDraft] = useState(false);
 	const dayCount = getDaysInMetaMonth(month, year);
 	const normalizedConfig = useMemo(
 		() => normalizeMetasBaseConfig(metasBaseConfig),
@@ -655,6 +673,44 @@ export default function MetasLancamentoManual({
 		sumRows(lojaOnnet, dayCount);
 	const totalPreview = totalSemprePreview + totalOnnetPreview;
 
+	const markDirty = useCallback(() => {
+		dirtyRef.current = true;
+		setAutosaveMessage("");
+	}, []);
+
+	useEffect(() => {
+		if (currentHydratedMonthRef.current !== month) {
+			currentHydratedMonthRef.current = month;
+			skipNextHydrationRef.current = false;
+		}
+		if (skipNextHydrationRef.current) return;
+		dirtyRef.current = false;
+		setCancelamentosSempre(initialState.cancelamentosSempre);
+		setCancelamentosOnnet(initialState.cancelamentosOnnet);
+		setTecnicosSempre(initialState.tecnicosSempre);
+		setTecnicosOnnet(initialState.tecnicosOnnet);
+		setRegionais(initialState.regionais);
+		setAgentes(initialState.agentes);
+		setAgentesLoja(initialState.agentesLoja);
+		setLojaSempre([
+			{
+				id: createRowId(),
+				name: "Entregue em loja Sempre",
+				...initialState.lojaSempre,
+			},
+		]);
+		setLojaOnnet([
+			{
+				id: createRowId(),
+				name: "Entregue em loja Onnet",
+				...initialState.lojaOnnet,
+			},
+		]);
+		setMessage("");
+		setError("");
+		setAutosaveMessage("");
+	}, [initialState, month]);
+
 	const loadOptions = useCallback(async (force = false) => {
 		setLoadingOptions(true);
 		try {
@@ -692,40 +748,88 @@ export default function MetasLancamentoManual({
 		setAgentesLoja((current) => mergeRowsWithOptions(current, agenteOptions));
 	}, [agenteOptions]);
 
+	const buildSavePayload = useCallback(
+		() => ({
+			mes: month,
+			ano: year,
+			lancamentosPorFonte: [
+				{
+					fonte: MANUAL_META_SOURCES.SEMPRE,
+					lancamento: {
+						cancelamentos: cancelamentosSempre,
+						tecnicos: tecnicosSempre,
+						regionais: regionaisSempre,
+						agentes,
+						agentesLoja,
+						loja: lojaSempre[0] || {},
+					},
+				},
+				{
+					fonte: MANUAL_META_SOURCES.ONNET,
+					lancamento: {
+						cancelamentos: cancelamentosOnnet,
+						tecnicos: tecnicosOnnet,
+						regionais: regionaisOnnet,
+						agentes: [],
+						agentesLoja: [],
+						loja: lojaOnnet[0] || {},
+					},
+				},
+			],
+		}),
+		[
+			agentes,
+			agentesLoja,
+			cancelamentosOnnet,
+			cancelamentosSempre,
+			lojaOnnet,
+			lojaSempre,
+			month,
+			regionaisOnnet,
+			regionaisSempre,
+			tecnicosOnnet,
+			tecnicosSempre,
+			year,
+		],
+	);
+
+	const saveDraft = useCallback(async () => {
+		if (!canManage || !dirtyRef.current || saving || savingDraft) return;
+		setSavingDraft(true);
+		try {
+			skipNextHydrationRef.current = true;
+			await onSave(buildSavePayload());
+			dirtyRef.current = false;
+			setAutosaveMessage("Salvo automaticamente.");
+		} catch (err) {
+			setError(err?.message || "Não foi possível salvar automaticamente.");
+		} finally {
+			setSavingDraft(false);
+		}
+	}, [buildSavePayload, canManage, onSave, saving, savingDraft]);
+
+	const scheduleAutosave = useCallback(() => {
+		if (!canManage || !dirtyRef.current) return;
+		window.clearTimeout(autosaveTimerRef.current);
+		autosaveTimerRef.current = window.setTimeout(() => {
+			saveDraft();
+		}, 500);
+	}, [canManage, saveDraft]);
+
+	useEffect(() => {
+		return () => window.clearTimeout(autosaveTimerRef.current);
+	}, []);
+
 	const handleSubmit = async (event) => {
 		event.preventDefault();
+		window.clearTimeout(autosaveTimerRef.current);
 		setMessage("");
 		setError("");
 		setPublishResult(null);
 		try {
-			await onSave({
-				mes: month,
-				ano: year,
-				lancamentosPorFonte: [
-					{
-						fonte: MANUAL_META_SOURCES.SEMPRE,
-						lancamento: {
-							cancelamentos: cancelamentosSempre,
-							tecnicos: tecnicosSempre,
-							regionais: regionaisSempre,
-							agentes,
-							agentesLoja,
-							loja: lojaSempre[0] || {},
-						},
-					},
-					{
-						fonte: MANUAL_META_SOURCES.ONNET,
-						lancamento: {
-							cancelamentos: cancelamentosOnnet,
-							tecnicos: tecnicosOnnet,
-							regionais: regionaisOnnet,
-							agentes: [],
-							agentesLoja: [],
-							loja: lojaOnnet[0] || {},
-						},
-					},
-				],
-			});
+			skipNextHydrationRef.current = true;
+			await onSave(buildSavePayload());
+			dirtyRef.current = false;
 			const successMessage =
 				"Lançamento publicado no /acompanhamento, /painel e AA.";
 			setMessage(successMessage);
@@ -748,7 +852,11 @@ export default function MetasLancamentoManual({
 
 	return (
 		<>
-		<form className="space-y-4" onSubmit={handleSubmit}>
+		<form
+			className="space-y-4"
+			onSubmit={handleSubmit}
+			onBlurCapture={scheduleAutosave}
+		>
 			<section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
 				<div className="flex flex-wrap items-start justify-between gap-4">
 					<div>
@@ -773,7 +881,10 @@ export default function MetasLancamentoManual({
 							min="2020"
 							max="2100"
 							value={year}
-							onChange={(event) => setYear(Number(event.target.value) || year)}
+							onChange={(event) => {
+								markDirty();
+								setYear(Number(event.target.value) || year);
+							}}
 							className="input-field bg-white"
 						/>
 					</label>
@@ -785,9 +896,10 @@ export default function MetasLancamentoManual({
 							type="number"
 							min="0"
 							value={cancelamentosSempre}
-							onChange={(event) =>
-								setCancelamentosSempre(event.target.value)
-							}
+							onChange={(event) => {
+								markDirty();
+								setCancelamentosSempre(event.target.value);
+							}}
 							className="input-field bg-white"
 							placeholder="2910"
 						/>
@@ -800,7 +912,10 @@ export default function MetasLancamentoManual({
 							type="number"
 							min="0"
 							value={cancelamentosOnnet}
-							onChange={(event) => setCancelamentosOnnet(event.target.value)}
+							onChange={(event) => {
+								markDirty();
+								setCancelamentosOnnet(event.target.value);
+							}}
 							className="input-field bg-white"
 							placeholder="0"
 						/>
@@ -857,6 +972,10 @@ export default function MetasLancamentoManual({
 					<span>
 						{dayCount} dias disponíveis para lançamento diário neste mês.
 					</span>
+					{savingDraft ? <span>Salvando automaticamente...</span> : null}
+					{autosaveMessage ? (
+						<span className="text-emerald-700">{autosaveMessage}</span>
+					) : null}
 					<button
 						type="button"
 						onClick={() => loadOptions(true)}
@@ -874,6 +993,7 @@ export default function MetasLancamentoManual({
 				rows={tecnicosSempre}
 				setRows={setTecnicosSempre}
 				dayCount={dayCount}
+				onDirty={markDirty}
 			/>
 
 			<SectionEditor
@@ -882,6 +1002,7 @@ export default function MetasLancamentoManual({
 				rows={tecnicosOnnet}
 				setRows={setTecnicosOnnet}
 				dayCount={dayCount}
+				onDirty={markDirty}
 			/>
 
 			<SectionEditor
@@ -893,6 +1014,7 @@ export default function MetasLancamentoManual({
 				nameOptions={regionalOptions}
 				allowCustomName={false}
 				showSourceScope
+				onDirty={markDirty}
 			/>
 
 			<SectionEditor
@@ -906,6 +1028,7 @@ export default function MetasLancamentoManual({
 				allowCustomName={false}
 				showGoalFields
 				goalPercent={metaPercentSempre}
+				onDirty={markDirty}
 			/>
 
 			<SectionEditor
@@ -917,6 +1040,7 @@ export default function MetasLancamentoManual({
 				dayCount={dayCount}
 				nameOptions={agenteOptions}
 				allowCustomName={false}
+				onDirty={markDirty}
 			/>
 
 			<SectionEditor
@@ -927,6 +1051,7 @@ export default function MetasLancamentoManual({
 				dayCount={dayCount}
 				allowAdd={false}
 				allowRemove={false}
+				onDirty={markDirty}
 			/>
 
 			<SectionEditor
@@ -937,6 +1062,7 @@ export default function MetasLancamentoManual({
 				dayCount={dayCount}
 				allowAdd={false}
 				allowRemove={false}
+				onDirty={markDirty}
 			/>
 
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4">

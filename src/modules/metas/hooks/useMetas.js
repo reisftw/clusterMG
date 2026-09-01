@@ -15,6 +15,10 @@ import {
 	normalizeMetasBaseConfig,
 } from "../constants/metasBaseConfig";
 import {
+	buscarTodosDashboardAgentes,
+	invalidateDashboardAgentesCache,
+} from "../services/dashboardAgentesService";
+import {
 	buildManualMetasRecord,
 	combineMetasRecords,
 	MANUAL_META_SOURCES,
@@ -793,12 +797,13 @@ export const useMetas = () => {
 		const requestVersion = dataVersionRef.current;
 		setLoading(true);
 		try {
-			const [dados, lu, extras, forcaConfig, baseConfig] = await Promise.all([
+			const [dados, lu, extras, forcaConfig, baseConfig, agentes] = await Promise.all([
 				buscarTodasMetas(),
 				buscarUltimaAtualizacao(),
 				buscarFeriadosVps(),
 				buscarForcaTarefaConfig(),
 				buscarMetasBaseConfig(),
+				buscarTodosDashboardAgentes(),
 			]);
 			if (requestVersion !== dataVersionRef.current) return;
 			const normalizedBaseConfig = normalizeMetasBaseConfig(baseConfig);
@@ -809,6 +814,7 @@ export const useMetas = () => {
 			setFeriadosExtras(extras);
 			setForcaTarefaConfig(forcaConfig);
 			setMetasBaseConfig(normalizedBaseConfig);
+			setAgentesData(agentes || {});
 		} catch (e) {
 			logger.error("Erro ao carregar metas", e);
 		} finally {
@@ -827,6 +833,7 @@ export const useMetas = () => {
 				invalidateMetasCache();
 				invalidateForcaTarefaConfigCache();
 				invalidateMetasBaseConfigCache();
+				invalidateDashboardAgentesCache();
 				invalidateDashboardDataCache();
 				invalidateInternalStaticDataCache();
 				carregar();
@@ -870,6 +877,7 @@ export const useMetas = () => {
 
 				if (uploadVersion !== dataVersionRef.current) return;
 				invalidateMetasCache();
+				invalidateDashboardAgentesCache();
 				setAllData(parsed);
 				setAgentesData(agentesData);
 				setLastUpdate(txt);
@@ -995,6 +1003,7 @@ export const useMetas = () => {
 
 				if (uploadVersion !== dataVersionRef.current) return null;
 				invalidateMetasCache();
+				invalidateDashboardAgentesCache();
 				invalidateDashboardDataCache(persistResult?.generatedAt || null);
 				invalidateInternalStaticDataCache(persistResult?.generatedAt || null);
 				setFeriadosExtras(extras);
