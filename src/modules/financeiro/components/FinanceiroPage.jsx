@@ -56,6 +56,7 @@ import PartnersConfigSection from "./budget/config/PartnersConfigSection";
 import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
+import FinanceiroEquipePage from "./equipe/FinanceiroEquipePage";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
 import TariffsDetailLayout from "./tariffs/TariffsDetailLayout";
 import TariffsDetectedBlocks from "./tariffs/TariffsDetectedBlocks";
@@ -257,6 +258,10 @@ const PAGE_META = {
 	configuracoes: {
 		title: "Configurações Financeiras",
 		subtitle: "Metas, categorias, alertas e dados demonstrativos.",
+	},
+	equipe: {
+		title: "Equipe",
+		subtitle: "Organograma, cargos e atribuições do time financeiro.",
 	},
 };
 
@@ -11201,6 +11206,7 @@ function FinanceiroPageContent({
 	budgetLoading,
 	budgetPeriodMode,
 	canManage,
+	canManageEquipe,
 	data,
 	exportModalOpen,
 	loading,
@@ -11274,6 +11280,9 @@ function FinanceiroPageContent({
 			{page === "configuracoes" ? (
 				<ConfiguracoesPage canManage={canManage} />
 			) : null}
+			{page === "equipe" ? (
+				<FinanceiroEquipePage canManage={canManageEquipe} />
+			) : null}
 		</>
 	);
 }
@@ -11300,6 +11309,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 	const canManage =
 		hasPermission(currentUser, "financeiro.configuracoes.manage") ||
 		hasPermission(currentUser, "financeiro.gestao_orcamento.manage");
+	const canManageEquipe = hasPermission(currentUser, "financeiro.equipe.manage");
 	const {
 		hideHeaderControls,
 		isBudgetOperationalPage,
@@ -11410,6 +11420,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				budgetLoading={budgetLoading}
 				budgetPeriodMode={budgetPeriodMode}
 				canManage={canManage}
+				canManageEquipe={canManageEquipe}
 				data={data}
 				exportModalOpen={exportModalOpen}
 				loading={loading}

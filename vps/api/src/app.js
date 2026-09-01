@@ -365,10 +365,13 @@ const FINANCEIRO_VIEW_PERMISSIONS = [
 	"financeiro.gestao_orcamento.manage",
 	"financeiro.configuracoes.view",
 	"financeiro.configuracoes.manage",
+	"financeiro.equipe.view",
+	"financeiro.equipe.manage",
 ];
 const FINANCEIRO_MANAGE_PERMISSIONS = [
 	"financeiro.configuracoes.manage",
 	"financeiro.gestao_orcamento.manage",
+	"financeiro.equipe.manage",
 ];
 
 const COLLECTION_READ_PERMISSIONS = Object.freeze({

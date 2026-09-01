@@ -54,6 +54,7 @@ const PAGE_TITLES = {
 	[ROUTES.FINANCEIRO_ORCAMENTO_APROVACOES]: "Aprovações de Orçamento",
 	[ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES]: "Configurações de Orçamento",
 	[ROUTES.FINANCEIRO_CONFIGURACOES]: "Configurações Financeiras",
+	[ROUTES.FINANCEIRO_EQUIPE]: "Equipe Financeira",
 	[ROUTES.VISITAS]: "Central de Visitas",
 	[ROUTES.GESTAO_DUVIDAS]: "Gestão de Dúvidas",
 	[ROUTES.RETIRADAS]: "Retiradas",

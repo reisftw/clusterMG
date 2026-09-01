@@ -693,6 +693,19 @@ const AppRouter = () => (
 							}
 						/>
 						<Route
+							path={ROUTES.FINANCEIRO_EQUIPE}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"financeiro.equipe.view",
+										"financeiro.equipe.manage",
+									]}
+								>
+									<Financeiro page="equipe" />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
 							path={ROUTES.ATENDIMENTO_CASOS}
 							element={
 								<ProtectedRoute

@@ -1,4 +1,5 @@
 const financeiro = require("../../financeiro");
+const financeiroEquipeRepository = require("../../financeiroEquipeRepository");
 const financeiroStatement = require("../../financeiroStatement");
 
 const FINANCEIRO_READ_CACHE_TTL_MS = Math.max(
@@ -299,12 +300,107 @@ function createFinanceiroController() {
 		}
 	}
 
+	async function getEquipe(_req, res, next) {
+		try {
+			res.json(await financeiroEquipeRepository.listEquipe());
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function createEquipeCargo(req, res, next) {
+		try {
+			const cargo = await financeiroEquipeRepository.createCargo(
+				req.body || {},
+				req.user,
+			);
+			res.status(201).json({ cargo });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function updateEquipeCargo(req, res, next) {
+		try {
+			const cargo = await financeiroEquipeRepository.updateCargo(
+				req.params.cargoId,
+				req.body || {},
+				req.user,
+			);
+			res.json({ cargo });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function deleteEquipeCargo(req, res, next) {
+		try {
+			res.json(await financeiroEquipeRepository.deleteCargo(req.params.cargoId));
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function createEquipeColaborador(req, res, next) {
+		try {
+			const colaborador = await financeiroEquipeRepository.createColaborador(
+				req.body || {},
+				req.user,
+			);
+			res.status(201).json({ colaborador });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function updateEquipeColaborador(req, res, next) {
+		try {
+			const colaborador = await financeiroEquipeRepository.updateColaborador(
+				req.params.colaboradorId,
+				req.body || {},
+				req.user,
+			);
+			res.json({ colaborador });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function deleteEquipeColaborador(req, res, next) {
+		try {
+			res.json(
+				await financeiroEquipeRepository.deleteColaborador(
+					req.params.colaboradorId,
+					req.user,
+				),
+			);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function moveEquipeColaborador(req, res, next) {
+		try {
+			const colaborador = await financeiroEquipeRepository.moveColaborador(
+				req.params.colaboradorId,
+				req.body || {},
+				req.user,
+			);
+			res.json({ colaborador });
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	return {
 		clearBudgetData,
 		createFakeDreData,
 		clearSerasaReport,
 		clearTariffsReport,
 		deleteFakeDreData,
+		deleteEquipeCargo,
+		deleteEquipeColaborador,
+		getEquipe,
 		getBudgetCostCenters,
 		getBudgetData,
 		getDashboard,
@@ -314,6 +410,8 @@ function createFinanceiroController() {
 		getSheetsConfig,
 		listImportLogs,
 		runSheetsImport,
+		createEquipeCargo,
+		createEquipeColaborador,
 		saveBudgetData,
 		saveBudgetCostCenters,
 		saveDreStatement,
@@ -321,6 +419,9 @@ function createFinanceiroController() {
 		saveTariffsReport,
 		saveSheetsConfig,
 		testSheetSource,
+		moveEquipeColaborador,
+		updateEquipeCargo,
+		updateEquipeColaborador,
 		updateBudgetApproval,
 	};
 }
