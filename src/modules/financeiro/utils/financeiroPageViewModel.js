@@ -13,6 +13,7 @@ export const HIDDEN_HEADER_CONTROL_PAGES = [
 	"reportsTarifasFaturas",
 	"reportsTarifasRecCliente",
 	"reportsTarifasFormasPagamento",
+	"equipe",
 ];
 
 export const COMPACT_REPORT_PAGES = [

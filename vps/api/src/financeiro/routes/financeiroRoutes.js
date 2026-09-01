@@ -38,6 +38,14 @@ function createFinanceiroRouter({
 		["financeiro.gestao_orcamento.manage", "financeiro.configuracoes.manage"],
 		financeiroRoles,
 	);
+	const requireEquipeView = requireAnyPermission(
+		["financeiro.equipe.view", "financeiro.equipe.manage"],
+		financeiroRoles,
+	);
+	const requireEquipeManage = requireAnyPermission(
+		["financeiro.equipe.manage"],
+		financeiroRoles,
+	);
 
 	router.get(
 		"/dashboard",
@@ -143,6 +151,61 @@ function createFinanceiroRouter({
 		requireAuthenticated,
 		requireConfigView,
 		controller.getTariffsReport,
+	);
+	router.get(
+		"/equipe",
+		requireAuthenticated,
+		requireEquipeView,
+		controller.getEquipe,
+	);
+	router.post(
+		"/equipe/cargos",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.createEquipeCargo,
+	);
+	router.put(
+		"/equipe/cargos/:cargoId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.updateEquipeCargo,
+	);
+	router.delete(
+		"/equipe/cargos/:cargoId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.deleteEquipeCargo,
+	);
+	router.post(
+		"/equipe/colaboradores",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.createEquipeColaborador,
+	);
+	router.put(
+		"/equipe/colaboradores/:colaboradorId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.updateEquipeColaborador,
+	);
+	router.patch(
+		"/equipe/colaboradores/:colaboradorId/move",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.moveEquipeColaborador,
+	);
+	router.delete(
+		"/equipe/colaboradores/:colaboradorId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.deleteEquipeColaborador,
 	);
 	router.post(
 		"/reports/tarifas",

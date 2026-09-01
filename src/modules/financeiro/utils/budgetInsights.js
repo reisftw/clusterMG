@@ -1,4 +1,10 @@
 import { brl, decimal, integer } from "./financeiroFormatters";
+import {
+	BUDGET_CATEGORY_CLASSES,
+	BUDGET_CATEGORY_CLASS_LABELS,
+	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
+	enrichFinancialAccountWithCategory,
+} from "./budgetAccountCategories";
 
 function dateFromInput(value) {
 	const parsed = new Date(`${value}T00:00:00`);
@@ -404,6 +410,181 @@ function budgetMetric(planned = 0, realized = 0) {
 	};
 }
 
+function normalizeBudgetText(value = "") {
+	return String(value || "")
+		.trim()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+}
+
+function isProjectCenter(center = {}) {
+	const fields = [
+		center.tipoCentro,
+		center.tipo_centro,
+		center.tipoDespesa,
+		center.tipo_despesa,
+		center.categoriaPrincipal,
+		center.categoria,
+		center.grupo,
+		center.parentName,
+		center.nome,
+	];
+	return fields.some((value) => normalizeBudgetText(value).includes("projeto"));
+}
+
+function classifyBudgetRow(account = {}, center = {}) {
+	const enriched = enrichFinancialAccountWithCategory(account || {});
+	if (isProjectCenter(center)) {
+		return {
+			...enriched,
+			categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
+			categoriaClasseLabel:
+				BUDGET_CATEGORY_CLASS_LABELS[BUDGET_CATEGORY_CLASSES.BASAL],
+			isBasal: true,
+		};
+	}
+	return enriched;
+}
+
+function getBudgetCategoryContainer(classMap, classType, classLabel, categoryName) {
+	const categoryKey = `${classType}:${categoryName}`;
+	const currentClass = classMap.get(classType) || {
+		id: classType,
+		label: classLabel,
+		planned: 0,
+		realized: 0,
+		categories: new Map(),
+	};
+	const currentCategory = currentClass.categories.get(categoryKey) || {
+		id: categoryKey,
+		name: categoryName,
+		planned: 0,
+		realized: 0,
+		accounts: new Map(),
+	};
+	currentClass.categories.set(categoryKey, currentCategory);
+	classMap.set(classType, currentClass);
+	return { currentClass, currentCategory, categoryKey };
+}
+
+function buildBudgetCategoryGroups(accountRows = [], accounts = []) {
+	const classMap = new Map();
+	FINANCIAL_ACCOUNT_CATEGORY_CATALOG.forEach((category) => {
+		getBudgetCategoryContainer(
+			classMap,
+			category.classType,
+			BUDGET_CATEGORY_CLASS_LABELS[category.classType],
+			category.name,
+		);
+	});
+	accountRows.forEach((row) => {
+		const classification = classifyBudgetRow(row.account, row.center);
+		const classType =
+			classification.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+		const classLabel =
+			classification.categoriaClasseLabel ||
+			BUDGET_CATEGORY_CLASS_LABELS[classType] ||
+			"BASAL";
+		const categoryName = classification.categoriaMae || "Sem categoria";
+		const accountId = row.account?.id || row.row?.accountId || "sem-conta";
+		const { currentClass, currentCategory, categoryKey } = getBudgetCategoryContainer(
+			classMap,
+			classType,
+			classLabel,
+			categoryName,
+		);
+		const accountKey = `${categoryKey}:${accountId}`;
+		const currentAccount = currentCategory.accounts.get(accountKey) || {
+			id: accountId,
+			account: classification,
+			planned: 0,
+			realized: 0,
+			centers: [],
+		};
+		const planned = Number(row.planned || 0);
+		const realized = Number(row.realized || 0);
+		currentClass.planned += planned;
+		currentClass.realized += realized;
+		currentCategory.planned += planned;
+		currentCategory.realized += realized;
+		currentAccount.planned += planned;
+		currentAccount.realized += realized;
+		if (row.center) {
+			currentAccount.centers.push({
+				center: row.center,
+				planned,
+				realized,
+				...budgetMetric(planned, realized),
+			});
+		}
+		currentCategory.accounts.set(accountKey, currentAccount);
+	});
+	accounts.map(enrichFinancialAccountWithCategory).forEach((account) => {
+		const classType = account.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+		const classLabel =
+			account.categoriaClasseLabel ||
+			BUDGET_CATEGORY_CLASS_LABELS[classType] ||
+			"BASAL";
+		const categoryName = account.categoriaMae || "Sem categoria";
+		const accountId = account.id || account.codigo || "sem-conta";
+		const { currentCategory, categoryKey } = getBudgetCategoryContainer(
+			classMap,
+			classType,
+			classLabel,
+			categoryName,
+		);
+		const accountKey = `${categoryKey}:${accountId}`;
+		if (!currentCategory.accounts.has(accountKey)) {
+			currentCategory.accounts.set(accountKey, {
+				id: accountId,
+				account,
+				planned: 0,
+				realized: 0,
+				centers: [],
+			});
+		}
+	});
+	return [
+		BUDGET_CATEGORY_CLASSES.BASAL,
+		BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	]
+		.map((classType) => {
+			const group = classMap.get(classType) || {
+				id: classType,
+				label: BUDGET_CATEGORY_CLASS_LABELS[classType],
+				planned: 0,
+				realized: 0,
+				categories: new Map(),
+			};
+			const categories = Array.from(group.categories.values())
+				.map((category) => ({
+					...category,
+					...budgetMetric(category.planned, category.realized),
+					accounts: Array.from(category.accounts.values())
+						.map((account) => ({
+							...account,
+							...budgetMetric(account.planned, account.realized),
+							centers: account.centers.sort(
+								(left, right) => right.realized - left.realized,
+							),
+						}))
+						.sort((left, right) => right.realized - left.realized),
+				}))
+				.sort((left, right) => {
+					const leftHasValue = left.planned || left.realized ? 1 : 0;
+					const rightHasValue = right.planned || right.realized ? 1 : 0;
+					if (leftHasValue !== rightHasValue) return rightHasValue - leftHasValue;
+					return right.realized - left.realized;
+				});
+			return {
+				...group,
+				...budgetMetric(group.planned, group.realized),
+				categories,
+			};
+		});
+}
+
 function buildAccountRows({
 	accounts = [],
 	centers = [],
@@ -479,7 +660,7 @@ function buildCenterRows({
 }
 
 export function getBudgetInsights(config = {}, selectedPeriod = {}) {
-	const accounts = config.accounts || [];
+	const accounts = (config.accounts || []).map(enrichFinancialAccountWithCategory);
 	const centers = config.centers || [];
 	const matrix = config.matrix || [];
 	const now = new Date();
@@ -649,6 +830,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	});
 	const forecastRows = buildForecastRows(monthlyEvolution);
 	const accountSummary = buildAccountSummary(accountRows);
+	const budgetCategoryGroups = buildBudgetCategoryGroups(accountRows, accounts);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")
 		.map((item) => ({ ...item, id: item.center?.id }))
@@ -668,6 +850,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		approvals,
 		approvalsAll,
 		accountRows,
+		budgetCategoryGroups,
 		centerRows,
 		movements,
 		monthlyEvolution,
@@ -736,6 +919,12 @@ export function isBudgetCenterResponsible(user, center = {}) {
 }
 
 export function buildBudgetOperationalKpis(insights = {}, config = {}) {
+	const basal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.BASAL,
+	);
+	const nonBasal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	);
 	return [
 		{
 			id: "orcado",
@@ -785,6 +974,22 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			helper: `${integer.format((config.versions || []).length)} versão(ões)`,
 			icon: "Landmark",
 		},
+		{
+			id: "basal",
+			title: "BASAL",
+			value: basal?.planned || 0,
+			type: "currency",
+			helper: `Realizado ${brl.format(basal?.realized || 0)}`,
+			icon: "Landmark",
+		},
+		{
+			id: "nao-basal",
+			title: "NÃO BASAL",
+			value: nonBasal?.planned || 0,
+			type: "currency",
+			helper: `Realizado ${brl.format(nonBasal?.realized || 0)}`,
+			icon: "FileText",
+		},
 	];
 }
 
@@ -825,84 +1030,48 @@ export function calculateBudgetReference(selectedPeriod = {}, now = new Date()) 
 
 export function buildCostCenterTopCards({
 	insights = {},
-	selectedPeriod = {},
-	now = new Date(),
 	expiringContracts = 0,
 } = {}) {
-	const reference = calculateBudgetReference(selectedPeriod, now);
-	const budgetYtd = (insights.monthlyEvolution || [])
-		.filter((item) => Number(item.month || 0) <= reference.budgetReferenceMonth)
-		.reduce((sum, item) => sum + Number(item.planned || 0), 0);
-	const realizedCommitted =
-		Number(insights.realizedMonth || 0) + Number(insights.committedMonth || 0);
-	const forecastClosing =
-		reference.isCurrentBudgetMonth && reference.elapsedBudgetDays
-			? (realizedCommitted / reference.elapsedBudgetDays) *
-				reference.daysInBudgetMonth
-			: realizedCommitted;
-	const forecastBalance = Number(insights.plannedMonth || 0) - forecastClosing;
-	const ytdMonthLabel =
-		budgetMonthName(reference.budgetReferenceMonth).slice(0, 3) || "Atual";
-	return [
-		{
-			id: "cc-orcado",
-			title: "Orçado no Mês",
-			value: insights.plannedMonth,
+	const basal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.BASAL,
+	);
+	const nonBasal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	);
+	const buildCategoryBudgetCard = (group, fallback) => {
+		const planned = Number(group?.planned || 0);
+		const realized = Number(group?.realized || 0);
+		const available = planned - realized;
+		const percent = planned ? (realized / planned) * 100 : 0;
+		return {
+			id: `cc-${fallback.id}`,
+			title: `Orçamento ${fallback.label}`,
+			value: planned,
 			type: "currency",
-			helper: insights.periodDisplayLabel,
+			helper: `Saldo disponível: ${brl.format(available)} · Realizado + comprometido: ${brl.format(realized)}`,
+			icon: fallback.icon,
+			color: available < 0 ? "amber" : fallback.color,
+			trend: {
+				status: available < 0 ? "negative" : "positive",
+				direction: available < 0 ? "up" : "down",
+				percent,
+			},
+			trendLabel: "consumido",
+		};
+	};
+	return [
+		buildCategoryBudgetCard(basal, {
+			id: "basal",
+			label: "BASAL",
 			icon: "BadgeDollarSign",
 			color: "blue",
-		},
-		{
-			id: "cc-realizado",
-			title: "Realizado + Comprometido",
-			value: realizedCommitted,
-			type: "currency",
-			helper: `${decimal.format(insights.usedPercent || 0)}% vs. ${decimal.format(insights.idealPercent || 0)}% do mês decorrido`,
-			icon: "Wallet",
-			color: "violet",
-		},
-		{
-			id: "cc-saldo",
-			title: "Saldo Disponível Mês",
-			value: insights.availableMonth,
-			type: "currency",
-			helper:
-				Number(insights.availableMonth || 0) < 0
-					? "Orçamento estourado"
-					: "Dentro do orçamento",
-			icon: "CircleDollarSign",
-			color: Number(insights.availableMonth || 0) < 0 ? "amber" : "emerald",
-		},
-		{
-			id: "cc-ytd",
-			title: `Orçamento Jan-${ytdMonthLabel}`,
-			value: budgetYtd,
-			type: "currency",
-			helper: `${brl.format(insights.plannedYear || 0)} total anual`,
+		}),
+		buildCategoryBudgetCard(nonBasal, {
+			id: "nao-basal",
+			label: "NÃO BASAL",
 			icon: "Landmark",
-			color: "slate",
-		},
-		{
-			id: "cc-forecast",
-			title: "Forecast de Fechamento",
-			value: forecastClosing,
-			type: "currency",
-			helper:
-				forecastBalance >= 0
-					? `Sobram ${brl.format(forecastBalance)}`
-					: `Estoura ${brl.format(Math.abs(forecastBalance))}`,
-			icon: "Repeat2",
-			color: forecastBalance < 0 ? "rose" : "emerald",
-			trend: {
-				status: forecastBalance < 0 ? "negative" : "positive",
-				direction: forecastBalance < 0 ? "down" : "up",
-				percent: insights.plannedMonth
-					? Math.abs(forecastBalance / insights.plannedMonth) * 100
-					: 0,
-			},
-			trendLabel: forecastBalance < 0 ? "risco" : "previsto",
-		},
+			color: "violet",
+		}),
 		{
 			id: "cc-alertas",
 			title: "Pendências & Alertas",

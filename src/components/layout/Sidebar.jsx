@@ -319,7 +319,7 @@ const NAV_ITEMS = [
 		],
 	},
 	{
-		label: "Gestão Orçamento - Centros de Custo",
+		label: "Gestão Orçamento - Orçamento",
 		path: ROUTES.FINANCEIRO_ORCAMENTO_CENTROS_CUSTO,
 		icon: Building2,
 		permission: [
@@ -359,6 +359,12 @@ const NAV_ITEMS = [
 			"financeiro.configuracoes.view",
 			"financeiro.configuracoes.manage",
 		],
+	},
+	{
+		label: "Equipe",
+		path: ROUTES.FINANCEIRO_EQUIPE,
+		icon: Users,
+		permission: ["financeiro.equipe.view", "financeiro.equipe.manage"],
 	},
 	{
 		label: "Casos",
@@ -756,6 +762,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.FINANCEIRO_ORCAMENTO_APROVACOES,
 	ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES,
 	ROUTES.FINANCEIRO_CONFIGURACOES,
+	ROUTES.FINANCEIRO_EQUIPE,
 	ROUTES.ATENDIMENTO_CASOS,
 	ROUTES.ATENDIMENTO_TECNICOS,
 	ROUTES.ATENDIMENTO_AVALIACOES,
@@ -847,6 +854,7 @@ const FINANCEIRO_PATHS = [
 	ROUTES.FINANCEIRO_ORCAMENTO_APROVACOES,
 	ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES,
 	ROUTES.FINANCEIRO_CONFIGURACOES,
+	ROUTES.FINANCEIRO_EQUIPE,
 ];
 
 const FINANCEIRO_ORCAMENTO_PATHS = [
@@ -1438,6 +1446,9 @@ function FinanceiroGroupItems({
 	const configItem = group.items.find(
 		(item) => item.path === ROUTES.FINANCEIRO_CONFIGURACOES,
 	);
+	const equipeItem = group.items.find(
+		(item) => item.path === ROUTES.FINANCEIRO_EQUIPE,
+	);
 	const orcamentoActive = orcamentoItems.some((item) =>
 		isMenuPathActive(pathname, item),
 	);
@@ -1562,10 +1573,13 @@ function FinanceiroGroupItems({
 				displayLabel={displayLabel}
 				labelClass={financeLinkLabelClass}
 			/>
-			{configItem ? (
+			{configItem || equipeItem ? (
 				<>
 					{renderSectionTitle("Sistema")}
-					{renderFinanceLink(configItem, "Configurações Gerais")}
+					{equipeItem ? renderFinanceLink(equipeItem, "Equipe") : null}
+					{configItem
+						? renderFinanceLink(configItem, "Configurações Gerais")
+						: null}
 				</>
 			) : null}
 		</>

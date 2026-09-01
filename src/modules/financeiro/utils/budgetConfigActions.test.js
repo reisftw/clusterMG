@@ -28,9 +28,13 @@ describe("budgetConfigActions", () => {
 			config,
 		);
 
-		expect(result.accounts).toEqual([
-			{ id: "new", codigo: "1211", nome: "Energia elétrica" },
-		]);
+		expect(result.accounts[0]).toMatchObject({
+			id: "new",
+			codigo: "1211",
+			nome: "Energia elétrica",
+			categoriaMae: "Ocupação",
+			categoriaClasse: "basal",
+		});
 		expect(result.centers[0].contasFinanceiras).toEqual(["new"]);
 		expect(result.centers[0].contaFinanceiraPadrao).toBe("new");
 	});

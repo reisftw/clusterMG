@@ -56,6 +56,7 @@ import PartnersConfigSection from "./budget/config/PartnersConfigSection";
 import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
+import FinanceiroEquipePage from "./equipe/FinanceiroEquipePage";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
 import TariffsDetailLayout from "./tariffs/TariffsDetailLayout";
 import TariffsDetectedBlocks from "./tariffs/TariffsDetectedBlocks";
@@ -80,6 +81,11 @@ import {
 	paginateBudgetGroups,
 } from "../domain/financialStatement";
 import {
+	BUDGET_CATEGORY_CLASSES,
+	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
+	enrichFinancialAccountWithCategory,
+} from "../utils/budgetAccountCategories";
+import {
 	buscarCentrosCustoOrcamentoFinanceiro,
 	buscarConfigPlanilhasFinanceiro,
 	buscarDadosOrcamentoFinanceiro,
@@ -87,8 +93,6 @@ import {
 	buscarLogsPlanilhasFinanceiro,
 	buscarSerasaReportFinanceiro,
 	buscarTarifasReportFinanceiro,
-	criarDadosFicticiosDreFinanceiro,
-	apagarDadosFicticiosDreFinanceiro,
 	importarDadosOrcamentoFinanceiro,
 	limparDadosOrcamentoFinanceiro,
 	limparSerasaReportFinanceiro,
@@ -239,8 +243,9 @@ const PAGE_META = {
 			"Importe XLSX, confira os campos e alimente a gestão orçamentária.",
 	},
 	orcamentoCentrosCusto: {
-		title: "Centros de Custo",
-		subtitle: "Organize áreas, responsáveis e limites orçamentários.",
+		title: "Orçamento",
+		subtitle:
+			"Organize categorias, contas financeiras, centros de custo e limites orçamentários.",
 	},
 	orcamentoDre: {
 		title: "DRE",
@@ -257,6 +262,10 @@ const PAGE_META = {
 	configuracoes: {
 		title: "Configurações Financeiras",
 		subtitle: "Metas, categorias, alertas e dados demonstrativos.",
+	},
+	equipe: {
+		title: "Equipe",
+		subtitle: "Organograma, cargos e atribuições do time financeiro.",
 	},
 };
 
@@ -5560,6 +5569,8 @@ const EMPTY_FINANCIAL_ACCOUNT = {
 	tipo: "despesa",
 	natureza: "opex",
 	grupo: "",
+	categoriaMae: "",
+	categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
 	dreGroup: "",
 	contaContabil: "",
 	status: "ativo",
@@ -6708,133 +6719,6 @@ function CostCenterAnalyticChildrenModal({
 	);
 }
 
-function FinancialAccountAnalyticChildrenModal({
-	synthetic,
-	category,
-	children = [],
-	onClose,
-	onView,
-	onEdit,
-	canManage,
-}) {
-	const [page, setPage] = useState(1);
-	const pageSize = 10;
-	const totalPages = Math.max(1, Math.ceil(children.length / pageSize));
-	const safePage = Math.min(page, totalPages);
-	const visibleChildren = children.slice(
-		(safePage - 1) * pageSize,
-		safePage * pageSize,
-	);
-
-	return (
-		<ModalShell
-			title={`Analíticas de ${synthetic?.nome || "conta sintética"}`}
-			description={`${synthetic?.codigo || synthetic?.id || "-"} · ${category ? `Categoria: ${category.codigo || category.id} - ${category.nome}` : "Sem categoria informada"}`}
-			onClose={onClose}
-			size="5xl"
-		>
-			<div className="space-y-4">
-				<div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-500">
-					<span className="rounded-full bg-slate-100 px-3 py-1">
-						{integer.format(children.length)} conta(s) analítica(s)
-					</span>
-					<span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-						{synthetic?.naturezaPlano === "C" ? "Receita" : "Despesa"}
-					</span>
-					<span className="rounded-full bg-slate-100 px-3 py-1">
-						Rateio: {synthetic?.rateio || "-"}
-					</span>
-				</div>
-
-				<div className="grid gap-3 md:grid-cols-2">
-					{visibleChildren.map((child) => {
-						const childInactive =
-							String(child.status || "")
-								.toLowerCase()
-								.includes("inativo") ||
-							normalizeImportHeader(child.nome || "").includes("inativo");
-						return (
-							<article
-								key={child.id}
-								className={`rounded-2xl border p-4 shadow-sm ${childInactive ? "border-slate-200 bg-slate-50 opacity-80" : "border-slate-200 bg-white"}`}
-							>
-								<div className="flex items-start justify-between gap-3">
-									<div className="min-w-0">
-										<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
-											{child.codigo || child.id} ·{" "}
-											{child.reduzida || child.classificacao}
-										</p>
-										<h3
-											className="mt-1 truncate text-base font-black text-slate-950"
-											title={child.nome}
-										>
-											{child.nome}
-										</h3>
-										<p className="mt-1 truncate text-xs font-bold text-slate-500">
-											{child.naturezaPlano === "C" ? "Receita" : "Despesa"} ·
-											Nível {child.nivel || "-"} · Rateio {child.rateio || "-"}
-										</p>
-									</div>
-									<span
-										className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${childInactive ? "bg-slate-200 text-slate-600" : "bg-emerald-50 text-emerald-700"}`}
-									>
-										{child.status || "ativo"}
-									</span>
-								</div>
-								<div className="mt-4 flex flex-wrap gap-2">
-									<button
-										type="button"
-										onClick={() => onView(child)}
-										className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 hover:bg-slate-50"
-									>
-										<Eye size={14} /> Ver
-									</button>
-									<button
-										type="button"
-										onClick={() => onEdit(child)}
-										disabled={!canManage}
-										className="inline-flex min-h-9 items-center gap-2 rounded-xl border border-blue-200 px-3 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-									>
-										<Pencil size={14} /> Editar
-									</button>
-								</div>
-							</article>
-						);
-					})}
-				</div>
-
-				{totalPages > 1 ? (
-					<div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
-						<span className="px-2 text-xs font-black text-slate-500">
-							Página {integer.format(safePage)} de {integer.format(totalPages)}
-						</span>
-						<span className="flex gap-2">
-							<button
-								type="button"
-								onClick={() => setPage((value) => Math.max(1, value - 1))}
-								disabled={safePage <= 1}
-								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-							>
-								Anterior
-							</button>
-							<button
-								type="button"
-								onClick={() =>
-									setPage((value) => Math.min(totalPages, value + 1))
-								}
-								disabled={safePage >= totalPages}
-								className="min-h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-							>
-								Próxima
-							</button>
-						</span>
-					</div>
-				) : null}
-			</div>
-		</ModalShell>
-	);
-}
-
 function FinancialAccountViewModal({
 	account,
 	accounts = [],
@@ -7165,6 +7049,17 @@ function FinancialAccountModal({
 			),
 		),
 	];
+	const financialCategoryOptions = FINANCIAL_ACCOUNT_CATEGORY_CATALOG.map(
+		(category) => ({
+			value: `${category.classType}:${category.name}`,
+			name: category.name,
+			classType: category.classType,
+			label: `${category.name} · ${category.classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL ? "NÃO BASAL" : "BASAL"}`,
+		}),
+	).filter(
+		(category, index, all) =>
+			all.findIndex((item) => item.value === category.value) === index,
+	);
 	const matchConfiguredOption = (value, options) => {
 		const normalizedValue = normalizeImportHeader(value);
 		if (!normalizedValue) return "";
@@ -7186,18 +7081,33 @@ function FinancialAccountModal({
 		form.dreGroup,
 		dreGroupOptions,
 	);
+	const resolvedCategory = enrichFinancialAccountWithCategory(form);
+	const selectedFinancialCategoryValue =
+		`${form.categoriaClasse || resolvedCategory.categoriaClasse}:${form.categoriaMae || resolvedCategory.categoriaMae}`;
 
 	const update = (field, value) =>
 		setForm((current) => ({ ...current, [field]: value }));
+	const updateFinancialCategory = (value) => {
+		const [classType, ...nameParts] = String(value || "").split(":");
+		const name = nameParts.join(":");
+		setForm((current) => ({
+			...current,
+			categoriaMae: name,
+			categoriaClasse: classType || BUDGET_CATEGORY_CLASSES.BASAL,
+		}));
+	};
 	const save = () => {
 		if (!String(form.nome || "").trim()) {
 			setMessage("Informe o nome da conta financeira.");
 			return;
 		}
 		setMessage("");
+		const category = enrichFinancialAccountWithCategory(form);
 		onSave({
 			...form,
 			grupo: selectedGroupValue || form.grupo || "",
+			categoriaMae: category.categoriaMae,
+			categoriaClasse: category.categoriaClasse,
 			dreGroup: selectedDreGroupValue || form.dreGroup || "",
 		});
 	};
@@ -7254,25 +7164,6 @@ function FinancialAccountModal({
 						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
 					/>
 				</label>
-				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
-					Conta pai
-					<select
-						value={form.parentId || ""}
-						disabled={!canManage}
-						onChange={(event) => update("parentId", event.target.value)}
-						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-					>
-						<option value="">Raiz / sem conta pai</option>
-						{accounts
-							.filter((item) => item.id !== form.id)
-							.map((item) => (
-								<option key={item.id} value={item.id}>
-									{item.codigo ? `${item.codigo} - ` : ""}
-									{item.nome}
-								</option>
-							))}
-					</select>
-				</label>
 				<label className="text-xs font-black uppercase text-slate-500">
 					Tipo
 					<select
@@ -7326,6 +7217,26 @@ function FinancialAccountModal({
 						{dreGroupOptions.map((group) => (
 							<option key={group} value={group}>
 								{group}
+							</option>
+						))}
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+					Categoria mãe
+					<select
+						value={selectedFinancialCategoryValue}
+						disabled={!canManage}
+						onChange={(event) => updateFinancialCategory(event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option
+							value={`${BUDGET_CATEGORY_CLASSES.BASAL}:Sem categoria`}
+						>
+							Sem categoria · BASAL
+						</option>
+						{financialCategoryOptions.map((category) => (
+							<option key={category.value} value={category.value}>
+								{category.label}
 							</option>
 						))}
 					</select>
@@ -8149,9 +8060,6 @@ function BudgetPartnerViewModal({
 
 function CostCentersConfigSection({
 	canManage,
-	onCreateFakeDreData,
-	onDeleteFakeDreData,
-	dreFakeLoading = false,
 }) {
 	const {
 		config,
@@ -8162,10 +8070,8 @@ function CostCentersConfigSection({
 		feedback,
 		accountModal,
 		accountViewModal,
-		accountChildrenModal,
 		accountSearch,
 		accountStatusFilter,
-		accountPage,
 		companyBranchModal,
 		partnerModal,
 		partnerViewModal,
@@ -8183,10 +8089,8 @@ function CostCentersConfigSection({
 		setFeedback,
 		setAccountModal,
 		setAccountViewModal,
-		setAccountChildrenModal,
 		setAccountSearch,
 		setAccountStatusFilter,
-		setAccountPage,
 		setCompanyBranchModal,
 		setPartnerModal,
 		setPartnerViewModal,
@@ -8308,40 +8212,10 @@ function CostCentersConfigSection({
 				return haystack.includes(normalizedPartnerSearch);
 			})
 		: config.partners || [];
-	const normalizedAccountSearch = normalizeImportHeader(accountSearch);
 	const isAccountInactive = (account) => {
 		const status = String(account?.status || "").toLowerCase();
 		const name = normalizeImportHeader(account?.nome || "");
 		return status.includes("inativo") || name.includes("inativo");
-	};
-	const isAccountStatusVisible = (account) => {
-		const inactive = isAccountInactive(account);
-		if (accountStatusFilter === "ativos") return !inactive;
-		if (accountStatusFilter === "inativos") return inactive;
-		return true;
-	};
-	const accountTextMatches = (account, related = []) => {
-		if (!normalizedAccountSearch) return true;
-		const haystack = normalizeImportHeader(
-			[
-				account?.codigo,
-				account?.reduzida,
-				account?.classificacao,
-				account?.nome,
-				account?.tipoPlano,
-				account?.naturezaPlano,
-				account?.status,
-				...related.flatMap((item) => [
-					item?.codigo,
-					item?.reduzida,
-					item?.classificacao,
-					item?.nome,
-				]),
-			]
-				.filter(Boolean)
-				.join(" "),
-		);
-		return haystack.includes(normalizedAccountSearch);
 	};
 	const sortedAccounts = [...(config.accounts || [])].sort((left, right) => {
 		const leftInactive = isAccountInactive(left) ? 1 : 0;
@@ -8353,112 +8227,6 @@ function CostCentersConfigSection({
 			{ numeric: true },
 		);
 	});
-	const accountByKey = new Map();
-	sortedAccounts.forEach((account) => {
-		if (account.id) accountByKey.set(account.id, account);
-		if (account.codigo)
-			accountByKey.set(String(account.codigo).replace(/\D+/g, ""), account);
-		if (account.reduzida)
-			accountByKey.set(String(account.reduzida).replace(/\D+/g, ""), account);
-	});
-	const accountCategoriesByCode = new Map(
-		sortedAccounts
-			.filter((account) => Number(account.nivel || 0) === 2)
-			.map((account) => [
-				String(account.codigo || account.id).replace(/\D+/g, ""),
-				account,
-			]),
-	);
-	const accountChildrenByParent = new Map();
-	sortedAccounts
-		.filter((account) => account.tipoPlano === "A")
-		.forEach((account) => {
-			const parentKey = String(
-				account.parentId || account.parentCodigo || "",
-			).replace(/\D+/g, "");
-			if (!parentKey) return;
-			const currentChildren = accountChildrenByParent.get(parentKey) || [];
-			currentChildren.push(account);
-			accountChildrenByParent.set(parentKey, currentChildren);
-		});
-	const accountGroups = sortedAccounts
-		.filter(
-			(account) => account.tipoPlano === "S" && Number(account.nivel || 0) > 2,
-		)
-		.map((account) => {
-			const categoryCode = String(account.categoriaCodigo || "").replace(
-				/\D+/g,
-				"",
-			);
-			const category =
-				accountCategoriesByCode.get(categoryCode) ||
-				accountByKey.get(categoryCode);
-			const accountCode = String(account.codigo || account.id || "").replace(
-				/\D+/g,
-				"",
-			);
-			const rawChildren = [
-				...(accountChildrenByParent.get(account.id) || []),
-				...(accountChildrenByParent.get(accountCode) || []),
-			]
-				.filter(
-					(child, index, items) =>
-						items.findIndex((item) => item.id === child.id) === index,
-				)
-				.sort((left, right) => {
-					const leftInactive = isAccountInactive(left) ? 1 : 0;
-					const rightInactive = isAccountInactive(right) ? 1 : 0;
-					if (leftInactive !== rightInactive)
-						return leftInactive - rightInactive;
-					return String(
-						left.classificacao || left.codigo || left.nome,
-					).localeCompare(
-						String(right.classificacao || right.codigo || right.nome),
-						"pt-BR",
-						{ numeric: true },
-					);
-				});
-			const visibleChildrenByStatus = rawChildren.filter(
-				isAccountStatusVisible,
-			);
-			const parentMatches = accountTextMatches(account, [category]);
-			const matchingChildren = visibleChildrenByStatus.filter((child) =>
-				accountTextMatches(child, [account, category]),
-			);
-			const visibleChildren = normalizedAccountSearch
-				? parentMatches
-					? visibleChildrenByStatus
-					: matchingChildren
-				: visibleChildrenByStatus;
-			const groupVisibleByStatus =
-				isAccountStatusVisible(account) || visibleChildren.length > 0;
-			if (!groupVisibleByStatus) return null;
-			if (normalizedAccountSearch && !parentMatches && !visibleChildren.length)
-				return null;
-			return {
-				account,
-				category,
-				children: visibleChildren,
-				totalChildren: rawChildren.length,
-			};
-		})
-		.filter(Boolean);
-	const accountPageSize = 12;
-	const accountTotalPages = Math.max(
-		1,
-		Math.ceil(accountGroups.length / accountPageSize),
-	);
-	const safeAccountPage = Math.min(accountPage, accountTotalPages);
-	const paginatedAccountGroups = accountGroups.slice(
-		(safeAccountPage - 1) * accountPageSize,
-		safeAccountPage * accountPageSize,
-	);
-	const totalSyntheticAccountCount = sortedAccounts.filter(
-		(account) => account.tipoPlano === "S" && Number(account.nivel || 0) > 2,
-	).length;
-	const totalAnalyticAccountCount = sortedAccounts.filter(
-		(account) => account.tipoPlano === "A",
-	).length;
 	const normalizedCenterSearch = normalizeImportHeader(centerSearch);
 	const isCenterInactive = (center) => {
 		const status = String(center?.status || "").toLowerCase();
@@ -8610,14 +8378,6 @@ function CostCentersConfigSection({
 		if (centerPage > centerTotalPages) setCenterPage(centerTotalPages);
 	}, [centerPage, centerTotalPages, setCenterPage]);
 
-	useEffect(() => {
-		setAccountPage(1);
-	}, [accountSearch, accountStatusFilter, setAccountPage]);
-
-	useEffect(() => {
-		if (accountPage > accountTotalPages) setAccountPage(accountTotalPages);
-	}, [accountPage, accountTotalPages, setAccountPage]);
-
 	return (
 		<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 			<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -8674,12 +8434,9 @@ function CostCentersConfigSection({
 				canManage={canManage}
 				centers={config.centers || []}
 				disabled={!canManage || saving}
-				dreFakeLoading={dreFakeLoading}
 				DirectoratesDropdownSection={DirectoratesDropdownSection}
 				ListConfigInput={ListConfigInput}
 				onChangeSettings={updateSettings}
-				onCreateFakeDreData={onCreateFakeDreData}
-				onDeleteFakeDreData={onDeleteFakeDreData}
 				open={parametersOpen}
 				setOpen={setParametersOpen}
 			/>
@@ -8784,26 +8541,17 @@ function CostCentersConfigSection({
 			<FinancialAccountsConfigSection
 				BudgetDropdownSection={BudgetDropdownSection}
 				EMPTY_FINANCIAL_ACCOUNT={EMPTY_FINANCIAL_ACCOUNT}
-				accountCategoriesByCode={accountCategoriesByCode}
-				accountGroups={accountGroups}
 				accountSearch={accountSearch}
 				accountStatusFilter={accountStatusFilter}
-				accountTotalPages={accountTotalPages}
 				canManage={canManage}
 				isAccountInactive={isAccountInactive}
-				paginatedAccountGroups={paginatedAccountGroups}
 				removeAccount={removeAccount}
-				safeAccountPage={safeAccountPage}
 				saving={saving}
-				setAccountChildrenModal={setAccountChildrenModal}
 				setAccountModal={setAccountModal}
-				setAccountPage={setAccountPage}
 				setAccountSearch={setAccountSearch}
 				setAccountStatusFilter={setAccountStatusFilter}
 				setAccountViewModal={setAccountViewModal}
 				sortedAccounts={sortedAccounts}
-				totalAnalyticAccountCount={totalAnalyticAccountCount}
-				totalSyntheticAccountCount={totalSyntheticAccountCount}
 			/>
 
 			<CostCentersTreeConfigSection
@@ -8935,23 +8683,6 @@ function CostCentersConfigSection({
 					companies={config.companies || []}
 					branches={config.branches || []}
 					onClose={() => setAccountViewModal(null)}
-				/>
-			) : null}
-			{accountChildrenModal ? (
-				<FinancialAccountAnalyticChildrenModal
-					synthetic={accountChildrenModal.synthetic}
-					category={accountChildrenModal.category}
-					children={accountChildrenModal.children}
-					canManage={canManage}
-					onClose={() => setAccountChildrenModal(null)}
-					onView={(account) => {
-						setAccountChildrenModal(null);
-						setAccountViewModal({ account });
-					}}
-					onEdit={(account) => {
-						setAccountChildrenModal(null);
-						setAccountModal({ account });
-					}}
 				/>
 			) : null}
 			{companyBranchModal ? (
@@ -9473,47 +9204,6 @@ function OrcamentoConfiguracoesPage({
 }) {
 	const [reportOpen, setReportOpen] = useState(false);
 	const [feedback, setFeedback] = useState(null);
-	const [dreFakeLoading, setDreFakeLoading] = useState(false);
-	const createFakeDreData = async () => {
-		if (!window.confirm("Criar dados fictícios de DRE para teste?")) return;
-		setDreFakeLoading(true);
-		try {
-			await criarDadosFicticiosDreFinanceiro();
-			setFeedback({
-				type: "success",
-				title: "Dados fictícios criados",
-				message: "A DRE de teste foi criada com sucesso.",
-			});
-		} catch (error) {
-			setFeedback({
-				type: "error",
-				title: "Erro ao criar dados fictícios",
-				...getVisibleError(error, "Não foi possível criar a DRE fictícia."),
-			});
-		} finally {
-			setDreFakeLoading(false);
-		}
-	};
-	const deleteFakeDreData = async () => {
-		if (!window.confirm("Apagar somente os dados fictícios de DRE?")) return;
-		setDreFakeLoading(true);
-		try {
-			await apagarDadosFicticiosDreFinanceiro();
-			setFeedback({
-				type: "success",
-				title: "Dados fictícios apagados",
-				message: "Somente os dados fictícios da DRE foram apagados.",
-			});
-		} catch (error) {
-			setFeedback({
-				type: "error",
-				title: "Erro ao apagar dados fictícios",
-				...getVisibleError(error, "Não foi possível apagar a DRE fictícia."),
-			});
-		} finally {
-			setDreFakeLoading(false);
-		}
-	};
 	return (
 		<section className="space-y-5">
 			<section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
@@ -9536,12 +9226,7 @@ function OrcamentoConfiguracoesPage({
 					</button>
 				</div>
 			</section>
-			<CostCentersConfigSection
-				canManage={canManage}
-				dreFakeLoading={dreFakeLoading}
-				onCreateFakeDreData={createFakeDreData}
-				onDeleteFakeDreData={deleteFakeDreData}
-			/>
+			<CostCentersConfigSection canManage={canManage} />
 			<FeedbackModal feedback={feedback} onClose={() => setFeedback(null)} />
 			{reportOpen ? (
 				<BudgetReportExportModal
@@ -11201,6 +10886,7 @@ function FinanceiroPageContent({
 	budgetLoading,
 	budgetPeriodMode,
 	canManage,
+	canManageEquipe,
 	data,
 	exportModalOpen,
 	loading,
@@ -11274,6 +10960,9 @@ function FinanceiroPageContent({
 			{page === "configuracoes" ? (
 				<ConfiguracoesPage canManage={canManage} />
 			) : null}
+			{page === "equipe" ? (
+				<FinanceiroEquipePage canManage={canManageEquipe} />
+			) : null}
 		</>
 	);
 }
@@ -11300,6 +10989,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 	const canManage =
 		hasPermission(currentUser, "financeiro.configuracoes.manage") ||
 		hasPermission(currentUser, "financeiro.gestao_orcamento.manage");
+	const canManageEquipe = hasPermission(currentUser, "financeiro.equipe.manage");
 	const {
 		hideHeaderControls,
 		isBudgetOperationalPage,
@@ -11410,6 +11100,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				budgetLoading={budgetLoading}
 				budgetPeriodMode={budgetPeriodMode}
 				canManage={canManage}
+				canManageEquipe={canManageEquipe}
 				data={data}
 				exportModalOpen={exportModalOpen}
 				loading={loading}

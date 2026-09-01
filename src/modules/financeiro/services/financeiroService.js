@@ -157,3 +157,65 @@ export async function limparTarifasReportFinanceiro() {
 		body: "{}",
 	});
 }
+
+export async function buscarEquipeFinanceiro() {
+	return requestVpsApi(`${BASE_PATH}/equipe`);
+}
+
+export async function criarCargoEquipeFinanceiro(payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/equipe/cargos`, {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function atualizarCargoEquipeFinanceiro(id, payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/equipe/cargos/${encodeURIComponent(id)}`, {
+		method: "PUT",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function removerCargoEquipeFinanceiro(id) {
+	return requestVpsApi(`${BASE_PATH}/equipe/cargos/${encodeURIComponent(id)}`, {
+		method: "DELETE",
+		body: "{}",
+	});
+}
+
+export async function criarColaboradorEquipeFinanceiro(payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/equipe/colaboradores`, {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function atualizarColaboradorEquipeFinanceiro(id, payload = {}) {
+	return requestVpsApi(
+		`${BASE_PATH}/equipe/colaboradores/${encodeURIComponent(id)}`,
+		{
+			method: "PUT",
+			body: JSON.stringify(payload || {}),
+		},
+	);
+}
+
+export async function moverColaboradorEquipeFinanceiro(id, payload = {}) {
+	return requestVpsApi(
+		`${BASE_PATH}/equipe/colaboradores/${encodeURIComponent(id)}/move`,
+		{
+			method: "PATCH",
+			body: JSON.stringify(payload || {}),
+		},
+	);
+}
+
+export async function removerColaboradorEquipeFinanceiro(id) {
+	return requestVpsApi(
+		`${BASE_PATH}/equipe/colaboradores/${encodeURIComponent(id)}`,
+		{
+			method: "DELETE",
+			body: "{}",
+		},
+	);
+}

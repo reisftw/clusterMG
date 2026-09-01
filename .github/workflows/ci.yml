@@ -122,7 +122,7 @@ jobs:
       contents: read
 
     env:
-      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST }}
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.20' }}
       VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.PROD_VPS_DEPLOY_PATH || secrets.VPS_DEPLOY_PATH || '/var/www/retiradas/dist' }}
@@ -221,7 +221,7 @@ jobs:
       contents: read
 
     env:
-      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST || secrets.PROD_VPS_HOST }}
+      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST || secrets.PROD_VPS_HOST || '145.223.27.20' }}
       VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || secrets.PROD_VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || secrets.PROD_VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH || '/var/www/retiradas-homolog/dist' }}

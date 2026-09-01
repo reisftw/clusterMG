@@ -7,7 +7,7 @@ export default function KpiValue({ item, loading = false, compact = false }) {
 
 	return (
 		<p
-			className={`max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-bold leading-none tracking-tight text-slate-950 ${compact ? "mt-1.5 text-[clamp(1rem,1vw,1.25rem)]" : "mt-3 text-[clamp(1.15rem,1.25vw,1.55rem)]"}`}
+			className={`max-w-full break-words font-bold leading-tight text-slate-950 ${compact ? "mt-1.5 text-base lg:text-lg" : "mt-3 text-xl lg:text-2xl"}`}
 		>
 			{formatValue(item.value, item.type)}
 		</p>

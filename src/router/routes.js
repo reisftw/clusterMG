@@ -54,6 +54,7 @@ export const ROUTES = {
 	FINANCEIRO_ORCAMENTO_CONFIGURACOES:
 		"/financeiro/gestao-orcamento/configuracoes",
 	FINANCEIRO_CONFIGURACOES: "/financeiro/configuracoes",
+	FINANCEIRO_EQUIPE: "/financeiro/equipe",
 	ATENDIMENTO_CASOS: "/atendimento/casos",
 	ATENDIMENTO_TECNICOS: "/atendimento/tecnicos",
 	ATENDIMENTO_AVALIACOES: "/atendimento/avaliacoes",

@@ -8,6 +8,9 @@ const { DEFAULT_COST_CENTER_PLAN } = require("./financeiroCostCenterPlan");
 const {
 	DEFAULT_FINANCIAL_ACCOUNT_PLAN,
 } = require("./financeiroFinancialAccountPlan");
+const {
+	enrichFinancialAccountWithCategory,
+} = require("./financeiroAccountCategories");
 
 const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 const SHEET_TYPES = [
@@ -2057,7 +2060,7 @@ function normalizeFinancialAccount(account = {}, index = 0) {
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, "-")
 			.replace(/^-+|-+$/g, "") || `conta-${index + 1}`;
-	return {
+	const normalized = {
 		id,
 		codigo: String(account.codigo || rawId || id).trim(),
 		reduzida: String(
@@ -2108,6 +2111,12 @@ function normalizeFinancialAccount(account = {}, index = 0) {
 		),
 		grupo: String(account.grupo || account.categoria || "").trim(),
 		dreGroup: String(account.dreGroup || account.grupoDre || "").trim(),
+		categoriaMae: String(
+			account.categoriaMae || account.categoryName || "",
+		).trim(),
+		categoriaClasse: String(
+			account.categoriaClasse || account.categoryClass || "",
+		).trim(),
 		contaContabil: String(account.contaContabil || account.glCode || "").trim(),
 		status: String(
 			account.status ||
@@ -2120,6 +2129,7 @@ function normalizeFinancialAccount(account = {}, index = 0) {
 		descricao: String(account.descricao || account.description || "").trim(),
 		atualizadoEm: account.atualizadoEm || nowIso(),
 	};
+	return enrichFinancialAccountWithCategory(normalized);
 }
 
 function normalizeBudgetPartner(partner = {}, index = 0) {
@@ -2727,7 +2737,7 @@ function financialAccountPlanToAccount(planItem = {}) {
 		String(planItem.status || "")
 			.toLowerCase()
 			.includes("inativo");
-	return {
+	return enrichFinancialAccountWithCategory({
 		id: code,
 		codigo: code,
 		reduzida: cleanText(planItem.reducedCode || planItem.code),
@@ -2749,7 +2759,7 @@ function financialAccountPlanToAccount(planItem = {}) {
 		contaContabil: code,
 		status: isInactive ? "inativo" : "ativo",
 		descricao: "Conta importada do Plano Financeiro.",
-	};
+	});
 }
 
 function mergeDefaultFinancialAccountPlan(rawAccounts = []) {
@@ -4193,7 +4203,11 @@ async function getBudgetCostCenters() {
 			return (
 				cleanText(rawAccount.grupo) !== cleanText(account.grupo) ||
 				cleanText(rawAccount.dreGroup) !== cleanText(account.dreGroup) ||
-				cleanText(rawAccount.tipoPlano) !== cleanText(account.tipoPlano)
+				cleanText(rawAccount.tipoPlano) !== cleanText(account.tipoPlano) ||
+				cleanText(rawAccount.categoriaMae) !==
+					cleanText(account.categoriaMae) ||
+				cleanText(rawAccount.categoriaClasse) !==
+					cleanText(account.categoriaClasse)
 			);
 		});
 	if (needsFinancialPlanRefresh) {

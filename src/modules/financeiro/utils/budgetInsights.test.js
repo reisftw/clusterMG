@@ -104,13 +104,24 @@ describe("budgetInsights", () => {
 			realized: 1200,
 			percent: 120,
 		});
+		expect(insights.budgetCategoryGroups[0]).toMatchObject({
+			id: "basal",
+			label: "BASAL",
+			planned: 1000,
+			realized: 1200,
+		});
+		expect(insights.budgetCategoryGroups[0].categories[0]).toMatchObject({
+			name: "Ocupação",
+			planned: 1000,
+			realized: 1200,
+		});
 		expect(insights.supplierSummary.map((item) => item.supplier)).toEqual([
 			"CEMIG",
 			"Fornecedor B",
 		]);
 	});
 
-	it("builds operational KPI cards and current-month forecast without mutating input", () => {
+	it("builds operational KPI cards and category budget cards without mutating input", () => {
 		vi.setSystemTime(new Date("2026-08-15T12:00:00"));
 		const insights = getBudgetInsights(config, {
 			mode: "month",
@@ -131,8 +142,28 @@ describe("budgetInsights", () => {
 			"saldo",
 			"aprovacoes",
 			"ano",
+			"basal",
+			"nao-basal",
 		]);
-		expect(cards.find((item) => item.id === "cc-forecast").value).toBeCloseTo(2480);
+		expect(cards.map((item) => item.id)).toEqual([
+			"cc-basal",
+			"cc-nao-basal",
+			"cc-alertas",
+		]);
+		expect(cards.find((item) => item.id === "cc-basal")).toMatchObject({
+			title: "Orçamento BASAL",
+			value: 1000,
+		});
+		expect(cards.find((item) => item.id === "cc-basal")?.helper).toContain(
+			"Saldo disponível:",
+		);
+		expect(cards.find((item) => item.id === "cc-basal")?.helper).toContain(
+			"Realizado + comprometido:",
+		);
+		expect(cards.find((item) => item.id === "cc-nao-basal")).toMatchObject({
+			title: "Orçamento NÃO BASAL",
+			value: 0,
+		});
 		vi.useRealTimers();
 	});
 
