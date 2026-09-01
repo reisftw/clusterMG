@@ -12,8 +12,14 @@ function emitAgendamentoUpsert(id, data) {
 	});
 }
 
-export const buscarAgendamentosDominio = async ({ max = 10000 } = {}) => {
+export const buscarAgendamentosDominio = async ({
+	max = 10000,
+	startDate = "",
+	endDate = "",
+} = {}) => {
 	const params = new URLSearchParams({ max: String(max) });
+	if (startDate) params.set("startDate", startDate);
+	if (endDate) params.set("endDate", endDate);
 	const response = await requestVpsApi(`/agendamentos?${params.toString()}`);
 	return response.items || [];
 };

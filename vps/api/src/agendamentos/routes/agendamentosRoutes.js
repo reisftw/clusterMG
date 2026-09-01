@@ -47,7 +47,12 @@ function createAgendamentosRouter({
 		try {
 			const max = toPositiveInt(req.query.max, 10000);
 			const items = await listAll(
-				(options) => agendamentosRepository.listAppointments(options),
+				(options) =>
+					agendamentosRepository.listAppointments({
+						...options,
+						startDate: req.query.startDate,
+						endDate: req.query.endDate,
+					}),
 				{ max },
 			);
 			res.json({ items });

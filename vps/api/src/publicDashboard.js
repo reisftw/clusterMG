@@ -6,6 +6,7 @@ const {
 } = require("./operationalMatchSnapshot");
 
 const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 10_000;
+const DEFAULT_MATCH_REBUILD_IDLE_MS = 120_000;
 
 const publicDashboardCache = {
 	data: null,
@@ -84,6 +85,12 @@ function getPublicDashboardCacheTtlMs() {
 	return Math.max(0, Math.min(configuredTtl, 60_000));
 }
 
+function getMatchRebuildIdleMs() {
+	const configured = Number(process.env.PUBLIC_MATCH_REBUILD_IDLE_MS);
+	if (!Number.isFinite(configured)) return DEFAULT_MATCH_REBUILD_IDLE_MS;
+	return Math.max(0, Math.min(configured, 10 * 60_000));
+}
+
 function invalidatePublicDashboardCache() {
 	publicDashboardCache.data = null;
 	publicDashboardCache.cachedAt = 0;
@@ -113,18 +120,31 @@ function normalizeOrderSource(order = {}) {
 	return "sempre";
 }
 
-async function resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw) {
+async function resolveMatchSnapshots(
+	matchOSRaw,
+	agentesMatchOSRaw,
+	{ allowRebuild = false } = {},
+) {
+	if (!allowRebuild) {
+		return { matchOS: matchOSRaw, agentesMatchOS: agentesMatchOSRaw };
+	}
+
 	const matchCollection =
 		ordensRepository.COLLECTIONS?.match || "match_os_abertas";
 	const latestUpdatedAt = await ordensRepository.getCollectionLatestUpdatedAt(
 		matchCollection,
 	);
 	const latestTime = toTime(latestUpdatedAt);
+	const idleMs = Date.now() - latestTime;
 	const currentSnapshotTime = Math.max(
 		getSnapshotMetaTime(matchOSRaw),
 		getSnapshotMetaTime(agentesMatchOSRaw),
 	);
-	if (!latestTime || currentSnapshotTime >= latestTime) {
+	if (
+		!latestTime ||
+		currentSnapshotTime >= latestTime ||
+		idleMs < getMatchRebuildIdleMs()
+	) {
 		return { matchOS: matchOSRaw, agentesMatchOS: agentesMatchOSRaw };
 	}
 
@@ -414,7 +434,7 @@ async function buildRhDomain() {
 	};
 }
 
-async function buildOperationalDomain() {
+async function buildOperationalDomain({ repairMatch = false } = {}) {
 	const [mapaRaw, matchOSRaw, agentesMatchOSRaw] = await Promise.all([
 		getDocumentData("public_dashboard/mapa_os"),
 		getDocumentData("public_dashboard/match_os"),
@@ -423,6 +443,7 @@ async function buildOperationalDomain() {
 	const { matchOS, agentesMatchOS } = await resolveMatchSnapshots(
 		matchOSRaw,
 		agentesMatchOSRaw,
+		{ allowRebuild: repairMatch },
 	);
 
 	return {
@@ -454,7 +475,9 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 	]);
 	const mapa = mapaRaw;
 	const { matchOS: matchOSFull, agentesMatchOS: agentesMatchOSFull } =
-		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw);
+		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw, {
+			allowRebuild: matchDetail,
+		});
 	const matchOS = matchDetail ? matchOSFull : compactMatchSlice(matchOSFull);
 	const agentesMatchOS = matchDetail
 		? agentesMatchOSFull
@@ -543,7 +566,7 @@ async function buildSnapshotDomain(domain, { compact = false } = {}) {
 		return compact ? compactSnapshotDomain(domain, snapshot) : snapshot;
 	}
 	if (domain === "operacional") {
-		const snapshot = await buildOperationalDomain();
+		const snapshot = await buildOperationalDomain({ repairMatch: !compact });
 		return compact ? compactSnapshotDomain(domain, snapshot) : snapshot;
 	}
 	if (domain === "financeiro") {

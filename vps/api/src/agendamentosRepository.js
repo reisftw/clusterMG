@@ -732,20 +732,66 @@ function dataListFromDocuments(documents = []) {
 	return documents.map(dataFromDocument).filter(Boolean);
 }
 
-async function listAppointmentDocuments({ limit = 1000, offset = 0 } = {}) {
-	return listDocuments({
-		collectionPath: COLLECTIONS.appointments,
-		limit,
-		offset,
-	});
+function normalizedDateFilter(value) {
+	const normalized = dateValue(value);
+	return normalized && /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+		? normalized
+		: "";
+}
+
+async function listAppointmentDocuments({
+	limit = 1000,
+	offset = 0,
+	startDate = "",
+	endDate = "",
+} = {}) {
+	const start = normalizedDateFilter(startDate);
+	const end = normalizedDateFilter(endDate);
+	if (!start && !end) {
+		return listDocuments({
+			collectionPath: COLLECTIONS.appointments,
+			limit,
+			offset,
+		});
+	}
+
+	const where = [];
+	const params = [];
+	if (start) {
+		params.push(start);
+		where.push(`data >= $${params.length}`);
+	}
+	if (end) {
+		params.push(end);
+		where.push(`data <= $${params.length}`);
+	}
+	params.push(normalizeLimit(limit), normalizeOffset(offset));
+	const limitParam = params.length - 1;
+	const offsetParam = params.length;
+	const config = CONFIG[COLLECTIONS.appointments];
+	const result = await db.query(
+		`select * from ${config.table}
+		 where ${where.join(" and ")}
+		 order by ${config.orderBy}
+		 limit $${limitParam} offset $${offsetParam}`,
+		params,
+	);
+	return result.rows.map(config.mapper);
 }
 
 async function listAllAppointmentDocuments() {
 	return listAllDocuments(COLLECTIONS.appointments);
 }
 
-async function listAppointments({ limit = 1000, offset = 0 } = {}) {
-	return dataListFromDocuments(await listAppointmentDocuments({ limit, offset }));
+async function listAppointments({
+	limit = 1000,
+	offset = 0,
+	startDate = "",
+	endDate = "",
+} = {}) {
+	return dataListFromDocuments(
+		await listAppointmentDocuments({ limit, offset, startDate, endDate }),
+	);
 }
 
 async function listAllAppointments() {

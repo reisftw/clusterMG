@@ -75,6 +75,44 @@ describe("agendamentosRepository", () => {
 		expect(dbQuery.mock.calls[0][0]).toContain("from agendamentos");
 	});
 
+	it("lista agendamentos filtrando por intervalo de data", async () => {
+		const dbQuery = vi.fn(async () => ({
+			rows: [
+				{
+					id: "pk-jan",
+					document_id_original: "ag-jan",
+					legacy_path: "agendamentos/ag-jan",
+					legacy_document_id: "ag-jan",
+					cliente_nome: "Cliente Janeiro",
+					data: new Date("2026-01-15T00:00:00.000Z"),
+					source_payload: {},
+				},
+			],
+		}));
+		const repository = loadRepository(dbQuery);
+
+		const rows = await repository.listAppointments({
+			limit: 20,
+			offset: 0,
+			startDate: "2026-01-01",
+			endDate: "2026-01-31",
+		});
+
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({
+			id: "ag-jan",
+			cliente_nome: "Cliente Janeiro",
+			data: "2026-01-15",
+		});
+		expect(dbQuery.mock.calls[0][0]).toContain("where data >= $1 and data <= $2");
+		expect(dbQuery.mock.calls[0][1]).toEqual([
+			"2026-01-01",
+			"2026-01-31",
+			20,
+			0,
+		]);
+	});
+
 	it("grava agendamento na tabela normalizada e retorna o registro salvo", async () => {
 		const dbQuery = vi
 			.fn()

@@ -31,7 +31,7 @@ import { invalidateCache } from "../../services/dataCache";
 import { invalidateInternalStaticDataCache } from "../../services/internalStaticDataService";
 import { subscribeRealtimeTopics } from "../../services/realtimeEvents";
 import { getVpsDocument } from "../../services/vpsApiClient";
-import { obterMesAtual } from "../../utils/mes";
+import { obterIndiceMes, obterMesAtual } from "../../utils/mes";
 import {
 	buildMetaDiariaSchedule,
 	buildMonthProjection,
@@ -340,6 +340,17 @@ function monthDateRangeFor(date = new Date()) {
 	};
 }
 
+function monthDateRangeForName(monthName, baseDate = new Date()) {
+	const monthIndex = obterIndiceMes(monthName);
+	if (monthIndex < 0) return monthDateRangeFor(baseDate);
+	const start = new Date(baseDate.getFullYear(), monthIndex, 1);
+	const end = new Date(baseDate.getFullYear(), monthIndex + 1, 0);
+	return {
+		start: localDateKey(start),
+		end: localDateKey(end),
+	};
+}
+
 function countRealtimeBy(items, getKey, fallback = "Nao informado", limit = 8) {
 	const totals = new Map();
 	(Array.isArray(items) ? items : []).forEach((item) => {
@@ -393,17 +404,21 @@ function buildRealtimeAttendantRanking(items = [], limit = 8) {
 		.slice(0, limit);
 }
 
-function useRealtimeAcompanhamento(now, onLiveUpdate) {
+function useRealtimeAcompanhamento(now, currentMonth, onLiveUpdate) {
 	const [monthlyAppointments, setMonthlyAppointments] = useState(null);
 	const [upcomingAppointments, setUpcomingAppointments] = useState(null);
-	const monthRange = monthDateRangeFor(now);
+	const monthRange = monthDateRangeForName(currentMonth, now);
 	const today = localDateKey(now);
 	const next7 = addDaysDateKey(7, now);
 
 	useEffect(() => {
 		let active = true;
 		const load = async () => {
-			const items = await buscarAgendamentosDominio();
+			const items = await buscarAgendamentosDominio({
+				max: 5000,
+				startDate: monthRange.start,
+				endDate: monthRange.end,
+			});
 			if (!active) return;
 			setMonthlyAppointments(
 				items
@@ -436,7 +451,11 @@ function useRealtimeAcompanhamento(now, onLiveUpdate) {
 	useEffect(() => {
 		let active = true;
 		const load = async () => {
-			const items = await buscarAgendamentosDominio();
+			const items = await buscarAgendamentosDominio({
+				max: 2000,
+				startDate: today,
+				endDate: next7,
+			});
 			if (!active) return;
 			setUpcomingAppointments(
 				items
@@ -2724,6 +2743,7 @@ export default function AcompanhamentoPage() {
 
 	const realtimeAcompanhamento = useRealtimeAcompanhamento(
 		now,
+		currentMonth,
 		markLiveRefresh,
 	);
 

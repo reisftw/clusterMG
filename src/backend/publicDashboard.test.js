@@ -33,6 +33,7 @@ function loadPublicDashboard({ dbQuery, ordensRepository }) {
 describe("publicDashboard", () => {
 	afterEach(() => {
 		clearModules();
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
@@ -215,5 +216,51 @@ describe("publicDashboard", () => {
 		expect(ordensRepository.listAllDocuments).toHaveBeenCalledWith(
 			"match_os_abertas",
 		);
+	});
+
+	it("nao reconstroi match enquanto a tabela normalizada ainda esta recebendo importacao", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-08-31T18:00:30.000Z"));
+		const dbQuery = vi.fn(async () => ({ rows: [] }));
+		const ordensRepository = {
+			COLLECTIONS: { match: "match_os_abertas" },
+			isOrdersCollection: vi.fn((collectionPath) =>
+				["match_os_abertas", "public_dashboard"].includes(collectionPath),
+			),
+			getDocument: vi.fn(async (documentPath) => {
+				if (documentPath === "public_dashboard/match_os") {
+					return {
+						data: {
+							data: { resumo: { totalMatches: 99 } },
+							meta: { data: "2026-08-28T12:34:17.649Z" },
+						},
+					};
+				}
+				if (documentPath === "public_dashboard/agentes_match_os") {
+					return {
+						data: {
+							data: { resumo: { totalMatches: 7 } },
+							meta: { data: "2026-08-28T12:34:17.649Z" },
+						},
+					};
+				}
+				return null;
+			}),
+			getCollectionLatestUpdatedAt: vi.fn(async () =>
+				new Date("2026-08-31T18:00:00.000Z"),
+			),
+			listAllDocuments: vi.fn(async () => {
+				throw new Error("nao deve reconstruir durante importacao ativa");
+			}),
+		};
+		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
+
+		const payload = await publicDashboard.buildPublicDashboard({
+			matchDetail: true,
+		});
+
+		expect(payload.matchOS.data.resumo.totalMatches).toBe(99);
+		expect(payload.agentesMatchOS.data.resumo.totalMatches).toBe(7);
+		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalled();
 	});
 });
