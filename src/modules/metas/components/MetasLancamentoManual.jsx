@@ -1,4 +1,4 @@
-import { Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { listarRegionaisAdmin } from "../../auth/services/authService";
@@ -285,10 +285,12 @@ function SectionEditor({
 	nameOptions = [],
 	allowCustomName = true,
 	showGoalFields = false,
+	goalPercent = 80,
 	showSourceScope = false,
 	allowAdd = true,
 	allowRemove = true,
 }) {
+	const [open, setOpen] = useState(false);
 	const [editingRowId, setEditingRowId] = useState(null);
 	const editingRow = rows.find((row) => row.id === editingRowId) || null;
 	const updateRow = (id, patch) => {
@@ -329,15 +331,34 @@ function SectionEditor({
 			total: daily.reduce((sum, item) => sum + Number(item || 0), 0),
 		});
 	};
+	const getRowGoal = (row = {}) =>
+		Math.round(Number(row.cancelamentos || 0) * (Number(goalPercent || 0) / 100));
 
 	return (
 		<section className="rounded-2xl border border-gray-100 bg-white p-4">
 			<div className="flex flex-wrap items-start justify-between gap-3">
-				<div>
+				<button
+					type="button"
+					onClick={() => setOpen((current) => !current)}
+					className="min-w-0 flex-1 text-left"
+					aria-expanded={open}
+				>
 					<h3 className="text-sm font-black text-gray-900">{title}</h3>
 					<p className="mt-1 text-xs text-gray-500">{description}</p>
+					<p className="mt-2 text-xs font-bold text-blue-600">
+						{open ? "Ocultar lançamentos" : "Abrir lançamentos"}
+					</p>
+				</button>
+				<div className="flex items-center gap-2">
+					<span className="rounded-xl bg-gray-50 px-3 py-2 text-xs font-black text-gray-600">
+						{rows.length} cards
+					</span>
+					<ChevronDown
+						size={18}
+						className={`text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+					/>
 				</div>
-				{allowAdd ? (
+				{allowAdd && open ? (
 					<button
 						type="button"
 						onClick={addRow}
@@ -349,6 +370,7 @@ function SectionEditor({
 				) : null}
 			</div>
 
+			{open ? (
 			<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 				{rows.map((row, index) => (
 					<div
@@ -399,14 +421,15 @@ function SectionEditor({
 						{showGoalFields ? (
 							<div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold text-gray-500">
 								<span>Cancel.: {formatNumber(row.cancelamentos)}</span>
-								<span>Meta: {formatNumber(row.meta)}</span>
+								<span>Meta: {formatNumber(getRowGoal(row))}</span>
 							</div>
 						) : null}
 					</div>
 				))}
 			</div>
+			) : null}
 
-			{editingRow ? (
+			{open && editingRow ? (
 				<ModalShell
 					open
 					title={editingRow.name || title}
@@ -514,21 +537,14 @@ function SectionEditor({
 										placeholder="0"
 									/>
 								</label>
-								<label className="space-y-1">
-									<span className="text-[11px] font-bold uppercase text-gray-400">
-										Meta da cidade
+								<div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+									<span className="text-[11px] font-bold uppercase text-blue-600">
+										Meta calculada ({formatNumber(goalPercent)}%)
 									</span>
-									<input
-										type="number"
-										min="0"
-										value={editingRow.meta}
-										onChange={(event) =>
-											updateRow(editingRow.id, { meta: event.target.value })
-										}
-										className="input-field"
-										placeholder="Calcula 80% se vazio"
-									/>
-								</label>
+									<p className="mt-1 text-2xl font-black text-blue-700">
+										{formatNumber(getRowGoal(editingRow))}
+									</p>
+								</div>
 							</div>
 						) : null}
 					</div>
@@ -584,6 +600,7 @@ export default function MetasLancamentoManual({
 	const [loadingOptions, setLoadingOptions] = useState(false);
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
+	const [publishResult, setPublishResult] = useState(null);
 	const dayCount = getDaysInMetaMonth(month, year);
 	const normalizedConfig = useMemo(
 		() => normalizeMetasBaseConfig(metasBaseConfig),
@@ -613,14 +630,16 @@ export default function MetasLancamentoManual({
 	const regionaisOnnet = regionais.filter((row) =>
 		[MANUAL_META_SOURCES.ONNET, "ambos"].includes(row.sourceScope),
 	);
-	const totalPreview =
+	const totalSemprePreview =
 		sumRows(tecnicosSempre, dayCount) +
-		sumRows(tecnicosOnnet, dayCount) +
 		sumRows(regionaisSempre, dayCount) +
-		sumRows(regionaisOnnet, dayCount) +
 		sumRows(agentes, dayCount) +
-		sumRows(lojaSempre, dayCount) +
+		sumRows(lojaSempre, dayCount);
+	const totalOnnetPreview =
+		sumRows(tecnicosOnnet, dayCount) +
+		sumRows(regionaisOnnet, dayCount) +
 		sumRows(lojaOnnet, dayCount);
+	const totalPreview = totalSemprePreview + totalOnnetPreview;
 
 	const loadOptions = useCallback(async (force = false) => {
 		setLoadingOptions(true);
@@ -663,6 +682,7 @@ export default function MetasLancamentoManual({
 		event.preventDefault();
 		setMessage("");
 		setError("");
+		setPublishResult(null);
 		try {
 			await onSave({
 				mes: month,
@@ -692,13 +712,28 @@ export default function MetasLancamentoManual({
 					},
 				],
 			});
-			setMessage("Lançamento publicado no /acompanhamento, /painel e AA.");
+			const successMessage =
+				"Lançamento publicado no /acompanhamento, /painel e AA.";
+			setMessage(successMessage);
+			setPublishResult({
+				type: "success",
+				title: "Lançamento concluído",
+				message: successMessage,
+			});
 		} catch (err) {
-			setError(err?.message || "Não foi possível lançar as metas.");
+			const errorMessage =
+				err?.message || "Não foi possível lançar as metas.";
+			setError(errorMessage);
+			setPublishResult({
+				type: "error",
+				title: "Falha ao lançar",
+				message: errorMessage,
+			});
 		}
 	};
 
 	return (
+		<>
 		<form className="space-y-4" onSubmit={handleSubmit}>
 			<section className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
 				<div className="flex flex-wrap items-start justify-between gap-4">
@@ -772,13 +807,36 @@ export default function MetasLancamentoManual({
 							{formatNumber(metaCalculadaOnnet)}
 						</p>
 					</div>
-					<div className="rounded-xl bg-white p-3">
+					<div className="rounded-xl bg-white p-3 xl:col-span-2">
 						<p className="text-xs font-bold text-gray-500">
-							Total lançado nesta fonte
+							Total lançado
 						</p>
-						<p className="mt-1 text-2xl font-black text-emerald-700">
-							{formatNumber(totalPreview)}
-						</p>
+						<div className="mt-2 grid grid-cols-3 gap-2">
+							<div>
+								<p className="text-[10px] font-black uppercase text-gray-400">
+									Sempre
+								</p>
+								<p className="text-lg font-black text-blue-700">
+									{formatNumber(totalSemprePreview)}
+								</p>
+							</div>
+							<div>
+								<p className="text-[10px] font-black uppercase text-gray-400">
+									Onnet
+								</p>
+								<p className="text-lg font-black text-sky-700">
+									{formatNumber(totalOnnetPreview)}
+								</p>
+							</div>
+							<div>
+								<p className="text-[10px] font-black uppercase text-gray-400">
+									Todos
+								</p>
+								<p className="text-lg font-black text-emerald-700">
+									{formatNumber(totalPreview)}
+								</p>
+							</div>
+						</div>
 					</div>
 				</div>
 				<div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-gray-600">
@@ -833,6 +891,7 @@ export default function MetasLancamentoManual({
 				nameOptions={agenteOptions}
 				allowCustomName={false}
 				showGoalFields
+				goalPercent={metaPercentSempre}
 			/>
 
 			<SectionEditor
@@ -898,5 +957,68 @@ export default function MetasLancamentoManual({
 				) : null}
 			</div>
 		</form>
+		{publishResult ? (
+			<ModalShell
+				open
+				title={publishResult.title}
+				description={`${month} / ${year}`}
+				onClose={() => setPublishResult(null)}
+				size="lg"
+				footer={
+					<div className="flex justify-end">
+						<button
+							type="button"
+							onClick={() => setPublishResult(null)}
+							className={`inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-black text-white ${
+								publishResult.type === "success"
+									? "bg-emerald-600 hover:bg-emerald-700"
+									: "bg-red-600 hover:bg-red-700"
+							}`}
+						>
+							Entendi
+						</button>
+					</div>
+				}
+			>
+				<div
+					className={`rounded-2xl border px-4 py-4 ${
+						publishResult.type === "success"
+							? "border-emerald-100 bg-emerald-50 text-emerald-800"
+							: "border-red-100 bg-red-50 text-red-800"
+					}`}
+				>
+					<p className="text-sm font-bold">{publishResult.message}</p>
+					{publishResult.type === "success" ? (
+						<div className="mt-4 grid grid-cols-3 gap-3 text-center">
+							<div className="rounded-xl bg-white px-3 py-2">
+								<p className="text-[10px] font-black uppercase text-gray-400">
+									Sempre
+								</p>
+								<p className="text-xl font-black text-blue-700">
+									{formatNumber(totalSemprePreview)}
+								</p>
+							</div>
+							<div className="rounded-xl bg-white px-3 py-2">
+								<p className="text-[10px] font-black uppercase text-gray-400">
+									Onnet
+								</p>
+								<p className="text-xl font-black text-sky-700">
+									{formatNumber(totalOnnetPreview)}
+								</p>
+							</div>
+							<div className="rounded-xl bg-white px-3 py-2">
+								<p className="text-[10px] font-black uppercase text-gray-400">
+									Todos
+								</p>
+								<p className="text-xl font-black text-emerald-700">
+									{formatNumber(totalPreview)}
+								</p>
+							</div>
+						</div>
+					) : null}
+				</div>
+			</ModalShell>
+		) : null}
+		</>
 	);
 }

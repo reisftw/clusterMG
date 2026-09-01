@@ -88,7 +88,7 @@ function buildPerformanceItems(rows = [], dayCount = 31) {
 		.sort((a, b) => b.total - a.total);
 }
 
-function buildAgentCities(rows = [], dayCount = 31) {
+function buildAgentCities(rows = [], dayCount = 31, metaPercent = 80) {
 	return (Array.isArray(rows) ? rows : [])
 		.map((row) => {
 			const cidade = compactName(row?.cidade || row?.name || row?.nome);
@@ -100,7 +100,9 @@ function buildAgentCities(rows = [], dayCount = 31) {
 			const totalFromDaily = daily.reduce((sum, value) => sum + value, 0);
 			const total = totalFromDaily || toNumber(row?.total);
 			const cancelamentos = toNumber(row?.cancelamentos);
-			const meta = toNumber(row?.meta) || Math.round(cancelamentos * 0.8);
+			const meta = Math.round(
+				cancelamentos * (Number(metaPercent || 0) / 100),
+			);
 			const pct = meta > 0 ? Number(((total / meta) * 100).toFixed(1)) : 0;
 
 			return { cidade, total, cancelamentos, meta, pct, daily };
@@ -190,7 +192,7 @@ export function buildManualMetasRecord({
 	const meta = Math.round(toNumber(cancelamentos) * (Number(metaSazonal) / 100));
 	const technicians = buildPerformanceItems(tecnicos, dayCount);
 	const regionalItems = buildPerformanceItems(regionais, dayCount);
-	const agentCities = buildAgentCities(agentes, dayCount);
+	const agentCities = buildAgentCities(agentes, dayCount, metaSazonal);
 	const agentStoreCities = buildAgentStoreCities(agentesLoja, dayCount);
 	const store = buildStoreItem(loja, dayCount);
 	const technicianDaily = sumDaily(technicians, dayCount);
