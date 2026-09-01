@@ -29,6 +29,7 @@ import MetasExportPDF from "./MetasExportPDF";
 import MetasLancamentoManual from "./MetasLancamentoManual";
 import MetasMultas from "./MetasMultas";
 import MetasPerformance from "./MetasPerformance";
+import MetasReportsCentral from "./MetasReportsCentral";
 import MetasResumoMensal from "./MetasResumoMensal";
 import MetasSaldoDiario from "./MetasSaldoDiario";
 import MetasUpload from "./MetasUpload";
@@ -870,6 +871,11 @@ const MetasPage = () => {
 					{podeGerenciar && (
 						<MetasUpload onUpload={processarPlanilha} uploading={uploading} />
 					)}
+					<MetasReportsCentral
+						allData={allData}
+						agentesData={agentesData}
+						currentMonth={mesSelecionado}
+					/>
 					<MetasExportButton dadosMes={dadosMesFonte || {}} />
 					<MetasExportPDF
 						allData={allDataFonte}
