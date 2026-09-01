@@ -319,7 +319,7 @@ const NAV_ITEMS = [
 		],
 	},
 	{
-		label: "Gestão Orçamento - Centros de Custo",
+		label: "Gestão Orçamento - Orçamento",
 		path: ROUTES.FINANCEIRO_ORCAMENTO_CENTROS_CUSTO,
 		icon: Building2,
 		permission: [

@@ -81,6 +81,11 @@ import {
 	paginateBudgetGroups,
 } from "../domain/financialStatement";
 import {
+	BUDGET_CATEGORY_CLASSES,
+	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
+	enrichFinancialAccountWithCategory,
+} from "../utils/budgetAccountCategories";
+import {
 	buscarCentrosCustoOrcamentoFinanceiro,
 	buscarConfigPlanilhasFinanceiro,
 	buscarDadosOrcamentoFinanceiro,
@@ -240,8 +245,9 @@ const PAGE_META = {
 			"Importe XLSX, confira os campos e alimente a gestão orçamentária.",
 	},
 	orcamentoCentrosCusto: {
-		title: "Centros de Custo",
-		subtitle: "Organize áreas, responsáveis e limites orçamentários.",
+		title: "Orçamento",
+		subtitle:
+			"Organize categorias, contas financeiras, centros de custo e limites orçamentários.",
 	},
 	orcamentoDre: {
 		title: "DRE",
@@ -5565,6 +5571,8 @@ const EMPTY_FINANCIAL_ACCOUNT = {
 	tipo: "despesa",
 	natureza: "opex",
 	grupo: "",
+	categoriaMae: "",
+	categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
 	dreGroup: "",
 	contaContabil: "",
 	status: "ativo",
@@ -7170,6 +7178,17 @@ function FinancialAccountModal({
 			),
 		),
 	];
+	const financialCategoryOptions = FINANCIAL_ACCOUNT_CATEGORY_CATALOG.map(
+		(category) => ({
+			value: `${category.classType}:${category.name}`,
+			name: category.name,
+			classType: category.classType,
+			label: `${category.name} · ${category.classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL ? "NÃO BASAL" : "BASAL"}`,
+		}),
+	).filter(
+		(category, index, all) =>
+			all.findIndex((item) => item.value === category.value) === index,
+	);
 	const matchConfiguredOption = (value, options) => {
 		const normalizedValue = normalizeImportHeader(value);
 		if (!normalizedValue) return "";
@@ -7191,18 +7210,33 @@ function FinancialAccountModal({
 		form.dreGroup,
 		dreGroupOptions,
 	);
+	const resolvedCategory = enrichFinancialAccountWithCategory(form);
+	const selectedFinancialCategoryValue =
+		`${form.categoriaClasse || resolvedCategory.categoriaClasse}:${form.categoriaMae || resolvedCategory.categoriaMae}`;
 
 	const update = (field, value) =>
 		setForm((current) => ({ ...current, [field]: value }));
+	const updateFinancialCategory = (value) => {
+		const [classType, ...nameParts] = String(value || "").split(":");
+		const name = nameParts.join(":");
+		setForm((current) => ({
+			...current,
+			categoriaMae: name,
+			categoriaClasse: classType || BUDGET_CATEGORY_CLASSES.BASAL,
+		}));
+	};
 	const save = () => {
 		if (!String(form.nome || "").trim()) {
 			setMessage("Informe o nome da conta financeira.");
 			return;
 		}
 		setMessage("");
+		const category = enrichFinancialAccountWithCategory(form);
 		onSave({
 			...form,
 			grupo: selectedGroupValue || form.grupo || "",
+			categoriaMae: category.categoriaMae,
+			categoriaClasse: category.categoriaClasse,
 			dreGroup: selectedDreGroupValue || form.dreGroup || "",
 		});
 	};
@@ -7331,6 +7365,26 @@ function FinancialAccountModal({
 						{dreGroupOptions.map((group) => (
 							<option key={group} value={group}>
 								{group}
+							</option>
+						))}
+					</select>
+				</label>
+				<label className="text-xs font-black uppercase text-slate-500 md:col-span-2">
+					Categoria mãe
+					<select
+						value={selectedFinancialCategoryValue}
+						disabled={!canManage}
+						onChange={(event) => updateFinancialCategory(event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+					>
+						<option
+							value={`${BUDGET_CATEGORY_CLASSES.BASAL}:Sem categoria`}
+						>
+							Sem categoria · BASAL
+						</option>
+						{financialCategoryOptions.map((category) => (
+							<option key={category.value} value={category.value}>
+								{category.label}
 							</option>
 						))}
 					</select>

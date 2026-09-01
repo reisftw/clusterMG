@@ -3,6 +3,99 @@ import { Bar, Doughnut, Line } from "react-chartjs-2";
 import ModalShell from "../../../../components/ui/ModalShell";
 import FinancialKpiCard from "../kpi/FinancialKpiCard";
 
+function BudgetCategoryClassPanel({
+	group,
+	brl,
+	decimal,
+	budgetAccountLabel,
+	budgetCenterCompactLabel,
+}) {
+	const categories = group.categories || [];
+	return (
+		<article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+			<div className="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<p className="text-xs font-black uppercase text-slate-500">
+						Categoria
+					</p>
+					<h3 className="text-xl font-black text-slate-950">{group.label}</h3>
+				</div>
+				<div className="text-right">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Orçado / realizado
+					</p>
+					<p className="text-sm font-black text-slate-950">
+						{brl.format(group.planned || 0)} / {brl.format(group.realized || 0)}
+					</p>
+					<p className="text-xs font-bold text-slate-500">
+						{decimal.format(group.percent || 0)}% consumido
+					</p>
+				</div>
+			</div>
+			<div className="mt-4 space-y-3">
+				{categories.length ? (
+					categories.slice(0, 5).map((category) => (
+						<section
+							key={category.id}
+							className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
+						>
+							<div className="flex flex-wrap items-start justify-between gap-2">
+								<div>
+									<p className="text-sm font-black text-slate-950">
+										{category.name}
+									</p>
+									<p className="text-xs font-bold text-slate-500">
+										{category.accounts.length} conta(s) financeira(s)
+									</p>
+								</div>
+								<p className="text-right text-xs font-black text-slate-700">
+									{brl.format(category.planned || 0)}
+									<span className="block text-slate-500">
+										{brl.format(category.realized || 0)}
+									</span>
+								</p>
+							</div>
+							<div className="mt-3 grid gap-2">
+								{category.accounts.slice(0, 3).map((accountRow) => (
+									<div
+										key={accountRow.id}
+										className="rounded-xl border border-white bg-white p-2"
+									>
+										<div className="flex flex-wrap items-start justify-between gap-2">
+											<p className="text-xs font-black text-slate-800">
+												{budgetAccountLabel(accountRow.account, accountRow.id)}
+											</p>
+											<p className="text-xs font-black text-slate-600">
+												{brl.format(accountRow.planned || 0)} /{" "}
+												{brl.format(accountRow.realized || 0)}
+											</p>
+										</div>
+										<div className="mt-2 flex flex-wrap gap-1.5">
+											{accountRow.centers.map(({ center, realized }) => (
+												<span
+													key={`${accountRow.id}-${center.id}`}
+													className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600"
+												>
+													{budgetCenterCompactLabel(center)} ·{" "}
+													{brl.format(realized || 0)}
+												</span>
+											))}
+										</div>
+									</div>
+								))}
+							</div>
+						</section>
+					))
+				) : (
+					<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
+						Nenhuma conta financeira classificada nesta categoria.
+					</p>
+				)}
+			</div>
+		</article>
+	);
+}
+
 export default function BudgetDashboardView({
 	ChartCard,
 	EmptyState,
@@ -46,9 +139,21 @@ export default function BudgetDashboardView({
 }) {
 	return (
 		<section className="space-y-4">
-			<section className="grid gap-4 md:grid-cols-5">
+			<section className="grid gap-4 md:grid-cols-3 xl:grid-cols-7">
 				{kpis.map((item) => (
 					<FinancialKpiCard key={item.id} item={item} />
+				))}
+			</section>
+			<section className="grid gap-4 xl:grid-cols-2">
+				{(insights.budgetCategoryGroups || []).map((group) => (
+					<BudgetCategoryClassPanel
+						key={group.id}
+						group={group}
+						brl={brl}
+						decimal={decimal}
+						budgetAccountLabel={budgetAccountLabel}
+						budgetCenterCompactLabel={budgetCenterCompactLabel}
+					/>
 				))}
 			</section>
 			<section className="grid gap-4 md:grid-cols-3">

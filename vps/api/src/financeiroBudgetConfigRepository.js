@@ -1,5 +1,8 @@
 const crypto = require("node:crypto");
 const db = require("./db");
+const {
+	enrichFinancialAccountWithCategory,
+} = require("./financeiroAccountCategories");
 
 const CONFIG_COLLECTION = "financeiro_config";
 const COST_CENTERS_ID = "orcamento_centros_custo";
@@ -182,18 +185,23 @@ function directorateLookup(directorates = []) {
 }
 
 function normalizeAccounts(config = {}) {
-	return (config.accounts || []).map((item, index) => ({
-		id: text(item.id || item.codigo || `conta-${index + 1}`),
-		codigo: text(item.codigo || item.reduzida || item.id),
-		nome: text(item.nome || item.name || "Conta financeira"),
-		tipo: text(item.tipo || "despesa"),
-		grupo: text(item.grupo || item.dreGroup || item.categoria),
-		status: text(item.status || "ativo"),
-		parent_id: text(item.parentId || item.parent_id || item.parentCodigo) || null,
-		legacy_path: `${CONFIG_COLLECTION}/${COST_CENTERS_ID}`,
-		legacy_document_id: COST_CENTERS_ID,
-		source_payload: item,
-	}));
+	return (config.accounts || []).map((item, index) => {
+		const enriched = enrichFinancialAccountWithCategory(item);
+		return {
+			id: text(item.id || item.codigo || `conta-${index + 1}`),
+			codigo: text(item.codigo || item.reduzida || item.id),
+			nome: text(item.nome || item.name || "Conta financeira"),
+			tipo: text(item.tipo || "despesa"),
+			grupo: text(item.grupo || item.dreGroup || item.categoria),
+			categoria_mae: enriched.categoriaMae,
+			categoria_classe: enriched.categoriaClasse,
+			status: text(item.status || "ativo"),
+			parent_id: text(item.parentId || item.parent_id || item.parentCodigo) || null,
+			legacy_path: `${CONFIG_COLLECTION}/${COST_CENTERS_ID}`,
+			legacy_document_id: COST_CENTERS_ID,
+			source_payload: enriched,
+		};
+	});
 }
 
 function normalizeCenters(config = {}, diretoriaByKey = new Map()) {
@@ -389,15 +397,17 @@ async function saveConfig(configId, data = {}, user = {}) {
 }
 
 function mapAccount(row = {}) {
-	return mapSource(row, {
+	return enrichFinancialAccountWithCategory(mapSource(row, {
 		id: row.id,
 		codigo: row.codigo || "",
 		nome: row.nome || "",
 		tipo: row.tipo || "",
 		grupo: row.grupo || "",
+		categoriaMae: row.categoria_mae || "",
+		categoriaClasse: row.categoria_classe || "",
 		status: row.status || "",
 		parentId: row.parent_id || "",
-	});
+	}));
 }
 
 function mapDirectorate(row = {}) {

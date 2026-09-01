@@ -93,6 +93,11 @@ export default function FinancialAccountsConfigSection({
 								({ account, category, children, totalChildren }) => {
 									const inactive = isAccountInactive(account);
 									const firstChildren = children.slice(0, 2);
+									const categoryClassLabel =
+										account.categoriaClasseLabel ||
+										(account.categoriaClasse === "nao_basal"
+											? "NÃO BASAL"
+											: "BASAL");
 									return (
 										<article
 											key={account.id}
@@ -108,7 +113,10 @@ export default function FinancialAccountsConfigSection({
 														{account.nome}
 													</h3>
 													<p className="mt-1 text-xs font-bold text-slate-500">
-														{category?.nome || "Sem categoria"} ·{" "}
+														{account.categoriaMae ||
+															category?.nome ||
+															"Sem categoria"}{" "}
+														· {categoryClassLabel} ·{" "}
 														{account.naturezaPlano === "C"
 															? "Crédito/Receita"
 															: "Débito/Despesa"}{" "}

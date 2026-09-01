@@ -1,4 +1,9 @@
 import { brl, decimal, integer } from "./financeiroFormatters";
+import {
+	BUDGET_CATEGORY_CLASSES,
+	BUDGET_CATEGORY_CLASS_LABELS,
+	enrichFinancialAccountWithCategory,
+} from "./budgetAccountCategories";
 
 function dateFromInput(value) {
 	const parsed = new Date(`${value}T00:00:00`);
@@ -404,6 +409,133 @@ function budgetMetric(planned = 0, realized = 0) {
 	};
 }
 
+function normalizeBudgetText(value = "") {
+	return String(value || "")
+		.trim()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+}
+
+function isProjectCenter(center = {}) {
+	const fields = [
+		center.tipoCentro,
+		center.tipo_centro,
+		center.tipoDespesa,
+		center.tipo_despesa,
+		center.categoriaPrincipal,
+		center.categoria,
+		center.grupo,
+		center.parentName,
+		center.nome,
+	];
+	return fields.some((value) => normalizeBudgetText(value).includes("projeto"));
+}
+
+function classifyBudgetRow(account = {}, center = {}) {
+	const enriched = enrichFinancialAccountWithCategory(account || {});
+	if (isProjectCenter(center)) {
+		return {
+			...enriched,
+			categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
+			categoriaClasseLabel:
+				BUDGET_CATEGORY_CLASS_LABELS[BUDGET_CATEGORY_CLASSES.BASAL],
+			isBasal: true,
+		};
+	}
+	return enriched;
+}
+
+function buildBudgetCategoryGroups(accountRows = []) {
+	const classMap = new Map();
+	accountRows.forEach((row) => {
+		const classification = classifyBudgetRow(row.account, row.center);
+		const classType =
+			classification.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+		const classLabel =
+			classification.categoriaClasseLabel ||
+			BUDGET_CATEGORY_CLASS_LABELS[classType] ||
+			"BASAL";
+		const categoryName = classification.categoriaMae || "Sem categoria";
+		const accountId = row.account?.id || row.row?.accountId || "sem-conta";
+		const categoryKey = `${classType}:${categoryName}`;
+		const accountKey = `${categoryKey}:${accountId}`;
+		const currentClass = classMap.get(classType) || {
+			id: classType,
+			label: classLabel,
+			planned: 0,
+			realized: 0,
+			categories: new Map(),
+		};
+		const currentCategory = currentClass.categories.get(categoryKey) || {
+			id: categoryKey,
+			name: categoryName,
+			planned: 0,
+			realized: 0,
+			accounts: new Map(),
+		};
+		const currentAccount = currentCategory.accounts.get(accountKey) || {
+			id: accountId,
+			account: classification,
+			planned: 0,
+			realized: 0,
+			centers: [],
+		};
+		const planned = Number(row.planned || 0);
+		const realized = Number(row.realized || 0);
+		currentClass.planned += planned;
+		currentClass.realized += realized;
+		currentCategory.planned += planned;
+		currentCategory.realized += realized;
+		currentAccount.planned += planned;
+		currentAccount.realized += realized;
+		if (row.center) {
+			currentAccount.centers.push({
+				center: row.center,
+				planned,
+				realized,
+				...budgetMetric(planned, realized),
+			});
+		}
+		currentCategory.accounts.set(accountKey, currentAccount);
+		currentClass.categories.set(categoryKey, currentCategory);
+		classMap.set(classType, currentClass);
+	});
+	return [
+		BUDGET_CATEGORY_CLASSES.BASAL,
+		BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	]
+		.map((classType) => {
+			const group = classMap.get(classType) || {
+				id: classType,
+				label: BUDGET_CATEGORY_CLASS_LABELS[classType],
+				planned: 0,
+				realized: 0,
+				categories: new Map(),
+			};
+			const categories = Array.from(group.categories.values())
+				.map((category) => ({
+					...category,
+					...budgetMetric(category.planned, category.realized),
+					accounts: Array.from(category.accounts.values())
+						.map((account) => ({
+							...account,
+							...budgetMetric(account.planned, account.realized),
+							centers: account.centers
+								.sort((left, right) => right.realized - left.realized)
+								.slice(0, 4),
+						}))
+						.sort((left, right) => right.realized - left.realized),
+				}))
+				.sort((left, right) => right.realized - left.realized);
+			return {
+				...group,
+				...budgetMetric(group.planned, group.realized),
+				categories,
+			};
+		});
+}
+
 function buildAccountRows({
 	accounts = [],
 	centers = [],
@@ -479,7 +611,7 @@ function buildCenterRows({
 }
 
 export function getBudgetInsights(config = {}, selectedPeriod = {}) {
-	const accounts = config.accounts || [];
+	const accounts = (config.accounts || []).map(enrichFinancialAccountWithCategory);
 	const centers = config.centers || [];
 	const matrix = config.matrix || [];
 	const now = new Date();
@@ -649,6 +781,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	});
 	const forecastRows = buildForecastRows(monthlyEvolution);
 	const accountSummary = buildAccountSummary(accountRows);
+	const budgetCategoryGroups = buildBudgetCategoryGroups(accountRows);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")
 		.map((item) => ({ ...item, id: item.center?.id }))
@@ -668,6 +801,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		approvals,
 		approvalsAll,
 		accountRows,
+		budgetCategoryGroups,
 		centerRows,
 		movements,
 		monthlyEvolution,
@@ -736,6 +870,12 @@ export function isBudgetCenterResponsible(user, center = {}) {
 }
 
 export function buildBudgetOperationalKpis(insights = {}, config = {}) {
+	const basal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.BASAL,
+	);
+	const nonBasal = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	);
 	return [
 		{
 			id: "orcado",
@@ -784,6 +924,22 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			type: "currency",
 			helper: `${integer.format((config.versions || []).length)} versão(ões)`,
 			icon: "Landmark",
+		},
+		{
+			id: "basal",
+			title: "BASAL",
+			value: basal?.planned || 0,
+			type: "currency",
+			helper: `Realizado ${brl.format(basal?.realized || 0)}`,
+			icon: "Landmark",
+		},
+		{
+			id: "nao-basal",
+			title: "NÃO BASAL",
+			value: nonBasal?.planned || 0,
+			type: "currency",
+			helper: `Realizado ${brl.format(nonBasal?.realized || 0)}`,
+			icon: "FileText",
 		},
 	];
 }

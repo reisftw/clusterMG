@@ -104,6 +104,17 @@ describe("budgetInsights", () => {
 			realized: 1200,
 			percent: 120,
 		});
+		expect(insights.budgetCategoryGroups[0]).toMatchObject({
+			id: "basal",
+			label: "BASAL",
+			planned: 1000,
+			realized: 1200,
+		});
+		expect(insights.budgetCategoryGroups[0].categories[0]).toMatchObject({
+			name: "Ocupação",
+			planned: 1000,
+			realized: 1200,
+		});
 		expect(insights.supplierSummary.map((item) => item.supplier)).toEqual([
 			"CEMIG",
 			"Fornecedor B",
@@ -131,6 +142,8 @@ describe("budgetInsights", () => {
 			"saldo",
 			"aprovacoes",
 			"ano",
+			"basal",
+			"nao-basal",
 		]);
 		expect(cards.find((item) => item.id === "cc-forecast").value).toBeCloseTo(2480);
 		vi.useRealTimers();

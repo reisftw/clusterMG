@@ -117,6 +117,8 @@ describe("financeiroBudgetConfigRepository", () => {
 			id: "1211",
 			codigo: "1211",
 			nome: "Energia",
+			categoriaMae: "Ocupação",
+			categoriaClasse: "basal",
 		});
 		expect(config.centers[0]).toMatchObject({
 			id: "110701",

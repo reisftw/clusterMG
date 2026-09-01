@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../../components/ui/ModalShell";
-import { addClusterLogo } from "../../../../utils/pdfBranding";
 import {
 	atualizarCargoEquipeFinanceiro,
 	atualizarColaboradorEquipeFinanceiro,
@@ -55,6 +54,18 @@ function getSetorBadgeClass(setor = "") {
 	let hash = 0;
 	for (const char of String(setor || "")) hash += char.charCodeAt(0);
 	return SETOR_COLORS[hash % SETOR_COLORS.length];
+}
+
+async function loadImageDataUrl(src) {
+	const response = await fetch(src, { cache: "force-cache" });
+	if (!response.ok) return "";
+	const blob = await response.blob();
+	return new Promise((resolve) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(String(reader.result || ""));
+		reader.onerror = () => resolve("");
+		reader.readAsDataURL(blob);
+	});
 }
 
 function buildTreeLayout(colaboradores = []) {
@@ -408,31 +419,92 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	async function exportPdf() {
 		const { default: jsPDF } = await import("jspdf");
 		const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-		await addClusterLogo(pdf, { width: 76, height: 38, y: 24, marginRight: 36 });
+		const pageWidth = pdf.internal.pageSize.getWidth();
+		const pageHeight = pdf.internal.pageSize.getHeight();
+		const margin = 38;
+		const logo = await loadImageDataUrl("/sempre-logo-azul.png");
+		if (logo) pdf.addImage(logo, "PNG", pageWidth - margin - 96, 22, 96, 42);
 		pdf.setFont("helvetica", "bold");
 		pdf.setFontSize(18);
-		pdf.text("Organograma - Financeiro", 40, 48);
+		pdf.setTextColor(15, 23, 42);
+		pdf.text("Organograma - Financeiro", margin, 42);
 		pdf.setFont("helvetica", "normal");
 		pdf.setFontSize(9);
-		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 40, 66);
-		const roots = nodes.filter((node) => !node.gestorId);
-		let y = 98;
-		function writeNode(node, depth = 0) {
-			if (y > 535) {
-				pdf.addPage("a4", "landscape");
-				y = 42;
-			}
-			pdf.setFont("helvetica", depth ? "normal" : "bold");
-			pdf.setFontSize(depth ? 9 : 10);
-			pdf.text(`${"  ".repeat(depth)}${node.nome} - ${node.cargoNome || "Cargo não vinculado"} (${node.setor})`, 44 + depth * 14, y);
-			y += 16;
-			nodes
-				.filter((child) => child.gestorId === node.id)
-				.sort((a, b) => (a.ordem || 0) - (b.ordem || 0) || a.nome.localeCompare(b.nome))
-				.forEach((child) => writeNode(child, depth + 1));
+		pdf.setTextColor(71, 85, 105);
+		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
+		if (!nodes.length) {
+			pdf.text("Nenhum colaborador cadastrado.", margin, 110);
+			pdf.save(`organograma-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
+			return;
 		}
-		roots.forEach((root) => writeNode(root));
-		if (!roots.length) pdf.text("Nenhum colaborador cadastrado.", 44, y);
+		const minX = Math.min(...nodes.map((node) => Number(node.x || 0)));
+		const minY = Math.min(...nodes.map((node) => Number(node.y || 0)));
+		const maxX = Math.max(...nodes.map((node) => Number(node.x || 0) + NODE_WIDTH));
+		const maxY = Math.max(...nodes.map((node) => Number(node.y || 0) + NODE_HEIGHT));
+		const contentWidth = Math.max(1, maxX - minX);
+		const contentHeight = Math.max(1, maxY - minY);
+		const availableWidth = pageWidth - margin * 2;
+		const availableHeight = pageHeight - 106;
+		const scale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
+		const offsetX = margin + (availableWidth - contentWidth * scale) / 2 - minX * scale;
+		const offsetY = 84 + (availableHeight - contentHeight * scale) / 2 - minY * scale;
+		const px = (value) => offsetX + Number(value || 0) * scale;
+		const py = (value) => offsetY + Number(value || 0) * scale;
+		pdf.setLineWidth(Math.max(1.2, 3 * scale));
+		pdf.setDrawColor(147, 197, 253);
+		nodes
+			.filter((node) => node.gestorId)
+			.forEach((node) => {
+				const parent = nodes.find((item) => item.id === node.gestorId);
+				if (!parent) return;
+				const x1 = px(parent.x + NODE_WIDTH);
+				const y1 = py(parent.y + NODE_HEIGHT / 2);
+				const x2 = px(node.x);
+				const y2 = py(node.y + NODE_HEIGHT / 2);
+				const mid = (x1 + x2) / 2;
+				pdf.lines(
+					[
+						[(mid - x1) / 2, 0, (mid - x1) / 2, y2 - y1, x2 - x1, y2 - y1],
+					],
+					x1,
+					y1,
+				);
+			});
+		nodes.forEach((node) => {
+			const x = px(node.x);
+			const y = py(node.y);
+			const width = NODE_WIDTH * scale;
+			const height = NODE_HEIGHT * scale;
+			pdf.setFillColor(255, 255, 255);
+			pdf.setDrawColor(226, 232, 240);
+			pdf.roundedRect(x, y, width, height, 10 * scale, 10 * scale, "FD");
+			pdf.setFillColor(37, 99, 235);
+			pdf.circle(x + 30 * scale, y + 34 * scale, 22 * scale, "F");
+			pdf.setFont("helvetica", "bold");
+			pdf.setTextColor(255, 255, 255);
+			pdf.setFontSize(Math.max(6, 10 * scale));
+			pdf.text(buildInitials(node.nome), x + 30 * scale, y + 37 * scale, {
+				align: "center",
+			});
+			pdf.setTextColor(15, 23, 42);
+			pdf.setFontSize(Math.max(7, 10 * scale));
+			pdf.text(String(node.nome || "").slice(0, 34), x + 62 * scale, y + 28 * scale);
+			pdf.setFont("helvetica", "normal");
+			pdf.setTextColor(71, 85, 105);
+			pdf.setFontSize(Math.max(6, 8 * scale));
+			pdf.text(
+				String(node.cargoNome || "Cargo não vinculado").slice(0, 38),
+				x + 62 * scale,
+				y + 44 * scale,
+			);
+			pdf.setFillColor(239, 246, 255);
+			pdf.setDrawColor(191, 219, 254);
+			pdf.roundedRect(x + 62 * scale, y + 58 * scale, 112 * scale, 22 * scale, 9 * scale, 9 * scale, "FD");
+			pdf.setFont("helvetica", "bold");
+			pdf.setTextColor(29, 78, 216);
+			pdf.setFontSize(Math.max(5.5, 7.4 * scale));
+			pdf.text(String(node.setor || "Setor").slice(0, 24), x + 68 * scale, y + 72 * scale);
+		});
 		pdf.save(`organograma-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
 	}
 
