@@ -11,7 +11,7 @@ import {
 } from "../services/agendamentosService";
 
 const CACHE_KEY = "agendamentos:lista:v2";
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 30 * 1000;
 
 const sortByData = (items = []) =>
 	[...items].sort((a, b) => {
@@ -59,7 +59,7 @@ export const useAgendamentos = () => {
 	}, []);
 
 	useEffect(() => {
-		carregar();
+		carregar(true);
 	}, [carregar]);
 
 	const criar = useCallback(async (dados) => {

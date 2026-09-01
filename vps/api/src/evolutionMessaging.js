@@ -2109,6 +2109,34 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 	};
 }
 
+function parseShortDateKey(value, baseDate = new Date()) {
+	const normalized = String(value || "").trim();
+	const match = normalized.match(/^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?$/);
+	if (!match) return "";
+	const day = Number(match[1]);
+	const month = Number(match[2]);
+	const todayParts = new Intl.DateTimeFormat("en-CA", {
+		timeZone: SEND_TIME_ZONE,
+		year: "numeric",
+	})
+		.formatToParts(baseDate)
+		.reduce((acc, part) => {
+			if (part.type !== "literal") acc[part.type] = part.value;
+			return acc;
+		}, {});
+	const rawYear = match[3] ? Number(match[3]) : Number(todayParts.year);
+	const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+	const date = new Date(year, month - 1, day);
+	if (
+		date.getFullYear() !== year ||
+		date.getMonth() !== month - 1 ||
+		date.getDate() !== day
+	) {
+		return "";
+	}
+	return dateKeyFromDate(date);
+}
+
 function getSaoPauloDate(value = new Date()) {
 	const parts = new Intl.DateTimeFormat("en-CA", {
 		timeZone: SEND_TIME_ZONE,
@@ -2153,12 +2181,16 @@ function dateKeyFromDate(date) {
 
 function dateKeyFromValue(value) {
 	if (!value) return "";
-	if (typeof value === "object" && value.value) return dateKeyFromValue(value.value);
-	if (value instanceof Date) return value.toISOString().slice(0, 10);
+	if (value instanceof Date) return dateKeyFromDate(getSaoPauloDate(value));
+	if (typeof value === "object") {
+		return dateKeyFromValue(value.value || value.date || value.data || value.key);
+	}
 	const normalized = String(value || "").trim();
 	if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+	const shortDateKey = parseShortDateKey(normalized);
+	if (shortDateKey) return shortDateKey;
 	const date = new Date(normalized);
-	return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+	return Number.isNaN(date.getTime()) ? "" : dateKeyFromDate(getSaoPauloDate(date));
 }
 
 function formatDateLabel(dateKey, { withWeekday = false } = {}) {
@@ -2213,9 +2245,11 @@ async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
 function getGuidedDateOptions(baseDate = new Date()) {
 	const localDate = getSaoPauloDate(baseDate);
 	const first = new Date(localDate);
-	first.setDate(first.getDate() + 1);
-	const second = new Date(localDate);
-	second.setDate(second.getDate() + 2);
+	if (getSaoPauloMinutes(baseDate) >= 15 * 60) {
+		first.setDate(first.getDate() + 1);
+	}
+	const second = new Date(first);
+	second.setDate(second.getDate() + 1);
 	const saturday = new Date(localDate);
 	const daysUntilSaturday = (6 - saturday.getDay() + 7) % 7 || 7;
 	saturday.setDate(saturday.getDate() + daysUntilSaturday);
@@ -2241,6 +2275,21 @@ function getGuidedDateOptions(baseDate = new Date()) {
 	];
 }
 
+function hasCurrentGuidedDateOptions(options = [], baseDate = new Date()) {
+	if (!Array.isArray(options) || !options.length) return false;
+	const current = getGuidedDateOptions(baseDate);
+	return current.every((expected) => {
+		const received = options.find((option) => String(option.key) === expected.key);
+		return dateKeyFromValue(received?.date) === expected.date;
+	});
+}
+
+function getReusableGuidedDateOptions(conversation = {}, baseDate = new Date()) {
+	return hasCurrentGuidedDateOptions(conversation.dateOptions, baseDate)
+		? conversation.dateOptions
+		: getGuidedDateOptions(baseDate);
+}
+
 function renderGuidedDateOptions(options = []) {
 	return [
 		...options.map((option) => `${option.key} - ${option.label}`),
@@ -2250,16 +2299,15 @@ function renderGuidedDateOptions(options = []) {
 
 function parseGuidedDateChoice(text, conversation = {}) {
 	const value = normalizeText(text);
-	const options = Array.isArray(conversation.dateOptions)
-		? conversation.dateOptions
-		: [];
+	const options = getReusableGuidedDateOptions(conversation);
+	const schedule = parseScheduleFromText(text);
+	if (schedule?.date) return schedule.date;
 	const selected = options.find(
 		(option) => value === option.key || value.includes(`opcao ${option.key}`),
 	);
 	if (selected?.date) return selected.date;
 	if (value === "4" || value.includes("outra")) return "other";
-	const schedule = parseScheduleFromText(text);
-	return schedule?.date || null;
+	return null;
 }
 
 function parseGuidedTimeChoice(text) {
@@ -2542,10 +2590,7 @@ async function resendGuidedDateOptions(
 	item = {},
 	conversation = {},
 ) {
-	const options =
-		Array.isArray(conversation.dateOptions) && conversation.dateOptions.length
-			? conversation.dateOptions
-			: getGuidedDateOptions();
+	const options = getReusableGuidedDateOptions(conversation);
 	const message = renderTemplate(
 		config.guidedScheduleDateMessage ||
 			DEFAULT_CONFIG.guidedScheduleDateMessage,
@@ -2565,10 +2610,7 @@ async function resendGuidedDateOptions(
 }
 
 function renderInvalidDateMessage(config, conversation = {}) {
-	const options =
-		Array.isArray(conversation.dateOptions) && conversation.dateOptions.length
-			? conversation.dateOptions
-			: getGuidedDateOptions();
+	const options = getReusableGuidedDateOptions(conversation);
 	const template =
 		config.guidedScheduleInvalidDateMessage ||
 		DEFAULT_CONFIG.guidedScheduleInvalidDateMessage;
@@ -3190,4 +3232,11 @@ module.exports = {
 	resetNextRunAt,
 	normalizePhone,
 	sendWhatsAppMessage,
+	_test: {
+		dateKeyFromValue,
+		getGuidedDateOptions,
+		getReusableGuidedDateOptions,
+		parseGuidedDateChoice,
+		parseScheduleFromText,
+	},
 };
