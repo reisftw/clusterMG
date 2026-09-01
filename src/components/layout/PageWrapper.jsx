@@ -91,6 +91,7 @@ const PageWrapper = ({ children }) => {
 	const { isModernLayout } = useLayoutMode();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 	const [forcedWelcomeOpen, setForcedWelcomeOpen] = useState(false);
+	const [welcomeClosedForUser, setWelcomeClosedForUser] = useState("");
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
 		try {
 			return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -119,10 +120,14 @@ const PageWrapper = ({ children }) => {
 	}, []);
 
 	const content = children || <Outlet />;
+	const currentWelcomeUserKey =
+		currentUser?.uid || currentUser?.id || currentUser?.email || "";
 	const showWelcomeModal =
 		Boolean(currentUser) &&
 		!trocarSenhaObrigatorio &&
-		(forcedWelcomeOpen || !hasSeenWelcomeModal(currentUser));
+		(forcedWelcomeOpen ||
+			(welcomeClosedForUser !== currentWelcomeUserKey &&
+				!hasSeenWelcomeModal(currentUser)));
 
 	return (
 		<div
@@ -202,7 +207,10 @@ const PageWrapper = ({ children }) => {
 			<WelcomeModal
 				open={showWelcomeModal}
 				user={currentUser}
-				onClose={() => setForcedWelcomeOpen(false)}
+				onClose={() => {
+					setForcedWelcomeOpen(false);
+					setWelcomeClosedForUser(currentWelcomeUserKey);
+				}}
 			/>
 		</div>
 	);
