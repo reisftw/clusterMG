@@ -109,6 +109,51 @@ function buildAgentCities(rows = [], dayCount = 31) {
 		.sort((a, b) => b.total - a.total);
 }
 
+function buildAgentStoreCities(rows = [], dayCount = 31) {
+	return (Array.isArray(rows) ? rows : [])
+		.map((row) => {
+			const cidade = compactName(row?.cidade || row?.name || row?.nome);
+			const daily = Array.isArray(row?.daily)
+				? Array.from({ length: dayCount }, (_, index) =>
+						Number(row.daily[index] || 0),
+					)
+				: parseDailyMetaValues(row?.dailyText, dayCount);
+			const totalFromDaily = daily.reduce((sum, value) => sum + value, 0);
+			const total = totalFromDaily || toNumber(row?.total);
+
+			return { cidade, lojaAgentesTotal: total, lojaAgentesDaily: daily };
+		})
+		.filter((item) => item.cidade)
+		.sort((a, b) => b.lojaAgentesTotal - a.lojaAgentesTotal);
+}
+
+function mergeAgentStoreIntoCities(agentCities = [], agentStoreCities = []) {
+	if (!agentStoreCities.length) return agentCities;
+	const byCity = new Map(
+		agentCities.map((city) => [compactName(city.cidade).toLowerCase(), city]),
+	);
+	agentStoreCities.forEach((storeCity) => {
+		const key = compactName(storeCity.cidade).toLowerCase();
+		const current = byCity.get(key) || {
+			cidade: storeCity.cidade,
+			total: 0,
+			cancelamentos: 0,
+			meta: 0,
+			pct: 0,
+			daily: Array.from(
+				{ length: storeCity.lojaAgentesDaily?.length || 31 },
+				() => 0,
+			),
+		};
+		byCity.set(key, {
+			...current,
+			lojaAgentesTotal: Number(storeCity.lojaAgentesTotal || 0),
+			lojaAgentesDaily: storeCity.lojaAgentesDaily || [],
+		});
+	});
+	return [...byCity.values()].sort((a, b) => b.total - a.total);
+}
+
 function buildStoreItem(row = {}, dayCount = 31) {
 	const daily = Array.isArray(row?.daily)
 		? Array.from({ length: dayCount }, (_, index) => Number(row.daily[index] || 0))
@@ -135,6 +180,7 @@ export function buildManualMetasRecord({
 	tecnicos = [],
 	regionais = [],
 	agentes = [],
+	agentesLoja = [],
 	loja = {},
 	feriadosSet = new Set(),
 }) {
@@ -145,6 +191,7 @@ export function buildManualMetasRecord({
 	const technicians = buildPerformanceItems(tecnicos, dayCount);
 	const regionalItems = buildPerformanceItems(regionais, dayCount);
 	const agentCities = buildAgentCities(agentes, dayCount);
+	const agentStoreCities = buildAgentStoreCities(agentesLoja, dayCount);
 	const store = buildStoreItem(loja, dayCount);
 	const technicianDaily = sumDaily(technicians, dayCount);
 	const regionalDaily = sumDaily(regionalItems, dayCount);
@@ -210,7 +257,7 @@ export function buildManualMetasRecord({
 		saldoDiario: saldo.saldoDiario,
 		metaDiaria: saldo.metaDiaria,
 		status: calculateStatus(baseRecord.percentAchieved, meta, totalOS),
-		agentesData: agentCities,
+		agentesData: mergeAgentStoreIntoCities(agentCities, agentStoreCities),
 	};
 }
 

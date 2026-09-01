@@ -84,4 +84,34 @@ describe("manualMetasBuilder", () => {
 			"Sempre A",
 		]);
 	});
+
+	it("salva entrega em loja de agente sem somar na meta operacional", () => {
+		const record = buildManualMetasRecord({
+			month: "Setembro",
+			source: MANUAL_META_SOURCES.SEMPRE,
+			year: 2026,
+			baseConfig: normalizeMetasBaseConfig(),
+			cancelamentos: 100,
+			tecnicos: [],
+			regionais: [],
+			agentes: [{ cidade: "Cidade A", cancelamentos: 20, meta: 16, daily: [2] }],
+			agentesLoja: [{ cidade: "Cidade A", daily: [5, 3] }],
+			loja: {},
+			feriadosSet: new Set(),
+		});
+
+		expect(record.totalOS).toBe(2);
+		expect(record.agenteTotal).toBe(2);
+		expect(record.rawDays).toEqual([
+			expect.objectContaining({ dia: 1, agente: 2, totalDia: 2 }),
+		]);
+		expect(record.agentesData[0]).toEqual(
+			expect.objectContaining({
+				cidade: "Cidade A",
+				total: 2,
+				lojaAgentesTotal: 8,
+				lojaAgentesDaily: expect.arrayContaining([5, 3]),
+			}),
+		);
+	});
 });

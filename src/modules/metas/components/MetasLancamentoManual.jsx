@@ -1,5 +1,7 @@
-import { Plus, Send, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { listarRegionaisAdmin } from "../../auth/services/authService";
+import { buscarAgentes } from "../../regionais/services/agentesService";
 import {
 	getMetaPercentForBase,
 	normalizeMetasBaseConfig,
@@ -47,12 +49,31 @@ function dailyToText(daily = []) {
 		.join(" ");
 }
 
+function normalizeDailyValues(daily = [], dayCount = 31) {
+	return Array.from({ length: dayCount }, (_, index) => {
+		const value = Number(Array.isArray(daily) ? daily[index] || 0 : 0);
+		return Number.isFinite(value) && value > 0 ? value : 0;
+	});
+}
+
+function rowDaily(row = {}, dayCount = 31) {
+	if (Array.isArray(row.daily)) return normalizeDailyValues(row.daily, dayCount);
+	return parseDailyMetaValues(row.dailyText, dayCount);
+}
+
+function sumDailyValues(row = {}, dayCount = 31) {
+	return rowDaily(row, dayCount).reduce(
+		(total, value) => total + Number(value || 0),
+		0,
+	);
+}
+
 function createRows(names = []) {
 	return names.map((name) => ({
 		id: createRowId(),
 		name,
 		total: "",
-		dailyText: "",
+		daily: [],
 		cancelamentos: "",
 		meta: "",
 	}));
@@ -64,6 +85,7 @@ function rowsFromPerformance(items = [], fallbackNames = []) {
 			id: createRowId(),
 			name: item.name || item.nome || "",
 			total: item.total || "",
+			daily: Array.isArray(item.daily) ? item.daily : parseDailyMetaValues(""),
 			dailyText: dailyToText(item.daily),
 			cancelamentos: item.cancelamentos || "",
 			meta: item.meta || "",
@@ -77,10 +99,32 @@ function rowsFromAgents(items = []) {
 		id: createRowId(),
 		name: item.cidade || item.name || "",
 		total: item.total || "",
+		daily: Array.isArray(item.daily) ? item.daily : parseDailyMetaValues(""),
 		dailyText: dailyToText(item.daily),
 		cancelamentos: item.cancelamentos || "",
 		meta: item.meta || "",
 	}));
+}
+
+function rowsFromAgentStore(items = []) {
+	return (Array.isArray(items) ? items : [])
+		.filter(
+			(item) =>
+				Number(item.lojaAgentesTotal || 0) > 0 ||
+				(Array.isArray(item.lojaAgentesDaily) &&
+					item.lojaAgentesDaily.some((value) => Number(value || 0) > 0)),
+		)
+		.map((item) => ({
+			id: createRowId(),
+			name: item.cidade || item.name || "",
+			total: item.lojaAgentesTotal || "",
+			daily: Array.isArray(item.lojaAgentesDaily)
+				? item.lojaAgentesDaily
+				: [],
+			dailyText: dailyToText(item.lojaAgentesDaily),
+			cancelamentos: "",
+			meta: "",
+		}));
 }
 
 function sourceMonthData(allData, month, source) {
@@ -99,10 +143,11 @@ function buildInitialState(allData, agentesData, month, source) {
 		),
 		regionais: rowsFromPerformance(data?.regionais, DEFAULT_REGIONAIS),
 		agentes: rowsFromAgents(agentesData?.[month] || []),
+		agentesLoja: rowsFromAgentStore(agentesData?.[month] || []),
 		loja: {
 			total: data?.lojaTotal || "",
-			dailyText: dailyToText(
-				(data?.rawDays || data?.saldoDiario || []).map((row) => row?.loja || 0),
+			daily: (data?.rawDays || data?.saldoDiario || []).map(
+				(row) => row?.loja || 0,
 			),
 		},
 	};
@@ -110,12 +155,67 @@ function buildInitialState(allData, agentesData, month, source) {
 
 function sumRows(rows = [], dayCount = 31) {
 	return rows.reduce((sum, row) => {
-		const dailyTotal = parseDailyMetaValues(row.dailyText, dayCount).reduce(
-			(total, value) => total + Number(value || 0),
-			0,
-		);
+		const dailyTotal = sumDailyValues(row, dayCount);
 		return sum + (dailyTotal || Number(row.total || 0));
 	}, 0);
+}
+
+function normalizeOptions(values = []) {
+	return [
+		...new Set(
+			values.map((value) => String(value || "").trim()).filter(Boolean),
+		),
+	].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+function mergeRowsWithOptions(rows = [], options = []) {
+	const existingByName = new Map(
+		rows
+			.map((row) => [String(row.name || "").trim().toLowerCase(), row])
+			.filter(([name]) => name),
+	);
+	const optionRows = options.map((name) => {
+		const current = existingByName.get(String(name).trim().toLowerCase());
+		return current ? { ...current, name } : createRows([name])[0];
+	});
+	const customRows = rows.filter((row) => {
+		const name = String(row.name || "").trim();
+		if (!name) return false;
+		return !options.some(
+			(option) => option.trim().toLowerCase() === name.toLowerCase(),
+		);
+	});
+	return [...optionRows, ...customRows];
+}
+
+function DailyGrid({ row, dayCount, onChangeDay }) {
+	const values = rowDaily(row, dayCount);
+	return (
+		<div className="overflow-x-auto rounded-xl border border-gray-200 bg-white p-3">
+			<div
+				className="grid min-w-max gap-2"
+				style={{
+					gridTemplateColumns: `repeat(${dayCount}, minmax(58px, 1fr))`,
+				}}
+			>
+				{values.map((value, index) => (
+					<label key={index} className="space-y-1">
+						<span className="block text-center text-[10px] font-black uppercase text-gray-400">
+							Dia {index + 1}
+						</span>
+						<input
+							type="number"
+							min="0"
+							value={value || ""}
+							onChange={(event) => onChangeDay(index, event.target.value)}
+							className="h-10 w-[58px] rounded-lg border border-gray-200 bg-gray-50 px-2 text-center text-sm font-black text-gray-900 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+							placeholder="0"
+						/>
+					</label>
+				))}
+			</div>
+		</div>
+	);
 }
 
 function SectionEditor({
@@ -124,6 +224,9 @@ function SectionEditor({
 	nameLabel = "Nome",
 	rows,
 	setRows,
+	dayCount,
+	nameOptions = [],
+	allowCustomName = true,
 	showGoalFields = false,
 }) {
 	const updateRow = (id, patch) => {
@@ -139,13 +242,29 @@ function SectionEditor({
 			...current,
 			{
 				id: createRowId(),
-				name: "",
+				name: nameOptions.find(
+					(option) =>
+						!current.some(
+							(row) =>
+								String(row.name || "").trim().toLowerCase() ===
+								String(option || "").trim().toLowerCase(),
+						),
+				) || "",
 				total: "",
-				dailyText: "",
+				daily: [],
 				cancelamentos: "",
 				meta: "",
 			},
 		]);
+	};
+	const updateDay = (row, dayIndex, value) => {
+		const daily = rowDaily(row, dayCount);
+		daily[dayIndex] = Math.max(0, Number(value || 0));
+		updateRow(row.id, {
+			daily,
+			dailyText: dailyToText(daily),
+			total: daily.reduce((sum, item) => sum + Number(item || 0), 0),
+		});
 	};
 
 	return (
@@ -169,61 +288,74 @@ function SectionEditor({
 				{rows.map((row, index) => (
 					<div
 						key={row.id}
-						className="grid gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 lg:grid-cols-[1.2fr_0.45fr_1.6fr_auto]"
+						className="rounded-xl border border-gray-100 bg-gray-50 p-3"
 					>
-						<label className="space-y-1">
-							<span className="text-[11px] font-bold uppercase text-gray-400">
-								{nameLabel} {index + 1}
-							</span>
-							<input
-								type="text"
-								value={row.name}
-								onChange={(event) =>
-									updateRow(row.id, { name: event.target.value })
-								}
-								className="input-field"
-								placeholder={nameLabel}
-							/>
-						</label>
-						<label className="space-y-1">
-							<span className="text-[11px] font-bold uppercase text-gray-400">
-								Total
-							</span>
-							<input
-								type="number"
-								min="0"
-								value={row.total}
-								onChange={(event) =>
-									updateRow(row.id, { total: event.target.value })
-								}
-								className="input-field"
-								placeholder="0"
-							/>
-						</label>
-						<label className="space-y-1">
-							<span className="text-[11px] font-bold uppercase text-gray-400">
-								Entregas por dia
-							</span>
-							<input
-								type="text"
-								value={row.dailyText}
-								onChange={(event) =>
-									updateRow(row.id, { dailyText: event.target.value })
-								}
-								className="input-field"
-								placeholder="Ex: 3 0 1 4 2"
-							/>
-						</label>
-						<button
-							type="button"
-							onClick={() => removeRow(row.id)}
-							className="mt-5 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
-							title="Remover linha"
-						>
-							<Trash2 size={16} />
-						</button>
+						<div className="mb-3 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_120px_auto]">
+							<label className="space-y-1">
+								<span className="text-[11px] font-bold uppercase text-gray-400">
+									{nameLabel} {index + 1}
+								</span>
+								{nameOptions.length && !allowCustomName ? (
+									<select
+										value={row.name}
+										onChange={(event) =>
+											updateRow(row.id, { name: event.target.value })
+										}
+										className="input-field bg-white"
+									>
+										<option value="">Selecionar</option>
+										{nameOptions.map((option) => (
+											<option key={option} value={option}>
+												{option}
+											</option>
+										))}
+									</select>
+								) : (
+									<input
+										type="text"
+										value={row.name}
+										onChange={(event) =>
+											updateRow(row.id, { name: event.target.value })
+										}
+										className="input-field bg-white"
+										placeholder={nameLabel}
+										list={nameOptions.length ? `${title}-options` : undefined}
+									/>
+								)}
+								{nameOptions.length && allowCustomName ? (
+									<datalist id={`${title}-options`}>
+										{nameOptions.map((option) => (
+											<option key={option} value={option} />
+										))}
+									</datalist>
+								) : null}
+							</label>
+							<div className="rounded-xl border border-gray-100 bg-white px-3 py-2">
+								<span className="text-[11px] font-bold uppercase text-gray-400">
+									Total
+								</span>
+								<p className="mt-1 text-2xl font-black text-blue-700">
+									{formatNumber(sumDailyValues(row, dayCount) || row.total)}
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => removeRow(row.id)}
+								className="inline-flex h-11 w-11 items-center justify-center self-end rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
+								title="Remover linha"
+							>
+								<Trash2 size={16} />
+							</button>
+						</div>
+						<DailyGrid
+							row={row}
+							dayCount={dayCount}
+							onChangeDay={(dayIndex, value) =>
+								updateDay(row, dayIndex, value)
+							}
+						/>
 						{showGoalFields ? (
-							<div className="grid gap-2 lg:col-span-4 sm:grid-cols-2">
+							<div className="mt-3 grid gap-2 sm:grid-cols-2">
 								<label className="space-y-1">
 									<span className="text-[11px] font-bold uppercase text-gray-400">
 										Cancelamentos da cidade
@@ -292,7 +424,11 @@ export default function MetasLancamentoManual({
 	const [tecnicos, setTecnicos] = useState(initialState.tecnicos);
 	const [regionais, setRegionais] = useState(initialState.regionais);
 	const [agentes, setAgentes] = useState(initialState.agentes);
+	const [agentesLoja, setAgentesLoja] = useState(initialState.agentesLoja);
 	const [loja, setLoja] = useState(initialState.loja);
+	const [regionalOptions, setRegionalOptions] = useState([]);
+	const [agenteOptions, setAgenteOptions] = useState([]);
+	const [loadingOptions, setLoadingOptions] = useState(false);
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 	const dayCount = getDaysInMetaMonth(month, year);
@@ -308,10 +444,44 @@ export default function MetasLancamentoManual({
 		sumRows(tecnicos, dayCount) +
 		sumRows(regionais, dayCount) +
 		sumRows(source === MANUAL_META_SOURCES.SEMPRE ? agentes : [], dayCount) +
-		(parseDailyMetaValues(loja.dailyText, dayCount).reduce(
-			(sum, value) => sum + value,
-			0,
-		) || Number(loja.total || 0));
+		(sumDailyValues(loja, dayCount) || Number(loja.total || 0));
+
+	const loadOptions = useCallback(async (force = false) => {
+		setLoadingOptions(true);
+		try {
+			const [nextRegionais, nextAgentes] = await Promise.all([
+				listarRegionaisAdmin(),
+				buscarAgentes(force),
+			]);
+			setRegionalOptions(
+				normalizeOptions(nextRegionais.map((regional) => regional.nome)),
+			);
+			setAgenteOptions(
+				normalizeOptions(
+					nextAgentes.map((agente) => agente.cidade || agente.nome),
+				),
+			);
+		} catch (err) {
+			console.warn("[metas] Falha ao carregar cadastros para lançamento.", err);
+		} finally {
+			setLoadingOptions(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		loadOptions();
+	}, [loadOptions]);
+
+	useEffect(() => {
+		if (!regionalOptions.length) return;
+		setRegionais((current) => mergeRowsWithOptions(current, regionalOptions));
+	}, [regionalOptions]);
+
+	useEffect(() => {
+		if (!agenteOptions.length) return;
+		setAgentes((current) => mergeRowsWithOptions(current, agenteOptions));
+		setAgentesLoja((current) => mergeRowsWithOptions(current, agenteOptions));
+	}, [agenteOptions]);
 
 	const hydrateSource = (nextSource) => {
 		const nextState = buildInitialState(allData, agentesData, month, nextSource);
@@ -320,6 +490,7 @@ export default function MetasLancamentoManual({
 		setTecnicos(nextState.tecnicos);
 		setRegionais(nextState.regionais);
 		setAgentes(nextState.agentes);
+		setAgentesLoja(nextState.agentesLoja);
 		setLoja(nextState.loja);
 		setMessage("");
 		setError("");
@@ -339,6 +510,8 @@ export default function MetasLancamentoManual({
 					tecnicos,
 					regionais,
 					agentes: source === MANUAL_META_SOURCES.SEMPRE ? agentes : [],
+					agentesLoja:
+						source === MANUAL_META_SOURCES.SEMPRE ? agentesLoja : [],
 					loja,
 				},
 			});
@@ -427,6 +600,19 @@ export default function MetasLancamentoManual({
 						</p>
 					</div>
 				</div>
+				<div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-gray-600">
+					<span>
+						{dayCount} dias disponíveis para lançamento diário neste mês.
+					</span>
+					<button
+						type="button"
+						onClick={() => loadOptions(true)}
+						className="inline-flex items-center gap-1 rounded-lg border border-blue-100 bg-white px-2.5 py-1.5 text-blue-700 hover:bg-blue-50"
+					>
+						<RefreshCw size={13} />
+						{loadingOptions ? "Atualizando cadastros..." : "Atualizar cadastros"}
+					</button>
+				</div>
 			</section>
 
 			<SectionEditor
@@ -434,6 +620,7 @@ export default function MetasLancamentoManual({
 				description="Cadastre os técnicos e os lançamentos de retirada por dia."
 				rows={tecnicos}
 				setRows={setTecnicos}
+				dayCount={dayCount}
 			/>
 
 			<SectionEditor
@@ -441,57 +628,68 @@ export default function MetasLancamentoManual({
 				description="Use as regionais atuais e informe os lançamentos por dia."
 				rows={regionais}
 				setRows={setRegionais}
+				dayCount={dayCount}
+				nameOptions={regionalOptions}
+				allowCustomName={false}
 			/>
 
 			{source === MANUAL_META_SOURCES.SEMPRE ? (
 				<SectionEditor
 					title="Agente autorizado"
-					description="Cadastre as cidades/agentes autorizados. Estes dados também alimentam o ranking de agentes."
+					description="Selecione a cidade, informe a meta e lance as retiradas por dia. Estes dados alimentam o ranking de agentes."
 					nameLabel="Cidade"
 					rows={agentes}
 					setRows={setAgentes}
+					dayCount={dayCount}
+					nameOptions={agenteOptions}
+					allowCustomName={false}
 					showGoalFields
+				/>
+			) : null}
+
+			{source === MANUAL_META_SOURCES.SEMPRE ? (
+				<SectionEditor
+					title="AA - Entrega em loja"
+					description="Lance entregas em loja por cidade de agente autorizado. Este bloco aparece no painel AA e não soma na meta operacional."
+					nameLabel="Cidade"
+					rows={agentesLoja}
+					setRows={setAgentesLoja}
+					dayCount={dayCount}
+					nameOptions={agenteOptions}
+					allowCustomName={false}
 				/>
 			) : null}
 
 			<section className="rounded-2xl border border-gray-100 bg-white p-4">
 				<h3 className="text-sm font-black text-gray-900">Entregue em loja</h3>
-				<div className="mt-4 grid gap-3 md:grid-cols-[0.4fr_1fr]">
-					<label className="space-y-1">
-						<span className="text-[11px] font-bold uppercase text-gray-400">
-							Total
-						</span>
-						<input
-							type="number"
-							min="0"
-							value={loja.total}
-							onChange={(event) =>
-								setLoja((current) => ({
-									...current,
-									total: event.target.value,
-								}))
-							}
-							className="input-field"
-							placeholder="0"
-						/>
-					</label>
-					<label className="space-y-1">
-						<span className="text-[11px] font-bold uppercase text-gray-400">
-							Entregas por dia
-						</span>
-						<input
-							type="text"
-							value={loja.dailyText}
-							onChange={(event) =>
-								setLoja((current) => ({
-									...current,
-									dailyText: event.target.value,
-								}))
-							}
-							className="input-field"
-							placeholder="Ex: 10 8 7 12"
-						/>
-					</label>
+				<div className="mt-4 space-y-3">
+					<div className="inline-flex rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
+						<div>
+							<span className="text-[11px] font-bold uppercase text-gray-400">
+								Total
+							</span>
+							<p className="mt-1 text-2xl font-black text-blue-700">
+								{formatNumber(sumDailyValues(loja, dayCount) || loja.total)}
+							</p>
+						</div>
+					</div>
+					<DailyGrid
+						row={loja}
+						dayCount={dayCount}
+						onChangeDay={(dayIndex, value) => {
+							const daily = rowDaily(loja, dayCount);
+							daily[dayIndex] = Math.max(0, Number(value || 0));
+							setLoja({
+								...loja,
+								daily,
+								dailyText: dailyToText(daily),
+								total: daily.reduce(
+									(sum, item) => sum + Number(item || 0),
+									0,
+								),
+							});
+						}}
+					/>
 				</div>
 			</section>
 
