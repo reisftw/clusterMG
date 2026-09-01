@@ -55,6 +55,25 @@ describe("RBAC security rules", () => {
 		);
 	});
 
+	it("lists Financeiro Equipe as finance RBAC view and manage permissions", () => {
+		const financeGroup = PERMISSION_GROUPS.find(
+			(group) => group.label === "Financeiro",
+		);
+
+		expect(financeGroup?.permissions).toEqual(
+			expect.arrayContaining([
+				"financeiro.equipe.view",
+				"financeiro.equipe.manage",
+			]),
+		);
+		expect(PERMISSION_LABELS["financeiro.equipe.view"]).toBe(
+			"Financeiro - Equipe",
+		);
+		expect(PERMISSION_LABELS["financeiro.equipe.manage"]).toBe(
+			"Gerenciar Equipe Financeira",
+		);
+	});
+
 	it("keeps legacy finance reports permission valid for existing roles", () => {
 		expect(
 			hasPermission(
