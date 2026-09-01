@@ -5,6 +5,8 @@ import {
 	Copy,
 	Flag,
 	PencilLine,
+	SkipBack,
+	SkipForward,
 	Settings,
 	ShieldAlert,
 	Target,
@@ -119,6 +121,12 @@ function formatNumber(value) {
 
 function getMesFromDate(date) {
 	return MESES[date.getMonth()] || "";
+}
+
+function moveMonth(month, direction) {
+	const index = MESES.findIndex((item) => item === month);
+	if (index < 0) return month;
+	return MESES[(index + direction + MESES.length) % MESES.length];
 }
 
 function getForcaTaskContext(config, allData, agentesData) {
@@ -892,6 +900,38 @@ const MetasPage = () => {
 					{/* Seletor de mes */}
 					{aba !== "auditoria" && (
 						<div className="flex flex-wrap items-center gap-2">
+							{aba === "lancamento" ? (
+								<div className="mr-1 flex items-center gap-2 rounded-2xl border border-blue-100 bg-white p-1.5">
+									<button
+										type="button"
+										onClick={() => setMesSelecionado(moveMonth(mesSelecionado, -1))}
+										className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100"
+										title="Voltar mês"
+									>
+										<SkipBack size={16} />
+									</button>
+									<select
+										value={mesSelecionado}
+										onChange={(event) => setMesSelecionado(event.target.value)}
+										className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-400"
+										aria-label="Mês do lançamento"
+									>
+										{MESES.map((m) => (
+											<option key={m} value={m}>
+												{m}
+											</option>
+										))}
+									</select>
+									<button
+										type="button"
+										onClick={() => setMesSelecionado(moveMonth(mesSelecionado, 1))}
+										className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100"
+										title="Avançar mês"
+									>
+										<SkipForward size={16} />
+									</button>
+								</div>
+							) : null}
 							{MESES.map((m) => (
 								<button
 									key={m}

@@ -922,7 +922,7 @@ export const useMetas = () => {
 	}, []);
 
 	const salvarLancamentoManual = useCallback(
-		async ({ mes, fonte, ano, lancamento }) => {
+		async ({ mes, fonte, ano, lancamento, lancamentosPorFonte }) => {
 			const uploadVersion = dataVersionRef.current + 1;
 			dataVersionRef.current = uploadVersion;
 			setSavingManualEntry(true);
@@ -932,15 +932,27 @@ export const useMetas = () => {
 				const baseConfig = await buscarMetasBaseConfig(true, {
 					preferLive: true,
 				});
-				const manualRecord = buildManualMetasRecord({
-					month: mes,
-					source: fonte,
-					year: ano,
-					baseConfig,
-					feriadosSet,
-					...lancamento,
+				const entries = Array.isArray(lancamentosPorFonte)
+					? lancamentosPorFonte
+					: [{ fonte, lancamento }];
+				const recordsBySource = new Map();
+				let manualAgentCities = agentesData?.[mes] || [];
+				entries.forEach((entry) => {
+					if (!entry?.fonte || !entry?.lancamento) return;
+					const manualRecord = buildManualMetasRecord({
+						month: mes,
+						source: entry.fonte,
+						year: ano,
+						baseConfig,
+						feriadosSet,
+						...entry.lancamento,
+					});
+					const { agentesData: nextAgentCities, ...recordData } = manualRecord;
+					recordsBySource.set(entry.fonte, recordData);
+					if (entry.fonte === MANUAL_META_SOURCES.SEMPRE) {
+						manualAgentCities = nextAgentCities || [];
+					}
 				});
-				const { agentesData: manualAgentCities, ...recordData } = manualRecord;
 				const currentMonthData = allData[mes] || {};
 				const currentSempre =
 					currentMonthData && typeof currentMonthData === "object"
@@ -951,38 +963,28 @@ export const useMetas = () => {
 							}
 						: null;
 				const sempreRecord =
-					fonte === MANUAL_META_SOURCES.SEMPRE ? recordData : currentSempre;
+					recordsBySource.get(MANUAL_META_SOURCES.SEMPRE) || currentSempre;
 				const onnetRecord =
-					fonte === MANUAL_META_SOURCES.ONNET
-						? recordData
-						: currentMonthData.onnet || null;
+					recordsBySource.get(MANUAL_META_SOURCES.ONNET) ||
+					currentMonthData.onnet ||
+					null;
 				const combined = combineMetasRecords(sempreRecord, onnetRecord, mes, {
 					year: ano,
 					feriadosSet,
 				});
-				const nextMonthData =
-					fonte === MANUAL_META_SOURCES.ONNET
-						? {
-								...(currentSempre || {}),
-								onnet: recordData,
-								onnetSempre: combined,
-							}
-						: {
-								...recordData,
-								onnet: onnetRecord,
-								onnetSempre: combined,
-							};
+				const nextMonthData = {
+					...(sempreRecord || {}),
+					onnet: onnetRecord,
+					onnetSempre: combined,
+				};
 				const parsed = {
 					...allData,
 					[mes]: nextMonthData,
 				};
-				const nextAgentesData =
-					fonte === MANUAL_META_SOURCES.SEMPRE
-						? {
-								...agentesData,
-								[mes]: manualAgentCities || [],
-							}
-						: agentesData;
+				const nextAgentesData = {
+					...agentesData,
+					[mes]: manualAgentCities || [],
+				};
 				const now = new Date();
 				const txt = `Ultima atualizacao: ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")} as ${String(now.getHours()).padStart(2, "0")}h${String(now.getMinutes()).padStart(2, "0")}`;
 				const persistResult = await persistMetasImport({

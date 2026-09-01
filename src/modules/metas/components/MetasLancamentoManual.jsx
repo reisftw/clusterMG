@@ -1,5 +1,6 @@
 import { Plus, RefreshCw, Send, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ModalShell from "../../../components/ui/ModalShell";
 import { listarRegionaisAdmin } from "../../auth/services/authService";
 import { buscarAgentes } from "../../regionais/services/agentesService";
 import {
@@ -30,6 +31,12 @@ const DEFAULT_SEMPRE_TECHNICIANS = [
 	"PAULO XAVIER",
 	"CLAUDSON FARIA",
 	"ANDRE PAULA",
+];
+
+const SOURCE_SCOPE_OPTIONS = [
+	{ id: MANUAL_META_SOURCES.SEMPRE, label: "Sempre" },
+	{ id: MANUAL_META_SOURCES.ONNET, label: "Onnet" },
+	{ id: "ambos", label: "Sempre e Onnet" },
 ];
 
 let nextRowId = 0;
@@ -72,6 +79,7 @@ function createRows(names = []) {
 	return names.map((name) => ({
 		id: createRowId(),
 		name,
+		sourceScope: "ambos",
 		total: "",
 		daily: [],
 		cancelamentos: "",
@@ -79,11 +87,12 @@ function createRows(names = []) {
 	}));
 }
 
-function rowsFromPerformance(items = [], fallbackNames = []) {
+function rowsFromPerformance(items = [], fallbackNames = [], sourceScope = "ambos") {
 	if (Array.isArray(items) && items.length > 0) {
 		return items.map((item) => ({
 			id: createRowId(),
 			name: item.name || item.nome || "",
+			sourceScope: item.sourceScope || sourceScope,
 			total: item.total || "",
 			daily: Array.isArray(item.daily) ? item.daily : parseDailyMetaValues(""),
 			dailyText: dailyToText(item.daily),
@@ -98,6 +107,7 @@ function rowsFromAgents(items = []) {
 	return (Array.isArray(items) ? items : []).map((item) => ({
 		id: createRowId(),
 		name: item.cidade || item.name || "",
+		sourceScope: MANUAL_META_SOURCES.SEMPRE,
 		total: item.total || "",
 		daily: Array.isArray(item.daily) ? item.daily : parseDailyMetaValues(""),
 		dailyText: dailyToText(item.daily),
@@ -117,6 +127,7 @@ function rowsFromAgentStore(items = []) {
 		.map((item) => ({
 			id: createRowId(),
 			name: item.cidade || item.name || "",
+			sourceScope: MANUAL_META_SOURCES.SEMPRE,
 			total: item.lojaAgentesTotal || "",
 			daily: Array.isArray(item.lojaAgentesDaily)
 				? item.lojaAgentesDaily
@@ -133,20 +144,66 @@ function sourceMonthData(allData, month, source) {
 	return source === MANUAL_META_SOURCES.ONNET ? monthData.onnet : monthData;
 }
 
-function buildInitialState(allData, agentesData, month, source) {
-	const data = sourceMonthData(allData, month, source);
+function mergeRegionalRows(sempreRows = [], onnetRows = []) {
+	const merged = new Map();
+	const addRows = (rows, sourceScope) => {
+		rows.forEach((row) => {
+			const key = String(row.name || "").trim().toLowerCase();
+			if (!key) return;
+			const current = merged.get(key);
+			if (!current) {
+				merged.set(key, { ...row, sourceScope });
+				return;
+			}
+			merged.set(key, {
+				...current,
+				sourceScope: current.sourceScope === sourceScope ? sourceScope : "ambos",
+			});
+		});
+	};
+	addRows(sempreRows, MANUAL_META_SOURCES.SEMPRE);
+	addRows(onnetRows, MANUAL_META_SOURCES.ONNET);
+	return [...merged.values()];
+}
+
+function buildInitialState(allData, agentesData, month) {
+	const sempreData = sourceMonthData(allData, month, MANUAL_META_SOURCES.SEMPRE);
+	const onnetData = sourceMonthData(allData, month, MANUAL_META_SOURCES.ONNET);
+	const sempreRegionais = rowsFromPerformance(
+		sempreData?.regionais,
+		DEFAULT_REGIONAIS,
+		MANUAL_META_SOURCES.SEMPRE,
+	);
+	const onnetRegionais = rowsFromPerformance(
+		onnetData?.regionais,
+		[],
+		MANUAL_META_SOURCES.ONNET,
+	);
 	return {
-		cancelamentos: data?.cancelamentos || "",
-		tecnicos: rowsFromPerformance(
-			data?.technicians,
-			source === MANUAL_META_SOURCES.SEMPRE ? DEFAULT_SEMPRE_TECHNICIANS : [],
+		cancelamentosSempre: sempreData?.cancelamentos || "",
+		cancelamentosOnnet: onnetData?.cancelamentos || "",
+		tecnicosSempre: rowsFromPerformance(
+			sempreData?.technicians,
+			DEFAULT_SEMPRE_TECHNICIANS,
+			MANUAL_META_SOURCES.SEMPRE,
 		),
-		regionais: rowsFromPerformance(data?.regionais, DEFAULT_REGIONAIS),
+		tecnicosOnnet: rowsFromPerformance(
+			onnetData?.technicians,
+			[],
+			MANUAL_META_SOURCES.ONNET,
+		),
+		regionais: mergeRegionalRows(sempreRegionais, onnetRegionais),
 		agentes: rowsFromAgents(agentesData?.[month] || []),
 		agentesLoja: rowsFromAgentStore(agentesData?.[month] || []),
-		loja: {
-			total: data?.lojaTotal || "",
-			daily: (data?.rawDays || data?.saldoDiario || []).map(
+		lojaSempre: {
+			total: sempreData?.lojaTotal || "",
+			daily: (sempreData?.rawDays || sempreData?.saldoDiario || []).map(
+				(row) => row?.loja || 0,
+			),
+		},
+		lojaOnnet: {
+			total: onnetData?.lojaTotal || "",
+			daily: (onnetData?.rawDays || onnetData?.saldoDiario || []).map(
 				(row) => row?.loja || 0,
 			),
 		},
@@ -228,7 +285,12 @@ function SectionEditor({
 	nameOptions = [],
 	allowCustomName = true,
 	showGoalFields = false,
+	showSourceScope = false,
+	allowAdd = true,
+	allowRemove = true,
 }) {
+	const [editingRowId, setEditingRowId] = useState(null);
+	const editingRow = rows.find((row) => row.id === editingRowId) || null;
 	const updateRow = (id, patch) => {
 		setRows((current) =>
 			current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
@@ -254,6 +316,7 @@ function SectionEditor({
 				daily: [],
 				cancelamentos: "",
 				meta: "",
+				sourceScope: showSourceScope ? "ambos" : undefined,
 			},
 		]);
 	};
@@ -274,32 +337,94 @@ function SectionEditor({
 					<h3 className="text-sm font-black text-gray-900">{title}</h3>
 					<p className="mt-1 text-xs text-gray-500">{description}</p>
 				</div>
-				<button
-					type="button"
-					onClick={addRow}
-					className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
-				>
-					<Plus size={14} />
-					Adicionar
-				</button>
+				{allowAdd ? (
+					<button
+						type="button"
+						onClick={addRow}
+						className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
+					>
+						<Plus size={14} />
+						Adicionar
+					</button>
+				) : null}
 			</div>
 
-			<div className="mt-4 space-y-3">
+			<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 				{rows.map((row, index) => (
 					<div
 						key={row.id}
-						className="rounded-xl border border-gray-100 bg-gray-50 p-3"
+						className="rounded-2xl border border-gray-100 bg-gray-50 p-4"
 					>
-						<div className="mb-3 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_120px_auto]">
+						<div className="flex items-start justify-between gap-3">
+							<div className="min-w-0">
+								<p className="truncate text-sm font-black text-gray-950">
+									{row.name || `${nameLabel} ${index + 1}`}
+								</p>
+								<p className="mt-1 text-xs font-bold text-gray-400">
+									{showSourceScope
+										? SOURCE_SCOPE_OPTIONS.find(
+												(option) => option.id === row.sourceScope,
+											)?.label || "Sempre e Onnet"
+										: `${dayCount} dias para preencher`}
+								</p>
+							</div>
+							{allowRemove ? (
+								<button
+									type="button"
+									onClick={() => removeRow(row.id)}
+									className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
+									title="Remover linha"
+								>
+									<Trash2 size={15} />
+								</button>
+							) : null}
+						</div>
+						<div className="mt-4 flex items-end justify-between gap-3">
+							<div>
+								<span className="text-[11px] font-bold uppercase text-gray-400">
+									Total lançado
+								</span>
+								<p className="mt-1 text-2xl font-black text-blue-700">
+									{formatNumber(sumDailyValues(row, dayCount) || row.total)}
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => setEditingRowId(row.id)}
+								className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700"
+							>
+								Preencher
+							</button>
+						</div>
+						{showGoalFields ? (
+							<div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold text-gray-500">
+								<span>Cancel.: {formatNumber(row.cancelamentos)}</span>
+								<span>Meta: {formatNumber(row.meta)}</span>
+							</div>
+						) : null}
+					</div>
+				))}
+			</div>
+
+			{editingRow ? (
+				<ModalShell
+					open
+					title={editingRow.name || title}
+					description={`Preencha os lançamentos diarios de ${title.toLowerCase()}.`}
+					onClose={() => setEditingRowId(null)}
+					size="6xl"
+				>
+					<div className="space-y-4">
+						<div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_120px]">
 							<label className="space-y-1">
 								<span className="text-[11px] font-bold uppercase text-gray-400">
-									{nameLabel} {index + 1}
+									{nameLabel}
 								</span>
 								{nameOptions.length && !allowCustomName ? (
 									<select
-										value={row.name}
+										value={editingRow.name}
 										onChange={(event) =>
-											updateRow(row.id, { name: event.target.value })
+											updateRow(editingRow.id, { name: event.target.value })
 										}
 										className="input-field bg-white"
 									>
@@ -313,9 +438,9 @@ function SectionEditor({
 								) : (
 									<input
 										type="text"
-										value={row.name}
+										value={editingRow.name}
 										onChange={(event) =>
-											updateRow(row.id, { name: event.target.value })
+											updateRow(editingRow.id, { name: event.target.value })
 										}
 										className="input-field bg-white"
 										placeholder={nameLabel}
@@ -330,28 +455,44 @@ function SectionEditor({
 									</datalist>
 								) : null}
 							</label>
+							{showSourceScope ? (
+								<label className="space-y-1">
+									<span className="text-[11px] font-bold uppercase text-gray-400">
+										Aparece em
+									</span>
+									<select
+										value={editingRow.sourceScope || "ambos"}
+										onChange={(event) =>
+											updateRow(editingRow.id, {
+												sourceScope: event.target.value,
+											})
+										}
+										className="input-field bg-white"
+									>
+										{SOURCE_SCOPE_OPTIONS.map((option) => (
+											<option key={option.id} value={option.id}>
+												{option.label}
+											</option>
+										))}
+									</select>
+								</label>
+							) : null}
 							<div className="rounded-xl border border-gray-100 bg-white px-3 py-2">
 								<span className="text-[11px] font-bold uppercase text-gray-400">
 									Total
 								</span>
 								<p className="mt-1 text-2xl font-black text-blue-700">
-									{formatNumber(sumDailyValues(row, dayCount) || row.total)}
+									{formatNumber(
+										sumDailyValues(editingRow, dayCount) || editingRow.total,
+									)}
 								</p>
 							</div>
-							<button
-								type="button"
-								onClick={() => removeRow(row.id)}
-								className="inline-flex h-11 w-11 items-center justify-center self-end rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
-								title="Remover linha"
-							>
-								<Trash2 size={16} />
-							</button>
 						</div>
 						<DailyGrid
-							row={row}
+							row={editingRow}
 							dayCount={dayCount}
 							onChangeDay={(dayIndex, value) =>
-								updateDay(row, dayIndex, value)
+								updateDay(editingRow, dayIndex, value)
 							}
 						/>
 						{showGoalFields ? (
@@ -363,9 +504,9 @@ function SectionEditor({
 									<input
 										type="number"
 										min="0"
-										value={row.cancelamentos}
+										value={editingRow.cancelamentos}
 										onChange={(event) =>
-											updateRow(row.id, {
+											updateRow(editingRow.id, {
 												cancelamentos: event.target.value,
 											})
 										}
@@ -380,9 +521,9 @@ function SectionEditor({
 									<input
 										type="number"
 										min="0"
-										value={row.meta}
+										value={editingRow.meta}
 										onChange={(event) =>
-											updateRow(row.id, { meta: event.target.value })
+											updateRow(editingRow.id, { meta: event.target.value })
 										}
 										className="input-field"
 										placeholder="Calcula 80% se vazio"
@@ -391,8 +532,8 @@ function SectionEditor({
 							</div>
 						) : null}
 					</div>
-				))}
-			</div>
+				</ModalShell>
+			) : null}
 		</section>
 	);
 }
@@ -406,26 +547,38 @@ export default function MetasLancamentoManual({
 	saving,
 	canManage,
 }) {
-	const [source, setSource] = useState(MANUAL_META_SOURCES.SEMPRE);
 	const [year, setYear] = useState(new Date().getFullYear());
 	const initialState = useMemo(
-		() =>
-			buildInitialState(
-				allData,
-				agentesData,
-				month,
-				MANUAL_META_SOURCES.SEMPRE,
-			),
+		() => buildInitialState(allData, agentesData, month),
 		[agentesData, allData, month],
 	);
-	const [cancelamentos, setCancelamentos] = useState(
-		initialState.cancelamentos,
+	const [cancelamentosSempre, setCancelamentosSempre] = useState(
+		initialState.cancelamentosSempre,
 	);
-	const [tecnicos, setTecnicos] = useState(initialState.tecnicos);
+	const [cancelamentosOnnet, setCancelamentosOnnet] = useState(
+		initialState.cancelamentosOnnet,
+	);
+	const [tecnicosSempre, setTecnicosSempre] = useState(
+		initialState.tecnicosSempre,
+	);
+	const [tecnicosOnnet, setTecnicosOnnet] = useState(initialState.tecnicosOnnet);
 	const [regionais, setRegionais] = useState(initialState.regionais);
 	const [agentes, setAgentes] = useState(initialState.agentes);
 	const [agentesLoja, setAgentesLoja] = useState(initialState.agentesLoja);
-	const [loja, setLoja] = useState(initialState.loja);
+	const [lojaSempre, setLojaSempre] = useState([
+		{
+			id: createRowId(),
+			name: "Entregue em loja Sempre",
+			...initialState.lojaSempre,
+		},
+	]);
+	const [lojaOnnet, setLojaOnnet] = useState([
+		{
+			id: createRowId(),
+			name: "Entregue em loja Onnet",
+			...initialState.lojaOnnet,
+		},
+	]);
 	const [regionalOptions, setRegionalOptions] = useState([]);
 	const [agenteOptions, setAgenteOptions] = useState([]);
 	const [loadingOptions, setLoadingOptions] = useState(false);
@@ -436,15 +589,38 @@ export default function MetasLancamentoManual({
 		() => normalizeMetasBaseConfig(metasBaseConfig),
 		[metasBaseConfig],
 	);
-	const metaPercent = getMetaPercentForBase(normalizedConfig, source, month);
-	const metaCalculada = Math.round(
-		Number(cancelamentos || 0) * (Number(metaPercent || 0) / 100),
+	const metaPercentSempre = getMetaPercentForBase(
+		normalizedConfig,
+		MANUAL_META_SOURCES.SEMPRE,
+		month,
+	);
+	const metaPercentOnnet = getMetaPercentForBase(
+		normalizedConfig,
+		MANUAL_META_SOURCES.ONNET,
+		month,
+	);
+	const metaCalculadaSempre = Math.round(
+		Number(cancelamentosSempre || 0) * (Number(metaPercentSempre || 0) / 100),
+	);
+	const metaCalculadaOnnet = Math.round(
+		Number(cancelamentosOnnet || 0) * (Number(metaPercentOnnet || 0) / 100),
+	);
+	const regionaisSempre = regionais.filter((row) =>
+		[MANUAL_META_SOURCES.SEMPRE, "ambos", undefined, ""].includes(
+			row.sourceScope,
+		),
+	);
+	const regionaisOnnet = regionais.filter((row) =>
+		[MANUAL_META_SOURCES.ONNET, "ambos"].includes(row.sourceScope),
 	);
 	const totalPreview =
-		sumRows(tecnicos, dayCount) +
-		sumRows(regionais, dayCount) +
-		sumRows(source === MANUAL_META_SOURCES.SEMPRE ? agentes : [], dayCount) +
-		(sumDailyValues(loja, dayCount) || Number(loja.total || 0));
+		sumRows(tecnicosSempre, dayCount) +
+		sumRows(tecnicosOnnet, dayCount) +
+		sumRows(regionaisSempre, dayCount) +
+		sumRows(regionaisOnnet, dayCount) +
+		sumRows(agentes, dayCount) +
+		sumRows(lojaSempre, dayCount) +
+		sumRows(lojaOnnet, dayCount);
 
 	const loadOptions = useCallback(async (force = false) => {
 		setLoadingOptions(true);
@@ -483,19 +659,6 @@ export default function MetasLancamentoManual({
 		setAgentesLoja((current) => mergeRowsWithOptions(current, agenteOptions));
 	}, [agenteOptions]);
 
-	const hydrateSource = (nextSource) => {
-		const nextState = buildInitialState(allData, agentesData, month, nextSource);
-		setSource(nextSource);
-		setCancelamentos(nextState.cancelamentos);
-		setTecnicos(nextState.tecnicos);
-		setRegionais(nextState.regionais);
-		setAgentes(nextState.agentes);
-		setAgentesLoja(nextState.agentesLoja);
-		setLoja(nextState.loja);
-		setMessage("");
-		setError("");
-	};
-
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setMessage("");
@@ -503,19 +666,33 @@ export default function MetasLancamentoManual({
 		try {
 			await onSave({
 				mes: month,
-				fonte: source,
 				ano: year,
-				lancamento: {
-					cancelamentos,
-					tecnicos,
-					regionais,
-					agentes: source === MANUAL_META_SOURCES.SEMPRE ? agentes : [],
-					agentesLoja:
-						source === MANUAL_META_SOURCES.SEMPRE ? agentesLoja : [],
-					loja,
-				},
+				lancamentosPorFonte: [
+					{
+						fonte: MANUAL_META_SOURCES.SEMPRE,
+						lancamento: {
+							cancelamentos: cancelamentosSempre,
+							tecnicos: tecnicosSempre,
+							regionais: regionaisSempre,
+							agentes,
+							agentesLoja,
+							loja: lojaSempre[0] || {},
+						},
+					},
+					{
+						fonte: MANUAL_META_SOURCES.ONNET,
+						lancamento: {
+							cancelamentos: cancelamentosOnnet,
+							tecnicos: tecnicosOnnet,
+							regionais: regionaisOnnet,
+							agentes: [],
+							agentesLoja: [],
+							loja: lojaOnnet[0] || {},
+						},
+					},
+				],
 			});
-			setMessage("Lançamento publicado no /acompanhamento e no /painel.");
+			setMessage("Lançamento publicado no /acompanhamento, /painel e AA.");
 		} catch (err) {
 			setError(err?.message || "Não foi possível lançar as metas.");
 		}
@@ -534,31 +711,12 @@ export default function MetasLancamentoManual({
 						</h2>
 						<p className="mt-1 text-sm text-gray-600">
 							Informe os dados no mesmo modelo da planilha. Os valores por dia
-							podem ser separados por espaço, vírgula ou ponto e vírgula.
+							devem ser preenchidos no modal de cada card.
 						</p>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						{[
-							{ id: MANUAL_META_SOURCES.SEMPRE, label: "SEMPRE" },
-							{ id: MANUAL_META_SOURCES.ONNET, label: "ONNET" },
-						].map((option) => (
-							<button
-								key={option.id}
-								type="button"
-								onClick={() => hydrateSource(option.id)}
-								className={`rounded-xl px-4 py-2 text-sm font-black ${
-									source === option.id
-										? "bg-blue-600 text-white shadow-sm"
-										: "bg-white text-gray-600 hover:bg-blue-100"
-								}`}
-							>
-								{option.label}
-							</button>
-						))}
 					</div>
 				</div>
 
-				<div className="mt-5 grid gap-3 md:grid-cols-4">
+				<div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
 					<label className="space-y-1.5">
 						<span className="text-xs font-bold text-gray-600">Ano</span>
 						<input
@@ -572,23 +730,46 @@ export default function MetasLancamentoManual({
 					</label>
 					<label className="space-y-1.5">
 						<span className="text-xs font-bold text-gray-600">
-							Cancelamentos do mês anterior
+							Cancelamentos Sempre
 						</span>
 						<input
 							type="number"
 							min="0"
-							value={cancelamentos}
-							onChange={(event) => setCancelamentos(event.target.value)}
+							value={cancelamentosSempre}
+							onChange={(event) =>
+								setCancelamentosSempre(event.target.value)
+							}
 							className="input-field bg-white"
 							placeholder="2910"
 						/>
 					</label>
+					<label className="space-y-1.5">
+						<span className="text-xs font-bold text-gray-600">
+							Cancelamentos Onnet
+						</span>
+						<input
+							type="number"
+							min="0"
+							value={cancelamentosOnnet}
+							onChange={(event) => setCancelamentosOnnet(event.target.value)}
+							className="input-field bg-white"
+							placeholder="0"
+						/>
+					</label>
 					<div className="rounded-xl bg-white p-3">
 						<p className="text-xs font-bold text-gray-500">
-							Meta cadastrada ({formatNumber(metaPercent)}%)
+							Meta Sempre ({formatNumber(metaPercentSempre)}%)
 						</p>
 						<p className="mt-1 text-2xl font-black text-blue-700">
-							{formatNumber(metaCalculada)}
+							{formatNumber(metaCalculadaSempre)}
+						</p>
+					</div>
+					<div className="rounded-xl bg-white p-3">
+						<p className="text-xs font-bold text-gray-500">
+							Meta Onnet ({formatNumber(metaPercentOnnet)}%)
+						</p>
+						<p className="mt-1 text-2xl font-black text-blue-700">
+							{formatNumber(metaCalculadaOnnet)}
 						</p>
 					</div>
 					<div className="rounded-xl bg-white p-3">
@@ -616,10 +797,18 @@ export default function MetasLancamentoManual({
 			</section>
 
 			<SectionEditor
-				title={`Técnicos ${source === MANUAL_META_SOURCES.ONNET ? "ONNET" : "SEMPRE"}`}
-				description="Cadastre os técnicos e os lançamentos de retirada por dia."
-				rows={tecnicos}
-				setRows={setTecnicos}
+				title="Técnicos Sempre"
+				description="Cadastre os técnicos Sempre e clique no card para lançar por dia."
+				rows={tecnicosSempre}
+				setRows={setTecnicosSempre}
+				dayCount={dayCount}
+			/>
+
+			<SectionEditor
+				title="Técnicos Onnet"
+				description="Cadastre os técnicos Onnet e clique no card para lançar por dia."
+				rows={tecnicosOnnet}
+				setRows={setTecnicosOnnet}
 				dayCount={dayCount}
 			/>
 
@@ -631,67 +820,51 @@ export default function MetasLancamentoManual({
 				dayCount={dayCount}
 				nameOptions={regionalOptions}
 				allowCustomName={false}
+				showSourceScope
 			/>
 
-			{source === MANUAL_META_SOURCES.SEMPRE ? (
-				<SectionEditor
-					title="Agente autorizado"
-					description="Selecione a cidade, informe a meta e lance as retiradas por dia. Estes dados alimentam o ranking de agentes."
-					nameLabel="Cidade"
-					rows={agentes}
-					setRows={setAgentes}
-					dayCount={dayCount}
-					nameOptions={agenteOptions}
-					allowCustomName={false}
-					showGoalFields
-				/>
-			) : null}
+			<SectionEditor
+				title="Agente autorizado Sempre"
+				description="Selecione a cidade, informe a meta e lance as retiradas por dia. Onnet não utiliza agente autorizado."
+				nameLabel="Cidade"
+				rows={agentes}
+				setRows={setAgentes}
+				dayCount={dayCount}
+				nameOptions={agenteOptions}
+				allowCustomName={false}
+				showGoalFields
+			/>
 
-			{source === MANUAL_META_SOURCES.SEMPRE ? (
-				<SectionEditor
-					title="AA - Entrega em loja"
-					description="Lance entregas em loja por cidade de agente autorizado. Este bloco aparece no painel AA e não soma na meta operacional."
-					nameLabel="Cidade"
-					rows={agentesLoja}
-					setRows={setAgentesLoja}
-					dayCount={dayCount}
-					nameOptions={agenteOptions}
-					allowCustomName={false}
-				/>
-			) : null}
+			<SectionEditor
+				title="AA - Entrega em loja"
+				description="Lance entregas em loja por cidade de agente autorizado. Este bloco aparece no painel AA e não soma na meta operacional."
+				nameLabel="Cidade"
+				rows={agentesLoja}
+				setRows={setAgentesLoja}
+				dayCount={dayCount}
+				nameOptions={agenteOptions}
+				allowCustomName={false}
+			/>
 
-			<section className="rounded-2xl border border-gray-100 bg-white p-4">
-				<h3 className="text-sm font-black text-gray-900">Entregue em loja</h3>
-				<div className="mt-4 space-y-3">
-					<div className="inline-flex rounded-xl border border-gray-100 bg-gray-50 px-3 py-2">
-						<div>
-							<span className="text-[11px] font-bold uppercase text-gray-400">
-								Total
-							</span>
-							<p className="mt-1 text-2xl font-black text-blue-700">
-								{formatNumber(sumDailyValues(loja, dayCount) || loja.total)}
-							</p>
-						</div>
-					</div>
-					<DailyGrid
-						row={loja}
-						dayCount={dayCount}
-						onChangeDay={(dayIndex, value) => {
-							const daily = rowDaily(loja, dayCount);
-							daily[dayIndex] = Math.max(0, Number(value || 0));
-							setLoja({
-								...loja,
-								daily,
-								dailyText: dailyToText(daily),
-								total: daily.reduce(
-									(sum, item) => sum + Number(item || 0),
-									0,
-								),
-							});
-						}}
-					/>
-				</div>
-			</section>
+			<SectionEditor
+				title="Entregue em loja Sempre"
+				description="Lançamento diário de entrega em loja da operação Sempre."
+				rows={lojaSempre}
+				setRows={setLojaSempre}
+				dayCount={dayCount}
+				allowAdd={false}
+				allowRemove={false}
+			/>
+
+			<SectionEditor
+				title="Entregue em loja Onnet"
+				description="Lançamento diário de entrega em loja da operação Onnet."
+				rows={lojaOnnet}
+				setRows={setLojaOnnet}
+				dayCount={dayCount}
+				allowAdd={false}
+				allowRemove={false}
+			/>
 
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4">
 				<div>

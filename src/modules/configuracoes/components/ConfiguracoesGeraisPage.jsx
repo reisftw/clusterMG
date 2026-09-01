@@ -2,6 +2,7 @@ import {
 	BellRing,
 	Camera,
 	Clock,
+	Image,
 	Loader2,
 	Trash2,
 	Volume2,
@@ -21,6 +22,10 @@ import {
 	setNotificationSound,
 } from "../../../services/notificationSoundSettings";
 import { AVATAR_ACCEPT, validateImageFile } from "../../../utils/imageUpload";
+import {
+	WELCOME_MODAL_EVENT,
+	WELCOME_MODAL_IMAGE,
+} from "../../auth/utils/welcomeModalStorage";
 import { enviarAvatarAdmin } from "../../auth/services/authService";
 
 const NOTIFICATION_TYPES = [
@@ -190,6 +195,10 @@ export default function ConfiguracoesGeraisPage() {
 		}
 	};
 
+	const testWelcomeModal = () => {
+		window.dispatchEvent(new CustomEvent(WELCOME_MODAL_EVENT));
+	};
+
 	if (loading) return <Spinner fullScreen />;
 
 	return (
@@ -221,6 +230,38 @@ export default function ConfiguracoesGeraisPage() {
 				<div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm font-black text-blue-800">
 					{message}
 				</div>
+			) : null}
+
+			{isAdmin ? (
+				<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+					<div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+						<div className="flex items-start gap-4">
+							<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-orange-50 text-orange-600">
+								<img
+									src={WELCOME_MODAL_IMAGE}
+									alt=""
+									className="h-full w-full object-cover"
+								/>
+							</div>
+							<div>
+								<h2 className="text-lg font-black text-slate-950">
+									Modal de boas-vindas
+								</h2>
+								<p className="mt-1 max-w-2xl text-sm font-semibold leading-relaxed text-slate-500">
+									Todo usuário verá este aviso uma vez após entrar no sistema.
+									Use o teste para conferir a experiência antes de liberar.
+								</p>
+							</div>
+						</div>
+						<button
+							type="button"
+							onClick={testWelcomeModal}
+							className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-orange-600"
+						>
+							<Image size={17} /> Testar modal
+						</button>
+					</div>
+				</section>
 			) : null}
 
 			{isAdmin ? (

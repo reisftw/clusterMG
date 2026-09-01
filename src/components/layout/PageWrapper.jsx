@@ -4,6 +4,11 @@ import { Outlet, useLocation } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 import { useLayoutMode } from "../../context/LayoutModeContext";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
+import WelcomeModal from "../../modules/auth/components/WelcomeModal";
+import {
+	hasSeenWelcomeModal,
+	WELCOME_MODAL_EVENT,
+} from "../../modules/auth/utils/welcomeModalStorage";
 import { ROUTES } from "../../router/routes";
 import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
@@ -82,9 +87,10 @@ const SIDEBAR_COLLAPSED_KEY = "retiradas-sidebar-collapsed";
 const PageWrapper = ({ children }) => {
 	const { pathname } = useLocation();
 	const title = PAGE_TITLES[pathname] ?? "Gestão Retiradas";
-	const { trocarSenhaObrigatorio } = useAuthContext();
+	const { currentUser, trocarSenhaObrigatorio } = useAuthContext();
 	const { isModernLayout } = useLayoutMode();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+	const [forcedWelcomeOpen, setForcedWelcomeOpen] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
 		try {
 			return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -104,7 +110,19 @@ const PageWrapper = ({ children }) => {
 		}
 	}, [sidebarCollapsed]);
 
+	useEffect(() => {
+		const openWelcomeModal = () => setForcedWelcomeOpen(true);
+		window.addEventListener(WELCOME_MODAL_EVENT, openWelcomeModal);
+		return () => {
+			window.removeEventListener(WELCOME_MODAL_EVENT, openWelcomeModal);
+		};
+	}, []);
+
 	const content = children || <Outlet />;
+	const showWelcomeModal =
+		Boolean(currentUser) &&
+		!trocarSenhaObrigatorio &&
+		(forcedWelcomeOpen || !hasSeenWelcomeModal(currentUser));
 
 	return (
 		<div
@@ -181,6 +199,11 @@ const PageWrapper = ({ children }) => {
 			{trocarSenhaObrigatorio && (
 				<TrocarSenhaModal obrigatorio={true} onClose={() => {}} />
 			)}
+			<WelcomeModal
+				open={showWelcomeModal}
+				user={currentUser}
+				onClose={() => setForcedWelcomeOpen(false)}
+			/>
 		</div>
 	);
 };
