@@ -15,6 +15,11 @@ import {
 	normalizeMetasBaseConfig,
 } from "../constants/metasBaseConfig";
 import {
+	buildManualMetasRecord,
+	combineMetasRecords,
+	MANUAL_META_SOURCES,
+} from "../utils/manualMetasBuilder";
+import {
 	buscarFeriados,
 	buscarForcaTarefaConfig,
 	buscarMetasBaseConfig,
@@ -770,6 +775,7 @@ export const useMetas = () => {
 	);
 	const [savingMetasBaseConfig, setSavingMetasBaseConfig] = useState(false);
 	const [savingForcaTarefa, setSavingForcaTarefa] = useState(false);
+	const [savingManualEntry, setSavingManualEntry] = useState(false);
 	const [agentesData, setAgentesData] = useState({});
 	const dataVersionRef = useRef(0);
 
@@ -915,6 +921,99 @@ export const useMetas = () => {
 		}
 	}, []);
 
+	const salvarLancamentoManual = useCallback(
+		async ({ mes, fonte, ano, lancamento }) => {
+			const uploadVersion = dataVersionRef.current + 1;
+			dataVersionRef.current = uploadVersion;
+			setSavingManualEntry(true);
+			try {
+				const extras = await buscarFeriadosVps();
+				const feriadosSet = new Set(extras);
+				const baseConfig = await buscarMetasBaseConfig(true, {
+					preferLive: true,
+				});
+				const manualRecord = buildManualMetasRecord({
+					month: mes,
+					source: fonte,
+					year: ano,
+					baseConfig,
+					feriadosSet,
+					...lancamento,
+				});
+				const { agentesData: manualAgentCities, ...recordData } = manualRecord;
+				const currentMonthData = allData[mes] || {};
+				const currentSempre =
+					currentMonthData && typeof currentMonthData === "object"
+						? {
+								...currentMonthData,
+								onnet: undefined,
+								onnetSempre: undefined,
+							}
+						: null;
+				const sempreRecord =
+					fonte === MANUAL_META_SOURCES.SEMPRE ? recordData : currentSempre;
+				const onnetRecord =
+					fonte === MANUAL_META_SOURCES.ONNET
+						? recordData
+						: currentMonthData.onnet || null;
+				const combined = combineMetasRecords(sempreRecord, onnetRecord, mes, {
+					year: ano,
+					feriadosSet,
+				});
+				const nextMonthData =
+					fonte === MANUAL_META_SOURCES.ONNET
+						? {
+								...(currentSempre || {}),
+								onnet: recordData,
+								onnetSempre: combined,
+							}
+						: {
+								...recordData,
+								onnet: onnetRecord,
+								onnetSempre: combined,
+							};
+				const parsed = {
+					...allData,
+					[mes]: nextMonthData,
+				};
+				const nextAgentesData =
+					fonte === MANUAL_META_SOURCES.SEMPRE
+						? {
+								...agentesData,
+								[mes]: manualAgentCities || [],
+							}
+						: agentesData;
+				const now = new Date();
+				const txt = `Ultima atualizacao: ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")} as ${String(now.getHours()).padStart(2, "0")}h${String(now.getMinutes()).padStart(2, "0")}`;
+				const persistResult = await persistMetasImport({
+					parsed,
+					agentesData: nextAgentesData,
+					lastUpdate: txt,
+				});
+
+				if (uploadVersion !== dataVersionRef.current) return null;
+				invalidateMetasCache();
+				invalidateDashboardDataCache(persistResult?.generatedAt || null);
+				invalidateInternalStaticDataCache(persistResult?.generatedAt || null);
+				setFeriadosExtras(extras);
+				setMetasBaseConfig(normalizeMetasBaseConfig(baseConfig));
+				setAllData(applyMetasBaseConfigToAllData(parsed, baseConfig));
+				setAgentesData(nextAgentesData);
+				setLastUpdate(txt);
+				setMesSelecionado(mes);
+				return persistResult;
+			} catch (e) {
+				logger.error("Erro ao salvar lancamento manual de metas", e);
+				throw e;
+			} finally {
+				if (uploadVersion === dataVersionRef.current) {
+					setSavingManualEntry(false);
+				}
+			}
+		},
+		[agentesData, allData, buscarFeriadosVps],
+	);
+
 	return {
 		allData,
 		dadosMes: allData[mesSelecionado] ?? null,
@@ -931,6 +1030,8 @@ export const useMetas = () => {
 		metasBaseConfig,
 		savingMetasBaseConfig,
 		salvarConfiguracaoMetasBase,
+		savingManualEntry,
+		salvarLancamentoManual,
 		carregar,
 		feriadosExtras,
 	};

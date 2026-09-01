@@ -4,6 +4,7 @@ import {
 	Calendar,
 	Copy,
 	Flag,
+	PencilLine,
 	Settings,
 	ShieldAlert,
 	Target,
@@ -23,6 +24,7 @@ import { useMetas } from "../hooks/useMetas";
 import MetasAuditoria from "./MetasAuditoria";
 import MetasExportButton from "./MetasExportButton";
 import MetasExportPDF from "./MetasExportPDF";
+import MetasLancamentoManual from "./MetasLancamentoManual";
 import MetasMultas from "./MetasMultas";
 import MetasPerformance from "./MetasPerformance";
 import MetasResumoMensal from "./MetasResumoMensal";
@@ -48,6 +50,7 @@ const ABAS = [
 	{ id: "resumo", label: "Resumo Mensal", icon: BarChart2 },
 	{ id: "performance", label: "Performance", icon: Target },
 	{ id: "saldo", label: "Saldo Diario", icon: Calendar },
+	{ id: "lancamento", label: "Lançamento", icon: PencilLine },
 	{ id: "multas", label: "Multas", icon: AlertTriangle },
 	{ id: "forca-tarefa", label: "Forca tarefa", icon: Flag },
 	{ id: "auditoria", label: "Auditoria", icon: ShieldAlert },
@@ -793,6 +796,8 @@ const MetasPage = () => {
 		metasBaseConfig,
 		savingMetasBaseConfig,
 		salvarConfiguracaoMetasBase,
+		savingManualEntry,
+		salvarLancamentoManual,
 	} = useMetas();
 
 	// Converte array MM-DD para Set, memoizado
@@ -809,6 +814,7 @@ const MetasPage = () => {
 		[allData, fonteDados],
 	);
 	const dadosMesFonte = allDataFonte[mesSelecionado] || null;
+	const temDados = Object.keys(allData).length > 0;
 	const fonteSelecionadaLabel =
 		FONTES_DADOS.find((fonte) => fonte.id === fonteDados)?.label || "SEMPRE";
 
@@ -866,7 +872,7 @@ const MetasPage = () => {
 			</div>
 
 			{/* Sem dados */}
-			{Object.keys(allData).length === 0 && (
+			{!temDados && aba !== "lancamento" && (
 				<div className="bg-white rounded-2xl border border-gray-100 p-14 text-center">
 					<BarChart2 size={32} className="text-gray-200 mx-auto mb-3" />
 					<p className="text-sm font-semibold text-gray-400">
@@ -881,7 +887,7 @@ const MetasPage = () => {
 				</div>
 			)}
 
-			{Object.keys(allData).length > 0 && (
+			{(temDados || podeGerenciar) && (
 				<>
 					{/* Seletor de mes */}
 					{aba !== "auditoria" && (
@@ -895,9 +901,12 @@ const MetasPage = () => {
 											? "bg-blue-600 text-white"
 											: temDadosNaFonte(allData[m], fonteDados)
 												? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-												: "bg-gray-50 text-gray-300 cursor-default"
+												: aba === "lancamento"
+													? "bg-gray-100 text-gray-600 hover:bg-gray-200"
+													: "bg-gray-50 text-gray-300 cursor-default"
 									}`}
 									disabled={
+										aba !== "lancamento" &&
 										!temDadosNaFonte(allData[m], fonteDados) &&
 										mesSelecionado !== m
 									}
@@ -976,6 +985,18 @@ const MetasPage = () => {
 					)}
 					{aba === "saldo" && (
 						<MetasSaldoDiario dados={dadosMesFonte} feriadosSet={feriadosSet} />
+					)}
+					{aba === "lancamento" && (
+						<MetasLancamentoManual
+							key={mesSelecionado}
+							month={mesSelecionado}
+							allData={allData}
+							agentesData={agentesData}
+							metasBaseConfig={metasBaseConfig}
+							onSave={salvarLancamentoManual}
+							saving={savingManualEntry}
+							canManage={podeGerenciar}
+						/>
 					)}
 					{aba === "multas" && (
 						<MetasMultas dados={dadosMesFonte} mes={mesSelecionado} />
