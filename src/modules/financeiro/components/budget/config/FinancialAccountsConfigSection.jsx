@@ -1,5 +1,6 @@
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import ModalShell from "../../../../../components/ui/ModalShell";
 import {
 	BUDGET_CATEGORY_CLASSES,
 	enrichFinancialAccountWithCategory,
@@ -71,6 +72,141 @@ function buildCategoryGroups({
 		.filter((group) => group.visibleItems.length || !group.items.length);
 }
 
+export function FinancialAccountCategoriesModal({
+	budgetSettings,
+	canManage,
+	onChangeSettings,
+	onClose,
+	saving,
+}) {
+	const [newCategoryName, setNewCategoryName] = useState("");
+	const [newCategoryClass, setNewCategoryClass] = useState(
+		BUDGET_CATEGORY_CLASSES.BASAL,
+	);
+	const categoryCatalog = getFinancialAccountCategoryCatalog(
+		budgetSettings?.financialAccountCategories || [],
+	);
+	const saveCategoryCatalog = (nextCategories) =>
+		onChangeSettings?.(
+			"financialAccountCategories",
+			normalizeFinancialAccountCategories(nextCategories, []),
+		);
+	const createCategory = (category) => {
+		const name = String(category?.name || "").trim();
+		if (!name || !canManage || saving) return;
+		const normalizedName = name
+			.normalize("NFD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.toLowerCase();
+		const classType = category.classType || BUDGET_CATEGORY_CLASSES.BASAL;
+		const nextCategories = [...categoryCatalog];
+		const alreadyExists = nextCategories.some(
+			(item) =>
+				item.classType === classType &&
+				item.name
+					.normalize("NFD")
+					.replace(/[\u0300-\u036f]/g, "")
+					.toLowerCase() === normalizedName,
+		);
+		if (!alreadyExists) {
+			nextCategories.push({
+				name,
+				classType,
+				accounts: [],
+			});
+		}
+		saveCategoryCatalog(nextCategories);
+		setNewCategoryName("");
+	};
+	const updateCategoryClass = (category, classType) => {
+		const nextCategories = categoryCatalog.map((item) =>
+			item.name === category.name && item.classType === category.classType
+				? { ...item, classType }
+				: item,
+		);
+		saveCategoryCatalog(nextCategories);
+	};
+
+	return (
+		<ModalShell title="Categorias BASAL e NÃO BASAL" onClose={onClose} size="xl">
+			<div className="space-y-4">
+				<section className="rounded-2xl border border-emerald-100 bg-white p-4">
+					<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+						<label className="flex-1 text-xs font-black uppercase text-slate-500">
+							Nova categoria
+							<input
+								value={newCategoryName}
+								disabled={!canManage || saving}
+								onChange={(event) => setNewCategoryName(event.target.value)}
+								placeholder="Ex: Auditoria, Expansão, Projetos especiais"
+								className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 px-3 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+							/>
+						</label>
+						<label className="text-xs font-black uppercase text-slate-500">
+							Tipo
+							<select
+								value={newCategoryClass}
+								disabled={!canManage || saving}
+								onChange={(event) => setNewCategoryClass(event.target.value)}
+								className="mt-2 min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+							>
+								<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
+								<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
+									NÃO BASAL
+								</option>
+							</select>
+						</label>
+						<button
+							type="button"
+							disabled={!canManage || saving || !newCategoryName.trim()}
+							onClick={() =>
+								createCategory({
+									name: newCategoryName,
+									classType: newCategoryClass,
+								})
+							}
+							className="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+						>
+							Cadastrar categoria
+						</button>
+					</div>
+				</section>
+				<section className="grid max-h-[60vh] gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+					{categoryCatalog.map((category) => (
+						<div
+							key={`${category.classType}:${category.name}`}
+							className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+						>
+							<div className="min-w-0">
+								<p className="break-words text-sm font-black text-slate-950">
+									{category.name}
+								</p>
+								<p className="text-[11px] font-bold text-slate-500">
+									{integer.format(category.accounts?.length || 0)} conta(s)
+									referência
+								</p>
+							</div>
+							<select
+								value={category.classType}
+								disabled={!canManage || saving}
+								onChange={(event) =>
+									updateCategoryClass(category, event.target.value)
+								}
+								className="min-h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+							>
+								<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
+								<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
+									NÃO BASAL
+								</option>
+							</select>
+						</div>
+					))}
+				</section>
+			</div>
+		</ModalShell>
+	);
+}
+
 export default function FinancialAccountsConfigSection({
 	BudgetDropdownSection,
 	EMPTY_FINANCIAL_ACCOUNT,
@@ -79,7 +215,6 @@ export default function FinancialAccountsConfigSection({
 	budgetSettings,
 	canManage,
 	isAccountInactive,
-	onChangeSettings,
 	removeAccount,
 	saving,
 	setAccountModal,
@@ -88,10 +223,6 @@ export default function FinancialAccountsConfigSection({
 	setAccountViewModal,
 	sortedAccounts,
 }) {
-	const [newCategoryName, setNewCategoryName] = useState("");
-	const [newCategoryClass, setNewCategoryClass] = useState(
-		BUDGET_CATEGORY_CLASSES.BASAL,
-	);
 	const configuredCategoryCatalog = budgetSettings?.financialAccountCategories || [];
 	const enrichedAccounts = sortedAccounts.map((account) =>
 		enrichFinancialAccountWithCategory(account, configuredCategoryCatalog),
@@ -148,49 +279,6 @@ export default function FinancialAccountsConfigSection({
 	const totalAnalyticAccountCount = enrichedAccounts.filter(
 		(account) => account.tipoPlano === "A",
 	).length;
-	const categoryCatalog = getFinancialAccountCategoryCatalog(
-		budgetSettings?.financialAccountCategories || [],
-	);
-	const saveCategoryCatalog = (nextCategories) =>
-		onChangeSettings?.(
-			"financialAccountCategories",
-			normalizeFinancialAccountCategories(nextCategories, []),
-		);
-	const createCategory = (category) => {
-		const name = String(category?.name || "").trim();
-		if (!name || !canManage || saving) return;
-		const normalizedName = name
-			.normalize("NFD")
-			.replace(/[\u0300-\u036f]/g, "")
-			.toLowerCase();
-		const classType = category.classType || BUDGET_CATEGORY_CLASSES.BASAL;
-		const nextCategories = [...categoryCatalog];
-		const alreadyExists = nextCategories.some(
-			(item) =>
-				item.classType === classType &&
-				item.name
-					.normalize("NFD")
-					.replace(/[\u0300-\u036f]/g, "")
-					.toLowerCase() === normalizedName,
-		);
-		if (!alreadyExists) {
-			nextCategories.push({
-				name,
-				classType,
-				accounts: [],
-			});
-		}
-		saveCategoryCatalog(nextCategories);
-		setNewCategoryName("");
-	};
-	const updateCategoryClass = (category, classType) => {
-		const nextCategories = categoryCatalog.map((item) =>
-			item.name === category.name && item.classType === category.classType
-				? { ...item, classType }
-				: item,
-		);
-		saveCategoryCatalog(nextCategories);
-	};
 	const renderCategory = (group) => (
 		<details
 			key={group.key}
@@ -354,78 +442,6 @@ export default function FinancialAccountsConfigSection({
 					</p>
 				</div>
 			</div>
-			<section className="mb-4 rounded-2xl border border-emerald-100 bg-white p-4">
-				<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-					<label className="flex-1 text-xs font-black uppercase text-slate-500">
-						Nova categoria
-						<input
-							value={newCategoryName}
-							disabled={!canManage || saving}
-							onChange={(event) => setNewCategoryName(event.target.value)}
-							placeholder="Ex: Auditoria, Expansão, Projetos especiais"
-							className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 px-3 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-						/>
-					</label>
-					<label className="text-xs font-black uppercase text-slate-500">
-						Tipo
-						<select
-							value={newCategoryClass}
-							disabled={!canManage || saving}
-							onChange={(event) => setNewCategoryClass(event.target.value)}
-							className="mt-2 min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-						>
-							<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
-							<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
-								NÃO BASAL
-							</option>
-						</select>
-					</label>
-					<button
-						type="button"
-						disabled={!canManage || saving || !newCategoryName.trim()}
-						onClick={() =>
-							createCategory({
-								name: newCategoryName,
-								classType: newCategoryClass,
-							})
-						}
-						className="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
-					>
-						Cadastrar categoria
-					</button>
-				</div>
-				<div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-					{categoryCatalog.map((category) => (
-						<div
-							key={`${category.classType}:${category.name}`}
-							className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
-						>
-							<div className="min-w-0">
-								<p className="break-words text-sm font-black text-slate-950">
-									{category.name}
-								</p>
-								<p className="text-[11px] font-bold text-slate-500">
-									{integer.format(category.accounts?.length || 0)} conta(s)
-									referência
-								</p>
-							</div>
-							<select
-								value={category.classType}
-								disabled={!canManage || saving}
-								onChange={(event) =>
-									updateCategoryClass(category, event.target.value)
-								}
-								className="min-h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-							>
-								<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
-								<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
-									NÃO BASAL
-								</option>
-							</select>
-						</div>
-					))}
-				</div>
-			</section>
 			<div className="grid gap-4 xl:grid-cols-2">
 				<section className="space-y-3">
 					<div className="rounded-2xl bg-emerald-100 px-4 py-3 text-sm font-black text-emerald-800">

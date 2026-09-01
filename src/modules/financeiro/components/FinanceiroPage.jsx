@@ -49,7 +49,9 @@ import BudgetDashboardView from "./budget/BudgetDashboardView";
 import BudgetDreView from "./budget/BudgetDreView";
 import CompaniesBranchesConfigSection from "./budget/config/CompaniesBranchesConfigSection";
 import CostCentersTreeConfigSection from "./budget/config/CostCentersTreeConfigSection";
-import FinancialAccountsConfigSection from "./budget/config/FinancialAccountsConfigSection";
+import FinancialAccountsConfigSection, {
+	FinancialAccountCategoriesModal,
+} from "./budget/config/FinancialAccountsConfigSection";
 import BudgetMatrixConfigSection from "./budget/config/BudgetMatrixConfigSection";
 import BudgetParametersSection from "./budget/config/BudgetParametersSection";
 import PartnersConfigSection from "./budget/config/PartnersConfigSection";
@@ -8127,6 +8129,8 @@ function CostCentersConfigSection({
 		normalizeFinancialAccountCategories,
 		normalizeList,
 	});
+	const [accountCategoriesModalOpen, setAccountCategoriesModalOpen] =
+		useState(false);
 
 	const upsertAccount = (account) => {
 		setAccountModal(null);
@@ -8425,6 +8429,14 @@ function CostCentersConfigSection({
 					</button>
 					<button
 						type="button"
+						onClick={() => setAccountCategoriesModalOpen(true)}
+						disabled={loading || saving}
+						className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+					>
+						<Settings size={16} /> Categorias BASAL
+					</button>
+					<button
+						type="button"
 						onClick={() =>
 							saveConfig(configRef.current, "Configurações salvas.")
 						}
@@ -8573,6 +8585,16 @@ function CostCentersConfigSection({
 				setAccountViewModal={setAccountViewModal}
 				sortedAccounts={sortedAccounts}
 			/>
+
+			{accountCategoriesModalOpen ? (
+				<FinancialAccountCategoriesModal
+					budgetSettings={budgetSettings}
+					canManage={canManage}
+					onChangeSettings={updateSettings}
+					onClose={() => setAccountCategoriesModalOpen(false)}
+					saving={saving}
+				/>
+			) : null}
 
 			<CostCentersTreeConfigSection
 				COST_CENTER_TYPES={COST_CENTER_TYPES}
