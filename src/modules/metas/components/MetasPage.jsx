@@ -4,6 +4,9 @@ import {
 	Calendar,
 	Copy,
 	Flag,
+	PencilLine,
+	SkipBack,
+	SkipForward,
 	Settings,
 	ShieldAlert,
 	Target,
@@ -23,6 +26,7 @@ import { useMetas } from "../hooks/useMetas";
 import MetasAuditoria from "./MetasAuditoria";
 import MetasExportButton from "./MetasExportButton";
 import MetasExportPDF from "./MetasExportPDF";
+import MetasLancamentoManual from "./MetasLancamentoManual";
 import MetasMultas from "./MetasMultas";
 import MetasPerformance from "./MetasPerformance";
 import MetasResumoMensal from "./MetasResumoMensal";
@@ -48,6 +52,7 @@ const ABAS = [
 	{ id: "resumo", label: "Resumo Mensal", icon: BarChart2 },
 	{ id: "performance", label: "Performance", icon: Target },
 	{ id: "saldo", label: "Saldo Diario", icon: Calendar },
+	{ id: "lancamento", label: "Lançamento", icon: PencilLine },
 	{ id: "multas", label: "Multas", icon: AlertTriangle },
 	{ id: "forca-tarefa", label: "Forca tarefa", icon: Flag },
 	{ id: "auditoria", label: "Auditoria", icon: ShieldAlert },
@@ -116,6 +121,12 @@ function formatNumber(value) {
 
 function getMesFromDate(date) {
 	return MESES[date.getMonth()] || "";
+}
+
+function moveMonth(month, direction) {
+	const index = MESES.findIndex((item) => item === month);
+	if (index < 0) return month;
+	return MESES[(index + direction + MESES.length) % MESES.length];
 }
 
 function getForcaTaskContext(config, allData, agentesData) {
@@ -793,6 +804,8 @@ const MetasPage = () => {
 		metasBaseConfig,
 		savingMetasBaseConfig,
 		salvarConfiguracaoMetasBase,
+		savingManualEntry,
+		salvarLancamentoManual,
 	} = useMetas();
 
 	// Converte array MM-DD para Set, memoizado
@@ -809,6 +822,7 @@ const MetasPage = () => {
 		[allData, fonteDados],
 	);
 	const dadosMesFonte = allDataFonte[mesSelecionado] || null;
+	const temDados = Object.keys(allData).length > 0;
 	const fonteSelecionadaLabel =
 		FONTES_DADOS.find((fonte) => fonte.id === fonteDados)?.label || "SEMPRE";
 
@@ -866,7 +880,7 @@ const MetasPage = () => {
 			</div>
 
 			{/* Sem dados */}
-			{Object.keys(allData).length === 0 && (
+			{!temDados && aba !== "lancamento" && (
 				<div className="bg-white rounded-2xl border border-gray-100 p-14 text-center">
 					<BarChart2 size={32} className="text-gray-200 mx-auto mb-3" />
 					<p className="text-sm font-semibold text-gray-400">
@@ -881,11 +895,43 @@ const MetasPage = () => {
 				</div>
 			)}
 
-			{Object.keys(allData).length > 0 && (
+			{(temDados || podeGerenciar) && (
 				<>
 					{/* Seletor de mes */}
 					{aba !== "auditoria" && (
 						<div className="flex flex-wrap items-center gap-2">
+							{aba === "lancamento" ? (
+								<div className="mr-1 flex items-center gap-2 rounded-2xl border border-blue-100 bg-white p-1.5">
+									<button
+										type="button"
+										onClick={() => setMesSelecionado(moveMonth(mesSelecionado, -1))}
+										className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100"
+										title="Voltar mês"
+									>
+										<SkipBack size={16} />
+									</button>
+									<select
+										value={mesSelecionado}
+										onChange={(event) => setMesSelecionado(event.target.value)}
+										className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 outline-none focus:border-blue-400"
+										aria-label="Mês do lançamento"
+									>
+										{MESES.map((m) => (
+											<option key={m} value={m}>
+												{m}
+											</option>
+										))}
+									</select>
+									<button
+										type="button"
+										onClick={() => setMesSelecionado(moveMonth(mesSelecionado, 1))}
+										className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100"
+										title="Avançar mês"
+									>
+										<SkipForward size={16} />
+									</button>
+								</div>
+							) : null}
 							{MESES.map((m) => (
 								<button
 									key={m}
@@ -895,9 +941,12 @@ const MetasPage = () => {
 											? "bg-blue-600 text-white"
 											: temDadosNaFonte(allData[m], fonteDados)
 												? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-												: "bg-gray-50 text-gray-300 cursor-default"
+												: aba === "lancamento"
+													? "bg-gray-100 text-gray-600 hover:bg-gray-200"
+													: "bg-gray-50 text-gray-300 cursor-default"
 									}`}
 									disabled={
+										aba !== "lancamento" &&
 										!temDadosNaFonte(allData[m], fonteDados) &&
 										mesSelecionado !== m
 									}
@@ -976,6 +1025,18 @@ const MetasPage = () => {
 					)}
 					{aba === "saldo" && (
 						<MetasSaldoDiario dados={dadosMesFonte} feriadosSet={feriadosSet} />
+					)}
+					{aba === "lancamento" && (
+						<MetasLancamentoManual
+							key={mesSelecionado}
+							month={mesSelecionado}
+							allData={allData}
+							agentesData={agentesData}
+							metasBaseConfig={metasBaseConfig}
+							onSave={salvarLancamentoManual}
+							saving={savingManualEntry}
+							canManage={podeGerenciar}
+						/>
 					)}
 					{aba === "multas" && (
 						<MetasMultas dados={dadosMesFonte} mes={mesSelecionado} />

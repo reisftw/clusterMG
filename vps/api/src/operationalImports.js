@@ -1517,6 +1517,10 @@ async function persistMetasImport(payload = {}, user = {}) {
 				falta: city.meta - city.total,
 				pct: city.pct,
 				daily: city.daily,
+				lojaAgentesTotal: Number(city.lojaAgentesTotal || 0),
+				lojaAgentesDaily: Array.isArray(city.lojaAgentesDaily)
+					? city.lojaAgentesDaily
+					: [],
 			}));
 			const totalRealizado = normalizedCities.reduce(
 				(sum, city) => sum + Number(city.realizado || 0),

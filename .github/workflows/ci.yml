@@ -221,9 +221,9 @@ jobs:
       contents: read
 
     env:
-      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST }}
-      VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || '22' }}
-      VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || 'root' }}
+      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST || secrets.PROD_VPS_HOST }}
+      VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || secrets.PROD_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || secrets.PROD_VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH || '/var/www/retiradas-homolog/dist' }}
       VPS_API_PATH: ${{ secrets.HOMOLOG_VPS_API_PATH || '/opt/retiradas/vps-homolog' }}
       VPS_API_SERVICE: ${{ secrets.HOMOLOG_VPS_API_SERVICE || 'retiradas-api-homolog' }}
@@ -243,10 +243,10 @@ jobs:
 
       - name: Configure SSH
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.HOMOLOG_VPS_SSH_KEY || secrets.VPS_SSH_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.HOMOLOG_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.PROD_VPS_SSH_KEY }}
         run: |
-          test -n "$VPS_HOST" || (echo "Missing secret HOMOLOG_VPS_HOST or VPS_HOST" && exit 1)
-          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret HOMOLOG_VPS_SSH_KEY or VPS_SSH_KEY" && exit 1)
+          test -n "$VPS_HOST" || (echo "Missing secret HOMOLOG_VPS_HOST, VPS_HOST or PROD_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret HOMOLOG_VPS_SSH_KEY, VPS_SSH_KEY or PROD_VPS_SSH_KEY" && exit 1)
 
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh

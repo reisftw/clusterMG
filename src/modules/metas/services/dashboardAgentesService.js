@@ -71,6 +71,10 @@ export async function salvarDashboardAgentes(agentesData) {
 					falta: c.meta - c.total,
 					pct: c.pct,
 					daily: c.daily,
+					lojaAgentesTotal: Number(c.lojaAgentesTotal || 0),
+					lojaAgentesDaily: Array.isArray(c.lojaAgentesDaily)
+						? c.lojaAgentesDaily
+						: [],
 				}));
 
 				const cidadesRanking = [...cidadesNorm].sort(
