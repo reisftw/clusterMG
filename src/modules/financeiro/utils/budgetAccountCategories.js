@@ -239,6 +239,18 @@ export const FINANCIAL_ACCOUNT_CATEGORY_CATALOG = [
 const ACCOUNT_ALIASES = new Map([
 	["energia", "Energia Elétrica (Lojas, Escritorios)"],
 	["agua luz e telefone", "Água e Esgoto"],
+	["agua e luz", "Água e Esgoto"],
+	["agua esgoto", "Água e Esgoto"],
+	["aluguéis", "Aluguel"],
+	["alugueis", "Aluguel"],
+	["manutencao imoveis", "Manutenção de Imóveis"],
+	["tarifa bancaria", "Tarifas e pacotes bancários"],
+	["tarifas bancarias", "Tarifas e pacotes bancários"],
+	["boleto", "Tarifas Boletos"],
+	["boletos", "Tarifas Boletos"],
+	["combustivel", "Combustíveis - Veículos"],
+	["combustiveis", "Combustíveis - Veículos"],
+	["veiculos", "Veículos"],
 ]);
 
 export function normalizeFinancialAccountCategoryKey(value = "") {
@@ -268,7 +280,13 @@ function findCategoryByAccountName(name = "") {
 	const exact = CATEGORY_BY_ACCOUNT_KEY.get(normalized);
 	if (exact) return exact;
 	for (const [key, category] of CATEGORY_BY_ACCOUNT_KEY.entries()) {
-		if (normalized.includes(key) || key.includes(normalized)) return category;
+		if (key.length < 4) continue;
+		const isPhrase = key.includes(" ");
+		const keyPattern = new RegExp(`(^| )${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
+		if (keyPattern.test(normalized)) return category;
+		if (isPhrase && key.includes(normalized) && normalized.length >= 8) {
+			return category;
+		}
 	}
 	return null;
 }

@@ -2,6 +2,7 @@ import { brl, decimal, integer } from "./financeiroFormatters";
 import {
 	BUDGET_CATEGORY_CLASSES,
 	BUDGET_CATEGORY_CLASS_LABELS,
+	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
 	enrichFinancialAccountWithCategory,
 } from "./budgetAccountCategories";
 
@@ -446,8 +447,37 @@ function classifyBudgetRow(account = {}, center = {}) {
 	return enriched;
 }
 
-function buildBudgetCategoryGroups(accountRows = []) {
+function getBudgetCategoryContainer(classMap, classType, classLabel, categoryName) {
+	const categoryKey = `${classType}:${categoryName}`;
+	const currentClass = classMap.get(classType) || {
+		id: classType,
+		label: classLabel,
+		planned: 0,
+		realized: 0,
+		categories: new Map(),
+	};
+	const currentCategory = currentClass.categories.get(categoryKey) || {
+		id: categoryKey,
+		name: categoryName,
+		planned: 0,
+		realized: 0,
+		accounts: new Map(),
+	};
+	currentClass.categories.set(categoryKey, currentCategory);
+	classMap.set(classType, currentClass);
+	return { currentClass, currentCategory, categoryKey };
+}
+
+function buildBudgetCategoryGroups(accountRows = [], accounts = []) {
 	const classMap = new Map();
+	FINANCIAL_ACCOUNT_CATEGORY_CATALOG.forEach((category) => {
+		getBudgetCategoryContainer(
+			classMap,
+			category.classType,
+			BUDGET_CATEGORY_CLASS_LABELS[category.classType],
+			category.name,
+		);
+	});
 	accountRows.forEach((row) => {
 		const classification = classifyBudgetRow(row.account, row.center);
 		const classType =
@@ -458,22 +488,13 @@ function buildBudgetCategoryGroups(accountRows = []) {
 			"BASAL";
 		const categoryName = classification.categoriaMae || "Sem categoria";
 		const accountId = row.account?.id || row.row?.accountId || "sem-conta";
-		const categoryKey = `${classType}:${categoryName}`;
+		const { currentClass, currentCategory, categoryKey } = getBudgetCategoryContainer(
+			classMap,
+			classType,
+			classLabel,
+			categoryName,
+		);
 		const accountKey = `${categoryKey}:${accountId}`;
-		const currentClass = classMap.get(classType) || {
-			id: classType,
-			label: classLabel,
-			planned: 0,
-			realized: 0,
-			categories: new Map(),
-		};
-		const currentCategory = currentClass.categories.get(categoryKey) || {
-			id: categoryKey,
-			name: categoryName,
-			planned: 0,
-			realized: 0,
-			accounts: new Map(),
-		};
 		const currentAccount = currentCategory.accounts.get(accountKey) || {
 			id: accountId,
 			account: classification,
@@ -498,8 +519,31 @@ function buildBudgetCategoryGroups(accountRows = []) {
 			});
 		}
 		currentCategory.accounts.set(accountKey, currentAccount);
-		currentClass.categories.set(categoryKey, currentCategory);
-		classMap.set(classType, currentClass);
+	});
+	accounts.map(enrichFinancialAccountWithCategory).forEach((account) => {
+		const classType = account.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+		const classLabel =
+			account.categoriaClasseLabel ||
+			BUDGET_CATEGORY_CLASS_LABELS[classType] ||
+			"BASAL";
+		const categoryName = account.categoriaMae || "Sem categoria";
+		const accountId = account.id || account.codigo || "sem-conta";
+		const { currentCategory, categoryKey } = getBudgetCategoryContainer(
+			classMap,
+			classType,
+			classLabel,
+			categoryName,
+		);
+		const accountKey = `${categoryKey}:${accountId}`;
+		if (!currentCategory.accounts.has(accountKey)) {
+			currentCategory.accounts.set(accountKey, {
+				id: accountId,
+				account,
+				planned: 0,
+				realized: 0,
+				centers: [],
+			});
+		}
 	});
 	return [
 		BUDGET_CATEGORY_CLASSES.BASAL,
@@ -527,7 +571,12 @@ function buildBudgetCategoryGroups(accountRows = []) {
 						}))
 						.sort((left, right) => right.realized - left.realized),
 				}))
-				.sort((left, right) => right.realized - left.realized);
+				.sort((left, right) => {
+					const leftHasValue = left.planned || left.realized ? 1 : 0;
+					const rightHasValue = right.planned || right.realized ? 1 : 0;
+					if (leftHasValue !== rightHasValue) return rightHasValue - leftHasValue;
+					return right.realized - left.realized;
+				});
 			return {
 				...group,
 				...budgetMetric(group.planned, group.realized),
@@ -781,7 +830,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	});
 	const forecastRows = buildForecastRows(monthlyEvolution);
 	const accountSummary = buildAccountSummary(accountRows);
-	const budgetCategoryGroups = buildBudgetCategoryGroups(accountRows);
+	const budgetCategoryGroups = buildBudgetCategoryGroups(accountRows, accounts);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")
 		.map((item) => ({ ...item, id: item.center?.id }))
