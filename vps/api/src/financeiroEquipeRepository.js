@@ -5,6 +5,7 @@ class FinanceiroEquipeError extends Error {
 		super(message);
 		this.name = "FinanceiroEquipeError";
 		this.status = status;
+		this.statusCode = status;
 	}
 }
 

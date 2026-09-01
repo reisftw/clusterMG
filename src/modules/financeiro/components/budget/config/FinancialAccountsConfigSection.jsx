@@ -1,20 +1,12 @@
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import {
 	BUDGET_CATEGORY_CLASSES,
-	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
 	enrichFinancialAccountWithCategory,
+	getFinancialAccountCategoryCatalog,
+	normalizeFinancialAccountCategories,
 } from "../../../utils/budgetAccountCategories";
 import { integer } from "../../../utils/financeiroFormatters";
-
-function uniqueCatalogCategories() {
-	const seen = new Set();
-	return FINANCIAL_ACCOUNT_CATEGORY_CATALOG.filter((category) => {
-		const key = `${category.classType}:${category.name}`;
-		if (seen.has(key)) return false;
-		seen.add(key);
-		return true;
-	});
-}
 
 function classLabel(classType) {
 	return classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL ? "NÃO BASAL" : "BASAL";
@@ -25,6 +17,7 @@ function buildCategoryGroups({
 	isAccountInactive,
 	accountStatusFilter,
 	accountTextMatches,
+	budgetSettings,
 }) {
 	const accountVisibleByStatus = (account) => {
 		const inactive = isAccountInactive(account);
@@ -32,8 +25,13 @@ function buildCategoryGroups({
 		if (accountStatusFilter === "inativos") return inactive;
 		return true;
 	};
-	const enrichedAccounts = accounts.map(enrichFinancialAccountWithCategory);
-	const catalog = uniqueCatalogCategories();
+	const categoryCatalog = budgetSettings?.financialAccountCategories || [];
+	const enrichedAccounts = accounts.map((account) =>
+		enrichFinancialAccountWithCategory(account, categoryCatalog),
+	);
+	const catalog = getFinancialAccountCategoryCatalog(
+		budgetSettings?.financialAccountCategories || [],
+	);
 	const baseGroups = [
 		...catalog,
 		{
@@ -78,8 +76,10 @@ export default function FinancialAccountsConfigSection({
 	EMPTY_FINANCIAL_ACCOUNT,
 	accountSearch,
 	accountStatusFilter,
+	budgetSettings,
 	canManage,
 	isAccountInactive,
+	onChangeSettings,
 	removeAccount,
 	saving,
 	setAccountModal,
@@ -88,9 +88,17 @@ export default function FinancialAccountsConfigSection({
 	setAccountViewModal,
 	sortedAccounts,
 }) {
-	const enrichedAccounts = sortedAccounts.map(enrichFinancialAccountWithCategory);
+	const [newCategoryName, setNewCategoryName] = useState("");
+	const [newCategoryClass, setNewCategoryClass] = useState(
+		BUDGET_CATEGORY_CLASSES.BASAL,
+	);
+	const configuredCategoryCatalog = budgetSettings?.financialAccountCategories || [];
+	const enrichedAccounts = sortedAccounts.map((account) =>
+		enrichFinancialAccountWithCategory(account, configuredCategoryCatalog),
+	);
 	const categoryGroups = buildCategoryGroups({
 		accounts: enrichedAccounts,
+		budgetSettings,
 		isAccountInactive,
 		accountStatusFilter,
 		accountTextMatches: (account, related = []) => {
@@ -130,7 +138,9 @@ export default function FinancialAccountsConfigSection({
 		(group) => group.classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
 	);
 	const classifiedCount = sortedAccounts.filter(
-		(account) => enrichFinancialAccountWithCategory(account).categoriaMae !== "Sem categoria",
+		(account) =>
+			enrichFinancialAccountWithCategory(account, configuredCategoryCatalog)
+				.categoriaMae !== "Sem categoria",
 	).length;
 	const totalSyntheticAccountCount = enrichedAccounts.filter(
 		(account) => account.tipoPlano === "S" && Number(account.nivel || 0) > 2,
@@ -138,6 +148,49 @@ export default function FinancialAccountsConfigSection({
 	const totalAnalyticAccountCount = enrichedAccounts.filter(
 		(account) => account.tipoPlano === "A",
 	).length;
+	const categoryCatalog = getFinancialAccountCategoryCatalog(
+		budgetSettings?.financialAccountCategories || [],
+	);
+	const saveCategoryCatalog = (nextCategories) =>
+		onChangeSettings?.(
+			"financialAccountCategories",
+			normalizeFinancialAccountCategories(nextCategories, []),
+		);
+	const createCategory = (category) => {
+		const name = String(category?.name || "").trim();
+		if (!name || !canManage || saving) return;
+		const normalizedName = name
+			.normalize("NFD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.toLowerCase();
+		const classType = category.classType || BUDGET_CATEGORY_CLASSES.BASAL;
+		const nextCategories = [...categoryCatalog];
+		const alreadyExists = nextCategories.some(
+			(item) =>
+				item.classType === classType &&
+				item.name
+					.normalize("NFD")
+					.replace(/[\u0300-\u036f]/g, "")
+					.toLowerCase() === normalizedName,
+		);
+		if (!alreadyExists) {
+			nextCategories.push({
+				name,
+				classType,
+				accounts: [],
+			});
+		}
+		saveCategoryCatalog(nextCategories);
+		setNewCategoryName("");
+	};
+	const updateCategoryClass = (category, classType) => {
+		const nextCategories = categoryCatalog.map((item) =>
+			item.name === category.name && item.classType === category.classType
+				? { ...item, classType }
+				: item,
+		);
+		saveCategoryCatalog(nextCategories);
+	};
 	const renderCategory = (group) => (
 		<details
 			key={group.key}
@@ -301,6 +354,78 @@ export default function FinancialAccountsConfigSection({
 					</p>
 				</div>
 			</div>
+			<section className="mb-4 rounded-2xl border border-emerald-100 bg-white p-4">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+					<label className="flex-1 text-xs font-black uppercase text-slate-500">
+						Nova categoria
+						<input
+							value={newCategoryName}
+							disabled={!canManage || saving}
+							onChange={(event) => setNewCategoryName(event.target.value)}
+							placeholder="Ex: Auditoria, Expansão, Projetos especiais"
+							className="mt-2 min-h-10 w-full rounded-xl border border-slate-200 px-3 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+						/>
+					</label>
+					<label className="text-xs font-black uppercase text-slate-500">
+						Tipo
+						<select
+							value={newCategoryClass}
+							disabled={!canManage || saving}
+							onChange={(event) => setNewCategoryClass(event.target.value)}
+							className="mt-2 min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm normal-case text-slate-900 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+						>
+							<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
+							<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
+								NÃO BASAL
+							</option>
+						</select>
+					</label>
+					<button
+						type="button"
+						disabled={!canManage || saving || !newCategoryName.trim()}
+						onClick={() =>
+							createCategory({
+								name: newCategoryName,
+								classType: newCategoryClass,
+							})
+						}
+						className="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+					>
+						Cadastrar categoria
+					</button>
+				</div>
+				<div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+					{categoryCatalog.map((category) => (
+						<div
+							key={`${category.classType}:${category.name}`}
+							className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+						>
+							<div className="min-w-0">
+								<p className="break-words text-sm font-black text-slate-950">
+									{category.name}
+								</p>
+								<p className="text-[11px] font-bold text-slate-500">
+									{integer.format(category.accounts?.length || 0)} conta(s)
+									referência
+								</p>
+							</div>
+							<select
+								value={category.classType}
+								disabled={!canManage || saving}
+								onChange={(event) =>
+									updateCategoryClass(category, event.target.value)
+								}
+								className="min-h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+							>
+								<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
+								<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
+									NÃO BASAL
+								</option>
+							</select>
+						</div>
+					))}
+				</div>
+			</section>
 			<div className="grid gap-4 xl:grid-cols-2">
 				<section className="space-y-3">
 					<div className="rounded-2xl bg-emerald-100 px-4 py-3 text-sm font-black text-emerald-800">

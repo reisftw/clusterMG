@@ -255,6 +255,14 @@ function CargoModal({ cargo, onClose, onSave }) {
 function ColaboradorModal({ cargos, colaborador, colaboradores, onClose, onDelete, onSave }) {
 	const [form, setForm] = useState(colaborador || emptyColaboradorForm());
 	const gestores = colaboradores.filter((item) => item.id !== colaborador?.id);
+	const setores = [
+		...new Set(
+			cargos
+				.map((cargo) => String(cargo.setor || "").trim())
+				.filter(Boolean)
+				.sort((left, right) => left.localeCompare(right, "pt-BR")),
+		),
+	];
 	function handleCargoChange(cargoId) {
 		const cargoSelecionado = cargos.find((cargo) => cargo.id === cargoId);
 		setForm((current) => ({
@@ -262,7 +270,7 @@ function ColaboradorModal({ cargos, colaborador, colaboradores, onClose, onDelet
 			cargoId,
 			atividades:
 				current.atividades || cargoSelecionado?.descricao || current.atividades,
-			setor: current.setor || cargoSelecionado?.setor || current.setor,
+			setor: cargoSelecionado?.setor || current.setor,
 		}));
 	}
 	return (
@@ -281,7 +289,19 @@ function ColaboradorModal({ cargos, colaborador, colaboradores, onClose, onDelet
 					</label>
 					<label className="space-y-1 text-sm font-bold text-slate-700">
 						Setor
-						<input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.setor} onChange={(event) => setForm((current) => ({ ...current, setor: event.target.value }))} />
+						<select
+							className="w-full rounded-xl border border-slate-200 px-3 py-2 disabled:bg-slate-100 disabled:text-slate-400"
+							disabled={!setores.length}
+							value={form.setor}
+							onChange={(event) => setForm((current) => ({ ...current, setor: event.target.value }))}
+						>
+							<option value="">
+								{setores.length ? "Selecione o setor" : "Não há setores cadastrados"}
+							</option>
+							{setores.map((setor) => (
+								<option key={setor} value={setor}>{setor}</option>
+							))}
+						</select>
 					</label>
 					<label className="space-y-1 text-sm font-bold text-slate-700">
 						Cargo

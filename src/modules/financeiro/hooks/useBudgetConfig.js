@@ -9,6 +9,7 @@ export function useBudgetConfig({
 	getBudgetSettings,
 	getVisibleError,
 	normalizeDirectorates,
+	normalizeFinancialAccountCategories,
 	normalizeList,
 }) {
 	const [config, setConfig] = useState({
@@ -139,6 +140,8 @@ export function useBudgetConfig({
 			const normalizedValue =
 				field === "directorates"
 					? normalizeDirectorates(value, [])
+					: field === "financialAccountCategories"
+						? normalizeFinancialAccountCategories(value, [])
 					: normalizeList(value, []);
 			const nextConfig = {
 				...configRef.current,
@@ -184,6 +187,7 @@ export function useBudgetConfig({
 			getBudgetSettings,
 			getVisibleError,
 			normalizeDirectorates,
+			normalizeFinancialAccountCategories,
 			normalizeList,
 		],
 	);

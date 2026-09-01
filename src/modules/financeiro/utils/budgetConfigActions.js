@@ -25,7 +25,10 @@ export function findDirectorateByName(directorates = [], name = "") {
 export function upsertAccount(account, config = {}) {
 	const rawId = String(account.id || account.codigo || account.nome || "").trim();
 	const id = budgetEntityId(rawId, `conta-${Date.now()}`);
-	const nextAccount = enrichFinancialAccountWithCategory({ ...account, id });
+	const nextAccount = enrichFinancialAccountWithCategory(
+		{ ...account, id },
+		config.settings?.financialAccountCategories || [],
+	);
 	const currentAccounts = config.accounts || [];
 	const existingIndex = currentAccounts.findIndex(
 		(item) => item.id === id || item.codigo === account.codigo,

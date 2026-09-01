@@ -84,6 +84,8 @@ import {
 	BUDGET_CATEGORY_CLASSES,
 	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
 	enrichFinancialAccountWithCategory,
+	getFinancialAccountCategoryCatalog,
+	normalizeFinancialAccountCategories,
 } from "../utils/budgetAccountCategories";
 import {
 	buscarCentrosCustoOrcamentoFinanceiro,
@@ -5632,6 +5634,9 @@ const DEFAULT_BUDGET_SETTINGS = {
 		"Impostos",
 	],
 	centerStatuses: ["ativo", "em_observacao", "bloqueado", "inativo"],
+	financialAccountCategories: normalizeFinancialAccountCategories(
+		FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
+	),
 };
 
 const EMPTY_DIRECTORATE = {
@@ -5756,6 +5761,10 @@ function getBudgetSettings(settings = {}) {
 		centerStatuses: normalizeList(
 			settings.centerStatuses,
 			DEFAULT_BUDGET_SETTINGS.centerStatuses,
+		),
+		financialAccountCategories: normalizeFinancialAccountCategories(
+			settings.financialAccountCategories,
+			DEFAULT_BUDGET_SETTINGS.financialAccountCategories,
 		),
 	};
 }
@@ -7049,7 +7058,9 @@ function FinancialAccountModal({
 			),
 		),
 	];
-	const financialCategoryOptions = FINANCIAL_ACCOUNT_CATEGORY_CATALOG.map(
+	const financialCategoryOptions = getFinancialAccountCategoryCatalog(
+		budgetSettings.financialAccountCategories,
+	).map(
 		(category) => ({
 			value: `${category.classType}:${category.name}`,
 			name: category.name,
@@ -7081,7 +7092,10 @@ function FinancialAccountModal({
 		form.dreGroup,
 		dreGroupOptions,
 	);
-	const resolvedCategory = enrichFinancialAccountWithCategory(form);
+	const resolvedCategory = enrichFinancialAccountWithCategory(
+		form,
+		budgetSettings.financialAccountCategories,
+	);
 	const selectedFinancialCategoryValue =
 		`${form.categoriaClasse || resolvedCategory.categoriaClasse}:${form.categoriaMae || resolvedCategory.categoriaMae}`;
 
@@ -7102,7 +7116,10 @@ function FinancialAccountModal({
 			return;
 		}
 		setMessage("");
-		const category = enrichFinancialAccountWithCategory(form);
+		const category = enrichFinancialAccountWithCategory(
+			form,
+			budgetSettings.financialAccountCategories,
+		);
 		onSave({
 			...form,
 			grupo: selectedGroupValue || form.grupo || "",
@@ -8107,6 +8124,7 @@ function CostCentersConfigSection({
 		getBudgetSettings,
 		getVisibleError,
 		normalizeDirectorates,
+		normalizeFinancialAccountCategories,
 		normalizeList,
 	});
 
@@ -8543,8 +8561,10 @@ function CostCentersConfigSection({
 				EMPTY_FINANCIAL_ACCOUNT={EMPTY_FINANCIAL_ACCOUNT}
 				accountSearch={accountSearch}
 				accountStatusFilter={accountStatusFilter}
+				budgetSettings={budgetSettings}
 				canManage={canManage}
 				isAccountInactive={isAccountInactive}
+				onChangeSettings={updateSettings}
 				removeAccount={removeAccount}
 				saving={saving}
 				setAccountModal={setAccountModal}

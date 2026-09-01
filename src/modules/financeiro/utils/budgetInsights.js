@@ -2,8 +2,8 @@ import { brl, decimal, integer } from "./financeiroFormatters";
 import {
 	BUDGET_CATEGORY_CLASSES,
 	BUDGET_CATEGORY_CLASS_LABELS,
-	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
 	enrichFinancialAccountWithCategory,
+	getFinancialAccountCategoryCatalog,
 } from "./budgetAccountCategories";
 
 function dateFromInput(value) {
@@ -433,8 +433,8 @@ function isProjectCenter(center = {}) {
 	return fields.some((value) => normalizeBudgetText(value).includes("projeto"));
 }
 
-function classifyBudgetRow(account = {}, center = {}) {
-	const enriched = enrichFinancialAccountWithCategory(account || {});
+function classifyBudgetRow(account = {}, center = {}, categoryCatalog = []) {
+	const enriched = enrichFinancialAccountWithCategory(account || {}, categoryCatalog);
 	if (isProjectCenter(center)) {
 		return {
 			...enriched,
@@ -468,9 +468,9 @@ function getBudgetCategoryContainer(classMap, classType, classLabel, categoryNam
 	return { currentClass, currentCategory, categoryKey };
 }
 
-function buildBudgetCategoryGroups(accountRows = [], accounts = []) {
+function buildBudgetCategoryGroups(accountRows = [], accounts = [], categoryCatalog = []) {
 	const classMap = new Map();
-	FINANCIAL_ACCOUNT_CATEGORY_CATALOG.forEach((category) => {
+	getFinancialAccountCategoryCatalog(categoryCatalog).forEach((category) => {
 		getBudgetCategoryContainer(
 			classMap,
 			category.classType,
@@ -479,7 +479,11 @@ function buildBudgetCategoryGroups(accountRows = [], accounts = []) {
 		);
 	});
 	accountRows.forEach((row) => {
-		const classification = classifyBudgetRow(row.account, row.center);
+		const classification = classifyBudgetRow(
+			row.account,
+			row.center,
+			categoryCatalog,
+		);
 		const classType =
 			classification.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
 		const classLabel =
@@ -520,7 +524,9 @@ function buildBudgetCategoryGroups(accountRows = [], accounts = []) {
 		}
 		currentCategory.accounts.set(accountKey, currentAccount);
 	});
-	accounts.map(enrichFinancialAccountWithCategory).forEach((account) => {
+	accounts
+		.map((account) => enrichFinancialAccountWithCategory(account, categoryCatalog))
+		.forEach((account) => {
 		const classType = account.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
 		const classLabel =
 			account.categoriaClasseLabel ||
@@ -544,7 +550,7 @@ function buildBudgetCategoryGroups(accountRows = [], accounts = []) {
 				centers: [],
 			});
 		}
-	});
+		});
 	return [
 		BUDGET_CATEGORY_CLASSES.BASAL,
 		BUDGET_CATEGORY_CLASSES.NAO_BASAL,
@@ -660,7 +666,10 @@ function buildCenterRows({
 }
 
 export function getBudgetInsights(config = {}, selectedPeriod = {}) {
-	const accounts = (config.accounts || []).map(enrichFinancialAccountWithCategory);
+	const categoryCatalog = config.settings?.financialAccountCategories || [];
+	const accounts = (config.accounts || []).map((account) =>
+		enrichFinancialAccountWithCategory(account, categoryCatalog),
+	);
 	const centers = config.centers || [];
 	const matrix = config.matrix || [];
 	const now = new Date();
@@ -830,7 +839,11 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	});
 	const forecastRows = buildForecastRows(monthlyEvolution);
 	const accountSummary = buildAccountSummary(accountRows);
-	const budgetCategoryGroups = buildBudgetCategoryGroups(accountRows, accounts);
+	const budgetCategoryGroups = buildBudgetCategoryGroups(
+		accountRows,
+		accounts,
+		categoryCatalog,
+	);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")
 		.map((item) => ({ ...item, id: item.center?.id }))

@@ -118,6 +118,7 @@ describe("financeiroEquipeRepository", () => {
 			repository.deleteCargo("7f5f0f68-4d5e-4994-8a77-14fd1169b1ed"),
 		).rejects.toMatchObject({
 			status: 409,
+			statusCode: 409,
 			message: "Este cargo ainda possui colaboradores vinculados.",
 		});
 		expect(dbQuery.mock.calls[0][0]).toContain(

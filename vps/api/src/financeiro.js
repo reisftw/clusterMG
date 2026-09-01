@@ -10,6 +10,7 @@ const {
 } = require("./financeiroFinancialAccountPlan");
 const {
 	enrichFinancialAccountWithCategory,
+	normalizeFinancialAccountCategories,
 } = require("./financeiroAccountCategories");
 
 const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
@@ -68,6 +69,7 @@ const DEFAULT_BUDGET_SETTINGS = {
 		"Impostos",
 	],
 	centerStatuses: ["ativo", "em_observacao", "bloqueado", "inativo"],
+	financialAccountCategories: normalizeFinancialAccountCategories(),
 };
 
 const BUDGET_DATA_FIELDS = [
@@ -2049,7 +2051,7 @@ function normalizeCostCenter(center = {}, index = 0) {
 	};
 }
 
-function normalizeFinancialAccount(account = {}, index = 0) {
+function normalizeFinancialAccount(account = {}, index = 0, categoryCatalog = []) {
 	const rawId = String(
 		account.id || account.codigo || account.nome || `conta-${index + 1}`,
 	).trim();
@@ -2129,7 +2131,7 @@ function normalizeFinancialAccount(account = {}, index = 0) {
 		descricao: String(account.descricao || account.description || "").trim(),
 		atualizadoEm: account.atualizadoEm || nowIso(),
 	};
-	return enrichFinancialAccountWithCategory(normalized);
+	return enrichFinancialAccountWithCategory(normalized, categoryCatalog);
 }
 
 function normalizeBudgetPartner(partner = {}, index = 0) {
@@ -2543,6 +2545,10 @@ function normalizeBudgetSettings(settings = {}) {
 			settings.centerStatuses,
 			DEFAULT_BUDGET_SETTINGS.centerStatuses,
 		),
+		financialAccountCategories: normalizeFinancialAccountCategories(
+			settings.financialAccountCategories,
+			DEFAULT_BUDGET_SETTINGS.financialAccountCategories,
+		),
 	};
 }
 
@@ -2706,7 +2712,7 @@ function mergeDefaultCostCenterPlan(rawCenters = []) {
 	});
 }
 
-function financialAccountPlanToAccount(planItem = {}) {
+function financialAccountPlanToAccount(planItem = {}, categoryCatalog = []) {
 	const code = budgetCodeKey(planItem.code || planItem.reducedCode);
 	const parentCode = budgetCodeKey(planItem.parentCode);
 	const categoryAccount = DEFAULT_FINANCIAL_ACCOUNT_PLAN.find(
@@ -2737,38 +2743,45 @@ function financialAccountPlanToAccount(planItem = {}) {
 		String(planItem.status || "")
 			.toLowerCase()
 			.includes("inativo");
-	return enrichFinancialAccountWithCategory({
-		id: code,
-		codigo: code,
-		reduzida: cleanText(planItem.reducedCode || planItem.code),
-		classificacao: cleanText(planItem.classification),
-		nome: cleanText(planItem.name || code),
-		parentId: parentCode,
-		parentCodigo: parentCode,
-		tipoPlano: ["S", "A"].includes(planType) ? planType : "",
-		nivel: Number(planItem.level || 0) || "",
-		categoriaCodigo: budgetCodeKey(categoryCode),
-		naturezaPlano: ["C", "D"].includes(accountNature) ? accountNature : "",
-		rateio: ["S", "N"].includes(String(planItem.allocation || "").toUpperCase())
-			? String(planItem.allocation).toUpperCase()
-			: "",
-		tipo: accountNature === "C" ? "receita" : "despesa",
-		natureza: "opex",
-		grupo: categoryGroup,
-		dreGroup: categoryGroup || cleanText(planItem.name),
-		contaContabil: code,
-		status: isInactive ? "inativo" : "ativo",
-		descricao: "Conta importada do Plano Financeiro.",
-	});
+	return enrichFinancialAccountWithCategory(
+		{
+			id: code,
+			codigo: code,
+			reduzida: cleanText(planItem.reducedCode || planItem.code),
+			classificacao: cleanText(planItem.classification),
+			nome: cleanText(planItem.name || code),
+			parentId: parentCode,
+			parentCodigo: parentCode,
+			tipoPlano: ["S", "A"].includes(planType) ? planType : "",
+			nivel: Number(planItem.level || 0) || "",
+			categoriaCodigo: budgetCodeKey(categoryCode),
+			naturezaPlano: ["C", "D"].includes(accountNature) ? accountNature : "",
+			rateio: ["S", "N"].includes(String(planItem.allocation || "").toUpperCase())
+				? String(planItem.allocation).toUpperCase()
+				: "",
+			tipo: accountNature === "C" ? "receita" : "despesa",
+			natureza: "opex",
+			grupo: categoryGroup,
+			dreGroup: categoryGroup || cleanText(planItem.name),
+			contaContabil: code,
+			status: isInactive ? "inativo" : "ativo",
+			descricao: "Conta importada do Plano Financeiro.",
+		},
+		categoryCatalog,
+	);
 }
 
-function mergeDefaultFinancialAccountPlan(rawAccounts = []) {
-	const planAccounts = DEFAULT_FINANCIAL_ACCOUNT_PLAN.map(
-		financialAccountPlanToAccount,
+function mergeDefaultFinancialAccountPlan(rawAccounts = [], categoryCatalog = []) {
+	const planAccounts = DEFAULT_FINANCIAL_ACCOUNT_PLAN.map((account) =>
+		financialAccountPlanToAccount(account, categoryCatalog),
 	);
 	const mergedByCode = new Map();
 	planAccounts.forEach((account) => {
-		const normalized = normalizeFinancialAccount(account, mergedByCode.size);
+		const normalized = normalizeFinancialAccount(
+			account,
+			mergedByCode.size,
+			categoryCatalog,
+		);
 		mergedByCode.set(
 			budgetCodeKey(normalized.codigo || normalized.id) || normalized.id,
 			normalized,
@@ -2776,7 +2789,7 @@ function mergeDefaultFinancialAccountPlan(rawAccounts = []) {
 	});
 
 	rawAccounts.forEach((account, index) => {
-		const normalized = normalizeFinancialAccount(account, index);
+		const normalized = normalizeFinancialAccount(account, index, categoryCatalog);
 		const key =
 			budgetCodeKey(
 				normalized.codigo || normalized.reduzida || normalized.id,
@@ -2997,9 +3010,11 @@ function normalizeCostCentersConfig(payload = {}, user = {}) {
 			DEFAULT_BUDGET_SETTINGS.centerStatuses,
 		),
 	};
+	const normalizedSettings = normalizeBudgetSettings(mergedSettings);
+	const categoryCatalog = normalizedSettings.financialAccountCategories;
 	const accounts = Array.isArray(payload.accounts)
-		? mergeDefaultFinancialAccountPlan(payload.accounts)
-		: mergeDefaultFinancialAccountPlan([]);
+		? mergeDefaultFinancialAccountPlan(payload.accounts, categoryCatalog)
+		: mergeDefaultFinancialAccountPlan([], categoryCatalog);
 	const accountIds = new Set(accounts.map((account) => account.id));
 	const centers = mergeDefaultCostCenterPlan(
 		Array.isArray(payload.centers) ? payload.centers : [],
@@ -3184,7 +3199,7 @@ function normalizeCostCentersConfig(payload = {}, user = {}) {
 			: [],
 		workflow: normalizeBudgetWorkflow(payload.workflow || {}),
 		cashSettings: normalizeCashSettings(payload.cashSettings || {}),
-		settings: normalizeBudgetSettings(mergedSettings),
+		settings: normalizedSettings,
 		approvals: Array.isArray(payload.approvals)
 			? payload.approvals
 					.map(normalizeBudgetApproval)
@@ -3455,8 +3470,13 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 	const originalCenterBudgetFields = new Map();
 	const accountsMap = new Map();
 	const centersMap = new Map();
+	const categoryCatalog = existingConfig.settings?.financialAccountCategories || [];
 	(existingConfig.accounts || []).forEach((account, index) => {
-		const normalized = normalizeFinancialAccount(account, index);
+		const normalized = normalizeFinancialAccount(
+			account,
+			index,
+			categoryCatalog,
+		);
 		const nameKey = slug(normalized.nome, "");
 		const importedCode = accountCodeByName.get(nameKey);
 		const canonicalCode = importedCode || cleanText(account.codigo);
@@ -3780,6 +3800,7 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 						descricao: `Importado de dados orçamentários em ${nowIso()}`,
 					},
 					accountsMap.size,
+					categoryCatalog,
 				),
 			);
 			if (accountCodeKey) accountIdsByCode.set(accountCodeKey, accountId);

@@ -24,4 +24,38 @@ describe("budgetAccountCategories", () => {
 			isBasal: false,
 		});
 	});
+
+	it("preserva categorias com mesmo nome em tipos diferentes", () => {
+		const categories = [
+			{ name: "Financeiro", classType: BUDGET_CATEGORY_CLASSES.BASAL },
+			{ name: "Financeiro", classType: BUDGET_CATEGORY_CLASSES.NAO_BASAL },
+		];
+
+		expect(
+			resolveFinancialAccountCategory(
+				{
+					nome: "Conta manual",
+					categoriaMae: "Financeiro",
+					categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
+				},
+				categories,
+			),
+		).toMatchObject({
+			categoriaMae: "Financeiro",
+			categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
+		});
+		expect(
+			resolveFinancialAccountCategory(
+				{
+					nome: "Conta manual",
+					categoriaMae: "Financeiro",
+					categoriaClasse: BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+				},
+				categories,
+			),
+		).toMatchObject({
+			categoriaMae: "Financeiro",
+			categoriaClasse: BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+		});
+	});
 });

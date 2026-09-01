@@ -216,21 +216,109 @@ function normalizeFinancialAccountCategoryKey(value = "") {
 		.trim();
 }
 
-const CATEGORY_BY_ACCOUNT_KEY = FINANCIAL_ACCOUNT_CATEGORY_CATALOG.flatMap((category) =>
-	category.accounts.map((accountName) => [
-		normalizeFinancialAccountCategoryKey(accountName),
-		{ ...category, accountName },
-	]),
-).reduce((map, [key, category]) => map.set(key, category), new Map());
+function normalizeCategoryClassType(value = "") {
+	const key = normalizeFinancialAccountCategoryKey(value);
+	if (["nao basal", "naobasal", "non basal", "nao_basal"].includes(key)) {
+		return BUDGET_CATEGORY_CLASSES.NAO_BASAL;
+	}
+	if (["basal", "custo basal"].includes(key)) return BUDGET_CATEGORY_CLASSES.BASAL;
+	return "";
+}
 
-function findCategoryByAccountName(name = "") {
+function normalizeFinancialAccountCategories(
+	value = [],
+	fallback = FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
+) {
+	const source = Array.isArray(value) && value.length ? value : fallback;
+	const categoryByKey = new Map();
+	source.forEach((category) => {
+		const rawName =
+			typeof category === "string"
+				? category
+				: category?.name || category?.nome || category?.categoriaMae;
+		const name = String(rawName || "").trim();
+		if (!name) return;
+		const classType =
+			normalizeCategoryClassType(
+				typeof category === "string"
+					? BUDGET_CATEGORY_CLASSES.BASAL
+					: category?.classType ||
+							category?.categoriaClasse ||
+							category?.tipoCategoria,
+			) || BUDGET_CATEGORY_CLASSES.BASAL;
+		const key = `${classType}:${normalizeFinancialAccountCategoryKey(name)}`;
+		const current = categoryByKey.get(key) || {
+			name,
+			classType,
+			accounts: [],
+		};
+		categoryByKey.set(key, {
+			...current,
+			name,
+			classType,
+			accounts: [
+				...new Set([
+					...(current.accounts || []),
+					...(Array.isArray(category?.accounts || category?.contas)
+						? category.accounts || category.contas
+						: []),
+				]),
+			],
+		});
+	});
+	return Array.from(categoryByKey.values()).sort((left, right) => {
+		if (left.classType !== right.classType) {
+			return left.classType === BUDGET_CATEGORY_CLASSES.BASAL ? -1 : 1;
+		}
+		return left.name.localeCompare(right.name, "pt-BR");
+	});
+}
+
+function getFinancialAccountCategoryCatalog(customCategories = []) {
+	const defaultByKey = new Map(
+		FINANCIAL_ACCOUNT_CATEGORY_CATALOG.map((category) => [
+			`${category.classType}:${normalizeFinancialAccountCategoryKey(category.name)}`,
+			category,
+		]),
+	);
+	normalizeFinancialAccountCategories(customCategories, []).forEach((category) => {
+		const nameKey = normalizeFinancialAccountCategoryKey(category.name);
+		const keysWithSameName = Array.from(defaultByKey.keys()).filter((key) =>
+			key.endsWith(`:${nameKey}`),
+		);
+		if (keysWithSameName.length === 1) defaultByKey.delete(keysWithSameName[0]);
+		const key = `${category.classType}:${nameKey}`;
+		const current = defaultByKey.get(key) || { accounts: [] };
+		defaultByKey.set(key, {
+			...current,
+			name: category.name,
+			classType: category.classType,
+			accounts: [...new Set([...(current.accounts || []), ...(category.accounts || [])])],
+		});
+	});
+	return normalizeFinancialAccountCategories(Array.from(defaultByKey.values()));
+}
+
+function buildCategoryByAccountKey(catalog = FINANCIAL_ACCOUNT_CATEGORY_CATALOG) {
+	return catalog
+		.flatMap((category) =>
+			(category.accounts || []).map((accountName) => [
+				normalizeFinancialAccountCategoryKey(accountName),
+				{ ...category, accountName },
+			]),
+		)
+		.reduce((map, [key, category]) => map.set(key, category), new Map());
+}
+
+function findCategoryByAccountName(name = "", catalog) {
 	const normalized = normalizeFinancialAccountCategoryKey(name);
 	if (!normalized) return null;
+	const categoryByAccountKey = buildCategoryByAccountKey(catalog);
 	const alias = ACCOUNT_ALIASES.get(normalized);
-	if (alias) return CATEGORY_BY_ACCOUNT_KEY.get(normalizeFinancialAccountCategoryKey(alias));
-	const exact = CATEGORY_BY_ACCOUNT_KEY.get(normalized);
+	if (alias) return categoryByAccountKey.get(normalizeFinancialAccountCategoryKey(alias));
+	const exact = categoryByAccountKey.get(normalized);
 	if (exact) return exact;
-	for (const [key, category] of CATEGORY_BY_ACCOUNT_KEY.entries()) {
+	for (const [key, category] of categoryByAccountKey.entries()) {
 		if (key.length < 4) continue;
 		const isPhrase = key.includes(" ");
 		const keyPattern = new RegExp(`(^| )${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
@@ -243,22 +331,28 @@ function findCategoryByAccountName(name = "") {
 }
 
 function normalizeClassType(value = "") {
-	const key = normalizeFinancialAccountCategoryKey(value);
-	if (["nao basal", "naobasal", "non basal", "nao_basal"].includes(key)) {
-		return BUDGET_CATEGORY_CLASSES.NAO_BASAL;
-	}
-	if (["basal", "custo basal"].includes(key)) return BUDGET_CATEGORY_CLASSES.BASAL;
-	return "";
+	return normalizeCategoryClassType(value);
 }
 
-function resolveFinancialAccountCategory(account = {}) {
-	const matched = findCategoryByAccountName(account.nome || account.name);
+function resolveFinancialAccountCategory(account = {}, customCategories = []) {
+	const catalog = getFinancialAccountCategoryCatalog(customCategories);
 	const savedClass = normalizeClassType(
 		account.categoriaClasse || account.categoryClass || account.tipoCategoria,
 	);
 	const savedCategory = String(
 		account.categoriaMae || account.categoryName || account.categoria || "",
 	).trim();
+	const savedCategoryKey = normalizeFinancialAccountCategoryKey(savedCategory);
+	const sameNameCategories = catalog.filter(
+		(category) =>
+			normalizeFinancialAccountCategoryKey(category.name) === savedCategoryKey,
+	);
+	const savedCatalogCategory =
+		(savedClass &&
+			sameNameCategories.find((category) => category.classType === savedClass)) ||
+		(sameNameCategories.length === 1 ? sameNameCategories[0] : null);
+	const matched =
+		savedCatalogCategory || findCategoryByAccountName(account.nome || account.name, catalog);
 	const classType =
 		matched?.classType || savedClass || BUDGET_CATEGORY_CLASSES.BASAL;
 	const name = matched?.name || savedCategory || "Sem categoria";
@@ -270,10 +364,10 @@ function resolveFinancialAccountCategory(account = {}) {
 	};
 }
 
-function enrichFinancialAccountWithCategory(account = {}) {
+function enrichFinancialAccountWithCategory(account = {}, customCategories = []) {
 	return {
 		...account,
-		...resolveFinancialAccountCategory(account),
+		...resolveFinancialAccountCategory(account, customCategories),
 	};
 }
 
@@ -282,6 +376,8 @@ module.exports = {
 	BUDGET_CATEGORY_CLASS_LABELS,
 	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
 	enrichFinancialAccountWithCategory,
+	getFinancialAccountCategoryCatalog,
+	normalizeFinancialAccountCategories,
 	normalizeFinancialAccountCategoryKey,
 	resolveFinancialAccountCategory,
 };
