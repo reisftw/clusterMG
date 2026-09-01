@@ -101,6 +101,7 @@ function makeAuthMock(overrides = {}) {
 		})),
 		createLocalUser: vi.fn(async () => ({ uid: "new-user" })),
 		deleteLocalUser: vi.fn(async () => undefined),
+		getLocalUserByEmail: vi.fn(async () => null),
 		makeTemporaryPassword: vi.fn(() => "Temp1234!"),
 		resetLocalUserPassword: vi.fn(async () => undefined),
 		updateLocalUser: vi.fn(async () => ({ uid: "admin-1" })),
@@ -601,6 +602,132 @@ describe("vps api app characterization - roles", () => {
 		expect(response.body).toMatchObject({
 			error: "Nao e possivel excluir cargo vinculado a usuarios.",
 		});
+	});
+});
+
+describe("vps api app characterization - scoped finance users", () => {
+	it("POST /api/admin/users permite gestor financeiro criar usuario em cargo financeiro", async () => {
+		const financialManager = {
+			uid: "financeiro-1",
+			email: "financeiro@example.com",
+			role: "coordenador_financeiro",
+			regional: "",
+			profile: {
+				uid: "financeiro-1",
+				email: "financeiro@example.com",
+				role: "coordenador_financeiro",
+				nome: "Coordenador Financeiro",
+				permissions: [
+					"financeiro.visao_geral.view",
+					"financeiro.reports.view",
+					"financeiro.reports.manage",
+					"configuracao.usuarios.manage",
+					"manage_users",
+				],
+			},
+			permissions: [
+				"financeiro.visao_geral.view",
+				"financeiro.reports.view",
+				"financeiro.reports.manage",
+				"configuracao.usuarios.manage",
+				"manage_users",
+			],
+		};
+		const financeiroRole = {
+			id: "analista_reports_financeiro",
+			name: "Analista Reports Financeiro",
+			systemRole: false,
+			active: true,
+			permissions: [
+				"financeiro.reports.view",
+				"financeiro.reports.manage",
+				"configuracao.usuarios.manage",
+			],
+		};
+		const app = loadApp({
+			auth: {
+				...makeAuthMock(),
+				requireAuthenticated: vi.fn((req, _res, next) => {
+					req.user = financialManager;
+					next();
+				}),
+				createLocalUser: vi.fn(async () => ({
+					uid: "novo-financeiro",
+					email: "novo.financeiro@example.com",
+					role: financeiroRole.id,
+				})),
+			},
+			db: {
+				...baseMocks().db,
+				query: vi.fn(async (sql) => {
+					const text = String(sql).replace(/\s+/g, " ").toLowerCase();
+					if (text.includes("from app_users") && text.includes("lower")) {
+						return { rows: [] };
+					}
+					if (text.includes("from app_users") && text.includes("where au.uid")) {
+						return {
+							rows: [
+								{
+									uid: "novo-financeiro",
+									email: "novo.financeiro@example.com",
+									display_name: "Novo Financeiro",
+									role: financeiroRole.id,
+									regional: "",
+									disabled: false,
+									must_change_password: true,
+									profile_data: {},
+								},
+							],
+						};
+					}
+					return { rows: [] };
+				}),
+			},
+			rolePermissions: {
+				...baseMocks().rolePermissions,
+				listPermissionCatalog: vi.fn(async () => [
+					{
+						id: "financeiro.reports.view",
+						sectionId: "financeiro",
+						sectionLabel: "Financeiro",
+					},
+					{
+						id: "financeiro.reports.manage",
+						sectionId: "financeiro",
+						sectionLabel: "Financeiro",
+					},
+					{
+						id: "configuracao.usuarios.manage",
+						sectionId: "configuracao",
+						sectionLabel: "Configuração",
+					},
+				]),
+				listRoles: vi.fn(async () => [financeiroRole]),
+			},
+		});
+
+		const response = await request(app)
+			.post("/api/admin/users")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				email: "novo.financeiro@example.com",
+				nome: "Novo Financeiro",
+				role: financeiroRole.id,
+			});
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({
+			ok: true,
+			uid: "novo-financeiro",
+		});
+		expect(currentMocks.auth.createLocalUser).toHaveBeenCalledWith(
+			expect.objectContaining({
+				email: "novo.financeiro@example.com",
+				nome: "Novo Financeiro",
+				role: financeiroRole.id,
+			}),
+		);
 	});
 });
 

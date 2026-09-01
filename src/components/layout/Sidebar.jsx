@@ -254,31 +254,51 @@ const NAV_ITEMS = [
 		label: "Reports - Serasa",
 		path: ROUTES.FINANCEIRO_REPORTS_SERASA,
 		icon: BarChart3,
-		permission: ["financeiro.chamados.view"],
+		permission: [
+			"financeiro.reports.view",
+			"financeiro.reports.manage",
+			"financeiro.chamados.view",
+		],
 	},
 	{
 		label: "Reports - Tarifas",
 		path: ROUTES.FINANCEIRO_REPORTS_TARIFAS,
 		icon: BarChart3,
-		permission: ["financeiro.chamados.view"],
+		permission: [
+			"financeiro.reports.view",
+			"financeiro.reports.manage",
+			"financeiro.chamados.view",
+		],
 	},
 	{
 		label: "Reports - Tarifas - Faturas",
 		path: ROUTES.FINANCEIRO_REPORTS_TARIFAS_FATURAS,
 		icon: FileText,
-		permission: ["financeiro.chamados.view"],
+		permission: [
+			"financeiro.reports.view",
+			"financeiro.reports.manage",
+			"financeiro.chamados.view",
+		],
 	},
 	{
 		label: "Reports - Tarifas - Receita Cliente",
 		path: ROUTES.FINANCEIRO_REPORTS_TARIFAS_REC_CLIENTE,
 		icon: Users,
-		permission: ["financeiro.chamados.view"],
+		permission: [
+			"financeiro.reports.view",
+			"financeiro.reports.manage",
+			"financeiro.chamados.view",
+		],
 	},
 	{
 		label: "Reports - Tarifas - Formas de Pagamento",
 		path: ROUTES.FINANCEIRO_REPORTS_TARIFAS_FORMAS_PAGAMENTO,
 		icon: Wallet,
-		permission: ["financeiro.chamados.view"],
+		permission: [
+			"financeiro.reports.view",
+			"financeiro.reports.manage",
+			"financeiro.chamados.view",
+		],
 	},
 	{
 		label: "Gestão Orçamento - Visão Geral",

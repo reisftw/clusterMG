@@ -97,7 +97,9 @@ export const PERMISSION_LABELS = Object.freeze({
 	"financeiro.contas_receber.manage": "Gerenciar Contas a Receber",
 	"financeiro.faturamento.view": "Financeiro - Faturamento",
 	"financeiro.notas.view": "Financeiro - Notas",
-	"financeiro.chamados.view": "Financeiro - Reports",
+	"financeiro.reports.view": "Financeiro - Reports",
+	"financeiro.reports.manage": "Gerenciar Reports Financeiros",
+	"financeiro.chamados.view": "Financeiro - Reports (legado)",
 	"financeiro.gestao_orcamento.view": "Financeiro - Gestão Orçamento",
 	"financeiro.gestao_orcamento.manage": "Gerenciar Gestão Orçamento",
 	"financeiro.configuracoes.view": "Financeiro - Configurações",
@@ -191,7 +193,8 @@ export const PERMISSION_GROUPS = Object.freeze([
 			"financeiro.contas_receber.manage",
 			"financeiro.faturamento.view",
 			"financeiro.notas.view",
-			"financeiro.chamados.view",
+			"financeiro.reports.view",
+			"financeiro.reports.manage",
 			"financeiro.gestao_orcamento.view",
 			"financeiro.gestao_orcamento.manage",
 			"financeiro.configuracoes.view",
@@ -316,6 +319,8 @@ const CATALOG_TO_LEGACY_PERMISSION = Object.freeze({
 	"financeiro.contas_receber.manage": null,
 	"financeiro.faturamento.view": null,
 	"financeiro.notas.view": null,
+	"financeiro.reports.view": "financeiro.chamados.view",
+	"financeiro.reports.manage": null,
 	"financeiro.chamados.view": null,
 	"financeiro.gestao_orcamento.view": null,
 	"financeiro.gestao_orcamento.manage": null,
@@ -435,6 +440,8 @@ const LEGACY_ROLE_PERMISSIONS = Object.freeze({
 	"financeiro.contas_receber.manage": ADMIN_ONLY,
 	"financeiro.faturamento.view": ADMIN_ONLY,
 	"financeiro.notas.view": ADMIN_ONLY,
+	"financeiro.reports.view": ADMIN_ONLY,
+	"financeiro.reports.manage": ADMIN_ONLY,
 	"financeiro.chamados.view": ADMIN_ONLY,
 	"financeiro.gestao_orcamento.view": ADMIN_ONLY,
 	"financeiro.gestao_orcamento.manage": ADMIN_ONLY,
@@ -600,6 +607,8 @@ function hasDynamicPermission(role, permission) {
 	) {
 		return true;
 	}
+	const legacyPermission = CATALOG_TO_LEGACY_PERMISSION[permission];
+	if (legacyPermission && permissionSet.has(legacyPermission)) return true;
 	return getEquivalentCatalogPermissions(permission).some((catalogPermission) =>
 		permissionSet.has(catalogPermission),
 	);

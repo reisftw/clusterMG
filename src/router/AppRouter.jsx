@@ -296,6 +296,7 @@ const AppRouter = () => (
 								requiredPermission={[
 									"financeiro.visao_geral.view",
 									"financeiro.visao_geral.manage",
+									"financeiro.reports.view",
 									"financeiro.chamados.view",
 								]}
 							>
@@ -536,7 +537,13 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.FINANCEIRO_REPORTS_SERASA}
 							element={
-								<ProtectedRoute requiredPermission="financeiro.chamados.view">
+								<ProtectedRoute
+									requiredPermission={[
+										"financeiro.reports.view",
+										"financeiro.reports.manage",
+										"financeiro.chamados.view",
+									]}
+								>
 									<Financeiro page="reportsSerasa" />
 								</ProtectedRoute>
 							}
@@ -544,7 +551,13 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS}
 							element={
-								<ProtectedRoute requiredPermission="financeiro.chamados.view">
+								<ProtectedRoute
+									requiredPermission={[
+										"financeiro.reports.view",
+										"financeiro.reports.manage",
+										"financeiro.chamados.view",
+									]}
+								>
 									<Financeiro page="reportsTarifas" />
 								</ProtectedRoute>
 							}
@@ -552,7 +565,13 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS_FATURAS}
 							element={
-								<ProtectedRoute requiredPermission="financeiro.chamados.view">
+								<ProtectedRoute
+									requiredPermission={[
+										"financeiro.reports.view",
+										"financeiro.reports.manage",
+										"financeiro.chamados.view",
+									]}
+								>
 									<Financeiro page="reportsTarifasFaturas" />
 								</ProtectedRoute>
 							}
@@ -560,7 +579,13 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS_REC_CLIENTE}
 							element={
-								<ProtectedRoute requiredPermission="financeiro.chamados.view">
+								<ProtectedRoute
+									requiredPermission={[
+										"financeiro.reports.view",
+										"financeiro.reports.manage",
+										"financeiro.chamados.view",
+									]}
+								>
 									<Financeiro page="reportsTarifasRecCliente" />
 								</ProtectedRoute>
 							}
@@ -568,7 +593,13 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS_FORMAS_PAGAMENTO}
 							element={
-								<ProtectedRoute requiredPermission="financeiro.chamados.view">
+								<ProtectedRoute
+									requiredPermission={[
+										"financeiro.reports.view",
+										"financeiro.reports.manage",
+										"financeiro.chamados.view",
+									]}
+								>
 									<Financeiro page="reportsTarifasFormasPagamento" />
 								</ProtectedRoute>
 							}

@@ -358,6 +358,8 @@ const FINANCEIRO_VIEW_PERMISSIONS = [
 	"financeiro.contas_receber.manage",
 	"financeiro.faturamento.view",
 	"financeiro.notas.view",
+	"financeiro.reports.view",
+	"financeiro.reports.manage",
 	"financeiro.chamados.view",
 	"financeiro.gestao_orcamento.view",
 	"financeiro.gestao_orcamento.manage",
@@ -1455,14 +1457,19 @@ function canScopedManagerAccessRole(role = {}, scope, options = {}) {
 	if (permissions.includes("*")) return false;
 	if (
 		options.forUserAssignment &&
-		permissions.some((permission) =>
+		permissions.every((permission) =>
 			SCOPED_ROLE_MANAGEMENT_PERMISSIONS.has(permission),
 		)
 	) {
 		return false;
 	}
 	const scopedPermissions = permissions.filter(
-		(permission) => !SCOPED_ROLE_BASELINE_PERMISSIONS.has(permission),
+		(permission) =>
+			!SCOPED_ROLE_BASELINE_PERMISSIONS.has(permission) &&
+			!(
+				options.forUserAssignment &&
+				SCOPED_ROLE_MANAGEMENT_PERMISSIONS.has(permission)
+			),
 	);
 	return (
 		scopedPermissions.length > 0 &&
@@ -1691,6 +1698,14 @@ async function getUserProfileDocument(uid) {
 
 async function assertCanCreateManagedUser(user, body = {}) {
 	if (hasRole(user, ADMIN_ROLES)) return;
+	if (
+		!hasRole(user, ["supervisor"]) &&
+		!hasRole(user, ["supervisor_administrativo"]) &&
+		hasAnyPermission(user, ["configuracao.usuarios.manage", "manage_users"])
+	) {
+		await assertScopedRoleCanBeAssigned(user, body.role);
+		return;
+	}
 	if (hasRole(user, ["supervisor_administrativo"])) {
 		if (canAdministrativoManageUserRole(body.role)) return;
 		const error = new Error(
@@ -1703,13 +1718,6 @@ async function assertCanCreateManagedUser(user, body = {}) {
 		const error = new Error("Permissao insuficiente.");
 		error.statusCode = 403;
 		throw error;
-	}
-	if (
-		!hasRole(user, ["supervisor"]) &&
-		hasAnyPermission(user, ["configuracao.usuarios.manage", "manage_users"])
-	) {
-		await assertScopedRoleCanBeAssigned(user, body.role);
-		return;
 	}
 	const role = normalizeUserRole(body.role);
 	if (!canSupervisorManageUserRole(role)) {

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { hasAnyPermission, hasPermission, ROLE_VALUES, ROLES } from "./roles";
+import {
+	hasAnyPermission,
+	hasPermission,
+	PERMISSION_GROUPS,
+	PERMISSION_LABELS,
+	ROLE_VALUES,
+	ROLES,
+} from "./roles";
 
 describe("RBAC security rules", () => {
 	it("blocks non-admin roles from admin-only permissions", () => {
@@ -27,5 +34,36 @@ describe("RBAC security rules", () => {
 				"mensageria.api.manage",
 			),
 		).toBe(false);
+	});
+
+	it("lists Reports as finance RBAC view and manage permissions", () => {
+		const financeGroup = PERMISSION_GROUPS.find(
+			(group) => group.label === "Financeiro",
+		);
+
+		expect(financeGroup?.permissions).toEqual(
+			expect.arrayContaining([
+				"financeiro.reports.view",
+				"financeiro.reports.manage",
+			]),
+		);
+		expect(PERMISSION_LABELS["financeiro.reports.view"]).toBe(
+			"Financeiro - Reports",
+		);
+		expect(PERMISSION_LABELS["financeiro.reports.manage"]).toBe(
+			"Gerenciar Reports Financeiros",
+		);
+	});
+
+	it("keeps legacy finance reports permission valid for existing roles", () => {
+		expect(
+			hasPermission(
+				{
+					role: ROLES.VISITANTE,
+					permissions: ["financeiro.chamados.view"],
+				},
+				"financeiro.reports.view",
+			),
+		).toBe(true);
 	});
 });
