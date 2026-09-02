@@ -302,7 +302,25 @@ function createFinanceiroController() {
 
 	async function getEquipe(_req, res, next) {
 		try {
-			res.json(await financeiroEquipeRepository.listEquipe());
+			res.set(
+				"Cache-Control",
+				"no-store, no-cache, must-revalidate, proxy-revalidate",
+			);
+			res.set("Pragma", "no-cache");
+			res.set("Expires", "0");
+			const equipe = await financeiroEquipeRepository.listEquipe();
+			res.json({
+				...equipe,
+				meta: {
+					cache: "no-store",
+					source: "postgres",
+					counts: {
+						setores: equipe.setores.length,
+						cargos: equipe.cargos.length,
+						colaboradores: equipe.colaboradores.length,
+					},
+				},
+			});
 		} catch (error) {
 			next(error);
 		}

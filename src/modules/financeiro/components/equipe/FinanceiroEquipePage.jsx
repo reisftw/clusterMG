@@ -477,6 +477,28 @@ function UserPill({ canDrag = false, colaborador, onClick, onDragEnd, onDragStar
 	);
 }
 
+function normalizeEquipeResponse(response) {
+	if (!response || typeof response !== "object") {
+		throw new Error("Resposta inválida ao carregar a equipe financeira.");
+	}
+	if (
+		!Array.isArray(response.setores) ||
+		!Array.isArray(response.cargos) ||
+		!Array.isArray(response.colaboradores)
+	) {
+		throw new Error("Resposta incompleta ao carregar a equipe financeira.");
+	}
+	return {
+		config:
+			response.config && typeof response.config === "object"
+				? response.config
+				: {},
+		setores: response.setores,
+		cargos: response.cargos,
+		colaboradores: response.colaboradores,
+	};
+}
+
 export default function FinanceiroEquipePage({ canManage = false }) {
 	const [config, setConfig] = useState({});
 	const [setores, setSetores] = useState([]);
@@ -495,10 +517,11 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		setMessage("");
 		try {
 			const response = await buscarEquipeFinanceiro();
-			setConfig(response.config || {});
-			setSetores(response.setores || []);
-			setCargos(response.cargos || []);
-			setColaboradores(response.colaboradores || []);
+			const equipe = normalizeEquipeResponse(response);
+			setConfig(equipe.config);
+			setSetores(equipe.setores);
+			setCargos(equipe.cargos);
+			setColaboradores(equipe.colaboradores);
 		} catch (error) {
 			setMessage(error?.message || "Não foi possível carregar a equipe financeira.");
 		} finally {
