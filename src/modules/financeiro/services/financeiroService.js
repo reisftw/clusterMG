@@ -159,7 +159,10 @@ export async function limparTarifasReportFinanceiro() {
 }
 
 export async function buscarEquipeFinanceiro() {
-	return requestVpsApi(`${BASE_PATH}/equipe`);
+	const params = new URLSearchParams({ _: String(Date.now()) });
+	return requestVpsApi(`${BASE_PATH}/equipe?${params.toString()}`, {
+		cache: "no-store",
+	});
 }
 
 export async function atualizarConfigEquipeFinanceiro(payload = {}) {

@@ -74,6 +74,27 @@ describe("RBAC security rules", () => {
 		);
 	});
 
+	it("allows custom RBAC role with Financeiro Equipe permission to view the team", () => {
+		expect(
+			hasPermission(
+				{
+					role: "coordenador_financeiro",
+					permissions: ["financeiro.equipe.view"],
+				},
+				"financeiro.equipe.view",
+			),
+		).toBe(true);
+		expect(
+			hasPermission(
+				{
+					role: "coordenador_financeiro",
+					permissions: ["financeiro.equipe.manage"],
+				},
+				"financeiro.equipe.view",
+			),
+		).toBe(true);
+	});
+
 	it("keeps legacy finance reports permission valid for existing roles", () => {
 		expect(
 			hasPermission(
