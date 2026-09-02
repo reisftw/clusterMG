@@ -49,6 +49,14 @@ function mapSetor(row = {}) {
 	};
 }
 
+function mapConfig(row = {}) {
+	return {
+		responsavelGeralId: row.responsavel_geral_id || null,
+		responsavelGeralNome: row.responsavel_geral_nome || "",
+		updatedAt: row.updated_at || null,
+	};
+}
+
 function mapCargo(row = {}) {
 	return {
 		id: row.id,
@@ -158,7 +166,13 @@ async function ensureSetorExists(setorNome) {
 }
 
 async function listEquipe() {
-	const [setoresResult, cargosResult, colaboradoresResult] = await Promise.all([
+	const [configResult, setoresResult, cargosResult, colaboradoresResult] = await Promise.all([
+		db.query(
+			`select cfg.*, c.nome as responsavel_geral_nome
+			   from financeiro_equipe_config cfg
+		  left join financeiro_equipe_colaboradores c on c.id = cfg.responsavel_geral_id
+			  where cfg.id = 'global'`,
+		),
 		db.query(
 			`select s.*, c.nome as responsavel_nome
 			   from financeiro_equipe_setores s
@@ -181,10 +195,37 @@ async function listEquipe() {
 		),
 	]);
 	return {
+		config: mapConfig(configResult.rows[0] || {}),
 		setores: setoresResult.rows.map(mapSetor),
 		cargos: cargosResult.rows.map(mapCargo),
 		colaboradores: colaboradoresResult.rows.map(mapColaborador),
 	};
+}
+
+async function updateConfig(payload = {}, user = {}) {
+	const responsavelGeralId = toNullableText(
+		payload.responsavelGeralId || payload.responsavel_geral_id,
+	);
+	try {
+		const result = await db.query(
+			`insert into financeiro_equipe_config
+				(id, responsavel_geral_id, updated_by)
+			 values ('global', nullif($1, '')::uuid, $2)
+			 on conflict (id) do update
+			    set responsavel_geral_id = excluded.responsavel_geral_id,
+			        updated_by = excluded.updated_by,
+			        updated_at = now()
+			 returning *`,
+			[responsavelGeralId || "", normalizeUserName(user)],
+		);
+		const equipe = await listEquipe();
+		return {
+			...mapConfig(result.rows[0]),
+			...equipe.config,
+		};
+	} catch (error) {
+		handleDbError(error);
+	}
 }
 
 async function createSetor(payload = {}, user = {}) {
@@ -578,6 +619,7 @@ module.exports = {
 	moveColaborador,
 	updateCargo,
 	updateColaborador,
+	updateConfig,
 	updateSetor,
 	__testables: {
 		mapCargo,

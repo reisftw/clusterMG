@@ -158,6 +158,13 @@ function createFinanceiroRouter({
 		requireEquipeView,
 		controller.getEquipe,
 	);
+	router.put(
+		"/equipe/config",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.updateEquipeConfig,
+	);
 	router.post(
 		"/equipe/setores",
 		requireAuthenticated,

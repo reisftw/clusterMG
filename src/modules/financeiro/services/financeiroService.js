@@ -162,6 +162,13 @@ export async function buscarEquipeFinanceiro() {
 	return requestVpsApi(`${BASE_PATH}/equipe`);
 }
 
+export async function atualizarConfigEquipeFinanceiro(payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/equipe/config`, {
+		method: "PUT",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
 export async function criarSetorEquipeFinanceiro(payload = {}) {
 	return requestVpsApi(`${BASE_PATH}/equipe/setores`, {
 		method: "POST",

@@ -9,11 +9,12 @@ import {
 	UserRound,
 	Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../../components/ui/ModalShell";
 import {
 	atualizarCargoEquipeFinanceiro,
 	atualizarColaboradorEquipeFinanceiro,
+	atualizarConfigEquipeFinanceiro,
 	atualizarSetorEquipeFinanceiro,
 	buscarEquipeFinanceiro,
 	criarCargoEquipeFinanceiro,
@@ -63,7 +64,7 @@ function emptyColaboradorForm() {
 	};
 }
 
-function buildSetorHierarchy(setores = [], colaboradores = []) {
+function buildSetorHierarchy(setores = [], colaboradores = [], responsavelGeralId = "") {
 	const setorMap = new Map();
 	for (const setor of setores) {
 		const key = setor.nome || setor.id || "Sem setor";
@@ -94,7 +95,11 @@ function buildSetorHierarchy(setores = [], colaboradores = []) {
 				colaboradores.find((colaborador) => colaborador.id === setor.responsavelId) ||
 				null,
 			membros: setor.membros
-				.filter((colaborador) => colaborador.id !== setor.responsavelId)
+				.filter(
+					(colaborador) =>
+						colaborador.id !== setor.responsavelId &&
+						colaborador.id !== responsavelGeralId,
+				)
 				.sort(
 					(left, right) =>
 						(left.ordem || 0) - (right.ordem || 0) ||
@@ -106,27 +111,6 @@ function buildSetorHierarchy(setores = [], colaboradores = []) {
 				(left.ordem || 0) - (right.ordem || 0) ||
 				left.nome.localeCompare(right.nome, "pt-BR"),
 		);
-}
-
-function buildResponsibleHierarchy(setores = [], colaboradores = []) {
-	const setorHierarchy = buildSetorHierarchy(setores, colaboradores);
-	const groups = new Map();
-	for (const setor of setorHierarchy) {
-		const responsavelKey = setor.responsavel?.id || `setor:${setor.id}`;
-		if (!groups.has(responsavelKey)) {
-			groups.set(responsavelKey, {
-				id: responsavelKey,
-				responsavel: setor.responsavel,
-				setores: [],
-			});
-		}
-		groups.get(responsavelKey).setores.push(setor);
-	}
-	return [...groups.values()].sort((left, right) => {
-		const leftName = left.responsavel?.nome || left.setores[0]?.nome || "";
-		const rightName = right.responsavel?.nome || right.setores[0]?.nome || "";
-		return leftName.localeCompare(rightName, "pt-BR");
-	});
 }
 
 function countSetorMembers(setor) {
@@ -142,18 +126,19 @@ function getSetorCargoCount(setor) {
 	).size;
 }
 
-function getResponsibleGroupsForPdf(setores = [], colaboradores = []) {
-	return buildResponsibleHierarchy(setores, colaboradores).map((group) => ({
-		...group,
-		setores: group.setores.map((setor) => ({
-			...setor,
-			membros: setor.membros.sort(
-				(left, right) =>
-					(left.ordem || 0) - (right.ordem || 0) ||
-					left.nome.localeCompare(right.nome, "pt-BR"),
-			),
-		}))
-	}));
+function buildEquipeTree(config = {}, setores = [], colaboradores = []) {
+	const responsavelGeral =
+		colaboradores.find(
+			(colaborador) => colaborador.id === config.responsavelGeralId,
+		) || null;
+	return {
+		responsavelGeral,
+		setores: buildSetorHierarchy(
+			setores,
+			colaboradores,
+			config.responsavelGeralId,
+		),
+	};
 }
 
 async function loadImageDataUrl(src) {
@@ -248,7 +233,7 @@ function SetorModal({ colaboradorOptions, onClose, onSave, setor }) {
 						<input type="color" className="h-10 w-full rounded-xl border border-slate-200 px-2 py-1" value={form.cor || DEFAULT_SETOR_COLOR} onChange={(event) => setForm((current) => ({ ...current, cor: event.target.value }))} />
 					</label>
 					<label className="space-y-1 text-sm font-bold text-slate-700 md:col-span-2">
-						Responsável pela hierarquia
+						Responsável pelo setor
 						<select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.responsavelId || ""} onChange={(event) => setForm((current) => ({ ...current, responsavelId: event.target.value }))}>
 							<option value="">Sem responsável definido</option>
 							{colaboradorOptions.map((colaborador) => (
@@ -432,6 +417,7 @@ function UserPill({ canDrag = false, colaborador, onClick, onDragEnd, onDragStar
 }
 
 export default function FinanceiroEquipePage({ canManage = false }) {
+	const [config, setConfig] = useState({});
 	const [setores, setSetores] = useState([]);
 	const [cargos, setCargos] = useState([]);
 	const [colaboradores, setColaboradores] = useState([]);
@@ -442,12 +428,14 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	const [cargoModal, setCargoModal] = useState(null);
 	const [colaboradorModal, setColaboradorModal] = useState(null);
 	const [draggingColaboradorId, setDraggingColaboradorId] = useState("");
+	const organogramRef = useRef(null);
 
 	const loadEquipe = useCallback(async () => {
 		setLoading(true);
 		setMessage("");
 		try {
 			const response = await buscarEquipeFinanceiro();
+			setConfig(response.config || {});
 			setSetores(response.setores || []);
 			setCargos(response.cargos || []);
 			setColaboradores(response.colaboradores || []);
@@ -462,10 +450,21 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		loadEquipe();
 	}, [loadEquipe]);
 
-	const responsibleGroups = useMemo(
-		() => buildResponsibleHierarchy(setores, colaboradores),
-		[setores, colaboradores],
+	const equipeTree = useMemo(
+		() => buildEquipeTree(config, setores, colaboradores),
+		[config, setores, colaboradores],
 	);
+
+	async function saveEquipeConfig(nextConfig) {
+		setMessage("");
+		try {
+			const response = await atualizarConfigEquipeFinanceiro(nextConfig);
+			setConfig(response.config || nextConfig || {});
+			await loadEquipe();
+		} catch (error) {
+			setMessage(error?.message || "Não foi possível atualizar a configuração da equipe.");
+		}
+	}
 
 	async function saveSetor(form) {
 		setMessage("");
@@ -540,9 +539,14 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	}
 
 	async function exportPdf() {
-		const { default: jsPDF } = await import("jspdf");
+		if (!organogramRef.current) return;
+		const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+			import("jspdf"),
+			import("html2canvas"),
+		]);
 		const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 		const pageWidth = pdf.internal.pageSize.getWidth();
+		const pageHeight = pdf.internal.pageSize.getHeight();
 		const margin = 38;
 		const logo = await loadImageDataUrl("/sempre-logo-documento.png");
 		if (logo) {
@@ -564,51 +568,19 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		pdf.setFontSize(9);
 		pdf.setTextColor(71, 85, 105);
 		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
-		let y = 96;
-		getResponsibleGroupsForPdf(setores, colaboradores).forEach((group, groupIndex) => {
-			if (y > 500) {
-				pdf.addPage();
-				y = 48;
-			}
-			pdf.setFillColor(248, 250, 252);
-			pdf.setDrawColor(203, 213, 225);
-			pdf.roundedRect(margin, y - 18, pageWidth - margin * 2, 32, 8, 8, "FD");
-			pdf.setFont("helvetica", "bold");
-			pdf.setFontSize(12);
-			pdf.setTextColor(15, 23, 42);
-			pdf.text(
-				group.responsavel?.nome || `Hierarquia ${groupIndex + 1}`,
-				margin + 12,
-				y + 2,
-			);
-				y += 42;
-			group.setores.forEach((setor) => {
-				pdf.setDrawColor(147, 197, 253);
-				pdf.line(margin + 24, y - 20, margin + 24, y + 4);
-				pdf.line(margin + 24, y + 4, margin + 42, y + 4);
-				pdf.setFont("helvetica", "bold");
-				pdf.setFontSize(10);
-				pdf.setTextColor(30, 64, 175);
-				pdf.text(setor.nome || "Setor", margin + 50, y + 7);
-				y += 28;
-				setor.membros.forEach((membro) => {
-					if (y > 520) {
-						pdf.addPage();
-						y = 48;
-					}
-					pdf.setFont("helvetica", "bold");
-					pdf.setFontSize(9);
-					pdf.setTextColor(15, 23, 42);
-					pdf.text(membro.nome || "Usuário", margin + 74, y + 7);
-					pdf.setFont("helvetica", "normal");
-					pdf.setFontSize(8);
-					pdf.setTextColor(71, 85, 105);
-					pdf.text(membro.cargoNome || "Cargo não vinculado", margin + 74, y + 20);
-					y += 34;
-				});
-			});
-			y += 16;
+		const canvas = await html2canvas(organogramRef.current, {
+			backgroundColor: "#ffffff",
+			scale: 2,
+			useCORS: true,
+			windowWidth: Math.max(organogramRef.current.scrollWidth, 1400),
 		});
+		const image = canvas.toDataURL("image/png", 0.96);
+		const maxWidth = pageWidth - margin * 2;
+		const maxHeight = pageHeight - 96;
+		const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
+		const width = canvas.width * ratio;
+		const height = canvas.height * ratio;
+		pdf.addImage(image, "PNG", (pageWidth - width) / 2, 82, width, height);
 		pdf.save(`organograma-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
 	}
 
@@ -625,6 +597,21 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 					</button>
 					{canManage ? (
 						<>
+							<label className="flex min-w-64 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black uppercase text-slate-500">
+								Responsável geral
+								<select
+									className="min-w-0 flex-1 bg-transparent text-sm font-bold normal-case text-slate-800 outline-none"
+									value={config.responsavelGeralId || ""}
+									onChange={(event) =>
+										saveEquipeConfig({ responsavelGeralId: event.target.value })
+									}
+								>
+									<option value="">Selecione</option>
+									{colaboradores.map((colaborador) => (
+										<option key={colaborador.id} value={colaborador.id}>{colaborador.nome}</option>
+									))}
+								</select>
+							</label>
 							<button type="button" onClick={() => setSetorModal(emptySetorForm())} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50">
 								<Users size={16} /> Novo setor
 							</button>
@@ -711,49 +698,49 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 							<Loader2 size={16} className="animate-spin" /> Carregando equipe...
 						</div>
 					) : null}
-					{!loading && !responsibleGroups.length ? (
+					{!loading && !equipeTree.setores.length ? (
 						<div className="rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
 							<div className="mb-2 flex items-center gap-2 font-black text-slate-800"><UserRound size={16} /> Nenhum setor cadastrado</div>
 							{canManage ? "Cadastre setores, cargos e usuários para montar o organograma." : "A equipe ainda não foi cadastrada."}
 						</div>
 					) : null}
 					<div className="space-y-6">
-						{responsibleGroups.map((group) => (
-							<div key={group.id} className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
+						{equipeTree.setores.length ? (
+							<div ref={organogramRef} className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
 								<div className="flex justify-center">
-									{group.responsavel ? (
+									{equipeTree.responsavelGeral ? (
 										<button
 											type="button"
 											draggable={canManage}
-											onClick={() => setSelectedColaborador(group.responsavel)}
+											onClick={() => setSelectedColaborador(equipeTree.responsavelGeral)}
 											onDragStart={(event) => {
-												setDraggingColaboradorId(group.responsavel.id);
+												setDraggingColaboradorId(equipeTree.responsavelGeral.id);
 												event.dataTransfer.effectAllowed = "move";
-												event.dataTransfer.setData("text/plain", group.responsavel.id);
+												event.dataTransfer.setData("text/plain", equipeTree.responsavelGeral.id);
 											}}
 											onDragEnd={() => setDraggingColaboradorId("")}
 											className={`flex min-w-64 items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-left shadow-md ${canManage ? "cursor-grab active:cursor-grabbing" : ""}`}
 										>
-											<Avatar className="h-12 w-12" colaborador={group.responsavel} />
+											<Avatar className="h-12 w-12" colaborador={equipeTree.responsavelGeral} />
 											<div className="min-w-0">
 												<div className="text-xs font-black uppercase text-slate-400">Responsável geral</div>
-												<div className="truncate text-base font-black text-slate-900">{group.responsavel.nome}</div>
-												<div className="text-xs font-bold text-slate-500">{group.setores.length} setores</div>
+												<div className="truncate text-base font-black text-slate-900">{equipeTree.responsavelGeral.nome}</div>
+												<div className="truncate text-xs font-bold text-slate-500">{equipeTree.responsavelGeral.cargoNome || "Cargo não vinculado"}</div>
 											</div>
 										</button>
 									) : (
 										<div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-center text-sm font-black text-slate-500">
-											Sem responsável definido
+											Responsável geral não definido
 										</div>
 									)}
 								</div>
 								<div className="mx-auto h-14 w-0.5 bg-slate-400" />
 								<div className="relative">
-									{group.setores.length > 1 ? (
+									{equipeTree.setores.length > 1 ? (
 										<div className="absolute left-[8%] right-[8%] top-0 hidden h-0.5 bg-slate-400 lg:block" />
 									) : null}
 									<div className="grid gap-4 pt-4 lg:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
-									{group.setores.map((setor) => (
+									{equipeTree.setores.map((setor) => (
 										<div
 											key={setor.id}
 											className={`relative rounded-2xl border-2 border-dashed bg-white/80 p-4 transition ${draggingColaboradorId ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"}`}
@@ -776,6 +763,21 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 													<p className="text-xs font-bold text-slate-500">{getSetorCargoCount(setor)} cargos · {countSetorMembers(setor)} usuários</p>
 												</div>
 											</div>
+											{setor.responsavel ? (
+												<div className="flex justify-center">
+													<button type="button" onClick={() => setSelectedColaborador(setor.responsavel)} className="flex min-w-0 max-w-full items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-left shadow-sm">
+														<Avatar className="h-10 w-10" colaborador={setor.responsavel} />
+														<div className="min-w-0">
+															<div className="truncate text-sm font-black text-slate-900">{setor.responsavel.nome}</div>
+															<div className="truncate text-xs font-bold text-slate-500">{setor.responsavel.cargoNome || "Responsável do setor"}</div>
+														</div>
+													</button>
+												</div>
+											) : (
+												<div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-center text-xs font-bold text-slate-400">
+													Sem responsável do setor
+												</div>
+											)}
 											<div className="mx-auto h-6 w-0.5 bg-slate-400" />
 											<div className="relative">
 												{setor.membros.length > 1 ? (
@@ -806,7 +808,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 								</div>
 								</div>
 							</div>
-						))}
+						) : null}
 					</div>
 				</div>
 			</div>

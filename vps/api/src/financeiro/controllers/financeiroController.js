@@ -308,6 +308,18 @@ function createFinanceiroController() {
 		}
 	}
 
+	async function updateEquipeConfig(req, res, next) {
+		try {
+			const config = await financeiroEquipeRepository.updateConfig(
+				req.body || {},
+				req.user,
+			);
+			res.json({ config });
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function createEquipeCargo(req, res, next) {
 		try {
 			const cargo = await financeiroEquipeRepository.createCargo(
@@ -435,6 +447,7 @@ function createFinanceiroController() {
 		deleteEquipeColaborador,
 		deleteEquipeSetor,
 		getEquipe,
+		updateEquipeConfig,
 		getBudgetCostCenters,
 		getBudgetData,
 		getDashboard,

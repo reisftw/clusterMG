@@ -34,6 +34,15 @@ describe("financeiroEquipeRepository", () => {
 			.mockResolvedValueOnce({
 				rows: [
 					{
+						id: "global",
+						responsavel_geral_id: "21768bee-00f7-4214-8c0d-b697cb23cb01",
+						responsavel_geral_nome: "Maria Silva",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					{
 						id: "c4a2f411-9845-46b9-8a83-19f2e43bdcf0",
 						nome: "Coordenação",
 						descricao: "",
@@ -80,6 +89,12 @@ describe("financeiroEquipeRepository", () => {
 
 		const equipe = await repository.listEquipe();
 
+		expect(equipe.config).toEqual(
+			expect.objectContaining({
+				responsavelGeralId: "21768bee-00f7-4214-8c0d-b697cb23cb01",
+				responsavelGeralNome: "Maria Silva",
+			}),
+		);
 		expect(equipe.setores).toEqual([
 			expect.objectContaining({
 				nome: "Coordenação",
@@ -232,6 +247,7 @@ describe("financeiroEquipeRepository", () => {
 			.mockResolvedValueOnce({
 				rows: [{ id: "21768bee-00f7-4214-8c0d-b697cb23cb01" }],
 			})
+			.mockResolvedValueOnce({ rows: [{ id: "global" }] })
 			.mockResolvedValueOnce({
 				rows: [
 					{
@@ -289,5 +305,48 @@ describe("financeiroEquipeRepository", () => {
 			"admin@example.com",
 		]);
 		expect(moved).toMatchObject({ nome: "Maria Silva", setor: "CR" });
+	});
+
+	it("salva responsável geral da equipe financeira", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "global",
+						responsavel_geral_id: "21768bee-00f7-4214-8c0d-b697cb23cb01",
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "global",
+						responsavel_geral_id: "21768bee-00f7-4214-8c0d-b697cb23cb01",
+						responsavel_geral_nome: "Maria Silva",
+					},
+				],
+			})
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({ rows: [] });
+		const repository = loadRepository(dbQuery);
+
+		const config = await repository.updateConfig(
+			{ responsavelGeralId: "21768bee-00f7-4214-8c0d-b697cb23cb01" },
+			{ email: "admin@example.com" },
+		);
+
+		expect(dbQuery.mock.calls[0][0]).toContain(
+			"insert into financeiro_equipe_config",
+		);
+		expect(dbQuery.mock.calls[0][1]).toEqual([
+			"21768bee-00f7-4214-8c0d-b697cb23cb01",
+			"admin@example.com",
+		]);
+		expect(config).toMatchObject({
+			responsavelGeralId: "21768bee-00f7-4214-8c0d-b697cb23cb01",
+			responsavelGeralNome: "Maria Silva",
+		});
 	});
 });
