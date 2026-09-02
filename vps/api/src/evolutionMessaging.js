@@ -2080,9 +2080,15 @@ function isGroupWebhook(payload = {}) {
 function parseScheduleFromText(text, baseDate = new Date()) {
 	const value = String(text || "");
 	const dateMatch = value.match(/(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/);
-	if (!dateMatch) return null;
+	const dayOnlyMatch = dateMatch
+		? null
+		: value.match(/\b(?:dia|data|para\s+dia|no\s+dia)\s+(\d{1,2})\b/i);
+	if (!dateMatch && !dayOnlyMatch) return null;
 
-	const valueWithoutDate = value.replace(dateMatch[0], " ");
+	const valueWithoutDate = value.replace(
+		dateMatch?.[0] || dayOnlyMatch?.[0] || "",
+		" ",
+	);
 	const timeMatch =
 		valueWithoutDate.match(
 			/(?:\b(?:às|as|a|para|por volta de)\s*)?(\d{1,2})\s*[:h]\s*(\d{2})\b/i,
@@ -2092,8 +2098,6 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 		) ||
 		valueWithoutDate.match(/\b(\d{1,2})\s*h(?:oras?)?\b/i);
 
-	const day = Number(dateMatch[1]);
-	const month = Number(dateMatch[2]);
 	const todayParts = new Intl.DateTimeFormat("en-CA", {
 		timeZone: SEND_TIME_ZONE,
 		year: "numeric",
@@ -2105,8 +2109,11 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 			if (part.type !== "literal") acc[part.type] = part.value;
 			return acc;
 		}, {});
-	const rawYear = dateMatch[3] ? Number(dateMatch[3]) : Number(todayParts.year);
-	const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+	const requestedDay = Number(dateMatch?.[1] || dayOnlyMatch?.[1]);
+	let day = requestedDay;
+	let month = dateMatch ? Number(dateMatch[2]) : Number(todayParts.month);
+	let rawYear = dateMatch?.[3] ? Number(dateMatch[3]) : Number(todayParts.year);
+	let year = rawYear < 100 ? 2000 + rawYear : rawYear;
 	const hourNumber = timeMatch ? Number(timeMatch[1]) : null;
 	const minuteNumber = timeMatch ? Number(timeMatch[2] || 0) : null;
 	if (
@@ -2115,13 +2122,23 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 	)
 		return null;
 
-	const date = new Date(year, month - 1, day);
+	let date = new Date(year, month - 1, day);
 	if (
 		date.getFullYear() !== year ||
 		date.getMonth() !== month - 1 ||
 		date.getDate() !== day
 	)
 		return null;
+	if (dayOnlyMatch) {
+		const today = getSaoPauloDate(baseDate);
+		if (dateKeyFromDate(date) < dateKeyFromDate(today)) {
+			date = new Date(year, month, day);
+			if (date.getDate() !== requestedDay) return null;
+			day = date.getDate();
+			month = date.getMonth() + 1;
+			year = date.getFullYear();
+		}
+	}
 
 	const hour = timeMatch ? String(hourNumber).padStart(2, "0") : "";
 	const minute = timeMatch ? String(minuteNumber).padStart(2, "0") : "";
