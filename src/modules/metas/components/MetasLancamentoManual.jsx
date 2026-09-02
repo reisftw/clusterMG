@@ -40,6 +40,71 @@ const SOURCE_SCOPE_OPTIONS = [
 ];
 
 let nextRowId = 0;
+const openSectionsCache = new Map();
+const publishResultCache = new Map();
+
+function getOpenSectionsStorageKey(month, year) {
+	return `metas-lancamento-open-sections:${month || "mes"}:${year || "ano"}`;
+}
+
+function getPublishResultStorageKey(month, year) {
+	return `metas-lancamento-publish-result:${month || "mes"}:${year || "ano"}`;
+}
+
+function readStoredOpenSections(key) {
+	if (typeof window === "undefined") return openSectionsCache.get(key) || {};
+	try {
+		const raw = window.sessionStorage.getItem(key);
+		if (!raw) return openSectionsCache.get(key) || {};
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === "object" ? parsed : {};
+	} catch {
+		return openSectionsCache.get(key) || {};
+	}
+}
+
+function storeOpenSections(key, value) {
+	openSectionsCache.set(key, value);
+	if (typeof window === "undefined") return;
+	try {
+		window.sessionStorage.setItem(key, JSON.stringify(value || {}));
+	} catch {
+		// Se o navegador bloquear storage, o cache em memoria ainda segura remounts.
+	}
+}
+
+function readStoredPublishResult(key) {
+	if (typeof window === "undefined") return publishResultCache.get(key) || null;
+	try {
+		const raw = window.sessionStorage.getItem(key);
+		if (!raw) return publishResultCache.get(key) || null;
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === "object" ? parsed : null;
+	} catch {
+		return publishResultCache.get(key) || null;
+	}
+}
+
+function storePublishResult(key, value) {
+	if (!value) return;
+	publishResultCache.set(key, value);
+	if (typeof window === "undefined") return;
+	try {
+		window.sessionStorage.setItem(key, JSON.stringify(value));
+	} catch {
+		// Se o navegador bloquear storage, o cache em memoria ainda segura remounts.
+	}
+}
+
+function clearStoredPublishResult(key) {
+	publishResultCache.delete(key);
+	if (typeof window === "undefined") return;
+	try {
+		window.sessionStorage.removeItem(key);
+	} catch {
+		// Sem acao: storage indisponivel nao deve quebrar a tela.
+	}
+}
 
 function createRowId() {
 	nextRowId += 1;
@@ -662,10 +727,16 @@ export default function MetasLancamentoManual({
 	const [loadingOptions, setLoadingOptions] = useState(false);
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
-	const [publishResult, setPublishResult] = useState(null);
 	const [savingCard, setSavingCard] = useState(false);
-	const [openSections, setOpenSections] = useState({});
 	const dayCount = getDaysInMetaMonth(month, year);
+	const openSectionsCacheKey = getOpenSectionsStorageKey(month, year);
+	const publishResultCacheKey = getPublishResultStorageKey(month, year);
+	const [openSections, setOpenSections] = useState(
+		() => readStoredOpenSections(openSectionsCacheKey),
+	);
+	const [publishResult, setPublishResult] = useState(() =>
+		readStoredPublishResult(publishResultCacheKey),
+	);
 	const normalizedConfig = useMemo(
 		() => normalizeMetasBaseConfig(metasBaseConfig),
 		[metasBaseConfig],
@@ -735,6 +806,14 @@ export default function MetasLancamentoManual({
 		setMessage("");
 		setError("");
 	}, [initialState, month]);
+
+	useEffect(() => {
+		setOpenSections(readStoredOpenSections(openSectionsCacheKey));
+	}, [openSectionsCacheKey]);
+
+	useEffect(() => {
+		setPublishResult(readStoredPublishResult(publishResultCacheKey));
+	}, [publishResultCacheKey]);
 
 	const loadOptions = useCallback(async (force = false) => {
 		setLoadingOptions(true);
@@ -834,38 +913,55 @@ export default function MetasLancamentoManual({
 	}, [buildSavePayload, canManage, onSave, saving, savingCard]);
 
 	const setSectionOpen = useCallback((sectionId, open) => {
-		setOpenSections((current) => ({
-			...current,
-			[sectionId]: open,
-		}));
-	}, []);
+		setOpenSections((current) => {
+			const next = {
+				...current,
+				[sectionId]: open,
+			};
+			storeOpenSections(openSectionsCacheKey, next);
+			return next;
+		});
+	}, [openSectionsCacheKey]);
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setMessage("");
 		setError("");
 		setPublishResult(null);
+		clearStoredPublishResult(publishResultCacheKey);
 		try {
 			await onSave(buildSavePayload());
 			const successMessage =
 				"Lançamento publicado no /acompanhamento, /painel e AA.";
-			setMessage(successMessage);
-			setPublishResult({
+			const nextPublishResult = {
 				type: "success",
 				title: "Lançamento concluído",
 				message: successMessage,
-			});
+				totalSempre: totalSemprePreview,
+				totalOnnet: totalOnnetPreview,
+				total: totalPreview,
+			};
+			setMessage(successMessage);
+			storePublishResult(publishResultCacheKey, nextPublishResult);
+			setPublishResult(nextPublishResult);
 		} catch (err) {
 			const errorMessage =
 				err?.message || "Não foi possível lançar as metas.";
-			setError(errorMessage);
-			setPublishResult({
+			const nextPublishResult = {
 				type: "error",
 				title: "Falha ao lançar",
 				message: errorMessage,
-			});
+			};
+			setError(errorMessage);
+			storePublishResult(publishResultCacheKey, nextPublishResult);
+			setPublishResult(nextPublishResult);
 		}
 	};
+
+	const closePublishResult = useCallback(() => {
+		clearStoredPublishResult(publishResultCacheKey);
+		setPublishResult(null);
+	}, [publishResultCacheKey]);
 
 	return (
 		<>
@@ -1146,13 +1242,13 @@ export default function MetasLancamentoManual({
 				open
 				title={publishResult.title}
 				description={`${month} / ${year}`}
-				onClose={() => setPublishResult(null)}
+				onClose={closePublishResult}
 				size="lg"
 				footer={
 					<div className="flex justify-end">
 						<button
 							type="button"
-							onClick={() => setPublishResult(null)}
+							onClick={closePublishResult}
 							className={`inline-flex min-h-11 items-center rounded-xl px-5 text-sm font-black text-white ${
 								publishResult.type === "success"
 									? "bg-emerald-600 hover:bg-emerald-700"
@@ -1179,7 +1275,9 @@ export default function MetasLancamentoManual({
 									Sempre
 								</p>
 								<p className="text-xl font-black text-blue-700">
-									{formatNumber(totalSemprePreview)}
+									{formatNumber(
+										publishResult.totalSempre ?? totalSemprePreview,
+									)}
 								</p>
 							</div>
 							<div className="rounded-xl bg-white px-3 py-2">
@@ -1187,7 +1285,7 @@ export default function MetasLancamentoManual({
 									Onnet
 								</p>
 								<p className="text-xl font-black text-sky-700">
-									{formatNumber(totalOnnetPreview)}
+									{formatNumber(publishResult.totalOnnet ?? totalOnnetPreview)}
 								</p>
 							</div>
 							<div className="rounded-xl bg-white px-3 py-2">
@@ -1195,7 +1293,7 @@ export default function MetasLancamentoManual({
 									Todos
 								</p>
 								<p className="text-xl font-black text-emerald-700">
-									{formatNumber(totalPreview)}
+									{formatNumber(publishResult.total ?? totalPreview)}
 								</p>
 							</div>
 						</div>
