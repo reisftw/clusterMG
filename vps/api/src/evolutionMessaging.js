@@ -2237,7 +2237,7 @@ function formatDateLabel(dateKey, { withWeekday = false } = {}) {
 	const [year, month, day] = String(normalizedDateKey || "")
 		.split("-")
 		.map(Number);
-	const date = new Date(year, month - 1, day);
+	const date = new Date(Date.UTC(year, month - 1, day, 12));
 	if (Number.isNaN(date.getTime())) return "";
 	return date.toLocaleDateString("pt-BR", {
 		timeZone: SEND_TIME_ZONE,
@@ -3279,6 +3279,7 @@ module.exports = {
 	sendWhatsAppMessage,
 	_test: {
 		dateKeyFromValue,
+		formatDateLabel,
 		getGuidedDateOptions,
 		getReusableGuidedDateOptions,
 		parseGuidedDateChoice,
