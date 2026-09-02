@@ -76,7 +76,7 @@ function getCargoSetorColor(cargo, setores = []) {
 	);
 }
 
-function buildHierarchy(setores = [], cargos = [], colaboradores = []) {
+function buildSetorHierarchy(setores = [], cargos = [], colaboradores = []) {
 	const setorMap = new Map();
 	for (const setor of setores) {
 		setorMap.set(setor.id || `nome:${setor.nome}`, {
@@ -121,6 +121,27 @@ function buildHierarchy(setores = [], cargos = [], colaboradores = []) {
 				(left.ordem || 0) - (right.ordem || 0) ||
 				left.nome.localeCompare(right.nome, "pt-BR"),
 		);
+}
+
+function buildResponsibleHierarchy(setores = [], cargos = [], colaboradores = []) {
+	const setorHierarchy = buildSetorHierarchy(setores, cargos, colaboradores);
+	const groups = new Map();
+	for (const setor of setorHierarchy) {
+		const responsavelKey = setor.responsavel?.id || `setor:${setor.id}`;
+		if (!groups.has(responsavelKey)) {
+			groups.set(responsavelKey, {
+				id: responsavelKey,
+				responsavel: setor.responsavel,
+				setores: [],
+			});
+		}
+		groups.get(responsavelKey).setores.push(setor);
+	}
+	return [...groups.values()].sort((left, right) => {
+		const leftName = left.responsavel?.nome || left.setores[0]?.nome || "";
+		const rightName = right.responsavel?.nome || right.setores[0]?.nome || "";
+		return leftName.localeCompare(rightName, "pt-BR");
+	});
 }
 
 async function loadImageDataUrl(src) {
@@ -427,8 +448,8 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		loadEquipe();
 	}, [loadEquipe]);
 
-	const hierarchy = useMemo(
-		() => buildHierarchy(setores, cargos, colaboradores),
+	const responsibleGroups = useMemo(
+		() => buildResponsibleHierarchy(setores, cargos, colaboradores),
 		[setores, cargos, colaboradores],
 	);
 
@@ -517,7 +538,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		pdf.setTextColor(71, 85, 105);
 		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
 		let y = 96;
-		hierarchy.forEach((setor, setorIndex) => {
+		responsibleGroups.forEach((group, groupIndex) => {
 			if (y > 500) {
 				pdf.addPage();
 				y = 48;
@@ -528,32 +549,37 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 			pdf.setFont("helvetica", "bold");
 			pdf.setFontSize(12);
 			pdf.setTextColor(15, 23, 42);
-			pdf.text(setor.nome || `Setor ${setorIndex + 1}`, margin + 12, y + 2);
-			if (setor.responsavel) {
-				pdf.setFont("helvetica", "normal");
-				pdf.setFontSize(9);
-				pdf.setTextColor(71, 85, 105);
-				pdf.text(`Responsável: ${setor.responsavel.nome}`, margin + 220, y + 2);
-			}
+			pdf.text(
+				group.responsavel?.nome || `Hierarquia ${groupIndex + 1}`,
+				margin + 12,
+				y + 2,
+			);
 			y += 42;
-			setor.cargos.forEach((cargo) => {
-				if (y > 520) {
-					pdf.addPage();
-					y = 48;
-				}
+			group.setores.forEach((setor) => {
 				pdf.setDrawColor(147, 197, 253);
 				pdf.line(margin + 24, y - 20, margin + 24, y + 4);
 				pdf.line(margin + 24, y + 4, margin + 42, y + 4);
 				pdf.setFont("helvetica", "bold");
 				pdf.setFontSize(10);
 				pdf.setTextColor(30, 64, 175);
-				pdf.text(cargo.nome || "Cargo", margin + 50, y + 7);
-				pdf.setFont("helvetica", "normal");
-				pdf.setFontSize(8);
-				pdf.setTextColor(71, 85, 105);
-				const nomes = cargo.membros.map((membro) => membro.nome).join(", ") || "Sem usuários vinculados";
-				pdf.text(pdf.splitTextToSize(nomes, pageWidth - margin * 2 - 70), margin + 50, y + 22);
-				y += 42 + Math.ceil(nomes.length / 120) * 10;
+				pdf.text(setor.nome || "Setor", margin + 50, y + 7);
+				y += 28;
+				setor.cargos.forEach((cargo) => {
+					if (y > 520) {
+						pdf.addPage();
+						y = 48;
+					}
+					pdf.setFont("helvetica", "bold");
+					pdf.setFontSize(9);
+					pdf.setTextColor(15, 23, 42);
+					pdf.text(cargo.nome || "Cargo", margin + 74, y + 7);
+					pdf.setFont("helvetica", "normal");
+					pdf.setFontSize(8);
+					pdf.setTextColor(71, 85, 105);
+					const nomes = cargo.membros.map((membro) => membro.nome).join(", ") || "Sem usuários vinculados";
+					pdf.text(pdf.splitTextToSize(nomes, pageWidth - margin * 2 - 96), margin + 74, y + 22);
+					y += 42 + Math.ceil(nomes.length / 120) * 10;
+				});
 			});
 			y += 16;
 		});
@@ -659,56 +685,72 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 							<Loader2 size={16} className="animate-spin" /> Carregando equipe...
 						</div>
 					) : null}
-					{!loading && !hierarchy.length ? (
+					{!loading && !responsibleGroups.length ? (
 						<div className="rounded-2xl bg-slate-50 p-5 text-sm font-semibold text-slate-500">
 							<div className="mb-2 flex items-center gap-2 font-black text-slate-800"><UserRound size={16} /> Nenhum setor cadastrado</div>
 							{canManage ? "Cadastre setores, cargos e usuários para montar o organograma." : "A equipe ainda não foi cadastrada."}
 						</div>
 					) : null}
 					<div className="space-y-6">
-						{hierarchy.map((setor) => (
-							<div key={setor.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-								<div className="flex flex-wrap items-center justify-between gap-3">
-									<div className="flex items-center gap-3">
-										<span className="h-4 w-4 rounded-full" style={{ backgroundColor: setor.cor || DEFAULT_SETOR_COLOR }} />
-										<div>
-											<h3 className="text-base font-black text-slate-950">{setor.nome}</h3>
-											<p className="text-xs font-bold text-slate-500">{setor.cargos.length} cargos · {setor.cargos.reduce((total, cargo) => total + cargo.membros.length, 0)} usuários</p>
-										</div>
-									</div>
-									{setor.responsavel ? (
-										<button type="button" onClick={() => setSelectedColaborador(setor.responsavel)} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-left shadow-sm">
-											<Avatar className="h-9 w-9" colaborador={setor.responsavel} />
-											<div>
+						{responsibleGroups.map((group) => (
+							<div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+								<div className="flex justify-center">
+									{group.responsavel ? (
+										<button type="button" onClick={() => setSelectedColaborador(group.responsavel)} className="flex min-w-64 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm">
+											<Avatar className="h-12 w-12" colaborador={group.responsavel} />
+											<div className="min-w-0">
 												<div className="text-xs font-black uppercase text-slate-400">Responsável</div>
-												<div className="text-sm font-black text-slate-900">{setor.responsavel.nome}</div>
+												<div className="truncate text-base font-black text-slate-900">{group.responsavel.nome}</div>
+												<div className="text-xs font-bold text-slate-500">{group.setores.length} setores</div>
 											</div>
 										</button>
-									) : null}
+									) : (
+										<div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-center text-sm font-black text-slate-500">
+											Sem responsável definido
+										</div>
+									)}
 								</div>
-								{setor.responsavel ? (
-									<div className="mx-auto mt-3 h-8 w-px bg-slate-300" />
-								) : null}
-								<div className="relative mt-1 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-									{setor.cargos.map((cargo) => (
-										<div key={cargo.id} className="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-											<div className="absolute left-1/2 top-[-18px] h-4 w-px bg-slate-300" />
-											<div className="flex items-start justify-between gap-2">
-												<div>
-													<div className="text-sm font-black text-slate-950">{cargo.nome}</div>
-													{cargo.descricao ? <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">{cargo.descricao}</p> : null}
+								<div className="mx-auto h-14 w-px bg-slate-300" />
+								<div className="relative">
+									{group.setores.length > 1 ? (
+										<div className="absolute left-[12%] right-[12%] top-0 hidden h-px bg-slate-300 lg:block" />
+									) : null}
+									<div className="grid gap-4 pt-4 lg:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+									{group.setores.map((setor) => (
+										<div key={setor.id} className="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+											<div className="absolute left-1/2 top-[-16px] h-4 w-px bg-slate-300" />
+											<div className="flex items-center gap-3">
+												<span className="h-4 w-4 rounded-full" style={{ backgroundColor: setor.cor || DEFAULT_SETOR_COLOR }} />
+												<div className="min-w-0">
+													<h3 className="truncate text-base font-black text-slate-950">{setor.nome}</h3>
+													<p className="text-xs font-bold text-slate-500">{setor.cargos.length} cargos · {setor.cargos.reduce((total, cargo) => total + cargo.membros.length, 0)} usuários</p>
 												</div>
-												<span className="h-3 w-3 rounded-full" style={{ backgroundColor: getCargoSetorColor(cargo, setores) }} />
 											</div>
-											<div className="mt-3 space-y-2">
-												{cargo.membros.map((colaborador) => (
-													<UserPill key={colaborador.id} colaborador={colaborador} onClick={() => setSelectedColaborador(colaborador)} />
+											<div className="mx-auto my-3 h-6 w-px bg-slate-200" />
+											<div className="grid gap-3">
+												{setor.cargos.map((cargo) => (
+													<div key={cargo.id} className="relative rounded-2xl border border-slate-200 bg-slate-50 p-4">
+														<div className="absolute left-1/2 top-[-14px] h-3 w-px bg-slate-200" />
+														<div className="flex items-start justify-between gap-2">
+															<div>
+																<div className="text-sm font-black text-slate-950">{cargo.nome}</div>
+																{cargo.descricao ? <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">{cargo.descricao}</p> : null}
+															</div>
+															<span className="h-3 w-3 rounded-full" style={{ backgroundColor: getCargoSetorColor(cargo, setores) }} />
+														</div>
+														<div className="mt-3 space-y-2">
+															{cargo.membros.map((colaborador) => (
+																<UserPill key={colaborador.id} colaborador={colaborador} onClick={() => setSelectedColaborador(colaborador)} />
+															))}
+															{!cargo.membros.length ? <div className="rounded-xl bg-white p-3 text-xs font-bold text-slate-400">Sem usuários vinculados.</div> : null}
+														</div>
+													</div>
 												))}
-												{!cargo.membros.length ? <div className="rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-400">Sem usuários vinculados.</div> : null}
+												{!setor.cargos.length ? <div className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Nenhum cargo neste setor.</div> : null}
 											</div>
 										</div>
 									))}
-									{!setor.cargos.length ? <div className="rounded-xl bg-white p-4 text-sm font-semibold text-slate-500">Nenhum cargo neste setor.</div> : null}
+								</div>
 								</div>
 							</div>
 						))}
