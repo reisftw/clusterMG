@@ -2341,6 +2341,11 @@ function parseGuidedDateChoice(text, conversation = {}) {
 	const options = getReusableGuidedDateOptions(conversation);
 	const schedule = parseScheduleFromText(text);
 	if (schedule?.date) return schedule.date;
+	const dayOnly = String(text || "").trim();
+	if (/^0\d$/.test(dayOnly)) {
+		const daySchedule = parseScheduleFromText(`dia ${dayOnly}`);
+		if (daySchedule?.date) return daySchedule.date;
+	}
 	const selected = options.find(
 		(option) => value === option.key || value.includes(`opcao ${option.key}`),
 	);
