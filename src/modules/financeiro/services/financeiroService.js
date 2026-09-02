@@ -162,6 +162,27 @@ export async function buscarEquipeFinanceiro() {
 	return requestVpsApi(`${BASE_PATH}/equipe`);
 }
 
+export async function criarSetorEquipeFinanceiro(payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/equipe/setores`, {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function atualizarSetorEquipeFinanceiro(id, payload = {}) {
+	return requestVpsApi(`${BASE_PATH}/equipe/setores/${encodeURIComponent(id)}`, {
+		method: "PUT",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function removerSetorEquipeFinanceiro(id) {
+	return requestVpsApi(`${BASE_PATH}/equipe/setores/${encodeURIComponent(id)}`, {
+		method: "DELETE",
+		body: "{}",
+	});
+}
+
 export async function criarCargoEquipeFinanceiro(payload = {}) {
 	return requestVpsApi(`${BASE_PATH}/equipe/cargos`, {
 		method: "POST",

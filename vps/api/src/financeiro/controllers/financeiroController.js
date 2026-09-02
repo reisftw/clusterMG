@@ -341,6 +341,39 @@ function createFinanceiroController() {
 		}
 	}
 
+	async function createEquipeSetor(req, res, next) {
+		try {
+			const setor = await financeiroEquipeRepository.createSetor(
+				req.body || {},
+				req.user,
+			);
+			res.status(201).json({ setor });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function updateEquipeSetor(req, res, next) {
+		try {
+			const setor = await financeiroEquipeRepository.updateSetor(
+				req.params.setorId,
+				req.body || {},
+				req.user,
+			);
+			res.json({ setor });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function deleteEquipeSetor(req, res, next) {
+		try {
+			res.json(await financeiroEquipeRepository.deleteSetor(req.params.setorId));
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function createEquipeColaborador(req, res, next) {
 		try {
 			const colaborador = await financeiroEquipeRepository.createColaborador(
@@ -400,6 +433,7 @@ function createFinanceiroController() {
 		deleteFakeDreData,
 		deleteEquipeCargo,
 		deleteEquipeColaborador,
+		deleteEquipeSetor,
 		getEquipe,
 		getBudgetCostCenters,
 		getBudgetData,
@@ -412,6 +446,7 @@ function createFinanceiroController() {
 		runSheetsImport,
 		createEquipeCargo,
 		createEquipeColaborador,
+		createEquipeSetor,
 		saveBudgetData,
 		saveBudgetCostCenters,
 		saveDreStatement,
@@ -422,6 +457,7 @@ function createFinanceiroController() {
 		moveEquipeColaborador,
 		updateEquipeCargo,
 		updateEquipeColaborador,
+		updateEquipeSetor,
 		updateBudgetApproval,
 	};
 }

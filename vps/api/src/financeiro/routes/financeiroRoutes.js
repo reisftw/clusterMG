@@ -159,6 +159,27 @@ function createFinanceiroRouter({
 		controller.getEquipe,
 	);
 	router.post(
+		"/equipe/setores",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.createEquipeSetor,
+	);
+	router.put(
+		"/equipe/setores/:setorId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.updateEquipeSetor,
+	);
+	router.delete(
+		"/equipe/setores/:setorId",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireEquipeManage,
+		controller.deleteEquipeSetor,
+	);
+	router.post(
 		"/equipe/cargos",
 		requireAuthenticated,
 		requireCsrfToken,
