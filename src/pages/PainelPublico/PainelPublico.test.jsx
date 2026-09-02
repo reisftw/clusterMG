@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import PainelPublico from "./PainelPublico";
 
@@ -126,7 +126,7 @@ describe("PainelPublico", () => {
 		);
 	});
 
-	it("usa o mes mais recente com dados quando o mes atual nao possui indicadores", async () => {
+	it("nao troca para mes antigo quando o mes atual nao possui indicadores", () => {
 		painelMocks.retiradas.mockReturnValue(
 			baseHook({
 				allData: {
@@ -138,11 +138,9 @@ describe("PainelPublico", () => {
 
 		render(<PainelPublico initialTab="retiradas" />);
 
-		await waitFor(() => {
-			expect(screen.getByTestId("painel-month")).toHaveTextContent("Julho");
-		});
+		expect(screen.getByTestId("painel-month")).toHaveTextContent("Março");
 		expect(screen.getByTestId("tab-retiradas")).toHaveTextContent(
-			"Retiradas Julho",
+			"Retiradas Março",
 		);
 	});
 

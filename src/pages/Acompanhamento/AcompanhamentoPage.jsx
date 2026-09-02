@@ -88,37 +88,6 @@ function getMonthData(allData, month) {
 	return key ? allData[key] : null;
 }
 
-function hasOperationalMonthData(monthData) {
-	const consolidated = getMetaSourceData(monthData, "consolidado");
-	if (!consolidated) return false;
-	const rawDays = Array.isArray(consolidated.rawDays) ? consolidated.rawDays : [];
-	const saldoDiario = Array.isArray(consolidated.saldoDiario)
-		? consolidated.saldoDiario
-		: [];
-	const regionais = Array.isArray(consolidated.regionais)
-		? consolidated.regionais
-		: [];
-
-	return (
-		Number(consolidated.totalOS || 0) > 0 ||
-		rawDays.some((item) => Number(item?.totalDia || item?.total || 0) > 0) ||
-		saldoDiario.some((item) => Number(item?.totalDia || item?.total || 0) > 0) ||
-		regionais.some(
-			(item) => Number(item?.total ?? item?.realizado ?? item?.value ?? 0) > 0,
-		)
-	);
-}
-
-function resolveAcompanhamentoMonth(allData, referenceMonth) {
-	if (hasOperationalMonthData(getMonthData(allData, referenceMonth))) {
-		return referenceMonth;
-	}
-	const latestWithData = [...MONTH_ORDER]
-		.reverse()
-		.find((month) => hasOperationalMonthData(getMonthData(allData, month)));
-	return latestWithData || referenceMonth;
-}
-
 const DEFAULT_CONFIG = {
 	sections: {
 		spotlight: true,
@@ -2234,7 +2203,7 @@ function buildDashboardSnapshot({
 	};
 	const mapaSnapshot = getMapaSnapshot(publicData);
 	const match = getPublicMatchData(publicData, matchPublicoData);
-	const metaMonthData = allData?.[currentMonth] || null;
+	const metaMonthData = getMonthData(allData, currentMonth);
 	const metaSempre = getMetaSourceData(metaMonthData, "sempre");
 	const metaOnnet = getMetaSourceData(metaMonthData, "onnet");
 	const metaMes = getMetaSourceData(metaMonthData, "consolidado");
@@ -2657,10 +2626,7 @@ export default function AcompanhamentoPage() {
 	const { data: matchPublicoData, loading: loadingMatchPublico } =
 		useMatchPublico();
 	const retiradas = useRetiradas(true, { refreshKey: dashboardRefreshKey });
-	const currentMonth = useMemo(
-		() => resolveAcompanhamentoMonth(retiradas.allData, calendarMonth),
-		[calendarMonth, retiradas.allData],
-	);
+	const currentMonth = calendarMonth;
 	const { boardData: diarioBoardData, loading: loadingDiario } =
 		useDiarioEntries(localDateKey(now));
 	const [sceneIndex, setSceneIndex] = useState(0);

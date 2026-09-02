@@ -22,36 +22,6 @@ const MESES = [
 	"Dezembro",
 ];
 
-function hasMetaValue(value) {
-	return Number(value || 0) > 0;
-}
-
-function hasMetaData(meta) {
-	if (!meta || typeof meta !== "object") return false;
-
-	if (
-		hasMetaValue(meta.totalOS) ||
-		hasMetaValue(meta.meta) ||
-		hasMetaValue(meta.cancelamentos) ||
-		hasMetaValue(meta.percentAchieved) ||
-		hasMetaValue(meta.totalGeral) ||
-		hasMetaValue(meta.realizado)
-	) {
-		return true;
-	}
-
-	if (Array.isArray(meta.saldoDiario) && meta.saldoDiario.length > 0)
-		return true;
-	if (Array.isArray(meta.rawDays) && meta.rawDays.length > 0) return true;
-	if (Array.isArray(meta.technicians) && meta.technicians.length > 0)
-		return true;
-	if (Array.isArray(meta.regionais) && meta.regionais.length > 0) return true;
-
-	return ["consolidado", "onnet", "onnetSempre"].some((key) =>
-		hasMetaData(meta[key]),
-	);
-}
-
 function withMonth(meta, mes) {
 	if (!meta || typeof meta !== "object") return meta;
 
@@ -66,22 +36,9 @@ function withMonth(meta, mes) {
 	);
 }
 
-function pickDashboardMonth(todos, currentMonth) {
+function getDashboardMonth(todos, currentMonth) {
 	if (!todos || typeof todos !== "object") return null;
-
-	const currentData = todos[currentMonth] ?? null;
-	if (hasMetaData(currentData)) {
-		return { mes: currentMonth, data: currentData };
-	}
-
-	for (let index = MESES.length - 1; index >= 0; index -= 1) {
-		const mes = MESES[index];
-		if (hasMetaData(todos[mes])) {
-			return { mes, data: todos[mes] };
-		}
-	}
-
-	return null;
+	return { mes: currentMonth, data: todos[currentMonth] ?? null };
 }
 
 export const useMetasDashboard = () => {
@@ -104,7 +61,7 @@ export const useMetasDashboard = () => {
 			);
 			const agora = new Date();
 			const mesNome = MESES[agora.getMonth()];
-			const selected = pickDashboardMonth(metasConfiguradas, mesNome);
+			const selected = getDashboardMonth(metasConfiguradas, mesNome);
 			setAllData(metasConfiguradas || {});
 			setMetaMes(selected ? withMonth(selected.data, selected.mes) : null);
 			setFeriadosSet(feriados instanceof Set ? feriados : new Set());

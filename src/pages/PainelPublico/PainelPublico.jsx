@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import MelzFooter from "../../components/layout/MelzFooter";
 import RetorninhoLoader from "../../components/ui/RetorninhoLoader";
 import { obterMesAtual } from "../../utils/mes";
@@ -11,63 +11,6 @@ import TabMapaOS from "./tabs/TabMapaOS";
 import TabRetiradas from "./tabs/TabRetiradas";
 import "./PainelPublico.css";
 
-const MONTH_ORDER = [
-	"Janeiro",
-	"Fevereiro",
-	"Março",
-	"Abril",
-	"Maio",
-	"Junho",
-	"Julho",
-	"Agosto",
-	"Setembro",
-	"Outubro",
-	"Novembro",
-	"Dezembro",
-];
-
-function normalizeMonthName(value) {
-	return String(value || "")
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.toLowerCase()
-		.trim();
-}
-
-function resolveMonthRecord(allData = {}, month) {
-	const normalizedMonth = normalizeMonthName(month);
-	const monthKey = Object.keys(allData || {}).find(
-		(key) => normalizeMonthName(key) === normalizedMonth,
-	);
-	return monthKey ? allData[monthKey] : allData?.[month];
-}
-
-function hasMonthData(record) {
-	if (!record || typeof record !== "object") return false;
-	const values = [
-		record.totalOS,
-		record.totalRealizado,
-		record.totalCancelamentos,
-		record.meta,
-		record.onnet?.totalOS,
-		record.onnetSempre?.totalOS,
-	];
-	return values.some((value) => Number(value || 0) > 0);
-}
-
-function latestMonthWithData(allData = {}) {
-	const orderedMonth = [...MONTH_ORDER]
-		.reverse()
-		.find((monthName) => hasMonthData(resolveMonthRecord(allData, monthName)));
-
-	return (
-		orderedMonth ||
-		Object.keys(allData || {})
-			.reverse()
-			.find((monthName) => hasMonthData(allData?.[monthName]))
-	);
-}
-
 export default function PainelPublico({ initialTab = "retiradas" }) {
 	const [month, setMonth] = useState(() => obterMesAtual() || "Janeiro");
 	const activeTab = initialTab;
@@ -76,15 +19,7 @@ export default function PainelPublico({ initialTab = "retiradas" }) {
 	const agentes = useAgentes(activeTab === "agentes");
 	const mapaOS = useMapaOS(activeTab === "mapa");
 
-	const displayMonth = useMemo(() => {
-		if (activeTab === "mapa") return month;
-
-		const source =
-			activeTab === "agentes" ? agentes.allData : retiradas.allData;
-		if (hasMonthData(resolveMonthRecord(source, month))) return month;
-
-		return latestMonthWithData(source) || month;
-	}, [activeTab, agentes.allData, month, retiradas.allData]);
+	const displayMonth = month;
 
 	const loading =
 		activeTab === "retiradas"
