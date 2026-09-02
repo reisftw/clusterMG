@@ -9,7 +9,7 @@ import {
 	UserRound,
 	Users,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../../components/ui/ModalShell";
 import {
 	atualizarCargoEquipeFinanceiro,
@@ -170,6 +170,67 @@ function fitImageInsideBox(image, maxWidth, maxHeight) {
 		width: image.width * ratio,
 		height: image.height * ratio,
 	};
+}
+
+function hexToRgb(hex, fallback = [37, 99, 235]) {
+	const normalized = String(hex || "").replace("#", "").trim();
+	if (!/^[0-9a-f]{6}$/i.test(normalized)) return fallback;
+	return [
+		Number.parseInt(normalized.slice(0, 2), 16),
+		Number.parseInt(normalized.slice(2, 4), 16),
+		Number.parseInt(normalized.slice(4, 6), 16),
+	];
+}
+
+function drawPdfText(pdf, text, x, y, options = {}) {
+	const {
+		align = "left",
+		bold = false,
+		color = [15, 23, 42],
+		maxWidth = 120,
+		size = 8,
+	} = options;
+	pdf.setFont("helvetica", bold ? "bold" : "normal");
+	pdf.setFontSize(size);
+	pdf.setTextColor(...color);
+	const lines = pdf.splitTextToSize(String(text || ""), maxWidth).slice(0, 2);
+	pdf.text(lines, x, y, { align });
+	return lines.length;
+}
+
+function drawPersonPdfCard(pdf, colaborador, x, y, width, height, options = {}) {
+	const { accent = [37, 99, 235], label = "" } = options;
+	pdf.setFillColor(255, 255, 255);
+	pdf.setDrawColor(203, 213, 225);
+	pdf.setLineWidth(0.8);
+	pdf.roundedRect(x, y, width, height, 7, 7, "FD");
+	pdf.setFillColor(...accent);
+	pdf.circle(x + 18, y + height / 2, 11, "F");
+	drawPdfText(pdf, buildInitials(colaborador?.nome), x + 18, y + height / 2 + 3, {
+		align: "center",
+		bold: true,
+		color: [255, 255, 255],
+		maxWidth: 22,
+		size: 7,
+	});
+	if (label) {
+		drawPdfText(pdf, label, x + 34, y + 11, {
+			bold: true,
+			color: [100, 116, 139],
+			maxWidth: width - 42,
+			size: 5.5,
+		});
+	}
+	drawPdfText(pdf, colaborador?.nome || "Sem responsável", x + 34, y + (label ? 22 : 18), {
+		bold: true,
+		maxWidth: width - 42,
+		size: 7.5,
+	});
+	drawPdfText(pdf, colaborador?.cargoNome || "Cargo não vinculado", x + 34, y + (label ? 34 : 30), {
+		color: [71, 85, 105],
+		maxWidth: width - 42,
+		size: 6.5,
+	});
 }
 
 function Avatar({ className = "h-10 w-10", colaborador }) {
@@ -428,7 +489,6 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	const [cargoModal, setCargoModal] = useState(null);
 	const [colaboradorModal, setColaboradorModal] = useState(null);
 	const [draggingColaboradorId, setDraggingColaboradorId] = useState("");
-	const organogramRef = useRef(null);
 
 	const loadEquipe = useCallback(async () => {
 		setLoading(true);
@@ -539,15 +599,12 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	}
 
 	async function exportPdf() {
-		if (!organogramRef.current) return;
-		const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-			import("jspdf"),
-			import("html2canvas"),
-		]);
+		const { default: jsPDF } = await import("jspdf");
 		const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 		const pageWidth = pdf.internal.pageSize.getWidth();
 		const pageHeight = pdf.internal.pageSize.getHeight();
 		const margin = 38;
+		const tree = buildEquipeTree(config, setores, colaboradores);
 		const logo = await loadImageDataUrl("/sempre-logo-documento.png");
 		if (logo) {
 			const logoSize = fitImageInsideBox(logo, 118, 42);
@@ -568,19 +625,109 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		pdf.setFontSize(9);
 		pdf.setTextColor(71, 85, 105);
 		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
-		const canvas = await html2canvas(organogramRef.current, {
-			backgroundColor: "#ffffff",
-			scale: 2,
-			useCORS: true,
-			windowWidth: Math.max(organogramRef.current.scrollWidth, 1400),
+		const chartTop = 92;
+		const chartBottom = pageHeight - margin;
+		const chartWidth = pageWidth - margin * 2;
+		const setoresToDraw = tree.setores.length ? tree.setores : [{ id: "empty", nome: "Sem setores", membros: [] }];
+		const columnGap = setoresToDraw.length > 8 ? 6 : 10;
+		const columnWidth =
+			(chartWidth - columnGap * (setoresToDraw.length - 1)) / setoresToDraw.length;
+		const maxColumnsWidth = columnWidth * setoresToDraw.length + columnGap * (setoresToDraw.length - 1);
+		const startX = margin + Math.max((chartWidth - maxColumnsWidth) / 2, 0);
+		const generalCardWidth = Math.min(220, chartWidth * 0.42);
+		const generalCardHeight = 54;
+		const generalX = margin + chartWidth / 2 - generalCardWidth / 2;
+		const generalY = chartTop;
+		drawPersonPdfCard(
+			pdf,
+			tree.responsavelGeral,
+			generalX,
+			generalY,
+			generalCardWidth,
+			generalCardHeight,
+			{ accent: [37, 99, 235], label: "RESPONSÁVEL GERAL" },
+		);
+		const spineTop = generalY + generalCardHeight;
+		const spineBottom = spineTop + 38;
+		pdf.setDrawColor(71, 85, 105);
+		pdf.setLineWidth(1.3);
+		pdf.line(pageWidth / 2, spineTop, pageWidth / 2, spineBottom);
+		if (setoresToDraw.length > 1) {
+			pdf.line(startX + columnWidth / 2, spineBottom, startX + maxColumnsWidth - columnWidth / 2, spineBottom);
+		}
+		const setorHeaderY = spineBottom + 18;
+		const availableMemberHeight = Math.max(chartBottom - setorHeaderY - 90, 90);
+		const maxMembers = Math.max(...setoresToDraw.map((setor) => setor.membros?.length || 0), 1);
+		const memberGap = 8;
+		const memberCardHeight = Math.max(
+			28,
+			Math.min(44, (availableMemberHeight - memberGap * Math.max(maxMembers - 1, 0)) / maxMembers),
+		);
+		setoresToDraw.forEach((setor, index) => {
+			const x = startX + index * (columnWidth + columnGap);
+			const centerX = x + columnWidth / 2;
+			const accent = hexToRgb(setor.cor, [37, 99, 235]);
+			pdf.setDrawColor(71, 85, 105);
+			pdf.setLineWidth(1.2);
+			pdf.line(centerX, spineBottom, centerX, setorHeaderY - 8);
+			pdf.setFillColor(248, 250, 252);
+			pdf.setDrawColor(...accent);
+			pdf.roundedRect(x, setorHeaderY, columnWidth, 30, 6, 6, "FD");
+			drawPdfText(pdf, setor.nome || "Setor", centerX, setorHeaderY + 13, {
+				align: "center",
+				bold: true,
+				color: [15, 23, 42],
+				maxWidth: columnWidth - 10,
+				size: 7.5,
+			});
+			drawPdfText(pdf, `${countSetorMembers(setor)} usuários`, centerX, setorHeaderY + 24, {
+				align: "center",
+				color: [71, 85, 105],
+				maxWidth: columnWidth - 10,
+				size: 6,
+			});
+			const responsavelY = setorHeaderY + 48;
+			if (setor.responsavel) {
+				pdf.line(centerX, setorHeaderY + 30, centerX, responsavelY);
+				drawPersonPdfCard(pdf, setor.responsavel, x, responsavelY, columnWidth, 42, {
+					accent,
+					label: "RESPONSÁVEL DO SETOR",
+				});
+			} else {
+				pdf.setFillColor(255, 255, 255);
+				pdf.setDrawColor(203, 213, 225);
+				pdf.roundedRect(x, responsavelY, columnWidth, 30, 6, 6, "FD");
+				drawPdfText(pdf, "Sem responsável do setor", centerX, responsavelY + 18, {
+					align: "center",
+					color: [100, 116, 139],
+					maxWidth: columnWidth - 10,
+					size: 6.5,
+				});
+			}
+			const memberTop = responsavelY + 58;
+			pdf.setDrawColor(71, 85, 105);
+			pdf.line(centerX, responsavelY + (setor.responsavel ? 42 : 30), centerX, memberTop - 8);
+			(setor.membros || []).forEach((membro, memberIndex) => {
+				const cardY = memberTop + memberIndex * (memberCardHeight + memberGap);
+				if (memberIndex === 0) {
+					pdf.line(centerX, memberTop - 8, centerX, cardY);
+				}
+				drawPersonPdfCard(pdf, membro, x, cardY, columnWidth, memberCardHeight, {
+					accent,
+				});
+			});
+			if (!setor.membros?.length) {
+				pdf.setFillColor(255, 255, 255);
+				pdf.setDrawColor(226, 232, 240);
+				pdf.roundedRect(x, memberTop, columnWidth, 28, 6, 6, "FD");
+				drawPdfText(pdf, "Nenhum usuário neste setor", centerX, memberTop + 17, {
+					align: "center",
+					color: [100, 116, 139],
+					maxWidth: columnWidth - 8,
+					size: 6.2,
+				});
+			}
 		});
-		const image = canvas.toDataURL("image/png", 0.96);
-		const maxWidth = pageWidth - margin * 2;
-		const maxHeight = pageHeight - 96;
-		const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
-		const width = canvas.width * ratio;
-		const height = canvas.height * ratio;
-		pdf.addImage(image, "PNG", (pageWidth - width) / 2, 82, width, height);
 		pdf.save(`organograma-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
 	}
 
@@ -706,7 +853,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 					) : null}
 					<div className="space-y-6">
 						{equipeTree.setores.length ? (
-							<div ref={organogramRef} className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
+							<div className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
 								<div className="flex justify-center">
 									{equipeTree.responsavelGeral ? (
 										<button
