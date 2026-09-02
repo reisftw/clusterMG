@@ -333,6 +333,15 @@ function normalizeLabel(value, fallback = "Nao informado") {
 	return text || fallback;
 }
 
+function normalizeGroupingKey(value) {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
 function localDateKey(date = new Date()) {
 	return [
 		date.getFullYear(),
@@ -2176,11 +2185,25 @@ function buildCityOsRanking(mapaSnapshot) {
 }
 
 function buildRegionalDeliveries(metaMes) {
-	return (metaMes?.regionais || [])
+	const grouped = new Map();
+
+	(metaMes?.regionais || []).forEach((item) => {
+		const label = normalizeLabel(item.name || item.nome || item.label, "Sem regional");
+		const key = normalizeGroupingKey(label) || "sem regional";
+		const current = grouped.get(key) || {
+			label,
+			total: 0,
+			meta: 0,
+		};
+		current.total += Number(item.total ?? item.realizado ?? item.value ?? 0);
+		current.meta += Number(item.meta || 0);
+		grouped.set(key, current);
+	});
+
+	return [...grouped.values()]
 		.map((item) => ({
-			label: normalizeLabel(item.name || item.nome || item.label, "Sem regional"),
-			total: Number(item.total ?? item.realizado ?? item.value ?? 0),
-			meta: Number(item.meta || 110),
+			...item,
+			meta: item.meta || 110,
 		}))
 		.filter((item) => item.total > 0)
 		.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "pt-BR"));
