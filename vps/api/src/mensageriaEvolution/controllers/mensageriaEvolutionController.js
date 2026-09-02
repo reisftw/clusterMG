@@ -33,7 +33,8 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 					String(config.whatsappProvider || "evolution") === "evolution" &&
 					config.evolutionEnabled &&
 					!config.evolutionPaused &&
-					!connection.connected
+					!connection.connected &&
+					evolutionMessaging.isConfirmedDisconnectedConnection?.(connection)
 				) {
 					await evolutionMessaging.pauseQueueForDisconnectedEvolution({
 						config,

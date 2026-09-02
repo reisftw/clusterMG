@@ -1,7 +1,6 @@
 const express = require("express");
+const agendamentosRepository = require("../../agendamentosRepository");
 const mensageriaRepository = require("../../mensageriaRepository");
-
-const AGENDAMENTOS_COLLECTION = "agendamentos";
 const PAGE_SIZE = 1000;
 
 async function listAll(fetchPage, { max = 10000 } = {}) {
@@ -60,7 +59,6 @@ function toNumber(value, fallback) {
 
 function createMensageriaRouter({
 	adminRoles,
-	documents,
 	requireAnyPermission,
 	requireAuthenticated,
 	requireCsrfToken,
@@ -281,10 +279,7 @@ function createMensageriaRouter({
 				listAll((options) => mensageriaRepository.listQueueMessages(options)),
 				listAll(
 					(options) =>
-						documents.listDocuments({
-							collectionPath: AGENDAMENTOS_COLLECTION,
-							...options,
-						}),
+						agendamentosRepository.listAppointmentDocuments(options),
 					{ max: 2000 },
 				),
 			]);

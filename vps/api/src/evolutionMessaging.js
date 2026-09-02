@@ -641,9 +641,12 @@ async function requestEvolution(config, path, options = {}) {
 		data = null;
 	}
 	if (!response.ok) {
-		throw new Error(
+		const error = new Error(
 			data?.message || data?.error || `Evolution HTTP ${response.status}`,
 		);
+		error.statusCode = response.status;
+		error.response = data;
+		throw error;
 	}
 	const statusValue = Number(
 		data?.status || data?.statusCode || data?.response?.status || 0,
@@ -712,6 +715,14 @@ function isDisconnectedConnectionState(state) {
 		"banned",
 		"ban",
 	].some((item) => value.includes(item));
+}
+
+function isConfirmedDisconnectedConnection(connection = {}) {
+	return Boolean(
+		connection.configured !== false &&
+			!connection.checkFailed &&
+			isDisconnectedConnectionState(connection.state),
+	);
 }
 
 function isEvolutionConnectionEvent(payload = {}) {
@@ -809,7 +820,7 @@ async function pauseQueueForDisconnectedEvolution({
 		extractConnectionState(payload || connection) ||
 		connection.state ||
 		"desconectado";
-	if (!isDisconnectedConnectionState(state) && !connection.error) return null;
+	if (!isDisconnectedConnectionState(state)) return null;
 
 	const finalReason =
 		reason ||
@@ -905,6 +916,8 @@ async function getConnectionInfo(config = null) {
 			connected: false,
 			state: "erro",
 			number: "",
+			checkFailed: true,
+			statusCode: error?.statusCode || 0,
 			error: String(error?.message || error),
 		};
 	}
@@ -1448,6 +1461,11 @@ async function processQueueOnce({ manual = false } = {}) {
 		return skippedQueue("Envio automatico desativado.");
 	if (String(config.whatsappProvider || "evolution") === "evolution") {
 		const connection = await getConnectionInfo(config);
+		if (connection.checkFailed) {
+			return skippedQueue(
+				`Falha ao consultar Evolution${connection.statusCode ? ` (${connection.statusCode})` : ""}: ${connection.error || "verifique a API key/base URL"}.`,
+			);
+		}
 		if (!connection.connected) {
 			const log = await pauseQueueForDisconnectedEvolution({
 				config,
@@ -3214,6 +3232,7 @@ module.exports = {
 	getConfig,
 	getStatus,
 	getConnectionInfo,
+	isConfirmedDisconnectedConnection,
 	getAccountsConnectionInfo,
 	createOrConnectInstance,
 	logoutInstance,
@@ -3238,5 +3257,6 @@ module.exports = {
 		getReusableGuidedDateOptions,
 		parseGuidedDateChoice,
 		parseScheduleFromText,
+		isConfirmedDisconnectedConnection,
 	},
 };

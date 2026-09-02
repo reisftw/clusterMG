@@ -134,4 +134,26 @@ describe("evolutionMessaging guided schedule dates", () => {
 			"2026-09-01",
 		);
 	});
+
+	it("nao trata falha de consulta da Evolution como desconexao confirmada", () => {
+		const helpers = loadEvolutionMessaging();
+
+		expect(
+			helpers.isConfirmedDisconnectedConnection({
+				configured: true,
+				connected: false,
+				state: "erro",
+				checkFailed: true,
+				statusCode: 401,
+				error: "Evolution HTTP 401",
+			}),
+		).toBe(false);
+		expect(
+			helpers.isConfirmedDisconnectedConnection({
+				configured: true,
+				connected: false,
+				state: "close",
+			}),
+		).toBe(true);
+	});
 });
