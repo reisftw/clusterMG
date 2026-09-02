@@ -107,6 +107,22 @@ describe("evolutionMessaging guided schedule dates", () => {
 		expect(selected).toBe("2026-09-04");
 	});
 
+	it("interpreta dia do mes com zero a esquerda sem cair na opcao guiada", () => {
+		const helpers = loadEvolutionMessaging();
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-09-02T13:00:00-03:00"));
+
+		const selected = helpers.parseGuidedDateChoice("03", {
+			dateOptions: [
+				{ key: "1", date: "2026-09-02", label: "02/09" },
+				{ key: "2", date: "2026-09-03", label: "03/09" },
+				{ key: "3", date: "2026-09-05", label: "sábado, 05/09" },
+			],
+		});
+
+		expect(selected).toBe("2026-09-03");
+	});
+
 	it("interpreta dia do mes com horario no texto livre", () => {
 		const helpers = loadEvolutionMessaging();
 		const schedule = helpers.parseScheduleFromText(

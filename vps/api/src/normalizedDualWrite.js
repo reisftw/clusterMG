@@ -59,7 +59,17 @@ function timestampValue(value) {
 }
 
 function dateValue(value) {
-	const timestamp = timestampValue(value);
+	if (!value) return null;
+	if (typeof value === "object" && value.value) return dateValue(value.value);
+	if (value instanceof Date) {
+		return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(
+			2,
+			"0",
+		)}-${String(value.getUTCDate()).padStart(2, "0")}`;
+	}
+	const normalized = text(value);
+	if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+	const timestamp = timestampValue(normalized);
 	return timestamp ? timestamp.slice(0, 10) : null;
 }
 

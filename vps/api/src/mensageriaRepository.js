@@ -61,7 +61,12 @@ function timestampToIso(value) {
 function dateToYmd(value) {
 	if (!value) return "";
 	if (typeof value === "object" && value.value) return dateToYmd(value.value);
-	if (value instanceof Date) return value.toISOString().slice(0, 10);
+	if (value instanceof Date) {
+		return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(
+			2,
+			"0",
+		)}-${String(value.getUTCDate()).padStart(2, "0")}`;
+	}
 	const normalized = text(value);
 	if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
 	const date = new Date(normalized);
