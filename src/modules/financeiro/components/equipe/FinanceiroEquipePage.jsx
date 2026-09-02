@@ -19,6 +19,7 @@ import {
 	criarCargoEquipeFinanceiro,
 	criarColaboradorEquipeFinanceiro,
 	criarSetorEquipeFinanceiro,
+	moverColaboradorEquipeFinanceiro,
 	removerCargoEquipeFinanceiro,
 	removerColaboradorEquipeFinanceiro,
 	removerSetorEquipeFinanceiro,
@@ -46,12 +47,13 @@ function emptySetorForm() {
 }
 
 function emptyCargoForm() {
-	return { nome: "", setorId: "", descricao: "", ordem: 0 };
+	return { nome: "", descricao: "", ordem: 0 };
 }
 
 function emptyColaboradorForm() {
 	return {
 		nome: "",
+		setor: "",
 		cargoId: "",
 		formacao: "",
 		atividades: "",
@@ -61,48 +63,29 @@ function emptyColaboradorForm() {
 	};
 }
 
-function getCargoSetor(cargo, setores = []) {
-	return (
-		setores.find((setor) => setor.id === cargo?.setorId)?.nome ||
-		cargo?.setor ||
-		"Sem setor"
-	);
-}
-
-function getCargoSetorColor(cargo, setores = []) {
-	return (
-		setores.find((setor) => setor.id === cargo?.setorId)?.cor ||
-		DEFAULT_SETOR_COLOR
-	);
-}
-
-function buildSetorHierarchy(setores = [], cargos = [], colaboradores = []) {
+function buildSetorHierarchy(setores = [], colaboradores = []) {
 	const setorMap = new Map();
 	for (const setor of setores) {
-		setorMap.set(setor.id || `nome:${setor.nome}`, {
+		const key = setor.nome || setor.id || "Sem setor";
+		setorMap.set(key.toLowerCase(), {
 			...setor,
-			cargos: [],
+			membros: [],
 		});
 	}
-	for (const cargo of cargos) {
-		const key = cargo.setorId || `nome:${cargo.setor}`;
+	for (const colaborador of colaboradores) {
+		const setorNome = colaborador.setor || "Sem setor";
+		const key = setorNome.toLowerCase();
 		if (!setorMap.has(key)) {
 			setorMap.set(key, {
 				id: key,
-				nome: cargo.setor || "Sem setor",
+				nome: setorNome,
 				cor: DEFAULT_SETOR_COLOR,
 				responsavelId: null,
-				cargos: [],
+				responsavelNome: "",
+				membros: [],
 			});
 		}
-		const membros = colaboradores
-			.filter((colaborador) => colaborador.cargoId === cargo.id)
-			.sort(
-				(left, right) =>
-					(left.ordem || 0) - (right.ordem || 0) ||
-					left.nome.localeCompare(right.nome, "pt-BR"),
-			);
-		setorMap.get(key).cargos.push({ ...cargo, membros });
+		setorMap.get(key).membros.push(colaborador);
 	}
 	return [...setorMap.values()]
 		.map((setor) => ({
@@ -110,11 +93,13 @@ function buildSetorHierarchy(setores = [], cargos = [], colaboradores = []) {
 			responsavel:
 				colaboradores.find((colaborador) => colaborador.id === setor.responsavelId) ||
 				null,
-			cargos: setor.cargos.sort(
-				(left, right) =>
-					(left.ordem || 0) - (right.ordem || 0) ||
-					left.nome.localeCompare(right.nome, "pt-BR"),
-			),
+			membros: setor.membros
+				.filter((colaborador) => colaborador.id !== setor.responsavelId)
+				.sort(
+					(left, right) =>
+						(left.ordem || 0) - (right.ordem || 0) ||
+						left.nome.localeCompare(right.nome, "pt-BR"),
+				),
 		}))
 		.sort(
 			(left, right) =>
@@ -123,8 +108,8 @@ function buildSetorHierarchy(setores = [], cargos = [], colaboradores = []) {
 		);
 }
 
-function buildResponsibleHierarchy(setores = [], cargos = [], colaboradores = []) {
-	const setorHierarchy = buildSetorHierarchy(setores, cargos, colaboradores);
+function buildResponsibleHierarchy(setores = [], colaboradores = []) {
+	const setorHierarchy = buildSetorHierarchy(setores, colaboradores);
 	const groups = new Map();
 	for (const setor of setorHierarchy) {
 		const responsavelKey = setor.responsavel?.id || `setor:${setor.id}`;
@@ -142,6 +127,33 @@ function buildResponsibleHierarchy(setores = [], cargos = [], colaboradores = []
 		const rightName = right.responsavel?.nome || right.setores[0]?.nome || "";
 		return leftName.localeCompare(rightName, "pt-BR");
 	});
+}
+
+function countSetorMembers(setor) {
+	return (setor.membros?.length || 0) + (setor.responsavel ? 1 : 0);
+}
+
+function getSetorCargoCount(setor) {
+	return new Set(
+		[setor.responsavel, ...(setor.membros || [])]
+			.filter(Boolean)
+			.map((colaborador) => colaborador.cargoId || colaborador.cargoNome)
+			.filter(Boolean),
+	).size;
+}
+
+function getResponsibleGroupsForPdf(setores = [], colaboradores = []) {
+	return buildResponsibleHierarchy(setores, colaboradores).map((group) => ({
+		...group,
+		setores: group.setores.map((setor) => ({
+			...setor,
+			membros: setor.membros.sort(
+				(left, right) =>
+					(left.ordem || 0) - (right.ordem || 0) ||
+					left.nome.localeCompare(right.nome, "pt-BR"),
+			),
+		}))
+	}));
 }
 
 async function loadImageDataUrl(src) {
@@ -258,7 +270,7 @@ function SetorModal({ colaboradorOptions, onClose, onSave, setor }) {
 	);
 }
 
-function CargoModal({ cargo, onClose, onSave, setores }) {
+function CargoModal({ cargo, onClose, onSave }) {
 	const [form, setForm] = useState(cargo || emptyCargoForm());
 	return (
 		<ModalShell title={cargo?.id ? "Editar cargo" : "Novo cargo"} onClose={onClose} size="lg">
@@ -273,20 +285,6 @@ function CargoModal({ cargo, onClose, onSave, setores }) {
 					<label className="space-y-1 text-sm font-bold text-slate-700">
 						Nome do cargo
 						<input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.nome} onChange={(event) => setForm((current) => ({ ...current, nome: event.target.value }))} />
-					</label>
-					<label className="space-y-1 text-sm font-bold text-slate-700">
-						Setor
-						<select
-							className="w-full rounded-xl border border-slate-200 px-3 py-2 disabled:bg-slate-100 disabled:text-slate-400"
-							disabled={!setores.length}
-							value={form.setorId || ""}
-							onChange={(event) => setForm((current) => ({ ...current, setorId: event.target.value }))}
-						>
-							<option value="">{setores.length ? "Selecione o setor" : "Cadastre um setor primeiro"}</option>
-							{setores.map((setor) => (
-								<option key={setor.id} value={setor.id}>{setor.nome}</option>
-							))}
-						</select>
 					</label>
 				</div>
 				<label className="space-y-1 text-sm font-bold text-slate-700">
@@ -305,7 +303,6 @@ function CargoModal({ cargo, onClose, onSave, setores }) {
 function ColaboradorModal({ cargos, colaborador, colaboradores, onClose, onDelete, onSave, setores }) {
 	const [form, setForm] = useState(colaborador || emptyColaboradorForm());
 	const gestores = colaboradores.filter((item) => item.id !== colaborador?.id);
-	const selectedCargo = cargos.find((cargo) => cargo.id === form.cargoId);
 	function handleCargoChange(cargoId) {
 		const cargoSelecionado = cargos.find((cargo) => cargo.id === cargoId);
 		setForm((current) => ({
@@ -330,20 +327,28 @@ function ColaboradorModal({ cargos, colaborador, colaboradores, onClose, onDelet
 						<input className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.nome} onChange={(event) => setForm((current) => ({ ...current, nome: event.target.value }))} />
 					</label>
 					<label className="space-y-1 text-sm font-bold text-slate-700">
+						Setor
+						<select
+							className="w-full rounded-xl border border-slate-200 px-3 py-2 disabled:bg-slate-100 disabled:text-slate-400"
+							disabled={!setores.length}
+							value={form.setor || ""}
+							onChange={(event) => setForm((current) => ({ ...current, setor: event.target.value }))}
+						>
+							<option value="">{setores.length ? "Selecione o setor" : "Cadastre um setor primeiro"}</option>
+							{setores.map((setor) => (
+								<option key={setor.id} value={setor.nome}>{setor.nome}</option>
+							))}
+						</select>
+					</label>
+					<label className="space-y-1 text-sm font-bold text-slate-700">
 						Cargo
 						<select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.cargoId} onChange={(event) => handleCargoChange(event.target.value)}>
 							<option value="">Selecione</option>
 							{cargos.map((cargo) => (
-								<option key={cargo.id} value={cargo.id}>{cargo.nome} · {getCargoSetor(cargo, setores)}</option>
+								<option key={cargo.id} value={cargo.id}>{cargo.nome}</option>
 							))}
 						</select>
 					</label>
-					<div className="space-y-1 text-sm font-bold text-slate-700">
-						Setor vinculado
-						<div className="min-h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500">
-							{selectedCargo ? getCargoSetor(selectedCargo, setores) : "Selecione um cargo"}
-						</div>
-					</div>
 					<label className="space-y-1 text-sm font-bold text-slate-700">
 						Gestor/Superior direto
 						<select className="w-full rounded-xl border border-slate-200 px-3 py-2" value={form.gestorId || ""} onChange={(event) => setForm((current) => ({ ...current, gestorId: event.target.value }))}>
@@ -406,13 +411,21 @@ function DetailModal({ colaborador, onClose }) {
 	);
 }
 
-function UserPill({ colaborador, onClick }) {
+function UserPill({ canDrag = false, colaborador, onClick, onDragEnd, onDragStart }) {
 	return (
-		<button type="button" onClick={onClick} className="flex w-full items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2 text-left hover:bg-blue-50">
+		<button
+			type="button"
+			draggable={canDrag}
+			onClick={onClick}
+			onDragEnd={onDragEnd}
+			onDragStart={(event) => onDragStart?.(event, colaborador)}
+			className={`flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50 ${canDrag ? "cursor-grab active:cursor-grabbing" : ""}`}
+			title={canDrag ? "Arrastar para outro setor" : undefined}
+		>
 			<Avatar className="h-8 w-8" colaborador={colaborador} />
 			<div className="min-w-0">
 				<div className="truncate text-sm font-black text-slate-900">{colaborador.nome}</div>
-				<div className="truncate text-xs font-semibold text-slate-500">{colaborador.formacao || "Formação não informada"}</div>
+				<div className="truncate text-xs font-semibold text-slate-500">{colaborador.cargoNome || "Cargo não vinculado"}</div>
 			</div>
 		</button>
 	);
@@ -428,6 +441,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	const [setorModal, setSetorModal] = useState(null);
 	const [cargoModal, setCargoModal] = useState(null);
 	const [colaboradorModal, setColaboradorModal] = useState(null);
+	const [draggingColaboradorId, setDraggingColaboradorId] = useState("");
 
 	const loadEquipe = useCallback(async () => {
 		setLoading(true);
@@ -449,8 +463,8 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	}, [loadEquipe]);
 
 	const responsibleGroups = useMemo(
-		() => buildResponsibleHierarchy(setores, cargos, colaboradores),
-		[setores, cargos, colaboradores],
+		() => buildResponsibleHierarchy(setores, colaboradores),
+		[setores, colaboradores],
 	);
 
 	async function saveSetor(form) {
@@ -475,14 +489,27 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 
 	async function saveColaborador(form) {
 		setMessage("");
-		const payload = { ...form };
-		delete payload.setor;
 		const response = colaboradorModal?.id
-			? await atualizarColaboradorEquipeFinanceiro(colaboradorModal.id, payload)
-			: await criarColaboradorEquipeFinanceiro(payload);
+			? await atualizarColaboradorEquipeFinanceiro(colaboradorModal.id, form)
+			: await criarColaboradorEquipeFinanceiro(form);
 		setColaboradorModal(null);
 		await loadEquipe();
 		return response;
+	}
+
+	async function moveColaboradorToSetor(colaboradorId, setorNome) {
+		if (!canManage || !colaboradorId || !setorNome) return;
+		const colaborador = colaboradores.find((item) => item.id === colaboradorId);
+		if (!colaborador || colaborador.setor === setorNome) return;
+		setMessage("");
+		try {
+			await moverColaboradorEquipeFinanceiro(colaboradorId, { setor: setorNome });
+			await loadEquipe();
+		} catch (error) {
+			setMessage(error?.message || "Não foi possível mover o usuário para outro setor.");
+		} finally {
+			setDraggingColaboradorId("");
+		}
 	}
 
 	async function deleteSetor(id) {
@@ -538,7 +565,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		pdf.setTextColor(71, 85, 105);
 		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
 		let y = 96;
-		responsibleGroups.forEach((group, groupIndex) => {
+		getResponsibleGroupsForPdf(setores, colaboradores).forEach((group, groupIndex) => {
 			if (y > 500) {
 				pdf.addPage();
 				y = 48;
@@ -554,7 +581,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 				margin + 12,
 				y + 2,
 			);
-			y += 42;
+				y += 42;
 			group.setores.forEach((setor) => {
 				pdf.setDrawColor(147, 197, 253);
 				pdf.line(margin + 24, y - 20, margin + 24, y + 4);
@@ -564,7 +591,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 				pdf.setTextColor(30, 64, 175);
 				pdf.text(setor.nome || "Setor", margin + 50, y + 7);
 				y += 28;
-				setor.cargos.forEach((cargo) => {
+				setor.membros.forEach((membro) => {
 					if (y > 520) {
 						pdf.addPage();
 						y = 48;
@@ -572,13 +599,12 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 					pdf.setFont("helvetica", "bold");
 					pdf.setFontSize(9);
 					pdf.setTextColor(15, 23, 42);
-					pdf.text(cargo.nome || "Cargo", margin + 74, y + 7);
+					pdf.text(membro.nome || "Usuário", margin + 74, y + 7);
 					pdf.setFont("helvetica", "normal");
 					pdf.setFontSize(8);
 					pdf.setTextColor(71, 85, 105);
-					const nomes = cargo.membros.map((membro) => membro.nome).join(", ") || "Sem usuários vinculados";
-					pdf.text(pdf.splitTextToSize(nomes, pageWidth - margin * 2 - 96), margin + 74, y + 22);
-					y += 42 + Math.ceil(nomes.length / 120) * 10;
+					pdf.text(membro.cargoNome || "Cargo não vinculado", margin + 74, y + 20);
+					y += 34;
 				});
 			});
 			y += 16;
@@ -591,7 +617,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 				<div>
 					<h2 className="text-lg font-black text-slate-950">Organograma Financeiro</h2>
-					<p className="text-sm font-semibold text-slate-500">Setores na hierarquia, cargos dentro dos setores e usuários vinculados ao cargo.</p>
+					<p className="text-sm font-semibold text-slate-500">Setores na hierarquia, responsáveis no topo e usuários com seus cargos dentro de cada setor.</p>
 				</div>
 				<div className="flex flex-wrap gap-2">
 					<button type="button" onClick={exportPdf} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
@@ -642,7 +668,6 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 							{cargos.map((cargo) => (
 								<div key={cargo.id} className="rounded-xl border border-slate-200 p-3">
 									<div className="font-black text-slate-950">{cargo.nome}</div>
-									<div className="text-xs font-bold text-slate-500">{getCargoSetor(cargo, setores)}</div>
 									{cargo.descricao ? <p className="mt-2 line-clamp-3 text-xs text-slate-500">{cargo.descricao}</p> : null}
 									{canManage ? (
 										<div className="mt-3 flex gap-2">
@@ -664,6 +689,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 										<div className="min-w-0">
 											<div className="truncate font-black text-slate-950">{colaborador.nome}</div>
 											<div className="truncate text-xs font-bold text-slate-500">{colaborador.cargoNome || "Cargo não vinculado"}</div>
+											<div className="truncate text-xs font-semibold text-slate-400">{colaborador.setor || "Sem setor"}</div>
 										</div>
 									</div>
 									{canManage ? (
@@ -693,13 +719,24 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 					) : null}
 					<div className="space-y-6">
 						{responsibleGroups.map((group) => (
-							<div key={group.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+							<div key={group.id} className="rounded-2xl border border-slate-300 bg-slate-50 p-5">
 								<div className="flex justify-center">
 									{group.responsavel ? (
-										<button type="button" onClick={() => setSelectedColaborador(group.responsavel)} className="flex min-w-64 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm">
+										<button
+											type="button"
+											draggable={canManage}
+											onClick={() => setSelectedColaborador(group.responsavel)}
+											onDragStart={(event) => {
+												setDraggingColaboradorId(group.responsavel.id);
+												event.dataTransfer.effectAllowed = "move";
+												event.dataTransfer.setData("text/plain", group.responsavel.id);
+											}}
+											onDragEnd={() => setDraggingColaboradorId("")}
+											className={`flex min-w-64 items-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-left shadow-md ${canManage ? "cursor-grab active:cursor-grabbing" : ""}`}
+										>
 											<Avatar className="h-12 w-12" colaborador={group.responsavel} />
 											<div className="min-w-0">
-												<div className="text-xs font-black uppercase text-slate-400">Responsável</div>
+												<div className="text-xs font-black uppercase text-slate-400">Responsável geral</div>
 												<div className="truncate text-base font-black text-slate-900">{group.responsavel.nome}</div>
 												<div className="text-xs font-bold text-slate-500">{group.setores.length} setores</div>
 											</div>
@@ -710,43 +747,59 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 										</div>
 									)}
 								</div>
-								<div className="mx-auto h-14 w-px bg-slate-300" />
+								<div className="mx-auto h-14 w-0.5 bg-slate-400" />
 								<div className="relative">
 									{group.setores.length > 1 ? (
-										<div className="absolute left-[12%] right-[12%] top-0 hidden h-px bg-slate-300 lg:block" />
+										<div className="absolute left-[8%] right-[8%] top-0 hidden h-0.5 bg-slate-400 lg:block" />
 									) : null}
 									<div className="grid gap-4 pt-4 lg:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
 									{group.setores.map((setor) => (
-										<div key={setor.id} className="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-											<div className="absolute left-1/2 top-[-16px] h-4 w-px bg-slate-300" />
-											<div className="flex items-center gap-3">
+										<div
+											key={setor.id}
+											className={`relative rounded-2xl border-2 border-dashed bg-white/80 p-4 transition ${draggingColaboradorId ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"}`}
+											onDragOver={(event) => {
+												if (canManage) event.preventDefault();
+											}}
+											onDrop={(event) => {
+												event.preventDefault();
+												moveColaboradorToSetor(
+													event.dataTransfer.getData("text/plain") || draggingColaboradorId,
+													setor.nome,
+												);
+											}}
+										>
+											<div className="absolute left-1/2 top-[-18px] h-4 w-0.5 bg-slate-400" />
+											<div className="mb-4 flex items-center gap-3 border-b border-slate-200 pb-3">
 												<span className="h-4 w-4 rounded-full" style={{ backgroundColor: setor.cor || DEFAULT_SETOR_COLOR }} />
-												<div className="min-w-0">
+												<div className="min-w-0 flex-1">
 													<h3 className="truncate text-base font-black text-slate-950">{setor.nome}</h3>
-													<p className="text-xs font-bold text-slate-500">{setor.cargos.length} cargos · {setor.cargos.reduce((total, cargo) => total + cargo.membros.length, 0)} usuários</p>
+													<p className="text-xs font-bold text-slate-500">{getSetorCargoCount(setor)} cargos · {countSetorMembers(setor)} usuários</p>
 												</div>
 											</div>
-											<div className="mx-auto my-3 h-6 w-px bg-slate-200" />
-											<div className="grid gap-3">
-												{setor.cargos.map((cargo) => (
-													<div key={cargo.id} className="relative rounded-2xl border border-slate-200 bg-slate-50 p-4">
-														<div className="absolute left-1/2 top-[-14px] h-3 w-px bg-slate-200" />
-														<div className="flex items-start justify-between gap-2">
-															<div>
-																<div className="text-sm font-black text-slate-950">{cargo.nome}</div>
-																{cargo.descricao ? <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">{cargo.descricao}</p> : null}
-															</div>
-															<span className="h-3 w-3 rounded-full" style={{ backgroundColor: getCargoSetorColor(cargo, setores) }} />
+											<div className="mx-auto h-6 w-0.5 bg-slate-400" />
+											<div className="relative">
+												{setor.membros.length > 1 ? (
+													<div className="absolute left-[10%] right-[10%] top-0 h-0.5 bg-slate-400" />
+												) : null}
+												<div className="grid gap-3 pt-4 sm:grid-cols-2 xl:grid-cols-3">
+													{setor.membros.map((colaborador) => (
+														<div key={colaborador.id} className="relative">
+															<div className="absolute left-1/2 top-[-16px] h-4 w-0.5 bg-slate-400" />
+															<UserPill
+																canDrag={canManage}
+																colaborador={colaborador}
+																onClick={() => setSelectedColaborador(colaborador)}
+																onDragStart={(event, dragged) => {
+																	setDraggingColaboradorId(dragged.id);
+																	event.dataTransfer.effectAllowed = "move";
+																	event.dataTransfer.setData("text/plain", dragged.id);
+																}}
+																onDragEnd={() => setDraggingColaboradorId("")}
+															/>
 														</div>
-														<div className="mt-3 space-y-2">
-															{cargo.membros.map((colaborador) => (
-																<UserPill key={colaborador.id} colaborador={colaborador} onClick={() => setSelectedColaborador(colaborador)} />
-															))}
-															{!cargo.membros.length ? <div className="rounded-xl bg-white p-3 text-xs font-bold text-slate-400">Sem usuários vinculados.</div> : null}
-														</div>
-													</div>
-												))}
-												{!setor.cargos.length ? <div className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Nenhum cargo neste setor.</div> : null}
+													))}
+													{!setor.membros.length ? <div className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">Nenhum usuário neste setor.</div> : null}
+												</div>
 											</div>
 										</div>
 									))}
@@ -758,7 +811,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 				</div>
 			</div>
 			{setorModal ? <SetorModal colaboradorOptions={colaboradores} setor={setorModal.id ? setorModal : null} onClose={() => setSetorModal(null)} onSave={saveSetor} /> : null}
-			{cargoModal ? <CargoModal cargo={cargoModal.id ? cargoModal : null} setores={setores} onClose={() => setCargoModal(null)} onSave={saveCargo} /> : null}
+			{cargoModal ? <CargoModal cargo={cargoModal.id ? cargoModal : null} onClose={() => setCargoModal(null)} onSave={saveCargo} /> : null}
 			{colaboradorModal ? <ColaboradorModal cargos={cargos} colaborador={colaboradorModal.id ? colaboradorModal : null} colaboradores={colaboradores} setores={setores} onClose={() => setColaboradorModal(null)} onDelete={deleteColaborador} onSave={saveColaborador} /> : null}
 			{selectedColaborador && !colaboradorModal ? <DetailModal colaborador={selectedColaborador} onClose={() => setSelectedColaborador(null)} /> : null}
 		</section>

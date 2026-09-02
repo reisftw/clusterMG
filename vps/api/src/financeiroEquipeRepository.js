@@ -65,7 +65,7 @@ function mapCargo(row = {}) {
 function mapColaborador(row = {}) {
 	return {
 		id: row.id,
-		setor: row.setor_nome || row.cargo_setor || row.setor || "",
+		setor: row.setor || "",
 		nome: row.nome || "",
 		cargoId: row.cargo_id || null,
 		cargoNome: row.cargo_nome || "",
@@ -97,14 +97,11 @@ function normalizeSetorInput(payload = {}, { partial = false } = {}) {
 
 function normalizeCargoInput(payload = {}) {
 	const nome = cleanText(payload.nome);
-	const setorId = toNullableText(payload.setorId || payload.setor_id);
-	const setor = cleanText(payload.setor);
 	if (!nome) throw new FinanceiroEquipeError("Informe o nome do cargo.");
-	if (!setorId && !setor) throw new FinanceiroEquipeError("Selecione o setor do cargo.");
 	return {
 		nome,
-		setorId,
-		setor,
+		setorId: null,
+		setor: "",
 		descricao: toNullableText(payload.descricao),
 		ordem: Number.isFinite(Number(payload.ordem)) ? Number(payload.ordem) : 0,
 	};
@@ -112,15 +109,20 @@ function normalizeCargoInput(payload = {}) {
 
 function normalizeColaboradorInput(payload = {}, { partial = false } = {}) {
 	const nome = cleanText(payload.nome);
+	const setor = cleanText(payload.setor);
 	const cargoId = toNullableText(payload.cargoId || payload.cargo_id);
 	if (!partial && !nome) {
 		throw new FinanceiroEquipeError("Informe o nome do colaborador.");
+	}
+	if (!partial && !setor) {
+		throw new FinanceiroEquipeError("Selecione o setor do colaborador.");
 	}
 	if (!partial && !cargoId) {
 		throw new FinanceiroEquipeError("Selecione um cargo.");
 	}
 	return {
 		nome,
+		setor,
 		cargoId,
 		formacao: toNullableText(payload.formacao),
 		atividades: toNullableText(payload.atividades),
@@ -142,52 +144,17 @@ function handleDbError(error) {
 	throw error;
 }
 
-async function resolveSetorForCargo(cargo = {}) {
-	if (cargo.setorId) {
-		const result = await db.query(
-			"select id, nome from financeiro_equipe_setores where id = $1",
-			[cargo.setorId],
-		);
-		if (!result.rows.length) {
-			throw new FinanceiroEquipeError("Setor não encontrado.", 404);
-		}
-		return { id: result.rows[0].id, nome: result.rows[0].nome };
-	}
-	const setorNome = cleanText(cargo.setor);
-	if (!setorNome) throw new FinanceiroEquipeError("Selecione o setor do cargo.");
+async function ensureSetorExists(setorNome) {
+	const nome = cleanText(setorNome);
+	if (!nome) throw new FinanceiroEquipeError("Selecione o setor do colaborador.");
 	const existing = await db.query(
 		"select id, nome from financeiro_equipe_setores where lower(nome) = lower($1)",
-		[setorNome],
+		[nome],
 	);
 	if (existing.rows.length) {
 		return { id: existing.rows[0].id, nome: existing.rows[0].nome };
 	}
-	const created = await db.query(
-		`insert into financeiro_equipe_setores (nome, created_by, updated_by)
-		 values ($1, 'legacy-cargo', 'legacy-cargo')
-		 returning id, nome`,
-		[setorNome],
-	);
-	return { id: created.rows[0].id, nome: created.rows[0].nome };
-}
-
-async function resolveSetorByCargoId(cargoId) {
-	if (!cargoId) throw new FinanceiroEquipeError("Selecione um cargo.");
-	const result = await db.query(
-		`select cg.id, coalesce(s.nome, cg.setor) as setor
-		   from financeiro_equipe_cargos cg
-	  left join financeiro_equipe_setores s on s.id = cg.setor_id
-		  where cg.id = $1`,
-		[cargoId],
-	);
-	if (!result.rows.length) {
-		throw new FinanceiroEquipeError("Cargo não encontrado.", 404);
-	}
-	const setor = cleanText(result.rows[0].setor);
-	if (!setor) {
-		throw new FinanceiroEquipeError("O cargo selecionado não possui setor.");
-	}
-	return setor;
+	throw new FinanceiroEquipeError("Setor não encontrado.", 404);
 }
 
 async function listEquipe() {
@@ -199,22 +166,18 @@ async function listEquipe() {
 			  order by s.ordem asc, s.nome asc`,
 		),
 		db.query(
-			`select cg.*, s.nome as setor_nome
+			`select cg.*
 			   from financeiro_equipe_cargos cg
-		  left join financeiro_equipe_setores s on s.id = cg.setor_id
-			  order by coalesce(s.nome, cg.setor) asc, cg.ordem asc, cg.nome asc`,
+			  order by cg.ordem asc, cg.nome asc`,
 		),
 		db.query(
 			`select c.*,
 			        cg.nome as cargo_nome,
-			        cg.descricao as cargo_descricao,
-			        coalesce(s.nome, cg.setor) as setor_nome,
-			        cg.setor as cargo_setor
+			        cg.descricao as cargo_descricao
 			   from financeiro_equipe_colaboradores c
 		  left join financeiro_equipe_cargos cg on cg.id = c.cargo_id
-		  left join financeiro_equipe_setores s on s.id = cg.setor_id
 			  where c.ativo = true
-			  order by coalesce(s.nome, cg.setor, c.setor) asc, c.ordem asc, c.nome asc`,
+			  order by c.setor asc, c.ordem asc, c.nome asc`,
 		),
 	]);
 	return {
@@ -280,20 +243,11 @@ async function updateSetor(id, payload = {}, user = {}) {
 			],
 		);
 		await db.query(
-			`update financeiro_equipe_cargos
-			    set setor = $2,
-			        updated_by = $3
-			  where setor_id = $1`,
-			[setorId, setor.nome, normalizeUserName(user)],
-		);
-		await db.query(
-			`update financeiro_equipe_colaboradores c
-			    set setor = $2,
-			        updated_by = $3
-			   from financeiro_equipe_cargos cg
-			  where c.cargo_id = cg.id
-			    and cg.setor_id = $1`,
-			[setorId, setor.nome, normalizeUserName(user)],
+			`update financeiro_equipe_colaboradores
+			    set setor = $1,
+			        updated_by = $2
+			  where lower(setor) = lower($3)`,
+			[setor.nome, normalizeUserName(user), current.rows[0].nome],
 		);
 		return mapSetor(result.rows[0]);
 	} catch (error) {
@@ -306,13 +260,20 @@ async function deleteSetor(id) {
 	if (!setorId) throw new FinanceiroEquipeError("Setor não informado.");
 	const inUse = await db.query(
 		`select count(*)::int as total
-		   from financeiro_equipe_cargos
-		  where setor_id = $1`,
-		[setorId],
+		   from financeiro_equipe_colaboradores
+		  where ativo = true
+		    and lower(setor) = lower($1)`,
+		[
+			(
+				await db.query("select nome from financeiro_equipe_setores where id = $1", [
+					setorId,
+				])
+			).rows[0]?.nome || "",
+		],
 	);
 	if (Number(inUse.rows[0]?.total || 0) > 0) {
 		throw new FinanceiroEquipeError(
-			"Este setor ainda possui cargos vinculados.",
+			"Este setor ainda possui colaboradores vinculados.",
 			409,
 		);
 	}
@@ -328,7 +289,6 @@ async function deleteSetor(id) {
 
 async function createCargo(payload = {}, user = {}) {
 	const cargo = normalizeCargoInput(payload);
-	const setor = await resolveSetorForCargo(cargo);
 	try {
 		const result = await db.query(
 			`insert into financeiro_equipe_cargos
@@ -337,8 +297,8 @@ async function createCargo(payload = {}, user = {}) {
 			 returning *`,
 			[
 				cargo.nome,
-				setor.nome,
-				setor.id,
+				null,
+				null,
 				cargo.descricao,
 				cargo.ordem,
 				normalizeUserName(user),
@@ -354,7 +314,6 @@ async function updateCargo(id, payload = {}, user = {}) {
 	const cargoId = toNullableText(id);
 	if (!cargoId) throw new FinanceiroEquipeError("Cargo não informado.");
 	const cargo = normalizeCargoInput(payload);
-	const setor = await resolveSetorForCargo(cargo);
 	try {
 		const result = await db.query(
 			`update financeiro_equipe_cargos
@@ -369,8 +328,8 @@ async function updateCargo(id, payload = {}, user = {}) {
 			[
 				cargoId,
 				cargo.nome,
-				setor.nome,
-				setor.id,
+				null,
+				null,
 				cargo.descricao,
 				cargo.ordem,
 				normalizeUserName(user),
@@ -379,14 +338,7 @@ async function updateCargo(id, payload = {}, user = {}) {
 		if (!result.rows.length) {
 			throw new FinanceiroEquipeError("Cargo não encontrado.", 404);
 		}
-		await db.query(
-			`update financeiro_equipe_colaboradores
-			    set setor = $2,
-			        updated_by = $3
-			  where cargo_id = $1`,
-			[cargoId, setor.nome, normalizeUserName(user)],
-		);
-		return mapCargo({ ...result.rows[0], setor_nome: setor.nome });
+		return mapCargo(result.rows[0]);
 	} catch (error) {
 		handleDbError(error);
 	}
@@ -438,7 +390,7 @@ async function deleteCargo(id) {
 
 async function createColaborador(payload = {}, user = {}) {
 	const colaborador = normalizeColaboradorInput(payload);
-	const setor = await resolveSetorByCargoId(colaborador.cargoId);
+	const setor = await ensureSetorExists(colaborador.setor);
 	try {
 		const result = await db.query(
 			`insert into financeiro_equipe_colaboradores
@@ -447,7 +399,7 @@ async function createColaborador(payload = {}, user = {}) {
 			 values ($1, $2, $3, $4, $5, nullif($6, '')::uuid, $7, $8, $9, $10, $11, $11)
 			 returning *`,
 			[
-				setor,
+				setor.nome,
 				colaborador.nome,
 				colaborador.cargoId,
 				colaborador.formacao,
@@ -486,7 +438,7 @@ async function updateColaborador(id, payload = {}, user = {}) {
 	if (input.gestorId === colaboradorId) {
 		throw new FinanceiroEquipeError("O colaborador não pode ser gestor de si mesmo.");
 	}
-	const setor = await resolveSetorByCargoId(input.cargoId);
+	const setor = await ensureSetorExists(input.setor);
 	try {
 		const result = await db.query(
 			`update financeiro_equipe_colaboradores
@@ -506,7 +458,7 @@ async function updateColaborador(id, payload = {}, user = {}) {
 			  returning id`,
 			[
 				colaboradorId,
-				setor,
+				setor.nome,
 				input.nome,
 				input.cargoId,
 				input.formacao,
@@ -582,20 +534,25 @@ async function moveColaborador(id, payload = {}, user = {}) {
 	const ordem = Number.isFinite(Number(payload.ordem))
 		? Number(payload.ordem)
 		: Number(current.rows[0].ordem || 0);
+	const setor = Object.hasOwn(payload, "setor")
+		? (await ensureSetorExists(payload.setor)).nome
+		: current.rows[0].setor;
 	try {
 		const result = await db.query(
 			`update financeiro_equipe_colaboradores
 			    set gestor_id = nullif($2, '')::uuid,
-			        pos_x = $3,
-			        pos_y = $4,
-			        ordem = $5,
-			        updated_by = $6
+			        setor = $3,
+			        pos_x = $4,
+			        pos_y = $5,
+			        ordem = $6,
+			        updated_by = $7
 			  where id = $1
 			    and ativo = true
 			  returning id`,
 			[
 				colaboradorId,
 				gestorId || "",
+				setor,
 				toNumberOrNull(payload.posX ?? payload.pos_x),
 				toNumberOrNull(payload.posY ?? payload.pos_y),
 				ordem,

@@ -49,9 +49,8 @@ describe("financeiroEquipeRepository", () => {
 					{
 						id: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
 						nome: "Coordenador Financeiro",
-						setor_id: "c4a2f411-9845-46b9-8a83-19f2e43bdcf0",
-						setor: "Coordenação",
-						setor_nome: "Coordenação",
+						setor_id: null,
+						setor: null,
 						descricao: "Coordena a rotina financeira.",
 						ordem: 1,
 					},
@@ -63,7 +62,6 @@ describe("financeiroEquipeRepository", () => {
 						id: "21768bee-00f7-4214-8c0d-b697cb23cb01",
 						nome: "Maria Silva",
 						setor: "Contas a Receber",
-						setor_nome: "Coordenação",
 						cargo_id: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
 						cargo_nome: "Coordenador Financeiro",
 						cargo_descricao: "Coordena a rotina financeira.",
@@ -91,13 +89,14 @@ describe("financeiroEquipeRepository", () => {
 		expect(equipe.cargos).toEqual([
 			expect.objectContaining({
 				nome: "Coordenador Financeiro",
-				setor: "Coordenação",
-				setorId: "c4a2f411-9845-46b9-8a83-19f2e43bdcf0",
+				setor: "",
+				setorId: null,
 			}),
 		]);
 		expect(equipe.colaboradores).toEqual([
 			expect.objectContaining({
 				nome: "Maria Silva",
+				setor: "Contas a Receber",
 				cargoNome: "Coordenador Financeiro",
 				posX: 120,
 				posY: 80,
@@ -105,24 +104,16 @@ describe("financeiroEquipeRepository", () => {
 		]);
 	});
 
-	it("cria cargo validando nome e setor obrigatórios", async () => {
+	it("cria cargo validando nome obrigatório sem vincular setor", async () => {
 		const dbQuery = vi
 			.fn()
 			.mockResolvedValueOnce({
 				rows: [
 					{
-						id: "c4a2f411-9845-46b9-8a83-19f2e43bdcf0",
-						nome: "CP",
-					},
-				],
-			})
-			.mockResolvedValueOnce({
-				rows: [
-					{
 						id: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
 						nome: "Analista Financeiro",
-						setor_id: "c4a2f411-9845-46b9-8a83-19f2e43bdcf0",
-						setor: "CP",
+						setor_id: null,
+						setor: null,
 						descricao: "Contas a pagar.",
 						ordem: 0,
 					},
@@ -130,18 +121,18 @@ describe("financeiroEquipeRepository", () => {
 			});
 		const repository = loadRepository(dbQuery);
 
-		await expect(repository.createCargo({ nome: "", setor: "CP" })).rejects.toThrow(
+		await expect(repository.createCargo({ nome: "" })).rejects.toThrow(
 			"Informe o nome do cargo.",
 		);
 		const cargo = await repository.createCargo(
-			{ nome: "Analista Financeiro", setor: "CP", descricao: "Contas a pagar." },
+			{ nome: "Analista Financeiro", descricao: "Contas a pagar." },
 			{ nome: "Admin" },
 		);
 
-		expect(dbQuery.mock.calls[1][0]).toContain(
+		expect(dbQuery.mock.calls[0][0]).toContain(
 			"insert into financeiro_equipe_cargos",
 		);
-		expect(cargo).toMatchObject({ nome: "Analista Financeiro", setor: "CP" });
+		expect(cargo).toMatchObject({ nome: "Analista Financeiro", setor: "" });
 	});
 
 	it("bloqueia exclusão de cargo em uso", async () => {
@@ -198,18 +189,26 @@ describe("financeiroEquipeRepository", () => {
 		});
 	});
 
-	it("cria colaborador sem aceitar cadastro sem cargo", async () => {
+	it("cria colaborador exigindo setor e cargo", async () => {
 		const repository = loadRepository(vi.fn());
 
 		await expect(
 			repository.createColaborador({
 				nome: "João Souza",
 				cargoId: "",
+				setor: "",
+			}),
+		).rejects.toThrow("Selecione o setor do colaborador.");
+		await expect(
+			repository.createColaborador({
+				nome: "João Souza",
+				cargoId: "",
+				setor: "CP",
 			}),
 		).rejects.toThrow("Selecione um cargo.");
 	});
 
-	it("move colaborador atualizando gestor e posição sem trocar setor diretamente", async () => {
+	it("move colaborador atualizando setor, gestor e posição", async () => {
 		const dbQuery = vi
 			.fn()
 			.mockResolvedValueOnce({
@@ -219,6 +218,14 @@ describe("financeiroEquipeRepository", () => {
 						setor: "CP",
 						ordem: 0,
 						gestor_id: null,
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "8c16f752-1496-47e3-a1b4-83b3f2c0cf42",
+						nome: "CR",
 					},
 				],
 			})
@@ -239,8 +246,7 @@ describe("financeiroEquipeRepository", () => {
 					{
 						id: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
 						nome: "Analista",
-						setor: "CP",
-						setor_nome: "CP",
+						setor: null,
 					},
 				],
 			})
@@ -249,8 +255,7 @@ describe("financeiroEquipeRepository", () => {
 					{
 						id: "21768bee-00f7-4214-8c0d-b697cb23cb01",
 						nome: "Maria Silva",
-						setor: "CP",
-						setor_nome: "CP",
+						setor: "CR",
 						cargo_nome: "Analista",
 						pos_x: "300",
 						pos_y: "120",
@@ -264,23 +269,25 @@ describe("financeiroEquipeRepository", () => {
 			"21768bee-00f7-4214-8c0d-b697cb23cb01",
 			{
 				gestorId: "7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
+				setor: "CR",
 				posX: 300,
 				posY: 120,
 			},
 			{ email: "admin@example.com" },
 		);
 
-		expect(dbQuery.mock.calls[1][0]).toContain(
+		expect(dbQuery.mock.calls[2][0]).toContain(
 			"update financeiro_equipe_colaboradores",
 		);
-		expect(dbQuery.mock.calls[1][1]).toEqual([
+		expect(dbQuery.mock.calls[2][1]).toEqual([
 			"21768bee-00f7-4214-8c0d-b697cb23cb01",
 			"7f5f0f68-4d5e-4994-8a77-14fd1169b1ed",
+			"CR",
 			300,
 			120,
 			0,
 			"admin@example.com",
 		]);
-		expect(moved).toMatchObject({ nome: "Maria Silva", setor: "CP" });
+		expect(moved).toMatchObject({ nome: "Maria Silva", setor: "CR" });
 	});
 });
