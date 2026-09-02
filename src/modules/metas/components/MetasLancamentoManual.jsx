@@ -298,6 +298,7 @@ function DailyGrid({ row, dayCount, onChangeDay }) {
 }
 
 function SectionEditor({
+	sectionId,
 	title,
 	description,
 	nameLabel = "Nome",
@@ -313,12 +314,15 @@ function SectionEditor({
 	allowRemove = true,
 	onDirty,
 	onSaveCard,
+	openSections,
+	onSectionOpenChange,
 	savingCard = false,
 }) {
-	const [open, setOpen] = useState(false);
 	const [editingRowId, setEditingRowId] = useState(null);
+	const open = Boolean(openSections?.[sectionId]);
 	const editingRow = rows.find((row) => row.id === editingRowId) || null;
 	const openEditor = (row) => {
+		onSectionOpenChange?.(sectionId, true);
 		setEditingRowId(row.id);
 	};
 	const closeEditor = () => {
@@ -369,6 +373,7 @@ function SectionEditor({
 		Math.round(Number(row.cancelamentos || 0) * (Number(goalPercent || 0) / 100));
 	const saveCard = async () => {
 		await onSaveCard?.();
+		onSectionOpenChange?.(sectionId, true);
 		closeEditor();
 	};
 
@@ -377,7 +382,7 @@ function SectionEditor({
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<button
 					type="button"
-					onClick={() => setOpen((current) => !current)}
+					onClick={() => onSectionOpenChange?.(sectionId, !open)}
 					className="min-w-0 flex-1 text-left"
 					aria-expanded={open}
 				>
@@ -659,6 +664,7 @@ export default function MetasLancamentoManual({
 	const [error, setError] = useState("");
 	const [publishResult, setPublishResult] = useState(null);
 	const [savingCard, setSavingCard] = useState(false);
+	const [openSections, setOpenSections] = useState({});
 	const dayCount = getDaysInMetaMonth(month, year);
 	const normalizedConfig = useMemo(
 		() => normalizeMetasBaseConfig(metasBaseConfig),
@@ -827,6 +833,13 @@ export default function MetasLancamentoManual({
 		}
 	}, [buildSavePayload, canManage, onSave, saving, savingCard]);
 
+	const setSectionOpen = useCallback((sectionId, open) => {
+		setOpenSections((current) => ({
+			...current,
+			[sectionId]: open,
+		}));
+	}, []);
+
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setMessage("");
@@ -984,6 +997,7 @@ export default function MetasLancamentoManual({
 			</section>
 
 			<SectionEditor
+				sectionId="tecnicosSempre"
 				title="Técnicos Sempre"
 				description="Cadastre os técnicos Sempre e clique no card para lançar por dia."
 				rows={tecnicosSempre}
@@ -991,10 +1005,13 @@ export default function MetasLancamentoManual({
 				dayCount={dayCount}
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
 			<SectionEditor
+				sectionId="tecnicosOnnet"
 				title="Técnicos Onnet"
 				description="Cadastre os técnicos Onnet e clique no card para lançar por dia."
 				rows={tecnicosOnnet}
@@ -1002,10 +1019,13 @@ export default function MetasLancamentoManual({
 				dayCount={dayCount}
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
 			<SectionEditor
+				sectionId="regionais"
 				title="Regionais"
 				description="Use as regionais atuais e informe os lançamentos por dia."
 				rows={regionais}
@@ -1016,10 +1036,13 @@ export default function MetasLancamentoManual({
 				showSourceScope
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
 			<SectionEditor
+				sectionId="agentes"
 				title="Agente autorizado Sempre"
 				description="Selecione a cidade, informe a meta e lance as retiradas por dia. Onnet não utiliza agente autorizado."
 				nameLabel="Cidade"
@@ -1032,10 +1055,13 @@ export default function MetasLancamentoManual({
 				goalPercent={metaPercentSempre}
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
 			<SectionEditor
+				sectionId="agentesLoja"
 				title="AA - Entrega em loja"
 				description="Lance entregas em loja por cidade de agente autorizado. Este bloco aparece no painel AA e não soma na meta operacional."
 				nameLabel="Cidade"
@@ -1046,10 +1072,13 @@ export default function MetasLancamentoManual({
 				allowCustomName={false}
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
 			<SectionEditor
+				sectionId="lojaSempre"
 				title="Entregue em loja Sempre"
 				description="Lançamento diário de entrega em loja da operação Sempre."
 				rows={lojaSempre}
@@ -1059,10 +1088,13 @@ export default function MetasLancamentoManual({
 				allowRemove={false}
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
 			<SectionEditor
+				sectionId="lojaOnnet"
 				title="Entregue em loja Onnet"
 				description="Lançamento diário de entrega em loja da operação Onnet."
 				rows={lojaOnnet}
@@ -1072,6 +1104,8 @@ export default function MetasLancamentoManual({
 				allowRemove={false}
 				onDirty={markDirty}
 				onSaveCard={saveCurrentCard}
+				openSections={openSections}
+				onSectionOpenChange={setSectionOpen}
 				savingCard={savingCard}
 			/>
 
