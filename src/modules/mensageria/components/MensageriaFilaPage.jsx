@@ -95,6 +95,21 @@ const getQueueItemLabel = (item = {}) => {
 	return cliente || codigo || item.telefone || item.os || "-";
 };
 
+const isQueueItemSendableNow = (item = {}, config = {}, now = new Date()) => {
+	const status = String(item.status || "novo");
+	if (!["aprovado", "novo", "aguardando_janela", "enviando"].includes(status)) {
+		return false;
+	}
+	if (Number(item.tentativas || 0) >= Number(config.retryLimit || 3)) {
+		return false;
+	}
+	if (item.proximaTentativaEm) {
+		const next = new Date(item.proximaTentativaEm);
+		if (!Number.isNaN(next.getTime()) && next > now) return false;
+	}
+	return true;
+};
+
 const MensageriaFilaPage = () => {
 	const { currentUser } = useAuthContext();
 	const canManage =
@@ -194,12 +209,8 @@ const MensageriaFilaPage = () => {
 	);
 	const nextQueueItem = useMemo(
 		() =>
-			fila.find((item) =>
-				["aprovado", "novo", "aguardando_janela", "enviando"].includes(
-					String(item.status || "novo"),
-				),
-			) || null,
-		[fila],
+			fila.find((item) => isQueueItemSendableNow(item, config)) || null,
+		[fila, config],
 	);
 
 	const stats = useMemo(

@@ -1602,6 +1602,10 @@ async function processQueueOnce({ manual = false } = {}) {
 			const retryAt = new Date(
 				Date.now() + Number(config.retryAfterMinutes || 30) * 60 * 1000,
 			).toISOString();
+			lastQueueExecutionItem = summarizeQueueExecutionItem({
+				...lockedItem,
+				ultimoErro: error?.message || "Falha no envio.",
+			});
 			await upsertQueueItem(lockedItem.id, {
 				...lockedItem,
 				status:
