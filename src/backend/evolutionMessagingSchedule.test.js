@@ -177,6 +177,15 @@ describe("evolutionMessaging guided schedule dates", () => {
 		);
 	});
 
+	it("formata data pura sem voltar um dia no alerta", () => {
+		const helpers = loadEvolutionMessaging();
+
+		expect(helpers.formatDateLabel("2026-09-03")).toBe("03/09");
+		expect(
+			helpers.formatDateLabel("2026-09-05", { withWeekday: true }),
+		).toContain("05/09");
+	});
+
 	it("nao trata falha de consulta da Evolution como desconexao confirmada", () => {
 		const helpers = loadEvolutionMessaging();
 
