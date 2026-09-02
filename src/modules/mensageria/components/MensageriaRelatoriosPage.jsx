@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
 	BarChart3,
 	CalendarRange,
@@ -64,7 +65,12 @@ function getDate(item, fields) {
 	for (const field of fields) {
 		const value = item?.[field];
 		if (!value) continue;
-		const date = new Date(value?.value || value);
+		const rawValue = value?.value || value;
+		if (typeof rawValue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+			const [year, month, day] = rawValue.split("-").map(Number);
+			return new Date(year, month - 1, day);
+		}
+		const date = new Date(rawValue);
 		if (!Number.isNaN(date.getTime())) return date;
 	}
 	return null;
@@ -108,7 +114,7 @@ function getAppointmentDate(item) {
 	return null;
 }
 
-function periodBounds(periodType, month, semester, year) {
+export function periodBounds(periodType, month, semester, year) {
 	const selectedYear = Number(year) || CURRENT_YEAR;
 	if (periodType === "annual") {
 		return {
@@ -307,7 +313,7 @@ function buildPersonKey(item) {
 	);
 }
 
-function summarize(
+export function summarize(
 	{ historico = [], callbacks = [], fila = [], agendamentos = [] },
 	bounds,
 ) {
@@ -333,13 +339,37 @@ function summarize(
 	const cutoffDate = getCutoffDate(bounds);
 	const nextCutoffDay = startOfDay(addDays(cutoffDate, 1));
 
-	const callbacksInPeriod = realCallbacks;
-	const appointmentsInPeriod = realAgendamentos;
-	const dueAppointments = appointmentsInPeriod.filter((appointment) => {
+	const callbacksInPeriod = realCallbacks.filter((item) =>
+		inPeriod(getReferenceDate(item), bounds),
+	);
+	const appointmentsInPeriod = realAgendamentos.filter((item) =>
+		inPeriod(getAppointmentDate(item), bounds),
+	);
+	const responseKeys = new Set(
+		callbacksInPeriod.map(buildPersonKey).filter(Boolean),
+	);
+	const scheduledKeys = new Set(
+		appointmentsInPeriod.map(buildPersonKey).filter(Boolean),
+	);
+	const linkedResponses = sentKeys.size
+		? [...responseKeys].filter((key) => sentKeys.has(key)).length
+		: responseKeys.size;
+	const linkedScheduled = sentKeys.size
+		? [...scheduledKeys].filter((key) => sentKeys.has(key)).length
+		: scheduledKeys.size;
+	const linkedAppointmentsInPeriod = appointmentsInPeriod.filter((item) => {
+		const key = buildPersonKey(item);
+		return !sentKeys.size || !key || sentKeys.has(key);
+	});
+	const linkedCallbacksInPeriod = callbacksInPeriod.filter((item) => {
+		const key = buildPersonKey(item);
+		return !sentKeys.size || !key || sentKeys.has(key);
+	});
+	const dueAppointments = linkedAppointmentsInPeriod.filter((appointment) => {
 		const date = getAppointmentDate(appointment);
 		return date ? date < nextCutoffDay : true;
 	});
-	const futureAppointments = appointmentsInPeriod.filter((appointment) => {
+	const futureAppointments = linkedAppointmentsInPeriod.filter((appointment) => {
 		const date = getAppointmentDate(appointment);
 		return date ? date >= nextCutoffDay : false;
 	});
@@ -358,7 +388,7 @@ function summarize(
 		current.enviados += 1;
 		byCity.set(city, current);
 	});
-	callbacksInPeriod.forEach((item) => {
+	linkedCallbacksInPeriod.forEach((item) => {
 		const queue = realFila.find(
 			(row) => String(row.id) === String(item.filaId),
 		);
@@ -375,7 +405,7 @@ function summarize(
 		current.respostas += 1;
 		byCity.set(city, current);
 	});
-	appointmentsInPeriod.forEach((item) => {
+	linkedAppointmentsInPeriod.forEach((item) => {
 		const city = String(item.cidade || "Sem cidade").trim() || "Sem cidade";
 		const current = byCity.get(city) || {
 			cidade: city,
@@ -402,8 +432,8 @@ function summarize(
 
 	const totalMessages = sentHistory.length;
 	const totalUnique = sentKeys.size || totalMessages;
-	const responses = callbacksInPeriod.length;
-	const scheduled = appointmentsInPeriod.length;
+	const responses = linkedResponses;
+	const scheduled = linkedScheduled;
 	const scheduledDue = dueAppointments.length;
 	const scheduledFuture = futureAppointments.length;
 	const collected = collectedAppointments.length;
