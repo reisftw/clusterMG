@@ -1083,6 +1083,18 @@ describe("vps api app characterization - permission and middleware helpers", () 
 		expect(
 			helpers.canReadCollection({ role: "admin" }, "api_integrations"),
 		).toBe(true);
+		expect(
+			helpers.canReadCollection(
+				{ role: "user", permissions: ["destaque.metas.view"] },
+				"agentes",
+			),
+		).toBe(true);
+		expect(
+			helpers.canReadCollection(
+				{ role: "user", permissions: ["destaque.metas.view"] },
+				"regionais",
+			),
+		).toBe(true);
 	});
 
 	it("canWriteCollection cobre sem permissao, permitido e admin", () => {

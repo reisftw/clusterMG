@@ -425,14 +425,22 @@ const COLLECTION_READ_PERMISSIONS = Object.freeze({
 	regionais: [
 		"configuracao.regionais.view",
 		"configuracao.regionais.manage",
+		"destaque.metas.view",
+		"destaque.metas.manage",
 		"view_regionais",
 		"manage_regionais",
+		"view_metas",
+		"manage_metas",
 	],
 	agentes: [
 		"configuracao.agentes.view",
 		"configuracao.agentes.manage",
+		"destaque.metas.view",
+		"destaque.metas.manage",
 		"view_agentes",
 		"manage_agentes",
+		"view_metas",
+		"manage_metas",
 	],
 	agenda: [
 		"equipe.agenda.view",
@@ -4125,7 +4133,19 @@ function createApp() {
 	app.get(
 		"/api/admin/regionais",
 		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
+		requireAnyPermission(
+			[
+				"configuracao.regionais.view",
+				"configuracao.regionais.manage",
+				"destaque.metas.view",
+				"destaque.metas.manage",
+				"view_regionais",
+				"manage_regionais",
+				"view_metas",
+				"manage_metas",
+			],
+			FULL_OPERATION_ROLES,
+		),
 		async (req, res, next) => {
 			try {
 				const items = await regionaisRepository.listRegionalDocuments({
