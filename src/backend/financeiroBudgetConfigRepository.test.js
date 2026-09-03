@@ -207,4 +207,34 @@ describe("financeiroBudgetConfigRepository", () => {
 		expect(allSql).toContain("insert into financeiro_contas");
 		expect(allSql).not.toContain("app_documents");
 	});
+
+	it("salva lancamentos importados em blocos para evitar excesso de parametros no Postgres", async () => {
+		const query = vi.fn(async () => ({ rows: [], rowCount: 1 }));
+		const release = vi.fn();
+		const connect = vi.fn(async () => ({ query, release }));
+		const repository = loadRepository({ query, connect });
+		const rows = Array.from({ length: 1200 }, (_, index) => ({
+			sourceKey: `linha-${index}`,
+			ano: 2026,
+			numMes: 9,
+			data: "2026-09-01",
+			codConta: "1001",
+			codCc: "2001",
+			codFornecedor: "3001",
+			empresaId: "0001",
+			filialId: "0001",
+			realizado: index + 1,
+			orcado: 0,
+		}));
+
+		await repository.saveBudgetData({ rows }, { uid: "user-1" });
+
+		const insertCalls = query.mock.calls.filter(([sql]) =>
+			String(sql).includes("insert into financeiro_orcamento_lancamentos"),
+		);
+		expect(insertCalls.length).toBeGreaterThan(1);
+		expect(insertCalls.every(([, params]) => params.length <= 10000)).toBe(true);
+		expect(query.mock.calls.some(([sql]) => sql === "commit")).toBe(true);
+		expect(release).toHaveBeenCalled();
+	});
 });

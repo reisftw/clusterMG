@@ -96,30 +96,36 @@ function sqlJson(value) {
 	return JSON.stringify(value ?? null);
 }
 
+const MAX_UPSERT_PARAMS = 10000;
+
 async function upsertMany(client, table, rows, conflictTarget) {
 	if (!rows.length) return 0;
 	const columns = Object.keys(rows[0]);
-	const placeholders = rows.map(
-		(_, rowIndex) =>
-			`(${columns.map((__, columnIndex) => `$${rowIndex * columns.length + columnIndex + 1}`).join(", ")})`,
-	);
+	const rowsPerBatch = Math.max(1, Math.floor(MAX_UPSERT_PARAMS / columns.length));
 	const updates = columns
 		.filter((column) => !conflictTarget.includes(column) && column !== "created_at")
 		.map((column) => `${column} = excluded.${column}`)
 		.join(", ");
-	const values = rows.flatMap((row) =>
-		columns.map((column) =>
-			row[column] && typeof row[column] === "object"
-				? sqlJson(row[column])
-				: row[column],
-		),
-	);
-	await client.query(
-		`insert into ${table} (${columns.join(", ")})
-		 values ${placeholders.join(", ")}
-		 on conflict (${conflictTarget.join(", ")}) do update set ${updates}`,
-		values,
-	);
+	for (let index = 0; index < rows.length; index += rowsPerBatch) {
+		const batch = rows.slice(index, index + rowsPerBatch);
+		const placeholders = batch.map(
+			(_, rowIndex) =>
+				`(${columns.map((__, columnIndex) => `$${rowIndex * columns.length + columnIndex + 1}`).join(", ")})`,
+		);
+		const values = batch.flatMap((row) =>
+			columns.map((column) =>
+				row[column] && typeof row[column] === "object"
+					? sqlJson(row[column])
+					: row[column],
+			),
+		);
+		await client.query(
+			`insert into ${table} (${columns.join(", ")})
+			 values ${placeholders.join(", ")}
+			 on conflict (${conflictTarget.join(", ")}) do update set ${updates}`,
+			values,
+		);
+	}
 	return rows.length;
 }
 
