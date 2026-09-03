@@ -223,6 +223,77 @@ describe("budgetInsights", () => {
 		});
 	});
 
+	it("filtra realizado basal e nao basal pelo grupo Sempre e mantem projetos", () => {
+		const insights = getBudgetInsights(
+			{
+				...config,
+				accounts: [
+					{ id: "basal", codigo: "basal", nome: "Serviços Digitais" },
+					{
+						id: "nao-basal",
+						codigo: "nao-basal",
+						nome: "Consórcio",
+						categoriaClasse: "nao_basal",
+						categoriaMae: "Financeiro",
+					},
+					{ id: "projeto", codigo: "projeto", nome: "Equipamentos POP" },
+				],
+				centers: [
+					{
+						id: "basal-center",
+						nome: "Basal",
+						realizedByCompanyBranch: [
+							{ year: 2026, month: 8, accountId: "basal", realized: 100, grupo: "Sempre", quebra2: "ORÇAMENTO" },
+							{ year: 2026, month: 8, accountId: "basal", realized: 200, grupo: "Onnet", quebra2: "ORÇAMENTO" },
+						],
+					},
+					{
+						id: "nao-basal-center",
+						nome: "Nao basal",
+						realizedByCompanyBranch: [
+							{ year: 2026, month: 8, accountId: "nao-basal", realized: 300, grupo: "Sempre", quebra2: "ACOMPANHAR" },
+							{ year: 2026, month: 8, accountId: "nao-basal", realized: 400, grupo: "Onnet", quebra2: "ACOMPANHAR" },
+						],
+					},
+					{
+						id: "project-center",
+						nome: "Projeto Seplag",
+						quebra2: "PROJETO",
+						realizedByCompanyBranch: [
+							{ year: 2026, month: 7, accountId: "projeto", realized: 250, grupo: "Sempre", quebra2: "PROJETO" },
+							{ year: 2026, month: 8, accountId: "projeto", realized: 500, grupo: "Onnet", quebra2: "PROJETO" },
+						],
+					},
+				],
+				matrix: [
+					{
+						accountId: "basal",
+						costCenterId: "basal-center",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+					{
+						accountId: "nao-basal",
+						costCenterId: "nao-basal-center",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+					{
+						accountId: "projeto",
+						costCenterId: "project-center",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+				],
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+
+		expect(insights.budgetCategoryGroups.find((item) => item.id === "basal").realized).toBe(100);
+		expect(insights.budgetCategoryGroups.find((item) => item.id === "nao_basal").realized).toBe(300);
+		expect(insights.budgetCategoryGroups.find((item) => item.id === "projetos").realized).toBe(750);
+	});
+
 	it("aplica orcamento oficial de projetos por vigencia", () => {
 		const configWithProjectBudgets = {
 			...config,

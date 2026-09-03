@@ -182,6 +182,14 @@ function breakdownRealizedValue(item = {}) {
 	return Number(item.realized ?? item.realizado ?? 0) || 0;
 }
 
+function shouldIncludeAccessBudgetItem(item = {}) {
+	const quebra2 = normalizeBudgetText(item.quebra2 || item.Quebra2);
+	if (quebra2 === "desconsiderar") return false;
+	if (quebra2 === "projeto") return true;
+	const grupo = normalizeBudgetText(item.grupo || item.Grupo);
+	return !grupo || grupo === "sempre";
+}
+
 function buildChildrenByParentKey(centers = [], parentKeyResolver = centerParentKey) {
 	const childrenByParentKey = new Map();
 	centers
@@ -245,7 +253,8 @@ function createRealizedForCenter(periodKeys = new Set()) {
 		if (!breakdowns.length) return 0;
 		return sumBy(
 			breakdowns.filter((item) => periodKeys.has(getBudgetPeriodKey(item))),
-			breakdownRealizedValue,
+			(item) =>
+				shouldIncludeAccessBudgetItem(item) ? breakdownRealizedValue(item) : 0,
 		);
 	};
 }
@@ -261,6 +270,9 @@ function buildMovementFromDetail(center = {}, breakdown = {}, movement = {}, ind
 		accountId: movement.accountId || breakdown.accountId,
 		companyId: movement.companyId || breakdown.companyId,
 		branchId: movement.branchId || breakdown.branchId,
+		grupo: movement.grupo || breakdown.grupo || "",
+		quebra2: movement.quebra2 || breakdown.quebra2 || "",
+		categoria: movement.categoria || breakdown.categoria || "",
 		supplier: movementSupplierName(
 			movement,
 			(breakdown.suppliers || breakdown.fornecedores || [])[0],
@@ -279,6 +291,9 @@ function buildMovementFromBreakdown(center = {}, breakdown = {}) {
 		accountId: breakdown.accountId,
 		companyId: breakdown.companyId,
 		branchId: breakdown.branchId,
+		grupo: breakdown.grupo || "",
+		quebra2: breakdown.quebra2 || "",
+		categoria: breakdown.categoria || "",
 		supplier:
 			(breakdown.suppliers || breakdown.fornecedores || [])[0] ||
 			"Fornecedor não informado",
@@ -291,7 +306,11 @@ function buildMovementFromBreakdown(center = {}, breakdown = {}) {
 function buildPeriodMovements(centers = [], periodKeys = new Set()) {
 	return centers.flatMap((center) =>
 		centerBreakdowns(center)
-			.filter((breakdown) => budgetPeriodMatches(breakdown, periodKeys))
+			.filter(
+				(breakdown) =>
+					budgetPeriodMatches(breakdown, periodKeys) &&
+					shouldIncludeAccessBudgetItem(breakdown),
+			)
 			.flatMap((breakdown) => {
 				const breakdownMovements = Array.isArray(
 					breakdown.movements || breakdown.movimentacoes,
@@ -410,6 +429,13 @@ function budgetMetric(planned = 0, realized = 0) {
 	};
 }
 
+function budgetStatusColor(percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent > 95) return "rose";
+	if (safePercent >= 70) return "amber";
+	return "emerald";
+}
+
 function categoryBudgetMatchesPeriod(item = {}, periodKeys = new Set()) {
 	const year = Number(item.year || item.ano || item.referenceYear);
 	const month = Number(item.month || item.mes || item.numMes || item.referenceMonth);
@@ -519,6 +545,12 @@ const PROJECT_CENTER_SIGNALS = [
 ];
 
 function isProjectCenter(center = {}) {
+	const quebra2 = normalizeBudgetText(center.quebra2 || center.Quebra2);
+	const statusProjetos = normalizeBudgetText(
+		center.statusProjetos || center.Status_Projetos || center.status_projetos,
+	);
+	if (quebra2 === "projeto" || statusProjetos) return true;
+
 	const fields = [
 		center.tipoCentro,
 		center.tipo_centro,
@@ -824,6 +856,7 @@ function buildAccountRows({
 	centers = [],
 	matrix = [],
 	periodKeys = new Set(),
+	projectPeriodKeys = periodKeys,
 	rowPeriodTotal = () => 0,
 	configuredBudgetForCenter = () => 0,
 	realizedTotalForCenter = () => 0,
@@ -834,11 +867,15 @@ function buildAccountRows({
 			const center = centers.find((item) => item.id === row.costCenterId);
 			if (isSyntheticCenter(center)) return null;
 			const rawPlanned = rowPeriodTotal(row);
+			const breakdownPeriodKeys = isProjectCenter(center)
+				? projectPeriodKeys
+				: periodKeys;
 			const breakdownRealized = sumBy(
 				centerBreakdowns(center).filter(
 					(item) =>
 						item.accountId === row.accountId &&
-						periodKeys.has(getBudgetPeriodKey(item)),
+						breakdownPeriodKeys.has(getBudgetPeriodKey(item)) &&
+						shouldIncludeAccessBudgetItem(item),
 				),
 				breakdownRealizedValue,
 			);
@@ -907,6 +944,15 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const periodKeys = new Set(
 		period.months.map((item) => `${item.year}-${item.month}`),
 	);
+	const projectPeriodKeys =
+		selectedPeriod.mode === "month" && period.months.length === 1
+			? new Set(
+					Array.from({ length: Number(period.months[0]?.month || 0) }, (_, index) => {
+						const month = index + 1;
+						return `${period.months[0].year}-${month}`;
+					}),
+				)
+			: periodKeys;
 	const isCurrentSingleMonth =
 		period.months.length === 1 &&
 		Number(period.months[0]?.year) === now.getFullYear() &&
@@ -1060,6 +1106,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		centers,
 		matrix,
 		periodKeys,
+		projectPeriodKeys,
 		rowPeriodTotal,
 		configuredBudgetForCenter,
 		realizedTotalForCenter,
@@ -1183,6 +1230,9 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 	const projects = (insights.budgetCategoryGroups || []).find(
 		(item) => item.id === BUDGET_CATEGORY_CLASSES.PROJETOS,
 	);
+	const usedPercent = Number(insights.usedPercent || 0);
+	const statusColor = budgetStatusColor(usedPercent);
+	const availablePercent = Math.max(0, Math.min(100, 100 - usedPercent));
 	return [
 		{
 			id: "orcado",
@@ -1202,8 +1252,13 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			title: "Realizado + comprometido",
 			value: Number(insights.realizedMonth || 0) + Number(insights.committedMonth || 0),
 			type: "currency",
-			helper: `${insights.periodDisplayLabel} · ${decimal.format(insights.usedPercent || 0)}% consumido`,
+			helper: insights.periodDisplayLabel,
 			icon: "Wallet",
+			statusColor,
+			progress: {
+				value: usedPercent,
+				label: `${decimal.format(usedPercent)}% consumido`,
+			},
 		},
 		{
 			id: "saldo",
@@ -1215,6 +1270,11 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 					? "Estourado"
 					: "Dentro do orçamento",
 			icon: "CircleDollarSign",
+			statusColor,
+			progress: {
+				value: availablePercent,
+				label: `${decimal.format(availablePercent)}% disponível`,
+			},
 		},
 		{
 			id: "aprovacoes",
@@ -1319,7 +1379,12 @@ export function buildCostCenterTopCards({
 			type: "currency",
 			helper: `Saldo disponível: ${brl.format(available)} · Realizado + comprometido: ${brl.format(realized)}`,
 			icon: fallback.icon,
-			color: available < 0 ? "amber" : fallback.color,
+			color: fallback.color,
+			statusColor: budgetStatusColor(percent),
+			progress: {
+				value: percent,
+				label: `${decimal.format(percent)}% consumido`,
+			},
 			trend: {
 				status: available < 0 ? "negative" : "positive",
 				direction: available < 0 ? "up" : "down",

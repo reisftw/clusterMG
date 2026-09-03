@@ -154,36 +154,24 @@ describe("financeiroBudgetXlsxImport", () => {
 			sheetName: "Plan1",
 		});
 
-		expect(parsed).toHaveLength(3);
+		expect(parsed).toHaveLength(1);
 		expect(parsed[0]).toMatchObject({
-			origem: "CP",
-			data: "2026-09-01",
-			codConta: "1321",
-			nomeConta: "Acoes de venda",
-			codCc: "110101",
-			nomeCc: "Marketing",
-			empresaId: "0001",
-			empresa: "0001 - SEMPRE TELECOMUNICACOES LTDA",
-			realizado: 550,
-			layoutOrigem: "FPCP302",
-			linhaOrigem: 6,
-		});
-		expect(parsed[0].observacoes).toBe(
-			"Data base: 2026-09-01 | Dt prev pgto: 2026-09-04",
-		);
-		expect(parsed[1]).toMatchObject({
-			empresaId: "0014",
-			empresa: "0014 - ONNET LOCACOES LTDA",
-			codCc: "110201",
-			realizado: 700,
-		});
-		expect(parsed[2]).toMatchObject({
 			data: "2060-10-10",
 			ano: 2060,
 			numMes: 10,
+			codCc: "2020121",
 			nomeCc: "Projeto Seplag",
+			empresaId: "0014",
+			empresa: "0014 - ONNET LOCACOES LTDA",
 			realizado: 46000,
+			quebra2: "PROJETO",
+			statusProjetos: "Em andamento / A Iniciar",
+			layoutOrigem: "FPCP302",
+			linhaOrigem: 9,
 			sourceDateForKey: "2026-08-28",
 		});
+		expect(parsed[0].observacoes).toBe(
+			"Data base: 2026-08-28 | Dt prev pgto: 2060-10-10",
+		);
 	});
 });

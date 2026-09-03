@@ -12,6 +12,10 @@ const {
 	enrichFinancialAccountWithCategory,
 	normalizeFinancialAccountCategories,
 } = require("./financeiroAccountCategories");
+const {
+	applyAccessBudgetRowRules,
+	shouldKeepAccessImportedRow,
+} = require("./financeiroBudgetAccessRules");
 
 const SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 const SHEET_TYPES = [
@@ -1881,6 +1885,14 @@ function normalizeCostCenter(center = {}, index = 0) {
 					accountId: String(item.accountId || item.contaId || "").trim(),
 					year: Number(item.year || item.ano || 0) || "",
 					month: Number(item.month || item.mesNumero || item.numMes || 0) || "",
+					grupo: cleanText(item.grupo || item.Grupo),
+					quebra2: cleanText(item.quebra2 || item.Quebra2),
+					categoria: cleanText(item.categoria || item.Categoria),
+					statusProjetos: cleanText(
+						item.statusProjetos ||
+							item.Status_Projetos ||
+							item.status_projetos,
+					),
 					budgeted: currency(item.budgeted ?? item.orcado ?? item.orcadoMes),
 					orcado: currency(item.orcado ?? item.budgeted ?? item.orcadoMes),
 					realized: currency(item.realized ?? item.realizado),
@@ -1918,6 +1930,16 @@ function normalizeCostCenter(center = {}, index = 0) {
 										movement.companyId || movement.empresaId,
 									),
 									branchId: cleanText(movement.branchId || movement.filialId),
+									grupo: cleanText(movement.grupo || movement.Grupo),
+									quebra2: cleanText(movement.quebra2 || movement.Quebra2),
+									categoria: cleanText(
+										movement.categoria || movement.Categoria,
+									),
+									statusProjetos: cleanText(
+										movement.statusProjetos ||
+											movement.Status_Projetos ||
+											movement.status_projetos,
+									),
 									document: cleanText(
 										movement.document || movement.titulo || movement.seqMov,
 									),
@@ -2013,6 +2035,11 @@ function normalizeCostCenter(center = {}, index = 0) {
 			center.categoriaPrincipal || center.categoria || "",
 		).trim(),
 		diretoria: String(center.diretoria || "").trim(),
+		quebra2: cleanText(center.quebra2 || center.Quebra2),
+		grupo: cleanText(center.grupo || center.Grupo),
+		statusProjetos: cleanText(
+			center.statusProjetos || center.Status_Projetos || center.status_projetos,
+		),
 		contaContabil: String(center.contaContabil || center.glCode || "").trim(),
 		valorMensal: monthlyBudget,
 		valorAnual: annualBudget,
@@ -3345,7 +3372,7 @@ function normalizeBudgetDataRow(row = {}, index = 0) {
 	if (!normalized.categoria) normalized.categoria = normalized.nomeConta;
 	if (!normalized.entidade)
 		normalized.entidade = normalized.nomeFornecedor || normalized.fornecedor;
-	return normalized;
+	return applyAccessBudgetRowRules(normalized);
 }
 
 function uniqueCount(rows, key) {
@@ -3412,6 +3439,24 @@ function summarizeBudgetDataRows(rows = []) {
 	};
 }
 
+function normalizeSavedBudgetRows(rows = []) {
+	return (Array.isArray(rows) ? rows : [])
+		.map(normalizeBudgetDataRow)
+		.filter(
+			(row) =>
+				shouldKeepAccessImportedRow(row) &&
+				(row.codConta ||
+					row.nomeConta ||
+					row.codCc ||
+					row.nomeCc ||
+					row.fornecedor ||
+					row.empresa ||
+					row.filial ||
+					row.orcado ||
+					row.realizado),
+		);
+}
+
 function budgetImportRowIdentity(row = {}) {
 	if (row.sourceKey) return cleanText(row.sourceKey);
 	return crypto
@@ -3453,6 +3498,31 @@ function mergeBudgetImportRows(existingRows = [], incomingRows = []) {
 		rowsByKey.set(budgetImportRowIdentity(normalized), normalized);
 	}
 	return [...rowsByKey.values()];
+}
+
+function budgetRowPeriodKey(row = {}) {
+	const year = Number(row.ano || 0);
+	const month = validBudgetMonth(row.numMes);
+	return year && month ? `${year}-${month}` : "";
+}
+
+function mergeBudgetImportRowsReplacingIncomingPeriods(
+	existingRows = [],
+	incomingRows = [],
+) {
+	const incomingPeriods = new Set(
+		incomingRows.map(budgetRowPeriodKey).filter(Boolean),
+	);
+	const preservedRows = incomingPeriods.size
+		? existingRows.filter((row) => !incomingPeriods.has(budgetRowPeriodKey(row)))
+		: existingRows;
+	return mergeBudgetImportRows(preservedRows, incomingRows);
+}
+
+function accessCategoryClassForRow(row = {}) {
+	const quebra2 = cleanText(row.quebra2).toUpperCase();
+	if (quebra2 === "ACOMPANHAR") return "nao_basal";
+	return "basal";
 }
 
 function buildImportCodeByName(rows = [], codeKey, nameKey) {
@@ -3507,6 +3577,7 @@ function clearBudgetImportArtifacts(config = {}) {
 }
 
 function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
+	rows = rows.map((row) => applyAccessBudgetRowRules(row));
 	const accountCodeByName = buildImportCodeByName(
 		rows,
 		"codConta",
@@ -3833,6 +3904,8 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 						codigo: row.codConta || accountId,
 						nome:
 							row.nomeConta || row.conta || row.categoria || "Conta financeira",
+						categoriaMae: row.categoria || row.nomeConta || "",
+						categoriaClasse: accessCategoryClassForRow(row),
 						tipo: String(row.tipo || "")
 							.toLowerCase()
 							.includes("receita")
@@ -3852,6 +3925,27 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 				),
 			);
 			if (accountCodeKey) accountIdsByCode.set(accountCodeKey, accountId);
+		} else {
+			const currentAccount = accountsMap.get(accountId);
+			accountsMap.set(
+				accountId,
+				normalizeFinancialAccount(
+					{
+						...currentAccount,
+						nome: row.nomeConta || currentAccount.nome,
+						categoriaMae: row.categoria || currentAccount.categoriaMae,
+						categoriaClasse:
+							accessCategoryClassForRow(row) ||
+							currentAccount.categoriaClasse,
+						grupo: row.grupo || currentAccount.grupo,
+						dreGroup:
+							row.quebra || row.quebra2 || row.categoria || currentAccount.dreGroup,
+						atualizadoEm: nowIso(),
+					},
+					accountsMap.size,
+					categoryCatalog,
+				),
+			);
 		}
 
 		const existingCenter = centersMap.get(centerId);
@@ -3860,8 +3954,10 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 		const importedResponsible = centerIsSynthetic
 			? row.diretor || row.gestor || ""
 			: row.gestor || "";
-		const importedCategory =
-			row.diretoria || row.categoria || row.nomeConta || row.grupo || "";
+		const rowIsProject = cleanText(row.quebra2).toUpperCase() === "PROJETO";
+		const importedCategory = rowIsProject
+			? row.nomeCc || row.diretoria || row.categoria || row.nomeConta || row.grupo || ""
+			: row.diretoria || row.categoria || row.nomeConta || row.grupo || "";
 		const updateParentDirector = (currentCenterId) => {
 			const currentCenter = centersMap.get(currentCenterId);
 			const parentId = currentCenter?.parentId || currentCenter?.parentCodigo;
@@ -3918,6 +4014,9 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 			accountId,
 			year: rowYear,
 			month: rowMonth,
+			grupo: row.grupo || "",
+			quebra2: row.quebra2 || "",
+			categoria: row.categoria || "",
 			budgeted: 0,
 			orcado: 0,
 			realized: 0,
@@ -3952,6 +4051,10 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 				supplier: supplierName,
 				accountId,
 				accountName: row.nomeConta || row.conta || row.categoria || "",
+				grupo: row.grupo || "",
+				quebra2: row.quebra2 || "",
+				categoria: row.categoria || "",
+				statusProjetos: row.statusProjetos || "",
 				companyId,
 				branchId,
 				document: row.titulo || row.seqMov || "",
@@ -3984,13 +4087,18 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 						responsavel: importedResponsible,
 						categoriaPrincipal: importedCategory,
 						diretoria: row.diretoria || "",
+						quebra2: row.quebra2 || "",
+						grupo: row.grupo || "",
 						tipoDespesa: String(row.grupo || row.categoria || "")
 							.toLowerCase()
 							.includes("capex")
 							? "capex"
 							: "opex",
 						finalidade: row.diretoria ? `Diretoria: ${row.diretoria}` : "",
-						status: row.statusProjetos || "ativo",
+						status: rowIsProject
+							? row.statusProjetos || "Em andamento / A Iniciar"
+							: row.statusProjetos || "ativo",
+						statusProjetos: row.statusProjetos || "",
 						observacoes: row.observacoes || "",
 					},
 					centersMap.size,
@@ -4029,9 +4137,13 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 				responsavel: existingCenter.responsavel || importedResponsible,
 				categoriaPrincipal:
 					existingCenter.categoriaPrincipal || importedCategory,
+				quebra2: existingCenter.quebra2 || row.quebra2 || "",
+				grupo: existingCenter.grupo || row.grupo || "",
 				diretoria:
 					existingCenter.diretoria ||
 					(centerIsSynthetic ? row.diretoria || "" : ""),
+				statusProjetos:
+					existingCenter.statusProjetos || row.statusProjetos || "",
 				finalidade:
 					existingCenter.finalidade ||
 					(row.diretoria ? `Diretoria: ${row.diretoria}` : ""),
@@ -4233,7 +4345,16 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 
 async function getBudgetCostCenters() {
 	const config = await financeiroStatement.getBudgetConfigurationStatement();
-	const normalizedConfig = normalizeCostCentersConfig(config, {});
+	let normalizedConfig = normalizeCostCentersConfig(config, {});
+	const savedData = await financeiroStatement.getBudgetDataStatement();
+	const savedRows = normalizeSavedBudgetRows(savedData?.rows || []);
+	if (savedRows.length) {
+		normalizedConfig = mergeBudgetConfigFromRows(
+			clearBudgetImportArtifacts(normalizedConfig),
+			savedRows,
+			{},
+		).config;
+	}
 	const rawAccounts = Array.isArray(config.accounts) ? config.accounts : [];
 	const rawAccountsByCode = new Map(
 		rawAccounts.map((account) => [
@@ -4387,11 +4508,14 @@ function emptyBudgetData() {
 
 async function getBudgetData() {
 	const savedData = await financeiroStatement.getBudgetDataStatement();
+	const rows = normalizeSavedBudgetRows(savedData?.rows || []);
 	return {
 		ok: true,
 		data: {
 			...emptyBudgetData(),
 			...(savedData || {}),
+			rows,
+			summary: summarizeBudgetDataRows(rows),
 			fields: BUDGET_DATA_FIELDS,
 		},
 	};
@@ -4399,27 +4523,17 @@ async function getBudgetData() {
 
 async function saveBudgetData(payload = {}, user = {}) {
 	const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
-	const incomingRows = rawRows
-		.map(normalizeBudgetDataRow)
-		.filter(
-			(row) =>
-				row.codConta ||
-				row.nomeConta ||
-				row.codCc ||
-				row.nomeCc ||
-				row.fornecedor ||
-				row.empresa ||
-				row.filial ||
-				row.orcado ||
-				row.realizado,
-		);
+	const incomingRows = normalizeSavedBudgetRows(rawRows);
 	const currentData = await getBudgetData();
 	const currentRows =
 		payload.append === false ? [] : currentData?.data?.rows || [];
-	const rows = mergeBudgetImportRows(currentRows, incomingRows);
+	const rows =
+		payload.append === false
+			? mergeBudgetImportRows([], incomingRows)
+			: mergeBudgetImportRowsReplacingIncomingPeriods(currentRows, incomingRows);
 	const existingBudget = await getBudgetCostCenters();
 	const merged = mergeBudgetConfigFromRows(
-		existingBudget.config || {},
+		clearBudgetImportArtifacts(existingBudget.config || {}),
 		rows,
 		user,
 	);
@@ -4519,4 +4633,5 @@ module.exports = {
 
 module.exports.__testables = {
 	mergeBudgetConfigFromRows,
+	mergeBudgetImportRowsReplacingIncomingPeriods,
 };

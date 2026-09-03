@@ -7,7 +7,8 @@ export default function KpiValue({ item, loading = false, compact = false }) {
 
 	return (
 		<p
-			className={`max-w-full break-words font-bold leading-tight text-slate-950 ${compact ? "mt-1.5 text-base lg:text-lg" : "mt-3 text-xl lg:text-2xl"}`}
+			className={`max-w-full break-words font-black leading-tight text-slate-950 ${compact ? "mt-1.5 text-base lg:text-lg" : "mt-3 text-[clamp(1.25rem,2vw,1.75rem)]"}`}
+			style={{ overflowWrap: "anywhere" }}
 		>
 			{formatValue(item.value, item.type)}
 		</p>

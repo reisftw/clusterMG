@@ -354,9 +354,9 @@ export default function BudgetCostCentersView({
 
 	return (
 		<section className="space-y-4">
-			<section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+			<section className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-stretch gap-4">
 				{costCenterTopCards.map((item) => (
-					<FinancialKpiCard key={item.id} item={item} />
+					<FinancialKpiCard key={item.id} item={item} variant="secondary" />
 				))}
 			</section>
 			<section className="space-y-4">

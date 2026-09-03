@@ -1,5 +1,11 @@
 const crypto = require("node:crypto");
 const XLSX = require("xlsx");
+const {
+	applyAccessBudgetRowRules,
+	isAccessProjectCenter,
+	resolveAccessCompanyGroup,
+	shouldKeepAccessImportedRow,
+} = require("./financeiroBudgetAccessRules");
 
 const MONTHS = [
 	"",
@@ -154,7 +160,7 @@ function withSource(row, meta) {
 		row.realizado,
 	]);
 	return {
-		...row,
+		...applyAccessBudgetRowRules(row),
 		id: row.id || `orc-${key}`,
 		sourceKey: key,
 		arquivoOrigem: meta.fileName,
@@ -162,28 +168,6 @@ function withSource(row, meta) {
 		linhaOrigem: meta.rowNumber,
 		layoutOrigem: meta.layout,
 	};
-}
-
-function isFpcp302ProjectRow({ titulo = "", nomeConta = "", nomeCc = "", codCc = "" } = {}) {
-	const text = normalizeKey([titulo, nomeConta, nomeCc, codCc].filter(Boolean).join(" "));
-	const projectSignals = [
-		"projeto",
-		"projetos",
-		"software",
-		"novaloja",
-		"dwdm",
-		"expansa",
-		"reforma",
-		"vex",
-		"swapzte",
-		"teleporto",
-		"hps",
-		"construca",
-		"novasportas",
-		"campobelo",
-		"setelagoas",
-	];
-	return projectSignals.some((signal) => text.includes(signal));
 }
 
 function normalizeFpcp106Row(row = [], meta) {
@@ -215,6 +199,7 @@ function normalizeFpcp106Row(row = [], meta) {
 			empresa,
 			filial,
 			conta,
+			grupo: resolveAccessCompanyGroup(empresa),
 			tipo: origem,
 			categoria: account.nome,
 			entidade: fornecedorParts.nome || cleanText(row[2]),
@@ -237,14 +222,7 @@ function normalizeFpcp302Row(row = [], company, meta) {
 	const nomeCc = cleanText(row[8]);
 	const baseDateInfo = parseDateInfo(row[12]);
 	const dueDateInfo = parseDateInfo(row[14]);
-	const isProject = isFpcp302ProjectRow({ titulo, nomeConta, nomeCc, codCc });
-	const dateInfo = isProject
-		? dueDateInfo.data
-			? dueDateInfo
-			: baseDateInfo
-		: baseDateInfo.data
-			? baseDateInfo
-			: dueDateInfo;
+	const dateInfo = dueDateInfo.data ? dueDateInfo : baseDateInfo;
 	if (!titulo || !tipo || !codConta || !nomeConta || !codCc || !nomeCc)
 		return null;
 	const observacoes = [
@@ -285,6 +263,7 @@ function normalizeFpcp302Row(row = [], company, meta) {
 			categoria: nomeConta,
 			entidade: company.nome,
 			empresaId: company.codigo,
+			grupo: resolveAccessCompanyGroup(company.codigo),
 			filialId: "",
 			cf: `${codConta} - ${nomeConta}`,
 			cc: `${codCc} - ${nomeCc}`,
@@ -354,7 +333,9 @@ function parseFpcp302Rows(rows = [], meta = {}) {
 			layout: "FPCP302",
 			rowNumber: index + 1,
 		});
-		if (normalized) parsedRows.push(normalized);
+		if (normalized && shouldKeepAccessImportedRow(normalized)) {
+			parsedRows.push(normalized);
+		}
 	});
 	return parsedRows;
 }
@@ -418,7 +399,7 @@ module.exports = {
 	parseFpcp106Rows,
 	parseFpcp302Rows,
 	__testables: {
-		isFpcp302ProjectRow,
+		isFpcp302ProjectRow: isAccessProjectCenter,
 		normalizeFpcp106Row,
 		normalizeFpcp302Row,
 		parseDateInfo,

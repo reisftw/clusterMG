@@ -2,13 +2,14 @@ import { decimal } from "../../utils/financeiroFormatters";
 import { getKpiTrendClass } from "./financialKpiStyles";
 
 function trendText(trend, label) {
-	if (!trend) return "Sem comparativo";
+	if (!trend) return "";
 	const arrow = trend.direction === "up" ? "↑" : "↓";
 	return `${arrow} ${decimal.format(Number(trend.percent || 0))}% ${label || ""}`.trim();
 }
 
 export default function KpiTrend({ item }) {
 	if (item.hideTrend) return null;
+	if (!item.trend) return null;
 
 	return (
 		<p

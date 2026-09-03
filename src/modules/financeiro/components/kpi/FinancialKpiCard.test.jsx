@@ -66,6 +66,34 @@ describe("FinancialKpiCard", () => {
 		expect(screen.getByText("20")).toBeInTheDocument();
 		expect(screen.getByText("Base atual")).toBeInTheDocument();
 		expect(screen.queryByText("Sem comparativo")).not.toBeInTheDocument();
-		expect(container.firstChild).toHaveClass("min-h-[104px]", "flex");
+		expect(container.firstChild).toHaveClass("min-h-[112px]", "flex");
+	});
+
+	it("renders progress without fallback comparison text", () => {
+		const { container } = render(
+			<FinancialKpiCard
+				variant="primary"
+				item={{
+					title: "Realizado + comprometido",
+					value: 850000,
+					type: "currency",
+					statusColor: "amber",
+					progress: {
+						value: 85,
+						label: "85% consumido",
+					},
+					icon: "Wallet",
+				}}
+			/>,
+		);
+
+		expect(screen.getByText("Realizado + comprometido")).toBeInTheDocument();
+		expect(screen.getByText("85% consumido")).toBeInTheDocument();
+		expect(screen.getByText("85%")).toBeInTheDocument();
+		expect(screen.queryByText("Sem comparativo")).not.toBeInTheDocument();
+		const progressBar = Array.from(
+			container.querySelectorAll(".bg-amber-500"),
+		).find((element) => element.style.width === "85%");
+		expect(progressBar).toBeInTheDocument();
 	});
 });

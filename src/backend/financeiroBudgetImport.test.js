@@ -5,12 +5,14 @@ const require = createRequire(import.meta.url);
 
 describe("financeiro budget import config merge", () => {
 	let mergeBudgetConfigFromRows;
+	let mergeBudgetImportRowsReplacingIncomingPeriods;
 
 	beforeAll(() => {
 		process.env.DATABASE_URL ||= "postgres://user:pass@localhost:5432/test";
-		mergeBudgetConfigFromRows =
-			require("../../vps/api/src/financeiro").__testables
-				.mergeBudgetConfigFromRows;
+		const testables = require("../../vps/api/src/financeiro").__testables;
+		mergeBudgetConfigFromRows = testables.mergeBudgetConfigFromRows;
+		mergeBudgetImportRowsReplacingIncomingPeriods =
+			testables.mergeBudgetImportRowsReplacingIncomingPeriods;
 	}, 30000);
 
 	it("reuses an existing cost center by code without remapping another center with the same name", () => {
@@ -180,5 +182,122 @@ describe("financeiro budget import config merge", () => {
 		);
 		expect(importedMatrix.months[7]).toBe(50);
 		expect(importedMatrix.total).toBe(50);
+	});
+
+	it("substitui o mesmo periodo importado sem apagar historico de outros meses", () => {
+		const rows = mergeBudgetImportRowsReplacingIncomingPeriods(
+			[
+				{
+					id: "antigo-agosto",
+					layoutOrigem: "FPCP106",
+					data: "2026-08-01",
+					ano: 2026,
+					numMes: 8,
+					codConta: "1211",
+					nomeConta: "Energia",
+					codCc: "110701",
+					nomeCc: "ROT",
+					realizado: 100,
+				},
+				{
+					id: "setembro",
+					layoutOrigem: "FPCP106",
+					data: "2026-09-01",
+					ano: 2026,
+					numMes: 9,
+					codConta: "1211",
+					nomeConta: "Energia",
+					codCc: "110701",
+					nomeCc: "ROT",
+					realizado: 300,
+				},
+			],
+			[
+				{
+					id: "novo-agosto",
+					layoutOrigem: "FPCP106",
+					data: "2026-08-02",
+					ano: 2026,
+					numMes: 8,
+					codConta: "1211",
+					nomeConta: "Energia",
+					codCc: "110701",
+					nomeCc: "ROT",
+					realizado: 200,
+				},
+			],
+		);
+
+		expect(rows.map((row) => row.id).sort()).toEqual([
+			"novo-agosto",
+			"setembro",
+		]);
+		expect(rows.find((row) => row.id === "setembro")?.realizado).toBe(300);
+		expect(rows.find((row) => row.id === "novo-agosto")?.realizado).toBe(200);
+	});
+
+	it("aplica De_Para, classificacao fora do basal e centro de projeto do Access", () => {
+		const result = mergeBudgetConfigFromRows(
+			{
+				accounts: [],
+				centers: [],
+				companies: [],
+				branches: [],
+				partners: [],
+				matrix: [],
+			},
+			[
+				{
+					codCc: "110701",
+					nomeCc: "ROT",
+					codConta: "2201",
+					nomeConta: "Conservação e Limpeza",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					realizado: 100,
+					orcado: 0,
+				},
+				{
+					codCc: "110701",
+					nomeCc: "ROT",
+					codConta: "3101",
+					nomeConta: "Consórcio",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					realizado: 50,
+					orcado: 0,
+				},
+				{
+					codCc: "2020121",
+					nomeCc: "Projeto Seplag",
+					codConta: "4101",
+					nomeConta: "Equipamentos POP (Switches, OTDR, Baterias)",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					realizado: 70,
+					orcado: 0,
+				},
+			],
+			{ uid: "test-user", email: "test@example.com" },
+		);
+
+		expect(result.config.accounts.find((item) => item.id === "2201")).toMatchObject({
+			nome: "Serviços de Conservação e Limpeza",
+			categoriaMae: "Administrativo",
+			categoriaClasse: "basal",
+		});
+		expect(result.config.accounts.find((item) => item.id === "3101")).toMatchObject({
+			nome: "Consórcio",
+			categoriaMae: "Financeiro",
+			categoriaClasse: "nao_basal",
+		});
+		expect(result.config.centers.find((item) => item.id === "2020121")).toMatchObject({
+			nome: "Projeto Seplag",
+			quebra2: "PROJETO",
+			statusProjetos: "Em andamento / A Iniciar",
+		});
 	});
 });

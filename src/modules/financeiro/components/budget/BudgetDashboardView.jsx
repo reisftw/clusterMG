@@ -166,11 +166,18 @@ export default function BudgetDashboardView({
 	treemapItems,
 	waterfallRows,
 }) {
+	const primaryKpis = kpis.slice(0, 3);
+	const secondaryKpis = kpis.slice(3);
 	return (
 		<section className="space-y-4">
-			<section className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
-				{kpis.map((item) => (
-					<FinancialKpiCard key={item.id} item={item} />
+			<section className="grid items-stretch gap-4 min-[480px]:grid-cols-2 md:grid-cols-3">
+				{primaryKpis.map((item) => (
+					<FinancialKpiCard key={item.id} item={item} variant="primary" />
+				))}
+			</section>
+			<section className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-stretch gap-4">
+				{secondaryKpis.map((item) => (
+					<FinancialKpiCard key={item.id} item={item} variant="secondary" />
 				))}
 			</section>
 			<section className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
