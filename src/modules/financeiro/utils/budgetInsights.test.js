@@ -302,6 +302,99 @@ describe("budgetInsights", () => {
 		expect(year.plannedYear).toBe(264423 * 12);
 	});
 
+	it("calcula orçamento não basal oficial por categoria", () => {
+		const configWithBudgets = {
+			...config,
+			settings: {
+				...config.settings,
+				financialCategoryBudgets: [
+					{
+						classType: "nao_basal",
+						categoryName: "Aquisições",
+						accountName: "Veículos",
+						periodScope: "monthly_default",
+						planned: 34000,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Financeiro",
+						accountName: "Consórcio",
+						periodScope: "monthly_default",
+						planned: 33000,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Financeiro",
+						accountName: "Empréstimos bancários",
+						periodScope: "monthly_default",
+						planned: 1600000,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Financeiro",
+						accountName: "Empréstimos c/ partes relacionadas",
+						periodScope: "monthly_default",
+						planned: 0,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Impostos Parcelamento",
+						accountName: "COFINS parcelamento",
+						periodScope: "monthly_default",
+						planned: 9000,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Impostos Parcelamento",
+						accountName: "CSLL parcelamento",
+						periodScope: "monthly_default",
+						planned: 12500,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Impostos Parcelamento",
+						accountName: "ICMS parcelamento",
+						periodScope: "monthly_default",
+						planned: 12000,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Impostos Parcelamento",
+						accountName: "IRPJ parcelamento",
+						periodScope: "monthly_default",
+						planned: 51000,
+					},
+					{
+						classType: "nao_basal",
+						categoryName: "Impostos Parcelamento",
+						accountName: "PIS parcelamento",
+						periodScope: "monthly_default",
+						planned: 2000,
+					},
+				],
+			},
+		};
+
+		const insights = getBudgetInsights(configWithBudgets, {
+			mode: "month",
+			referenceYear: 2026,
+			referenceMonth: 8,
+		});
+		const nonBasalGroup = insights.budgetCategoryGroups.find(
+			(item) => item.id === "nao_basal",
+		);
+		const financeiro = nonBasalGroup.categories.find(
+			(item) => item.name === "Financeiro",
+		);
+		const parcelamento = nonBasalGroup.categories.find(
+			(item) => item.name === "Impostos Parcelamento",
+		);
+
+		expect(nonBasalGroup.planned).toBe(1753500);
+		expect(financeiro.planned).toBe(1633000);
+		expect(parcelamento.planned).toBe(86500);
+	});
+
 	it("groups synthetic centers, filters responsible users and paginates groups", () => {
 		const insights = getBudgetInsights(config, {
 			mode: "month",
