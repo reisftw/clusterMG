@@ -223,6 +223,76 @@ describe("budgetInsights", () => {
 		});
 	});
 
+	it("aplica orcamento oficial de projetos por vigencia", () => {
+		const configWithProjectBudgets = {
+			...config,
+			settings: {
+				...config.settings,
+				financialCategoryBudgets: [
+					{
+						classType: "projetos",
+						categoryName: "Projeto Seplag",
+						accountName: "Orçamento do projeto",
+						periodScope: "project_range",
+						startYear: 2026,
+						startMonth: 8,
+						planned: 460000,
+					},
+					{
+						classType: "projetos",
+						categoryName: "Fase 1 HPs 2026",
+						accountName: "Orçamento do projeto",
+						periodScope: "project_range",
+						startYear: 2026,
+						startMonth: 8,
+						planned: 1200000,
+					},
+					{
+						classType: "projetos",
+						categoryName: "Construção de Novas Portas 2026",
+						accountName: "Orçamento do projeto",
+						periodScope: "project_range",
+						startYear: 2026,
+						startMonth: 8,
+						planned: 2400000,
+					},
+				],
+			},
+		};
+		const insights = getBudgetInsights(
+			configWithProjectBudgets,
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+		const projectGroup = insights.budgetCategoryGroups.find(
+			(item) => item.id === "projetos",
+		);
+		const septemberInsights = getBudgetInsights(
+			configWithProjectBudgets,
+			{ mode: "month", referenceYear: 2026, referenceMonth: 9 },
+		);
+		const septemberProjectGroup = septemberInsights.budgetCategoryGroups.find(
+			(item) => item.id === "projetos",
+		);
+		const julyInsights = getBudgetInsights(
+			configWithProjectBudgets,
+			{ mode: "month", referenceYear: 2026, referenceMonth: 7 },
+		);
+		const julyProjectGroup = julyInsights.budgetCategoryGroups.find(
+			(item) => item.id === "projetos",
+		);
+
+		expect(projectGroup.planned).toBe(4060000);
+		expect(projectGroup.categories.map((item) => item.name)).toEqual(
+			expect.arrayContaining([
+				"Projeto Seplag",
+				"Fase 1 HPs 2026",
+				"Construção de Novas Portas 2026",
+			]),
+		);
+		expect(septemberProjectGroup.planned).toBe(4060000);
+		expect(julyProjectGroup.planned).toBe(0);
+	});
+
 	it("prioriza orçamento mensal cadastrado por categoria financeira", () => {
 		const insights = getBudgetInsights(
 			{

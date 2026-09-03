@@ -286,6 +286,43 @@ function normalizeMeta(doc) {
 	};
 }
 
+function getFinancialCategoryBudgets(data = {}) {
+	const budgets = data?.settings?.financialCategoryBudgets;
+	return Array.isArray(budgets)
+		? budgets.filter((item) => item && typeof item === "object")
+		: [];
+}
+
+async function readExistingFinancialCategoryBudgets(client) {
+	const result = await client.query(
+		"select data from financeiro_config_meta where config_id = $1 limit 1",
+		["orcamento_centros_custo"],
+	);
+	return getFinancialCategoryBudgets(result.rows[0]?.data || {});
+}
+
+function preserveFinancialCategoryBudgets(rows, existingBudgets = []) {
+	if (!existingBudgets.length) return rows;
+	const metas = rows.metas.map((meta) => {
+		if (meta.config_id !== "orcamento_centros_custo") return meta;
+		const currentBudgets = getFinancialCategoryBudgets(meta.data || {});
+		if (currentBudgets.length) return meta;
+		const data = {
+			...(meta.data || {}),
+			settings: {
+				...(meta.data?.settings || {}),
+				financialCategoryBudgets: existingBudgets,
+			},
+		};
+		return {
+			...meta,
+			data,
+			source_payload: data,
+		};
+	});
+	return { ...rows, metas };
+}
+
 function buildRows(documents) {
 	const byPath = new Map(documents.map((doc) => [doc.path, doc]));
 	const configDoc = byPath.get(COST_CENTERS_PATH) || {};
@@ -337,6 +374,12 @@ async function applyRows(rows) {
 	try {
 		await client.query("begin");
 		await client.query("set constraints all deferred");
+		const existingFinancialCategoryBudgets =
+			await readExistingFinancialCategoryBudgets(client);
+		const rowsToApply = preserveFinancialCategoryBudgets(
+			rows,
+			existingFinancialCategoryBudgets,
+		);
 		await client.query("delete from financeiro_orcamento_lancamentos");
 		await client.query("delete from financeiro_orcamento_matriz");
 		await client.query("delete from financeiro_filiais");
@@ -346,15 +389,38 @@ async function applyRows(rows) {
 		await client.query("delete from financeiro_matrizes");
 		await client.query("delete from financeiro_contas");
 		await client.query("delete from financeiro_config_meta");
-		await upsertMany(client, "financeiro_config_meta", rows.metas, ["config_id"]);
-		await upsertMany(client, "financeiro_diretorias", rows.diretorias, ["id"]);
-		await upsertMany(client, "financeiro_contas", rows.contas, ["id"]);
-		await upsertMany(client, "financeiro_matrizes", rows.matrizes, ["id"]);
-		await upsertMany(client, "financeiro_centros_custo", rows.centros, ["id"]);
-		await upsertMany(client, "financeiro_fornecedores", rows.fornecedores, ["id"]);
-		await upsertMany(client, "financeiro_filiais", rows.filiais, ["matriz_id", "id"]);
-		await upsertMany(client, "financeiro_orcamento_matriz", rows.matriz, ["ano", "mes", "conta_id", "centro_custo_id", "versao_id"]);
-		await upsertMany(client, "financeiro_orcamento_lancamentos", rows.lancamentos, ["source_hash"]);
+		await upsertMany(client, "financeiro_config_meta", rowsToApply.metas, [
+			"config_id",
+		]);
+		await upsertMany(client, "financeiro_diretorias", rowsToApply.diretorias, [
+			"id",
+		]);
+		await upsertMany(client, "financeiro_contas", rowsToApply.contas, ["id"]);
+		await upsertMany(client, "financeiro_matrizes", rowsToApply.matrizes, [
+			"id",
+		]);
+		await upsertMany(client, "financeiro_centros_custo", rowsToApply.centros, [
+			"id",
+		]);
+		await upsertMany(client, "financeiro_fornecedores", rowsToApply.fornecedores, [
+			"id",
+		]);
+		await upsertMany(client, "financeiro_filiais", rowsToApply.filiais, [
+			"matriz_id",
+			"id",
+		]);
+		await upsertMany(
+			client,
+			"financeiro_orcamento_matriz",
+			rowsToApply.matriz,
+			["ano", "mes", "conta_id", "centro_custo_id", "versao_id"],
+		);
+		await upsertMany(
+			client,
+			"financeiro_orcamento_lancamentos",
+			rowsToApply.lancamentos,
+			["source_hash"],
+		);
 		await client.query("commit");
 	} catch (error) {
 		await client.query("rollback").catch(() => undefined);

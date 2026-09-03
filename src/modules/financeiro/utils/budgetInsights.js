@@ -416,6 +416,62 @@ function categoryBudgetMatchesPeriod(item = {}, periodKeys = new Set()) {
 	return year && month && periodKeys.has(`${year}-${month}`);
 }
 
+function categoryBudgetPeriodScope(item = {}) {
+	return String(item.periodScope || item.escopoPeriodo || "")
+		.trim()
+		.toLowerCase();
+}
+
+function categoryBudgetHasRangePeriod(item = {}) {
+	const scope = categoryBudgetPeriodScope(item);
+	return Boolean(
+		["project_range", "range", "period"].includes(scope) ||
+			item.startYear ||
+			item.anoInicio ||
+			item.startMonth ||
+			item.mesInicio ||
+			item.endYear ||
+			item.anoFim ||
+			item.endMonth ||
+			item.mesFim,
+	);
+}
+
+function categoryBudgetMonthSerial(year, month) {
+	const safeYear = Number(year);
+	const safeMonth = Number(month);
+	if (!safeYear || !safeMonth) return null;
+	return safeYear * 12 + safeMonth;
+}
+
+function categoryBudgetRangeBoundary(item = {}, side = "start") {
+	const isStart = side === "start";
+	const year = Number(
+		isStart
+			? item.startYear || item.anoInicio || item.inicioAno
+			: item.endYear || item.anoFim || item.fimAno,
+	);
+	const month = Number(
+		isStart
+			? item.startMonth || item.mesInicio || item.inicioMes
+			: item.endMonth || item.mesFim || item.fimMes,
+	);
+	return categoryBudgetMonthSerial(year, month);
+}
+
+function categoryBudgetMatchesRange(item = {}, periodMonths = []) {
+	if (!categoryBudgetHasRangePeriod(item)) return false;
+	const months = periodMonths.length
+		? periodMonths
+		: [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }];
+	const start = categoryBudgetRangeBoundary(item, "start") || -Infinity;
+	const end = categoryBudgetRangeBoundary(item, "end") || Infinity;
+	return months.some((month) => {
+		const selected = categoryBudgetMonthSerial(month.year, month.month);
+		return selected !== null && selected >= start && selected <= end;
+	});
+}
+
 function categoryBudgetHasFixedPeriod(item = {}) {
 	return Boolean(
 		Number(item.year || item.ano || item.referenceYear) &&
@@ -425,9 +481,10 @@ function categoryBudgetHasFixedPeriod(item = {}) {
 
 function categoryBudgetIsMonthlyDefault(item = {}) {
 	return Boolean(
-		item.periodScope === "monthly_default" ||
+		!categoryBudgetHasRangePeriod(item) &&
+			(categoryBudgetPeriodScope(item) === "monthly_default" ||
 			item.appliesEveryMonth ||
-			!categoryBudgetHasFixedPeriod(item),
+			!categoryBudgetHasFixedPeriod(item)),
 	);
 }
 
@@ -531,17 +588,18 @@ function getEffectiveCategoryBudgets(categoryBudgets = [], periodMonths = []) {
 	const months = periodMonths.length
 		? periodMonths
 		: [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }];
-	const exactBudgets = categoryBudgets.filter((item) =>
-		categoryBudgetMatchesPeriod(
-			item,
-			new Set(months.map((month) => `${month.year}-${month.month}`)),
-		),
+	const periodKeys = new Set(months.map((month) => `${month.year}-${month.month}`));
+	const exactBudgets = categoryBudgets.filter(
+		(item) =>
+			categoryBudgetMatchesPeriod(item, periodKeys) ||
+			categoryBudgetMatchesRange(item, months),
 	);
 	const exactDimensionsByMonth = new Set(
-		exactBudgets.map((item) => {
+		exactBudgets.flatMap((item) => {
+			if (!categoryBudgetHasFixedPeriod(item)) return [];
 			const year = Number(item.year || item.ano || item.referenceYear);
 			const month = Number(item.month || item.mes || item.numMes || item.referenceMonth);
-			return `${year}-${month}:${categoryBudgetDimensionKey(item)}`;
+			return [`${year}-${month}:${categoryBudgetDimensionKey(item)}`];
 		}),
 	);
 	const monthlyDefaults = categoryBudgets.filter(categoryBudgetIsMonthlyDefault);
