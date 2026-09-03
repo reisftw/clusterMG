@@ -351,6 +351,86 @@ describe("budgetInsights", () => {
 		expect(insights.budgetCategoryGroups.find((item) => item.id === "basal").realized).toBe(1000);
 	});
 
+	it("classifica realizado pela quebra e categoria do lancamento importado", () => {
+		const insights = getBudgetInsights(
+			{
+				accounts: [
+					{
+						id: "conta-compartilhada",
+						codigo: "999",
+						nome: "Conta compartilhada",
+						categoriaClasse: "basal",
+						categoriaMae: "Produto",
+					},
+				],
+				centers: [
+					{
+						id: "centro-basal",
+						nome: "Centro basal",
+						tipoPlano: "A",
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "conta-compartilhada",
+								realized: 100,
+								grupo: "Sempre",
+								quebra2: "ORÇAMENTO",
+								categoria: "Produto",
+							},
+						],
+					},
+					{
+						id: "centro-nao-basal",
+						nome: "Centro nao basal",
+						tipoPlano: "A",
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "conta-compartilhada",
+								realized: 300,
+								grupo: "Sempre",
+								quebra2: "ACOMPANHAR",
+								categoria: "Financeiro",
+							},
+						],
+					},
+				],
+				matrix: [
+					{
+						accountId: "conta-compartilhada",
+						costCenterId: "centro-basal",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+					{
+						accountId: "conta-compartilhada",
+						costCenterId: "centro-nao-basal",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+				],
+				settings: {},
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+
+		const basalGroup = insights.budgetCategoryGroups.find((item) => item.id === "basal");
+		const nonBasalGroup = insights.budgetCategoryGroups.find((item) => item.id === "nao_basal");
+
+		expect(basalGroup.realized).toBe(100);
+		expect(basalGroup.categories[0]).toMatchObject({
+			name: "Produto",
+			realized: 100,
+		});
+		expect(nonBasalGroup.realized).toBe(300);
+		expect(nonBasalGroup.categories[0]).toMatchObject({
+			name: "Financeiro",
+			realized: 300,
+		});
+	});
+
 	it("aplica orcamento oficial de projetos por vigencia", () => {
 		const configWithProjectBudgets = {
 			...config,

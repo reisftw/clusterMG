@@ -584,6 +584,33 @@ function classifyBudgetRow(account = {}, center = {}, categoryCatalog = []) {
 	return enriched;
 }
 
+function classifyBreakdownBudgetRow(account = {}, center = {}, breakdown = {}) {
+	const quebra2 = normalizeBudgetText(breakdown.quebra2 || breakdown.Quebra2);
+	const categoryName =
+		quebra2 === "projeto"
+			? center?.nome || center?.name || breakdown.categoria || "Projetos"
+			: breakdown.categoria || account?.categoriaMae || account?.nome || "Sem categoria";
+	const classType =
+		quebra2 === "projeto"
+			? BUDGET_CATEGORY_CLASSES.PROJETOS
+			: quebra2 === "acompanhar"
+				? BUDGET_CATEGORY_CLASSES.NAO_BASAL
+				: quebra2 === "orcamento" || quebra2 === "orçamento"
+					? BUDGET_CATEGORY_CLASSES.BASAL
+					: account?.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+	const classLabel =
+		BUDGET_CATEGORY_CLASS_LABELS[classType] ||
+		BUDGET_CATEGORY_CLASS_LABELS[BUDGET_CATEGORY_CLASSES.BASAL];
+	return {
+		...(account || {}),
+		categoriaMae: categoryName,
+		categoriaClasse: classType,
+		categoriaClasseLabel: classLabel,
+		isBasal: classType === BUDGET_CATEGORY_CLASSES.BASAL,
+		isProject: classType === BUDGET_CATEGORY_CLASSES.PROJETOS,
+	};
+}
+
 function getBudgetCategoryContainer(classMap, classType, classLabel, categoryName) {
 	const categoryKey = `${classType}:${categoryName}`;
 	const currentClass = classMap.get(classType) || {
@@ -893,6 +920,10 @@ function buildAccountRows({
 				breakdownRealizedValue,
 			);
 			const hasDirectBreakdown = matchingBreakdowns.length > 0;
+			const accountForGrouping =
+				hasDirectBreakdown && matchingBreakdowns[0]
+					? classifyBreakdownBudgetRow(account, center, matchingBreakdowns[0])
+					: account;
 			const canFallbackToCenterRealized = !hasAccountScopedBreakdowns;
 			const centerTotalPlanned = sumBy(
 				matrix.filter((item) => item.costCenterId === row.costCenterId),
@@ -917,7 +948,7 @@ function buildAccountRows({
 					: 0;
 			return {
 				row,
-				account,
+				account: accountForGrouping,
 				center,
 				...budgetMetric(planned, realized),
 			};
