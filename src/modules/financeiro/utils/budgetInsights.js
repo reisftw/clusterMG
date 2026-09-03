@@ -330,19 +330,23 @@ function buildMonthlyEvolutionRows({
 	centers = [],
 	referenceYear,
 	plannedForMonth = () => 0,
+	realizedForMonth,
 } = {}) {
 	return Array.from({ length: 12 }, (_, index) => {
 		const month = index + 1;
-		const realized = sumBy(centers, (center) =>
-			sumBy(
-				centerBreakdowns(center).filter(
-					(item) =>
-						Number(item.year || item.ano || referenceYear) === referenceYear &&
-						Number(item.month || item.numMes || 0) === month,
-				),
-				breakdownRealizedValue,
-			),
-		);
+		const realized =
+			typeof realizedForMonth === "function"
+				? realizedForMonth(month)
+				: sumBy(centers, (center) =>
+						sumBy(
+							centerBreakdowns(center).filter(
+								(item) =>
+									Number(item.year || item.ano || referenceYear) === referenceYear &&
+									Number(item.month || item.numMes || 0) === month,
+							),
+							breakdownRealizedValue,
+						),
+					);
 		const planned = plannedForMonth(month);
 		return {
 			month,
@@ -1230,6 +1234,32 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const monthlyEvolution = buildMonthlyEvolutionRows({
 		centers: centersForTotals,
 		referenceYear,
+		realizedForMonth: (month) => {
+			const monthKeys = new Set([`${referenceYear}-${month}`]);
+			const monthProjectKeys = new Set(
+				Array.from({ length: month }, (_, index) => `${referenceYear}-${index + 1}`),
+			);
+			const monthRowPeriodTotal = createMatrixPeriodTotal([
+				{ year: referenceYear, month },
+			]);
+			const monthAccountRows = buildAccountRows({
+				accounts,
+				centers,
+				matrix,
+				periodKeys: monthKeys,
+				projectPeriodKeys: monthProjectKeys,
+				rowPeriodTotal: monthRowPeriodTotal,
+				configuredBudgetForCenter,
+				realizedTotalForCenter,
+			});
+			return sumBy(
+				buildBudgetCategoryGroups(monthAccountRows, accounts, categoryCatalog, {
+					categoryBudgets,
+					periodMonths: [{ year: referenceYear, month }],
+				}),
+				(group) => group.realized,
+			);
+		},
 		plannedForMonth: (month) => {
 			const monthPeriod = [{ year: referenceYear, month }];
 			const categoryPlanned = sumBy(

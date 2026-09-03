@@ -292,6 +292,9 @@ describe("budgetInsights", () => {
 		expect(insights.budgetCategoryGroups.find((item) => item.id === "basal").realized).toBe(100);
 		expect(insights.budgetCategoryGroups.find((item) => item.id === "nao_basal").realized).toBe(300);
 		expect(insights.budgetCategoryGroups.find((item) => item.id === "projetos").realized).toBe(750);
+		expect(insights.monthlyEvolution.find((item) => item.month === 8)).toMatchObject({
+			realized: 1150,
+		});
 	});
 
 	it("nao duplica realizado do centro em contas sem lancamento no periodo", () => {
