@@ -232,6 +232,11 @@ describe("financeiroBudgetConfigRepository", () => {
 		const insertCalls = query.mock.calls.filter(([sql]) =>
 			String(sql).includes("insert into financeiro_orcamento_lancamentos"),
 		);
+		expect(
+			query.mock.calls.some(([sql]) =>
+				String(sql).includes("delete from financeiro_orcamento_lancamentos"),
+			),
+		).toBe(true);
 		expect(insertCalls.length).toBeGreaterThan(1);
 		expect(insertCalls.every(([, params]) => params.length <= 10000)).toBe(true);
 		expect(query.mock.calls.some(([sql]) => sql === "commit")).toBe(true);

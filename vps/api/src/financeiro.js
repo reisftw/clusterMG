@@ -4345,16 +4345,7 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 
 async function getBudgetCostCenters() {
 	const config = await financeiroStatement.getBudgetConfigurationStatement();
-	let normalizedConfig = normalizeCostCentersConfig(config, {});
-	const savedData = await financeiroStatement.getBudgetDataStatement();
-	const savedRows = normalizeSavedBudgetRows(savedData?.rows || []);
-	if (savedRows.length) {
-		normalizedConfig = mergeBudgetConfigFromRows(
-			clearBudgetImportArtifacts(normalizedConfig),
-			savedRows,
-			{},
-		).config;
-	}
+	const normalizedConfig = normalizeCostCentersConfig(config, {});
 	const rawAccounts = Array.isArray(config.accounts) ? config.accounts : [];
 	const rawAccountsByCode = new Map(
 		rawAccounts.map((account) => [

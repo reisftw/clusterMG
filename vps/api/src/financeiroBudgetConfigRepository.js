@@ -91,6 +91,43 @@ function sourceHash(kind, legacyPath, item) {
 }
 
 const MAX_UPSERT_PARAMS = 10000;
+const BUDGET_CONFIG_ARRAY_KEYS = [
+	"accounts",
+	"centers",
+	"partners",
+	"companies",
+	"branches",
+	"matrix",
+	"approvals",
+	"versions",
+];
+const IMPORT_ARTIFACT_KEYS = [
+	"realizedByCompanyBranch",
+	"realizadoPorEmpresaFilial",
+	"realizadoMes",
+	"orcadoImportado",
+	"realizadoImportado",
+	"saldoImportado",
+	"linhasImportadas",
+];
+
+function stripImportArtifacts(item = {}) {
+	const next = { ...(item || {}) };
+	for (const key of IMPORT_ARTIFACT_KEYS) delete next[key];
+	return next;
+}
+
+function compactBudgetConfigForMeta(config = {}) {
+	const compact = { ...(config || {}) };
+	for (const key of BUDGET_CONFIG_ARRAY_KEYS) delete compact[key];
+	return compact;
+}
+
+function compactBudgetDataForMeta(data = {}) {
+	const compact = { ...(data || {}) };
+	delete compact.rows;
+	return compact;
+}
 
 async function upsertMany(client, table, rows, conflictTarget) {
 	if (!rows.length) return 0;
@@ -162,6 +199,32 @@ async function getMeta(configId) {
 	return row?.data || row?.source_payload || {};
 }
 
+async function getBudgetCostCentersMeta() {
+	const result = await db.query(
+		`select
+			data - 'accounts' - 'centers' - 'partners' - 'companies' - 'branches' - 'matrix' - 'approvals' - 'versions' as data,
+			source_payload - 'accounts' - 'centers' - 'partners' - 'companies' - 'branches' - 'matrix' - 'approvals' - 'versions' as source_payload
+		 from financeiro_config_meta
+		 where config_id = $1`,
+		[COST_CENTERS_ID],
+	);
+	const row = result.rows[0];
+	return row?.data || row?.source_payload || {};
+}
+
+async function getBudgetDataMeta() {
+	const result = await db.query(
+		`select
+			data - 'rows' as data,
+			source_payload - 'rows' as source_payload
+		 from financeiro_config_meta
+		 where config_id = $1`,
+		[BUDGET_DATA_ID],
+	);
+	const row = result.rows[0];
+	return row?.data || row?.source_payload || {};
+}
+
 function mapSource(row = {}, fallback = {}) {
 	return { ...(row.source_payload || {}), ...fallback };
 }
@@ -224,7 +287,7 @@ function normalizeCenters(config = {}, diretoriaByKey = new Map()) {
 			tipo_despesa: text(item.tipoDespesa || item.tipo_despesa || "opex"),
 			legacy_path: `${CONFIG_COLLECTION}/${COST_CENTERS_ID}`,
 			legacy_document_id: COST_CENTERS_ID,
-			source_payload: item,
+			source_payload: stripImportArtifacts(item),
 		};
 	});
 }
@@ -349,7 +412,7 @@ async function saveBudgetCostCenters(config = {}, user = {}) {
 		await client.query("delete from financeiro_fornecedores");
 		await client.query("delete from financeiro_matrizes");
 		await client.query("delete from financeiro_contas");
-		await saveMeta(client, COST_CENTERS_ID, config, user);
+		await saveMeta(client, COST_CENTERS_ID, compactBudgetConfigForMeta(config), user);
 		await replaceRows(client, "financeiro_diretorias", directorates, ["id"]);
 		await replaceRows(client, "financeiro_contas", normalizeAccounts(config), ["id"]);
 		await replaceRows(client, "financeiro_matrizes", normalizeCompanies(config), ["id"]);
@@ -378,8 +441,40 @@ async function saveBudgetData(data = {}, user = {}) {
 	const client = await db.connect();
 	try {
 		await client.query("begin");
-		await saveMeta(client, BUDGET_DATA_ID, data, user);
+		await saveMeta(client, BUDGET_DATA_ID, compactBudgetDataForMeta(data), user);
+		await client.query("delete from financeiro_orcamento_lancamentos");
 		await upsertMany(client, "financeiro_orcamento_lancamentos", rows, ["source_hash"]);
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => undefined);
+		throw error;
+	} finally {
+		client.release();
+	}
+	return data;
+}
+
+async function clearBudgetData(user = {}) {
+	const data = {
+		rows: [],
+		fields: [],
+		detectedFields: [],
+		summary: {},
+		importInfo: {
+			importedAt: new Date().toISOString(),
+			importedBy: text(user?.uid || user?.id || user?.email),
+			importedByName: text(user?.profile?.nome || user?.nome || user?.email),
+			totalRowsReceived: 0,
+			totalRowsImported: 0,
+			cleared: true,
+		},
+		appliedConfig: null,
+	};
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		await saveMeta(client, BUDGET_DATA_ID, compactBudgetDataForMeta(data), user);
+		await client.query("delete from financeiro_orcamento_lancamentos");
 		await client.query("commit");
 	} catch (error) {
 		await client.query("rollback").catch(() => undefined);
@@ -522,7 +617,7 @@ async function getBudgetCostCenters() {
 		branches,
 		matrix,
 	] = await Promise.all([
-		getMeta(COST_CENTERS_ID),
+		getBudgetCostCentersMeta(),
 		db.query("select * from financeiro_contas order by codigo nulls last, id"),
 		db.query("select * from financeiro_diretorias order by nome"),
 		db.query("select * from financeiro_centros_custo order by codigo nulls last, id"),
@@ -552,7 +647,7 @@ async function getBudgetCostCenters() {
 
 async function getBudgetData() {
 	const [meta, rows] = await Promise.all([
-		getMeta(BUDGET_DATA_ID),
+		getBudgetDataMeta(),
 		db.query(
 			`select * from financeiro_orcamento_lancamentos
 			  order by (source_payload->>'position')::int nulls last, data nulls last, id`,
@@ -599,6 +694,7 @@ module.exports = {
 	getBudgetCostCenters,
 	getBudgetData,
 	getImportedBudgetRows,
+	clearBudgetData,
 	getConfig: getMeta,
 	saveBudgetConfiguration,
 	saveBudgetCostCenters,
