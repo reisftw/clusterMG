@@ -221,7 +221,16 @@ jobs:
              \$SUDO tar -xzf \"\$frontend_package\" -C \"\$deploy_path\"
              \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
              cd \"\$api_path\"
-             \$SUDO npm ci --omit=dev
+             if [ -d node_modules ] && [ -f package-lock.json ] && [ -f .package-lock.sha256 ] && [ \"\$(sha256sum package-lock.json | awk '{print \$1}')\" = \"\$(cat .package-lock.sha256)\" ]; then
+               echo 'Backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               if [ -f package-lock.json ]; then
+                 sha256sum package-lock.json | awk '{print \$1}' > /tmp/retiradas-package-lock.sha256
+                 \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
+               fi
+             fi
              \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
              \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
@@ -344,7 +353,16 @@ jobs:
              \$SUDO tar -xzf \"\$frontend_package\" -C \"\$deploy_path\"
              \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
              cd \"\$api_path\"
-             \$SUDO npm ci --omit=dev
+             if [ -d node_modules ] && [ -f package-lock.json ] && [ -f .package-lock.sha256 ] && [ \"\$(sha256sum package-lock.json | awk '{print \$1}')\" = \"\$(cat .package-lock.sha256)\" ]; then
+               echo 'Backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               if [ -f package-lock.json ]; then
+                 sha256sum package-lock.json | awk '{print \$1}' > /tmp/retiradas-package-lock.sha256
+                 \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
+               fi
+             fi
              \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
              \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
