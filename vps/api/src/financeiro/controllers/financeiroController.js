@@ -1,4 +1,5 @@
 const financeiro = require("../../financeiro");
+const financeiroBudgetImportJobs = require("../../financeiroBudgetImportJobs");
 const financeiroEquipeRepository = require("../../financeiroEquipeRepository");
 const financeiroStatement = require("../../financeiroStatement");
 
@@ -133,6 +134,40 @@ function createFinanceiroController() {
 			const result = await financeiro.clearBudgetData(req.user);
 			clearFinanceiroReadCache();
 			res.json(result);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function createBudgetDataImportJob(req, res, next) {
+		try {
+			clearFinanceiroReadCache();
+			const job = financeiroBudgetImportJobs.createBudgetImportJob(
+				req.files || [],
+				req.user,
+			);
+			res.status(202).json({ job });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function getBudgetDataImportJob(req, res, next) {
+		try {
+			const job = financeiroBudgetImportJobs.getBudgetImportJob(
+				req.params.jobId,
+			);
+			if (!job) {
+				res.status(404).json({ error: "Importação não encontrada." });
+				return;
+			}
+			if (job.status === "completed" || job.status === "failed")
+				clearFinanceiroReadCache();
+			res.set(
+				"Cache-Control",
+				"no-store, no-cache, must-revalidate, proxy-revalidate",
+			);
+			res.json({ job });
 		} catch (error) {
 			next(error);
 		}
@@ -464,7 +499,9 @@ function createFinanceiroController() {
 		deleteEquipeCargo,
 		deleteEquipeColaborador,
 		deleteEquipeSetor,
+		createBudgetDataImportJob,
 		getEquipe,
+		getBudgetDataImportJob,
 		updateEquipeConfig,
 		getBudgetCostCenters,
 		getBudgetData,

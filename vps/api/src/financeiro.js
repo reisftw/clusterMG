@@ -3407,6 +3407,49 @@ function summarizeBudgetDataRows(rows = []) {
 	};
 }
 
+function budgetImportRowIdentity(row = {}) {
+	if (row.sourceKey) return cleanText(row.sourceKey);
+	return crypto
+		.createHash("sha256")
+		.update(
+			[
+				row.layoutOrigem,
+				row.arquivoOrigem,
+				row.abaOrigem,
+				row.linhaOrigem,
+				row.origem,
+				row.data,
+				row.codConta,
+				row.nomeConta,
+				row.codCc,
+				row.nomeCc,
+				row.empresaId || row.empresa,
+				row.filialId || row.filial,
+				row.titulo,
+				row.tipo,
+				row.realizado,
+				row.orcado,
+			]
+				.map(cleanText)
+				.join("|"),
+		)
+		.digest("hex")
+		.slice(0, 24);
+}
+
+function mergeBudgetImportRows(existingRows = [], incomingRows = []) {
+	const rowsByKey = new Map();
+	for (const row of existingRows) {
+		const normalized = normalizeBudgetDataRow(row, rowsByKey.size);
+		rowsByKey.set(budgetImportRowIdentity(normalized), normalized);
+	}
+	for (const row of incomingRows) {
+		const normalized = normalizeBudgetDataRow(row, rowsByKey.size);
+		rowsByKey.set(budgetImportRowIdentity(normalized), normalized);
+	}
+	return [...rowsByKey.values()];
+}
+
 function buildImportCodeByName(rows = [], codeKey, nameKey) {
 	const lookup = new Map();
 	rows.forEach((row) => {
@@ -4362,7 +4405,7 @@ async function getBudgetData() {
 
 async function saveBudgetData(payload = {}, user = {}) {
 	const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
-	const rows = rawRows
+	const incomingRows = rawRows
 		.map(normalizeBudgetDataRow)
 		.filter(
 			(row) =>
@@ -4376,6 +4419,10 @@ async function saveBudgetData(payload = {}, user = {}) {
 				row.orcado ||
 				row.realizado,
 		);
+	const currentData = await getBudgetData().catch(() => ({ data: {} }));
+	const currentRows =
+		payload.append === false ? [] : currentData?.data?.rows || [];
+	const rows = mergeBudgetImportRows(currentRows, incomingRows);
 	const existingBudget = await getBudgetCostCenters();
 	const merged = mergeBudgetConfigFromRows(
 		existingBudget.config || {},
@@ -4389,7 +4436,8 @@ async function saveBudgetData(payload = {}, user = {}) {
 		importedBy: user?.uid || "",
 		importedByName: user?.profile?.nome || user?.nome || user?.email || "",
 		totalRowsReceived: rawRows.length,
-		totalRowsImported: rows.length,
+		totalRowsImported: incomingRows.length,
+		totalRowsSaved: rows.length,
 	};
 	merged.config.lastImportInfo = importInfo;
 	await saveBudgetCostCenters(merged.config, user);

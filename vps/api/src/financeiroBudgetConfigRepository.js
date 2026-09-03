@@ -303,6 +303,7 @@ function normalizeBudgetRows(data = {}) {
 	return (data.rows || []).map((item, index) => ({
 		id: `orc_lanc_${hash({
 			path: `${CONFIG_COLLECTION}/${BUDGET_DATA_ID}`,
+			sourceKey: item.sourceKey,
 			item,
 			index,
 		}).slice(0, 24)}`,
@@ -316,10 +317,12 @@ function normalizeBudgetRows(data = {}) {
 		filial_id: text(item.filialId || item.filial),
 		orcado: money(item.orcado),
 		realizado: money(item.realizado),
-		source_hash: sourceHash("financeiro_orcamento_lancamento", `${CONFIG_COLLECTION}/${BUDGET_DATA_ID}`, {
-			...item,
-			position: index,
-		}),
+		source_hash: item.sourceKey
+			? text(item.sourceKey)
+			: sourceHash("financeiro_orcamento_lancamento", `${CONFIG_COLLECTION}/${BUDGET_DATA_ID}`, {
+				...item,
+				position: index,
+			}),
 		legacy_path: `${CONFIG_COLLECTION}/${BUDGET_DATA_ID}`,
 		legacy_document_id: BUDGET_DATA_ID,
 		source_payload: { ...item, position: index },
@@ -370,7 +373,7 @@ async function saveBudgetData(data = {}, user = {}) {
 	try {
 		await client.query("begin");
 		await saveMeta(client, BUDGET_DATA_ID, data, user);
-		await replaceRows(client, "financeiro_orcamento_lancamentos", rows, ["source_hash"]);
+		await upsertMany(client, "financeiro_orcamento_lancamentos", rows, ["source_hash"]);
 		await client.query("commit");
 	} catch (error) {
 		await client.query("rollback").catch(() => undefined);

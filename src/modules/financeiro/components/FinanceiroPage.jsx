@@ -97,7 +97,8 @@ import {
 	buscarLogsPlanilhasFinanceiro,
 	buscarSerasaReportFinanceiro,
 	buscarTarifasReportFinanceiro,
-	importarDadosOrcamentoFinanceiro,
+	buscarImportacaoDadosOrcamentoFinanceiro,
+	iniciarImportacaoDadosOrcamentoFinanceiro,
 	limparDadosOrcamentoFinanceiro,
 	limparSerasaReportFinanceiro,
 	salvarConfigPlanilhasFinanceiro,
@@ -105,7 +106,6 @@ import {
 	sincronizarPlanilhasFinanceiro,
 	testarPlanilhaFinanceiro,
 } from "../services/financeiroService";
-import { normalizeBudgetImportRows } from "../utils/budgetImportRows";
 import {
 	buildBudgetAccountChart,
 	buildBudgetCenterChart,
@@ -9283,9 +9283,7 @@ function OrcamentoConfiguracoesPage({
 
 function BudgetDataImportPage({ canManage }) {
 	const [dataState, setDataState] = useState(null);
-	const [parsedRows, setParsedRows] = useState([]);
-	const [detectedFields, setDetectedFields] = useState([]);
-	const [fileMeta, setFileMeta] = useState({ fileName: "", sheetName: "" });
+	const [importJob, setImportJob] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [reading, setReading] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -9318,105 +9316,74 @@ function BudgetDataImportPage({ canManage }) {
 		loadBudgetData();
 	}, [loadBudgetData]);
 
+	const pollImportJob = useCallback(
+		async (jobId) => {
+			let keepPolling = true;
+			while (keepPolling) {
+				const response = await buscarImportacaoDadosOrcamentoFinanceiro(jobId);
+				const job = response.job || {};
+				setImportJob(job);
+				setMessage(
+					`${job.stage || "Processando"} · ${integer.format(job.percent || 0)}%`,
+				);
+				if (job.status === "completed") {
+					setDataState(job.result?.data || {});
+					setMessage(
+						`Importação concluída: ${integer.format(job.result?.data?.summary?.totalRows || 0)} linha(s) salvas no histórico.`,
+					);
+					keepPolling = false;
+					break;
+				}
+				if (job.status === "failed") {
+					const visibleError = {
+						message: job.error || "Falha ao importar dados orçamentários.",
+						details: "",
+					};
+					setFeedback({
+						type: "error",
+						title: "Erro ao importar dados",
+						...visibleError,
+					});
+					setMessage(visibleError.message);
+					keepPolling = false;
+					break;
+				}
+				await new Promise((resolve) => setTimeout(resolve, 1200));
+			}
+			await loadBudgetData();
+		},
+		[loadBudgetData],
+	);
+
 	const handleFileChange = async (event) => {
 		const files = Array.from(event.target.files || []);
 		if (!files.length) return;
 		setReading(true);
+		setSaving(true);
 		setMessage("");
 		try {
-			const allRows = [];
-			const fieldSet = new Set();
-			const sheetLabels = [];
-			for (const file of files) {
-				const buffer = await file.arrayBuffer();
-				const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-				const sheetName = workbook.SheetNames[0];
-				const worksheet = workbook.Sheets[sheetName];
-				const rawRows = XLSX.utils.sheet_to_json(worksheet, {
-					raw: false,
-					defval: "",
-				});
-				const normalized = normalizeBudgetImportRows(rawRows);
-				normalized.rows.forEach((row) =>
-					allRows.push({
-						...row,
-						arquivoOrigem: file.name,
-						abaOrigem: sheetName,
-					}),
-				);
-				normalized.detectedFields.forEach((field) => fieldSet.add(field));
-				sheetLabels.push(`${file.name}:${sheetName}`);
-			}
-			setParsedRows(allRows);
-			setDetectedFields(Array.from(fieldSet));
-			setFileMeta({
-				fileName: files.map((file) => file.name).join(", "),
-				sheetName: sheetLabels.join(", "),
-			});
+			const response = await iniciarImportacaoDadosOrcamentoFinanceiro(files);
+			const job = response.job || {};
+			setImportJob(job);
 			setMessage(
-				`${integer.format(files.length)} arquivo(s) lido(s): ${integer.format(allRows.length)} linha(s) prontas para importar.`,
+				`Importação enviada: ${integer.format(files.length)} arquivo(s). Acompanhando processamento...`,
 			);
+			await pollImportJob(job.id);
 		} catch (error) {
-			setParsedRows([]);
-			setDetectedFields([]);
 			const visibleError = getVisibleError(
 				error,
-				"Não foi possível ler o XLSX selecionado.",
+				"Não foi possível enviar/importar o XLSX selecionado.",
 			);
 			setMessage(visibleError.message);
 			setFeedback({
 				type: "error",
-				title: "Erro ao ler XLSX",
+				title: "Erro ao importar XLSX",
 				...visibleError,
 			});
 		} finally {
 			setReading(false);
-			event.target.value = "";
-		}
-	};
-
-	const submitImport = async () => {
-		if (!parsedRows.length) {
-			const visibleError = {
-				message: "Selecione um XLSX válido antes de importar.",
-				details: "",
-			};
-			setMessage(visibleError.message);
-			setFeedback({
-				type: "error",
-				title: "Arquivo obrigatório",
-				...visibleError,
-			});
-			return;
-		}
-		setSaving(true);
-		setMessage("");
-		try {
-			const response = await importarDadosOrcamentoFinanceiro({
-				fileName: fileMeta.fileName,
-				sheetName: fileMeta.sheetName,
-				detectedFields,
-				rows: parsedRows,
-			});
-			setDataState(response.data || {});
-			setParsedRows([]);
-			setDetectedFields([]);
-			setMessage(
-				`Importação concluída: ${integer.format(response.data?.summary?.totalRows || 0)} linha(s) salvas e cadastros orçamentários atualizados.`,
-			);
-		} catch (error) {
-			const visibleError = getVisibleError(
-				error,
-				"Falha ao importar dados orçamentários.",
-			);
-			setMessage(visibleError.message);
-			setFeedback({
-				type: "error",
-				title: "Erro ao importar dados",
-				...visibleError,
-			});
-		} finally {
 			setSaving(false);
+			event.target.value = "";
 		}
 	};
 
@@ -9433,8 +9400,7 @@ function BudgetDataImportPage({ canManage }) {
 		try {
 			const response = await limparDadosOrcamentoFinanceiro();
 			setDataState(response.data || {});
-			setParsedRows([]);
-			setDetectedFields([]);
+			setImportJob(null);
 			setMessage("Dados importados zerados. Cadastros orçamentários mantidos.");
 		} catch (error) {
 			const visibleError = getVisibleError(
@@ -9455,10 +9421,11 @@ function BudgetDataImportPage({ canManage }) {
 	const summary = dataState?.summary || {};
 	const importInfo = dataState?.importInfo || {};
 	const savedRows = dataState?.rows || [];
-	const activeFields = new Set(
-		parsedRows.length ? detectedFields : dataState?.detectedFields || [],
-	);
-	const previewRows = (parsedRows.length ? parsedRows : savedRows).slice(0, 20);
+	const activeFields = new Set(dataState?.detectedFields || []);
+	const previewRows = savedRows.slice(0, 20);
+	const importProgress = Math.max(0, Math.min(100, Number(importJob?.percent || 0)));
+	const importRunning =
+		importJob && ["queued", "running"].includes(importJob.status);
 
 	return (
 		<section className="space-y-5">
@@ -9492,7 +9459,7 @@ function BudgetDataImportPage({ canManage }) {
 							) : (
 								<Upload size={16} />
 							)}{" "}
-							Ler XLSX
+							Enviar XLSX
 							<input
 								type="file"
 								accept=".xlsx"
@@ -9502,19 +9469,6 @@ function BudgetDataImportPage({ canManage }) {
 								onChange={handleFileChange}
 							/>
 						</label>
-						<button
-							type="button"
-							onClick={submitImport}
-							disabled={!canManage || saving || !parsedRows.length}
-							className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
-						>
-							{saving ? (
-								<Loader2 size={16} className="animate-spin" />
-							) : (
-								<CheckCircle2 size={16} />
-							)}{" "}
-							Importar
-						</button>
 						<button
 							type="button"
 							onClick={loadBudgetData}
@@ -9541,9 +9495,50 @@ function BudgetDataImportPage({ canManage }) {
 					</div>
 				) : null}
 
+				{importJob ? (
+					<div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="text-sm font-black text-slate-950">
+									{importJob.stage || "Processando importação"}
+								</p>
+								<p className="mt-1 text-xs font-bold text-slate-500">
+									{integer.format(importJob.totalFiles || 0)} arquivo(s) ·{" "}
+									{integer.format(importJob.totalRows || 0)} linha(s)
+								</p>
+							</div>
+							<span className="text-sm font-black text-blue-700">
+								{integer.format(importProgress)}%
+							</span>
+						</div>
+						<div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
+							<div
+								className={`h-full rounded-full ${importRunning ? "bg-blue-600" : importJob.status === "failed" ? "bg-red-500" : "bg-emerald-500"}`}
+								style={{ width: `${importProgress}%` }}
+							/>
+						</div>
+						{(importJob.fileReports || []).length ? (
+							<div className="mt-3 grid gap-2 md:grid-cols-2">
+								{importJob.fileReports.map((file, index) => (
+									<div
+										key={`${file.fileName}-${file.sheetName}-${index}`}
+										className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600"
+									>
+										<span className="font-black text-slate-950">
+											{file.fileName}
+										</span>{" "}
+										· {file.sheetName} · {file.layout} ·{" "}
+										{integer.format(file.rows || 0)} linhas
+									</div>
+								))}
+							</div>
+						) : null}
+					</div>
+				) : null}
+
 				<div className="mt-5 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
 					{[
-						["Linhas", summary.totalRows || parsedRows.length || 0, "number"],
+						["Linhas", summary.totalRows || 0, "number"],
 						["Orçado", summary.totalOrcado || 0, "currency"],
 						["Realizado", summary.totalRealizado || 0, "currency"],
 						["Contas", summary.uniqueAccounts || 0, "number"],

@@ -48,6 +48,21 @@ export async function importarDadosOrcamentoFinanceiro(payload) {
 	});
 }
 
+export async function iniciarImportacaoDadosOrcamentoFinanceiro(files = []) {
+	const formData = new FormData();
+	files.forEach((file) => formData.append("files", file));
+	return requestVpsApi(`${BASE_PATH}/orcamento/dados/import-jobs`, {
+		method: "POST",
+		body: formData,
+	});
+}
+
+export async function buscarImportacaoDadosOrcamentoFinanceiro(jobId) {
+	return requestVpsApi(
+		`${BASE_PATH}/orcamento/dados/import-jobs/${encodeURIComponent(jobId)}`,
+	);
+}
+
 export async function limparDadosOrcamentoFinanceiro() {
 	return requestVpsApi(`${BASE_PATH}/orcamento/dados`, {
 		method: "DELETE",

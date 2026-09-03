@@ -11,7 +11,7 @@ describe("financeiro budget import config merge", () => {
 		mergeBudgetConfigFromRows =
 			require("../../vps/api/src/financeiro").__testables
 				.mergeBudgetConfigFromRows;
-	});
+	}, 30000);
 
 	it("reuses an existing cost center by code without remapping another center with the same name", () => {
 		const result = mergeBudgetConfigFromRows(

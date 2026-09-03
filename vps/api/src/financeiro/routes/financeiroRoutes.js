@@ -1,7 +1,23 @@
 const express = require("express");
+const multer = require("multer");
 const {
 	createFinanceiroController,
 } = require("../controllers/financeiroController");
+
+const budgetUpload = multer({
+	storage: multer.memoryStorage(),
+	limits: {
+		fileSize: 30 * 1024 * 1024,
+		files: 10,
+	},
+	fileFilter: (_req, file, callback) => {
+		if (/\.xlsx$/i.test(file.originalname || "")) {
+			callback(null, true);
+			return;
+		}
+		callback(new Error("Envie apenas arquivos XLSX."));
+	},
+});
 
 function createFinanceiroRouter({
 	financeiroManagePermissions,
@@ -85,6 +101,20 @@ function createFinanceiroRouter({
 		requireCsrfToken,
 		requireBudgetConfigManage,
 		controller.saveBudgetData,
+	);
+	router.post(
+		"/orcamento/dados/import-jobs",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBudgetConfigManage,
+		budgetUpload.array("files", 10),
+		controller.createBudgetDataImportJob,
+	);
+	router.get(
+		"/orcamento/dados/import-jobs/:jobId",
+		requireAuthenticated,
+		requireBudgetConfigView,
+		controller.getBudgetDataImportJob,
 	);
 	router.delete(
 		"/orcamento/dados",
