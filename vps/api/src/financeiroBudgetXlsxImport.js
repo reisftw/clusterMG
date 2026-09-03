@@ -148,7 +148,7 @@ function withSource(row, meta) {
 		row.tipo,
 		row.codConta,
 		row.codCc,
-		row.data,
+		row.sourceDateForKey || row.data,
 		row.empresaId || row.empresa,
 		row.filialId || row.filial,
 		row.realizado,
@@ -162,6 +162,28 @@ function withSource(row, meta) {
 		linhaOrigem: meta.rowNumber,
 		layoutOrigem: meta.layout,
 	};
+}
+
+function isFpcp302ProjectRow({ titulo = "", nomeConta = "", nomeCc = "", codCc = "" } = {}) {
+	const text = normalizeKey([titulo, nomeConta, nomeCc, codCc].filter(Boolean).join(" "));
+	const projectSignals = [
+		"projeto",
+		"projetos",
+		"software",
+		"novaloja",
+		"dwdm",
+		"expansa",
+		"reforma",
+		"vex",
+		"swapzte",
+		"teleporto",
+		"hps",
+		"construca",
+		"novasportas",
+		"campobelo",
+		"setelagoas",
+	];
+	return projectSignals.some((signal) => text.includes(signal));
 }
 
 function normalizeFpcp106Row(row = [], meta) {
@@ -215,7 +237,14 @@ function normalizeFpcp302Row(row = [], company, meta) {
 	const nomeCc = cleanText(row[8]);
 	const baseDateInfo = parseDateInfo(row[12]);
 	const dueDateInfo = parseDateInfo(row[14]);
-	const dateInfo = baseDateInfo.data ? baseDateInfo : dueDateInfo;
+	const isProject = isFpcp302ProjectRow({ titulo, nomeConta, nomeCc, codCc });
+	const dateInfo = isProject
+		? dueDateInfo.data
+			? dueDateInfo
+			: baseDateInfo
+		: baseDateInfo.data
+			? baseDateInfo
+			: dueDateInfo;
 	if (!titulo || !tipo || !codConta || !nomeConta || !codCc || !nomeCc)
 		return null;
 	const observacoes = [
@@ -259,6 +288,7 @@ function normalizeFpcp302Row(row = [], company, meta) {
 			filialId: "",
 			cf: `${codConta} - ${nomeConta}`,
 			cc: `${codCc} - ${nomeCc}`,
+			sourceDateForKey: baseDateInfo.data || dueDateInfo.data || "",
 		},
 		meta,
 	);
@@ -388,6 +418,7 @@ module.exports = {
 	parseFpcp106Rows,
 	parseFpcp302Rows,
 	__testables: {
+		isFpcp302ProjectRow,
 		normalizeFpcp106Row,
 		normalizeFpcp302Row,
 		parseDateInfo,

@@ -10,7 +10,9 @@ import {
 import { integer } from "../../../utils/financeiroFormatters";
 
 function classLabel(classType) {
-	return classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL ? "NÃO BASAL" : "BASAL";
+	if (classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL) return "NÃO BASAL";
+	if (classType === BUDGET_CATEGORY_CLASSES.PROJETOS) return "PROJETOS";
+	return "BASAL";
 }
 
 function buildCategoryGroups({
@@ -128,7 +130,7 @@ export function FinancialAccountCategoriesModal({
 	};
 
 	return (
-		<ModalShell title="Categorias BASAL e NÃO BASAL" onClose={onClose} size="xl">
+		<ModalShell title="Categorias BASAL, NÃO BASAL e PROJETOS" onClose={onClose} size="xl">
 			<div className="space-y-4">
 				<section className="rounded-2xl border border-emerald-100 bg-white p-4">
 					<div className="flex flex-col gap-3 lg:flex-row lg:items-end">
@@ -153,6 +155,9 @@ export function FinancialAccountCategoriesModal({
 								<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
 								<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
 									NÃO BASAL
+								</option>
+								<option value={BUDGET_CATEGORY_CLASSES.PROJETOS}>
+									PROJETOS
 								</option>
 							</select>
 						</label>
@@ -197,6 +202,9 @@ export function FinancialAccountCategoriesModal({
 								<option value={BUDGET_CATEGORY_CLASSES.BASAL}>BASAL</option>
 								<option value={BUDGET_CATEGORY_CLASSES.NAO_BASAL}>
 									NÃO BASAL
+								</option>
+								<option value={BUDGET_CATEGORY_CLASSES.PROJETOS}>
+									PROJETOS
 								</option>
 							</select>
 						</div>
@@ -267,6 +275,9 @@ export default function FinancialAccountsConfigSection({
 	);
 	const nonBasalGroups = categoryGroups.filter(
 		(group) => group.classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+	);
+	const projectGroups = categoryGroups.filter(
+		(group) => group.classType === BUDGET_CATEGORY_CLASSES.PROJETOS,
 	);
 	const classifiedCount = sortedAccounts.filter(
 		(account) =>
@@ -404,7 +415,7 @@ export default function FinancialAccountsConfigSection({
 				</div>
 			}
 		>
-			<div className="mb-4 grid gap-3 md:grid-cols-4">
+			<div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
 				<div className="rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
 					<p className="text-xs font-black uppercase text-emerald-700">
 						BASAL
@@ -419,6 +430,14 @@ export default function FinancialAccountsConfigSection({
 					</p>
 					<p className="mt-1 text-2xl font-black text-slate-950">
 						{integer.format(nonBasalGroups.length)}
+					</p>
+				</div>
+				<div className="rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
+					<p className="text-xs font-black uppercase text-emerald-700">
+						PROJETOS
+					</p>
+					<p className="mt-1 text-2xl font-black text-slate-950">
+						{integer.format(projectGroups.length)}
 					</p>
 				</div>
 				<div className="rounded-2xl bg-white p-3 ring-1 ring-emerald-100">
@@ -454,6 +473,12 @@ export default function FinancialAccountsConfigSection({
 						Custos NÃO BASAL
 					</div>
 					{nonBasalGroups.map(renderCategory)}
+				</section>
+				<section className="space-y-3">
+					<div className="rounded-2xl bg-blue-100 px-4 py-3 text-sm font-black text-blue-800">
+						Projetos
+					</div>
+					{projectGroups.map(renderCategory)}
 				</section>
 			</div>
 		</BudgetDropdownSection>

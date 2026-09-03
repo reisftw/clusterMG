@@ -144,10 +144,12 @@ describe("budgetInsights", () => {
 			"ano",
 			"basal",
 			"nao-basal",
+			"projetos",
 		]);
 		expect(cards.map((item) => item.id)).toEqual([
 			"cc-basal",
 			"cc-nao-basal",
+			"cc-projetos",
 			"cc-alertas",
 		]);
 		expect(cards.find((item) => item.id === "cc-basal")).toMatchObject({
@@ -164,7 +166,61 @@ describe("budgetInsights", () => {
 			title: "Orçamento NÃO BASAL",
 			value: 0,
 		});
+		expect(cards.find((item) => item.id === "cc-projetos")).toMatchObject({
+			title: "Orçamento PROJETOS",
+			value: 0,
+		});
 		vi.useRealTimers();
+	});
+
+	it("separa centros de custo de projeto da base basal", () => {
+		const insights = getBudgetInsights(
+			{
+				...config,
+				centers: [
+					...config.centers,
+					{
+						id: "220001",
+						codigo: "220001",
+						nome: "Fase 1 HPs 2026",
+						tipoPlano: "A",
+						valorMensal: 0,
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "1211",
+								realized: 5000,
+							},
+						],
+					},
+				],
+				matrix: [
+					...config.matrix,
+					{
+						accountId: "1211",
+						costCenterId: "220001",
+						year: 2026,
+						months: [0, 0, 0, 0, 0, 0, 0, 460000, 0, 0, 0, 0],
+					},
+				],
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+		const projectGroup = insights.budgetCategoryGroups.find(
+			(item) => item.id === "projetos",
+		);
+
+		expect(projectGroup).toMatchObject({
+			label: "PROJETOS",
+			planned: 460000,
+			realized: 5000,
+		});
+		expect(projectGroup.categories[0]).toMatchObject({
+			name: "Fase 1 HPs 2026",
+			planned: 460000,
+			realized: 5000,
+		});
 	});
 
 	it("groups synthetic centers, filters responsible users and paginates groups", () => {

@@ -21,13 +21,13 @@ describe("financeiroPageViewModel", () => {
 		});
 	});
 
-	it("monta referencia do orçamento usando lastImportReference antes do summary", () => {
+	it("monta referencia do orçamento usando o mês atual, sem avançar pela última importação", () => {
 		expect(
 			getBudgetReference({
-				lastImportReference: { year: 2026, month: 8 },
-				lastImportSummary: { referenceYear: 2025, referenceMonth: 7 },
-			}),
-		).toEqual({ referenceYear: 2026, referenceMonth: 8 });
+				lastImportReference: { year: 2060, month: 10 },
+				lastImportSummary: { referenceYear: 2029, referenceMonth: 7 },
+			}, new Date("2026-09-03T12:00:00")),
+		).toEqual({ referenceYear: 2026, referenceMonth: 9 });
 	});
 
 	it("calcula ano do seletor com override antes da referencia", () => {

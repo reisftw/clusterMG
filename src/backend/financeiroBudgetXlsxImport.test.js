@@ -128,6 +128,24 @@ describe("financeiroBudgetXlsxImport", () => {
 				new Date(2026, 8, 5),
 				700,
 			],
+			[
+				"030926.01",
+				"OUT",
+				"9999",
+				"Materiais de Projeto",
+				"",
+				"",
+				"",
+				"990001",
+				"Projeto Seplag",
+				"",
+				"",
+				"",
+				new Date(2026, 7, 28),
+				"",
+				new Date(2060, 9, 10),
+				46000,
+			],
 		];
 
 		expect(detectLayout(rows)).toBe("fpcp302");
@@ -136,7 +154,7 @@ describe("financeiroBudgetXlsxImport", () => {
 			sheetName: "Plan1",
 		});
 
-		expect(parsed).toHaveLength(2);
+		expect(parsed).toHaveLength(3);
 		expect(parsed[0]).toMatchObject({
 			origem: "CP",
 			data: "2026-09-01",
@@ -158,6 +176,14 @@ describe("financeiroBudgetXlsxImport", () => {
 			empresa: "0014 - ONNET LOCACOES LTDA",
 			codCc: "110201",
 			realizado: 700,
+		});
+		expect(parsed[2]).toMatchObject({
+			data: "2060-10-10",
+			ano: 2060,
+			numMes: 10,
+			nomeCc: "Projeto Seplag",
+			realizado: 46000,
+			sourceDateForKey: "2026-08-28",
 		});
 	});
 });

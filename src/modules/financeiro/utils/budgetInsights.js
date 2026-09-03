@@ -418,6 +418,24 @@ function normalizeBudgetText(value = "") {
 		.toLowerCase();
 }
 
+const PROJECT_CENTER_SIGNALS = [
+	"projeto",
+	"projetos",
+	"software",
+	"nova loja",
+	"dwdm",
+	"expansa",
+	"reforma",
+	"vex",
+	"swap zte",
+	"teleporto",
+	"hps",
+	"construca",
+	"novas portas",
+	"campo belo",
+	"sete lagoas",
+];
+
 function isProjectCenter(center = {}) {
 	const fields = [
 		center.tipoCentro,
@@ -430,18 +448,23 @@ function isProjectCenter(center = {}) {
 		center.parentName,
 		center.nome,
 	];
-	return fields.some((value) => normalizeBudgetText(value).includes("projeto"));
+	const text = fields.map(normalizeBudgetText).filter(Boolean).join(" ");
+	return PROJECT_CENTER_SIGNALS.some((signal) => text.includes(signal));
 }
 
 function classifyBudgetRow(account = {}, center = {}, categoryCatalog = []) {
 	const enriched = enrichFinancialAccountWithCategory(account || {}, categoryCatalog);
 	if (isProjectCenter(center)) {
+		const projectName =
+			center.nome || center.name || center.categoriaPrincipal || "Projetos";
 		return {
 			...enriched,
-			categoriaClasse: BUDGET_CATEGORY_CLASSES.BASAL,
+			categoriaMae: projectName,
+			categoriaClasse: BUDGET_CATEGORY_CLASSES.PROJETOS,
 			categoriaClasseLabel:
-				BUDGET_CATEGORY_CLASS_LABELS[BUDGET_CATEGORY_CLASSES.BASAL],
-			isBasal: true,
+				BUDGET_CATEGORY_CLASS_LABELS[BUDGET_CATEGORY_CLASSES.PROJETOS],
+			isBasal: false,
+			isProject: true,
 		};
 	}
 	return enriched;
@@ -554,6 +577,7 @@ function buildBudgetCategoryGroups(accountRows = [], accounts = [], categoryCata
 	return [
 		BUDGET_CATEGORY_CLASSES.BASAL,
 		BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+		BUDGET_CATEGORY_CLASSES.PROJETOS,
 	]
 		.map((classType) => {
 			const group = classMap.get(classType) || {
@@ -938,6 +962,9 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 	const nonBasal = (insights.budgetCategoryGroups || []).find(
 		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
 	);
+	const projects = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.PROJETOS,
+	);
 	return [
 		{
 			id: "orcado",
@@ -1003,6 +1030,14 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			helper: `Realizado ${brl.format(nonBasal?.realized || 0)}`,
 			icon: "FileText",
 		},
+		{
+			id: "projetos",
+			title: "PROJETOS",
+			value: projects?.planned || 0,
+			type: "currency",
+			helper: `Realizado ${brl.format(projects?.realized || 0)}`,
+			icon: "FolderKanban",
+		},
 	];
 }
 
@@ -1051,6 +1086,9 @@ export function buildCostCenterTopCards({
 	const nonBasal = (insights.budgetCategoryGroups || []).find(
 		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
 	);
+	const projects = (insights.budgetCategoryGroups || []).find(
+		(item) => item.id === BUDGET_CATEGORY_CLASSES.PROJETOS,
+	);
 	const buildCategoryBudgetCard = (group, fallback) => {
 		const planned = Number(group?.planned || 0);
 		const realized = Number(group?.realized || 0);
@@ -1084,6 +1122,12 @@ export function buildCostCenterTopCards({
 			label: "NÃO BASAL",
 			icon: "Landmark",
 			color: "violet",
+		}),
+		buildCategoryBudgetCard(projects, {
+			id: "projetos",
+			label: "PROJETOS",
+			icon: "FolderKanban",
+			color: "emerald",
 		}),
 		{
 			id: "cc-alertas",

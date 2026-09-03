@@ -29,6 +29,7 @@ describe("budgetAccountCategories", () => {
 		const categories = [
 			{ name: "Financeiro", classType: BUDGET_CATEGORY_CLASSES.BASAL },
 			{ name: "Financeiro", classType: BUDGET_CATEGORY_CLASSES.NAO_BASAL },
+			{ name: "Projetos especiais", classType: BUDGET_CATEGORY_CLASSES.PROJETOS },
 		];
 
 		expect(
@@ -56,6 +57,21 @@ describe("budgetAccountCategories", () => {
 		).toMatchObject({
 			categoriaMae: "Financeiro",
 			categoriaClasse: BUDGET_CATEGORY_CLASSES.NAO_BASAL,
+		});
+		expect(
+			resolveFinancialAccountCategory(
+				{
+					nome: "Conta manual",
+					categoriaMae: "Projetos especiais",
+					categoriaClasse: BUDGET_CATEGORY_CLASSES.PROJETOS,
+				},
+				categories,
+			),
+		).toMatchObject({
+			categoriaMae: "Projetos especiais",
+			categoriaClasse: BUDGET_CATEGORY_CLASSES.PROJETOS,
+			categoriaClasseLabel: "PROJETOS",
+			isBasal: false,
 		});
 	});
 });

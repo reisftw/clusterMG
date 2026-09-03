@@ -1,11 +1,19 @@
 export const BUDGET_CATEGORY_CLASSES = {
 	BASAL: "basal",
 	NAO_BASAL: "nao_basal",
+	PROJETOS: "projetos",
 };
 
 export const BUDGET_CATEGORY_CLASS_LABELS = {
 	[BUDGET_CATEGORY_CLASSES.BASAL]: "BASAL",
 	[BUDGET_CATEGORY_CLASSES.NAO_BASAL]: "NÃO BASAL",
+	[BUDGET_CATEGORY_CLASSES.PROJETOS]: "PROJETOS",
+};
+
+const CATEGORY_CLASS_ORDER = {
+	[BUDGET_CATEGORY_CLASSES.BASAL]: 0,
+	[BUDGET_CATEGORY_CLASSES.NAO_BASAL]: 1,
+	[BUDGET_CATEGORY_CLASSES.PROJETOS]: 2,
 };
 
 export const FINANCIAL_ACCOUNT_CATEGORY_CATALOG = [
@@ -269,6 +277,9 @@ function normalizeCategoryClassType(value = "") {
 	if (["nao basal", "naobasal", "non basal", "nao_basal"].includes(key)) {
 		return BUDGET_CATEGORY_CLASSES.NAO_BASAL;
 	}
+	if (["projeto", "projetos", "projects"].includes(key)) {
+		return BUDGET_CATEGORY_CLASSES.PROJETOS;
+	}
 	if (["basal", "custo basal"].includes(key)) return BUDGET_CATEGORY_CLASSES.BASAL;
 	return "";
 }
@@ -316,7 +327,10 @@ export function normalizeFinancialAccountCategories(
 	});
 	return Array.from(categoryByKey.values()).sort((left, right) => {
 		if (left.classType !== right.classType) {
-			return left.classType === BUDGET_CATEGORY_CLASSES.BASAL ? -1 : 1;
+			return (
+				(CATEGORY_CLASS_ORDER[left.classType] ?? 99) -
+				(CATEGORY_CLASS_ORDER[right.classType] ?? 99)
+			);
 		}
 		return left.name.localeCompare(right.name, "pt-BR");
 	});

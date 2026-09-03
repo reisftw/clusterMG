@@ -84,6 +84,7 @@ import {
 } from "../domain/financialStatement";
 import {
 	BUDGET_CATEGORY_CLASSES,
+	BUDGET_CATEGORY_CLASS_LABELS,
 	FINANCIAL_ACCOUNT_CATEGORY_CATALOG,
 	enrichFinancialAccountWithCategory,
 	getFinancialAccountCategoryCatalog,
@@ -7067,7 +7068,7 @@ function FinancialAccountModal({
 			value: `${category.classType}:${category.name}`,
 			name: category.name,
 			classType: category.classType,
-			label: `${category.name} · ${category.classType === BUDGET_CATEGORY_CLASSES.NAO_BASAL ? "NÃO BASAL" : "BASAL"}`,
+			label: `${category.name} · ${BUDGET_CATEGORY_CLASS_LABELS[category.classType] || "BASAL"}`,
 		}),
 	).filter(
 		(category, index, all) =>
@@ -8433,7 +8434,7 @@ function CostCentersConfigSection({
 						disabled={loading || saving}
 						className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
 					>
-						<Settings size={16} /> Categorias BASAL
+						<Settings size={16} /> Categorias
 					</button>
 					<button
 						type="button"

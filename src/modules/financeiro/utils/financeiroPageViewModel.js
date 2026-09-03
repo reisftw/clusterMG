@@ -42,19 +42,9 @@ export function getFinanceiroPageFlags(page) {
 	};
 }
 
-export function getBudgetReference(config = {}) {
-	const referenceYear =
-		Number(
-			config?.lastImportReference?.year ||
-				config?.lastImportSummary?.referenceYear ||
-				0,
-		) || undefined;
-	const referenceMonth =
-		Number(
-			config?.lastImportReference?.month ||
-				config?.lastImportSummary?.referenceMonth ||
-				0,
-		) || undefined;
+export function getBudgetReference(_config = {}, now = new Date()) {
+	const referenceYear = now.getFullYear();
+	const referenceMonth = now.getMonth() + 1;
 	return { referenceYear, referenceMonth };
 }
 
