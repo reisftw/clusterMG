@@ -589,7 +589,9 @@ function classifyBudgetRow(account = {}, center = {}, categoryCatalog = []) {
 
 function classifyBreakdownBudgetRow(account = {}, center = {}, breakdown = {}) {
 	const quebra2 = normalizeBudgetText(breakdown.quebra2 || breakdown.Quebra2);
-	const isProjectBreakdown = quebra2 === "projeto" || isProjectCenter(center);
+	const isProjectBreakdown = quebra2
+		? quebra2 === "projeto"
+		: isProjectCenter(center);
 	const categoryName =
 		isProjectBreakdown
 			? center?.nome || center?.name || breakdown.categoria || "Projetos"
@@ -906,12 +908,14 @@ function buildAccountRows({
 			const rawPlanned = rowPeriodTotal(row);
 			const rowYear = Number(row.year || row.ano || 0);
 			const rowMatchesSelectedYear = !rowYear || selectedYears.has(rowYear);
-			const breakdownPeriodKeys = isProjectCenter(center)
-				? projectPeriodKeys
-				: periodKeys;
 			const periodBreakdowns = centerBreakdowns(center).filter(
 				(item) =>
-					breakdownPeriodKeys.has(getBudgetPeriodKey(item)) &&
+					(
+						normalizeBudgetText(item.quebra2 || item.Quebra2) === "projeto" ||
+						(!normalizeBudgetText(item.quebra2 || item.Quebra2) && isProjectCenter(center))
+							? projectPeriodKeys
+							: periodKeys
+					).has(getBudgetPeriodKey(item)) &&
 					shouldIncludeAccessBudgetItem(item),
 			);
 			const hasAccountScopedBreakdowns = periodBreakdowns.some((item) =>

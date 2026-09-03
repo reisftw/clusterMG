@@ -3949,10 +3949,6 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 					{
 						...currentAccount,
 						nome: row.nomeConta || currentAccount.nome,
-						categoriaMae: row.categoria || currentAccount.categoriaMae,
-						categoriaClasse:
-							accessCategoryClassForRow(row) ||
-							currentAccount.categoriaClasse,
 						grupo: row.grupo || currentAccount.grupo,
 						dreGroup:
 							row.quebra || row.quebra2 || row.categoria || currentAccount.dreGroup,
@@ -4020,7 +4016,16 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 		centerStats.accounts.add(accountId);
 		if (companyId) centerStats.companies.add(companyId);
 		if (branchId) centerStats.branches.add(branchId);
-		const breakdownKey = `${companyId || "sem-empresa"}|${branchId || "sem-filial"}|${accountId}|${rowYear}|${rowMonth}`;
+		const breakdownKey = [
+			companyId || "sem-empresa",
+			branchId || "sem-filial",
+			accountId,
+			rowYear,
+			rowMonth,
+			cleanText(row.grupo || ""),
+			cleanText(row.quebra2 || ""),
+			cleanText(row.categoria || ""),
+		].join("|");
 		const currentBreakdown = centerStats.realizedBreakdown.get(
 			breakdownKey,
 		) || {

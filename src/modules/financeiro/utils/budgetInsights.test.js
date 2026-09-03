@@ -431,6 +431,54 @@ describe("budgetInsights", () => {
 		});
 	});
 
+	it("prioriza a quebra do lancamento sobre sinais de projeto no centro", () => {
+		const insights = getBudgetInsights(
+			{
+				accounts: [
+					{ id: "aluguel-postes", codigo: "aluguel-postes", nome: "Aluguel Postes" },
+				],
+				centers: [
+					{
+						id: "centro-expansao",
+						nome: "Expansão de Rede 2025",
+						tipoPlano: "A",
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "aluguel-postes",
+								realized: 795021.81,
+								grupo: "Sempre",
+								quebra2: "ORÇAMENTO",
+								categoria: "Transmissão",
+							},
+						],
+					},
+				],
+				matrix: [
+					{
+						accountId: "aluguel-postes",
+						costCenterId: "centro-expansao",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+				],
+				settings: {},
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+
+		const basalGroup = insights.budgetCategoryGroups.find((item) => item.id === "basal");
+		const projectGroup = insights.budgetCategoryGroups.find((item) => item.id === "projetos");
+
+		expect(basalGroup.realized).toBe(795021.81);
+		expect(basalGroup.categories[0]).toMatchObject({
+			name: "Transmissão",
+			realized: 795021.81,
+		});
+		expect(projectGroup.realized).toBe(0);
+	});
+
 	it("aplica orcamento oficial de projetos por vigencia", () => {
 		const configWithProjectBudgets = {
 			...config,
