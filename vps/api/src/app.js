@@ -1999,6 +1999,50 @@ function canWriteDocumentPath(user, documentPath) {
 	return canWriteCollection(user, collectionPath);
 }
 
+function isLegacySchedulingCollection(collectionPath) {
+	return AGENDAMENTOS_COLLECTIONS.has(String(collectionPath || "").trim());
+}
+
+async function listLegacySchedulingDocuments(collectionPath, query = {}) {
+	return agendamentosRepository.listDocuments({
+		collectionPath,
+		limit: query.limit,
+		offset: query.offset,
+	});
+}
+
+async function getLegacySchedulingDocument(documentPath) {
+	return agendamentosRepository.getDocument(documentPath);
+}
+
+async function upsertLegacySchedulingDocument({
+	path,
+	collectionPath,
+	documentId,
+	parentPath,
+	data,
+}) {
+	if (collectionPath === "agendamentos") {
+		await agendamentosRepository.saveAppointment(documentId, data);
+		return;
+	}
+	if (collectionPath === "agendamentos_logs") {
+		await agendamentosRepository.recordAppointmentLog(data, { id: documentId });
+		return;
+	}
+	await agendamentosRepository.upsertDocument({
+		path,
+		collectionPath,
+		documentId,
+		parentPath,
+		data,
+	});
+}
+
+async function deleteLegacySchedulingDocument(documentPath) {
+	return agendamentosRepository.deleteDocument(documentPath);
+}
+
 function rejectDomainRouteOnlyCollection(res, collectionPath) {
 	const collection = String(collectionPath || "").trim();
 	if (IMOVEIS_ADMINISTRATIVOS_COLLECTIONS.has(collection)) {
@@ -2014,10 +2058,7 @@ function rejectDomainRouteOnlyCollection(res, collectionPath) {
 		return true;
 	}
 	if (AGENDAMENTOS_COLLECTIONS.has(collection)) {
-		res.status(410).json({
-			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/agendamentos.`,
-		});
-		return true;
+		return false;
 	}
 	if (FINANCEIRO_COLLECTIONS.has(collection)) {
 		res.status(410).json({
@@ -3498,7 +3539,9 @@ function createApp() {
 			}
 
 			const items =
-				collectionPath === "regionais"
+				isLegacySchedulingCollection(collectionPath)
+					? await listLegacySchedulingDocuments(collectionPath, req.query)
+					: collectionPath === "regionais"
 					? await regionaisRepository.listRegionalDocuments({
 							limit: req.query.limit,
 							offset: req.query.offset,
@@ -3536,7 +3579,9 @@ function createApp() {
 			const documentCollectionPath = documentPath.split("/").slice(0, -1).join("/");
 			if (rejectDomainRouteOnlyCollection(res, documentCollectionPath)) return;
 			const item =
-				documentCollectionPath === "regionais"
+				isLegacySchedulingCollection(documentCollectionPath)
+					? await getLegacySchedulingDocument(documentPath)
+					: documentCollectionPath === "regionais"
 					? await regionaisRepository.getRegionalDocument(documentPath)
 					: documentCollectionPath === "usuarios"
 						? await usersRepository.getUserDocument(documentPath)
@@ -4535,7 +4580,15 @@ function createApp() {
 					documentId,
 					scopedRegionalData,
 				);
-				if (collectionPath === "regionais") {
+				if (isLegacySchedulingCollection(collectionPath)) {
+					await upsertLegacySchedulingDocument({
+						path,
+						collectionPath,
+						documentId,
+						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+						data,
+					});
+				} else if (collectionPath === "regionais") {
 					await regionaisRepository.upsertRegionalDocument({
 						documentId,
 						data,
@@ -4647,7 +4700,15 @@ function createApp() {
 					parts.at(-1),
 					scopedRegionalData,
 				);
-				if (collectionPath === "regionais") {
+				if (isLegacySchedulingCollection(collectionPath)) {
+					await upsertLegacySchedulingDocument({
+						path: documentPath,
+						collectionPath,
+						documentId: parts.at(-1),
+						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+						data,
+					});
+				} else if (collectionPath === "regionais") {
 					await regionaisRepository.upsertRegionalDocument({
 						documentId: parts.at(-1),
 						data,
@@ -4700,7 +4761,9 @@ function createApp() {
 				const collectionPath = parts.slice(0, -1).join("/");
 				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
 				const item =
-					collectionPath === "regionais"
+					isLegacySchedulingCollection(collectionPath)
+						? await getLegacySchedulingDocument(documentPath)
+						: collectionPath === "regionais"
 						? await regionaisRepository.getRegionalDocument(documentPath)
 						: collectionPath === "usuarios"
 							? await usersRepository.getUserDocument(documentPath)
@@ -4728,7 +4791,9 @@ function createApp() {
 						.json({ error: "Lider Empresa nao pode excluir empresa." });
 					return;
 				}
-				if (collectionPath === "regionais") {
+				if (isLegacySchedulingCollection(collectionPath)) {
+					await deleteLegacySchedulingDocument(documentPath);
+				} else if (collectionPath === "regionais") {
 					await regionaisRepository.deleteRegionalDocument(documentPath);
 				} else if (collectionPath === "usuarios") {
 					await usersRepository.deleteUserDocument(documentPath);

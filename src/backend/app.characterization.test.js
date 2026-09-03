@@ -117,6 +117,19 @@ function baseMocks(overrides = {}) {
 		listDocuments: vi.fn(async () => []),
 		deleteDocument: vi.fn(async () => undefined),
 	};
+	const agendamentosRepository = {
+		deleteDocument: vi.fn(async () => 1),
+		getDocument: vi.fn(async () => ({
+			path: "agendamentos/ag-1",
+			collectionPath: "agendamentos",
+			documentId: "ag-1",
+			data: {},
+		})),
+		listDocuments: vi.fn(async () => []),
+		recordAppointmentLog: vi.fn(async () => ({ id: "log-1" })),
+		saveAppointment: vi.fn(async () => ({ id: "ag-1" })),
+		upsertDocument: vi.fn(async () => ({ ok: true })),
+	};
 	const evolutionMessaging = {
 		registerCallback: vi.fn(async () => ({ ok: true, status: "received" })),
 		getConfig: vi.fn(async () => ({
@@ -305,6 +318,7 @@ function baseMocks(overrides = {}) {
 			listSyncRuns: vi.fn(async () => ({ items: [] })),
 		},
 		documentosService: {},
+		agendamentosRepository,
 		createAgendamentosRouter: vi.fn(() => require("express").Router()),
 		createImoveisRouter: vi.fn(() => require("express").Router()),
 		createMensageriaRouter: vi.fn(() => require("express").Router()),
@@ -337,6 +351,7 @@ function installMocks(overrides = {}) {
 	setMock("./apiStatus", currentMocks.apiStatus);
 	setMock("./databaseBackups", currentMocks.databaseBackups);
 	setMock("./documents", currentMocks.documents);
+	setMock("./agendamentosRepository", currentMocks.agendamentosRepository);
 	setMock("./notificationsService", currentMocks.notificationsService);
 	setMock(
 		"./agendamentoEsteiraCommands",
@@ -768,7 +783,7 @@ describe("vps api app characterization - domain route only collections", () => {
 		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
 	});
 
-	it("POST /api/admin/documents bloqueia colecoes de agendamentos migradas", async () => {
+	it("POST /api/admin/documents salva agendamentos legados pelo repositorio de dominio", async () => {
 		const app = loadApp();
 
 		const response = await request(app)
@@ -781,8 +796,16 @@ describe("vps api app characterization - domain route only collections", () => {
 				data: { cliente_nome: "Cliente" },
 			});
 
-		expect(response.status).toBe(410);
-		expect(response.body.error).toContain("/api/agendamentos");
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({
+			ok: true,
+			path: "agendamentos/ag-1",
+			documentId: "ag-1",
+		});
+		expect(currentMocks.agendamentosRepository.saveAppointment).toHaveBeenCalledWith(
+			"ag-1",
+			expect.objectContaining({ cliente_nome: "Cliente" }),
+		);
 		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
 	});
 
