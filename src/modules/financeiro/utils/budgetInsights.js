@@ -567,6 +567,9 @@ function isProjectCenter(center = {}) {
 }
 
 function classifyBudgetRow(account = {}, center = {}, categoryCatalog = []) {
+	if (account?.classificacaoImportada) {
+		return account;
+	}
 	const enriched = enrichFinancialAccountWithCategory(account || {}, categoryCatalog);
 	if (isProjectCenter(center)) {
 		const projectName =
@@ -586,12 +589,13 @@ function classifyBudgetRow(account = {}, center = {}, categoryCatalog = []) {
 
 function classifyBreakdownBudgetRow(account = {}, center = {}, breakdown = {}) {
 	const quebra2 = normalizeBudgetText(breakdown.quebra2 || breakdown.Quebra2);
+	const isProjectBreakdown = quebra2 === "projeto" || isProjectCenter(center);
 	const categoryName =
-		quebra2 === "projeto"
+		isProjectBreakdown
 			? center?.nome || center?.name || breakdown.categoria || "Projetos"
 			: breakdown.categoria || account?.categoriaMae || account?.nome || "Sem categoria";
 	const classType =
-		quebra2 === "projeto"
+		isProjectBreakdown
 			? BUDGET_CATEGORY_CLASSES.PROJETOS
 			: quebra2 === "acompanhar"
 				? BUDGET_CATEGORY_CLASSES.NAO_BASAL
@@ -608,6 +612,7 @@ function classifyBreakdownBudgetRow(account = {}, center = {}, breakdown = {}) {
 		categoriaClasseLabel: classLabel,
 		isBasal: classType === BUDGET_CATEGORY_CLASSES.BASAL,
 		isProject: classType === BUDGET_CATEGORY_CLASSES.PROJETOS,
+		classificacaoImportada: true,
 	};
 }
 
