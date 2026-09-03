@@ -84,5 +84,101 @@ describe("financeiro budget import config merge", () => {
 			costCenterId: "110701",
 			year: 2026,
 		});
+		expect(result.config.matrix[0].months[7]).toBe(0);
+	});
+
+	it("preserva orçamento categorizado cadastrado ao mesclar dados importados", () => {
+		const result = mergeBudgetConfigFromRows(
+			{
+				settings: {
+					financialCategoryBudgets: [
+						{
+							classType: "basal",
+							categoryName: "Produto",
+							accountName: "Serviços Digitais",
+							periodScope: "monthly_default",
+							planned: 264423,
+						},
+					],
+				},
+				accounts: [],
+				centers: [],
+				companies: [],
+				branches: [],
+				partners: [],
+				matrix: [],
+			},
+			[
+				{
+					codCc: "110701",
+					nomeCc: "ROT",
+					codConta: "1211",
+					nomeConta: "Energia",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					realizado: 100,
+					orcado: 0,
+				},
+			],
+			{ uid: "test-user", email: "test@example.com" },
+		);
+
+		expect(result.config.settings.financialCategoryBudgets).toEqual([
+			expect.objectContaining({
+				classType: "basal",
+				categoryName: "Produto",
+				accountName: "Serviços Digitais",
+				periodScope: "monthly_default",
+				planned: 264423,
+			}),
+		]);
+	});
+
+	it("usa apenas o campo orçado da planilha na matriz, sem copiar realizado", () => {
+		const result = mergeBudgetConfigFromRows(
+			{
+				accounts: [],
+				centers: [],
+				companies: [],
+				branches: [],
+				partners: [],
+				matrix: [],
+			},
+			[
+				{
+					codCc: "110701",
+					nomeCc: "ROT",
+					codConta: "1211",
+					nomeConta: "Energia",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					realizado: 180808.51,
+					orcado: 0,
+				},
+				{
+					codCc: "110701",
+					nomeCc: "ROT",
+					codConta: "1211",
+					nomeConta: "Energia",
+					data: "2026-08-25",
+					ano: 2026,
+					numMes: 8,
+					realizado: 10,
+					orcado: 50,
+				},
+			],
+			{ uid: "test-user", email: "test@example.com" },
+		);
+
+		const importedMatrix = result.config.matrix.find(
+			(item) =>
+				item.accountId === "1211" &&
+				item.costCenterId === "110701" &&
+				item.year === 2026,
+		);
+		expect(importedMatrix.months[7]).toBe(50);
+		expect(importedMatrix.total).toBe(50);
 	});
 });

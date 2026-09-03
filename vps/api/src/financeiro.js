@@ -2549,6 +2549,11 @@ function normalizeBudgetSettings(settings = {}) {
 			settings.financialAccountCategories,
 			DEFAULT_BUDGET_SETTINGS.financialAccountCategories,
 		),
+		financialCategoryBudgets: Array.isArray(settings.financialCategoryBudgets)
+			? settings.financialCategoryBudgets.filter(
+					(item) => item && typeof item === "object",
+				)
+			: [],
 	};
 }
 
@@ -3724,7 +3729,7 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 			origemImportacao: true,
 		};
 		currentMatrix.months[rowMonth - 1] = currency(
-			currentMatrix.months[rowMonth - 1] + realizedValue,
+			currentMatrix.months[rowMonth - 1] + plannedValue,
 		);
 		currentMatrix.total = currentMatrix.months.reduce(
 			(sum, value) => sum + currency(value),
