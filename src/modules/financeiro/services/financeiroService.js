@@ -14,7 +14,11 @@ export async function buscarDashboardFinanceiro(params = {}) {
 }
 
 export async function buscarCentrosCustoOrcamentoFinanceiro() {
-	return requestVpsApi(`${BASE_PATH}/orcamento/centros-custo`);
+	const params = new URLSearchParams({ _: String(Date.now()) });
+	return requestVpsApi(
+		`${BASE_PATH}/orcamento/centros-custo?${params.toString()}`,
+		{ cache: "no-store" },
+	);
 }
 
 export async function salvarCentrosCustoOrcamentoFinanceiro(config) {
@@ -38,7 +42,10 @@ export async function atualizarAprovacaoOrcamentoFinanceiro(
 }
 
 export async function buscarDadosOrcamentoFinanceiro() {
-	return requestVpsApi(`${BASE_PATH}/orcamento/dados`);
+	const params = new URLSearchParams({ _: String(Date.now()) });
+	return requestVpsApi(`${BASE_PATH}/orcamento/dados?${params.toString()}`, {
+		cache: "no-store",
+	});
 }
 
 export async function importarDadosOrcamentoFinanceiro(payload) {
@@ -58,8 +65,10 @@ export async function iniciarImportacaoDadosOrcamentoFinanceiro(files = []) {
 }
 
 export async function buscarImportacaoDadosOrcamentoFinanceiro(jobId) {
+	const params = new URLSearchParams({ _: String(Date.now()) });
 	return requestVpsApi(
-		`${BASE_PATH}/orcamento/dados/import-jobs/${encodeURIComponent(jobId)}`,
+		`${BASE_PATH}/orcamento/dados/import-jobs/${encodeURIComponent(jobId)}?${params.toString()}`,
+		{ cache: "no-store" },
 	);
 }
 

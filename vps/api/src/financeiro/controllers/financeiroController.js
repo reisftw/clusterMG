@@ -51,6 +51,13 @@ function clearFinanceiroReadCache() {
 	financeiroReadCache.clear();
 }
 
+function setNoStore(res) {
+	res.set(
+		"Cache-Control",
+		"no-store, no-cache, must-revalidate, proxy-revalidate",
+	);
+}
+
 function createFinanceiroController() {
 	async function getDashboard(_req, res, next) {
 		try {
@@ -66,11 +73,8 @@ function createFinanceiroController() {
 
 	async function getBudgetCostCenters(_req, res, next) {
 		try {
-			res.json(
-				await getOrSetFinanceiroCache("orcamento-centros-custo", () =>
-					financeiro.getBudgetCostCenters(),
-				),
-			);
+			setNoStore(res);
+			res.json(await financeiro.getBudgetCostCenters());
 		} catch (error) {
 			next(error);
 		}
@@ -107,11 +111,8 @@ function createFinanceiroController() {
 
 	async function getBudgetData(_req, res, next) {
 		try {
-			res.json(
-				await getOrSetFinanceiroCache("orcamento-dados", () =>
-					financeiro.getBudgetData(),
-				),
-			);
+			setNoStore(res);
+			res.json(await financeiro.getBudgetData());
 		} catch (error) {
 			next(error);
 		}
@@ -163,10 +164,7 @@ function createFinanceiroController() {
 			}
 			if (job.status === "completed" || job.status === "failed")
 				clearFinanceiroReadCache();
-			res.set(
-				"Cache-Control",
-				"no-store, no-cache, must-revalidate, proxy-revalidate",
-			);
+			setNoStore(res);
 			res.json({ job });
 		} catch (error) {
 			next(error);

@@ -4227,24 +4227,7 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 }
 
 async function getBudgetCostCenters() {
-	const config = await financeiroStatement
-		.getBudgetConfigurationStatement()
-		.catch(() => ({
-		clusters: [],
-		accounts: [],
-		centers: [],
-		partners: [],
-		companies: [],
-		branches: [],
-		matrix: [],
-		versions: [],
-		allocationRules: [],
-		workflow: {},
-		cashSettings: {},
-		updatedAt: "",
-		updatedBy: "",
-		updatedByName: "",
-	}));
+	const config = await financeiroStatement.getBudgetConfigurationStatement();
 	const normalizedConfig = normalizeCostCentersConfig(config, {});
 	const rawAccounts = Array.isArray(config.accounts) ? config.accounts : [];
 	const rawAccountsByCode = new Map(
@@ -4284,9 +4267,7 @@ async function getBudgetCostCenters() {
 }
 
 async function saveBudgetCostCenters(payload = {}, user = {}) {
-	const existingConfig = await financeiroStatement
-		.getBudgetConfigurationStatement()
-		.catch(() => ({}));
+	const existingConfig = await financeiroStatement.getBudgetConfigurationStatement();
 	const nextPayload = {
 		...(existingConfig || {}),
 		...(payload || {}),
@@ -4390,9 +4371,7 @@ function emptyBudgetData() {
 }
 
 async function getBudgetData() {
-	const savedData = await financeiroStatement
-		.getBudgetDataStatement()
-		.catch(() => ({}));
+	const savedData = await financeiroStatement.getBudgetDataStatement();
 	return {
 		ok: true,
 		data: {
@@ -4419,7 +4398,7 @@ async function saveBudgetData(payload = {}, user = {}) {
 				row.orcado ||
 				row.realizado,
 		);
-	const currentData = await getBudgetData().catch(() => ({ data: {} }));
+	const currentData = await getBudgetData();
 	const currentRows =
 		payload.append === false ? [] : currentData?.data?.rows || [];
 	const rows = mergeBudgetImportRows(currentRows, incomingRows);
