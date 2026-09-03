@@ -540,6 +540,45 @@ function mapCenter(row = {}, directorateById = new Map()) {
 	};
 }
 
+function mapBudgetBreakdowns(rows = []) {
+	const byCenter = new Map();
+	for (const [index, row] of rows.entries()) {
+		const centerId = text(row.centro_custo_id);
+		if (!centerId) continue;
+		const breakdown = {
+			id: `realizado-${centerId}-${text(row.empresa_id) || "sem-empresa"}-${text(row.filial_id) || "sem-filial"}-${text(row.conta_id) || "sem-conta"}-${row.ano || ""}-${row.mes || ""}-${index}`,
+			companyId: text(row.empresa_id),
+			branchId: text(row.filial_id),
+			accountId: text(row.conta_id),
+			year: Number(row.ano || 0) || "",
+			month: Number(row.mes || 0) || "",
+			grupo: text(row.grupo),
+			quebra2: text(row.quebra2),
+			categoria: text(row.categoria),
+			statusProjetos: text(row.status_projetos),
+			budgeted: money(row.orcado),
+			orcado: money(row.orcado),
+			realized: money(row.realizado),
+			realizado: money(row.realizado),
+			saldo: money(row.orcado) - money(row.realizado),
+			suppliers: Array.isArray(row.fornecedores)
+				? row.fornecedores.map(text).filter(Boolean)
+				: [],
+			fornecedores: Array.isArray(row.fornecedores)
+				? row.fornecedores.map(text).filter(Boolean)
+				: [],
+			movements: [],
+			movimentacoes: [],
+			rows: Number(row.linhas || 0) || 0,
+			updatedAt: new Date().toISOString(),
+		};
+		const current = byCenter.get(centerId) || [];
+		current.push(breakdown);
+		byCenter.set(centerId, current);
+	}
+	return byCenter;
+}
+
 function mapPartner(row = {}) {
 	return mapSource(row, {
 		id: row.id,
@@ -615,6 +654,7 @@ async function getBudgetCostCenters() {
 		partners,
 		companies,
 		branches,
+		breakdowns,
 		matrix,
 	] = await Promise.all([
 		getBudgetCostCentersMeta(),
@@ -624,14 +664,54 @@ async function getBudgetCostCenters() {
 		db.query("select * from financeiro_fornecedores order by nome"),
 		db.query("select * from financeiro_matrizes order by id"),
 		db.query("select * from financeiro_filiais order by matriz_id, id"),
+		db.query(
+			`select
+				centro_custo_id,
+				conta_id,
+				empresa_id,
+				filial_id,
+				ano,
+				mes,
+				coalesce(source_payload->>'grupo', '') as grupo,
+				coalesce(source_payload->>'quebra2', '') as quebra2,
+				coalesce(source_payload->>'categoria', '') as categoria,
+				coalesce(source_payload->>'statusProjetos', '') as status_projetos,
+				sum(orcado) as orcado,
+				sum(realizado) as realizado,
+				count(*) as linhas,
+				array_agg(distinct coalesce(source_payload->>'fornecedor', source_payload->>'nomeFornecedor', ''))
+					filter (where coalesce(source_payload->>'fornecedor', source_payload->>'nomeFornecedor', '') <> '') as fornecedores
+			 from financeiro_orcamento_lancamentos
+			 group by
+				centro_custo_id,
+				conta_id,
+				empresa_id,
+				filial_id,
+				ano,
+				mes,
+				coalesce(source_payload->>'grupo', ''),
+				coalesce(source_payload->>'quebra2', ''),
+				coalesce(source_payload->>'categoria', ''),
+				coalesce(source_payload->>'statusProjetos', '')
+			 order by ano, mes, centro_custo_id, conta_id`,
+		),
 		db.query("select * from financeiro_orcamento_matriz order by ano, conta_id, centro_custo_id, mes"),
 	]);
 	const mappedDirectorates = directorates.rows.map(mapDirectorate);
 	const directorateById = new Map(mappedDirectorates.map((item) => [item.id, item]));
+	const breakdownsByCenter = mapBudgetBreakdowns(breakdowns.rows);
 	return {
 		...meta,
 		accounts: accounts.rows.map(mapAccount),
-		centers: centers.rows.map((row) => mapCenter(row, directorateById)),
+		centers: centers.rows.map((row) => {
+			const center = mapCenter(row, directorateById);
+			const realizedByCompanyBranch = breakdownsByCenter.get(center.id) || [];
+			return {
+				...center,
+				realizedByCompanyBranch,
+				realizadoPorEmpresaFilial: realizedByCompanyBranch,
+			};
+		}),
 		partners: partners.rows.map(mapPartner),
 		companies: companies.rows.map(mapCompany),
 		branches: mapBranchRows(branches.rows),

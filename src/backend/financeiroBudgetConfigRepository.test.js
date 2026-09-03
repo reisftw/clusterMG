@@ -99,6 +99,26 @@ describe("financeiroBudgetConfigRepository", () => {
 			.mockResolvedValueOnce({
 				rows: [
 					{
+						centro_custo_id: "110701",
+						conta_id: "1211",
+						empresa_id: "0001",
+						filial_id: "1",
+						ano: 2026,
+						mes: 8,
+						grupo: "Sempre",
+						quebra2: "ORÇAMENTO",
+						categoria: "Ocupação",
+						status_projetos: "",
+						orcado: "0",
+						realizado: "730.00",
+						linhas: "2",
+						fornecedores: ["CEMIG"],
+					},
+				],
+			})
+			.mockResolvedValueOnce({
+				rows: [
+					{
 						ano: 2026,
 						mes: 8,
 						conta_id: "1211",
@@ -124,6 +144,14 @@ describe("financeiroBudgetConfigRepository", () => {
 			id: "110701",
 			nome: "ROT",
 			diretoria: "Diretoria de Operações",
+			realizedByCompanyBranch: [
+				expect.objectContaining({
+					accountId: "1211",
+					realizado: 730,
+					grupo: "Sempre",
+					quebra2: "ORÇAMENTO",
+				}),
+			],
 		});
 		expect(config.matrix[0]).toMatchObject({
 			year: 2026,
