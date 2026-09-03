@@ -3356,6 +3356,12 @@ function normalizeBudgetDataRow(row = {}, index = 0) {
 			row.statusProjetos || row.Status_Projetos || row.status_projetos,
 		),
 		grupo: cleanText(row.grupo || row.Grupo),
+		position:
+			row.position ??
+			row.posicao ??
+			row.linhaOrigem ??
+			row.Linha_Origem ??
+			index,
 		empresaId,
 		filialId,
 		codFornecedor: cleanText(
@@ -3479,6 +3485,7 @@ function budgetImportRowIdentity(row = {}) {
 				row.tipo,
 				row.realizado,
 				row.orcado,
+				row.position,
 			]
 				.map(cleanText)
 				.join("|"),

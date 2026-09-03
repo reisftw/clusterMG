@@ -236,6 +236,49 @@ describe("financeiro budget import config merge", () => {
 		expect(rows.find((row) => row.id === "novo-agosto")?.realizado).toBe(200);
 	});
 
+	it("preserva linhas repetidas sem sourceKey usando a posição da importação", () => {
+		const rows = mergeBudgetImportRowsReplacingIncomingPeriods(
+			[],
+			[
+				{
+					layoutOrigem: "FPCP106",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					codConta: "1343",
+					nomeConta: "Empréstimos bancários",
+					codCc: "110602",
+					nomeCc: "Financeiro",
+					empresaId: "1",
+					filialId: "1",
+					titulo: "123",
+					tipo: "CP",
+					realizado: 100,
+					orcado: 0,
+				},
+				{
+					layoutOrigem: "FPCP106",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					codConta: "1343",
+					nomeConta: "Empréstimos bancários",
+					codCc: "110602",
+					nomeCc: "Financeiro",
+					empresaId: "1",
+					filialId: "1",
+					titulo: "123",
+					tipo: "CP",
+					realizado: 100,
+					orcado: 0,
+				},
+			],
+		);
+
+		expect(rows).toHaveLength(2);
+		expect(rows.reduce((sum, row) => sum + row.realizado, 0)).toBe(200);
+	});
+
 	it("aplica De_Para, classificacao fora do basal e centro de projeto do Access", () => {
 		const result = mergeBudgetConfigFromRows(
 			{
