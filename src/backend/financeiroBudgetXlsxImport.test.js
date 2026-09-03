@@ -139,7 +139,7 @@ describe("financeiroBudgetXlsxImport", () => {
 		expect(parsed).toHaveLength(2);
 		expect(parsed[0]).toMatchObject({
 			origem: "CP",
-			data: "2026-09-04",
+			data: "2026-09-01",
 			codConta: "1321",
 			nomeConta: "Acoes de venda",
 			codCc: "110101",
@@ -150,6 +150,9 @@ describe("financeiroBudgetXlsxImport", () => {
 			layoutOrigem: "FPCP302",
 			linhaOrigem: 6,
 		});
+		expect(parsed[0].observacoes).toBe(
+			"Data base: 2026-09-01 | Dt prev pgto: 2026-09-04",
+		);
 		expect(parsed[1]).toMatchObject({
 			empresaId: "0014",
 			empresa: "0014 - ONNET LOCACOES LTDA",

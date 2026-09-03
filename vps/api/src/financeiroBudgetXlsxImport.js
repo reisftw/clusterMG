@@ -213,10 +213,25 @@ function normalizeFpcp302Row(row = [], company, meta) {
 	const nomeConta = cleanText(row[3]);
 	const codCc = cleanText(row[7]);
 	const nomeCc = cleanText(row[8]);
-	const dateInfo = parseDateInfo(row[14] || row[12]);
 	const baseDateInfo = parseDateInfo(row[12]);
+	const dueDateInfo = parseDateInfo(row[14]);
+	const dateInfo = baseDateInfo.data ? baseDateInfo : dueDateInfo;
 	if (!titulo || !tipo || !codConta || !nomeConta || !codCc || !nomeCc)
 		return null;
+	const observacoes = [
+		baseDateInfo.data
+			? `Data base: ${baseDateInfo.data}`
+			: row[12]
+				? `Data base: ${cleanText(row[12])}`
+				: "",
+		dueDateInfo.data
+			? `Dt prev pgto: ${dueDateInfo.data}`
+			: row[14]
+				? `Dt prev pgto: ${cleanText(row[14])}`
+				: "",
+	]
+		.filter(Boolean)
+		.join(" | ");
 	return withSource(
 		{
 			quebra: "CP",
@@ -237,11 +252,7 @@ function normalizeFpcp302Row(row = [], company, meta) {
 			seqMov: titulo,
 			titulo,
 			tipo,
-			observacoes: baseDateInfo.data
-				? `Data base: ${baseDateInfo.data}`
-				: row[12]
-					? `Data base: ${cleanText(row[12])}`
-					: "",
+			observacoes,
 			categoria: nomeConta,
 			entidade: company.nome,
 			empresaId: company.codigo,

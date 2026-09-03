@@ -9281,7 +9281,7 @@ function OrcamentoConfiguracoesPage({
 	);
 }
 
-function BudgetDataImportPage({ canManage }) {
+function BudgetDataImportPage({ canManage, onConfigUpdated }) {
 	const [dataState, setDataState] = useState(null);
 	const [importJob, setImportJob] = useState(null);
 	const [loading, setLoading] = useState(true);
@@ -9331,6 +9331,7 @@ function BudgetDataImportPage({ canManage }) {
 					setMessage(
 						`Importação concluída: ${integer.format(job.result?.data?.summary?.totalRows || 0)} linha(s) salvas no histórico.`,
 					);
+					await onConfigUpdated?.({ silent: true });
 					keepPolling = false;
 					break;
 				}
@@ -9352,7 +9353,7 @@ function BudgetDataImportPage({ canManage }) {
 			}
 			await loadBudgetData();
 		},
-		[loadBudgetData],
+		[loadBudgetData, onConfigUpdated],
 	);
 
 	const handleFileChange = async (event) => {
@@ -9402,6 +9403,7 @@ function BudgetDataImportPage({ canManage }) {
 			setDataState(response.data || {});
 			setImportJob(null);
 			setMessage("Dados importados zerados. Cadastros orçamentários mantidos.");
+			await onConfigUpdated?.({ silent: true });
 		} catch (error) {
 			const visibleError = getVisibleError(
 				error,
@@ -10927,6 +10929,7 @@ function FinanceiroPageContent({
 	data,
 	exportModalOpen,
 	loading,
+	loadBudgetConfig,
 	page,
 	period,
 	selectedBudgetReference,
@@ -10985,7 +10988,10 @@ function FinanceiroPageContent({
 				/>
 			) : null}
 			{page === "orcamentoDados" ? (
-				<BudgetDataImportPage canManage={canManage} />
+				<BudgetDataImportPage
+					canManage={canManage}
+					onConfigUpdated={loadBudgetConfig}
+				/>
 			) : null}
 			{page === "orcamentoConfiguracoes" ? (
 				<OrcamentoConfiguracoesPage
@@ -11141,6 +11147,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				data={data}
 				exportModalOpen={exportModalOpen}
 				loading={loading}
+				loadBudgetConfig={loadBudgetConfig}
 				page={page}
 				period={period}
 				selectedBudgetReference={selectedBudgetReference}
