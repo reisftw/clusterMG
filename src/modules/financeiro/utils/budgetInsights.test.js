@@ -294,6 +294,63 @@ describe("budgetInsights", () => {
 		expect(insights.budgetCategoryGroups.find((item) => item.id === "projetos").realized).toBe(750);
 	});
 
+	it("nao duplica realizado do centro em contas sem lancamento no periodo", () => {
+		const insights = getBudgetInsights(
+			{
+				accounts: [
+					{ id: "energia", codigo: "energia", nome: "Energia Elétrica (Lojas, Escritorios)" },
+					{ id: "aluguel", codigo: "aluguel", nome: "Aluguel" },
+				],
+				centers: [
+					{
+						id: "centro-1",
+						nome: "Centro financeiro",
+						tipoPlano: "A",
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "energia",
+								realized: 1000,
+								grupo: "Sempre",
+								quebra2: "ORÇAMENTO",
+							},
+						],
+					},
+				],
+				matrix: [
+					{
+						accountId: "energia",
+						costCenterId: "centro-1",
+						year: 2026,
+						months: Array.from({ length: 12 }, (_, index) => index === 7 ? 500 : 0),
+					},
+					{
+						accountId: "energia",
+						costCenterId: "centro-1",
+						year: 2027,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+					{
+						accountId: "aluguel",
+						costCenterId: "centro-1",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+				],
+				settings: {},
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+		const rowsByAccount = new Map(
+			insights.accountRows.map((row) => [row.row.accountId, row]),
+		);
+
+		expect(rowsByAccount.get("energia").realized).toBe(1000);
+		expect(rowsByAccount.get("aluguel")).toBeUndefined();
+		expect(insights.budgetCategoryGroups.find((item) => item.id === "basal").realized).toBe(1000);
+	});
+
 	it("aplica orcamento oficial de projetos por vigencia", () => {
 		const configWithProjectBudgets = {
 			...config,

@@ -861,24 +861,39 @@ function buildAccountRows({
 	configuredBudgetForCenter = () => 0,
 	realizedTotalForCenter = () => 0,
 } = {}) {
+	const selectedYears = new Set(
+		Array.from(periodKeys)
+			.map((key) => Number(String(key).split("-")[0] || 0))
+			.filter(Boolean),
+	);
 	return matrix
 		.map((row) => {
 			const account = accounts.find((item) => item.id === row.accountId);
 			const center = centers.find((item) => item.id === row.costCenterId);
 			if (isSyntheticCenter(center)) return null;
 			const rawPlanned = rowPeriodTotal(row);
+			const rowYear = Number(row.year || row.ano || 0);
+			const rowMatchesSelectedYear = !rowYear || selectedYears.has(rowYear);
 			const breakdownPeriodKeys = isProjectCenter(center)
 				? projectPeriodKeys
 				: periodKeys;
+			const periodBreakdowns = centerBreakdowns(center).filter(
+				(item) =>
+					breakdownPeriodKeys.has(getBudgetPeriodKey(item)) &&
+					shouldIncludeAccessBudgetItem(item),
+			);
+			const hasAccountScopedBreakdowns = periodBreakdowns.some((item) =>
+				String(item.accountId || "").trim(),
+			);
+			const matchingBreakdowns = periodBreakdowns.filter(
+				(item) => item.accountId === row.accountId,
+			);
 			const breakdownRealized = sumBy(
-				centerBreakdowns(center).filter(
-					(item) =>
-						item.accountId === row.accountId &&
-						breakdownPeriodKeys.has(getBudgetPeriodKey(item)) &&
-						shouldIncludeAccessBudgetItem(item),
-				),
+				matchingBreakdowns,
 				breakdownRealizedValue,
 			);
+			const hasDirectBreakdown = matchingBreakdowns.length > 0;
+			const canFallbackToCenterRealized = !hasAccountScopedBreakdowns;
 			const centerTotalPlanned = sumBy(
 				matrix.filter((item) => item.costCenterId === row.costCenterId),
 				rowPeriodTotal,
@@ -891,13 +906,15 @@ function buildAccountRows({
 					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
 					: rawPlanned;
 			const centerRealized = realizedTotalForCenter(center || {});
-			const realized =
-				breakdownRealized ||
-				(configuredCenterPlanned && planned
-					? (planned / configuredCenterPlanned) * centerRealized
-					: centerTotalPlanned
-						? (rawPlanned / centerTotalPlanned) * centerRealized
-						: centerRealized);
+			const realized = rowMatchesSelectedYear && hasDirectBreakdown
+				? breakdownRealized
+				: rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized
+					? configuredCenterPlanned && planned
+						? (planned / configuredCenterPlanned) * centerRealized
+						: centerTotalPlanned
+							? (rawPlanned / centerTotalPlanned) * centerRealized
+							: 0
+					: 0;
 			return {
 				row,
 				account,

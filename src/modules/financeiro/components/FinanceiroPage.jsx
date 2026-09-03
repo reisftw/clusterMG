@@ -1247,7 +1247,7 @@ async function exportBudgetManagementPdf({
 	const { default: autoTable } = await import("jspdf-autotable");
 	const selectedPeriod = budgetReportPeriodFromState(periodState);
 	const period = buildBudgetPeriod(selectedPeriod);
-	const insights = getBudgetInsights(config, selectedPeriod);
+	const insights = getBudgetInsightsFromStatement(config, selectedPeriod);
 	const rows = buildBudgetReportRows(config, insights);
 	const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 	const pageWidth = pdf.internal.pageSize.getWidth();
@@ -3891,7 +3891,7 @@ function centerCodeKey(center = {}) {
 	);
 }
 
-function getBudgetInsights(config = {}, selectedPeriod = {}) {
+function LEGACY_BUDGET_INSIGHTS(config = {}, selectedPeriod = {}) {
 	const accounts = config.accounts || [];
 	const centers = config.centers || [];
 	const matrix = config.matrix || [];
@@ -9398,7 +9398,7 @@ function BudgetDataImportPage({ canManage, onConfigUpdated }) {
 		if (
 			!canManage ||
 			!window.confirm(
-				"Zerar somente os Dados importados para teste? Clusters, filiais, empresas, centros de custo, contas financeiras e fornecedores serão mantidos.",
+				"Zerar dados importados e a estrutura orçamentária gerada pela importação? A próxima planilha recriará contas, centros, empresas, filiais e fornecedores pelas regras atuais.",
 			)
 		)
 			return;
@@ -9408,7 +9408,7 @@ function BudgetDataImportPage({ canManage, onConfigUpdated }) {
 			const response = await limparDadosOrcamentoFinanceiro();
 			setDataState(response.data || {});
 			setImportJob(null);
-			setMessage("Dados importados zerados. Cadastros orçamentários mantidos.");
+			setMessage("Dados importados zerados. A próxima planilha recriará a estrutura orçamentária.");
 			await onConfigUpdated?.({ silent: true });
 		} catch (error) {
 			const visibleError = getVisibleError(

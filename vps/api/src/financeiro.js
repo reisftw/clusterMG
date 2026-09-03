@@ -3576,6 +3576,22 @@ function clearBudgetImportArtifacts(config = {}) {
 	});
 }
 
+function resetBudgetStructureForImport(config = {}) {
+	return {
+		...config,
+		accounts: [],
+		centers: [],
+		companies: [],
+		branches: [],
+		partners: [],
+		matrix: [],
+		approvals: [],
+		lastImportReference: null,
+		lastImportSummary: null,
+		lastImportInfo: null,
+	};
+}
+
 function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 	rows = rows.map((row) => applyAccessBudgetRowRules(row));
 	const accountCodeByName = buildImportCodeByName(
@@ -4524,7 +4540,7 @@ async function saveBudgetData(payload = {}, user = {}) {
 			: mergeBudgetImportRowsReplacingIncomingPeriods(currentRows, incomingRows);
 	const existingBudget = await getBudgetCostCenters();
 	const merged = mergeBudgetConfigFromRows(
-		clearBudgetImportArtifacts(existingBudget.config || {}),
+		resetBudgetStructureForImport(clearBudgetImportArtifacts(existingBudget.config || {})),
 		rows,
 		user,
 	);
@@ -4559,7 +4575,9 @@ async function saveBudgetData(payload = {}, user = {}) {
 
 async function clearBudgetData(user = {}) {
 	const existingBudget = await getBudgetCostCenters();
-	const cleanConfig = clearBudgetImportArtifacts(existingBudget.config || {});
+	const cleanConfig = resetBudgetStructureForImport(
+		clearBudgetImportArtifacts(existingBudget.config || {}),
+	);
 	await saveBudgetCostCenters(cleanConfig, user);
 
 	const data = {
