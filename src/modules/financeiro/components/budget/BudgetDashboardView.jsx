@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Eye } from "lucide-react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import ModalShell from "../../../../components/ui/ModalShell";
 import FinancialKpiCard from "../kpi/FinancialKpiCard";
+
+const CATEGORY_PAGE_SIZE = 5;
 
 function BudgetCategoryClassPanel({
 	group,
@@ -11,12 +14,19 @@ function BudgetCategoryClassPanel({
 	budgetAccountLabel,
 	budgetCenterCompactLabel,
 }) {
+	const [page, setPage] = useState(1);
 	const categories = group.categories || [];
+	const totalPages = Math.max(1, Math.ceil(categories.length / CATEGORY_PAGE_SIZE));
+	const safePage = Math.min(page, totalPages);
+	const visibleCategories = categories.slice(
+		(safePage - 1) * CATEGORY_PAGE_SIZE,
+		safePage * CATEGORY_PAGE_SIZE,
+	);
 	const available = Number(group.planned || 0) - Number(group.realized || 0);
 	const isFavorable = available >= 0;
 	return (
-		<article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-			<div className="flex flex-wrap items-start justify-between gap-3">
+		<details className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+			<summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-4">
 				<div className="min-w-0">
 					<div className="flex items-center gap-2">
 						<span
@@ -42,10 +52,10 @@ function BudgetCategoryClassPanel({
 						{decimal.format(group.percent || 0)}% consumido
 					</p>
 				</div>
-			</div>
-			<div className="mt-4 space-y-3">
+			</summary>
+			<div className="space-y-3 border-t border-slate-100 p-4">
 				{categories.length ? (
-					categories.slice(0, 5).map((category) => {
+					visibleCategories.map((category) => {
 						const categoryAvailable =
 							Number(category.planned || 0) - Number(category.realized || 0);
 						const categoryFavorable = categoryAvailable >= 0;
@@ -120,8 +130,35 @@ function BudgetCategoryClassPanel({
 						Nenhuma conta financeira classificada nesta categoria.
 					</p>
 				)}
+				{totalPages > 1 ? (
+					<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+						<p className="text-xs font-black uppercase text-slate-500">
+							Página {integer.format(safePage)} de {integer.format(totalPages)}
+						</p>
+						<div className="flex gap-2">
+							<button
+								type="button"
+								onClick={() => setPage((current) => Math.max(1, current - 1))}
+								disabled={safePage <= 1}
+								className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+							>
+								Anterior
+							</button>
+							<button
+								type="button"
+								onClick={() =>
+									setPage((current) => Math.min(totalPages, current + 1))
+								}
+								disabled={safePage >= totalPages}
+								className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+							>
+								Próxima
+							</button>
+						</div>
+					</div>
+				) : null}
 			</div>
-		</article>
+		</details>
 	);
 }
 
@@ -416,10 +453,9 @@ export default function BudgetDashboardView({
 							indexAxis: "y",
 							scales: {
 								x: {
-									stacked: true,
 									ticks: { callback: (value) => brl.format(Number(value)) },
 								},
-								y: { stacked: true, grid: { display: false } },
+								y: { grid: { display: false } },
 							},
 						}}
 					/>
@@ -444,7 +480,7 @@ export default function BudgetDashboardView({
 								return (
 									<div
 										key={item.center.id}
-										className={`rounded-2xl p-3 text-white shadow-sm ${item.percent > 100 ? "bg-red-500" : item.percent >= 80 ? "bg-amber-400" : "bg-emerald-500"}`}
+										className={`rounded-2xl p-3 text-white shadow-sm ${status.barClass}`}
 										style={{ minHeight: `${basis}px` }}
 									>
 										<p className="text-xs font-black uppercase">

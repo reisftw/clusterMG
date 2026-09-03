@@ -9,6 +9,9 @@ const {
 	DEFAULT_FINANCIAL_ACCOUNT_PLAN,
 } = require("./financeiroFinancialAccountPlan");
 const {
+	OFFICIAL_BUDGET_MATRIX_2026,
+} = require("./financeiroOfficialBudgetMatrix2026");
+const {
 	enrichFinancialAccountWithCategory,
 	normalizeFinancialAccountCategories,
 } = require("./financeiroAccountCategories");
@@ -2401,6 +2404,153 @@ function normalizeBudgetMatrixRow(row = {}, index = 0) {
 	};
 }
 
+function categoryBudgetKey(item = {}) {
+	return [
+		cleanText(item.classType || item.categoriaClasse || "basal"),
+		slug(item.categoryName || item.categoriaMae || item.categoria || "Sem categoria", ""),
+		slug(item.accountName || item.contaNome || item.nomeConta || item.account || "Sem conta", ""),
+	].join(":");
+}
+
+function categoryBudgetAmount(item = {}) {
+	return currency(item.planned ?? item.orcado ?? item.amount ?? item.valor);
+}
+
+function categoryBudgetMatchesMonth(item = {}, year, month) {
+	const scope = cleanText(item.periodScope || item.escopoPeriodo).toLowerCase();
+	if (scope === "monthly_default") return true;
+	if (
+		Number(item.year || item.ano || item.referenceYear) === Number(year) &&
+		Number(item.month || item.mes || item.numMes || item.referenceMonth) === Number(month)
+	) {
+		return true;
+	}
+	return false;
+}
+
+function buildOfficialCategoryBudgetLookup(settings = {}) {
+	const lookup = new Map();
+	const budgets = Array.isArray(settings.financialCategoryBudgets)
+		? settings.financialCategoryBudgets
+		: [];
+	budgets.forEach((item) => {
+		for (let month = 1; month <= 12; month += 1) {
+			const year = Number(item.year || item.ano || item.referenceYear || 2026);
+			if (!categoryBudgetMatchesMonth(item, year, month)) continue;
+			const key = `${year}-${month}:${categoryBudgetKey(item)}`;
+			lookup.set(key, currency((lookup.get(key) || 0) + categoryBudgetAmount(item)));
+		}
+	});
+	return lookup;
+}
+
+function applyOfficialBudgetMatrix(config = {}) {
+	const accounts = Array.isArray(config.accounts) ? config.accounts : [];
+	const centers = Array.isArray(config.centers) ? config.centers : [];
+	const categoryCatalog = config.settings?.financialAccountCategories || [];
+	const officialBudgetByDimension = buildOfficialCategoryBudgetLookup(config.settings);
+	const accountsByCode = new Map(
+		accounts
+			.map((account) => [
+				budgetCodeKey(account.codigo || account.reduzida || account.id),
+				account,
+			])
+			.filter(([key]) => key),
+	);
+	const accountsByName = new Map(
+		accounts
+			.map((account) => [slug(account.nome || account.name, ""), account])
+			.filter(([key]) => key),
+	);
+	const centersByCode = new Map(
+		centers
+			.map((center) => [budgetCodeKey(center.codigo || center.id), center])
+			.filter(([key]) => key),
+	);
+	const centersByName = new Map(
+		centers
+			.map((center) => [slug(center.nome || center.name, ""), center])
+			.filter(([key]) => key),
+	);
+	const rawRows = OFFICIAL_BUDGET_MATRIX_2026.map((row) =>
+		applyAccessBudgetRowRules({
+			codConta: row.accountId,
+			nomeConta: row.accountName,
+			codCc: row.centerId,
+			nomeCc: row.centerName,
+			categoria: row.category,
+			grupo: row.group,
+			ano: row.year,
+			numMes: row.month,
+			orcado: row.planned,
+		}),
+	).filter((row) => cleanText(row.quebra2).toUpperCase() !== "PROJETO");
+	const rowsByDimensionMonth = new Map();
+	rawRows.forEach((row) => {
+		const account =
+			accountsByCode.get(budgetCodeKey(row.codConta)) ||
+			accountsByName.get(slug(row.nomeConta, ""));
+		const center =
+			centersByCode.get(budgetCodeKey(row.codCc)) ||
+			centersByName.get(slug(row.nomeCc, ""));
+		if (!account || !center || center.tipoPlano === "S") return;
+		const classified = enrichFinancialAccountWithCategory(
+			{
+				...account,
+				nome: row.nomeConta || account.nome,
+				categoriaMae: row.categoria || account.categoriaMae,
+			},
+			categoryCatalog,
+		);
+		const dimension = categoryBudgetKey({
+			classType: classified.categoriaClasse,
+			categoryName: classified.categoriaMae,
+			accountName: classified.nome,
+		});
+		const key = `${row.ano}-${row.numMes}:${dimension}`;
+		const current = rowsByDimensionMonth.get(key) || [];
+		current.push({
+			...row,
+			accountId: account.id,
+			centerId: center.id,
+			dimension,
+			planned: currency(row.orcado),
+		});
+		rowsByDimensionMonth.set(key, current);
+	});
+	const matrixByKey = new Map();
+	rowsByDimensionMonth.forEach((rows, dimensionMonthKey) => {
+		const officialTotal = officialBudgetByDimension.get(dimensionMonthKey);
+		if (!officialTotal) return;
+		const currentTotal = rows.reduce((sum, row) => sum + currency(row.planned), 0);
+		const scale = currentTotal ? officialTotal / currentTotal : 0;
+		rows.forEach((row) => {
+			const planned = currency(row.planned * scale);
+			if (!planned) return;
+			const key = `${row.ano}:${row.accountId}:${row.centerId}`;
+			const current = matrixByKey.get(key) || {
+				id: `access-2026-${row.accountId}-${row.centerId}`,
+				accountId: row.accountId,
+				costCenterId: row.centerId,
+				versionId: "budget",
+				year: Number(row.ano),
+				months: Array.from({ length: 12 }, () => 0),
+				source: "access-orcamento-2024",
+			};
+			current.months[Number(row.numMes) - 1] = currency(
+				current.months[Number(row.numMes) - 1] + planned,
+			);
+			current.total = current.months.reduce((sum, value) => currency(sum + value), 0);
+			matrixByKey.set(key, current);
+		});
+	});
+	if (!matrixByKey.size) return config;
+	return {
+		...config,
+		matrix: Array.from(matrixByKey.values()),
+	};
+}
+
 function normalizeBudgetVersion(version = {}, index = 0) {
 	return {
 		id: String(version.id || `versao-${index + 1}`).trim(),
@@ -3197,8 +3347,14 @@ function normalizeCostCentersConfig(payload = {}, user = {}) {
 			.filter((center) => center.tipoPlano === "S")
 			.map((center) => center.id),
 	);
-	const normalizedMatrix = Array.isArray(payload.matrix)
-		? payload.matrix
+	const matrixSource = applyOfficialBudgetMatrix({
+		matrix: Array.isArray(payload.matrix) ? payload.matrix : [],
+		accounts,
+		centers: normalizedCenters,
+		settings: normalizedSettings,
+	});
+	const normalizedMatrix = Array.isArray(matrixSource.matrix)
+		? matrixSource.matrix
 				.map(normalizeBudgetMatrixRow)
 				.filter((row) => !syntheticCenterIds.has(row.costCenterId))
 		: [];

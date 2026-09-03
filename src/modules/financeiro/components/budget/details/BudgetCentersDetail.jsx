@@ -16,10 +16,9 @@ export default function BudgetCentersDetail({
 					indexAxis: "y",
 					scales: {
 						x: {
-							stacked: true,
 							ticks: { callback: (value) => brl.format(Number(value)) },
 						},
-						y: { stacked: true, grid: { display: false } },
+						y: { grid: { display: false } },
 					},
 				}}
 			/>

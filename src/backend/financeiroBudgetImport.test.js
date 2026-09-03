@@ -279,6 +279,53 @@ describe("financeiro budget import config merge", () => {
 		expect(rows.reduce((sum, row) => sum + row.realizado, 0)).toBe(200);
 	});
 
+	it("aplica a matriz oficial do Access por conta e centro de custo", () => {
+		const result = mergeBudgetConfigFromRows(
+			{
+				accounts: [],
+				centers: [],
+				companies: [],
+				branches: [],
+				partners: [],
+				matrix: [],
+				settings: {
+					financialCategoryBudgets: [
+						{
+							classType: "nao_basal",
+							categoryName: "Financeiro",
+							accountName: "Empréstimos bancários",
+							periodScope: "monthly_default",
+							planned: 1600000,
+						},
+					],
+				},
+			},
+			[
+				{
+					codCc: "110602",
+					nomeCc: "Financeiro",
+					codConta: "1343",
+					nomeConta: "Empréstimos bancários",
+					data: "2026-08-24",
+					ano: 2026,
+					numMes: 8,
+					realizado: 1722527.62,
+					orcado: 0,
+					grupo: "Sempre",
+					quebra2: "ACOMPANHAR",
+					categoria: "Financeiro",
+				},
+			],
+			{ uid: "test-user", email: "test@example.com" },
+		);
+
+		const matrixRow = result.config.matrix.find(
+			(row) => row.accountId === "1343" && row.costCenterId === "110602",
+		);
+
+		expect(matrixRow?.months[7]).toBe(1600000);
+	});
+
 	it("aplica De_Para, classificacao fora do basal e centro de projeto do Access", () => {
 		const result = mergeBudgetConfigFromRows(
 			{

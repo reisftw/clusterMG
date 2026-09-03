@@ -87,15 +87,15 @@ export function buildBudgetCenterChart(
 			labels: rows.map((item) => budgetCenterCompactLabel(item.center)),
 			datasets: [
 				{
-					label: "Disponível",
-					data: rows.map((item) => Math.max(0, item.planned - item.realized)),
-					backgroundColor: "#bfdbfe",
+					label: "Orçado",
+					data: rows.map((item) => item.planned),
+					backgroundColor: "#0f766e",
 					borderRadius: 8,
 				},
 				{
-					label: "Consumido",
+					label: "Realizado",
 					data: rows.map((item) => item.realized),
-					backgroundColor: "#2563eb",
+					backgroundColor: "#f97316",
 					borderRadius: 8,
 				},
 			],

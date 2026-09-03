@@ -239,7 +239,7 @@ const PAGE_META = {
 		subtitle: "Formas de pagamento, cobrança e tarifas por período.",
 	},
 	orcamentoDashboard: {
-		title: "Gestão Orçamento",
+		title: "Gestão Orçamentária",
 		subtitle: "Visão executiva do orçamento, realizado, saldo e desvios.",
 	},
 	orcamentoDados: {
@@ -3027,35 +3027,35 @@ function renderSupplierDetailTable(
 ) {
 	return (
 		<div className="overflow-auto rounded-2xl border border-slate-200">
-			<table className="min-w-[860px] divide-y divide-slate-200 text-left text-xs font-bold">
+			<table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-left text-xs font-bold">
 				<thead className="bg-slate-50 text-slate-500">
 					<tr>
-						<th className="px-3 py-2">Fornecedor</th>
-						<th className="px-3 py-2 text-right">Valor acumulado</th>
-						<th className="px-3 py-2 text-right">Participação</th>
-						<th className="px-3 py-2">Centros de custo</th>
-						<th className="px-3 py-2">Contas financeiras</th>
+						<th className="w-[280px] px-4 py-3">Fornecedor</th>
+						<th className="w-[150px] px-4 py-3 text-right">Valor acumulado</th>
+						<th className="w-[120px] px-4 py-3 text-right">Participação</th>
+						<th className="w-[320px] px-4 py-3">Centros de custo</th>
+						<th className="w-[310px] px-4 py-3">Contas financeiras</th>
 					</tr>
 				</thead>
 				<tbody className="divide-y divide-slate-100">
 					{rows.length ? (
 						rows.map((supplier) => (
 							<tr key={supplier.supplier}>
-								<td className="px-3 py-2 font-black text-slate-950">
+								<td className="break-words px-4 py-3 align-top font-black text-slate-950">
 									{supplier.supplier}
 								</td>
-								<td className="px-3 py-2 text-right font-black text-slate-900">
+								<td className="px-4 py-3 text-right align-top font-black text-slate-900">
 									{brl.format(supplier.value)}
 								</td>
-								<td className="px-3 py-2 text-right text-slate-700">
+								<td className="px-4 py-3 text-right align-top text-slate-700">
 									{decimal.format(supplier.share)}%
 								</td>
-								<td className="px-3 py-2 text-slate-600">
+								<td className="break-words px-4 py-3 align-top leading-relaxed text-slate-600">
 									{supplier.centers
 										.map((id) => centerById.get(id)?.nome || id)
 										.join(", ") || "-"}
 								</td>
-								<td className="px-3 py-2 text-slate-600">
+								<td className="break-words px-4 py-3 align-top leading-relaxed text-slate-600">
 									{supplier.accounts
 										.map((id) => accountById.get(id)?.nome || id)
 										.join(", ") || "-"}
@@ -3084,15 +3084,15 @@ function renderMovementsDetailTable(
 ) {
 	return (
 		<div className="overflow-auto rounded-2xl border border-slate-200">
-			<table className="min-w-[1040px] divide-y divide-slate-200 text-left text-xs font-bold">
+			<table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-left text-xs font-bold">
 				<thead className="bg-slate-50 text-slate-500">
 					<tr>
-						<th className="px-3 py-2">Fornecedor</th>
-						<th className="px-3 py-2">Conta financeira</th>
-						<th className="px-3 py-2">Centro de custo</th>
-						<th className="px-3 py-2">Matriz / filial</th>
-						<th className="px-3 py-2">Referência</th>
-						<th className="px-3 py-2 text-right">Valor</th>
+						<th className="w-[260px] px-4 py-3">Fornecedor</th>
+						<th className="w-[260px] px-4 py-3">Conta financeira</th>
+						<th className="w-[220px] px-4 py-3">Centro de custo</th>
+						<th className="w-[220px] px-4 py-3">Matriz / filial</th>
+						<th className="w-[120px] px-4 py-3">Referência</th>
+						<th className="w-[120px] px-4 py-3 text-right">Valor</th>
 					</tr>
 				</thead>
 				<tbody className="divide-y divide-slate-100">
@@ -3104,20 +3104,20 @@ function renderMovementsDetailTable(
 							const branch = branchById.get(movement.branchId);
 							return (
 								<tr key={movement.id}>
-									<td className="px-3 py-2 font-black text-slate-950">
+									<td className="break-words px-4 py-3 align-top font-black text-slate-950">
 										{movementSupplierName(movement)}
 									</td>
-									<td className="px-3 py-2 text-slate-600">
+									<td className="break-words px-4 py-3 align-top text-slate-600">
 										{account
 											? budgetAccountLabel(account, movement.accountId)
 											: movement.accountName || movement.accountId || "-"}
 									</td>
-									<td className="px-3 py-2 text-slate-600">
+									<td className="break-words px-4 py-3 align-top text-slate-600">
 										{center
 											? budgetCenterCompactLabel(center, movement.centerId)
 											: movement.centerName || movement.centerId || "-"}
 									</td>
-									<td className="px-3 py-2 text-slate-600">
+									<td className="break-words px-4 py-3 align-top text-slate-600">
 										{[
 											company?.nome || movement.companyId,
 											branch?.nome || movement.branchId,
@@ -3125,12 +3125,12 @@ function renderMovementsDetailTable(
 											.filter(Boolean)
 											.join(" / ") || "-"}
 									</td>
-									<td className="px-3 py-2 text-slate-600">
+									<td className="px-4 py-3 align-top text-slate-600">
 										{[movement.year, budgetMonthName(movement.month)]
 											.filter(Boolean)
 											.join(" - ") || "-"}
 									</td>
-									<td className="px-3 py-2 text-right font-black text-slate-950">
+									<td className="px-4 py-3 text-right align-top font-black text-slate-950">
 										{brl.format(movementValue(movement))}
 									</td>
 								</tr>

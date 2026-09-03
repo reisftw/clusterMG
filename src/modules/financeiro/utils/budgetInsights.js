@@ -1230,8 +1230,21 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const monthlyEvolution = buildMonthlyEvolutionRows({
 		centers: centersForTotals,
 		referenceYear,
-		plannedForMonth: () =>
-			sumCenterConfiguredBudget(centersForTotals, { mode: "month" }, 1),
+		plannedForMonth: (month) => {
+			const monthPeriod = [{ year: referenceYear, month }];
+			const categoryPlanned = sumBy(
+				getEffectiveCategoryBudgets(categoryBudgets, monthPeriod),
+				categoryBudgetAmount,
+			);
+			if (categoryPlanned) return categoryPlanned;
+			const matrixPlanned = sumMatrixRows(
+				matrix,
+				centers,
+				createMatrixPeriodTotal(monthPeriod),
+			);
+			if (matrixPlanned) return matrixPlanned;
+			return sumCenterConfiguredBudget(centersForTotals, { mode: "month" }, 1);
+		},
 	});
 	const forecastRows = buildForecastRows(monthlyEvolution);
 	const accountSummary = buildAccountSummary(accountRows);
@@ -1274,14 +1287,14 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 }
 
 export function budgetConsumptionStatus(percent = 0) {
-	if (percent > 100) {
+	if (percent > 95) {
 		return {
 			label: "Estourado",
 			textClass: "text-red-600",
 			barClass: "bg-red-500",
 		};
 	}
-	if (percent >= 80) {
+	if (percent >= 70) {
 		return {
 			label: "Atenção",
 			textClass: "text-amber-600",
