@@ -900,7 +900,16 @@ function buildAccountRows({
 			.map((key) => Number(String(key).split("-")[0] || 0))
 			.filter(Boolean),
 	);
-	return matrix
+	const matrixDimensionKeys = new Set(
+		matrix.map((row) =>
+			[
+				row.costCenterId,
+				row.accountId,
+				Number(row.year || row.ano || 0),
+			].join("|"),
+		),
+	);
+	const matrixRows = matrix
 		.map((row) => {
 			const account = accounts.find((item) => item.id === row.accountId);
 			const center = centers.find((item) => item.id === row.costCenterId);
@@ -963,6 +972,46 @@ function buildAccountRows({
 			};
 		})
 		.filter((item) => item && (item.planned || item.realized));
+	const breakdownRows = centers.flatMap((center) => {
+		if (isSyntheticCenter(center)) return [];
+		return centerBreakdowns(center)
+			.filter((breakdown) => {
+				const quebra2 = normalizeBudgetText(breakdown.quebra2 || breakdown.Quebra2);
+				const keys =
+					quebra2 === "projeto" ||
+					(!quebra2 && isProjectCenter(center))
+						? projectPeriodKeys
+						: periodKeys;
+				const year = Number(breakdown.year || breakdown.ano || 0);
+				const dimensionKey = [
+					center.id,
+					breakdown.accountId,
+					year,
+				].join("|");
+				return (
+					keys.has(getBudgetPeriodKey(breakdown)) &&
+					shouldIncludeAccessBudgetItem(breakdown) &&
+					!matrixDimensionKeys.has(dimensionKey)
+				);
+			})
+			.map((breakdown) => {
+				const account = accounts.find((item) => item.id === breakdown.accountId);
+				const realized = breakdownRealizedValue(breakdown);
+				return {
+					row: {
+						accountId: breakdown.accountId,
+						costCenterId: center.id,
+						year: Number(breakdown.year || breakdown.ano || 0),
+						source: "importacao",
+					},
+					account: classifyBreakdownBudgetRow(account, center, breakdown),
+					center,
+					...budgetMetric(0, realized),
+				};
+			})
+			.filter((item) => item.realized);
+	});
+	return [...matrixRows, ...breakdownRows];
 }
 
 function buildCenterRows({

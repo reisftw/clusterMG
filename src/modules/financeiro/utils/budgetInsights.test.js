@@ -479,6 +479,45 @@ describe("budgetInsights", () => {
 		expect(projectGroup.realized).toBe(0);
 	});
 
+	it("inclui realizado importado sem linha correspondente na matriz", () => {
+		const insights = getBudgetInsights(
+			{
+				accounts: [
+					{ id: "tarifas", codigo: "tarifas", nome: "Tarifas Boletos" },
+				],
+				centers: [
+					{
+						id: "centro-sem-matriz",
+						nome: "Centro sem matriz",
+						tipoPlano: "A",
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "tarifas",
+								realized: 137894.28,
+								grupo: "Sempre",
+								quebra2: "ORÇAMENTO",
+								categoria: "Financeiro",
+							},
+						],
+					},
+				],
+				matrix: [],
+				settings: {},
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+
+		const basalGroup = insights.budgetCategoryGroups.find((item) => item.id === "basal");
+
+		expect(basalGroup.realized).toBe(137894.28);
+		expect(basalGroup.categories[0]).toMatchObject({
+			name: "Financeiro",
+			realized: 137894.28,
+		});
+	});
+
 	it("aplica orcamento oficial de projetos por vigencia", () => {
 		const configWithProjectBudgets = {
 			...config,
