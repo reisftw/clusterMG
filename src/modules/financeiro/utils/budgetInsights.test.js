@@ -622,6 +622,75 @@ describe("budgetInsights", () => {
 		});
 	});
 
+	it("consolida orçamento oficial e realizado importado no mesmo card de conta", () => {
+		const insights = getBudgetInsights(
+			{
+				accounts: [
+					{
+						id: "1343",
+						codigo: "1343",
+						nome: "Empréstimos bancários",
+						categoriaMae: "Financeiro",
+						categoriaClasse: "nao_basal",
+					},
+				],
+				centers: [
+					{
+						id: "110602",
+						codigo: "110602",
+						nome: "Financeiro",
+						tipoPlano: "A",
+						responsavel: "VICTOR HUGO",
+						realizedByCompanyBranch: [
+							{
+								year: 2026,
+								month: 8,
+								accountId: "1343",
+								realized: 1722527.62,
+								grupo: "Sempre",
+								quebra2: "ACOMPANHAR",
+								categoria: "Financeiro",
+							},
+						],
+					},
+				],
+				matrix: [
+					{
+						accountId: "1343",
+						costCenterId: "110602",
+						year: 2026,
+						months: Array.from({ length: 12 }, () => 0),
+					},
+				],
+				settings: {
+					financialCategoryBudgets: [
+						{
+							classType: "nao_basal",
+							categoryName: "Financeiro",
+							accountName: "Empréstimos bancários",
+							periodScope: "monthly_default",
+							planned: 1600000,
+						},
+					],
+				},
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+		const nonBasalGroup = insights.budgetCategoryGroups.find(
+			(item) => item.id === "nao_basal",
+		);
+		const financeiro = nonBasalGroup.categories.find(
+			(item) => item.name === "Financeiro",
+		);
+
+		expect(financeiro.accounts).toHaveLength(1);
+		expect(financeiro.accounts[0]).toMatchObject({
+			id: "1343",
+			planned: 1600000,
+			realized: 1722527.62,
+		});
+	});
+
 	it("usa orçamento categorizado padrão mensal sem duplicar mês específico", () => {
 		const configWithBudgets = {
 			...config,

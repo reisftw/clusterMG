@@ -721,15 +721,17 @@ function applyCategoryBudgetOverrides(
 			budget.categoryName,
 		);
 		const normalizedAccountName = normalizeBudgetText(budget.accountName);
-		const existingAccount = Array.from(currentCategory.accounts.values()).find(
-			(account) =>
+		const existingAccountEntry = Array.from(
+			currentCategory.accounts.entries(),
+		).find(
+			([, account]) =>
 				normalizeBudgetText(account.account?.nome || account.account?.name || account.id) ===
 				normalizedAccountName,
 		);
 		const accountKey =
-			existingAccount?.id ||
+			existingAccountEntry?.[0] ||
 			`${categoryKey}:orcado:${normalizedAccountName || "sem-conta"}`;
-		const currentAccount = existingAccount || {
+		const currentAccount = existingAccountEntry?.[1] || {
 			id: accountKey,
 			account: {
 				id: accountKey,
