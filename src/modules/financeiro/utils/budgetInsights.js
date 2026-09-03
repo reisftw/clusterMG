@@ -410,6 +410,16 @@ function budgetMetric(planned = 0, realized = 0) {
 	};
 }
 
+function categoryBudgetMatchesPeriod(item = {}, periodKeys = new Set()) {
+	const year = Number(item.year || item.ano || item.referenceYear);
+	const month = Number(item.month || item.mes || item.numMes || item.referenceMonth);
+	return year && month && periodKeys.has(`${year}-${month}`);
+}
+
+function categoryBudgetAmount(item = {}) {
+	return Number(item.orcado || item.planned || item.valor || item.value || 0);
+}
+
 function normalizeBudgetText(value = "") {
 	return String(value || "")
 		.trim()
@@ -491,7 +501,76 @@ function getBudgetCategoryContainer(classMap, classType, classLabel, categoryNam
 	return { currentClass, currentCategory, categoryKey };
 }
 
-function buildBudgetCategoryGroups(accountRows = [], accounts = [], categoryCatalog = []) {
+function applyCategoryBudgetOverrides(classMap, categoryBudgets = [], periodKeys = new Set()) {
+	const matchingBudgets = categoryBudgets.filter((item) =>
+		categoryBudgetMatchesPeriod(item, periodKeys),
+	);
+	const budgetsByAccount = new Map();
+	matchingBudgets.forEach((item) => {
+		const classType = item.classType || item.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+		const categoryName = item.categoryName || item.categoriaMae || item.categoria || "Sem categoria";
+		const accountName = item.accountName || item.contaNome || item.nomeConta || item.account || "Sem conta";
+		const key = [
+			classType,
+			normalizeBudgetText(categoryName),
+			normalizeBudgetText(accountName),
+		].join(":");
+		const current = budgetsByAccount.get(key) || {
+			classType,
+			categoryName,
+			accountName,
+			planned: 0,
+		};
+		current.planned += categoryBudgetAmount(item);
+		budgetsByAccount.set(key, current);
+	});
+	budgetsByAccount.forEach((budget) => {
+		const classLabel =
+			BUDGET_CATEGORY_CLASS_LABELS[budget.classType] ||
+			BUDGET_CATEGORY_CLASS_LABELS[BUDGET_CATEGORY_CLASSES.BASAL];
+		const { currentClass, currentCategory, categoryKey } = getBudgetCategoryContainer(
+			classMap,
+			budget.classType,
+			classLabel,
+			budget.categoryName,
+		);
+		const normalizedAccountName = normalizeBudgetText(budget.accountName);
+		const existingAccount = Array.from(currentCategory.accounts.values()).find(
+			(account) =>
+				normalizeBudgetText(account.account?.nome || account.account?.name || account.id) ===
+				normalizedAccountName,
+		);
+		const accountKey =
+			existingAccount?.id ||
+			`${categoryKey}:orcado:${normalizedAccountName || "sem-conta"}`;
+		const currentAccount = existingAccount || {
+			id: accountKey,
+			account: {
+				id: accountKey,
+				nome: budget.accountName,
+				categoriaMae: budget.categoryName,
+				categoriaClasse: budget.classType,
+				categoriaClasseLabel: classLabel,
+				isBasal: budget.classType === BUDGET_CATEGORY_CLASSES.BASAL,
+			},
+			planned: 0,
+			realized: 0,
+			centers: [],
+		};
+		const delta = budget.planned - Number(currentAccount.planned || 0);
+		currentAccount.planned = budget.planned;
+		currentClass.planned += delta;
+		currentCategory.planned += delta;
+		currentCategory.accounts.set(accountKey, currentAccount);
+	});
+}
+
+function buildBudgetCategoryGroups(
+	accountRows = [],
+	accounts = [],
+	categoryCatalog = [],
+	options = {},
+) {
 	const classMap = new Map();
 	getFinancialAccountCategoryCatalog(categoryCatalog).forEach((category) => {
 		getBudgetCategoryContainer(
@@ -574,6 +653,11 @@ function buildBudgetCategoryGroups(accountRows = [], accounts = [], categoryCata
 			});
 		}
 		});
+	applyCategoryBudgetOverrides(
+		classMap,
+		options.categoryBudgets || [],
+		options.periodKeys || new Set(),
+	);
 	return [
 		BUDGET_CATEGORY_CLASSES.BASAL,
 		BUDGET_CATEGORY_CLASSES.NAO_BASAL,
@@ -691,6 +775,7 @@ function buildCenterRows({
 
 export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const categoryCatalog = config.settings?.financialAccountCategories || [];
+	const categoryBudgets = config.settings?.financialCategoryBudgets || [];
 	const accounts = (config.accounts || []).map((account) =>
 		enrichFinancialAccountWithCategory(account, categoryCatalog),
 	);
@@ -759,7 +844,11 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		{ mode: "year" },
 		12,
 	);
-	const plannedMonth = plannedMonthFromCenters || plannedMonthFromMatrix;
+	const plannedMonthFromCategories = sumBy(
+		categoryBudgets.filter((item) => categoryBudgetMatchesPeriod(item, periodKeys)),
+		categoryBudgetAmount,
+	);
+	const plannedMonth = plannedMonthFromCategories || plannedMonthFromCenters || plannedMonthFromMatrix;
 	const plannedYear = plannedYearFromCenters || plannedYearFromMatrix;
 	const realizedMonth = sumBy(centersForTotals, realizedForCenter);
 	const committedMonth = sumBy(
@@ -867,6 +956,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		accountRows,
 		accounts,
 		categoryCatalog,
+		{ categoryBudgets, periodKeys },
 	);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")

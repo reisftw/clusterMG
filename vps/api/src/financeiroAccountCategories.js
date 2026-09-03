@@ -76,7 +76,16 @@ const FINANCIAL_ACCOUNT_CATEGORY_CATALOG = [
 			"Manutenção Corretiva de Veículos",
 		],
 	],
-	["Financeiro", BUDGET_CATEGORY_CLASSES.BASAL, ["Tarifas e pacotes bancários", "Tarifas Boletos"]],
+	[
+		"Financeiro",
+		BUDGET_CATEGORY_CLASSES.BASAL,
+		[
+			"Tarifas e pacotes bancários",
+			"IOF",
+			"IRRF sobre Aplicações",
+			"Tarifas Boletos",
+		],
+	],
 	["Viagens e Estadias", BUDGET_CATEGORY_CLASSES.BASAL, ["Despesas de Viagens e Estadias"]],
 	[
 		"Administrativo",
@@ -106,11 +115,11 @@ const FINANCIAL_ACCOUNT_CATEGORY_CATALOG = [
 			"Serviços de Consultoria",
 		],
 	],
+	["Comercial", BUDGET_CATEGORY_CLASSES.BASAL, ["Comissões PJ"]],
 	[
-		"Comercial",
+		"TI",
 		BUDGET_CATEGORY_CLASSES.BASAL,
 		[
-			"Comissões PJ",
 			"TI",
 			"Infraestrutura de Datacenter",
 			"Telefone",
@@ -211,6 +220,7 @@ const ACCOUNT_ALIASES = new Map([
 	["combustivel", "Combustíveis - Veículos"],
 	["combustiveis", "Combustíveis - Veículos"],
 	["veiculos", "Veículos"],
+	["irrf sobre aplicacoes", "IRRF sobre Aplicações"],
 ]);
 
 function normalizeFinancialAccountCategoryKey(value = "") {

@@ -91,7 +91,12 @@ export const FINANCIAL_ACCOUNT_CATEGORY_CATALOG = [
 	{
 		name: "Financeiro",
 		classType: BUDGET_CATEGORY_CLASSES.BASAL,
-		accounts: ["Tarifas e pacotes bancários", "Tarifas Boletos"],
+		accounts: [
+			"Tarifas e pacotes bancários",
+			"IOF",
+			"IRRF sobre Aplicações",
+			"Tarifas Boletos",
+		],
 	},
 	{
 		name: "Viagens e Estadias",
@@ -129,8 +134,12 @@ export const FINANCIAL_ACCOUNT_CATEGORY_CATALOG = [
 	{
 		name: "Comercial",
 		classType: BUDGET_CATEGORY_CLASSES.BASAL,
+		accounts: ["Comissões PJ"],
+	},
+	{
+		name: "TI",
+		classType: BUDGET_CATEGORY_CLASSES.BASAL,
 		accounts: [
-			"Comissões PJ",
 			"TI",
 			"Infraestrutura de Datacenter",
 			"Telefone",
@@ -259,6 +268,7 @@ const ACCOUNT_ALIASES = new Map([
 	["combustivel", "Combustíveis - Veículos"],
 	["combustiveis", "Combustíveis - Veículos"],
 	["veiculos", "Veículos"],
+	["irrf sobre aplicacoes", "IRRF sobre Aplicações"],
 ]);
 
 export function normalizeFinancialAccountCategoryKey(value = "") {

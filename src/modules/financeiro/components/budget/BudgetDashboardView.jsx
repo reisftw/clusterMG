@@ -12,13 +12,21 @@ function BudgetCategoryClassPanel({
 	budgetCenterCompactLabel,
 }) {
 	const categories = group.categories || [];
+	const available = Number(group.planned || 0) - Number(group.realized || 0);
+	const isFavorable = available >= 0;
 	return (
 		<article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<div className="min-w-0">
-					<p className="text-xs font-black uppercase text-slate-500">
-						Categoria
-					</p>
+					<div className="flex items-center gap-2">
+						<span
+							className={`h-3 w-3 rounded-full ${isFavorable ? "bg-emerald-500" : "bg-red-500"}`}
+							aria-label={isFavorable ? "Dentro do orçamento" : "Acima do orçamento"}
+						/>
+						<p className="text-xs font-black uppercase text-slate-500">
+							Categoria
+						</p>
+					</div>
 					<h3 className="break-words text-xl font-black text-slate-950">
 						{group.label}
 					</h3>
@@ -37,16 +45,26 @@ function BudgetCategoryClassPanel({
 			</div>
 			<div className="mt-4 space-y-3">
 				{categories.length ? (
-					categories.slice(0, 5).map((category) => (
+					categories.slice(0, 5).map((category) => {
+						const categoryAvailable =
+							Number(category.planned || 0) - Number(category.realized || 0);
+						const categoryFavorable = categoryAvailable >= 0;
+						return (
 						<section
 							key={category.id}
 							className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
 						>
 							<div className="flex flex-wrap items-start justify-between gap-2">
 								<div className="min-w-0">
-									<p className="break-words text-sm font-black text-slate-950">
-										{category.name}
-									</p>
+									<div className="flex items-center gap-2">
+										<span
+											className={`h-2.5 w-2.5 shrink-0 rounded-full ${categoryFavorable ? "bg-emerald-500" : "bg-red-500"}`}
+											aria-label={categoryFavorable ? "Dentro do orçamento" : "Acima do orçamento"}
+										/>
+										<p className="break-words text-sm font-black text-slate-950">
+											{category.name}
+										</p>
+									</div>
 									<p className="text-xs font-bold text-slate-500">
 										{category.accounts.length} conta(s) financeira(s)
 									</p>
@@ -95,7 +113,8 @@ function BudgetCategoryClassPanel({
 								))}
 							</div>
 						</section>
-					))
+						);
+					})
 				) : (
 					<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
 						Nenhuma conta financeira classificada nesta categoria.

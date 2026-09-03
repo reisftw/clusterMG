@@ -223,6 +223,40 @@ describe("budgetInsights", () => {
 		});
 	});
 
+	it("prioriza orçamento mensal cadastrado por categoria financeira", () => {
+		const insights = getBudgetInsights(
+			{
+				...config,
+				settings: {
+					...config.settings,
+					financialCategoryBudgets: [
+						{
+							classType: "basal",
+							categoryName: "Produto",
+							accountName: "Serviços Digitais",
+							year: 2026,
+							month: 8,
+							planned: 264423,
+						},
+					],
+				},
+			},
+			{ mode: "month", referenceYear: 2026, referenceMonth: 8 },
+		);
+		const basalGroup = insights.budgetCategoryGroups.find(
+			(item) => item.id === "basal",
+		);
+		const produto = basalGroup.categories.find((item) => item.name === "Produto");
+
+		expect(insights.plannedMonth).toBe(264423);
+		expect(produto).toMatchObject({
+			planned: 264423,
+		});
+		expect(produto.accounts[0]).toMatchObject({
+			planned: 264423,
+		});
+	});
+
 	it("groups synthetic centers, filters responsible users and paginates groups", () => {
 		const insights = getBudgetInsights(config, {
 			mode: "month",
