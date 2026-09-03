@@ -52,7 +52,10 @@ describe("budgetCharts", () => {
 		];
 
 		expect(buildBudgetAccountChart(accounts, (account) => account.nome, 1).chart.labels).toEqual(["Receita"]);
-		expect(buildBudgetCenterChart(centers, (center) => center.nome, 2).chart.datasets[0].data).toEqual([20, 0]);
+		expect(buildBudgetCenterChart(centers, (center) => center.nome, 2).chart.datasets).toMatchObject([
+			{ label: "Orçado", data: [100, 50] },
+			{ label: "Realizado", data: [80, 70] },
+		]);
 		expect(buildBudgetSupplierChart(suppliers, 1)).toMatchObject({
 			total: 100,
 			chart: { labels: ["CEMIG"] },
