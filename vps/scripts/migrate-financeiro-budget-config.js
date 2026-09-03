@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const db = require("../api/src/db");
 
 const APPLY = process.argv.includes("--apply");
+const FORCE = process.argv.includes("--force");
 const JSON_MODE = process.argv.includes("--json");
 const CONFIG_COLLECTION = "financeiro_config";
 const COST_CENTERS_PATH = "financeiro_config/orcamento_centros_custo";
@@ -363,6 +364,21 @@ async function applyRows(rows) {
 	}
 }
 
+async function hasNormalizedBudgetData() {
+	const result = await db.query(
+		`select
+			(select count(*)::int from financeiro_contas) as contas_count,
+			(select count(*)::int from financeiro_centros_custo) as centros_count,
+			(select count(*)::int from financeiro_orcamento_lancamentos) as lancamentos_count`,
+	);
+	const row = result.rows[0] || {};
+	return (
+		Number(row.contas_count || 0) > 0 ||
+		Number(row.centros_count || 0) > 0 ||
+		Number(row.lancamentos_count || 0) > 0
+	);
+}
+
 function groupSums(rows) {
 	const map = new Map();
 	for (const row of rows) {
@@ -426,6 +442,18 @@ async function run() {
 		},
 	};
 	if (APPLY) {
+		if (!FORCE && (await hasNormalizedBudgetData())) {
+			report.skipped = true;
+			report.reason =
+				"Financeiro orçamento já possui dados normalizados; migração legada ignorada para não sobrescrever produção.";
+			report.database = await dbCounts();
+			if (JSON_MODE) {
+				console.log(JSON.stringify(report, null, 2));
+			} else {
+				console.log(report.reason);
+			}
+			return;
+		}
 		await applyRows(rows);
 		report.database = await dbCounts();
 	}
