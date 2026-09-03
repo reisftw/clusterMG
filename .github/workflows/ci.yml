@@ -142,6 +142,34 @@ jobs:
           name: retiradas-dist
           path: dist
 
+      - name: Resolve VPS deploy environment
+        env:
+          PROD_VPS_HOST_SECRET: ${{ secrets.PROD_VPS_HOST }}
+          VPS_HOST_SECRET: ${{ secrets.VPS_HOST }}
+          HOMOLOG_VPS_HOST_SECRET: ${{ secrets.HOMOLOG_VPS_HOST }}
+          PROD_VPS_PORT_SECRET: ${{ secrets.PROD_VPS_PORT }}
+          VPS_PORT_SECRET: ${{ secrets.VPS_PORT }}
+          HOMOLOG_VPS_PORT_SECRET: ${{ secrets.HOMOLOG_VPS_PORT }}
+          PROD_VPS_USER_SECRET: ${{ secrets.PROD_VPS_USER }}
+          VPS_USER_SECRET: ${{ secrets.VPS_USER }}
+          HOMOLOG_VPS_USER_SECRET: ${{ secrets.HOMOLOG_VPS_USER }}
+          PROD_VPS_DEPLOY_PATH_SECRET: ${{ secrets.PROD_VPS_DEPLOY_PATH }}
+          VPS_DEPLOY_PATH_SECRET: ${{ secrets.VPS_DEPLOY_PATH }}
+          PROD_VPS_API_PATH_SECRET: ${{ secrets.PROD_VPS_API_PATH }}
+          VPS_API_PATH_SECRET: ${{ secrets.VPS_API_PATH }}
+          PROD_VPS_API_SERVICE_SECRET: ${{ secrets.PROD_VPS_API_SERVICE }}
+          VPS_API_SERVICE_SECRET: ${{ secrets.VPS_API_SERVICE }}
+          PROD_VPS_API_ENV_FILE_SECRET: ${{ secrets.PROD_VPS_API_ENV_FILE }}
+          VPS_API_ENV_FILE_SECRET: ${{ secrets.VPS_API_ENV_FILE }}
+        run: |
+          echo "VPS_HOST=${PROD_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${HOMOLOG_VPS_HOST_SECRET:-145.223.27.20}}}" >> "$GITHUB_ENV"
+          echo "VPS_PORT=${PROD_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${HOMOLOG_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
+          echo "VPS_USER=${PROD_VPS_USER_SECRET:-${VPS_USER_SECRET:-${HOMOLOG_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
+          echo "VPS_DEPLOY_PATH=${PROD_VPS_DEPLOY_PATH_SECRET:-${VPS_DEPLOY_PATH_SECRET:-/var/www/retiradas/dist}}" >> "$GITHUB_ENV"
+          echo "VPS_API_PATH=${PROD_VPS_API_PATH_SECRET:-${VPS_API_PATH_SECRET:-/opt/retiradas/vps}}" >> "$GITHUB_ENV"
+          echo "VPS_API_SERVICE=${PROD_VPS_API_SERVICE_SECRET:-${VPS_API_SERVICE_SECRET:-retiradas-api}}" >> "$GITHUB_ENV"
+          echo "VPS_API_ENV_FILE=${PROD_VPS_API_ENV_FILE_SECRET:-${VPS_API_ENV_FILE_SECRET:-/etc/retiradas/api.env}}" >> "$GITHUB_ENV"
+
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.PROD_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.HOMOLOG_VPS_SSH_KEY }}
@@ -240,6 +268,30 @@ jobs:
         with:
           name: retiradas-dist
           path: dist
+
+      - name: Resolve homolog VPS deploy environment
+        env:
+          HOMOLOG_VPS_HOST_SECRET: ${{ secrets.HOMOLOG_VPS_HOST }}
+          VPS_HOST_SECRET: ${{ secrets.VPS_HOST }}
+          PROD_VPS_HOST_SECRET: ${{ secrets.PROD_VPS_HOST }}
+          HOMOLOG_VPS_PORT_SECRET: ${{ secrets.HOMOLOG_VPS_PORT }}
+          VPS_PORT_SECRET: ${{ secrets.VPS_PORT }}
+          PROD_VPS_PORT_SECRET: ${{ secrets.PROD_VPS_PORT }}
+          HOMOLOG_VPS_USER_SECRET: ${{ secrets.HOMOLOG_VPS_USER }}
+          VPS_USER_SECRET: ${{ secrets.VPS_USER }}
+          PROD_VPS_USER_SECRET: ${{ secrets.PROD_VPS_USER }}
+          HOMOLOG_VPS_DEPLOY_PATH_SECRET: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH }}
+          HOMOLOG_VPS_API_PATH_SECRET: ${{ secrets.HOMOLOG_VPS_API_PATH }}
+          HOMOLOG_VPS_API_SERVICE_SECRET: ${{ secrets.HOMOLOG_VPS_API_SERVICE }}
+          HOMOLOG_VPS_API_ENV_FILE_SECRET: ${{ secrets.HOMOLOG_VPS_API_ENV_FILE }}
+        run: |
+          echo "VPS_HOST=${HOMOLOG_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${PROD_VPS_HOST_SECRET:-145.223.27.20}}}" >> "$GITHUB_ENV"
+          echo "VPS_PORT=${HOMOLOG_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${PROD_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
+          echo "VPS_USER=${HOMOLOG_VPS_USER_SECRET:-${VPS_USER_SECRET:-${PROD_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
+          echo "VPS_DEPLOY_PATH=${HOMOLOG_VPS_DEPLOY_PATH_SECRET:-/var/www/retiradas-homolog/dist}" >> "$GITHUB_ENV"
+          echo "VPS_API_PATH=${HOMOLOG_VPS_API_PATH_SECRET:-/opt/retiradas/vps-homolog}" >> "$GITHUB_ENV"
+          echo "VPS_API_SERVICE=${HOMOLOG_VPS_API_SERVICE_SECRET:-retiradas-api-homolog}" >> "$GITHUB_ENV"
+          echo "VPS_API_ENV_FILE=${HOMOLOG_VPS_API_ENV_FILE_SECRET:-/etc/retiradas/api-homolog.env}" >> "$GITHUB_ENV"
 
       - name: Configure SSH
         env:
