@@ -4273,12 +4273,22 @@ async function getBudgetCostCenters() {
 
 async function saveBudgetCostCenters(payload = {}, user = {}) {
 	const existingConfig = await financeiroStatement.getBudgetConfigurationStatement();
+	const payloadCategoryBudgets = payload.settings?.financialCategoryBudgets;
+	const existingCategoryBudgets =
+		existingConfig.settings?.financialCategoryBudgets;
+	const financialCategoryBudgets =
+		Array.isArray(payloadCategoryBudgets) && payloadCategoryBudgets.length
+			? payloadCategoryBudgets
+			: Array.isArray(existingCategoryBudgets)
+				? existingCategoryBudgets
+				: payloadCategoryBudgets;
 	const nextPayload = {
 		...(existingConfig || {}),
 		...(payload || {}),
 		settings: {
 			...(existingConfig.settings || {}),
 			...(payload.settings || {}),
+			financialCategoryBudgets,
 		},
 	};
 	const config = normalizeCostCentersConfig(nextPayload, user);

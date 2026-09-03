@@ -5769,6 +5769,11 @@ function getBudgetSettings(settings = {}) {
 			settings.financialAccountCategories,
 			DEFAULT_BUDGET_SETTINGS.financialAccountCategories,
 		),
+		financialCategoryBudgets: Array.isArray(settings.financialCategoryBudgets)
+			? settings.financialCategoryBudgets.filter(
+					(item) => item && typeof item === "object",
+				)
+			: [],
 	};
 }
 
