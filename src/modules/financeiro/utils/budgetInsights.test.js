@@ -257,6 +257,51 @@ describe("budgetInsights", () => {
 		});
 	});
 
+	it("usa orçamento categorizado padrão mensal sem duplicar mês específico", () => {
+		const configWithBudgets = {
+			...config,
+			settings: {
+				...config.settings,
+				financialCategoryBudgets: [
+					{
+						classType: "basal",
+						categoryName: "Produto",
+						accountName: "Serviços Digitais",
+						periodScope: "monthly_default",
+						planned: 264423,
+					},
+					{
+						classType: "basal",
+						categoryName: "Produto",
+						accountName: "Serviços Digitais",
+						year: 2026,
+						month: 8,
+						planned: 264423,
+					},
+				],
+			},
+		};
+
+		const august = getBudgetInsights(configWithBudgets, {
+			mode: "month",
+			referenceYear: 2026,
+			referenceMonth: 8,
+		});
+		const september = getBudgetInsights(configWithBudgets, {
+			mode: "month",
+			referenceYear: 2026,
+			referenceMonth: 9,
+		});
+		const year = getBudgetInsights(configWithBudgets, {
+			mode: "year",
+			referenceYear: 2026,
+		});
+
+		expect(august.plannedMonth).toBe(264423);
+		expect(september.plannedMonth).toBe(264423);
+		expect(year.plannedYear).toBe(264423 * 12);
+	});
+
 	it("groups synthetic centers, filters responsible users and paginates groups", () => {
 		const insights = getBudgetInsights(config, {
 			mode: "month",

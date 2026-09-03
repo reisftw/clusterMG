@@ -416,6 +416,21 @@ function categoryBudgetMatchesPeriod(item = {}, periodKeys = new Set()) {
 	return year && month && periodKeys.has(`${year}-${month}`);
 }
 
+function categoryBudgetHasFixedPeriod(item = {}) {
+	return Boolean(
+		Number(item.year || item.ano || item.referenceYear) &&
+			Number(item.month || item.mes || item.numMes || item.referenceMonth),
+	);
+}
+
+function categoryBudgetIsMonthlyDefault(item = {}) {
+	return Boolean(
+		item.periodScope === "monthly_default" ||
+			item.appliesEveryMonth ||
+			!categoryBudgetHasFixedPeriod(item),
+	);
+}
+
 function categoryBudgetAmount(item = {}) {
 	return Number(item.orcado || item.planned || item.valor || item.value || 0);
 }
@@ -501,20 +516,67 @@ function getBudgetCategoryContainer(classMap, classType, classLabel, categoryNam
 	return { currentClass, currentCategory, categoryKey };
 }
 
-function applyCategoryBudgetOverrides(classMap, categoryBudgets = [], periodKeys = new Set()) {
-	const matchingBudgets = categoryBudgets.filter((item) =>
-		categoryBudgetMatchesPeriod(item, periodKeys),
+function categoryBudgetDimensionKey(item = {}) {
+	const classType = item.classType || item.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
+	const categoryName = item.categoryName || item.categoriaMae || item.categoria || "Sem categoria";
+	const accountName = item.accountName || item.contaNome || item.nomeConta || item.account || "Sem conta";
+	return [
+		classType,
+		normalizeBudgetText(categoryName),
+		normalizeBudgetText(accountName),
+	].join(":");
+}
+
+function getEffectiveCategoryBudgets(categoryBudgets = [], periodMonths = []) {
+	const months = periodMonths.length
+		? periodMonths
+		: [{ year: new Date().getFullYear(), month: new Date().getMonth() + 1 }];
+	const exactBudgets = categoryBudgets.filter((item) =>
+		categoryBudgetMatchesPeriod(
+			item,
+			new Set(months.map((month) => `${month.year}-${month.month}`)),
+		),
 	);
+	const exactDimensionsByMonth = new Set(
+		exactBudgets.map((item) => {
+			const year = Number(item.year || item.ano || item.referenceYear);
+			const month = Number(item.month || item.mes || item.numMes || item.referenceMonth);
+			return `${year}-${month}:${categoryBudgetDimensionKey(item)}`;
+		}),
+	);
+	const monthlyDefaults = categoryBudgets.filter(categoryBudgetIsMonthlyDefault);
+	const defaultEntries = months.flatMap((month) =>
+		monthlyDefaults
+			.filter(
+				(item) =>
+					!exactDimensionsByMonth.has(
+						`${month.year}-${month.month}:${categoryBudgetDimensionKey(item)}`,
+					),
+			)
+			.map((item) => ({
+				...item,
+				year: month.year,
+				ano: month.year,
+				month: month.month,
+				mes: month.month,
+				numMes: month.month,
+			})),
+	);
+	return [...exactBudgets, ...defaultEntries];
+}
+
+function applyCategoryBudgetOverrides(
+	classMap,
+	categoryBudgets = [],
+	periodMonths = [],
+) {
+	const matchingBudgets = getEffectiveCategoryBudgets(categoryBudgets, periodMonths);
 	const budgetsByAccount = new Map();
 	matchingBudgets.forEach((item) => {
 		const classType = item.classType || item.categoriaClasse || BUDGET_CATEGORY_CLASSES.BASAL;
 		const categoryName = item.categoryName || item.categoriaMae || item.categoria || "Sem categoria";
 		const accountName = item.accountName || item.contaNome || item.nomeConta || item.account || "Sem conta";
-		const key = [
-			classType,
-			normalizeBudgetText(categoryName),
-			normalizeBudgetText(accountName),
-		].join(":");
+		const key = categoryBudgetDimensionKey(item);
 		const current = budgetsByAccount.get(key) || {
 			classType,
 			categoryName,
@@ -656,7 +718,7 @@ function buildBudgetCategoryGroups(
 	applyCategoryBudgetOverrides(
 		classMap,
 		options.categoryBudgets || [],
-		options.periodKeys || new Set(),
+		options.periodMonths || [],
 	);
 	return [
 		BUDGET_CATEGORY_CLASSES.BASAL,
@@ -845,11 +907,19 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		12,
 	);
 	const plannedMonthFromCategories = sumBy(
-		categoryBudgets.filter((item) => categoryBudgetMatchesPeriod(item, periodKeys)),
+		getEffectiveCategoryBudgets(categoryBudgets, period.months),
+		categoryBudgetAmount,
+	);
+	const yearPeriodMonths = Array.from({ length: 12 }, (_, index) => ({
+		year: referenceYear,
+		month: index + 1,
+	}));
+	const plannedYearFromCategories = sumBy(
+		getEffectiveCategoryBudgets(categoryBudgets, yearPeriodMonths),
 		categoryBudgetAmount,
 	);
 	const plannedMonth = plannedMonthFromCategories || plannedMonthFromCenters || plannedMonthFromMatrix;
-	const plannedYear = plannedYearFromCenters || plannedYearFromMatrix;
+	const plannedYear = plannedYearFromCategories || plannedYearFromCenters || plannedYearFromMatrix;
 	const realizedMonth = sumBy(centersForTotals, realizedForCenter);
 	const committedMonth = sumBy(
 		centersForTotals,
@@ -956,7 +1026,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		accountRows,
 		accounts,
 		categoryCatalog,
-		{ categoryBudgets, periodKeys },
+		{ categoryBudgets, periodMonths: period.months },
 	);
 	const centerSummary = centerRows
 		.filter(({ center }) => center?.tipoPlano === "A")
