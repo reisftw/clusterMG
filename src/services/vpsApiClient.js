@@ -8,7 +8,13 @@ import {
 } from "./vpsAuthSession";
 
 const DEFAULT_API_BASE_URL = "https://retiradas.tech/api";
+const FINAN_TOKEN_KEY = "finan-auth-token";
 let csrfRefreshPromise = null;
+
+function isFinanHost() {
+	if (typeof window === "undefined") return false;
+	return /^finan\./i.test(window.location.hostname);
+}
 
 export function isVpsBackendEnabled() {
 	return (
@@ -17,6 +23,7 @@ export function isVpsBackendEnabled() {
 }
 
 export function getApiBaseUrl() {
+	if (isFinanHost()) return `${window.location.origin}/api`;
 	return String(
 		import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL,
 	).replace(/\/+$/, "");
@@ -66,7 +73,9 @@ async function refreshCsrfToken() {
 }
 
 async function buildRequestHeaders(options = {}) {
-	const token = getVpsAuthToken();
+	const token = isFinanHost()
+		? window.localStorage.getItem(FINAN_TOKEN_KEY) || ""
+		: getVpsAuthToken();
 	const method = String(options.method || "GET").toUpperCase();
 	const isFormData =
 		typeof FormData !== "undefined" && options.body instanceof FormData;
@@ -76,7 +85,7 @@ async function buildRequestHeaders(options = {}) {
 	if (!isFormData && !headers["Content-Type"])
 		headers["Content-Type"] = "application/json";
 	if (token) headers.Authorization = `Bearer ${token}`;
-	if (isUnsafeMethod(method)) {
+	if (!isFinanHost() && isUnsafeMethod(method)) {
 		const csrfToken = getVpsCsrfToken() || (await refreshCsrfToken());
 		if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
 	}

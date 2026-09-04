@@ -27,11 +27,30 @@ const FINANCIAL_SOURCE_TABLES = [
 ];
 
 function createRetiradasPool() {
-	if (!process.env.RETIRADAS_DATABASE_URL) {
-		throw new Error("Informe RETIRADAS_DATABASE_URL para auditar a base atual.");
+	if (process.env.RETIRADAS_DATABASE_URL) {
+		return new Pool({
+			connectionString: process.env.RETIRADAS_DATABASE_URL,
+			ssl:
+				String(process.env.RETIRADAS_PGSSLMODE || "").toLowerCase() === "require"
+					? { rejectUnauthorized: false }
+					: undefined,
+		});
 	}
+
+	for (const key of ["RETIRADAS_PGHOST", "RETIRADAS_PGUSER", "RETIRADAS_PGDATABASE"]) {
+		if (!process.env[key]) {
+			throw new Error(
+				"Informe RETIRADAS_DATABASE_URL ou RETIRADAS_PGHOST/RETIRADAS_PGUSER/RETIRADAS_PGDATABASE para auditar a base atual.",
+			);
+		}
+	}
+
 	return new Pool({
-		connectionString: process.env.RETIRADAS_DATABASE_URL,
+		host: process.env.RETIRADAS_PGHOST,
+		port: Number(process.env.RETIRADAS_PGPORT || 5432),
+		user: process.env.RETIRADAS_PGUSER,
+		password: process.env.RETIRADAS_PGPASSWORD,
+		database: process.env.RETIRADAS_PGDATABASE,
 		ssl:
 			String(process.env.RETIRADAS_PGSSLMODE || "").toLowerCase() === "require"
 				? { rejectUnauthorized: false }

@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
 import PageWrapper from "../components/layout/PageWrapper";
 import ErrorPage from "../components/ui/ErrorPage";
@@ -126,9 +126,6 @@ const EntregasTecnicos = lazy(
 const Logistica = lazy(
 	() => import("../modules/logistica/components/LogisticaPage"),
 );
-const Financeiro = lazy(
-	() => import("../modules/financeiro/components/FinanceiroPage"),
-);
 const Atendimento = lazy(
 	() => import("../modules/atendimento/components/AtendimentoPage"),
 );
@@ -222,6 +219,59 @@ const AuthenticatedRoutes = () => (
 		<Outlet />
 	</AuthProvider>
 );
+
+const FINAN_BASE_URL = "https://finan.retiradas.tech";
+
+function buildFinanRedirectUrl(pathname, search = "") {
+	const normalizedPath = String(pathname || "/financeiro")
+		.replace(/\/+$/g, "")
+		.toLowerCase();
+	const targetPath =
+		{
+			"/financeiro": "/",
+			"/financeiro/contas-a-pagar": "/contas-a-pagar",
+			"/financeiro/contas-a-receber": "/contas-a-receber",
+			"/financeiro/faturamento": "/faturamento",
+			"/financeiro/notas": "/notas",
+			"/financeiro/reports/serasa": "/reports/serasa",
+			"/financeiro/reports/tarifas": "/reports/tarifas",
+			"/financeiro/reports/tarifas/faturas": "/reports/faturas",
+			"/financeiro/reports/tarifas/rec-cliente": "/reports/receitas",
+			"/financeiro/reports/tarifas/formas-pagamento":
+				"/reports/formas-pagamento",
+			"/financeiro/gestao-orcamento": "/gestao-orcamentaria/visao-geral",
+			"/financeiro/gestao-orcamento/dados": "/gestao-orcamentaria/dados",
+			"/financeiro/gestao-orcamento/centros-custo":
+				"/gestao-orcamentaria/orcamento",
+			"/financeiro/gestao-orcamento/dre": "/gestao-orcamentaria/dre",
+			"/financeiro/gestao-orcamento/aprovacoes":
+				"/gestao-orcamentaria/aprovacoes",
+			"/financeiro/gestao-orcamento/configuracoes":
+				"/gestao-orcamentaria/configuracoes",
+			"/financeiro/configuracoes": "/configuracao-geral",
+			"/financeiro/equipe": "/equipe",
+		}[normalizedPath] || "/";
+	return `${FINAN_BASE_URL}${targetPath}${search || ""}`;
+}
+
+function FinanceiroRedirect() {
+	useEffect(() => {
+		window.location.replace(
+			buildFinanRedirectUrl(window.location.pathname, window.location.search),
+		);
+	}, []);
+
+	return (
+		<div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-center">
+			<div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm">
+				<Spinner size="md" text="Abrindo Finan..." />
+				<p className="mt-3 text-sm font-semibold text-slate-500">
+					O Financeiro agora fica em finan.retiradas.tech.
+				</p>
+			</div>
+		</div>
+	);
+}
 
 const AppRouter = () => (
 	<BrowserRouter>
@@ -480,230 +530,8 @@ const AppRouter = () => (
 							}
 						/>
 						<Route
-							path={ROUTES.FINANCEIRO}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.visao_geral.view",
-										"financeiro.visao_geral.manage",
-									]}
-								>
-									<Financeiro page="dashboard" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_CONTAS_PAGAR}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.contas_pagar.view",
-										"financeiro.contas_pagar.manage",
-									]}
-								>
-									<Financeiro page="contasPagar" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_CONTAS_RECEBER}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.contas_receber.view",
-										"financeiro.contas_receber.manage",
-									]}
-								>
-									<Financeiro page="contasReceber" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_FATURAMENTO}
-							element={
-								<ProtectedRoute requiredPermission="financeiro.faturamento.view">
-									<Financeiro page="faturamento" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_NOTAS}
-							element={
-								<ProtectedRoute requiredPermission="financeiro.notas.view">
-									<Financeiro page="notas" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_REPORTS_SERASA}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.reports.view",
-										"financeiro.reports.manage",
-										"financeiro.chamados.view",
-									]}
-								>
-									<Financeiro page="reportsSerasa" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.reports.view",
-										"financeiro.reports.manage",
-										"financeiro.chamados.view",
-									]}
-								>
-									<Financeiro page="reportsTarifas" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS_FATURAS}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.reports.view",
-										"financeiro.reports.manage",
-										"financeiro.chamados.view",
-									]}
-								>
-									<Financeiro page="reportsTarifasFaturas" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS_REC_CLIENTE}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.reports.view",
-										"financeiro.reports.manage",
-										"financeiro.chamados.view",
-									]}
-								>
-									<Financeiro page="reportsTarifasRecCliente" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_REPORTS_TARIFAS_FORMAS_PAGAMENTO}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.reports.view",
-										"financeiro.reports.manage",
-										"financeiro.chamados.view",
-									]}
-								>
-									<Financeiro page="reportsTarifasFormasPagamento" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_GESTAO_ORCAMENTO}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.gestao_orcamento.view",
-										"financeiro.gestao_orcamento.manage",
-									]}
-								>
-									<Financeiro page="orcamentoDashboard" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_ORCAMENTO_DADOS}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.gestao_orcamento.view",
-										"financeiro.gestao_orcamento.manage",
-									]}
-								>
-									<Financeiro page="orcamentoDados" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_ORCAMENTO_CENTROS_CUSTO}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.gestao_orcamento.view",
-										"financeiro.gestao_orcamento.manage",
-									]}
-								>
-									<Financeiro page="orcamentoCentrosCusto" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_ORCAMENTO_DRE}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.gestao_orcamento.view",
-										"financeiro.gestao_orcamento.manage",
-									]}
-								>
-									<Financeiro page="orcamentoDre" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_ORCAMENTO_APROVACOES}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.gestao_orcamento.view",
-										"financeiro.gestao_orcamento.manage",
-									]}
-								>
-									<Financeiro page="orcamentoAprovacoes" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_ORCAMENTO_CONFIGURACOES}
-							element={
-								<ProtectedRoute
-									requiredPermission={["financeiro.gestao_orcamento.manage"]}
-								>
-									<Financeiro page="orcamentoConfiguracoes" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_CONFIGURACOES}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.configuracoes.view",
-										"financeiro.configuracoes.manage",
-									]}
-								>
-									<Financeiro page="configuracoes" />
-								</ProtectedRoute>
-							}
-						/>
-						<Route
-							path={ROUTES.FINANCEIRO_EQUIPE}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"financeiro.equipe.view",
-										"financeiro.equipe.manage",
-									]}
-								>
-									<Financeiro page="equipe" />
-								</ProtectedRoute>
-							}
+							path="/financeiro/*"
+							element={<FinanceiroRedirect />}
 						/>
 						<Route
 							path={ROUTES.ATENDIMENTO_CASOS}

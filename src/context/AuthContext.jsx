@@ -3,7 +3,7 @@ import { ROLES } from "../constants/roles";
 import { useAuth } from "../modules/auth/hooks/useAuth";
 import { listarCargosAdmin } from "../modules/auth/services/authService";
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 const EMPTY_VIEW_AS_ROLES = [];
 
 export const AuthProvider = ({ children }) => {

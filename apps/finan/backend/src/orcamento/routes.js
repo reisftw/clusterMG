@@ -4,7 +4,7 @@ const { requireFinanPermission } = require("../auth/middleware");
 
 const router = express.Router();
 
-router.use(requireFinanPermission("finan.gestao_orcamentaria.view"));
+router.use(requireFinanPermission(["finan.gestao_orcamentaria.view", "finan.dashboard.view"]));
 
 router.get("/resumo", async (_req, res) => {
 	const now = new Date();
@@ -53,9 +53,13 @@ router.get("/detalhes", async (req, res) => {
 				group by conta_id
 			),
 			base as (
-				select coalesce(m.conta_id, l.conta_id) as conta_id, m.orcado, l.realizado
-				from matriz m
-				full join lancamentos l on l.conta_id is not distinct from m.conta_id
+				select conta_id, sum(orcado)::numeric as orcado, sum(realizado)::numeric as realizado
+				from (
+					select conta_id, orcado, 0::numeric as realizado from matriz
+					union all
+					select conta_id, 0::numeric as orcado, realizado from lancamentos
+				) x
+				group by conta_id
 			)
 			select
 				coalesce(c.categoria_classe, 'sem_classe') as classe,
@@ -81,9 +85,13 @@ router.get("/detalhes", async (req, res) => {
 				group by conta_id
 			),
 			base as (
-				select coalesce(m.conta_id, l.conta_id) as conta_id, m.orcado, l.realizado
-				from matriz m
-				full join lancamentos l on l.conta_id is not distinct from m.conta_id
+				select conta_id, sum(orcado)::numeric as orcado, sum(realizado)::numeric as realizado
+				from (
+					select conta_id, orcado, 0::numeric as realizado from matriz
+					union all
+					select conta_id, 0::numeric as orcado, realizado from lancamentos
+				) x
+				group by conta_id
 			)
 			select
 				coalesce(c.id, base.conta_id, 'sem-conta') as id,
@@ -115,11 +123,15 @@ router.get("/detalhes", async (req, res) => {
 			),
 			base as (
 				select
-					coalesce(m.centro_custo_id, l.centro_custo_id) as centro_custo_id,
-					m.orcado,
-					l.realizado
-				from matriz m
-				full join lancamentos l on l.centro_custo_id is not distinct from m.centro_custo_id
+					centro_custo_id,
+					sum(orcado)::numeric as orcado,
+					sum(realizado)::numeric as realizado
+				from (
+					select centro_custo_id, orcado, 0::numeric as realizado from matriz
+					union all
+					select centro_custo_id, 0::numeric as orcado, realizado from lancamentos
+				) x
+				group by centro_custo_id
 			)
 			select
 				coalesce(cc.id, base.centro_custo_id, 'sem-centro') as id,
@@ -151,17 +163,28 @@ router.get("/detalhes", async (req, res) => {
 				left join finan_centros_custo cc on cc.id = ol.centro_custo_id
 				where ol.ano = $1 and ol.mes = $2
 				group by cc.diretoria_id
+			),
+			base as (
+				select
+					diretoria_id,
+					sum(orcado)::numeric as orcado,
+					sum(realizado)::numeric as realizado
+				from (
+					select diretoria_id, orcado, 0::numeric as realizado from matriz
+					union all
+					select diretoria_id, 0::numeric as orcado, realizado from lancamentos
+				) x
+				group by diretoria_id
 			)
 			select
 				coalesce(d.id, 'sem-diretoria') as id,
 				coalesce(d.nome, 'Diretoria não informada') as nome,
 				d.diretor_nome,
-				coalesce(m.orcado, 0)::numeric as orcado,
-				coalesce(l.realizado, 0)::numeric as realizado
-			from matriz m
-			full join lancamentos l on l.diretoria_id is not distinct from m.diretoria_id
-			left join finan_diretorias d on d.id = coalesce(m.diretoria_id, l.diretoria_id)
-			order by abs(coalesce(l.realizado, 0)) desc, nome`,
+				coalesce(base.orcado, 0)::numeric as orcado,
+				coalesce(base.realizado, 0)::numeric as realizado
+			from base
+			left join finan_diretorias d on d.id = base.diretoria_id
+			order by abs(coalesce(base.realizado, 0)) desc, nome`,
 			[year, month],
 		),
 		db.query(
@@ -195,3 +218,4 @@ router.get("/detalhes", async (req, res) => {
 });
 
 module.exports = router;
+

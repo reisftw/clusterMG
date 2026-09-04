@@ -1,5 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { fetchFinanMe, getFinanToken, loginFinan, logoutFinan } from "../api/finanApi";
+import {
+	fetchFinanMe,
+	getFinanToken,
+	loginFinan,
+	logoutFinan,
+	verifyFinanEmailMfa,
+} from "../api/finanApi";
 
 const FinanAuthContext = createContext(null);
 
@@ -35,10 +41,27 @@ export function FinanAuthProvider({ children }) {
 		setError("");
 		setLoading(true);
 		try {
-			const profile = await loginFinan(email, password);
-			setUser(profile);
+			const result = await loginFinan(email, password);
+			if (result?.mfaRequired) return result;
+			setUser(result.user);
+			return result;
 		} catch (err) {
 			setError(err?.message || "Não foi possível entrar no Finan.");
+			throw err;
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const verifyEmailMfa = async ({ challengeId, code }) => {
+		setError("");
+		setLoading(true);
+		try {
+			const result = await verifyFinanEmailMfa(challengeId, code);
+			setUser(result.user);
+			return result;
+		} catch (err) {
+			setError(err?.message || "Não foi possível validar o MFA.");
 			throw err;
 		} finally {
 			setLoading(false);
@@ -51,7 +74,7 @@ export function FinanAuthProvider({ children }) {
 	};
 
 	const value = useMemo(
-		() => ({ user, loading, error, login, logout }),
+		() => ({ user, loading, error, login, verifyEmailMfa, logout }),
 		[user, loading, error],
 	);
 

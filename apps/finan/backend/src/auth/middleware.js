@@ -6,15 +6,76 @@ function tokenHash(token) {
 }
 
 function publicUser(user) {
+	const permissions = normalizePublicPermissions(user);
 	return {
 		id: user.id,
 		uid: user.id,
 		name: user.name,
 		email: user.email,
+		avatarUrl: user.avatar_url || user.source_profile?.avatarUrl || "",
 		role: user.role_id,
-		permissions: user.permissions || [],
+		permissions,
 		isAdmin: Boolean(user.is_admin),
 	};
+}
+
+function normalizePublicPermissions(user) {
+	const source = Array.isArray(user?.permissions) ? user.permissions : [];
+	const permissions = new Set(source);
+	for (const permission of source) {
+		const mapped = mapFinanToFinanceiroPermission(permission);
+		if (mapped) permissions.add(mapped);
+	}
+	if (user?.is_admin) {
+		permissions.add("*");
+		permissions.add("financeiro.visao_geral.view");
+		permissions.add("financeiro.visao_geral.manage");
+		permissions.add("financeiro.gestao_orcamento.view");
+		permissions.add("financeiro.gestao_orcamento.manage");
+		permissions.add("financeiro.reports.view");
+		permissions.add("financeiro.reports.manage");
+		permissions.add("financeiro.equipe.view");
+		permissions.add("financeiro.equipe.manage");
+		permissions.add("financeiro.configuracoes.manage");
+	}
+	return Array.from(permissions);
+}
+
+function mapFinanToFinanceiroPermission(permission) {
+	const value = String(permission || "");
+	if (value === "finan.dashboard.view") return "financeiro.visao_geral.view";
+	if (value === "finan.gestao_orcamentaria.view") {
+		return "financeiro.gestao_orcamento.view";
+	}
+	if (value === "finan.gestao_orcamentaria.manage") {
+		return "financeiro.gestao_orcamento.manage";
+	}
+	if (value.startsWith("finan.")) return value.replace(/^finan\./, "financeiro.");
+	return "";
+}
+
+function mapFinanceiroToFinanPermission(permission) {
+	const value = String(permission || "");
+	if (value === "financeiro.visao_geral.view") return "finan.dashboard.view";
+	if (value === "financeiro.visao_geral.manage") return "finan.dashboard.view";
+	if (value.startsWith("financeiro.gestao_orcamento.")) {
+		return value.replace(/^financeiro\.gestao_orcamento\./, "finan.gestao_orcamentaria.");
+	}
+	if (value.startsWith("financeiro.")) return value.replace(/^financeiro\./, "finan.");
+	return "";
+}
+
+function userHasFinanPermission(user, permission) {
+	const required = String(permission || "");
+	if (!required) return true;
+	const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+	if (user?.is_admin || permissions.includes("*")) return true;
+	if (permissions.includes(required)) return true;
+	const financeiroPermission = mapFinanToFinanceiroPermission(required);
+	if (financeiroPermission && permissions.includes(financeiroPermission)) return true;
+	const finanPermission = mapFinanceiroToFinanPermission(required);
+	if (finanPermission && permissions.includes(finanPermission)) return true;
+	return false;
 }
 
 async function findUserByBearer(req) {
@@ -57,11 +118,9 @@ async function requireFinanAuth(req, res, next) {
 }
 
 function requireFinanPermission(permission) {
+	const required = Array.isArray(permission) ? permission : [permission];
 	return (req, res, next) => {
-		const permissions = Array.isArray(req.finanUser?.permissions)
-			? req.finanUser.permissions
-			: [];
-		if (req.finanUser?.is_admin || permissions.includes(permission)) {
+		if (required.some((item) => userHasFinanPermission(req.finanUser, item))) {
 			next();
 			return;
 		}
@@ -78,4 +137,5 @@ module.exports = {
 	requireFinanAuth,
 	requireFinanPermission,
 	tokenHash,
+	userHasFinanPermission,
 };

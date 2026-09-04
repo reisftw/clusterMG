@@ -194,6 +194,8 @@ export default function CargosPermissoesPage() {
 		isViewingAsRole,
 	} = useAuthContext();
 	const isAdmin = String(realUser?.role || "").toLowerCase() === ROLES.ADMIN;
+	const isFinanScope =
+		currentUser?.appScope === "finan" || currentUser?.sourceSystem === "finan";
 	const canManage =
 		hasPermission(currentUser, "configuracao.cargos_permissoes.manage") ||
 		hasPermission(currentUser, "manage_roles");
@@ -238,7 +240,7 @@ export default function CargosPermissoesPage() {
 			const nextCatalog = normalizeCatalog(data.permissions || []);
 			const nextRoles = data.roles?.length
 				? data.roles
-				: isAdmin
+				: isAdmin && !isFinanScope
 					? DEFAULT_ROLE_OPTIONS
 					: [];
 			setPermissionCatalog(nextCatalog);
@@ -247,13 +249,13 @@ export default function CargosPermissoesPage() {
 		} catch (err) {
 			setError(err?.message || "Não foi possível carregar os cargos.");
 			setPermissionCatalog([]);
-			const fallbackRoles = isAdmin ? DEFAULT_ROLE_OPTIONS : [];
+			const fallbackRoles = isAdmin && !isFinanScope ? DEFAULT_ROLE_OPTIONS : [];
 			setRoles(fallbackRoles);
 			setSelectedId((current) => current || fallbackRoles[0]?.id || "");
 		} finally {
 			setLoading(false);
 		}
-	}, [isAdmin]);
+	}, [isAdmin, isFinanScope]);
 
 	useEffect(() => {
 		loadRoles();
@@ -482,7 +484,11 @@ export default function CargosPermissoesPage() {
 							className="w-full rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-blue-950 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 lg:w-72"
 						>
 							<option value="">Admin real</option>
-							{(viewAsRoles.length ? viewAsRoles : CARGOS_RETIRADAS)
+							{(viewAsRoles.length
+								? viewAsRoles
+								: isFinanScope
+									? []
+									: CARGOS_RETIRADAS)
 								.filter((cargo) => cargo.value !== ROLES.ADMIN)
 								.map((cargo) => (
 									<option key={cargo.value} value={cargo.value}>

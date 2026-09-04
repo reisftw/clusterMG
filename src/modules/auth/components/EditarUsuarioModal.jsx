@@ -77,7 +77,7 @@ const EditarUsuarioModal = ({
 		role:
 			usuario.role && allowedRoles.includes(usuario.role)
 				? usuario.role
-				: allowedRoles[0] || ROLES.BACKOFFICE_RETIRADA,
+				: allowedRoles[0] || "",
 		regional:
 			usuario.regional || (isSupervisor ? currentUser?.regional || "" : ""),
 		empresaId: usuario.empresaId || usuario.empresa_id || "",

@@ -81,6 +81,14 @@ export default function ConfiguracoesGeraisPage() {
 	const [saving, setSaving] = useState(false);
 	const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
 	const [message, setMessage] = useState("");
+	const isFinanHost =
+		typeof window !== "undefined" && /^finan\./i.test(window.location.hostname);
+	const welcomeModalEvent = isFinanHost
+		? "finan:welcome-modal-open"
+		: WELCOME_MODAL_EVENT;
+	const welcomeModalImage = isFinanHost
+		? "/finan-boas-vindas.jpg"
+		: WELCOME_MODAL_IMAGE;
 
 	useEffect(() => {
 		let active = true;
@@ -196,7 +204,7 @@ export default function ConfiguracoesGeraisPage() {
 	};
 
 	const testWelcomeModal = () => {
-		window.dispatchEvent(new CustomEvent(WELCOME_MODAL_EVENT));
+		window.dispatchEvent(new CustomEvent(welcomeModalEvent));
 	};
 
 	if (loading) return <Spinner fullScreen />;
@@ -238,7 +246,7 @@ export default function ConfiguracoesGeraisPage() {
 						<div className="flex items-start gap-4">
 							<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-orange-50 text-orange-600">
 								<img
-									src={WELCOME_MODAL_IMAGE}
+									src={welcomeModalImage}
 									alt=""
 									className="h-full w-full object-cover"
 								/>
@@ -285,7 +293,8 @@ export default function ConfiguracoesGeraisPage() {
 								</h2>
 								<p className="mt-1 max-w-2xl text-sm font-semibold leading-relaxed text-slate-500">
 									Usuários sem avatar próprio exibirão esta imagem. Aceita
-									apenas JPG ou PNG até 600 KB.
+									apenas JPG ou PNG até 600 KB. No Finan, ao enviar um novo
+									avatar padrão, todos os usuários cadastrados são atualizados.
 								</p>
 							</div>
 						</div>

@@ -747,12 +747,16 @@ const NovoUsuarioModal = ({
 const UsuariosPage = () => {
 	const { currentUser } = useAuthContext();
 	const isAdmin = String(currentUser?.role || "").toLowerCase() === ROLES.ADMIN;
+	const isFinanScope =
+		currentUser?.appScope === "finan" || currentUser?.sourceSystem === "finan";
 	const canManage =
 		hasPermission(currentUser, "configuracao.usuarios.manage") ||
 		hasPermission(currentUser, "manage_users");
 	const [usuarios, setUsuarios] = useState([]);
 	const [usuariosStats, setUsuariosStats] = useState({});
-	const [cargosOptions, setCargosOptions] = useState(CARGOS_RETIRADAS);
+	const [cargosOptions, setCargosOptions] = useState(() =>
+		isFinanScope ? [] : CARGOS_RETIRADAS,
+	);
 	const [defaultAvatarUrl, setDefaultAvatarUrl] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [modalNovo, setModalNovo] = useState(false);
@@ -789,7 +793,7 @@ const UsuariosPage = () => {
 		listarCargosAdmin()
 			.then((items) => {
 				if (items?.length) {
-					const baseOptions = isAdmin ? CARGOS_RETIRADAS : [];
+					const baseOptions = isAdmin && !isFinanScope ? CARGOS_RETIRADAS : [];
 					const merged = new Map(
 						baseOptions.map((cargo) => [cargo.value, cargo]),
 					);
@@ -797,11 +801,11 @@ const UsuariosPage = () => {
 						if (cargo?.value) merged.set(cargo.value, cargo);
 					});
 					setCargosOptions([...merged.values()]);
-				} else if (!isAdmin) {
+				} else if (!isAdmin || isFinanScope) {
 					setCargosOptions([]);
 				}
 			})
-			.catch(() => setCargosOptions(CARGOS_RETIRADAS));
+			.catch(() => setCargosOptions(isFinanScope ? [] : CARGOS_RETIRADAS));
 		obterPreferenciasNotificacoes()
 			.then((preferences) =>
 				setDefaultAvatarUrl(
@@ -811,7 +815,7 @@ const UsuariosPage = () => {
 				),
 			)
 			.catch(() => {});
-	}, [carregar, isAdmin]);
+	}, [carregar, isAdmin, isFinanScope]);
 
 	const deletar = async (uid) => {
 		if (!canManage || !isAdmin) return;

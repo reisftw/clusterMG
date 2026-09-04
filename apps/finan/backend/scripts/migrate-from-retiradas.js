@@ -2,13 +2,30 @@ const { Pool } = require("pg");
 const finanDb = require("../src/db");
 
 function createRetiradasPool() {
-	if (!process.env.RETIRADAS_DATABASE_URL) {
-		throw new Error(
-			"Informe RETIRADAS_DATABASE_URL apenas para coletar dados financeiros, usuários financeiros e admins.",
-		);
+	if (process.env.RETIRADAS_DATABASE_URL) {
+		return new Pool({
+			connectionString: process.env.RETIRADAS_DATABASE_URL,
+			ssl:
+				String(process.env.RETIRADAS_PGSSLMODE || "").toLowerCase() === "require"
+					? { rejectUnauthorized: false }
+					: undefined,
+		});
 	}
+
+	for (const key of ["RETIRADAS_PGHOST", "RETIRADAS_PGUSER", "RETIRADAS_PGDATABASE"]) {
+		if (!process.env[key]) {
+			throw new Error(
+				"Informe RETIRADAS_DATABASE_URL ou RETIRADAS_PGHOST/RETIRADAS_PGUSER/RETIRADAS_PGDATABASE para coletar dados financeiros, usuários financeiros e admins.",
+			);
+		}
+	}
+
 	return new Pool({
-		connectionString: process.env.RETIRADAS_DATABASE_URL,
+		host: process.env.RETIRADAS_PGHOST,
+		port: Number(process.env.RETIRADAS_PGPORT || 5432),
+		user: process.env.RETIRADAS_PGUSER,
+		password: process.env.RETIRADAS_PGPASSWORD,
+		database: process.env.RETIRADAS_PGDATABASE,
 		ssl:
 			String(process.env.RETIRADAS_PGSSLMODE || "").toLowerCase() === "require"
 				? { rejectUnauthorized: false }
@@ -17,6 +34,7 @@ function createRetiradasPool() {
 }
 
 async function migrateUsers(retiradasPool) {
+	await migrateRoles(retiradasPool);
 	const { rows } = await retiradasPool.query(`
 		select
 			u.uid as id,
@@ -26,6 +44,7 @@ async function migrateUsers(retiradasPool) {
 			coalesce(u.role, 'analista_financeiro') as role,
 			case when coalesce(u.disabled, false) then 'inativo' else 'ativo' end as status,
 			u.must_change_password as trocar_senha,
+			coalesce(u.imported_profile->>'avatarUrl', u.imported_profile->>'avatar_url', '') as avatar_url,
 			coalesce(u.imported_profile, '{}'::jsonb) as imported_profile,
 			coalesce(
 				jsonb_agg(distinct rp.permission) filter (where rp.permission is not null),
@@ -51,24 +70,20 @@ async function migrateUsers(retiradasPool) {
 	`);
 
 	for (const user of rows) {
-		const roleId =
-			String(user.role || "").toLowerCase() === "admin"
-				? "admin"
-				: String(user.role || "").toLowerCase().includes("coordenador")
-					? "coordenador_financeiro"
-					: "analista_financeiro";
+		const roleId = String(user.role || "").trim() || "analista_financeiro";
 		await finanDb.query(
 			`insert into finan_users (
 				id, name, email, password_hash, role_id, status,
-				must_change_password, source_system, source_user_id,
+				must_change_password, avatar_url, source_system, source_user_id,
 				source_role, source_permissions, source_profile
 			)
-			values ($1, $2, $3, $4, $5, $6, $7, 'retiradas', $1, $8, $9::jsonb, $10::jsonb)
+			values ($1, $2, $3, $4, $5, $6, $7, $8, 'retiradas', $1, $9, $10::jsonb, $11::jsonb)
 			on conflict (email) do update set
 				name = excluded.name,
 				password_hash = coalesce(finan_users.password_hash, excluded.password_hash),
 				role_id = excluded.role_id,
 				status = excluded.status,
+				avatar_url = excluded.avatar_url,
 				source_user_id = excluded.source_user_id,
 				source_role = excluded.source_role,
 				source_permissions = excluded.source_permissions,
@@ -82,6 +97,7 @@ async function migrateUsers(retiradasPool) {
 				roleId,
 				user.status || "ativo",
 				Boolean(user.trocar_senha),
+				user.avatar_url || null,
 				user.role || null,
 				JSON.stringify(user.permissions || []),
 				JSON.stringify(user.imported_profile || {}),
@@ -90,6 +106,113 @@ async function migrateUsers(retiradasPool) {
 	}
 
 	return rows.length;
+}
+
+async function migrateRoles(retiradasPool) {
+	const { rows } = await retiradasPool.query(`
+		select
+			r.id,
+			r.name,
+			r.description,
+			coalesce(r.system_role, false) as system_role,
+			coalesce(r.active, true) as active,
+			coalesce(
+				jsonb_agg(distinct rp.permission) filter (where rp.permission is not null),
+				'[]'::jsonb
+			) as permissions
+		from app_roles r
+		left join app_role_permissions rp on rp.role_id = r.id
+		where lower(r.id) = 'admin'
+			or lower(r.id) like '%financeiro%'
+			or lower(r.name) like '%financeiro%'
+			or exists (
+				select 1
+				from app_role_permissions check_perm
+				where check_perm.role_id = r.id
+					and check_perm.permission like 'financeiro.%'
+			)
+		group by r.id, r.name, r.description, r.system_role, r.active
+	`);
+
+	const fallbackRoles = [
+		{
+			id: "admin",
+			name: "Admin",
+			description: "Acesso total ao sistema financeiro dedicado.",
+			permissions: [
+				"finan.dashboard.view",
+				"finan.gestao_orcamentaria.view",
+				"finan.gestao_orcamentaria.manage",
+				"finan.contas_pagar.view",
+				"finan.contas_pagar.manage",
+				"finan.contas_receber.view",
+				"finan.contas_receber.manage",
+				"finan.faturamento.view",
+				"finan.notas.view",
+				"finan.reports.view",
+				"finan.reports.manage",
+				"finan.equipe.view",
+				"finan.equipe.manage",
+				"finan.integracoes.view",
+				"finan.integracoes.manage",
+				"finan.configuracoes.view",
+				"finan.configuracoes.manage",
+				"finan.usuarios.manage",
+			],
+			system_role: true,
+			active: true,
+		},
+	];
+
+	for (const role of rows.length ? rows : fallbackRoles) {
+		const permissions = mapRetiradasPermissionsToFinan(role.permissions || []);
+		await finanDb.query(
+			`insert into finan_roles (
+				id, name, description, permissions, is_admin, system_role, active
+			)
+			values ($1, $2, $3, $4::jsonb, $5, $6, $7)
+			on conflict (id) do update set
+				name = excluded.name,
+				description = excluded.description,
+				permissions = excluded.permissions,
+				is_admin = excluded.is_admin,
+				system_role = excluded.system_role,
+				active = excluded.active,
+				updated_at = now()`,
+			[
+				String(role.id),
+				role.name || role.id,
+				role.description || null,
+				JSON.stringify(permissions),
+				String(role.id).toLowerCase() === "admin",
+				Boolean(role.system_role),
+				Boolean(role.active),
+			],
+		);
+	}
+	return rows.length;
+}
+
+function mapRetiradasPermissionsToFinan(permissions) {
+	const mapped = new Set();
+	for (const permission of permissions || []) {
+		const value = String(permission || "");
+		if (value === "*") {
+			mapped.add("finan.dashboard.view");
+			mapped.add("finan.gestao_orcamentaria.view");
+			mapped.add("finan.gestao_orcamentaria.manage");
+			mapped.add("finan.usuarios.manage");
+			continue;
+		}
+		if (value.startsWith("financeiro.")) {
+			mapped.add(value.replace(/^financeiro\./, "finan."));
+		}
+	}
+	if (!mapped.size) {
+		mapped.add("finan.dashboard.view");
+		mapped.add("finan.gestao_orcamentaria.view");
+	}
+	return Array.from(mapped).sort();
 }
 
 const FINANCIAL_SOURCE_TABLES = [
