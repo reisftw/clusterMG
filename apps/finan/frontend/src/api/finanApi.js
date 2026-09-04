@@ -36,6 +36,20 @@ export async function loginFinan(email, password) {
 	return data.user;
 }
 
+export async function requestFinanPasswordReset(email) {
+	return requestFinanApi("/auth/password/forgot", {
+		method: "POST",
+		body: JSON.stringify({ email }),
+	});
+}
+
+export async function resetFinanPassword(token, password) {
+	return requestFinanApi("/auth/password/reset", {
+		method: "POST",
+		body: JSON.stringify({ token, password }),
+	});
+}
+
 export async function fetchFinanMe() {
 	const data = await requestFinanApi("/auth/me");
 	return data.user;
