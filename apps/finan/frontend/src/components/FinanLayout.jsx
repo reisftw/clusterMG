@@ -18,7 +18,6 @@ import {
 	PanelLeftClose,
 	PanelLeftOpen,
 	Plug,
-	Search,
 	Settings,
 	Tags,
 	Users,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { getAppBuildInfo } from "../../../../../src/utils/appBuildInfo";
 import { FINAN_ROUTES } from "../routes";
 import { useFinanAuth } from "../state/FinanAuthContext";
 import {
@@ -243,6 +243,7 @@ const navGroups = [
 
 export default function FinanLayout() {
 	const { user, logout } = useFinanAuth();
+	const buildInfo = getAppBuildInfo();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 	const [forcedWelcomeOpen, setForcedWelcomeOpen] = useState(false);
 	const [welcomeClosedForUser, setWelcomeClosedForUser] = useState("");
@@ -351,11 +352,12 @@ export default function FinanLayout() {
 							})}
 						</p>
 					</div>
-					<div className="mx-5 hidden min-w-0 max-w-xl flex-1 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-400 shadow-inner xl:flex">
-						<Search size={18} className="shrink-0" />
-						<span className="ml-2 truncate text-sm">
-							Buscar por O.S, colaborador, cidade...
-						</span>
+					<div className="mx-5 hidden min-w-0 flex-1 justify-center xl:flex">
+						<div className="inline-flex max-w-full items-center justify-center rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-center text-xs font-black uppercase tracking-wide text-blue-700 shadow-inner">
+							<span className="truncate">
+								{buildInfo.version} - {buildInfo.environment || "Produção"}
+							</span>
+						</div>
 					</div>
 					<div className="relative">
 						<div className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-card sm:flex">

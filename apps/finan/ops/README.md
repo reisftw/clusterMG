@@ -1,6 +1,6 @@
 # Operação do Finan
 
-Templates para a futura publicação em `finan.retirada.tech`.
+Templates para a futura publicação em `finan.retiradas.tech`.
 
 Nada aqui é aplicado automaticamente. São referências para quando o ambiente dedicado for criado na VPS.
 

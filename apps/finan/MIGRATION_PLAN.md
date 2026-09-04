@@ -2,7 +2,7 @@
 
 ## Decisão
 
-Criar um sistema dedicado para o financeiro em `finan.retirada.tech`, com banco, usuários, login, MFA, permissões, sessões e configurações próprios.
+Criar um sistema dedicado para o financeiro em `finan.retiradas.tech`, com banco, usuários, login, MFA, permissões, sessões e configurações próprios.
 
 O módulo financeiro atual do Retiradas permanece ativo até o Finan estar validado.
 
@@ -90,6 +90,6 @@ Os dados financeiros são salvos em tabelas próprias `finan_*` e também em `fi
 - [ ] Migrar Gestão Orçamentária real.
 - [ ] Migrar Reports, Equipe e integrações.
 - [ ] Configurar systemd próprio.
-- [ ] Configurar Nginx para `finan.retirada.tech`.
+- [ ] Configurar Nginx para `finan.retiradas.tech`.
 - [ ] Validar lado a lado com o Financeiro atual.
 - [ ] Só depois remover/redirecionar o módulo financeiro do Retiradas.

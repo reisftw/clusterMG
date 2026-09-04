@@ -1,6 +1,6 @@
 # Finan
 
-Sistema financeiro dedicado que será publicado futuramente em `finan.retirada.tech`.
+Sistema financeiro dedicado que será publicado futuramente em `finan.retiradas.tech`.
 
 Este app é um workspace novo e isolado dentro do repositório. Ele não remove nem altera o módulo financeiro atual do Retiradas. A estratégia é espelhar, validar e só depois desligar o financeiro antigo.
 
@@ -60,5 +60,5 @@ npm run finan:migrate:from-retiradas
 3. Rodar auditoria read-only da base Retiradas.
 4. Rodar a carga inicial de admins, usuários financeiros e dados financeiros.
 5. Ligar o backend em porta própria.
-6. Configurar Nginx para `finan.retirada.tech`.
+6. Configurar Nginx para `finan.retiradas.tech`.
 7. Migrar tela por tela do financeiro atual para componentes nativos do Finan.

@@ -1,6 +1,6 @@
 server {
 	listen 80;
-	server_name finan.retirada.tech;
+	server_name finan.retiradas.tech;
 
 	root /opt/retiradas/apps/finan/frontend/dist;
 	index index.html;
