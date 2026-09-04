@@ -55,16 +55,24 @@ const PAGE_META = {
 export default function FinanModulePage({ page }) {
 	const meta = PAGE_META[page] || PAGE_META.dashboard;
 	const [summary, setSummary] = useState(null);
+	const [details, setDetails] = useState(null);
 
 	useEffect(() => {
 		if (page !== "dashboard" && page !== "gestao-orcamentaria") return;
 		let active = true;
-		requestFinanApi("/orcamento/resumo")
-			.then((data) => {
-				if (active) setSummary(data.resumo);
+		Promise.all([
+			requestFinanApi("/orcamento/resumo"),
+			requestFinanApi("/orcamento/detalhes"),
+		])
+			.then(([summaryData, detailsData]) => {
+				if (!active) return;
+				setSummary(summaryData.resumo);
+				setDetails(detailsData.detalhes);
 			})
 			.catch(() => {
-				if (active) setSummary(null);
+				if (!active) return;
+				setSummary(null);
+				setDetails(null);
 			});
 		return () => {
 			active = false;
@@ -105,7 +113,62 @@ export default function FinanModulePage({ page }) {
 					nativos do Finan, mantendo o Retiradas intacto até a validação final.
 				</p>
 			</div>
+			{details ? (
+				<div className="finan-detail-grid">
+					<DetailList
+						title="Categorias orçamentárias"
+						rows={details.classes}
+						getLabel={(row) => labelClasse(row.classe)}
+					/>
+					<DetailList
+						title="Diretorias"
+						rows={details.diretorias}
+						getLabel={(row) => row.nome}
+						getMeta={(row) => row.diretor_nome || "Diretor não informado"}
+					/>
+					<DetailList
+						title="Contas financeiras"
+						rows={details.contas}
+						getLabel={(row) => [row.codigo, row.nome].filter(Boolean).join(" - ")}
+						getMeta={(row) => row.categoria}
+					/>
+					<DetailList
+						title="Centros de custo"
+						rows={details.centros}
+						getLabel={(row) => [row.codigo, row.nome].filter(Boolean).join(" - ")}
+						getMeta={(row) => row.diretoria || "Diretoria não informada"}
+					/>
+					<DetailList
+						title="Fornecedores"
+						rows={details.fornecedores}
+						getLabel={(row) => [row.codigo, row.nome].filter(Boolean).join(" - ")}
+						getMeta={(row) => `${Number(row.linhas || 0).toLocaleString("pt-BR")} linha(s)`}
+						showBudget={false}
+					/>
+				</div>
+			) : null}
 		</section>
+	);
+}
+
+function DetailList({ title, rows = [], getLabel, getMeta, showBudget = true }) {
+	return (
+		<article className="finan-work-card finan-detail-card">
+			<h2>{title}</h2>
+			{rows.slice(0, 8).map((row) => (
+				<div key={row.id || row.classe || row.nome} className="finan-detail-row">
+					<div>
+						<strong>{getLabel(row) || "Sem identificação"}</strong>
+						{getMeta ? <span>{getMeta(row)}</span> : null}
+					</div>
+					<div>
+						{showBudget ? <span>{formatMoney(row.orcado)}</span> : null}
+						<strong>{formatMoney(row.realizado)}</strong>
+					</div>
+				</div>
+			))}
+			{!rows.length ? <p>Aguardando carga inicial no banco dedicado.</p> : null}
+		</article>
 	);
 }
 
@@ -114,4 +177,12 @@ function formatMoney(value) {
 		style: "currency",
 		currency: "BRL",
 	}).format(Number(value || 0));
+}
+
+function labelClasse(value) {
+	const normalized = String(value || "").toLowerCase();
+	if (normalized === "basal") return "BASAL";
+	if (normalized === "nao_basal") return "NÃO BASAL";
+	if (normalized === "projetos") return "PROJETOS";
+	return value || "Sem classe";
 }

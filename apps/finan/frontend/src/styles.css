@@ -244,6 +244,60 @@ input {
 	padding: 22px;
 }
 
+.finan-detail-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 16px;
+	margin-top: 16px;
+}
+
+.finan-detail-card {
+	margin-top: 0;
+	min-width: 0;
+}
+
+.finan-detail-row {
+	display: flex;
+	min-width: 0;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	border-top: 1px solid #e2e8f0;
+	padding: 12px 0;
+}
+
+.finan-detail-row:first-of-type {
+	margin-top: 10px;
+}
+
+.finan-detail-row > div {
+	min-width: 0;
+}
+
+.finan-detail-row > div:last-child {
+	flex: 0 0 auto;
+	text-align: right;
+}
+
+.finan-detail-row strong,
+.finan-detail-row span {
+	display: block;
+	overflow-wrap: break-word;
+}
+
+.finan-detail-row strong {
+	color: #020617;
+	font-size: 0.9rem;
+	font-weight: 950;
+}
+
+.finan-detail-row span {
+	margin-top: 2px;
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 800;
+}
+
 .finan-work-card h2,
 .finan-setting-card h2 {
 	margin: 0;
