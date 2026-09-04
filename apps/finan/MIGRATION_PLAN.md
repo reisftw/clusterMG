@@ -34,6 +34,10 @@ Migration inicial:
 
 ## Coleta do Retiradas
 
+Auditoria sem escrita:
+
+- `npm run finan:audit:retiradas`
+
 Script:
 
 - `npm run finan:migrate:from-retiradas`
@@ -50,7 +54,13 @@ Esse script coleta:
 - Tabelas de reports/tarifas/Serasa.
 - Tabelas de equipe financeira.
 
-Os dados financeiros são salvos inicialmente em `finan_migration_snapshots`, para conferência antes de normalizar definitivamente.
+Esse script não coleta usuários gerais do Retiradas. A carga inicial do Finan reaproveita somente:
+
+- admins;
+- usuários com cargo/permissão financeira;
+- dados atuais do financeiro.
+
+Os dados financeiros são salvos em tabelas próprias `finan_*` e também em `finan_migration_snapshots`, para conferência antes da virada definitiva.
 
 ## Menu do Finan
 
@@ -73,6 +83,7 @@ Os dados financeiros são salvos inicialmente em `finan_migration_snapshots`, pa
 - [ ] Criar banco `finan` na VPS.
 - [ ] Instalar dependências do backend em `/opt/finan` quando criar o ambiente.
 - [ ] Rodar migrations do Finan.
+- [ ] Rodar auditoria read-only da base Retiradas.
 - [ ] Rodar coleta inicial dos usuários financeiros/admins e snapshots financeiros.
 - [ ] Implementar MFA por e-mail usando adaptador temporário SMTP atual.
 - [ ] Migrar o dashboard real para API/tabelas próprias do Finan.

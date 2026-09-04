@@ -33,14 +33,32 @@ Este app é um workspace novo e isolado dentro do repositório. Ele não remove 
 ## Regras de isolamento
 
 - Não usar tabelas de usuário do sistema principal.
+- Reaproveitar apenas admins, usuários financeiros e dados financeiros na carga inicial.
+- Não importar usuários gerais do Retiradas para o Finan.
 - Não apontar o backend para `DATABASE_URL` do Retiradas.
 - Não remover rotas/telas financeiras atuais até o Finan estar validado.
 - Usar `FINAN_DATABASE_URL` em produção.
 
+## Carga inicial
+
+Antes de escrever no banco dedicado, rode:
+
+```bash
+npm run finan:audit:retiradas
+```
+
+Depois, com `FINAN_DATABASE_URL` e `RETIRADAS_DATABASE_URL` definidos:
+
+```bash
+npm run finan:migrate:from-retiradas
+```
+
 ## Próximos passos
 
 1. Criar o banco `finan` na VPS.
-2. Rodar `apps/finan/backend/sql/001_finan_core.sql`.
-3. Ligar o backend em porta própria.
-4. Configurar Nginx para `finan.retirada.tech`.
-5. Migrar tela por tela do financeiro atual para componentes nativos do Finan.
+2. Rodar as migrations do Finan.
+3. Rodar auditoria read-only da base Retiradas.
+4. Rodar a carga inicial de admins, usuários financeiros e dados financeiros.
+5. Ligar o backend em porta própria.
+6. Configurar Nginx para `finan.retirada.tech`.
+7. Migrar tela por tela do financeiro atual para componentes nativos do Finan.
