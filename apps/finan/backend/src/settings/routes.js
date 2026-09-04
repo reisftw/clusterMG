@@ -1,6 +1,9 @@
 const express = require("express");
+const { requireFinanPermission } = require("../auth/middleware");
 
 const router = express.Router();
+
+router.use(requireFinanPermission("finan.configuracoes.view"));
 
 router.get("/", (_req, res) => {
 	res.json({

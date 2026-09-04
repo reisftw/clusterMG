@@ -1,7 +1,10 @@
 const express = require("express");
 const db = require("../db");
+const { requireFinanPermission } = require("../auth/middleware");
 
 const router = express.Router();
+
+router.use(requireFinanPermission("finan.gestao_orcamentaria.view"));
 
 router.get("/resumo", async (_req, res) => {
 	const now = new Date();

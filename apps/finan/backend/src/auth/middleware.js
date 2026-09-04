@@ -56,9 +56,26 @@ async function requireFinanAuth(req, res, next) {
 	}
 }
 
+function requireFinanPermission(permission) {
+	return (req, res, next) => {
+		const permissions = Array.isArray(req.finanUser?.permissions)
+			? req.finanUser.permissions
+			: [];
+		if (req.finanUser?.is_admin || permissions.includes(permission)) {
+			next();
+			return;
+		}
+		res.status(403).json({
+			ok: false,
+			error: "Você não tem permissão para acessar esta área do Finan.",
+		});
+	};
+}
+
 module.exports = {
 	findUserByBearer,
 	publicUser,
 	requireFinanAuth,
+	requireFinanPermission,
 	tokenHash,
 };

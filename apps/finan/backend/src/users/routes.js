@@ -1,7 +1,10 @@
 const express = require("express");
 const db = require("../db");
+const { requireFinanPermission } = require("../auth/middleware");
 
 const router = express.Router();
+
+router.use(requireFinanPermission("finan.usuarios.manage"));
 
 router.get("/", async (_req, res) => {
 	const { rows } = await db.query(
