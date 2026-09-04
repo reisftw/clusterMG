@@ -14,7 +14,14 @@
 		"preview": "vite preview",
 		"test:coverage": "vitest run --coverage",
 		"test:coverage:json": "vitest run --coverage --coverage.reporter=json-summary",
-		"test:watch": "vitest"
+		"test:watch": "vitest",
+		"finan:frontend:dev": "npm run frontend:dev --prefix apps/finan",
+		"finan:frontend:build": "npm run frontend:build --prefix apps/finan",
+		"finan:backend:dev": "npm run backend:dev --prefix apps/finan",
+		"finan:backend:start": "npm run backend:start --prefix apps/finan",
+		"finan:migrate": "npm run migrate --prefix apps/finan",
+		"finan:backup": "npm run backup --prefix apps/finan",
+		"finan:migrate:from-retiradas": "npm run migrate:from-retiradas --prefix apps/finan/backend"
 	},
 	"dependencies": {
 		"@headlessui/react": "^2.2.9",

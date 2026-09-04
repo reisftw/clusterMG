@@ -1,0 +1,382 @@
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: #eef3f8;
+	color: #0f172a;
+	font-family:
+		Inter,
+		ui-sans-serif,
+		system-ui,
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		sans-serif;
+}
+
+button,
+input {
+	font: inherit;
+}
+
+.finan-shell {
+	display: grid;
+	min-height: 100vh;
+	grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.finan-sidebar {
+	position: sticky;
+	top: 0;
+	height: 100vh;
+	overflow-y: auto;
+	border-right: 1px solid #dbe4ee;
+	background: #07111f;
+	padding: 18px;
+	color: white;
+}
+
+.finan-brand {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	border-bottom: 1px solid rgb(255 255 255 / 10%);
+	padding-bottom: 18px;
+}
+
+.finan-brand-mark {
+	display: grid;
+	width: 44px;
+	height: 44px;
+	place-items: center;
+	border-radius: 14px;
+	background: #2563eb;
+	font-size: 1.25rem;
+	font-weight: 900;
+}
+
+.finan-brand strong,
+.finan-brand span {
+	display: block;
+}
+
+.finan-brand strong {
+	font-size: 1.1rem;
+	font-weight: 900;
+}
+
+.finan-brand span {
+	margin-top: 2px;
+	color: #9fb0c7;
+	font-size: 0.78rem;
+	font-weight: 800;
+}
+
+.finan-nav {
+	display: grid;
+	gap: 6px;
+	margin-top: 18px;
+}
+
+.finan-nav-link {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 10px;
+	border-radius: 12px;
+	padding: 0 12px;
+	color: #c9d6e8;
+	font-size: 0.9rem;
+	font-weight: 850;
+	text-decoration: none;
+}
+
+.finan-nav-link:hover,
+.finan-nav-link.is-active {
+	background: #ffffff;
+	color: #0f172a;
+}
+
+.finan-nav-chevron {
+	margin-left: auto;
+	opacity: 0.6;
+}
+
+.finan-main {
+	min-width: 0;
+}
+
+.finan-topbar {
+	position: sticky;
+	z-index: 10;
+	top: 0;
+	display: flex;
+	min-height: 76px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	border-bottom: 1px solid #dbe4ee;
+	background: rgb(255 255 255 / 88%);
+	padding: 14px 24px;
+	backdrop-filter: blur(14px);
+}
+
+.finan-topbar p,
+.finan-topbar strong {
+	display: block;
+	margin: 0;
+}
+
+.finan-topbar p {
+	color: #64748b;
+	font-size: 0.85rem;
+	font-weight: 800;
+}
+
+.finan-topbar strong {
+	margin-top: 2px;
+	font-size: 1.05rem;
+	font-weight: 950;
+}
+
+.finan-content {
+	padding: 24px;
+}
+
+.finan-ghost-button {
+	display: inline-flex;
+	min-height: 42px;
+	align-items: center;
+	gap: 8px;
+	border: 1px solid #dbe4ee;
+	border-radius: 12px;
+	background: white;
+	padding: 0 14px;
+	color: #334155;
+	cursor: pointer;
+	font-weight: 850;
+}
+
+.finan-page-title {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 18px;
+}
+
+.finan-page-title h1 {
+	margin: 0;
+	color: #020617;
+	font-size: clamp(2rem, 3vw, 3rem);
+	font-weight: 950;
+	letter-spacing: 0;
+}
+
+.finan-page-title p {
+	margin: 6px 0 0;
+	color: #52637a;
+	font-size: 1rem;
+	font-weight: 750;
+}
+
+.finan-page-title span {
+	border-radius: 999px;
+	background: #dbeafe;
+	padding: 8px 12px;
+	color: #1d4ed8;
+	font-size: 0.75rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-kpi-grid,
+.finan-settings-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 16px;
+}
+
+.finan-kpi-card,
+.finan-setting-card,
+.finan-work-card,
+.finan-login-card {
+	border: 1px solid #dbe4ee;
+	border-radius: 18px;
+	background: white;
+	box-shadow: 0 16px 40px rgb(15 23 42 / 7%);
+}
+
+.finan-kpi-card {
+	min-width: 0;
+	padding: 20px;
+}
+
+.finan-kpi-card span {
+	color: #64748b;
+	font-size: 0.76rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-kpi-card strong {
+	display: block;
+	margin-top: 8px;
+	overflow-wrap: break-word;
+	color: #020617;
+	font-size: clamp(1.45rem, 2vw, 2rem);
+	font-weight: 950;
+}
+
+.finan-kpi-card p,
+.finan-work-card p,
+.finan-setting-card p {
+	color: #64748b;
+	font-size: 0.9rem;
+	font-weight: 750;
+	line-height: 1.5;
+}
+
+.finan-work-card {
+	margin-top: 16px;
+	padding: 22px;
+}
+
+.finan-work-card h2,
+.finan-setting-card h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.finan-setting-card {
+	padding: 20px;
+}
+
+.finan-setting-card div {
+	display: grid;
+	width: 44px;
+	height: 44px;
+	place-items: center;
+	border-radius: 14px;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.finan-login-page {
+	display: grid;
+	min-height: 100vh;
+	place-items: center;
+	padding: 24px;
+}
+
+.finan-login-card {
+	width: min(100%, 420px);
+	padding: 28px;
+}
+
+.finan-login-icon {
+	display: grid;
+	width: 52px;
+	height: 52px;
+	place-items: center;
+	border-radius: 16px;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.finan-login-card h1 {
+	margin: 18px 0 6px;
+	font-size: 1.7rem;
+	font-weight: 950;
+}
+
+.finan-login-card p {
+	margin: 0 0 18px;
+	color: #64748b;
+	font-weight: 750;
+}
+
+.finan-login-card label {
+	display: block;
+	margin-top: 14px;
+	color: #475569;
+	font-size: 0.78rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-login-card input {
+	display: block;
+	width: 100%;
+	min-height: 46px;
+	margin-top: 8px;
+	border: 1px solid #dbe4ee;
+	border-radius: 12px;
+	padding: 0 12px;
+	color: #0f172a;
+	outline: none;
+}
+
+.finan-login-card input:focus {
+	border-color: #2563eb;
+	box-shadow: 0 0 0 4px rgb(37 99 235 / 13%);
+}
+
+.finan-login-card button {
+	width: 100%;
+	min-height: 46px;
+	margin-top: 18px;
+	border: 0;
+	border-radius: 12px;
+	background: #2563eb;
+	color: white;
+	cursor: pointer;
+	font-weight: 950;
+}
+
+.finan-login-card button:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.finan-error {
+	margin-top: 14px;
+	border: 1px solid #fecaca;
+	border-radius: 12px;
+	background: #fef2f2;
+	padding: 10px 12px;
+	color: #b91c1c;
+	font-size: 0.85rem;
+	font-weight: 850;
+}
+
+.finan-loading {
+	display: grid;
+	min-height: 100vh;
+	place-items: center;
+	color: #475569;
+	font-weight: 950;
+}
+
+@media (max-width: 860px) {
+	.finan-shell {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-sidebar {
+		position: static;
+		height: auto;
+	}
+
+	.finan-nav {
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	}
+
+	.finan-content,
+	.finan-topbar {
+		padding-inline: 16px;
+	}
+}

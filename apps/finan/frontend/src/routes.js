@@ -1,0 +1,16 @@
+export const FINAN_ROUTES = {
+	LOGIN: "/login",
+	DASHBOARD: "/",
+	GESTAO_ORCAMENTARIA: "/gestao-orcamentaria",
+	DADOS_ORCAMENTARIOS: "/dados-orcamentarios",
+	ORCAMENTO: "/orcamento",
+	DRE: "/dre",
+	APROVACOES: "/aprovacoes",
+	CONTAS_PAGAR: "/contas-a-pagar",
+	CONTAS_RECEBER: "/contas-a-receber",
+	FATURAMENTO: "/faturamento",
+	NOTAS: "/notas",
+	REPORTS: "/reports",
+	EQUIPE: "/equipe",
+	CONFIGURACAO_GERAL: "/configuracao-geral",
+};
