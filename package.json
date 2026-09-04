@@ -21,6 +21,7 @@
 		"finan:backend:start": "npm run backend:start --prefix apps/finan",
 		"finan:migrate": "npm run migrate --prefix apps/finan",
 		"finan:backup": "npm run backup --prefix apps/finan",
+		"finan:audit:retiradas": "npm run audit:retiradas --prefix apps/finan/backend",
 		"finan:migrate:from-retiradas": "npm run migrate:from-retiradas --prefix apps/finan/backend"
 	},
 	"dependencies": {

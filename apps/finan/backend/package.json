@@ -8,6 +8,7 @@
 		"api:dev": "node --watch src/index.js",
 		"migrate": "node scripts/run-sql-migrations.js",
 		"backup:database": "node scripts/database-backup.js",
+		"audit:retiradas": "node scripts/audit-retiradas-sources.js",
 		"migrate:from-retiradas": "node scripts/migrate-from-retiradas.js"
 	},
 	"dependencies": {
