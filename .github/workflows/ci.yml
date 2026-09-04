@@ -116,6 +116,16 @@ jobs:
           export VITE_APP_VERSION="${GITHUB_SHA::7}"
           npm run build
 
+      - name: Validate Finan dedicated app
+        run: |
+          npm run finan:frontend:build
+          node --check apps/finan/backend/src/app.js
+          node --check apps/finan/backend/src/auth/routes.js
+          node --check apps/finan/backend/src/index.js
+          node --check apps/finan/backend/scripts/migrate-from-retiradas.js
+          node --check apps/finan/backend/scripts/run-sql-migrations.js
+          node --check apps/finan/backend/scripts/database-backup.js
+
       - name: Upload frontend build artifact
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/homolog-dev')
         uses: actions/upload-artifact@v4
