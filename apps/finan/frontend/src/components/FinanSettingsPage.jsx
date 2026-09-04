@@ -1,4 +1,6 @@
-import { Cable, Database, Mail, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Cable, Database, Mail, ShieldCheck, UsersRound } from "lucide-react";
+import { requestFinanApi } from "../api/finanApi";
 
 const cards = [
 	{
@@ -25,6 +27,77 @@ const cards = [
 ];
 
 export default function FinanSettingsPage() {
+	const [migrationState, setMigrationState] = useState({
+		loading: true,
+		error: "",
+		users: [],
+		roles: [],
+		snapshots: [],
+	});
+
+	useEffect(() => {
+		let active = true;
+		Promise.all([
+			requestFinanApi("/usuarios"),
+			requestFinanApi("/usuarios/roles"),
+			requestFinanApi("/usuarios/migration-snapshots"),
+		])
+			.then(([usersData, rolesData, snapshotsData]) => {
+				if (!active) return;
+				setMigrationState({
+					loading: false,
+					error: "",
+					users: usersData.users || [],
+					roles: rolesData.roles || [],
+					snapshots: snapshotsData.snapshots || [],
+				});
+			})
+			.catch((error) => {
+				if (!active) return;
+				setMigrationState({
+					loading: false,
+					error: error.message || "Não foi possível ler os dados migrados.",
+					users: [],
+					roles: [],
+					snapshots: [],
+				});
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	const migrationSummary = useMemo(() => {
+		const financialUsers = migrationState.users.filter(
+			(user) => !user.source_role || user.source_role !== "admin",
+		);
+		const admins = migrationState.users.filter(
+			(user) => user.source_role === "admin" || user.role_id === "admin",
+		);
+		const financialTables = migrationState.snapshots.filter((snapshot) =>
+			String(snapshot.source_table || "").startsWith("financeiro_"),
+		);
+		const financialRows = financialTables.reduce(
+			(total, snapshot) => total + Number(snapshot.rows || 0),
+			0,
+		);
+
+		return {
+			totalUsers: migrationState.users.length,
+			financialUsers: financialUsers.length,
+			admins: admins.length,
+			roles: migrationState.roles.length,
+			financialTables: financialTables.length,
+			financialRows,
+			lastImport: migrationState.snapshots.reduce((latest, snapshot) => {
+				const value = snapshot.imported_at
+					? new Date(snapshot.imported_at).getTime()
+					: 0;
+				return Math.max(latest, value || 0);
+			}, 0),
+		};
+	}, [migrationState]);
+
 	return (
 		<section>
 			<div className="finan-page-title">
@@ -48,6 +121,62 @@ export default function FinanSettingsPage() {
 					);
 				})}
 			</div>
+			<div className="finan-work-card">
+				<div className="finan-card-heading">
+					<div>
+						<UsersRound size={20} />
+					</div>
+					<div>
+						<h2>Base reaproveitada do Retiradas</h2>
+						<p>
+							Usuários financeiros, admins e dados financeiros copiados para o
+							banco dedicado do Finan.
+						</p>
+					</div>
+				</div>
+				{migrationState.loading ? (
+					<p>Carregando leitura do banco dedicado...</p>
+				) : migrationState.error ? (
+					<p className="finan-muted-warning">{migrationState.error}</p>
+				) : (
+					<>
+						<div className="finan-snapshot-grid">
+							<Metric label="Usuários migrados" value={migrationSummary.totalUsers} />
+							<Metric
+								label="Usuários financeiros"
+								value={migrationSummary.financialUsers}
+							/>
+							<Metric label="Admins reaproveitados" value={migrationSummary.admins} />
+							<Metric label="Perfis Finan" value={migrationSummary.roles} />
+							<Metric
+								label="Tabelas financeiras"
+								value={migrationSummary.financialTables}
+							/>
+							<Metric
+								label="Linhas financeiras"
+								value={migrationSummary.financialRows.toLocaleString("pt-BR")}
+							/>
+						</div>
+						<p>
+							Última carga:{" "}
+							<strong>
+								{migrationSummary.lastImport
+									? new Date(migrationSummary.lastImport).toLocaleString("pt-BR")
+									: "aguardando migração"}
+							</strong>
+						</p>
+					</>
+				)}
+			</div>
 		</section>
+	);
+}
+
+function Metric({ label, value }) {
+	return (
+		<div className="finan-snapshot-metric">
+			<span>{label}</span>
+			<strong>{value}</strong>
+		</div>
 	);
 }
