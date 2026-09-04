@@ -25,6 +25,9 @@ create table if not exists finan_users (
 	must_change_password boolean not null default false,
 	source_system text not null default 'finan',
 	source_user_id text,
+	source_role text,
+	source_permissions jsonb not null default '[]'::jsonb,
+	source_profile jsonb not null default '{}'::jsonb,
 	last_login_at timestamptz,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now()

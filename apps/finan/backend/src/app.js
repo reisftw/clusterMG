@@ -8,6 +8,7 @@ const healthRoutes = require("./health/routes");
 const integrationsRoutes = require("./integrations/routes");
 const budgetRoutes = require("./orcamento/routes");
 const settingsRoutes = require("./settings/routes");
+const usersRoutes = require("./users/routes");
 
 function createApp() {
 	const app = express();
@@ -36,6 +37,7 @@ function createApp() {
 	app.use("/api/finan/orcamento", budgetRoutes);
 	app.use("/api/finan/integracoes", integrationsRoutes);
 	app.use("/api/finan/configuracoes", settingsRoutes);
+	app.use("/api/finan/usuarios", usersRoutes);
 
 	app.use((req, res) => {
 		res.status(404).json({ ok: false, error: "Rota do Finan não encontrada." });

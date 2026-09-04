@@ -25,20 +25,29 @@ async function migrateUsers(retiradasPool) {
 			u.password_hash,
 			coalesce(u.role, 'analista_financeiro') as role,
 			case when coalesce(u.disabled, false) then 'inativo' else 'ativo' end as status,
-			u.must_change_password as trocar_senha
+			u.must_change_password as trocar_senha,
+			coalesce(u.imported_profile, '{}'::jsonb) as imported_profile,
+			coalesce(
+				jsonb_agg(distinct rp.permission) filter (where rp.permission is not null),
+				'[]'::jsonb
+			) as permissions
 		from app_users u
+		left join app_roles r on r.id = coalesce(u.role, '')
+		left join app_role_permissions rp on rp.role_id = r.id
 		where lower(coalesce(u.role, '')) = 'admin'
 			or lower(coalesce(u.role, '')) like '%financeiro%'
 			or exists (
 				select 1
-				from app_roles r
-				left join app_role_permissions rp on rp.role_id = r.id
-				where r.id = coalesce(u.role, '')
+				from app_roles role_check
+				left join app_role_permissions perm_check on perm_check.role_id = role_check.id
+				where role_check.id = coalesce(u.role, '')
 					and (
-						lower(r.name) like '%financeiro%'
-						or rp.permission like 'financeiro.%'
+						lower(role_check.name) like '%financeiro%'
+						or perm_check.permission like 'financeiro.%'
 					)
 			)
+		group by u.uid, u.display_name, u.imported_profile, u.email, u.password_hash,
+			u.role, u.disabled, u.must_change_password
 	`);
 
 	for (const user of rows) {
@@ -51,15 +60,19 @@ async function migrateUsers(retiradasPool) {
 		await finanDb.query(
 			`insert into finan_users (
 				id, name, email, password_hash, role_id, status,
-				must_change_password, source_system, source_user_id
+				must_change_password, source_system, source_user_id,
+				source_role, source_permissions, source_profile
 			)
-			values ($1, $2, $3, $4, $5, $6, $7, 'retiradas', $1)
+			values ($1, $2, $3, $4, $5, $6, $7, 'retiradas', $1, $8, $9::jsonb, $10::jsonb)
 			on conflict (email) do update set
 				name = excluded.name,
 				password_hash = coalesce(finan_users.password_hash, excluded.password_hash),
 				role_id = excluded.role_id,
 				status = excluded.status,
 				source_user_id = excluded.source_user_id,
+				source_role = excluded.source_role,
+				source_permissions = excluded.source_permissions,
+				source_profile = excluded.source_profile,
 				updated_at = now()`,
 			[
 				String(user.id),
@@ -69,6 +82,9 @@ async function migrateUsers(retiradasPool) {
 				roleId,
 				user.status || "ativo",
 				Boolean(user.trocar_senha),
+				user.role || null,
+				JSON.stringify(user.permissions || []),
+				JSON.stringify(user.imported_profile || {}),
 			],
 		);
 	}
