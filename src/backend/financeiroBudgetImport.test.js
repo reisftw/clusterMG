@@ -282,8 +282,25 @@ describe("financeiro budget import config merge", () => {
 	it("aplica a matriz oficial do Access por conta e centro de custo", () => {
 		const result = mergeBudgetConfigFromRows(
 			{
-				accounts: [],
-				centers: [],
+				accounts: [
+					{
+						id: "13111",
+						codigo: "13111",
+						nome: "Serviços de Conservação e Limpeza",
+						categoriaMae: "Administrativo",
+						categoriaClasse: "basal",
+					},
+				],
+				centers: [
+					{ id: "1106", codigo: "1106", nome: "Administrativo", tipoPlano: "S" },
+					{
+						id: "110604",
+						codigo: "110604",
+						nome: "Administrativo",
+						tipoPlano: "A",
+						parentId: "1106",
+					},
+				],
 				companies: [],
 				branches: [],
 				partners: [],
@@ -296,6 +313,13 @@ describe("financeiro budget import config merge", () => {
 							accountName: "Empréstimos bancários",
 							periodScope: "monthly_default",
 							planned: 1600000,
+						},
+						{
+							classType: "basal",
+							categoryName: "Administrativo",
+							accountName: "Serviços de Conservação e Limpeza",
+							periodScope: "monthly_default",
+							planned: 36571,
 						},
 					],
 				},
@@ -322,8 +346,12 @@ describe("financeiro budget import config merge", () => {
 		const matrixRow = result.config.matrix.find(
 			(row) => row.accountId === "1343" && row.costCenterId === "110602",
 		);
+		const syntheticMappedRow = result.config.matrix.find(
+			(row) => row.accountId === "13111" && row.costCenterId === "110604",
+		);
 
 		expect(matrixRow?.months[7]).toBe(1600000);
+		expect(syntheticMappedRow?.months[7]).toBeGreaterThan(0);
 	});
 
 	it("aplica De_Para, classificacao fora do basal e centro de projeto do Access", () => {

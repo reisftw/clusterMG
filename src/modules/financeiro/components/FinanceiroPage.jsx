@@ -75,7 +75,6 @@ import {
 	buildCostCenterTopCards,
 	buildDirectorateRows,
 	buildOperationalCenterGroups,
-	budgetVarianceMeta as budgetVarianceMetaFromStatement,
 	findBudgetParetoRows,
 	getBudgetInsights as getBudgetInsightsFromStatement,
 	getTariffsAvailableYears as getTariffsDetailAvailableYears,
@@ -102,6 +101,7 @@ import {
 	iniciarImportacaoDadosOrcamentoFinanceiro,
 	limparDadosOrcamentoFinanceiro,
 	limparSerasaReportFinanceiro,
+	salvarCentrosCustoOrcamentoFinanceiro,
 	salvarConfigPlanilhasFinanceiro,
 	salvarSerasaReportFinanceiro,
 	sincronizarPlanilhasFinanceiro,
@@ -1522,7 +1522,7 @@ async function exportBudgetManagementPdf({
 					color: [30, 64, 175],
 				},
 				{
-					title: "Realizado + comprometido",
+					title: "Realizado",
 					value: brl.format(insights.realizedMonth + insights.committedMonth),
 					helper: `${decimal.format(insights.usedPercent)}% consumido`,
 					fill: [245, 243, 255],
@@ -5124,6 +5124,7 @@ function BudgetOperationalPage({
 	loading,
 	canManage,
 	onConfigUpdated,
+	onOpenDirectoratesConfig,
 	selectedPeriod,
 }) {
 	const insights = useMemo(
@@ -5170,7 +5171,6 @@ function BudgetOperationalPage({
 		onConfigUpdated,
 		getVisibleError,
 	});
-
 	if (loading) {
 		return (
 			<section className="grid gap-4 md:grid-cols-5">
@@ -5348,10 +5348,6 @@ function BudgetOperationalPage({
 	const branchById = new Map(
 		(config.branches || []).map((branch) => [branch.id, branch]),
 	);
-	const budgetDeviation = budgetVarianceMetaFromStatement(
-		insights.plannedMonth,
-		insights.realizedMonth + insights.committedMonth,
-	);
 	const monthlyChart = buildBudgetMonthlyChart(insights);
 	const forecastChart = buildBudgetForecastChart(insights);
 	const { rows: topAccounts, chart: accountChart } = buildBudgetAccountChart(
@@ -5442,6 +5438,7 @@ function BudgetOperationalPage({
 		);
 	};
 	return (
+		<>
 		<BudgetDashboardView
 			ChartCard={ChartCard}
 			EmptyState={EmptyState}
@@ -5455,7 +5452,6 @@ function BudgetOperationalPage({
 			budgetAccountLabel={budgetAccountLabel}
 			budgetCenterCompactLabel={budgetCenterCompactLabel}
 			budgetConsumptionStatus={budgetConsumptionStatus}
-			budgetDeviation={budgetDeviation}
 			centerById={centerById}
 			centerChart={centerChart}
 			companyById={companyById}
@@ -5472,6 +5468,7 @@ function BudgetOperationalPage({
 			movementSupplierName={movementSupplierName}
 			movementValue={movementValue}
 			onCloseDashboardDetail={() => setDashboardDetail(null)}
+			onOpenDirectoratesConfig={onOpenDirectoratesConfig}
 			onShowDashboardDetail={setDashboardDetail}
 			pareto={pareto}
 			renderDashboardDetail={renderDashboardDetail}
@@ -5483,6 +5480,7 @@ function BudgetOperationalPage({
 			treemapItems={treemapItems}
 			waterfallRows={waterfallRows}
 		/>
+		</>
 	);
 }
 
@@ -6281,6 +6279,199 @@ function DirectoratesDropdownSection({
 				</ModalShell>
 			) : null}
 		</>
+	);
+}
+
+function BudgetDirectoratesQuickConfigModal({
+	config = {},
+	canManage,
+	saving,
+	onClose,
+	onSave,
+}) {
+	const existingDirectorates = useMemo(() => {
+		const byKey = new Map();
+		(config.centers || []).forEach((center) => {
+			const name = String(center.diretoria || center.directorate || "").trim();
+			if (!name) return;
+			const key = normalizeImportHeader(name);
+			if (!key || byKey.has(key)) return;
+			byKey.set(key, {
+				id: budgetEntityId(name, `diretoria-${name}`),
+				nome: name,
+				centers: 0,
+			});
+		});
+		(config.centers || []).forEach((center) => {
+			const key = normalizeImportHeader(center.diretoria || center.directorate || "");
+			const item = byKey.get(key);
+			if (item && center.tipoPlano !== "S") item.centers += 1;
+		});
+		return Array.from(byKey.values()).sort((left, right) =>
+			left.nome.localeCompare(right.nome, "pt-BR", { numeric: true }),
+		);
+	}, [config.centers]);
+	const savedDirectorates = useMemo(
+		() => normalizeDirectorates(config.settings?.directorates, []),
+		[config.settings?.directorates],
+	);
+	const [drafts, setDrafts] = useState(() =>
+		existingDirectorates.map((directorate) => {
+			const saved = findDirectorateByName(savedDirectorates, directorate.nome);
+			return {
+				...directorate,
+				diretor: saved?.diretor || "",
+				emailDiretor: saved?.emailDiretor || "",
+				numeroDiretor: saved?.numeroDiretor || "",
+			};
+		}),
+	);
+
+	const updateDraft = (id, field, value) => {
+		setDrafts((current) =>
+			current.map((item) =>
+				item.id === id ? { ...item, [field]: value } : item,
+			),
+		);
+	};
+
+	const save = () => {
+		const existingKeys = new Set(
+			existingDirectorates.map((item) => normalizeImportHeader(item.nome)),
+		);
+		const untouched = savedDirectorates.filter(
+			(item) => !existingKeys.has(normalizeImportHeader(item.nome)),
+		);
+		const nextDirectorates = normalizeDirectorates([
+			...untouched,
+			...drafts.map((item) => ({
+				id: item.id,
+				nome: item.nome,
+				diretor: item.diretor,
+				emailDiretor: item.emailDiretor,
+				numeroDiretor: item.numeroDiretor,
+			})),
+		]);
+		onSave({
+			...config,
+			settings: {
+				...(config.settings || {}),
+				directorates: nextDirectorates,
+			},
+		});
+	};
+
+	return (
+		<ModalShell
+			title="Diretores por diretoria"
+			description="As diretorias vêm dos centros de custo cadastrados. Informe apenas quem responde por cada uma."
+			icon={<Settings size={20} />}
+			onClose={onClose}
+			size="5xl"
+			footer={
+				<div className="flex flex-wrap justify-end gap-2">
+					<button
+						type="button"
+						onClick={onClose}
+						className="inline-flex min-h-11 items-center rounded-xl border border-slate-200 px-4 text-sm font-black text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={save}
+						disabled={!canManage || saving}
+						className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						{saving ? (
+							<Loader2 size={16} className="animate-spin" />
+						) : (
+							<CheckCircle2 size={16} />
+						)}
+						Salvar diretores
+					</button>
+				</div>
+			}
+		>
+			{drafts.length ? (
+				<div className="grid gap-3">
+					{drafts.map((directorate) => (
+						<section
+							key={directorate.id}
+							className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+						>
+							<div className="flex flex-wrap items-start justify-between gap-3">
+								<div>
+									<p className="text-xs font-black uppercase text-slate-500">
+										Diretoria
+									</p>
+									<h3 className="mt-1 text-base font-black text-slate-950">
+										{directorate.nome}
+									</h3>
+									<p className="mt-1 text-xs font-bold text-slate-500">
+										{integer.format(directorate.centers)} centro(s) analítico(s)
+									</p>
+								</div>
+								<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
+									Campo existente
+								</span>
+							</div>
+							<div className="mt-4 grid gap-3 md:grid-cols-3">
+								<label className="text-xs font-black uppercase text-slate-500">
+									Diretor
+									<input
+										value={directorate.diretor}
+										disabled={!canManage || saving}
+										onChange={(event) =>
+											updateDraft(directorate.id, "diretor", event.target.value)
+										}
+										className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+										placeholder="Nome do diretor"
+									/>
+								</label>
+								<label className="text-xs font-black uppercase text-slate-500">
+									E-mail
+									<input
+										type="email"
+										value={directorate.emailDiretor}
+										disabled={!canManage || saving}
+										onChange={(event) =>
+											updateDraft(
+												directorate.id,
+												"emailDiretor",
+												event.target.value,
+											)
+										}
+										className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+										placeholder="email@empresa.com"
+									/>
+								</label>
+								<label className="text-xs font-black uppercase text-slate-500">
+									Telefone
+									<input
+										value={directorate.numeroDiretor}
+										disabled={!canManage || saving}
+										onChange={(event) =>
+											updateDraft(
+												directorate.id,
+												"numeroDiretor",
+												event.target.value,
+											)
+										}
+										className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm normal-case text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-60"
+										placeholder="Telefone ou WhatsApp"
+									/>
+								</label>
+							</div>
+						</section>
+					))}
+				</div>
+			) : (
+				<div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm font-bold text-slate-500">
+					Nenhuma diretoria foi encontrada nos centros de custo.
+				</div>
+			)}
+		</ModalShell>
 	);
 }
 
@@ -10820,6 +11011,7 @@ function FinanceiroPageHeader({
 	loadBudgetConfig,
 	loading,
 	meta,
+	onOpenDirectoratesConfig,
 	page,
 	period,
 	selectedBudgetReference,
@@ -10918,6 +11110,18 @@ function FinanceiroPageHeader({
 							/>{" "}
 							Atualizar
 						</button>
+						{page === "orcamentoDashboard" ? (
+							<button
+								type="button"
+								onClick={onOpenDirectoratesConfig}
+								disabled={refreshLoading}
+								className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+								title="Configurar diretores do ranking"
+								aria-label="Configurar diretores do ranking"
+							>
+								<Settings size={16} />
+							</button>
+						) : null}
 					</div>
 				)}
 			</div>
@@ -10936,6 +11140,7 @@ function FinanceiroPageContent({
 	exportModalOpen,
 	loading,
 	loadBudgetConfig,
+	onOpenDirectoratesConfig,
 	page,
 	period,
 	selectedBudgetReference,
@@ -10990,6 +11195,7 @@ function FinanceiroPageContent({
 					loading={budgetLoading}
 					canManage={canManage}
 					onConfigUpdated={setBudgetConfig}
+					onOpenDirectoratesConfig={onOpenDirectoratesConfig}
 					selectedPeriod={selectedPeriod}
 				/>
 			) : null}
@@ -11033,6 +11239,8 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 	const [budgetLoading, setBudgetLoading] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [exportModalOpen, setExportModalOpen] = useState(false);
+	const [directoratesConfigOpen, setDirectoratesConfigOpen] = useState(false);
+	const [directoratesConfigSaving, setDirectoratesConfigSaving] = useState(false);
 	const [message, setMessage] = useState("");
 	const meta = PAGE_META[page] || PAGE_META.dashboard;
 	const canManage =
@@ -11093,6 +11301,20 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 		}
 	}, []);
 
+	const saveDirectoratesConfig = async (nextConfig) => {
+		setDirectoratesConfigSaving(true);
+		try {
+			const response = await salvarCentrosCustoOrcamentoFinanceiro(nextConfig);
+			setBudgetConfig(response.config || nextConfig);
+			setDirectoratesConfigOpen(false);
+			setMessage("Diretores do ranking atualizados com sucesso.");
+		} catch (error) {
+			setMessage(error?.message || "Não foi possível salvar os diretores.");
+		} finally {
+			setDirectoratesConfigSaving(false);
+		}
+	};
+
 	useEffect(() => {
 		load();
 	}, [load]);
@@ -11127,6 +11349,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				loadBudgetConfig={loadBudgetConfig}
 				loading={loading}
 				meta={meta}
+				onOpenDirectoratesConfig={() => setDirectoratesConfigOpen(true)}
 				page={page}
 				period={period}
 				selectedBudgetReference={selectedBudgetReference}
@@ -11154,6 +11377,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				exportModalOpen={exportModalOpen}
 				loading={loading}
 				loadBudgetConfig={loadBudgetConfig}
+				onOpenDirectoratesConfig={() => setDirectoratesConfigOpen(true)}
 				page={page}
 				period={period}
 				selectedBudgetReference={selectedBudgetReference}
@@ -11169,6 +11393,15 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 						setBudgetPeriodMode("custom");
 						setBudgetDateModalOpen(false);
 					}}
+				/>
+			) : null}
+			{directoratesConfigOpen ? (
+				<BudgetDirectoratesQuickConfigModal
+					canManage={canManage}
+					config={budgetConfig || {}}
+					onClose={() => setDirectoratesConfigOpen(false)}
+					onSave={saveDirectoratesConfig}
+					saving={directoratesConfigSaving}
 				/>
 			) : null}
 		</main>

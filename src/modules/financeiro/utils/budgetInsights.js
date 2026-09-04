@@ -1372,18 +1372,41 @@ export function isBudgetCenterResponsible(user, center = {}) {
 }
 
 export function buildBudgetOperationalKpis(insights = {}, config = {}) {
-	const basal = (insights.budgetCategoryGroups || []).find(
-		(item) => item.id === BUDGET_CATEGORY_CLASSES.BASAL,
-	);
-	const nonBasal = (insights.budgetCategoryGroups || []).find(
-		(item) => item.id === BUDGET_CATEGORY_CLASSES.NAO_BASAL,
-	);
-	const projects = (insights.budgetCategoryGroups || []).find(
-		(item) => item.id === BUDGET_CATEGORY_CLASSES.PROJETOS,
-	);
 	const usedPercent = Number(insights.usedPercent || 0);
 	const statusColor = budgetStatusColor(usedPercent);
 	const availablePercent = Math.max(0, Math.min(100, 100 - usedPercent));
+	const deviationMeta = budgetVarianceMeta(
+		insights.plannedMonth,
+		Number(insights.realizedMonth || 0) + Number(insights.committedMonth || 0),
+	);
+	const analyticCenters = (insights.centerSummary || []).filter(
+		(item) => item.center?.tipoPlano === "A",
+	);
+	const positiveCenters = analyticCenters.filter(
+		(item) =>
+			Number(item.planned || 0) > 0 &&
+			Number(item.realized || 0) <= Number(item.planned || 0),
+	);
+	const negativeCenters = analyticCenters.filter(
+		(item) =>
+			Number(item.realized || 0) > Number(item.planned || 0) ||
+			(!Number(item.planned || 0) && Number(item.realized || 0) > 0),
+	);
+	const directorateRows = buildDirectorateRows(insights, config);
+	const positiveDirectorate =
+		directorateRows
+			.filter((item) => Number(item.planned || 0) > 0 && Number(item.available || 0) >= 0)
+			.sort((left, right) => Number(right.available || 0) - Number(left.available || 0))[0] ||
+		null;
+	const negativeDirectorate =
+		directorateRows
+			.filter((item) => Number(item.planned || 0) > 0 && Number(item.available || 0) < 0)
+			.sort((left, right) => Number(left.available || 0) - Number(right.available || 0))[0] ||
+		null;
+	const directorateHelper = (item, fallback) =>
+		item
+			? `${item.nome} · ${item.diretor || "Diretor não informado"} · ${decimal.format(item.percent || 0)}% consumido`
+			: fallback;
 	return [
 		{
 			id: "orcado",
@@ -1400,7 +1423,7 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 		},
 		{
 			id: "realizado",
-			title: "Realizado + comprometido",
+			title: "Realizado",
 			value: Number(insights.realizedMonth || 0) + Number(insights.committedMonth || 0),
 			type: "currency",
 			helper: insights.periodDisplayLabel,
@@ -1416,6 +1439,10 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			title: "Saldo disponível",
 			value: insights.availableMonth,
 			type: "currency",
+			valueClassName:
+				Number(insights.availableMonth || 0) >= 0
+					? "text-emerald-700"
+					: "text-red-700",
 			helper:
 				Number(insights.availableMonth || 0) < 0
 					? "Estourado"
@@ -1428,44 +1455,59 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			},
 		},
 		{
-			id: "aprovacoes",
-			title: "Aprovações pendentes",
-			value: insights.approvals?.length || 0,
-			type: "integer",
-			helper: "Geradas por estouro/alerta",
+			id: "desvio-percentual",
+			title: "Desvio percentual",
+			value: Math.abs(deviationMeta.percent),
+			type: "percent",
+			helper: `${decimal.format(usedPercent)}% consumido no período`,
 			icon: "ClipboardCheck",
+			valueClassName: deviationMeta.textClass,
 		},
 		{
-			id: "ano",
-			title: "Budget anual",
-			value: insights.plannedYear,
+			id: "centros-positivos",
+			title: "QTD Centro de custo positivo",
+			value: positiveCenters.length,
+			type: "integer",
+			helper: "Dentro do orçamento no período",
+			icon: "CheckCircle2",
+			color: "emerald",
+			valueClassName: "text-emerald-700",
+		},
+		{
+			id: "centros-negativos",
+			title: "QTD Centro de custo negativo",
+			value: negativeCenters.length,
+			type: "integer",
+			helper: "Acima do orçamento ou sem orçamento",
+			icon: "AlertTriangle",
+			color: "rose",
+			valueClassName: negativeCenters.length ? "text-red-700" : "text-slate-950",
+		},
+		{
+			id: "diretoria-positiva",
+			title: "Diretoria positiva",
+			value: positiveDirectorate?.available || 0,
 			type: "currency",
-			helper: `${integer.format((config.versions || []).length)} versão(ões)`,
+			helper: directorateHelper(
+				positiveDirectorate,
+				"Nenhuma diretoria positiva no período",
+			),
 			icon: "Landmark",
+			color: "emerald",
+			valueClassName: "text-emerald-700",
 		},
 		{
-			id: "basal",
-			title: "BASAL",
-			value: basal?.planned || 0,
+			id: "diretoria-negativa",
+			title: "Diretoria negativa",
+			value: Math.abs(negativeDirectorate?.available || 0),
 			type: "currency",
-			helper: `Realizado ${brl.format(basal?.realized || 0)}`,
-			icon: "Landmark",
-		},
-		{
-			id: "nao-basal",
-			title: "NÃO BASAL",
-			value: nonBasal?.planned || 0,
-			type: "currency",
-			helper: `Realizado ${brl.format(nonBasal?.realized || 0)}`,
-			icon: "FileText",
-		},
-		{
-			id: "projetos",
-			title: "PROJETOS",
-			value: projects?.planned || 0,
-			type: "currency",
-			helper: `Realizado ${brl.format(projects?.realized || 0)}`,
-			icon: "FolderKanban",
+			helper: directorateHelper(
+				negativeDirectorate,
+				"Nenhuma diretoria negativa no período",
+			),
+			icon: "AlertTriangle",
+			color: "rose",
+			valueClassName: negativeDirectorate ? "text-red-700" : "text-slate-950",
 		},
 	];
 }
@@ -1528,7 +1570,7 @@ export function buildCostCenterTopCards({
 			title: `Orçamento ${fallback.label}`,
 			value: planned,
 			type: "currency",
-			helper: `Saldo disponível: ${brl.format(available)} · Realizado + comprometido: ${brl.format(realized)}`,
+			helper: `Saldo disponível: ${brl.format(available)} · Realizado: ${brl.format(realized)}`,
 			icon: fallback.icon,
 			color: fallback.color,
 			statusColor: budgetStatusColor(percent),

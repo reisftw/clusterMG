@@ -8,7 +8,7 @@ export default function BudgetRhythmDetail({ insights, lineOptions }) {
 			<div className="h-[420px] rounded-2xl border border-slate-200 p-4">
 				<Line
 					data={{
-						labels: ["Ideal hoje", "Realizado + comprometido"],
+						labels: ["Ideal hoje", "Realizado"],
 						datasets: [
 							{
 								label: "Consumo %",

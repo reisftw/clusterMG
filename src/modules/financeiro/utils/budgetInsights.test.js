@@ -140,12 +140,26 @@ describe("budgetInsights", () => {
 			"orcado",
 			"realizado",
 			"saldo",
-			"aprovacoes",
-			"ano",
-			"basal",
-			"nao-basal",
-			"projetos",
+			"desvio-percentual",
+			"centros-positivos",
+			"centros-negativos",
+			"diretoria-positiva",
+			"diretoria-negativa",
 		]);
+		expect(kpis.find((item) => item.id === "desvio-percentual")).toMatchObject({
+			title: "Desvio percentual",
+			valueClassName: "text-red-600",
+		});
+		expect(kpis.find((item) => item.id === "centros-positivos")).toMatchObject({
+			title: "QTD Centro de custo positivo",
+			value: 0,
+			valueClassName: "text-emerald-700",
+		});
+		expect(kpis.find((item) => item.id === "centros-negativos")).toMatchObject({
+			title: "QTD Centro de custo negativo",
+			value: 1,
+			valueClassName: "text-red-700",
+		});
 		expect(cards.map((item) => item.id)).toEqual([
 			"cc-basal",
 			"cc-nao-basal",
@@ -160,7 +174,7 @@ describe("budgetInsights", () => {
 			"Saldo disponível:",
 		);
 		expect(cards.find((item) => item.id === "cc-basal")?.helper).toContain(
-			"Realizado + comprometido:",
+			"Realizado:",
 		);
 		expect(cards.find((item) => item.id === "cc-nao-basal")).toMatchObject({
 			title: "Orçamento NÃO BASAL",

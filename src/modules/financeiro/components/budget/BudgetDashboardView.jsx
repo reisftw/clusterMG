@@ -1,10 +1,42 @@
 import { useState } from "react";
-import { Eye } from "lucide-react";
+import { Eye, Settings } from "lucide-react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import ModalShell from "../../../../components/ui/ModalShell";
 import FinancialKpiCard from "../kpi/FinancialKpiCard";
 
 const CATEGORY_PAGE_SIZE = 5;
+
+function budgetClassVisualState(percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent >= 100) {
+		return {
+			border: "border-red-300",
+			shadow: "shadow-[0_14px_34px_rgba(239,68,68,0.14)]",
+			dot: "bg-red-500",
+			bar: "bg-red-500",
+			text: "text-red-700",
+			label: "Acima do orçamento",
+		};
+	}
+	if (safePercent >= 80) {
+		return {
+			border: "border-orange-300",
+			shadow: "shadow-[0_14px_34px_rgba(249,115,22,0.14)]",
+			dot: "bg-orange-500",
+			bar: "bg-orange-500",
+			text: "text-orange-700",
+			label: "Em atenção",
+		};
+	}
+	return {
+		border: "border-emerald-300",
+		shadow: "shadow-[0_14px_34px_rgba(16,185,129,0.12)]",
+		dot: "bg-emerald-500",
+		bar: "bg-emerald-500",
+		text: "text-emerald-700",
+		label: "Positivo",
+	};
+}
 
 function BudgetCategoryClassPanel({
 	group,
@@ -14,6 +46,7 @@ function BudgetCategoryClassPanel({
 	budgetAccountLabel,
 	budgetCenterCompactLabel,
 }) {
+	const [open, setOpen] = useState(false);
 	const [page, setPage] = useState(1);
 	const categories = group.categories || [];
 	const totalPages = Math.max(1, Math.ceil(categories.length / CATEGORY_PAGE_SIZE));
@@ -24,141 +57,244 @@ function BudgetCategoryClassPanel({
 	);
 	const available = Number(group.planned || 0) - Number(group.realized || 0);
 	const isFavorable = available >= 0;
+	const progress = Math.min(100, Math.max(0, Number(group.percent || 0)));
+	const visualState = budgetClassVisualState(group.percent);
 	return (
-		<details className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
-			<summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-4">
-				<div className="min-w-0">
-					<div className="flex items-center gap-2">
-						<span
-							className={`h-3 w-3 rounded-full ${isFavorable ? "bg-emerald-500" : "bg-red-500"}`}
-							aria-label={isFavorable ? "Dentro do orçamento" : "Acima do orçamento"}
-						/>
-						<p className="text-xs font-black uppercase text-slate-500">
-							Categoria
+		<>
+			<button
+				type="button"
+				onClick={() => {
+					setPage(1);
+					setOpen(true);
+				}}
+				className={`group min-w-0 rounded-2xl border bg-white p-4 text-left ${visualState.border} ${visualState.shadow} transition hover:-translate-y-0.5`}
+			>
+				<div className="flex items-start justify-between gap-3">
+					<div className="min-w-0">
+						<div className="flex items-center gap-2">
+							<span
+								className={`h-3 w-3 rounded-full ${visualState.dot}`}
+								aria-label={visualState.label}
+							/>
+							<p className="text-xs font-black uppercase text-slate-500">
+								Categoria orçamentária
+							</p>
+						</div>
+						<h3 className="mt-1 break-words text-2xl font-black text-slate-950">
+							{group.label}
+						</h3>
+						<p className="mt-1 text-xs font-bold text-slate-500">
+							{integer.format(categories.length)} categoria(s) · clique para detalhar
 						</p>
 					</div>
-					<h3 className="break-words text-xl font-black text-slate-950">
-						{group.label}
-					</h3>
+					<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700 transition group-hover:bg-blue-100">
+						Abrir
+					</span>
 				</div>
-				<div className="min-w-[170px] text-left sm:text-right">
-					<p className="text-xs font-black uppercase text-slate-500">
-						Orçado / realizado
-					</p>
-					<p className="break-words text-sm font-black text-slate-950">
-						{brl.format(group.planned || 0)} / {brl.format(group.realized || 0)}
-					</p>
-					<p className="text-xs font-bold text-slate-500">
-						{decimal.format(group.percent || 0)}% consumido
-					</p>
-				</div>
-			</summary>
-			<div className="space-y-3 border-t border-slate-100 p-4">
-				{categories.length ? (
-					visibleCategories.map((category) => {
-						const categoryAvailable =
-							Number(category.planned || 0) - Number(category.realized || 0);
-						const categoryFavorable = categoryAvailable >= 0;
-						return (
-						<section
-							key={category.id}
-							className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
-						>
-							<div className="flex flex-wrap items-start justify-between gap-2">
-								<div className="min-w-0">
-									<div className="flex items-center gap-2">
-										<span
-											className={`h-2.5 w-2.5 shrink-0 rounded-full ${categoryFavorable ? "bg-emerald-500" : "bg-red-500"}`}
-											aria-label={categoryFavorable ? "Dentro do orçamento" : "Acima do orçamento"}
-										/>
-										<p className="break-words text-sm font-black text-slate-950">
-											{category.name}
-										</p>
-									</div>
-									<p className="text-xs font-bold text-slate-500">
-										{category.accounts.length} conta(s) financeira(s)
-									</p>
-								</div>
-								<p className="min-w-[120px] break-words text-left text-xs font-black text-slate-700 sm:text-right">
-									{brl.format(category.planned || 0)}
-									<span className="block text-slate-500">
-										{brl.format(category.realized || 0)}
-									</span>
-								</p>
-							</div>
-							<div className="mt-3 grid gap-2">
-								{category.accounts.slice(0, 3).map((accountRow) => (
-									<div
-										key={accountRow.id}
-										className="rounded-xl border border-white bg-white p-2"
-									>
-										<div className="flex flex-wrap items-start justify-between gap-2">
-											<p className="min-w-0 break-words text-xs font-black text-slate-800">
-												{budgetAccountLabel(accountRow.account, accountRow.id)}
-											</p>
-											<p className="text-xs font-black text-slate-600">
-												{brl.format(accountRow.planned || 0)} /{" "}
-												{brl.format(accountRow.realized || 0)}
-											</p>
-										</div>
-										<div className="mt-2 flex flex-wrap gap-1.5">
-											{accountRow.centers
-												.slice(0, 4)
-												.map(({ center, realized }) => (
-													<span
-														key={`${accountRow.id}-${center.id}`}
-														className="max-w-full break-words rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600"
-													>
-														{budgetCenterCompactLabel(center)} ·{" "}
-														{brl.format(realized || 0)}
-													</span>
-												))}
-											{accountRow.centers.length > 4 ? (
-												<span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700">
-													+{integer.format(accountRow.centers.length - 4)}
-												</span>
-											) : null}
-										</div>
-									</div>
-								))}
-							</div>
-						</section>
-						);
-					})
-				) : (
-					<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
-						Nenhuma conta financeira classificada nesta categoria.
-					</p>
-				)}
-				{totalPages > 1 ? (
-					<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-						<p className="text-xs font-black uppercase text-slate-500">
-							Página {integer.format(safePage)} de {integer.format(totalPages)}
+				<div className="mt-4 grid gap-2 sm:grid-cols-3">
+					<div className="rounded-xl bg-slate-50 p-3">
+						<p className="text-[11px] font-black uppercase text-slate-500">
+							Orçado
 						</p>
-						<div className="flex gap-2">
-							<button
-								type="button"
-								onClick={() => setPage((current) => Math.max(1, current - 1))}
-								disabled={safePage <= 1}
-								className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+						<p className="mt-1 break-words text-sm font-black text-slate-950">
+							{brl.format(group.planned || 0)}
+						</p>
+					</div>
+					<div className="rounded-xl bg-slate-50 p-3">
+						<p className="text-[11px] font-black uppercase text-slate-500">
+							Realizado
+						</p>
+						<p className="mt-1 break-words text-sm font-black text-slate-950">
+							{brl.format(group.realized || 0)}
+						</p>
+					</div>
+					<div className="rounded-xl bg-slate-50 p-3">
+						<p className="text-[11px] font-black uppercase text-slate-500">
+							Saldo
+						</p>
+						<p
+							className={`mt-1 break-words text-sm font-black ${isFavorable ? "text-emerald-700" : "text-red-700"}`}
+						>
+							{brl.format(available)}
+						</p>
+					</div>
+				</div>
+				<div className="mt-4">
+					<div className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
+						<span>{decimal.format(group.percent || 0)}% consumido</span>
+						<span className={visualState.text}>{visualState.label}</span>
+					</div>
+					<div className="mt-2 h-2.5 rounded-full bg-slate-100">
+						<div
+							className={`h-full rounded-full ${visualState.bar}`}
+							style={{ width: `${progress}%` }}
+						/>
+					</div>
+				</div>
+			</button>
+			{open ? (
+				<ModalShell
+					title={`Detalhe ${group.label}`}
+					description={`${integer.format(categories.length)} categoria(s) do período selecionado.`}
+					size="6xl"
+					onClose={() => setOpen(false)}
+					icon={
+						<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+							<Eye size={22} />
+						</span>
+					}
+				>
+					<div className="grid gap-3 md:grid-cols-4">
+						<div className="rounded-2xl bg-slate-50 p-4">
+							<p className="text-xs font-black uppercase text-slate-500">
+								Orçado
+							</p>
+							<p className="mt-1 break-words text-xl font-black text-slate-950">
+								{brl.format(group.planned || 0)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-slate-50 p-4">
+							<p className="text-xs font-black uppercase text-slate-500">
+								Realizado
+							</p>
+							<p className="mt-1 break-words text-xl font-black text-slate-950">
+								{brl.format(group.realized || 0)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-slate-50 p-4">
+							<p className="text-xs font-black uppercase text-slate-500">
+								Saldo
+							</p>
+							<p
+								className={`mt-1 break-words text-xl font-black ${isFavorable ? "text-emerald-700" : "text-red-700"}`}
 							>
-								Anterior
-							</button>
-							<button
-								type="button"
-								onClick={() =>
-									setPage((current) => Math.min(totalPages, current + 1))
-								}
-								disabled={safePage >= totalPages}
-								className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
-							>
-								Próxima
-							</button>
+								{brl.format(available)}
+							</p>
+						</div>
+						<div className="rounded-2xl bg-slate-50 p-4">
+							<p className="text-xs font-black uppercase text-slate-500">
+								Uso
+							</p>
+							<p className="mt-1 break-words text-xl font-black text-slate-950">
+								{decimal.format(group.percent || 0)}%
+							</p>
 						</div>
 					</div>
-				) : null}
-			</div>
-		</details>
+					<div className="mt-4 space-y-3">
+						{categories.length ? (
+							visibleCategories.map((category) => {
+								const categoryAvailable =
+									Number(category.planned || 0) - Number(category.realized || 0);
+								const categoryFavorable = categoryAvailable >= 0;
+								return (
+									<section
+										key={category.id}
+										className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+									>
+										<div className="flex flex-wrap items-start justify-between gap-3">
+											<div className="min-w-0">
+												<div className="flex items-center gap-2">
+													<span
+														className={`h-2.5 w-2.5 shrink-0 rounded-full ${categoryFavorable ? "bg-emerald-500" : "bg-red-500"}`}
+														aria-label={categoryFavorable ? "Dentro do orçamento" : "Acima do orçamento"}
+													/>
+													<p className="break-words text-base font-black text-slate-950">
+														{category.name}
+													</p>
+												</div>
+												<p className="text-xs font-bold text-slate-500">
+													{category.accounts.length} conta(s) financeira(s)
+												</p>
+											</div>
+											<div className="grid min-w-[240px] gap-2 text-xs font-black sm:grid-cols-3">
+												<span className="rounded-xl bg-white px-3 py-2 text-slate-700">
+													Orçado {brl.format(category.planned || 0)}
+												</span>
+												<span className="rounded-xl bg-white px-3 py-2 text-slate-700">
+													Realizado {brl.format(category.realized || 0)}
+												</span>
+												<span
+													className={`rounded-xl bg-white px-3 py-2 ${categoryFavorable ? "text-emerald-700" : "text-red-700"}`}
+												>
+													Saldo {brl.format(categoryAvailable)}
+												</span>
+											</div>
+										</div>
+										<div className="mt-3 grid gap-2">
+											{category.accounts.slice(0, 5).map((accountRow) => (
+												<div
+													key={accountRow.id}
+													className="rounded-xl border border-white bg-white p-3"
+												>
+													<div className="flex flex-wrap items-start justify-between gap-2">
+														<p className="min-w-0 break-words text-xs font-black text-slate-800">
+															{budgetAccountLabel(accountRow.account, accountRow.id)}
+														</p>
+														<p className="text-xs font-black text-slate-600">
+															{brl.format(accountRow.planned || 0)} /{" "}
+															{brl.format(accountRow.realized || 0)}
+														</p>
+													</div>
+													<div className="mt-2 flex flex-wrap gap-1.5">
+														{accountRow.centers
+															.slice(0, 5)
+															.map(({ center, realized }) => (
+																<span
+																	key={`${accountRow.id}-${center.id}`}
+																	className="max-w-full break-words rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600"
+																>
+																	{budgetCenterCompactLabel(center)} ·{" "}
+																	{brl.format(realized || 0)}
+																</span>
+															))}
+														{accountRow.centers.length > 5 ? (
+															<span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700">
+																+{integer.format(accountRow.centers.length - 5)}
+															</span>
+														) : null}
+													</div>
+												</div>
+											))}
+										</div>
+									</section>
+								);
+							})
+						) : (
+							<p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500">
+								Nenhuma conta financeira classificada nesta categoria.
+							</p>
+						)}
+						{totalPages > 1 ? (
+							<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+								<p className="text-xs font-black uppercase text-slate-500">
+									Página {integer.format(safePage)} de {integer.format(totalPages)}
+								</p>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={() => setPage((current) => Math.max(1, current - 1))}
+										disabled={safePage <= 1}
+										className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+									>
+										Anterior
+									</button>
+									<button
+										type="button"
+										onClick={() =>
+											setPage((current) => Math.min(totalPages, current + 1))
+										}
+										disabled={safePage >= totalPages}
+										className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-40"
+									>
+										Próxima
+									</button>
+								</div>
+							</div>
+						) : null}
+					</div>
+				</ModalShell>
+			) : null}
+		</>
 	);
 }
 
@@ -175,7 +311,6 @@ export default function BudgetDashboardView({
 	budgetAccountLabel,
 	budgetCenterCompactLabel,
 	budgetConsumptionStatus,
-	budgetDeviation,
 	centerById,
 	centerChart,
 	companyById,
@@ -192,6 +327,7 @@ export default function BudgetDashboardView({
 	movementSupplierName,
 	movementValue,
 	onCloseDashboardDetail,
+	onOpenDirectoratesConfig,
 	onShowDashboardDetail,
 	pareto,
 	renderDashboardDetail,
@@ -230,42 +366,6 @@ export default function BudgetDashboardView({
 					/>
 				))}
 			</section>
-			<section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-					<p className="text-xs font-black uppercase text-slate-500">
-						Orçado x realizado total
-					</p>
-					<p className="mt-2 break-words text-xl font-black text-slate-950">
-						{brl.format(insights.plannedMonth)} /{" "}
-						{brl.format(insights.realizedMonth + insights.committedMonth)}
-					</p>
-					<p className="mt-1 text-xs font-bold text-slate-500">
-						{insights.periodDisplayLabel}
-					</p>
-				</div>
-				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-					<p className="text-xs font-black uppercase text-slate-500">
-						Desvio absoluto
-					</p>
-					<p className={`mt-2 break-words text-xl font-black ${budgetDeviation.textClass}`}>
-						{brl.format(budgetDeviation.variance)}
-					</p>
-					<p className="mt-1 text-xs font-bold text-slate-500">
-						Realizado + comprometido contra orçamento
-					</p>
-				</div>
-				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-					<p className="text-xs font-black uppercase text-slate-500">
-						Desvio percentual
-					</p>
-					<p className={`mt-2 break-words text-xl font-black ${budgetDeviation.textClass}`}>
-						{decimal.format(budgetDeviation.percent)}%
-					</p>
-					<p className="mt-1 text-xs font-bold text-slate-500">
-						{decimal.format(insights.usedPercent)}% consumido no período
-					</p>
-				</div>
-			</section>
 			<section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
 				<ChartCard
 					title="Ritmo de consumo do mês"
@@ -274,7 +374,7 @@ export default function BudgetDashboardView({
 				>
 					<Line
 						data={{
-							labels: ["Ideal hoje", "Realizado + comprometido"],
+							labels: ["Ideal hoje", "Realizado"],
 							datasets: [
 								{
 									label: "Consumo %",
@@ -545,6 +645,17 @@ export default function BudgetDashboardView({
 				<FinancePanel
 					title="Ranking diretoria"
 					onViewMore={() => onShowDashboardDetail("diretorias")}
+					headerExtra={
+						<button
+							type="button"
+							onClick={onOpenDirectoratesConfig}
+							className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+							title="Configurar diretores"
+							aria-label="Configurar diretores"
+						>
+							<Settings size={16} />
+						</button>
+					}
 					className="min-h-[440px]"
 				>
 					<div className="grid flex-1 gap-3 md:grid-cols-2 2xl:grid-cols-1">

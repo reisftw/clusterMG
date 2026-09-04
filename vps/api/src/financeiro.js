@@ -2472,6 +2472,22 @@ function applyOfficialBudgetMatrix(config = {}) {
 			.map((center) => [slug(center.nome || center.name, ""), center])
 			.filter(([key]) => key),
 	);
+	const analyticCentersByName = new Map(
+		centers
+			.filter((center) => center.tipoPlano !== "S")
+			.map((center) => [slug(center.nome || center.name, ""), center])
+			.filter(([key]) => key),
+	);
+	const resolveOfficialBudgetCenter = (row = {}) => {
+		const centerByCode = centersByCode.get(budgetCodeKey(row.codCc));
+		const centerByName =
+			analyticCentersByName.get(slug(row.nomeCc, "")) ||
+			centersByName.get(slug(row.nomeCc, ""));
+		if (centerByCode?.tipoPlano === "S" && centerByName?.tipoPlano !== "S") {
+			return centerByName;
+		}
+		return centerByCode || centerByName;
+	};
 	const rawRows = OFFICIAL_BUDGET_MATRIX_2026.map((row) =>
 		applyAccessBudgetRowRules({
 			codConta: row.accountId,
@@ -2490,9 +2506,7 @@ function applyOfficialBudgetMatrix(config = {}) {
 		const account =
 			accountsByCode.get(budgetCodeKey(row.codConta)) ||
 			accountsByName.get(slug(row.nomeConta, ""));
-		const center =
-			centersByCode.get(budgetCodeKey(row.codCc)) ||
-			centersByName.get(slug(row.nomeCc, ""));
+		const center = resolveOfficialBudgetCenter(row);
 		if (!account || !center || center.tipoPlano === "S") return;
 		const classified = enrichFinancialAccountWithCategory(
 			{
