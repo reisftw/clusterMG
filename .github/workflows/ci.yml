@@ -47,7 +47,22 @@ jobs:
           npm ci --prefix vps
 
       - name: Audit dependencies for high and critical vulnerabilities
-        run: npm audit --audit-level=high
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --audit-level=high 2>&1 | tee npm-audit.log; then
+              exit 0
+            fi
+
+            if grep -Eiq "503 Service Unavailable|Service Unavailable|audit endpoint returned an error" npm-audit.log; then
+              echo "npm audit registry endpoint unavailable on attempt ${attempt}/3."
+              sleep 10
+              continue
+            fi
+
+            exit 1
+          done
+
+          echo "::warning::npm audit skipped because the npm registry audit endpoint returned Service Unavailable after 3 attempts."
 
       - name: Run Semgrep security scan
         uses: semgrep/semgrep-action@v1
