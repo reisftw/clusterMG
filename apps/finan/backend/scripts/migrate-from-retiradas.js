@@ -118,6 +118,22 @@ const FINANCIAL_SOURCE_TABLES = [
 	"financeiro_equipe_colaboradores",
 ];
 
+const FINANCIAL_TABLE_COPIES = [
+	{ source: "financeiro_config_meta", target: "finan_config_meta", conflict: ["config_id"] },
+	{ source: "financeiro_contas", target: "finan_contas", conflict: ["id"] },
+	{ source: "financeiro_diretorias", target: "finan_diretorias", conflict: ["id"] },
+	{ source: "financeiro_centros_custo", target: "finan_centros_custo", conflict: ["id"] },
+	{ source: "financeiro_fornecedores", target: "finan_fornecedores", conflict: ["id"] },
+	{ source: "financeiro_matrizes", target: "finan_matrizes", conflict: ["id"] },
+	{ source: "financeiro_filiais", target: "finan_filiais", conflict: ["matriz_id", "id"] },
+	{ source: "financeiro_orcamento_matriz", target: "finan_orcamento_matriz", conflict: ["id"] },
+	{ source: "financeiro_orcamento_lancamentos", target: "finan_orcamento_lancamentos", conflict: ["id"] },
+	{ source: "financeiro_equipe_config", target: "finan_equipe_config", conflict: ["id"] },
+	{ source: "financeiro_equipe_setores", target: "finan_equipe_setores", conflict: ["id"] },
+	{ source: "financeiro_equipe_cargos", target: "finan_equipe_cargos", conflict: ["id"] },
+	{ source: "financeiro_equipe_colaboradores", target: "finan_equipe_colaboradores", conflict: ["id"] },
+];
+
 function rowSourcePk(row) {
 	if (row.id !== undefined && row.id !== null) return String(row.id);
 	if (row.source_hash) return String(row.source_hash);
@@ -158,16 +174,75 @@ async function migrateFinancialSnapshots(retiradasPool) {
 	return summary;
 }
 
+async function tableColumns(pool, table) {
+	const { rows } = await pool.query(
+		`select column_name
+		from information_schema.columns
+		where table_schema = 'public' and table_name = $1
+		order by ordinal_position`,
+		[table],
+	);
+	return rows.map((row) => row.column_name);
+}
+
+function quoteIdent(value) {
+	return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+async function copyFinancialTables(retiradasPool) {
+	const summary = [];
+	for (const item of FINANCIAL_TABLE_COPIES) {
+		if (!(await sourceTableExists(retiradasPool, item.source))) {
+			summary.push({ ...item, rows: 0, skipped: true });
+			continue;
+		}
+
+		const [sourceColumns, targetColumns] = await Promise.all([
+			tableColumns(retiradasPool, item.source),
+			tableColumns(finanDb, item.target),
+		]);
+		const commonColumns = sourceColumns.filter((column) =>
+			targetColumns.includes(column),
+		);
+		if (!commonColumns.length) {
+			summary.push({ ...item, rows: 0, skipped: true, reason: "sem_colunas_comuns" });
+			continue;
+		}
+
+		const { rows } = await retiradasPool.query(
+			`select ${commonColumns.map(quoteIdent).join(", ")} from ${item.source}`,
+		);
+		for (const row of rows) {
+			const values = commonColumns.map((column) => row[column]);
+			const placeholders = commonColumns.map((_, index) => `$${index + 1}`);
+			const updates = commonColumns
+				.filter((column) => !item.conflict.includes(column))
+				.map((column) => `${quoteIdent(column)} = excluded.${quoteIdent(column)}`);
+			await finanDb.query(
+				`insert into ${item.target} (${commonColumns.map(quoteIdent).join(", ")})
+				values (${placeholders.join(", ")})
+				on conflict (${item.conflict.map(quoteIdent).join(", ")}) do update set
+					${updates.length ? updates.join(", ") : `${quoteIdent(item.conflict[0])} = excluded.${quoteIdent(item.conflict[0])}`}`,
+				values,
+			);
+		}
+		summary.push({ ...item, rows: rows.length, skipped: false });
+	}
+	return summary;
+}
+
 async function main() {
 	const retiradasPool = createRetiradasPool();
 	try {
 		const users = await migrateUsers(retiradasPool);
 		const financialSnapshots = await migrateFinancialSnapshots(retiradasPool);
+		const financialTables = await copyFinancialTables(retiradasPool);
 		console.log(
 			JSON.stringify({
 				ok: true,
 				usersMigrated: users,
 				financialSnapshots,
+				financialTables,
 				note: "Coleta somente dados financeiros, usuários financeiros e admins para o banco apartado do Finan.",
 			}),
 		);
