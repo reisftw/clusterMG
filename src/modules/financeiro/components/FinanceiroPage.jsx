@@ -34,7 +34,15 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+	Suspense,
+	lazy,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -43,29 +51,10 @@ import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
 import { addClusterLogo } from "../../../utils/pdfBranding";
-import BudgetApprovalsView from "./budget/BudgetApprovalsView";
-import BudgetCostCentersView from "./budget/BudgetCostCentersView";
-import BudgetDashboardView from "./budget/BudgetDashboardView";
-import BudgetDreView from "./budget/BudgetDreView";
-import CompaniesBranchesConfigSection from "./budget/config/CompaniesBranchesConfigSection";
-import CostCentersTreeConfigSection from "./budget/config/CostCentersTreeConfigSection";
-import FinancialAccountsConfigSection, {
-	FinancialAccountCategoriesModal,
-} from "./budget/config/FinancialAccountsConfigSection";
-import BudgetMatrixConfigSection from "./budget/config/BudgetMatrixConfigSection";
-import BudgetParametersSection from "./budget/config/BudgetParametersSection";
-import PartnersConfigSection from "./budget/config/PartnersConfigSection";
 import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
-import FinanceiroEquipePage from "./equipe/FinanceiroEquipePage";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
-import TariffsDetailLayout from "./tariffs/TariffsDetailLayout";
-import TariffsDetectedBlocks from "./tariffs/TariffsDetectedBlocks";
-import TariffsOverviewCharts from "./tariffs/TariffsOverviewCharts";
-import TariffsOverviewKpis from "./tariffs/TariffsOverviewKpis";
-import TariffsPeriodSelector from "./tariffs/TariffsPeriodSelector";
-import TariffsUploadActions from "./tariffs/TariffsUploadActions";
 import { useBudgetConfig } from "../hooks/useBudgetConfig";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
@@ -143,6 +132,41 @@ import {
 	getBudgetReference,
 	getFinanceiroPageFlags,
 } from "../utils/financeiroPageViewModel";
+
+const BudgetApprovalsView = lazy(() => import("./budget/BudgetApprovalsView"));
+const BudgetCostCentersView = lazy(() => import("./budget/BudgetCostCentersView"));
+const BudgetDashboardView = lazy(() => import("./budget/BudgetDashboardView"));
+const BudgetDreView = lazy(() => import("./budget/BudgetDreView"));
+const CompaniesBranchesConfigSection = lazy(() =>
+	import("./budget/config/CompaniesBranchesConfigSection"),
+);
+const CostCentersTreeConfigSection = lazy(() =>
+	import("./budget/config/CostCentersTreeConfigSection"),
+);
+const FinancialAccountsConfigSection = lazy(() =>
+	import("./budget/config/FinancialAccountsConfigSection"),
+);
+const FinancialAccountCategoriesModal = lazy(() =>
+	import("./budget/config/FinancialAccountsConfigSection").then((module) => ({
+		default: module.FinancialAccountCategoriesModal,
+	})),
+);
+const BudgetMatrixConfigSection = lazy(() =>
+	import("./budget/config/BudgetMatrixConfigSection"),
+);
+const BudgetParametersSection = lazy(() =>
+	import("./budget/config/BudgetParametersSection"),
+);
+const PartnersConfigSection = lazy(() =>
+	import("./budget/config/PartnersConfigSection"),
+);
+const FinanceiroEquipePage = lazy(() => import("./equipe/FinanceiroEquipePage"));
+const TariffsDetailLayout = lazy(() => import("./tariffs/TariffsDetailLayout"));
+const TariffsDetectedBlocks = lazy(() => import("./tariffs/TariffsDetectedBlocks"));
+const TariffsOverviewCharts = lazy(() => import("./tariffs/TariffsOverviewCharts"));
+const TariffsOverviewKpis = lazy(() => import("./tariffs/TariffsOverviewKpis"));
+const TariffsPeriodSelector = lazy(() => import("./tariffs/TariffsPeriodSelector"));
+const TariffsUploadActions = lazy(() => import("./tariffs/TariffsUploadActions"));
 
 const FINANCE_FONT_STACK =
 	"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -11158,7 +11182,7 @@ function FinanceiroPageContent({
 		reportsTarifasFormasPagamento: "formasPagamento",
 	};
 	return (
-		<>
+		<Suspense fallback={<FinanceiroLazyFallback />}>
 			{page === "dashboard" ? (
 				<DashboardContent data={data} loading={loading} />
 			) : null}
@@ -11218,12 +11242,29 @@ function FinanceiroPageContent({
 			{page === "equipe" ? (
 				<FinanceiroEquipePage canManage={canManageEquipe} />
 			) : null}
-		</>
+		</Suspense>
 	);
 }
 
 const MemoizedFinanceiroPageHeader = memo(FinanceiroPageHeader);
 const MemoizedFinanceiroPageContent = memo(FinanceiroPageContent);
+
+function FinanceiroLazyFallback() {
+	return (
+		<section className="grid gap-4 md:grid-cols-3">
+			{Array.from({ length: 3 }, (_, index) => (
+				<div
+					key={index}
+					className="min-h-32 animate-pulse rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+				>
+					<div className="h-4 w-24 rounded-full bg-slate-100" />
+					<div className="mt-5 h-7 w-2/3 rounded-full bg-slate-100" />
+					<div className="mt-4 h-3 w-full rounded-full bg-slate-100" />
+				</div>
+			))}
+		</section>
+	);
+}
 
 export default function FinanceiroPage({ page = "dashboard" }) {
 	const { currentUser } = useAuthContext();
