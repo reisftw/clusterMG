@@ -126,15 +126,6 @@ jobs:
           node --check apps/finan/backend/scripts/run-sql-migrations.js
           node --check apps/finan/backend/scripts/database-backup.js
 
-      - name: Upload frontend build artifact
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/homolog-dev')
-        uses: actions/upload-artifact@v4
-        with:
-          name: retiradas-dist
-          path: dist/
-          if-no-files-found: error
-          retention-days: 7
-
   deploy-vps:
     name: Deploy frontend and backend to VPS
     runs-on: ubuntu-latest
@@ -161,11 +152,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Download frontend build artifact
-        uses: actions/download-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
-          name: retiradas-dist
-          path: dist
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build production frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_API_BASE_URL="${{ secrets.PROD_PUBLIC_API_URL || 'https://retiradas.tech/api' }}"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build
 
       - name: Resolve VPS deploy environment
         env:
@@ -297,11 +301,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Download frontend build artifact
-        uses: actions/download-artifact@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
-          name: retiradas-dist
-          path: dist
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build homolog frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Homologação"
+          export VITE_API_BASE_URL="${{ secrets.HOMOLOG_PUBLIC_API_URL || 'https://homolog.retiradas.tech/api' }}"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build
 
       - name: Resolve homolog VPS deploy environment
         env:
