@@ -7,6 +7,7 @@ on:
       - master
       - homolog-dev
       - develop
+      - finan
       - 'feature/**'
       - 'fix/**'
       - 'hotfix/**'
@@ -73,6 +74,7 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -126,6 +128,136 @@ jobs:
           node --check apps/finan/backend/scripts/run-sql-migrations.js
           node --check apps/finan/backend/scripts/database-backup.js
 
+  deploy-finan-vps:
+    name: Deploy Finan to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/finan' || github.ref == 'refs/heads/master')
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
+      FINAN_APP_PATH: ${{ secrets.PROD_FINAN_APP_PATH || secrets.FINAN_APP_PATH || '/opt/retiradas/apps/finan' }}
+      FINAN_API_SERVICE: ${{ secrets.PROD_FINAN_API_SERVICE || secrets.FINAN_API_SERVICE || 'finan-api.service' }}
+      FINAN_API_ENV_FILE: ${{ secrets.PROD_FINAN_API_ENV_FILE || secrets.FINAN_API_ENV_FILE || '/opt/retiradas/apps/finan/.env' }}
+      FINAN_PUBLIC_URL: ${{ secrets.PROD_FINAN_PUBLIC_URL || secrets.FINAN_PUBLIC_URL || 'https://finan.retiradas.tech' }}
+      REMOTE_FINAN_PACKAGE: /tmp/finan-app-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Finan frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_API_BASE_URL="${FINAN_PUBLIC_URL}/api"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run finan:frontend:build
+
+      - name: Resolve Finan VPS deploy environment
+        env:
+          PROD_VPS_HOST_SECRET: ${{ secrets.PROD_VPS_HOST }}
+          VPS_HOST_SECRET: ${{ secrets.VPS_HOST }}
+          HOMOLOG_VPS_HOST_SECRET: ${{ secrets.HOMOLOG_VPS_HOST }}
+          PROD_VPS_PORT_SECRET: ${{ secrets.PROD_VPS_PORT }}
+          VPS_PORT_SECRET: ${{ secrets.VPS_PORT }}
+          HOMOLOG_VPS_PORT_SECRET: ${{ secrets.HOMOLOG_VPS_PORT }}
+          PROD_VPS_USER_SECRET: ${{ secrets.PROD_VPS_USER }}
+          VPS_USER_SECRET: ${{ secrets.VPS_USER }}
+          HOMOLOG_VPS_USER_SECRET: ${{ secrets.HOMOLOG_VPS_USER }}
+          PROD_FINAN_APP_PATH_SECRET: ${{ secrets.PROD_FINAN_APP_PATH }}
+          FINAN_APP_PATH_SECRET: ${{ secrets.FINAN_APP_PATH }}
+          PROD_FINAN_API_SERVICE_SECRET: ${{ secrets.PROD_FINAN_API_SERVICE }}
+          FINAN_API_SERVICE_SECRET: ${{ secrets.FINAN_API_SERVICE }}
+          PROD_FINAN_API_ENV_FILE_SECRET: ${{ secrets.PROD_FINAN_API_ENV_FILE }}
+          FINAN_API_ENV_FILE_SECRET: ${{ secrets.FINAN_API_ENV_FILE }}
+        run: |
+          echo "VPS_HOST=${PROD_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${HOMOLOG_VPS_HOST_SECRET:-145.223.27.204}}}" >> "$GITHUB_ENV"
+          echo "VPS_PORT=${PROD_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${HOMOLOG_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
+          echo "VPS_USER=${PROD_VPS_USER_SECRET:-${VPS_USER_SECRET:-${HOMOLOG_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
+          echo "FINAN_APP_PATH=${PROD_FINAN_APP_PATH_SECRET:-${FINAN_APP_PATH_SECRET:-/opt/retiradas/apps/finan}}" >> "$GITHUB_ENV"
+          echo "FINAN_API_SERVICE=${PROD_FINAN_API_SERVICE_SECRET:-${FINAN_API_SERVICE_SECRET:-finan-api.service}}" >> "$GITHUB_ENV"
+          echo "FINAN_API_ENV_FILE=${PROD_FINAN_API_ENV_FILE_SECRET:-${FINAN_API_ENV_FILE_SECRET:-/opt/retiradas/apps/finan/.env}}" >> "$GITHUB_ENV"
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.HOMOLOG_VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret PROD_VPS_HOST, VPS_HOST or HOMOLOG_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret PROD_VPS_SSH_KEY, VPS_SSH_KEY or HOMOLOG_VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package Finan app
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -czf finan-app.tar.gz \
+            -C apps finan
+
+      - name: Upload Finan package to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            finan-app.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_FINAN_PACKAGE"
+
+      - name: Publish Finan on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             finan_app_path='$FINAN_APP_PATH'
+             finan_parent_path=\"\$(dirname \"\$finan_app_path\")\"
+             finan_service='$FINAN_API_SERVICE'
+             finan_env_file='$FINAN_API_ENV_FILE'
+             finan_package='$REMOTE_FINAN_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$finan_parent_path\"
+             \$SUDO tar -xzf \"\$finan_package\" -C \"\$finan_parent_path\"
+             cd \"\$finan_app_path/backend\"
+             package_hash=\"\$(sha256sum package.json | awk '{print \$1}')\"
+             if [ -d node_modules ] && [ -f .package-json.sha256 ] && [ \"\$package_hash\" = \"\$(cat .package-json.sha256)\" ]; then
+               echo 'Finan backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing Finan backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               echo \"\$package_hash\" > /tmp/finan-package-json.sha256
+               \$SUDO mv /tmp/finan-package-json.sha256 .package-json.sha256
+             fi
+             if [ -f \"\$finan_env_file\" ]; then
+               set -a
+               . \"\$finan_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate
+             \$SUDO systemctl restart \"\$finan_service\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             rm -f \"\$finan_package\" || \$SUDO rm -f \"\$finan_package\""
+
   deploy-vps:
     name: Deploy frontend and backend to VPS
     runs-on: ubuntu-latest
@@ -138,7 +270,7 @@ jobs:
       contents: read
 
     env:
-      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.20' }}
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.204' }}
       VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.PROD_VPS_DEPLOY_PATH || secrets.VPS_DEPLOY_PATH || '/var/www/retiradas/dist' }}
@@ -191,7 +323,7 @@ jobs:
           PROD_VPS_API_ENV_FILE_SECRET: ${{ secrets.PROD_VPS_API_ENV_FILE }}
           VPS_API_ENV_FILE_SECRET: ${{ secrets.VPS_API_ENV_FILE }}
         run: |
-          echo "VPS_HOST=${PROD_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${HOMOLOG_VPS_HOST_SECRET:-145.223.27.20}}}" >> "$GITHUB_ENV"
+          echo "VPS_HOST=${PROD_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${HOMOLOG_VPS_HOST_SECRET:-145.223.27.204}}}" >> "$GITHUB_ENV"
           echo "VPS_PORT=${PROD_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${HOMOLOG_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
           echo "VPS_USER=${PROD_VPS_USER_SECRET:-${VPS_USER_SECRET:-${HOMOLOG_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
           echo "VPS_DEPLOY_PATH=${PROD_VPS_DEPLOY_PATH_SECRET:-${VPS_DEPLOY_PATH_SECRET:-/var/www/retiradas/dist}}" >> "$GITHUB_ENV"
@@ -287,7 +419,7 @@ jobs:
       contents: read
 
     env:
-      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST || secrets.PROD_VPS_HOST || '145.223.27.20' }}
+      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST || secrets.PROD_VPS_HOST || '145.223.27.204' }}
       VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || secrets.PROD_VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || secrets.PROD_VPS_USER || 'root' }}
       VPS_DEPLOY_PATH: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH || '/var/www/retiradas-homolog/dist' }}
@@ -336,7 +468,7 @@ jobs:
           HOMOLOG_VPS_API_SERVICE_SECRET: ${{ secrets.HOMOLOG_VPS_API_SERVICE }}
           HOMOLOG_VPS_API_ENV_FILE_SECRET: ${{ secrets.HOMOLOG_VPS_API_ENV_FILE }}
         run: |
-          echo "VPS_HOST=${HOMOLOG_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${PROD_VPS_HOST_SECRET:-145.223.27.20}}}" >> "$GITHUB_ENV"
+          echo "VPS_HOST=${HOMOLOG_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${PROD_VPS_HOST_SECRET:-145.223.27.204}}}" >> "$GITHUB_ENV"
           echo "VPS_PORT=${HOMOLOG_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${PROD_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
           echo "VPS_USER=${HOMOLOG_VPS_USER_SECRET:-${VPS_USER_SECRET:-${PROD_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
           echo "VPS_DEPLOY_PATH=${HOMOLOG_VPS_DEPLOY_PATH_SECRET:-/var/www/retiradas-homolog/dist}" >> "$GITHUB_ENV"
