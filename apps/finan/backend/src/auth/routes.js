@@ -2,28 +2,13 @@ const express = require("express");
 const crypto = require("node:crypto");
 const argon2 = require("argon2");
 const db = require("../db");
+const { findUserByBearer, publicUser, tokenHash } = require("./middleware");
 
 const router = express.Router();
 const SESSION_TTL_DAYS = Number(process.env.FINAN_SESSION_TTL_DAYS || 7);
 
-function publicUser(user) {
-	return {
-		id: user.id,
-		uid: user.id,
-		name: user.name,
-		email: user.email,
-		role: user.role_id,
-		permissions: user.permissions || [],
-		isAdmin: Boolean(user.is_admin),
-	};
-}
-
 function randomToken() {
 	return crypto.randomBytes(32).toString("base64url");
-}
-
-function tokenHash(token) {
-	return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 async function createSession(userId) {
@@ -48,28 +33,6 @@ async function findUserByEmail(email) {
 		where lower(u.email) = lower($1)
 		limit 1`,
 		[email],
-	);
-	return rows[0] || null;
-}
-
-async function findUserByBearer(req) {
-	const raw = String(req.headers.authorization || "");
-	const token = raw.startsWith("Bearer ") ? raw.slice(7) : "";
-	if (!token) return null;
-	const { rows } = await db.query(
-		`select
-			u.*,
-			coalesce(r.permissions, '[]'::jsonb) as permissions,
-			coalesce(r.is_admin, false) as is_admin
-		from finan_sessions s
-		join finan_users u on u.id = s.user_id
-		left join finan_roles r on r.id = u.role_id
-		where s.token_hash = $1
-			and s.revoked_at is null
-			and s.expires_at > now()
-			and u.status = 'ativo'
-		limit 1`,
-		[tokenHash(token)],
 	);
 	return rows[0] || null;
 }

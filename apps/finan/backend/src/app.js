@@ -3,6 +3,7 @@ const cors = require("cors");
 const express = require("express");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const { requireFinanAuth } = require("./auth/middleware");
 const authRoutes = require("./auth/routes");
 const healthRoutes = require("./health/routes");
 const integrationsRoutes = require("./integrations/routes");
@@ -34,6 +35,7 @@ function createApp() {
 
 	app.use("/api/finan/health", healthRoutes);
 	app.use("/api/finan/auth", authRoutes);
+	app.use(requireFinanAuth);
 	app.use("/api/finan/orcamento", budgetRoutes);
 	app.use("/api/finan/integracoes", integrationsRoutes);
 	app.use("/api/finan/configuracoes", settingsRoutes);
