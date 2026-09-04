@@ -34,7 +34,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -11222,6 +11222,9 @@ function FinanceiroPageContent({
 	);
 }
 
+const MemoizedFinanceiroPageHeader = memo(FinanceiroPageHeader);
+const MemoizedFinanceiroPageContent = memo(FinanceiroPageContent);
+
 export default function FinanceiroPage({ page = "dashboard" }) {
 	const { currentUser } = useAuthContext();
 	const [period, setPeriod] = useState("month");
@@ -11314,6 +11317,12 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 			setDirectoratesConfigSaving(false);
 		}
 	};
+	const openDirectoratesConfig = useCallback(() => {
+		setDirectoratesConfigOpen(true);
+	}, []);
+	const closeDirectoratesConfig = useCallback(() => {
+		setDirectoratesConfigOpen(false);
+	}, []);
 
 	useEffect(() => {
 		load();
@@ -11332,7 +11341,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 			className={isCompactReportPage ? "space-y-3" : "space-y-5"}
 			style={{ fontFamily: FINANCE_FONT_STACK }}
 		>
-			<FinanceiroPageHeader
+			<MemoizedFinanceiroPageHeader
 				budgetConfig={budgetConfig}
 				budgetLoading={budgetLoading}
 				budgetMonthMenuOpen={budgetMonthMenuOpen}
@@ -11349,7 +11358,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				loadBudgetConfig={loadBudgetConfig}
 				loading={loading}
 				meta={meta}
-				onOpenDirectoratesConfig={() => setDirectoratesConfigOpen(true)}
+				onOpenDirectoratesConfig={openDirectoratesConfig}
 				page={page}
 				period={period}
 				selectedBudgetReference={selectedBudgetReference}
@@ -11366,7 +11375,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 					{message}
 				</div>
 			) : null}
-			<FinanceiroPageContent
+			<MemoizedFinanceiroPageContent
 				budgetConfig={budgetConfig}
 				budgetDateRange={budgetDateRange}
 				budgetLoading={budgetLoading}
@@ -11377,7 +11386,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				exportModalOpen={exportModalOpen}
 				loading={loading}
 				loadBudgetConfig={loadBudgetConfig}
-				onOpenDirectoratesConfig={() => setDirectoratesConfigOpen(true)}
+				onOpenDirectoratesConfig={openDirectoratesConfig}
 				page={page}
 				period={period}
 				selectedBudgetReference={selectedBudgetReference}
@@ -11399,7 +11408,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				<BudgetDirectoratesQuickConfigModal
 					canManage={canManage}
 					config={budgetConfig || {}}
-					onClose={() => setDirectoratesConfigOpen(false)}
+					onClose={closeDirectoratesConfig}
 					onSave={saveDirectoratesConfig}
 					saving={directoratesConfigSaving}
 				/>
