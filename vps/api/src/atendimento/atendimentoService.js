@@ -9,6 +9,10 @@ const { broadcastRealtime } = require("../realtime");
 const {
 	getProvidedWebhookSecret,
 } = require("../webhooks/utils/webhookSecrets");
+const {
+	assertRegionalRecordAccess,
+	scopeWritePayload,
+} = require("../security/regionalScope");
 
 const CONFIG_PATH = "atendimento_config/global";
 const CONFIG_COLLECTION = "atendimento_config";
@@ -2859,12 +2863,29 @@ async function getStats() {
 
 async function getCase(id) {
 	const record = await documents.getDocument(`${CASES_COLLECTION}/${id}`);
-	if (!record?.data) throw new Error("Caso não encontrado.");
+	if (!record?.data) {
+		const error = new Error("Caso não encontrado.");
+		error.statusCode = 404;
+		throw error;
+	}
 	return record.data;
 }
 
 async function updateCase(id, patch = {}, user = null) {
 	const item = await getCase(id);
+	// Defesa contra IDOR (docs/TECHNICAL-AUDIT.md, achado #3): a regional do
+	// caso vem do tecnico vinculado (item.technician.regional) — permissao
+	// de atendimento.casos.manage sozinha nao basta pra agir sobre um caso
+	// de outra regional (mesmo criterio ja usado em agendamentos).
+	// `allowUnknownRegional: true` porque um caso pode legitimamente ainda
+	// nao ter tecnico/regional vinculado (inicio do fluxo de atendimento) —
+	// bloquear nesse caso seria regressao operacional sem ganho de
+	// seguranca real.
+	assertRegionalRecordAccess(
+		user,
+		{ regional: item.technician?.regional },
+		{ allowUnknownRegional: true },
+	);
 	const action = String(patch.action || "").toLowerCase();
 	const userName = getUserName(user);
 	const userEmail = user?.email || user?.uid || "";
@@ -2999,7 +3020,18 @@ async function replyCase(id, payload = {}, user = null) {
 }
 
 async function updateTechnician(phone, patch = {}, user = null) {
-	const saved = await saveTechnician(phone, patch);
+	// Mesma defesa contra IDOR do resto desta fase: se o tecnico ja existe e
+	// tem regional definida, permissao de atendimento.tecnicos.manage sozinha
+	// nao basta pra alterar um tecnico de outra regional.
+	const normalizedPhone = normalizePhone(phone);
+	const existing = (
+		await documents.getDocument(`${TECHNICIANS_COLLECTION}/${normalizedPhone}`)
+	)?.data;
+	if (existing) {
+		assertRegionalRecordAccess(user, existing, { allowUnknownRegional: true });
+	}
+	const scopedPatch = scopeWritePayload(user, patch || {});
+	const saved = await saveTechnician(phone, scopedPatch);
 	const syncedEmpresaId = await syncEmpresaTecnico(saved).catch((error) => {
 		appendLog("sync_empresa_error", error?.message || String(error), {
 			phone: saved.phone,
@@ -3019,11 +3051,20 @@ async function updateTechnician(phone, patch = {}, user = null) {
 
 async function deleteTechnician(phone, user = null) {
 	const normalized = normalizePhone(phone);
-	if (!normalized) throw new Error("Telefone obrigatório.");
+	if (!normalized) {
+		const error = new Error("Telefone obrigatório.");
+		error.statusCode = 400;
+		throw error;
+	}
 	const current = await documents.getDocument(
 		`${TECHNICIANS_COLLECTION}/${normalized}`,
 	);
-	if (!current?.data) throw new Error("Técnico não encontrado.");
+	if (!current?.data) {
+		const error = new Error("Técnico não encontrado.");
+		error.statusCode = 404;
+		throw error;
+	}
+	assertRegionalRecordAccess(user, current.data, { allowUnknownRegional: true });
 	await documents.deleteDocument(`${TECHNICIANS_COLLECTION}/${normalized}`);
 	await unlinkTechnicianFromOtherCompanies(current.data, "");
 	await appendLog("technician_delete", "Técnico excluído.", {

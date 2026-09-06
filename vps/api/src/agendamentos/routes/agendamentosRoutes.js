@@ -1,5 +1,9 @@
 const express = require("express");
 const agendamentosRepository = require("../../agendamentosRepository");
+const {
+	assertRegionalRecordAccess,
+	scopeWritePayload,
+} = require("../../security/regionalScope");
 
 const PAGE_SIZE = 1000;
 
@@ -76,7 +80,11 @@ function createAgendamentosRouter({
 
 	router.post("/", requireCsrfToken, requireManage, async (req, res, next) => {
 		try {
-			const item = await agendamentosRepository.createAppointment(req.body || {});
+			// Defesa contra IDOR/escalada de escopo (docs/TECHNICAL-AUDIT.md,
+			// achado #3): um supervisor so pode criar agendamento pra propria
+			// regional — o campo `regional` do body nunca e confiavel por si so.
+			const payload = scopeWritePayload(req.user, req.body || {});
+			const item = await agendamentosRepository.createAppointment(payload);
 			res.json({ ok: true, id: item?.id, item });
 		} catch (error) {
 			next(error);
@@ -85,10 +93,18 @@ function createAgendamentosRouter({
 
 	router.put("/:id", requireCsrfToken, requireManage, async (req, res, next) => {
 		try {
-			const item = await agendamentosRepository.updateAppointment(
-				req.params.id,
-				req.body || {},
-			);
+			const current = await agendamentosRepository.getAppointment(req.params.id);
+			if (!current) {
+				res.status(404).json({ error: "Agendamento não encontrado." });
+				return;
+			}
+			// Mesma checagem de posse do modulo de documentos
+			// (documentosService.js#requireEmpresaAccess), adaptada ao escopo
+			// regional deste dominio: permissao de "manage_agendamentos" sozinha
+			// nao basta pra alterar um agendamento de outra regional.
+			assertRegionalRecordAccess(req.user, current);
+			const payload = scopeWritePayload(req.user, req.body || {});
+			const item = await agendamentosRepository.updateAppointment(req.params.id, payload);
 			res.json({ ok: true, id: item?.id || req.params.id, item });
 		} catch (error) {
 			next(error);
@@ -97,6 +113,12 @@ function createAgendamentosRouter({
 
 	router.delete("/:id", requireCsrfToken, requireManage, async (req, res, next) => {
 		try {
+			const current = await agendamentosRepository.getAppointment(req.params.id);
+			if (!current) {
+				res.status(404).json({ error: "Agendamento não encontrado." });
+				return;
+			}
+			assertRegionalRecordAccess(req.user, current);
 			const deleted = await agendamentosRepository.deleteAppointment(req.params.id);
 			res.json({ ok: true, deleted });
 		} catch (error) {
