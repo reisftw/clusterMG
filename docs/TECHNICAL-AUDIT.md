@@ -86,7 +86,7 @@
   (usada por dezenas de outros call sites de `agendamentosRepository.js`,
   com mapeamento de coluna dinâmico por coleção), risco de regressão maior
   do que o tempo restante desta sessão permite revisar com segurança.
-  Registrado como item específico do backlog (seção 12).
+  Registrado como item de backlog futuro.
 - 🔶 **Fase H — Hardening secundário** (achados #13, #14, #18, #19):
   `publicReadLimiter` (60 req/min por IP) adicionado em
   `/api/public/dashboard`, `/api/public/static/:domain` e
@@ -107,8 +107,29 @@
   com segurança e houver ganho claro"; sem métrica real de performance
   medida (Fase I não executada com ferramenta de profiling), não há
   evidência concreta do ganho, então fica no backlog.
-- ⏳ Fases G (E2E) e I (performance, sem ferramenta de medição disponível
-  neste ambiente — ver seção de riscos residuais) — pendentes.
+- ✅ **Fase G — Testes E2E reais** (achado #6): novo
+  `tests/e2e/critical-ui-flows.spec.js` — E2E de UI de verdade (navega
+  página, preenche formulário, clica, confere o que aparece na tela), não
+  só chamada HTTP como o `critical-flows.spec.js` existente. 3 dos 4 testes
+  não precisam de credencial e **rodam sempre**: tela de login carrega com
+  os campos certos, credenciais inválidas mostram a mensagem de erro na
+  tela (não silenciosa), rota protegida sem sessão redireciona pro login.
+  **Executados de verdade contra `https://homolog.retiradas.tech`
+  (ambiente real) antes de commitar** — não just escritos e assumidos: a
+  primeira tentativa falhou porque a mensagem de erro renderiza sem acento
+  em produção (`"invalidos"` sem í, mesmo aparecendo com acento na tela —
+  provável normalização de fonte), corrigido pra usar regex tolerante a
+  isso. O 4º teste (login válido + logout) só roda se
+  `E2E_LOGIN_EMAIL`/`E2E_LOGIN_PASSWORD` estiverem configurados — não há
+  conta de teste real disponível, então esse trecho específico não foi
+  executado (fica documentado no próprio arquivo). `test:e2e` agora **roda
+  de fato no CI**: dois jobs novos, `e2e-smoke-homolog` (depois de
+  `deploy-homolog-vps`) e `e2e-smoke-prod` (depois de `deploy-vps`),
+  usando `E2E_HOMOLOG_LOGIN_EMAIL`/`E2E_HOMOLOG_LOGIN_PASSWORD` e
+  equivalentes de produção como GitHub Secrets **opcionais** (se não
+  existirem, o job roda mesmo assim — só o teste de login válido/logout
+  pula). Antes, `npm run test:e2e` nunca era chamado em lugar nenhum do
+  pipeline.
 
 ---
 
@@ -459,7 +480,20 @@ tudo verde.
 
 ---
 
-## 12. O que NÃO foi encontrado (registrar explicitamente, como pedido)
+## 12. Fase I — Performance (não executada com ferramenta de profiling)
+
+Sem acesso a uma ferramenta de medição real (APM, profiler de produção)
+neste ambiente, não há como "medir antes de otimizar" com números
+verdadeiros — e a missão é explícita: "somente implementar otimizações
+comprovadas", "registrar antes/depois". Fabricar uma métrica que não foi
+medida seria pior do que não otimizar. Registrado como backlog: medir
+`Mapa`/`Match`/`Retiradas`/`Dashboard público` com uma ferramenta real
+(Lighthouse, React DevTools Profiler, ou APM já em uso, se houver) antes
+de decompor `TabRetiradas.jsx`/`TabMatchOS.jsx`/`MatchUpload.jsx` ou
+adicionar paginação/filtro server-side em `useMapaOS.js`/
+`useDashboardData.js`.
+
+## 13. O que NÃO foi encontrado (registrar explicitamente, como pedido)
 
 - Nenhuma SQL injection.
 - Nenhum segredo hardcoded no código-fonte.
