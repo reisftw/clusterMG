@@ -15,6 +15,8 @@ const agendamentosRepository = require("./agendamentosRepository");
 const regionaisRepository = require("./regionaisRepository");
 const usersRepository = require("./usersRepository");
 const auditLog = require("./auditLog");
+const { validate } = require("./dtos/middleware");
+const { UserAdminUpdateDTO } = require("./dtos/userAdminDto");
 const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
 const evolutionMessaging = require("./evolutionMessaging");
@@ -3987,6 +3989,7 @@ function createApp() {
 		"/api/admin/users/:uid",
 		requireAuthenticated,
 		requireCsrfToken,
+		validate({ body: { schema: UserAdminUpdateDTO, partial: true } }),
 		async (req, res, next) => {
 			try {
 				if (!canManageUsers(req.user)) {
@@ -3999,7 +4002,7 @@ function createApp() {
 					return;
 				}
 
-				const nextBody = req.body || {};
+				const nextBody = req.validated.body;
 				await assertCanUpdateManagedUser(req.user, uid, nextBody);
 				if (hasRole(req.user, ["supervisor"])) {
 					nextBody.regional = getUserRegional(req.user);
@@ -5184,9 +5187,18 @@ function createApp() {
 		}
 
 		console.error("[api]", error);
-		res
-			.status(error.statusCode || 500)
-			.json({ error: error.statusCode ? error.message : "Erro interno." });
+		const status = error.statusCode || 500;
+		const body = { error: error.statusCode ? error.message : "Erro interno." };
+		// DTOs (Fase C — vps/api/src/dtos/): erro de validacao tem uma forma
+		// propria (`.code`, `.fields`) — `error` continua sendo a mensagem
+		// legivel generica ("Dados invalidos."), como ja era antes, so
+		// adiciona `fields` (mapa campo -> motivo) pra quem quiser consumir
+		// erro por campo. Nao muda nada pra quem so le `error`.
+		if (error.code === "VALIDATION_ERROR" && error.fields) {
+			body.code = error.code;
+			body.fields = error.fields;
+		}
+		res.status(status).json(body);
 	});
 
 	return app;

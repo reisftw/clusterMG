@@ -17,6 +17,32 @@
 > fortalecer o que já existe (JWT próprio + cookie + Argon2id + revogação
 > real de sessão), não substituí-lo.
 
+## Status de execução (atualizado durante a implementação)
+
+- ✅ **Fase A — IDOR** (achado #3): `vps/api/src/security/regionalScope.js`
+  aplicado em agendamentos e atendimento (casos/técnicos).
+- ✅ **Fase B — Migrations e deploy** (achado #4): preflight
+  (`vps/scripts/migration-preflight.js`), backup pré-migration e health
+  check adicionados ao pipeline; rollback documentado em
+  `docs/DEPLOY-ROLLBACK.md`.
+- 🔶 **Fase C — DTO/validação centralizada** (achado #20): infraestrutura
+  criada em `vps/api/src/dtos/` (mesmo padrão leve do Finan, sem lib nova).
+  Aplicada de ponta a ponta em **agendamentos** (`AgendamentoWriteDTO`,
+  `unknownKeys: "reject"`) e em **usuários administrados**
+  (`UserAdminUpdateDTO` em `PUT /api/admin/users/:uid`, `unknownKeys:
+  "strip"` — ver justificativa no próprio arquivo). **Ordens de serviço**
+  ficou de fora nesta rodada: a escrita desse domínio acontece só via
+  pipelines de importação em lote (Hubsoft/Sempre/match), não por um
+  endpoint simples de criar/editar um registro — um "CreateDTO/UpdateDTO"
+  no molde REST não mapeia bem pra esse formato; validar o payload de
+  importação é um trabalho diferente, registrado no backlog. **Atendimento**
+  já recebeu a correção de IDOR (Fase A) e de status code; uma passada de
+  DTO completa nesse arquivo de 3000+ linhas (fluxo de chatbot com estado)
+  ficou para uma iteração futura dedicada, dado o risco de regressão maior
+  ali.
+- ⏳ Fases D (auditoria), E (banco), F (robustez PostgreSQL), G (E2E), H
+  (hardening secundário) e I (performance) — pendentes.
+
 ---
 
 ## Resumo executivo

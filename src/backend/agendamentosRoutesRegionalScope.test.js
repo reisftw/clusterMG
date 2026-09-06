@@ -1,9 +1,10 @@
-// Testes de rota do IDOR/escopo regional introduzido na Fase A
-// (docs/TECHNICAL-AUDIT.md, achado #3) em
-// vps/api/src/agendamentos/routes/agendamentosRoutes.js — PUT/DELETE por
-// :id agora verificam que o agendamento pertence à regional do usuário
-// autenticado (quando o papel é escopado), além da permissão funcional já
-// existente.
+// Testes de rota do IDOR/escopo regional (Fase A) e do DTO/validação
+// centralizada (Fase C) — docs/TECHNICAL-AUDIT.md, achados #3 e #20 — em
+// vps/api/src/agendamentos/routes/agendamentosRoutes.js: PUT/DELETE por
+// :id verificam que o agendamento pertence à regional do usuário
+// autenticado (quando o papel é escopado), e POST/PUT agora validam o
+// corpo via AgendamentoWriteDTO (campos obrigatórios, enums, anti mass
+// assignment).
 //
 // `createAgendamentosRouter` recebe os middlewares de auth/permissão/CSRF
 // por injeção de dependência (fábrica) — não precisamos mockar `auth.js`
@@ -47,6 +48,23 @@ function fakeUser(role, regional) {
 	return { role, regional, profile: { role, regional } };
 }
 
+// Payload válido mínimo, batendo com o formulário real
+// (src/modules/agendamentos/components/AgendamentoModal.jsx).
+function validPayload(overrides = {}) {
+	return {
+		tecnico_nome: "João Técnico",
+		codigo_cliente: "12345",
+		cliente_nome: "Cliente Teste",
+		cidade: "Uberlândia",
+		data: "2026-09-10",
+		turno: "Manha",
+		hora: "09:00",
+		status: "Aguardando dia",
+		observacao: "",
+		...overrides,
+	};
+}
+
 function buildApp(user) {
 	const createAgendamentosRouter = require(routesPath);
 	const app = express();
@@ -62,12 +80,18 @@ function buildApp(user) {
 	});
 	app.use("/api/agendamentos", router);
 	app.use((error, _req, res, _next) => {
-		res.status(error.statusCode || 500).json({ error: error.message });
+		const status = error.statusCode || 500;
+		const body = { error: error.statusCode ? error.message : "Erro interno." };
+		if (error.code === "VALIDATION_ERROR" && error.fields) {
+			body.code = error.code;
+			body.fields = error.fields;
+		}
+		res.status(status).json(body);
 	});
 	return app;
 }
 
-describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
+describe("IDOR + DTO: PUT/DELETE/POST /api/agendamentos — escopo regional e validação", () => {
 	beforeEach(() => {
 		setRepoMock();
 	});
@@ -85,7 +109,7 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 		const app = buildApp(fakeUser("supervisor", "Metropolitana SUB2"));
 		const response = await request(app)
 			.put("/api/agendamentos/ag-1")
-			.send({ status: "confirmado" });
+			.send(validPayload({ status: "Concluido" }));
 		expect(response.status).toBe(200);
 		expect(repoMock.updateAppointment).toHaveBeenCalled();
 	});
@@ -98,7 +122,7 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 		const app = buildApp(fakeUser("supervisor", "Metropolitana SUB2"));
 		const response = await request(app)
 			.put("/api/agendamentos/ag-1")
-			.send({ status: "confirmado" });
+			.send(validPayload());
 		expect(response.status).toBe(403);
 		expect(repoMock.updateAppointment).not.toHaveBeenCalled();
 	});
@@ -111,12 +135,14 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 		);
 		const app = buildApp(fakeUser("supervisor", "Metropolitana SUB2"));
 		// o supervisor teria acesso ao "seu" agendamento...
-		const own = await request(app).put("/api/agendamentos/ag-propria").send({});
+		const own = await request(app)
+			.put("/api/agendamentos/ag-propria")
+			.send(validPayload());
 		expect(own.status).toBe(200);
 		// ...mas trocando o ID na URL pra um de outra regional, é bloqueado.
 		const other = await request(app)
 			.put("/api/agendamentos/ag-de-outra-regional")
-			.send({});
+			.send(validPayload());
 		expect(other.status).toBe(403);
 	});
 
@@ -126,7 +152,9 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 			regional: "Interior SUB1",
 		});
 		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
-		const response = await request(app).put("/api/agendamentos/ag-1").send({});
+		const response = await request(app)
+			.put("/api/agendamentos/ag-1")
+			.send(validPayload());
 		expect(response.status).toBe(200);
 	});
 
@@ -136,7 +164,9 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 			regional: "Interior SUB1",
 		});
 		const app = buildApp(fakeUser("backoffice_retirada", "Metropolitana SUB2"));
-		const response = await request(app).put("/api/agendamentos/ag-1").send({});
+		const response = await request(app)
+			.put("/api/agendamentos/ag-1")
+			.send(validPayload());
 		expect(response.status).toBe(200);
 	});
 
@@ -145,7 +175,7 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 		const app = buildApp(fakeUser("supervisor", "Metropolitana SUB2"));
 		const response = await request(app)
 			.put("/api/agendamentos/nao-existe")
-			.send({});
+			.send(validPayload());
 		expect(response.status).toBe(404);
 	});
 
@@ -167,13 +197,34 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 		expect(response.status).toBe(404);
 	});
 
+	it("DELETE com :id de formato inválido → 400 (nunca chega a buscar/deletar)", async () => {
+		const app = buildApp(fakeUser("supervisor", "Metropolitana SUB2"));
+		const response = await request(app).delete(
+			"/api/agendamentos/" + encodeURIComponent("id; drop table x;"),
+		);
+		expect(response.status).toBe(400);
+		expect(repoMock.getAppointment).not.toHaveBeenCalled();
+	});
+
 	it("POST cria agendamento — regional do body é ignorada e forçada para a do supervisor", async () => {
 		const app = buildApp(fakeUser("supervisor", "Metropolitana SUB2"));
-		await request(app)
+		const response = await request(app)
 			.post("/api/agendamentos")
-			.send({ codigo_cliente: "123", regional: "Interior SUB1" });
+			.send(validPayload({ regional: "Interior SUB1" }));
+		expect(response.status).toBe(200);
 		expect(repoMock.createAppointment).toHaveBeenCalledWith(
 			expect.objectContaining({ regional: "Metropolitana SUB2" }),
+		);
+	});
+
+	it("POST cria agendamento — admin mantém a regional enviada no body", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.post("/api/agendamentos")
+			.send(validPayload({ regional: "Interior SUB1" }));
+		expect(response.status).toBe(200);
+		expect(repoMock.createAppointment).toHaveBeenCalledWith(
+			expect.objectContaining({ regional: "Interior SUB1" }),
 		);
 	});
 
@@ -195,18 +246,92 @@ describe("IDOR: PUT/DELETE /api/agendamentos/:id — escopo regional", () => {
 		app.use((error, _req, res, _next) => {
 			res.status(error.statusCode || 500).json({ error: error.message });
 		});
-		const response = await request(app).put("/api/agendamentos/ag-1").send({});
+		const response = await request(app)
+			.put("/api/agendamentos/ag-1")
+			.send(validPayload());
 		expect(response.status).toBe(403);
 		expect(repoMock.getAppointment).not.toHaveBeenCalled();
 	});
+});
 
-	it("POST cria agendamento — admin mantém a regional enviada no body", async () => {
+describe("DTO: AgendamentoWriteDTO aplicado em POST/PUT /api/agendamentos", () => {
+	beforeEach(() => {
+		setRepoMock();
+	});
+
+	afterEach(() => {
+		delete require.cache[repoPath];
+		delete require.cache[routesPath];
+	});
+
+	it("payload válido é aceito", async () => {
 		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
-		await request(app)
+		const response = await request(app).post("/api/agendamentos").send(validPayload());
+		expect(response.status).toBe(200);
+	});
+
+	it("campo obrigatório ausente (tecnico_nome) → 400 VALIDATION_ERROR", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const payload = validPayload();
+		delete payload.tecnico_nome;
+		const response = await request(app).post("/api/agendamentos").send(payload);
+		expect(response.status).toBe(400);
+		expect(response.body.code).toBe("VALIDATION_ERROR");
+		expect(response.body.fields.tecnico_nome).toBeTruthy();
+	});
+
+	it("codigo_cliente com letras (deve ser só números) → 400", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
 			.post("/api/agendamentos")
-			.send({ codigo_cliente: "123", regional: "Interior SUB1" });
-		expect(repoMock.createAppointment).toHaveBeenCalledWith(
-			expect.objectContaining({ regional: "Interior SUB1" }),
-		);
+			.send(validPayload({ codigo_cliente: "abc123" }));
+		expect(response.status).toBe(400);
+		expect(response.body.fields.codigo_cliente).toBeTruthy();
+	});
+
+	it("data em formato errado (não AAAA-MM-DD) → 400", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.post("/api/agendamentos")
+			.send(validPayload({ data: "10/09/2026" }));
+		expect(response.status).toBe(400);
+		expect(response.body.fields.data).toBeTruthy();
+	});
+
+	it("status fora do enum → 400", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.post("/api/agendamentos")
+			.send(validPayload({ status: "Status Inventado" }));
+		expect(response.status).toBe(400);
+		expect(response.body.fields.status).toBeTruthy();
+	});
+
+	it("campo desconhecido no corpo (tentativa de mass assignment) → 400, nunca chega ao repository", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.post("/api/agendamentos")
+			.send(validPayload({ isAdmin: true, empresaId: "outra-empresa" }));
+		expect(response.status).toBe(400);
+		expect(response.body.fields.isAdmin).toBeTruthy();
+		expect(response.body.fields.empresaId).toBeTruthy();
+		expect(repoMock.createAppointment).not.toHaveBeenCalled();
+	});
+
+	it("criado_em/atualizado_em (ISO datetime, mandados pelo frontend) são aceitos", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.post("/api/agendamentos")
+			.send(validPayload({ criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }));
+		expect(response.status).toBe(200);
+	});
+
+	it("PUT com :id de formato inválido → 400 (nunca chega a buscar o agendamento)", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.put("/api/agendamentos/" + encodeURIComponent("id com espaço"))
+			.send(validPayload());
+		expect(response.status).toBe(400);
+		expect(repoMock.getAppointment).not.toHaveBeenCalled();
 	});
 });
