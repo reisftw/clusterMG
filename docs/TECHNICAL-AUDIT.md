@@ -70,7 +70,7 @@
   travar agora; preflight pareado protege a parte que muta dado (MAC) no
   deploy real. `vps/api/src/macUtils.js` também elimina uma duplicação
   real que existia em `sempreIntegration.js`.
-- 🔶 **Fase F — Robustez PostgreSQL** (achados #9, #10, #11): pool `pg`
+- ✅ **Fase F — Robustez PostgreSQL** (achados #9, #10, #11): pool `pg`
   agora configurado explicitamente (`max`/`idleTimeoutMillis`/
   `connectionTimeoutMillis`, `vps/api/src/db.js`) com `pool.on("error")`
   pra não derrubar o processo numa conexão ociosa perdida.
@@ -80,13 +80,20 @@
   **não** alterados — têm consumidores reais (reconciliação, confirmação
   automática) que precisam do dataset completo, e um teto ali seria a
   "breaking change silenciosa" que a missão pede pra evitar.
-  **Não aplicado**: transação explícita no fluxo agendamento→log de
-  `agendamentoMapaReconciliation.js` (achado #9) — exigiria threading de
-  um client opcional pela função genérica `upsertDocument`/`getDocument`
-  (usada por dezenas de outros call sites de `agendamentosRepository.js`,
-  com mapeamento de coluna dinâmico por coleção), risco de regressão maior
-  do que o tempo restante desta sessão permite revisar com segurança.
-  Registrado como item de backlog futuro.
+  **Achado #9 resolvido** (commit `43ffbb7`, a pedido explícito do
+  usuário antes da promoção pra produção): `getDocument`/`upsertDocument`/
+  `saveAppointment`/`recordAppointmentLog` em `agendamentosRepository.js`
+  passaram a aceitar um `{client}` opcional (default é o `db` do módulo
+  quando não informado — zero mudança de comportamento pros ~20 outros
+  call sites existentes). `agendamentoMapaReconciliation.js` agora abre
+  uma transação por registro (`db.connect()` + `begin`/`commit`, com
+  `rollback`+`client.release()` no catch) envolvendo o par
+  `updateAppointment`+`saveReconciliationLog`, eliminando a janela onde o
+  agendamento ficava com status novo sem o log da verificação
+  correspondente. Cobertura de teste nova em
+  `src/backend/agendamentoMapaReconciliation.test.js`: begin/commit
+  chamados em ordem, client correto propagado, rollback+release em falha
+  de gravação do log.
 - 🔶 **Fase H — Hardening secundário** (achados #13, #14, #18, #19):
   `publicReadLimiter` (60 req/min por IP) adicionado em
   `/api/public/dashboard`, `/api/public/static/:domain` e
