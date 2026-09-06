@@ -947,14 +947,22 @@ describe("vps api app characterization - auth", () => {
 		);
 	});
 
-	it("POST /api/auth/login rejeita credenciais invalidas sem status 4xx", async () => {
+	it("POST /api/auth/login rejeita credenciais invalidas com 401 (Fase G — docs/TECHNICAL-AUDIT.md)", async () => {
+		// Ate a Fase G da otimizacao tecnica, esta rota respondia 200 pra
+		// credencial invalida (achado real, exposto pelo E2E de login
+		// passando a rodar de verdade no CI — tests/e2e/critical-flows.spec.js
+		// ja esperava 4xx desde antes, so nunca tinha rodado contra o
+		// endpoint real). Corrigido em app.js/auth.js#verifyPasswordCredentials
+		// pra responder 401 — o frontend ja trata `data.ok === false`
+		// independente do status (authService.js#requestPublicAuth), entao a
+		// correcao nao muda nada visivel pro usuario.
 		const app = loadApp();
 
 		const response = await request(app)
 			.post("/api/auth/login")
 			.send({ email: "admin@example.com", password: "wrong" });
 
-		expect(response.status).toBe(200);
+		expect(response.status).toBe(401);
 		expect(response.body).toMatchObject({
 			ok: false,
 			error: "Credenciais invalidas.",

@@ -937,7 +937,16 @@ async function loginWithPassword(email, password, { req = null } = {}) {
 async function verifyPasswordCredentials(email, password) {
 	const user = await getLocalUserByEmail(email);
 	if (!user || user.disabled || !(await verifyPassword(password, user))) {
-		throw new Error("E-mail ou senha invalidos.");
+		// Fase G (docs/TECHNICAL-AUDIT.md): achado real, exposto pelo E2E de
+		// login (tests/e2e/critical-flows.spec.js) passando a rodar de
+		// verdade no CI — credencial invalida respondia HTTP 200 (o catch da
+		// rota nunca setava status). 401 e o codigo correto pra "nao
+		// autenticado"; o frontend ja trata `data.ok === false` independente
+		// do status (requestPublicAuth em authService.js), entao isso nao
+		// muda nenhum comportamento visivel pro usuario.
+		const error = new Error("E-mail ou senha invalidos.");
+		error.statusCode = 401;
+		throw error;
 	}
 
 	await upgradePasswordHashIfNeeded(user, password);

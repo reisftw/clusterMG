@@ -2683,7 +2683,7 @@ function createApp() {
 				.toLowerCase();
 			const password = String(req.body?.password || "");
 			if (!email || !password) {
-				res.json({ ok: false, error: "Informe e-mail e senha." });
+				res.status(400).json({ ok: false, error: "Informe e-mail e senha." });
 				return;
 			}
 
@@ -2720,7 +2720,12 @@ function createApp() {
 				user: session.user,
 			});
 		} catch (error) {
-			res.json({
+			// Fase G: credencial invalida (verifyPasswordCredentials, auth.js)
+			// ja seta error.statusCode = 401 — usa isso em vez de sempre 200.
+			// Qualquer outro erro sem statusCode explicito continua 401 (era
+			// implicitamente 200 antes, o que e errado pra uma rota de login:
+			// falha de autenticacao nunca deveria ser 2xx).
+			res.status(error?.statusCode || 401).json({
 				ok: false,
 				error: error?.message || "E-mail ou senha invalidos.",
 			});

@@ -418,6 +418,23 @@ build bloqueiam deploy de fato; boa cobertura em financeiro e nos
 repositórios normalizados de backend (agendamentos, imóveis, ordens,
 mensageria, auditoria, RBAC).
 
+**Bug real encontrado e corrigido pela própria Fase G**: assim que
+`test:e2e` passou a rodar de verdade no CI (`e2e-smoke-homolog`),
+`POST /api/auth/login` com credencial inválida respondeu **200** em vez
+de 4xx — o teste `tests/e2e/critical-flows.spec.js` (pré-existente, nunca
+tinha rodado contra o endpoint real) esperava `>= 400` e falhou. Causa:
+`verifyPasswordCredentials` (`auth.js`) lançava `Error` sem `.statusCode`,
+e o `catch` da rota (`app.js`) nunca chamava `res.status(...)`, sempre
+`res.json(...)` puro (200 implícito do Express). Corrigido: erro de
+credencial inválida agora seta `.statusCode = 401`, e o `catch` da rota
+usa `error.statusCode || 401`. Confirmado que o frontend não depende do
+status 200 nesse caso — `authService.js#requestPublicAuth` já trata
+`data.ok === false` independente do HTTP status — então a correção não
+muda nada visível pro usuário. Teste de characterization
+(`app.characterization.test.js`) que documentava o `200` como
+comportamento atual foi atualizado para `401` (era uma characterization
+test, não uma afirmação de que 200 estava correto).
+
 ---
 
 ## 9. Frontend / PWA — detalhe
