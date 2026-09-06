@@ -400,11 +400,30 @@ jobs:
                . \"\$api_env_file\"
                set +a
              fi
+             echo '--- Migration preflight (Fase B) ---'
+             \$SUDO -E npm run migrate:preflight
+             echo '--- Backup pre-migration (Fase B) ---'
+             \$SUDO -E npm run backup:database -- --scheduled
              \$SUDO npm run migrate:sql
              \$SUDO npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
+             echo '--- Health check pos-deploy (Fase B) ---'
+             health_url=\"http://127.0.0.1:\${PORT:-3001}/api/health\"
+             health_ok=0
+             for attempt in 1 2 3 4 5 6 7 8 9 10; do
+               if curl -fsS \"\$health_url\" >/dev/null 2>&1; then
+                 health_ok=1
+                 break
+               fi
+               sleep 3
+             done
+             if [ \"\$health_ok\" -ne 1 ]; then
+               echo \"Health check falhou apos deploy (\$health_url). Servico pode estar fora do ar.\" >&2
+               exit 1
+             fi
+             echo 'Health check OK.'
              rm -f \"\$frontend_package\" \"\$backend_package\" || \$SUDO rm -f \"\$frontend_package\" \"\$backend_package\""
 
   deploy-homolog-vps:
@@ -545,9 +564,28 @@ jobs:
                . \"\$api_env_file\"
                set +a
              fi
+             echo '--- Migration preflight (Fase B) ---'
+             \$SUDO -E npm run migrate:preflight
+             echo '--- Backup pre-migration (Fase B) ---'
+             \$SUDO -E npm run backup:database -- --scheduled
              \$SUDO npm run migrate:sql
              \$SUDO npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
+             echo '--- Health check pos-deploy (Fase B) ---'
+             health_url=\"http://127.0.0.1:\${PORT:-3001}/api/health\"
+             health_ok=0
+             for attempt in 1 2 3 4 5 6 7 8 9 10; do
+               if curl -fsS \"\$health_url\" >/dev/null 2>&1; then
+                 health_ok=1
+                 break
+               fi
+               sleep 3
+             done
+             if [ \"\$health_ok\" -ne 1 ]; then
+               echo \"Health check falhou apos deploy (\$health_url). Servico pode estar fora do ar.\" >&2
+               exit 1
+             fi
+             echo 'Health check OK.'
              rm -f \"\$frontend_package\" \"\$backend_package\" || \$SUDO rm -f \"\$frontend_package\" \"\$backend_package\""

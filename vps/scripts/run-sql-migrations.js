@@ -117,7 +117,24 @@ async function main() {
 	}
 }
 
-main().catch((error) => {
-	console.error("[migrations] Falha ao aplicar migrations:", error);
-	process.exit(1);
-});
+module.exports = {
+	sqlDir,
+	getConnectionConfig,
+	getMigrationVersion,
+	listMigrationFiles,
+	tableExists,
+	ensureMigrationTable,
+	getAppliedMigrations,
+	maybeBaselineExistingDatabase,
+};
+
+// So roda automaticamente quando chamado direto (`node run-sql-migrations.js`
+// / `npm run migrate:sql`) — quando importado por outro script (ex.:
+// migration-preflight.js), so os helpers acima sao usados, sem disparar a
+// aplicacao de migrations.
+if (require.main === module) {
+	main().catch((error) => {
+		console.error("[migrations] Falha ao aplicar migrations:", error);
+		process.exit(1);
+	});
+}
