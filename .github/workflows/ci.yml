@@ -401,9 +401,9 @@ jobs:
                set +a
              fi
              echo '--- Migration preflight (Fase B) ---'
-             \$SUDO -E npm run migrate:preflight
+             \$SUDO npm run migrate:preflight
              echo '--- Backup pre-migration (Fase B) ---'
-             \$SUDO -E npm run backup:database -- --scheduled
+             \$SUDO npm run backup:database -- --scheduled
              \$SUDO npm run migrate:sql
              \$SUDO npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
@@ -565,9 +565,9 @@ jobs:
                set +a
              fi
              echo '--- Migration preflight (Fase B) ---'
-             \$SUDO -E npm run migrate:preflight
+             \$SUDO npm run migrate:preflight
              echo '--- Backup pre-migration (Fase B) ---'
-             \$SUDO -E npm run backup:database -- --scheduled
+             \$SUDO npm run backup:database -- --scheduled
              \$SUDO npm run migrate:sql
              \$SUDO npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
