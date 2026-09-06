@@ -272,6 +272,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
 - Não versionar `dist`, `node_modules`, uploads, arquivos `.env`, pacotes de deploy (`*.tar.gz`, `*.zip`) ou temporários.
 - Não mexer em grandes refatorações recentes de `src/modules/financeiro/components/FinanceiroPage.jsx` sem contexto; várias partes já foram extraídas para hooks, utils e subcomponentes.
 - Não alterar `operationalImports.js`, `publicDashboard.js` ou snapshots dentro de refactors estruturais sem isolar o risco e validar manualmente painel/mapa/match.
+- Pode acessar via SSH utilizando as chaves do GIT HUB ACTIONS, apenas não faça deploy manual.
 
 ## 10. Contexto adicional útil
 

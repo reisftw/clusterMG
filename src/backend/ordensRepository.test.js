@@ -107,6 +107,75 @@ describe("ordensRepository", () => {
 		expect(saved.data.fonte).toBe("onnet");
 	});
 
+	it("normaliza MAC na gravacao (Fase E — docs/TECHNICAL-AUDIT.md, achado #2)", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "ordens_abertas:onnet:790",
+						source_collection: "ordens_abertas",
+						source: "onnet",
+						num_os: "790",
+						legacy_path: "ordens_abertas/790",
+						legacy_document_id: "790",
+						source_payload: { num_os: "790", fonte: "onnet" },
+					},
+				],
+			});
+		const repository = loadRepository(dbQuery);
+
+		await repository.upsertDocument({
+			path: "ordens_abertas/790",
+			collectionPath: "ordens_abertas",
+			documentId: "790",
+			data: {
+				num_os: "790",
+				fonte: "onnet",
+				mac_addr: "aa:bb:cc:dd:ee:ff",
+				phy_addr: "AABBCCDDEEFF", // mesmo MAC, formato diferente — deve deduplicar
+			},
+		});
+
+		const insertParams = dbQuery.mock.calls[0][1];
+		// macs_equipamento e o parametro na posicao 27 (indice 26) da query
+		// (ver `insert into ordens_servico`, coluna macs_equipamento).
+		const macsEquipamentoParam = JSON.parse(insertParams[26]);
+		expect(macsEquipamentoParam).toEqual(["AABBCCDDEEFF"]);
+	});
+
+	it("descarta MAC invalido (nao vira 12 hex) em vez de gravar lixo", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [] })
+			.mockResolvedValueOnce({
+				rows: [
+					{
+						id: "ordens_abertas:onnet:791",
+						source_collection: "ordens_abertas",
+						source: "onnet",
+						num_os: "791",
+						legacy_path: "ordens_abertas/791",
+						legacy_document_id: "791",
+						source_payload: { num_os: "791", fonte: "onnet" },
+					},
+				],
+			});
+		const repository = loadRepository(dbQuery);
+
+		await repository.upsertDocument({
+			path: "ordens_abertas/791",
+			collectionPath: "ordens_abertas",
+			documentId: "791",
+			data: { num_os: "791", fonte: "onnet", mac_addr: "nao e um mac" },
+		});
+
+		const insertParams = dbQuery.mock.calls[0][1];
+		const macsEquipamentoParam = JSON.parse(insertParams[26]);
+		expect(macsEquipamentoParam).toEqual([]);
+	});
+
 	it("remove ordens por fonte para importacao incremental", async () => {
 		const dbQuery = vi.fn(async () => ({ rowCount: 12, rows: [] }));
 		const repository = loadRepository(dbQuery);

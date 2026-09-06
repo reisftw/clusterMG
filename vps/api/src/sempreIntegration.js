@@ -16,19 +16,9 @@ const RETIRADA_EQUIPMENT_TYPES = [
 	"retirada e cancelamento segunda tentativa",
 ];
 const documents = require("./documents");
+const { normalizeMac, isValidMac: isValidEquipmentMac } = require("./macUtils");
 const equipmentLookupCache = new Map();
 let mapEquipmentRefreshPromise = null;
-
-function normalizeMac(value) {
-	return String(value || "")
-		.replace(/[^a-fA-F0-9]/g, "")
-		.toUpperCase();
-}
-
-function isValidEquipmentMac(value) {
-	const mac = normalizeMac(value);
-	return mac.length === 12 && mac !== "FFFFFFFFFFFF";
-}
 
 async function findSempreIntegration() {
 	const direct = await documents.getDocument(

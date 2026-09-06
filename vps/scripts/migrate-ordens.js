@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const { Pool } = require("pg");
+const { normalizeMac, isValidMac } = require("../api/src/macUtils");
 
 const APPLY = process.argv.includes("--apply");
 const JSON_MODE = process.argv.includes("--json");
@@ -137,7 +138,7 @@ function normalizeMacs(data = {}) {
 	const macs = Array.isArray(data.macs_equipamento)
 		? data.macs_equipamento
 		: [data.mac_addr, data.phy_addr];
-	return macs.map(text).filter(Boolean);
+	return [...new Set(macs.map(normalizeMac).filter(isValidMac))];
 }
 
 function normalizeOrder(row) {

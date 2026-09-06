@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const db = require("./db");
+const { normalizeMac, isValidMac } = require("./macUtils");
 
 const COLLECTIONS = Object.freeze({
 	ordens: "ordens_abertas",
@@ -140,11 +141,18 @@ function normalizePhones(data = {}) {
 	return [...new Set(phones)];
 }
 
+// Normaliza pro formato canonico (macUtils.js: 12 hex maiusculos, sem
+// separador) na escrita — forward-only, nao migra dados historicos ja
+// gravados (docs/TECHNICAL-AUDIT.md, achado #2; plano de backfill em
+// docs/DATABASE-CONSTRAINTS-PLAN.md). Descarta valor que nao vira um MAC
+// valido (isValidMac) em vez de gravar lixo/placeholder, e deduplica —
+// antes desta normalizacao, "AA:BB:CC:DD:EE:FF" e "aabbccddeeff" eram
+// tratados como dois valores diferentes e nunca deduplicavam.
 function normalizeMacs(data = {}) {
 	const macs = Array.isArray(data.macs_equipamento)
 		? data.macs_equipamento
 		: [data.mac_addr, data.phy_addr];
-	return macs.map(text).filter(Boolean);
+	return [...new Set(macs.map(normalizeMac).filter(isValidMac))];
 }
 
 function sourcePayload(row = {}, fallback = {}) {

@@ -53,8 +53,18 @@
   (achado #8 — auditoria fora de transação — permanece registrado, não
   resolvido nesta fase; mudar isso exigiria plumbing transacional mais
   amplo, fica para a Fase F).
-- ⏳ Fases E (banco), F (robustez PostgreSQL), G (E2E), H (hardening
-  secundário) e I (performance) — pendentes.
+- 🔶 **Fase E — Banco** (achados #1, #2): `vps/api/src/macUtils.js`
+  (normalizador canônico de MAC, forward-only, aplicado em
+  `ordensRepository.js`/`migrate-ordens.js`, eliminando duplicação com
+  `sempreIntegration.js`). Constraints reais (`FK` pra `regionais`,
+  `CHECK` de status/tipo/turno, `UNIQUE` de MAC) **não aplicadas nesta
+  sessão** — exigem consultar dados reais de produção/homologação antes
+  (mandado explicitamente pela missão), e este ambiente não tem acesso ao
+  Postgres real. Relatórios prontos e o plano completo em
+  `docs/DATABASE-CONSTRAINTS-PLAN.md`, aguardando alguém com acesso à VPS
+  rodar as queries (todas somente leitura) e devolver o resultado.
+- ⏳ Fases F (robustez PostgreSQL), G (E2E), H (hardening secundário) e I
+  (performance) — pendentes.
 
 ---
 
