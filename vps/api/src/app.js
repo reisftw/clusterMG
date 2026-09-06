@@ -2161,6 +2161,20 @@ function createApp() {
 			error: "Muitas conexoes em tempo real. Tente novamente em instantes.",
 		},
 	});
+	// Fase H (docs/TECHNICAL-AUDIT.md, achado #13): /api/public/dashboard,
+	// /api/public/static/:domain e /api/public/documents* nao tinham rate
+	// limit nenhum. Limite generoso o bastante pra nao quebrar o painel
+	// publico real (RelatoriosPublicoPage.jsx#useDashboardData nao faz
+	// polling continuo por padrao — so busca no load + quando o SSE avisa
+	// atualizacao — entao um viewer legitimo nunca bate nem perto disso),
+	// so protege contra scraping/DoS de leitura.
+	const publicReadLimiter = rateLimit({
+		windowMs: Number(process.env.PUBLIC_READ_RATE_LIMIT_WINDOW_MS || 60 * 1000),
+		limit: Number(process.env.PUBLIC_READ_RATE_LIMIT_MAX || 60),
+		standardHeaders: true,
+		legacyHeaders: false,
+		message: { error: "Muitas requisicoes. Tente novamente em instantes." },
+	});
 	const antiBotGuard = antiBot.requireAntiBot();
 
 	app.set("trust proxy", 1);
@@ -2432,7 +2446,7 @@ function createApp() {
 		}),
 	);
 
-	app.get("/api/public/dashboard", async (req, res, next) => {
+	app.get("/api/public/dashboard", publicReadLimiter, async (req, res, next) => {
 		try {
 			const detail = String(req.query.detail || "").toLowerCase();
 			const dashboard = await getCachedPublicDashboard({
@@ -2449,7 +2463,7 @@ function createApp() {
 		}
 	});
 
-	app.get("/api/public/static/:domain", async (req, res, next) => {
+	app.get("/api/public/static/:domain", publicReadLimiter, async (req, res, next) => {
 		try {
 			const domain = String(req.params.domain || "").trim();
 			const compact = ["1", "true", "yes"].includes(
@@ -2484,7 +2498,7 @@ function createApp() {
 		}
 	});
 
-	app.get("/api/public/documents", async (req, res, next) => {
+	app.get("/api/public/documents", publicReadLimiter, async (req, res, next) => {
 		try {
 			const collectionPath = String(req.query.collection || "").trim();
 			if (!PUBLIC_COLLECTIONS.has(collectionPath)) {
@@ -2503,7 +2517,7 @@ function createApp() {
 		}
 	});
 
-	app.get("/api/public/documents/*", async (req, res, next) => {
+	app.get("/api/public/documents/*", publicReadLimiter, async (req, res, next) => {
 		try {
 			const documentPath = req.params[0];
 			if (!PUBLIC_DOCUMENTS.has(documentPath)) {

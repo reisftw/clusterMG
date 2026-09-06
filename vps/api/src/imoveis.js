@@ -50,6 +50,43 @@ const upload = multer({
 	},
 });
 
+// Fase H (docs/TECHNICAL-AUDIT.md, achado #19): MIME/extensao sao so o que
+// o cliente diz que o arquivo e (spoofavel) — avatar e documentos ja
+// validam magic bytes (assinatura real do conteudo), imoveis nao validava
+// pra nenhum dos tipos aceitos. Cobertura por assinatura real:
+// PDF/PNG/JPEG (mesmas assinaturas de documentosRoutes.js), MP4/MOV (caixa
+// ISO base media, "ftyp" nos bytes 4-7 — cobre os dois formatos, que
+// compartilham o mesmo container), WEBM (cabecalho EBML), XLSX (zip:
+// PK\x03\x04 — Office Open XML e um zip) e XLS legado (assinatura OLE2).
+function isAllowedImovelFileBuffer(file) {
+	if (!file?.buffer?.length) return false;
+	const buffer = file.buffer;
+	const header3 = buffer.subarray(0, 3);
+	const header4 = buffer.subarray(0, 4);
+	const header5 = buffer.subarray(0, 5).toString("utf8");
+	const header8 = buffer.subarray(4, 8).toString("ascii");
+	const isPdf = header5 === "%PDF-";
+	const isPng = header4.equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+	const isJpeg = header3.equals(Buffer.from([0xff, 0xd8, 0xff]));
+	const isMp4OrMov = header8 === "ftyp";
+	const isWebm = header4.equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+	const isXlsx = header4.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+	const isXlsLegacy = buffer
+		.subarray(0, 8)
+		.equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+	return isPdf || isPng || isJpeg || isMp4OrMov || isWebm || isXlsx || isXlsLegacy;
+}
+
+function rejectInvalidImovelFile(req, res, next) {
+	if (req.file && !isAllowedImovelFileBuffer(req.file)) {
+		res.status(400).json({
+			error: "Arquivo invalido ou corrompido. Envie PDF, PNG, JPG, vídeo ou planilha Excel.",
+		});
+		return;
+	}
+	next();
+}
+
 const DEFAULT_CONFIG = Object.freeze({
 	empresas: ["SEMPRE", "ONNET"],
 	classificacoes: [
@@ -740,6 +777,7 @@ function createImoveisRouter({
 		"/:id/reajustes",
 		requireCsrfToken,
 		upload.single("file"),
+		rejectInvalidImovelFile,
 		async (req, res, next) => {
 			try {
 				const imovel = await getImovelOrThrow(req.params.id);
@@ -797,6 +835,7 @@ function createImoveisRouter({
 		"/:id/iptu",
 		requireCsrfToken,
 		upload.single("file"),
+		rejectInvalidImovelFile,
 		async (req, res, next) => {
 			try {
 				const imovel = await getImovelOrThrow(req.params.id);
@@ -885,6 +924,7 @@ function createImoveisRouter({
 		"/:id/anexos/upload",
 		requireCsrfToken,
 		upload.single("file"),
+		rejectInvalidImovelFile,
 		async (req, res, next) => {
 			try {
 				const imovel = await getImovelOrThrow(req.params.id);
@@ -905,6 +945,7 @@ function createImoveisRouter({
 		"/:id/aditivos",
 		requireCsrfToken,
 		upload.single("file"),
+		rejectInvalidImovelFile,
 		async (req, res, next) => {
 			try {
 				const imovel = await getImovelOrThrow(req.params.id);
@@ -983,6 +1024,7 @@ function createImoveisRouter({
 		"/:id/contratos/upload",
 		requireCsrfToken,
 		upload.single("file"),
+		rejectInvalidImovelFile,
 		async (req, res, next) => {
 			try {
 				const imovel = await getImovelOrThrow(req.params.id);
@@ -1099,4 +1141,5 @@ module.exports = {
 	COLLECTIONS,
 	buildReports,
 	createImoveisRouter,
+	isAllowedImovelFileBuffer,
 };

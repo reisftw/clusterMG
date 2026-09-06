@@ -87,7 +87,28 @@
   com mapeamento de coluna dinâmico por coleção), risco de regressão maior
   do que o tempo restante desta sessão permite revisar com segurança.
   Registrado como item específico do backlog (seção 12).
-- ⏳ Fases G (E2E), H (hardening secundário) e I (performance) — pendentes.
+- 🔶 **Fase H — Hardening secundário** (achados #13, #14, #18, #19):
+  `publicReadLimiter` (60 req/min por IP) adicionado em
+  `/api/public/dashboard`, `/api/public/static/:domain` e
+  `/api/public/documents*` — limite generoso o bastante pra não afetar o
+  painel público real (`useDashboardData.js` não faz polling contínuo por
+  padrão). `/api/events` (SSE) **mantido sem autenticação** de propósito —
+  investigado e confirmado: `PainelPublico` (público, sem login) depende
+  dele pra atualização em tempo real; adicionar auth ali quebraria essa
+  tela. Já tinha rate limit (`realtimeLimiter`); payload continua sendo só
+  heartbeat/tópicos genéricos (já verificado na Fase 0). Uploads de
+  imóveis (`imoveis.js`) ganharam validação de assinatura real de arquivo
+  (magic bytes) pra PDF/PNG/JPEG/MP4/MOV/WEBM/XLSX/XLS — antes só
+  MIME/extensão (spoofável), mesmo padrão já usado em avatar/documentos.
+  `html2pdf.js` (dependência confirmada sem nenhum uso) removida do
+  `package.json`. **Não aplicado**: decomposição dos componentes grandes
+  do Painel Público (`TabRetiradas.jsx`, `TabMatchOS.jsx`,
+  `MatchUpload.jsx`) — a missão pede "só decompor quando puder ser feito
+  com segurança e houver ganho claro"; sem métrica real de performance
+  medida (Fase I não executada com ferramenta de profiling), não há
+  evidência concreta do ganho, então fica no backlog.
+- ⏳ Fases G (E2E) e I (performance, sem ferramenta de medição disponível
+  neste ambiente — ver seção de riscos residuais) — pendentes.
 
 ---
 
