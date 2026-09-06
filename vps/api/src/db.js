@@ -7,9 +7,23 @@ if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
 	);
 }
 
+// Fase F (docs/TECHNICAL-AUDIT.md, achado #11): antes, o Pool nao definia
+// `max`/`idleTimeoutMillis`/`connectionTimeoutMillis` (ficava nos defaults
+// implicitos do driver `pg`). Valores conservadores abaixo, configuraveis
+// por env caso a VPS real precise de ajuste — nao escolhidos "grandes"
+// arbitrariamente: `max: 10` mantem o mesmo teto que o driver ja usava por
+// padrao (so torna explicito), `connectionTimeoutMillis` garante que uma
+// requisicao FALHA RAPIDO (5s) em vez de travar indefinidamente esperando
+// conexao livre num pico de carga.
 function buildPoolConfig() {
+	const poolLimits = {
+		max: Number(process.env.PG_POOL_MAX || 10),
+		idleTimeoutMillis: Number(process.env.PG_POOL_IDLE_TIMEOUT_MS || 30_000),
+		connectionTimeoutMillis: Number(process.env.PG_POOL_CONNECTION_TIMEOUT_MS || 5_000),
+	};
 	if (process.env.DATABASE_URL) {
 		return {
+			...poolLimits,
 			connectionString: process.env.DATABASE_URL,
 			ssl:
 				process.env.PGSSLMODE === "require"
@@ -19,6 +33,7 @@ function buildPoolConfig() {
 	}
 
 	return {
+		...poolLimits,
 		host: process.env.PGHOST || "127.0.0.1",
 		port: Number(process.env.PGPORT || 5432),
 		user: process.env.PGUSER || "retorninho",
@@ -32,6 +47,14 @@ function buildPoolConfig() {
 }
 
 const pool = new Pool(buildPoolConfig());
+// Fase F (achado #11): sem este handler, um erro em conexao OCIOSA do pool
+// (ex.: o Postgres derruba a conexao por trafego de rede/timeout do lado
+// do servidor) e um evento "error" sem listener no EventEmitter do Pool —
+// comportamento padrao do Node e derrubar o processo inteiro nesse caso.
+// So logar aqui evita esse crash silencioso.
+pool.on("error", (error) => {
+	console.error("[db] Erro inesperado em conexao ociosa do pool:", error);
+});
 const requestContext = new AsyncLocalStorage();
 
 function getQueryRecorder() {

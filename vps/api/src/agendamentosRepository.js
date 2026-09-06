@@ -837,8 +837,20 @@ async function listAppointmentLogs({ limit = 1000, offset = 0 } = {}) {
 	);
 }
 
+// Teto de seguranca (Fase F, achado #10): nenhum consumidor real usa esta
+// funcao hoje (confirmado por busca em todo o backend) — mas ela e
+// exportada, entao um uso futuro sem paginacao numa tabela de log que so
+// cresce ficaria sem protecao nenhuma. 50000 e generoso o bastante pra nao
+// afetar qualquer uso legitimo atual (nao ha nenhum), so evita "SELECT *
+// sem limite" virar hábito nessa tabela especificamente.
+const APPOINTMENT_LOGS_SAFETY_LIMIT = 50_000;
+
 async function listAllAppointmentLogs() {
-	return dataListFromDocuments(await listAllDocuments(COLLECTIONS.appointmentLogs));
+	return dataListFromDocuments(
+		await listAllDocuments(COLLECTIONS.appointmentLogs, {
+			limit: APPOINTMENT_LOGS_SAFETY_LIMIT,
+		}),
+	);
 }
 
 async function recordAppointmentLog(payload = {}, { id } = {}) {
@@ -913,9 +925,19 @@ async function recordPipelineLog(payload = {}, { id } = {}) {
 	return dataFromDocument(saved);
 }
 
-async function listAllDocuments(collectionPath) {
+// `limit` opcional (Fase F — docs/TECHNICAL-AUDIT.md, achado #10): por
+// padrao continua sem LIMIT, porque os callers reais de
+// `listAllAppointmentDocuments` (reconciliacao de agendamentos/confirmacao
+// automatica) legitimamente precisam do dataset inteiro — colocar um teto
+// ali seria a "breaking change silenciosa" que a missao pede pra evitar.
+// So `listAllAppointmentLogs` (abaixo), que hoje nao tem nenhum consumidor
+// real, passa um teto de seguranca.
+async function listAllDocuments(collectionPath, { limit } = {}) {
 	const config = tableConfig(collectionPath);
-	const result = await db.query(`select * from ${config.table} order by ${config.orderBy}`);
+	const limitClause = Number.isFinite(limit) && limit > 0 ? ` limit ${Math.trunc(limit)}` : "";
+	const result = await db.query(
+		`select * from ${config.table} order by ${config.orderBy}${limitClause}`,
+	);
 	return result.rows.map(config.mapper);
 }
 

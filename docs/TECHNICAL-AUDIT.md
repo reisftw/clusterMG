@@ -53,18 +53,41 @@
   (achado #8 — auditoria fora de transação — permanece registrado, não
   resolvido nesta fase; mudar isso exigiria plumbing transacional mais
   amplo, fica para a Fase F).
-- 🔶 **Fase E — Banco** (achados #1, #2): `vps/api/src/macUtils.js`
-  (normalizador canônico de MAC, forward-only, aplicado em
-  `ordensRepository.js`/`migrate-ordens.js`, eliminando duplicação com
-  `sempreIntegration.js`). Constraints reais (`FK` pra `regionais`,
-  `CHECK` de status/tipo/turno, `UNIQUE` de MAC) **não aplicadas nesta
-  sessão** — exigem consultar dados reais de produção/homologação antes
-  (mandado explicitamente pela missão), e este ambiente não tem acesso ao
-  Postgres real. Relatórios prontos e o plano completo em
-  `docs/DATABASE-CONSTRAINTS-PLAN.md`, aguardando alguém com acesso à VPS
-  rodar as queries (todas somente leitura) e devolver o resultado.
-- ⏳ Fases F (robustez PostgreSQL), G (E2E), H (hardening secundário) e I
-  (performance) — pendentes.
+- ✅ **Fase E — Banco** (achados #1, #2): acesso de leitura à VPS de
+  homologação foi liberado durante a sessão — os relatórios de
+  `docs/DATABASE-CONSTRAINTS-PLAN.md` foram rodados contra dado real
+  (49464 `ordens_servico`, 207 `agendamentos`) e vieram muito mais limpos
+  do que o pior cenário previsto. Aplicado em
+  `vps/sql/060_ordens_agendamentos_regional_mac.sql` (testado dentro de
+  transação com `ROLLBACK` contra o banco real antes de commitar):
+  `regional_id` nullable + FK + índice em `ordens_servico`/`agendamentos`
+  (backfillado), `CHECK` de `agendamentos.status`/`turno` (0 violações),
+  normalização de MAC nos dados já existentes (0 colisões). `UNIQUE` de
+  MAC e `CHECK` de `ordens_servico.status`/`tipo` deliberadamente **não**
+  aplicados — produção não pôde ser verificada diretamente (acesso
+  bloqueado especificamente para o env de produção) e `tipo` tem 37
+  valores legítimos vindos de múltiplas integrações, volátil demais pra
+  travar agora; preflight pareado protege a parte que muta dado (MAC) no
+  deploy real. `vps/api/src/macUtils.js` também elimina uma duplicação
+  real que existia em `sempreIntegration.js`.
+- 🔶 **Fase F — Robustez PostgreSQL** (achados #9, #10, #11): pool `pg`
+  agora configurado explicitamente (`max`/`idleTimeoutMillis`/
+  `connectionTimeoutMillis`, `vps/api/src/db.js`) com `pool.on("error")`
+  pra não derrubar o processo numa conexão ociosa perdida.
+  `listAllAppointmentLogs` (achado #10 — tabela de log sem consumidor real
+  encontrado, mas exportada) ganhou teto de segurança de 50000 linhas;
+  `listAllAppointmentDocuments`/`listAllAppointments` deliberadamente
+  **não** alterados — têm consumidores reais (reconciliação, confirmação
+  automática) que precisam do dataset completo, e um teto ali seria a
+  "breaking change silenciosa" que a missão pede pra evitar.
+  **Não aplicado**: transação explícita no fluxo agendamento→log de
+  `agendamentoMapaReconciliation.js` (achado #9) — exigiria threading de
+  um client opcional pela função genérica `upsertDocument`/`getDocument`
+  (usada por dezenas de outros call sites de `agendamentosRepository.js`,
+  com mapeamento de coluna dinâmico por coleção), risco de regressão maior
+  do que o tempo restante desta sessão permite revisar com segurança.
+  Registrado como item específico do backlog (seção 12).
+- ⏳ Fases G (E2E), H (hardening secundário) e I (performance) — pendentes.
 
 ---
 
