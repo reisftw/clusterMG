@@ -1,3 +1,5 @@
+const auditLog = require("../../auditLog");
+
 function getProfile(req) {
 	return req.user?.profile || req.user || {};
 }
@@ -19,6 +21,17 @@ function createDatabaseBackupsAdminController({
 			const result = await databaseBackups.createBackup({
 				reason: "manual",
 				user: req.user,
+			});
+			// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5): acao administrativa
+			// sensivel, sem rastro nenhum ate aqui.
+			auditLog.recordAuditLog({
+				action: "create",
+				module: "configuracao",
+				entity: "database_backups",
+				recordId: result?.latestBackup?.fileName || null,
+				beforeData: null,
+				afterData: result?.latestBackup || null,
+				changedFields: ["latestBackup"],
 			});
 			notificationsService
 				.createNotification({
@@ -57,6 +70,18 @@ function createDatabaseBackupsAdminController({
 
 			const result = await databaseBackups.restoreBackup(req.params.fileName, {
 				user: req.user,
+			});
+			// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5): restauracao de
+			// backup e a acao administrativa mais sensivel deste controller
+			// (reverte o banco inteiro) e nao deixava rastro nenhum ate aqui.
+			auditLog.recordAuditLog({
+				action: "restore",
+				module: "configuracao",
+				entity: "database_backups",
+				recordId: req.params.fileName,
+				beforeData: null,
+				afterData: { fileName: req.params.fileName, result },
+				changedFields: ["*"],
 			});
 			notificationsService
 				.createNotification({

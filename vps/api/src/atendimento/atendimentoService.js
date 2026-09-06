@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const agendamentosRepository = require("../agendamentosRepository");
+const auditLog = require("../auditLog");
 const documents = require("../documents");
 const regionaisRepository = require("../regionaisRepository");
 const evolutionMessaging = require("../evolutionMessaging");
@@ -2988,7 +2989,31 @@ async function updateCase(id, patch = {}, user = null) {
 		});
 	}
 
-	return saveCase(next);
+	const saved = await saveCase(next);
+	// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5): casos de atendimento
+	// nao deixavam rastro nenhum de quem alterou o que. `messages`/
+	// `timeline` ficam fora do before/after (sao historico proprio do caso,
+	// ja registrado em appendLog/timeline do proprio caso — duplicar aqui
+	// so infla audit_logs sem ganho real).
+	const stripHistory = (value = {}) => {
+		const { messages: _messages, timeline: _timeline, ...rest } = value;
+		return rest;
+	};
+	const beforeAudit = stripHistory(item);
+	const afterAudit = stripHistory(saved);
+	const changedFields = auditLog.calculateChangedFields(beforeAudit, afterAudit);
+	if (changedFields.length) {
+		auditLog.recordAuditLog({
+			action: action || "update",
+			module: "atendimento",
+			entity: "atendimento_casos",
+			recordId: id,
+			beforeData: beforeAudit,
+			afterData: afterAudit,
+			changedFields,
+		});
+	}
+	return saved;
 }
 
 async function replyCase(id, payload = {}, user = null) {
@@ -3046,6 +3071,19 @@ async function updateTechnician(phone, patch = {}, user = null) {
 		phone: saved.phone,
 		user: user?.email || user?.uid || "",
 	});
+	// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5).
+	const changedFields = auditLog.calculateChangedFields(existing || {}, saved);
+	if (changedFields.length) {
+		auditLog.recordAuditLog({
+			action: existing ? "update" : "create",
+			module: "atendimento",
+			entity: "atendimento_tecnicos",
+			recordId: saved.phone,
+			beforeData: existing || null,
+			afterData: saved,
+			changedFields,
+		});
+	}
 	return saved;
 }
 
@@ -3071,6 +3109,15 @@ async function deleteTechnician(phone, user = null) {
 		phone: normalized,
 		name: current.data.name || current.data.hubsoftName || "",
 		user: user?.email || user?.uid || "",
+	});
+	auditLog.recordAuditLog({
+		action: "delete",
+		module: "atendimento",
+		entity: "atendimento_tecnicos",
+		recordId: normalized,
+		beforeData: current.data,
+		afterData: null,
+		changedFields: Object.keys(current.data || {}),
 	});
 	return { ok: true, phone: normalized };
 }

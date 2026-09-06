@@ -22,9 +22,11 @@ const routesDir = path.join(process.cwd(), "vps/api/src/agendamentos/routes");
 const repoPath = require.resolve(
 	path.join(process.cwd(), "vps/api/src/agendamentosRepository.js"),
 );
+const auditLogPath = require.resolve(path.join(process.cwd(), "vps/api/src/auditLog.js"));
 const routesPath = require.resolve(path.join(routesDir, "agendamentosRoutes.js"));
 
 let repoMock;
+let auditLogMock;
 
 function setRepoMock() {
 	repoMock = {
@@ -40,6 +42,27 @@ function setRepoMock() {
 		filename: repoPath,
 		loaded: true,
 		exports: repoMock,
+	};
+	// auditLog.js exige vps/api/src/db.js no topo, que lanca erro sincrono
+	// se nenhuma env var de conexao estiver definida (ver db.js:4-8) — mock
+	// pra nao precisar de Postgres real so pra testar a rota.
+	auditLogMock = {
+		recordAuditLog: vi.fn(async () => undefined),
+		calculateChangedFields: vi.fn((before, after) => {
+			const beforeKeys = before && typeof before === "object" ? Object.keys(before) : [];
+			const afterKeys = after && typeof after === "object" ? Object.keys(after) : [];
+			const changed = new Set();
+			for (const key of new Set([...beforeKeys, ...afterKeys])) {
+				if (JSON.stringify(before?.[key]) !== JSON.stringify(after?.[key])) changed.add(key);
+			}
+			return Array.from(changed);
+		}),
+	};
+	require.cache[auditLogPath] = {
+		id: auditLogPath,
+		filename: auditLogPath,
+		loaded: true,
+		exports: auditLogMock,
 	};
 	delete require.cache[routesPath];
 }
@@ -98,6 +121,7 @@ describe("IDOR + DTO: PUT/DELETE/POST /api/agendamentos — escopo regional e va
 
 	afterEach(() => {
 		delete require.cache[repoPath];
+		delete require.cache[auditLogPath];
 		delete require.cache[routesPath];
 	});
 
@@ -254,6 +278,66 @@ describe("IDOR + DTO: PUT/DELETE/POST /api/agendamentos — escopo regional e va
 	});
 });
 
+describe("Auditoria (Fase D — docs/TECHNICAL-AUDIT.md, achado #5)", () => {
+	beforeEach(() => {
+		setRepoMock();
+	});
+
+	afterEach(() => {
+		delete require.cache[repoPath];
+		delete require.cache[auditLogPath];
+		delete require.cache[routesPath];
+	});
+
+	it("POST registra auditoria de criação", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app).post("/api/agendamentos").send(validPayload());
+		expect(response.status).toBe(200);
+		expect(auditLogMock.recordAuditLog).toHaveBeenCalledWith(
+			expect.objectContaining({ action: "create", module: "agendamentos", entity: "agendamentos" }),
+		);
+	});
+
+	it("PUT registra auditoria de atualização com before/after", async () => {
+		repoMock.getAppointment.mockResolvedValue({
+			id: "ag-1",
+			regional: "Metropolitana SUB2",
+			status: "Aguardando dia",
+		});
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.put("/api/agendamentos/ag-1")
+			.send(validPayload({ status: "Concluido" }));
+		expect(response.status).toBe(200);
+		expect(auditLogMock.recordAuditLog).toHaveBeenCalledWith(
+			expect.objectContaining({ action: "update", recordId: "ag-1" }),
+		);
+	});
+
+	it("PUT sem nenhum campo alterado NÃO registra auditoria (mesmo padrão já usado em usuários)", async () => {
+		const existing = { id: "ag-1", regional: "Metropolitana SUB2", ...validPayload() };
+		repoMock.getAppointment.mockResolvedValue(existing);
+		repoMock.updateAppointment.mockResolvedValue(existing);
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app)
+			.put("/api/agendamentos/ag-1")
+			.send(validPayload());
+		expect(response.status).toBe(200);
+		expect(auditLogMock.recordAuditLog).not.toHaveBeenCalled();
+	});
+
+	it("DELETE registra auditoria de exclusão com o registro removido", async () => {
+		const existing = { id: "ag-1", regional: "Metropolitana SUB2" };
+		repoMock.getAppointment.mockResolvedValue(existing);
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app).delete("/api/agendamentos/ag-1");
+		expect(response.status).toBe(200);
+		expect(auditLogMock.recordAuditLog).toHaveBeenCalledWith(
+			expect.objectContaining({ action: "delete", recordId: "ag-1", beforeData: existing }),
+		);
+	});
+});
+
 describe("DTO: AgendamentoWriteDTO aplicado em POST/PUT /api/agendamentos", () => {
 	beforeEach(() => {
 		setRepoMock();
@@ -261,6 +345,7 @@ describe("DTO: AgendamentoWriteDTO aplicado em POST/PUT /api/agendamentos", () =
 
 	afterEach(() => {
 		delete require.cache[repoPath];
+		delete require.cache[auditLogPath];
 		delete require.cache[routesPath];
 	});
 

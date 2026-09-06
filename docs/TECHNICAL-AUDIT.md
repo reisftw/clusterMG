@@ -40,8 +40,21 @@
   DTO completa nesse arquivo de 3000+ linhas (fluxo de chatbot com estado)
   ficou para uma iteração futura dedicada, dado o risco de regressão maior
   ali.
-- ⏳ Fases D (auditoria), E (banco), F (robustez PostgreSQL), G (E2E), H
-  (hardening secundário) e I (performance) — pendentes.
+- ✅ **Fase D — Auditoria** (achado #5): `auditLog.recordAuditLog` adicionado
+  em criação/edição/exclusão de agendamentos, casos de atendimento e
+  técnicos de atendimento, e criação/restauração de backup de banco
+  (`databaseBackupsAdminController.js` — restauração é a ação
+  administrativa mais sensível do sistema e não deixava rastro nenhum).
+  Verificado: não existe endpoint de escrita direta de config de
+  integração (Hubsoft/Cvortex/Senior) fora da camada genérica de
+  `documents.js` no app principal — essa camada já audita sozinha, então
+  não havia gap real ali (diferente do que a hipótese inicial supunha).
+  Mantido o mesmo padrão fire-and-forget já usado no resto do projeto
+  (achado #8 — auditoria fora de transação — permanece registrado, não
+  resolvido nesta fase; mudar isso exigiria plumbing transacional mais
+  amplo, fica para a Fase F).
+- ⏳ Fases E (banco), F (robustez PostgreSQL), G (E2E), H (hardening
+  secundário) e I (performance) — pendentes.
 
 ---
 

@@ -27,9 +27,11 @@ const mockPaths = [
 	"sempreIntegration.js",
 	"realtime.js",
 	"webhooks/utils/webhookSecrets.js",
+	"auditLog.js",
 ].map((relative) => require.resolve(path.join(apiDir, relative)));
 
 let documentsMock;
+let auditLogMock;
 
 function setMock(resolvedPath, exports) {
 	require.cache[resolvedPath] = {
@@ -48,6 +50,21 @@ function installMocks() {
 		listAllDocuments: vi.fn(async () => []),
 		listDocuments: vi.fn(async () => []),
 	};
+	// auditLog.js exige vps/api/src/db.js no topo, que lanca erro sincrono se
+	// nenhuma env var de conexao estiver definida — mock pra nao precisar de
+	// Postgres real so pra testar o service.
+	auditLogMock = {
+		recordAuditLog: vi.fn(async () => undefined),
+		calculateChangedFields: vi.fn((before, after) => {
+			const beforeKeys = before && typeof before === "object" ? Object.keys(before) : [];
+			const afterKeys = after && typeof after === "object" ? Object.keys(after) : [];
+			const changed = new Set();
+			for (const key of new Set([...beforeKeys, ...afterKeys])) {
+				if (JSON.stringify(before?.[key]) !== JSON.stringify(after?.[key])) changed.add(key);
+			}
+			return Array.from(changed);
+		}),
+	};
 	setMock(mockPaths[0], {});
 	setMock(mockPaths[1], documentsMock);
 	setMock(mockPaths[2], {});
@@ -56,6 +73,7 @@ function installMocks() {
 	setMock(mockPaths[5], {});
 	setMock(mockPaths[6], { broadcastRealtime: vi.fn() });
 	setMock(mockPaths[7], { getProvidedWebhookSecret: vi.fn(() => "") });
+	setMock(mockPaths[8], auditLogMock);
 	delete require.cache[servicePath];
 }
 
@@ -88,6 +106,9 @@ describe("IDOR/escopo regional — atendimentoService", () => {
 				),
 			).resolves.toBeTruthy();
 			expect(documentsMock.upsertDocument).toHaveBeenCalled();
+			expect(auditLogMock.recordAuditLog).toHaveBeenCalledWith(
+				expect.objectContaining({ module: "atendimento", entity: "atendimento_casos", recordId: "caso-1" }),
+			);
 		});
 
 		it("supervisor autorizado + caso de técnico de OUTRA regional → 403", async () => {
@@ -158,6 +179,9 @@ describe("IDOR/escopo regional — atendimentoService", () => {
 					fakeUser("supervisor", "Metropolitana SUB2"),
 				),
 			).resolves.toMatchObject({ ok: true });
+			expect(auditLogMock.recordAuditLog).toHaveBeenCalledWith(
+				expect.objectContaining({ action: "delete", module: "atendimento", entity: "atendimento_tecnicos" }),
+			);
 		});
 
 		it("supervisor autorizado + técnico de OUTRA regional → 403", async () => {

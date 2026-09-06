@@ -1,5 +1,6 @@
 const express = require("express");
 const agendamentosRepository = require("../../agendamentosRepository");
+const auditLog = require("../../auditLog");
 const {
 	assertRegionalRecordAccess,
 	scopeWritePayload,
@@ -92,6 +93,18 @@ function createAgendamentosRouter({
 				// regional — o campo `regional` do body nunca e confiavel por si so.
 				const payload = scopeWritePayload(req.user, req.validated.body);
 				const item = await agendamentosRepository.createAppointment(payload);
+				// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5): agendamento nao
+				// passava pela camada generica de "documents" que audita sozinha,
+				// entao criar/editar/excluir aqui nao deixava rastro nenhum.
+				auditLog.recordAuditLog({
+					action: "create",
+					module: "agendamentos",
+					entity: "agendamentos",
+					recordId: item?.id,
+					beforeData: null,
+					afterData: item,
+					changedFields: auditLog.calculateChangedFields(null, item),
+				});
 				res.json({ ok: true, id: item?.id, item });
 			} catch (error) {
 				next(error);
@@ -119,6 +132,18 @@ function createAgendamentosRouter({
 				assertRegionalRecordAccess(req.user, current);
 				const payload = scopeWritePayload(req.user, req.validated.body);
 				const item = await agendamentosRepository.updateAppointment(id, payload);
+				const changedFields = auditLog.calculateChangedFields(current, item);
+				if (changedFields.length) {
+					auditLog.recordAuditLog({
+						action: "update",
+						module: "agendamentos",
+						entity: "agendamentos",
+						recordId: id,
+						beforeData: current,
+						afterData: item,
+						changedFields,
+					});
+				}
 				res.json({ ok: true, id: item?.id || id, item });
 			} catch (error) {
 				next(error);
@@ -141,6 +166,15 @@ function createAgendamentosRouter({
 				}
 				assertRegionalRecordAccess(req.user, current);
 				const deleted = await agendamentosRepository.deleteAppointment(id);
+				auditLog.recordAuditLog({
+					action: "delete",
+					module: "agendamentos",
+					entity: "agendamentos",
+					recordId: id,
+					beforeData: current,
+					afterData: null,
+					changedFields: Object.keys(current || {}),
+				});
 				res.json({ ok: true, deleted });
 			} catch (error) {
 				next(error);
