@@ -802,15 +802,18 @@ async function getAppointment(id) {
 	return dataFromDocument(await getDocument(`${COLLECTIONS.appointments}/${text(id)}`));
 }
 
-async function saveAppointment(id, payload = {}) {
+async function saveAppointment(id, payload = {}, { client } = {}) {
 	const documentId = text(id || payload.id) || randomDocumentId("agendamento");
-	const saved = await upsertDocument({
-		path: `${COLLECTIONS.appointments}/${documentId}`,
-		collectionPath: COLLECTIONS.appointments,
-		documentId,
-		parentPath: null,
-		data: { ...payload, id: documentId },
-	});
+	const saved = await upsertDocument(
+		{
+			path: `${COLLECTIONS.appointments}/${documentId}`,
+			collectionPath: COLLECTIONS.appointments,
+			documentId,
+			parentPath: null,
+			data: { ...payload, id: documentId },
+		},
+		{ client },
+	);
 	return dataFromDocument(saved);
 }
 
@@ -853,15 +856,18 @@ async function listAllAppointmentLogs() {
 	);
 }
 
-async function recordAppointmentLog(payload = {}, { id } = {}) {
+async function recordAppointmentLog(payload = {}, { id, client } = {}) {
 	const documentId = text(id || payload.id) || randomDocumentId("agendamento_log");
-	const saved = await upsertDocument({
-		path: `${COLLECTIONS.appointmentLogs}/${documentId}`,
-		collectionPath: COLLECTIONS.appointmentLogs,
-		documentId,
-		parentPath: null,
-		data: { ...payload, id: documentId },
-	});
+	const saved = await upsertDocument(
+		{
+			path: `${COLLECTIONS.appointmentLogs}/${documentId}`,
+			collectionPath: COLLECTIONS.appointmentLogs,
+			documentId,
+			parentPath: null,
+			data: { ...payload, id: documentId },
+		},
+		{ client },
+	);
 	return dataFromDocument(saved);
 }
 
@@ -941,13 +947,21 @@ async function listAllDocuments(collectionPath, { limit } = {}) {
 	return result.rows.map(config.mapper);
 }
 
-async function getDocument(documentPath) {
+// `client` opcional (Fase F — docs/TECHNICAL-AUDIT.md, achado #9): quando
+// informado (um client de `db.connect()`, dentro de uma transacao), usa
+// ele em vez do pool `db` direto — permite que o chamador agrupe varias
+// escritas (ex.: agendamento + log) numa unica transacao. Sem `client`
+// (o caso de todos os ~20 outros callers existentes hoje), comportamento
+// identico a antes — nenhuma mudanca de contrato pra quem ja usa esta
+// funcao.
+async function getDocument(documentPath, { client } = {}) {
+	const runner = client || db;
 	const collectionPath = collectionFromPath(documentPath);
 	const config = tableConfig(collectionPath);
 	const documentId = documentIdFromPath(documentPath);
 	const hashedId = hashPath(documentPath);
 	const legacyPath = String(documentPath || "").trim();
-	const byLegacyPath = await db.query(
+	const byLegacyPath = await runner.query(
 		`select * from ${config.table} where legacy_path = $1 limit 1`,
 		[legacyPath],
 	);
@@ -955,7 +969,7 @@ async function getDocument(documentPath) {
 
 	const idCandidates = [...new Set([documentId, hashedId].filter(Boolean))];
 	for (const candidate of idCandidates) {
-		const byId = await db.query(
+		const byId = await runner.query(
 			`select * from ${config.table} where ${config.pk} = $1 limit 1`,
 			[candidate],
 		);
@@ -965,12 +979,13 @@ async function getDocument(documentPath) {
 	return null;
 }
 
-async function upsertDocument(record = {}) {
+async function upsertDocument(record = {}, { client } = {}) {
 	if (!isSchedulingCollection(record.collectionPath)) {
 		const error = new Error("Colecao de agendamentos invalida.");
 		error.statusCode = 400;
 		throw error;
 	}
+	const runner = client || db;
 	const config = tableConfig(record.collectionPath);
 	const columns = buildColumns(record, config.extractors);
 	if (record.collectionPath === COLLECTIONS.metrics) {
@@ -983,14 +998,14 @@ async function upsertDocument(record = {}) {
 	const updateColumns = columnNames.filter(
 		(column) => !["id", "mes", "created_at"].includes(column),
 	);
-	await db.query(
+	await runner.query(
 		`insert into ${config.table} (${columnNames.join(", ")})
 		 values (${placeholders.join(", ")})
 		 on conflict (${config.pk}) do update set
 		   ${updateColumns.map((column) => `${column} = excluded.${column}`).join(", ")}`,
 		columnNames.map((column) => sqlValue(columns[column])),
 	);
-	return getDocument(record.path || `${record.collectionPath}/${record.documentId}`);
+	return getDocument(record.path || `${record.collectionPath}/${record.documentId}`, { client });
 }
 
 async function deleteDocument(documentPath) {

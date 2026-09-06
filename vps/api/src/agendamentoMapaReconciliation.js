@@ -1,3 +1,4 @@
+const db = require("./db");
 const agendamentosRepository = require("./agendamentosRepository");
 const documents = require("./documents");
 const notifications = require("./notificationsService");
@@ -206,8 +207,8 @@ async function notifyNotCollected({ appointment, documentId, match, user }) {
 	});
 }
 
-async function updateAppointment(record, nextData) {
-	await agendamentosRepository.saveAppointment(record.documentId, nextData);
+async function updateAppointment(record, nextData, { client } = {}) {
+	await agendamentosRepository.saveAppointment(record.documentId, nextData, { client });
 }
 
 async function clearPreviousReconciliationLogs() {
@@ -221,6 +222,7 @@ async function saveReconciliationLog({
 	match,
 	reason,
 	checkedAt,
+	client,
 }) {
 	const id = `mapa_${checkedAt.replace(/\D/g, "")}_${record.documentId}`;
 	await agendamentosRepository.recordAppointmentLog(
@@ -256,7 +258,7 @@ async function saveReconciliationLog({
 			]),
 			criado_em: checkedAt,
 		},
-		{ id },
+		{ id, client },
 	);
 }
 
@@ -328,15 +330,31 @@ async function reconcileAppointmentsWithMapa({
 			summary.recolhidos += 1;
 		}
 
-		await updateAppointment(record, nextData);
-		await saveReconciliationLog({
-			record,
-			before: data,
-			after: nextData,
-			match,
-			reason,
-			checkedAt,
-		});
+		// Fase F (docs/TECHNICAL-AUDIT.md, achado #9): atualizar o
+		// agendamento e gravar o log da reconciliacao agora sao atomicos —
+		// antes eram duas escritas separadas sem transacao; se o processo
+		// falhasse entre as duas, o agendamento ficava com o status novo mas
+		// sem o log correspondente daquela verificacao.
+		const client = await db.connect();
+		try {
+			await client.query("begin");
+			await updateAppointment(record, nextData, { client });
+			await saveReconciliationLog({
+				record,
+				before: data,
+				after: nextData,
+				match,
+				reason,
+				checkedAt,
+				client,
+			});
+			await client.query("commit");
+		} catch (error) {
+			await client.query("rollback").catch(() => {});
+			throw error;
+		} finally {
+			client.release();
+		}
 		if (match.matched)
 			await notifyNotCollected({
 				appointment: nextData,
