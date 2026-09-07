@@ -82,6 +82,7 @@ export default function CityTable({ cidades = [], onCityClick }) {
 								<td data-label="Status">{statusPill(c.pct)}</td>
 								<td data-label="Relatório">
 									<button
+										type="button"
 										className="btn-city-pdf"
 										onClick={(e) => {
 											e.stopPropagation();

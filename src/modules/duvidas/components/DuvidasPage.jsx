@@ -8,7 +8,7 @@
 	Trash2,
 	Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import InternalStaticDataStatus from "../../../components/ui/InternalStaticDataStatus";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
@@ -73,6 +73,9 @@ function BaseModal({ title, children, onClose }) {
 
 function DuvidaModal({ initialValue, onClose, onSave, saving }) {
 	const [form, setForm] = useState(initialValue || EMPTY_DUVIDA);
+	const perguntaInputId = useId();
+	const categoriaInputId = useId();
+	const respostaInputId = useId();
 
 	const update = (field, value) =>
 		setForm((current) => ({ ...current, [field]: value }));
@@ -84,20 +87,28 @@ function DuvidaModal({ initialValue, onClose, onSave, saving }) {
 		>
 			<div className="space-y-4">
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={perguntaInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Pergunta
 					</label>
 					<input
+						id={perguntaInputId}
 						value={form.pergunta}
 						onChange={(e) => update("pergunta", e.target.value)}
 						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
 					/>
 				</div>
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={categoriaInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Categoria
 					</label>
 					<input
+						id={categoriaInputId}
 						value={form.categoria}
 						onChange={(e) => update("categoria", e.target.value)}
 						placeholder="Ex.: Agendamento, Loja, Backoffice"
@@ -105,10 +116,14 @@ function DuvidaModal({ initialValue, onClose, onSave, saving }) {
 					/>
 				</div>
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={respostaInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Resposta
 					</label>
 					<textarea
+						id={respostaInputId}
 						value={form.resposta}
 						onChange={(e) => update("resposta", e.target.value)}
 						rows={6}
@@ -139,6 +154,11 @@ function DuvidaModal({ initialValue, onClose, onSave, saving }) {
 
 function ContatoModal({ initialValue, onClose, onSave, saving }) {
 	const [form, setForm] = useState(initialValue || EMPTY_CONTATO);
+	const grupoInputId = useId();
+	const nomeInputId = useId();
+	const cargoInputId = useId();
+	const telefoneInputId = useId();
+	const observacaoInputId = useId();
 
 	const update = (field, value) =>
 		setForm((current) => ({ ...current, [field]: value }));
@@ -150,10 +170,14 @@ function ContatoModal({ initialValue, onClose, onSave, saving }) {
 		>
 			<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={grupoInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Grupo
 					</label>
 					<select
+						id={grupoInputId}
 						value={form.grupo}
 						onChange={(e) => update("grupo", e.target.value)}
 						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
@@ -166,30 +190,42 @@ function ContatoModal({ initialValue, onClose, onSave, saving }) {
 					</select>
 				</div>
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={nomeInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Nome
 					</label>
 					<input
+						id={nomeInputId}
 						value={form.nome}
 						onChange={(e) => update("nome", e.target.value)}
 						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
 					/>
 				</div>
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={cargoInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Cargo
 					</label>
 					<input
+						id={cargoInputId}
 						value={form.cargo}
 						onChange={(e) => update("cargo", e.target.value)}
 						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
 					/>
 				</div>
 				<div>
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={telefoneInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Telefone corporativo
 					</label>
 					<input
+						id={telefoneInputId}
 						value={form.telefone}
 						onChange={(e) => update("telefone", e.target.value)}
 						placeholder="(31) 99999-9999"
@@ -197,10 +233,14 @@ function ContatoModal({ initialValue, onClose, onSave, saving }) {
 					/>
 				</div>
 				<div className="md:col-span-2">
-					<label className="mb-1 block text-xs font-semibold text-gray-600">
+					<label
+						htmlFor={observacaoInputId}
+						className="mb-1 block text-xs font-semibold text-gray-600"
+					>
 						Observação
 					</label>
 					<textarea
+						id={observacaoInputId}
 						value={form.observacao}
 						onChange={(e) => update("observacao", e.target.value)}
 						rows={4}

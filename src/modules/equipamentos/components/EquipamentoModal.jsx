@@ -1,5 +1,5 @@
 ﻿import { Package, X } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useColaboradores } from "../../colaboradores/hooks/useColaboradores";
 import {
 	STATUS_EQUIPAMENTO,
@@ -23,6 +23,12 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 	const editando = !!equipamento;
 	const [form, setForm] = useState(() => buildInitialForm(equipamento));
 	const [saving, setSaving] = useState(false);
+	const tipoInputId = useId();
+	const statusInputId = useId();
+	const modeloInputId = useId();
+	const patrimonioInputId = useId();
+	const responsavelInputId = useId();
+	const observacaoInputId = useId();
 
 	const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
@@ -47,6 +53,7 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 						</h3>
 					</div>
 					<button
+						type="button"
 						onClick={onClose}
 						className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
 					>
@@ -57,10 +64,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 				<div className="px-6 py-5 space-y-4">
 					<div className="grid grid-cols-2 gap-3">
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={tipoInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Tipo *
 							</label>
 							<select
+								id={tipoInputId}
 								value={form.tipo}
 								onChange={(e) => set("tipo", e.target.value)}
 								className="input-field"
@@ -74,10 +85,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 							</select>
 						</div>
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={statusInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Status *
 							</label>
 							<select
+								id={statusInputId}
 								value={form.status}
 								onChange={(e) => set("status", e.target.value)}
 								className="input-field"
@@ -92,10 +107,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={modeloInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Modelo *
 						</label>
 						<input
+							id={modeloInputId}
 							type="text"
 							value={form.modelo}
 							onChange={(e) => set("modelo", e.target.value)}
@@ -105,10 +124,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={patrimonioInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Patrimonio
 						</label>
 						<input
+							id={patrimonioInputId}
 							type="text"
 							value={form.patrimonio}
 							onChange={(e) => set("patrimonio", e.target.value)}
@@ -118,10 +141,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={responsavelInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Responsavel
 						</label>
 						<select
+							id={responsavelInputId}
 							value={form.responsavel}
 							onChange={(e) => set("responsavel", e.target.value)}
 							className="input-field"
@@ -136,10 +163,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={observacaoInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Observacao (opcional)
 						</label>
 						<textarea
+							id={observacaoInputId}
 							value={form.observacao}
 							onChange={(e) => set("observacao", e.target.value)}
 							rows={2}
@@ -151,12 +182,14 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 
 				<div className="flex gap-3 px-6 pb-5">
 					<button
+						type="button"
 						onClick={onClose}
 						className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 					>
 						Cancelar
 					</button>
 					<button
+						type="button"
 						onClick={handleSalvar}
 						disabled={saving || !form.tipo || !form.modelo}
 						className="flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed"

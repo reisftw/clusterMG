@@ -1,5 +1,5 @@
 ﻿import { Eye, EyeOff, KeyRound } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useAuthContext } from "../../../context/AuthContext";
 import { atualizarPerfilVps, trocarSenha } from "../services/authService";
 
@@ -12,6 +12,9 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 	const [showNova, setShowNova] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [erro, setErro] = useState("");
+	const senhaAtualInputId = useId();
+	const novaSenhaInputId = useId();
+	const confirmarSenhaInputId = useId();
 
 	const inputClass =
 		"w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10";
@@ -83,11 +86,15 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 
 				<div className="space-y-3">
 					<div>
-						<label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+						<label
+							htmlFor={senhaAtualInputId}
+							className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
+						>
 							Senha atual
 						</label>
 						<div className="relative">
 							<input
+								id={senhaAtualInputId}
 								type={showAtual ? "text" : "password"}
 								value={senhaAtual}
 								onChange={(event) => setSenhaAtual(event.target.value)}
@@ -105,11 +112,15 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+						<label
+							htmlFor={novaSenhaInputId}
+							className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
+						>
 							Nova senha
 						</label>
 						<div className="relative">
 							<input
+								id={novaSenhaInputId}
 								type={showNova ? "text" : "password"}
 								value={novaSenha}
 								onChange={(event) => setNovaSenha(event.target.value)}
@@ -127,10 +138,14 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+						<label
+							htmlFor={confirmarSenhaInputId}
+							className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
+						>
 							Confirmar nova senha
 						</label>
 						<input
+							id={confirmarSenhaInputId}
 							type="password"
 							value={confirmar}
 							onChange={(event) => setConfirmar(event.target.value)}
@@ -143,6 +158,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 				<div className="flex gap-3 pt-1">
 					{!obrigatorio ? (
 						<button
+							type="button"
 							onClick={onClose}
 							className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm"
 						>
@@ -150,6 +166,7 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 						</button>
 					) : null}
 					<button
+						type="button"
 						onClick={handleSalvar}
 						disabled={saving}
 						className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-60 text-sm"

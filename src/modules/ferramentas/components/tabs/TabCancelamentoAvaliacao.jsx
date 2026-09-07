@@ -673,6 +673,7 @@ const TabCancelamentoAvaliacao = () => {
 					</div>
 
 					<button
+						type="button"
 						onClick={gerar}
 						className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
 					>

@@ -9,7 +9,7 @@ import {
 	Server,
 	ShieldCheck,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
@@ -435,6 +435,7 @@ const MensageriaApiPage = () => {
 		hasPermission(currentUser, "manage_mensageria");
 	const [config, setConfig] = useState({});
 	const [status, setStatus] = useState(null);
+	const guidedScheduleToggleId = useId();
 	const [qr, setQr] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -885,8 +886,12 @@ const MensageriaApiPage = () => {
 					WhatsApp.
 				</p>
 				<div className="mt-5 grid gap-4 lg:grid-cols-2">
-					<label className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4 lg:col-span-2">
+					<label
+						htmlFor={guidedScheduleToggleId}
+						className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4 lg:col-span-2"
+					>
 						<input
+							id={guidedScheduleToggleId}
 							type="checkbox"
 							checked={config.guidedScheduleEnabled !== false}
 							onChange={(event) =>

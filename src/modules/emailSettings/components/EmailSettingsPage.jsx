@@ -9,7 +9,7 @@ import {
 	ShieldCheck,
 	XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
 	buscarConfigEmailSistema,
 	DEFAULT_EMAIL_CONFIG,
@@ -45,6 +45,7 @@ const EmailSettingsPage = () => {
 	const [config, setConfig] = useState(DEFAULT_EMAIL_CONFIG);
 	const [testTo, setTestTo] = useState("administracao@retiradas.tech");
 	const [loading, setLoading] = useState(true);
+	const mfaEmailToggleId = useId();
 	const [saving, setSaving] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [feedback, setFeedback] = useState("");
@@ -551,8 +552,12 @@ const EmailSettingsPage = () => {
 								MFA por e-mail
 							</h2>
 							<div className="mt-5 grid gap-4 md:grid-cols-2">
-								<label className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3">
+								<label
+									htmlFor={mfaEmailToggleId}
+									className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-3"
+								>
 									<input
+										id={mfaEmailToggleId}
 										type="checkbox"
 										checked={Boolean(config.mfaEmailEnabled)}
 										onChange={(e) =>

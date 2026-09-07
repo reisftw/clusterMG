@@ -163,6 +163,7 @@ const MetasAuditoria = () => {
 				<div className="flex gap-1 flex-wrap">
 					{FILTROS.map((f) => (
 						<button
+							type="button"
 							key={f.id}
 							onClick={() => setFiltro(f.id)}
 							className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -191,6 +192,7 @@ const MetasAuditoria = () => {
 				</div>
 
 				<button
+					type="button"
 					onClick={carregar}
 					className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
 				>
@@ -266,6 +268,7 @@ const MetasAuditoria = () => {
 									</td>
 									<td className="px-3 py-2.5 text-center">
 										<button
+											type="button"
 											onClick={() => setCidadeSel(c)}
 											className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition-colors"
 											title="Gerar relatorio"

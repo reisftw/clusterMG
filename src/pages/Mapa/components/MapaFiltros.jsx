@@ -28,6 +28,7 @@ export default function MapaFiltros({
 					<div className="flex min-w-0 flex-1 gap-1 overflow-x-auto sm:flex-none">
 						{OPCOES.map((op) => (
 							<button
+								type="button"
 								key={op.value}
 								onClick={() => setFiltroData(op.value)}
 								className={`shrink-0 rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
@@ -58,6 +59,7 @@ export default function MapaFiltros({
 				</div>
 
 				<button
+					type="button"
 					onClick={() => setMapaAberto(true)}
 					disabled={disableMapa}
 					className={`flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold shadow-sm transition-all ${

@@ -8,7 +8,7 @@ import {
 	UserCheck,
 	X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import UserAvatar from "../../../components/ui/UserAvatar";
 import {
@@ -106,6 +106,11 @@ const EditarUsuarioModal = ({
 	const [erro, setErro] = useState("");
 	const [loadingLink, setLoadingLink] = useState(false);
 	const [senhaPrimeiroAcesso, setSenhaPrimeiroAcesso] = useState("");
+	const nomeInputId = useId();
+	const emailInputId = useId();
+	const roleInputId = useId();
+	const regionalInputId = useId();
+	const empresaInputId = useId();
 
 	const handleAvatarUpload = async (event) => {
 		const file = event.target.files?.[0];
@@ -329,7 +334,7 @@ const EditarUsuarioModal = ({
 					<div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
 						<div className="grid gap-4 lg:grid-cols-2">
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={nomeInputId} className={labelClass}>
 									<span className={labelIconClass}>
 										<User size={18} />
 									</span>
@@ -338,6 +343,7 @@ const EditarUsuarioModal = ({
 									</span>
 								</label>
 								<input
+									id={nomeInputId}
 									type="text"
 									value={form.nome}
 									onChange={(event) => set("nome", event.target.value)}
@@ -347,13 +353,14 @@ const EditarUsuarioModal = ({
 							</div>
 
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={emailInputId} className={labelClass}>
 									<span className={labelIconClass}>
 										<Mail size={18} />
 									</span>
 									<span>E-mail</span>
 								</label>
 								<input
+									id={emailInputId}
 									type="email"
 									value={form.email}
 									onChange={(event) => set("email", event.target.value)}
@@ -368,7 +375,7 @@ const EditarUsuarioModal = ({
 
 						<div className="mt-5 grid gap-4 lg:grid-cols-2">
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={roleInputId} className={labelClass}>
 									<span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
 										<ShieldCheck size={18} />
 									</span>
@@ -377,6 +384,7 @@ const EditarUsuarioModal = ({
 									</span>
 								</label>
 								<select
+									id={roleInputId}
 									value={form.role}
 									onChange={(event) => handleRoleChange(event.target.value)}
 									className={fieldClass}
@@ -391,13 +399,14 @@ const EditarUsuarioModal = ({
 							</div>
 
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={regionalInputId} className={labelClass}>
 									<span className={labelIconClass}>
 										<MapPin size={18} />
 									</span>
 									<span>Regional</span>
 								</label>
 								<select
+									id={regionalInputId}
 									value={form.regional}
 									onChange={(event) => set("regional", event.target.value)}
 									className={fieldClass}
@@ -429,7 +438,7 @@ const EditarUsuarioModal = ({
 
 						{requiresEmpresa(form.role) ? (
 							<div className="mt-5">
-								<label className={labelClass}>
+								<label htmlFor={empresaInputId} className={labelClass}>
 									<span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
 										<UserCheck size={18} />
 									</span>
@@ -438,6 +447,7 @@ const EditarUsuarioModal = ({
 									</span>
 								</label>
 								<select
+									id={empresaInputId}
 									value={form.empresaId}
 									onChange={(event) => handleEmpresaChange(event.target.value)}
 									className={fieldClass}
@@ -495,6 +505,7 @@ const EditarUsuarioModal = ({
 
 					<div className="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
 						<button
+							type="button"
 							onClick={onClose}
 							className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-6 text-sm font-extrabold text-slate-700 transition hover:bg-slate-200"
 						>
@@ -502,6 +513,7 @@ const EditarUsuarioModal = ({
 							Cancelar
 						</button>
 						<button
+							type="button"
 							onClick={handleSalvar}
 							disabled={saving}
 							className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-60"

@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { FileDown } from "lucide-react";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import RetorninhoLoader from "../../../../components/ui/RetorninhoLoader";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
@@ -20,6 +20,8 @@ const TabDevolucoesMes = () => {
 	const [fname, setFname] = useState("");
 	const [de, setDe] = useState("");
 	const [ate, setAte] = useState("");
+	const dataInicioInputId = useId();
+	const dataFimInputId = useId();
 	const inputRef = useRef();
 
 	const cidMap = buildCidadeRegionalMap(regionais, (r, c) => ({
@@ -405,10 +407,14 @@ const TabDevolucoesMes = () => {
 			{rows.length > 0 && (
 				<div className="flex flex-wrap gap-3 items-end">
 					<div>
-						<label className="block text-xs text-gray-500 font-medium mb-1">
+						<label
+							htmlFor={dataInicioInputId}
+							className="block text-xs text-gray-500 font-medium mb-1"
+						>
 							Data Inicio
 						</label>
 						<input
+							id={dataInicioInputId}
 							type="date"
 							value={de}
 							onChange={(e) => setDe(e.target.value)}
@@ -416,10 +422,14 @@ const TabDevolucoesMes = () => {
 						/>
 					</div>
 					<div>
-						<label className="block text-xs text-gray-500 font-medium mb-1">
+						<label
+							htmlFor={dataFimInputId}
+							className="block text-xs text-gray-500 font-medium mb-1"
+						>
 							Data Fim
 						</label>
 						<input
+							id={dataFimInputId}
 							type="date"
 							value={ate}
 							onChange={(e) => setAte(e.target.value)}
@@ -432,6 +442,7 @@ const TabDevolucoesMes = () => {
 			{/* Botao gerar */}
 			{rows.length > 0 && de && ate && (
 				<button
+					type="button"
 					onClick={gerar}
 					className="flex items-center gap-2 px-5 py-2.5 bg-blue-800 text-white rounded-xl font-semibold hover:bg-blue-900 transition-colors"
 				>

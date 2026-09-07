@@ -2280,6 +2280,11 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 
 						{imoveis.map((item) => {
 							const checked = deleteSelection.includes(item.id);
+							// S-C (docs/SONARQUBE-MAP.md, achado javascript:S6853): o
+							// checkbox e filho direto do label (associacao implicita
+							// valida por wrapping) — nao usar id/htmlFor estatico aqui,
+							// pois isso e uma lista (.map) e geraria ids duplicados no
+							// DOM entre os itens.
 							return (
 								<label
 									key={item.id}

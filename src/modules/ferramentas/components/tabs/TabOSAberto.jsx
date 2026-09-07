@@ -383,6 +383,7 @@ const TabOSAberto = () => {
 			{/* Botao confrontar */}
 			{atRows.length > 0 && osRows.length > 0 && (
 				<button
+					type="button"
 					onClick={confrontar}
 					className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors"
 				>
@@ -437,6 +438,7 @@ const TabOSAberto = () => {
 			{/* Botao gerar */}
 			{resultado?.length > 0 && (
 				<button
+					type="button"
 					onClick={gerar}
 					className="flex items-center gap-2 px-5 py-2.5 bg-red-700 text-white rounded-xl font-semibold hover:bg-red-800 transition-colors"
 				>

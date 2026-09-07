@@ -92,6 +92,7 @@ function AgenteCard({ cidade, data, maxTotal, alertaThreshold, onDrillDown }) {
 						{total} O.S
 					</span>
 					<button
+						type="button"
 						onClick={(e) => {
 							e.stopPropagation();
 							navigator.clipboard.writeText(

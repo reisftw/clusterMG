@@ -57,6 +57,7 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 						<div className={`status-big ${statusCls()}`}>{statusLabel()}</div>
 					</div>
 					<button className="city-modal-close" onClick={onClose}>
+						type="button"
 						✕
 					</button>
 				</div>
@@ -156,9 +157,11 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 					{/* Acoes */}
 					<div className="city-modal-actions">
 						<button className="btn-fechar-modal" onClick={onClose}>
+							type="button"
 							Fechar
 						</button>
 						<button
+							type="button"
 							className="btn-gerar-pdf"
 							style={{ background: "var(--blue)" }}
 							onClick={() => gerarRelatorio3Meses(cidade.nome, month, allData)}
@@ -166,6 +169,7 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 							📊 Relatório 3 Meses
 						</button>
 						<button
+							type="button"
 							className="btn-gerar-pdf"
 							onClick={() => gerarPDFCidade(cidade.nome, month, allData)}
 						>

@@ -12,6 +12,7 @@ const CopyBtn = ({ value }) => {
 	};
 	return (
 		<button
+			type="button"
 			onClick={copy}
 			className="ml-1 p-1 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors shrink-0"
 		>

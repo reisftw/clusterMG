@@ -491,6 +491,7 @@ const TabCancelamento = () => {
 			{/* Botao */}
 			{canOk && (
 				<button
+					type="button"
 					onClick={gerar}
 					className="flex items-center gap-2 px-5 py-2.5 bg-red-700 text-white rounded-xl font-semibold hover:bg-red-800 transition-colors"
 				>

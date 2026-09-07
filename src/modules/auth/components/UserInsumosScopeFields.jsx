@@ -1,4 +1,5 @@
 import { MapPin, ShieldCheck } from "lucide-react";
+import { useId } from "react";
 
 const findBaseByNameOrId = (bases = [], value = "") =>
 	bases.find(
@@ -37,18 +38,20 @@ export default function UserInsumosScopeFields({
 	};
 
 	const categorias = insumosConfig.categorias || [];
+	const baseInputId = useId();
 
 	return (
 		<div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
 			<div className="grid gap-4 lg:grid-cols-2">
 				<div>
-					<label className={labelClass}>
+					<label htmlFor={baseInputId} className={labelClass}>
 						<span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
 							<MapPin size={18} />
 						</span>
 						<span>Base/Cidade de insumos</span>
 					</label>
 					<input
+						id={baseInputId}
 						list={datalistId}
 						value={form.insumosBaseNome}
 						onChange={(event) => handleBaseChange(event.target.value)}

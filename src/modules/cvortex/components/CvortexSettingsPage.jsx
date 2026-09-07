@@ -10,7 +10,7 @@ import {
 	TestTube2,
 	Webhook,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { secureRandomHex } from "../../../utils/secureRandom";
 import {
@@ -183,6 +183,8 @@ export default function CvortexSettingsPage() {
 	const [saving, setSaving] = useState(false);
 	const [testing, setTesting] = useState(false);
 	const [associating, setAssociating] = useState(false);
+	const enabledToggleId = useId();
+	const useForMessagingToggleId = useId();
 	const [sendingTest, setSendingTest] = useState(false);
 	const [feedback, setFeedback] = useState("");
 	const [error, setError] = useState("");
@@ -434,8 +436,12 @@ export default function CvortexSettingsPage() {
 				</div>
 
 				<div className="mt-5 grid gap-4 lg:grid-cols-2">
-					<label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+					<label
+						htmlFor={enabledToggleId}
+						className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+					>
 						<input
+							id={enabledToggleId}
 							type="checkbox"
 							checked={config.enabled}
 							onChange={(event) =>
@@ -452,8 +458,12 @@ export default function CvortexSettingsPage() {
 							</span>
 						</span>
 					</label>
-					<label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+					<label
+						htmlFor={useForMessagingToggleId}
+						className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"
+					>
 						<input
+							id={useForMessagingToggleId}
 							type="checkbox"
 							checked={config.useCvortexForMessaging}
 							readOnly

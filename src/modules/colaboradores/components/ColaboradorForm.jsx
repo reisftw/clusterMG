@@ -1,5 +1,5 @@
 ﻿import { UserPlus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 
 const CARGOS = [
@@ -37,26 +37,36 @@ const Field = ({
 	onChange,
 	type = "text",
 	placeholder = "",
-}) => (
-	<div>
-		<label className="block text-xs font-semibold text-gray-600 mb-1.5">
-			{label}
-		</label>
-		<input
-			type={type}
-			name={name}
-			value={value}
-			onChange={onChange}
-			placeholder={placeholder}
-			className="input-field"
-		/>
-	</div>
-);
+}) => {
+	const inputId = useId();
+	return (
+		<div>
+			<label
+				htmlFor={inputId}
+				className="block text-xs font-semibold text-gray-600 mb-1.5"
+			>
+				{label}
+			</label>
+			<input
+				id={inputId}
+				type={type}
+				name={name}
+				value={value}
+				onChange={onChange}
+				placeholder={placeholder}
+				className="input-field"
+			/>
+		</div>
+	);
+};
 
 const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 	const [form, setForm] = useState(inicial ?? CAMPOS_INICIAIS);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [erro, setErro] = useState("");
+	const cargoInputId = useId();
+	const statusInputId = useId();
+	const motivoInputId = useId();
 
 	useEffect(() => {
 		setForm(inicial ?? CAMPOS_INICIAIS);
@@ -113,6 +123,7 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 						</h3>
 					</div>
 					<button
+						type="button"
 						onClick={onClose}
 						className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
 					>
@@ -140,10 +151,14 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 									/>
 								</div>
 								<div>
-									<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+									<label
+										htmlFor={cargoInputId}
+										className="block text-xs font-semibold text-gray-600 mb-1.5"
+									>
 										Cargo *
 									</label>
 									<select
+										id={cargoInputId}
 										name="cargo"
 										value={form.cargo}
 										onChange={handle}
@@ -158,10 +173,14 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 									</select>
 								</div>
 								<div>
-									<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+									<label
+										htmlFor={statusInputId}
+										className="block text-xs font-semibold text-gray-600 mb-1.5"
+									>
 										Status
 									</label>
 									<select
+										id={statusInputId}
 										name="status"
 										value={form.status}
 										onChange={handle}
@@ -266,10 +285,14 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 										type="date"
 									/>
 									<div className="sm:col-span-2">
-										<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+										<label
+											htmlFor={motivoInputId}
+											className="block text-xs font-semibold text-gray-600 mb-1.5"
+										>
 											Motivo
 										</label>
 										<textarea
+											id={motivoInputId}
 											name="motivo_desligamento"
 											value={form.motivo_desligamento}
 											onChange={handle}

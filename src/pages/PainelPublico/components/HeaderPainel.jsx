@@ -103,6 +103,7 @@ export default function HeaderPainel({
 			<div className="header-right">
 				<div className="painel-tabs">
 					<button
+						type="button"
 						className={`painel-tab ${activeTab === "retiradas" ? "active" : ""}`}
 						onClick={() => window.location.assign(ROUTES.PAINEL_PUBLICO)}
 					>
@@ -110,6 +111,7 @@ export default function HeaderPainel({
 						Visão geral
 					</button>
 					<button
+						type="button"
 						className={`painel-tab ${activeTab === "agentes" ? "active" : ""}`}
 						onClick={() => window.location.assign(ROUTES.PAINEL_AGENTES)}
 					>
@@ -122,6 +124,7 @@ export default function HeaderPainel({
 						className="public-install-btn public-header-btn"
 					/>
 					<button
+						type="button"
 						className={`painel-tab ${activeTab === "mapa" ? "active" : ""}`}
 						onClick={() => window.location.assign(ROUTES.PAINEL_MAPA)}
 					>
@@ -129,6 +132,7 @@ export default function HeaderPainel({
 						Mapa de O.S.
 					</button>
 					<button
+						type="button"
 						className={`painel-tab ${activeTab === "match" ? "active" : ""}`}
 						onClick={() => window.location.assign(ROUTES.PAINEL_MATCH)}
 					>

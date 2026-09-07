@@ -11,7 +11,7 @@ import {
 	X,
 	XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { useAuthContext } from "../../../context/AuthContext";
 import {
@@ -314,6 +314,9 @@ function RequestModal({
 	onSubmit,
 	onChange,
 }) {
+	const produtoInputId = useId();
+	const quantidadeInputId = useId();
+	const observacaoInputId = useId();
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm">
 			<form
@@ -344,8 +347,11 @@ function RequestModal({
 				</div>
 				<div className="space-y-4 p-6">
 					<div>
-						<label className="form-label">Item</label>
+						<label htmlFor={produtoInputId} className="form-label">
+							Item
+						</label>
 						<select
+							id={produtoInputId}
 							value={form.produto_id}
 							onChange={(event) =>
 								onChange((current) => ({
@@ -373,8 +379,11 @@ function RequestModal({
 					</div>
 
 					<div>
-						<label className="form-label">Quantidade</label>
+						<label htmlFor={quantidadeInputId} className="form-label">
+							Quantidade
+						</label>
 						<input
+							id={quantidadeInputId}
 							type="number"
 							min="1"
 							max={
@@ -395,8 +404,11 @@ function RequestModal({
 					</div>
 
 					<div>
-						<label className="form-label">Observação</label>
+						<label htmlFor={observacaoInputId} className="form-label">
+							Observação
+						</label>
 						<textarea
+							id={observacaoInputId}
 							value={form.observacao}
 							onChange={(event) =>
 								onChange((current) => ({

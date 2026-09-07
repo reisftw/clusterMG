@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 import {
 	buscarRegrasAtivas,
@@ -10,6 +10,7 @@ const RegrasConfig = () => {
 	const [regras, setRegras] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [riscoMeta, setRiscoMeta] = useState(0);
+	const riscoMetaInputId = useId();
 
 	useEffect(() => {
 		carregarRegras();
@@ -69,11 +70,15 @@ const RegrasConfig = () => {
 
 			{/* Meta de Risco */}
 			<div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-				<label className="block text-sm font-medium text-gray-700 mb-3">
+				<label
+					htmlFor={riscoMetaInputId}
+					className="block text-sm font-medium text-gray-700 mb-3"
+				>
 					Meta de Risco (%)
 				</label>
 				<div className="flex items-center gap-4">
 					<input
+						id={riscoMetaInputId}
 						type="range"
 						min="0"
 						max="20"
@@ -86,6 +91,7 @@ const RegrasConfig = () => {
 						{riscoMeta}%
 					</span>
 					<button
+						type="button"
 						onClick={salvarRiscoMeta}
 						className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-xl font-medium hover:bg-blue-700 ml-auto"
 					>
@@ -115,6 +121,7 @@ const RegrasConfig = () => {
 										<p className="text-sm text-gray-500">{regra.descricao}</p>
 									</div>
 									<button
+										type="button"
 										onClick={() => handleToggle(regra.id)}
 										className={`w-11 h-6 rounded-full transition-all relative ${
 											regra.ativa ? "bg-green-600 shadow-sm" : "bg-gray-200"

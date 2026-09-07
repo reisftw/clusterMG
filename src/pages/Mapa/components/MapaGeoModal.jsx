@@ -152,6 +152,7 @@ export default function MapaGeoModal({ ordens, onClose }) {
 						)}
 					</div>
 					<button
+						type="button"
 						onClick={onClose}
 						className="p-1 rounded-lg hover:bg-gray-200 transition-colors"
 					>

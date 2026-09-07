@@ -83,6 +83,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
 					</div>
 					<div className="flex items-center gap-1">
 						<button
+							type="button"
 							onClick={copiar}
 							className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 							title="Copiar dados"
@@ -95,6 +96,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
 						</button>
 						{onEditar && (
 							<button
+								type="button"
 								onClick={onEditar}
 								className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-orange-50 hover:text-orange-500"
 								title="Editar"
@@ -103,6 +105,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
 							</button>
 						)}
 						<button
+							type="button"
 							onClick={onClose}
 							className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
 						>
@@ -175,6 +178,7 @@ const ColaboradorDetalheModal = ({ colaborador: c, onClose, onEditar }) => {
 
 				<div className="px-6 py-4 border-t border-gray-100">
 					<button
+						type="button"
 						onClick={onClose}
 						className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 					>

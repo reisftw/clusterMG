@@ -7,7 +7,7 @@ import {
 	Trash2,
 	Volume2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission, ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
@@ -81,6 +81,7 @@ export default function ConfiguracoesGeraisPage() {
 	const [saving, setSaving] = useState(false);
 	const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
 	const [message, setMessage] = useState("");
+	const quietHoursToggleId = useId();
 	const isFinanHost =
 		typeof window !== "undefined" && /^finan\./i.test(window.location.hostname);
 	const welcomeModalEvent = isFinanHost
@@ -445,7 +446,10 @@ export default function ConfiguracoesGeraisPage() {
 				</div>
 
 				<div className="mt-5 grid gap-3 md:grid-cols-[1fr_160px_160px]">
-					<label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4">
+					<label
+						htmlFor={quietHoursToggleId}
+						className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4"
+					>
 						<span>
 							<span className="block text-sm font-black text-slate-950">
 								Ativar horário silencioso
@@ -455,6 +459,7 @@ export default function ConfiguracoesGeraisPage() {
 							</span>
 						</span>
 						<input
+							id={quietHoursToggleId}
 							type="checkbox"
 							checked={Boolean(preferences.quietHours?.enabled)}
 							onChange={(event) =>

@@ -7,7 +7,7 @@ import {
 	UserRound,
 	Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
 	exportAgentesPdf,
 	exportAgentesXlsx,
@@ -187,6 +187,7 @@ function ReportCard({
 export default function RelatoriosPublicoPage() {
 	const [month, setMonth] = useState(() => obterMesAtual() || "Janeiro");
 	const [activeLoading, setActiveLoading] = useState("");
+	const mesInputId = useId();
 	const retiradas = useRetiradas(true);
 	const agentes = useAgentes(true);
 	const match = useMatchPublico({ detail: true });
@@ -290,10 +291,14 @@ export default function RelatoriosPublicoPage() {
 							</div>
 
 							<div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-								<label className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+								<label
+									htmlFor={mesInputId}
+									className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400"
+								>
 									Mês base
 								</label>
 								<select
+									id={mesInputId}
 									value={month}
 									onChange={(event) => setMonth(event.target.value)}
 									className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400"

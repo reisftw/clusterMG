@@ -8,7 +8,7 @@ import {
 	Target,
 	TrendingUp,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { addClusterLogo } from "../../../utils/pdfBranding";
 import { buscarDadosRelatorioMensageria } from "../services/mensageriaService";
 
@@ -596,6 +596,10 @@ async function exportPdf({ summary, periodLabel }) {
 export default function MensageriaRelatoriosPage() {
 	const [loading, setLoading] = useState(true);
 	const [feedback, setFeedback] = useState("");
+	const periodoInputId = useId();
+	const mesInputId = useId();
+	const semestreInputId = useId();
+	const anoInputId = useId();
 	const [data, setData] = useState({
 		historico: [],
 		callbacks: [],
@@ -672,10 +676,12 @@ export default function MensageriaRelatoriosPage() {
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
 						<button onClick={load} className="btn-secondary" disabled={loading}>
+							type="button"
 							<RefreshCw size={16} className={loading ? "animate-spin" : ""} />{" "}
 							Atualizar
 						</button>
 						<button
+							type="button"
 							onClick={() => exportPdf({ summary, periodLabel: bounds.label })}
 							className="btn-primary"
 							disabled={loading || !summary.totalMessages}
@@ -689,10 +695,14 @@ export default function MensageriaRelatoriosPage() {
 			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 				<div className="grid gap-3 md:grid-cols-4">
 					<div>
-						<label className="mb-1 block text-xs font-black uppercase text-slate-500">
+						<label
+							htmlFor={periodoInputId}
+							className="mb-1 block text-xs font-black uppercase text-slate-500"
+						>
 							Período
 						</label>
 						<select
+							id={periodoInputId}
 							className="input-field"
 							value={periodType}
 							onChange={(event) => setPeriodType(event.target.value)}
@@ -704,10 +714,14 @@ export default function MensageriaRelatoriosPage() {
 					</div>
 					{periodType === "month" ? (
 						<div>
-							<label className="mb-1 block text-xs font-black uppercase text-slate-500">
+							<label
+								htmlFor={mesInputId}
+								className="mb-1 block text-xs font-black uppercase text-slate-500"
+							>
 								Mês
 							</label>
 							<select
+								id={mesInputId}
 								className="input-field"
 								value={month}
 								onChange={(event) => setMonth(Number(event.target.value))}
@@ -722,10 +736,14 @@ export default function MensageriaRelatoriosPage() {
 					) : null}
 					{periodType === "semester" ? (
 						<div>
-							<label className="mb-1 block text-xs font-black uppercase text-slate-500">
+							<label
+								htmlFor={semestreInputId}
+								className="mb-1 block text-xs font-black uppercase text-slate-500"
+							>
 								Semestre
 							</label>
 							<select
+								id={semestreInputId}
 								className="input-field"
 								value={semester}
 								onChange={(event) => setSemester(event.target.value)}
@@ -736,10 +754,14 @@ export default function MensageriaRelatoriosPage() {
 						</div>
 					) : null}
 					<div>
-						<label className="mb-1 block text-xs font-black uppercase text-slate-500">
+						<label
+							htmlFor={anoInputId}
+							className="mb-1 block text-xs font-black uppercase text-slate-500"
+						>
 							Ano
 						</label>
 						<input
+							id={anoInputId}
 							className="input-field"
 							type="number"
 							value={year}

@@ -128,6 +128,7 @@ function RegionalCard({ regional, cidades, alertaThreshold, onDrillDown }) {
 						{totalRegional} O.S
 					</span>
 					<button
+						type="button"
 						onClick={(e) => {
 							e.stopPropagation();
 							navigator.clipboard.writeText(

@@ -1,14 +1,20 @@
-﻿import { useRegionais } from "../../regionais/hooks/useRegionais";
+﻿import { useId } from "react";
+import { useRegionais } from "../../regionais/hooks/useRegionais";
 
 const ColaboradorRegionalField = ({ value, onChange }) => {
 	const { regionais, loading } = useRegionais();
+	const inputId = useId();
 
 	return (
 		<div>
-			<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+			<label
+				htmlFor={inputId}
+				className="block text-xs font-semibold text-gray-600 mb-1.5"
+			>
 				Regional
 			</label>
 			<select
+				id={inputId}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
 				disabled={loading}

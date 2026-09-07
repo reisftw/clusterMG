@@ -96,6 +96,7 @@ function MapaUploadActions({
 
 			{!isLegacyView && ordens.length > 0 ? (
 				<button
+					type="button"
 					onClick={() => gerarPDFMapa(ordens, ultimaAtualizacao)}
 					className="self-start rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
 				>

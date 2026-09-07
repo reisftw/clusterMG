@@ -99,6 +99,7 @@ const FeriasPage = () => {
 				<div className="flex items-center gap-2">
 					<div className="flex items-center bg-gray-100 rounded-xl p-1 gap-1">
 						<button
+							type="button"
 							onClick={() => setVisualizacao("lista")}
 							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
 								visualizacao === "lista"
@@ -109,6 +110,7 @@ const FeriasPage = () => {
 							<List size={13} /> Lista
 						</button>
 						<button
+							type="button"
 							onClick={() => setVisualizacao("calendario")}
 							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
 								visualizacao === "calendario"
@@ -123,6 +125,7 @@ const FeriasPage = () => {
 
 				<div className="flex items-center gap-2">
 					<button
+						type="button"
 						onClick={carregar}
 						className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
 					>
@@ -130,6 +133,7 @@ const FeriasPage = () => {
 					</button>
 					{podeLancar && (
 						<button
+							type="button"
 							onClick={() => setShowForm(true)}
 							className="btn-primary flex items-center gap-2"
 						>
@@ -189,6 +193,7 @@ const FeriasPage = () => {
 					<div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex-wrap">
 						{["todos", "pendente", "aprovado", "reprovado"].map((status) => (
 							<button
+								type="button"
 								key={status}
 								onClick={() => setFiltroStatus(status)}
 								className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
@@ -283,6 +288,7 @@ const FeriasPage = () => {
 													{podeAprovar && item.status === "pendente" && (
 														<>
 															<button
+																type="button"
 																onClick={() =>
 																	atualizarStatus(item.id, "aprovado")
 																}
@@ -292,6 +298,7 @@ const FeriasPage = () => {
 																<Check size={14} />
 															</button>
 															<button
+																type="button"
 																onClick={() =>
 																	atualizarStatus(item.id, "reprovado")
 																}
@@ -303,6 +310,7 @@ const FeriasPage = () => {
 														</>
 													)}
 													<button
+														type="button"
 														onClick={() => setConfirmarDel(item)}
 														className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
 														title="Excluir"
@@ -350,12 +358,14 @@ const FeriasPage = () => {
 						</p>
 						<div className="flex gap-3">
 							<button
+								type="button"
 								onClick={() => setConfirmarDel(null)}
 								className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 							>
 								Cancelar
 							</button>
 							<button
+								type="button"
 								onClick={async () => {
 									await deletar(confirmarDel.id);
 									setConfirmarDel(null);

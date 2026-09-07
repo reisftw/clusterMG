@@ -1,3 +1,4 @@
+import { useId } from "react";
 import CostCenterCompaniesField from "./CostCenterCompaniesField";
 import CostCenterLinkedAccountsField from "./CostCenterLinkedAccountsField";
 
@@ -23,6 +24,7 @@ export default function CostCenterRegistrationTab({
 	updateDirectorate,
 	usoPercentual,
 }) {
+	const comprometidoMesInputId = useId();
 	return (
 		<>
 			<div className="grid gap-4 md:grid-cols-2">
@@ -276,9 +278,13 @@ export default function CostCenterRegistrationTab({
 								Pagamento.
 							</div>
 						</label>
-						<label className="text-xs font-black uppercase text-slate-500">
+						<label
+							htmlFor={comprometidoMesInputId}
+							className="text-xs font-black uppercase text-slate-500"
+						>
 							Comprometido no mês
 							<MoneyInput
+								id={comprometidoMesInputId}
 								value={form.comprometidoMes}
 								disabled={readOnly || !canManage}
 								onChange={(event) =>

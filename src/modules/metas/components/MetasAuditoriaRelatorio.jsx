@@ -296,12 +296,14 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
 					</div>
 					<div className="flex items-center gap-2">
 						<button
+							type="button"
 							onClick={gerarPDF}
 							className="flex min-h-11 items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
 						>
 							<Download size={14} /> Exportar PDF
 						</button>
 						<button
+							type="button"
 							onClick={onClose}
 							className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100"
 						>

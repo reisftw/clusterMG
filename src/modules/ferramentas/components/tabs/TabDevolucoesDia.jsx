@@ -329,6 +329,7 @@ const TabDevolucoesDia = () => {
 					</span>
 					{datas.map((d) => (
 						<button
+							type="button"
 							key={d}
 							onClick={() => setFiltroData(d)}
 							className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors
@@ -347,6 +348,7 @@ const TabDevolucoesDia = () => {
 			{/* Botao gerar */}
 			{rows.length > 0 && filtroData && (
 				<button
+					type="button"
 					onClick={gerar}
 					className="flex items-center gap-2 px-5 py-2.5 bg-blue-800 text-white rounded-xl font-semibold hover:bg-blue-900 transition-colors"
 				>

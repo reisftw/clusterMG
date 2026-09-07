@@ -19,7 +19,7 @@ import {
 	Users,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import ResponsiveDataView from "../../../components/ui/ResponsiveDataView";
 import Spinner from "../../../components/ui/Spinner";
@@ -229,6 +229,12 @@ const NovoUsuarioModal = ({
 	const [resultadoCriacao, setResultadoCriacao] = useState(null);
 	const [copiado, setCopiado] = useState(false);
 	const [showPassword, setShowPassword] = useState(false);
+	const nomeInputId = useId();
+	const emailInputId = useId();
+	const senhaTemporariaInputId = useId();
+	const roleInputId = useId();
+	const regionalInputId = useId();
+	const empresaInputId = useId();
 
 	const handleAvatarUpload = async (event) => {
 		const file = event.target.files?.[0];
@@ -447,18 +453,21 @@ const NovoUsuarioModal = ({
 
 					<div className="flex gap-3 pt-1">
 						<button
+							type="button"
 							onClick={onClose}
 							className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm"
 						>
 							Fechar
 						</button>
 						<button
+							type="button"
 							onClick={handleCopiarAcesso}
 							className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-60 text-sm"
 						>
 							Copiar acesso
 						</button>
 						<button
+							type="button"
 							onClick={handleCopiarLink}
 							disabled={!resultadoCriacao.temporaryPassword}
 							className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-semibold disabled:opacity-60 text-sm"
@@ -546,7 +555,7 @@ const NovoUsuarioModal = ({
 					<div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
 						<div className="grid gap-4 lg:grid-cols-2">
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={nomeInputId} className={labelClass}>
 									<span className={labelIconClass}>
 										<User size={20} />
 									</span>
@@ -555,6 +564,7 @@ const NovoUsuarioModal = ({
 									</span>
 								</label>
 								<input
+									id={nomeInputId}
 									type="text"
 									value={form.nome}
 									onChange={(event) => set("nome", event.target.value)}
@@ -564,7 +574,7 @@ const NovoUsuarioModal = ({
 							</div>
 
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={emailInputId} className={labelClass}>
 									<span className={labelIconClass}>
 										<Mail size={20} />
 									</span>
@@ -573,6 +583,7 @@ const NovoUsuarioModal = ({
 									</span>
 								</label>
 								<input
+									id={emailInputId}
 									type="email"
 									value={form.email}
 									onChange={(event) => set("email", event.target.value)}
@@ -598,7 +609,10 @@ const NovoUsuarioModal = ({
 						</div>
 
 						<div className="mt-5">
-							<label className="mb-3 flex items-center gap-3 text-sm font-extrabold text-violet-700">
+							<label
+								htmlFor={senhaTemporariaInputId}
+								className="mb-3 flex items-center gap-3 text-sm font-extrabold text-violet-700"
+							>
 								<span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
 									<ShieldCheck size={18} />
 								</span>
@@ -606,6 +620,7 @@ const NovoUsuarioModal = ({
 							</label>
 							<div className="relative">
 								<input
+									id={senhaTemporariaInputId}
 									type={showPassword ? "text" : "password"}
 									value={form.temporaryPassword}
 									onChange={(event) =>
@@ -632,7 +647,7 @@ const NovoUsuarioModal = ({
 
 						<div className="mt-5 grid gap-4 lg:grid-cols-2">
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={roleInputId} className={labelClass}>
 									<span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
 										<ShieldCheck size={18} />
 									</span>
@@ -641,6 +656,7 @@ const NovoUsuarioModal = ({
 									</span>
 								</label>
 								<select
+									id={roleInputId}
 									value={form.role}
 									onChange={(event) => handleRoleChange(event.target.value)}
 									className={fieldClass}
@@ -655,13 +671,14 @@ const NovoUsuarioModal = ({
 							</div>
 
 							<div>
-								<label className={labelClass}>
+								<label htmlFor={regionalInputId} className={labelClass}>
 									<span className={labelIconClass}>
 										<MapPin size={18} />
 									</span>
 									<span>Regional</span>
 								</label>
 								<select
+									id={regionalInputId}
 									value={form.regional}
 									onChange={(event) => set("regional", event.target.value)}
 									className={fieldClass}
@@ -693,7 +710,7 @@ const NovoUsuarioModal = ({
 
 						{requiresEmpresa(form.role) ? (
 							<div className="mt-5">
-								<label className={labelClass}>
+								<label htmlFor={empresaInputId} className={labelClass}>
 									<span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
 										<Users size={18} />
 									</span>
@@ -702,6 +719,7 @@ const NovoUsuarioModal = ({
 									</span>
 								</label>
 								<select
+									id={empresaInputId}
 									value={form.empresaId}
 									onChange={(event) => handleEmpresaChange(event.target.value)}
 									className={fieldClass}
@@ -723,6 +741,7 @@ const NovoUsuarioModal = ({
 
 					<div className="mt-5 flex flex-col justify-end gap-3 sm:flex-row">
 						<button
+							type="button"
 							onClick={onClose}
 							className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-100 px-6 text-sm font-extrabold text-slate-700 transition hover:bg-slate-200"
 						>
@@ -730,6 +749,7 @@ const NovoUsuarioModal = ({
 							Cancelar
 						</button>
 						<button
+							type="button"
 							onClick={handleCriar}
 							disabled={saving}
 							className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 text-sm font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-60"
@@ -1015,12 +1035,14 @@ const UsuariosPage = () => {
 
 				<div className="flex gap-2">
 					<button
+						type="button"
 						onClick={atualizarLista}
 						className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
 					>
 						<RefreshCw size={17} /> Atualizar
 					</button>
 					<button
+						type="button"
 						onClick={() => setModalNovo(true)}
 						disabled={!canManage}
 						className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-extrabold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700"

@@ -1,5 +1,5 @@
 ﻿import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import RetorninhoLoader from "../../../../components/ui/RetorninhoLoader";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
 
@@ -20,6 +20,8 @@ const TabRegionais = () => {
 	const metaRetirada = config.metaRetirada ?? 110;
 
 	const [novaReg, setNovaReg] = useState("");
+	const metaAtivaInputId = useId();
+	const metaRetiradaInputId = useId();
 	const [novaCidade, setNovaCidade] = useState({});
 	const [isAgente, setIsAgente] = useState({});
 	const [novoTec, setNovoTec] = useState("");
@@ -102,6 +104,7 @@ const TabRegionais = () => {
 							onKeyDown={(e) => e.key === "Enter" && addRegional()}
 						/>
 						<button
+							type="button"
 							onClick={addRegional}
 							className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600"
 						>
@@ -116,7 +119,12 @@ const TabRegionais = () => {
 						Adicionar Cidade
 					</p>
 					<div className="mb-2">
-						<label className="text-xs text-gray-500 block mb-1">Regional</label>
+						<label
+							htmlFor="sel-reg-cidade"
+							className="text-xs text-gray-500 block mb-1"
+						>
+							Regional
+						</label>
 						<select
 							className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 							id="sel-reg-cidade"
@@ -130,7 +138,7 @@ const TabRegionais = () => {
 						</select>
 					</div>
 					<div className="mb-2">
-						<label className="text-xs text-gray-500 block mb-1">
+						<label htmlFor="inp-cidade" className="text-xs text-gray-500 block mb-1">
 							Nome da Cidade
 						</label>
 						<input
@@ -168,6 +176,7 @@ const TabRegionais = () => {
 						Agente Autorizado
 					</label>
 					<button
+						type="button"
 						onClick={() => {
 							const regId = document.getElementById("sel-reg-cidade").value;
 							const reg = regionais.find((r) => r.id === regId);
@@ -201,6 +210,7 @@ const TabRegionais = () => {
 							onKeyDown={(e) => e.key === "Enter" && addTecnico()}
 						/>
 						<button
+							type="button"
 							onClick={addTecnico}
 							className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
 						>
@@ -224,6 +234,7 @@ const TabRegionais = () => {
 										Retirada
 									</span>
 									<button
+										type="button"
 										onClick={() => removeTecnico(i)}
 										className="text-gray-300 hover:text-red-500"
 									>
@@ -241,11 +252,15 @@ const TabRegionais = () => {
 						Metas Globais
 					</p>
 					<div className="mb-3">
-						<label className="text-xs text-gray-500 block mb-1">
+						<label
+							htmlFor={metaAtivaInputId}
+							className="text-xs text-gray-500 block mb-1"
+						>
 							Meta Ativa (O.S/mes)
 						</label>
 						<div className="flex gap-2">
 							<input
+								id={metaAtivaInputId}
 								type="number"
 								className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 								defaultValue={metaAtiva}
@@ -254,11 +269,15 @@ const TabRegionais = () => {
 						</div>
 					</div>
 					<div className="mb-3">
-						<label className="text-xs text-gray-500 block mb-1">
+						<label
+							htmlFor={metaRetiradaInputId}
+							className="text-xs text-gray-500 block mb-1"
+						>
 							Meta Retirada (O.S/mes)
 						</label>
 						<div className="flex gap-2">
 							<input
+								id={metaRetiradaInputId}
 								type="number"
 								className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 								defaultValue={metaRetirada}
@@ -267,6 +286,7 @@ const TabRegionais = () => {
 						</div>
 					</div>
 					<button
+						type="button"
 						onClick={saveMetas}
 						className="w-full py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600"
 					>
@@ -319,6 +339,7 @@ const TabRegionais = () => {
 								</span>
 							</div>
 							<button
+								type="button"
 								onClick={(e) => {
 									e.stopPropagation();
 									remover(reg.id);
@@ -358,6 +379,7 @@ const TabRegionais = () => {
 										Ag. Aut.
 									</label>
 									<button
+										type="button"
 										onClick={() => addCidade(reg)}
 										className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700"
 									>
@@ -376,6 +398,7 @@ const TabRegionais = () => {
 												<span className="text-sm text-gray-700">{c.nome}</span>
 												{c.agente && (
 													<button
+														type="button"
 														onClick={() => toggleAgente(reg, i)}
 														className="text-xs bg-orange-100 text-orange-600 font-bold px-2 py-0.5 rounded-full border border-orange-200 hover:bg-orange-200 transition-colors"
 													>
@@ -384,6 +407,7 @@ const TabRegionais = () => {
 												)}
 												{!c.agente && (
 													<button
+														type="button"
 														onClick={() => toggleAgente(reg, i)}
 														className="text-xs bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full border border-gray-200 hover:border-orange-400 hover:text-orange-500 transition-colors"
 													>
@@ -392,6 +416,7 @@ const TabRegionais = () => {
 												)}
 											</div>
 											<button
+												type="button"
 												onClick={() => removeCidade(reg, i)}
 												className="text-gray-300 hover:text-red-500 ml-2"
 											>

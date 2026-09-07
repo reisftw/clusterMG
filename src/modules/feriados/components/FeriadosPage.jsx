@@ -6,7 +6,7 @@
 	RefreshCw,
 	Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
@@ -37,6 +37,9 @@ const FeriadoForm = ({ onSubmit, onClose }) => {
 		estado: "",
 	});
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const nomeInputId = useId();
+	const dataInputId = useId();
+	const tipoInputId = useId();
 
 	const handle = (e) =>
 		setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
@@ -69,10 +72,14 @@ const FeriadoForm = ({ onSubmit, onClose }) => {
 
 				<form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={nomeInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Nome
 						</label>
 						<input
+							id={nomeInputId}
 							name="nome"
 							value={form.nome}
 							onChange={handle}
@@ -84,10 +91,14 @@ const FeriadoForm = ({ onSubmit, onClose }) => {
 
 					<div className="grid grid-cols-2 gap-3">
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={dataInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Data
 							</label>
 							<input
+								id={dataInputId}
 								name="data"
 								type="date"
 								value={form.data}
@@ -97,10 +108,14 @@ const FeriadoForm = ({ onSubmit, onClose }) => {
 							/>
 						</div>
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={tipoInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Tipo
 							</label>
 							<select
+								id={tipoInputId}
 								name="tipo"
 								value={form.tipo}
 								onChange={handle}
@@ -177,6 +192,7 @@ const FeriadosPage = () => {
 				</div>
 				<div className="flex items-center gap-2">
 					<button
+						type="button"
 						onClick={carregar}
 						className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
 					>
@@ -184,6 +200,7 @@ const FeriadosPage = () => {
 					</button>
 					{podeGerenciar && (
 						<button
+							type="button"
 							onClick={() => setShowForm(true)}
 							className="btn-primary flex items-center gap-2"
 						>
@@ -200,6 +217,7 @@ const FeriadosPage = () => {
 					{ key: "manuais", label: "Cadastrados", icon: BookMarked },
 				].map(({ key, label, icon: Icon }) => (
 					<button
+						type="button"
 						key={key}
 						onClick={() => setAba(key)}
 						className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
@@ -287,6 +305,7 @@ const FeriadosPage = () => {
 							</p>
 							{podeGerenciar && (
 								<button
+									type="button"
 									onClick={() => setShowForm(true)}
 									className="mt-4 btn-primary inline-flex items-center gap-2 text-sm"
 								>
@@ -332,6 +351,7 @@ const FeriadosPage = () => {
 											{podeGerenciar && (
 												<td className="px-5 py-3">
 													<button
+														type="button"
 														onClick={() => setConfirmarDel(f)}
 														className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
 													>
@@ -370,12 +390,14 @@ const FeriadosPage = () => {
 						</p>
 						<div className="flex gap-3">
 							<button
+								type="button"
 								onClick={() => setConfirmarDel(null)}
 								className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 							>
 								Cancelar
 							</button>
 							<button
+								type="button"
 								onClick={async () => {
 									await deletar(confirmarDel.id);
 									setConfirmarDel(null);

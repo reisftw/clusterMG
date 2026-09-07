@@ -1,5 +1,5 @@
 import { Check, Copy, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { sanitizeHtml } from "../../../../shared/html/sanitizeHtml";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
 
@@ -50,6 +50,15 @@ const TabEmailFechamento = () => {
 
 	// -- ABA -------------------------------------------------------
 	const [aba, setAba] = useState("fechamento");
+	const fcMesInputId = useId();
+	const fcAnoInputId = useId();
+	const fcMetaGeralInputId = useId();
+	const fcTotalRealizadoInputId = useId();
+	const inMesInputId = useId();
+	const inAnoInputId = useId();
+	const inCancelInputId = useId();
+	const inDiasUInputId = useId();
+	const inDiasCInputId = useId();
 
 	// -- FECHAMENTO ------------------------------------------------
 	const [fcMes, setFcMes] = useState(mesAtual);
@@ -317,6 +326,7 @@ const TabEmailFechamento = () => {
 					{ key: "inicio", label: "🚀 E-mail Inicio de Mes" },
 				].map((t) => (
 					<button
+						type="button"
 						key={t.key}
 						onClick={() => setAba(t.key)}
 						className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors
@@ -342,10 +352,14 @@ const TabEmailFechamento = () => {
 							</p>
 							<div className="grid grid-cols-2 gap-3 mb-3">
 								<div>
-									<label className="block text-xs text-gray-500 mb-1">
+									<label
+										htmlFor={fcMesInputId}
+										className="block text-xs text-gray-500 mb-1"
+									>
 										Mes de Referencia
 									</label>
 									<select
+										id={fcMesInputId}
 										value={fcMes}
 										onChange={(e) => setFcMes(e.target.value)}
 										className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
@@ -356,10 +370,14 @@ const TabEmailFechamento = () => {
 									</select>
 								</div>
 								<div>
-									<label className="block text-xs text-gray-500 mb-1">
+									<label
+										htmlFor={fcAnoInputId}
+										className="block text-xs text-gray-500 mb-1"
+									>
 										Ano
 									</label>
 									<input
+										id={fcAnoInputId}
 										type="number"
 										value={fcAno}
 										onChange={(e) => setFcAno(e.target.value)}
@@ -368,10 +386,14 @@ const TabEmailFechamento = () => {
 								</div>
 							</div>
 							<div className="mb-3">
-								<label className="block text-xs text-gray-500 mb-1">
+								<label
+									htmlFor={fcMetaGeralInputId}
+									className="block text-xs text-gray-500 mb-1"
+								>
 									Meta geral de retiradas (total)
 								</label>
 								<input
+									id={fcMetaGeralInputId}
 									type="number"
 									value={fcMetaGeral}
 									onChange={(e) => setFcMetaGeral(e.target.value)}
@@ -384,10 +406,14 @@ const TabEmailFechamento = () => {
 								</p>
 							</div>
 							<div>
-								<label className="block text-xs text-gray-500 mb-1">
+								<label
+									htmlFor={fcTotalRealizadoInputId}
+									className="block text-xs text-gray-500 mb-1"
+								>
 									Total de retiradas realizadas no mes
 								</label>
 								<input
+									id={fcTotalRealizadoInputId}
 									type="number"
 									value={fcTotalRealizado}
 									onChange={(e) => setFcTotalRealizado(e.target.value)}
@@ -424,6 +450,7 @@ const TabEmailFechamento = () => {
 											className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 										/>
 										<button
+											type="button"
 											onClick={() =>
 												setFcRegs((p) => p.filter((_, j) => j !== i))
 											}
@@ -444,6 +471,7 @@ const TabEmailFechamento = () => {
 									className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 								/>
 								<button
+									type="button"
 									onClick={fcAddRegional}
 									className="flex items-center gap-1 px-3 py-2 bg-blue-800 text-white rounded-lg text-sm font-semibold hover:bg-blue-900"
 								>
@@ -459,6 +487,7 @@ const TabEmailFechamento = () => {
 							Pre-visualizacao
 						</p>
 						<button
+							type="button"
 							onClick={fcGerar}
 							className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors mb-4"
 						>
@@ -467,6 +496,7 @@ const TabEmailFechamento = () => {
 						{fcHTML && (
 							<div className="relative">
 								<button
+									type="button"
 									onClick={fcCopiar}
 									className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-semibold hover:bg-orange-600"
 								>
@@ -508,10 +538,14 @@ const TabEmailFechamento = () => {
 							</p>
 							<div className="grid grid-cols-2 gap-3 mb-3">
 								<div>
-									<label className="block text-xs text-gray-500 mb-1">
+									<label
+										htmlFor={inMesInputId}
+										className="block text-xs text-gray-500 mb-1"
+									>
 										Mes de Referencia
 									</label>
 									<select
+										id={inMesInputId}
 										value={inMes}
 										onChange={(e) => setInMes(e.target.value)}
 										className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
@@ -522,10 +556,14 @@ const TabEmailFechamento = () => {
 									</select>
 								</div>
 								<div>
-									<label className="block text-xs text-gray-500 mb-1">
+									<label
+										htmlFor={inAnoInputId}
+										className="block text-xs text-gray-500 mb-1"
+									>
 										Ano
 									</label>
 									<input
+										id={inAnoInputId}
 										type="number"
 										value={inAno}
 										onChange={(e) => setInAno(e.target.value)}
@@ -534,10 +572,14 @@ const TabEmailFechamento = () => {
 								</div>
 							</div>
 							<div className="mb-3">
-								<label className="block text-xs text-gray-500 mb-1">
+								<label
+									htmlFor={inCancelInputId}
+									className="block text-xs text-gray-500 mb-1"
+								>
 									Total de cancelamentos no mes anterior
 								</label>
 								<input
+									id={inCancelInputId}
 									type="number"
 									value={inCancel}
 									onChange={(e) => setInCancel(e.target.value)}
@@ -549,10 +591,14 @@ const TabEmailFechamento = () => {
 								</p>
 							</div>
 							<div className="mb-3">
-								<label className="block text-xs text-gray-500 mb-1">
+								<label
+									htmlFor={inDiasUInputId}
+									className="block text-xs text-gray-500 mb-1"
+								>
 									Dias uteis no mes (sem sab/dom)
 								</label>
 								<input
+									id={inDiasUInputId}
 									type="number"
 									value={inDiasU}
 									onChange={(e) => setInDiasU(e.target.value)}
@@ -561,10 +607,14 @@ const TabEmailFechamento = () => {
 								/>
 							</div>
 							<div>
-								<label className="block text-xs text-gray-500 mb-1">
+								<label
+									htmlFor={inDiasCInputId}
+									className="block text-xs text-gray-500 mb-1"
+								>
 									Dias corridos no mes (com sab/dom)
 								</label>
 								<input
+									id={inDiasCInputId}
 									type="number"
 									value={inDiasC}
 									onChange={(e) => setInDiasC(e.target.value)}
@@ -619,6 +669,7 @@ const TabEmailFechamento = () => {
 											className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 										/>
 										<button
+											type="button"
 											onClick={() =>
 												setInRegs((p) => p.filter((_, j) => j !== i))
 											}
@@ -639,6 +690,7 @@ const TabEmailFechamento = () => {
 									className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-400"
 								/>
 								<button
+									type="button"
 									onClick={inAddRegional}
 									className="flex items-center gap-1 px-3 py-2 bg-blue-800 text-white rounded-lg text-sm font-semibold hover:bg-blue-900"
 								>
@@ -700,6 +752,7 @@ const TabEmailFechamento = () => {
 							Pre-visualizacao
 						</p>
 						<button
+							type="button"
 							onClick={inGerar}
 							className="w-full py-3 bg-orange-500 text-white rounded-xl font-semibold hover:bg-orange-600 transition-colors mb-4"
 						>
@@ -708,6 +761,7 @@ const TabEmailFechamento = () => {
 						{inHTML && (
 							<div className="relative">
 								<button
+									type="button"
 									onClick={inCopiarFn}
 									className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-semibold hover:bg-orange-600"
 								>

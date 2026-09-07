@@ -6,7 +6,7 @@ import {
 	ShieldCheck,
 	ShieldOff,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
@@ -59,6 +59,7 @@ export default function ConfiguracoesVpnPage() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [checking, setChecking] = useState(false);
+	const vpnToggleId = useId();
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
 	const [routesText, setRoutesText] = useState("");
 	const [cidrsText, setCidrsText] = useState("");
@@ -217,7 +218,10 @@ export default function ConfiguracoesVpnPage() {
 							)}
 						</div>
 					</div>
-					<label className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4">
+					<label
+						htmlFor={vpnToggleId}
+						className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 p-4"
+					>
 						<span>
 							<span className="block text-sm font-black text-slate-950">
 								Ativar bloqueio por VPN
@@ -227,6 +231,7 @@ export default function ConfiguracoesVpnPage() {
 							</span>
 						</span>
 						<input
+							id={vpnToggleId}
 							type="checkbox"
 							checked={Boolean(config.enabled)}
 							disabled={!canManage}

@@ -5817,13 +5817,14 @@ function budgetEntityId(value, fallback = "item") {
 	);
 }
 
-function MoneyInput({ value, disabled, onChange }) {
+function MoneyInput({ id, value, disabled, onChange }) {
 	return (
 		<div className="mt-2 flex overflow-hidden rounded-xl border border-emerald-200 bg-white ring-0 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
 			<span className="flex min-h-11 items-center bg-emerald-50 px-3 text-sm font-black text-emerald-800">
 				R$
 			</span>
 			<input
+				id={id}
 				value={value ?? ""}
 				disabled={disabled}
 				inputMode="decimal"

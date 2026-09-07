@@ -940,6 +940,7 @@ const MetasPage = () => {
 							) : null}
 							{MESES.map((m) => (
 								<button
+									type="button"
 									key={m}
 									onClick={() => setMesSelecionado(m)}
 									className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -1007,6 +1008,7 @@ const MetasPage = () => {
 					<div className="flex flex-wrap gap-1 bg-white rounded-2xl border border-gray-100 p-2">
 						{ABAS.map(({ id, label, icon: Icon }) => (
 							<button
+								type="button"
 								key={id}
 								onClick={() => setAba(id)}
 								className={tabClass(id)}

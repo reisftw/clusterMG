@@ -66,6 +66,7 @@ export default function RankingList({
 					</span>
 					<div className="rank-page-btns">
 						<button
+							type="button"
 							className="rank-page-btn"
 							onClick={() => setPage((p) => p - 1)}
 							disabled={page === 0}
@@ -74,6 +75,7 @@ export default function RankingList({
 						</button>
 						{Array.from({ length: totalPages }, (_, p) => (
 							<button
+								type="button"
 								key={p}
 								className={`rank-page-btn ${p === page ? "active" : ""}`}
 								onClick={() => setPage(p)}
@@ -82,6 +84,7 @@ export default function RankingList({
 							</button>
 						))}
 						<button
+							type="button"
 							className="rank-page-btn"
 							onClick={() => setPage((p) => p + 1)}
 							disabled={page === totalPages - 1}

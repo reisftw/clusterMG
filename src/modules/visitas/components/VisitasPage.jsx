@@ -18,7 +18,7 @@
 	UserRound,
 	Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { useRegionais } from "../../regionais/hooks/useRegionais";
 import { STATUS_STYLES, TECNICO_STATUS, VISITA_STATUS } from "../constants";
@@ -381,6 +381,15 @@ const VisitasPage = () => {
 	const [valorConfig, setValorConfig] = useState(null);
 	const [copiadoId, setCopiadoId] = useState(null);
 	const [pdfLoading, setPdfLoading] = useState("");
+	const visitaTecnicoInputId = useId();
+	const visitaCodigoClienteInputId = useId();
+	const visitaDataInputId = useId();
+	const visitaStatusInputId = useId();
+	const visitaObservacaoInputId = useId();
+	const tecnicoNomeInputId = useId();
+	const tecnicoRegionalInputId = useId();
+	const tecnicoStatusInputId = useId();
+	const valorVisitaInputId = useId();
 
 	const regionaisSistemaOptions = useMemo(
 		() =>
@@ -647,6 +656,7 @@ const VisitasPage = () => {
 						<ChevronRight size={16} />
 					</button>
 					<button
+						type="button"
 						onClick={carregar}
 						className="rounded-xl border border-gray-200 p-2 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600"
 						title="Atualizar"
@@ -852,10 +862,14 @@ const VisitasPage = () => {
 							</div>
 
 							<div>
-								<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+								<label
+									htmlFor={visitaTecnicoInputId}
+									className="mb-1.5 block text-xs font-semibold text-gray-600"
+								>
 									Tecnico *
 								</label>
 								<input
+									id={visitaTecnicoInputId}
 									list="visitas-tecnicos"
 									value={visitaForm.tecnico_nome}
 									onChange={(event) => handleTecnicoVisita(event.target.value)}
@@ -870,9 +884,13 @@ const VisitasPage = () => {
 							</div>
 
 							<div>
-								<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+								{/* S-C (docs/SONARQUBE-MAP.md, achado javascript:S6853): não é
+								    um <label> de verdade — não há input visível/focável pra
+								    associar (o valor real fica num input hidden, que a11y não
+								    expõe). O texto abaixo é só um heading do valor derivado. */}
+								<p className="mb-1.5 block text-xs font-semibold text-gray-600">
 									Regional *
-								</label>
+								</p>
 								<div
 									className="input-field flex items-center text-gray-700"
 									aria-label="Regional do tecnico selecionado"
@@ -896,10 +914,14 @@ const VisitasPage = () => {
 							</div>
 
 							<div>
-								<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+								<label
+									htmlFor={visitaCodigoClienteInputId}
+									className="mb-1.5 block text-xs font-semibold text-gray-600"
+								>
 									Codigo do cliente *
 								</label>
 								<input
+									id={visitaCodigoClienteInputId}
 									value={visitaForm.codigo_cliente}
 									onChange={(event) =>
 										setVisitaForm((prev) => ({
@@ -915,10 +937,14 @@ const VisitasPage = () => {
 
 							<div className="grid grid-cols-2 gap-3">
 								<div>
-									<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+									<label
+										htmlFor={visitaDataInputId}
+										className="mb-1.5 block text-xs font-semibold text-gray-600"
+									>
 										Data *
 									</label>
 									<input
+										id={visitaDataInputId}
 										type="date"
 										value={visitaForm.data}
 										onChange={(event) =>
@@ -931,10 +957,14 @@ const VisitasPage = () => {
 									/>
 								</div>
 								<div>
-									<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+									<label
+										htmlFor={visitaStatusInputId}
+										className="mb-1.5 block text-xs font-semibold text-gray-600"
+									>
 										Status
 									</label>
 									<select
+										id={visitaStatusInputId}
 										value={visitaForm.status}
 										onChange={(event) =>
 											setVisitaForm((prev) => ({
@@ -954,10 +984,14 @@ const VisitasPage = () => {
 							</div>
 
 							<div>
-								<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+								<label
+									htmlFor={visitaObservacaoInputId}
+									className="mb-1.5 block text-xs font-semibold text-gray-600"
+								>
 									Observacao
 								</label>
 								<textarea
+									id={visitaObservacaoInputId}
 									value={visitaForm.observacao}
 									onChange={(event) =>
 										setVisitaForm((prev) => ({
@@ -1167,10 +1201,14 @@ const VisitasPage = () => {
 							)}
 						</div>
 						<div>
-							<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+							<label
+								htmlFor={tecnicoNomeInputId}
+								className="mb-1.5 block text-xs font-semibold text-gray-600"
+							>
 								Nome *
 							</label>
 							<input
+								id={tecnicoNomeInputId}
 								value={tecnicoForm.nome}
 								onChange={(event) =>
 									setTecnicoForm((prev) => ({
@@ -1183,10 +1221,14 @@ const VisitasPage = () => {
 							/>
 						</div>
 						<div>
-							<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+							<label
+								htmlFor={tecnicoRegionalInputId}
+								className="mb-1.5 block text-xs font-semibold text-gray-600"
+							>
 								Regional *
 							</label>
 							<select
+								id={tecnicoRegionalInputId}
 								value={tecnicoForm.regional}
 								onChange={(event) =>
 									setTecnicoForm((prev) => ({
@@ -1210,10 +1252,14 @@ const VisitasPage = () => {
 							)}
 						</div>
 						<div>
-							<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+							<label
+								htmlFor={tecnicoStatusInputId}
+								className="mb-1.5 block text-xs font-semibold text-gray-600"
+							>
 								Status
 							</label>
 							<select
+								id={tecnicoStatusInputId}
 								value={tecnicoForm.status}
 								onChange={(event) =>
 									setTecnicoForm((prev) => ({
@@ -1545,10 +1591,14 @@ const VisitasPage = () => {
 							</p>
 						</div>
 						<div>
-							<label className="mb-1.5 block text-xs font-semibold text-gray-600">
+							<label
+								htmlFor={valorVisitaInputId}
+								className="mb-1.5 block text-xs font-semibold text-gray-600"
+							>
 								Valor unitario
 							</label>
 							<input
+								id={valorVisitaInputId}
 								type="number"
 								min="0"
 								step="0.01"

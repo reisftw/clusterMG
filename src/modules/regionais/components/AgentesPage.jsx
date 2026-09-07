@@ -65,6 +65,7 @@ const AgentesPage = () => {
 				</div>
 				<div className="flex items-center gap-2">
 					<button
+						type="button"
 						onClick={carregar}
 						className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:bg-amber-50 hover:text-amber-500 hover:border-amber-200 transition-colors"
 					>
@@ -72,6 +73,7 @@ const AgentesPage = () => {
 					</button>
 					{podeEditar && (
 						<button
+							type="button"
 							onClick={() => setModal("novo")}
 							className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 transition-colors"
 						>
@@ -140,12 +142,14 @@ const AgentesPage = () => {
 													{podeEditar && (
 														<div className="flex gap-1">
 															<button
+																type="button"
 																onClick={() => setModal(agente)}
 																className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-orange-500 transition-colors"
 															>
 																<Pencil size={13} />
 															</button>
 															<button
+																type="button"
 																onClick={() => setConfirmarExcluir(agente)}
 																className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-red-500 transition-colors"
 															>
@@ -203,12 +207,14 @@ const AgentesPage = () => {
 						</p>
 						<div className="flex gap-3">
 							<button
+								type="button"
 								onClick={() => setConfirmarExcluir(null)}
 								className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 							>
 								Cancelar
 							</button>
 							<button
+								type="button"
 								onClick={async () => {
 									await excluir(confirmarExcluir.id);
 									setConfirmarExcluir(null);

@@ -16,8 +16,11 @@ const DRE_LINE_IDS = new Set([
 function stableStringify(value) {
 	if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
 	if (value && typeof value === "object") {
+		// Comparador explicito por code unit (nao localeCompare): o hash
+		// precisa ser deterministico entre maquinas/locales diferentes, e
+		// localeCompare pode variar por ICU/locale do ambiente de execucao.
 		return `{${Object.keys(value)
-			.sort()
+			.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 			.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
 			.join(",")}}`;
 	}
@@ -849,4 +852,7 @@ module.exports = {
 	saveSerasaFinancialReport,
 	saveTariffsReport,
 	saveTariffsFinancialReport,
+	// Exportado só para teste (S-A, docs/SONARQUBE-MAP.md): garante que a
+	// ordenação de chaves do hash de mudança é determinística.
+	stableStringify,
 };

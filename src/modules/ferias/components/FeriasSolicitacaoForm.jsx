@@ -1,5 +1,5 @@
 ﻿import { CalendarDays, User, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 const isColaboradorAtivo = (colaborador) => {
 	const status = String(colaborador?.status || "").toLowerCase();
@@ -24,6 +24,9 @@ const FeriasSolicitacaoForm = ({
 	const [dataFim, setDataFim] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [erro, setErro] = useState("");
+	const colaboradorInputId = useId();
+	const dataInicioInputId = useId();
+	const dataFimInputId = useId();
 
 	const colaboradoresAtivos = useMemo(
 		() =>
@@ -91,6 +94,7 @@ const FeriasSolicitacaoForm = ({
 						<h3 className="text-base font-bold text-gray-900">{titulo}</h3>
 					</div>
 					<button
+						type="button"
 						onClick={onClose}
 						className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
 					>
@@ -101,12 +105,16 @@ const FeriasSolicitacaoForm = ({
 				<form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
 					{permitirEscolherColaborador && (
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={colaboradorInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								<span className="inline-flex items-center gap-1">
 									<User size={12} /> Colaborador
 								</span>
 							</label>
 							<select
+								id={colaboradorInputId}
 								value={colaboradorId}
 								onChange={(event) => setColaboradorId(event.target.value)}
 								className="input-field"
@@ -123,10 +131,14 @@ const FeriasSolicitacaoForm = ({
 
 					<div className="grid grid-cols-2 gap-3">
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={dataInicioInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Data de Inicio
 							</label>
 							<input
+								id={dataInicioInputId}
 								type="date"
 								value={dataInicio}
 								onChange={(event) => setDataInicio(event.target.value)}
@@ -135,10 +147,14 @@ const FeriasSolicitacaoForm = ({
 							/>
 						</div>
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={dataFimInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Data de Fim
 							</label>
 							<input
+								id={dataFimInputId}
 								type="date"
 								value={dataFim}
 								min={dataInicio}

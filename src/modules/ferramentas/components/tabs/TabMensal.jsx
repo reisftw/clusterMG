@@ -427,6 +427,7 @@ const TabMensal = () => {
 			{/* Botao gerar */}
 			{rows.length > 0 && (
 				<button
+					type="button"
 					onClick={gerar}
 					className="flex items-center gap-2 px-5 py-2.5 bg-blue-800 text-white rounded-xl font-semibold hover:bg-blue-900 transition-colors"
 				>

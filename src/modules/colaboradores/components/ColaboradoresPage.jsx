@@ -83,12 +83,14 @@ const ColaboradoresPage = () => {
 				</p>
 				<div className="flex items-center gap-2">
 					<button
+						type="button"
 						onClick={carregar}
 						className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
 					>
 						<RefreshCw size={16} />
 					</button>
 					<button
+						type="button"
 						onClick={() => {
 							setEditando(null);
 							setShowForm(true);
@@ -124,6 +126,7 @@ const ColaboradoresPage = () => {
 				<div className="flex gap-2 flex-wrap">
 					{FILTROS_STATUS.map((filtro) => (
 						<button
+							type="button"
 							key={filtro}
 							onClick={() => setFiltroStatus(filtro)}
 							className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${
@@ -224,12 +227,14 @@ const ColaboradoresPage = () => {
 										>
 											<div className="flex items-center gap-1">
 												<button
+													type="button"
 													onClick={() => handleEditar(colaborador)}
 													className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-orange-50 hover:text-orange-500"
 												>
 													<Pencil size={14} />
 												</button>
 												<button
+													type="button"
 													onClick={() => setConfirmar(colaborador)}
 													className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
 												>
@@ -289,12 +294,14 @@ const ColaboradoresPage = () => {
 						</p>
 						<div className="flex gap-3">
 							<button
+								type="button"
 								onClick={() => setConfirmar(null)}
 								className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 							>
 								Cancelar
 							</button>
 							<button
+								type="button"
 								onClick={async () => {
 									await deletar(confirmar.id);
 									setConfirmar(null);

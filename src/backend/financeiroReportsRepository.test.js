@@ -242,4 +242,19 @@ describe("financeiroReportsRepository", () => {
 			"delete from dre_lancamentos where is_fake = true",
 		);
 	});
+
+	// S-A (docs/SONARQUBE-MAP.md, achado javascript:S6449): stableStringify
+	// usava Object.keys(value).sort() sem comparador explícito. A correção
+	// usa um comparador por code unit (não localeCompare) — importante que
+	// o hash continue determinístico entre chaves fora de ordem alfabética
+	// de inserção, e não dependa de locale/ICU do ambiente.
+	it("stableStringify ordena chaves de objeto de forma deterministica, independente da ordem de insercao", () => {
+		const { stableStringify } = loadRepository();
+
+		const inserçãoA = { zebra: 1, abacaxi: 2, meio: 3 };
+		const inserçãoB = { meio: 3, zebra: 1, abacaxi: 2 };
+
+		expect(stableStringify(inserçãoA)).toBe(stableStringify(inserçãoB));
+		expect(stableStringify(inserçãoA)).toBe('{"abacaxi":2,"meio":3,"zebra":1}');
+	});
 });

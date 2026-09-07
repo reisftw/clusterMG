@@ -382,6 +382,7 @@ const MetasExportPDF = ({ allData, feriadosSet = new Set() }) => {
 
 	return (
 		<button
+			type="button"
 			onClick={handleExport}
 			disabled={loading}
 			className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"

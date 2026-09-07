@@ -1608,6 +1608,7 @@ function CriarLiderEmpresaModal({ empresa, onClose, onCreated }) {
 						Fechar
 					</button>
 					<button
+						type="submit"
 						disabled={saving}
 						className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white disabled:opacity-60"
 					>

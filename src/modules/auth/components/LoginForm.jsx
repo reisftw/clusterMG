@@ -7,7 +7,7 @@ import {
 	Mail,
 	ShieldCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import MelzFooter from "../../../components/layout/MelzFooter";
 import { useAuthContext } from "../../../context/AuthContext";
@@ -26,6 +26,7 @@ const trustItems = [
 ];
 
 function MfaCodePanel({ challenge, code, onCodeChange, onReset }) {
+	const codeInputId = useId();
 	return (
 		<div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
 			<div className="flex items-start gap-3">
@@ -42,10 +43,14 @@ function MfaCodePanel({ challenge, code, onCodeChange, onReset }) {
 					</p>
 				</div>
 			</div>
-			<label className="mt-5 block text-sm font-extrabold text-slate-900">
+			<label
+				htmlFor={codeInputId}
+				className="mt-5 block text-sm font-extrabold text-slate-900"
+			>
 				Código de segurança
 			</label>
 			<input
+				id={codeInputId}
 				value={code}
 				onChange={(event) =>
 					onCodeChange(event.target.value.replace(/\D/g, "").slice(0, 6))
@@ -78,10 +83,15 @@ function CredentialFields({
 	onPasswordChange,
 	onTogglePassword,
 }) {
+	const emailInputId = useId();
+	const passwordInputId = useId();
 	return (
 		<>
 			<div>
-				<label className="mb-2 block text-sm font-extrabold text-slate-900">
+				<label
+					htmlFor={emailInputId}
+					className="mb-2 block text-sm font-extrabold text-slate-900"
+				>
 					E-mail
 				</label>
 				<div className="relative">
@@ -90,6 +100,7 @@ function CredentialFields({
 						className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"
 					/>
 					<input
+						id={emailInputId}
 						type="email"
 						value={email}
 						onChange={(event) => onEmailChange(event.target.value)}
@@ -101,7 +112,10 @@ function CredentialFields({
 			</div>
 
 			<div>
-				<label className="mb-2 block text-sm font-extrabold text-slate-900">
+				<label
+					htmlFor={passwordInputId}
+					className="mb-2 block text-sm font-extrabold text-slate-900"
+				>
 					Senha
 				</label>
 				<div className="relative">
@@ -110,6 +124,7 @@ function CredentialFields({
 						className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"
 					/>
 					<input
+						id={passwordInputId}
 						type={showPassword ? "text" : "password"}
 						value={password}
 						onChange={(event) => onPasswordChange(event.target.value)}

@@ -7,7 +7,7 @@
 	Upload,
 	X,
 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import StaticDataRefreshLink from "../../../components/ui/StaticDataRefreshLink";
 import {
 	DEFAULT_MATCH_IGNORED_TYPES,
@@ -34,6 +34,8 @@ function ModalPeriodo({ quantidadeArquivos = 1, onConfirmar, onCancelar }) {
 	const [inicio, setInicio] = useState("");
 	const [fim, setFim] = useState(hoje);
 	const [fontes, setFontes] = useState(["sempre", "onnet"]);
+	const inicioInputId = useId();
+	const fimInputId = useId();
 	const isMultiplo = quantidadeArquivos > 1;
 
 	function toggleFonte(fonteId) {
@@ -62,6 +64,7 @@ function ModalPeriodo({ quantidadeArquivos = 1, onConfirmar, onCancelar }) {
 							<h3 className="font-bold text-gray-900">Período da Planilha</h3>
 						</div>
 						<button
+							type="button"
 							onClick={onCancelar}
 							className="p-1 rounded-lg hover:bg-gray-100"
 						>
@@ -75,9 +78,12 @@ function ModalPeriodo({ quantidadeArquivos = 1, onConfirmar, onCancelar }) {
 						{isMultiplo ? ` Arquivos selecionados: ${quantidadeArquivos}.` : ""}
 					</p>
 					<div className="mb-5">
-						<label className="text-xs font-semibold text-gray-500 mb-2 block">
+						{/* S-C (docs/SONARQUBE-MAP.md, achado javascript:S6853): heading
+						    de um grupo de botões de seleção, não um <label> de input —
+						    trocado para <p> pra refletir isso corretamente. */}
+						<p className="text-xs font-semibold text-gray-500 mb-2 block">
 							Bases que serão atualizadas
-						</label>
+						</p>
 						<div className="grid grid-cols-2 gap-2">
 							{FONTES_MATCH.map((item) => {
 								const ativo = fontes.includes(item.id);
@@ -118,10 +124,14 @@ function ModalPeriodo({ quantidadeArquivos = 1, onConfirmar, onCancelar }) {
 					</div>
 					<div className="flex flex-col gap-3 mb-6">
 						<div>
-							<label className="text-xs font-semibold text-gray-500 mb-1 block">
+							<label
+								htmlFor={inicioInputId}
+								className="text-xs font-semibold text-gray-500 mb-1 block"
+							>
 								Data inicio
 							</label>
 							<input
+								id={inicioInputId}
 								type="date"
 								value={inicio}
 								onChange={(e) => setInicio(e.target.value)}
@@ -129,10 +139,14 @@ function ModalPeriodo({ quantidadeArquivos = 1, onConfirmar, onCancelar }) {
 							/>
 						</div>
 						<div>
-							<label className="text-xs font-semibold text-gray-500 mb-1 block">
+							<label
+								htmlFor={fimInputId}
+								className="text-xs font-semibold text-gray-500 mb-1 block"
+							>
 								Data fim
 							</label>
 							<input
+								id={fimInputId}
 								type="date"
 								value={fim}
 								onChange={(e) => setFim(e.target.value)}
@@ -142,12 +156,14 @@ function ModalPeriodo({ quantidadeArquivos = 1, onConfirmar, onCancelar }) {
 					</div>
 					<div className="flex gap-2">
 						<button
+							type="button"
 							onClick={onCancelar}
 							className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-all"
 						>
 							Cancelar
 						</button>
 						<button
+							type="button"
 							onClick={() => onConfirmar({ inicio, fim, fontes })}
 							disabled={!inicio || !fim || fontes.length === 0}
 							className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-xl transition-all"
@@ -310,6 +326,7 @@ function MatchConfigModal({ initialExtras, onClose, onSave }) {
 							</p>
 						</div>
 						<button
+							type="button"
 							onClick={onClose}
 							className="p-1 rounded-lg hover:bg-gray-100"
 						>
@@ -390,12 +407,14 @@ function MatchConfigModal({ initialExtras, onClose, onSave }) {
 
 					<div className="mt-6 flex gap-2">
 						<button
+							type="button"
 							onClick={onClose}
 							className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50"
 						>
 							Cancelar
 						</button>
 						<button
+							type="button"
 							onClick={handleSave}
 							disabled={saving}
 							className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-xl"
@@ -559,6 +578,7 @@ export default function MatchUpload({ onConcluido }) {
 						className="hidden"
 					/>
 					<button
+						type="button"
 						onClick={() => inputRef.current.click()}
 						disabled={loading}
 						className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-xl transition-all"

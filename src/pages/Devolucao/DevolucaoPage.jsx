@@ -19,7 +19,7 @@ import {
 	Store,
 	Truck,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Tesseract from "tesseract.js";
 import {
 	fetchRetiradaByProtocol,
@@ -963,11 +963,12 @@ function RequestMethodBody(props) {
 }
 
 function DropoffRequest({ form, selectStore, selectedStore }) {
+	const selectId = useId();
 	return (
 		<div className="space-y-4">
 			<div className="rounded-[28px] border border-blue-100 bg-[linear-gradient(135deg,#eff6ff,#fff7ed)] px-4 py-4">
-				<label className="mb-2 block text-sm font-bold text-slate-900">Unidade selecionada para entrega</label>
-				<select value={form.lojaSelecionadaId} onChange={(event) => selectStore(event.target.value, true)} className={inputClassName()}>
+				<label htmlFor={selectId} className="mb-2 block text-sm font-bold text-slate-900">Unidade selecionada para entrega</label>
+				<select id={selectId} value={form.lojaSelecionadaId} onChange={(event) => selectStore(event.target.value, true)} className={inputClassName()}>
 					<option value="">Selecione uma unidade</option>
 					{STORE_LOCATIONS.map((store) => (
 						<option key={store.id} value={store.id}>{store.name} - {store.city}</option>
@@ -1037,19 +1038,21 @@ function TextFieldGrid({ columns, fields, form, updateField }) {
 }
 
 function TextInputField({ field, form, label, placeholder, required = false, type = "text", updateField }) {
+	const inputId = useId();
 	return (
 		<div className="space-y-2">
-			<label className="block text-sm font-bold text-slate-900">{label}</label>
-			<input value={form[field]} onChange={(event) => updateField(field, event.target.value)} placeholder={placeholder} required={required} type={type} className={inputClassName()} />
+			<label htmlFor={inputId} className="block text-sm font-bold text-slate-900">{label}</label>
+			<input id={inputId} value={form[field]} onChange={(event) => updateField(field, event.target.value)} placeholder={placeholder} required={required} type={type} className={inputClassName()} />
 		</div>
 	);
 }
 
 function PeriodoField({ form, updateField }) {
+	const selectId = useId();
 	return (
 		<div className="space-y-2">
-			<label className="block text-sm font-bold text-slate-900">Janela preferencial</label>
-			<select value={form.periodoPreferido} onChange={(event) => updateField("periodoPreferido", event.target.value)} className={inputClassName()}>
+			<label htmlFor={selectId} className="block text-sm font-bold text-slate-900">Janela preferencial</label>
+			<select id={selectId} value={form.periodoPreferido} onChange={(event) => updateField("periodoPreferido", event.target.value)} className={inputClassName()}>
 				<option value="">Selecione uma janela</option>
 				{RETIRADA_PERIODOS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
 			</select>
@@ -1058,10 +1061,11 @@ function PeriodoField({ form, updateField }) {
 }
 
 function EquipamentoField({ form, updateField }) {
+	const selectId = useId();
 	return (
 		<div className="space-y-2">
-			<label className="block text-sm font-bold text-slate-900">Equipamento principal</label>
-			<select value={form.equipamento} onChange={(event) => updateField("equipamento", event.target.value)} required className={inputClassName()}>
+			<label htmlFor={selectId} className="block text-sm font-bold text-slate-900">Equipamento principal</label>
+			<select id={selectId} value={form.equipamento} onChange={(event) => updateField("equipamento", event.target.value)} required className={inputClassName()}>
 				<option value="">Selecione o equipamento principal</option>
 				{EQUIPMENT_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
 			</select>
@@ -1070,10 +1074,11 @@ function EquipamentoField({ form, updateField }) {
 }
 
 function ObservacoesField({ form, updateField }) {
+	const textareaId = useId();
 	return (
 		<div className="space-y-2">
-			<label className="block text-sm font-bold text-slate-900">Observacoes para a equipe</label>
-			<textarea value={form.observacoes} onChange={(event) => updateField("observacoes", event.target.value)} rows={4} placeholder="Inclua informacoes uteis para agilizar o atendimento" className={textAreaClassName("resize-none")} />
+			<label htmlFor={textareaId} className="block text-sm font-bold text-slate-900">Observacoes para a equipe</label>
+			<textarea id={textareaId} value={form.observacoes} onChange={(event) => updateField("observacoes", event.target.value)} rows={4} placeholder="Inclua informacoes uteis para agilizar o atendimento" className={textAreaClassName("resize-none")} />
 		</div>
 	);
 }
@@ -1108,11 +1113,12 @@ function MacReaderHeader({ macSectionOpen, setMacSectionOpen }) {
 }
 
 function MacReaderInput({ form, handleMacImageChange, macReading, updateField }) {
+	const macInputId = useId();
 	return (
 		<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-start">
 			<div className="space-y-2">
-				<label className="block text-sm font-bold text-slate-900">MAC do equipamento</label>
-				<input value={form.equipamentoMac} onChange={(event) => updateField("equipamentoMac", formatMac(event.target.value))} placeholder="Ex.: A1:B2:C3:D4:E5:F6" className={inputClassName("font-mono uppercase")} />
+				<label htmlFor={macInputId} className="block text-sm font-bold text-slate-900">MAC do equipamento</label>
+				<input id={macInputId} value={form.equipamentoMac} onChange={(event) => updateField("equipamentoMac", formatMac(event.target.value))} placeholder="Ex.: A1:B2:C3:D4:E5:F6" className={inputClassName("font-mono uppercase")} />
 				<p className="text-xs leading-6 text-slate-500">Se a leitura nao ficar boa, voce pode ajustar manualmente.</p>
 			</div>
 			<div className="grid gap-2 sm:grid-cols-2">
@@ -1226,6 +1232,7 @@ function DevolucaoRequestCard(props) {
 }
 
 export default function DevolucaoPage() {
+	const protocolInputId = useId();
 	const formController = useRetiradaFormController();
 	const protocolController = useProtocolSearchController();
 	const macController = useMacReaderController(formController.setForm);
@@ -1444,7 +1451,10 @@ export default function DevolucaoPage() {
 						<div className="rounded-[34px] bg-[linear-gradient(180deg,#f8fbff,#fff7ef)] p-5 ring-1 ring-slate-100">
 							<form onSubmit={handleProtocolSearch} className="space-y-4">
 								<div>
-									<label className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+									<label
+										htmlFor={protocolInputId}
+										className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-blue-700"
+									>
 										Consultar protocolo
 									</label>
 									<div className="flex flex-col gap-3 sm:flex-row">
@@ -1454,6 +1464,7 @@ export default function DevolucaoPage() {
 												className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
 											/>
 											<input
+												id={protocolInputId}
 												value={protocolSearch}
 												onChange={(event) => {
 													setProtocolSearch(event.target.value.toUpperCase());

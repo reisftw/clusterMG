@@ -152,6 +152,7 @@ const FeriasCalendario = ({ ferias, colaboradores }) => {
 		<div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 			<div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
 				<button
+					type="button"
 					onClick={() => navMes(-1)}
 					className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
 				>
@@ -161,6 +162,7 @@ const FeriasCalendario = ({ ferias, colaboradores }) => {
 					{MESES[mes]} <span className="text-blue-600">{ano}</span>
 				</h3>
 				<button
+					type="button"
 					onClick={() => navMes(1)}
 					className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
 				>

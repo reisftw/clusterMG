@@ -24,6 +24,7 @@ const MetasUpload = ({ onUpload, uploading, lastUpdate, onRefresh }) => {
 				<span className="text-xs text-gray-400 mr-1">{lastUpdate}</span>
 			)}
 			<button
+				type="button"
 				onClick={onRefresh}
 				className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
 				title="Recarregar dados"
@@ -38,6 +39,7 @@ const MetasUpload = ({ onUpload, uploading, lastUpdate, onRefresh }) => {
 				onChange={handleFile}
 			/>
 			<button
+				type="button"
 				onClick={() => inputRef.current?.click()}
 				disabled={uploading}
 				className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"

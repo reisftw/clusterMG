@@ -1,11 +1,13 @@
 ﻿import { Archive, Calendar, Copy, X } from "lucide-react";
-import React, { useRef, useState } from "react";
+import React, { useId, useRef, useState } from "react";
 import { processarUploadMapaLegado } from "../utils/uploadMapaOSLegado";
 
 function ModalPeriodo({ onConfirmar, onCancelar }) {
 	const hoje = new Date().toISOString().split("T")[0];
 	const [inicio, setInicio] = useState("");
 	const [fim, setFim] = useState(hoje);
+	const inicioInputId = useId();
+	const fimInputId = useId();
 
 	return (
 		<>
@@ -24,6 +26,7 @@ function ModalPeriodo({ onConfirmar, onCancelar }) {
 							<h3 className="font-bold text-gray-900">Período da Planilha</h3>
 						</div>
 						<button
+							type="button"
 							onClick={onCancelar}
 							className="rounded-lg p-1 hover:bg-gray-100"
 						>
@@ -37,10 +40,14 @@ function ModalPeriodo({ onConfirmar, onCancelar }) {
 
 					<div className="mb-6 flex flex-col gap-3">
 						<div>
-							<label className="mb-1 block text-xs font-semibold text-gray-500">
+							<label
+								htmlFor={inicioInputId}
+								className="mb-1 block text-xs font-semibold text-gray-500"
+							>
 								Data início
 							</label>
 							<input
+								id={inicioInputId}
 								type="date"
 								value={inicio}
 								onChange={(e) => setInicio(e.target.value)}
@@ -48,10 +55,14 @@ function ModalPeriodo({ onConfirmar, onCancelar }) {
 							/>
 						</div>
 						<div>
-							<label className="mb-1 block text-xs font-semibold text-gray-500">
+							<label
+								htmlFor={fimInputId}
+								className="mb-1 block text-xs font-semibold text-gray-500"
+							>
 								Data fim
 							</label>
 							<input
+								id={fimInputId}
 								type="date"
 								value={fim}
 								onChange={(e) => setFim(e.target.value)}
@@ -62,12 +73,14 @@ function ModalPeriodo({ onConfirmar, onCancelar }) {
 
 					<div className="flex gap-2">
 						<button
+							type="button"
 							onClick={onCancelar}
 							className="flex-1 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition-all hover:bg-gray-50"
 						>
 							Cancelar
 						</button>
 						<button
+							type="button"
 							onClick={() => onConfirmar({ inicio, fim })}
 							disabled={!inicio || !fim}
 							className="flex-1 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-amber-700 disabled:bg-gray-300"
@@ -172,6 +185,7 @@ export default function MapaLegadoUpload({
 				/>
 
 				<button
+					type="button"
 					onClick={() => inputRef.current.click()}
 					disabled={loading}
 					className="flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-amber-700 disabled:bg-gray-300"

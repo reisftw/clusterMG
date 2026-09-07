@@ -1,5 +1,5 @@
 ﻿import { CalendarDays, X } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 	const [colaboradorId, setColaboradorId] = useState("");
@@ -7,6 +7,9 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 	const [dataFim, setDataFim] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [erro, setErro] = useState("");
+	const colaboradorInputId = useId();
+	const dataInicioInputId = useId();
+	const dataFimInputId = useId();
 
 	const calcularDias = () => {
 		if (!dataInicio || !dataFim) return 0;
@@ -53,6 +56,7 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 						<CalendarDays size={20} /> Lancar Ferias
 					</h2>
 					<button
+						type="button"
 						onClick={onClose}
 						className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
 					>
@@ -62,10 +66,14 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 
 				<form onSubmit={handleSubmit} className="space-y-4">
 					<div>
-						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+						<label
+							htmlFor={colaboradorInputId}
+							className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+						>
 							Colaborador
 						</label>
 						<select
+							id={colaboradorInputId}
 							value={colaboradorId}
 							onChange={(e) => setColaboradorId(e.target.value)}
 							required
@@ -81,10 +89,14 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+						<label
+							htmlFor={dataInicioInputId}
+							className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+						>
 							Data de Inicio
 						</label>
 						<input
+							id={dataInicioInputId}
 							type="date"
 							value={dataInicio}
 							onChange={(e) => setDataInicio(e.target.value)}
@@ -94,10 +106,14 @@ const FeriasLancamentoForm = ({ colaboradores, onSubmit, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+						<label
+							htmlFor={dataFimInputId}
+							className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+						>
 							Data de Fim
 						</label>
 						<input
+							id={dataFimInputId}
 							type="date"
 							value={dataFim}
 							onChange={(e) => setDataFim(e.target.value)}

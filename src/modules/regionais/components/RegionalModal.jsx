@@ -1,5 +1,5 @@
 ﻿import { MapPin, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { TIPOS_CIDADE } from "../hooks/useRegionais";
 import PessoaFields from "./PessoaFields";
 
@@ -76,6 +76,7 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 	const initialState = buildInitialState(regional);
 
 	const [nome, setNome] = useState(initialState.nome);
+	const nomeInputId = useId();
 	const [cidades, setCidades] = useState(initialState.cidades);
 	const [supervisor] = useState(initialState.supervisor);
 	const [lider] = useState(initialState.lider);
@@ -201,6 +202,7 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 						</h3>
 					</div>
 					<button
+						type="button"
 						onClick={onClose}
 						className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
 					>
@@ -210,9 +212,11 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 
 				<div className="flex gap-1 px-5 pt-4 bg-gray-50/50">
 					<button className={tabClass("info")} onClick={() => setAba("info")}>
+						type="button"
 						Informacoes
 					</button>
 					<button
+						type="button"
 						className={tabClass("cidades")}
 						onClick={() => setAba("cidades")}
 					>
@@ -226,6 +230,7 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 						</span>
 					</button>
 					<button
+						type="button"
 						className={tabClass("equipe")}
 						onClick={() => setAba("equipe")}
 					>
@@ -236,10 +241,14 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 				<div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 					{aba === "info" && (
 						<div>
-							<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+							<label
+								htmlFor={nomeInputId}
+								className="block text-xs font-semibold text-gray-600 mb-1.5"
+							>
 								Nome da Regional *
 							</label>
 							<input
+								id={nomeInputId}
 								type="text"
 								value={nome}
 								onChange={(e) => setNome(e.target.value)}
@@ -256,6 +265,7 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 									{cidadesValidas} cidade(s)
 								</p>
 								<button
+									type="button"
 									onClick={addCidade}
 									className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
 								>
@@ -288,6 +298,7 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 											))}
 										</select>
 										<button
+											type="button"
 											onClick={() => removeCidade(i)}
 											disabled={cidades.length === 1}
 											className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-30 transition-colors shrink-0"
@@ -431,12 +442,14 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 
 				<div className="flex gap-3 px-6 py-4 border-t border-gray-100">
 					<button
+						type="button"
 						onClick={onClose}
 						className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 					>
 						Cancelar
 					</button>
 					<button
+						type="button"
 						onClick={handleSalvar}
 						disabled={saving || !nome.trim()}
 						className="flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed"

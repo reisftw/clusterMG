@@ -1,5 +1,5 @@
 ﻿import { Star, X } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRegionais } from "../hooks/useRegionais";
 import PessoaFields from "./PessoaFields";
 
@@ -18,6 +18,8 @@ const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 
 	const [cidade, setCidade] = useState(initialState.cidade);
 	const [regional_id, setRegionalId] = useState(initialState.regionalId);
+	const cidadeInputId = useId();
+	const regionalInputId = useId();
 	const [responsavel, setResponsavel] = useState(initialState.responsavel);
 	const [saving, setSaving] = useState(false);
 
@@ -48,6 +50,7 @@ const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 						</h3>
 					</div>
 					<button
+						type="button"
 						onClick={onClose}
 						className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
 					>
@@ -57,10 +60,14 @@ const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 
 				<div className="px-6 py-5 space-y-4">
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={cidadeInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Cidade *
 						</label>
 						<input
+							id={cidadeInputId}
 							type="text"
 							value={cidade}
 							onChange={(e) => setCidade(e.target.value.toUpperCase())}
@@ -70,10 +77,14 @@ const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 					</div>
 
 					<div>
-						<label className="block text-xs font-semibold text-gray-600 mb-1.5">
+						<label
+							htmlFor={regionalInputId}
+							className="block text-xs font-semibold text-gray-600 mb-1.5"
+						>
 							Regional
 						</label>
 						<select
+							id={regionalInputId}
 							value={regional_id}
 							onChange={(e) => setRegionalId(e.target.value)}
 							className="input-field"
@@ -96,12 +107,14 @@ const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 
 				<div className="flex gap-3 px-6 pb-5">
 					<button
+						type="button"
 						onClick={onClose}
 						className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 					>
 						Cancelar
 					</button>
 					<button
+						type="button"
 						onClick={handleSalvar}
 						disabled={saving || !cidade.trim()}
 						className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40 transition-colors"

@@ -9,7 +9,7 @@
 	UserRound,
 	Users,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useMapaOS } from "../../../pages/Mapa/hooks/useMapaOS";
 import { useMatchOS } from "../../../pages/Mapa/hooks/useMatchOS";
 import { useAgentes } from "../../../pages/PainelPublico/hooks/useAgentes";
@@ -123,6 +123,7 @@ export default function RelatoriosPage() {
 		() => obterMesAtual() || "Janeiro",
 	);
 	const [metasData, setMetasData] = useState({});
+	const mesInputId = useId();
 	const [loading, setLoading] = useState(true);
 	const [activeLoading, setActiveLoading] = useState("");
 
@@ -193,10 +194,14 @@ export default function RelatoriosPage() {
 					</div>
 
 					<div className="w-full max-w-xs rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-						<label className="block text-[11px] font-bold uppercase tracking-[0.14em] text-white/70">
+						<label
+							htmlFor={mesInputId}
+							className="block text-[11px] font-bold uppercase tracking-[0.14em] text-white/70"
+						>
 							Mês base
 						</label>
 						<select
+							id={mesInputId}
 							value={mesSelecionado}
 							onChange={(event) => setMesSelecionado(event.target.value)}
 							className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-3 text-sm font-semibold text-white outline-none"

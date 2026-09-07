@@ -84,6 +84,7 @@ const EquipamentosPage = () => {
 				</div>
 				<div className="flex items-center gap-2">
 					<button
+						type="button"
 						onClick={carregar}
 						className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
 					>
@@ -91,6 +92,7 @@ const EquipamentosPage = () => {
 					</button>
 					{podeEditar && (
 						<button
+							type="button"
 							onClick={() => setModal("novo")}
 							className="btn-primary flex items-center gap-2"
 						>
@@ -262,12 +264,14 @@ const EquipamentosPage = () => {
 											<td className="px-5 py-3">
 												<div className="flex items-center gap-1">
 													<button
+														type="button"
 														onClick={() => setModal(eq)}
 														className="p-1.5 rounded-lg text-gray-400 hover:bg-orange-50 hover:text-orange-500 transition-colors"
 													>
 														<Pencil size={14} />
 													</button>
 													<button
+														type="button"
 														onClick={() => setConfirmarExcluir(eq)}
 														className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
 													>
@@ -316,12 +320,14 @@ const EquipamentosPage = () => {
 						</p>
 						<div className="flex gap-3">
 							<button
+								type="button"
 								onClick={() => setConfirmarExcluir(null)}
 								className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
 							>
 								Cancelar
 							</button>
 							<button
+								type="button"
 								onClick={() => handleExcluir(confirmarExcluir.id)}
 								className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
 							>

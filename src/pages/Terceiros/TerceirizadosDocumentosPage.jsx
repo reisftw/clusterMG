@@ -1359,6 +1359,7 @@ function SubmitDocumentsButton({
 
 	return (
 		<button
+			type="submit"
 			disabled={disabled}
 			className="mt-5 inline-flex min-h-16 w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-r from-indigo-600 to-blue-600 px-5 py-4 text-lg font-black text-white shadow-[0_20px_42px_rgba(37,99,235,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_50px_rgba(37,99,235,0.38)] disabled:translate-y-0 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none"
 		>

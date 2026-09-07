@@ -86,6 +86,7 @@ const FerramentasPage = () => {
 			<div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-3">
 				{TABS.map((t) => (
 					<button
+						type="button"
 						key={t.id}
 						onClick={() => setTab(t.id)}
 						className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
