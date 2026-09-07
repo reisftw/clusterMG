@@ -394,14 +394,33 @@ export default function AuditoriaLogsPage() {
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100">
-							{loading ? (
-								<tr>
-									<td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-										Carregando logs...
-									</td>
-								</tr>
-							) : logs.length ? (
-								logs.map((log) => (
+							{(() => {
+								// Extraido pra achado javascript:S3358 (ternario aninhado).
+								if (loading) {
+									return (
+										<tr>
+											<td
+												colSpan={7}
+												className="px-4 py-8 text-center text-slate-500"
+											>
+												Carregando logs...
+											</td>
+										</tr>
+									);
+								}
+								if (!logs.length) {
+									return (
+										<tr>
+											<td
+												colSpan={7}
+												className="px-4 py-8 text-center text-slate-500"
+											>
+												{error || "Nenhum log encontrado."}
+											</td>
+										</tr>
+									);
+								}
+								return logs.map((log) => (
 									<tr key={log.id} className="hover:bg-blue-50/40">
 										<td className="px-4 py-3 font-semibold text-slate-700">
 											{formatDateTime(log.createdAt)}
@@ -442,14 +461,8 @@ export default function AuditoriaLogsPage() {
 											</button>
 										</td>
 									</tr>
-								))
-							) : (
-								<tr>
-									<td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-										{error || "Nenhum log encontrado."}
-									</td>
-								</tr>
-							)}
+								));
+							})()}
 						</tbody>
 					</table>
 				</div>

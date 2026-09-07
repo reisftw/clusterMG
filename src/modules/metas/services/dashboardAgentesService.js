@@ -87,11 +87,10 @@ export async function buscarTodosDashboardAgentes(force = false) {
 					const doc = await getVpsDocument(`dashboardagentes/${mes}`).catch(
 						() => null,
 					);
-					const cidades = Array.isArray(doc?.cidades)
-						? doc.cidades
-						: Array.isArray(doc?.cidadesRanking)
-							? doc.cidadesRanking
-							: [];
+					// Extraido pra achado javascript:S3358 (ternario aninhado).
+					let cidades = [];
+					if (Array.isArray(doc?.cidades)) cidades = doc.cidades;
+					else if (Array.isArray(doc?.cidadesRanking)) cidades = doc.cidadesRanking;
 					return [
 						mes,
 						deduplicarCidades(cidades).map(normalizeDashboardAgenteRow),

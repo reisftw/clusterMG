@@ -33,6 +33,12 @@ function buildPoolConfig() {
 	};
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function compareCodeUnit(a, b) {
+	if (a < b) return -1;
+	return a > b ? 1 : 0;
+}
+
 function stableStringify(value) {
 	if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
 	if (value && typeof value === "object") {
@@ -40,7 +46,7 @@ function stableStringify(value) {
 		// precisa ser deterministico entre maquinas/locales diferentes, e
 		// localeCompare pode variar por ICU/locale do ambiente de execucao.
 		return `{${Object.keys(value)
-			.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+			.sort(compareCodeUnit)
 			.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
 			.join(",")}}`;
 	}

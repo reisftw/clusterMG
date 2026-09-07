@@ -729,11 +729,10 @@ async function validateHubsoftEmail(email) {
 	const response = await sempreIntegration.requestSempreRaw(
 		`/mesclar/usuario?page=1&limit=100&filter.email=$ilike:${encodeURIComponent(normalizedEmail)}`,
 	);
-	const items = Array.isArray(response?.data)
-		? response.data
-		: Array.isArray(response)
-			? response
-			: [];
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let items = [];
+	if (Array.isArray(response?.data)) items = response.data;
+	else if (Array.isArray(response)) items = response;
 	const match =
 		items.find(
 			(item) => String(item.email || "").toLowerCase() === normalizedEmail,

@@ -31,6 +31,12 @@ function getPermissionLabel(permission) {
 	return "Pendente";
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolvePrimaryActionLabel(busy, enabled) {
+	if (busy) return "Salvando...";
+	return enabled ? "Salvar preferencias" : "Ativar notificacoes";
+}
+
 function getStatusTone(enabled) {
 	return enabled
 		? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -229,11 +235,7 @@ function NotificationsModalFooter({
 				className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
 			>
 				<Check size={16} />
-				{busy
-					? "Salvando..."
-					: enabled
-						? "Salvar preferencias"
-						: "Ativar notificacoes"}
+				{resolvePrimaryActionLabel(busy, enabled)}
 			</button>
 		</div>
 	);
