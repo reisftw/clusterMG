@@ -644,6 +644,64 @@ function RetiradaCardEditForm({ form, updateField }) {
 // Extraido de RetiradaCard (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // — bloco de detalhes (modo nao-edicao), mesma JSX de antes, sem mudanca
 // de comportamento.
+// Extraido de RetiradaCardDetails (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — bloco de custo estimado dos Correios, mesma
+// JSX/logica de antes.
+function RetiradaCorreiosCostCard({ retirada, correiosPending, quoting, onQuote }) {
+	return (
+		<div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+			<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+				<div>
+					<p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">
+						Custo estimado Correios
+					</p>
+					<p className="mt-2 text-lg font-black text-gray-900">
+						{correiosPending
+							? "Integracao pendente"
+							: formatCurrency(
+									retirada.correiosFreteValor,
+									retirada.correiosFreteMoeda,
+								)}
+					</p>
+					<p className="mt-1 text-sm text-gray-600">
+						{correiosPending
+							? "Configure as credenciais dos Correios na VPS para calcular."
+							: retirada.correiosFreteServicoNome
+								? `${retirada.correiosFreteServicoNome} (${retirada.correiosFreteServicoCodigo})`
+								: "Ainda nao calculado."}
+					</p>
+					<p className="mt-1 text-xs text-gray-500">
+						Pacote padrao: 23 x 10 x 10 cm, 780 g.
+					</p>
+					{retirada.correiosFreteErro ? (
+						<p
+							className={`mt-2 text-xs font-medium ${
+								correiosPending ? "text-amber-700" : "text-rose-600"
+							}`}
+						>
+							{correiosPending
+								? "Preencha CORREIOS_CWS_USERNAME, CORREIOS_CWS_PASSWORD e CORREIOS_POSTING_CARD na VPS."
+								: retirada.correiosFreteErro}
+						</p>
+					) : null}
+				</div>
+				<button
+					type="button"
+					disabled={quoting || correiosPending}
+					onClick={() => onQuote(retirada.id)}
+					className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					{correiosPending
+						? "Configuracao pendente"
+						: quoting
+							? "Calculando..."
+							: "Calcular frete"}
+				</button>
+			</div>
+		</div>
+	);
+}
+
 function RetiradaCardDetails({
 	retirada,
 	displayRetirada,
@@ -824,56 +882,12 @@ function RetiradaCardDetails({
 					</div>
 				</div>
 			) : null}
-			<div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
-				<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-					<div>
-						<p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">
-							Custo estimado Correios
-						</p>
-						<p className="mt-2 text-lg font-black text-gray-900">
-							{correiosPending
-								? "Integracao pendente"
-								: formatCurrency(
-										retirada.correiosFreteValor,
-										retirada.correiosFreteMoeda,
-									)}
-						</p>
-						<p className="mt-1 text-sm text-gray-600">
-							{correiosPending
-								? "Configure as credenciais dos Correios na VPS para calcular."
-								: retirada.correiosFreteServicoNome
-									? `${retirada.correiosFreteServicoNome} (${retirada.correiosFreteServicoCodigo})`
-									: "Ainda nao calculado."}
-						</p>
-						<p className="mt-1 text-xs text-gray-500">
-							Pacote padrao: 23 x 10 x 10 cm, 780 g.
-						</p>
-						{retirada.correiosFreteErro ? (
-							<p
-								className={`mt-2 text-xs font-medium ${
-									correiosPending ? "text-amber-700" : "text-rose-600"
-								}`}
-							>
-								{correiosPending
-									? "Preencha CORREIOS_CWS_USERNAME, CORREIOS_CWS_PASSWORD e CORREIOS_POSTING_CARD na VPS."
-									: retirada.correiosFreteErro}
-							</p>
-						) : null}
-					</div>
-					<button
-						type="button"
-						disabled={quoting || correiosPending}
-						onClick={() => onQuote(retirada.id)}
-						className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{correiosPending
-							? "Configuracao pendente"
-							: quoting
-								? "Calculando..."
-								: "Calcular frete"}
-					</button>
-				</div>
-			</div>
+			<RetiradaCorreiosCostCard
+				retirada={retirada}
+				correiosPending={correiosPending}
+				quoting={quoting}
+				onQuote={onQuote}
+			/>
 		</div>
 	);
 }
@@ -918,6 +932,88 @@ function RetiradaCardFooterActions({
 				</button>
 			)}
 		</div>
+	);
+}
+
+// Extraido de RetiradaCard (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — cabecalho/badges do card (botao de toggle), mesma JSX/logica de
+// antes.
+function RetiradaCardHeader({
+	displayRetirada,
+	retirada,
+	expanded,
+	emailStatusMeta,
+	correiosPending,
+	onToggle,
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onToggle}
+			className="flex w-full items-center gap-4 px-5 py-4 text-left"
+		>
+			<div className="min-w-0 flex-1">
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+						{displayRetirada.metodo === "coleta" ? "Coleta" : "Ponto de apoio"}
+					</span>
+					<span
+						className={`rounded-full px-3 py-1 text-xs font-bold ${
+							STATUS_STYLES[displayRetirada.status] || "bg-gray-100 text-gray-700"
+						}`}
+					>
+						{STATUS_LABELS[displayRetirada.status] || displayRetirada.status}
+					</span>
+					{displayRetirada.tratativaTipo ? (
+						<span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+							{TRATATIVA_LABELS[displayRetirada.tratativaTipo] ||
+								displayRetirada.tratativaTipo}
+						</span>
+					) : null}
+					{displayRetirada.protocolo ? (
+						<span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+							{displayRetirada.protocolo}
+						</span>
+					) : null}
+					<span
+						className={`rounded-full px-3 py-1 text-xs font-semibold ${emailStatusMeta.pill}`}
+					>
+						{emailStatusMeta.label}
+					</span>
+				</div>
+				<div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+					<h2 className="text-base font-black text-gray-900">
+						{displayRetirada.nome}
+					</h2>
+					<span className="text-sm text-gray-500">
+						{displayRetirada.telefone || "-"}
+					</span>
+					<span className="text-sm text-gray-500">
+						{displayRetirada.cidade || "-"}
+					</span>
+					<span className="text-sm text-gray-500">
+						Criado em {formatDate(retirada.createdAt)}
+					</span>
+				</div>
+				<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+					<span>{displayRetirada.contrato || "Sem contrato"}</span>
+					<span>{displayRetirada.equipamento || "Sem equipamento"}</span>
+					<span>{displayRetirada.equipamentoMac || "Sem MAC"}</span>
+					<span>
+						Frete:{" "}
+						{correiosPending
+							? "Integracao pendente"
+							: formatCurrency(
+									retirada.correiosFreteValor,
+									retirada.correiosFreteMoeda,
+								)}
+					</span>
+				</div>
+			</div>
+			<div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+				{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+			</div>
+		</button>
 	);
 }
 
@@ -977,76 +1073,14 @@ function RetiradaCard({
 
 	return (
 		<div className="rounded-3xl border border-gray-100 bg-white shadow-sm">
-			<button
-				type="button"
-				onClick={onToggle}
-				className="flex w-full items-center gap-4 px-5 py-4 text-left"
-			>
-				<div className="min-w-0 flex-1">
-					<div className="flex flex-wrap items-center gap-2">
-						<span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-							{displayRetirada.metodo === "coleta"
-								? "Coleta"
-								: "Ponto de apoio"}
-						</span>
-						<span
-							className={`rounded-full px-3 py-1 text-xs font-bold ${
-								STATUS_STYLES[displayRetirada.status] ||
-								"bg-gray-100 text-gray-700"
-							}`}
-						>
-							{STATUS_LABELS[displayRetirada.status] || displayRetirada.status}
-						</span>
-						{displayRetirada.tratativaTipo ? (
-							<span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-								{TRATATIVA_LABELS[displayRetirada.tratativaTipo] ||
-									displayRetirada.tratativaTipo}
-							</span>
-						) : null}
-						{displayRetirada.protocolo ? (
-							<span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-								{displayRetirada.protocolo}
-							</span>
-						) : null}
-						<span
-							className={`rounded-full px-3 py-1 text-xs font-semibold ${emailStatusMeta.pill}`}
-						>
-							{emailStatusMeta.label}
-						</span>
-					</div>
-					<div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-						<h2 className="text-base font-black text-gray-900">
-							{displayRetirada.nome}
-						</h2>
-						<span className="text-sm text-gray-500">
-							{displayRetirada.telefone || "-"}
-						</span>
-						<span className="text-sm text-gray-500">
-							{displayRetirada.cidade || "-"}
-						</span>
-						<span className="text-sm text-gray-500">
-							Criado em {formatDate(retirada.createdAt)}
-						</span>
-					</div>
-					<div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
-						<span>{displayRetirada.contrato || "Sem contrato"}</span>
-						<span>{displayRetirada.equipamento || "Sem equipamento"}</span>
-						<span>{displayRetirada.equipamentoMac || "Sem MAC"}</span>
-						<span>
-							Frete:{" "}
-							{correiosPending
-								? "Integracao pendente"
-								: formatCurrency(
-										retirada.correiosFreteValor,
-										retirada.correiosFreteMoeda,
-									)}
-						</span>
-					</div>
-				</div>
-				<div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-500">
-					{expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-				</div>
-			</button>
+			<RetiradaCardHeader
+				displayRetirada={displayRetirada}
+				retirada={retirada}
+				expanded={expanded}
+				emailStatusMeta={emailStatusMeta}
+				correiosPending={correiosPending}
+				onToggle={onToggle}
+			/>
 
 			{expanded ? (
 				<div className="border-t border-gray-100 px-5 py-5">

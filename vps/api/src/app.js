@@ -1720,48 +1720,47 @@ async function assertCanCreateManagedUser(user, body = {}) {
 	}
 }
 
-async function assertCanUpdateManagedUser(user, uid, body = {}) {
-	if (hasRole(user, ADMIN_ROLES)) return;
-	if (hasRole(user, ["supervisor_administrativo"])) {
-		const current = await getUserProfileDocument(uid);
-		if (!current || !canAdministrativoAccessUserRecord(user, current)) {
-			const error = new Error(
-				"Supervisor Administrativo so pode alterar Analista Administrativo, Lider Empresa ou Agente Autorizado.",
-			);
-			error.statusCode = 403;
-			throw error;
-		}
-		const nextRole =
-			body.role !== undefined
-				? normalizeUserRole(body.role)
-				: normalizeUserRole(current.role);
-		if (!canAdministrativoManageUserRole(nextRole)) {
-			const error = new Error(
-				"Supervisor Administrativo so pode manter usuarios como Analista Administrativo, Lider Empresa ou Agente Autorizado.",
-			);
-			error.statusCode = 403;
-			throw error;
-		}
-		return;
+// Extraidos de assertCanUpdateManagedUser (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cada ramo (mutuamente exclusivo, so um
+// executa) virou uma funcao dedicada, mesma logica/mensagens de antes.
+async function assertSupervisorAdministrativoCanUpdateUser(user, uid, body) {
+	const current = await getUserProfileDocument(uid);
+	if (!current || !canAdministrativoAccessUserRecord(user, current)) {
+		const error = new Error(
+			"Supervisor Administrativo so pode alterar Analista Administrativo, Lider Empresa ou Agente Autorizado.",
+		);
+		error.statusCode = 403;
+		throw error;
 	}
-	if (
-		!hasRole(user, ["supervisor"]) &&
-		hasAnyPermission(user, ["configuracao.usuarios.manage", "manage_users"])
-	) {
-		const current = await getUserProfileDocument(uid);
-		if (!current) {
-			const error = new Error("Usuario nao encontrado.");
-			error.statusCode = 404;
-			throw error;
-		}
-		await assertScopedRoleCanBeAssigned(user, current.role);
-		const nextRole =
-			body.role !== undefined
-				? normalizeUserRole(body.role)
-				: normalizeUserRole(current.role);
-		await assertScopedRoleCanBeAssigned(user, nextRole);
-		return;
+	const nextRole =
+		body.role !== undefined
+			? normalizeUserRole(body.role)
+			: normalizeUserRole(current.role);
+	if (!canAdministrativoManageUserRole(nextRole)) {
+		const error = new Error(
+			"Supervisor Administrativo so pode manter usuarios como Analista Administrativo, Lider Empresa ou Agente Autorizado.",
+		);
+		error.statusCode = 403;
+		throw error;
 	}
+}
+
+async function assertScopedManagerCanUpdateUser(user, uid, body) {
+	const current = await getUserProfileDocument(uid);
+	if (!current) {
+		const error = new Error("Usuario nao encontrado.");
+		error.statusCode = 404;
+		throw error;
+	}
+	await assertScopedRoleCanBeAssigned(user, current.role);
+	const nextRole =
+		body.role !== undefined
+			? normalizeUserRole(body.role)
+			: normalizeUserRole(current.role);
+	await assertScopedRoleCanBeAssigned(user, nextRole);
+}
+
+async function assertSupervisorCanUpdateUser(user, uid, body) {
 	if (!hasRole(user, ["supervisor"])) {
 		const error = new Error("Permissao insuficiente.");
 		error.statusCode = 403;
@@ -1801,6 +1800,20 @@ async function assertCanUpdateManagedUser(user, uid, body = {}) {
 		error.statusCode = 403;
 		throw error;
 	}
+}
+
+async function assertCanUpdateManagedUser(user, uid, body = {}) {
+	if (hasRole(user, ADMIN_ROLES)) return;
+	if (hasRole(user, ["supervisor_administrativo"])) {
+		return assertSupervisorAdministrativoCanUpdateUser(user, uid, body);
+	}
+	if (
+		!hasRole(user, ["supervisor"]) &&
+		hasAnyPermission(user, ["configuracao.usuarios.manage", "manage_users"])
+	) {
+		return assertScopedManagerCanUpdateUser(user, uid, body);
+	}
+	return assertSupervisorCanUpdateUser(user, uid, body);
 }
 
 const ADMIN_ONLY_COLLECTION_PREFIXES = [

@@ -373,6 +373,258 @@ function useHubsoftSettingsController() {
 	};
 }
 
+// Extraido de HubsoftSettingsPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — secao inteira de sincronizacao Mapa/Match
+// (botoes, config, job em andamento e historico de execucoes), mesma
+// JSX/logica de antes.
+function HubsoftSyncSection({
+	syncing,
+	handleSync,
+	config,
+	updateConfig,
+	toggleArrayValue,
+	syncJob,
+	syncRuns,
+}) {
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-700">
+						<DatabaseZap size={21} />
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Sincronização Mapa e Match
+						</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Prepare a leitura automática do Hubsoft. Use prévia primeiro;
+							produção substitui os dados atuais.
+						</p>
+					</div>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					<button
+						type="button"
+						disabled={syncing}
+						onClick={() => handleSync("preview")}
+						className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-100 disabled:opacity-60"
+					>
+						{syncing ? (
+							<Loader2 className="animate-spin" size={17} />
+						) : (
+							<Search size={17} />
+						)}{" "}
+						Gerar prévia
+					</button>
+					<button
+						type="button"
+						disabled={syncing}
+						onClick={() => handleSync("production")}
+						className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
+					>
+						{syncing ? (
+							<Loader2 className="animate-spin" size={17} />
+						) : (
+							<DatabaseZap size={17} />
+						)}{" "}
+						Sincronizar produção
+					</button>
+				</div>
+			</div>
+
+			<div className="grid gap-4 lg:grid-cols-2">
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Tipo de busca padrão
+					</span>
+					<select
+						value={config.syncBusca || "numero_ordem_servico"}
+						onChange={(event) => updateConfig("syncBusca", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
+					>
+						{SEARCH_TYPES.map((item) => (
+							<option key={item.value} value={item.value}>
+								{item.label}
+							</option>
+						))}
+					</select>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Limite por chamada
+					</span>
+					<input
+						type="number"
+						min="1"
+						max="50"
+						value={config.syncLimit || 50}
+						onChange={(event) =>
+							updateConfig("syncLimit", Number(event.target.value))
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300"
+					/>
+				</label>
+				<label className="block lg:col-span-2">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Termos de busca opcionais
+					</span>
+					<textarea
+						value={(Array.isArray(config.syncTermos)
+							? config.syncTermos
+							: []
+						).join("\n")}
+						onChange={(event) =>
+							updateConfig(
+								"syncTermos",
+								event.target.value
+									.split(/[\n,;]+/)
+									.map((item) => item.trim())
+									.filter(Boolean),
+							)
+						}
+						rows={3}
+						placeholder="Um termo por linha. Ex: códigos de clientes, números de O.S. ou deixe vazio para tentativa geral por status."
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300"
+					/>
+				</label>
+			</div>
+
+			<div className="mt-5 grid gap-4 lg:grid-cols-3">
+				<div className="rounded-2xl border border-slate-200 p-4">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Status de O.S.
+					</p>
+					<div className="mt-3 flex flex-wrap gap-2">
+						{SYNC_STATUSES.map((item) => (
+							<button
+								key={item.value}
+								type="button"
+								onClick={() => toggleArrayValue("syncStatuses", item.value)}
+								className={`rounded-full px-3 py-2 text-xs font-black transition ${
+									(config.syncStatuses || []).includes(item.value)
+										? "bg-blue-600 text-white"
+										: "bg-slate-100 text-slate-600 hover:bg-slate-200"
+								}`}
+							>
+								{item.label}
+							</button>
+						))}
+					</div>
+				</div>
+				<div className="rounded-2xl border border-slate-200 p-4">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Fontes atualizadas
+					</p>
+					<div className="mt-3 flex flex-wrap gap-2">
+						{SYNC_FONTES.map((item) => (
+							<button
+								key={item.value}
+								type="button"
+								onClick={() => toggleArrayValue("syncFontes", item.value)}
+								className={`rounded-full px-3 py-2 text-xs font-black transition ${
+									(config.syncFontes || []).includes(item.value)
+										? "bg-emerald-600 text-white"
+										: "bg-slate-100 text-slate-600 hover:bg-slate-200"
+								}`}
+							>
+								{item.label}
+							</button>
+						))}
+					</div>
+				</div>
+				<div className="rounded-2xl border border-slate-200 p-4">
+					<p className="text-xs font-black uppercase text-slate-500">Match</p>
+					<label className="mt-3 inline-flex items-center gap-2 text-sm font-black text-slate-700">
+						<input
+							type="checkbox"
+							checked={config.syncMatchEnabled !== false}
+							onChange={(event) =>
+								updateConfig("syncMatchEnabled", event.target.checked)
+							}
+							className="h-4 w-4"
+						/>
+						Atualizar Match junto com Mapa
+					</label>
+				</div>
+			</div>
+
+			{syncJob ? (
+				<div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+					<div className="flex items-center justify-between gap-3">
+						<div>
+							<p className="text-sm font-black text-blue-950">
+								{syncJob.stage || "Processando"}
+							</p>
+							<p className="text-xs font-semibold text-blue-700">
+								Status: {syncJob.status || "-"}{" "}
+								{syncJob.error ? `| ${syncJob.error}` : ""}
+							</p>
+						</div>
+						<span className="text-lg font-black text-blue-950">
+							{Number(syncJob.percent || 0)}%
+						</span>
+					</div>
+					<div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
+						<div
+							className="h-full rounded-full bg-blue-600 transition-all"
+							style={{
+								width: `${Math.min(Math.max(Number(syncJob.percent || 0), 0), 100)}%`,
+							}}
+						/>
+					</div>
+					{syncJob.result?.sample?.length ? (
+						<pre className="mt-4 max-h-64 overflow-auto rounded-2xl bg-slate-950 p-4 text-xs font-semibold text-slate-100">
+							{safePreview(syncJob.result.sample)}
+						</pre>
+					) : null}
+				</div>
+			) : null}
+
+			{syncRuns.length ? (
+				<div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
+					<table className="min-w-[760px] w-full divide-y divide-slate-200 text-sm">
+						<thead className="bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+							<tr>
+								<th className="px-4 py-3">Data</th>
+								<th className="px-4 py-3">Modo</th>
+								<th className="px-4 py-3">Status</th>
+								<th className="px-4 py-3">O.S.</th>
+								<th className="px-4 py-3">Mapa</th>
+								<th className="px-4 py-3">Match</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100 bg-white">
+							{syncRuns.map((run) => (
+								<tr key={run.id}>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{formatDateTime(run.createdAt)}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{run.mode || "-"}
+									</td>
+									<td className="px-4 py-3 font-black text-slate-900">
+										{run.status || "-"}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{run.totalRows || 0}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{run.mapaTotal || 0}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{run.matchTotal || 0}
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			) : null}
+		</section>
+	);
+}
+
 export default function HubsoftSettingsPage() {
 	const {
 		config,
@@ -636,243 +888,15 @@ export default function HubsoftSettingsPage() {
 				) : null}
 			</section>
 
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-					<div className="flex items-start gap-3">
-						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-700">
-							<DatabaseZap size={21} />
-						</div>
-						<div>
-							<h2 className="text-lg font-black text-slate-950">
-								Sincronização Mapa e Match
-							</h2>
-							<p className="text-sm font-semibold text-slate-500">
-								Prepare a leitura automática do Hubsoft. Use prévia primeiro;
-								produção substitui os dados atuais.
-							</p>
-						</div>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						<button
-							type="button"
-							disabled={syncing}
-							onClick={() => handleSync("preview")}
-							className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800 transition hover:bg-blue-100 disabled:opacity-60"
-						>
-							{syncing ? (
-								<Loader2 className="animate-spin" size={17} />
-							) : (
-								<Search size={17} />
-							)}{" "}
-							Gerar prévia
-						</button>
-						<button
-							type="button"
-							disabled={syncing}
-							onClick={() => handleSync("production")}
-							className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
-						>
-							{syncing ? (
-								<Loader2 className="animate-spin" size={17} />
-							) : (
-								<DatabaseZap size={17} />
-							)}{" "}
-							Sincronizar produção
-						</button>
-					</div>
-				</div>
-
-				<div className="grid gap-4 lg:grid-cols-2">
-					<label className="block">
-						<span className="text-xs font-black uppercase text-slate-500">
-							Tipo de busca padrão
-						</span>
-						<select
-							value={config.syncBusca || "numero_ordem_servico"}
-							onChange={(event) =>
-								updateConfig("syncBusca", event.target.value)
-							}
-							className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
-						>
-							{SEARCH_TYPES.map((item) => (
-								<option key={item.value} value={item.value}>
-									{item.label}
-								</option>
-							))}
-						</select>
-					</label>
-					<label className="block">
-						<span className="text-xs font-black uppercase text-slate-500">
-							Limite por chamada
-						</span>
-						<input
-							type="number"
-							min="1"
-							max="50"
-							value={config.syncLimit || 50}
-							onChange={(event) =>
-								updateConfig("syncLimit", Number(event.target.value))
-							}
-							className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300"
-						/>
-					</label>
-					<label className="block lg:col-span-2">
-						<span className="text-xs font-black uppercase text-slate-500">
-							Termos de busca opcionais
-						</span>
-						<textarea
-							value={(Array.isArray(config.syncTermos)
-								? config.syncTermos
-								: []
-							).join("\n")}
-							onChange={(event) =>
-								updateConfig(
-									"syncTermos",
-									event.target.value
-										.split(/[\n,;]+/)
-										.map((item) => item.trim())
-										.filter(Boolean),
-								)
-							}
-							rows={3}
-							placeholder="Um termo por linha. Ex: códigos de clientes, números de O.S. ou deixe vazio para tentativa geral por status."
-							className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300"
-						/>
-					</label>
-				</div>
-
-				<div className="mt-5 grid gap-4 lg:grid-cols-3">
-					<div className="rounded-2xl border border-slate-200 p-4">
-						<p className="text-xs font-black uppercase text-slate-500">
-							Status de O.S.
-						</p>
-						<div className="mt-3 flex flex-wrap gap-2">
-							{SYNC_STATUSES.map((item) => (
-								<button
-									key={item.value}
-									type="button"
-									onClick={() => toggleArrayValue("syncStatuses", item.value)}
-									className={`rounded-full px-3 py-2 text-xs font-black transition ${
-										(config.syncStatuses || []).includes(item.value)
-											? "bg-blue-600 text-white"
-											: "bg-slate-100 text-slate-600 hover:bg-slate-200"
-									}`}
-								>
-									{item.label}
-								</button>
-							))}
-						</div>
-					</div>
-					<div className="rounded-2xl border border-slate-200 p-4">
-						<p className="text-xs font-black uppercase text-slate-500">
-							Fontes atualizadas
-						</p>
-						<div className="mt-3 flex flex-wrap gap-2">
-							{SYNC_FONTES.map((item) => (
-								<button
-									key={item.value}
-									type="button"
-									onClick={() => toggleArrayValue("syncFontes", item.value)}
-									className={`rounded-full px-3 py-2 text-xs font-black transition ${
-										(config.syncFontes || []).includes(item.value)
-											? "bg-emerald-600 text-white"
-											: "bg-slate-100 text-slate-600 hover:bg-slate-200"
-									}`}
-								>
-									{item.label}
-								</button>
-							))}
-						</div>
-					</div>
-					<div className="rounded-2xl border border-slate-200 p-4">
-						<p className="text-xs font-black uppercase text-slate-500">Match</p>
-						<label className="mt-3 inline-flex items-center gap-2 text-sm font-black text-slate-700">
-							<input
-								type="checkbox"
-								checked={config.syncMatchEnabled !== false}
-								onChange={(event) =>
-									updateConfig("syncMatchEnabled", event.target.checked)
-								}
-								className="h-4 w-4"
-							/>
-							Atualizar Match junto com Mapa
-						</label>
-					</div>
-				</div>
-
-				{syncJob ? (
-					<div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-						<div className="flex items-center justify-between gap-3">
-							<div>
-								<p className="text-sm font-black text-blue-950">
-									{syncJob.stage || "Processando"}
-								</p>
-								<p className="text-xs font-semibold text-blue-700">
-									Status: {syncJob.status || "-"}{" "}
-									{syncJob.error ? `| ${syncJob.error}` : ""}
-								</p>
-							</div>
-							<span className="text-lg font-black text-blue-950">
-								{Number(syncJob.percent || 0)}%
-							</span>
-						</div>
-						<div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
-							<div
-								className="h-full rounded-full bg-blue-600 transition-all"
-								style={{
-									width: `${Math.min(Math.max(Number(syncJob.percent || 0), 0), 100)}%`,
-								}}
-							/>
-						</div>
-						{syncJob.result?.sample?.length ? (
-							<pre className="mt-4 max-h-64 overflow-auto rounded-2xl bg-slate-950 p-4 text-xs font-semibold text-slate-100">
-								{safePreview(syncJob.result.sample)}
-							</pre>
-						) : null}
-					</div>
-				) : null}
-
-				{syncRuns.length ? (
-					<div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
-						<table className="min-w-[760px] w-full divide-y divide-slate-200 text-sm">
-							<thead className="bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
-								<tr>
-									<th className="px-4 py-3">Data</th>
-									<th className="px-4 py-3">Modo</th>
-									<th className="px-4 py-3">Status</th>
-									<th className="px-4 py-3">O.S.</th>
-									<th className="px-4 py-3">Mapa</th>
-									<th className="px-4 py-3">Match</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-slate-100 bg-white">
-								{syncRuns.map((run) => (
-									<tr key={run.id}>
-										<td className="px-4 py-3 font-semibold text-slate-700">
-											{formatDateTime(run.createdAt)}
-										</td>
-										<td className="px-4 py-3 font-semibold text-slate-700">
-											{run.mode || "-"}
-										</td>
-										<td className="px-4 py-3 font-black text-slate-900">
-											{run.status || "-"}
-										</td>
-										<td className="px-4 py-3 font-semibold text-slate-700">
-											{run.totalRows || 0}
-										</td>
-										<td className="px-4 py-3 font-semibold text-slate-700">
-											{run.mapaTotal || 0}
-										</td>
-										<td className="px-4 py-3 font-semibold text-slate-700">
-											{run.matchTotal || 0}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				) : null}
-			</section>
+			<HubsoftSyncSection
+				syncing={syncing}
+				handleSync={handleSync}
+				config={config}
+				updateConfig={updateConfig}
+				toggleArrayValue={toggleArrayValue}
+				syncJob={syncJob}
+				syncRuns={syncRuns}
+			/>
 		</div>
 	);
 }

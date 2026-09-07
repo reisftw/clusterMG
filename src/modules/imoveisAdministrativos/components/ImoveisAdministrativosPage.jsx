@@ -903,6 +903,90 @@ function useImoveisAdministrativosController(page) {
 // Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
 // docs/SONARQUBE-MAP.md) — aba de cadastro/edicao de imovel, mesma JSX de
 // antes, sem mudanca de comportamento.
+// Extraidos de ImovelCadastroTab (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — 3 blocos condicionais pequenos do formulario,
+// mesma JSX/logica de antes.
+function ImovelInativacaoFields({ form, setForm }) {
+	if (form.ativo !== false) return null;
+	return (
+		<div className="grid gap-4 rounded-2xl border border-red-100 bg-red-50/40 p-4 md:grid-cols-2">
+			<Field label="Data de inativação">
+				<input
+					type="date"
+					className={inputClass()}
+					value={form.dataInativacao}
+					onChange={(e) =>
+						setForm((cur) => ({ ...cur, dataInativacao: e.target.value }))
+					}
+				/>
+			</Field>
+			<Field label="Motivo da inativação">
+				<input
+					className={inputClass()}
+					value={form.motivoInativacao}
+					onChange={(e) =>
+						setForm((cur) => ({ ...cur, motivoInativacao: e.target.value }))
+					}
+				/>
+			</Field>
+		</div>
+	);
+}
+
+function ImovelAluguelTeaser({ form, setAluguelModalOpen }) {
+	if (form.tipoContrato !== "alugado") return null;
+	return (
+		<div className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-orange-50/40 p-4 md:flex-row md:items-center md:justify-between">
+			<div>
+				<p className="text-sm font-black uppercase tracking-wide text-orange-700">
+					Dados do aluguel e proprietário
+				</p>
+				<p className="mt-1 text-sm font-semibold text-slate-600">
+					{form.valorAluguel
+						? `Aluguel ${formatCurrency(form.valorAluguel)} · `
+						: ""}
+					{form.proprietarioNome || "Proprietário não informado"}
+				</p>
+			</div>
+			<ActionButton
+				icon={Home}
+				tone="orange"
+				onClick={() => setAluguelModalOpen(true)}
+			>
+				Preencher aluguel
+			</ActionButton>
+		</div>
+	);
+}
+
+function ImovelMapsLinks({ form }) {
+	if (!form.mapsUrl && !form.streetViewUrl) return null;
+	return (
+		<div className="flex flex-wrap gap-2 text-sm font-bold">
+			{form.mapsUrl ? (
+				<a
+					className="text-blue-700 underline"
+					href={form.mapsUrl}
+					target="_blank"
+					rel="noreferrer"
+				>
+					Abrir localização
+				</a>
+			) : null}
+			{form.streetViewUrl ? (
+				<a
+					className="text-blue-700 underline"
+					href={form.streetViewUrl}
+					target="_blank"
+					rel="noreferrer"
+				>
+					Abrir Google Street View
+				</a>
+			) : null}
+		</div>
+	);
+}
+
 function ImovelCadastroTab(props) {
 	const {
 	selectedId,
@@ -1093,58 +1177,12 @@ function ImovelCadastroTab(props) {
 										</select>
 									</Field>
 								</div>
-								{form.ativo === false ? (
-									<div className="grid gap-4 rounded-2xl border border-red-100 bg-red-50/40 p-4 md:grid-cols-2">
-										<Field label="Data de inativação">
-											<input
-												type="date"
-												className={inputClass()}
-												value={form.dataInativacao}
-												onChange={(e) =>
-													setForm((cur) => ({
-														...cur,
-														dataInativacao: e.target.value,
-													}))
-												}
-											/>
-										</Field>
-										<Field label="Motivo da inativação">
-											<input
-												className={inputClass()}
-												value={form.motivoInativacao}
-												onChange={(e) =>
-													setForm((cur) => ({
-														...cur,
-														motivoInativacao: e.target.value,
-													}))
-												}
-											/>
-										</Field>
-									</div>
-								) : null}
+								<ImovelInativacaoFields form={form} setForm={setForm} />
 
-								{form.tipoContrato === "alugado" ? (
-									<div className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-orange-50/40 p-4 md:flex-row md:items-center md:justify-between">
-										<div>
-											<p className="text-sm font-black uppercase tracking-wide text-orange-700">
-												Dados do aluguel e proprietário
-											</p>
-											<p className="mt-1 text-sm font-semibold text-slate-600">
-												{form.valorAluguel
-													? `Aluguel ${formatCurrency(form.valorAluguel)} · `
-													: ""}
-												{form.proprietarioNome || "Proprietário não informado"}
-											</p>
-										</div>
-										<ActionButton
-											icon={Home}
-											tone="orange"
-											onClick={() => setAluguelModalOpen(true)}
-										>
-											Preencher aluguel
-										</ActionButton>
-									</div>
-								) : null}
+								<ImovelAluguelTeaser
+									form={form}
+									setAluguelModalOpen={setAluguelModalOpen}
+								/>
 
 								<div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
 									<h3 className="mb-4 text-sm font-black uppercase tracking-wide text-slate-600">
@@ -1231,30 +1269,7 @@ function ImovelCadastroTab(props) {
 										</ActionButton>
 									</div>
 								</div>
-								{form.mapsUrl || form.streetViewUrl ? (
-									<div className="flex flex-wrap gap-2 text-sm font-bold">
-										{form.mapsUrl ? (
-											<a
-												className="text-blue-700 underline"
-												href={form.mapsUrl}
-												target="_blank"
-												rel="noreferrer"
-											>
-												Abrir localização
-											</a>
-										) : null}
-										{form.streetViewUrl ? (
-											<a
-												className="text-blue-700 underline"
-												href={form.streetViewUrl}
-												target="_blank"
-												rel="noreferrer"
-											>
-												Abrir Google Street View
-											</a>
-										) : null}
-									</div>
-								) : null}
+								<ImovelMapsLinks form={form} />
 
 								<div className="grid gap-4 md:grid-cols-3">
 									<Field label="Tem estacionamento?">
@@ -2923,6 +2938,169 @@ function ImoveisPlacasModal(props) {
 	);
 }
 
+// Extraidos de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cabecalho (contador + acoes) e lista lateral
+// de imoveis, mesma JSX/logica de antes.
+function ImoveisPageHeader({
+	podeGerenciar,
+	config,
+	setConfigDraft,
+	setConfigOpen,
+	setDeleteSelection,
+	setDeleteModalOpen,
+	loading,
+	carregar,
+	setSelectedId,
+	setForm,
+	setRegistros,
+	setTab,
+	message,
+	localReport,
+}) {
+	return (
+		<>
+			<div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+				<div className="flex items-center gap-3">
+					<span className="rounded-2xl bg-blue-50 p-3 text-blue-700">
+						<Building2 size={26} />
+					</span>
+					<div>
+						<h1 className="text-2xl font-black text-slate-950">Imóveis</h1>
+						<p className="text-sm font-semibold text-slate-500">
+							Cadastro, contratos, reajustes, IPTU e relatórios dos imóveis
+							administrativos.
+						</p>
+					</div>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					{podeGerenciar ? (
+						<>
+							<ActionButton
+								icon={Settings}
+								tone="slate"
+								onClick={() => {
+									setConfigDraft({
+										...config,
+										empresasText: (config.empresas || []).join("\n"),
+										classificacoesText: (config.classificacoes || []).join(
+											"\n",
+										),
+										diretoriasText: (config.diretorias || []).join("\n"),
+									});
+									setConfigOpen(true);
+								}}
+							>
+								Configurações
+							</ActionButton>
+							<ActionButton
+								icon={Trash2}
+								tone="slate"
+								onClick={() => {
+									setDeleteSelection([]);
+									setDeleteModalOpen(true);
+								}}
+							>
+								Excluir imóveis
+							</ActionButton>
+						</>
+					) : null}
+					<ActionButton
+						icon={RefreshCw}
+						tone="slate"
+						loading={loading}
+						onClick={carregar}
+					>
+						Atualizar
+					</ActionButton>
+					<ActionButton
+						icon={Plus}
+						onClick={() => {
+							setSelectedId("");
+							setForm(EMPTY_FORM);
+							setRegistros(null);
+							setTab("cadastro");
+						}}
+					>
+						Novo imóvel
+					</ActionButton>
+				</div>
+			</div>
+
+			{message ? (
+				<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
+					{message}
+				</div>
+			) : null}
+
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<StatCard
+					icon={Home}
+					label="Imóveis ativos"
+					value={localReport.ativos}
+					hint="Em operação"
+				/>
+				<StatCard
+					icon={Building2}
+					label="Imóveis próprios"
+					value={localReport.proprios}
+					hint="Sem aluguel mensal"
+					tone="green"
+				/>
+				<StatCard
+					icon={CalendarClock}
+					label="Alugados"
+					value={localReport.alugados}
+					hint="Com aluguel mensal"
+					tone="orange"
+				/>
+				<StatCard
+					icon={History}
+					label="Contratos cancelados"
+					value={localReport.finalizados}
+					hint="Histórico/cancelados"
+					tone="slate"
+				/>
+			</div>
+		</>
+	);
+}
+
+function ImoveisSidebarList({ imoveis, selectedId, setSelectedId }) {
+	return (
+		<aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+			<h2 className="font-black text-slate-950">Imóveis cadastrados</h2>
+			<div className="mt-3 max-h-[620px] space-y-2 overflow-auto pr-1">
+				{imoveis.map((item) => (
+					<button
+						key={item.id}
+						type="button"
+						onClick={() => setSelectedId(item.id)}
+						className={`w-full rounded-xl border p-3 text-left transition ${selectedId === item.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+					>
+						<div className="flex items-center justify-between gap-2">
+							<p className="font-black text-slate-950">{item.seniorId}</p>
+							<span
+								className={`rounded-full px-2 py-0.5 text-[11px] font-black ${item.ativo === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
+							>
+								{item.ativo === false ? "Inativo" : "Ativo"}
+							</span>
+						</div>
+						<p className="mt-1 truncate text-xs font-black text-slate-700">
+							{item.nome || "Sem título"}
+						</p>
+						<p className="mt-1 truncate text-xs font-semibold text-slate-500">
+							{item.endereco || "Sem endereço"}
+						</p>
+						<p className="mt-1 text-xs font-black uppercase text-blue-700">
+							{item.base || "-"} · {item.tipoContrato || "-"}
+						</p>
+					</button>
+				))}
+			</div>
+		</aside>
+	);
+}
+
 export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 	const controller = useImoveisAdministrativosController(page);
 	const {
@@ -2959,110 +3137,22 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 	return (
 		<div className="space-y-6 p-6">
 			{!isDetalhePage ? (
-				<>
-					<div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-						<div className="flex items-center gap-3">
-							<span className="rounded-2xl bg-blue-50 p-3 text-blue-700">
-								<Building2 size={26} />
-							</span>
-							<div>
-								<h1 className="text-2xl font-black text-slate-950">Imóveis</h1>
-								<p className="text-sm font-semibold text-slate-500">
-									Cadastro, contratos, reajustes, IPTU e relatórios dos imóveis
-									administrativos.
-								</p>
-							</div>
-						</div>
-						<div className="flex flex-wrap gap-2">
-							{podeGerenciar ? (
-								<>
-									<ActionButton
-										icon={Settings}
-										tone="slate"
-										onClick={() => {
-											setConfigDraft({
-												...config,
-												empresasText: (config.empresas || []).join("\n"),
-												classificacoesText: (config.classificacoes || []).join(
-													"\n",
-												),
-												diretoriasText: (config.diretorias || []).join("\n"),
-											});
-											setConfigOpen(true);
-										}}
-									>
-										Configurações
-									</ActionButton>
-									<ActionButton
-										icon={Trash2}
-										tone="slate"
-										onClick={() => {
-											setDeleteSelection([]);
-											setDeleteModalOpen(true);
-										}}
-									>
-										Excluir imóveis
-									</ActionButton>
-								</>
-							) : null}
-							<ActionButton
-								icon={RefreshCw}
-								tone="slate"
-								loading={loading}
-								onClick={carregar}
-							>
-								Atualizar
-							</ActionButton>
-							<ActionButton
-								icon={Plus}
-								onClick={() => {
-									setSelectedId("");
-									setForm(EMPTY_FORM);
-									setRegistros(null);
-									setTab("cadastro");
-								}}
-							>
-								Novo imóvel
-							</ActionButton>
-						</div>
-					</div>
-
-					{message ? (
-						<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
-							{message}
-						</div>
-					) : null}
-
-					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-						<StatCard
-							icon={Home}
-							label="Imóveis ativos"
-							value={localReport.ativos}
-							hint="Em operação"
-						/>
-						<StatCard
-							icon={Building2}
-							label="Imóveis próprios"
-							value={localReport.proprios}
-							hint="Sem aluguel mensal"
-							tone="green"
-						/>
-						<StatCard
-							icon={CalendarClock}
-							label="Alugados"
-							value={localReport.alugados}
-							hint="Com aluguel mensal"
-							tone="orange"
-						/>
-						<StatCard
-							icon={History}
-							label="Contratos cancelados"
-							value={localReport.finalizados}
-							hint="Histórico/cancelados"
-							tone="slate"
-						/>
-					</div>
-				</>
+				<ImoveisPageHeader
+					podeGerenciar={podeGerenciar}
+					config={config}
+					setConfigDraft={setConfigDraft}
+					setConfigOpen={setConfigOpen}
+					setDeleteSelection={setDeleteSelection}
+					setDeleteModalOpen={setDeleteModalOpen}
+					loading={loading}
+					carregar={carregar}
+					setSelectedId={setSelectedId}
+					setForm={setForm}
+					setRegistros={setRegistros}
+					setTab={setTab}
+					message={message}
+					localReport={localReport}
+				/>
 			) : null}
 
 			{tab === "dashboard" ? (
@@ -3098,37 +3188,11 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 
 			{tab !== "dashboard" && tab !== "detalhe" ? (
 				<div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-					<aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-						<h2 className="font-black text-slate-950">Imóveis cadastrados</h2>
-						<div className="mt-3 max-h-[620px] space-y-2 overflow-auto pr-1">
-							{imoveis.map((item) => (
-								<button
-									key={item.id}
-									type="button"
-									onClick={() => setSelectedId(item.id)}
-									className={`w-full rounded-xl border p-3 text-left transition ${selectedId === item.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-								>
-									<div className="flex items-center justify-between gap-2">
-										<p className="font-black text-slate-950">{item.seniorId}</p>
-										<span
-											className={`rounded-full px-2 py-0.5 text-[11px] font-black ${item.ativo === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
-										>
-											{item.ativo === false ? "Inativo" : "Ativo"}
-										</span>
-									</div>
-									<p className="mt-1 truncate text-xs font-black text-slate-700">
-										{item.nome || "Sem título"}
-									</p>
-									<p className="mt-1 truncate text-xs font-semibold text-slate-500">
-										{item.endereco || "Sem endereço"}
-									</p>
-									<p className="mt-1 text-xs font-black uppercase text-blue-700">
-										{item.base || "-"} · {item.tipoContrato || "-"}
-									</p>
-								</button>
-							))}
-						</div>
-					</aside>
+					<ImoveisSidebarList
+						imoveis={imoveis}
+						selectedId={selectedId}
+						setSelectedId={setSelectedId}
+					/>
 
 					<main className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 						{tab === "cadastro" ? <ImovelCadastroTab {...controller} /> : null}
@@ -3209,6 +3273,148 @@ function renderDriveFileCell(row, key) {
 		</a>
 	) : (
 		"-"
+	);
+}
+
+// Extraidos de ImovelDetailPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — grade de InfoPills e card do proprietario,
+// mesma JSX/logica de antes.
+function ImovelInfoPillsGrid({ imovel, placas, costPerSpot }) {
+	return (
+		<div className="grid gap-3 sm:grid-cols-2">
+			<InfoPill
+				label="Status"
+				value={imovel.ativo === false ? "Inativo" : "Ativo"}
+			/>
+			<InfoPill
+				label="Contrato"
+				value={imovel.tipoContrato === "alugado" ? "Alugado" : "Próprio"}
+			/>
+			<InfoPill label="Empresa" value={String(imovel.base || "-").toUpperCase()} />
+			<InfoPill label="Classificação" value={imovel.classificacao || "-"} />
+			<InfoPill label="Diretoria" value={imovel.diretoria || "-"} />
+			<InfoPill
+				label="Nome do site"
+				value={imovel.nomeSite || imovel.siteDso || "-"}
+			/>
+			<InfoPill label="CNPJ/CPF" value={imovel.cnpjCpf || "-"} />
+			<InfoPill label="m²" value={imovel.metrosQuadrados || "-"} />
+			<InfoPill
+				label="Energia média"
+				value={formatCurrency(imovel.energiaValorMedio || 0)}
+			/>
+			<InfoPill
+				label="Cliente energia"
+				value={imovel.energiaCodigoCliente || "-"}
+			/>
+			<InfoPill
+				label="Água média"
+				value={formatCurrency(imovel.aguaValorMedio || 0)}
+			/>
+			<InfoPill label="Cliente água" value={imovel.aguaCodigoCliente || "-"} />
+			{imovel.tipoContrato === "alugado" ? (
+				<>
+					<InfoPill
+						label="Valor original"
+						value={formatCurrency(imovel.valorOriginal || 0)}
+					/>
+					<InfoPill
+						label="Valor do aluguel"
+						value={formatCurrency(imovel.valorAluguel || 0)}
+					/>
+					<InfoPill
+						label="Valor por m²"
+						value={formatCurrency(imovel.valorM2 || 0)}
+					/>
+					<InfoPill
+						label="Vencimento"
+						value={
+							imovel.vencimentoAluguelDia
+								? `Dia ${imovel.vencimentoAluguelDia}`
+								: "-"
+						}
+					/>
+					<InfoPill
+						label="Início do contrato"
+						value={formatDate(imovel.contratoInicio)}
+					/>
+					<InfoPill
+						label="Fim do contrato"
+						value={formatDate(imovel.contratoFim)}
+					/>
+					<InfoPill label="Mês do reajuste" value={imovel.mesReajuste || "-"} />
+					<InfoPill
+						label="Último reajuste"
+						value={formatDate(imovel.dataUltimoReajuste)}
+					/>
+					<InfoPill
+						label="Índice de reajuste"
+						value={imovel.indiceReajuste || "-"}
+					/>
+				</>
+			) : null}
+			{imovel.estacionamento || imovel.temEstacionamento ? (
+				<>
+					<InfoPill label="Vagas" value={imovel.vagas || 0} />
+					<InfoPill
+						label="Custo por vaga"
+						value={costPerSpot ? formatCurrency(costPerSpot) : "-"}
+					/>
+					<InfoPill label="Placas" value={placas.join(", ") || "-"} />
+				</>
+			) : null}
+			<InfoPill label="Seguro" value={imovel.seguroTipo || "-"} />
+			<InfoPill
+				label="Vencimento seguro"
+				value={formatDate(imovel.seguroVencimento)}
+			/>
+			{imovel.ativo === false ? (
+				<>
+					<InfoPill
+						label="Data de inativação"
+						value={formatDate(imovel.dataInativacao)}
+					/>
+					<InfoPill
+						label="Motivo da inativação"
+						value={imovel.motivoInativacao || "-"}
+					/>
+				</>
+			) : null}
+		</div>
+	);
+}
+
+function ImovelProprietarioCard({ imovel, whatsappUrl }) {
+	if (imovel.tipoContrato !== "alugado") return null;
+	return (
+		<div className="rounded-2xl border border-orange-100 bg-orange-50/50 p-4">
+			<p className="text-xs font-black uppercase tracking-wide text-orange-700">
+				Proprietário
+			</p>
+			<h3 className="mt-1 text-lg font-black text-slate-950">
+				{imovel.proprietarioNome || "-"}
+			</h3>
+			<div className="mt-3 space-y-2 text-sm font-semibold text-slate-600">
+				<p>{imovel.proprietarioEmail || "Sem e-mail cadastrado"}</p>
+				<div className="flex flex-wrap items-center gap-2">
+					<span>{imovel.proprietarioTelefone || "Sem telefone cadastrado"}</span>
+					{whatsappUrl ? (
+						<a
+							href={whatsappUrl}
+							target="_blank"
+							rel="noreferrer"
+							className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700"
+						>
+							<MessageCircle size={14} />
+							WhatsApp
+						</a>
+					) : null}
+				</div>
+				{imovel.proprietarioContatos ? (
+					<p>{imovel.proprietarioContatos}</p>
+				) : null}
+			</div>
+		</div>
 	);
 }
 
@@ -3343,151 +3549,13 @@ function ImovelDetailPage({
 				</section>
 
 				<section className="space-y-4">
-					<div className="grid gap-3 sm:grid-cols-2">
-						<InfoPill
-							label="Status"
-							value={imovel.ativo === false ? "Inativo" : "Ativo"}
-						/>
-						<InfoPill
-							label="Contrato"
-							value={imovel.tipoContrato === "alugado" ? "Alugado" : "Próprio"}
-						/>
-						<InfoPill
-							label="Empresa"
-							value={String(imovel.base || "-").toUpperCase()}
-						/>
-						<InfoPill
-							label="Classificação"
-							value={imovel.classificacao || "-"}
-						/>
-						<InfoPill label="Diretoria" value={imovel.diretoria || "-"} />
-						<InfoPill
-							label="Nome do site"
-							value={imovel.nomeSite || imovel.siteDso || "-"}
-						/>
-						<InfoPill label="CNPJ/CPF" value={imovel.cnpjCpf || "-"} />
-						<InfoPill label="m²" value={imovel.metrosQuadrados || "-"} />
-						<InfoPill
-							label="Energia média"
-							value={formatCurrency(imovel.energiaValorMedio || 0)}
-						/>
-						<InfoPill
-							label="Cliente energia"
-							value={imovel.energiaCodigoCliente || "-"}
-						/>
-						<InfoPill
-							label="Água média"
-							value={formatCurrency(imovel.aguaValorMedio || 0)}
-						/>
-						<InfoPill
-							label="Cliente água"
-							value={imovel.aguaCodigoCliente || "-"}
-						/>
-						{imovel.tipoContrato === "alugado" ? (
-							<>
-								<InfoPill
-									label="Valor original"
-									value={formatCurrency(imovel.valorOriginal || 0)}
-								/>
-								<InfoPill
-									label="Valor do aluguel"
-									value={formatCurrency(imovel.valorAluguel || 0)}
-								/>
-								<InfoPill
-									label="Valor por m²"
-									value={formatCurrency(imovel.valorM2 || 0)}
-								/>
-								<InfoPill
-									label="Vencimento"
-									value={
-										imovel.vencimentoAluguelDia
-											? `Dia ${imovel.vencimentoAluguelDia}`
-											: "-"
-									}
-								/>
-								<InfoPill
-									label="Início do contrato"
-									value={formatDate(imovel.contratoInicio)}
-								/>
-								<InfoPill
-									label="Fim do contrato"
-									value={formatDate(imovel.contratoFim)}
-								/>
-								<InfoPill
-									label="Mês do reajuste"
-									value={imovel.mesReajuste || "-"}
-								/>
-								<InfoPill
-									label="Último reajuste"
-									value={formatDate(imovel.dataUltimoReajuste)}
-								/>
-								<InfoPill
-									label="Índice de reajuste"
-									value={imovel.indiceReajuste || "-"}
-								/>
-							</>
-						) : null}
-						{imovel.estacionamento || imovel.temEstacionamento ? (
-							<>
-								<InfoPill label="Vagas" value={imovel.vagas || 0} />
-								<InfoPill
-									label="Custo por vaga"
-									value={costPerSpot ? formatCurrency(costPerSpot) : "-"}
-								/>
-								<InfoPill label="Placas" value={placas.join(", ") || "-"} />
-							</>
-						) : null}
-						<InfoPill label="Seguro" value={imovel.seguroTipo || "-"} />
-						<InfoPill
-							label="Vencimento seguro"
-							value={formatDate(imovel.seguroVencimento)}
-						/>
-						{imovel.ativo === false ? (
-							<>
-								<InfoPill
-									label="Data de inativação"
-									value={formatDate(imovel.dataInativacao)}
-								/>
-								<InfoPill
-									label="Motivo da inativação"
-									value={imovel.motivoInativacao || "-"}
-								/>
-							</>
-						) : null}
-					</div>
+					<ImovelInfoPillsGrid
+						imovel={imovel}
+						placas={placas}
+						costPerSpot={costPerSpot}
+					/>
 
-					{imovel.tipoContrato === "alugado" ? (
-						<div className="rounded-2xl border border-orange-100 bg-orange-50/50 p-4">
-							<p className="text-xs font-black uppercase tracking-wide text-orange-700">
-								Proprietário
-							</p>
-							<h3 className="mt-1 text-lg font-black text-slate-950">
-								{imovel.proprietarioNome || "-"}
-							</h3>
-							<div className="mt-3 space-y-2 text-sm font-semibold text-slate-600">
-								<p>{imovel.proprietarioEmail || "Sem e-mail cadastrado"}</p>
-								<div className="flex flex-wrap items-center gap-2">
-									<span>
-										{imovel.proprietarioTelefone || "Sem telefone cadastrado"}
-									</span>
-									{whatsappUrl ? (
-										<a
-											href={whatsappUrl}
-											target="_blank"
-											rel="noreferrer"
-											className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700"
-										>
-											<MessageCircle size={14} />
-											WhatsApp
-										</a>
-									) : null}
-								</div>
-								{imovel.proprietarioContatos ? (
-									<p>{imovel.proprietarioContatos}</p>
-								) : null}
-							</div>
-						</div>
-					) : null}
+					<ImovelProprietarioCard imovel={imovel} whatsappUrl={whatsappUrl} />
 				</section>
 			</div>
 

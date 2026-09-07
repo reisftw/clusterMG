@@ -392,6 +392,54 @@ function useSubmissionModalController({ submission, currentUser, onChanged }) {
 	};
 }
 
+// Extraido de SubmissionModal (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — item da lista de arquivos da submissao,
+// mesma JSX/logica de antes.
+function SubmissionFileListItem({ file, selectedFile, onSelect }) {
+	return (
+		<button
+			type="button"
+			onClick={onSelect}
+			className={`w-full rounded-2xl border p-3 text-left transition ${
+				selectedFile?.id === file.id
+					? "border-blue-300 bg-blue-50"
+					: "border-slate-200 bg-white hover:bg-slate-50"
+			}`}
+		>
+			<div className="flex min-w-0 items-start justify-between gap-2">
+				<div className="min-w-0">
+					<p className="break-words text-sm font-black text-slate-950">
+						{file.fieldNome || file.tipo || "Documento"}
+					</p>
+					<p className="mt-1 line-clamp-2 break-all text-xs font-semibold text-slate-500">
+						{file.nome}
+					</p>
+				</div>
+				<span className={`${statusBadge(file.status)} shrink-0`}>
+					{statusLabel(file.status)}
+				</span>
+			</div>
+			{String(file.status || "").toLowerCase() === "aprovado" ? (
+				<div className="mt-2 flex flex-wrap gap-2">
+					<span className={statusBadge(file.adminStatus || "pendente")}>
+						Administrativo: {statusLabel(file.adminStatus || "pendente")}
+					</span>
+				</div>
+			) : null}
+			{file.motivoReprovacao ? (
+				<p className="mt-2 break-words rounded-xl bg-red-50 p-2 text-xs font-bold text-red-700">
+					{file.motivoReprovacao}
+				</p>
+			) : null}
+			{file.adminMotivoReprovacao ? (
+				<p className="mt-2 break-words rounded-xl bg-red-50 p-2 text-xs font-bold text-red-700">
+					Administrativo: {file.adminMotivoReprovacao}
+				</p>
+			) : null}
+		</button>
+	);
+}
+
 function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
 	const {
 		setSelectedFileId,
@@ -479,55 +527,17 @@ function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
 					<div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(260px,310px)_minmax(0,1fr)]">
 						<div className="min-w-0 space-y-2">
 							{(submission.files || []).map((file) => (
-								<button
+								<SubmissionFileListItem
 									key={file.id}
-									type="button"
-									onClick={() => {
+									file={file}
+									selectedFile={selectedFile}
+									onSelect={() => {
 										setSelectedFileId(file.id);
 										setMotivo(file.motivoReprovacao || "");
 										setShowRejectReason(false);
 										setModalMessage("");
 									}}
-									className={`w-full rounded-2xl border p-3 text-left transition ${
-										selectedFile?.id === file.id
-											? "border-blue-300 bg-blue-50"
-											: "border-slate-200 bg-white hover:bg-slate-50"
-									}`}
-								>
-									<div className="flex min-w-0 items-start justify-between gap-2">
-										<div className="min-w-0">
-											<p className="break-words text-sm font-black text-slate-950">
-												{file.fieldNome || file.tipo || "Documento"}
-											</p>
-											<p className="mt-1 line-clamp-2 break-all text-xs font-semibold text-slate-500">
-												{file.nome}
-											</p>
-										</div>
-										<span className={`${statusBadge(file.status)} shrink-0`}>
-											{statusLabel(file.status)}
-										</span>
-									</div>
-									{String(file.status || "").toLowerCase() === "aprovado" ? (
-										<div className="mt-2 flex flex-wrap gap-2">
-											<span
-												className={statusBadge(file.adminStatus || "pendente")}
-											>
-												Administrativo:{" "}
-												{statusLabel(file.adminStatus || "pendente")}
-											</span>
-										</div>
-									) : null}
-									{file.motivoReprovacao ? (
-										<p className="mt-2 break-words rounded-xl bg-red-50 p-2 text-xs font-bold text-red-700">
-											{file.motivoReprovacao}
-										</p>
-									) : null}
-									{file.adminMotivoReprovacao ? (
-										<p className="mt-2 break-words rounded-xl bg-red-50 p-2 text-xs font-bold text-red-700">
-											Administrativo: {file.adminMotivoReprovacao}
-										</p>
-									) : null}
-								</button>
+								/>
 							))}
 						</div>
 
