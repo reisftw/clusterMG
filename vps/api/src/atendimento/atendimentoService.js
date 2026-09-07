@@ -2601,7 +2601,7 @@ const STEP_HANDLERS = {
 async function computeStepResponse(item, technician, text, config, phone) {
 	const handler = STEP_HANDLERS[item.step];
 	if (handler) return handler(item, technician, text, config, phone);
-	return handleMenuCommand(item, technician, text, config, phone);
+	return handleMenuCommand(item, technician, text, config);
 }
 
 async function handleEvolutionWebhook(payload = {}) {

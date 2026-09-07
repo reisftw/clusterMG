@@ -2106,6 +2106,80 @@ function normalizeAgendamentoClienteRecord(row = null) {
 	};
 }
 
+// Extraido do mesmo handler — as 4 guardas de permissao viram uma
+// unica checagem que devolve a mensagem de erro (ou null se pode
+// ler), mesma logica/ordem de antes. Todas usam status 403.
+function findDocumentReadPermissionError(req, item, documentPath, isOwnUserProfile) {
+	const canReadGenericDocument = canReadDocumentPath(req.user, documentPath);
+	if (!isOwnUserProfile && !canReadGenericDocument) {
+		return "Permissao insuficiente.";
+	}
+	if (
+		!isOwnUserProfile &&
+		isAcertoEstoqueCollection(item.collectionPath) &&
+		!canAccessRegionalRecord(req.user, item.data || {})
+	) {
+		return "Supervisor so pode acessar registros da propria regional.";
+	}
+	if (
+		!isOwnUserProfile &&
+		item.collectionPath === EMPRESAS_COLLECTION &&
+		!canAccessEmpresaRecord(req.user, item.documentId, item.data || {})
+	) {
+		return "Lider Empresa so pode acessar a propria empresa.";
+	}
+	if (
+		!isOwnUserProfile &&
+		item.collectionPath === "usuarios" &&
+		(!canSupervisorAccessUserRecord(req.user, item.data || {}) ||
+			!canAdministrativoAccessUserRecord(req.user, item.data || {}))
+	) {
+		return "Sem permissao para acessar este usuario.";
+	}
+	return null;
+}
+
+// Extraido do mesmo handler — as 2 guardas de permissao de escrita,
+// mesma logica/ordem de antes. Ambas usam status 403.
+function findDocumentWritePermissionError(req, existing, collectionPath) {
+	if (
+		existing &&
+		isAcertoEstoqueCollection(collectionPath) &&
+		!canAccessRegionalRecord(req.user, existing.data || {})
+	) {
+		return "Supervisor so pode alterar registros da propria regional.";
+	}
+	if (
+		existing &&
+		collectionPath === EMPRESAS_COLLECTION &&
+		!canAccessEmpresaRecord(req.user, existing.documentId, existing.data || {})
+	) {
+		return "Lider Empresa so pode alterar a propria empresa.";
+	}
+	return null;
+}
+
+// Extraido do handler DELETE /api/admin/documents/* (achado
+// javascript:S3776, docs/SONARQUBE-MAP.md) — as 2 guardas de permissao
+// de exclusao, mesma logica/ordem de antes. Ambas usam status 403.
+function findDocumentDeletePermissionError(req, item) {
+	if (
+		item &&
+		isAcertoEstoqueCollection(item.collectionPath) &&
+		!canAccessRegionalRecord(req.user, item.data || {})
+	) {
+		return "Supervisor so pode excluir registros da propria regional.";
+	}
+	if (
+		item &&
+		item.collectionPath === EMPRESAS_COLLECTION &&
+		isEmpresaLeader(req.user)
+	) {
+		return "Lider Empresa nao pode excluir empresa.";
+	}
+	return null;
+}
+
 function createApp() {
 	const app = express();
 	const allowedOrigins = getAllowedOrigins();
@@ -3574,39 +3648,6 @@ function createApp() {
 		return documents.getDocument(documentPath);
 	}
 
-	// Extraido do mesmo handler — as 4 guardas de permissao viram uma
-	// unica checagem que devolve a mensagem de erro (ou null se pode
-	// ler), mesma logica/ordem de antes. Todas usam status 403.
-	function findDocumentReadPermissionError(req, item, documentPath, isOwnUserProfile) {
-		const canReadGenericDocument = canReadDocumentPath(req.user, documentPath);
-		if (!isOwnUserProfile && !canReadGenericDocument) {
-			return "Permissao insuficiente.";
-		}
-		if (
-			!isOwnUserProfile &&
-			isAcertoEstoqueCollection(item.collectionPath) &&
-			!canAccessRegionalRecord(req.user, item.data || {})
-		) {
-			return "Supervisor so pode acessar registros da propria regional.";
-		}
-		if (
-			!isOwnUserProfile &&
-			item.collectionPath === EMPRESAS_COLLECTION &&
-			!canAccessEmpresaRecord(req.user, item.documentId, item.data || {})
-		) {
-			return "Lider Empresa so pode acessar a propria empresa.";
-		}
-		if (
-			!isOwnUserProfile &&
-			item.collectionPath === "usuarios" &&
-			(!canSupervisorAccessUserRecord(req.user, item.data || {}) ||
-				!canAdministrativoAccessUserRecord(req.user, item.data || {}))
-		) {
-			return "Sem permissao para acessar este usuario.";
-		}
-		return null;
-	}
-
 	app.get("/api/documents/*", requireAuthenticated, async (req, res, next) => {
 		try {
 			const documentPath = req.params[0];
@@ -4640,30 +4681,10 @@ function createApp() {
 		return documents.getDocument(documentPath);
 	}
 
-	// Extraido do mesmo handler — as 2 guardas de permissao de escrita,
-	// mesma logica/ordem de antes. Ambas usam status 403.
-	function findDocumentWritePermissionError(req, existing, collectionPath) {
-		if (
-			existing &&
-			isAcertoEstoqueCollection(collectionPath) &&
-			!canAccessRegionalRecord(req.user, existing.data || {})
-		) {
-			return "Supervisor so pode alterar registros da propria regional.";
-		}
-		if (
-			existing &&
-			collectionPath === EMPRESAS_COLLECTION &&
-			!canAccessEmpresaRecord(req.user, existing.documentId, existing.data || {})
-		) {
-			return "Lider Empresa so pode alterar a propria empresa.";
-		}
-		return null;
-	}
-
 	// Extraido do mesmo handler — supervisor nao pode sobrescrever o campo
 	// `supervisor` da propria empresa, mesma logica de antes.
 	function buildScopedDocumentRequestBody(req, existing, collectionPath, body) {
-		const requestBody = { ...(body || {}) };
+		const requestBody = { ...body };
 		if (
 			existing &&
 			collectionPath === EMPRESAS_COLLECTION &&
@@ -4784,27 +4805,6 @@ function createApp() {
 			}
 		},
 	);
-
-	// Extraido do handler DELETE /api/admin/documents/* (achado
-	// javascript:S3776, docs/SONARQUBE-MAP.md) — as 2 guardas de permissao
-	// de exclusao, mesma logica/ordem de antes. Ambas usam status 403.
-	function findDocumentDeletePermissionError(req, item) {
-		if (
-			item &&
-			isAcertoEstoqueCollection(item.collectionPath) &&
-			!canAccessRegionalRecord(req.user, item.data || {})
-		) {
-			return "Supervisor so pode excluir registros da propria regional.";
-		}
-		if (
-			item &&
-			item.collectionPath === EMPRESAS_COLLECTION &&
-			isEmpresaLeader(req.user)
-		) {
-			return "Lider Empresa nao pode excluir empresa.";
-		}
-		return null;
-	}
 
 	// Extraido do mesmo handler — mesma cadeia if/else-if de exclusao por
 	// tipo de colecao de antes.

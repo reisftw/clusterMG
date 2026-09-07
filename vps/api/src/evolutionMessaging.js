@@ -2245,7 +2245,7 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 			baseDate,
 		});
 		if (!rolled) return null;
-		({ date, year, month, day } = rolled);
+		({ year, month, day } = rolled);
 	}
 
 	const hour = timeMatch ? String(hourNumber).padStart(2, "0") : "";
