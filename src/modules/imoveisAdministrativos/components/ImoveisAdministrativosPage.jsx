@@ -342,11 +342,8 @@ function ActionButton({
 			disabled={loading || props.disabled}
 			{...props}
 		>
-			{loading ? (
-				<Loader2 size={16} className="animate-spin" />
-			) : Icon ? (
-				<Icon size={16} />
-			) : null}
+			{loading ? <Loader2 size={16} className="animate-spin" /> : null}
+			{!loading && Icon ? <Icon size={16} /> : null}
 			{children}
 		</button>
 	);
@@ -2064,13 +2061,7 @@ function ImovelHistoricoTab(props) {
 										["valorNovo", "Valor novo"],
 										["createdByName", "Registrado por"],
 									]}
-									renderCell={(row, key) =>
-										key.includes("valor")
-											? formatCurrency(row[key])
-											: key === "data"
-												? formatDate(row[key])
-												: row[key] || "-"
-									}
+									renderCell={renderCurrencyDateCell}
 								/>
 							</div>
 	);
@@ -2189,13 +2180,7 @@ function ImovelRelatoriosTab(props) {
 												["valor", "Valor"],
 												["vencimento", "Vencimento"],
 											]}
-											renderCell={(row, key) =>
-												key === "valor"
-													? formatCurrency(row[key])
-													: key === "vencimento"
-														? formatDate(row[key])
-														: row[key] || "-"
-											}
+											renderCell={renderIptuAvisoCell}
 										/>
 										<DataTable
 											title="Aluguel próximo do vencimento"
@@ -2205,13 +2190,7 @@ function ImovelRelatoriosTab(props) {
 												["valorAluguel", "Valor"],
 												["vencimentoAluguel", "Vencimento"],
 											]}
-											renderCell={(row, key) =>
-												key === "valorAluguel"
-													? formatCurrency(row[key])
-													: key === "vencimentoAluguel"
-														? formatDate(row[key])
-														: row[key] || "-"
-											}
+											renderCell={renderAluguelAvisoCell}
 										/>
 									</>
 								) : (
@@ -3263,6 +3242,19 @@ function normalizePlacas(value) {
 		.split(/[,;\n]/)
 		.map((item) => item.trim())
 		.filter(Boolean);
+}
+
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function renderIptuAvisoCell(row, key) {
+	if (key === "valor") return formatCurrency(row[key]);
+	if (key === "vencimento") return formatDate(row[key]);
+	return row[key] || "-";
+}
+
+function renderAluguelAvisoCell(row, key) {
+	if (key === "valorAluguel") return formatCurrency(row[key]);
+	if (key === "vencimentoAluguel") return formatDate(row[key]);
+	return row[key] || "-";
 }
 
 function renderCurrencyDateCell(row, key) {
