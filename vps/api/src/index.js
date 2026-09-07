@@ -3,6 +3,7 @@ const db = require("./db");
 const apiStatus = require("./apiStatus");
 const evolutionMessaging = require("./evolutionMessaging");
 const agendamentoConfirmacao = require("./agendamentoConfirmacao");
+const financeiro = require("./financeiro");
 const operationalImports = require("./operationalImports");
 const { closeRealtimeClients } = require("./realtime");
 
@@ -13,6 +14,7 @@ const server = app.listen(port, () => {
 	console.log(`[retiradas-api] ouvindo em http://127.0.0.1:${port}`);
 	evolutionMessaging.startWorker();
 	agendamentoConfirmacao.startWorker();
+	financeiro.startWorker();
 	operationalImports.markInterruptedImportJobs().catch((error) => {
 		console.error(
 			"[retiradas-api] Falha ao recuperar jobs de importacao:",
@@ -33,6 +35,7 @@ async function shutdown(signal) {
 	console.log(`[retiradas-api] Encerrando por ${signal}...`);
 	evolutionMessaging.stopWorker();
 	agendamentoConfirmacao.stopWorker();
+	financeiro.stopWorker();
 	closeRealtimeClients();
 
 	const forceExit = setTimeout(() => {

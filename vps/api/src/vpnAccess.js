@@ -38,7 +38,10 @@ function uniqueSorted(values = []) {
 function getDefaultConfig() {
 	return {
 		enabled: false,
-		protectedRoutes: [],
+		protectedRoutes: [
+			"/financeiro/gestao-orcamento*",
+			"/api/financeiro/orcamento*",
+		],
 		allowedCidrs: [],
 		updatedAt: "",
 		updatedBy: "",

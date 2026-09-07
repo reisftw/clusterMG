@@ -36,4 +36,74 @@ describe("RBAC security rules", () => {
 		).toBe(false);
 	});
 
+	it("lists Reports as finance RBAC view and manage permissions", () => {
+		const financeGroup = PERMISSION_GROUPS.find(
+			(group) => group.label === "Financeiro",
+		);
+
+		expect(financeGroup?.permissions).toEqual(
+			expect.arrayContaining([
+				"financeiro.reports.view",
+				"financeiro.reports.manage",
+			]),
+		);
+		expect(PERMISSION_LABELS["financeiro.reports.view"]).toBe(
+			"Financeiro - Reports",
+		);
+		expect(PERMISSION_LABELS["financeiro.reports.manage"]).toBe(
+			"Gerenciar Reports Financeiros",
+		);
+	});
+
+	it("lists Financeiro Equipe as finance RBAC view and manage permissions", () => {
+		const financeGroup = PERMISSION_GROUPS.find(
+			(group) => group.label === "Financeiro",
+		);
+
+		expect(financeGroup?.permissions).toEqual(
+			expect.arrayContaining([
+				"financeiro.equipe.view",
+				"financeiro.equipe.manage",
+			]),
+		);
+		expect(PERMISSION_LABELS["financeiro.equipe.view"]).toBe(
+			"Financeiro - Equipe",
+		);
+		expect(PERMISSION_LABELS["financeiro.equipe.manage"]).toBe(
+			"Gerenciar Equipe Financeira",
+		);
+	});
+
+	it("allows custom RBAC role with Financeiro Equipe permission to view the team", () => {
+		expect(
+			hasPermission(
+				{
+					role: "coordenador_financeiro",
+					permissions: ["financeiro.equipe.view"],
+				},
+				"financeiro.equipe.view",
+			),
+		).toBe(true);
+		expect(
+			hasPermission(
+				{
+					role: "coordenador_financeiro",
+					permissions: ["financeiro.equipe.manage"],
+				},
+				"financeiro.equipe.view",
+			),
+		).toBe(true);
+	});
+
+	it("keeps legacy finance reports permission valid for existing roles", () => {
+		expect(
+			hasPermission(
+				{
+					role: ROLES.VISITANTE,
+					permissions: ["financeiro.chamados.view"],
+				},
+				"financeiro.reports.view",
+			),
+		).toBe(true);
+	});
 });

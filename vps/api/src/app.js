@@ -38,6 +38,7 @@ const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes"
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
+const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
@@ -325,6 +326,11 @@ const AGENDAMENTOS_COLLECTIONS = new Set([
 	"agendamento_esteira_metricas",
 	"agendamento_esteira_catalogo",
 ]);
+const FINANCEIRO_COLLECTIONS = new Set([
+	"financeiro_config",
+	"financeiro_reports",
+	"financeiro_import_logs",
+]);
 const OPERATIONAL_EVENT_COLLECTIONS = new Set([
 	"api_runtime_events",
 	"api_service_events",
@@ -339,11 +345,36 @@ const IMOVEIS_ADMINISTRATIVOS_ROLES = [
 	"admin",
 	...ADMINISTRATIVO_DOCUMENTOS_ROLES,
 ];
+const FINANCEIRO_ROLES = ["admin"];
 const PUBLIC_STATIC_CACHE_TTL_MS = Math.max(
 	Number(process.env.PUBLIC_STATIC_CACHE_TTL_MS || 10000),
 	0,
 );
 const publicStaticCache = new Map();
+const FINANCEIRO_VIEW_PERMISSIONS = [
+	"financeiro.visao_geral.view",
+	"financeiro.visao_geral.manage",
+	"financeiro.contas_pagar.view",
+	"financeiro.contas_pagar.manage",
+	"financeiro.contas_receber.view",
+	"financeiro.contas_receber.manage",
+	"financeiro.faturamento.view",
+	"financeiro.notas.view",
+	"financeiro.reports.view",
+	"financeiro.reports.manage",
+	"financeiro.chamados.view",
+	"financeiro.gestao_orcamento.view",
+	"financeiro.gestao_orcamento.manage",
+	"financeiro.configuracoes.view",
+	"financeiro.configuracoes.manage",
+	"financeiro.equipe.view",
+	"financeiro.equipe.manage",
+];
+const FINANCEIRO_MANAGE_PERMISSIONS = [
+	"financeiro.configuracoes.manage",
+	"financeiro.gestao_orcamento.manage",
+	"financeiro.equipe.manage",
+];
 
 const COLLECTION_READ_PERMISSIONS = Object.freeze({
 	usuarios: [
@@ -2031,6 +2062,12 @@ function rejectDomainRouteOnlyCollection(res, collectionPath) {
 	if (AGENDAMENTOS_COLLECTIONS.has(collection)) {
 		return false;
 	}
+	if (FINANCEIRO_COLLECTIONS.has(collection)) {
+		res.status(410).json({
+			error: `Colecao ${collection} migrada. Use as rotas de dominio em /api/financeiro.`,
+		});
+		return true;
+	}
 	if (OPERATIONAL_EVENT_COLLECTIONS.has(collection)) {
 		res.status(410).json({
 			error: `Colecao ${collection} migrada para tabelas operacionais normalizadas.`,
@@ -2354,6 +2391,18 @@ function createApp() {
 			requireAuthenticated,
 			requireCsrfToken,
 			requireRoles,
+		}),
+	);
+
+	app.use(
+		"/api/financeiro",
+		createFinanceiroRouter({
+			financeiroManagePermissions: FINANCEIRO_MANAGE_PERMISSIONS,
+			financeiroRoles: FINANCEIRO_ROLES,
+			financeiroViewPermissions: FINANCEIRO_VIEW_PERMISSIONS,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
 		}),
 	);
 

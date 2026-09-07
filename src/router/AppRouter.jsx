@@ -63,6 +63,9 @@ const Agendamentos = lazy(
 const Acompanhamento = lazy(
 	() => import("../pages/Acompanhamento/AcompanhamentoPage"),
 );
+const AcompanhamentoFinanceiro = lazy(
+	() => import("../pages/AcompanhamentoFinanceiro/AcompanhamentoFinanceiroPage"),
+);
 const Visitas = lazy(() => import("../modules/visitas/components/VisitasPage"));
 const GestaoDuvidas = lazy(
 	() => import("../modules/duvidas/components/DuvidasPage"),
@@ -333,6 +336,21 @@ const AppRouter = () => (
 								]}
 							>
 								<Acompanhamento />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
+						path={ROUTES.ACOMPANHAMENTO_FINANCEIRO}
+						element={
+							<ProtectedRoute
+								requiredPermission={[
+									"financeiro.visao_geral.view",
+									"financeiro.visao_geral.manage",
+									"financeiro.reports.view",
+									"financeiro.chamados.view",
+								]}
+							>
+								<AcompanhamentoFinanceiro />
 							</ProtectedRoute>
 						}
 					/>
