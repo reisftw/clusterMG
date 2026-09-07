@@ -975,6 +975,30 @@ function buildBudgetCategoryGroups(
 		});
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveRealizedForCenterRow({
+	rowMatchesSelectedYear,
+	hasDirectBreakdown,
+	breakdownRealized,
+	canFallbackToCenterRealized,
+	centerRealized,
+	configuredCenterPlanned,
+	planned,
+	centerTotalPlanned,
+	rawPlanned,
+}) {
+	if (rowMatchesSelectedYear && hasDirectBreakdown) return breakdownRealized;
+	if (!(rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized)) {
+		return 0;
+	}
+	if (configuredCenterPlanned && planned) {
+		return (planned / configuredCenterPlanned) * centerRealized;
+	}
+	return centerTotalPlanned
+		? (rawPlanned / centerTotalPlanned) * centerRealized
+		: 0;
+}
+
 function buildAccountRows({
 	accounts = [],
 	centers = [],
@@ -1047,15 +1071,17 @@ function buildAccountRows({
 					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
 					: rawPlanned;
 			const centerRealized = realizedTotalForCenter(center || {});
-			const realized = rowMatchesSelectedYear && hasDirectBreakdown
-				? breakdownRealized
-				: rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized
-					? configuredCenterPlanned && planned
-						? (planned / configuredCenterPlanned) * centerRealized
-						: centerTotalPlanned
-							? (rawPlanned / centerTotalPlanned) * centerRealized
-							: 0
-					: 0;
+			const realized = resolveRealizedForCenterRow({
+				rowMatchesSelectedYear,
+				hasDirectBreakdown,
+				breakdownRealized,
+				canFallbackToCenterRealized,
+				centerRealized,
+				configuredCenterPlanned,
+				planned,
+				centerTotalPlanned,
+				rawPlanned,
+			});
 			return {
 				row,
 				account: accountForGrouping,

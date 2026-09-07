@@ -46,6 +46,12 @@ import UserAvatar from "./UserAvatar";
 
 const FINAN_SIDEBAR_COLLAPSED_KEY = "finan-sidebar-collapsed";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolvePushToggleLabel(pushBusy, pushSubscribed) {
+	if (pushBusy) return "Aguarde...";
+	return pushSubscribed ? "Desativar notificações" : "Ativar notificações";
+}
+
 const navGroups = [
 	{
 		label: "Visão geral",
@@ -530,11 +536,7 @@ export default function FinanLayout() {
 												className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
 											>
 												{pushSubscribed ? <BellOff size={16} /> : <Bell size={16} />}
-												{pushBusy
-													? "Aguarde..."
-													: pushSubscribed
-														? "Desativar notificações"
-														: "Ativar notificações"}
+												{resolvePushToggleLabel(pushBusy, pushSubscribed)}
 											</button>
 										) : null}
 										{pushError ? (
