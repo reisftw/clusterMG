@@ -714,69 +714,114 @@ const OperationalDashboardContent = ({ currentUser }) => {
 
 	if (loading) return <Spinner fullScreen />;
 
-	if (isModernLayout) {
-		return (
-			<div className="mx-auto max-w-[1500px] space-y-4">
-				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-					<div>
-						<h1 className="text-3xl font-black text-slate-950">Visão geral</h1>
-						<p className="mt-1 text-sm font-medium text-slate-500">
-							Acompanhe os principais indicadores da operação.
-						</p>
-					</div>
-					<InternalStaticDataStatus className="max-w-xl" fallbackIsHealthy />
+	const viewProps = {
+		currentUser,
+		resumo,
+		error,
+		currentRole,
+		isLimitedDashboardRole,
+		showDocumentsInHero,
+		kpiHiddenKeys,
+		summaryHiddenKeys,
+		mapaKpisOverride,
+		topCidadesOverride,
+	};
+
+	return isModernLayout ? (
+		<ModernDashboardView {...viewProps} />
+	) : (
+		<ClassicDashboardView {...viewProps} />
+	);
+};
+
+// Extraidos de OperationalDashboardContent (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — os dois layouts sao arvores JSX totalmente
+// independentes (so um dos dois renderiza por vez), sem logica
+// compartilhada alem das props ja computadas no componente pai.
+function ModernDashboardView({
+	currentUser,
+	resumo,
+	error,
+	currentRole,
+	isLimitedDashboardRole,
+	showDocumentsInHero,
+	kpiHiddenKeys,
+	mapaKpisOverride,
+	topCidadesOverride,
+}) {
+	return (
+		<div className="mx-auto max-w-[1500px] space-y-4">
+			<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+				<div>
+					<h1 className="text-3xl font-black text-slate-950">Visão geral</h1>
+					<p className="mt-1 text-sm font-medium text-slate-500">
+						Acompanhe os principais indicadores da operação.
+					</p>
 				</div>
-
-				<div className="grid min-w-0 items-stretch gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-					{showDocumentsInHero ? (
-						<DocumentosPendentesCard currentUser={currentUser} />
-					) : currentRole === ROLES.BACKOFFICE ? null : (
-						<AgendamentosHojeCard defaultOpen featured maxVisibleItems={4} />
-					)}
-					<FeaturedMetasPanel />
-				</div>
-
-				<ModernKpiGrid
-					resumo={resumo}
-					ordens={[]}
-					mapaKpisOverride={mapaKpisOverride}
-					hiddenKeys={kpiHiddenKeys}
-				/>
-
-				<div className="columns-1 gap-5 lg:columns-2 xl:columns-3">
-					<div className="mb-5 break-inside-avoid">
-						<TopCidadesCard
-							ordens={[]}
-							rankingOverride={topCidadesOverride}
-						/>
-					</div>
-					{!isLimitedDashboardRole ? (
-						<div className="mb-5 break-inside-avoid">
-							<AniversariantesWidget />
-						</div>
-					) : null}
-					<div className="mb-5 break-inside-avoid">
-						<ProximosFeriados feriados={resumo?.feriadosProximos} />
-					</div>
-					<div className="mb-5 break-inside-avoid">
-						<MetasCidadesCriticasWidget />
-					</div>
-					{!isLimitedDashboardRole ? (
-						<div className="mb-5 break-inside-avoid">
-							<ProximasAgendas />
-						</div>
-					) : null}
-				</div>
-
-				{error && (
-					<div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-						{error}
-					</div>
-				)}
+				<InternalStaticDataStatus className="max-w-xl" fallbackIsHealthy />
 			</div>
-		);
-	}
 
+			<div className="grid min-w-0 items-stretch gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+				{showDocumentsInHero ? (
+					<DocumentosPendentesCard currentUser={currentUser} />
+				) : currentRole === ROLES.BACKOFFICE ? null : (
+					<AgendamentosHojeCard defaultOpen featured maxVisibleItems={4} />
+				)}
+				<FeaturedMetasPanel />
+			</div>
+
+			<ModernKpiGrid
+				resumo={resumo}
+				ordens={[]}
+				mapaKpisOverride={mapaKpisOverride}
+				hiddenKeys={kpiHiddenKeys}
+			/>
+
+			<div className="columns-1 gap-5 lg:columns-2 xl:columns-3">
+				<div className="mb-5 break-inside-avoid">
+					<TopCidadesCard
+						ordens={[]}
+						rankingOverride={topCidadesOverride}
+					/>
+				</div>
+				{!isLimitedDashboardRole ? (
+					<div className="mb-5 break-inside-avoid">
+						<AniversariantesWidget />
+					</div>
+				) : null}
+				<div className="mb-5 break-inside-avoid">
+					<ProximosFeriados feriados={resumo?.feriadosProximos} />
+				</div>
+				<div className="mb-5 break-inside-avoid">
+					<MetasCidadesCriticasWidget />
+				</div>
+				{!isLimitedDashboardRole ? (
+					<div className="mb-5 break-inside-avoid">
+						<ProximasAgendas />
+					</div>
+				) : null}
+			</div>
+
+			{error && (
+				<div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+					{error}
+				</div>
+			)}
+		</div>
+	);
+}
+
+function ClassicDashboardView({
+	currentUser,
+	resumo,
+	error,
+	currentRole,
+	isLimitedDashboardRole,
+	showDocumentsInHero,
+	summaryHiddenKeys,
+	mapaKpisOverride,
+	topCidadesOverride,
+}) {
 	return (
 		<div className="space-y-6">
 			<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -842,7 +887,7 @@ const OperationalDashboardContent = ({ currentUser }) => {
 			)}
 		</div>
 	);
-};
+}
 
 const DashboardPage = () => {
 	const { currentUser } = useAuthContext();

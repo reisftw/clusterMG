@@ -51,15 +51,13 @@ function normalizeConfig(config = {}) {
 	};
 }
 
-export default function ConfiguracoesVpnPage() {
-	const { currentUser } = useAuthContext();
-	const canManage =
-		hasPermission(currentUser, "configuracao.vpn.manage") ||
-		hasPermission(currentUser, "*");
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo estado
+// e mesmas chamadas, sem mudanca de comportamento.
+function useVpnConfigController() {
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [checking, setChecking] = useState(false);
-	const vpnToggleId = useId();
 	const [config, setConfig] = useState(DEFAULT_CONFIG);
 	const [routesText, setRoutesText] = useState("");
 	const [cidrsText, setCidrsText] = useState("");
@@ -100,7 +98,7 @@ export default function ConfiguracoesVpnPage() {
 		loadData();
 	}, []);
 
-	const handleSave = async () => {
+	const handleSave = async (canManage) => {
 		if (!canManage) return;
 		setSaving(true);
 		setMessage("");
@@ -141,6 +139,57 @@ export default function ConfiguracoesVpnPage() {
 		}
 	};
 
+	return {
+		loading,
+		saving,
+		checking,
+		config,
+		setConfig,
+		routesText,
+		setRoutesText,
+		cidrsText,
+		setCidrsText,
+		logs,
+		testRoute,
+		setTestRoute,
+		message,
+		checkResult,
+		routeCount,
+		cidrCount,
+		loadData,
+		handleSave,
+		handleCheck,
+	};
+}
+
+export default function ConfiguracoesVpnPage() {
+	const { currentUser } = useAuthContext();
+	const canManage =
+		hasPermission(currentUser, "configuracao.vpn.manage") ||
+		hasPermission(currentUser, "*");
+	const vpnToggleId = useId();
+	const {
+		loading,
+		saving,
+		checking,
+		config,
+		setConfig,
+		routesText,
+		setRoutesText,
+		cidrsText,
+		setCidrsText,
+		logs,
+		testRoute,
+		setTestRoute,
+		message,
+		checkResult,
+		routeCount,
+		cidrCount,
+		loadData,
+		handleSave,
+		handleCheck,
+	} = useVpnConfigController();
+
 	if (loading) return <Spinner fullScreen />;
 
 	return (
@@ -169,7 +218,7 @@ export default function ConfiguracoesVpnPage() {
 						</button>
 						<button
 							type="button"
-							onClick={handleSave}
+							onClick={() => handleSave(canManage)}
 							disabled={!canManage || saving}
 							className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
 						>

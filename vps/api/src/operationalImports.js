@@ -331,6 +331,173 @@ async function loadMatchIgnoredTypes() {
 	return { adicionais: extras, todos: unique };
 }
 
+// Constroi o registro de ordem a partir de uma linha da planilha, ou
+// devolve o motivo pelo qual a linha deve ser ignorada. Extraido de
+// buildOrdersFromRows (achado javascript:S3776) — cada "return" antigo
+// virou um "status" de retorno, sem mudar nenhuma regra de negocio.
+function buildOrderFromRow(row, { cityMap, ignoredTypes, fontesSet, forMatch }) {
+	const numOs = getRowValue(row, [
+		"numero_ordem_servico",
+		"num_o_s",
+		"num_os",
+		"numero_os",
+	]);
+	const status = getRowValue(row, ["status"]);
+	const tipoRaw = getRowValue(row, ["tipo_ordem_servico", "tipo"]);
+	const tipo = String(tipoRaw || "").trim();
+	if (!numOs || !tipo || tipo === "-" || status === "-") {
+		return { status: "skip" };
+	}
+
+	if (forMatch) {
+		const normalizedType = normalizeText(tipo);
+		const shouldIgnore = ignoredTypes.todos.some(
+			(item) => normalizeText(item) === normalizedType,
+		);
+		if (shouldIgnore) return { status: "ignoredByType", tipo };
+	}
+
+	const statusNorm = normalizeStatus(status);
+	if (!statusNorm) return { status: "skip" };
+
+	const endereco = getRowValue(row, ["endereco", "endereco_instalacao"]);
+	const cidadeRaw = getRowValue(row, ["cidade"]) || extractCity(endereco);
+	const cidadeInformada = normalizeCity(cidadeRaw);
+	if (!cidadeInformada) return { status: "skip" };
+
+	const regionalRaw = getRowValue(row, [
+		"regional",
+		"regiao",
+		"região",
+		"nome_regional",
+		"regional_atendimento",
+	]);
+	const info = cityMap[normalizeCityKey(cidadeInformada)] || {
+		nome: cidadeInformada,
+		regional: regionalRaw ? String(regionalRaw).trim() : "Sem Regional",
+		agente: false,
+	};
+	if (forMatch && (!info.regional || info.regional === "Sem Regional")) {
+		return { status: "ignoredNoRegional" };
+	}
+
+	const fonteDaLinha = getFonteMapaPorRegional(info.regional);
+	if (!fontesSet.has(fonteDaLinha)) return { status: "skip" };
+
+	const fonteConfig = getMapaFonteConfig(fonteDaLinha);
+	const numero = getRowValue(row, ["numero"]);
+	const bairro = getRowValue(row, ["bairro"]);
+	const coordenadas = getRowValue(row, ["coordenadas"]);
+	const coords = parseCoordinates(coordenadas);
+	const dataCadastro = normalizeMapaDateValue(
+		getRowValue(row, [
+			"data_cadastro",
+			"data_abertura",
+			"data_abertura_os",
+			"abertura",
+		]),
+	);
+	const telefonePrimario = getFirstRowValue(row, [
+		"telefone_primario",
+		"telefone_principal",
+		"celular",
+		"telefone",
+		"whatsapp",
+	]);
+	const telefoneSecundario = getRowValue(row, ["telefone_secundario"]);
+	const telefoneTerciario = getRowValue(row, ["telefone_terciario"]);
+	const macAddr = getRowValue(row, [
+		"mac_addr",
+		"mac addr",
+		"macaddr",
+		"mac",
+		"mac_address",
+	]);
+	const phyAddr = getRowValue(row, [
+		"phy_addr",
+		"phy addr",
+		"phyaddr",
+		"phy",
+		"phy_address",
+	]);
+	const macCandidates = buildMacCandidates(macAddr, phyAddr);
+	const telefones = uniqueValues([
+		normalizePhone(telefonePrimario),
+		normalizePhone(telefoneSecundario),
+		normalizePhone(telefoneTerciario),
+		...parsePhoneList(getRowValue(row, ["telefones"])),
+	]);
+	const id = buildMapaDocumentId(numOs, fonteConfig.id);
+
+	const order = {
+		num_os: String(numOs),
+		empresa: fonteConfig.empresa,
+		fonte: fonteConfig.id,
+		status: statusNorm,
+		tipo,
+		cidade: info.nome || cidadeInformada,
+		regional: info.regional || "Sem Regional",
+		agente: info.agente === true,
+		codigo_cliente: getRowValue(row, ["codigo_cliente", "codigo"])
+			? String(getRowValue(row, ["codigo_cliente", "codigo"]))
+			: "",
+		nome_cliente: getRowValue(row, [
+			"nome_razaosocial",
+			"cliente",
+			"nome_cliente",
+		])
+			? String(
+					getRowValue(row, ["nome_razaosocial", "cliente", "nome_cliente"]),
+				).trim()
+			: "",
+		id_cliente_servico: getRowValue(row, [
+			"id_cliente_servico",
+			"cliente_servico",
+			"id_servico",
+		])
+			? String(
+					getRowValue(row, [
+						"id_cliente_servico",
+						"cliente_servico",
+						"id_servico",
+					]),
+				).trim()
+			: "",
+		servico: getRowValue(row, ["servico", "plano", "nome_plano"])
+			? String(getRowValue(row, ["servico", "plano", "nome_plano"])).trim()
+			: "",
+		numero_plano: getRowValue(row, ["numero_plano"])
+			? String(getRowValue(row, ["numero_plano"])).trim()
+			: "",
+		data_cadastro: dataCadastro,
+		data_abertura_os: dataCadastro,
+		telefone: telefones[0] || "",
+		telefone_primario: normalizePhone(telefonePrimario),
+		telefone_secundario: normalizePhone(telefoneSecundario),
+		telefone_terciario: normalizePhone(telefoneTerciario),
+		telefones,
+		mac_addr: normalizeMac(macAddr),
+		phy_addr: normalizeMac(phyAddr),
+		macs_equipamento: macCandidates,
+		tecnico: getRowValue(row, ["tecnicos", "tecnico"])
+			? String(getRowValue(row, ["tecnicos", "tecnico"])).trim()
+			: "",
+		endereco: endereco ? String(endereco).trim() : "",
+		numero: numero ? String(numero).trim() : "",
+		bairro: bairro ? String(bairro).trim() : "",
+		endereco_resumo: buildAddress({
+			endereco: endereco ? String(endereco).trim() : "",
+			numero: numero ? String(numero).trim() : "",
+			bairro: bairro ? String(bairro).trim() : "",
+		}),
+		coordenadas: coordenadas ? String(coordenadas).trim() : "",
+		latitude: coords?.latitude ?? null,
+		longitude: coords?.longitude ?? null,
+	};
+
+	return { status: "ok", id, order };
+}
+
 async function buildOrdersFromRows(
 	rows = [],
 	fontesSelecionadas = ["sempre"],
@@ -347,167 +514,23 @@ async function buildOrdersFromRows(
 	const ignoradasTipos = {};
 
 	rows.forEach((row) => {
-		const numOs = getRowValue(row, [
-			"numero_ordem_servico",
-			"num_o_s",
-			"num_os",
-			"numero_os",
-		]);
-		const status = getRowValue(row, ["status"]);
-		const tipoRaw = getRowValue(row, ["tipo_ordem_servico", "tipo"]);
-		const tipo = String(tipoRaw || "").trim();
-		if (!numOs || !tipo || tipo === "-" || status === "-") return;
-
-		if (forMatch) {
-			const normalizedType = normalizeText(tipo);
-			const shouldIgnore = ignoredTypes.todos.some(
-				(item) => normalizeText(item) === normalizedType,
-			);
-			if (shouldIgnore) {
-				ignoradasPorTipo += 1;
-				ignoradasTipos[tipo] = (ignoradasTipos[tipo] || 0) + 1;
-				return;
-			}
+		const result = buildOrderFromRow(row, {
+			cityMap,
+			ignoredTypes,
+			fontesSet,
+			forMatch,
+		});
+		if (result.status === "ignoredByType") {
+			ignoradasPorTipo += 1;
+			ignoradasTipos[result.tipo] = (ignoradasTipos[result.tipo] || 0) + 1;
+			return;
 		}
-
-		const statusNorm = normalizeStatus(status);
-		if (!statusNorm) return;
-
-		const endereco = getRowValue(row, ["endereco", "endereco_instalacao"]);
-		const cidadeRaw = getRowValue(row, ["cidade"]) || extractCity(endereco);
-		const cidadeInformada = normalizeCity(cidadeRaw);
-		if (!cidadeInformada) return;
-
-		const regionalRaw = getRowValue(row, [
-			"regional",
-			"regiao",
-			"região",
-			"nome_regional",
-			"regional_atendimento",
-		]);
-		const info = cityMap[normalizeCityKey(cidadeInformada)] || {
-			nome: cidadeInformada,
-			regional: regionalRaw ? String(regionalRaw).trim() : "Sem Regional",
-			agente: false,
-		};
-		if (forMatch && (!info.regional || info.regional === "Sem Regional")) {
+		if (result.status === "ignoredNoRegional") {
 			ignoradasSemRegional += 1;
 			return;
 		}
-
-		const fonteDaLinha = getFonteMapaPorRegional(info.regional);
-		if (!fontesSet.has(fonteDaLinha)) return;
-
-		const fonteConfig = getMapaFonteConfig(fonteDaLinha);
-		const numero = getRowValue(row, ["numero"]);
-		const bairro = getRowValue(row, ["bairro"]);
-		const coordenadas = getRowValue(row, ["coordenadas"]);
-		const coords = parseCoordinates(coordenadas);
-		const dataCadastro = normalizeMapaDateValue(
-			getRowValue(row, [
-				"data_cadastro",
-				"data_abertura",
-				"data_abertura_os",
-				"abertura",
-			]),
-		);
-		const telefonePrimario = getFirstRowValue(row, [
-			"telefone_primario",
-			"telefone_principal",
-			"celular",
-			"telefone",
-			"whatsapp",
-		]);
-		const telefoneSecundario = getRowValue(row, ["telefone_secundario"]);
-		const telefoneTerciario = getRowValue(row, ["telefone_terciario"]);
-		const macAddr = getRowValue(row, [
-			"mac_addr",
-			"mac addr",
-			"macaddr",
-			"mac",
-			"mac_address",
-		]);
-		const phyAddr = getRowValue(row, [
-			"phy_addr",
-			"phy addr",
-			"phyaddr",
-			"phy",
-			"phy_address",
-		]);
-		const macCandidates = buildMacCandidates(macAddr, phyAddr);
-		const telefones = uniqueValues([
-			normalizePhone(telefonePrimario),
-			normalizePhone(telefoneSecundario),
-			normalizePhone(telefoneTerciario),
-			...parsePhoneList(getRowValue(row, ["telefones"])),
-		]);
-		const id = buildMapaDocumentId(numOs, fonteConfig.id);
-
-		ordensNovas[id] = {
-			num_os: String(numOs),
-			empresa: fonteConfig.empresa,
-			fonte: fonteConfig.id,
-			status: statusNorm,
-			tipo,
-			cidade: info.nome || cidadeInformada,
-			regional: info.regional || "Sem Regional",
-			agente: info.agente === true,
-			codigo_cliente: getRowValue(row, ["codigo_cliente", "codigo"])
-				? String(getRowValue(row, ["codigo_cliente", "codigo"]))
-				: "",
-			nome_cliente: getRowValue(row, [
-				"nome_razaosocial",
-				"cliente",
-				"nome_cliente",
-			])
-				? String(
-						getRowValue(row, ["nome_razaosocial", "cliente", "nome_cliente"]),
-					).trim()
-				: "",
-			id_cliente_servico: getRowValue(row, [
-				"id_cliente_servico",
-				"cliente_servico",
-				"id_servico",
-			])
-				? String(
-						getRowValue(row, [
-							"id_cliente_servico",
-							"cliente_servico",
-							"id_servico",
-						]),
-					).trim()
-				: "",
-			servico: getRowValue(row, ["servico", "plano", "nome_plano"])
-				? String(getRowValue(row, ["servico", "plano", "nome_plano"])).trim()
-				: "",
-			numero_plano: getRowValue(row, ["numero_plano"])
-				? String(getRowValue(row, ["numero_plano"])).trim()
-				: "",
-			data_cadastro: dataCadastro,
-			data_abertura_os: dataCadastro,
-			telefone: telefones[0] || "",
-			telefone_primario: normalizePhone(telefonePrimario),
-			telefone_secundario: normalizePhone(telefoneSecundario),
-			telefone_terciario: normalizePhone(telefoneTerciario),
-			telefones,
-			mac_addr: normalizeMac(macAddr),
-			phy_addr: normalizeMac(phyAddr),
-			macs_equipamento: macCandidates,
-			tecnico: getRowValue(row, ["tecnicos", "tecnico"])
-				? String(getRowValue(row, ["tecnicos", "tecnico"])).trim()
-				: "",
-			endereco: endereco ? String(endereco).trim() : "",
-			numero: numero ? String(numero).trim() : "",
-			bairro: bairro ? String(bairro).trim() : "",
-			endereco_resumo: buildAddress({
-				endereco: endereco ? String(endereco).trim() : "",
-				numero: numero ? String(numero).trim() : "",
-				bairro: bairro ? String(bairro).trim() : "",
-			}),
-			coordenadas: coordenadas ? String(coordenadas).trim() : "",
-			latitude: coords?.latitude ?? null,
-			longitude: coords?.longitude ?? null,
-		};
+		if (result.status !== "ok") return;
+		ordensNovas[result.id] = result.order;
 	});
 
 	return {
@@ -1924,4 +1947,7 @@ module.exports = {
 	saveMatchConfig,
 	saveMetasBaseConfig,
 	saveMetasForceTaskConfig,
+	// Exportado so pra teste (achado javascript:S3776,
+	// docs/SONARQUBE-MAP.md) — funcao pura extraida de buildOrdersFromRows.
+	buildOrderFromRow,
 };

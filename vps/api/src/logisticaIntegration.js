@@ -339,6 +339,40 @@ function buildLalamoveError(data, responseText, status) {
 	return `Falha na cotação Lalamove (${status}): ${details || responseText || "sem detalhe retornado"}`;
 }
 
+function buildGeocodeUrl(baseUrl, query) {
+	const url = new URL(baseUrl);
+	url.searchParams.set("format", "jsonv2");
+	url.searchParams.set("limit", "5");
+	url.searchParams.set("addressdetails", "1");
+	url.searchParams.set("countrycodes", "br");
+	url.searchParams.set("accept-language", "pt-BR,pt;q=0.9");
+	url.searchParams.set("q", query);
+	return url;
+}
+
+async function tryGeocodeQuery(baseUrl, query, payload) {
+	const url = buildGeocodeUrl(baseUrl, query);
+	const response = await fetch(url.toString(), {
+		headers: {
+			Accept: "application/json",
+			"User-Agent": cleanText(
+				process.env.LOGISTICA_GEOCODER_USER_AGENT ||
+					"retiradas.tech logística/1.0",
+			),
+		},
+	});
+	const responseText = await response.text();
+	let data = null;
+	try {
+		data = responseText ? JSON.parse(responseText) : null;
+	} catch {
+		data = null;
+	}
+	if (!response.ok) return { httpStatus: response.status, result: null };
+	const result = Array.isArray(data) ? pickBestGeocodeResult(data, payload) : null;
+	return { httpStatus: response.status, result };
+}
+
 async function geocodeAddress(payload = {}) {
 	const queries = buildGeocodeCandidates(payload);
 	if (!queries.length) {
@@ -358,33 +392,9 @@ async function geocodeAddress(payload = {}) {
 	let result = null;
 	for (const query of queries) {
 		lastQuery = query;
-		const url = new URL(baseUrl);
-		url.searchParams.set("format", "jsonv2");
-		url.searchParams.set("limit", "5");
-		url.searchParams.set("addressdetails", "1");
-		url.searchParams.set("countrycodes", "br");
-		url.searchParams.set("accept-language", "pt-BR,pt;q=0.9");
-		url.searchParams.set("q", query);
-
-		const response = await fetch(url.toString(), {
-			headers: {
-				Accept: "application/json",
-				"User-Agent": cleanText(
-					process.env.LOGISTICA_GEOCODER_USER_AGENT ||
-						"retiradas.tech logística/1.0",
-				),
-			},
-		});
-		lastHttpStatus = response.status;
-		const responseText = await response.text();
-		let data = null;
-		try {
-			data = responseText ? JSON.parse(responseText) : null;
-		} catch {
-			data = null;
-		}
-		if (!response.ok) continue;
-		result = Array.isArray(data) ? pickBestGeocodeResult(data, payload) : null;
+		const attempt = await tryGeocodeQuery(baseUrl, query, payload);
+		lastHttpStatus = attempt.httpStatus;
+		result = attempt.result;
 		if (result) break;
 	}
 

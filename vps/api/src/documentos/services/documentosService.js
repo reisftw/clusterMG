@@ -331,6 +331,22 @@ async function createSubfolder({ empresaId, name, user }) {
 	return drive.createFolder(text(name), folder.driveFolderId);
 }
 
+// Resolve os parents de um unico folderId no Drive, ou null se ja visitado
+// / se a chamada falhar. Extraido de isFolderInsideClientFolder (achado
+// javascript:S3776, docs/SONARQUBE-MAP.md) pra reduzir o aninhamento do
+// loop duplo — mesmo comportamento (falha isolada e ignorada, segue
+// tentando os outros ramos da arvore).
+async function resolveFolderParents(currentId, visited) {
+	if (!currentId || visited.has(currentId)) return null;
+	visited.add(currentId);
+	try {
+		const metadata = await drive.getFileMetadata(currentId, "id,parents");
+		return Array.isArray(metadata?.parents) ? metadata.parents : [];
+	} catch {
+		return null;
+	}
+}
+
 async function isFolderInsideClientFolder({ folderId, clientFolderId }) {
 	const targetFolderId = text(folderId);
 	const rootFolderId = text(clientFolderId);
@@ -342,15 +358,8 @@ async function isFolderInsideClientFolder({ folderId, clientFolderId }) {
 	for (let depth = 0; depth < 20 && currentIds.length; depth += 1) {
 		const nextIds = [];
 		for (const currentId of currentIds) {
-			if (!currentId || visited.has(currentId)) continue;
-			visited.add(currentId);
-			let metadata = null;
-			try {
-				metadata = await drive.getFileMetadata(currentId, "id,parents");
-			} catch {
-				continue;
-			}
-			const parents = Array.isArray(metadata?.parents) ? metadata.parents : [];
+			const parents = await resolveFolderParents(currentId, visited);
+			if (!parents) continue;
 			if (parents.includes(rootFolderId)) return true;
 			nextIds.push(...parents.filter((parentId) => !visited.has(parentId)));
 		}
@@ -1023,96 +1032,115 @@ async function runBillingNotifications({
 	const errors = [];
 
 	for (const empresaDoc of empresas) {
-		const data = empresaDoc.data || {};
-		const empresa = {
-			id: empresaDoc.documentId,
-			nome: text(data.nome || data.empresa || empresaDoc.documentId),
-			responsavelEmail: text(
-				data.responsavel?.email || data.email || data.emailResponsavel,
-			),
-			responsavelNome: text(
-				data.responsavel?.nome || data.responsavel_nome || data.nomeResponsavel,
-			),
-			agenteAutorizado: Boolean(
-				data.agenteAutorizado ||
-					data.agente_autorizado ||
-					data.isAgente ||
-					data.is_agente,
-			),
-		};
-		if (!empresa.responsavelEmail) continue;
-
-		const logId = `${empresa.id}_${month}_${stamp}`;
-		const existingLog = await repository.getBillingLog(logId);
-		if (existingLog && !force) continue;
-
-		const submission = await repository.getLatestSubmissionByEmpresaMes(
-			empresa.id,
+		const outcome = await processBillingForEmpresa(empresaDoc, {
 			month,
-		);
-		const files = submission
-			? await repository.listSubmissionFiles(submission.id)
-			: [];
-		const latestByField = new Map(
-			latestFilesByField(documentFilesOnly(files)).map((file) => [
-				file.fieldId,
-				file,
-			]),
-		);
-		const audience = empresa.agenteAutorizado ? "agente" : "tecnico";
-		const companyFields = fields.filter((field) =>
-			fieldAppliesToAudience(field, audience),
-		);
-		const pendingFields = companyFields.filter(
-			(field) => normalize(latestByField.get(field.id)?.status) !== "aprovado",
-		);
-		if (!pendingFields.length) continue;
-
-		try {
-			await sendDocumentEmail({
-				to: empresa.responsavelEmail,
-				subject: config.emailSubject || DEFAULT_BILLING_CONFIG.emailSubject,
-				title: "Documentacao mensal pendente",
-				lines: [
-					`Empresa: ${empresa.nome}`,
-					`Mês de referência: ${month}`,
-					`Pendencias: ${pendingFields.map((item) => item.nome).join(", ")}`,
-					"Acesse o portal de terceirizados para enviar ou corrigir os documentos pendentes.",
-				],
-				actionPath: "/terceirizados/login",
-				meta: {
-					event: "billing_reminder",
-					empresaId: empresa.id,
-					mesReferencia: month,
-				},
-			});
-			await repository.recordBillingLog(logId, {
-				empresaId: empresa.id,
-				empresaNome: empresa.nome,
-				email: empresa.responsavelEmail,
-				mesReferencia: month,
-				pendencias: pendingFields.map((item) => item.nome),
-				sentAt: new Date().toISOString(),
-			});
-			sent += 1;
-		} catch (error) {
-			errors.push({
-				empresaId: empresa.id,
-				error: error?.message || String(error),
-			});
-		}
+			stamp,
+			force,
+			config,
+			fields,
+		});
+		if (outcome === "sent") sent += 1;
+		else if (outcome?.error) errors.push(outcome.error);
 	}
 
 	return { ok: true, sent, errors };
 }
 
-async function createMonthlySubmission({
-	mesReferencia,
-	files = [],
-	fieldIds = [],
-	user,
-}) {
-	clearDocumentosListCache();
+function buildBillingEmpresa(empresaDoc) {
+	const data = empresaDoc.data || {};
+	return {
+		id: empresaDoc.documentId,
+		nome: text(data.nome || data.empresa || empresaDoc.documentId),
+		responsavelEmail: text(
+			data.responsavel?.email || data.email || data.emailResponsavel,
+		),
+		responsavelNome: text(
+			data.responsavel?.nome || data.responsavel_nome || data.nomeResponsavel,
+		),
+		agenteAutorizado: Boolean(
+			data.agenteAutorizado ||
+				data.agente_autorizado ||
+				data.isAgente ||
+				data.is_agente,
+		),
+	};
+}
+
+// Processa o lembrete de cobranca de UMA empresa. Extraido do loop de
+// runBillingNotifications (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — devolve "skip", "sent" ou { error } pro chamador decidir o que fazer,
+// sem mudar nenhuma regra (mesmos "continue"/contadores de antes).
+async function processBillingForEmpresa(
+	empresaDoc,
+	{ month, stamp, force, config, fields },
+) {
+	const empresa = buildBillingEmpresa(empresaDoc);
+	if (!empresa.responsavelEmail) return "skip";
+
+	const logId = `${empresa.id}_${month}_${stamp}`;
+	const existingLog = await repository.getBillingLog(logId);
+	if (existingLog && !force) return "skip";
+
+	const submission = await repository.getLatestSubmissionByEmpresaMes(
+		empresa.id,
+		month,
+	);
+	const files = submission
+		? await repository.listSubmissionFiles(submission.id)
+		: [];
+	const latestByField = new Map(
+		latestFilesByField(documentFilesOnly(files)).map((file) => [
+			file.fieldId,
+			file,
+		]),
+	);
+	const audience = empresa.agenteAutorizado ? "agente" : "tecnico";
+	const companyFields = fields.filter((field) =>
+		fieldAppliesToAudience(field, audience),
+	);
+	const pendingFields = companyFields.filter(
+		(field) => normalize(latestByField.get(field.id)?.status) !== "aprovado",
+	);
+	if (!pendingFields.length) return "skip";
+
+	try {
+		await sendDocumentEmail({
+			to: empresa.responsavelEmail,
+			subject: config.emailSubject || DEFAULT_BILLING_CONFIG.emailSubject,
+			title: "Documentacao mensal pendente",
+			lines: [
+				`Empresa: ${empresa.nome}`,
+				`Mês de referência: ${month}`,
+				`Pendencias: ${pendingFields.map((item) => item.nome).join(", ")}`,
+				"Acesse o portal de terceirizados para enviar ou corrigir os documentos pendentes.",
+			],
+			actionPath: "/terceirizados/login",
+			meta: {
+				event: "billing_reminder",
+				empresaId: empresa.id,
+				mesReferencia: month,
+			},
+		});
+		await repository.recordBillingLog(logId, {
+			empresaId: empresa.id,
+			empresaNome: empresa.nome,
+			email: empresa.responsavelEmail,
+			mesReferencia: month,
+			pendencias: pendingFields.map((item) => item.nome),
+			sentAt: new Date().toISOString(),
+		});
+		return "sent";
+	} catch (error) {
+		return { error: { empresaId: empresa.id, error: error?.message || String(error) } };
+	}
+}
+
+// Valida se o usuario pode criar/reenviar a submissao mensal, e resolve
+// todo o contexto necessario (empresa, mes, campos ativos, submissao
+// existente). Extraido de createMonthlySubmission (achado
+// javascript:S3776, docs/SONARQUBE-MAP.md) — cada "throw" e exatamente o
+// mesmo de antes, so movido pra fora do corpo principal da funcao.
+async function validateMonthlySubmissionRequest({ user, mesReferencia, fieldIds, files }) {
 	const role = normalize(user?.role);
 	if (!["lider_empresa", "agente_autorizado", "admin"].includes(role)) {
 		const error = new Error(
@@ -1139,7 +1167,7 @@ async function createMonthlySubmission({
 		fieldAppliesToAudience(field, audience),
 	);
 	const fieldMap = new Map(activeFields.map((field) => [field.id, field]));
-	let submission = await repository.getLatestSubmissionByEmpresaMes(
+	const submission = await repository.getLatestSubmissionByEmpresaMes(
 		empresa.id,
 		month,
 	);
@@ -1198,6 +1226,19 @@ async function createMonthlySubmission({
 		error.statusCode = 400;
 		throw error;
 	}
+
+	return { empresa, month, activeFields, fieldMap, submission, existingFiles };
+}
+
+async function createMonthlySubmission({
+	mesReferencia,
+	files = [],
+	fieldIds = [],
+	user,
+}) {
+	clearDocumentosListCache();
+	let { empresa, month, fieldMap, submission, existingFiles } =
+		await validateMonthlySubmissionRequest({ user, mesReferencia, fieldIds, files });
 	files.forEach(ensureAllowedMonthlyDocument);
 
 	const { monthFolder } = await ensureMonthFolder(empresa, month, user);
@@ -1995,6 +2036,9 @@ module.exports = {
 	reviewSubmission,
 	runBillingNotifications,
 	purgeDocumentHistory,
+	// Exportados so pra teste (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+	isFolderInsideClientFolder,
+	processBillingForEmpresa,
 	saveBillingConfig,
 	saveInvoiceField,
 	saveRequiredField,
