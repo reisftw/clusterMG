@@ -1,5 +1,13 @@
 import { brl, decimal } from "../../../utils/financeiroFormatters";
 
+function formatBudgetUsageLabel(percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent > 100) {
+		return `${decimal.format(safePercent - 100)}% acima`;
+	}
+	return `${decimal.format(safePercent)}% consumido`;
+}
+
 export default function BudgetTreemapDetail({
 	fullTreemapItems,
 	budgetConsumptionStatus,
@@ -20,7 +28,7 @@ export default function BudgetTreemapDetail({
 						</p>
 						<p className="mt-2 text-lg font-black">{brl.format(item.realized)}</p>
 						<p className="text-xs font-black opacity-90">
-							{decimal.format(item.percent)}% · {status.label}
+							{formatBudgetUsageLabel(item.percent)} · {status.label}
 						</p>
 					</div>
 				);

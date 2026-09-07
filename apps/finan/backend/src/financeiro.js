@@ -4541,40 +4541,20 @@ function mergeBudgetConfigFromRows(existingConfig = {}, rows = [], user = {}) {
 	};
 }
 
-async function getBudgetCostCenters() {
-	const config = await financeiroStatement.getBudgetConfigurationStatement();
+async function getBudgetCostCenters(filters = {}) {
+	const config = await financeiroStatement.getBudgetConfigurationStatement(filters);
 	const normalizedConfig = normalizeCostCentersConfig(config, {});
-	const rawAccounts = Array.isArray(config.accounts) ? config.accounts : [];
-	const rawAccountsByCode = new Map(
-		rawAccounts.map((account) => [
-			budgetCodeKey(account.codigo || account.reduzida || account.id) ||
-				account.id,
-			account,
-		]),
-	);
-	const planAccounts = DEFAULT_FINANCIAL_ACCOUNT_PLAN.map(
-		financialAccountPlanToAccount,
-	);
-	const needsFinancialPlanRefresh =
-		rawAccounts.length < planAccounts.length ||
-		planAccounts.some((account) => {
-			const rawAccount = rawAccountsByCode.get(
-				budgetCodeKey(account.codigo || account.id) || account.id,
-			);
-			if (!rawAccount) return true;
-			return (
-				cleanText(rawAccount.grupo) !== cleanText(account.grupo) ||
-				cleanText(rawAccount.dreGroup) !== cleanText(account.dreGroup) ||
-				cleanText(rawAccount.tipoPlano) !== cleanText(account.tipoPlano) ||
-				cleanText(rawAccount.categoriaMae) !==
-					cleanText(account.categoriaMae) ||
-				cleanText(rawAccount.categoriaClasse) !==
-					cleanText(account.categoriaClasse)
-			);
-		});
-	if (needsFinancialPlanRefresh) {
-		await financeiroStatement.saveBudgetConfigurationStatement(normalizedConfig);
-	}
+	// Esta rota e GET e nao deve ter efeito colateral de escrita. Antes,
+	// quando o plano de contas persistido divergia do plano padrao
+	// (DEFAULT_FINANCIAL_ACCOUNT_PLAN), o codigo disparava aqui um
+	// DELETE+reinsert completo de finan_centros_custo/finan_contas via
+	// saveBudgetCostCenters. Essa rotina nao leva em conta linhas de
+	// finan_orcamento_lancamentos que referenciam esses centros/contas, e
+	// passou a violar a FK RESTRICT adicionada pela migration 010 em toda
+	// leitura desta rota. O `normalizedConfig` ja reflete o que o cliente
+	// precisa ver; uma eventual ressincronizacao do plano financeiro padrao
+	// deve ser uma acao explicita de escrita (PUT), nao um efeito colateral
+	// de leitura.
 	return {
 		ok: true,
 		config: normalizedConfig,

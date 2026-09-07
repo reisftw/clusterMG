@@ -32,6 +32,8 @@ function normalizePublicPermissions(user) {
 		permissions.add("financeiro.visao_geral.manage");
 		permissions.add("financeiro.gestao_orcamento.view");
 		permissions.add("financeiro.gestao_orcamento.manage");
+		permissions.add("relatorios_financeiros:visualizar");
+		permissions.add("relatorios_financeiros:gerenciar");
 		permissions.add("financeiro.reports.view");
 		permissions.add("financeiro.reports.manage");
 		permissions.add("financeiro.equipe.view");
@@ -86,7 +88,8 @@ async function findUserByBearer(req) {
 		`select
 			u.*,
 			coalesce(r.permissions, '[]'::jsonb) as permissions,
-			coalesce(r.is_admin, false) as is_admin
+			coalesce(r.is_admin, false) as is_admin,
+			coalesce(r.hierarchy_level, 999) as hierarchy_level
 		from finan_sessions s
 		join finan_users u on u.id = s.user_id
 		left join finan_roles r on r.id = u.role_id

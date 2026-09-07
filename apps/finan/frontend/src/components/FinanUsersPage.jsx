@@ -1,18 +1,26 @@
-import { RefreshCw, ShieldCheck, UsersRound } from "lucide-react";
+import { Lock, RefreshCw, ShieldCheck, Unlock, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
 	createFinanRole,
+	fetchFinanPinManageableUsers,
 	fetchFinanRoles,
+	fetchFinanSettingSection,
 	fetchFinanUsers,
+	resetFinanUserPin,
+	saveFinanSettingSection,
+	unlockFinanUserPin,
 	updateFinanRole,
 	updateFinanUser,
 } from "../api/finanApi";
+import { useFinanAuth } from "../state/FinanAuthContext";
 import UserAvatar from "./UserAvatar";
 
 const FINAN_PERMISSION_CATALOG = [
 	["finan.dashboard.view", "Dashboard", "Visualizar"],
 	["finan.gestao_orcamentaria.view", "Gestão Orçamentária", "Visualizar"],
 	["finan.gestao_orcamentaria.manage", "Gestão Orçamentária", "Gerenciar"],
+	["relatorios_financeiros:visualizar", "Planejamento > Relatórios Financeiros", "Visualizar"],
+	["relatorios_financeiros:gerenciar", "Planejamento > Relatórios Financeiros", "Gerenciar"],
 	["finan.contas_pagar.view", "Contas a Pagar", "Visualizar"],
 	["finan.contas_pagar.manage", "Contas a Pagar", "Gerenciar"],
 	["finan.contas_receber.view", "Contas a Receber", "Visualizar"],
@@ -28,15 +36,45 @@ const FINAN_PERMISSION_CATALOG = [
 	["finan.configuracoes.view", "Configuração Geral", "Visualizar"],
 	["finan.configuracoes.manage", "Configuração Geral", "Gerenciar"],
 	["finan.usuarios.manage", "Usuários, Cargos e Permissões", "Gerenciar"],
+	["finan.pin.manage", "PIN de Bloqueio", "Gerenciar"],
+	["finan.calendario.manage", "Calendário Financeiro", "Gerenciar"],
 ];
 
+function hasFinanPinManagePermission(user) {
+	if (!user) return false;
+	if (user.isAdmin) return true;
+	const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+	return permissions.includes("*") || permissions.includes("finan.pin.manage");
+}
+
+function hasFinanConfigManagePermission(user) {
+	if (!user) return false;
+	if (user.isAdmin) return true;
+	const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+	return permissions.includes("*") || permissions.includes("finan.configuracoes.manage");
+}
+
 export default function FinanUsersPage({ initialTab = "usuarios" }) {
+	const { user: currentUser } = useFinanAuth();
+	const canManagePins = hasFinanPinManagePermission(currentUser);
+	const canManageConfig = hasFinanConfigManagePermission(currentUser);
 	const [users, setUsers] = useState([]);
 	const [roles, setRoles] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [query, setQuery] = useState("");
 	const [activeTab, setActiveTab] = useState(initialTab);
+	const [pinUsers, setPinUsers] = useState([]);
+	const [pinError, setPinError] = useState("");
+
+	const loadPinUsers = async () => {
+		if (!canManagePins) return;
+		try {
+			setPinUsers(await fetchFinanPinManageableUsers());
+		} catch (err) {
+			setPinError(err?.message || "Não foi possível carregar o status de PIN dos usuários.");
+		}
+	};
 
 	const load = async () => {
 		setLoading(true);
@@ -58,6 +96,11 @@ export default function FinanUsersPage({ initialTab = "usuarios" }) {
 	useEffect(() => {
 		load();
 	}, []);
+
+	useEffect(() => {
+		loadPinUsers();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [canManagePins]);
 
 	useEffect(() => {
 		setActiveTab(initialTab);
@@ -174,26 +217,191 @@ export default function FinanUsersPage({ initialTab = "usuarios" }) {
 								<p>Nenhum usuário financeiro/admin encontrado.</p>
 							) : null}
 						</div>
+						{canManagePins ? (
+							<PinManagementPanel
+								pinUsers={pinUsers}
+								error={pinError}
+								onUnlock={async (id) => {
+									await unlockFinanUserPin(id);
+									await loadPinUsers();
+								}}
+								onReset={async (id) => {
+									await resetFinanUserPin(id);
+									await loadPinUsers();
+								}}
+							/>
+						) : null}
 					</>
 				) : (
-					<RolesPanel
-						roles={roles}
-						onCreate={async (payload) => {
-							const created = await createFinanRole(payload);
-							setRoles((current) => [...current, created]);
-						}}
-						onUpdate={async (id, payload) => {
-							const updated = await updateFinanRole(id, payload);
-							setRoles((current) =>
-								current.map((role) =>
-									role.id === id ? { ...role, ...updated } : role,
-								),
-							);
-						}}
-					/>
+					<>
+						{canManageConfig ? <PinIdleTimeoutCard /> : null}
+						<RolesPanel
+							roles={roles}
+							onCreate={async (payload) => {
+								const created = await createFinanRole(payload);
+								setRoles((current) => [...current, created]);
+							}}
+							onUpdate={async (id, payload) => {
+								const updated = await updateFinanRole(id, payload);
+								setRoles((current) =>
+									current.map((role) =>
+										role.id === id ? { ...role, ...updated } : role,
+									),
+								);
+							}}
+						/>
+					</>
 				)}
 			</div>
 		</section>
+	);
+}
+
+function PinManagementPanel({ pinUsers, error, onUnlock, onReset }) {
+	const [busyId, setBusyId] = useState("");
+
+	const run = async (id, action) => {
+		setBusyId(id);
+		try {
+			await action(id);
+		} finally {
+			setBusyId("");
+		}
+	};
+
+	return (
+		<div className="finan-work-card">
+			<div className="finan-card-heading">
+				<div>
+					<ShieldCheck size={20} />
+				</div>
+				<div>
+					<h2>Gerenciar PIN de bloqueio</h2>
+					<p>
+						Só usuários abaixo do seu cargo na hierarquia aparecem aqui. Resetar apaga o
+						PIN e a palavra secreta — o usuário configura tudo de novo no próximo acesso.
+					</p>
+				</div>
+			</div>
+			{error ? <div className="finan-error">{error}</div> : null}
+			<div className="finan-users-list">
+				{pinUsers.map((pinUser) => (
+					<article key={pinUser.id} className="finan-user-row">
+						<div>
+							<strong>{pinUser.name || pinUser.email}</strong>
+							<span>{pinUser.email}</span>
+							<span>
+								{pinUser.role_name || "Sem cargo"} ·{" "}
+								{pinUser.pin_configured ? "PIN configurado" : "PIN não configurado"}
+								{pinUser.pin_locked ? " · Bloqueado" : ""}
+							</span>
+						</div>
+						<div className="finan-user-actions">
+							<button
+								type="button"
+								disabled={busyId === pinUser.id || !pinUser.pin_locked}
+								onClick={() => run(pinUser.id, onUnlock)}
+							>
+								<Unlock size={14} /> Desbloquear
+							</button>
+							<button
+								type="button"
+								disabled={busyId === pinUser.id || !pinUser.pin_configured}
+								onClick={() => run(pinUser.id, onReset)}
+							>
+								<Lock size={14} /> Resetar PIN
+							</button>
+						</div>
+					</article>
+				))}
+				{!pinUsers.length ? (
+					<p>Nenhum usuário abaixo do seu cargo na hierarquia.</p>
+				) : null}
+			</div>
+		</div>
+	);
+}
+
+// So aparece pra quem tem finan.configuracoes.manage (ou admin). Controla
+// depois de quantos minutos de inatividade, numa aba de navegador normal
+// (nao no PWA instalado), o Finan pede o PIN de novo — ver
+// FinanPinLockContext.jsx no frontend e GET/PUT
+// /auth/pin/status|/configuracoes/section/pin_lock no backend.
+function PinIdleTimeoutCard() {
+	const [minutes, setMinutes] = useState(20);
+	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState("");
+	const [success, setSuccess] = useState(false);
+
+	useEffect(() => {
+		let active = true;
+		fetchFinanSettingSection("pin_lock")
+			.then((data) => {
+				if (!active) return;
+				const value = Number(data?.value?.idleTimeoutMinutes ?? data?.idleTimeoutMinutes);
+				if (Number.isFinite(value) && value > 0) setMinutes(value);
+			})
+			.catch(() => {})
+			.finally(() => {
+				if (active) setLoading(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	const save = async () => {
+		setError("");
+		setSuccess(false);
+		const value = Math.max(1, Math.round(Number(minutes) || 20));
+		setSaving(true);
+		try {
+			await saveFinanSettingSection("pin_lock", { idleTimeoutMinutes: value });
+			setMinutes(value);
+			setSuccess(true);
+		} catch (err) {
+			setError(err?.message || "Não foi possível salvar.");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	return (
+		<div className="finan-work-card">
+			<div className="finan-card-heading">
+				<div>
+					<ShieldCheck size={20} />
+				</div>
+				<div>
+					<h2>Bloqueio por inatividade (desktop)</h2>
+					<p>
+						Depois de quantos minutos sem uso, numa aba de navegador normal, o Finan
+						pede o PIN de novo. No app instalado (PWA), o bloqueio continua imediato ao
+						voltar de segundo plano, independente deste valor.
+					</p>
+				</div>
+			</div>
+			{loading ? (
+				<p>Carregando...</p>
+			) : (
+				<div className="finan-user-actions">
+					<input
+						type="number"
+						min={1}
+						value={minutes}
+						onChange={(event) => setMinutes(event.target.value)}
+						style={{ width: 90 }}
+					/>
+					<span>minutos</span>
+					<button type="button" onClick={save} disabled={saving}>
+						{saving ? "Salvando..." : "Salvar"}
+					</button>
+				</div>
+			)}
+			{error ? <div className="finan-error">{error}</div> : null}
+			{success ? <p>Salvo com sucesso.</p> : null}
+		</div>
 	);
 }
 
@@ -267,13 +475,16 @@ function UserRow({ user, roles, onPatch }) {
 	);
 }
 
+const DEFAULT_ROLE_DRAFT = {
+	name: "",
+	description: "",
+	permissions: ["finan.dashboard.view", "finan.gestao_orcamentaria.view"],
+	is_admin: false,
+	hierarchy_level: 999,
+};
+
 function RolesPanel({ roles, onCreate, onUpdate }) {
-	const [draft, setDraft] = useState({
-		name: "",
-		description: "",
-		permissions: ["finan.dashboard.view", "finan.gestao_orcamentaria.view"],
-		is_admin: false,
-	});
+	const [draft, setDraft] = useState(DEFAULT_ROLE_DRAFT);
 	const [saving, setSaving] = useState("");
 
 	const create = async () => {
@@ -281,12 +492,7 @@ function RolesPanel({ roles, onCreate, onUpdate }) {
 		setSaving("new");
 		try {
 			await onCreate(draft);
-			setDraft({
-				name: "",
-				description: "",
-				permissions: ["finan.dashboard.view", "finan.gestao_orcamentaria.view"],
-				is_admin: false,
-			});
+			setDraft(DEFAULT_ROLE_DRAFT);
 		} finally {
 			setSaving("");
 		}
@@ -326,6 +532,20 @@ function RolesPanel({ roles, onCreate, onUpdate }) {
 					/>
 					<span>Administrador do Finan</span>
 				</label>
+				<label className="finan-hierarchy-field">
+					<span>Nível hierárquico (menor = mais alto)</span>
+					<input
+						type="number"
+						min={0}
+						value={draft.hierarchy_level}
+						onChange={(event) =>
+							setDraft((current) => ({
+								...current,
+								hierarchy_level: Number(event.target.value) || 0,
+							}))
+						}
+					/>
+				</label>
 				<PermissionPicker
 					value={draft.permissions}
 					onChange={(permissions) =>
@@ -363,6 +583,7 @@ function RoleCard({ role, saving, onSave }) {
 		permissions: Array.isArray(role.permissions) ? role.permissions : [],
 		is_admin: Boolean(role.is_admin),
 		active: role.active !== false,
+		hierarchy_level: Number.isFinite(Number(role.hierarchy_level)) ? Number(role.hierarchy_level) : 999,
 	});
 
 	return (
@@ -415,6 +636,20 @@ function RoleCard({ role, saving, onSave }) {
 					}
 				/>
 				<span>Cargo ativo</span>
+			</label>
+			<label className="finan-hierarchy-field">
+				<span>Nível hierárquico (menor = mais alto)</span>
+				<input
+					type="number"
+					min={0}
+					value={draft.hierarchy_level}
+					onChange={(event) =>
+						setDraft((current) => ({
+							...current,
+							hierarchy_level: Number(event.target.value) || 0,
+						}))
+					}
+				/>
 			</label>
 			<PermissionPicker
 				value={draft.permissions}

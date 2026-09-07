@@ -1,5 +1,5 @@
 export const FINAN_WELCOME_MODAL_EVENT = "finan:welcome-modal-open";
-export const FINAN_WELCOME_MODAL_VERSION = "2026-09-boas-vindas-finan-v2";
+export const FINAN_WELCOME_MODAL_VERSION = "2026-09-boas-vindas-finan-v3";
 export const FINAN_WELCOME_MODAL_IMAGE = "/finan-boas-vindas.jpg";
 
 function getUserKey(user = {}) {

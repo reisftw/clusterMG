@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import {
 	calculateDreStatement,
 	classifyDreCategory,
@@ -88,7 +87,8 @@ function normalizeSheetRow(row = {}) {
 	);
 }
 
-export function parseDreWorkbook(file, buffer) {
+export async function parseDreWorkbook(file, buffer) {
+	const XLSX = await import("xlsx");
 	const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
 	const sheetName = workbook.SheetNames[0];
 	const sheet = workbook.Sheets[sheetName];

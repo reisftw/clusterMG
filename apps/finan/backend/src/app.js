@@ -6,13 +6,19 @@ const rateLimit = require("express-rate-limit");
 const db = require("./db");
 const { requireFinanAuth } = require("./auth/middleware");
 const authRoutes = require("./auth/routes");
+const pinAdminRoutes = require("./auth/pinAdminRoutes");
+const calendarioRoutes = require("./calendario/routes");
 const compatRoutes = require("./compat/routes");
 const createFinanceiroRouter = require("./financeiro/routes/financeiroRoutes");
 const healthRoutes = require("./health/routes");
 const integrationsRoutes = require("./integrations/routes");
 const budgetRoutes = require("./orcamento/routes");
+const pushRoutes = require("./push/routes");
 const settingsRoutes = require("./settings/routes");
 const usersRoutes = require("./users/routes");
+const { buildFinanCorsOptions } = require("./security/cors");
+const { toClientResponse } = require("./security/errors");
+const { sanitizeForLog } = require("./security/logSanitizer");
 
 const FINAN_FINANCEIRO_VIEW_PERMISSIONS = [
 	"financeiro.visao_geral.view",
@@ -69,6 +75,18 @@ function requireAnyFinanPermission(permissions = []) {
 	};
 }
 
+// Log leve de cada request: metodo, rota, status e duracao. Nunca loga
+// body/headers (evita vazar Authorization, senha, etc. — ver
+// security/logSanitizer.js para o caso em que precisamos logar um objeto).
+function requestTimingLogger(req, res, next) {
+	const startedAt = process.hrtime.bigint();
+	res.on("finish", () => {
+		const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+		console.log(`[finan-api] ${req.method} ${req.path} ${res.statusCode} ${durationMs.toFixed(0)}ms`);
+	});
+	next();
+}
+
 function auditMutations(req, res, next) {
 	if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
 		next();
@@ -100,7 +118,7 @@ function auditMutations(req, res, next) {
 					durationMs: Date.now() - startedAt,
 				}),
 			],
-		).catch((error) => console.error("[finan-audit]", error));
+		).catch((error) => console.error("[finan-audit]", sanitizeForLog(error)));
 	});
 	next();
 }
@@ -140,14 +158,21 @@ function createApp() {
 			},
 		}),
 	);
+	// Helmet nao define Permissions-Policy por padrao. O Finan nao usa
+	// camera/microfone/geolocalizacao/etc., entao desabilita tudo isso
+	// explicitamente (reduz superficie caso algum script de terceiro
+	// injetado tente usar essas APIs do navegador).
+	app.use((_req, res, next) => {
+		res.setHeader(
+			"Permissions-Policy",
+			"camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+		);
+		next();
+	});
 	app.use(compression());
-	app.use(
-		cors({
-			origin: process.env.FINAN_CORS_ORIGIN || true,
-			credentials: true,
-		}),
-	);
+	app.use(cors(buildFinanCorsOptions()));
 	app.use(express.json({ limit: "10mb" }));
+	app.use(requestTimingLogger);
 	app.use(
 		rateLimit({
 			windowMs: 60 * 1000,
@@ -178,17 +203,22 @@ function createApp() {
 	app.use("/api/finan/integracoes", integrationsRoutes);
 	app.use("/api/finan/configuracoes", settingsRoutes);
 	app.use("/api/finan/usuarios", usersRoutes);
+	app.use("/api/finan/pin-admin", pinAdminRoutes);
+	app.use("/api/finan/calendario-financeiro", calendarioRoutes);
+	app.use("/api/finan/push", pushRoutes);
 
 	app.use((req, res) => {
 		res.status(404).json({ ok: false, error: "Rota do Finan não encontrada." });
 	});
 
 	app.use((error, _req, res, _next) => {
-		console.error("[finan-api]", error);
-		res.status(error.status || 500).json({
-			ok: false,
-			error: error.message || "Erro interno do Finan.",
-		});
+		// Log completo (sanitizado) sempre fica no backend. O que volta pro
+		// cliente passa por toClientResponse, que esconde a mensagem quando o
+		// erro tem a forma de um erro cru do driver `pg` (ver
+		// security/errors.js) — evita vazar nome de tabela/constraint/coluna.
+		console.error("[finan-api]", sanitizeForLog(error));
+		const { status, body } = toClientResponse(error);
+		res.status(status).json(body);
 	});
 
 	return app;

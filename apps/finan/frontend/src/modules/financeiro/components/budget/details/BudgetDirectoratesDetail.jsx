@@ -1,5 +1,13 @@
 import { brl, decimal, integer } from "../../../utils/financeiroFormatters";
 
+function formatBudgetUsageLabel(percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent > 100) {
+		return `${decimal.format(safePercent - 100)}% acima`;
+	}
+	return `${decimal.format(safePercent)}% consumido`;
+}
+
 export default function BudgetDirectoratesDetail({
 	directorateRows,
 	budgetConsumptionStatus,
@@ -28,7 +36,7 @@ export default function BudgetDirectoratesDetail({
 										</p>
 									</div>
 									<span className={`rounded-full px-3 py-1 text-xs font-black ${status.textClass} bg-slate-50`}>
-										{decimal.format(item.percent)}%
+										{formatBudgetUsageLabel(item.percent)}
 									</span>
 								</div>
 								<div className="mt-4 grid gap-2 sm:grid-cols-3">

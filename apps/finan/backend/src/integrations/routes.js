@@ -1,10 +1,14 @@
 const express = require("express");
 const db = require("../db");
 const { requireFinanPermission } = require("../auth/middleware");
+const { noStore } = require("../security/noStore");
+const { validate } = require("../dtos/middleware");
+const { ProviderParamDTO, IntegrationConfigUpdateDTO } = require("../dtos/integrationDto");
 
 const router = express.Router();
 
 router.use(requireFinanPermission("finan.integracoes.view"));
+router.use(noStore);
 
 router.get("/", async (_req, res, next) => {
 	try {
@@ -19,9 +23,9 @@ router.get("/", async (_req, res, next) => {
 	}
 });
 
-router.get("/:provider", async (req, res, next) => {
+router.get("/:provider", validate({ params: ProviderParamDTO }), async (req, res, next) => {
 	try {
-		const provider = normalizeProvider(req.params.provider);
+		const provider = normalizeProvider(req.validated.params.provider);
 		const { rows } = await db.query(
 			`select id, provider, name, status, config, updated_at
 			from finan_integration_configs
@@ -42,15 +46,13 @@ router.get("/:provider", async (req, res, next) => {
 router.put(
 	"/:provider",
 	requireFinanPermission("finan.integracoes.manage"),
+	validate({ params: ProviderParamDTO, body: IntegrationConfigUpdateDTO }),
 	async (req, res, next) => {
 		try {
-			const provider = normalizeProvider(req.params.provider);
-			const config =
-				req.body && typeof req.body.config === "object" && req.body.config !== null
-					? req.body.config
-					: {};
-			const status = normalizeStatus(req.body?.status);
-			const name = String(req.body?.name || providerLabel(provider)).trim();
+			const provider = normalizeProvider(req.validated.params.provider);
+			const { config, status: rawStatus, name: rawName } = req.validated.body;
+			const status = normalizeStatus(rawStatus);
+			const name = String(rawName || providerLabel(provider)).trim();
 			const { rows } = await db.query(
 				`insert into finan_integration_configs (id, provider, name, status, config, updated_at)
 				values ($1, $1, $2, $3, $4::jsonb, now())
@@ -77,9 +79,10 @@ router.put(
 router.post(
 	"/:provider/test",
 	requireFinanPermission("finan.integracoes.manage"),
+	validate({ params: ProviderParamDTO }),
 	async (req, res, next) => {
 		try {
-			const provider = normalizeProvider(req.params.provider);
+			const provider = normalizeProvider(req.validated.params.provider);
 			await db.query(
 				`insert into finan_audit_logs (user_id, action, entity, entity_id, after_data)
 				values ($1, 'integration.test', 'finan_integration_configs', $2, $3::jsonb)`,

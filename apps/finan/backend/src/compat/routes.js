@@ -8,9 +8,26 @@ const argon2 = require("argon2");
 const db = require("../db");
 const { requireFinanPermission, tokenHash } = require("../auth/middleware");
 const emailService = require("../email/service");
+const { noStore } = require("../security/noStore");
+const { validate } = require("../dtos/middleware");
+const { IdParamDTO, AdminUserUpdateDTO } = require("../dtos/userDto");
+const { LegacyRoleUpsertDTO } = require("../dtos/roleDto");
+const { ProviderParamDTO, RawIntegrationConfigDTO } = require("../dtos/integrationDto");
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 700 * 1024 } });
+const upload = multer({
+	storage: multer.memoryStorage(),
+	limits: { fileSize: 700 * 1024 },
+	fileFilter: (_req, file, callback) => {
+		if (/^image\/(png|jpe?g|webp|gif)$/i.test(file.mimetype || "")) {
+			callback(null, true);
+			return;
+		}
+		const error = new Error("Envie apenas imagens PNG, JPEG, WEBP ou GIF.");
+		error.statusCode = 400;
+		callback(error);
+	},
+});
 const FINAN_BACKUP_DIR = process.env.FINAN_BACKUP_DIR || "/opt/retiradas/backups/finan";
 const MAX_BACKUP_BYTES = Number(process.env.FINAN_BACKUP_MAX_BYTES || 10 * 1024 * 1024 * 1024);
 const MAX_BACKUPS = Number(process.env.FINAN_BACKUP_RETENTION || 30);
@@ -19,6 +36,8 @@ const PERMISSION_CATALOG = [
 	["finan.dashboard.view", "visao_geral", "Visão geral", "dashboard", "Dashboard", "view"],
 	["finan.gestao_orcamentaria.view", "planejamento", "Planejamento", "orcamento", "Gestão Orçamentária", "view"],
 	["finan.gestao_orcamentaria.manage", "planejamento", "Planejamento", "orcamento", "Gestão Orçamentária", "manage"],
+	["relatorios_financeiros:visualizar", "planejamento", "Planejamento", "relatorios_financeiros", "Relatórios Financeiros", "view"],
+	["relatorios_financeiros:gerenciar", "planejamento", "Planejamento", "relatorios_financeiros", "Relatórios Financeiros", "manage"],
 	["finan.contas_pagar.view", "operacao", "Operação", "contas_pagar", "Contas a pagar", "view"],
 	["finan.contas_pagar.manage", "operacao", "Operação", "contas_pagar", "Contas a pagar", "manage"],
 	["finan.contas_receber.view", "operacao", "Operação", "contas_receber", "Contas a receber", "view"],
@@ -118,41 +137,46 @@ router.post("/admin/users", requireFinanPermission("finan.usuarios.manage"), asy
 	}
 });
 
-router.put("/admin/users/:id", requireFinanPermission("finan.usuarios.manage"), async (req, res, next) => {
-	try {
-		const payload = req.body || {};
-		const { rows } = await db.query(
-			`update finan_users
-			set name = coalesce($2, name),
-				email = coalesce($3, email),
-				role_id = coalesce($4, role_id),
-				status = coalesce($5, status),
-				mfa_enabled = coalesce($6, mfa_enabled),
-				avatar_url = coalesce($7, avatar_url),
-				updated_at = now()
-			where id = $1
-			returning id, name, email, role_id, status, mfa_enabled, avatar_url, source_role, created_at, updated_at, last_login_at`,
-			[
-				req.params.id,
-				textOrNull(payload.nome || payload.name),
-				textOrNull(payload.email)?.toLowerCase() || null,
-				payload.role || payload.role_id || payload.cargo
-					? await resolveFinanRoleId(payload.role || payload.role_id || payload.cargo)
-					: null,
-				textOrNull(payload.status),
-				payload.mfa_enabled === undefined ? null : Boolean(payload.mfa_enabled),
-				textOrNull(payload.avatarUrl || payload.avatar_url),
-			],
-		);
-		if (!rows[0]) {
-			res.status(404).json({ ok: false, error: "Usuário não encontrado." });
-			return;
+router.put(
+	"/admin/users/:id",
+	requireFinanPermission("finan.usuarios.manage"),
+	validate({ params: IdParamDTO, body: AdminUserUpdateDTO }),
+	async (req, res, next) => {
+		try {
+			const payload = req.validated.body;
+			const { rows } = await db.query(
+				`update finan_users
+				set name = coalesce($2, name),
+					email = coalesce($3, email),
+					role_id = coalesce($4, role_id),
+					status = coalesce($5, status),
+					mfa_enabled = coalesce($6, mfa_enabled),
+					avatar_url = coalesce($7, avatar_url),
+					updated_at = now()
+				where id = $1
+				returning id, name, email, role_id, status, mfa_enabled, avatar_url, source_role, created_at, updated_at, last_login_at`,
+				[
+					req.validated.params.id,
+					textOrNull(payload.nome || payload.name),
+					textOrNull(payload.email)?.toLowerCase() || null,
+					payload.role || payload.role_id || payload.cargo
+						? await resolveFinanRoleId(payload.role || payload.role_id || payload.cargo)
+						: null,
+					textOrNull(payload.status),
+					payload.mfa_enabled === undefined ? null : Boolean(payload.mfa_enabled),
+					textOrNull(payload.avatarUrl || payload.avatar_url),
+				],
+			);
+			if (!rows[0]) {
+				res.status(404).json({ ok: false, error: "Usuário não encontrado." });
+				return;
+			}
+			res.json({ ok: true, user: publicAdminUser(rows[0]), item: publicAdminUser(rows[0]) });
+		} catch (error) {
+			next(error);
 		}
-		res.json({ ok: true, user: publicAdminUser(rows[0]), item: publicAdminUser(rows[0]) });
-	} catch (error) {
-		next(error);
-	}
-});
+	},
+);
 
 router.delete("/admin/users/:id", requireFinanPermission("finan.usuarios.manage"), async (req, res, next) => {
 	try {
@@ -233,6 +257,7 @@ router.get("/admin/roles", requireFinanPermission("finan.usuarios.manage"), asyn
 					is_admin = true
 					or permissions::text like '%finan.%'
 					or permissions::text like '%financeiro.%'
+					or permissions::text like '%relatorios_financeiros:%'
 					or id in ('admin', 'coordenador_financeiro', 'analista_financeiro')
 				)
 				and id not in ('analistafinanceiro', 'coordenadorfinanceiro')
@@ -248,35 +273,51 @@ router.get("/admin/roles", requireFinanPermission("finan.usuarios.manage"), asyn
 	}
 });
 
-router.put("/admin/roles/:id", requireFinanPermission("finan.usuarios.manage"), async (req, res, next) => {
-	try {
-		const id = String(req.params.id || "").trim().toLowerCase();
-		const permissions = normalizeFinanPermissions(req.body?.permissions);
-		const { rows } = await db.query(
-			`insert into finan_roles (id, name, description, permissions, is_admin, system_role, active)
-			values ($1, $2, $3, $4::jsonb, $5, false, $6)
-			on conflict (id) do update set
-				name = excluded.name,
-				description = excluded.description,
-				permissions = excluded.permissions,
-				is_admin = excluded.is_admin,
-				active = excluded.active,
-				updated_at = now()
-			returning id, name, description, permissions, is_admin, system_role, active`,
-			[
-				id,
-				String(req.body?.name || id),
-				String(req.body?.description || ""),
-				JSON.stringify(permissions),
-				Boolean(req.body?.is_admin),
-				req.body?.active !== false,
-			],
-		);
-		res.json({ ok: true, role: publicRole(rows[0]) });
-	} catch (error) {
-		next(error);
-	}
-});
+router.put(
+	"/admin/roles/:id",
+	requireFinanPermission("finan.usuarios.manage"),
+	validate({ params: IdParamDTO, body: LegacyRoleUpsertDTO }),
+	async (req, res, next) => {
+		try {
+			const id = req.validated.params.id.toLowerCase();
+			const dto = req.validated.body;
+
+			// Mesma checagem de `users/routes.js#POST /roles`: `is_admin` (acesso
+			// total) so pode ser concedido por quem ja e admin.
+			if (dto.is_admin && !req.finanUser?.is_admin) {
+				res.status(403).json({
+					ok: false,
+					error: "Somente um administrador pode conceder acesso total (is_admin) a um cargo.",
+				});
+				return;
+			}
+
+			const { rows } = await db.query(
+				`insert into finan_roles (id, name, description, permissions, is_admin, system_role, active)
+				values ($1, $2, $3, $4::jsonb, $5, false, $6)
+				on conflict (id) do update set
+					name = excluded.name,
+					description = excluded.description,
+					permissions = excluded.permissions,
+					is_admin = excluded.is_admin,
+					active = excluded.active,
+					updated_at = now()
+				returning id, name, description, permissions, is_admin, system_role, active`,
+				[
+					id,
+					dto.name || id,
+					dto.description || "",
+					JSON.stringify(dto.permissions || []),
+					Boolean(dto.is_admin),
+					dto.active !== false,
+				],
+			);
+			res.json({ ok: true, role: publicRole(rows[0]) });
+		} catch (error) {
+			next(error);
+		}
+	},
+);
 
 router.delete("/admin/roles/:id", requireFinanPermission("finan.usuarios.manage"), async (req, res, next) => {
 	try {
@@ -291,26 +332,41 @@ router.get("/admin/regionais", async (_req, res) => {
 	res.json({ ok: true, regionais: [] });
 });
 
-router.get("/admin/oauth/:provider", async (req, res, next) => {
-	try {
-		const config = await readSetting(`oauth_${req.params.provider}`);
-		res.json({ ok: true, config: config || {} });
-	} catch (error) {
-		next(error);
-	}
-});
+router.get(
+	"/admin/oauth/:provider",
+	requireFinanPermission("finan.configuracoes.view"),
+	noStore,
+	async (req, res, next) => {
+		try {
+			const config = await readSetting(`oauth_${req.params.provider}`);
+			res.json({ ok: true, config: sanitizeOAuthConfig(config || {}) });
+		} catch (error) {
+			next(error);
+		}
+	},
+);
 
-router.put("/admin/oauth/:provider", requireFinanPermission("finan.configuracoes.manage"), async (req, res, next) => {
-	try {
-		const config = req.body || {};
-		await writeSetting(`oauth_${req.params.provider}`, config);
-		res.json({ ok: true, config });
-	} catch (error) {
-		next(error);
-	}
-});
+router.put(
+	"/admin/oauth/:provider",
+	requireFinanPermission("finan.configuracoes.manage"),
+	validate({ params: ProviderParamDTO, body: RawIntegrationConfigDTO }),
+	async (req, res, next) => {
+		try {
+			const config = req.validated.body;
+			await writeSetting(`oauth_${req.validated.params.provider}`, config);
+			// Achado de seguranca do mapeamento de DTOs: esta rota devolvia o
+			// `req.body` cru (incluindo `clientSecret` em texto puro) na resposta
+			// do PUT, mesmo a rota GET equivalente ja mascarando (ver
+			// `sanitizeOAuthConfig`, poucas linhas acima). Corrigido para usar a
+			// mesma sanitizacao dos dois lados.
+			res.json({ ok: true, config: sanitizeOAuthConfig(config) });
+		} catch (error) {
+			next(error);
+		}
+	},
+);
 
-router.get("/notifications/preferences", async (_req, res, next) => {
+router.get("/notifications/preferences", requireFinanPermission("finan.configuracoes.view"), async (_req, res, next) => {
 	try {
 		res.json(await readSetting("notificacoes") || {});
 	} catch (error) {
@@ -318,16 +374,21 @@ router.get("/notifications/preferences", async (_req, res, next) => {
 	}
 });
 
-router.put("/notifications/preferences", requireFinanPermission("finan.configuracoes.manage"), async (req, res, next) => {
-	try {
-		const preferences = req.body || {};
-		await writeSetting("notificacoes", preferences);
-		const avatarAppliedToUsers = await applyDefaultAvatarToUsers(preferences);
-		res.json({ ...preferences, avatarAppliedToUsers });
-	} catch (error) {
-		next(error);
-	}
-});
+router.put(
+	"/notifications/preferences",
+	requireFinanPermission("finan.configuracoes.manage"),
+	validate({ body: RawIntegrationConfigDTO }),
+	async (req, res, next) => {
+		try {
+			const preferences = req.validated.body;
+			await writeSetting("notificacoes", preferences);
+			const avatarAppliedToUsers = await applyDefaultAvatarToUsers(preferences);
+			res.json({ ...preferences, avatarAppliedToUsers });
+		} catch (error) {
+			next(error);
+		}
+	},
+);
 
 router.get("/notifications", async (_req, res) => {
 	res.json({ ok: true, items: [], total: 0 });
@@ -349,7 +410,7 @@ router.post("/notifications/check-critical", async (_req, res) => {
 	res.json({ ok: true, alerts: [] });
 });
 
-router.get("/admin/api-status", async (_req, res, next) => {
+router.get("/admin/api-status", requireFinanPermission("finan.configuracoes.view"), noStore, async (_req, res, next) => {
 	try {
 		const { rows } = await db.query("select id, provider, name, status, updated_at from finan_integration_configs order by name");
 		res.json({ ok: true, services: rows, items: rows });
@@ -359,22 +420,34 @@ router.get("/admin/api-status", async (_req, res, next) => {
 });
 
 ["hubsoft", "cvortex", "senior"].forEach((provider) => {
-	router.get(`/admin/${provider}/config`, async (_req, res, next) => {
-		try {
-			res.json({ ok: true, config: await readIntegration(provider) });
-		} catch (error) {
-			next(error);
-		}
-	});
-	router.put(`/admin/${provider}/config`, requireFinanPermission("finan.integracoes.manage"), async (req, res, next) => {
-		try {
-			const config = req.body || {};
-			await writeIntegration(provider, config);
-			res.json({ ok: true, config });
-		} catch (error) {
-			next(error);
-		}
-	});
+	router.get(
+		`/admin/${provider}/config`,
+		requireFinanPermission("finan.integracoes.view"),
+		noStore,
+		async (_req, res, next) => {
+			try {
+				res.json({ ok: true, config: sanitizeIntegrationConfig(await readIntegration(provider)) });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+	router.put(
+		`/admin/${provider}/config`,
+		requireFinanPermission("finan.integracoes.manage"),
+		validate({ body: RawIntegrationConfigDTO }),
+		async (req, res, next) => {
+			try {
+				const config = req.validated.body;
+				await writeIntegration(provider, config);
+				// Mesmo achado/correcao do PUT /admin/oauth/:provider acima: nao
+				// devolver o config cru (token/secret/password em texto puro).
+				res.json({ ok: true, config: sanitizeIntegrationConfig(config) });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 	router.post(`/admin/${provider}/test`, requireFinanPermission("finan.integracoes.manage"), async (_req, res) => {
 		res.json({ ok: true, status: "pendente", message: "Configuração dedicada salva no Finan." });
 	});
@@ -383,7 +456,7 @@ router.get("/admin/api-status", async (_req, res, next) => {
 	});
 });
 
-router.get("/admin/database/backups", async (_req, res, next) => {
+router.get("/admin/database/backups", requireFinanPermission("finan.configuracoes.view"), noStore, async (_req, res, next) => {
 	try {
 		res.json(await buildBackupStatus());
 	} catch (error) {
@@ -408,7 +481,7 @@ router.post("/admin/database/backups", requireFinanPermission("finan.configuraco
 	}
 });
 
-router.get("/admin/email/config", async (_req, res, next) => {
+router.get("/admin/email/config", requireFinanPermission("finan.configuracoes.view"), noStore, async (_req, res, next) => {
 	try {
 		res.json({ ok: true, config: emailService.sanitizeConfig(await emailService.getConfig()) });
 	} catch (error) {
@@ -433,7 +506,7 @@ router.post("/admin/email/test", requireFinanPermission("finan.configuracoes.man
 	}
 });
 
-router.get("/admin/email/logs", async (req, res, next) => {
+router.get("/admin/email/logs", requireFinanPermission("finan.configuracoes.view"), noStore, async (req, res, next) => {
 	try {
 		const limit = clamp(Number(req.query.limit || 20), 1, 200);
 		const offset = Math.max(0, Number(req.query.offset || 0));
@@ -451,7 +524,7 @@ router.get("/admin/email/logs", async (req, res, next) => {
 	}
 });
 
-router.get("/admin/audit-logs", async (req, res, next) => {
+router.get("/admin/audit-logs", requireFinanPermission("finan.configuracoes.view"), noStore, async (req, res, next) => {
 	try {
 		const limit = clamp(Number(req.query.limit || 50), 1, 200);
 		const offset = Math.max(0, Number(req.query.offset || 0));
@@ -488,7 +561,7 @@ router.get("/admin/audit-logs", async (req, res, next) => {
 	}
 });
 
-router.get("/admin/audit-logs/options", async (_req, res, next) => {
+router.get("/admin/audit-logs/options", requireFinanPermission("finan.configuracoes.view"), noStore, async (_req, res, next) => {
 	try {
 		const [modules, setores] = await Promise.all([
 			db.query("select distinct module from finan_audit_logs where module is not null order by module"),
@@ -504,7 +577,7 @@ router.get("/admin/audit-logs/options", async (_req, res, next) => {
 	}
 });
 
-router.get("/admin/audit-logs/:id", async (req, res, next) => {
+router.get("/admin/audit-logs/:id", requireFinanPermission("finan.configuracoes.view"), noStore, async (req, res, next) => {
 	try {
 		const { rows } = await db.query(
 			`select id, user_id, user_name, user_email, setor_id, department_id, module, entity, action,
@@ -533,15 +606,20 @@ router.get("/documents/*", async (_req, res) => {
 	res.json({ ok: true, data: null });
 });
 
-router.post("/admin/documents", async (_req, res) => {
+// Estes 3 endpoints ainda sao stubs (nao gravam nada de verdade — sem
+// tabela/arquivo por tras). Mesmo assim, ganham a mesma permissao exigida
+// pelos outros endpoints de escrita "/admin/*", para nao virarem uma
+// pegadinha de autorizacao no dia em que alguem implementar a logica real
+// aqui sem lembrar de adicionar o gate.
+router.post("/admin/documents", requireFinanPermission("finan.configuracoes.manage"), async (_req, res) => {
 	res.json({ ok: true, documentId: crypto.randomUUID() });
 });
 
-router.put("/admin/documents/*", async (_req, res) => {
+router.put("/admin/documents/*", requireFinanPermission("finan.configuracoes.manage"), async (_req, res) => {
 	res.json({ ok: true });
 });
 
-router.delete("/admin/documents/*", async (_req, res) => {
+router.delete("/admin/documents/*", requireFinanPermission("finan.configuracoes.manage"), async (_req, res) => {
 	res.json({ ok: true });
 });
 
@@ -696,6 +774,25 @@ async function readIntegration(provider) {
 	return rows[0]?.config || {};
 }
 
+// Mesmo criterio de mascaramento usado em integrations/routes.js (publicIntegration):
+// token/secret/password nunca devem sair do backend em texto puro por esta rota de leitura.
+function sanitizeIntegrationConfig(config = {}) {
+	return {
+		...config,
+		token: config.token ? "********" : "",
+		secret: config.secret ? "********" : "",
+		password: config.password ? "********" : "",
+	};
+}
+
+function sanitizeOAuthConfig(config = {}) {
+	return {
+		...config,
+		clientSecret: config.clientSecret ? "********" : "",
+		secret: config.secret ? "********" : "",
+	};
+}
+
 async function writeIntegration(provider, config) {
 	await db.query(
 		`insert into finan_integration_configs (id, provider, name, status, config, updated_at)
@@ -803,26 +900,13 @@ async function resolveFinanRoleId(value) {
 				is_admin = true
 				or permissions::text like '%finan.%'
 				or permissions::text like '%financeiro.%'
+				or permissions::text like '%relatorios_financeiros:%'
 				or id in ('admin', 'coordenador_financeiro', 'analista_financeiro')
 			)
 		limit 1`,
 		[requested],
 	);
 	return rows[0]?.id || "analista_financeiro";
-}
-
-function normalizeFinanPermissions(permissions = []) {
-	const mapped = (Array.isArray(permissions) ? permissions : [])
-		.map((permission) =>
-			String(permission || "")
-				.replace(/^financeiro\.visao_geral\.view$/, "finan.dashboard.view")
-				.replace(/^financeiro\.visao_geral\.manage$/, "finan.dashboard.view")
-				.replace(/^financeiro\.gestao_orcamento\./, "finan.gestao_orcamentaria.")
-				.replace(/^financeiro\./, "finan."),
-		)
-		.filter((permission) => permission === "*" || permission.startsWith("finan."));
-	if (!mapped.length) mapped.push("finan.dashboard.view");
-	return [...new Set(mapped)];
 }
 
 function addTextFilter(filters, params, column, value) {

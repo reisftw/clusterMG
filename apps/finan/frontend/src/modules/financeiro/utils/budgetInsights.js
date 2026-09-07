@@ -184,10 +184,41 @@ function breakdownRealizedValue(item = {}) {
 
 function shouldIncludeAccessBudgetItem(item = {}) {
 	const quebra2 = normalizeBudgetText(item.quebra2 || item.Quebra2);
+	const layoutOrigem = normalizeBudgetText(item.layoutOrigem || item.layout || "");
 	if (quebra2 === "desconsiderar") return false;
-	if (quebra2 === "projeto") return true;
-	const grupo = normalizeBudgetText(item.grupo || item.Grupo);
-	return !grupo || grupo === "sempre";
+	if (quebra2 === "projeto" && layoutOrigem === "fpcp302") return false;
+	return true;
+}
+
+function normalizeBudgetId(value = "") {
+	return String(value || "").trim();
+}
+
+function budgetItemMatchesCompany(item = {}, companyId = "") {
+	const selectedCompanyId = normalizeBudgetId(companyId);
+	if (!selectedCompanyId) return true;
+	if (
+		normalizeBudgetText(item.grupo || item.Grupo || item.group) ===
+		normalizeBudgetText(selectedCompanyId)
+	) {
+		return true;
+	}
+	const directCompanyId = normalizeBudgetId(
+		item.companyId || item.empresaId || item.empresa,
+	);
+	if (directCompanyId) return directCompanyId === selectedCompanyId;
+	const companies = Array.isArray(item.companies || item.empresas)
+		? item.companies || item.empresas
+		: [];
+	return companies.some((company) => {
+		if (typeof company === "string" || typeof company === "number") {
+			return normalizeBudgetId(company) === selectedCompanyId;
+		}
+		return (
+			normalizeBudgetId(company.id || company.companyId || company.empresaId) ===
+			selectedCompanyId
+		);
+	});
 }
 
 function buildChildrenByParentKey(centers = [], parentKeyResolver = centerParentKey) {
@@ -234,9 +265,16 @@ function createMatrixPeriodTotal(periodMonths = []) {
 		}, 0);
 }
 
-function sumMatrixRows(rows = [], centers = [], rowTotal = () => 0) {
+function sumMatrixRows(rows = [], centers = [], rowTotal = () => 0, companyId = "") {
 	return sumBy(rows, (row) => {
 		const center = centers.find((item) => item.id === row.costCenterId);
+		if (
+			companyId &&
+			!budgetItemMatchesCompany(row, companyId) &&
+			!budgetItemMatchesCompany(center, companyId)
+		) {
+			return 0;
+		}
 		return isSyntheticCenter(center) ? 0 : rowTotal(row);
 	});
 }
@@ -247,12 +285,16 @@ function sumCenterConfiguredBudget(centers = [], selectedPeriod = {}, monthCount
 	);
 }
 
-function createRealizedForCenter(periodKeys = new Set()) {
+function createRealizedForCenter(periodKeys = new Set(), companyId = "") {
 	return (center) => {
 		const breakdowns = centerBreakdowns(center);
 		if (!breakdowns.length) return 0;
 		return sumBy(
-			breakdowns.filter((item) => periodKeys.has(getBudgetPeriodKey(item))),
+			breakdowns.filter(
+				(item) =>
+					periodKeys.has(getBudgetPeriodKey(item)) &&
+					budgetItemMatchesCompany(item, companyId),
+			),
 			(item) =>
 				shouldIncludeAccessBudgetItem(item) ? breakdownRealizedValue(item) : 0,
 		);
@@ -303,12 +345,13 @@ function buildMovementFromBreakdown(center = {}, breakdown = {}) {
 	};
 }
 
-function buildPeriodMovements(centers = [], periodKeys = new Set()) {
+function buildPeriodMovements(centers = [], periodKeys = new Set(), companyId = "") {
 	return centers.flatMap((center) =>
 		centerBreakdowns(center)
 			.filter(
 				(breakdown) =>
 					budgetPeriodMatches(breakdown, periodKeys) &&
+					budgetItemMatchesCompany(breakdown, companyId) &&
 					shouldIncludeAccessBudgetItem(breakdown),
 			)
 			.flatMap((breakdown) => {
@@ -424,6 +467,39 @@ function buildSupplierSummary(movements = [], realizedMonth = 0) {
 		.sort((left, right) => right.value - left.value);
 }
 
+function buildCompanySummary(movements = [], companies = [], plannedMonth = 0, realizedMonth = 0) {
+	const companyById = new Map(
+		companies.map((company) => [normalizeBudgetId(company.id || company.codigo), company]),
+	);
+	const summaryMap = new Map();
+	movements.forEach((movement) => {
+		const companyId = normalizeBudgetId(movement.companyId || movement.empresaId || movement.empresa) || "sem-empresa";
+		const company = companyById.get(companyId);
+		const current = summaryMap.get(companyId) || {
+			id: companyId,
+			company,
+			nome: company?.nome || company?.nomeFantasia || movement.companyName || companyId,
+			codigo: company?.codigo || companyId,
+			planned: 0,
+			realized: 0,
+			rows: 0,
+		};
+		current.realized += movementValue(movement);
+		current.rows += 1;
+		summaryMap.set(companyId, current);
+	});
+	const totalRealized = realizedMonth || sumBy([...summaryMap.values()], (item) => item.realized);
+	return Array.from(summaryMap.values())
+		.map((item) => {
+			const planned = totalRealized ? (item.realized / totalRealized) * plannedMonth : 0;
+			return {
+				...item,
+				...budgetMetric(planned, item.realized),
+			};
+		})
+		.sort((left, right) => right.realized - left.realized);
+}
+
 function budgetMetric(planned = 0, realized = 0) {
 	return {
 		planned,
@@ -438,6 +514,14 @@ function budgetStatusColor(percent = 0) {
 	if (safePercent > 95) return "rose";
 	if (safePercent >= 70) return "amber";
 	return "emerald";
+}
+
+function formatBudgetUsageLabel(percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent > 100) {
+		return `${decimal.format(safePercent - 100)}% acima`;
+	}
+	return `${decimal.format(safePercent)}% consumido`;
 }
 
 function categoryBudgetMatchesPeriod(item = {}, periodKeys = new Set()) {
@@ -891,105 +975,6 @@ function buildBudgetCategoryGroups(
 		});
 }
 
-// Extraido de buildAccountRows (achado javascript:S3776,
-// docs/SONARQUBE-MAP.md) — so a decisao de qual valor realizado usar pra
-// uma linha da matriz, exatamente o mesmo encadeamento de ternarios de
-// antes (dado financeiro sensivel: NENHUMA formula foi alterada, so o
-// nome das condicoes ficou explicito).
-function computeMatrixRowRealized({
-	rowMatchesSelectedYear,
-	hasDirectBreakdown,
-	breakdownRealized,
-	canFallbackToCenterRealized,
-	centerRealized,
-	configuredCenterPlanned,
-	planned,
-	centerTotalPlanned,
-	rawPlanned,
-}) {
-	if (rowMatchesSelectedYear && hasDirectBreakdown) return breakdownRealized;
-	if (!(rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized)) {
-		return 0;
-	}
-	if (configuredCenterPlanned && planned) {
-		return (planned / configuredCenterPlanned) * centerRealized;
-	}
-	return centerTotalPlanned ? (rawPlanned / centerTotalPlanned) * centerRealized : 0;
-}
-
-// Extraido de buildAccountRows (achado javascript:S3776,
-// docs/SONARQUBE-MAP.md) — monta UMA linha de orcamento planejado x
-// realizado a partir de uma linha da matriz. Mesma logica de antes,
-// so movida pra fora do .map() principal.
-function buildMatrixRow(row, {
-	accounts,
-	centers,
-	matrix,
-	periodKeys,
-	projectPeriodKeys,
-	rowPeriodTotal,
-	configuredBudgetForCenter,
-	realizedTotalForCenter,
-	selectedYears,
-}) {
-	const account = accounts.find((item) => item.id === row.accountId);
-	const center = centers.find((item) => item.id === row.costCenterId);
-	if (isSyntheticCenter(center)) return null;
-	const rawPlanned = rowPeriodTotal(row);
-	const rowYear = Number(row.year || row.ano || 0);
-	const rowMatchesSelectedYear = !rowYear || selectedYears.has(rowYear);
-	const periodBreakdowns = centerBreakdowns(center).filter(
-		(item) =>
-			(
-				normalizeBudgetText(item.quebra2 || item.Quebra2) === "projeto" ||
-				(!normalizeBudgetText(item.quebra2 || item.Quebra2) && isProjectCenter(center))
-					? projectPeriodKeys
-					: periodKeys
-			).has(getBudgetPeriodKey(item)) &&
-			shouldIncludeAccessBudgetItem(item),
-	);
-	const hasAccountScopedBreakdowns = periodBreakdowns.some((item) =>
-		String(item.accountId || "").trim(),
-	);
-	const matchingBreakdowns = periodBreakdowns.filter(
-		(item) => item.accountId === row.accountId,
-	);
-	const breakdownRealized = sumBy(matchingBreakdowns, breakdownRealizedValue);
-	const hasDirectBreakdown = matchingBreakdowns.length > 0;
-	const accountForGrouping =
-		hasDirectBreakdown && matchingBreakdowns[0]
-			? classifyBreakdownBudgetRow(account, center, matchingBreakdowns[0])
-			: account;
-	const canFallbackToCenterRealized = !hasAccountScopedBreakdowns;
-	const centerTotalPlanned = sumBy(
-		matrix.filter((item) => item.costCenterId === row.costCenterId),
-		rowPeriodTotal,
-	);
-	const configuredCenterPlanned = center ? configuredBudgetForCenter(center) : 0;
-	const planned =
-		configuredCenterPlanned && centerTotalPlanned
-			? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
-			: rawPlanned;
-	const centerRealized = realizedTotalForCenter(center || {});
-	const realized = computeMatrixRowRealized({
-		rowMatchesSelectedYear,
-		hasDirectBreakdown,
-		breakdownRealized,
-		canFallbackToCenterRealized,
-		centerRealized,
-		configuredCenterPlanned,
-		planned,
-		centerTotalPlanned,
-		rawPlanned,
-	});
-	return {
-		row,
-		account: accountForGrouping,
-		center,
-		...budgetMetric(planned, realized),
-	};
-}
-
 function buildAccountRows({
 	accounts = [],
 	centers = [],
@@ -999,6 +984,7 @@ function buildAccountRows({
 	rowPeriodTotal = () => 0,
 	configuredBudgetForCenter = () => 0,
 	realizedTotalForCenter = () => 0,
+	selectedCompanyId = "",
 } = {}) {
 	const selectedYears = new Set(
 		Array.from(periodKeys)
@@ -1015,19 +1001,68 @@ function buildAccountRows({
 		),
 	);
 	const matrixRows = matrix
-		.map((row) =>
-			buildMatrixRow(row, {
-				accounts,
-				centers,
-				matrix,
-				periodKeys,
-				projectPeriodKeys,
+		.map((row) => {
+			const account = accounts.find((item) => item.id === row.accountId);
+			const center = centers.find((item) => item.id === row.costCenterId);
+			if (isSyntheticCenter(center)) return null;
+			const rawPlanned = rowPeriodTotal(row);
+			const rowYear = Number(row.year || row.ano || 0);
+			const rowMatchesSelectedYear = !rowYear || selectedYears.has(rowYear);
+			const periodBreakdowns = centerBreakdowns(center).filter(
+				(item) =>
+					(
+						normalizeBudgetText(item.quebra2 || item.Quebra2) === "projeto" ||
+						(!normalizeBudgetText(item.quebra2 || item.Quebra2) && isProjectCenter(center))
+							? projectPeriodKeys
+							: periodKeys
+					).has(getBudgetPeriodKey(item)) &&
+					budgetItemMatchesCompany(item, selectedCompanyId) &&
+					shouldIncludeAccessBudgetItem(item),
+			);
+			const hasAccountScopedBreakdowns = periodBreakdowns.some((item) =>
+				String(item.accountId || "").trim(),
+			);
+			const matchingBreakdowns = periodBreakdowns.filter(
+				(item) => item.accountId === row.accountId,
+			);
+			const breakdownRealized = sumBy(
+				matchingBreakdowns,
+				breakdownRealizedValue,
+			);
+			const hasDirectBreakdown = matchingBreakdowns.length > 0;
+			const accountForGrouping =
+				hasDirectBreakdown && matchingBreakdowns[0]
+					? classifyBreakdownBudgetRow(account, center, matchingBreakdowns[0])
+					: account;
+			const canFallbackToCenterRealized = !hasAccountScopedBreakdowns;
+			const centerTotalPlanned = sumBy(
+				matrix.filter((item) => item.costCenterId === row.costCenterId),
 				rowPeriodTotal,
-				configuredBudgetForCenter,
-				realizedTotalForCenter,
-				selectedYears,
-			}),
-		)
+			);
+			const configuredCenterPlanned = center
+				? configuredBudgetForCenter(center)
+				: 0;
+			const planned =
+				configuredCenterPlanned && centerTotalPlanned
+					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
+					: rawPlanned;
+			const centerRealized = realizedTotalForCenter(center || {});
+			const realized = rowMatchesSelectedYear && hasDirectBreakdown
+				? breakdownRealized
+				: rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized
+					? configuredCenterPlanned && planned
+						? (planned / configuredCenterPlanned) * centerRealized
+						: centerTotalPlanned
+							? (rawPlanned / centerTotalPlanned) * centerRealized
+							: 0
+					: 0;
+			return {
+				row,
+				account: accountForGrouping,
+				center,
+				...budgetMetric(planned, realized),
+			};
+		})
 		.filter((item) => item && (item.planned || item.realized));
 	const breakdownRows = centers.flatMap((center) => {
 		if (isSyntheticCenter(center)) return [];
@@ -1047,6 +1082,7 @@ function buildAccountRows({
 				].join("|");
 				return (
 					keys.has(getBudgetPeriodKey(breakdown)) &&
+					budgetItemMatchesCompany(breakdown, selectedCompanyId) &&
 					shouldIncludeAccessBudgetItem(breakdown) &&
 					!matrixDimensionKeys.has(dimensionKey)
 				);
@@ -1096,6 +1132,7 @@ function buildCenterRows({
 export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const categoryCatalog = config.settings?.financialAccountCategories || [];
 	const categoryBudgets = config.settings?.financialCategoryBudgets || [];
+	const selectedCompanyId = normalizeBudgetId(selectedPeriod.companyId);
 	const accounts = (config.accounts || []).map((account) =>
 		enrichFinancialAccountWithCategory(account, categoryCatalog),
 	);
@@ -1107,15 +1144,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const periodKeys = new Set(
 		period.months.map((item) => `${item.year}-${item.month}`),
 	);
-	const projectPeriodKeys =
-		selectedPeriod.mode === "month" && period.months.length === 1
-			? new Set(
-					Array.from({ length: Number(period.months[0]?.month || 0) }, (_, index) => {
-						const month = index + 1;
-						return `${period.months[0].year}-${month}`;
-					}),
-				)
-			: periodKeys;
+	const projectPeriodKeys = periodKeys;
 	const isCurrentSingleMonth =
 		period.months.length === 1 &&
 		Number(period.months[0]?.year) === now.getFullYear() &&
@@ -1132,7 +1161,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 	const dayOfMonth = isCurrentSingleMonth ? now.getDate() : daysInMonth;
 	const rowPeriodTotal = createMatrixPeriodTotal(period.months);
 	const periodMonthCount = Math.max(1, period.months.length);
-	const realizedForCenter = createRealizedForCenter(periodKeys);
+	const realizedForCenter = createRealizedForCenter(periodKeys, selectedCompanyId);
 	const analyticChildrenForCenter = createAnalyticChildrenResolver(centers);
 	const centersForTotals = centers.filter((center) => !isSyntheticCenter(center));
 	const configuredBudgetForCenter = (center) => {
@@ -1154,9 +1183,18 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		}
 		return realizedForCenter(center) + Number(center?.comprometidoMes || 0);
 	};
-	const plannedMonthFromMatrix = sumMatrixRows(matrix, centers, rowPeriodTotal);
+	const plannedMonthFromMatrix = sumMatrixRows(
+		matrix,
+		centers,
+		rowPeriodTotal,
+		selectedCompanyId,
+	);
 	const plannedMonthFromCenters = sumCenterConfiguredBudget(
-		centersForTotals,
+		selectedCompanyId
+			? centersForTotals.filter((center) =>
+					budgetItemMatchesCompany(center, selectedCompanyId),
+				)
+			: centersForTotals,
 		selectedPeriod,
 		periodMonthCount,
 	);
@@ -1167,9 +1205,14 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		currentYearMatrix,
 		centers,
 		(row) => sumBy(row.months || [], (value) => value),
+		selectedCompanyId,
 	);
 	const plannedYearFromCenters = sumCenterConfiguredBudget(
-		centersForTotals,
+		selectedCompanyId
+			? centersForTotals.filter((center) =>
+					budgetItemMatchesCompany(center, selectedCompanyId),
+				)
+			: centersForTotals,
 		{ mode: "year" },
 		12,
 	);
@@ -1185,8 +1228,12 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		getEffectiveCategoryBudgets(categoryBudgets, yearPeriodMonths),
 		categoryBudgetAmount,
 	);
-	const plannedMonth = plannedMonthFromCategories || plannedMonthFromCenters || plannedMonthFromMatrix;
-	const plannedYear = plannedYearFromCategories || plannedYearFromCenters || plannedYearFromMatrix;
+	const plannedMonth = selectedCompanyId
+		? plannedMonthFromMatrix || plannedMonthFromCenters
+		: plannedMonthFromCategories || plannedMonthFromCenters || plannedMonthFromMatrix;
+	const plannedYear = selectedCompanyId
+		? plannedYearFromMatrix || plannedYearFromCenters
+		: plannedYearFromCategories || plannedYearFromCenters || plannedYearFromMatrix;
 	const realizedMonth = sumBy(centersForTotals, realizedForCenter);
 	const committedMonth = sumBy(
 		centersForTotals,
@@ -1273,6 +1320,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		rowPeriodTotal,
 		configuredBudgetForCenter,
 		realizedTotalForCenter,
+		selectedCompanyId,
 	});
 	const centerRows = buildCenterRows({
 		centers,
@@ -1281,15 +1329,12 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		configuredBudgetForCenter,
 		realizedTotalForCenter,
 	});
-	const movements = buildPeriodMovements(centersForTotals, periodKeys);
+	const movements = buildPeriodMovements(centersForTotals, periodKeys, selectedCompanyId);
 	const monthlyEvolution = buildMonthlyEvolutionRows({
 		centers: centersForTotals,
 		referenceYear,
 		realizedForMonth: (month) => {
 			const monthKeys = new Set([`${referenceYear}-${month}`]);
-			const monthProjectKeys = new Set(
-				Array.from({ length: month }, (_, index) => `${referenceYear}-${index + 1}`),
-			);
 			const monthRowPeriodTotal = createMatrixPeriodTotal([
 				{ year: referenceYear, month },
 			]);
@@ -1298,10 +1343,11 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 				centers,
 				matrix,
 				periodKeys: monthKeys,
-				projectPeriodKeys: monthProjectKeys,
+				projectPeriodKeys: monthKeys,
 				rowPeriodTotal: monthRowPeriodTotal,
 				configuredBudgetForCenter,
 				realizedTotalForCenter,
+				selectedCompanyId,
 			});
 			return sumBy(
 				buildBudgetCategoryGroups(monthAccountRows, accounts, categoryCatalog, {
@@ -1340,6 +1386,12 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		.map((item) => ({ ...item, id: item.center?.id }))
 		.sort((left, right) => right.realized - left.realized);
 	const supplierSummary = buildSupplierSummary(movements, realizedMonth);
+	const companySummary = buildCompanySummary(
+		buildPeriodMovements(centersForTotals, periodKeys),
+		config.companies || [],
+		plannedMonth,
+		sumBy(centersForTotals, createRealizedForCenter(periodKeys)),
+	);
 	return {
 		accounts,
 		centers,
@@ -1362,6 +1414,7 @@ export function getBudgetInsights(config = {}, selectedPeriod = {}) {
 		accountSummary,
 		centerSummary,
 		supplierSummary,
+		companySummary,
 		periodLabel: period.label,
 		periodDisplayLabel: period.displayLabel,
 	};
@@ -1456,7 +1509,7 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 		null;
 	const directorateHelper = (item, fallback) =>
 		item
-			? `${item.nome} · ${item.diretor || "Diretor não informado"} · ${decimal.format(item.percent || 0)}% consumido`
+			? `${item.nome} · ${item.diretor || "Diretor não informado"} · ${formatBudgetUsageLabel(item.percent || 0)}`
 			: fallback;
 	return [
 		{
@@ -1482,7 +1535,7 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			statusColor,
 			progress: {
 				value: usedPercent,
-				label: `${decimal.format(usedPercent)}% consumido`,
+				label: formatBudgetUsageLabel(usedPercent),
 			},
 		},
 		{
@@ -1510,7 +1563,7 @@ export function buildBudgetOperationalKpis(insights = {}, config = {}) {
 			title: "Desvio percentual",
 			value: Math.abs(deviationMeta.percent),
 			type: "percent",
-			helper: `${decimal.format(usedPercent)}% consumido no período`,
+			helper: `${formatBudgetUsageLabel(usedPercent)} no período`,
 			icon: "ClipboardCheck",
 			valueClassName: deviationMeta.textClass,
 		},
@@ -1627,14 +1680,14 @@ export function buildCostCenterTopCards({
 			statusColor: budgetStatusColor(percent),
 			progress: {
 				value: percent,
-				label: `${decimal.format(percent)}% consumido`,
+				label: formatBudgetUsageLabel(percent),
 			},
 			trend: {
 				status: available < 0 ? "negative" : "positive",
 				direction: available < 0 ? "up" : "down",
-				percent,
+				percent: percent > 100 ? percent - 100 : percent,
 			},
-			trendLabel: "consumido",
+			trendLabel: percent > 100 ? "acima" : "consumido",
 		};
 	};
 	return [

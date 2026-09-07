@@ -73,8 +73,21 @@ export function FinanAuthProvider({ children }) {
 		setUser(null);
 	};
 
+	// Reconsulta /auth/me e atualiza o usuario em memoria — usado depois de
+	// trocar o proprio avatar/senha, por exemplo, sem precisar de F5.
+	const refresh = async () => {
+		if (!getFinanToken()) return null;
+		try {
+			const profile = await fetchFinanMe();
+			setUser(profile);
+			return profile;
+		} catch {
+			return null;
+		}
+	};
+
 	const value = useMemo(
-		() => ({ user, loading, error, login, verifyEmailMfa, logout }),
+		() => ({ user, loading, error, login, verifyEmailMfa, logout, refresh }),
 		[user, loading, error],
 	);
 

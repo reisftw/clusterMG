@@ -45,7 +45,6 @@ import {
 } from "react";
 import { Bar, Doughnut, Line } from "react-chartjs-2";
 import { Link } from "react-router-dom";
-import * as XLSX from "xlsx";
 import ModalShell from "../../../components/ModalShell";
 import { hasPermission } from "../financeiroPermissions";
 import { useAuthContext } from "../financeiroAuthContext";
@@ -4365,6 +4364,12 @@ function budgetCenterCompactLabel(center, fallback = "") {
 	);
 }
 
+const BUDGET_COMPANY_GROUP_OPTIONS = [
+	{ id: "Sempre", codigo: "Sempre", nome: "Sempre" },
+	{ id: "On", codigo: "On", nome: "On" },
+	{ id: "Onnet", codigo: "Onnet", nome: "Onnet" },
+];
+
 function isCenterInactive(center) {
 	return (
 		String(center?.status || "")
@@ -5151,9 +5156,19 @@ function BudgetOperationalPage({
 	onOpenDirectoratesConfig,
 	selectedPeriod,
 }) {
+	const [selectedCompanyId, setSelectedCompanyId] = useState("");
+	const effectiveSelectedPeriod = useMemo(
+		() => ({
+			...selectedPeriod,
+			companyId: ["orcamentoDashboard", "orcamentoCentrosCusto"].includes(page)
+				? selectedCompanyId
+				: "",
+		}),
+		[page, selectedCompanyId, selectedPeriod],
+	);
 	const insights = useMemo(
-		() => getBudgetInsightsFromStatement(config, selectedPeriod),
-		[config, selectedPeriod],
+		() => getBudgetInsightsFromStatement(config, effectiveSelectedPeriod),
+		[config, effectiveSelectedPeriod],
 	);
 	const {
 		currentUser,
@@ -5240,7 +5255,7 @@ function BudgetOperationalPage({
 	const costCenterTopCards = buildCostCenterTopCards({
 		insights,
 		config,
-		selectedPeriod,
+		selectedPeriod: effectiveSelectedPeriod,
 		expiringContracts,
 	});
 	const responsibleOnly = !canManage;
@@ -5283,6 +5298,7 @@ function BudgetOperationalPage({
 	}
 
 	const BudgetPageView = BUDGET_OPERATIONAL_PAGE_VIEWS[page];
+	const companyOptions = BUDGET_COMPANY_GROUP_OPTIONS;
 
 	if (BudgetPageView) {
 		return (
@@ -5313,6 +5329,7 @@ function BudgetOperationalPage({
 				canManage={canManage}
 				centerPage={centerPage}
 				centerTotalPages={centerTotalPages}
+				companyOptions={companyOptions}
 				config={config}
 				costCenterTopCards={costCenterTopCards}
 				currentUser={currentUser}
@@ -5339,7 +5356,9 @@ function BudgetOperationalPage({
 				rowByCenterId={rowByCenterId}
 				safeCenterPage={safeCenterPage}
 				saving={saving}
-				selectedPeriod={selectedPeriod}
+				selectedPeriod={effectiveSelectedPeriod}
+				selectedCompanyId={selectedCompanyId}
+				setSelectedCompanyId={setSelectedCompanyId}
 				setAnalyticChildrenModal={setAnalyticChildrenModal}
 				setApprovalDecision={setApprovalDecision}
 				setApprovalEmail={setApprovalEmail}
@@ -5479,6 +5498,7 @@ function BudgetOperationalPage({
 			centerById={centerById}
 			centerChart={centerChart}
 			companyById={companyById}
+			companyOptions={companyOptions}
 			dashboardDetail={dashboardDetail}
 			decimal={decimal}
 			detailTitles={detailTitles}
@@ -5492,10 +5512,12 @@ function BudgetOperationalPage({
 			movementSupplierName={movementSupplierName}
 			movementValue={movementValue}
 			onCloseDashboardDetail={() => setDashboardDetail(null)}
+			onCompanyChange={setSelectedCompanyId}
 			onOpenDirectoratesConfig={onOpenDirectoratesConfig}
 			onShowDashboardDetail={setDashboardDetail}
 			pareto={pareto}
 			renderDashboardDetail={renderDashboardDetail}
+			selectedCompanyId={selectedCompanyId}
 			supplierChart={supplierChart}
 			supplierTotalTop={supplierTotalTop}
 			topAccounts={topAccounts}
@@ -5817,14 +5839,13 @@ function budgetEntityId(value, fallback = "item") {
 	);
 }
 
-function MoneyInput({ id, value, disabled, onChange }) {
+function MoneyInput({ value, disabled, onChange }) {
 	return (
 		<div className="mt-2 flex overflow-hidden rounded-xl border border-emerald-200 bg-white ring-0 focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100">
 			<span className="flex min-h-11 items-center bg-emerald-50 px-3 text-sm font-black text-emerald-800">
 				R$
 			</span>
 			<input
-				id={id}
 				value={value ?? ""}
 				disabled={disabled}
 				inputMode="decimal"
@@ -9970,6 +9991,7 @@ function SerasaReportPage({ canManage }) {
 		if (!file) return;
 		setAction("upload");
 		try {
+			const XLSX = await import("xlsx");
 			const buffer = await file.arrayBuffer();
 			const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
 			const sheetName =
@@ -11315,6 +11337,17 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 				...selectedBudgetReference,
 			}).displayLabel
 		: "";
+	const budgetConfigQueryParams = useMemo(() => {
+		if (!["orcamentoDashboard", "orcamentoCentrosCusto"].includes(page)) {
+			return {};
+		}
+		return {
+			scope: "period",
+			ano:
+				selectedBudgetReference.referenceYear ||
+				new Date().getFullYear(),
+		};
+	}, [page, selectedBudgetReference.referenceYear]);
 
 	const load = useCallback(async () => {
 		setLoading(true);
@@ -11334,7 +11367,8 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 	const loadBudgetConfig = useCallback(async ({ silent = false } = {}) => {
 		if (!silent) setBudgetLoading(true);
 		try {
-			const response = await buscarCentrosCustoOrcamentoFinanceiro();
+			const response =
+				await buscarCentrosCustoOrcamentoFinanceiro(budgetConfigQueryParams);
 			const nextConfig = response.config || {};
 			setBudgetConfig(nextConfig);
 		} catch (error) {
@@ -11344,7 +11378,7 @@ export default function FinanceiroPage({ page = "dashboard" }) {
 		} finally {
 			if (!silent) setBudgetLoading(false);
 		}
-	}, []);
+	}, [budgetConfigQueryParams]);
 
 	const saveDirectoratesConfig = async (nextConfig) => {
 		setDirectoratesConfigSaving(true);

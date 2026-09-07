@@ -71,10 +71,22 @@ function createFinanceiroController() {
 		}
 	}
 
-	async function getBudgetCostCenters(_req, res, next) {
+	async function getBudgetCostCenters(req, res, next) {
 		try {
-			setNoStore(res);
-			res.json(await financeiro.getBudgetCostCenters());
+			const query = req.query || {};
+			const cacheKey = [
+				"budget-cost-centers",
+				query.scope || "",
+				query.ano || query.year || "",
+				query.mes || query.month || "",
+				query.startDate || "",
+				query.endDate || "",
+			].join(":");
+			res.json(
+				await getOrSetFinanceiroCache(cacheKey, () =>
+					financeiro.getBudgetCostCenters(query),
+				),
+			);
 		} catch (error) {
 			next(error);
 		}

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import {
 	buscarTarifasReportFinanceiro,
 	limparTarifasReportFinanceiro,
@@ -16,10 +15,10 @@ const DEFAULT_TARIFFS_REFERENCE = {
 	referenceMonth: 8,
 };
 
-function buildTariffsSheetsFromWorkbook(workbook) {
+function buildTariffsSheetsFromWorkbook(workbook, xlsx) {
 	return workbook.SheetNames.map((sheetName) => ({
 		sheetName,
-		rows: XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+		rows: xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], {
 			header: 1,
 			raw: false,
 			defval: "",
@@ -82,9 +81,10 @@ export function useTariffsReport({
 			if (!file) return;
 			setAction("upload");
 			try {
+				const XLSX = await import("xlsx");
 				const buffer = await file.arrayBuffer();
 				const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
-				const sheets = buildTariffsSheetsFromWorkbook(workbook);
+				const sheets = buildTariffsSheetsFromWorkbook(workbook, XLSX);
 				const response = await salvarTarifasReportFinanceiro({
 					fileName: file.name,
 					sheets,

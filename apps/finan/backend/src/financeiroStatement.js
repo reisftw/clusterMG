@@ -62,8 +62,8 @@ async function clearTariffsStatement(data = {}) {
 	return financeiroReportsRepository.clearTariffsFinancialReport(data);
 }
 
-async function getBudgetConfigurationStatement() {
-	return financeiroBudgetConfigRepository.getBudgetCostCenters();
+async function getBudgetConfigurationStatement(filters = {}) {
+	return financeiroBudgetConfigRepository.getBudgetCostCenters(filters);
 }
 
 async function saveBudgetConfigurationStatement(config = {}, user = {}) {

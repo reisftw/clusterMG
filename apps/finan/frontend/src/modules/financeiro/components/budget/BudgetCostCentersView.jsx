@@ -7,6 +7,22 @@ function statusClasses(isOverBudget) {
 		: "border-emerald-200 bg-emerald-50 text-emerald-700";
 }
 
+function formatBudgetUsageLabel(decimal, percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent > 100) {
+		return `${decimal.format(safePercent - 100)}% acima`;
+	}
+	return `${decimal.format(safePercent)}% consumido`;
+}
+
+function companyGroupLabel(company = {}) {
+	return (
+		[company.codigo || company.id, company.nome || company.nomeFantasia]
+			.filter(Boolean)
+			.join(" - ") || "Grupo não informado"
+	);
+}
+
 function BudgetCenterCard({
 	centerRow,
 	brl,
@@ -85,7 +101,7 @@ function BudgetCenterCard({
 				<div>
 					<dt className="font-bold text-slate-500">Uso</dt>
 					<dd className={`font-black ${status.textClass}`}>
-						{decimal.format(percent || 0)}%
+						{formatBudgetUsageLabel(decimal, percent || 0)}
 					</dd>
 				</div>
 				<div>
@@ -180,7 +196,7 @@ function BudgetAccountBlock({
 						{brl.format(accountRow.realized || 0)} realizado
 					</p>
 					<p className={`text-xs font-black ${status.textClass}`}>
-						{decimal.format(accountRow.percent || 0)}% consumido
+						{formatBudgetUsageLabel(decimal, accountRow.percent || 0)}
 					</p>
 				</div>
 			</summary>
@@ -242,7 +258,7 @@ function BudgetCategoryBlock(props) {
 						{brl.format(category.realized || 0)} realizado
 					</p>
 					<p className={`text-xs font-black ${status.textClass}`}>
-						{decimal.format(category.percent || 0)}% consumido
+						{formatBudgetUsageLabel(decimal, category.percent || 0)}
 					</p>
 				</div>
 			</summary>
@@ -298,7 +314,7 @@ function BudgetClassSection(props) {
 					<div className="rounded-xl bg-slate-50 p-3">
 						<p className="text-xs font-black uppercase text-slate-500">Uso</p>
 						<p className={`mt-1 text-sm font-black ${status.textClass}`}>
-							{decimal.format(group.percent || 0)}%
+							{formatBudgetUsageLabel(decimal, group.percent || 0)}
 						</p>
 					</div>
 				</div>
@@ -331,6 +347,7 @@ export default function BudgetCostCentersView({
 	budgetCenterCompactLabel,
 	budgetConsumptionStatus,
 	canManage,
+	companyOptions = [],
 	config,
 	costCenterTopCards,
 	currentUser,
@@ -345,15 +362,47 @@ export default function BudgetCostCentersView({
 	removeOperationalCenter,
 	resendApprovalAdjustment,
 	saving,
+	selectedCompanyId = "",
 	setFeedback,
 	setModalState,
 	setPendenciesState,
+	setSelectedCompanyId,
 	upsertOperationalCenter,
 }) {
 	const categoryGroups = insights.budgetCategoryGroups || [];
 
 	return (
 		<section className="space-y-4">
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+					<div className="min-w-0">
+						<p className="text-xs font-black uppercase tracking-wide text-blue-700">
+							Filtro por grupo empresarial
+						</p>
+						<h2 className="mt-1 text-lg font-black text-slate-950">
+							Orçamento por grupo
+						</h2>
+						<p className="mt-1 text-sm font-bold text-slate-500">
+							Filtra Basal, Não Basal e Projetos por Sempre, On ou Onnet.
+						</p>
+					</div>
+					<label className="min-w-0 lg:w-[340px]">
+						<span className="sr-only">Grupo empresarial</span>
+						<select
+							value={selectedCompanyId}
+							onChange={(event) => setSelectedCompanyId?.(event.target.value)}
+							className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+						>
+							<option value="">Todos os grupos</option>
+							{companyOptions.map((company) => (
+								<option key={company.id} value={company.id}>
+									{companyGroupLabel(company)}
+								</option>
+							))}
+						</select>
+					</label>
+				</div>
+			</section>
 			<section className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] items-stretch gap-4">
 				{costCenterTopCards.map((item) => (
 					<FinancialKpiCard key={item.id} item={item} variant="secondary" />

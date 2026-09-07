@@ -78,7 +78,7 @@ export default function BudgetDreView({ canManage, setFeedback }) {
 		if (!file) return;
 		try {
 			const buffer = await file.arrayBuffer();
-			const parsed = parseDreWorkbook(file, buffer);
+			const parsed = await parseDreWorkbook(file, buffer);
 			setPreview(parsed);
 			const first = parsed.rows.find(
 				(row) => row.competenciaAno && row.competenciaMes,

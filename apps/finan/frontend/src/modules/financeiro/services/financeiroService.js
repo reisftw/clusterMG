@@ -13,11 +13,15 @@ export async function buscarDashboardFinanceiro(params = {}) {
 	);
 }
 
-export async function buscarCentrosCustoOrcamentoFinanceiro() {
-	const params = new URLSearchParams({ _: String(Date.now()) });
+export async function buscarCentrosCustoOrcamentoFinanceiro(params = {}) {
+	const search = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && String(value).trim()) {
+			search.set(key, String(value));
+		}
+	});
 	return requestFinanFinanceiroApi(
-		`${BASE_PATH}/orcamento/centros-custo?${params.toString()}`,
-		{ cache: "no-store" },
+		`${BASE_PATH}/orcamento/centros-custo${search.size ? `?${search.toString()}` : ""}`,
 	);
 }
 

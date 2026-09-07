@@ -1,10 +1,14 @@
 const express = require("express");
 const db = require("../db");
 const { requireFinanPermission } = require("../auth/middleware");
+const { noStore } = require("../security/noStore");
+const { validate } = require("../dtos/middleware");
+const { SectionParamDTO, SectionUpdateDTO } = require("../dtos/settingsDto");
 
 const router = express.Router();
 
 router.use(requireFinanPermission("finan.configuracoes.view"));
+router.use(noStore);
 
 const DEFAULT_SETTINGS = {
 	geral: {
@@ -26,6 +30,9 @@ const DEFAULT_SETTINGS = {
 	banco: {
 		backupProfile: "finan",
 		database: process.env.PGDATABASE || "",
+	},
+	pin_lock: {
+		idleTimeoutMinutes: Number(process.env.FINAN_PIN_IDLE_TIMEOUT_MINUTES || 20),
 	},
 };
 
@@ -101,9 +108,9 @@ router.get("/summary", async (_req, res, next) => {
 	}
 });
 
-router.get("/section/:key", async (req, res, next) => {
+router.get("/section/:key", validate({ params: SectionParamDTO }), async (req, res, next) => {
 	try {
-		const key = normalizeKey(req.params.key);
+		const key = normalizeKey(req.validated.params.key);
 		const { rows } = await db.query(
 			`select key, value, updated_at from finan_settings where key = $1 limit 1`,
 			[key],
@@ -122,13 +129,11 @@ router.get("/section/:key", async (req, res, next) => {
 router.put(
 	"/section/:key",
 	requireFinanPermission("finan.configuracoes.manage"),
+	validate({ params: SectionParamDTO, body: SectionUpdateDTO }),
 	async (req, res, next) => {
 		try {
-			const key = normalizeKey(req.params.key);
-			const value =
-				req.body && typeof req.body.value === "object" && req.body.value !== null
-					? req.body.value
-					: {};
+			const key = normalizeKey(req.validated.params.key);
+			const { value } = req.validated.body;
 			const { rows } = await db.query(
 				`insert into finan_settings (key, value, updated_at)
 				values ($1, $2::jsonb, now())

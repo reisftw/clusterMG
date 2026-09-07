@@ -554,6 +554,7 @@ function mapBudgetBreakdowns(rows = []) {
 			month: Number(row.mes || 0) || "",
 			grupo: text(row.grupo),
 			quebra2: text(row.quebra2),
+			layoutOrigem: text(row.layout_origem),
 			categoria: text(row.categoria),
 			statusProjetos: text(row.status_projetos),
 			budgeted: money(row.orcado),
@@ -645,7 +646,44 @@ function mapMatrix(rows = []) {
 	return [...byKey.values()];
 }
 
-async function getBudgetCostCenters() {
+function budgetPeriodFilters(filters = {}) {
+	const scope = text(filters.scope);
+	if (scope !== "period") {
+		return {
+			lancamentosWhere: "",
+			matrixWhere: "",
+			params: [],
+		};
+	}
+	const params = [];
+	const conditions = [];
+	const year = int(filters.ano || filters.year);
+	const month = int(filters.mes || filters.month);
+	if (year) {
+		params.push(year);
+		conditions.push(`ano = $${params.length}`);
+	}
+	if (month) {
+		params.push(month);
+		conditions.push(`mes = $${params.length}`);
+	}
+	if (!conditions.length) {
+		return {
+			lancamentosWhere: "",
+			matrixWhere: "",
+			params: [],
+		};
+	}
+	const where = `where ${conditions.join(" and ")}`;
+	return {
+		lancamentosWhere: where,
+		matrixWhere: where,
+		params,
+	};
+}
+
+async function getBudgetCostCenters(filters = {}) {
+	const budgetFilters = budgetPeriodFilters(filters);
 	const [
 		meta,
 		accounts,
@@ -674,6 +712,7 @@ async function getBudgetCostCenters() {
 				mes,
 				coalesce(source_payload->>'grupo', '') as grupo,
 				coalesce(source_payload->>'quebra2', '') as quebra2,
+				coalesce(source_payload->>'layoutOrigem', '') as layout_origem,
 				coalesce(source_payload->>'categoria', '') as categoria,
 				coalesce(source_payload->>'statusProjetos', '') as status_projetos,
 				sum(orcado) as orcado,
@@ -682,6 +721,7 @@ async function getBudgetCostCenters() {
 				array_agg(distinct coalesce(source_payload->>'fornecedor', source_payload->>'nomeFornecedor', ''))
 					filter (where coalesce(source_payload->>'fornecedor', source_payload->>'nomeFornecedor', '') <> '') as fornecedores
 			 from finan_orcamento_lancamentos
+			 ${budgetFilters.lancamentosWhere}
 			 group by
 				centro_custo_id,
 				conta_id,
@@ -691,11 +731,18 @@ async function getBudgetCostCenters() {
 				mes,
 				coalesce(source_payload->>'grupo', ''),
 				coalesce(source_payload->>'quebra2', ''),
+				coalesce(source_payload->>'layoutOrigem', ''),
 				coalesce(source_payload->>'categoria', ''),
 				coalesce(source_payload->>'statusProjetos', '')
 			 order by ano, mes, centro_custo_id, conta_id`,
+			budgetFilters.params,
 		),
-		db.query("select * from finan_orcamento_matriz order by ano, conta_id, centro_custo_id, mes"),
+		db.query(
+			`select * from finan_orcamento_matriz
+			 ${budgetFilters.matrixWhere}
+			 order by ano, conta_id, centro_custo_id, mes`,
+			budgetFilters.params,
+		),
 	]);
 	const mappedDirectorates = directorates.rows.map(mapDirectorate);
 	const directorateById = new Map(mappedDirectorates.map((item) => [item.id, item]));

@@ -128,9 +128,9 @@ create index if not exists idx_finan_migration_snapshots_source
 
 insert into finan_roles (id, name, description, permissions, is_admin)
 values
-	('admin', 'Admin', 'Administrador do sistema financeiro dedicado.', '["finan.dashboard.view","finan.gestao_orcamentaria.view","finan.gestao_orcamentaria.manage","finan.contas_pagar.view","finan.contas_pagar.manage","finan.contas_receber.view","finan.contas_receber.manage","finan.faturamento.view","finan.notas.view","finan.reports.view","finan.reports.manage","finan.equipe.view","finan.equipe.manage","finan.integracoes.view","finan.integracoes.manage","finan.configuracoes.view","finan.configuracoes.manage","finan.usuarios.manage"]'::jsonb, true),
-	('coordenador_financeiro', 'Coordenador Financeiro', 'Coordenação do financeiro no Finan.', '["finan.dashboard.view","finan.gestao_orcamentaria.view","finan.gestao_orcamentaria.manage","finan.reports.view","finan.equipe.view","finan.equipe.manage"]'::jsonb, false),
-	('analista_financeiro', 'Analista Financeiro', 'Operação financeira no Finan.', '["finan.dashboard.view","finan.gestao_orcamentaria.view","finan.contas_pagar.view","finan.contas_receber.view","finan.reports.view"]'::jsonb, false)
+	('admin', 'Admin', 'Administrador do sistema financeiro dedicado.', '["finan.dashboard.view","finan.gestao_orcamentaria.view","finan.gestao_orcamentaria.manage","relatorios_financeiros:visualizar","relatorios_financeiros:gerenciar","finan.contas_pagar.view","finan.contas_pagar.manage","finan.contas_receber.view","finan.contas_receber.manage","finan.faturamento.view","finan.notas.view","finan.reports.view","finan.reports.manage","finan.equipe.view","finan.equipe.manage","finan.integracoes.view","finan.integracoes.manage","finan.configuracoes.view","finan.configuracoes.manage","finan.usuarios.manage"]'::jsonb, true),
+	('coordenador_financeiro', 'Coordenador Financeiro', 'Coordenação do financeiro no Finan.', '["finan.dashboard.view","finan.gestao_orcamentaria.view","finan.gestao_orcamentaria.manage","relatorios_financeiros:visualizar","relatorios_financeiros:gerenciar","finan.reports.view","finan.equipe.view","finan.equipe.manage"]'::jsonb, false),
+	('analista_financeiro', 'Analista Financeiro', 'Operação financeira no Finan.', '["finan.dashboard.view","finan.gestao_orcamentaria.view","relatorios_financeiros:visualizar","finan.contas_pagar.view","finan.contas_receber.view","finan.reports.view"]'::jsonb, false)
 on conflict (id) do update set
 	name = excluded.name,
 	description = excluded.description,

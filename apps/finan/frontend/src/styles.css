@@ -189,6 +189,119 @@ select {
 	min-width: 0;
 }
 
+.finan-app-shell {
+	display: flex;
+	width: 100%;
+	min-height: 100dvh;
+	overflow-x: hidden;
+	background: #eef3f8;
+}
+
+.finan-app-sidebar-frame {
+	display: none;
+	height: 100dvh;
+	flex: 0 0 auto;
+	overflow: hidden;
+	box-shadow: 4px 0 24px rgb(0 48 135 / 18%);
+	transition: width 0.2s ease;
+}
+
+.finan-app-sidebar-frame.is-expanded {
+	width: 18rem;
+}
+
+.finan-app-sidebar-frame.is-collapsed {
+	width: 4rem;
+}
+
+.finan-app-sidebar-panel {
+	display: flex;
+	height: 100%;
+	width: 100%;
+	flex-direction: column;
+	border-right: 1px solid #020617;
+	background: linear-gradient(180deg, #061b38 0%, #06294d 54%, #04162c 100%);
+	color: #ffffff;
+}
+
+.finan-app-sidebar-panel img[alt="Sempre Internet"] {
+	display: block;
+	width: min(8rem, 100%);
+	height: auto;
+	max-height: 4.5rem;
+	object-fit: contain;
+}
+
+.finan-app-content {
+	display: flex;
+	min-width: 0;
+	min-height: 100dvh;
+	flex: 1 1 auto;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.finan-app-topbar {
+	position: relative;
+	z-index: 30;
+	display: flex;
+	min-height: 4.75rem;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	overflow: visible;
+	border-bottom: 1px solid rgb(226 232 240 / 80%);
+	background: rgb(255 255 255 / 95%);
+	padding: 0.625rem 0.75rem;
+	backdrop-filter: blur(14px);
+}
+
+.finan-app-main {
+	min-width: 0;
+	min-height: 0;
+	flex: 1 1 auto;
+	overflow-y: auto;
+	background:
+		radial-gradient(circle at top left, rgb(255 107 0 / 8%), transparent 34%),
+		linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+	padding: 0.75rem;
+}
+
+@media (min-width: 640px) {
+	.finan-app-topbar {
+		padding-right: 1.25rem;
+		padding-left: 1.25rem;
+	}
+
+	.finan-app-main {
+		padding: 1rem;
+	}
+}
+
+@media (min-width: 1024px) {
+	.finan-app-shell {
+		height: 100dvh;
+		overflow: hidden;
+	}
+
+	.finan-app-sidebar-frame {
+		display: block;
+	}
+
+	.finan-app-content {
+		min-height: 0;
+	}
+
+	.finan-app-topbar {
+		padding-right: 2rem;
+		padding-left: 2rem;
+	}
+
+	.finan-app-main {
+		padding: 1.5rem;
+	}
+}
+
 .finan-topbar {
 	position: sticky;
 	z-index: 10;
@@ -503,6 +616,198 @@ select {
 	font-weight: 900;
 }
 
+.finan-financial-reports-page {
+	display: grid;
+	gap: 1rem;
+}
+
+.finan-report-hero,
+.finan-report-focus-card,
+.finan-report-card {
+	border: 1px solid rgb(226 232 240 / 90%);
+	border-radius: 20px;
+	background: rgb(255 255 255 / 94%);
+	box-shadow: 0 18px 40px rgb(15 23 42 / 8%);
+}
+
+.finan-report-hero {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 1rem;
+	align-items: center;
+	padding: 1.25rem;
+}
+
+.finan-report-hero-icon,
+.finan-report-focus-icon,
+.finan-report-card-head > div {
+	display: inline-flex;
+	width: 3rem;
+	height: 3rem;
+	align-items: center;
+	justify-content: center;
+	border-radius: 16px;
+	background: #eff6ff;
+	color: #1d4ed8;
+}
+
+.finan-report-hero span,
+.finan-report-focus-card span,
+.finan-report-card-head span,
+.finan-report-card-section strong {
+	display: block;
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 950;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.finan-report-hero h2,
+.finan-report-focus-card h2,
+.finan-report-card h2 {
+	margin: 0.25rem 0 0;
+	color: #020617;
+	font-size: clamp(1.25rem, 2vw, 1.75rem);
+	font-weight: 950;
+	line-height: 1.05;
+}
+
+.finan-report-hero p,
+.finan-report-focus-card p,
+.finan-report-card p {
+	margin: 0.5rem 0 0;
+	color: #475569;
+	font-size: 0.94rem;
+	font-weight: 700;
+	line-height: 1.5;
+}
+
+.finan-report-focus-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 1rem;
+	align-items: center;
+	padding: 1rem;
+	border-left: 5px solid #2563eb;
+}
+
+.finan-report-focus-card.orange {
+	border-left-color: #f97316;
+}
+
+.finan-report-focus-card.green {
+	border-left-color: #10b981;
+}
+
+.finan-report-focus-card.orange .finan-report-focus-icon,
+.finan-report-card.orange .finan-report-card-head > div {
+	background: #fff7ed;
+	color: #ea580c;
+}
+
+.finan-report-focus-card.green .finan-report-focus-icon,
+.finan-report-card.green .finan-report-card-head > div {
+	background: #ecfdf5;
+	color: #059669;
+}
+
+.finan-report-focus-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	border-radius: 999px;
+	background: #f8fafc;
+	padding: 0.55rem 0.75rem;
+	color: #0f766e;
+	white-space: nowrap;
+}
+
+.finan-report-focus-status span {
+	color: inherit;
+	font-size: 0.72rem;
+}
+
+.finan-report-card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 1rem;
+	align-items: stretch;
+}
+
+.finan-report-card {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 1rem;
+	padding: 1rem;
+	border-top: 4px solid #2563eb;
+}
+
+.finan-report-card.orange {
+	border-top-color: #f97316;
+}
+
+.finan-report-card.green {
+	border-top-color: #10b981;
+}
+
+.finan-report-card.is-active {
+	box-shadow: 0 18px 40px rgb(37 99 235 / 18%);
+}
+
+.finan-report-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+}
+
+.finan-report-card-section {
+	display: grid;
+	gap: 0.25rem;
+}
+
+.finan-report-card-section p {
+	margin: 0;
+	overflow-wrap: break-word;
+}
+
+.finan-report-card a {
+	display: inline-flex;
+	min-height: 2.75rem;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	margin-top: auto;
+	border-radius: 14px;
+	background: #0f172a;
+	color: #ffffff;
+	font-size: 0.86rem;
+	font-weight: 950;
+	text-decoration: none;
+	transition:
+		transform 0.2s ease,
+		box-shadow 0.2s ease;
+}
+
+.finan-report-card a:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 14px 28px rgb(15 23 42 / 18%);
+}
+
+@media (max-width: 640px) {
+	.finan-report-hero,
+	.finan-report-focus-card {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-report-focus-status {
+		justify-content: center;
+		white-space: normal;
+	}
+}
+
 .finan-dashboard-kpis {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -744,6 +1049,10 @@ select {
 	font-weight: 950;
 }
 
+.finan-dashboard-total-foot strong.positive {
+	color: #047857;
+}
+
 .finan-dashboard-total-foot strong.negative {
 	color: #be123c;
 }
@@ -758,6 +1067,10 @@ select {
 
 .finan-dashboard-chart-card {
 	padding: 20px;
+}
+
+.finan-dashboard-company-chart-card {
+	margin-top: 18px;
 }
 
 .finan-dashboard-chart-card h2 {
@@ -825,6 +1138,31 @@ select {
 
 .finan-dashboard-bar-row i.realizado {
 	background: #f97316;
+}
+
+.finan-dashboard-company-usage {
+	grid-column: 2 / -1;
+	width: max-content;
+	max-width: 100%;
+	border-radius: 999px;
+	padding: 5px 10px;
+	font-size: 0.72rem;
+	font-weight: 950;
+}
+
+.finan-dashboard-company-usage.success {
+	background: #dcfce7;
+	color: #047857;
+}
+
+.finan-dashboard-company-usage.warning {
+	background: #ffedd5;
+	color: #c2410c;
+}
+
+.finan-dashboard-company-usage.danger {
+	background: #ffe4e6;
+	color: #be123c;
 }
 
 .finan-dashboard-class-stack {
@@ -996,6 +1334,10 @@ select {
 
 	.finan-dashboard-bar-row {
 		grid-template-columns: 1fr;
+	}
+
+	.finan-dashboard-company-usage {
+		grid-column: auto;
 	}
 
 	.finan-dashboard-bar-row > div {

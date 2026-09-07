@@ -66,6 +66,27 @@ function rowHasValue(row = []) {
 	return row.some((value) => cleanText(value));
 }
 
+function isFpcp106HeaderRow(row = []) {
+	return (
+		normalizeKey(row[0]) === "origem" &&
+		normalizeKey(row[1]).includes("datamovimento")
+	);
+}
+
+function isFpcp106DataRow(row = []) {
+	const origem = normalizeKey(row[0]);
+	const dateInfo = parseDateInfo(row[1]);
+	const account = splitCodeName(row[5]);
+	const costCenter = splitCodeName(row[9]);
+	return Boolean(
+		(origem === "cp" || origem === "cr" || origem === "cx") &&
+			dateInfo.data &&
+			account.raw &&
+			costCenter.raw &&
+			cleanText(row[12]),
+	);
+}
+
 function splitCodeName(value) {
 	const text = cleanText(value);
 	if (!text) return { codigo: "", nome: "", raw: "" };
@@ -128,9 +149,7 @@ function parseDateInfo(value) {
 		const first = Number(br[1]);
 		const second = Number(br[2]);
 		const year = Number(String(br[3]).length === 2 ? `20${br[3]}` : br[3]);
-		return first > 12
-			? buildDateInfo(year, second, first)
-			: buildDateInfo(year, first, second);
+		return buildDateInfo(year, second, first);
 	}
 	return {};
 }
@@ -275,10 +294,7 @@ function normalizeFpcp302Row(row = [], company, meta) {
 
 function detectLayout(rows = []) {
 	const first = rows.find(rowHasValue) || [];
-	if (
-		normalizeKey(first[0]) === "origem" &&
-		normalizeKey(first[1]).includes("datamovimento")
-	) {
+	if (isFpcp106HeaderRow(first) || isFpcp106DataRow(first)) {
 		return "fpcp106";
 	}
 	if (
@@ -295,12 +311,11 @@ function detectLayout(rows = []) {
 
 function parseFpcp106Rows(rows = [], meta = {}) {
 	return rows
-		.slice(1)
 		.map((row, index) =>
 			normalizeFpcp106Row(row, {
 				...meta,
 				layout: "FPCP106",
-				rowNumber: index + 2,
+				rowNumber: index + 1,
 			}),
 		)
 		.filter(Boolean);

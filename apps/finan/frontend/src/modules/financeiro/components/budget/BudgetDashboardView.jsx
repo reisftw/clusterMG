@@ -38,6 +38,22 @@ function budgetClassVisualState(percent = 0) {
 	};
 }
 
+function formatBudgetUsageLabel(decimal, percent = 0) {
+	const safePercent = Number(percent || 0);
+	if (safePercent > 100) {
+		return `${decimal.format(safePercent - 100)}% acima`;
+	}
+	return `${decimal.format(safePercent)}% consumido`;
+}
+
+function dashboardCompanyLabel(company = {}) {
+	return (
+		[company.codigo || company.id, company.nome || company.nomeFantasia]
+			.filter(Boolean)
+			.join(" - ") || "Empresa não informada"
+	);
+}
+
 function BudgetCategoryClassPanel({
 	group,
 	brl,
@@ -121,7 +137,7 @@ function BudgetCategoryClassPanel({
 				</div>
 				<div className="mt-4">
 					<div className="flex items-center justify-between gap-3 text-xs font-black text-slate-500">
-						<span>{decimal.format(group.percent || 0)}% consumido</span>
+						<span>{formatBudgetUsageLabel(decimal, group.percent || 0)}</span>
 						<span className={visualState.text}>{visualState.label}</span>
 					</div>
 					<div className="mt-2 h-2.5 rounded-full bg-slate-100">
@@ -176,7 +192,7 @@ function BudgetCategoryClassPanel({
 								Uso
 							</p>
 							<p className="mt-1 break-words text-xl font-black text-slate-950">
-								{decimal.format(group.percent || 0)}%
+								{formatBudgetUsageLabel(decimal, group.percent || 0)}
 							</p>
 						</div>
 					</div>
@@ -314,6 +330,7 @@ export default function BudgetDashboardView({
 	centerById,
 	centerChart,
 	companyById,
+	companyOptions = [],
 	dashboardDetail,
 	decimal,
 	detailTitles,
@@ -327,10 +344,12 @@ export default function BudgetDashboardView({
 	movementSupplierName,
 	movementValue,
 	onCloseDashboardDetail,
+	onCompanyChange,
 	onOpenDirectoratesConfig,
 	onShowDashboardDetail,
 	pareto,
 	renderDashboardDetail,
+	selectedCompanyId = "",
 	supplierChart,
 	supplierTotalTop,
 	topAccounts,
@@ -343,6 +362,36 @@ export default function BudgetDashboardView({
 	const secondaryKpis = kpis.slice(3);
 	return (
 		<section className="space-y-4">
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+					<div className="min-w-0">
+						<p className="text-xs font-black uppercase tracking-wide text-blue-700">
+							Filtro por grupo empresarial
+						</p>
+						<h2 className="mt-1 text-xl font-black text-slate-950">
+							Visão geral por grupo
+						</h2>
+						<p className="mt-1 text-sm font-bold text-slate-500">
+							Filtra indicadores, gráficos e rankings por Sempre, On ou Onnet.
+						</p>
+					</div>
+					<label className="min-w-0 lg:w-[360px]">
+						<span className="sr-only">Grupo empresarial</span>
+						<select
+							value={selectedCompanyId}
+							onChange={(event) => onCompanyChange?.(event.target.value)}
+							className="min-h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+						>
+							<option value="">Todos os grupos</option>
+							{companyOptions.map((company) => (
+								<option key={company.id} value={company.id}>
+									{dashboardCompanyLabel(company)}
+								</option>
+							))}
+						</select>
+					</label>
+				</div>
+			</section>
 			<section className="grid items-stretch gap-4 min-[480px]:grid-cols-2 md:grid-cols-3">
 				{primaryKpis.map((item) => (
 					<FinancialKpiCard key={item.id} item={item} variant="primary" />
@@ -420,7 +469,7 @@ export default function BudgetDashboardView({
 												{budgetCenterCompactLabel(center)}
 											</span>
 											<span className={status.textClass}>
-												{decimal.format(percent)}% ·{" "}
+												{formatBudgetUsageLabel(decimal, percent)} ·{" "}
 												{brl.format(Math.abs(deviation))}
 											</span>
 										</div>
@@ -590,7 +639,7 @@ export default function BudgetDashboardView({
 											{brl.format(item.realized)}
 										</p>
 										<p className="text-xs font-black opacity-90">
-											{decimal.format(item.percent)}% · {status.label}
+											{formatBudgetUsageLabel(decimal, item.percent)} · {status.label}
 										</p>
 									</div>
 								);
@@ -680,7 +729,7 @@ export default function BudgetDashboardView({
 											<span
 												className={`text-sm font-black ${status.textClass}`}
 											>
-												{decimal.format(item.percent)}%
+												{formatBudgetUsageLabel(decimal, item.percent)}
 											</span>
 										</div>
 										<div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs font-black text-slate-600">

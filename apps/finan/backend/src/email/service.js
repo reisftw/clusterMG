@@ -35,6 +35,22 @@ const DEFAULT_EMAIL_TEMPLATES = {
 		actionLabel: "Acessar o Finan",
 		body: "Olá, {nome}.\n\nSeu acesso ao Finan - Gestão Financeira Sempre Internet foi criado.\n\nE-mail: {email}\nSenha temporária: {temporaryPassword}\n\nNo primeiro acesso, use essa senha temporária e siga o fluxo de segurança do sistema.",
 	},
+	pin_locked: {
+		label: "Conta bloqueada por PIN",
+		subject: "Conta bloqueada - Finan",
+		title: "Sua conta foi bloqueada",
+		preview: "Você errou o PIN de bloqueio 3 vezes.",
+		actionLabel: "Recuperar acesso",
+		body: "Olá, {nome}.\n\nSua conta no Finan foi bloqueada porque o PIN de bloqueio do app foi digitado incorretamente 3 vezes seguidas.\n\nPara recuperar o acesso, clique no botão abaixo, informe a palavra secreta que você cadastrou e defina um novo PIN. O link expira em {minutos} minutos.\n\nSe você não tentou acessar o Finan recentemente, avise a administração imediatamente.",
+	},
+	calendar_event_alert: {
+		label: "Alerta do Calendário Financeiro",
+		subject: "Lembrete: {titulo} em {dias}",
+		title: "Lembrete do Calendário Financeiro",
+		preview: "Você tem um evento se aproximando no Calendário Financeiro.",
+		actionLabel: "Abrir o Finan",
+		body: "Olá, {nome}.\n\n\"{titulo}\" está marcado para {data} ({dias}).\n\nEste lembrete foi configurado com {diasAntecedencia} dia(s) de antecedência no Calendário Financeiro do Finan.",
+	},
 	smtp_test: {
 		label: "Teste SMTP",
 		subject: "Teste de e-mail - Finan",
@@ -231,9 +247,13 @@ function renderConfiguredEmail(config, templateKey, variables = {}) {
 		replyTo: config.replyTo || DEFAULT_CONFIG.replyTo,
 		...variables,
 	};
-	const actionUrl = ["password_reset", "smtp_test"].includes(templateKey)
-		? renderVariables(templateKey === "smtp_test" ? "{appUrl}" : "{resetUrl}", resolvedVariables)
-		: "";
+	const actionUrlVariable = {
+		password_reset: "{resetUrl}",
+		pin_locked: "{recoveryUrl}",
+		smtp_test: "{appUrl}",
+		calendar_event_alert: "{appUrl}",
+	}[templateKey];
+	const actionUrl = actionUrlVariable ? renderVariables(actionUrlVariable, resolvedVariables) : "";
 	const actionLabel = renderVariables(template.actionLabel, resolvedVariables);
 	const subject = renderVariables(template.subject, resolvedVariables);
 	const text = renderVariables(template.body, resolvedVariables);
@@ -391,6 +411,39 @@ async function sendMfaLoginCodeEmail({ to, name, code, ttlMinutes }) {
 	});
 }
 
+async function sendPinLockedEmail({ to, name, recoveryUrl, ttlMinutes }) {
+	const config = await getConfig();
+	const rendered = renderConfiguredEmail(config, "pin_locked", {
+		nome: name || to,
+		email: to,
+		recoveryUrl,
+		minutos: ttlMinutes || 30,
+	});
+	return sendMail({
+		to,
+		...rendered,
+		meta: { type: "pin_locked" },
+	});
+}
+
+async function sendCalendarEventAlertEmail({ to, name, eventTitle, eventDateLabel, diasAntecedencia, diasLabel }) {
+	const config = await getConfig();
+	const rendered = renderConfiguredEmail(config, "calendar_event_alert", {
+		nome: name || to,
+		email: to,
+		titulo: eventTitle,
+		data: eventDateLabel,
+		dias: diasLabel,
+		diasAntecedencia,
+		appUrl: config.appUrl,
+	});
+	return sendMail({
+		to,
+		...rendered,
+		meta: { type: "calendar_event_alert" },
+	});
+}
+
 async function sendWelcomeFirstAccessEmail({ to, name, temporaryPassword }) {
 	const config = await getConfig();
 	const rendered = renderConfiguredEmail(config, "welcome_first_access", {
@@ -430,8 +483,10 @@ module.exports = {
 	getConfig,
 	sanitizeConfig,
 	saveConfig,
+	sendCalendarEventAlertEmail,
 	sendMfaLoginCodeEmail,
 	sendPasswordResetEmail,
+	sendPinLockedEmail,
 	sendTestEmail,
 	sendWelcomeFirstAccessEmail,
 };

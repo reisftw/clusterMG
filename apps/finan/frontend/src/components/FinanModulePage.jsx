@@ -15,6 +15,8 @@ import {
 	requestFinanApi,
 	requestFinanFinanceiroApi,
 } from "../api/finanApi";
+import FinanCalendarWeekStrip from "./FinanCalendarWeekStrip";
+import FinanMorningSummary from "./FinanMorningSummary";
 
 const PAGE_META = {
 	dashboard: {
@@ -95,6 +97,10 @@ export default function FinanModulePage({ page }) {
 		() => buildBudgetClasses(dashboard.budgetDetails),
 		[dashboard.budgetDetails],
 	);
+	const companyRows = useMemo(
+		() => buildCompanyRows(dashboard.budgetDetails),
+		[dashboard.budgetDetails],
+	);
 	const chartRows = useMemo(
 		() =>
 			BUDGET_CLASSES.map((item) => {
@@ -138,6 +144,13 @@ export default function FinanModulePage({ page }) {
 
 			{error ? <div className="finan-dashboard-alert">{error}</div> : null}
 
+			{page === "dashboard" ? (
+				<div className="mb-8 flex flex-col gap-4">
+					<FinanMorningSummary />
+					<FinanCalendarWeekStrip />
+				</div>
+			) : null}
+
 			<div className="finan-dashboard-kpis">
 				<KpiCard
 					icon={Banknote}
@@ -163,6 +176,8 @@ export default function FinanModulePage({ page }) {
 			</div>
 
 			<BudgetTotalChart budgetTotals={budgetTotals} period={period} />
+
+			<CompanyBudgetChart rows={companyRows} />
 
 			<div className="finan-dashboard-budget-grid">
 				<article className="finan-dashboard-chart-card">
@@ -222,7 +237,7 @@ export default function FinanModulePage({ page }) {
 										<span>{item.label}</span>
 										<strong>{formatMoney(data.realizado)}</strong>
 										<small>
-											Orçado {formatMoney(data.orcado)} · {formatPercent(usage)} consumido
+											Orçado {formatMoney(data.orcado)} · {formatUsageLabel(usage)}
 										</small>
 									</div>
 									<Eye size={18} />
@@ -290,7 +305,7 @@ function BudgetTotalChart({ budgetTotals, period }) {
 					<span>Orçado x Realizado no mês</span>
 					<h2>{period.label}</h2>
 				</div>
-				<strong>{formatPercent(budgetTotals.usage)} consumido</strong>
+				<strong>{formatUsageLabel(budgetTotals.usage)}</strong>
 			</div>
 			<div className="finan-dashboard-total-bars">
 				<BudgetTotalBar
@@ -311,6 +326,53 @@ function BudgetTotalChart({ budgetTotals, period }) {
 				<strong className={saldo >= 0 ? "positive" : "negative"}>
 					{formatMoney(saldo)}
 				</strong>
+			</div>
+		</article>
+	);
+}
+
+function CompanyBudgetChart({ rows }) {
+	const visibleRows = rows.slice(0, 8);
+	return (
+		<article className="finan-dashboard-chart-card finan-dashboard-company-chart-card">
+			<div>
+				<span>Grupos empresariais</span>
+				<h2>Realizado x Orçado</h2>
+			</div>
+			<div className="finan-dashboard-chart">
+				{visibleRows.length ? (
+					visibleRows.map((row) => {
+						const max = Math.max(row.orcado, row.realizado, 1);
+						const usage = row.orcado > 0 ? (row.realizado / row.orcado) * 100 : 0;
+						return (
+							<div key={row.id} className="finan-dashboard-bar-row">
+								<strong>{row.label}</strong>
+								<div>
+									<span>Orçado</span>
+									<div>
+										<i style={{ width: `${(row.orcado / max) * 100}%` }} />
+									</div>
+									<em>{compactMoney(row.orcado)}</em>
+								</div>
+								<div>
+									<span>Realizado</span>
+									<div>
+										<i
+											className="realizado"
+											style={{ width: `${(row.realizado / max) * 100}%` }}
+										/>
+									</div>
+									<em>{compactMoney(row.realizado)}</em>
+								</div>
+								<small className={`finan-dashboard-company-usage ${budgetStatus(usage)}`}>
+									{formatUsageLabel(usage)}
+								</small>
+							</div>
+						);
+					})
+				) : (
+					<p>Nenhum grupo com orçamento ou realizado no período.</p>
+				)}
 			</div>
 		</article>
 	);
@@ -453,6 +515,20 @@ function buildBudgetClasses(details) {
 	return classes;
 }
 
+function buildCompanyRows(details) {
+	const rows = Array.isArray(details?.empresas) ? details.empresas : [];
+	return rows
+		.map((row, index) => ({
+			id: row.id || `empresa-${index}`,
+			label:
+				[row.codigo, row.nome].filter(Boolean).join(" - ") ||
+				"Empresa não informada",
+			orcado: Number(row.orcado || 0),
+			realizado: Number(row.realizado || 0),
+		}))
+		.sort((left, right) => Math.abs(right.realizado) - Math.abs(left.realizado));
+}
+
 function normalizeClass(value) {
 	const normalized = normalizeText(value);
 	if (normalized === "nao basal" || normalized === "nao_basal") return "nao_basal";
@@ -496,6 +572,14 @@ function formatPercent(value) {
 		minimumFractionDigits: 1,
 		maximumFractionDigits: 1,
 	})}%`;
+}
+
+function formatUsageLabel(value) {
+	const numeric = Number(value || 0);
+	if (numeric > 100) {
+		return `${formatPercent(numeric - 100)} acima`;
+	}
+	return `${formatPercent(numeric)} consumido`;
 }
 
 function formatInteger(value) {
