@@ -59,19 +59,26 @@ export default function AlertasAutomaticosWidget() {
 			iconClassName="bg-amber-50 text-amber-600"
 			title="Alertas Automaticos"
 		>
-			{loading ? (
-				<p className="text-sm text-gray-400">Atualizando alertas...</p>
-			) : alertas.length === 0 ? (
-				<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-					Nenhum alerta critico no momento.
-				</div>
-			) : (
-				<div className="space-y-3">
-					{alertas.map((alerta, index) => (
-						<AlertItem key={index} {...alerta} />
-					))}
-				</div>
-			)}
+			{(() => {
+				// Extraido pra achado javascript:S3358 (ternario aninhado).
+				if (loading) {
+					return <p className="text-sm text-gray-400">Atualizando alertas...</p>;
+				}
+				if (alertas.length === 0) {
+					return (
+						<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+							Nenhum alerta critico no momento.
+						</div>
+					);
+				}
+				return (
+					<div className="space-y-3">
+						{alertas.map((alerta, index) => (
+							<AlertItem key={index} {...alerta} />
+						))}
+					</div>
+				);
+			})()}
 		</DashboardWidgetCard>
 	);
 }

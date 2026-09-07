@@ -60,6 +60,12 @@ const Field = ({
 	);
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSalvarButtonLabel(isSubmitting, inicial) {
+	if (isSubmitting) return "Salvando...";
+	return inicial ? "Salvar alteracoes" : "Cadastrar";
+}
+
 const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 	const [form, setForm] = useState(inicial ?? CAMPOS_INICIAIS);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -325,11 +331,7 @@ const ColaboradorForm = ({ onSubmit, onClose, inicial = null }) => {
 							disabled={isSubmitting}
 							className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
 						>
-							{isSubmitting
-								? "Salvando..."
-								: inicial
-									? "Salvar alteracoes"
-									: "Cadastrar"}
+							{resolveSalvarButtonLabel(isSubmitting, inicial)}
 						</button>
 					</div>
 				</form>

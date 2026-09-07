@@ -7,6 +7,12 @@ import { resolveVpsDate } from "../../../services/vpsDate";
 import { META_SAZONAL } from "../utils/constants";
 import { useDashboardData } from "./useDashboardData";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFbStatus(error, loading) {
+	if (error) return "Erro ao carregar dados";
+	return loading ? "Carregando..." : "Sincronizado";
+}
+
 function toNumber(v) {
 	if (typeof v === "number") return Number.isFinite(v) ? v : 0;
 	if (typeof v === "string") {
@@ -189,11 +195,7 @@ export function useRetiradas(enabled = true, options = {}) {
 		feriadosSet,
 		forcaTarefa,
 		loading: enabled ? loading : false,
-		fbStatus: error
-			? "Erro ao carregar dados"
-			: loading
-				? "Carregando..."
-				: "Sincronizado",
+		fbStatus: resolveFbStatus(error, loading),
 		lastUpdate,
 	};
 }

@@ -377,14 +377,32 @@ function EvolutionDisconnectLogsModal({ logs, loading, onClose, onRefresh }) {
 				</div>
 			}
 		>
-			{loading ? (
-				<div className="flex min-h-40 items-center justify-center text-sm font-semibold text-slate-500">
-					<RefreshCw size={18} className="mr-2 animate-spin" />
-					Carregando logs...
-				</div>
-			) : logs.length ? (
-				<div className="space-y-3">
-					{logs.map((log) => (
+			{(() => {
+				// Extraido pra achado javascript:S3358 (ternario aninhado).
+				if (loading) {
+					return (
+						<div className="flex min-h-40 items-center justify-center text-sm font-semibold text-slate-500">
+							<RefreshCw size={18} className="mr-2 animate-spin" />
+							Carregando logs...
+						</div>
+					);
+				}
+				if (!logs.length) {
+					return (
+						<div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+							<p className="text-sm font-bold text-slate-700">
+								Nenhuma queda registrada ainda.
+							</p>
+							<p className="mt-1 text-xs font-semibold text-slate-500">
+								Quando a Evolution sinalizar desconexão, banimento ou
+								fechamento da instância, o evento aparece aqui.
+							</p>
+						</div>
+					);
+				}
+				return (
+					<div className="space-y-3">
+						{logs.map((log) => (
 						<article
 							key={log.id}
 							className="rounded-xl border border-slate-200 bg-slate-50 p-4"
@@ -411,19 +429,10 @@ function EvolutionDisconnectLogsModal({ logs, loading, onClose, onRefresh }) {
 								</span>
 							</div>
 						</article>
-					))}
-				</div>
-			) : (
-				<div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-					<p className="text-sm font-bold text-slate-700">
-						Nenhuma queda registrada ainda.
-					</p>
-					<p className="mt-1 text-xs font-semibold text-slate-500">
-						Quando a Evolution sinalizar desconexão, banimento ou fechamento da
-						instância, o evento aparece aqui.
-					</p>
-				</div>
-			)}
+						))}
+					</div>
+				);
+			})()}
 		</ModalShell>
 	);
 }
