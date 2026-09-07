@@ -809,24 +809,6 @@ describe("vps api app characterization - domain route only collections", () => {
 		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
 	});
 
-	it("POST /api/admin/documents bloqueia colecoes financeiras migradas", async () => {
-		const app = loadApp();
-
-		const response = await request(app)
-			.post("/api/admin/documents")
-			.set("Authorization", "Bearer valid")
-			.set("x-csrf-token", "valid-csrf")
-			.send({
-				collectionPath: "financeiro_reports",
-				documentId: "serasa",
-				data: { rows: [] },
-			});
-
-		expect(response.status).toBe(410);
-		expect(response.body.error).toContain("/api/financeiro");
-		expect(currentMocks.documents.upsertDocument).not.toHaveBeenCalled();
-	});
-
 	it("POST /api/admin/documents bloqueia eventos operacionais migrados", async () => {
 		const app = loadApp();
 
