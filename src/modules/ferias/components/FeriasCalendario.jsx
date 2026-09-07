@@ -57,6 +57,14 @@ const MESES = [
 	"Dezembro",
 ];
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDiaCellClass(isHoje, temFerias) {
+	if (isHoje) return "bg-blue-50 border-2 border-blue-300";
+	return temFerias
+		? "bg-orange-50 border border-orange-100"
+		: "bg-gray-50 border border-gray-100 hover:bg-gray-100";
+}
+
 const toDateOrNull = (value) => {
 	if (!value) return null;
 	if (value?.toDate) return value.toDate();
@@ -192,13 +200,7 @@ const FeriasCalendario = ({ ferias, colaboradores }) => {
 						return (
 							<div
 								key={dia}
-								className={`min-h-[64px] rounded-xl p-1.5 flex flex-col transition-colors ${
-									isHoje(dia)
-										? "bg-blue-50 border-2 border-blue-300"
-										: temFerias
-											? "bg-orange-50 border border-orange-100"
-											: "bg-gray-50 border border-gray-100 hover:bg-gray-100"
-								}`}
+								className={`min-h-[64px] rounded-xl p-1.5 flex flex-col transition-colors ${resolveDiaCellClass(isHoje(dia), temFerias)}`}
 							>
 								<span
 									className={`text-xs font-bold mb-1 ${isHoje(dia) ? "text-blue-600" : "text-gray-500"}`}

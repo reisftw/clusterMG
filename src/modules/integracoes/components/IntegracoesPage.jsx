@@ -37,6 +37,12 @@ const STATUS_CLASS = {
 	not_tested: "border-gray-200 bg-gray-50 text-gray-500",
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+const INTEGRACAO_STATUS_LABELS = {
+	ok: "Ok",
+	error: "Erro",
+};
+
 const MODULE_OPTIONS = [
 	"Hubsoft",
 	"Playground",
@@ -985,11 +991,7 @@ function IntegracaoStatusCell({ item }) {
 			) : (
 				<AlertCircle size={13} />
 			)}
-			{item.lastStatus === "ok"
-				? "Ok"
-				: item.lastStatus === "error"
-					? "Erro"
-					: "Não testada"}
+			{INTEGRACAO_STATUS_LABELS[item.lastStatus] || "Não testada"}
 		</span>
 	);
 }

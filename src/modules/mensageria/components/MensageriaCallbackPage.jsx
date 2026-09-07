@@ -286,17 +286,33 @@ const MensageriaCallbackPage = () => {
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-slate-100 bg-white">
-								{loading ? (
-									<tr>
-										<td
-											colSpan={6}
-											className="px-4 py-8 text-center text-sm text-slate-500"
-										>
-											Carregando callbacks...
-										</td>
-									</tr>
-								) : callbacks.length ? (
-									callbacks.map((item) => (
+								{(() => {
+									// Extraido pra achado javascript:S3358 (ternario aninhado).
+									if (loading) {
+										return (
+											<tr>
+												<td
+													colSpan={6}
+													className="px-4 py-8 text-center text-sm text-slate-500"
+												>
+													Carregando callbacks...
+												</td>
+											</tr>
+										);
+									}
+									if (!callbacks.length) {
+										return (
+											<tr>
+												<td
+													colSpan={6}
+													className="px-4 py-8 text-center text-sm text-slate-500"
+												>
+													Nenhum callback recebido ainda.
+												</td>
+											</tr>
+										);
+									}
+									return callbacks.map((item) => (
 										<tr key={item.id} className="align-top hover:bg-slate-50">
 											<td className="px-4 py-3 text-slate-600">
 												{formatDateTime(getCallbackDate(item))}
@@ -340,17 +356,8 @@ const MensageriaCallbackPage = () => {
 												)}
 											</td>
 										</tr>
-									))
-								) : (
-									<tr>
-										<td
-											colSpan={6}
-											className="px-4 py-8 text-center text-sm text-slate-500"
-										>
-											Nenhum callback recebido ainda.
-										</td>
-									</tr>
-								)}
+									));
+								})()}
 							</tbody>
 						</table>
 					</div>

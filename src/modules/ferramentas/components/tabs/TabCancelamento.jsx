@@ -4,6 +4,13 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { useFerramentasRegionais } from "../../hooks/useFerramentasRegionais";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDropzoneClass(canOk, status) {
+	if (canOk) return "border-green-400 bg-green-50";
+	if (status === "err") return "border-red-400 bg-red-50";
+	return "border-gray-200 bg-white hover:border-red-400";
+}
+
 const TabCancelamento = () => {
 	const { regionais } = useFerramentasRegionais();
 	const [status, setStatus] = useState(null);
@@ -408,7 +415,7 @@ const TabCancelamento = () => {
 			{/* Upload Cancelamentos */}
 			<div
 				className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
-          ${canOk ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-red-400"}`}
+          ${resolveDropzoneClass(canOk, status)}`}
 				onClick={() => inputCanRef.current?.click()}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" || event.key === " ") {

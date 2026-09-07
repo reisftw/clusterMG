@@ -314,18 +314,38 @@ function EmailLogsSection({
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100">
-							{logsLoading ? (
-								<tr>
-									<td
-										colSpan={6}
-										className="px-4 py-10 text-center text-sm font-bold text-slate-500"
-									>
-										<RefreshCw size={18} className="mx-auto mb-2 animate-spin" />
-										Carregando logs...
-									</td>
-								</tr>
-							) : logs.length ? (
-								logs.map((item) => (
+							{(() => {
+								// Extraido pra achado javascript:S3358 (ternario aninhado).
+								if (logsLoading) {
+									return (
+										<tr>
+											<td
+												colSpan={6}
+												className="px-4 py-10 text-center text-sm font-bold text-slate-500"
+											>
+												<RefreshCw
+													size={18}
+													className="mx-auto mb-2 animate-spin"
+												/>
+												Carregando logs...
+											</td>
+										</tr>
+									);
+								}
+								if (!logs.length) {
+									return (
+										<tr>
+											<td
+												colSpan={6}
+												className="px-4 py-10 text-center text-sm font-bold text-slate-500"
+											>
+												<AlertCircle size={18} className="mx-auto mb-2" />
+												Nenhum log encontrado.
+											</td>
+										</tr>
+									);
+								}
+								return logs.map((item) => (
 									<tr key={item.id} className="hover:bg-slate-50">
 										<td className="px-4 py-3 font-semibold text-slate-700">
 											{formatDateTime(item.createdAt)}
@@ -356,18 +376,8 @@ function EmailLogsSection({
 											{item.error || "-"}
 										</td>
 									</tr>
-								))
-							) : (
-								<tr>
-									<td
-										colSpan={6}
-										className="px-4 py-10 text-center text-sm font-bold text-slate-500"
-									>
-										<AlertCircle size={18} className="mx-auto mb-2" />
-										Nenhum log encontrado.
-									</td>
-								</tr>
-							)}
+								));
+							})()}
 						</tbody>
 					</table>
 				</div>
