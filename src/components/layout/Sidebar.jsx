@@ -848,11 +848,12 @@ function SidebarSectionLabel({
 	isModernLayout,
 	tone = "default",
 }) {
-	const colorClass = isModernLayout
-		? "text-slate-400"
-		: tone === "blue"
-			? "text-blue-500"
-			: "text-gray-400";
+	let colorClass = "text-gray-400";
+	if (isModernLayout) {
+		colorClass = "text-slate-400";
+	} else if (tone === "blue") {
+		colorClass = "text-blue-500";
+	}
 	return (
 		<p
 			className={`${collapsed ? "sr-only" : ""} mb-2 px-4 text-[10px] font-bold uppercase tracking-wider ${colorClass}`}
@@ -860,6 +861,16 @@ function SidebarSectionLabel({
 			{children}
 		</p>
 	);
+}
+
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFeaturedNavClassName(state, isModernLayout, navClass) {
+	if (isModernLayout) return navClass(state);
+	return `nav-item ${
+		state.isActive
+			? "nav-item-active"
+			: "border border-blue-100 bg-blue-50/70 text-blue-700 hover:bg-blue-100"
+	}`;
 }
 
 function FeaturedMenuItems({
@@ -888,13 +899,7 @@ function FeaturedMenuItems({
 					displayLabel={displayLabel}
 					labelClass={collapsed ? "sr-only" : "truncate"}
 					className={(state) =>
-						isModernLayout
-							? navClass(state)
-							: `nav-item ${
-									state.isActive
-										? "nav-item-active"
-										: "border border-blue-100 bg-blue-50/70 text-blue-700 hover:bg-blue-100"
-								}`
+						resolveFeaturedNavClassName(state, isModernLayout, navClass)
 					}
 				/>
 			))}
@@ -1272,25 +1277,26 @@ function getNestedButtonClass({ active, open, isModernLayout }) {
 	}`;
 }
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveNavToneClass(tone) {
+	if (tone === "orange") return "text-orange-500";
+	if (tone === "blue") return "text-blue-600";
+	return "";
+}
+
+function resolveNavModernToneClass(tone) {
+	if (tone === "orange") return "text-orange-200 hover:bg-white/10 hover:text-white";
+	if (tone === "blue") return "text-blue-100 hover:bg-white/10 hover:text-white";
+	return "text-slate-300 hover:bg-white/10 hover:text-white";
+}
+
 function getNavClass({ isActive, tone, isModernLayout }) {
 	if (!isModernLayout) {
-		return `nav-item ${isActive ? "nav-item-active" : "nav-item-inactive"} ${
-			tone === "orange"
-				? "text-orange-500"
-				: tone === "blue"
-					? "text-blue-600"
-					: ""
-		}`;
+		return `nav-item ${isActive ? "nav-item-active" : "nav-item-inactive"} ${resolveNavToneClass(tone)}`;
 	}
 
 	return `nav-item-modern ${
-		isActive
-			? "nav-item-modern-active"
-			: tone === "orange"
-				? "text-orange-200 hover:bg-white/10 hover:text-white"
-				: tone === "blue"
-					? "text-blue-100 hover:bg-white/10 hover:text-white"
-					: "text-slate-300 hover:bg-white/10 hover:text-white"
+		isActive ? "nav-item-modern-active" : resolveNavModernToneClass(tone)
 	}`;
 }
 
@@ -1407,11 +1413,12 @@ function useSidebarMenuItems({ currentUser, isModernLayout }) {
 // os dois blocos de cabecalho (moderno/classico) sao arvores JSX
 // independentes, so um renderiza por vez.
 function SidebarHeader({ collapsed, isModernLayout, isMobileDrawer, onToggleCollapsed }) {
-	const toggleTitle = isMobileDrawer
-		? "Fechar menu"
-		: collapsed
-			? "Expandir menu"
-			: "Ocultar menu";
+	let toggleTitle = "Ocultar menu";
+	if (isMobileDrawer) {
+		toggleTitle = "Fechar menu";
+	} else if (collapsed) {
+		toggleTitle = "Expandir menu";
+	}
 	const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
 	if (isModernLayout) {
@@ -1501,6 +1508,17 @@ function SidebarUserFooter({ currentUser, signOut }) {
 	);
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado dentro de
+// template literal) — mesma logica de antes.
+function getSidebarHeaderWrapClassName(isModernLayout, collapsed) {
+	let padding = "px-3";
+	if (!collapsed) {
+		padding = isModernLayout ? "px-5" : "px-6";
+	}
+	const border = isModernLayout ? "border-white/10" : "border-gray-100";
+	return `${padding} border-b ${border} py-5`;
+}
+
 const Sidebar = ({
 	collapsed = false,
 	onToggleCollapsed,
@@ -1569,11 +1587,7 @@ const Sidebar = ({
 			}
 		>
 			<div
-				className={
-					isModernLayout
-						? `${collapsed ? "px-3" : "px-5"} border-b border-white/10 py-5`
-						: `${collapsed ? "px-3" : "px-6"} border-b border-gray-100 py-5`
-				}
+				className={getSidebarHeaderWrapClassName(isModernLayout, collapsed)}
 			>
 				<SidebarHeader
 					collapsed={collapsed}
