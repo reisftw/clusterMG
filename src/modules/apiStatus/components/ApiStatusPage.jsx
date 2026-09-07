@@ -66,6 +66,14 @@ function serviceEventLabel(event = {}) {
 	return event.status || "Status registrado";
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveApiStatusDetailValue(key, value) {
+	if (Array.isArray(value)) return value.length ? JSON.stringify(value) : "-";
+	return key.toLowerCase().includes("bytes")
+		? formatBytes(value)
+		: String(value);
+}
+
 function renderDetails(details = {}) {
 	const entries = Object.entries(details).filter(
 		([, value]) => value !== undefined && value !== null && value !== "",
@@ -78,13 +86,7 @@ function renderDetails(details = {}) {
 				<div key={key}>
 					<dt className="font-bold uppercase text-slate-400">{key}</dt>
 					<dd className="mt-1 break-words font-semibold text-slate-700">
-						{Array.isArray(value)
-							? value.length
-								? JSON.stringify(value)
-								: "-"
-							: key.toLowerCase().includes("bytes")
-								? formatBytes(value)
-								: String(value)}
+						{resolveApiStatusDetailValue(key, value)}
 					</dd>
 				</div>
 			))}

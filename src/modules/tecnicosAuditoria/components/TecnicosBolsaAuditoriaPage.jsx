@@ -523,6 +523,15 @@ function MonthlyConsumptionList({ title, rows = [], showClients = false }) {
 	);
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveAuditoriaDayClass(active, hasMovement, bate) {
+	if (active) return "border-blue-500 bg-blue-600 text-white";
+	if (!hasMovement) return "border-slate-200 bg-slate-50 text-slate-400";
+	return bate
+		? "border-emerald-200 bg-emerald-50 text-emerald-800"
+		: "border-amber-200 bg-amber-50 text-amber-800";
+}
+
 function DailyHistoryCalendar({ days = [], selectedDay, onSelectDay }) {
 	if (!days.length) return null;
 	return (
@@ -542,15 +551,7 @@ function DailyHistoryCalendar({ days = [], selectedDay, onSelectDay }) {
 							key={day.date}
 							type="button"
 							onClick={() => onSelectDay(day.date)}
-							className={`min-h-14 rounded-xl border px-2 text-xs font-black transition ${
-								active
-									? "border-blue-500 bg-blue-600 text-white"
-									: hasMovement
-										? day.bate
-											? "border-emerald-200 bg-emerald-50 text-emerald-800"
-											: "border-amber-200 bg-amber-50 text-amber-800"
-										: "border-slate-200 bg-slate-50 text-slate-400"
-							}`}
+							className={`min-h-14 rounded-xl border px-2 text-xs font-black transition ${resolveAuditoriaDayClass(active, hasMovement, day.bate)}`}
 						>
 							<span className="block">{formatDayLabel(day.date)}</span>
 							<span className="mt-1 block text-[10px]">

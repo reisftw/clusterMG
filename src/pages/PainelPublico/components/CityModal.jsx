@@ -30,13 +30,12 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 		return "🚨 Abaixo da Meta";
 	}
 
-	const barColor = over
-		? "linear-gradient(90deg,#7c3aed,#a855f7)"
-		: done
-			? "linear-gradient(90deg,var(--green),#36B37E)"
-			: pct >= 50
-				? "linear-gradient(90deg,var(--orange),var(--yellow))"
-				: "linear-gradient(90deg,var(--red),#FF6B6B)";
+	function barColor() {
+		if (over) return "linear-gradient(90deg,#7c3aed,#a855f7)";
+		if (done) return "linear-gradient(90deg,var(--green),#36B37E)";
+		if (pct >= 50) return "linear-gradient(90deg,var(--orange),var(--yellow))";
+		return "linear-gradient(90deg,var(--red),#FF6B6B)";
+	}
 
 	return (
 		<div
@@ -110,7 +109,7 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 									height: "100%",
 									borderRadius: 12,
 									width: `${Math.min(pct, 100)}%`,
-									background: barColor,
+									background: barColor(),
 									transition: "width .8s",
 								}}
 							/>

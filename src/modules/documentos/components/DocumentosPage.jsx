@@ -533,31 +533,45 @@ function SubmissionFilePreviewPanel({
 				</div>
 			) : null}
 			<div className="h-[48vh] min-h-[360px]">
-				{loadingPdf ? (
-					<div className="flex h-full items-center justify-center text-sm font-black text-slate-500">
-						<Loader2 className="mr-2 animate-spin" size={18} /> Carregando
-						PDF...
-					</div>
-				) : pdfUrl &&
-					String(selectedFile?.mimeType || "").startsWith("image/") ? (
-					<div className="flex h-full items-center justify-center p-3">
-						<img
-							src={pdfUrl}
-							alt={selectedFile?.nome || "Documento"}
-							className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
-						/>
-					</div>
-				) : pdfUrl ? (
-					<iframe
-						title={selectedFile?.nome || "Documento"}
-						src={pdfUrl}
-						className="h-full w-full"
-					/>
-				) : (
-					<div className="flex h-full items-center justify-center p-6 text-center text-sm font-bold text-slate-400">
-						Não foi possível carregar a visualização do PDF.
-					</div>
-				)}
+				{(() => {
+					// Extraido pra achado javascript:S3358 (ternario aninhado).
+					if (loadingPdf) {
+						return (
+							<div className="flex h-full items-center justify-center text-sm font-black text-slate-500">
+								<Loader2 className="mr-2 animate-spin" size={18} /> Carregando
+								PDF...
+							</div>
+						);
+					}
+					const isImage = String(selectedFile?.mimeType || "").startsWith(
+						"image/",
+					);
+					if (pdfUrl && isImage) {
+						return (
+							<div className="flex h-full items-center justify-center p-3">
+								<img
+									src={pdfUrl}
+									alt={selectedFile?.nome || "Documento"}
+									className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
+								/>
+							</div>
+						);
+					}
+					if (pdfUrl) {
+						return (
+							<iframe
+								title={selectedFile?.nome || "Documento"}
+								src={pdfUrl}
+								className="h-full w-full"
+							/>
+						);
+					}
+					return (
+						<div className="flex h-full items-center justify-center p-6 text-center text-sm font-bold text-slate-400">
+							Não foi possível carregar a visualização do PDF.
+						</div>
+					);
+				})()}
 			</div>
 		</div>
 	);

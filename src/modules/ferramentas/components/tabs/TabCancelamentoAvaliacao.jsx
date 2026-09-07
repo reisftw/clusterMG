@@ -12,6 +12,13 @@ import {
 
 const formatDate = (date) => (date ? date.toLocaleDateString("pt-BR") : "");
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDropzoneClass(status) {
+	if (status === "ok" || status === "generating") return "border-green-400 bg-green-50";
+	if (status === "err") return "border-red-400 bg-red-50";
+	return "border-gray-200 bg-white hover:border-orange-400";
+}
+
 const monthKeyFromDate = (date) =>
 	date
 		? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
@@ -558,13 +565,7 @@ const TabCancelamentoAvaliacao = () => {
 	return (
 		<div className="space-y-4">
 			<div
-				className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
-					status === "ok" || status === "generating"
-						? "border-green-400 bg-green-50"
-						: status === "err"
-							? "border-red-400 bg-red-50"
-							: "border-gray-200 bg-white hover:border-orange-400"
-				}`}
+				className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${resolveDropzoneClass(status)}`}
 				onClick={() => inputRef.current?.click()}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" || event.key === " ") {
@@ -585,27 +586,34 @@ const TabCancelamentoAvaliacao = () => {
 				<span className="text-4xl font-black text-orange-500 block mb-3">
 					FTTH
 				</span>
-				{rawRows.length > 0 ? (
-					<>
-						<p className="font-semibold text-green-700">{fileName}</p>
-						<p className="text-sm text-green-600">
-							{analytics.totalRetiradas} clientes FIBRA em {rawRows.length}{" "}
-							linhas
-						</p>
-					</>
-				) : status === "loading" ? (
-					<p className="text-sm text-gray-500">Carregando planilha...</p>
-				) : (
-					<>
-						<p className="font-semibold text-gray-700">
-							Clique ou arraste a planilha de cancelamentos para avaliacao
-						</p>
-						<p className="text-xs text-gray-400 mt-1">
-							Agrupa clientes FIBRA por regional e mes usando cidade e data de
-							cancelamento
-						</p>
-					</>
-				)}
+				{(() => {
+					// Extraido pra achado javascript:S3358 (ternario aninhado).
+					if (rawRows.length > 0) {
+						return (
+							<>
+								<p className="font-semibold text-green-700">{fileName}</p>
+								<p className="text-sm text-green-600">
+									{analytics.totalRetiradas} clientes FIBRA em{" "}
+									{rawRows.length} linhas
+								</p>
+							</>
+						);
+					}
+					if (status === "loading") {
+						return <p className="text-sm text-gray-500">Carregando planilha...</p>;
+					}
+					return (
+						<>
+							<p className="font-semibold text-gray-700">
+								Clique ou arraste a planilha de cancelamentos para avaliacao
+							</p>
+							<p className="text-xs text-gray-400 mt-1">
+								Agrupa clientes FIBRA por regional e mes usando cidade e data de
+								cancelamento
+							</p>
+						</>
+					);
+				})()}
 			</div>
 
 			{rawRows.length > 0 && rows.length === 0 && (

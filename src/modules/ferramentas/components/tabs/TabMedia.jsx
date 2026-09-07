@@ -87,6 +87,13 @@ function writePorDiaCidadeRow({
 	);
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDropzoneClass(status) {
+	if (status === "ok") return "border-green-400 bg-green-50";
+	if (status === "err") return "border-red-400 bg-red-50";
+	return "border-gray-200 bg-white hover:border-orange-400";
+}
+
 const TabMedia = () => {
 	const { regionais, config } = useFerramentasRegionais();
 	const [status, setStatus] = useState(null);
@@ -965,7 +972,7 @@ const TabMedia = () => {
 		<div className="space-y-4">
 			<div
 				className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
-          ${status === "ok" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-orange-400"}`}
+          ${resolveDropzoneClass(status)}`}
 				onClick={() => inputRef.current?.click()}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" || event.key === " ") {
@@ -984,29 +991,36 @@ const TabMedia = () => {
 					onChange={load}
 				/>
 				<span className="text-4xl block mb-3">📊</span>
-				{status === "ok" ? (
-					<>
-						<p className="font-semibold text-green-700">{fname}</p>
-						<p className="text-sm text-green-600">
-							{rows.length} linhas · clique para trocar
-						</p>
-					</>
-				) : status === "loading" || status === "gerando" ? (
-					<p className="text-sm text-gray-500">Processando...</p>
-				) : (
-					<>
-						<p className="font-semibold text-gray-700">
-							Clique ou arraste o arquivo .xlsx
-						</p>
-						<p className="text-xs text-gray-400 mt-1">
-							Campos esperados:{" "}
-							<code>
-								num_o_s · tecnicos · endereco_instalacao ·
-								data_termino_executado
-							</code>
-						</p>
-					</>
-				)}
+				{(() => {
+					// Extraido pra achado javascript:S3358 (ternario aninhado).
+					if (status === "ok") {
+						return (
+							<>
+								<p className="font-semibold text-green-700">{fname}</p>
+								<p className="text-sm text-green-600">
+									{rows.length} linhas · clique para trocar
+								</p>
+							</>
+						);
+					}
+					if (status === "loading" || status === "gerando") {
+						return <p className="text-sm text-gray-500">Processando...</p>;
+					}
+					return (
+						<>
+							<p className="font-semibold text-gray-700">
+								Clique ou arraste o arquivo .xlsx
+							</p>
+							<p className="text-xs text-gray-400 mt-1">
+								Campos esperados:{" "}
+								<code>
+									num_o_s · tecnicos · endereco_instalacao ·
+									data_termino_executado
+								</code>
+							</p>
+						</>
+					);
+				})()}
 			</div>
 
 			{status === "ok" && (

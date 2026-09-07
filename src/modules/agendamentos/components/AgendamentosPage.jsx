@@ -198,6 +198,14 @@ const StatusBadge = ({ status }) => (
 	</span>
 );
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveCalendarDayClass(isToday, currentMonth) {
+	if (isToday) return "border-blue-300 bg-blue-50";
+	return currentMonth
+		? "border-gray-100 bg-gray-50 hover:bg-blue-50"
+		: "border-gray-50 bg-gray-50/50 text-gray-300";
+}
+
 const AgendamentosCalendar = ({
 	agendamentos,
 	mes,
@@ -282,13 +290,7 @@ const AgendamentosCalendar = ({
 									setModalPage(1);
 								}}
 								disabled={!itens.length}
-								className={`min-h-16 rounded-xl border p-2 text-left transition-colors disabled:cursor-default ${
-									isToday
-										? "border-blue-300 bg-blue-50"
-										: dia.currentMonth
-											? "border-gray-100 bg-gray-50 hover:bg-blue-50"
-											: "border-gray-50 bg-gray-50/50 text-gray-300"
-								} ${itens.length ? "cursor-pointer" : ""}`}
+								className={`min-h-16 rounded-xl border p-2 text-left transition-colors disabled:cursor-default ${resolveCalendarDayClass(isToday, dia.currentMonth)} ${itens.length ? "cursor-pointer" : ""}`}
 							>
 								<div className="flex items-center justify-between gap-1">
 									<span
@@ -527,12 +529,11 @@ const AgendamentosPage = () => {
 
 		return agendamentos.filter((item) => {
 			const data = String(item.data || "");
-			const periodoOk =
-				filtroPeriodo === "hoje"
-					? data === hoje
-					: filtroPeriodo === "proximos"
-						? data >= hoje && item.status !== "Cancelado"
-						: true;
+			// Extraido pra achado javascript:S3358 (ternario aninhado).
+			let periodoOk = true;
+			if (filtroPeriodo === "hoje") periodoOk = data === hoje;
+			else if (filtroPeriodo === "proximos")
+				periodoOk = data >= hoje && item.status !== "Cancelado";
 			const statusOk = filtroStatus === "todos" || item.status === filtroStatus;
 			const tecnicoOk =
 				filtroTecnico === "todos" || item.tecnico_nome === filtroTecnico;

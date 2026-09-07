@@ -2,6 +2,17 @@ import { useState } from "react";
 
 const PER_PAGE = 8;
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveRankingFillClass(over, done) {
+	if (over) return "over";
+	return done ? "complete" : "";
+}
+
+function resolveRankingValueColor(over, done) {
+	if (over) return "#7c3aed";
+	return done ? "var(--green)" : "var(--text)";
+}
+
 export default function RankingList({
 	items = [],
 	metaRef = 110,
@@ -27,7 +38,7 @@ export default function RankingList({
 				const w = maxVal > 0 ? Math.min((val / maxVal) * 100, 100) : 0;
 				const over = Number.parseFloat(pct) > 100;
 				const done = Number.parseFloat(pct) >= 100;
-				const fillCls = over ? "over" : done ? "complete" : "";
+				const fillCls = resolveRankingFillClass(over, done);
 
 				return (
 					<div className="rank-item" key={item.name ?? item.nome ?? i}>
@@ -50,7 +61,7 @@ export default function RankingList({
 						<div
 							className="rank-value"
 							style={{
-								color: over ? "#7c3aed" : done ? "var(--green)" : "var(--text)",
+								color: resolveRankingValueColor(over, done),
 							}}
 						>
 							{val}

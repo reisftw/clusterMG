@@ -59,13 +59,11 @@ export function useMapaOS(enabled = true) {
 		[data],
 	);
 
-	const fbStatus = error
-		? "Erro ao carregar dados"
-		: loading
-			? "Buscando resumo publico do mapa..."
-			: allData?.Janeiro?.summary?.totalOrdens
-				? "Sincronizado"
-				: "Nenhuma O.S em aberto encontrada";
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let fbStatus = "Nenhuma O.S em aberto encontrada";
+	if (error) fbStatus = "Erro ao carregar dados";
+	else if (loading) fbStatus = "Buscando resumo publico do mapa...";
+	else if (allData?.Janeiro?.summary?.totalOrdens) fbStatus = "Sincronizado";
 
 	return {
 		allData,

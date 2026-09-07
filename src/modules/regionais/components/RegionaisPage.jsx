@@ -29,15 +29,18 @@ function normalizeBackoffices(group = {}, legacy = []) {
 	return legacy.length ? legacy : [];
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveLegacyBackoffices(regional = {}) {
+	if (Array.isArray(regional.backoffices) && regional.backoffices.length) {
+		return regional.backoffices;
+	}
+	return regional.backoffice?.nome ? [regional.backoffice] : [];
+}
+
 function getRegionalOperationalGroups(regional = {}) {
 	const groups =
 		regional.gruposOperacionais || regional.grupos_operacionais || {};
-	const legacyBackoffices =
-		Array.isArray(regional.backoffices) && regional.backoffices.length
-			? regional.backoffices
-			: regional.backoffice?.nome
-				? [regional.backoffice]
-				: [];
+	const legacyBackoffices = resolveLegacyBackoffices(regional);
 	return {
 		delivery: {
 			lider: groups.delivery?.lider || regional.lider || emptyPessoa,
@@ -174,12 +177,7 @@ const RegionaisPage = () => {
 						0;
 
 					// Suporte ao formato antigo (backoffice) e novo (backoffices)
-					const listaBackoffices =
-						Array.isArray(regional.backoffices) && regional.backoffices.length
-							? regional.backoffices
-							: regional.backoffice?.nome
-								? [regional.backoffice]
-								: [];
+					const listaBackoffices = resolveLegacyBackoffices(regional);
 
 					const gruposOperacionais = getRegionalOperationalGroups(regional);
 					const temEquipe =

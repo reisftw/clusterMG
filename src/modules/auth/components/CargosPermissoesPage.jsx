@@ -241,11 +241,10 @@ function useCargosPermissoesController() {
 		try {
 			const data = await listarCargosPermissoes();
 			const nextCatalog = normalizeCatalog(data.permissions || []);
-			const nextRoles = data.roles?.length
-				? data.roles
-				: isAdmin && !isFinanScope
-					? DEFAULT_ROLE_OPTIONS
-					: [];
+			// Extraido pra achado javascript:S3358 (ternario aninhado).
+			let nextRoles = [];
+			if (data.roles?.length) nextRoles = data.roles;
+			else if (isAdmin && !isFinanScope) nextRoles = DEFAULT_ROLE_OPTIONS;
 			setPermissionCatalog(nextCatalog);
 			setRoles(nextRoles);
 			setSelectedId((current) => current || nextRoles[0]?.id || "");
@@ -626,11 +625,11 @@ function VerComoSection({
 					className="w-full rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-blue-950 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 lg:w-72"
 				>
 					<option value="">Admin real</option>
-					{(viewAsRoles.length
-						? viewAsRoles
-						: isFinanScope
-							? []
-							: CARGOS_RETIRADAS)
+					{(() => {
+						// Extraido pra achado javascript:S3358 (ternario aninhado).
+						if (viewAsRoles.length) return viewAsRoles;
+						return isFinanScope ? [] : CARGOS_RETIRADAS;
+					})()
 						.filter((cargo) => cargo.value !== ROLES.ADMIN)
 						.map((cargo) => (
 							<option key={cargo.value} value={cargo.value}>
