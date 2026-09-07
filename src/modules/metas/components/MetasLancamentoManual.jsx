@@ -1,5 +1,5 @@
 import { ChevronDown, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { listarRegionaisAdmin } from "../../auth/services/authService";
 import { buscarAgentes } from "../../regionais/services/agentesService";
@@ -382,8 +382,14 @@ function SectionEditor({
 	openSections,
 	onSectionOpenChange,
 	savingCard = false,
+	cardError = "",
 }) {
 	const [editingRowId, setEditingRowId] = useState(null);
+	// Confirmacao visivel de "Salvo!" antes de fechar o modal — sem isso o
+	// modal fechava na hora que o save terminava e o usuario nunca via
+	// nenhuma confirmacao (a mensagem "Card salvo." so aparecia la embaixo
+	// da pagina, atras do modal).
+	const [justSaved, setJustSaved] = useState(false);
 	const open = Boolean(openSections?.[sectionId]);
 	const editingRow = rows.find((row) => row.id === editingRowId) || null;
 	const openEditor = (row) => {
@@ -392,9 +398,11 @@ function SectionEditor({
 	};
 	const closeEditor = () => {
 		setEditingRowId(null);
+		setJustSaved(false);
 	};
 	const updateRow = (id, patch) => {
 		onDirty?.();
+		setJustSaved(false);
 		setRows((current) =>
 			current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
 		);
@@ -437,8 +445,14 @@ function SectionEditor({
 	const getRowGoal = (row = {}) =>
 		Math.round(Number(row.cancelamentos || 0) * (Number(goalPercent || 0) / 100));
 	const saveCard = async () => {
-		await onSaveCard?.();
+		const ok = await onSaveCard?.();
+		if (!ok) return;
 		onSectionOpenChange?.(sectionId, true);
+		setJustSaved(true);
+		// Deixa o "Salvo!" visivel por um instante antes de fechar, pra
+		// garantir que o usuario realmente viu a confirmacao (ver
+		// PR/relato: usuario nao tinha certeza se o card salvou).
+		await new Promise((resolve) => window.setTimeout(resolve, 700));
 		closeEditor();
 	};
 
@@ -508,6 +522,8 @@ function SectionEditor({
 					closeEditor={closeEditor}
 					saveCard={saveCard}
 					savingCard={savingCard}
+					justSaved={justSaved}
+					cardError={cardError}
 					getRowGoal={getRowGoal}
 				/>
 			) : null}
@@ -605,8 +621,15 @@ function SectionEditingModal({
 	closeEditor,
 	saveCard,
 	savingCard,
+	justSaved,
+	cardError,
 	getRowGoal,
 }) {
+	const saveButtonLabel = savingCard
+		? "Salvando..."
+		: justSaved
+			? "Salvo!"
+			: "Salvar card";
 	return (
 		<ModalShell
 			open
@@ -615,22 +638,34 @@ function SectionEditingModal({
 			onClose={closeEditor}
 			size="6xl"
 			footer={
-				<div className="flex justify-end gap-2">
-					<button
-						type="button"
-						onClick={closeEditor}
-						className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
-					>
-						Cancelar
-					</button>
-					<button
-						type="button"
-						onClick={saveCard}
-						disabled={savingCard}
-						className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						{savingCard ? "Salvando..." : "Salvar card"}
-					</button>
+				<div className="flex flex-col items-end gap-2">
+					{cardError ? (
+						<p className="w-full rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-right text-xs font-bold text-red-700">
+							{cardError}
+						</p>
+					) : null}
+					<div className="flex justify-end gap-2">
+						<button
+							type="button"
+							onClick={closeEditor}
+							disabled={savingCard}
+							className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							Cancelar
+						</button>
+						<button
+							type="button"
+							onClick={saveCard}
+							disabled={savingCard || justSaved}
+							className={`inline-flex min-h-11 items-center justify-center rounded-xl px-5 text-sm font-black text-white disabled:cursor-not-allowed ${
+								justSaved
+									? "bg-emerald-600 disabled:opacity-100"
+									: "bg-blue-600 hover:bg-blue-700 disabled:opacity-60"
+							}`}
+						>
+							{saveButtonLabel}
+						</button>
+					</div>
 				</div>
 			}
 		>
@@ -794,6 +829,13 @@ export default function MetasLancamentoManual({
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 	const [savingCard, setSavingCard] = useState(false);
+	// Guarda em ref (nao em state) pra bloquear cliques duplos de verdade:
+	// state so reflete no DOM no proximo render, entao um duplo-clique
+	// rapido (ou um clique enquanto o "Lançar nos painéis" já está
+	// salvando) podia passar pelos dois handlers antes do botão desabilitar
+	// — cada chamada via uma closure diferente, mas todas leem/escrevem o
+	// mesmo ref, entao a segunda chamada sempre ve o bloqueio da primeira.
+	const savingCardRef = useRef(false);
 	const dayCount = getDaysInMetaMonth(month, year);
 	const openSectionsCacheKey = getOpenSectionsStorageKey(month, year);
 	const publishResultCacheKey = getPublishResultStorageKey(month, year);
@@ -964,19 +1006,29 @@ export default function MetasLancamentoManual({
 	);
 
 	const saveCurrentCard = useCallback(async () => {
-		if (!canManage || saving || savingCard) return;
+		if (!canManage || saving || savingCardRef.current) return false;
+		savingCardRef.current = true;
 		setSavingCard(true);
 		setError("");
 		try {
 			await onSave(buildSavePayload());
 			setMessage("Card salvo.");
+			return true;
 		} catch (err) {
 			setError(err?.message || "Não foi possível salvar o card.");
 			throw err;
 		} finally {
+			savingCardRef.current = false;
 			setSavingCard(false);
 		}
-	}, [buildSavePayload, canManage, onSave, saving, savingCard]);
+	}, [buildSavePayload, canManage, onSave, saving]);
+
+	// Usado pra desabilitar o botao "Salvar card": cobre tanto um card
+	// sendo salvo quanto o "Lançar nos painéis" (saving) rodando ao mesmo
+	// tempo — sem isso, o botao do card ficava clicavel mesmo com outro
+	// save em andamento, e o clique era silenciosamente ignorado (guarda
+	// interna de saveCurrentCard barrava sem nenhum feedback visual).
+	const cardBusy = saving || savingCard;
 
 	const setSectionOpen = useCallback((sectionId, open) => {
 		setOpenSections((current) => {
@@ -1169,7 +1221,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<SectionEditor
@@ -1183,7 +1236,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<SectionEditor
@@ -1200,7 +1254,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<SectionEditor
@@ -1219,7 +1274,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<SectionEditor
@@ -1236,7 +1292,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<SectionEditor
@@ -1252,7 +1309,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<SectionEditor
@@ -1268,7 +1326,8 @@ export default function MetasLancamentoManual({
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
-				savingCard={savingCard}
+				savingCard={cardBusy}
+				cardError={error}
 			/>
 
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4">
