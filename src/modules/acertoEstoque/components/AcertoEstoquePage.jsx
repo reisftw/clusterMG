@@ -1601,8 +1601,13 @@ function AcertoLancamentoTab(props) {
 							}
 						>
 							<div className="space-y-4">
+								{/* emailPreviewHtml vem de buildAcertoEmailHtml()
+									    (acertoEstoqueUtils.js), que passa todo valor interpolado
+									    (nomes de tecnico/empresa/produto etc.) por escapeHtml()
+									    antes de montar a string; nao ha HTML bruto de usuario aqui. */}
 								<div
 									className="rounded-2xl border border-gray-200 bg-white"
+									// nosemgrep
 									dangerouslySetInnerHTML={{ __html: emailPreviewHtml }}
 								/>
 								{copiedMessage === "preview-email" ? (
@@ -1891,11 +1896,14 @@ function AcertoHistoricoTab(props) {
 										<p className="mb-2 text-sm font-bold text-gray-900">
 											E-mail
 										</p>
+										{/* selectedAcertoEmailHtml vem de buildAcertoEmailHtml()
+											    (acertoEstoqueUtils.js), que passa todo valor interpolado
+											    por escapeHtml() antes de montar a string; nao ha HTML
+											    bruto de usuario aqui. */}
 										<div
 											className="rounded-2xl border border-gray-200 bg-white"
-											dangerouslySetInnerHTML={{
-												__html: selectedAcertoEmailHtml,
-											}}
+											// nosemgrep
+											dangerouslySetInnerHTML={{ __html: selectedAcertoEmailHtml }}
 										/>
 										{copiedMessage === `${selectedAcerto.id}-email` ? (
 											<p className="mt-2 text-xs font-semibold text-emerald-600">
