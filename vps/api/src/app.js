@@ -682,11 +682,9 @@ function hasRole(user, roles) {
 }
 
 function getUserPermissions(user = {}) {
-	return Array.isArray(user?.profile?.permissions)
-		? user.profile.permissions
-		: Array.isArray(user?.permissions)
-			? user.permissions
-			: [];
+	if (Array.isArray(user?.profile?.permissions)) return user.profile.permissions;
+	if (Array.isArray(user?.permissions)) return user.permissions;
+	return [];
 }
 
 function hasPermission(user, permission) {
@@ -723,7 +721,8 @@ function requireAnyPermission(permissions, fallbackRoles = []) {
 
 function getPublicStaticCacheKey(domain, { compact = false } = {}) {
 	const key = String(domain || "").trim();
-	return key ? `${key}:${compact ? "compact" : "full"}` : "";
+	if (!key) return "";
+	return `${key}:${compact ? "compact" : "full"}`;
 }
 
 function getCachedPublicStaticSnapshot(domain, options = {}) {
@@ -1361,11 +1360,12 @@ function canAdministrativoManageUserRole(role) {
 }
 
 function getUserPermissionList(user = {}) {
-	const permissions = Array.isArray(user?.permissions)
-		? user.permissions
-		: Array.isArray(user?.profile?.permissions)
-			? user.profile.permissions
-			: [];
+	let permissions = [];
+	if (Array.isArray(user?.permissions)) {
+		permissions = user.permissions;
+	} else if (Array.isArray(user?.profile?.permissions)) {
+		permissions = user.profile.permissions;
+	}
 	return permissions
 		.map((permission) => String(permission || "").trim())
 		.filter(Boolean);
@@ -1867,11 +1867,12 @@ function getAuthCookieOptions(maxAgeSeconds) {
 function setCsrfCookie(res, csrfToken, maxAgeSeconds) {
 	const cookie = `${CSRF_COOKIE_NAME}=${encodeURIComponent(csrfToken || "")}; ${getBaseCookieOptions(maxAgeSeconds).join("; ")}`;
 	const previous = res.getHeader("Set-Cookie");
-	const cookies = Array.isArray(previous)
-		? previous
-		: previous
-			? [previous]
-			: [];
+	let cookies = [];
+	if (Array.isArray(previous)) {
+		cookies = previous;
+	} else if (previous) {
+		cookies = [previous];
+	}
 	res.setHeader("Set-Cookie", [...cookies, cookie]);
 }
 
@@ -3584,6 +3585,32 @@ function createApp() {
 		}
 	});
 
+	// Extraido do handler GET /api/documents abaixo (achado
+	// javascript:S3358 — ternario aninhado), mesma cadeia de resolucao por
+	// tipo de colecao de antes.
+	async function resolveCollectionDocuments(collectionPath, query) {
+		if (isLegacySchedulingCollection(collectionPath)) {
+			return listLegacySchedulingDocuments(collectionPath, query);
+		}
+		if (collectionPath === "regionais") {
+			return regionaisRepository.listRegionalDocuments({
+				limit: query.limit,
+				offset: query.offset,
+			});
+		}
+		if (collectionPath === "usuarios") {
+			return usersRepository.listUserDocuments({
+				limit: query.limit,
+				offset: query.offset,
+			});
+		}
+		return documents.listDocuments({
+			collectionPath,
+			limit: query.limit,
+			offset: query.offset,
+		});
+	}
+
 	app.get("/api/documents", requireAuthenticated, async (req, res, next) => {
 		try {
 			const collectionPath = String(req.query.collection || "").trim();
@@ -3597,24 +3624,7 @@ function createApp() {
 				return;
 			}
 
-			const items =
-				isLegacySchedulingCollection(collectionPath)
-					? await listLegacySchedulingDocuments(collectionPath, req.query)
-					: collectionPath === "regionais"
-					? await regionaisRepository.listRegionalDocuments({
-							limit: req.query.limit,
-							offset: req.query.offset,
-						})
-					: collectionPath === "usuarios"
-						? await usersRepository.listUserDocuments({
-								limit: req.query.limit,
-								offset: req.query.offset,
-							})
-						: await documents.listDocuments({
-								collectionPath,
-								limit: req.query.limit,
-								offset: req.query.offset,
-							});
+			const items = await resolveCollectionDocuments(collectionPath, req.query);
 			const visibleItems = await filterUserDocumentsForManager(
 				req.user,
 				collectionPath,

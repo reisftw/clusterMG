@@ -239,13 +239,14 @@ function getDocumentCardState({ currentFile, selectedFile, saving }) {
 		currentStatus === "reprovado" || currentAdminStatus === "reprovado";
 	const rejectionReason =
 		currentFile?.adminMotivoReprovacao || currentFile?.motivoReprovacao;
-	const helperText = saving
-		? "Enviando arquivo..."
-		: selectedFile
-			? "Arquivo selecionado"
-			: isRejected
-				? "Reenvie o documento corrigido"
-				: "Envie o arquivo solicitado";
+	let helperText = "Envie o arquivo solicitado";
+	if (saving) {
+		helperText = "Enviando arquivo...";
+	} else if (selectedFile) {
+		helperText = "Arquivo selecionado";
+	} else if (isRejected) {
+		helperText = "Reenvie o documento corrigido";
+	}
 
 	return { isRejected, rejectionReason, helperText };
 }
@@ -771,6 +772,12 @@ function LoginNotice({ tone = "blue", children }) {
 }
 
 function LoginPrimaryButton({ mfaChallenge, saving, submit, submitMfa }) {
+	let label = "Entrar";
+	if (saving) {
+		label = "Validando...";
+	} else if (mfaChallenge) {
+		label = "Validar código";
+	}
 	return (
 		<button
 			type="button"
@@ -778,8 +785,7 @@ function LoginPrimaryButton({ mfaChallenge, saving, submit, submitMfa }) {
 			disabled={saving}
 			className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg hover:bg-orange-600 disabled:opacity-60"
 		>
-			<LogIn size={18} />{" "}
-			{saving ? "Validando..." : mfaChallenge ? "Validar código" : "Entrar"}
+			<LogIn size={18} /> {label}
 		</button>
 	);
 }
@@ -792,6 +798,12 @@ function LoginSecondaryButton({
 	recoverPassword,
 }) {
 	const isMfa = Boolean(mfaChallenge);
+	let label = "Esqueci minha senha";
+	if (isMfa) {
+		label = "Voltar para login";
+	} else if (recovering) {
+		label = "Enviando link...";
+	}
 	return (
 		<button
 			type="button"
@@ -799,7 +811,7 @@ function LoginSecondaryButton({
 			onClick={isMfa ? resetMfa : recoverPassword}
 			className="w-full rounded-2xl border border-slate-200 px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
 		>
-			{isMfa ? "Voltar para login" : recovering ? "Enviando link..." : "Esqueci minha senha"}
+			{label}
 		</button>
 	);
 }
@@ -1349,13 +1361,14 @@ function SubmitDocumentsButton({
 		waitingReview ||
 		!visibleFields.length ||
 		!selectedFiles.length;
-	const label = saving
-		? "Enviando arquivos..."
-		: waitingReview
-			? "Aguardando avaliação"
-			: hasRejectedFields
-				? "Reenviar para aprovação"
-				: "Enviar para aprovação";
+	let label = "Enviar para aprovação";
+	if (saving) {
+		label = "Enviando arquivos...";
+	} else if (waitingReview) {
+		label = "Aguardando avaliação";
+	} else if (hasRejectedFields) {
+		label = "Reenviar para aprovação";
+	}
 
 	return (
 		<button
