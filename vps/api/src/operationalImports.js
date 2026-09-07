@@ -335,68 +335,20 @@ async function loadMatchIgnoredTypes() {
 // devolve o motivo pelo qual a linha deve ser ignorada. Extraido de
 // buildOrdersFromRows (achado javascript:S3776) — cada "return" antigo
 // virou um "status" de retorno, sem mudar nenhuma regra de negocio.
-function buildOrderFromRow(row, { cityMap, ignoredTypes, fontesSet, forMatch }) {
-	const numOs = getRowValue(row, [
-		"numero_ordem_servico",
-		"num_o_s",
-		"num_os",
-		"numero_os",
-	]);
-	const status = getRowValue(row, ["status"]);
-	const tipoRaw = getRowValue(row, ["tipo_ordem_servico", "tipo"]);
-	const tipo = String(tipoRaw || "").trim();
-	if (!numOs || !tipo || tipo === "-" || status === "-") {
-		return { status: "skip" };
-	}
+// Extraido de buildOrderFromRow (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md).
+function isIgnoredOrderType(tipo, ignoredTypes) {
+	const normalizedType = normalizeText(tipo);
+	return ignoredTypes.todos.some((item) => normalizeText(item) === normalizedType);
+}
 
-	if (forMatch) {
-		const normalizedType = normalizeText(tipo);
-		const shouldIgnore = ignoredTypes.todos.some(
-			(item) => normalizeText(item) === normalizedType,
-		);
-		if (shouldIgnore) return { status: "ignoredByType", tipo };
-	}
-
-	const statusNorm = normalizeStatus(status);
-	if (!statusNorm) return { status: "skip" };
-
-	const endereco = getRowValue(row, ["endereco", "endereco_instalacao"]);
-	const cidadeRaw = getRowValue(row, ["cidade"]) || extractCity(endereco);
-	const cidadeInformada = normalizeCity(cidadeRaw);
-	if (!cidadeInformada) return { status: "skip" };
-
-	const regionalRaw = getRowValue(row, [
-		"regional",
-		"regiao",
-		"região",
-		"nome_regional",
-		"regional_atendimento",
-	]);
-	const info = cityMap[normalizeCityKey(cidadeInformada)] || {
-		nome: cidadeInformada,
-		regional: regionalRaw ? String(regionalRaw).trim() : "Sem Regional",
-		agente: false,
-	};
-	if (forMatch && (!info.regional || info.regional === "Sem Regional")) {
-		return { status: "ignoredNoRegional" };
-	}
-
-	const fonteDaLinha = getFonteMapaPorRegional(info.regional);
-	if (!fontesSet.has(fonteDaLinha)) return { status: "skip" };
-
-	const fonteConfig = getMapaFonteConfig(fonteDaLinha);
+// Agrupa a extracao de contato/localizacao da linha (telefones, MAC/PHY,
+// coordenadas), mesma logica de antes.
+function extractOrderContactInfo(row) {
 	const numero = getRowValue(row, ["numero"]);
 	const bairro = getRowValue(row, ["bairro"]);
 	const coordenadas = getRowValue(row, ["coordenadas"]);
 	const coords = parseCoordinates(coordenadas);
-	const dataCadastro = normalizeMapaDateValue(
-		getRowValue(row, [
-			"data_cadastro",
-			"data_abertura",
-			"data_abertura_os",
-			"abertura",
-		]),
-	);
 	const telefonePrimario = getFirstRowValue(row, [
 		"telefone_primario",
 		"telefone_principal",
@@ -427,9 +379,32 @@ function buildOrderFromRow(row, { cityMap, ignoredTypes, fontesSet, forMatch }) 
 		normalizePhone(telefoneTerciario),
 		...parsePhoneList(getRowValue(row, ["telefones"])),
 	]);
-	const id = buildMapaDocumentId(numOs, fonteConfig.id);
+	return {
+		numero,
+		bairro,
+		coordenadas,
+		coords,
+		telefonePrimario,
+		telefoneSecundario,
+		telefoneTerciario,
+		macAddr,
+		phyAddr,
+		macCandidates,
+		telefones,
+	};
+}
 
-	const order = {
+// Monta o objeto de ordem final a partir dos campos ja resolvidos, mesmos
+// campos/ternarios de antes (so extraido pra funcao propria pra tirar
+// esses ~8 ternarios do orcamento de complexidade de buildOrderFromRow).
+function buildOrderRecord(row, ctx) {
+	const {
+		numOs, fonteConfig, statusNorm, tipo, info, cidadeInformada, dataCadastro,
+		endereco, numero, bairro, coordenadas, coords,
+		telefonePrimario, telefoneSecundario, telefoneTerciario, telefones,
+		macAddr, phyAddr, macCandidates,
+	} = ctx;
+	return {
 		num_os: String(numOs),
 		empresa: fonteConfig.empresa,
 		fonte: fonteConfig.id,
@@ -494,6 +469,77 @@ function buildOrderFromRow(row, { cityMap, ignoredTypes, fontesSet, forMatch }) 
 		latitude: coords?.latitude ?? null,
 		longitude: coords?.longitude ?? null,
 	};
+}
+
+function buildOrderFromRow(row, { cityMap, ignoredTypes, fontesSet, forMatch }) {
+	const numOs = getRowValue(row, [
+		"numero_ordem_servico",
+		"num_o_s",
+		"num_os",
+		"numero_os",
+	]);
+	const status = getRowValue(row, ["status"]);
+	const tipoRaw = getRowValue(row, ["tipo_ordem_servico", "tipo"]);
+	const tipo = String(tipoRaw || "").trim();
+	if (!numOs || !tipo || tipo === "-" || status === "-") {
+		return { status: "skip" };
+	}
+
+	if (forMatch && isIgnoredOrderType(tipo, ignoredTypes)) {
+		return { status: "ignoredByType", tipo };
+	}
+
+	const statusNorm = normalizeStatus(status);
+	if (!statusNorm) return { status: "skip" };
+
+	const endereco = getRowValue(row, ["endereco", "endereco_instalacao"]);
+	const cidadeRaw = getRowValue(row, ["cidade"]) || extractCity(endereco);
+	const cidadeInformada = normalizeCity(cidadeRaw);
+	if (!cidadeInformada) return { status: "skip" };
+
+	const regionalRaw = getRowValue(row, [
+		"regional",
+		"regiao",
+		"região",
+		"nome_regional",
+		"regional_atendimento",
+	]);
+	const info = cityMap[normalizeCityKey(cidadeInformada)] || {
+		nome: cidadeInformada,
+		regional: regionalRaw ? String(regionalRaw).trim() : "Sem Regional",
+		agente: false,
+	};
+	if (forMatch && (!info.regional || info.regional === "Sem Regional")) {
+		return { status: "ignoredNoRegional" };
+	}
+
+	const fonteDaLinha = getFonteMapaPorRegional(info.regional);
+	if (!fontesSet.has(fonteDaLinha)) return { status: "skip" };
+
+	const fonteConfig = getMapaFonteConfig(fonteDaLinha);
+	const dataCadastro = normalizeMapaDateValue(
+		getRowValue(row, [
+			"data_cadastro",
+			"data_abertura",
+			"data_abertura_os",
+			"abertura",
+		]),
+	);
+	const contactInfo = extractOrderContactInfo(row);
+	const id = buildMapaDocumentId(numOs, fonteConfig.id);
+
+	const order = buildOrderRecord(row, {
+		numOs,
+		id,
+		fonteConfig,
+		statusNorm,
+		tipo,
+		info,
+		cidadeInformada,
+		dataCadastro,
+		endereco,
+		...contactInfo,
+	});
 
 	return { status: "ok", id, order };
 }

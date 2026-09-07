@@ -207,6 +207,67 @@ function mergeLegacyEmpresas(legacyEmpresas, empresasById, empresasByName, empre
 // migra os tecnicos legados pras empresas correspondentes (ou cria um
 // placeholder quando nao acha a empresa), mutando empresasById in place.
 // Devolve os contadores usados no relatorio final.
+// Extraido de migrateTecnicos (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — acha a empresa do tecnico legado ou cria um
+// placeholder, mesma logica de antes. Muta empresasById/empresasByName
+// in place quando cria o placeholder.
+function resolveEmpresaIdForTecnico(
+	legacyTecnico,
+	tecnico,
+	empresasById,
+	empresasByName,
+	empresasByLegacyId,
+) {
+	const empresaId = findEmpresaIdForTecnico(
+		legacyTecnico,
+		empresasByLegacyId,
+		empresasByName,
+	);
+	if (empresaId) return { empresaId, placeholderCreated: false };
+
+	const fallbackName = text(
+		legacyTecnico.empresaNome || legacyTecnico.empresa || "Empresa nao informada",
+	);
+	const newEmpresaId = slugify(fallbackName) || "empresa-nao-informada";
+	if (empresasById.has(newEmpresaId)) {
+		return { empresaId: newEmpresaId, placeholderCreated: false };
+	}
+
+	empresasById.set(
+		newEmpresaId,
+		buildEmpresaPayload(newEmpresaId, {
+			id: newEmpresaId,
+			nome: fallbackName,
+			cidades: tecnico.cidade ? [tecnico.cidade] : [],
+			migradoDoAcertoEstoque: true,
+		}),
+	);
+	empresasByName.set(normalizeText(fallbackName), newEmpresaId);
+	return { empresaId: newEmpresaId, placeholderCreated: true };
+}
+
+// Extraido de migrateTecnicos — dedupe (por tecnicoKey) e adiciona o
+// tecnico na empresa, mesma logica de antes. Devolve false quando ja
+// existia (duplicata ignorada).
+function addTecnicoToEmpresa(empresasById, empresaId, tecnico) {
+	const empresa = empresasById.get(empresaId);
+	const tecnicos = Array.isArray(empresa.tecnicos) ? empresa.tecnicos : [];
+	const keys = new Set(tecnicos.map(tecnicoKey));
+	const nextTecnico = {
+		...tecnico,
+		id:
+			tecnico.id ||
+			`${empresaId}-${slugify(tecnico.nome)}-${tecnicos.length + 1}`,
+	};
+
+	if (keys.has(tecnicoKey(nextTecnico))) return false;
+
+	empresa.tecnicos = [...tecnicos, nextTecnico];
+	empresa.cidades = cleanList([...(empresa.cidades || []), nextTecnico.cidade]);
+	empresasById.set(empresaId, empresa);
+	return true;
+}
+
 function migrateTecnicos(legacyTecnicos, empresasById, empresasByName, empresasByLegacyId) {
 	let tecnicosMigrados = 0;
 	let tecnicosIgnorados = 0;
@@ -219,55 +280,20 @@ function migrateTecnicos(legacyTecnicos, empresasById, empresasByName, empresasB
 			continue;
 		}
 
-		let empresaId = findEmpresaIdForTecnico(
+		const { empresaId, placeholderCreated } = resolveEmpresaIdForTecnico(
 			legacyTecnico,
-			empresasByLegacyId,
+			tecnico,
+			empresasById,
 			empresasByName,
+			empresasByLegacyId,
 		);
-		if (!empresaId) {
-			const fallbackName = text(
-				legacyTecnico.empresaNome ||
-					legacyTecnico.empresa ||
-					"Empresa nao informada",
-			);
-			empresaId = slugify(fallbackName) || "empresa-nao-informada";
-			if (!empresasById.has(empresaId)) {
-				empresasById.set(
-					empresaId,
-					buildEmpresaPayload(empresaId, {
-						id: empresaId,
-						nome: fallbackName,
-						cidades: tecnico.cidade ? [tecnico.cidade] : [],
-						migradoDoAcertoEstoque: true,
-					}),
-				);
-				empresasByName.set(normalizeText(fallbackName), empresaId);
-				placeholdersCriados += 1;
-			}
-		}
+		if (placeholderCreated) placeholdersCriados += 1;
 
-		const empresa = empresasById.get(empresaId);
-		const tecnicos = Array.isArray(empresa.tecnicos) ? empresa.tecnicos : [];
-		const keys = new Set(tecnicos.map(tecnicoKey));
-		const nextTecnico = {
-			...tecnico,
-			id:
-				tecnico.id ||
-				`${empresaId}-${slugify(tecnico.nome)}-${tecnicos.length + 1}`,
-		};
-
-		if (keys.has(tecnicoKey(nextTecnico))) {
+		if (addTecnicoToEmpresa(empresasById, empresaId, tecnico)) {
+			tecnicosMigrados += 1;
+		} else {
 			tecnicosIgnorados += 1;
-			continue;
 		}
-
-		empresa.tecnicos = [...tecnicos, nextTecnico];
-		empresa.cidades = cleanList([
-			...(empresa.cidades || []),
-			nextTecnico.cidade,
-		]);
-		empresasById.set(empresaId, empresa);
-		tecnicosMigrados += 1;
 	}
 
 	return { tecnicosMigrados, tecnicosIgnorados, placeholdersCriados };

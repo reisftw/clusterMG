@@ -1199,13 +1199,10 @@ function getUserName(user = {}) {
 	);
 }
 
-async function findRegionalByCity(city) {
-	const target = normalizeText(city);
-	if (!target) return null;
-
-	const regionais = await regionaisRepository
-		.listAllRegionalDocuments()
-		.catch(() => []);
+// Extraido de findRegionalByCity (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cada loop de busca virou um helper dedicado,
+// mesma logica de antes.
+function findCityInRegionalDocuments(regionais, target, city) {
 	for (const row of regionais) {
 		const data = row.data || {};
 		const cidades = Array.isArray(data.cidades) ? data.cidades : [];
@@ -1227,10 +1224,10 @@ async function findRegionalByCity(city) {
 			};
 		}
 	}
+	return null;
+}
 
-	const empresas = await documents
-		.listAllDocuments(EMPRESAS_COLLECTION)
-		.catch(() => []);
+function findCityInEmpresaDocuments(empresas, target, city) {
 	for (const row of empresas) {
 		const data = row.data || {};
 		const cidades = Array.isArray(data.cidades) ? data.cidades : [];
@@ -1251,8 +1248,23 @@ async function findRegionalByCity(city) {
 			};
 		}
 	}
-
 	return null;
+}
+
+async function findRegionalByCity(city) {
+	const target = normalizeText(city);
+	if (!target) return null;
+
+	const regionais = await regionaisRepository
+		.listAllRegionalDocuments()
+		.catch(() => []);
+	const foundInRegionais = findCityInRegionalDocuments(regionais, target, city);
+	if (foundInRegionais) return foundInRegionais;
+
+	const empresas = await documents
+		.listAllDocuments(EMPRESAS_COLLECTION)
+		.catch(() => []);
+	return findCityInEmpresaDocuments(empresas, target, city);
 }
 
 function getEmpresaName(row = {}) {
@@ -2195,408 +2207,401 @@ async function handleReturningValidatedGreeting(config, phone, item, technician,
 
 // Extraido de handleEvolutionWebhook (achado javascript:S3776,
 // docs/SONARQUBE-MAP.md) — dispatch principal por `item.step`/comando de
-// menu, mesma logica de antes (mesma cadeia if/else if, sem mudanca de
-// comportamento). Muta `item` e devolve o texto de resposta.
-async function computeStepResponse(item, technician, text, config, phone) {
-	let responseText = "";
-	if (item.step === "onboarding_name") {
-		if (cleanText(text).length < 3) {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "nomeInvalido"),
-			);
-		} else {
-			item.invalidAttempts = 0;
-			item.name = cleanText(text);
-			technician = await saveTechnician(phone, {
-				...(technician || {}),
-				name: item.name,
-				whatsappName: item.whatsappName || "",
-				status: "pendente_cidade",
-			});
-			item.step = "onboarding_city";
-			responseText = config.templates.pedirCidade;
-		}
-	} else if (item.step === "onboarding_city") {
-		const location = await findRegionalByCity(text);
-		if (!location?.regional) {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "cidadeNaoEncontrada"),
-			);
-		} else {
-			item.invalidAttempts = 0;
-			technician = await saveTechnician(phone, {
-				city: location.cidade,
-				regional: location.regional,
-				status: "pendente_email",
-			});
-			item.city = location.cidade;
-			item.regional = location.regional;
-			item.step = "onboarding_email";
-			responseText = getTemplate(config, "regionalEncontrada", {
-				regional: location.regional,
-				pedir_empresa: config.templates.pedirEmail,
-			});
-		}
-	} else if (item.step === "onboarding_company") {
-		const empresa = await findEmpresaByTextAndRegional(
-			text,
-			technician?.regional || item.regional || "",
+// menu. Cada branch da cadeia if/else if original virou um handler
+// dedicado (mesma logica de cada um, sem mudanca de comportamento);
+// `computeStepResponse` so escolhe o handler pelo `item.step` num mapa
+// (achado javascript:S3776 tambem nele mesmo, ver STEP_HANDLERS abaixo).
+// Cada handler muta `item` e devolve o texto de resposta; a reatribuicao
+// local de `technician` dentro de um handler nunca escapa pra fora dele
+// (o caller de computeStepResponse so usa o responseText), entao extrair
+// em funcoes separadas nao muda nada do fluxo.
+
+async function handleOnboardingNameStep(item, technician, text, config, phone) {
+	if (cleanText(text).length < 3) {
+		return registerInvalidAttempt(item, config, getTemplate(config, "nomeInvalido"));
+	}
+	item.invalidAttempts = 0;
+	item.name = cleanText(text);
+	await saveTechnician(phone, {
+		...(technician || {}),
+		name: item.name,
+		whatsappName: item.whatsappName || "",
+		status: "pendente_cidade",
+	});
+	item.step = "onboarding_city";
+	return config.templates.pedirCidade;
+}
+
+async function handleOnboardingCityStep(item, technician, text, config, phone) {
+	const location = await findRegionalByCity(text);
+	if (!location?.regional) {
+		return registerInvalidAttempt(item, config, getTemplate(config, "cidadeNaoEncontrada"));
+	}
+	item.invalidAttempts = 0;
+	await saveTechnician(phone, {
+		city: location.cidade,
+		regional: location.regional,
+		status: "pendente_email",
+	});
+	item.city = location.cidade;
+	item.regional = location.regional;
+	item.step = "onboarding_email";
+	return getTemplate(config, "regionalEncontrada", {
+		regional: location.regional,
+		pedir_empresa: config.templates.pedirEmail,
+	});
+}
+
+async function handleOnboardingCompanyStep(item, technician, text, config) {
+	const empresa = await findEmpresaByTextAndRegional(
+		text,
+		technician?.regional || item.regional || "",
+	);
+	if (empresa) {
+		item.invalidAttempts = 0;
+		item.pendingEmpresa = empresa;
+		item.step = "confirm_company";
+		return getTemplate(config, "empresaConfirmacao", {
+			empresa: empresa.nome,
+			regional_linha: empresa.regional ? ` - ${empresa.regional}` : "",
+		});
+	}
+	const attempts = Number(item.companySearchAttempts || 0) + 1;
+	item.companySearchAttempts = attempts;
+	if (attempts < 2) {
+		return getTemplate(config, "empresaNaoEncontradaPrimeira");
+	}
+	item.invalidAttempts = 0;
+	item.step = "select_company";
+	const empresas = await listEmpresasByRegional(
+		technician?.regional || item.regional || "",
+	);
+	return buildEmpresaOptionsMessage(
+		config,
+		item,
+		empresas,
+		technician?.regional || item.regional || "",
+	);
+}
+
+// Compartilhado por confirm_company/select_company: com pendingEmailValidation
+// finaliza o cadastro do tecnico direto; sem isso, so aplica a empresa e
+// segue pro proximo passo pedindo o e-mail. Quem chama decide se/quando
+// zera `item.pendingEmpresa` (os dois steps originais tinham regras
+// diferentes pra esse campo, entao isso fica fora do helper).
+async function applyPendingEmpresaChoice(item, technician, empresa, phone, config) {
+	if (item.pendingEmailValidation) {
+		technician = await finalizeTechnicianRegistration(
+			phone,
+			technician,
+			item.pendingEmailValidation,
+			empresa,
+			item,
+			config,
 		);
-		if (empresa) {
-			item.invalidAttempts = 0;
-			item.pendingEmpresa = empresa;
-			item.step = "confirm_company";
-			responseText = getTemplate(config, "empresaConfirmacao", {
-				empresa: empresa.nome,
-				regional_linha: empresa.regional ? ` - ${empresa.regional}` : "",
-			});
-		} else {
-			const attempts = Number(item.companySearchAttempts || 0) + 1;
-			item.companySearchAttempts = attempts;
-			if (attempts >= 2) {
-				item.invalidAttempts = 0;
-				item.step = "select_company";
-				const empresas = await listEmpresasByRegional(
-					technician?.regional || item.regional || "",
-				);
-				responseText = buildEmpresaOptionsMessage(
-					config,
-					item,
-					empresas,
-					technician?.regional || item.regional || "",
-				);
-			} else {
-				responseText = getTemplate(config, "empresaNaoEncontradaPrimeira");
-			}
-		}
-	} else if (item.step === "confirm_company") {
-		if (text === "1") {
-			item.invalidAttempts = 0;
-			if (item.pendingEmailValidation) {
-				technician = await finalizeTechnicianRegistration(
-					phone,
-					technician,
-					item.pendingEmailValidation,
-					item.pendingEmpresa,
-					item,
-					config,
-				);
-				item.empresa = technician.empresa;
-				item.empresaId = technician.empresaId;
-				item.pendingEmailValidation = null;
-				item.pendingEmpresa = null;
-				item.step = "menu";
-				responseText = config.templates.menu;
-			} else {
-				technician = await applyEmpresaToTechnician(
-					phone,
-					technician,
-					item.pendingEmpresa,
-				);
-				item.empresa = technician.empresa;
-				item.empresaId = technician.empresaId;
-				item.step = "onboarding_email";
-				responseText = config.templates.pedirEmail;
-			}
-		} else if (text === "2") {
-			item.invalidAttempts = 0;
-			item.pendingEmpresa = null;
-			item.companySearchAttempts = Number(item.companySearchAttempts || 0);
-			item.step = "onboarding_company";
-			responseText = getTemplate(config, "empresaTentarNovamente");
-		} else {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "empresaConfirmacaoInvalida"),
-			);
-		}
-	} else if (item.step === "select_company") {
-		const selected = item.companyOptions?.find(
-			(option) => String(option.option) === text,
+		item.empresa = technician.empresa;
+		item.empresaId = technician.empresaId;
+		item.pendingEmailValidation = null;
+		item.step = "menu";
+		return config.templates.menu;
+	}
+	technician = await applyEmpresaToTechnician(phone, technician, empresa);
+	item.empresa = technician.empresa;
+	item.empresaId = technician.empresaId;
+	item.step = "onboarding_email";
+	return config.templates.pedirEmail;
+}
+
+async function handleConfirmCompanyStep(item, technician, text, config, phone) {
+	if (text === "1") {
+		item.invalidAttempts = 0;
+		const hadPendingEmailValidation = Boolean(item.pendingEmailValidation);
+		const responseText = await applyPendingEmpresaChoice(
+			item,
+			technician,
+			item.pendingEmpresa,
+			phone,
+			config,
 		);
-		if (selected) {
-			item.invalidAttempts = 0;
-			if (item.pendingEmailValidation) {
-				technician = await finalizeTechnicianRegistration(
-					phone,
-					technician,
-					item.pendingEmailValidation,
-					selected,
-					item,
-					config,
-				);
-				item.empresa = technician.empresa;
-				item.empresaId = technician.empresaId;
-				item.pendingEmailValidation = null;
-				item.step = "menu";
-				responseText = config.templates.menu;
-			} else {
-				technician = await applyEmpresaToTechnician(
-					phone,
-					technician,
-					selected,
-				);
-				item.empresa = technician.empresa;
-				item.empresaId = technician.empresaId;
-				item.step = "onboarding_email";
-				responseText = config.templates.pedirEmail;
-			}
-		} else {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "empresaListaInvalida"),
-			);
-		}
-	} else if (item.step === "onboarding_email") {
-		const validation = await validateHubsoftEmail(text);
-		if (!validation.ok)
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				`${config.templates.naoEntendi}\n${validation.error || "E-mail não validado."}`,
-			);
-		else {
-			item.invalidAttempts = 0;
-			const companyTechnician = await findEmpresaTechnicianByEmail(
-				validation.email,
-				technician?.regional || item.regional || "",
-			);
-			if (companyTechnician?.empresa) {
-				technician = await finalizeTechnicianRegistration(
-					phone,
-					technician,
-					validation,
-					companyTechnician.empresa,
-					item,
-					config,
-				);
-				item.name = technician.name || item.name;
-				item.empresa = technician.empresa;
-				item.empresaId = technician.empresaId;
-				item.regional = technician.regional || item.regional;
-				item.step = "menu";
-				responseText = [
-					getTemplate(config, "emailEmpresaEncontrada", {
-						empresa: technician.empresa || companyTechnician.empresa.nome,
-						regional_linha: technician.regional
-							? ` - ${technician.regional}`
-							: "",
-					}),
+		if (hadPendingEmailValidation) item.pendingEmpresa = null;
+		return responseText;
+	}
+	if (text === "2") {
+		item.invalidAttempts = 0;
+		item.pendingEmpresa = null;
+		item.companySearchAttempts = Number(item.companySearchAttempts || 0);
+		item.step = "onboarding_company";
+		return getTemplate(config, "empresaTentarNovamente");
+	}
+	return registerInvalidAttempt(item, config, getTemplate(config, "empresaConfirmacaoInvalida"));
+}
+
+async function handleSelectCompanyStep(item, technician, text, config, phone) {
+	const selected = item.companyOptions?.find(
+		(option) => String(option.option) === text,
+	);
+	if (!selected) {
+		return registerInvalidAttempt(item, config, getTemplate(config, "empresaListaInvalida"));
+	}
+	item.invalidAttempts = 0;
+	return applyPendingEmpresaChoice(item, technician, selected, phone, config);
+}
+
+async function handleOnboardingEmailStep(item, technician, text, config, phone) {
+	const validation = await validateHubsoftEmail(text);
+	if (!validation.ok) {
+		return registerInvalidAttempt(
+			item,
+			config,
+			`${config.templates.naoEntendi}\n${validation.error || "E-mail não validado."}`,
+		);
+	}
+	item.invalidAttempts = 0;
+	const companyTechnician = await findEmpresaTechnicianByEmail(
+		validation.email,
+		technician?.regional || item.regional || "",
+	);
+	if (!companyTechnician?.empresa) {
+		item.pendingEmailValidation = validation;
+		await saveTechnician(phone, {
+			...(technician || {}),
+			hubsoftEmail: validation.email,
+			hubsoftName: validation.nome,
+			seniorId: validation.seniorId,
+			hubsoftId: validation.hubsoftId,
+			status: "pendente_empresa",
+		});
+		item.step = "onboarding_company";
+		return getTemplate(config, "emailEmpresaNaoEncontrada");
+	}
+	technician = await finalizeTechnicianRegistration(
+		phone,
+		technician,
+		validation,
+		companyTechnician.empresa,
+		item,
+		config,
+	);
+	item.name = technician.name || item.name;
+	item.empresa = technician.empresa;
+	item.empresaId = technician.empresaId;
+	item.regional = technician.regional || item.regional;
+	item.step = "menu";
+	return [
+		getTemplate(config, "emailEmpresaEncontrada", {
+			empresa: technician.empresa || companyTechnician.empresa.nome,
+			regional_linha: technician.regional ? ` - ${technician.regional}` : "",
+		}),
+		"",
+		config.templates.menu,
+	].join("\n");
+}
+
+async function handleOsLookupMenuStep(item, technician, text, config) {
+	if (text === "1") {
+		item.invalidAttempts = 0;
+		item.step = "consulta_os";
+		return getTemplate(config, "consultaOsPergunta");
+	}
+	if (text === "2") {
+		item.invalidAttempts = 0;
+		item.step = "consulta_os_cidade";
+		return getTemplate(config, "consultaOsCidadePergunta");
+	}
+	if (text === "3") {
+		item.invalidAttempts = 0;
+		item.step = "menu";
+		return config.templates.menu;
+	}
+	return registerInvalidAttempt(item, config, getTemplate(config, "consultaOsMenuInvalido"));
+}
+
+async function handleConsultaOsStep(item, technician, text, config) {
+	item.invalidAttempts = 0;
+	const orders = await searchOpenOrders(text, technician || {}, { limit: 10 });
+	item.lastOpenOrders = orders;
+	item.step = orders.length ? "os_results_menu" : "menu";
+	return orders.length
+		? formatOpenOrdersResult(config, orders, { includeOptions: true })
+		: `${formatOpenOrdersResult(config, orders)}\n\n${config.templates.menu}`;
+}
+
+async function handleConsultaOsCidadeStep(item, technician, text, config) {
+	item.invalidAttempts = 0;
+	const orders = await searchOpenOrders(text, technician || {}, {
+		limit: 10,
+		mode: "city",
+	});
+	item.lastOpenOrders = orders;
+	item.lastOpenOrdersCity = cleanText(text);
+	item.step = orders.length ? "os_results_menu" : "menu";
+	return orders.length
+		? formatOpenOrdersResult(config, orders, { includeOptions: true })
+		: `${formatOpenOrdersResult(config, orders)}\n\n${config.templates.menu}`;
+}
+
+async function handleOsResultsMenuStep(item, technician, text, config) {
+	const normalized = normalizeText(text);
+	if (
+		normalized.includes("solicitar ordens") ||
+		normalized.includes("solicitar ordem") ||
+		text === "1"
+	) {
+		item.invalidAttempts = 0;
+		createOrdersBackofficeCase(
+			item,
+			technician,
+			item.lastOpenOrders || [],
+			item.osFlowType || "consulta_os",
+		);
+		return applyTemplate(config.templates.casoCriado, { protocolo: item.protocol });
+	}
+	if (normalized.includes("menu") || text === "2") {
+		item.invalidAttempts = 0;
+		item.step = "menu";
+		return config.templates.menu;
+	}
+	return registerInvalidAttempt(item, config, getTemplate(config, "consultaOsResultadoOpcoes"));
+}
+
+async function handleConsultaMacStep(item, technician, text, config) {
+	try {
+		item.invalidAttempts = 0;
+		const result = await sempreIntegration.consultEquipment(text);
+		const primary = result.primary || result.equipment?.[0] || {};
+		item.lastEquipmentLookup = {
+			mac: result.mac,
+			produto: getEquipmentProductName(primary),
+			cliente: getEquipmentLinkedCustomer(primary),
+			contrato: cleanText(
+				primary.contrato || primary.contratoId || primary.contrato_id || "",
+			),
+			codigoCliente: cleanText(
+				primary.codigoCliente ||
+					primary.codigo_cliente ||
+					primary.codCliente ||
+					primary.cod_cliente ||
 					"",
-					config.templates.menu,
-				].join("\n");
-			} else {
-				item.pendingEmailValidation = validation;
-				technician = await saveTechnician(phone, {
-					...(technician || {}),
-					hubsoftEmail: validation.email,
-					hubsoftName: validation.nome,
-					seniorId: validation.seniorId,
-					hubsoftId: validation.hubsoftId,
-					status: "pendente_empresa",
-				});
-				item.step = "onboarding_company";
-				responseText = getTemplate(config, "emailEmpresaNaoEncontrada");
-			}
-		}
-	} else if (item.step === "os_lookup_menu") {
-		if (text === "1") {
-			item.invalidAttempts = 0;
-			item.step = "consulta_os";
-			responseText = getTemplate(config, "consultaOsPergunta");
-		} else if (text === "2") {
-			item.invalidAttempts = 0;
-			item.step = "consulta_os_cidade";
-			responseText = getTemplate(config, "consultaOsCidadePergunta");
-		} else if (text === "3") {
-			item.invalidAttempts = 0;
-			item.step = "menu";
-			responseText = config.templates.menu;
-		} else {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "consultaOsMenuInvalido"),
-			);
-		}
-	} else if (item.step === "consulta_os") {
+			),
+			vinculadoId: primary.vinculadoId || primary.vinculado_id || "",
+			status: primary.status || "",
+		};
+		item.step = result?.found ? "consulta_mac_menu" : "menu";
+		return result?.found
+			? `${formatEquipmentResult(config, result)}\n\n${getTemplate(config, "consultaMacMenu")}`
+			: `${formatEquipmentResult(config, result)}\n\n${config.templates.menu}`;
+	} catch (error) {
+		return registerInvalidAttempt(
+			item,
+			config,
+			error?.message || getTemplate(config, "consultaMacErro"),
+		);
+	}
+}
+
+async function handleConsultaMacMenuStep(item, technician, text, config) {
+	if (text === "1") {
 		item.invalidAttempts = 0;
-		const orders = await searchOpenOrders(text, technician || {}, {
-			limit: 10,
-		});
-		item.lastOpenOrders = orders;
-		item.step = orders.length ? "os_results_menu" : "menu";
-		responseText = orders.length
-			? formatOpenOrdersResult(config, orders, { includeOptions: true })
-			: `${formatOpenOrdersResult(config, orders)}\n\n${config.templates.menu}`;
-	} else if (item.step === "consulta_os_cidade") {
+		const lookup = item.lastEquipmentLookup || {};
+		const orders = lookup.cliente
+			? await searchOpenOrders(lookup, technician || {}, {
+					limit: 10,
+					mode: "customer",
+				})
+			: [];
+		const retiradaOrders = uniqueOrders(orders.filter((order) => isRetiradaOrder(order)));
+		item.lastEquipmentWithdrawalOrders = retiradaOrders;
+		item.step = retiradaOrders.length ? "consulta_mac_retirada_menu" : "menu";
+		return retiradaOrders.length
+			? formatMacWithdrawalLookup(config, retiradaOrders)
+			: `${getTemplate(config, "consultaMacClienteRetiradaSemResultado")}\n\n${config.templates.menu}`;
+	}
+	if (text === "2") {
 		item.invalidAttempts = 0;
-		const orders = await searchOpenOrders(text, technician || {}, {
-			limit: 10,
-			mode: "city",
-		});
-		item.lastOpenOrders = orders;
-		item.lastOpenOrdersCity = cleanText(text);
-		item.step = orders.length ? "os_results_menu" : "menu";
-		responseText = orders.length
-			? formatOpenOrdersResult(config, orders, { includeOptions: true })
-			: `${formatOpenOrdersResult(config, orders)}\n\n${config.templates.menu}`;
-	} else if (item.step === "os_results_menu") {
-		const normalized = normalizeText(text);
-		if (
-			normalized.includes("solicitar ordens") ||
-			normalized.includes("solicitar ordem") ||
-			text === "1"
-		) {
-			item.invalidAttempts = 0;
-			createOrdersBackofficeCase(
-				item,
-				technician,
-				item.lastOpenOrders || [],
-				item.osFlowType || "consulta_os",
-			);
-			responseText = applyTemplate(config.templates.casoCriado, {
-				protocolo: item.protocol,
-			});
-		} else if (normalized.includes("menu") || text === "2") {
-			item.invalidAttempts = 0;
-			item.step = "menu";
-			responseText = config.templates.menu;
-		} else {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "consultaOsResultadoOpcoes"),
-			);
-		}
-	} else if (item.step === "consulta_mac") {
-		try {
-			item.invalidAttempts = 0;
-			const result = await sempreIntegration.consultEquipment(text);
-			const primary = result.primary || result.equipment?.[0] || {};
-			item.lastEquipmentLookup = {
-				mac: result.mac,
-				produto: getEquipmentProductName(primary),
-				cliente: getEquipmentLinkedCustomer(primary),
-				contrato: cleanText(
-					primary.contrato || primary.contratoId || primary.contrato_id || "",
-				),
-				codigoCliente: cleanText(
-					primary.codigoCliente ||
-						primary.codigo_cliente ||
-						primary.codCliente ||
-						primary.cod_cliente ||
-						"",
-				),
-				vinculadoId: primary.vinculadoId || primary.vinculado_id || "",
-				status: primary.status || "",
-			};
-			item.step = result?.found ? "consulta_mac_menu" : "menu";
-			responseText = result?.found
-				? `${formatEquipmentResult(config, result)}\n\n${getTemplate(config, "consultaMacMenu")}`
-				: `${formatEquipmentResult(config, result)}\n\n${config.templates.menu}`;
-		} catch (error) {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				error?.message || getTemplate(config, "consultaMacErro"),
-			);
-		}
-	} else if (item.step === "consulta_mac_menu") {
-		if (text === "1") {
-			item.invalidAttempts = 0;
-			const lookup = item.lastEquipmentLookup || {};
-			const orders = lookup.cliente
-				? await searchOpenOrders(lookup, technician || {}, {
-						limit: 10,
-						mode: "customer",
-					})
-				: [];
-			const retiradaOrders = uniqueOrders(
-				orders.filter((order) => isRetiradaOrder(order)),
-			);
-			item.lastEquipmentWithdrawalOrders = retiradaOrders;
-			item.step = retiradaOrders.length ? "consulta_mac_retirada_menu" : "menu";
-			responseText = retiradaOrders.length
-				? formatMacWithdrawalLookup(config, retiradaOrders)
-				: `${getTemplate(config, "consultaMacClienteRetiradaSemResultado")}\n\n${config.templates.menu}`;
-		} else if (text === "2") {
-			item.invalidAttempts = 0;
-			item.step = "menu";
-			responseText = config.templates.menu;
-		} else {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "naoEntendi"),
-			);
-		}
-	} else if (item.step === "consulta_mac_retirada_menu") {
-		if (text === "1") {
-			item.invalidAttempts = 0;
-			createOrdersBackofficeCase(
-				item,
-				technician,
-				item.lastEquipmentWithdrawalOrders || [],
-				"consulta_mac",
-			);
-			item.context = {
-				...(item.context || {}),
-				origem: "consulta_mac",
-				equipamento: item.lastEquipmentLookup || null,
-				ordensRetirada: uniqueOrders(item.lastEquipmentWithdrawalOrders || []),
-			};
-			responseText = applyTemplate(config.templates.casoCriado, {
-				protocolo: item.protocol,
-			});
-		} else if (text === "2") {
-			responseText = markCaseAwaitingRating(
-				item,
-				config,
-				technician?.name || technician?.hubsoftName || item.name || "Técnico",
-				{ technician },
-			);
-		} else {
-			responseText = registerInvalidAttempt(
-				item,
-				config,
-				getTemplate(config, "naoEntendi"),
-			);
-		}
-	} else if (text === "1") {
+		item.step = "menu";
+		return config.templates.menu;
+	}
+	return registerInvalidAttempt(item, config, getTemplate(config, "naoEntendi"));
+}
+
+async function handleConsultaMacRetiradaMenuStep(item, technician, text, config) {
+	if (text === "1") {
+		item.invalidAttempts = 0;
+		createOrdersBackofficeCase(
+			item,
+			technician,
+			item.lastEquipmentWithdrawalOrders || [],
+			"consulta_mac",
+		);
+		item.context = {
+			...(item.context || {}),
+			origem: "consulta_mac",
+			equipamento: item.lastEquipmentLookup || null,
+			ordensRetirada: uniqueOrders(item.lastEquipmentWithdrawalOrders || []),
+		};
+		return applyTemplate(config.templates.casoCriado, { protocolo: item.protocol });
+	}
+	if (text === "2") {
+		return markCaseAwaitingRating(
+			item,
+			config,
+			technician?.name || technician?.hubsoftName || item.name || "Técnico",
+			{ technician },
+		);
+	}
+	return registerInvalidAttempt(item, config, getTemplate(config, "naoEntendi"));
+}
+
+// Fallback quando `item.step` nao bate com nenhum STEP_HANDLERS (ex.:
+// step "menu"): dispatch pelo texto digitado, mesma cadeia de antes.
+async function handleMenuCommand(item, technician, text, config) {
+	if (text === "1") {
 		item.invalidAttempts = 0;
 		item.osFlowType = "consulta_os";
 		item.step = "os_lookup_menu";
-		responseText = openOrdersLookupMenu(config, item.osFlowType);
-	} else if (text === "2") {
+		return openOrdersLookupMenu(config, item.osFlowType);
+	}
+	if (text === "2") {
 		item.invalidAttempts = 0;
 		item.step = "consulta_mac";
-		responseText = getTemplate(config, "consultaMacPergunta");
-	} else if (
-		text === "4" ||
-		normalizeText(text).includes("atualizar cadastro")
-	) {
+		return getTemplate(config, "consultaMacPergunta");
+	}
+	if (text === "4" || normalizeText(text).includes("atualizar cadastro")) {
 		item.invalidAttempts = 0;
 		item.companySearchAttempts = 0;
 		item.step = "onboarding_name";
-		responseText = getTemplate(config, "atualizarCadastroInicio");
-	} else if (normalizeText(text).includes("retirada") || text === "3") {
+		return getTemplate(config, "atualizarCadastroInicio");
+	}
+	if (normalizeText(text).includes("retirada") || text === "3") {
 		item.invalidAttempts = 0;
 		item.osFlowType = "solicitacao_retirada";
 		item.step = "os_lookup_menu";
-		responseText = openOrdersLookupMenu(config, item.osFlowType);
-	} else {
-		item.step = "menu";
-		responseText = config.templates.menu;
+		return openOrdersLookupMenu(config, item.osFlowType);
 	}
+	item.step = "menu";
+	return config.templates.menu;
+}
 
-	return responseText;
+const STEP_HANDLERS = {
+	onboarding_name: handleOnboardingNameStep,
+	onboarding_city: handleOnboardingCityStep,
+	onboarding_company: handleOnboardingCompanyStep,
+	confirm_company: handleConfirmCompanyStep,
+	select_company: handleSelectCompanyStep,
+	onboarding_email: handleOnboardingEmailStep,
+	os_lookup_menu: handleOsLookupMenuStep,
+	consulta_os: handleConsultaOsStep,
+	consulta_os_cidade: handleConsultaOsCidadeStep,
+	os_results_menu: handleOsResultsMenuStep,
+	consulta_mac: handleConsultaMacStep,
+	consulta_mac_menu: handleConsultaMacMenuStep,
+	consulta_mac_retirada_menu: handleConsultaMacRetiradaMenuStep,
+};
+
+async function computeStepResponse(item, technician, text, config, phone) {
+	const handler = STEP_HANDLERS[item.step];
+	if (handler) return handler(item, technician, text, config, phone);
+	return handleMenuCommand(item, technician, text, config, phone);
 }
 
 async function handleEvolutionWebhook(payload = {}) {

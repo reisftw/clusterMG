@@ -1230,6 +1230,117 @@ async function validateMonthlySubmissionRequest({ user, mesReferencia, fieldIds,
 	return { empresa, month, activeFields, fieldMap, submission, existingFiles };
 }
 
+// Extraido de createMonthlySubmission (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cria a submission ou reabre a existente como
+// pendente, mesma logica de antes.
+async function getOrCreateMonthlySubmission(submission, empresa, month, user) {
+	if (!submission) {
+		return repository.createSubmission({
+			empresaId: empresa.id,
+			empresaNome: empresa.nome,
+			supervisorId: empresa.supervisorId,
+			supervisorNome: empresa.supervisorNome,
+			supervisorEmail: empresa.supervisorEmail,
+			regional: empresa.regional,
+			mesReferencia: month,
+			submittedBy: userId(user),
+			submittedByName: userName(user),
+			submittedByEmail: userEmail(user) || empresa.responsavelEmail,
+		});
+	}
+	return repository.markSubmissionPending(submission.id, {
+		submittedBy: userId(user),
+		submittedByName: userName(user),
+		submittedByEmail: userEmail(user) || empresa.responsavelEmail,
+	});
+}
+
+// Extraido de createMonthlySubmission — envia um unico arquivo (removendo
+// reenvios pendentes anteriores do mesmo campo antes) e grava o registro
+// do arquivo, mesma logica de antes.
+async function uploadMonthlyDocumentFile(file, field, ctx) {
+	const { empresa, month, monthFolder, submission, user, existingFiles } = ctx;
+	if (field?.id) {
+		const repeatedFiles = documentFilesOnly(existingFiles).filter(
+			(item) =>
+				item.fieldId === field.id && normalize(item.status) !== "aprovado",
+		);
+		for (const repeatedFile of repeatedFiles) {
+			await deleteDriveFileQuietly(repeatedFile);
+		}
+	}
+	let uploaded = null;
+	try {
+		uploaded = await drive.uploadFile({
+			file,
+			folderId: monthFolder.id,
+			name: field?.nome
+				? monthlyDocumentFileName(field, month, file)
+				: file.originalname,
+		});
+	} catch (error) {
+		const uploadError = new Error(
+			`Falha ao enviar arquivo para o Google Drive: ${error?.message || "erro desconhecido"}`,
+		);
+		uploadError.statusCode = error?.statusCode || 502;
+		throw uploadError;
+	}
+	return repository.createFile({
+		empresaId: empresa.id,
+		empresaNome: empresa.nome,
+		supervisorId: empresa.supervisorId,
+		supervisorNome: empresa.supervisorNome,
+		regional: empresa.regional,
+		driveFileId: uploaded.id,
+		driveFolderId: monthFolder.id,
+		parentDriveFolderId: monthFolder.id,
+		nome: uploaded.name || file.originalname,
+		mimeType: uploaded.mimeType || file.mimetype,
+		tipo: field?.nome || "Documento",
+		tamanho: Number(uploaded.size || file.size || 0),
+		status: "pendente",
+		uploadedBy: userId(user),
+		uploadedByName: userName(user),
+		submissionId: submission.id,
+		fieldId: field?.id || null,
+		fieldNome: field?.nome || null,
+		mesReferencia: month,
+	});
+}
+
+// Extraido de createMonthlySubmission — mesmo for original, so delega
+// cada iteracao pro helper acima.
+async function uploadMonthlySubmissionFiles(files, fieldIds, ctx) {
+	const uploadedFiles = [];
+	for (let index = 0; index < files.length; index += 1) {
+		const file = files[index];
+		const field = ctx.fieldMap.get(fieldIds[index]) || null;
+		uploadedFiles.push(await uploadMonthlyDocumentFile(file, field, ctx));
+	}
+	return uploadedFiles;
+}
+
+// Extraido de createMonthlySubmission — mesmos campos/ternarios de antes.
+function buildSubmissionStatusPatch(nextStatus, allFiles, submission) {
+	return {
+		status: nextStatus,
+		motivoReprovacao:
+			nextStatus === "reprovado"
+				? latestFilesByField(allFiles)
+						.filter((item) => normalize(item.status) === "reprovado")
+						.map(
+							(item) =>
+								`${item.fieldNome || item.nome}: ${item.motivoReprovacao || "-"}`,
+						)
+						.join("\n")
+				: null,
+		reviewedBy: nextStatus === "pendente" ? null : submission.reviewedBy,
+		reviewedByName:
+			nextStatus === "pendente" ? null : submission.reviewedByName,
+		reviewedAt: nextStatus === "pendente" ? null : submission.reviewedAt,
+	};
+}
+
 async function createMonthlySubmission({
 	mesReferencia,
 	files = [],
@@ -1242,101 +1353,23 @@ async function createMonthlySubmission({
 	files.forEach(ensureAllowedMonthlyDocument);
 
 	const { monthFolder } = await ensureMonthFolder(empresa, month, user);
-	if (!submission) {
-		submission = await repository.createSubmission({
-			empresaId: empresa.id,
-			empresaNome: empresa.nome,
-			supervisorId: empresa.supervisorId,
-			supervisorNome: empresa.supervisorNome,
-			supervisorEmail: empresa.supervisorEmail,
-			regional: empresa.regional,
-			mesReferencia: month,
-			submittedBy: userId(user),
-			submittedByName: userName(user),
-			submittedByEmail: userEmail(user) || empresa.responsavelEmail,
-		});
-	} else {
-		submission = await repository.markSubmissionPending(submission.id, {
-			submittedBy: userId(user),
-			submittedByName: userName(user),
-			submittedByEmail: userEmail(user) || empresa.responsavelEmail,
-		});
-	}
+	submission = await getOrCreateMonthlySubmission(submission, empresa, month, user);
 
-	const uploadedFiles = [];
-	for (let index = 0; index < files.length; index += 1) {
-		const file = files[index];
-		const field = fieldMap.get(fieldIds[index]) || null;
-		if (field?.id) {
-			const repeatedFiles = documentFilesOnly(existingFiles).filter(
-				(item) =>
-					item.fieldId === field.id && normalize(item.status) !== "aprovado",
-			);
-			for (const repeatedFile of repeatedFiles) {
-				await deleteDriveFileQuietly(repeatedFile);
-			}
-		}
-		let uploaded = null;
-		try {
-			uploaded = await drive.uploadFile({
-				file,
-				folderId: monthFolder.id,
-				name: field?.nome
-					? monthlyDocumentFileName(field, month, file)
-					: file.originalname,
-			});
-		} catch (error) {
-			const uploadError = new Error(
-				`Falha ao enviar arquivo para o Google Drive: ${error?.message || "erro desconhecido"}`,
-			);
-			uploadError.statusCode = error?.statusCode || 502;
-			throw uploadError;
-		}
-		uploadedFiles.push(
-			await repository.createFile({
-				empresaId: empresa.id,
-				empresaNome: empresa.nome,
-				supervisorId: empresa.supervisorId,
-				supervisorNome: empresa.supervisorNome,
-				regional: empresa.regional,
-				driveFileId: uploaded.id,
-				driveFolderId: monthFolder.id,
-				parentDriveFolderId: monthFolder.id,
-				nome: uploaded.name || file.originalname,
-				mimeType: uploaded.mimeType || file.mimetype,
-				tipo: field?.nome || "Documento",
-				tamanho: Number(uploaded.size || file.size || 0),
-				status: "pendente",
-				uploadedBy: userId(user),
-				uploadedByName: userName(user),
-				submissionId: submission.id,
-				fieldId: field?.id || null,
-				fieldNome: field?.nome || null,
-				mesReferencia: month,
-			}),
-		);
-	}
+	const uploadedFiles = await uploadMonthlySubmissionFiles(files, fieldIds, {
+		fieldMap,
+		existingFiles,
+		empresa,
+		month,
+		monthFolder,
+		submission,
+		user,
+	});
+
 	const allFiles = await repository.listSubmissionFiles(submission.id);
 	const nextStatus = computeSubmissionStatus(allFiles);
 	const updatedSubmission = await repository.updateSubmissionOnly(
 		submission.id,
-		{
-			status: nextStatus,
-			motivoReprovacao:
-				nextStatus === "reprovado"
-					? latestFilesByField(allFiles)
-							.filter((item) => normalize(item.status) === "reprovado")
-							.map(
-								(item) =>
-									`${item.fieldNome || item.nome}: ${item.motivoReprovacao || "-"}`,
-							)
-							.join("\n")
-					: null,
-			reviewedBy: nextStatus === "pendente" ? null : submission.reviewedBy,
-			reviewedByName:
-				nextStatus === "pendente" ? null : submission.reviewedByName,
-			reviewedAt: nextStatus === "pendente" ? null : submission.reviewedAt,
-		},
+		buildSubmissionStatusPatch(nextStatus, allFiles, submission),
 	);
 	notifyInBackground(() =>
 		notifySubmissionCreated(updatedSubmission || submission),

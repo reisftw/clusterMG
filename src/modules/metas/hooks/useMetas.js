@@ -274,75 +274,58 @@ function buildEmptyDaily(length) {
 	return Array.from({ length }, () => 0);
 }
 
-function parseOnnetMonth(wb, mes, feriadosExtras = []) {
-	const sheetName = ONNET_SHEET_BY_MONTH[mes];
-	const ws = sheetName ? findSheet(wb, sheetName) : null;
-	if (!ws) return null;
-
-	const lojaHeaderRow = findRowByLabel(ws, "ENTREGUE EM LOJA", 1, 30);
-	const regionaisHeaderRow = findRowByLabel(ws, "REGIONAIS", 1, 40);
-	const totalRegionaisRow = findRowByLabel(ws, "TOTAL REGIONAIS", 1, 60);
-	const totalColIdx =
-		findCellColumnByLabel(ws, "TOTAL", lojaHeaderRow, 2, 60) ??
-		findCellColumnByLabel(ws, "TOTAL", regionaisHeaderRow, 2, 60) ??
-		33;
-	const totalCol = encCol(totalColIdx);
-	const dayColStart = 2;
-	const dayColEnd = Math.max(dayColStart - 1, totalColIdx - 1);
-	const dayCount = Math.max(0, dayColEnd - dayColStart + 1);
-	const lojaRow = lojaHeaderRow ? lojaHeaderRow + 1 : null;
-
-	const cancelamentos = cv(ws, "B", 4);
-	const meta = cv(ws, "B", 5);
-	const metaSazonal = META_SAZONAL[mes] ?? 80;
-	const lojaTotal = lojaRow ? cv(ws, totalCol, lojaRow) : 0;
+// Extraido de parseOnnetMonth (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md), mesma logica de antes.
+function buildOnnetLojaDaily(ws, lojaRow, dayColStart, dayColEnd) {
 	const lojaDaily = [];
 	for (let col = dayColStart; col <= dayColEnd; col++) {
 		lojaDaily.push(lojaRow ? cv(ws, encCol(col), lojaRow) : 0);
 	}
+	return lojaDaily;
+}
 
+function buildOnnetRegionais(
+	ws,
+	{ regionaisHeaderRow, totalRegionaisRow, totalCol, dayColStart, dayColEnd },
+) {
 	const regionais = [];
 	const firstRegionalRow = regionaisHeaderRow ? regionaisHeaderRow + 1 : null;
 	const lastRegionalRow = totalRegionaisRow ? totalRegionaisRow - 1 : null;
 	if (
-		firstRegionalRow &&
-		lastRegionalRow &&
-		lastRegionalRow >= firstRegionalRow
+		!firstRegionalRow ||
+		!lastRegionalRow ||
+		lastRegionalRow < firstRegionalRow
 	) {
-		for (let row = firstRegionalRow; row <= lastRegionalRow; row++) {
-			const name = ct(ws, "B", row);
-			if (!name) continue;
-			const total = cv(ws, totalCol, row);
-			const daily = [];
-			for (let col = dayColStart; col <= dayColEnd; col++) {
-				daily.push(cv(ws, encCol(col), row));
-			}
-			regionais.push({
-				name,
-				total,
-				daily,
-				percent: ((total / 110) * 100).toFixed(1),
-			});
+		return regionais;
+	}
+	for (let row = firstRegionalRow; row <= lastRegionalRow; row++) {
+		const name = ct(ws, "B", row);
+		if (!name) continue;
+		const total = cv(ws, totalCol, row);
+		const daily = [];
+		for (let col = dayColStart; col <= dayColEnd; col++) {
+			daily.push(cv(ws, encCol(col), row));
 		}
+		regionais.push({
+			name,
+			total,
+			daily,
+			percent: ((total / 110) * 100).toFixed(1),
+		});
 	}
 	regionais.sort((a, b) => b.total - a.total);
+	return regionais;
+}
 
-	const totalRegionais = regionais.reduce(
-		(sum, item) => sum + Number(item.total || 0),
-		0,
-	);
-	const totalMensal = totalRegionais + lojaTotal;
-	const dashboardTotalOS = cv(ws, "B", 21);
-	const totalOS = dashboardTotalOS > 0 ? dashboardTotalOS : totalMensal;
-	const percentAchieved =
-		meta > 0 ? Number(((totalOS / meta) * 100).toFixed(1)) : 0;
-
-	const { metaPorDia, metaAcumuladaPorDia } = buildMetaDiariaSchedule({
-		month: mes,
-		meta,
-		feriadosSet: feriadosExtras,
-	});
-
+function buildOnnetSaldoDiario({
+	dayCount,
+	mes,
+	feriadosExtras,
+	regionais,
+	lojaDaily,
+	metaPorDia,
+	metaAcumuladaPorDia,
+}) {
 	const saldoDiarioCalculado = [];
 	let saldoMes = 0;
 	for (let index = 0; index < dayCount; index++) {
@@ -372,6 +355,66 @@ function parseOnnetMonth(wb, mes, feriadosExtras = []) {
 			saldoMes,
 		});
 	}
+	return saldoDiarioCalculado;
+}
+
+function parseOnnetMonth(wb, mes, feriadosExtras = []) {
+	const sheetName = ONNET_SHEET_BY_MONTH[mes];
+	const ws = sheetName ? findSheet(wb, sheetName) : null;
+	if (!ws) return null;
+
+	const lojaHeaderRow = findRowByLabel(ws, "ENTREGUE EM LOJA", 1, 30);
+	const regionaisHeaderRow = findRowByLabel(ws, "REGIONAIS", 1, 40);
+	const totalRegionaisRow = findRowByLabel(ws, "TOTAL REGIONAIS", 1, 60);
+	const totalColIdx =
+		findCellColumnByLabel(ws, "TOTAL", lojaHeaderRow, 2, 60) ??
+		findCellColumnByLabel(ws, "TOTAL", regionaisHeaderRow, 2, 60) ??
+		33;
+	const totalCol = encCol(totalColIdx);
+	const dayColStart = 2;
+	const dayColEnd = Math.max(dayColStart - 1, totalColIdx - 1);
+	const dayCount = Math.max(0, dayColEnd - dayColStart + 1);
+	const lojaRow = lojaHeaderRow ? lojaHeaderRow + 1 : null;
+
+	const cancelamentos = cv(ws, "B", 4);
+	const meta = cv(ws, "B", 5);
+	const metaSazonal = META_SAZONAL[mes] ?? 80;
+	const lojaTotal = lojaRow ? cv(ws, totalCol, lojaRow) : 0;
+	const lojaDaily = buildOnnetLojaDaily(ws, lojaRow, dayColStart, dayColEnd);
+
+	const regionais = buildOnnetRegionais(ws, {
+		regionaisHeaderRow,
+		totalRegionaisRow,
+		totalCol,
+		dayColStart,
+		dayColEnd,
+	});
+
+	const totalRegionais = regionais.reduce(
+		(sum, item) => sum + Number(item.total || 0),
+		0,
+	);
+	const totalMensal = totalRegionais + lojaTotal;
+	const dashboardTotalOS = cv(ws, "B", 21);
+	const totalOS = dashboardTotalOS > 0 ? dashboardTotalOS : totalMensal;
+	const percentAchieved =
+		meta > 0 ? Number(((totalOS / meta) * 100).toFixed(1)) : 0;
+
+	const { metaPorDia, metaAcumuladaPorDia } = buildMetaDiariaSchedule({
+		month: mes,
+		meta,
+		feriadosSet: feriadosExtras,
+	});
+
+	const saldoDiarioCalculado = buildOnnetSaldoDiario({
+		dayCount,
+		mes,
+		feriadosExtras,
+		regionais,
+		lojaDaily,
+		metaPorDia,
+		metaAcumuladaPorDia,
+	});
 
 	return {
 		mes,
@@ -561,206 +604,230 @@ function combineMonthlyData(sempreData, onnetData, mes, feriadosExtras = []) {
 // antes, sem mudanca de comportamento. Retorna a entrada de `result[mes]`
 // ou null quando o mes nao tem linha no dashboard (mesmo `return` early
 // que existia no forEach).
-function buildMetasMonthResult(wb, wsDash, wsMult, mes, feriadosExtras) {
-	{
-		const wsMonth = findSheet(wb, mes);
-		const dRow = DASHROW[mes];
-		if (!dRow) return null;
-
-		const cfg = findMonthlyLayout(
-			wsMonth,
-			mes === "Fevereiro" ? CFGFEV : CFGDEF,
-		);
-		const cancelamentos = cv(wsDash, "B", dRow);
-		const meta = cv(wsDash, "C", dRow);
-		const dashboardTotalOS = cv(wsDash, "D", dRow);
-		const pctRaw = cv(wsDash, "F", dRow);
-		const metaSazonal = META_SAZONAL[mes] ?? 80;
-
-		const multCols = {
-			Janeiro: 9,
-			Fevereiro: 10,
-			Marco: 11,
-			Abril: 12,
-			Maio: 13,
-			Junho: 14,
-			Julho: 15,
-			Agosto: 16,
-			Setembro: 17,
-			Outubro: 18,
-			Novembro: 19,
-			Dezembro: 20,
-		};
-		let totalMultas = 0;
-		if (wsMult) {
-			const mCol = multCols[mes];
-			if (mCol !== undefined) totalMultas = cv(wsMult, encCol(mCol - 1), 34);
-		}
-
-		const {
-			diasUteis: du,
-			metaDiariaMedia,
-			metaPorDia,
-			metaAcumuladaPorDia,
-		} = buildMetaDiariaSchedule({
-			month: mes,
-			meta,
-			feriadosSet: feriadosExtras,
-		});
-		const metaDiaria = du > 0 ? Math.ceil(metaDiariaMedia) : 0;
-
-		const technicians = [];
-		for (let i = 0; i < 7; i++) {
-			const r = cfg.techStart + i;
-			const name = wsMonth ? ct(wsMonth, "B", r) : TECHNAMES[i];
-			const total = wsMonth ? cv(wsMonth, cfg.totalCol, r) : 0;
-			const daily = [];
-			for (let d = cfg.dayColStart; d <= cfg.dayColEnd; d++) {
-				daily.push(wsMonth ? cv(wsMonth, encCol(d), r) : 0);
-			}
-			technicians.push({
-				name,
-				total,
-				daily,
-				percent: ((total / 110) * 100).toFixed(1),
-			});
-		}
-		technicians.sort((a, b) => b.total - a.total);
-
-		const regionais = [];
-		for (let i = 0; i < 7; i++) {
-			const r = cfg.regStart + i;
-			const name = wsMonth ? ct(wsMonth, "B", r) : REGNAMES[i];
-			const total = wsMonth ? cv(wsMonth, cfg.totalCol, r) : 0;
-			const daily = [];
-			for (let d = cfg.dayColStart; d <= cfg.dayColEnd; d++) {
-				daily.push(wsMonth ? cv(wsMonth, encCol(d), r) : 0);
-			}
-			regionais.push({
-				name,
-				total,
-				daily,
-				percent: ((total / 110) * 100).toFixed(1),
-			});
-		}
-		regionais.sort((a, b) => b.total - a.total);
-
-		const agenteTotal = wsMonth ? cv(wsMonth, cfg.totalCol, cfg.agenteRow) : 0;
-		const lojaTotal = wsMonth ? cv(wsMonth, cfg.totalCol, cfg.lojaRow) : 0;
-		const totalMensal =
-			technicians.reduce((sum, item) => sum + Number(item.total || 0), 0) +
-			regionais.reduce((sum, item) => sum + Number(item.total || 0), 0) +
-			agenteTotal +
-			lojaTotal;
-		const totalOS = dashboardTotalOS > 0 ? dashboardTotalOS : totalMensal;
-		const percentAchieved =
-			pctRaw > 0
-				? pctRaw > 1
-					? pctRaw
-					: Number((pctRaw * 100).toFixed(1))
-				: meta > 0
-					? Number(((totalOS / meta) * 100).toFixed(1))
-					: 0;
-		const propMult =
-			totalOS > 0 && totalMultas > 0 ? (totalOS / totalMultas).toFixed(1) : 0;
-		const agenteDai = [];
-		const lojaDai = [];
+// Extraido de buildMetasMonthResult (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — technicians e regionais usavam o mesmo loop,
+// so trocando a linha inicial e os nomes default; viraram uma unica
+// funcao generica, mesma logica de antes.
+function buildMetasSeriesRows(wsMonth, cfg, startRow, defaultNames) {
+	const rows = [];
+	for (let i = 0; i < 7; i++) {
+		const r = startRow + i;
+		const name = wsMonth ? ct(wsMonth, "B", r) : defaultNames[i];
+		const total = wsMonth ? cv(wsMonth, cfg.totalCol, r) : 0;
+		const daily = [];
 		for (let d = cfg.dayColStart; d <= cfg.dayColEnd; d++) {
-			agenteDai.push(wsMonth ? cv(wsMonth, encCol(d), cfg.agenteRow) : 0);
-			lojaDai.push(wsMonth ? cv(wsMonth, encCol(d), cfg.lojaRow) : 0);
+			daily.push(wsMonth ? cv(wsMonth, encCol(d), r) : 0);
 		}
-
-		const numDays = cfg.dayColEnd - cfg.dayColStart + 1;
-		const saldoDiarioCalculado = [];
-		let saldoMes = 0;
-		for (let d = 0; d < numDays; d++) {
-			const diaNum = d + 1;
-			const util = isDiaUtil(mes, diaNum, feriadosExtras);
-			const tecTot = technicians.reduce((s, t) => s + (t.daily[d] || 0), 0);
-			const regTot = regionais.reduce((s, r) => s + (r.daily[d] || 0), 0);
-			const agDia = agenteDai[d] || 0;
-			const lojaDia = lojaDai[d] || 0;
-			const totalDia = tecTot + regTot + agDia + lojaDia;
-			if (totalDia <= 0) continue;
-
-			const metaDoDia = util ? metaPorDia.get(diaNum) || 0 : 0;
-			saldoMes += totalDia - metaDoDia;
-			saldoDiarioCalculado.push({
-				dia: diaNum,
-				util,
-				equipe: tecTot,
-				agente: agDia,
-				loja: lojaDia,
-				regionais: regTot,
-				totalDia,
-				metaDia: metaDoDia,
-				metaAcumulada: metaAcumuladaPorDia.get(diaNum) || 0,
-				saldoDia: totalDia - metaDoDia,
-				saldoMes,
-			});
-		}
-		const saldoDiario = saldoDiarioCalculado;
-
-		const multasDiarias = [];
-		if (wsMult) {
-			for (let d = 1; d <= 31; d++) {
-				const lancadas = cv(wsMult, "B", d + 1);
-				const retiradas = cv(wsMult, "C", d + 1);
-				if (lancadas > 0 || retiradas > 0) {
-					multasDiarias.push({ dia: d, lancadas, retiradas });
-				}
-			}
-		}
-
-		const sempreData = {
-			mes,
-			origem: "SEMPRE",
-			cancelamentos,
-			meta,
-			metaSazonal,
-			totalOS,
-			planilhaCarregada: true,
-			temLancamentos: Boolean(wsMonth) || totalOS > 0,
-			percentAchieved,
-			metaDiaria,
-			totalMultas,
-			propMult,
-			technicians,
-			regionais,
-			agenteTotal,
-			lojaTotal,
-			saldoDiario,
-			rawDays: saldoDiarioCalculado.map((item) => ({
-				dia: item.dia,
-				equipe: item.equipe,
-				agente: item.agente,
-				loja: item.loja,
-				regionais: item.regionais,
-				totalDia: item.totalDia,
-			})),
-			multasDiarias,
-			status:
-				Number.parseFloat(percentAchieved) >= metaSazonal
-					? "Meta atingida!"
-					: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
-		};
-
-		const onnet = parseOnnetMonth(wb, mes, feriadosExtras);
-		return {
-			...sempreData,
-			...(onnet
-				? {
-						onnet,
-						onnetSempre: combineMonthlyData(
-							sempreData,
-							onnet,
-							mes,
-							feriadosExtras,
-						),
-					}
-				: {}),
-		};
+		rows.push({
+			name,
+			total,
+			daily,
+			percent: ((total / 110) * 100).toFixed(1),
+		});
 	}
+	rows.sort((a, b) => b.total - a.total);
+	return rows;
+}
+
+function resolveTotalMultas(wsMult, mes) {
+	if (!wsMult) return 0;
+	const multCols = {
+		Janeiro: 9,
+		Fevereiro: 10,
+		Marco: 11,
+		Abril: 12,
+		Maio: 13,
+		Junho: 14,
+		Julho: 15,
+		Agosto: 16,
+		Setembro: 17,
+		Outubro: 18,
+		Novembro: 19,
+		Dezembro: 20,
+	};
+	const mCol = multCols[mes];
+	return mCol !== undefined ? cv(wsMult, encCol(mCol - 1), 34) : 0;
+}
+
+function resolveSempreMonthPercentAchieved(pctRaw, meta, totalOS) {
+	if (pctRaw > 0) {
+		return pctRaw > 1 ? pctRaw : Number((pctRaw * 100).toFixed(1));
+	}
+	return meta > 0 ? Number(((totalOS / meta) * 100).toFixed(1)) : 0;
+}
+
+function buildAgenteLojaDaily(wsMonth, cfg) {
+	const agenteDai = [];
+	const lojaDai = [];
+	for (let d = cfg.dayColStart; d <= cfg.dayColEnd; d++) {
+		agenteDai.push(wsMonth ? cv(wsMonth, encCol(d), cfg.agenteRow) : 0);
+		lojaDai.push(wsMonth ? cv(wsMonth, encCol(d), cfg.lojaRow) : 0);
+	}
+	return { agenteDai, lojaDai };
+}
+
+function buildSempreSaldoDiario({
+	cfg,
+	mes,
+	feriadosExtras,
+	technicians,
+	regionais,
+	agenteDai,
+	lojaDai,
+	metaPorDia,
+	metaAcumuladaPorDia,
+}) {
+	const numDays = cfg.dayColEnd - cfg.dayColStart + 1;
+	const saldoDiarioCalculado = [];
+	let saldoMes = 0;
+	for (let d = 0; d < numDays; d++) {
+		const diaNum = d + 1;
+		const util = isDiaUtil(mes, diaNum, feriadosExtras);
+		const tecTot = technicians.reduce((s, t) => s + (t.daily[d] || 0), 0);
+		const regTot = regionais.reduce((s, r) => s + (r.daily[d] || 0), 0);
+		const agDia = agenteDai[d] || 0;
+		const lojaDia = lojaDai[d] || 0;
+		const totalDia = tecTot + regTot + agDia + lojaDia;
+		if (totalDia <= 0) continue;
+
+		const metaDoDia = util ? metaPorDia.get(diaNum) || 0 : 0;
+		saldoMes += totalDia - metaDoDia;
+		saldoDiarioCalculado.push({
+			dia: diaNum,
+			util,
+			equipe: tecTot,
+			agente: agDia,
+			loja: lojaDia,
+			regionais: regTot,
+			totalDia,
+			metaDia: metaDoDia,
+			metaAcumulada: metaAcumuladaPorDia.get(diaNum) || 0,
+			saldoDia: totalDia - metaDoDia,
+			saldoMes,
+		});
+	}
+	return saldoDiarioCalculado;
+}
+
+function buildMultasDiarias(wsMult) {
+	const multasDiarias = [];
+	if (!wsMult) return multasDiarias;
+	for (let d = 1; d <= 31; d++) {
+		const lancadas = cv(wsMult, "B", d + 1);
+		const retiradas = cv(wsMult, "C", d + 1);
+		if (lancadas > 0 || retiradas > 0) {
+			multasDiarias.push({ dia: d, lancadas, retiradas });
+		}
+	}
+	return multasDiarias;
+}
+
+function buildMetasMonthResult(wb, wsDash, wsMult, mes, feriadosExtras) {
+	const wsMonth = findSheet(wb, mes);
+	const dRow = DASHROW[mes];
+	if (!dRow) return null;
+
+	const cfg = findMonthlyLayout(wsMonth, mes === "Fevereiro" ? CFGFEV : CFGDEF);
+	const cancelamentos = cv(wsDash, "B", dRow);
+	const meta = cv(wsDash, "C", dRow);
+	const dashboardTotalOS = cv(wsDash, "D", dRow);
+	const pctRaw = cv(wsDash, "F", dRow);
+	const metaSazonal = META_SAZONAL[mes] ?? 80;
+
+	const totalMultas = resolveTotalMultas(wsMult, mes);
+
+	const {
+		diasUteis: du,
+		metaDiariaMedia,
+		metaPorDia,
+		metaAcumuladaPorDia,
+	} = buildMetaDiariaSchedule({
+		month: mes,
+		meta,
+		feriadosSet: feriadosExtras,
+	});
+	const metaDiaria = du > 0 ? Math.ceil(metaDiariaMedia) : 0;
+
+	const technicians = buildMetasSeriesRows(wsMonth, cfg, cfg.techStart, TECHNAMES);
+	const regionais = buildMetasSeriesRows(wsMonth, cfg, cfg.regStart, REGNAMES);
+
+	const agenteTotal = wsMonth ? cv(wsMonth, cfg.totalCol, cfg.agenteRow) : 0;
+	const lojaTotal = wsMonth ? cv(wsMonth, cfg.totalCol, cfg.lojaRow) : 0;
+	const totalMensal =
+		technicians.reduce((sum, item) => sum + Number(item.total || 0), 0) +
+		regionais.reduce((sum, item) => sum + Number(item.total || 0), 0) +
+		agenteTotal +
+		lojaTotal;
+	const totalOS = dashboardTotalOS > 0 ? dashboardTotalOS : totalMensal;
+	const percentAchieved = resolveSempreMonthPercentAchieved(pctRaw, meta, totalOS);
+	const propMult =
+		totalOS > 0 && totalMultas > 0 ? (totalOS / totalMultas).toFixed(1) : 0;
+
+	const { agenteDai, lojaDai } = buildAgenteLojaDaily(wsMonth, cfg);
+
+	const saldoDiarioCalculado = buildSempreSaldoDiario({
+		cfg,
+		mes,
+		feriadosExtras,
+		technicians,
+		regionais,
+		agenteDai,
+		lojaDai,
+		metaPorDia,
+		metaAcumuladaPorDia,
+	});
+	const saldoDiario = saldoDiarioCalculado;
+
+	const multasDiarias = buildMultasDiarias(wsMult);
+
+	const sempreData = {
+		mes,
+		origem: "SEMPRE",
+		cancelamentos,
+		meta,
+		metaSazonal,
+		totalOS,
+		planilhaCarregada: true,
+		temLancamentos: Boolean(wsMonth) || totalOS > 0,
+		percentAchieved,
+		metaDiaria,
+		totalMultas,
+		propMult,
+		technicians,
+		regionais,
+		agenteTotal,
+		lojaTotal,
+		saldoDiario,
+		rawDays: saldoDiarioCalculado.map((item) => ({
+			dia: item.dia,
+			equipe: item.equipe,
+			agente: item.agente,
+			loja: item.loja,
+			regionais: item.regionais,
+			totalDia: item.totalDia,
+		})),
+		multasDiarias,
+		status:
+			Number.parseFloat(percentAchieved) >= metaSazonal
+				? "Meta atingida!"
+				: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
+	};
+
+	const onnet = parseOnnetMonth(wb, mes, feriadosExtras);
+	return {
+		...sempreData,
+		...(onnet
+			? {
+					onnet,
+					onnetSempre: combineMonthlyData(
+						sempreData,
+						onnet,
+						mes,
+						feriadosExtras,
+					),
+				}
+			: {}),
+	};
 }
 
 export function parseMetasWorkbook(wb, feriadosExtras = []) {

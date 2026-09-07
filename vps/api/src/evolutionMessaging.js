@@ -1571,34 +1571,45 @@ async function processQueueCandidate(item, config) {
 	}
 }
 
-async function processQueueOnce({ manual = false } = {}) {
-	const config = await getConfig();
-	lastRun = nowIso();
-	lastError = "";
-	lastSkipped = "";
+// Extraido de processQueueOnce (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — encapsula a checagem de conexao Evolution
+// (so entra quando o provider selecionado e "evolution"), mesma logica
+// de antes. Le/muta as variaveis de modulo (nextRunAt etc.) igual ao
+// original, ja que sao closures do mesmo arquivo.
+async function evaluateEvolutionConnectionGuard(config, manual) {
+	const connection = await getConnectionInfo(config);
+	if (connection.checkFailed) {
+		return skippedQueue(
+			`Falha ao consultar Evolution${connection.statusCode ? ` (${connection.statusCode})` : ""}: ${connection.error || "verifique a API key/base URL"}.`,
+		);
+	}
+	if (!connection.connected) {
+		const log = await pauseQueueForDisconnectedEvolution({
+			config,
+			connection,
+			source: manual ? "manual_run" : "worker",
+		});
+		return skippedQueue(
+			`Evolution desconectada: ${log?.reason || connection.error || connection.state || "sem conexão"}.`,
+		);
+	}
+	return null;
+}
 
-	if (!isSelectedProviderEnabled(config))
+// Guardas de entrada de processQueueOnce, na mesma ordem do if/else-if
+// original: devolve o resultado de skip assim que a primeira guarda
+// bloquear, ou null se pode prosseguir com o envio.
+async function evaluateQueueDispatchGuards(config, manual) {
+	if (!isSelectedProviderEnabled(config)) {
 		return skippedQueue(`${getProviderName(config)} desativado.`);
+	}
 	if (config.evolutionPaused && !manual) return skippedQueue("Envio pausado.");
-	if (!config.autoSend && !manual)
+	if (!config.autoSend && !manual) {
 		return skippedQueue("Envio automatico desativado.");
+	}
 	if (String(config.whatsappProvider || "evolution") === "evolution") {
-		const connection = await getConnectionInfo(config);
-		if (connection.checkFailed) {
-			return skippedQueue(
-				`Falha ao consultar Evolution${connection.statusCode ? ` (${connection.statusCode})` : ""}: ${connection.error || "verifique a API key/base URL"}.`,
-			);
-		}
-		if (!connection.connected) {
-			const log = await pauseQueueForDisconnectedEvolution({
-				config,
-				connection,
-				source: manual ? "manual_run" : "worker",
-			});
-			return skippedQueue(
-				`Evolution desconectada: ${log?.reason || connection.error || connection.state || "sem conexão"}.`,
-			);
-		}
+		const connectionSkip = await evaluateEvolutionConnectionGuard(config, manual);
+		if (connectionSkip) return connectionSkip;
 	}
 	if (!manual && !isInsideSendWindow(config)) {
 		const nextWindow = getNextSendWindowStart(config);
@@ -1607,6 +1618,40 @@ async function processQueueOnce({ manual = false } = {}) {
 			: new Date(Date.now() + 30000).toISOString();
 		return skippedQueue("Fora da janela de envio.", { nextRunAt });
 	}
+	return null;
+}
+
+// Processa o lote de candidatos da fila, mesma logica do for original.
+async function runQueueDispatchBatch(candidates, config, manual, remainingToday) {
+	const sent = [];
+	const failed = [];
+	for (const item of candidates) {
+		const result = await processQueueCandidate(item, config);
+		if (!result.locked) {
+			lastSkipped = `Item ${item.id} ignorado: ${result.reason}.`;
+			continue;
+		}
+		if (result.outcome === "sent") {
+			sent.push(result.id);
+		} else if (result.outcome === "failed") {
+			failed.push({ id: result.id, error: result.error });
+		}
+		if (!manual && sent.length < candidates.length) {
+			const remainingAfterCurrent = Math.max(1, remainingToday - sent.length);
+			await sleep(calculateQueueDelayMs(config, remainingAfterCurrent));
+		}
+	}
+	return { sent, failed };
+}
+
+async function processQueueOnce({ manual = false } = {}) {
+	const config = await getConfig();
+	lastRun = nowIso();
+	lastError = "";
+	lastSkipped = "";
+
+	const guardSkip = await evaluateQueueDispatchGuards(config, manual);
+	if (guardSkip) return guardSkip;
 
 	const dailyLimit = Math.max(
 		1,
@@ -1633,25 +1678,13 @@ async function processQueueOnce({ manual = false } = {}) {
 		.filter((item) => canSendItem(item, config))
 		.slice(0, batchSize);
 	nextQueueExecutionItem = summarizeQueueExecutionItem(candidates[0]);
-	const sent = [];
-	const failed = [];
 
-	for (const item of candidates) {
-		const result = await processQueueCandidate(item, config);
-		if (!result.locked) {
-			lastSkipped = `Item ${item.id} ignorado: ${result.reason}.`;
-			continue;
-		}
-		if (result.outcome === "sent") {
-			sent.push(result.id);
-		} else if (result.outcome === "failed") {
-			failed.push({ id: result.id, error: result.error });
-		}
-		if (!manual && sent.length < candidates.length) {
-			const remainingAfterCurrent = Math.max(1, remainingToday - sent.length);
-			await sleep(calculateQueueDelayMs(config, remainingAfterCurrent));
-		}
-	}
+	const { sent, failed } = await runQueueDispatchBatch(
+		candidates,
+		config,
+		manual,
+		remainingToday,
+	);
 
 	if (sent.length) {
 		const remainingAfterBatch = Math.max(1, remainingToday - sent.length);
@@ -2106,14 +2139,14 @@ function isGroupWebhook(payload = {}) {
 	return remoteJid.includes("@g.us") || remoteJid.startsWith("120363");
 }
 
-function parseScheduleFromText(text, baseDate = new Date()) {
-	const value = String(text || "");
+// Extraido de parseScheduleFromText (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — so agrupa os 3 regex.match (data completa,
+// so-o-dia, horario), mesma logica/ordem de antes.
+function matchScheduleDateAndTime(value) {
 	const dateMatch = value.match(/(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?/);
 	const dayOnlyMatch = dateMatch
 		? null
 		: value.match(/\b(?:dia|data|para\s+dia|no\s+dia)\s+(\d{1,2})\b/i);
-	if (!dateMatch && !dayOnlyMatch) return null;
-
 	const valueWithoutDate = value.replace(
 		dateMatch?.[0] || dayOnlyMatch?.[0] || "",
 		" ",
@@ -2126,8 +2159,11 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 			/\b(?:às|as|a|para|por volta de)\s*(\d{1,2})(?:\s*(?:h|horas?))?\b/i,
 		) ||
 		valueWithoutDate.match(/\b(\d{1,2})\s*h(?:oras?)?\b/i);
+	return { dateMatch, dayOnlyMatch, timeMatch };
+}
 
-	const todayParts = new Intl.DateTimeFormat("en-CA", {
+function resolveTodayParts(baseDate) {
+	return new Intl.DateTimeFormat("en-CA", {
 		timeZone: SEND_TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
@@ -2138,10 +2174,36 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 			if (part.type !== "literal") acc[part.type] = part.value;
 			return acc;
 		}, {});
+}
+
+// So entra quando o texto trouxe so o dia (sem mes/ano, ex.: "dia 5") e a
+// data resultante nesse mes ja passou: joga pro mesmo dia do proximo mes,
+// mesma logica de antes. Fora desse caso devolve year/month/day intactos;
+// devolve null so quando o dia nao existir no mes seguinte (ex.: dia 31
+// num mes de 30 dias), igual ao original.
+function rollDayOnlyMatchToNextMonthIfPast(date, { year, month, day, requestedDay, baseDate }) {
+	const today = getSaoPauloDate(baseDate);
+	if (dateKeyFromDate(date) >= dateKeyFromDate(today)) return { date, year, month, day };
+	const rolled = new Date(year, month, day);
+	if (rolled.getDate() !== requestedDay) return null;
+	return {
+		date: rolled,
+		day: rolled.getDate(),
+		month: rolled.getMonth() + 1,
+		year: rolled.getFullYear(),
+	};
+}
+
+function parseScheduleFromText(text, baseDate = new Date()) {
+	const value = String(text || "");
+	const { dateMatch, dayOnlyMatch, timeMatch } = matchScheduleDateAndTime(value);
+	if (!dateMatch && !dayOnlyMatch) return null;
+
+	const todayParts = resolveTodayParts(baseDate);
 	const requestedDay = Number(dateMatch?.[1] || dayOnlyMatch?.[1]);
 	let day = requestedDay;
 	let month = dateMatch ? Number(dateMatch[2]) : Number(todayParts.month);
-	let rawYear = dateMatch?.[3] ? Number(dateMatch[3]) : Number(todayParts.year);
+	const rawYear = dateMatch?.[3] ? Number(dateMatch[3]) : Number(todayParts.year);
 	let year = rawYear < 100 ? 2000 + rawYear : rawYear;
 	const hourNumber = timeMatch ? Number(timeMatch[1]) : null;
 	const minuteNumber = timeMatch ? Number(timeMatch[2] || 0) : null;
@@ -2158,15 +2220,17 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 		date.getDate() !== day
 	)
 		return null;
+
 	if (dayOnlyMatch) {
-		const today = getSaoPauloDate(baseDate);
-		if (dateKeyFromDate(date) < dateKeyFromDate(today)) {
-			date = new Date(year, month, day);
-			if (date.getDate() !== requestedDay) return null;
-			day = date.getDate();
-			month = date.getMonth() + 1;
-			year = date.getFullYear();
-		}
+		const rolled = rollDayOnlyMatchToNextMonthIfPast(date, {
+			year,
+			month,
+			day,
+			requestedDay,
+			baseDate,
+		});
+		if (!rolled) return null;
+		({ date, year, month, day } = rolled);
 	}
 
 	const hour = timeMatch ? String(hourNumber).padStart(2, "0") : "";
@@ -3039,6 +3103,179 @@ async function handleConnectionEventCallback(payload) {
 // guiado, "ja devolvi", sem match, pos-agendamento, sem data, data
 // invalida ou agendamento confirmado), mesma cadeia if/else if de antes,
 // sem mudanca de comportamento.
+// Extraido de classifyCallbackResponse (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cada ramo da cadeia if/else-if original virou
+// um classificador dedicado, mesma logica e mesma ordem de avaliacao
+// (curto-circuito if/return em vez de if/else-if, comportamento
+// identico), todos devolvendo o mesmo shape { status, agendamentoId,
+// motivo, respostaAutomatica }.
+
+function classifyGuidedResult(guidedResult) {
+	const status =
+		guidedResult.status ||
+		(guidedResult.agendamentoId ? "agendado" : "fluxo_agendamento");
+	let motivo =
+		guidedResult.motivo ||
+		(guidedResult.agendamentoId
+			? "Agendamento criado pelo fluxo guiado."
+			: "Fluxo guiado de agendamento em andamento.");
+	if (guidedResult.respostaAutomaticaErro) {
+		motivo = `${motivo} Confirmacao automatica falhou: ${guidedResult.respostaAutomaticaErro}`;
+	}
+	return {
+		status,
+		agendamentoId: guidedResult.agendamentoId || null,
+		motivo,
+		respostaAutomatica: guidedResult.respostaAutomatica || guidedResult,
+	};
+}
+
+function classifyGuidedError(guidedError, hasActiveGuidedConversation) {
+	return {
+		status: hasActiveGuidedConversation ? "fluxo_agendamento_erro" : "erro",
+		agendamentoId: null,
+		motivo: `Falha no fluxo guiado: ${guidedError}`,
+		respostaAutomatica: null,
+	};
+}
+
+async function classifyDeliveredIntent(config, telefone, item) {
+	let motivo = "Cliente informou que ja realizou a devolucao.";
+	let respostaAutomatica = null;
+	try {
+		respostaAutomatica = await sendConfiguredAutoReply(
+			config,
+			telefone,
+			item || { telefone },
+			config.replyDeliveredMessage || DEFAULT_CONFIG.replyDeliveredMessage,
+		);
+	} catch (error) {
+		motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: "devolucao_informada", agendamentoId: null, motivo, respostaAutomatica };
+}
+
+async function classifyMissingItem(config, telefone) {
+	let motivo = "Nao foi encontrada O.S/fila pelo telefone, codigo ou nome.";
+	let respostaAutomatica = null;
+	try {
+		respostaAutomatica = await sendConfiguredAutoReply(
+			config,
+			telefone,
+			{ telefone },
+			config.replyUnmatchedMessage || DEFAULT_CONFIG.replyUnmatchedMessage,
+		);
+	} catch (error) {
+		motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: "cliente_nao_localizado", agendamentoId: null, motivo, respostaAutomatica };
+}
+
+async function classifyPostScheduleReply(config, telefone, item) {
+	let motivo =
+		"Cliente respondeu novamente apos agendamento. Encaminhado para a central.";
+	let respostaAutomatica = null;
+	try {
+		respostaAutomatica = await sendHumanSupportAutoReply(config, telefone, item);
+	} catch (error) {
+		motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: "resposta_pos_agendamento", agendamentoId: null, motivo, respostaAutomatica };
+}
+
+async function classifyGuidedScheduleAccepted(config, telefone, item) {
+	let motivo = "Cliente aceitou agendar. Opcoes de data enviadas.";
+	let respostaAutomatica = null;
+	try {
+		respostaAutomatica = await startGuidedScheduleFlow(config, telefone, item);
+	} catch (error) {
+		motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: "fluxo_agendamento", agendamentoId: null, motivo, respostaAutomatica };
+}
+
+async function classifyMissingScheduleReply(config, telefone, item) {
+	let motivo = "Resposta recebida sem data valida.";
+	let respostaAutomatica = null;
+	try {
+		respostaAutomatica = await sendConfiguredAutoReply(
+			config,
+			telefone,
+			item,
+			config.replyNoScheduleMessage || DEFAULT_CONFIG.replyNoScheduleMessage,
+		);
+	} catch (error) {
+		motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: "sem_data_horario", agendamentoId: null, motivo, respostaAutomatica };
+}
+
+async function classifyNoSchedule(config, telefone, item, mensagem) {
+	if (config.guidedScheduleEnabled !== false && isPositiveScheduleIntent(mensagem)) {
+		return classifyGuidedScheduleAccepted(config, telefone, item);
+	}
+	return classifyMissingScheduleReply(config, telefone, item);
+}
+
+async function classifyScheduleRejected(config, telefone, item, schedule, dateValidation) {
+	let motivo = dateValidation.motivo;
+	let respostaAutomatica = null;
+	try {
+		const rejected = await rejectScheduleDate(
+			config,
+			telefone,
+			item,
+			schedule,
+			dateValidation,
+		);
+		respostaAutomatica = rejected.respostaAutomatica;
+	} catch (error) {
+		motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: dateValidation.status, agendamentoId: null, motivo, respostaAutomatica };
+}
+
+async function classifyScheduleAccepted(config, telefone, item, schedule, callbackId, queueItem, mensagem) {
+	const agendamentoId = await createAppointmentFromCallback(item, schedule, callbackId);
+	if (queueItem?.id) {
+		await upsertQueueItem(queueItem.id, {
+			...queueItem,
+			status: "agendado",
+			agendamento_id: agendamentoId,
+			respostaCliente: mensagem,
+			ultimaRespostaCliente: mensagem,
+			ultimaRespostaClienteEm: nowIso(),
+			atualizadoEm: nowIso(),
+		});
+	}
+	let motivo = "";
+	let respostaAutomatica = null;
+	try {
+		respostaAutomatica = await sendConfiguredAutoReply(
+			config,
+			telefone,
+			{
+				...item,
+				data_agendamento: formatDateLabel(schedule.date),
+				hora_agendamento: schedule.time || "",
+			},
+			config.replyScheduledConfirmationMessage ||
+				DEFAULT_CONFIG.replyScheduledConfirmationMessage,
+		);
+	} catch (error) {
+		motivo = `Agendamento criado, mas confirmacao automatica falhou: ${String(error?.message || error)}`;
+	}
+	return { status: "agendado", agendamentoId, motivo, respostaAutomatica };
+}
+
+async function classifyWithSchedule(config, telefone, item, schedule, callbackId, queueItem, mensagem) {
+	const dateValidation = validateScheduleDateWindow(schedule);
+	if (!dateValidation.ok) {
+		return classifyScheduleRejected(config, telefone, item, schedule, dateValidation);
+	}
+	return classifyScheduleAccepted(config, telefone, item, schedule, callbackId, queueItem, mensagem);
+}
+
 async function classifyCallbackResponse({
 	guidedResult,
 	guidedError,
@@ -3051,151 +3288,15 @@ async function classifyCallbackResponse({
 	queueItem,
 	callbackId,
 }) {
-	let status = "recebido";
-	let agendamentoId = null;
-	let motivo = "";
-	let respostaAutomatica = null;
-	if (guidedResult) {
-		status =
-			guidedResult.status ||
-			(guidedResult.agendamentoId ? "agendado" : "fluxo_agendamento");
-		agendamentoId = guidedResult.agendamentoId || null;
-		respostaAutomatica = guidedResult.respostaAutomatica || guidedResult;
-		motivo =
-			guidedResult.motivo ||
-			(guidedResult.agendamentoId
-				? "Agendamento criado pelo fluxo guiado."
-				: "Fluxo guiado de agendamento em andamento.");
-		if (guidedResult.respostaAutomaticaErro) {
-			motivo = `${motivo} Confirmacao automatica falhou: ${guidedResult.respostaAutomaticaErro}`;
-		}
-	} else if (guidedError) {
-		status = hasActiveGuidedConversation ? "fluxo_agendamento_erro" : "erro";
-		motivo = `Falha no fluxo guiado: ${guidedError}`;
-	} else if (isDeliveredIntent(mensagem)) {
-		status = "devolucao_informada";
-		motivo = "Cliente informou que ja realizou a devolucao.";
-		try {
-			respostaAutomatica = await sendConfiguredAutoReply(
-				config,
-				telefone,
-				item || { telefone },
-				config.replyDeliveredMessage || DEFAULT_CONFIG.replyDeliveredMessage,
-			);
-		} catch (error) {
-			motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
-		}
-	} else if (!item) {
-		status = "cliente_nao_localizado";
-		motivo = "Nao foi encontrada O.S/fila pelo telefone, codigo ou nome.";
-		try {
-			respostaAutomatica = await sendConfiguredAutoReply(
-				config,
-				telefone,
-				{ telefone },
-				config.replyUnmatchedMessage || DEFAULT_CONFIG.replyUnmatchedMessage,
-			);
-		} catch (error) {
-			motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
-		}
-	} else if (String(item.status || "").toLowerCase() === "agendado") {
-		status = "resposta_pos_agendamento";
-		motivo =
-			"Cliente respondeu novamente apos agendamento. Encaminhado para a central.";
-		try {
-			respostaAutomatica = await sendHumanSupportAutoReply(
-				config,
-				telefone,
-				item,
-			);
-		} catch (error) {
-			motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
-		}
-	} else if (!schedule) {
-		if (
-			config.guidedScheduleEnabled !== false &&
-			isPositiveScheduleIntent(mensagem)
-		) {
-			status = "fluxo_agendamento";
-			motivo = "Cliente aceitou agendar. Opcoes de data enviadas.";
-			try {
-				respostaAutomatica = await startGuidedScheduleFlow(
-					config,
-					telefone,
-					item,
-				);
-			} catch (error) {
-				motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
-			}
-		} else {
-			status = "sem_data_horario";
-			motivo = "Resposta recebida sem data valida.";
-			try {
-				respostaAutomatica = await sendConfiguredAutoReply(
-					config,
-					telefone,
-					item,
-					config.replyNoScheduleMessage ||
-						DEFAULT_CONFIG.replyNoScheduleMessage,
-				);
-			} catch (error) {
-				motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
-			}
-		}
-	} else {
-		const dateValidation = validateScheduleDateWindow(schedule);
-		if (!dateValidation.ok) {
-			status = dateValidation.status;
-			motivo = dateValidation.motivo;
-			try {
-				const rejected = await rejectScheduleDate(
-					config,
-					telefone,
-					item,
-					schedule,
-					dateValidation,
-				);
-				respostaAutomatica = rejected.respostaAutomatica;
-			} catch (error) {
-				motivo = `${motivo} Resposta automatica falhou: ${String(error?.message || error)}`;
-			}
-		} else {
-			agendamentoId = await createAppointmentFromCallback(
-				item,
-				schedule,
-				callbackId,
-			);
-			status = "agendado";
-			if (queueItem?.id) {
-				await upsertQueueItem(queueItem.id, {
-					...queueItem,
-					status: "agendado",
-					agendamento_id: agendamentoId,
-					respostaCliente: mensagem,
-					ultimaRespostaCliente: mensagem,
-					ultimaRespostaClienteEm: nowIso(),
-					atualizadoEm: nowIso(),
-				});
-			}
-			try {
-				respostaAutomatica = await sendConfiguredAutoReply(
-					config,
-					telefone,
-					{
-						...item,
-						data_agendamento: formatDateLabel(schedule.date),
-						hora_agendamento: schedule.time || "",
-					},
-					config.replyScheduledConfirmationMessage ||
-						DEFAULT_CONFIG.replyScheduledConfirmationMessage,
-				);
-			} catch (error) {
-				motivo = `Agendamento criado, mas confirmacao automatica falhou: ${String(error?.message || error)}`;
-			}
-		}
+	if (guidedResult) return classifyGuidedResult(guidedResult);
+	if (guidedError) return classifyGuidedError(guidedError, hasActiveGuidedConversation);
+	if (isDeliveredIntent(mensagem)) return classifyDeliveredIntent(config, telefone, item);
+	if (!item) return classifyMissingItem(config, telefone);
+	if (String(item.status || "").toLowerCase() === "agendado") {
+		return classifyPostScheduleReply(config, telefone, item);
 	}
-
-	return { status, agendamentoId, motivo, respostaAutomatica };
+	if (!schedule) return classifyNoSchedule(config, telefone, item, mensagem);
+	return classifyWithSchedule(config, telefone, item, schedule, callbackId, queueItem, mensagem);
 }
 
 async function registerCallback(payload = {}) {

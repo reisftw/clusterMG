@@ -3545,63 +3545,77 @@ function createApp() {
 		}
 	});
 
+	// Extraido do handler GET /api/documents/* (achado javascript:S3776,
+	// docs/SONARQUBE-MAP.md) — mesma cadeia de resolucao por tipo de
+	// colecao de antes, so trocando o ternario aninhado por if/return.
+	async function resolveDocumentByCollectionPath(documentCollectionPath, documentPath) {
+		if (isLegacySchedulingCollection(documentCollectionPath)) {
+			return getLegacySchedulingDocument(documentPath);
+		}
+		if (documentCollectionPath === "regionais") {
+			return regionaisRepository.getRegionalDocument(documentPath);
+		}
+		if (documentCollectionPath === "usuarios") {
+			return usersRepository.getUserDocument(documentPath);
+		}
+		return documents.getDocument(documentPath);
+	}
+
+	// Extraido do mesmo handler — as 4 guardas de permissao viram uma
+	// unica checagem que devolve a mensagem de erro (ou null se pode
+	// ler), mesma logica/ordem de antes. Todas usam status 403.
+	function findDocumentReadPermissionError(req, item, documentPath, isOwnUserProfile) {
+		const canReadGenericDocument = canReadDocumentPath(req.user, documentPath);
+		if (!isOwnUserProfile && !canReadGenericDocument) {
+			return "Permissao insuficiente.";
+		}
+		if (
+			!isOwnUserProfile &&
+			isAcertoEstoqueCollection(item.collectionPath) &&
+			!canAccessRegionalRecord(req.user, item.data || {})
+		) {
+			return "Supervisor so pode acessar registros da propria regional.";
+		}
+		if (
+			!isOwnUserProfile &&
+			item.collectionPath === EMPRESAS_COLLECTION &&
+			!canAccessEmpresaRecord(req.user, item.documentId, item.data || {})
+		) {
+			return "Lider Empresa so pode acessar a propria empresa.";
+		}
+		if (
+			!isOwnUserProfile &&
+			item.collectionPath === "usuarios" &&
+			(!canSupervisorAccessUserRecord(req.user, item.data || {}) ||
+				!canAdministrativoAccessUserRecord(req.user, item.data || {}))
+		) {
+			return "Sem permissao para acessar este usuario.";
+		}
+		return null;
+	}
+
 	app.get("/api/documents/*", requireAuthenticated, async (req, res, next) => {
 		try {
 			const documentPath = req.params[0];
 			const documentCollectionPath = documentPath.split("/").slice(0, -1).join("/");
 			if (rejectDomainRouteOnlyCollection(res, documentCollectionPath)) return;
-			const item =
-				isLegacySchedulingCollection(documentCollectionPath)
-					? await getLegacySchedulingDocument(documentPath)
-					: documentCollectionPath === "regionais"
-					? await regionaisRepository.getRegionalDocument(documentPath)
-					: documentCollectionPath === "usuarios"
-						? await usersRepository.getUserDocument(documentPath)
-					: await documents.getDocument(documentPath);
+			const item = await resolveDocumentByCollectionPath(
+				documentCollectionPath,
+				documentPath,
+			);
 			if (!item) {
 				res.status(404).json({ error: "Documento nao encontrado." });
 				return;
 			}
 			const isOwnUserProfile = documentPath === `usuarios/${req.user.uid}`;
-			const canReadGenericDocument = canReadDocumentPath(
-				req.user,
+			const permissionError = findDocumentReadPermissionError(
+				req,
+				item,
 				documentPath,
+				isOwnUserProfile,
 			);
-			if (!isOwnUserProfile && !canReadGenericDocument) {
-				res.status(403).json({ error: "Permissao insuficiente." });
-				return;
-			}
-			if (
-				!isOwnUserProfile &&
-				isAcertoEstoqueCollection(item.collectionPath) &&
-				!canAccessRegionalRecord(req.user, item.data || {})
-			) {
-				res
-					.status(403)
-					.json({
-						error: "Supervisor so pode acessar registros da propria regional.",
-					});
-				return;
-			}
-			if (
-				!isOwnUserProfile &&
-				item.collectionPath === EMPRESAS_COLLECTION &&
-				!canAccessEmpresaRecord(req.user, item.documentId, item.data || {})
-			) {
-				res
-					.status(403)
-					.json({ error: "Lider Empresa so pode acessar a propria empresa." });
-				return;
-			}
-			if (
-				!isOwnUserProfile &&
-				item.collectionPath === "usuarios" &&
-				(!canSupervisorAccessUserRecord(req.user, item.data || {}) ||
-					!canAdministrativoAccessUserRecord(req.user, item.data || {}))
-			) {
-				res
-					.status(403)
-					.json({ error: "Sem permissao para acessar este usuario." });
+			if (permissionError) {
+				res.status(403).json({ error: permissionError });
 				return;
 			}
 
@@ -4599,6 +4613,91 @@ function createApp() {
 		},
 	);
 
+	// Extraido do handler PUT /api/admin/documents/* (achado
+	// javascript:S3776, docs/SONARQUBE-MAP.md) — mesma cadeia de resolucao
+	// por tipo de colecao de antes, so trocando o ternario aninhado por
+	// if/return.
+	async function resolveExistingDocumentForWrite(collectionPath, documentPath) {
+		if (collectionPath === "regionais") {
+			return regionaisRepository.getRegionalDocument(documentPath);
+		}
+		if (collectionPath === "usuarios") {
+			return usersRepository.getUserDocument(documentPath);
+		}
+		return documents.getDocument(documentPath);
+	}
+
+	// Extraido do mesmo handler — as 2 guardas de permissao de escrita,
+	// mesma logica/ordem de antes. Ambas usam status 403.
+	function findDocumentWritePermissionError(req, existing, collectionPath) {
+		if (
+			existing &&
+			isAcertoEstoqueCollection(collectionPath) &&
+			!canAccessRegionalRecord(req.user, existing.data || {})
+		) {
+			return "Supervisor so pode alterar registros da propria regional.";
+		}
+		if (
+			existing &&
+			collectionPath === EMPRESAS_COLLECTION &&
+			!canAccessEmpresaRecord(req.user, existing.documentId, existing.data || {})
+		) {
+			return "Lider Empresa so pode alterar a propria empresa.";
+		}
+		return null;
+	}
+
+	// Extraido do mesmo handler — supervisor nao pode sobrescrever o campo
+	// `supervisor` da propria empresa, mesma logica de antes.
+	function buildScopedDocumentRequestBody(req, existing, collectionPath, body) {
+		const requestBody = { ...(body || {}) };
+		if (
+			existing &&
+			collectionPath === EMPRESAS_COLLECTION &&
+			hasRole(req.user, ["supervisor"]) &&
+			!hasRole(req.user, ADMIN_ROLES)
+		) {
+			requestBody.supervisor = existing.data?.supervisor || {};
+		}
+		return requestBody;
+	}
+
+	// Extraido do mesmo handler — mesma cadeia if/else-if de escrita por
+	// tipo de colecao de antes.
+	async function persistDocumentByCollectionPath(collectionPath, documentPath, parts, data) {
+		if (isLegacySchedulingCollection(collectionPath)) {
+			await upsertLegacySchedulingDocument({
+				path: documentPath,
+				collectionPath,
+				documentId: parts.at(-1),
+				parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+				data,
+			});
+			return;
+		}
+		if (collectionPath === "regionais") {
+			await regionaisRepository.upsertRegionalDocument({
+				documentId: parts.at(-1),
+				data,
+			});
+			return;
+		}
+		if (collectionPath === "usuarios") {
+			await usersRepository.upsertUserDocument({
+				documentId: parts.at(-1),
+				data,
+			});
+			return;
+		}
+		await documents.upsertDocument({
+			path: documentPath,
+			collectionPath,
+			documentId: parts.at(-1),
+			parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
+			data,
+		});
+	}
+
 	app.put(
 		"/api/admin/documents/*",
 		requireAuthenticated,
@@ -4618,50 +4717,25 @@ function createApp() {
 
 				const collectionPath = parts.slice(0, -1).join("/");
 				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
-				const existing =
-					collectionPath === "regionais"
-						? await regionaisRepository.getRegionalDocument(documentPath)
-						: collectionPath === "usuarios"
-							? await usersRepository.getUserDocument(documentPath)
-						: await documents.getDocument(documentPath);
-				if (
-					existing &&
-					isAcertoEstoqueCollection(collectionPath) &&
-					!canAccessRegionalRecord(req.user, existing.data || {})
-				) {
-					res
-						.status(403)
-						.json({
-							error:
-								"Supervisor so pode alterar registros da propria regional.",
-						});
+				const existing = await resolveExistingDocumentForWrite(
+					collectionPath,
+					documentPath,
+				);
+				const permissionError = findDocumentWritePermissionError(
+					req,
+					existing,
+					collectionPath,
+				);
+				if (permissionError) {
+					res.status(403).json({ error: permissionError });
 					return;
 				}
-				if (
-					existing &&
-					collectionPath === EMPRESAS_COLLECTION &&
-					!canAccessEmpresaRecord(
-						req.user,
-						existing.documentId,
-						existing.data || {},
-					)
-				) {
-					res
-						.status(403)
-						.json({
-							error: "Lider Empresa so pode alterar a propria empresa.",
-						});
-					return;
-				}
-				const requestBody = { ...(req.body || {}) };
-				if (
-					existing &&
-					collectionPath === EMPRESAS_COLLECTION &&
-					hasRole(req.user, ["supervisor"]) &&
-					!hasRole(req.user, ADMIN_ROLES)
-				) {
-					requestBody.supervisor = existing.data?.supervisor || {};
-				}
+				const requestBody = buildScopedDocumentRequestBody(
+					req,
+					existing,
+					collectionPath,
+					req.body,
+				);
 				const scopedRegionalData = applyRegionalScopeToData(
 					req.user,
 					collectionPath,
@@ -4673,33 +4747,12 @@ function createApp() {
 					parts.at(-1),
 					scopedRegionalData,
 				);
-				if (isLegacySchedulingCollection(collectionPath)) {
-					await upsertLegacySchedulingDocument({
-						path: documentPath,
-						collectionPath,
-						documentId: parts.at(-1),
-						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
-						data,
-					});
-				} else if (collectionPath === "regionais") {
-					await regionaisRepository.upsertRegionalDocument({
-						documentId: parts.at(-1),
-						data,
-					});
-				} else if (collectionPath === "usuarios") {
-					await usersRepository.upsertUserDocument({
-						documentId: parts.at(-1),
-						data,
-					});
-				} else {
-					await documents.upsertDocument({
-						path: documentPath,
-						collectionPath,
-						documentId: parts.at(-1),
-						parentPath: parts.length > 2 ? parts.slice(0, -2).join("/") : null,
-						data,
-					});
-				}
+				await persistDocumentByCollectionPath(
+					collectionPath,
+					documentPath,
+					parts,
+					data,
+				);
 				await ensureEmpresaDriveFolderIfConfigured(
 					collectionPath,
 					parts.at(-1),
@@ -4719,6 +4772,45 @@ function createApp() {
 		},
 	);
 
+	// Extraido do handler DELETE /api/admin/documents/* (achado
+	// javascript:S3776, docs/SONARQUBE-MAP.md) — as 2 guardas de permissao
+	// de exclusao, mesma logica/ordem de antes. Ambas usam status 403.
+	function findDocumentDeletePermissionError(req, item) {
+		if (
+			item &&
+			isAcertoEstoqueCollection(item.collectionPath) &&
+			!canAccessRegionalRecord(req.user, item.data || {})
+		) {
+			return "Supervisor so pode excluir registros da propria regional.";
+		}
+		if (
+			item &&
+			item.collectionPath === EMPRESAS_COLLECTION &&
+			isEmpresaLeader(req.user)
+		) {
+			return "Lider Empresa nao pode excluir empresa.";
+		}
+		return null;
+	}
+
+	// Extraido do mesmo handler — mesma cadeia if/else-if de exclusao por
+	// tipo de colecao de antes.
+	async function deleteDocumentByCollectionPath(collectionPath, documentPath) {
+		if (isLegacySchedulingCollection(collectionPath)) {
+			await deleteLegacySchedulingDocument(documentPath);
+			return;
+		}
+		if (collectionPath === "regionais") {
+			await regionaisRepository.deleteRegionalDocument(documentPath);
+			return;
+		}
+		if (collectionPath === "usuarios") {
+			await usersRepository.deleteUserDocument(documentPath);
+			return;
+		}
+		await documents.deleteDocument(documentPath);
+	}
+
 	app.delete(
 		"/api/admin/documents/*",
 		requireAuthenticated,
@@ -4733,46 +4825,18 @@ function createApp() {
 				const parts = documentPath.split("/").filter(Boolean);
 				const collectionPath = parts.slice(0, -1).join("/");
 				if (rejectDomainRouteOnlyCollection(res, collectionPath)) return;
-				const item =
-					isLegacySchedulingCollection(collectionPath)
-						? await getLegacySchedulingDocument(documentPath)
-						: collectionPath === "regionais"
-						? await regionaisRepository.getRegionalDocument(documentPath)
-						: collectionPath === "usuarios"
-							? await usersRepository.getUserDocument(documentPath)
-						: await documents.getDocument(documentPath);
-				if (
-					item &&
-					isAcertoEstoqueCollection(item.collectionPath) &&
-					!canAccessRegionalRecord(req.user, item.data || {})
-				) {
-					res
-						.status(403)
-						.json({
-							error:
-								"Supervisor so pode excluir registros da propria regional.",
-						});
+				// Mesma resolucao por tipo de colecao do handler GET
+				// (resolveDocumentByCollectionPath, definido acima).
+				const item = await resolveDocumentByCollectionPath(
+					collectionPath,
+					documentPath,
+				);
+				const permissionError = findDocumentDeletePermissionError(req, item);
+				if (permissionError) {
+					res.status(403).json({ error: permissionError });
 					return;
 				}
-				if (
-					item &&
-					item.collectionPath === EMPRESAS_COLLECTION &&
-					isEmpresaLeader(req.user)
-				) {
-					res
-						.status(403)
-						.json({ error: "Lider Empresa nao pode excluir empresa." });
-					return;
-				}
-				if (isLegacySchedulingCollection(collectionPath)) {
-					await deleteLegacySchedulingDocument(documentPath);
-				} else if (collectionPath === "regionais") {
-					await regionaisRepository.deleteRegionalDocument(documentPath);
-				} else if (collectionPath === "usuarios") {
-					await usersRepository.deleteUserDocument(documentPath);
-				} else {
-					await documents.deleteDocument(documentPath);
-				}
+				await deleteDocumentByCollectionPath(collectionPath, documentPath);
 				res.json({ ok: true });
 			} catch (error) {
 				next(error);
