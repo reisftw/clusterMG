@@ -7,8 +7,10 @@ const {
 const budgetUpload = multer({
 	storage: multer.memoryStorage(),
 	limits: {
-		fileSize: 30 * 1024 * 1024,
-		files: 10,
+		fileSize: Number(
+			process.env.FINANCEIRO_UPLOAD_LIMIT_BYTES || 30 * 1024 * 1024,
+		),
+		files: Number(process.env.FINANCEIRO_UPLOAD_MAX_FILES || 10),
 	},
 	fileFilter: (_req, file, callback) => {
 		if (/\.xlsx$/i.test(file.originalname || "")) {

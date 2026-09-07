@@ -49,6 +49,14 @@ function timestampValue(value) {
 	return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+// NOSONAR (javascript:S4790): SHA-1 aqui NAO protege segredo nenhum — gera
+// um UUID v5-like DETERMINISTICO a partir de uma chave de negocio (cidade,
+// responsavel), pra idempotencia de migracao (mesmo seed -> mesmo id, evita
+// duplicar registro ja existente). Trocar o algoritmo mudaria o id gerado
+// pra registros que ja existem em producao (migration
+// 030_regionais_usuarios_normalizacao.sql, ja aplicada), causando
+// duplicidade em vez de atualizacao no proximo re-run. NAO alterar sem
+// migrar os ids existentes primeiro.
 function stableUuid(seed) {
 	const hash = crypto.createHash("sha1").update(String(seed)).digest();
 	hash[6] = (hash[6] & 0x0f) | 0x50;

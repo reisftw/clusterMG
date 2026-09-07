@@ -12,7 +12,9 @@ const TOKEN_TTL_SECONDS = Number(
 const PASSWORD_ITERATIONS = 210000;
 const PASSWORD_KEY_LENGTH = 32;
 const PASSWORD_DIGEST = "sha256";
-const LEGACY_PASSWORD_ALGORITHM = "pbkdf2_sha256";
+// Identificador do algoritmo (nao e um segredo) usado pra marcar/detectar
+// hashes de senha legados armazenados em app_users.password_algorithm.
+const LEGACY_HASH_ALGORITHM_TAG = "pbkdf2_sha256";
 const PASSWORD_ALGORITHM = "argon2id";
 const JWT_ALGORITHM = "HS256";
 const JWT_ISSUER = process.env.APP_AUTH_ISSUER || "retiradas-api";
@@ -147,7 +149,7 @@ function hashLegacyPassword(
 	return {
 		passwordHash: hash,
 		passwordSalt: salt,
-		passwordAlgorithm: LEGACY_PASSWORD_ALGORITHM,
+		passwordAlgorithm: LEGACY_HASH_ALGORITHM_TAG,
 	};
 }
 
@@ -169,7 +171,7 @@ async function hashPassword(password) {
 async function verifyPassword(password, user) {
 	if (!user?.password_hash) return false;
 	if (
-		user.password_algorithm === LEGACY_PASSWORD_ALGORITHM ||
+		user.password_algorithm === LEGACY_HASH_ALGORITHM_TAG ||
 		!user.password_algorithm
 	) {
 		if (!user.password_salt) return false;

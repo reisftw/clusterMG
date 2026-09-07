@@ -195,6 +195,14 @@ async function getRegionalByName(regionalName) {
 	return match?.data || null;
 }
 
+// NOSONAR (javascript:S4790): SHA-1 aqui NAO protege segredo nenhum — gera
+// um UUID v5-like DETERMINISTICO a partir de uma chave de negocio (cidade,
+// responsavel), pra idempotencia de migracao/dual-write (mesmo seed -> mesmo
+// id, evita duplicar registro ja existente). Trocar o algoritmo mudaria o id
+// gerado pra registros que ja existem em producao (migration
+// 030_regionais_usuarios_normalizacao.sql, ja aplicada), causando
+// duplicidade em vez de atualizacao no proximo dual-write/migracao. NAO
+// alterar sem migrar os ids existentes primeiro.
 function stableUuid(seed) {
 	const crypto = require("node:crypto");
 	const hash = crypto.createHash("sha1").update(String(seed)).digest();
