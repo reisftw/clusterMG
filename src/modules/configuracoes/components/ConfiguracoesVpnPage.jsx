@@ -19,10 +19,7 @@ import {
 
 const DEFAULT_CONFIG = {
 	enabled: false,
-	protectedRoutes: [
-		"/financeiro/gestao-orcamento*",
-		"/api/financeiro/orcamento*",
-	],
+	protectedRoutes: [],
 	allowedCidrs: [],
 };
 
@@ -62,7 +59,7 @@ function useVpnConfigController() {
 	const [routesText, setRoutesText] = useState("");
 	const [cidrsText, setCidrsText] = useState("");
 	const [logs, setLogs] = useState([]);
-	const [testRoute, setTestRoute] = useState("/financeiro/gestao-orcamento");
+	const [testRoute, setTestRoute] = useState("");
 	const [message, setMessage] = useState("");
 	const [checkResult, setCheckResult] = useState(null);
 
@@ -329,9 +326,7 @@ export default function ConfiguracoesVpnPage() {
 						onChange={(event) => setRoutesText(event.target.value)}
 						disabled={!canManage}
 						rows={9}
-						placeholder={
-							"/financeiro/gestao-orcamento\n/api/financeiro/orcamento*"
-						}
+						placeholder={"/administrativo/imoveis\n/api/imoveis*"}
 						className="mt-3 w-full resize-y rounded-2xl border border-slate-200 px-4 py-3 font-mono text-sm font-semibold text-slate-800 outline-none focus:border-blue-400 disabled:bg-slate-50"
 					/>
 					<p className="mt-2 text-xs font-semibold text-slate-500">
@@ -369,7 +364,7 @@ export default function ConfiguracoesVpnPage() {
 							value={testRoute}
 							onChange={(event) => setTestRoute(event.target.value)}
 							className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-400"
-							placeholder="/api/financeiro/orcamento"
+							placeholder="/api/imoveis"
 						/>
 					</label>
 					<button

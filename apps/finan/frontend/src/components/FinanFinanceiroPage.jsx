@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import FinanceiroPage from "../../../../../src/modules/financeiro/components/FinanceiroPage";
-import { AuthContext } from "../../../../../src/context/AuthContext";
-import { ROLES } from "../../../../../src/constants/roles";
+import FinanceiroPage from "../modules/financeiro/components/FinanceiroPage";
+import { AuthContext } from "../modules/financeiro/financeiroAuthContext";
 import { fetchFinanRoles } from "../api/finanApi";
 import { useFinanAuth } from "../state/FinanAuthContext";
 
@@ -51,7 +50,7 @@ export default function FinanFinanceiroPage({ page }) {
 	const currentUser = useMemo(() => buildFinanceiroUser(auth.user), [auth.user]);
 	const isAdmin =
 		Boolean(auth.user?.isAdmin) ||
-		String(auth.user?.role || "").toLowerCase() === ROLES.ADMIN;
+		String(auth.user?.role || "").toLowerCase() === "admin";
 	useEffect(() => {
 		if (!isAdmin) {
 			setViewAsRoles([]);
