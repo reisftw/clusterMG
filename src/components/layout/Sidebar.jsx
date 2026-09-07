@@ -1348,6 +1348,75 @@ function TecnicosGroupItems({
 	);
 }
 
+// Extraido de FinanceiroGroupItems (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — so calcula os itens/flags derivados do grupo
+// financeiro, sem nenhuma logica nova. Mesmos filters/finds de antes.
+function computeFinanceiroGroupState({ group, pathname, clickedGroups }) {
+	const orcamentoItems = group.items.filter((item) =>
+		FINANCEIRO_ORCAMENTO_PATHS.includes(item.path),
+	);
+	const reportsItems = group.items.filter((item) =>
+		FINANCEIRO_REPORTS_PATHS.includes(item.path),
+	);
+	const tarifasReportItems = reportsItems.filter((item) =>
+		FINANCEIRO_TARIFAS_REPORTS_PATHS.includes(item.path),
+	);
+	const directReportItems = reportsItems.filter(
+		(item) =>
+			!FINANCEIRO_TARIFAS_REPORTS_PATHS.includes(item.path) &&
+			item.path !== ROUTES.FINANCEIRO_REPORTS_TARIFAS,
+	);
+	const tarifasReportItem = reportsItems.find(
+		(item) => item.path === ROUTES.FINANCEIRO_REPORTS_TARIFAS,
+	);
+	const dashboardItem = group.items.find(
+		(item) => item.path === ROUTES.FINANCEIRO,
+	);
+	const operationItems = [
+		ROUTES.FINANCEIRO_CONTAS_PAGAR,
+		ROUTES.FINANCEIRO_CONTAS_RECEBER,
+		ROUTES.FINANCEIRO_FATURAMENTO,
+		ROUTES.FINANCEIRO_NOTAS,
+	]
+		.map((path) => group.items.find((item) => item.path === path))
+		.filter(Boolean);
+	const configItem = group.items.find(
+		(item) => item.path === ROUTES.FINANCEIRO_CONFIGURACOES,
+	);
+	const equipeItem = group.items.find(
+		(item) => item.path === ROUTES.FINANCEIRO_EQUIPE,
+	);
+	const orcamentoActive = orcamentoItems.some((item) =>
+		isMenuPathActive(pathname, item),
+	);
+	const reportsActive = reportsItems.some((item) =>
+		isMenuPathActive(pathname, item),
+	);
+	const tarifasReportsActive =
+		Boolean(tarifasReportItem && isMenuPathActive(pathname, tarifasReportItem)) ||
+		tarifasReportItems.some((item) => isMenuPathActive(pathname, item));
+
+	return {
+		orcamentoItems,
+		reportsItems,
+		tarifasReportItems,
+		directReportItems,
+		tarifasReportItem,
+		dashboardItem,
+		operationItems,
+		configItem,
+		equipeItem,
+		orcamentoActive,
+		reportsActive,
+		tarifasReportsActive,
+		reportsOpen: Boolean(clickedGroups.financeiro_reports) || reportsActive,
+		tarifasReportsOpen:
+			Boolean(clickedGroups.financeiro_reports_tarifas) || tarifasReportsActive,
+		orcamentoOpen:
+			Boolean(clickedGroups.financeiro_orcamento) || orcamentoActive,
+	};
+}
+
 function FinanceiroGroupItems({
 	group,
 	pathname,
@@ -1392,55 +1461,23 @@ function FinanceiroGroupItems({
 			</NavLink>
 		);
 	};
-	const orcamentoItems = group.items.filter((item) =>
-		FINANCEIRO_ORCAMENTO_PATHS.includes(item.path),
-	);
-	const reportsItems = group.items.filter((item) =>
-		FINANCEIRO_REPORTS_PATHS.includes(item.path),
-	);
-	const tarifasReportItems = reportsItems.filter((item) =>
-		FINANCEIRO_TARIFAS_REPORTS_PATHS.includes(item.path),
-	);
-	const directReportItems = reportsItems.filter(
-		(item) =>
-			!FINANCEIRO_TARIFAS_REPORTS_PATHS.includes(item.path) &&
-			item.path !== ROUTES.FINANCEIRO_REPORTS_TARIFAS,
-	);
-	const tarifasReportItem = reportsItems.find(
-		(item) => item.path === ROUTES.FINANCEIRO_REPORTS_TARIFAS,
-	);
-	const dashboardItem = group.items.find(
-		(item) => item.path === ROUTES.FINANCEIRO,
-	);
-	const operationItems = [
-		ROUTES.FINANCEIRO_CONTAS_PAGAR,
-		ROUTES.FINANCEIRO_CONTAS_RECEBER,
-		ROUTES.FINANCEIRO_FATURAMENTO,
-		ROUTES.FINANCEIRO_NOTAS,
-	]
-		.map((path) => group.items.find((item) => item.path === path))
-		.filter(Boolean);
-	const configItem = group.items.find(
-		(item) => item.path === ROUTES.FINANCEIRO_CONFIGURACOES,
-	);
-	const equipeItem = group.items.find(
-		(item) => item.path === ROUTES.FINANCEIRO_EQUIPE,
-	);
-	const orcamentoActive = orcamentoItems.some((item) =>
-		isMenuPathActive(pathname, item),
-	);
-	const reportsActive = reportsItems.some((item) =>
-		isMenuPathActive(pathname, item),
-	);
-	const tarifasReportsActive =
-		Boolean(tarifasReportItem && isMenuPathActive(pathname, tarifasReportItem)) ||
-		tarifasReportItems.some((item) => isMenuPathActive(pathname, item));
-	const reportsOpen =
-		Boolean(clickedGroups.financeiro_reports) || reportsActive;
-	const tarifasReportsOpen =
-		Boolean(clickedGroups.financeiro_reports_tarifas) || tarifasReportsActive;
-	const orcamentoOpen =
-		Boolean(clickedGroups.financeiro_orcamento) || orcamentoActive;
+	const {
+		orcamentoItems,
+		reportsItems,
+		tarifasReportItems,
+		directReportItems,
+		tarifasReportItem,
+		dashboardItem,
+		operationItems,
+		configItem,
+		equipeItem,
+		orcamentoActive,
+		reportsActive,
+		tarifasReportsActive,
+		reportsOpen,
+		tarifasReportsOpen,
+		orcamentoOpen,
+	} = computeFinanceiroGroupState({ group, pathname, clickedGroups });
 
 	return (
 		<>
@@ -1563,6 +1600,16 @@ function FinanceiroGroupItems({
 	);
 }
 
+// Extraido de MenuGroup (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — substitui a cadeia de ternarios encadeados (administrativo/tecnicos/
+// financeiro/fallback) por uma tabela de despacho; os 3 componentes ja
+// recebem exatamente o mesmo conjunto de props.
+const GROUP_ITEMS_COMPONENTS = {
+	administrativo: AdministrativeGroupItems,
+	tecnicos: TecnicosGroupItems,
+	financeiro: FinanceiroGroupItems,
+};
+
 function MenuGroup({
 	group,
 	collapsed,
@@ -1584,6 +1631,7 @@ function MenuGroup({
 		group.id === "atendimento"
 			? displayLabel(group.label, "__atendimento_group")
 			: group.label;
+	const GroupItemsComponent = GROUP_ITEMS_COMPONENTS[group.id];
 	return (
 		<div key={group.id}>
 			<button
@@ -1615,32 +1663,8 @@ function MenuGroup({
 			</button>
 			{open && !collapsed ? (
 				<div className={submenuWrapClass}>
-					{group.id === "administrativo" ? (
-						<AdministrativeGroupItems
-							group={group}
-							pathname={pathname}
-							clickedGroups={clickedGroups}
-							setClickedGroups={setClickedGroups}
-							isModernLayout={isModernLayout}
-							nestedButtonClass={nestedButtonClass}
-							submenuClass={submenuClass}
-							onNavigate={onNavigate}
-							displayLabel={displayLabel}
-						/>
-					) : group.id === "tecnicos" ? (
-						<TecnicosGroupItems
-							group={group}
-							pathname={pathname}
-							clickedGroups={clickedGroups}
-							setClickedGroups={setClickedGroups}
-							isModernLayout={isModernLayout}
-							nestedButtonClass={nestedButtonClass}
-							submenuClass={submenuClass}
-							onNavigate={onNavigate}
-							displayLabel={displayLabel}
-						/>
-					) : group.id === "financeiro" ? (
-						<FinanceiroGroupItems
+					{GroupItemsComponent ? (
+						<GroupItemsComponent
 							group={group}
 							pathname={pathname}
 							clickedGroups={clickedGroups}
@@ -1744,22 +1768,12 @@ function getNavClass({ isActive, tone, isModernLayout }) {
 	}`;
 }
 
-const Sidebar = ({
-	collapsed = false,
-	onToggleCollapsed,
-	onNavigate,
-	variant = "desktop",
-}) => {
-	const { currentUser, signOut } = useAuthContext();
-	const { isModernLayout } = useLayoutMode();
-	const location = useLocation();
-	const [clickedGroups, setClickedGroups] = useState({});
+// Extraido de Sidebar (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
+// so os contadores de badge (documentos pendentes / atendimentos abertos),
+// mesmo efeito/assinaturas realtime de antes.
+function useSidebarBadgeCounters() {
 	const [documentosPendentes, setDocumentosPendentes] = useState(0);
 	const [atendimentoAbertos, setAtendimentoAbertos] = useState(0);
-	const currentRole = currentUser?.role;
-	const isEstoqueOnly = ["estoque", "supervisor_estoque"].includes(
-		String(currentRole || "").toLowerCase(),
-	);
 
 	useEffect(() => {
 		let active = true;
@@ -1796,27 +1810,13 @@ const Sidebar = ({
 		};
 	}, []);
 
-	const displayLabel = (label, path) => {
-		if (path === ROUTES.DOCUMENTOS_PENDENTES && documentosPendentes > 0) {
-			return (
-				<>
-					{label} (<span className="text-red-500">{documentosPendentes}</span>)
-				</>
-			);
-		}
-		if (
-			(path === ROUTES.ATENDIMENTO_CASOS || path === "__atendimento_group") &&
-			atendimentoAbertos > 0
-		) {
-			return (
-				<>
-					{label} (<span className="text-red-500">{atendimentoAbertos}</span>)
-				</>
-			);
-		}
-		return label;
-	};
+	return { documentosPendentes, atendimentoAbertos };
+}
 
+// Extraido de Sidebar (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
+// so os useMemo de derivacao do menu (itens visiveis/destacados/
+// agrupados), mesmas dependencias e mesma logica de antes.
+function useSidebarMenuItems({ currentUser, isModernLayout }) {
 	const visibleItems = useMemo(
 		() =>
 			NAV_ITEMS.filter(
@@ -1875,6 +1875,149 @@ const Sidebar = ({
 			),
 		[groupedPaths, menuItems],
 	);
+
+	return { featuredItems, groupedMenu, otherMenuItems };
+}
+
+// Extraidos de Sidebar (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
+// os dois blocos de cabecalho (moderno/classico) sao arvores JSX
+// independentes, so um renderiza por vez.
+function SidebarHeader({ collapsed, isModernLayout, isMobileDrawer, onToggleCollapsed }) {
+	const toggleTitle = isMobileDrawer
+		? "Fechar menu"
+		: collapsed
+			? "Expandir menu"
+			: "Ocultar menu";
+	const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+
+	if (isModernLayout) {
+		return (
+			<div className={collapsed ? "flex flex-col items-center gap-3" : ""}>
+				<img
+					src="/cluster-mg.png"
+					alt="Sempre Internet"
+					className={`${collapsed ? "w-12 rounded-xl" : "w-52 rounded-2xl"} mx-auto h-auto max-w-full object-contain shadow-[0_18px_42px_rgba(0,0,0,0.34)]`}
+				/>
+				<p
+					className={`${collapsed ? "sr-only" : "mt-5"} text-xs font-semibold text-slate-300`}
+				>
+					Gestão Retiradas
+				</p>
+				<button
+					type="button"
+					onClick={onToggleCollapsed}
+					className="mt-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-white transition hover:bg-white/15"
+					title={toggleTitle}
+					aria-label={toggleTitle}
+				>
+					<ToggleIcon size={18} />
+				</button>
+			</div>
+		);
+	}
+
+	return (
+		<div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
+			<div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-md">
+				<img
+					src="/cluster-mg.png"
+					alt="Sempre Internet"
+					className="h-9 w-9 rounded-xl object-cover"
+				/>
+			</div>
+			<div className={collapsed ? "sr-only" : ""}>
+				<p className="text-sm font-bold leading-none text-gray-900">
+					Sempre Internet
+				</p>
+				<p className="mt-0.5 text-xs font-medium text-orange-500">
+					Gestão Retiradas
+				</p>
+			</div>
+			<button
+				type="button"
+				onClick={onToggleCollapsed}
+				className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-100 bg-white text-gray-600 transition hover:bg-gray-50"
+				title={toggleTitle}
+				aria-label={toggleTitle}
+			>
+				<ToggleIcon size={18} />
+			</button>
+		</div>
+	);
+}
+
+// Extraido de Sidebar (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
+// cartao de usuario + botao de sair, so aparece no layout classico.
+function SidebarUserFooter({ currentUser, signOut }) {
+	return (
+		<div className="border-t border-gray-100 px-3 py-4">
+			<div className="mb-2 flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3">
+				<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600">
+					<span className="text-xs font-bold text-white">
+						{currentUser?.nome?.charAt(0)?.toUpperCase() ?? "U"}
+					</span>
+				</div>
+				<div className="min-w-0">
+					<p className="truncate text-sm font-semibold text-gray-900">
+						{currentUser?.nome}
+					</p>
+					<p className="truncate text-xs capitalize text-gray-400">
+						{getRoleLabel(currentUser?.role)}
+					</p>
+				</div>
+			</div>
+			<button
+				type="button"
+				onClick={signOut}
+				className="nav-item nav-item-inactive w-full text-red-400 hover:bg-red-50 hover:text-red-500"
+			>
+				<span>Sair</span>
+			</button>
+		</div>
+	);
+}
+
+const Sidebar = ({
+	collapsed = false,
+	onToggleCollapsed,
+	onNavigate,
+	variant = "desktop",
+}) => {
+	const { currentUser, signOut } = useAuthContext();
+	const { isModernLayout } = useLayoutMode();
+	const location = useLocation();
+	const [clickedGroups, setClickedGroups] = useState({});
+	const { documentosPendentes, atendimentoAbertos } = useSidebarBadgeCounters();
+	const currentRole = currentUser?.role;
+	const isEstoqueOnly = ["estoque", "supervisor_estoque"].includes(
+		String(currentRole || "").toLowerCase(),
+	);
+
+	const displayLabel = (label, path) => {
+		if (path === ROUTES.DOCUMENTOS_PENDENTES && documentosPendentes > 0) {
+			return (
+				<>
+					{label} (<span className="text-red-500">{documentosPendentes}</span>)
+				</>
+			);
+		}
+		if (
+			(path === ROUTES.ATENDIMENTO_CASOS || path === "__atendimento_group") &&
+			atendimentoAbertos > 0
+		) {
+			return (
+				<>
+					{label} (<span className="text-red-500">{atendimentoAbertos}</span>)
+				</>
+			);
+		}
+		return label;
+	};
+
+	const { featuredItems, groupedMenu, otherMenuItems } = useSidebarMenuItems({
+		currentUser,
+		isModernLayout,
+	});
 	const isGroupActive = (group) =>
 		group.items.some((item) => isMenuPathActive(location.pathname, item));
 	const groupButtonClass = (active, open) =>
@@ -1908,112 +2051,12 @@ const Sidebar = ({
 						: `${collapsed ? "px-3" : "px-6"} border-b border-gray-100 py-5`
 				}
 			>
-				{isModernLayout ? (
-					<div className={collapsed ? "flex flex-col items-center gap-3" : ""}>
-						<img
-							src="/cluster-mg.png"
-							alt="Sempre Internet"
-							className={`${collapsed ? "w-12 rounded-xl" : "w-52 rounded-2xl"} mx-auto h-auto max-w-full object-contain shadow-[0_18px_42px_rgba(0,0,0,0.34)]`}
-						/>
-						<p
-							className={`${collapsed ? "sr-only" : "mt-5"} text-xs font-semibold text-slate-300`}
-						>
-							Gestão Retiradas
-						</p>
-						<button
-							type="button"
-							onClick={onToggleCollapsed}
-							className="mt-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-white transition hover:bg-white/15"
-							title={
-								isMobileDrawer
-									? "Fechar menu"
-									: collapsed
-										? "Expandir menu"
-										: "Ocultar menu"
-							}
-							aria-label={
-								isMobileDrawer
-									? "Fechar menu"
-									: collapsed
-										? "Expandir menu"
-										: "Ocultar menu"
-							}
-						>
-							{collapsed ? (
-								<PanelLeftOpen size={18} />
-							) : (
-								<PanelLeftClose size={18} />
-							)}
-						</button>
-					</div>
-				) : (
-					<div
-						className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}
-					>
-						<div
-							className={
-								isModernLayout
-									? "flex h-10 w-10 items-center justify-center rounded-lg bg-white shadow-md"
-									: "flex h-9 w-9 items-center justify-center rounded-xl shadow-md"
-							}
-						>
-							<img
-								src="/cluster-mg.png"
-								alt="Sempre Internet"
-								className={
-									isModernLayout
-										? "max-h-8 max-w-8 object-contain"
-										: "h-9 w-9 rounded-xl object-cover"
-								}
-							/>
-						</div>
-						<div className={collapsed ? "sr-only" : ""}>
-							<p
-								className={
-									isModernLayout
-										? "text-sm font-extrabold uppercase leading-none tracking-wide text-white"
-										: "text-sm font-bold leading-none text-gray-900"
-								}
-							>
-								Sempre Internet
-							</p>
-							<p
-								className={
-									isModernLayout
-										? "mt-1 text-xs font-medium text-slate-300"
-										: "mt-0.5 text-xs font-medium text-orange-500"
-								}
-							>
-								Gestão Retiradas
-							</p>
-						</div>
-						<button
-							type="button"
-							onClick={onToggleCollapsed}
-							className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-100 bg-white text-gray-600 transition hover:bg-gray-50"
-							title={
-								isMobileDrawer
-									? "Fechar menu"
-									: collapsed
-										? "Expandir menu"
-										: "Ocultar menu"
-							}
-							aria-label={
-								isMobileDrawer
-									? "Fechar menu"
-									: collapsed
-										? "Expandir menu"
-										: "Ocultar menu"
-							}
-						>
-							{collapsed ? (
-								<PanelLeftOpen size={18} />
-							) : (
-								<PanelLeftClose size={18} />
-							)}
-						</button>
-					</div>
-				)}
+				<SidebarHeader
+					collapsed={collapsed}
+					isModernLayout={isModernLayout}
+					isMobileDrawer={isMobileDrawer}
+					onToggleCollapsed={onToggleCollapsed}
+				/>
 			</div>
 
 			<nav
@@ -2102,30 +2145,7 @@ const Sidebar = ({
 			</nav>
 
 			{!isModernLayout && (
-				<div className="border-t border-gray-100 px-3 py-4">
-					<div className="mb-2 flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3">
-						<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600">
-							<span className="text-xs font-bold text-white">
-								{currentUser?.nome?.charAt(0)?.toUpperCase() ?? "U"}
-							</span>
-						</div>
-						<div className="min-w-0">
-							<p className="truncate text-sm font-semibold text-gray-900">
-								{currentUser?.nome}
-							</p>
-							<p className="truncate text-xs capitalize text-gray-400">
-								{getRoleLabel(currentUser?.role)}
-							</p>
-						</div>
-					</div>
-					<button
-						type="button"
-						onClick={signOut}
-						className="nav-item nav-item-inactive w-full text-red-400 hover:bg-red-50 hover:text-red-500"
-					>
-						<span>Sair</span>
-					</button>
-				</div>
+				<SidebarUserFooter currentUser={currentUser} signOut={signOut} />
 			)}
 		</div>
 	);
