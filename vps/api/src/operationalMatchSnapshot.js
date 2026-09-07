@@ -67,6 +67,79 @@ function compactOrder(order = {}) {
 	};
 }
 
+// Extraidos de buildSection (achados javascript:S2004 — mais de 5 niveis
+// de funcoes aninhadas — e javascript:S7721 — buildSection nao usava
+// closure nenhuma de buildMatchData, so os proprios parametros, entao
+// podia virar funcao de modulo). Mesma logica de antes, so quebrada em
+// funcoes nomeadas menores pra reduzir o aninhamento.
+function computeRelacionadas(principal, retiradas) {
+	const street = normalizeStreet(principal.endereco);
+	return retiradas
+		.filter((order) => order.id !== principal.id)
+		.map((order) => {
+			const distanceMeters = Math.round(calcDistanceMeters(principal, order));
+			const sameStreet = street && street === normalizeStreet(order.endereco);
+			if (distanceMeters > 120) return null;
+			return { ...order, sameStreet, distanceMeters };
+		})
+		.filter(Boolean)
+		.sort((a, b) => a.distanceMeters - b.distanceMeters);
+}
+
+function buildCityMatch(principal, city, retiradas) {
+	const relacionadas = computeRelacionadas(principal, retiradas);
+	if (!relacionadas.length) return null;
+	return {
+		id: `${principal.id || principal.num_os}-${city}`,
+		principal: compactOrder(principal),
+		relacionadas: relacionadas.map(compactOrder),
+		totalRelacionadas: relacionadas.length,
+	};
+}
+
+function buildCityEntry(city, list, isAgente) {
+	const withCoords = list.filter(hasCoordinates);
+	const retiradas = withCoords.filter((order) => isRetiradaTipo(order.tipo));
+	const servicos = withCoords.filter((order) => !isRetiradaTipo(order.tipo));
+	const matches = servicos
+		.map((principal) => buildCityMatch(principal, city, retiradas))
+		.filter(Boolean)
+		.sort((a, b) => b.totalRelacionadas - a.totalRelacionadas);
+
+	return {
+		cidade: city,
+		matches,
+		totalMatches: matches.length,
+		totalRetiradasRelacionadas: matches.reduce(
+			(sum, item) => sum + item.totalRelacionadas,
+			0,
+		),
+		isAgente,
+	};
+}
+
+function buildGroupSection(group, cities, isAgente) {
+	const cidades = Object.entries(cities)
+		.map(([city, list]) => buildCityEntry(city, list, isAgente))
+		.filter((item) => item.totalMatches > 0)
+		.sort((a, b) => b.totalMatches - a.totalMatches);
+
+	return {
+		regional: group,
+		cidades,
+		totalMatches: cidades.reduce((sum, item) => sum + item.totalMatches, 0),
+		totalCidades: cidades.length,
+		isAgente,
+	};
+}
+
+function buildSection(grouped, isAgente = false) {
+	return Object.entries(grouped)
+		.map(([group, cities]) => buildGroupSection(group, cities, isAgente))
+		.filter((item) => item.totalMatches > 0)
+		.sort((a, b) => b.totalMatches - a.totalMatches);
+}
+
 function buildMatchData(ordens = []) {
 	const groupedRegionais = {};
 	const groupedAgentes = {};
@@ -85,74 +158,6 @@ function buildMatchData(ordens = []) {
 		if (!target[group][city]) target[group][city] = [];
 		target[group][city].push(order);
 	});
-
-	function buildSection(grouped, isAgente = false) {
-		return Object.entries(grouped)
-			.map(([group, cities]) => {
-				const cidades = Object.entries(cities)
-					.map(([city, list]) => {
-						const withCoords = list.filter(hasCoordinates);
-						const retiradas = withCoords.filter((order) =>
-							isRetiradaTipo(order.tipo),
-						);
-						const servicos = withCoords.filter(
-							(order) => !isRetiradaTipo(order.tipo),
-						);
-						const matches = servicos
-							.map((principal) => {
-								const street = normalizeStreet(principal.endereco);
-								const relacionadas = retiradas
-									.filter((order) => order.id !== principal.id)
-									.map((order) => {
-										const distanceMeters = Math.round(
-											calcDistanceMeters(principal, order),
-										);
-										const sameStreet =
-											street && street === normalizeStreet(order.endereco);
-										if (distanceMeters > 120) return null;
-										return { ...order, sameStreet, distanceMeters };
-									})
-									.filter(Boolean)
-									.sort((a, b) => a.distanceMeters - b.distanceMeters);
-								if (!relacionadas.length) return null;
-								return {
-									id: `${principal.id || principal.num_os}-${city}`,
-									principal: compactOrder(principal),
-									relacionadas: relacionadas.map(compactOrder),
-									totalRelacionadas: relacionadas.length,
-								};
-							})
-							.filter(Boolean)
-							.sort((a, b) => b.totalRelacionadas - a.totalRelacionadas);
-
-						return {
-							cidade: city,
-							matches,
-							totalMatches: matches.length,
-							totalRetiradasRelacionadas: matches.reduce(
-								(sum, item) => sum + item.totalRelacionadas,
-								0,
-							),
-							isAgente,
-						};
-					})
-					.filter((item) => item.totalMatches > 0)
-					.sort((a, b) => b.totalMatches - a.totalMatches);
-
-				return {
-					regional: group,
-					cidades,
-					totalMatches: cidades.reduce(
-						(sum, item) => sum + item.totalMatches,
-						0,
-					),
-					totalCidades: cidades.length,
-					isAgente,
-				};
-			})
-			.filter((item) => item.totalMatches > 0)
-			.sort((a, b) => b.totalMatches - a.totalMatches);
-	}
 
 	const regionais = buildSection(groupedRegionais);
 	const agentes = buildSection(groupedAgentes, true);
@@ -189,7 +194,7 @@ function buildMatchData(ordens = []) {
 }
 
 function buildMatchMessages(matchData = {}) {
-	const buildTopCities = (section = [], groupLabel) =>
+	const buildTopCities = (groupLabel, section = []) =>
 		section
 			.flatMap((group) =>
 				(group.cidades || []).map((city) => ({
@@ -224,12 +229,12 @@ function buildMatchMessages(matchData = {}) {
 	return {
 		regionais: buildMessage(
 			"Regionais:",
-			buildTopCities(matchData.regionais || [], "regional"),
+			buildTopCities("regional", matchData.regionais || []),
 			"https://retiradas.tech/painel/match",
 		),
 		agentes: buildMessage(
 			"Agente autorizado:",
-			buildTopCities(matchData.agentes || [], "agente"),
+			buildTopCities("agente", matchData.agentes || []),
 			"https://retiradas.tech/aa-sempre",
 		),
 	};
