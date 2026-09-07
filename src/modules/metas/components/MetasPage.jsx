@@ -785,6 +785,22 @@ function MetasBaseConfigModal({ config, onClose, onSave, saving }) {
 	);
 }
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveMonthButtonClass({ mesSelecionado, m, allData, fonteDados, aba }) {
+	if (mesSelecionado === m) return "bg-blue-600 text-white";
+	if (temDadosNaFonte(allData[m], fonteDados)) {
+		return "bg-gray-100 text-gray-600 hover:bg-gray-200";
+	}
+	if (aba === "lancamento") return "bg-gray-100 text-gray-600 hover:bg-gray-200";
+	return "bg-gray-50 text-gray-300 cursor-default";
+}
+
+function resolveFonteButtonClass(fonteDados, fonteId, disponivel) {
+	if (fonteDados === fonteId) return "bg-blue-600 text-white shadow-sm";
+	if (disponivel) return "bg-gray-100 text-gray-600 hover:bg-gray-200";
+	return "bg-gray-50 text-gray-300 cursor-not-allowed";
+}
+
 const MetasPage = () => {
 	const { currentUser } = useAuthContext();
 	const podeGerenciar = hasPermission(currentUser, "manage_metas");
@@ -943,15 +959,9 @@ const MetasPage = () => {
 									type="button"
 									key={m}
 									onClick={() => setMesSelecionado(m)}
-									className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-										mesSelecionado === m
-											? "bg-blue-600 text-white"
-											: temDadosNaFonte(allData[m], fonteDados)
-												? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-												: aba === "lancamento"
-													? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-													: "bg-gray-50 text-gray-300 cursor-default"
-									}`}
+									className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${resolveMonthButtonClass(
+										{ mesSelecionado, m, allData, fonteDados, aba },
+									)}`}
 									disabled={
 										aba !== "lancamento" &&
 										!temDadosNaFonte(allData[m], fonteDados) &&
@@ -983,13 +993,11 @@ const MetasPage = () => {
 											type="button"
 											onClick={() => setFonteDados(fonte.id)}
 											disabled={!disponivel}
-											className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
-												fonteDados === fonte.id
-													? "bg-blue-600 text-white shadow-sm"
-													: disponivel
-														? "bg-gray-100 text-gray-600 hover:bg-gray-200"
-														: "bg-gray-50 text-gray-300 cursor-not-allowed"
-											}`}
+											className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${resolveFonteButtonClass(
+												fonteDados,
+												fonte.id,
+												disponivel,
+											)}`}
 											title={
 												disponivel
 													? fonte.label

@@ -34,12 +34,12 @@ function mergeMatchAgentes(matchData, agentesData) {
 	const regionais = Array.isArray(matchData?.regionais)
 		? matchData.regionais
 		: [];
-	const agentes =
-		Array.isArray(matchData?.agentes) && matchData.agentes.length
-			? matchData.agentes
-			: Array.isArray(agentesData?.agentes)
-				? agentesData.agentes
-				: [];
+	let agentes = [];
+	if (Array.isArray(matchData?.agentes) && matchData.agentes.length) {
+		agentes = matchData.agentes;
+	} else if (Array.isArray(agentesData?.agentes)) {
+		agentes = agentesData.agentes;
+	}
 
 	const totalRegionais = regionais.length;
 	const totalAgentes = agentes.reduce(
@@ -75,6 +75,15 @@ function hasMatches(matchData) {
 
 function isCompactMatchData(matchData) {
 	return Boolean(matchData?.compact);
+}
+
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveMatchPublicoData({ detail, detailData, matchData }) {
+	if (detail) {
+		if (detailData) return detailData;
+		return isCompactMatchData(matchData) ? null : matchData;
+	}
+	return hasMatches(matchData) ? matchData : null;
 }
 
 export function useMatchPublico(options = {}) {
@@ -159,12 +168,7 @@ export function useMatchPublico(options = {}) {
 	const detailData =
 		detailState.version === matchVersion ? detailState.data : null;
 
-	const resolvedData =
-		detail
-			? detailData || (isCompactMatchData(matchData) ? null : matchData)
-			: hasMatches(matchData)
-				? matchData
-				: null;
+	const resolvedData = resolveMatchPublicoData({ detail, detailData, matchData });
 
 	return {
 		data: resolvedData,
