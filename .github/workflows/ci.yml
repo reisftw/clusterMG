@@ -649,8 +649,23 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Aguardar o deploy estabilizar
-        run: sleep 10
+      - name: Aguardar o site publico responder
+        # O health check do deploy so confere 127.0.0.1:PORT/api/health
+        # DENTRO da VPS — pode passar com nginx ainda recarregando/
+        # estabilizando pro lado de fora. Um sleep fixo de 10s as vezes
+        # nao bastava, gerando falso alarme de E2E (site "fora do ar")
+        # segundos antes de ele voltar sozinho. Agora espera a URL
+        # publica responder de verdade antes de rodar os testes.
+        run: |
+          url="${{ env.E2E_BASE_URL }}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS --max-time 10 "$url" >/dev/null 2>&1; then
+              echo "Site publico respondeu (tentativa $attempt)."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Site publico nao respondeu apos varias tentativas — seguindo mesmo assim." >&2
 
       - name: Rodar E2E (Fase G — docs/TECHNICAL-AUDIT.md, achado #6)
         run: npm run test:e2e
@@ -695,8 +710,20 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Aguardar o deploy estabilizar
-        run: sleep 10
+      - name: Aguardar o site publico responder
+        # Mesmo motivo do job de homologacao: o health check do deploy
+        # so confere localhost DENTRO da VPS, nao a URL publica. Espera
+        # de verdade antes de rodar os testes, em vez de um sleep fixo.
+        run: |
+          url="${{ env.E2E_BASE_URL }}"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS --max-time 10 "$url" >/dev/null 2>&1; then
+              echo "Site publico respondeu (tentativa $attempt)."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Site publico nao respondeu apos varias tentativas — seguindo mesmo assim." >&2
 
       - name: Rodar E2E (Fase G — docs/TECHNICAL-AUDIT.md, achado #6)
         run: npm run test:e2e
