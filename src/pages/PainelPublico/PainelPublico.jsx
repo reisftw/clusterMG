@@ -21,12 +21,10 @@ export default function PainelPublico({ initialTab = "retiradas" }) {
 
 	const displayMonth = month;
 
-	const loading =
-		activeTab === "retiradas"
-			? retiradas.loading
-			: activeTab === "agentes"
-				? agentes.loading
-				: mapaOS.loading;
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let loading = mapaOS.loading;
+	if (activeTab === "retiradas") loading = retiradas.loading;
+	else if (activeTab === "agentes") loading = agentes.loading;
 
 	return (
 		<div className="painel-publico-page">

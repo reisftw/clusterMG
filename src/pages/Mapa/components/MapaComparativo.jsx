@@ -7,6 +7,12 @@
 } from "lucide-react";
 import React, { useState } from "react";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDiffRowClass(diff) {
+	if (diff > 0) return "bg-red-50/30";
+	return diff < 0 ? "bg-green-50/30" : "";
+}
+
 function DiffBadge({ diff }) {
 	if (diff > 0)
 		return (
@@ -88,9 +94,7 @@ export default function MapaComparativo({ comparativo }) {
 					{comparativo.map(({ regional, anterior, atual, diff }) => (
 						<div
 							key={regional}
-							className={`grid grid-cols-4 gap-2 px-5 py-3 border-b border-gray-50 last:border-0 items-center ${
-								diff > 0 ? "bg-red-50/30" : diff < 0 ? "bg-green-50/30" : ""
-							}`}
+							className={`grid grid-cols-4 gap-2 px-5 py-3 border-b border-gray-50 last:border-0 items-center ${resolveDiffRowClass(diff)}`}
 						>
 							<span className="text-sm font-semibold text-gray-700 truncate">
 								{regional}

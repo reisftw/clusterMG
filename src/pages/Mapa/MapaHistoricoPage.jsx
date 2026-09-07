@@ -133,25 +133,36 @@ export default function MapaHistoricoPage() {
 				</p>
 			</div>
 
-			{loading ? (
-				<div className="flex justify-center py-20">
-					<Spinner />
-				</div>
-			) : historico.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-20 text-center">
-					<span className="text-5xl mb-4">📭</span>
-					<p className="text-gray-600 font-semibold">Nenhum histórico ainda</p>
-					<p className="text-gray-400 text-sm mt-1">
-						Importe uma planilha na página do Mapa para começar
-					</p>
-				</div>
-			) : (
-				<div className="flex flex-col gap-3">
-					{historico.map((item) => (
-						<HistoricoCard key={item.id} item={item} />
-					))}
-				</div>
-			)}
+			{(() => {
+				// Extraido pra achado javascript:S3358 (ternario aninhado).
+				if (loading) {
+					return (
+						<div className="flex justify-center py-20">
+							<Spinner />
+						</div>
+					);
+				}
+				if (historico.length === 0) {
+					return (
+						<div className="flex flex-col items-center justify-center py-20 text-center">
+							<span className="text-5xl mb-4">📭</span>
+							<p className="text-gray-600 font-semibold">
+								Nenhum histórico ainda
+							</p>
+							<p className="text-gray-400 text-sm mt-1">
+								Importe uma planilha na página do Mapa para começar
+							</p>
+						</div>
+					);
+				}
+				return (
+					<div className="flex flex-col gap-3">
+						{historico.map((item) => (
+							<HistoricoCard key={item.id} item={item} />
+						))}
+					</div>
+				);
+			})()}
 		</div>
 	);
 }

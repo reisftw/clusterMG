@@ -10,12 +10,10 @@ export default function PainelMapaNav({ current = "mapa" }) {
 			: "";
 	const fromExternalApp = from === "terceiros" || from === "terceirizados";
 	const suffix = fromExternalApp ? `?from=${from}` : "";
-	const homeHref =
-		from === "terceirizados"
-			? ROUTES.TERCEIRIZADOS
-			: from === "terceiros"
-				? ROUTES.TERCEIROS
-				: ROUTES.PAINEL_PUBLICO;
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let homeHref = ROUTES.PAINEL_PUBLICO;
+	if (from === "terceirizados") homeHref = ROUTES.TERCEIRIZADOS;
+	else if (from === "terceiros") homeHref = ROUTES.TERCEIROS;
 
 	function linkClass(active) {
 		return `inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-center text-sm font-semibold transition-all sm:flex-none sm:px-4 ${
