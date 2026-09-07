@@ -1047,6 +1047,108 @@ function TracksTableBody({ tracks, openManualResponsible }) {
 	));
 }
 
+// Extraidos de AgendamentoConfirmacaoPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cabecalho (contador + acoes) e cards de
+// estatisticas, mesma JSX/logica de antes.
+function AgendamentoHeader({
+	config,
+	loadData,
+	openTomorrowPreview,
+	openLogs,
+	working,
+	handleToggleAutomation,
+}) {
+	return (
+		<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="flex items-center gap-3">
+				<div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+					<ShieldCheck size={22} />
+				</div>
+				<div>
+					<h2 className="text-xl font-black text-slate-950">
+						Confirmação de Agendamentos
+					</h2>
+					<p className="text-sm text-slate-500">
+						Rotina automática das 08h e monitoramento de novos agendamentos do
+						dia.
+					</p>
+				</div>
+			</div>
+			<div className="flex flex-wrap gap-2">
+				<span
+					className={`inline-flex items-center rounded-xl border px-3 py-2 text-sm font-black ${
+						config?.enabled
+							? "border-emerald-200 bg-emerald-50 text-emerald-700"
+							: "border-amber-200 bg-amber-50 text-amber-700"
+					}`}
+				>
+					{config?.enabled ? "Rotina ativa" : "Rotina pausada"}
+				</span>
+				<button
+					type="button"
+					onClick={loadData}
+					className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+				>
+					<RefreshCw size={16} /> Atualizar
+				</button>
+				<button
+					type="button"
+					onClick={openTomorrowPreview}
+					className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+				>
+					<Clock size={16} /> Prévia de amanhã
+				</button>
+				<button
+					type="button"
+					onClick={openLogs}
+					className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+				>
+					<MessageSquareText size={16} /> Logs
+				</button>
+				<button
+					type="button"
+					disabled={working}
+					onClick={handleToggleAutomation}
+					className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold shadow-sm disabled:opacity-50 ${
+						config?.enabled
+							? "bg-amber-500 text-white hover:bg-amber-600"
+							: "bg-emerald-600 text-white hover:bg-emerald-700"
+					}`}
+				>
+					{config?.enabled ? "Pausar rotina" : "Ativar rotina"}
+				</button>
+			</div>
+		</div>
+	);
+}
+
+function AgendamentoStatCardTone(tone) {
+	if (tone === "green") return "border-emerald-200 bg-emerald-50";
+	if (tone === "amber") return "border-amber-200 bg-amber-50";
+	if (tone === "red") return "border-red-200 bg-red-50";
+	return "border-blue-200 bg-blue-50";
+}
+
+function AgendamentoStatCards({ stats }) {
+	return (
+		<div className="grid gap-3 md:grid-cols-4">
+			{stats.map((item) => (
+				<div
+					key={item.label}
+					className={`rounded-2xl border p-4 shadow-sm ${AgendamentoStatCardTone(item.tone)}`}
+				>
+					<p className="text-xs font-black uppercase tracking-wide text-slate-600">
+						{item.label}
+					</p>
+					<p className="mt-2 text-3xl font-black text-slate-950">
+						{item.value}
+					</p>
+				</div>
+			))}
+		</div>
+	);
+}
+
 export default function AgendamentoConfirmacaoPage() {
 	const {
 		config,
@@ -1113,66 +1215,14 @@ export default function AgendamentoConfirmacaoPage() {
 
 	return (
 		<div className="space-y-5">
-			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="flex items-center gap-3">
-					<div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-						<ShieldCheck size={22} />
-					</div>
-					<div>
-						<h2 className="text-xl font-black text-slate-950">
-							Confirmação de Agendamentos
-						</h2>
-						<p className="text-sm text-slate-500">
-							Rotina automática das 08h e monitoramento de novos agendamentos do
-							dia.
-						</p>
-					</div>
-				</div>
-				<div className="flex flex-wrap gap-2">
-					<span
-						className={`inline-flex items-center rounded-xl border px-3 py-2 text-sm font-black ${
-							config?.enabled
-								? "border-emerald-200 bg-emerald-50 text-emerald-700"
-								: "border-amber-200 bg-amber-50 text-amber-700"
-						}`}
-					>
-						{config?.enabled ? "Rotina ativa" : "Rotina pausada"}
-					</span>
-					<button
-						type="button"
-						onClick={loadData}
-						className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-					>
-						<RefreshCw size={16} /> Atualizar
-					</button>
-					<button
-						type="button"
-						onClick={openTomorrowPreview}
-						className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
-					>
-						<Clock size={16} /> Prévia de amanhã
-					</button>
-					<button
-						type="button"
-						onClick={openLogs}
-						className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-					>
-						<MessageSquareText size={16} /> Logs
-					</button>
-					<button
-						type="button"
-						disabled={working}
-						onClick={handleToggleAutomation}
-						className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold shadow-sm disabled:opacity-50 ${
-							config?.enabled
-								? "bg-amber-500 text-white hover:bg-amber-600"
-								: "bg-emerald-600 text-white hover:bg-emerald-700"
-						}`}
-					>
-						{config?.enabled ? "Pausar rotina" : "Ativar rotina"}
-					</button>
-				</div>
-			</div>
+			<AgendamentoHeader
+				config={config}
+				loadData={loadData}
+				openTomorrowPreview={openTomorrowPreview}
+				openLogs={openLogs}
+				working={working}
+				handleToggleAutomation={handleToggleAutomation}
+			/>
 
 			{feedback ? (
 				<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
@@ -1180,29 +1230,7 @@ export default function AgendamentoConfirmacaoPage() {
 				</div>
 			) : null}
 
-			<div className="grid gap-3 md:grid-cols-4">
-				{stats.map((item) => (
-					<div
-						key={item.label}
-						className={`rounded-2xl border p-4 shadow-sm ${
-							item.tone === "green"
-								? "border-emerald-200 bg-emerald-50"
-								: item.tone === "amber"
-									? "border-amber-200 bg-amber-50"
-									: item.tone === "red"
-										? "border-red-200 bg-red-50"
-										: "border-blue-200 bg-blue-50"
-						}`}
-					>
-						<p className="text-xs font-black uppercase tracking-wide text-slate-600">
-							{item.label}
-						</p>
-						<p className="mt-2 text-3xl font-black text-slate-950">
-							{item.value}
-						</p>
-					</div>
-				))}
-			</div>
+			<AgendamentoStatCards stats={stats} />
 
 			<div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(380px,0.9fr)]">
 				<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -2194,6 +2194,31 @@ function rollDayOnlyMatchToNextMonthIfPast(date, { year, month, day, requestedDa
 	};
 }
 
+// Extraidos de parseScheduleFromText (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — validacoes de horario/data, mesma logica de
+// antes.
+function resolveScheduleTimeNumbers(timeMatch) {
+	return {
+		hourNumber: timeMatch ? Number(timeMatch[1]) : null,
+		minuteNumber: timeMatch ? Number(timeMatch[2] || 0) : null,
+	};
+}
+
+function isValidScheduleTime(hourNumber, minuteNumber) {
+	if (hourNumber === null) return true;
+	return (
+		hourNumber >= 0 && hourNumber <= 23 && minuteNumber >= 0 && minuteNumber <= 59
+	);
+}
+
+function isValidCalendarDate(date, year, month, day) {
+	return (
+		date.getFullYear() === year &&
+		date.getMonth() === month - 1 &&
+		date.getDate() === day
+	);
+}
+
 function parseScheduleFromText(text, baseDate = new Date()) {
 	const value = String(text || "");
 	const { dateMatch, dayOnlyMatch, timeMatch } = matchScheduleDateAndTime(value);
@@ -2205,21 +2230,11 @@ function parseScheduleFromText(text, baseDate = new Date()) {
 	let month = dateMatch ? Number(dateMatch[2]) : Number(todayParts.month);
 	const rawYear = dateMatch?.[3] ? Number(dateMatch[3]) : Number(todayParts.year);
 	let year = rawYear < 100 ? 2000 + rawYear : rawYear;
-	const hourNumber = timeMatch ? Number(timeMatch[1]) : null;
-	const minuteNumber = timeMatch ? Number(timeMatch[2] || 0) : null;
-	if (
-		hourNumber !== null &&
-		(hourNumber < 0 || hourNumber > 23 || minuteNumber < 0 || minuteNumber > 59)
-	)
-		return null;
+	const { hourNumber, minuteNumber } = resolveScheduleTimeNumbers(timeMatch);
+	if (!isValidScheduleTime(hourNumber, minuteNumber)) return null;
 
 	let date = new Date(year, month - 1, day);
-	if (
-		date.getFullYear() !== year ||
-		date.getMonth() !== month - 1 ||
-		date.getDate() !== day
-	)
-		return null;
+	if (!isValidCalendarDate(date, year, month, day)) return null;
 
 	if (dayOnlyMatch) {
 		const rolled = rollDayOnlyMatchToNextMonthIfPast(date, {

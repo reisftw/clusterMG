@@ -440,6 +440,129 @@ function SubmissionFileListItem({ file, selectedFile, onSelect }) {
 	);
 }
 
+// Extraido de SubmissionModal (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — painel de preview/rename do arquivo
+// selecionado, mesma JSX/logica de antes.
+function SubmissionFilePreviewPanel({
+	selectedFile,
+	canRenameSelected,
+	setRenameOpen,
+	setModalMessage,
+	renameOpen,
+	renameName,
+	setRenameName,
+	renaming,
+	renameFile,
+	loadingPdf,
+	pdfUrl,
+}) {
+	return (
+		<div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+			<div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-3">
+				<div className="min-w-0">
+					<p className="break-words text-sm font-black text-slate-950">
+						{selectedFile?.fieldNome || selectedFile?.tipo || "Documento"}
+					</p>
+					<p className="break-all text-xs font-semibold text-slate-500">
+						{selectedFile?.nome || "-"}
+					</p>
+				</div>
+				<div className="flex shrink-0 flex-wrap justify-end gap-2">
+					{canRenameSelected ? (
+						<button
+							type="button"
+							onClick={() => {
+								setRenameOpen((current) => !current);
+								setModalMessage("");
+							}}
+							className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
+						>
+							<Pencil size={14} /> Editar nome
+						</button>
+					) : null}
+					{selectedFile ? (
+						<button
+							type="button"
+							onClick={() => baixarDocumento(selectedFile)}
+							className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
+						>
+							<Download size={14} /> Baixar
+						</button>
+					) : null}
+				</div>
+			</div>
+			{renameOpen ? (
+				<div className="border-b border-slate-200 bg-blue-50 p-3">
+					<label className="block">
+						<span className="mb-1 block text-xs font-black uppercase tracking-wide text-blue-700">
+							Nome do arquivo
+						</span>
+						<input
+							value={renameName}
+							onChange={(event) => setRenameName(event.target.value)}
+							className={inputClass}
+							placeholder="Ex: Contrato social - Agosto.pdf"
+						/>
+					</label>
+					<div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
+						<button
+							type="button"
+							disabled={renaming}
+							onClick={() => {
+								setRenameOpen(false);
+								setRenameName(selectedFile?.nome || "");
+							}}
+							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+						>
+							Cancelar
+						</button>
+						<button
+							type="button"
+							disabled={renaming || !renameName.trim()}
+							onClick={renameFile}
+							className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
+						>
+							{renaming ? (
+								<Loader2 className="animate-spin" size={16} />
+							) : (
+								<Save size={16} />
+							)}{" "}
+							Salvar nome
+						</button>
+					</div>
+				</div>
+			) : null}
+			<div className="h-[48vh] min-h-[360px]">
+				{loadingPdf ? (
+					<div className="flex h-full items-center justify-center text-sm font-black text-slate-500">
+						<Loader2 className="mr-2 animate-spin" size={18} /> Carregando
+						PDF...
+					</div>
+				) : pdfUrl &&
+					String(selectedFile?.mimeType || "").startsWith("image/") ? (
+					<div className="flex h-full items-center justify-center p-3">
+						<img
+							src={pdfUrl}
+							alt={selectedFile?.nome || "Documento"}
+							className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
+						/>
+					</div>
+				) : pdfUrl ? (
+					<iframe
+						title={selectedFile?.nome || "Documento"}
+						src={pdfUrl}
+						className="h-full w-full"
+					/>
+				) : (
+					<div className="flex h-full items-center justify-center p-6 text-center text-sm font-bold text-slate-400">
+						Não foi possível carregar a visualização do PDF.
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
 	const {
 		setSelectedFileId,
@@ -541,111 +664,19 @@ function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
 							))}
 						</div>
 
-						<div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-							<div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-3">
-								<div className="min-w-0">
-									<p className="break-words text-sm font-black text-slate-950">
-										{selectedFile?.fieldNome ||
-											selectedFile?.tipo ||
-											"Documento"}
-									</p>
-									<p className="break-all text-xs font-semibold text-slate-500">
-										{selectedFile?.nome || "-"}
-									</p>
-								</div>
-								<div className="flex shrink-0 flex-wrap justify-end gap-2">
-									{canRenameSelected ? (
-										<button
-											type="button"
-											onClick={() => {
-												setRenameOpen((current) => !current);
-												setModalMessage("");
-											}}
-											className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
-										>
-											<Pencil size={14} /> Editar nome
-										</button>
-									) : null}
-									{selectedFile ? (
-										<button
-											type="button"
-											onClick={() => baixarDocumento(selectedFile)}
-											className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
-										>
-											<Download size={14} /> Baixar
-										</button>
-									) : null}
-								</div>
-							</div>
-							{renameOpen ? (
-								<div className="border-b border-slate-200 bg-blue-50 p-3">
-									<label className="block">
-										<span className="mb-1 block text-xs font-black uppercase tracking-wide text-blue-700">
-											Nome do arquivo
-										</span>
-										<input
-											value={renameName}
-											onChange={(event) => setRenameName(event.target.value)}
-											className={inputClass}
-											placeholder="Ex: Contrato social - Agosto.pdf"
-										/>
-									</label>
-									<div className="mt-3 flex flex-col gap-2 sm:flex-row sm:justify-end">
-										<button
-											type="button"
-											disabled={renaming}
-											onClick={() => {
-												setRenameOpen(false);
-												setRenameName(selectedFile?.nome || "");
-											}}
-											className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-										>
-											Cancelar
-										</button>
-										<button
-											type="button"
-											disabled={renaming || !renameName.trim()}
-											onClick={renameFile}
-											className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60"
-										>
-											{renaming ? (
-												<Loader2 className="animate-spin" size={16} />
-											) : (
-												<Save size={16} />
-											)}{" "}
-											Salvar nome
-										</button>
-									</div>
-								</div>
-							) : null}
-							<div className="h-[48vh] min-h-[360px]">
-								{loadingPdf ? (
-									<div className="flex h-full items-center justify-center text-sm font-black text-slate-500">
-										<Loader2 className="mr-2 animate-spin" size={18} />{" "}
-										Carregando PDF...
-									</div>
-								) : pdfUrl &&
-									String(selectedFile?.mimeType || "").startsWith("image/") ? (
-									<div className="flex h-full items-center justify-center p-3">
-										<img
-											src={pdfUrl}
-											alt={selectedFile?.nome || "Documento"}
-											className="max-h-full max-w-full rounded-xl object-contain shadow-sm"
-										/>
-									</div>
-								) : pdfUrl ? (
-									<iframe
-										title={selectedFile?.nome || "Documento"}
-										src={pdfUrl}
-										className="h-full w-full"
-									/>
-								) : (
-									<div className="flex h-full items-center justify-center p-6 text-center text-sm font-bold text-slate-400">
-										Não foi possível carregar a visualização do PDF.
-									</div>
-								)}
-							</div>
-						</div>
+						<SubmissionFilePreviewPanel
+							selectedFile={selectedFile}
+							canRenameSelected={canRenameSelected}
+							setRenameOpen={setRenameOpen}
+							setModalMessage={setModalMessage}
+							renameOpen={renameOpen}
+							renameName={renameName}
+							setRenameName={setRenameName}
+							renaming={renaming}
+							renameFile={renameFile}
+							loadingPdf={loadingPdf}
+							pdfUrl={pdfUrl}
+						/>
 					</div>
 
 					{modalMessage ? (

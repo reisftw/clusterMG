@@ -1017,6 +1017,94 @@ function RetiradaCardHeader({
 	);
 }
 
+// Extraido de RetiradaCard (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — corpo expandido do card (cabecalho de edicao + form/detalhes +
+// rodape), mesma JSX/logica de antes.
+function RetiradaCardExpandedBody({
+	editing,
+	setEditing,
+	cancelEditing,
+	deleting,
+	handleDelete,
+	form,
+	updateField,
+	retirada,
+	displayRetirada,
+	emailStatusMeta,
+	receiptEmailStatusMeta,
+	isConcluded,
+	correiosPending,
+	quoting,
+	receiptSending,
+	onQuote,
+	onSendReceipt,
+	handleGenerateReceipt,
+	saving,
+	handleSave,
+}) {
+	return (
+		<div className="border-t border-gray-100 px-5 py-5">
+			<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<p className="text-sm font-black text-gray-900">
+						{editing ? "Editando solicitacao" : "Detalhes da solicitacao"}
+					</p>
+					<p className="text-sm text-gray-500">
+						{editing
+							? "Atualize os dados e salve quando terminar."
+							: "Abra a edicao para ajustar dados do cliente e da tratativa."}
+					</p>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					<button
+						type="button"
+						onClick={editing ? cancelEditing : () => setEditing(true)}
+						className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+					>
+						<Pencil size={16} />
+						{editing ? "Cancelar edicao" : "Editar"}
+					</button>
+					<button
+						type="button"
+						disabled={deleting}
+						onClick={handleDelete}
+						className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<Trash2 size={16} />
+						{deleting ? "Excluindo..." : "Excluir"}
+					</button>
+				</div>
+			</div>
+
+			{editing ? (
+				<RetiradaCardEditForm form={form} updateField={updateField} />
+			) : (
+				<RetiradaCardDetails
+					retirada={retirada}
+					displayRetirada={displayRetirada}
+					emailStatusMeta={emailStatusMeta}
+					receiptEmailStatusMeta={receiptEmailStatusMeta}
+					isConcluded={isConcluded}
+					correiosPending={correiosPending}
+					quoting={quoting}
+					receiptSending={receiptSending}
+					onQuote={onQuote}
+					onSendReceipt={onSendReceipt}
+					handleGenerateReceipt={handleGenerateReceipt}
+				/>
+			)}
+
+			<RetiradaCardFooterActions
+				editing={editing}
+				saving={saving}
+				cancelEditing={cancelEditing}
+				handleSave={handleSave}
+				setEditing={setEditing}
+			/>
+		</div>
+	);
+}
+
 function RetiradaCard({
 	retirada,
 	expanded,
@@ -1083,65 +1171,28 @@ function RetiradaCard({
 			/>
 
 			{expanded ? (
-				<div className="border-t border-gray-100 px-5 py-5">
-					<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-						<div>
-							<p className="text-sm font-black text-gray-900">
-								{editing ? "Editando solicitacao" : "Detalhes da solicitacao"}
-							</p>
-							<p className="text-sm text-gray-500">
-								{editing
-									? "Atualize os dados e salve quando terminar."
-									: "Abra a edicao para ajustar dados do cliente e da tratativa."}
-							</p>
-						</div>
-						<div className="flex flex-wrap gap-2">
-							<button
-								type="button"
-								onClick={editing ? cancelEditing : () => setEditing(true)}
-								className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-							>
-								<Pencil size={16} />
-								{editing ? "Cancelar edicao" : "Editar"}
-							</button>
-							<button
-								type="button"
-								disabled={deleting}
-								onClick={handleDelete}
-								className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								<Trash2 size={16} />
-								{deleting ? "Excluindo..." : "Excluir"}
-							</button>
-						</div>
-					</div>
-
-					{editing ? (
-						<RetiradaCardEditForm form={form} updateField={updateField} />
-					) : (
-						<RetiradaCardDetails
-							retirada={retirada}
-							displayRetirada={displayRetirada}
-							emailStatusMeta={emailStatusMeta}
-							receiptEmailStatusMeta={receiptEmailStatusMeta}
-							isConcluded={isConcluded}
-							correiosPending={correiosPending}
-							quoting={quoting}
-							receiptSending={receiptSending}
-							onQuote={onQuote}
-							onSendReceipt={onSendReceipt}
-							handleGenerateReceipt={handleGenerateReceipt}
-						/>
-					)}
-
-					<RetiradaCardFooterActions
-						editing={editing}
-						saving={saving}
-						cancelEditing={cancelEditing}
-						handleSave={handleSave}
-						setEditing={setEditing}
-					/>
-				</div>
+				<RetiradaCardExpandedBody
+					editing={editing}
+					setEditing={setEditing}
+					cancelEditing={cancelEditing}
+					deleting={deleting}
+					handleDelete={handleDelete}
+					form={form}
+					updateField={updateField}
+					retirada={retirada}
+					displayRetirada={displayRetirada}
+					emailStatusMeta={emailStatusMeta}
+					receiptEmailStatusMeta={receiptEmailStatusMeta}
+					isConcluded={isConcluded}
+					correiosPending={correiosPending}
+					quoting={quoting}
+					receiptSending={receiptSending}
+					onQuote={onQuote}
+					onSendReceipt={onSendReceipt}
+					handleGenerateReceipt={handleGenerateReceipt}
+					saving={saving}
+					handleSave={handleSave}
+				/>
 			) : null}
 		</div>
 	);

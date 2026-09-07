@@ -3101,6 +3101,57 @@ function ImoveisSidebarList({ imoveis, selectedId, setSelectedId }) {
 	);
 }
 
+// Extraidos de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — conteudo das abas de cadastro (aside + main
+// com sub-abas) e a pilha de modais, mesma JSX/logica de antes.
+function ImoveisTabContent({
+	tab,
+	imoveis,
+	selectedId,
+	setSelectedId,
+	controller,
+}) {
+	if (tab === "dashboard" || tab === "detalhe") return null;
+	return (
+		<div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+			<ImoveisSidebarList
+				imoveis={imoveis}
+				selectedId={selectedId}
+				setSelectedId={setSelectedId}
+			/>
+
+			<main className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				{tab === "cadastro" ? <ImovelCadastroTab {...controller} /> : null}
+
+				{tab === "contratos" ? <ImovelContratosTab {...controller} /> : null}
+
+				{tab === "historico" ? <ImovelHistoricoTab {...controller} /> : null}
+
+				{tab === "relatorios" ? <ImovelRelatoriosTab {...controller} /> : null}
+			</main>
+		</div>
+	);
+}
+
+function ImoveisModals({
+	deleteModalOpen,
+	configOpen,
+	aluguelModalOpen,
+	aguaEnergiaModalOpen,
+	placasModalOpen,
+	controller,
+}) {
+	return (
+		<>
+			{deleteModalOpen ? <ImoveisDeleteModal {...controller} /> : null}
+			{configOpen ? <ImoveisConfigModal {...controller} /> : null}
+			{aluguelModalOpen ? <ImoveisAluguelModal {...controller} /> : null}
+			{aguaEnergiaModalOpen ? <ImoveisAguaEnergiaModal {...controller} /> : null}
+			{placasModalOpen ? <ImoveisPlacasModal {...controller} /> : null}
+		</>
+	);
+}
+
 export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 	const controller = useImoveisAdministrativosController(page);
 	const {
@@ -3186,36 +3237,22 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 				/>
 			) : null}
 
-			{tab !== "dashboard" && tab !== "detalhe" ? (
-				<div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-					<ImoveisSidebarList
-						imoveis={imoveis}
-						selectedId={selectedId}
-						setSelectedId={setSelectedId}
-					/>
+			<ImoveisTabContent
+				tab={tab}
+				imoveis={imoveis}
+				selectedId={selectedId}
+				setSelectedId={setSelectedId}
+				controller={controller}
+			/>
 
-					<main className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-						{tab === "cadastro" ? <ImovelCadastroTab {...controller} /> : null}
-
-
-						{tab === "contratos" ? <ImovelContratosTab {...controller} /> : null}
-
-						{tab === "historico" ? <ImovelHistoricoTab {...controller} /> : null}
-
-						{tab === "relatorios" ? <ImovelRelatoriosTab {...controller} /> : null}
-					</main>
-				</div>
-			) : null}
-
-			{deleteModalOpen ? <ImoveisDeleteModal {...controller} /> : null}
-
-			{configOpen ? <ImoveisConfigModal {...controller} /> : null}
-
-			{aluguelModalOpen ? <ImoveisAluguelModal {...controller} /> : null}
-
-			{aguaEnergiaModalOpen ? <ImoveisAguaEnergiaModal {...controller} /> : null}
-
-			{placasModalOpen ? <ImoveisPlacasModal {...controller} /> : null}
+			<ImoveisModals
+				deleteModalOpen={deleteModalOpen}
+				configOpen={configOpen}
+				aluguelModalOpen={aluguelModalOpen}
+				aguaEnergiaModalOpen={aguaEnergiaModalOpen}
+				placasModalOpen={placasModalOpen}
+				controller={controller}
+			/>
 		</div>
 	);
 }

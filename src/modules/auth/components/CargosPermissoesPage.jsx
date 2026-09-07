@@ -588,6 +588,61 @@ function PermissionMatrix({
 	));
 }
 
+// Extraido de CargosPermissoesPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — secao "Ver Como" (gated por isAdmin), mesma
+// JSX/logica de antes.
+function VerComoSection({
+	isAdmin,
+	isViewingAsRole,
+	viewAsRole,
+	setViewAsRole,
+	viewAsRoles,
+	isFinanScope,
+}) {
+	if (!isAdmin) return null;
+	return (
+		<section className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
+			<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+						<Eye size={20} />
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">Ver Como</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Simule outro cargo para conferir menus, permissões e
+							visualizações do sistema.
+						</p>
+						{isViewingAsRole ? (
+							<p className="mt-2 text-xs font-black uppercase tracking-wide text-blue-700">
+								Simulando: {getRoleLabel(viewAsRole)}
+							</p>
+						) : null}
+					</div>
+				</div>
+				<select
+					value={viewAsRole}
+					onChange={(event) => setViewAsRole(event.target.value)}
+					className="w-full rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-blue-950 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 lg:w-72"
+				>
+					<option value="">Admin real</option>
+					{(viewAsRoles.length
+						? viewAsRoles
+						: isFinanScope
+							? []
+							: CARGOS_RETIRADAS)
+						.filter((cargo) => cargo.value !== ROLES.ADMIN)
+						.map((cargo) => (
+							<option key={cargo.value} value={cargo.value}>
+								{cargo.label}
+							</option>
+						))}
+				</select>
+			</div>
+		</section>
+	);
+}
+
 export default function CargosPermissoesPage() {
 	const {
 		viewAsRole,
@@ -685,47 +740,14 @@ export default function CargosPermissoesPage() {
 				</div>
 			) : null}
 
-			{isAdmin ? (
-				<section className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm">
-					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-						<div className="flex items-start gap-3">
-							<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-								<Eye size={20} />
-							</div>
-							<div>
-								<h2 className="text-lg font-black text-slate-950">Ver Como</h2>
-								<p className="text-sm font-semibold text-slate-500">
-									Simule outro cargo para conferir menus, permissões e
-									visualizações do sistema.
-								</p>
-								{isViewingAsRole ? (
-									<p className="mt-2 text-xs font-black uppercase tracking-wide text-blue-700">
-										Simulando: {getRoleLabel(viewAsRole)}
-									</p>
-								) : null}
-							</div>
-						</div>
-						<select
-							value={viewAsRole}
-							onChange={(event) => setViewAsRole(event.target.value)}
-							className="w-full rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-blue-950 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 lg:w-72"
-						>
-							<option value="">Admin real</option>
-							{(viewAsRoles.length
-								? viewAsRoles
-								: isFinanScope
-									? []
-									: CARGOS_RETIRADAS)
-								.filter((cargo) => cargo.value !== ROLES.ADMIN)
-								.map((cargo) => (
-									<option key={cargo.value} value={cargo.value}>
-										{cargo.label}
-									</option>
-								))}
-						</select>
-					</div>
-				</section>
-			) : null}
+			<VerComoSection
+				isAdmin={isAdmin}
+				isViewingAsRole={isViewingAsRole}
+				viewAsRole={viewAsRole}
+				setViewAsRole={setViewAsRole}
+				viewAsRoles={viewAsRoles}
+				isFinanScope={isFinanScope}
+			/>
 
 			<div className="grid gap-5 xl:grid-cols-[330px_1fr]">
 				<aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

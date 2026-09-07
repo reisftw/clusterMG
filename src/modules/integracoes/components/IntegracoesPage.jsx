@@ -924,6 +924,76 @@ function useIntegracoesController() {
 // Extraido de IntegracoesPage (achado javascript:S3776,
 // docs/SONARQUBE-MAP.md) — linha da tabela de integracoes, mesma
 // JSX/logica de antes.
+// Extraidos de IntegracaoTableRow (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — celulas com mais de um condicional, mesma
+// JSX/logica de antes.
+function IntegracaoAuthCell({ item }) {
+	return (
+		<>
+			<div className="flex items-center gap-2">
+				<KeyRound size={14} className="text-gray-400" />
+				<span className="text-xs font-semibold text-gray-700">
+					{getLabel(AUTH_TYPES, item.authType)}
+				</span>
+			</div>
+			<p className="mt-1 text-xs text-gray-400">
+				{item.secretConfigured
+					? `${item.credentialRef || "Credencial"} configurada`
+					: item.credentialRef || "Sem referência"}
+			</p>
+			{item.loginConfigured || item.tokenExpiresAt ? (
+				<p className="mt-1 text-xs text-gray-400">
+					{item.loginConfigured ? "Login automático configurado" : ""}
+					{item.loginConfigured && item.tokenExpiresAt ? " · " : ""}
+					{item.tokenExpiresAt
+						? `Token expira em ${new Date(item.tokenExpiresAt).toLocaleString("pt-BR")}`
+						: ""}
+				</p>
+			) : null}
+		</>
+	);
+}
+
+function IntegracaoModulesCell({ item }) {
+	return (
+		<div className="flex max-w-[240px] flex-wrap gap-1">
+			{(item.modules || []).length ? (
+				item.modules.map((module) => (
+					<span
+						key={module}
+						className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600"
+					>
+						{module}
+					</span>
+				))
+			) : (
+				<span className="text-xs text-gray-400">Nenhum módulo</span>
+			)}
+		</div>
+	);
+}
+
+function IntegracaoStatusCell({ item }) {
+	return (
+		<span
+			className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+				STATUS_CLASS[item.lastStatus] || STATUS_CLASS.not_tested
+			}`}
+		>
+			{item.lastStatus === "ok" ? (
+				<CheckCircle2 size={13} />
+			) : (
+				<AlertCircle size={13} />
+			)}
+			{item.lastStatus === "ok"
+				? "Ok"
+				: item.lastStatus === "error"
+					? "Erro"
+					: "Não testada"}
+		</span>
+	);
+}
+
 function IntegracaoTableRow({ item, podeEditar, handleEdit, setConfirmDelete }) {
 	return (
 		<tr className="hover:bg-gray-50">
@@ -965,60 +1035,13 @@ function IntegracaoTableRow({ item, podeEditar, handleEdit, setConfirmDelete }) 
 				) : null}
 			</td>
 			<td className="px-5 py-4">
-				<div className="flex items-center gap-2">
-					<KeyRound size={14} className="text-gray-400" />
-					<span className="text-xs font-semibold text-gray-700">
-						{getLabel(AUTH_TYPES, item.authType)}
-					</span>
-				</div>
-				<p className="mt-1 text-xs text-gray-400">
-					{item.secretConfigured
-						? `${item.credentialRef || "Credencial"} configurada`
-						: item.credentialRef || "Sem referência"}
-				</p>
-				{item.loginConfigured || item.tokenExpiresAt ? (
-					<p className="mt-1 text-xs text-gray-400">
-						{item.loginConfigured ? "Login automático configurado" : ""}
-						{item.loginConfigured && item.tokenExpiresAt ? " · " : ""}
-						{item.tokenExpiresAt
-							? `Token expira em ${new Date(item.tokenExpiresAt).toLocaleString("pt-BR")}`
-							: ""}
-					</p>
-				) : null}
+				<IntegracaoAuthCell item={item} />
 			</td>
 			<td className="px-5 py-4">
-				<div className="flex max-w-[240px] flex-wrap gap-1">
-					{(item.modules || []).length ? (
-						item.modules.map((module) => (
-							<span
-								key={module}
-								className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600"
-							>
-								{module}
-							</span>
-						))
-					) : (
-						<span className="text-xs text-gray-400">Nenhum módulo</span>
-					)}
-				</div>
+				<IntegracaoModulesCell item={item} />
 			</td>
 			<td className="px-5 py-4">
-				<span
-					className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
-						STATUS_CLASS[item.lastStatus] || STATUS_CLASS.not_tested
-					}`}
-				>
-					{item.lastStatus === "ok" ? (
-						<CheckCircle2 size={13} />
-					) : (
-						<AlertCircle size={13} />
-					)}
-					{item.lastStatus === "ok"
-						? "Ok"
-						: item.lastStatus === "error"
-							? "Erro"
-							: "Não testada"}
-				</span>
+				<IntegracaoStatusCell item={item} />
 			</td>
 			{podeEditar ? (
 				<td className="px-5 py-4">
