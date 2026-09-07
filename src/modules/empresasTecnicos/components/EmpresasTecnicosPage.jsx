@@ -471,6 +471,13 @@ function Metric({ label, value, tone = "slate" }) {
 	);
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+const EMPRESAS_METRIC_TONE_CLASSES = {
+	green: "bg-emerald-100",
+	purple: "bg-violet-100",
+	amber: "bg-amber-100",
+};
+
 function EmpresasMetricCard({
 	icon: Icon,
 	label,
@@ -502,7 +509,7 @@ function EmpresasMetricCard({
 					</div>
 				</div>
 				<div
-					className={`h-8 w-16 rounded-full opacity-80 ${tone === "green" ? "bg-emerald-100" : tone === "purple" ? "bg-violet-100" : tone === "amber" ? "bg-amber-100" : "bg-blue-100"}`}
+					className={`h-8 w-16 rounded-full opacity-80 ${EMPRESAS_METRIC_TONE_CLASSES[tone] || "bg-blue-100"}`}
 				/>
 			</div>
 		</div>
@@ -1924,21 +1931,37 @@ function EmpresaDriveSection({
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-slate-100">
-								{loadingDrive ? (
-									<tr>
-										<td
-											colSpan={5}
-											className="px-4 py-8 text-center text-sm font-bold text-blue-700"
-										>
-											<RefreshCw
-												className="mx-auto mb-2 animate-spin"
-												size={20}
-											/>
-											Carregando arquivos...
-										</td>
-									</tr>
-								) : driveItems.length ? (
-									driveItems.map((item) => (
+								{(() => {
+									// Extraido pra achado javascript:S3358 (ternario aninhado).
+									if (loadingDrive) {
+										return (
+											<tr>
+												<td
+													colSpan={5}
+													className="px-4 py-8 text-center text-sm font-bold text-blue-700"
+												>
+													<RefreshCw
+														className="mx-auto mb-2 animate-spin"
+														size={20}
+													/>
+													Carregando arquivos...
+												</td>
+											</tr>
+										);
+									}
+									if (!driveItems.length) {
+										return (
+											<tr>
+												<td
+													colSpan={5}
+													className="px-4 py-8 text-center text-sm font-bold text-slate-400"
+												>
+													Nenhum arquivo encontrado nesta pasta.
+												</td>
+											</tr>
+										);
+									}
+									return driveItems.map((item) => (
 										<tr key={item.id}>
 											<td className="px-4 py-3 font-black text-slate-900">
 												<div className="flex items-center gap-2">
@@ -2002,17 +2025,8 @@ function EmpresaDriveSection({
 												)}
 											</td>
 										</tr>
-									))
-								) : (
-									<tr>
-										<td
-											colSpan={5}
-											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
-										>
-											Nenhum arquivo encontrado nesta pasta.
-										</td>
-									</tr>
-								)}
+									));
+								})()}
 							</tbody>
 						</table>
 					</div>
