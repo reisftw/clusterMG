@@ -25,6 +25,12 @@ const trustItems = [
 	{ label: "Suporte dedicado", icon: Headphones },
 ];
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveLoginSubmitLabel(isSubmitting, mfaChallenge) {
+	if (isSubmitting) return "Entrando...";
+	return mfaChallenge ? "Validar código" : "Entrar no sistema";
+}
+
 function MfaCodePanel({ challenge, code, onCodeChange, onReset }) {
 	const codeInputId = useId();
 	return (
@@ -527,11 +533,7 @@ const LoginForm = () => {
 									className="mt-2 inline-flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-[linear-gradient(90deg,#ff9800_0%,#ff4b00_100%)] text-lg font-black text-white shadow-[0_18px_34px_rgba(255,95,0,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(255,95,0,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									<LogIn size={24} />
-									{isSubmitting
-										? "Entrando..."
-										: mfaChallenge
-											? "Validar código"
-											: "Entrar no sistema"}
+									{resolveLoginSubmitLabel(isSubmitting, mfaChallenge)}
 								</button>
 								{!mfaChallenge &&
 								googleConfig.enabled &&

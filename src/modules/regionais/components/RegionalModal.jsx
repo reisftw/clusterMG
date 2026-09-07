@@ -71,6 +71,12 @@ const buildInitialState = (regional) => {
 	};
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSalvarButtonLabel(saving, editando) {
+	if (saving) return "Salvando...";
+	return editando ? "Salvar alteracoes" : "Cadastrar";
+}
+
 const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 	const editando = !!regional;
 	const initialState = buildInitialState(regional);
@@ -454,11 +460,7 @@ const RegionalModalContent = ({ regional, onSalvar, onClose }) => {
 						disabled={saving || !nome.trim()}
 						className="flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
 					>
-						{saving
-							? "Salvando..."
-							: editando
-								? "Salvar alteracoes"
-								: "Cadastrar"}
+						{resolveSalvarButtonLabel(saving, editando)}
 					</button>
 				</div>
 			</div>

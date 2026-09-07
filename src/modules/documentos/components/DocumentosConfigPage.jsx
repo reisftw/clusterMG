@@ -19,6 +19,12 @@ import {
 } from "../services/documentosService";
 import { DEFAULT_FINANCEIRO_EMAIL_TEMPLATE } from "../utils/financeiroEmail";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+const PUBLICO_ALVO_LABELS = {
+	agente: "Agente",
+	tecnico: "Técnico",
+};
+
 function formatDate(value) {
 	if (!value) return "-";
 	const date = new Date(value);
@@ -696,11 +702,7 @@ export default function DocumentosConfigPage() {
 											{field.nome}
 										</td>
 										<td className="px-4 py-3 font-semibold text-slate-600">
-											{field.publicoAlvo === "agente"
-												? "Agente"
-												: field.publicoAlvo === "tecnico"
-													? "Técnico"
-													: "Ambos"}
+											{PUBLICO_ALVO_LABELS[field.publicoAlvo] || "Ambos"}
 										</td>
 										<td className="px-4 py-3 font-semibold text-slate-600">
 											{field.obrigatorio ? "Sim" : "Não"}

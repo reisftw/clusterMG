@@ -119,6 +119,12 @@ const toQrImageSrc = (value) => {
 // Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // pra reduzir a complexidade cognitiva da funcao de render — mesmo
 // estado e mesmas chamadas, sem mudanca de comportamento.
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveWorkerStatusLabel(worker) {
+	if (!worker?.enabled) return "rotina desativada ou pausada";
+	return worker?.workerRunning ? "rodando agora" : "ativo";
+}
+
 function useAgendamentoConfirmacaoController() {
 	const [config, setConfig] = useState(null);
 	const [worker, setWorker] = useState({});
@@ -1550,11 +1556,7 @@ export default function AgendamentoConfirmacaoPage() {
 								<span
 									className={`font-black ${worker?.enabled ? "text-emerald-700" : "text-amber-700"}`}
 								>
-									{worker?.enabled
-										? worker?.workerRunning
-											? "rodando agora"
-											: "ativo"
-										: "rotina desativada ou pausada"}
+									{resolveWorkerStatusLabel(worker)}
 								</span>
 							</p>
 							<p>
