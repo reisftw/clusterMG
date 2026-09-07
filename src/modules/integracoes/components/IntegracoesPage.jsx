@@ -774,7 +774,10 @@ function OAuthSettingsPanel({
 	);
 }
 
-export default function IntegracoesPage() {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useIntegracoesController() {
 	const { currentUser } = useAuthContext();
 	const { integracoes, loading, error, carregar, criar, atualizar, excluir } =
 		useIntegracoes();
@@ -885,6 +888,70 @@ export default function IntegracoesPage() {
 			setOktaSaving(false);
 		}
 	};
+
+	return {
+		integracoes,
+		loading,
+		error,
+		carregar,
+		editing,
+		setEditing,
+		showForm,
+		setShowForm,
+		saving,
+		confirmDelete,
+		setConfirmDelete,
+		googleOAuth,
+		setGoogleOAuth,
+		oktaOAuth,
+		setOktaOAuth,
+		googleSaving,
+		googleMessage,
+		oktaSaving,
+		oktaMessage,
+		podeEditar,
+		isAdmin,
+		activeCount,
+		handleNew,
+		handleEdit,
+		handleSave,
+		handleDelete,
+		saveGoogleOAuth,
+		saveOktaOAuth,
+	};
+}
+
+export default function IntegracoesPage() {
+	const {
+		integracoes,
+		loading,
+		error,
+		carregar,
+		editing,
+		setEditing,
+		showForm,
+		setShowForm,
+		saving,
+		confirmDelete,
+		setConfirmDelete,
+		googleOAuth,
+		setGoogleOAuth,
+		oktaOAuth,
+		setOktaOAuth,
+		googleSaving,
+		googleMessage,
+		oktaSaving,
+		oktaMessage,
+		podeEditar,
+		isAdmin,
+		activeCount,
+		handleNew,
+		handleEdit,
+		handleSave,
+		handleDelete,
+		saveGoogleOAuth,
+		saveOktaOAuth,
+	} = useIntegracoesController();
 
 	if (loading) return <Spinner fullScreen />;
 

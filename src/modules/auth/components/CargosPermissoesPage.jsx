@@ -184,7 +184,10 @@ function withPermissionPairRules(
 	return normalizePermissions([...next]);
 }
 
-export default function CargosPermissoesPage() {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useCargosPermissoesController() {
 	const {
 		currentUser,
 		realUser,
@@ -394,6 +397,78 @@ export default function CargosPermissoesPage() {
 			setDeleting(false);
 		}
 	};
+
+	return {
+		currentUser,
+		viewAsRole,
+		viewAsRoles,
+		setViewAsRole,
+		isViewingAsRole,
+		isAdmin,
+		isFinanScope,
+		canManage,
+		roles,
+		permissionCatalog,
+		selectedId,
+		setSelectedId,
+		draft,
+		loading,
+		saving,
+		deleting,
+		message,
+		error,
+		catalogById,
+		catalogIds,
+		groupedCatalog,
+		selectedRole,
+		loadRoles,
+		isAdminRole,
+		canEditDraft,
+		canDeleteDraft,
+		selectedPermissions,
+		selectedCount,
+		setField,
+		togglePermission,
+		handleCreate,
+		handleClone,
+		handleSave,
+		handleDelete,
+	};
+}
+
+export default function CargosPermissoesPage() {
+	const {
+		viewAsRole,
+		viewAsRoles,
+		setViewAsRole,
+		isViewingAsRole,
+		isAdmin,
+		isFinanScope,
+		canManage,
+		roles,
+		permissionCatalog,
+		selectedId,
+		setSelectedId,
+		draft,
+		loading,
+		saving,
+		deleting,
+		message,
+		error,
+		groupedCatalog,
+		loadRoles,
+		isAdminRole,
+		canEditDraft,
+		canDeleteDraft,
+		selectedPermissions,
+		selectedCount,
+		setField,
+		togglePermission,
+		handleCreate,
+		handleClone,
+		handleSave,
+		handleDelete,
+	} = useCargosPermissoesController();
 
 	if (loading) return <Spinner fullScreen />;
 

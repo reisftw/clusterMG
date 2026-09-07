@@ -165,7 +165,10 @@ function HubsoftStatusCards({ config }) {
 	);
 }
 
-export default function HubsoftSettingsPage() {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useHubsoftSettingsController() {
 	const [config, setConfig] = useState(DEFAULT_HUBSOFT_CONFIG);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
@@ -342,6 +345,60 @@ export default function HubsoftSettingsPage() {
 			setSyncing(false);
 		}
 	};
+
+	return {
+		config,
+		loading,
+		saving,
+		testing,
+		associating,
+		searching,
+		syncing,
+		feedback,
+		error,
+		testResult,
+		syncJob,
+		syncRuns,
+		query,
+		setQuery,
+		queryResult,
+		loadConfig,
+		updateConfig,
+		handleSave,
+		handleTest,
+		handleAssociate,
+		handleSearch,
+		toggleArrayValue,
+		handleSync,
+	};
+}
+
+export default function HubsoftSettingsPage() {
+	const {
+		config,
+		loading,
+		saving,
+		testing,
+		associating,
+		searching,
+		syncing,
+		feedback,
+		error,
+		testResult,
+		syncJob,
+		syncRuns,
+		query,
+		setQuery,
+		queryResult,
+		loadConfig,
+		updateConfig,
+		handleSave,
+		handleTest,
+		handleAssociate,
+		handleSearch,
+		toggleArrayValue,
+		handleSync,
+	} = useHubsoftSettingsController();
 
 	if (loading) return <Spinner fullScreen={false} />;
 

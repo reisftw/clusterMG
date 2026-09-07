@@ -121,7 +121,10 @@ function StatusBadge({ status }) {
 	);
 }
 
-const LogisticaPage = () => {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useLogisticaController() {
 	const { currentUser } = useAuthContext();
 	const [activeTab, setActiveTab] = useState("cotacoes");
 	const [loading, setLoading] = useState(true);
@@ -493,6 +496,112 @@ const LogisticaPage = () => {
 			),
 		}));
 	};
+
+	return {
+		activeTab,
+		setActiveTab,
+		loading,
+		saving,
+		feedback,
+		feedbackType,
+		search,
+		setSearch,
+		pageSize,
+		setPageSize,
+		page,
+		setPage,
+		config,
+		setConfig,
+		pontos,
+		cotacoes,
+		cidades,
+		clientes,
+		clienteBusca,
+		setClienteBusca,
+		geocodingTarget,
+		cotacaoForm,
+		setCotacaoForm,
+		pontoForm,
+		setPontoForm,
+		editingPonto,
+		setEditingPonto,
+		filteredCotacoes,
+		filteredPontos,
+		list,
+		totalPages,
+		currentPage,
+		pageItems,
+		stats,
+		pontosDaCidade,
+		sugestoesClientes,
+		updateCotacao,
+		showFeedback,
+		clearFeedback,
+		loadData,
+		aplicarCliente,
+		updatePonto,
+		preencherRegionalPonto,
+		handleGeocodeCotacao,
+		handleGeocodePonto,
+		handleSaveCotacao,
+		handleLalamoveQuote,
+		handleSavePonto,
+		handleDeletePonto,
+		handleDeleteCotacao,
+		handleCreateBasePoints,
+		handleSaveConfig,
+		updateProvider,
+	};
+}
+
+const LogisticaPage = () => {
+	const {
+		activeTab,
+		setActiveTab,
+		loading,
+		saving,
+		feedback,
+		feedbackType,
+		search,
+		setSearch,
+		pageSize,
+		setPageSize,
+		setPage,
+		config,
+		setConfig,
+		cidades,
+		clienteBusca,
+		setClienteBusca,
+		geocodingTarget,
+		cotacaoForm,
+		pontoForm,
+		setPontoForm,
+		editingPonto,
+		setEditingPonto,
+		list,
+		totalPages,
+		currentPage,
+		pageItems,
+		stats,
+		pontosDaCidade,
+		sugestoesClientes,
+		updateCotacao,
+		clearFeedback,
+		loadData,
+		aplicarCliente,
+		updatePonto,
+		preencherRegionalPonto,
+		handleGeocodeCotacao,
+		handleGeocodePonto,
+		handleSaveCotacao,
+		handleLalamoveQuote,
+		handleSavePonto,
+		handleDeletePonto,
+		handleDeleteCotacao,
+		handleCreateBasePoints,
+		handleSaveConfig,
+		updateProvider,
+	} = useLogisticaController();
 
 	if (loading)
 		return <Spinner fullScreen={false} label="Carregando Logística..." />;

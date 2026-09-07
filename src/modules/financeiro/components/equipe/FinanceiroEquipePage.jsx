@@ -499,6 +499,143 @@ function normalizeEquipeResponse(response) {
 	};
 }
 
+// Extraido de FinanceiroEquipePage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — desenho do PDF do organograma inteiro, sem
+// nenhuma dependencia de estado do React alem dos 3 argumentos. Mesma
+// logica de desenho de antes, so movida pra fora do corpo do componente.
+async function exportEquipePdf(config, setores, colaboradores) {
+	const { default: jsPDF } = await import("jspdf");
+	const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+	const pageWidth = pdf.internal.pageSize.getWidth();
+	const pageHeight = pdf.internal.pageSize.getHeight();
+	const margin = 38;
+	const tree = buildEquipeTree(config, setores, colaboradores);
+	const logo = await loadImageDataUrl("/sempre-logo-documento.png");
+	if (logo) {
+		const logoSize = fitImageInsideBox(logo, 118, 42);
+		pdf.addImage(
+			logo.dataUrl,
+			"PNG",
+			pageWidth - margin - logoSize.width,
+			22,
+			logoSize.width,
+			logoSize.height,
+		);
+	}
+	pdf.setFont("helvetica", "bold");
+	pdf.setFontSize(18);
+	pdf.setTextColor(15, 23, 42);
+	pdf.text("Organograma - Financeiro", margin, 42);
+	pdf.setFont("helvetica", "normal");
+	pdf.setFontSize(9);
+	pdf.setTextColor(71, 85, 105);
+	pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
+	const chartTop = 92;
+	const chartBottom = pageHeight - margin;
+	const chartWidth = pageWidth - margin * 2;
+	const setoresToDraw = tree.setores.length ? tree.setores : [{ id: "empty", nome: "Sem setores", membros: [] }];
+	const columnGap = setoresToDraw.length > 8 ? 6 : 10;
+	const columnWidth =
+		(chartWidth - columnGap * (setoresToDraw.length - 1)) / setoresToDraw.length;
+	const maxColumnsWidth = columnWidth * setoresToDraw.length + columnGap * (setoresToDraw.length - 1);
+	const startX = margin + Math.max((chartWidth - maxColumnsWidth) / 2, 0);
+	const generalCardWidth = Math.min(220, chartWidth * 0.42);
+	const generalCardHeight = 54;
+	const generalX = margin + chartWidth / 2 - generalCardWidth / 2;
+	const generalY = chartTop;
+	drawPersonPdfCard(
+		pdf,
+		tree.responsavelGeral,
+		generalX,
+		generalY,
+		generalCardWidth,
+		generalCardHeight,
+		{ accent: [37, 99, 235], label: "RESPONSÁVEL GERAL" },
+	);
+	const spineTop = generalY + generalCardHeight;
+	const spineBottom = spineTop + 38;
+	pdf.setDrawColor(71, 85, 105);
+	pdf.setLineWidth(1.3);
+	pdf.line(pageWidth / 2, spineTop, pageWidth / 2, spineBottom);
+	if (setoresToDraw.length > 1) {
+		pdf.line(startX + columnWidth / 2, spineBottom, startX + maxColumnsWidth - columnWidth / 2, spineBottom);
+	}
+	const setorHeaderY = spineBottom + 18;
+	const availableMemberHeight = Math.max(chartBottom - setorHeaderY - 90, 90);
+	const maxMembers = Math.max(...setoresToDraw.map((setor) => setor.membros?.length || 0), 1);
+	const memberGap = 8;
+	const memberCardHeight = Math.max(
+		28,
+		Math.min(44, (availableMemberHeight - memberGap * Math.max(maxMembers - 1, 0)) / maxMembers),
+	);
+	setoresToDraw.forEach((setor, index) => {
+		const x = startX + index * (columnWidth + columnGap);
+		const centerX = x + columnWidth / 2;
+		const accent = hexToRgb(setor.cor, [37, 99, 235]);
+		pdf.setDrawColor(71, 85, 105);
+		pdf.setLineWidth(1.2);
+		pdf.line(centerX, spineBottom, centerX, setorHeaderY - 8);
+		pdf.setFillColor(248, 250, 252);
+		pdf.setDrawColor(...accent);
+		pdf.roundedRect(x, setorHeaderY, columnWidth, 30, 6, 6, "FD");
+		drawPdfText(pdf, setor.nome || "Setor", centerX, setorHeaderY + 13, {
+			align: "center",
+			bold: true,
+			color: [15, 23, 42],
+			maxWidth: columnWidth - 10,
+			size: 7.5,
+		});
+		drawPdfText(pdf, `${countSetorMembers(setor)} usuários`, centerX, setorHeaderY + 24, {
+			align: "center",
+			color: [71, 85, 105],
+			maxWidth: columnWidth - 10,
+			size: 6,
+		});
+		const responsavelY = setorHeaderY + 48;
+		if (setor.responsavel) {
+			pdf.line(centerX, setorHeaderY + 30, centerX, responsavelY);
+			drawPersonPdfCard(pdf, setor.responsavel, x, responsavelY, columnWidth, 42, {
+				accent,
+				label: "RESPONSÁVEL DO SETOR",
+			});
+		} else {
+			pdf.setFillColor(255, 255, 255);
+			pdf.setDrawColor(203, 213, 225);
+			pdf.roundedRect(x, responsavelY, columnWidth, 30, 6, 6, "FD");
+			drawPdfText(pdf, "Sem responsável do setor", centerX, responsavelY + 18, {
+				align: "center",
+				color: [100, 116, 139],
+				maxWidth: columnWidth - 10,
+				size: 6.5,
+			});
+		}
+		const memberTop = responsavelY + 58;
+		pdf.setDrawColor(71, 85, 105);
+		pdf.line(centerX, responsavelY + (setor.responsavel ? 42 : 30), centerX, memberTop - 8);
+		(setor.membros || []).forEach((membro, memberIndex) => {
+			const cardY = memberTop + memberIndex * (memberCardHeight + memberGap);
+			if (memberIndex === 0) {
+				pdf.line(centerX, memberTop - 8, centerX, cardY);
+			}
+			drawPersonPdfCard(pdf, membro, x, cardY, columnWidth, memberCardHeight, {
+				accent,
+			});
+		});
+		if (!setor.membros?.length) {
+			pdf.setFillColor(255, 255, 255);
+			pdf.setDrawColor(226, 232, 240);
+			pdf.roundedRect(x, memberTop, columnWidth, 28, 6, 6, "FD");
+			drawPdfText(pdf, "Nenhum usuário neste setor", centerX, memberTop + 17, {
+				align: "center",
+				color: [100, 116, 139],
+				maxWidth: columnWidth - 8,
+				size: 6.2,
+			});
+		}
+	});
+	pdf.save(`organograma-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 export default function FinanceiroEquipePage({ canManage = false }) {
 	const [config, setConfig] = useState({});
 	const [setores, setSetores] = useState([]);
@@ -622,136 +759,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 	}
 
 	async function exportPdf() {
-		const { default: jsPDF } = await import("jspdf");
-		const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-		const pageWidth = pdf.internal.pageSize.getWidth();
-		const pageHeight = pdf.internal.pageSize.getHeight();
-		const margin = 38;
-		const tree = buildEquipeTree(config, setores, colaboradores);
-		const logo = await loadImageDataUrl("/sempre-logo-documento.png");
-		if (logo) {
-			const logoSize = fitImageInsideBox(logo, 118, 42);
-			pdf.addImage(
-				logo.dataUrl,
-				"PNG",
-				pageWidth - margin - logoSize.width,
-				22,
-				logoSize.width,
-				logoSize.height,
-			);
-		}
-		pdf.setFont("helvetica", "bold");
-		pdf.setFontSize(18);
-		pdf.setTextColor(15, 23, 42);
-		pdf.text("Organograma - Financeiro", margin, 42);
-		pdf.setFont("helvetica", "normal");
-		pdf.setFontSize(9);
-		pdf.setTextColor(71, 85, 105);
-		pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 60);
-		const chartTop = 92;
-		const chartBottom = pageHeight - margin;
-		const chartWidth = pageWidth - margin * 2;
-		const setoresToDraw = tree.setores.length ? tree.setores : [{ id: "empty", nome: "Sem setores", membros: [] }];
-		const columnGap = setoresToDraw.length > 8 ? 6 : 10;
-		const columnWidth =
-			(chartWidth - columnGap * (setoresToDraw.length - 1)) / setoresToDraw.length;
-		const maxColumnsWidth = columnWidth * setoresToDraw.length + columnGap * (setoresToDraw.length - 1);
-		const startX = margin + Math.max((chartWidth - maxColumnsWidth) / 2, 0);
-		const generalCardWidth = Math.min(220, chartWidth * 0.42);
-		const generalCardHeight = 54;
-		const generalX = margin + chartWidth / 2 - generalCardWidth / 2;
-		const generalY = chartTop;
-		drawPersonPdfCard(
-			pdf,
-			tree.responsavelGeral,
-			generalX,
-			generalY,
-			generalCardWidth,
-			generalCardHeight,
-			{ accent: [37, 99, 235], label: "RESPONSÁVEL GERAL" },
-		);
-		const spineTop = generalY + generalCardHeight;
-		const spineBottom = spineTop + 38;
-		pdf.setDrawColor(71, 85, 105);
-		pdf.setLineWidth(1.3);
-		pdf.line(pageWidth / 2, spineTop, pageWidth / 2, spineBottom);
-		if (setoresToDraw.length > 1) {
-			pdf.line(startX + columnWidth / 2, spineBottom, startX + maxColumnsWidth - columnWidth / 2, spineBottom);
-		}
-		const setorHeaderY = spineBottom + 18;
-		const availableMemberHeight = Math.max(chartBottom - setorHeaderY - 90, 90);
-		const maxMembers = Math.max(...setoresToDraw.map((setor) => setor.membros?.length || 0), 1);
-		const memberGap = 8;
-		const memberCardHeight = Math.max(
-			28,
-			Math.min(44, (availableMemberHeight - memberGap * Math.max(maxMembers - 1, 0)) / maxMembers),
-		);
-		setoresToDraw.forEach((setor, index) => {
-			const x = startX + index * (columnWidth + columnGap);
-			const centerX = x + columnWidth / 2;
-			const accent = hexToRgb(setor.cor, [37, 99, 235]);
-			pdf.setDrawColor(71, 85, 105);
-			pdf.setLineWidth(1.2);
-			pdf.line(centerX, spineBottom, centerX, setorHeaderY - 8);
-			pdf.setFillColor(248, 250, 252);
-			pdf.setDrawColor(...accent);
-			pdf.roundedRect(x, setorHeaderY, columnWidth, 30, 6, 6, "FD");
-			drawPdfText(pdf, setor.nome || "Setor", centerX, setorHeaderY + 13, {
-				align: "center",
-				bold: true,
-				color: [15, 23, 42],
-				maxWidth: columnWidth - 10,
-				size: 7.5,
-			});
-			drawPdfText(pdf, `${countSetorMembers(setor)} usuários`, centerX, setorHeaderY + 24, {
-				align: "center",
-				color: [71, 85, 105],
-				maxWidth: columnWidth - 10,
-				size: 6,
-			});
-			const responsavelY = setorHeaderY + 48;
-			if (setor.responsavel) {
-				pdf.line(centerX, setorHeaderY + 30, centerX, responsavelY);
-				drawPersonPdfCard(pdf, setor.responsavel, x, responsavelY, columnWidth, 42, {
-					accent,
-					label: "RESPONSÁVEL DO SETOR",
-				});
-			} else {
-				pdf.setFillColor(255, 255, 255);
-				pdf.setDrawColor(203, 213, 225);
-				pdf.roundedRect(x, responsavelY, columnWidth, 30, 6, 6, "FD");
-				drawPdfText(pdf, "Sem responsável do setor", centerX, responsavelY + 18, {
-					align: "center",
-					color: [100, 116, 139],
-					maxWidth: columnWidth - 10,
-					size: 6.5,
-				});
-			}
-			const memberTop = responsavelY + 58;
-			pdf.setDrawColor(71, 85, 105);
-			pdf.line(centerX, responsavelY + (setor.responsavel ? 42 : 30), centerX, memberTop - 8);
-			(setor.membros || []).forEach((membro, memberIndex) => {
-				const cardY = memberTop + memberIndex * (memberCardHeight + memberGap);
-				if (memberIndex === 0) {
-					pdf.line(centerX, memberTop - 8, centerX, cardY);
-				}
-				drawPersonPdfCard(pdf, membro, x, cardY, columnWidth, memberCardHeight, {
-					accent,
-				});
-			});
-			if (!setor.membros?.length) {
-				pdf.setFillColor(255, 255, 255);
-				pdf.setDrawColor(226, 232, 240);
-				pdf.roundedRect(x, memberTop, columnWidth, 28, 6, 6, "FD");
-				drawPdfText(pdf, "Nenhum usuário neste setor", centerX, memberTop + 17, {
-					align: "center",
-					color: [100, 116, 139],
-					maxWidth: columnWidth - 8,
-					size: 6.2,
-				});
-			}
-		});
-		pdf.save(`organograma-financeiro-${new Date().toISOString().slice(0, 10)}.pdf`);
+		await exportEquipePdf(config, setores, colaboradores);
 	}
 
 	return (

@@ -110,7 +110,10 @@ const isQueueItemSendableNow = (item = {}, config = {}, now = new Date()) => {
 	return true;
 };
 
-const MensageriaFilaPage = () => {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useMensageriaFilaController() {
 	const { currentUser } = useAuthContext();
 	const canManage =
 		hasPermission(currentUser, "mensageria.fila.manage") ||
@@ -362,6 +365,80 @@ const MensageriaFilaPage = () => {
 			setWorking(false);
 		}
 	};
+
+	return {
+		canManage,
+		fila,
+		config,
+		status,
+		loading,
+		working,
+		feedback,
+		filters,
+		setFilters,
+		pageSize,
+		setPageSize,
+		page,
+		setPage,
+		loadData,
+		origemOptions,
+		filteredFila,
+		totalPages,
+		currentPage,
+		pageItems,
+		nextQueueItem,
+		stats,
+		queueRunning,
+		workerRunning,
+		workerActive,
+		queueHasError,
+		queueWaiting,
+		startButtonState,
+		startButtonClass,
+		StartButtonIcon,
+		startButtonLabel,
+		handleStartQueue,
+		handlePauseQueue,
+		handleSendNow,
+		updateQueueConfig,
+		toggleSendDay,
+		handleSaveQueueConfig,
+	};
+}
+
+const MensageriaFilaPage = () => {
+	const {
+		canManage,
+		config,
+		status,
+		loading,
+		working,
+		feedback,
+		filters,
+		setFilters,
+		pageSize,
+		setPageSize,
+		setPage,
+		loadData,
+		origemOptions,
+		filteredFila,
+		totalPages,
+		currentPage,
+		pageItems,
+		nextQueueItem,
+		stats,
+		workerRunning,
+		startButtonState,
+		startButtonClass,
+		StartButtonIcon,
+		startButtonLabel,
+		handleStartQueue,
+		handlePauseQueue,
+		handleSendNow,
+		updateQueueConfig,
+		toggleSendDay,
+		handleSaveQueueConfig,
+	} = useMensageriaFilaController();
 
 	if (loading) {
 		return (

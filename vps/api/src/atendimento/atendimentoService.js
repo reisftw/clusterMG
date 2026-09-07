@@ -2013,80 +2013,11 @@ async function findActiveCase(phone) {
 	);
 }
 
-async function handleEvolutionWebhook(payload = {}) {
-	const phone = extractPhone(payload);
-	const text = extractText(payload);
-	const payloadSummary = summarizeWebhookPayload(payload);
-	if (payload.data?.key?.fromMe || payload.key?.fromMe) {
-		await recordMessage({
-			direction: "in",
-			phone,
-			text,
-			status: "ignorado",
-			reason: "from_me",
-			payload: payloadSummary,
-		});
-		return { ok: true, ignored: true, reason: "from_me" };
-	}
-	const config = await readConfig();
-	if (!config.enabled) {
-		await recordMessage({
-			direction: "in",
-			phone,
-			text,
-			status: "ignorado",
-			reason: "bot_disabled",
-			payload: payloadSummary,
-		});
-		await appendLog(
-			"webhook_ignored",
-			"Mensagem recebida, mas o bot do atendimento esta desativado.",
-			{ phone, textPreview: text.slice(0, 80) },
-		);
-		return { ok: true, ignored: true, reason: "disabled" };
-	}
-	if (!phone || !text) {
-		await recordMessage({
-			direction: "in",
-			phone,
-			text,
-			status: "ignorado",
-			reason: !phone ? "missing_phone" : "empty_text",
-			payload: payloadSummary,
-		});
-		await appendLog(
-			"webhook_ignored",
-			"Mensagem do atendimento ignorada por telefone/texto vazio.",
-			{ phone, textPreview: text.slice(0, 80), payload: payloadSummary },
-		);
-		return { ok: true, ignored: true, reason: "empty" };
-	}
-	const teamMember = getTeamMember(config, phone);
-	await recordMessage({
-		direction: "in",
-		phone,
-		text,
-		status: "recebido",
-		payload: payloadSummary,
-	});
-	if (teamMember)
-		return handleTeamMemberMessage(config, teamMember, phone, text);
-	const technicianRecord = await documents.getDocument(
-		`${TECHNICIANS_COLLECTION}/${phone}`,
-	);
-	let technician = technicianRecord?.data || null;
-	let item = await findActiveCase(phone);
-	const isNew = !item;
-	if (!item)
-		item = await createCase(phone, {
-			whatsappName: payload.data?.pushName || payload.pushName || "",
-			step: technician?.status === "validado" ? "menu" : "onboarding_name",
-		});
-	item.messages = [
-		...(item.messages || []),
-		{ at: nowIso(), direction: "in", text },
-	].slice(-100);
-
+// Extraido de handleEvolutionWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — comando de reiniciar a conversa, mesma logica
+// de antes (mesmo `if` original, so que devolvendo null quando nao se
+// aplica em vez de cair no restante do fluxo).
+async function handleRestartCommand(config, phone, item, technician, text) {
 	if (isStartOverCommand(text) && item.step !== "awaiting_rating") {
 		resetCaseConversation(item, technician);
 		const responseText =
@@ -2115,7 +2046,13 @@ async function handleEvolutionWebhook(payload = {}) {
 			restarted: true,
 		};
 	}
+	return null;
+}
 
+// Extraido de handleEvolutionWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — passo de avaliacao (1 a 5 estrelas), mesma
+// logica de antes.
+async function handleAwaitingRatingStep(config, phone, item, text) {
 	if (item.step === "awaiting_rating") {
 		const rating = Number.parseInt(text, 10);
 		if (Number.isInteger(rating) && rating >= 1 && rating <= 5) {
@@ -2171,7 +2108,13 @@ async function handleEvolutionWebhook(payload = {}) {
 			protocol: item.protocol,
 		};
 	}
+	return null;
+}
 
+// Extraido de handleEvolutionWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — comando de encerrar atendimento, mesma logica
+// de antes.
+async function handleEncerrarCommand(config, phone, item, technician, text) {
 	if (text === "5" || normalizeText(text).includes("encerrar")) {
 		const technicianName =
 			technician?.name || technician?.hubsoftName || item.name || "Técnico";
@@ -2196,7 +2139,13 @@ async function handleEvolutionWebhook(payload = {}) {
 			protocol: item.protocol,
 		};
 	}
+	return null;
+}
 
+// Extraido de handleEvolutionWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — saudacao inicial pra tecnico novo/nao
+// validado, mesma logica de antes.
+async function handleNewTechnicianGreeting(config, phone, item, technician, isNew) {
 	if (isNew && (!technician || technician.status !== "validado")) {
 		item.messages.push({
 			at: nowIso(),
@@ -2214,7 +2163,13 @@ async function handleEvolutionWebhook(payload = {}) {
 			protocol: item.protocol,
 		};
 	}
+	return null;
+}
 
+// Extraido de handleEvolutionWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — boas-vindas pra tecnico ja validado, mesma
+// logica de antes.
+async function handleReturningValidatedGreeting(config, phone, item, technician, isNew) {
 	if (isNew && technician?.status === "validado") {
 		const responseText = getTemplate(config, "boasVindasValidado", {
 			nome:
@@ -2235,7 +2190,14 @@ async function handleEvolutionWebhook(payload = {}) {
 			protocol: item.protocol,
 		};
 	}
+	return null;
+}
 
+// Extraido de handleEvolutionWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — dispatch principal por `item.step`/comando de
+// menu, mesma logica de antes (mesma cadeia if/else if, sem mudanca de
+// comportamento). Muta `item` e devolve o texto de resposta.
+async function computeStepResponse(item, technician, text, config, phone) {
 	let responseText = "";
 	if (item.step === "onboarding_name") {
 		if (cleanText(text).length < 3) {
@@ -2634,6 +2596,124 @@ async function handleEvolutionWebhook(payload = {}) {
 		responseText = config.templates.menu;
 	}
 
+	return responseText;
+}
+
+async function handleEvolutionWebhook(payload = {}) {
+	const phone = extractPhone(payload);
+	const text = extractText(payload);
+	const payloadSummary = summarizeWebhookPayload(payload);
+	if (payload.data?.key?.fromMe || payload.key?.fromMe) {
+		await recordMessage({
+			direction: "in",
+			phone,
+			text,
+			status: "ignorado",
+			reason: "from_me",
+			payload: payloadSummary,
+		});
+		return { ok: true, ignored: true, reason: "from_me" };
+	}
+	const config = await readConfig();
+	if (!config.enabled) {
+		await recordMessage({
+			direction: "in",
+			phone,
+			text,
+			status: "ignorado",
+			reason: "bot_disabled",
+			payload: payloadSummary,
+		});
+		await appendLog(
+			"webhook_ignored",
+			"Mensagem recebida, mas o bot do atendimento esta desativado.",
+			{ phone, textPreview: text.slice(0, 80) },
+		);
+		return { ok: true, ignored: true, reason: "disabled" };
+	}
+	if (!phone || !text) {
+		await recordMessage({
+			direction: "in",
+			phone,
+			text,
+			status: "ignorado",
+			reason: !phone ? "missing_phone" : "empty_text",
+			payload: payloadSummary,
+		});
+		await appendLog(
+			"webhook_ignored",
+			"Mensagem do atendimento ignorada por telefone/texto vazio.",
+			{ phone, textPreview: text.slice(0, 80), payload: payloadSummary },
+		);
+		return { ok: true, ignored: true, reason: "empty" };
+	}
+	const teamMember = getTeamMember(config, phone);
+	await recordMessage({
+		direction: "in",
+		phone,
+		text,
+		status: "recebido",
+		payload: payloadSummary,
+	});
+	if (teamMember)
+		return handleTeamMemberMessage(config, teamMember, phone, text);
+	const technicianRecord = await documents.getDocument(
+		`${TECHNICIANS_COLLECTION}/${phone}`,
+	);
+	let technician = technicianRecord?.data || null;
+	let item = await findActiveCase(phone);
+	const isNew = !item;
+	if (!item)
+		item = await createCase(phone, {
+			whatsappName: payload.data?.pushName || payload.pushName || "",
+			step: technician?.status === "validado" ? "menu" : "onboarding_name",
+		});
+	item.messages = [
+		...(item.messages || []),
+		{ at: nowIso(), direction: "in", text },
+	].slice(-100);
+
+	const restartResult = await handleRestartCommand(
+		config,
+		phone,
+		item,
+		technician,
+		text,
+	);
+	if (restartResult) return restartResult;
+
+	const ratingResult = await handleAwaitingRatingStep(config, phone, item, text);
+	if (ratingResult) return ratingResult;
+
+	const encerrarResult = await handleEncerrarCommand(
+		config,
+		phone,
+		item,
+		technician,
+		text,
+	);
+	if (encerrarResult) return encerrarResult;
+
+	const newGreetingResult = await handleNewTechnicianGreeting(
+		config,
+		phone,
+		item,
+		technician,
+		isNew,
+	);
+	if (newGreetingResult) return newGreetingResult;
+
+	const returningGreetingResult = await handleReturningValidatedGreeting(
+		config,
+		phone,
+		item,
+		technician,
+		isNew,
+	);
+	if (returningGreetingResult) return returningGreetingResult;
+
+	const responseText = await computeStepResponse(item, technician, text, config, phone);
+
 	item.messages.push({ at: nowIso(), direction: "out", text: responseText });
 	await sendMessage(config, phone, responseText, { caseId: item.id });
 	await saveCase(item);
@@ -2872,27 +2952,9 @@ async function getCase(id) {
 	return record.data;
 }
 
-async function updateCase(id, patch = {}, user = null) {
-	const item = await getCase(id);
-	// Defesa contra IDOR (docs/TECHNICAL-AUDIT.md, achado #3): a regional do
-	// caso vem do tecnico vinculado (item.technician.regional) — permissao
-	// de atendimento.casos.manage sozinha nao basta pra agir sobre um caso
-	// de outra regional (mesmo criterio ja usado em agendamentos).
-	// `allowUnknownRegional: true` porque um caso pode legitimamente ainda
-	// nao ter tecnico/regional vinculado (inicio do fluxo de atendimento) —
-	// bloquear nesse caso seria regressao operacional sem ganho de
-	// seguranca real.
-	assertRegionalRecordAccess(
-		user,
-		{ regional: item.technician?.regional },
-		{ allowUnknownRegional: true },
-	);
-	const action = String(patch.action || "").toLowerCase();
-	const userName = getUserName(user);
-	const userEmail = user?.email || user?.uid || "";
-	const next = { ...item, ...(patch || {}) };
-	delete next.action;
-
+// Extraido de updateCase (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — acao "assumir" de um caso de atendimento, mesma logica de antes.
+async function applyAssumirAction(action, item, next, userEmail, userName, id) {
 	if (action === "assumir") {
 		const config = await readConfig();
 		const assignedMessage = getTemplate(config, "assumirCaso", {
@@ -2937,7 +2999,11 @@ async function updateCase(id, patch = {}, user = null) {
 			userName,
 		});
 	}
+}
 
+// Extraido de updateCase (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — acao "encerrar" de um caso de atendimento, mesma logica de antes.
+async function applyEncerrarAction(action, item, next, patch, userEmail, userName, id) {
 	if (action === "encerrar" || next.status === "encerrado") {
 		const config = await readConfig();
 		const closedAt = nowIso();
@@ -2988,6 +3054,31 @@ async function updateCase(id, patch = {}, user = null) {
 			userName,
 		});
 	}
+}
+
+async function updateCase(id, patch = {}, user = null) {
+	const item = await getCase(id);
+	// Defesa contra IDOR (docs/TECHNICAL-AUDIT.md, achado #3): a regional do
+	// caso vem do tecnico vinculado (item.technician.regional) — permissao
+	// de atendimento.casos.manage sozinha nao basta pra agir sobre um caso
+	// de outra regional (mesmo criterio ja usado em agendamentos).
+	// `allowUnknownRegional: true` porque um caso pode legitimamente ainda
+	// nao ter tecnico/regional vinculado (inicio do fluxo de atendimento) —
+	// bloquear nesse caso seria regressao operacional sem ganho de
+	// seguranca real.
+	assertRegionalRecordAccess(
+		user,
+		{ regional: item.technician?.regional },
+		{ allowUnknownRegional: true },
+	);
+	const action = String(patch.action || "").toLowerCase();
+	const userName = getUserName(user);
+	const userEmail = user?.email || user?.uid || "";
+	const next = { ...item, ...(patch || {}) };
+	delete next.action;
+
+	await applyAssumirAction(action, item, next, userEmail, userName, id);
+	await applyEncerrarAction(action, item, next, patch, userEmail, userName, id);
 
 	const saved = await saveCase(next);
 	// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5): casos de atendimento

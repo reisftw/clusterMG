@@ -396,6 +396,531 @@ function buildDisplayRetirada(retirada, form, editing) {
 	};
 }
 
+// Extraido de RetiradaCard (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — formulario de edicao, mesma JSX de antes, sem mudanca de
+// comportamento.
+function RetiradaCardEditForm({ form, updateField }) {
+	return (
+		<div className="space-y-4">
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<Field label="Nome">
+					<input
+						value={form.nome}
+						onChange={(event) => updateField("nome", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Telefone">
+					<input
+						value={form.telefone}
+						onChange={(event) => updateField("telefone", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="CPF/CNPJ">
+					<input
+						value={form.cpfCnpj}
+						onChange={(event) => updateField("cpfCnpj", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="E-mail">
+					<input
+						value={form.email}
+						onChange={(event) => updateField("email", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+			</div>
+
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<Field label="Contrato">
+					<input
+						value={form.contrato}
+						onChange={(event) => updateField("contrato", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="MAC do equipamento">
+					<input
+						value={form.equipamentoMac}
+						onChange={(event) =>
+							updateField("equipamentoMac", event.target.value)
+						}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono uppercase outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Cidade">
+					<input
+						value={form.cidade}
+						onChange={(event) => updateField("cidade", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="CEP">
+					<input
+						value={form.cep}
+						onChange={(event) => updateField("cep", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Bairro">
+					<input
+						value={form.bairro}
+						onChange={(event) => updateField("bairro", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+			</div>
+
+			<div className="grid gap-4 md:grid-cols-[1.2fr_0.5fr_0.8fr_0.8fr]">
+				<Field label="Endereco">
+					<input
+						value={form.endereco}
+						onChange={(event) => updateField("endereco", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Numero">
+					<input
+						value={form.numero}
+						onChange={(event) => updateField("numero", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Complemento">
+					<input
+						value={form.complemento}
+						onChange={(event) =>
+							updateField("complemento", event.target.value)
+						}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Referencia">
+					<input
+						value={form.referencia}
+						onChange={(event) => updateField("referencia", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+			</div>
+
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<Field label="Metodo">
+					<select
+						value={form.metodo}
+						onChange={(event) => updateField("metodo", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					>
+						<option value="coleta">Coleta</option>
+						<option value="ponto">Ponto de apoio</option>
+					</select>
+				</Field>
+				<Field label="Equipamento">
+					<input
+						value={form.equipamento}
+						onChange={(event) =>
+							updateField("equipamento", event.target.value)
+						}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Periodo preferido">
+					<select
+						value={form.periodoPreferido}
+						onChange={(event) =>
+							updateField("periodoPreferido", event.target.value)
+						}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					>
+						<option value="">Selecione o periodo</option>
+						{RETIRADA_PERIODOS.map((item) => (
+							<option key={item.value} value={item.value}>
+								{item.label}
+							</option>
+						))}
+					</select>
+				</Field>
+				<Field label="Status">
+					<select
+						value={form.status}
+						onChange={(event) => updateField("status", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					>
+						{RETIRADA_STATUS.map((item) => (
+							<option key={item.value} value={item.value}>
+								{item.label}
+							</option>
+						))}
+					</select>
+				</Field>
+			</div>
+
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+				<Field label="Tratativa">
+					<select
+						value={form.tratativaTipo}
+						onChange={(event) =>
+							updateField("tratativaTipo", event.target.value)
+						}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					>
+						<option value="">Selecione a tratativa</option>
+						{RETIRADA_TRATATIVAS.map((item) => (
+							<option key={item.value} value={item.value}>
+								{item.label}
+							</option>
+						))}
+					</select>
+				</Field>
+				<Field label="Responsavel local">
+					<input
+						value={form.responsavelNome}
+						onChange={(event) =>
+							updateField("responsavelNome", event.target.value)
+						}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Motivo">
+					<input
+						value={form.motivo}
+						onChange={(event) => updateField("motivo", event.target.value)}
+						className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+			</div>
+
+			{form.metodo === "ponto" ? (
+				<div className="grid gap-4 md:grid-cols-2">
+					<Field label="Nome do ponto">
+						<input
+							value={form.lojaSelecionadaNome}
+							onChange={(event) =>
+								updateField("lojaSelecionadaNome", event.target.value)
+							}
+							className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+						/>
+					</Field>
+					<Field label="Endereco do ponto">
+						<input
+							value={form.lojaSelecionadaEndereco}
+							onChange={(event) =>
+								updateField("lojaSelecionadaEndereco", event.target.value)
+							}
+							className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
+						/>
+					</Field>
+				</div>
+			) : null}
+
+			<div className="grid gap-4 md:grid-cols-2">
+				<Field label="Observacoes do cliente">
+					<textarea
+						value={form.observacoes}
+						onChange={(event) =>
+							updateField("observacoes", event.target.value)
+						}
+						rows={4}
+						className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+				<Field label="Notas da equipe">
+					<textarea
+						value={form.atendimentoNotas}
+						onChange={(event) =>
+							updateField("atendimentoNotas", event.target.value)
+						}
+						rows={4}
+						className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-300"
+					/>
+				</Field>
+			</div>
+		</div>
+	);
+}
+
+// Extraido de RetiradaCard (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — bloco de detalhes (modo nao-edicao), mesma JSX de antes, sem mudanca
+// de comportamento.
+function RetiradaCardDetails({
+	retirada,
+	displayRetirada,
+	emailStatusMeta,
+	receiptEmailStatusMeta,
+	isConcluded,
+	correiosPending,
+	quoting,
+	receiptSending,
+	onQuote,
+	onSendReceipt,
+	handleGenerateReceipt,
+}) {
+	return (
+		<div className="space-y-3">
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+				<DetailItem
+					label="Telefone"
+					value={displayRetirada.telefone}
+					icon={Phone}
+				/>
+				<DetailItem
+					label="Contrato"
+					value={displayRetirada.contrato}
+					icon={PackageCheck}
+				/>
+				<DetailItem
+					label="Cidade"
+					value={displayRetirada.cidade}
+					icon={MapPin}
+				/>
+				<DetailItem
+					label="Periodo preferido"
+					value={
+						PERIODO_LABELS[displayRetirada.periodoPreferido] ||
+						displayRetirada.periodoPreferido
+					}
+					icon={CalendarClock}
+				/>
+			</div>
+			<div className="grid gap-3 md:grid-cols-2">
+				<DetailItem
+					label="Protocolo"
+					value={displayRetirada.protocolo || "-"}
+					icon={ClipboardCheck}
+				/>
+			</div>
+			<div className="grid gap-3 md:grid-cols-2">
+				<DetailItem
+					label="Endereco"
+					value={[
+						displayRetirada.endereco,
+						displayRetirada.numero,
+						displayRetirada.bairro,
+					]
+						.filter(Boolean)
+						.join(", ")}
+					icon={Truck}
+				/>
+				<DetailItem
+					label="Equipamentos"
+					value={displayRetirada.equipamento}
+					icon={PackageCheck}
+				/>
+				<DetailItem
+					label="MAC do equipamento"
+					value={displayRetirada.equipamentoMac}
+					icon={PackageCheck}
+				/>
+			</div>
+			<div className="grid gap-3 md:grid-cols-2">
+				<DetailItem
+					label="Tratativa atual"
+					value={
+						TRATATIVA_LABELS[displayRetirada.tratativaTipo] ||
+						displayRetirada.tratativaTipo ||
+						"-"
+					}
+					icon={ClipboardCheck}
+				/>
+				<DetailItem
+					label="Responsavel"
+					value={displayRetirada.responsavelNome || "-"}
+					icon={Phone}
+				/>
+			</div>
+			<div className={`rounded-2xl border px-4 py-4 ${emailStatusMeta.card}`}>
+				<p className="text-xs font-black uppercase tracking-[0.18em] text-slate-700">
+					Notificacao por e-mail
+				</p>
+				<p className="mt-2 text-lg font-black text-gray-900">
+					{emailStatusMeta.label}
+				</p>
+				<p className="mt-1 text-sm text-gray-600">{emailStatusMeta.text}</p>
+				<div className="mt-3 grid gap-3 md:grid-cols-2">
+					<DetailItem
+						label="E-mail do cliente"
+						value={displayRetirada.email || "-"}
+						icon={Phone}
+					/>
+					<DetailItem
+						label="Enviado em"
+						value={formatDate(retirada.emailNotificacaoEnviadaEm)}
+						icon={CalendarClock}
+					/>
+				</div>
+				{retirada.emailNotificacaoErro ? (
+					<p className="mt-3 text-sm font-medium text-rose-700">
+						{retirada.emailNotificacaoErro}
+					</p>
+				) : null}
+			</div>
+			{isConcluded ? (
+				<div
+					className={`rounded-2xl border px-4 py-4 ${receiptEmailStatusMeta.card}`}
+				>
+					<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+						<div>
+							<p className="text-xs font-black uppercase tracking-[0.18em] text-slate-700">
+								Comprovante de entrega
+							</p>
+							<p className="mt-2 text-lg font-black text-gray-900">
+								{receiptEmailStatusMeta.label}
+							</p>
+							<p className="mt-1 text-sm text-gray-600">
+								{receiptEmailStatusMeta.text}
+							</p>
+						</div>
+						<span
+							className={`rounded-full px-3 py-1 text-xs font-semibold ${receiptEmailStatusMeta.pill}`}
+						>
+							{receiptEmailStatusMeta.label}
+						</span>
+					</div>
+
+					<div className="mt-3 grid gap-3 md:grid-cols-2">
+						<DetailItem
+							label="Conclusao"
+							value={formatDate(
+								displayRetirada.concluidoEm ||
+									displayRetirada.tratativaAtualizadaEm,
+							)}
+							icon={CalendarClock}
+						/>
+						<DetailItem
+							label="Enviado por e-mail"
+							value={formatDate(displayRetirada.reciboEmailEnviadoEm)}
+							icon={Mail}
+						/>
+					</div>
+
+					{displayRetirada.reciboEmailErro ? (
+						<p className="mt-3 text-sm font-medium text-rose-700">
+							{displayRetirada.reciboEmailErro}
+						</p>
+					) : null}
+
+					<div className="mt-4 flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={handleGenerateReceipt}
+							className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+						>
+							<FileText size={16} />
+							Gerar comprovante
+						</button>
+						<button
+							type="button"
+							disabled={receiptSending || !displayRetirada.email}
+							onClick={() => onSendReceipt(retirada.id)}
+							className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<Mail size={16} />
+							{receiptSending
+								? "Enviando comprovante..."
+								: "Encaminhar por e-mail"}
+						</button>
+					</div>
+				</div>
+			) : null}
+			<div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+				<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div>
+						<p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">
+							Custo estimado Correios
+						</p>
+						<p className="mt-2 text-lg font-black text-gray-900">
+							{correiosPending
+								? "Integracao pendente"
+								: formatCurrency(
+										retirada.correiosFreteValor,
+										retirada.correiosFreteMoeda,
+									)}
+						</p>
+						<p className="mt-1 text-sm text-gray-600">
+							{correiosPending
+								? "Configure as credenciais dos Correios na VPS para calcular."
+								: retirada.correiosFreteServicoNome
+									? `${retirada.correiosFreteServicoNome} (${retirada.correiosFreteServicoCodigo})`
+									: "Ainda nao calculado."}
+						</p>
+						<p className="mt-1 text-xs text-gray-500">
+							Pacote padrao: 23 x 10 x 10 cm, 780 g.
+						</p>
+						{retirada.correiosFreteErro ? (
+							<p
+								className={`mt-2 text-xs font-medium ${
+									correiosPending ? "text-amber-700" : "text-rose-600"
+								}`}
+							>
+								{correiosPending
+									? "Preencha CORREIOS_CWS_USERNAME, CORREIOS_CWS_PASSWORD e CORREIOS_POSTING_CARD na VPS."
+									: retirada.correiosFreteErro}
+							</p>
+						) : null}
+					</div>
+					<button
+						type="button"
+						disabled={quoting || correiosPending}
+						onClick={() => onQuote(retirada.id)}
+						className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{correiosPending
+							? "Configuracao pendente"
+							: quoting
+								? "Calculando..."
+								: "Calcular frete"}
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+// Extraido de RetiradaCard (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — botoes de rodape do card, mesma JSX de antes, sem mudanca de
+// comportamento.
+function RetiradaCardFooterActions({
+	editing,
+	saving,
+	cancelEditing,
+	handleSave,
+	setEditing,
+}) {
+	return (
+		<div className="mt-5 flex flex-wrap justify-end gap-2">
+			{editing ? (
+				<>
+					<button
+						type="button"
+						onClick={cancelEditing}
+						className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						disabled={saving}
+						onClick={handleSave}
+						className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{saving ? "Salvando..." : "Salvar alteracoes"}
+					</button>
+				</>
+			) : (
+				<button
+					type="button"
+					onClick={() => setEditing(true)}
+					className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+				>
+					Editar solicitacao
+				</button>
+			)}
+		</div>
+	);
+}
+
 function RetiradaCard({
 	retirada,
 	expanded,
@@ -558,525 +1083,30 @@ function RetiradaCard({
 					</div>
 
 					{editing ? (
-						<div className="space-y-4">
-							<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-								<Field label="Nome">
-									<input
-										value={form.nome}
-										onChange={(event) =>
-											updateField("nome", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Telefone">
-									<input
-										value={form.telefone}
-										onChange={(event) =>
-											updateField("telefone", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="CPF/CNPJ">
-									<input
-										value={form.cpfCnpj}
-										onChange={(event) =>
-											updateField("cpfCnpj", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="E-mail">
-									<input
-										value={form.email}
-										onChange={(event) =>
-											updateField("email", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-							</div>
-
-							<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-								<Field label="Contrato">
-									<input
-										value={form.contrato}
-										onChange={(event) =>
-											updateField("contrato", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="MAC do equipamento">
-									<input
-										value={form.equipamentoMac}
-										onChange={(event) =>
-											updateField("equipamentoMac", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-mono uppercase outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Cidade">
-									<input
-										value={form.cidade}
-										onChange={(event) =>
-											updateField("cidade", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="CEP">
-									<input
-										value={form.cep}
-										onChange={(event) => updateField("cep", event.target.value)}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Bairro">
-									<input
-										value={form.bairro}
-										onChange={(event) =>
-											updateField("bairro", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-							</div>
-
-							<div className="grid gap-4 md:grid-cols-[1.2fr_0.5fr_0.8fr_0.8fr]">
-								<Field label="Endereco">
-									<input
-										value={form.endereco}
-										onChange={(event) =>
-											updateField("endereco", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Numero">
-									<input
-										value={form.numero}
-										onChange={(event) =>
-											updateField("numero", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Complemento">
-									<input
-										value={form.complemento}
-										onChange={(event) =>
-											updateField("complemento", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Referencia">
-									<input
-										value={form.referencia}
-										onChange={(event) =>
-											updateField("referencia", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-							</div>
-
-							<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-								<Field label="Metodo">
-									<select
-										value={form.metodo}
-										onChange={(event) =>
-											updateField("metodo", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									>
-										<option value="coleta">Coleta</option>
-										<option value="ponto">Ponto de apoio</option>
-									</select>
-								</Field>
-								<Field label="Equipamento">
-									<input
-										value={form.equipamento}
-										onChange={(event) =>
-											updateField("equipamento", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Periodo preferido">
-									<select
-										value={form.periodoPreferido}
-										onChange={(event) =>
-											updateField("periodoPreferido", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									>
-										<option value="">Selecione o periodo</option>
-										{RETIRADA_PERIODOS.map((item) => (
-											<option key={item.value} value={item.value}>
-												{item.label}
-											</option>
-										))}
-									</select>
-								</Field>
-								<Field label="Status">
-									<select
-										value={form.status}
-										onChange={(event) =>
-											updateField("status", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									>
-										{RETIRADA_STATUS.map((item) => (
-											<option key={item.value} value={item.value}>
-												{item.label}
-											</option>
-										))}
-									</select>
-								</Field>
-							</div>
-
-							<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-								<Field label="Tratativa">
-									<select
-										value={form.tratativaTipo}
-										onChange={(event) =>
-											updateField("tratativaTipo", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									>
-										<option value="">Selecione a tratativa</option>
-										{RETIRADA_TRATATIVAS.map((item) => (
-											<option key={item.value} value={item.value}>
-												{item.label}
-											</option>
-										))}
-									</select>
-								</Field>
-								<Field label="Responsavel local">
-									<input
-										value={form.responsavelNome}
-										onChange={(event) =>
-											updateField("responsavelNome", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Motivo">
-									<input
-										value={form.motivo}
-										onChange={(event) =>
-											updateField("motivo", event.target.value)
-										}
-										className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-							</div>
-
-							{form.metodo === "ponto" ? (
-								<div className="grid gap-4 md:grid-cols-2">
-									<Field label="Nome do ponto">
-										<input
-											value={form.lojaSelecionadaNome}
-											onChange={(event) =>
-												updateField("lojaSelecionadaNome", event.target.value)
-											}
-											className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-										/>
-									</Field>
-									<Field label="Endereco do ponto">
-										<input
-											value={form.lojaSelecionadaEndereco}
-											onChange={(event) =>
-												updateField(
-													"lojaSelecionadaEndereco",
-													event.target.value,
-												)
-											}
-											className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-300"
-										/>
-									</Field>
-								</div>
-							) : null}
-
-							<div className="grid gap-4 md:grid-cols-2">
-								<Field label="Observacoes do cliente">
-									<textarea
-										value={form.observacoes}
-										onChange={(event) =>
-											updateField("observacoes", event.target.value)
-										}
-										rows={4}
-										className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-								<Field label="Notas da equipe">
-									<textarea
-										value={form.atendimentoNotas}
-										onChange={(event) =>
-											updateField("atendimentoNotas", event.target.value)
-										}
-										rows={4}
-										className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-300"
-									/>
-								</Field>
-							</div>
-						</div>
+						<RetiradaCardEditForm form={form} updateField={updateField} />
 					) : (
-						<div className="space-y-3">
-							<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-								<DetailItem
-									label="Telefone"
-									value={displayRetirada.telefone}
-									icon={Phone}
-								/>
-								<DetailItem
-									label="Contrato"
-									value={displayRetirada.contrato}
-									icon={PackageCheck}
-								/>
-								<DetailItem
-									label="Cidade"
-									value={displayRetirada.cidade}
-									icon={MapPin}
-								/>
-								<DetailItem
-									label="Periodo preferido"
-									value={
-										PERIODO_LABELS[displayRetirada.periodoPreferido] ||
-										displayRetirada.periodoPreferido
-									}
-									icon={CalendarClock}
-								/>
-							</div>
-							<div className="grid gap-3 md:grid-cols-2">
-								<DetailItem
-									label="Protocolo"
-									value={displayRetirada.protocolo || "-"}
-									icon={ClipboardCheck}
-								/>
-							</div>
-							<div className="grid gap-3 md:grid-cols-2">
-								<DetailItem
-									label="Endereco"
-									value={[
-										displayRetirada.endereco,
-										displayRetirada.numero,
-										displayRetirada.bairro,
-									]
-										.filter(Boolean)
-										.join(", ")}
-									icon={Truck}
-								/>
-								<DetailItem
-									label="Equipamentos"
-									value={displayRetirada.equipamento}
-									icon={PackageCheck}
-								/>
-								<DetailItem
-									label="MAC do equipamento"
-									value={displayRetirada.equipamentoMac}
-									icon={PackageCheck}
-								/>
-							</div>
-							<div className="grid gap-3 md:grid-cols-2">
-								<DetailItem
-									label="Tratativa atual"
-									value={
-										TRATATIVA_LABELS[displayRetirada.tratativaTipo] ||
-										displayRetirada.tratativaTipo ||
-										"-"
-									}
-									icon={ClipboardCheck}
-								/>
-								<DetailItem
-									label="Responsavel"
-									value={displayRetirada.responsavelNome || "-"}
-									icon={Phone}
-								/>
-							</div>
-							<div
-								className={`rounded-2xl border px-4 py-4 ${emailStatusMeta.card}`}
-							>
-								<p className="text-xs font-black uppercase tracking-[0.18em] text-slate-700">
-									Notificacao por e-mail
-								</p>
-								<p className="mt-2 text-lg font-black text-gray-900">
-									{emailStatusMeta.label}
-								</p>
-								<p className="mt-1 text-sm text-gray-600">
-									{emailStatusMeta.text}
-								</p>
-								<div className="mt-3 grid gap-3 md:grid-cols-2">
-									<DetailItem
-										label="E-mail do cliente"
-										value={displayRetirada.email || "-"}
-										icon={Phone}
-									/>
-									<DetailItem
-										label="Enviado em"
-										value={formatDate(retirada.emailNotificacaoEnviadaEm)}
-										icon={CalendarClock}
-									/>
-								</div>
-								{retirada.emailNotificacaoErro ? (
-									<p className="mt-3 text-sm font-medium text-rose-700">
-										{retirada.emailNotificacaoErro}
-									</p>
-								) : null}
-							</div>
-							{isConcluded ? (
-								<div
-									className={`rounded-2xl border px-4 py-4 ${receiptEmailStatusMeta.card}`}
-								>
-									<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-										<div>
-											<p className="text-xs font-black uppercase tracking-[0.18em] text-slate-700">
-												Comprovante de entrega
-											</p>
-											<p className="mt-2 text-lg font-black text-gray-900">
-												{receiptEmailStatusMeta.label}
-											</p>
-											<p className="mt-1 text-sm text-gray-600">
-												{receiptEmailStatusMeta.text}
-											</p>
-										</div>
-										<span
-											className={`rounded-full px-3 py-1 text-xs font-semibold ${receiptEmailStatusMeta.pill}`}
-										>
-											{receiptEmailStatusMeta.label}
-										</span>
-									</div>
-
-									<div className="mt-3 grid gap-3 md:grid-cols-2">
-										<DetailItem
-											label="Conclusao"
-											value={formatDate(
-												displayRetirada.concluidoEm ||
-													displayRetirada.tratativaAtualizadaEm,
-											)}
-											icon={CalendarClock}
-										/>
-										<DetailItem
-											label="Enviado por e-mail"
-											value={formatDate(displayRetirada.reciboEmailEnviadoEm)}
-											icon={Mail}
-										/>
-									</div>
-
-									{displayRetirada.reciboEmailErro ? (
-										<p className="mt-3 text-sm font-medium text-rose-700">
-											{displayRetirada.reciboEmailErro}
-										</p>
-									) : null}
-
-									<div className="mt-4 flex flex-wrap gap-2">
-										<button
-											type="button"
-											onClick={handleGenerateReceipt}
-											className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-										>
-											<FileText size={16} />
-											Gerar comprovante
-										</button>
-										<button
-											type="button"
-											disabled={receiptSending || !displayRetirada.email}
-											onClick={() => onSendReceipt(retirada.id)}
-											className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-										>
-											<Mail size={16} />
-											{receiptSending
-												? "Enviando comprovante..."
-												: "Encaminhar por e-mail"}
-										</button>
-									</div>
-								</div>
-							) : null}
-							<div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
-								<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-									<div>
-										<p className="text-xs font-black uppercase tracking-[0.18em] text-orange-700">
-											Custo estimado Correios
-										</p>
-										<p className="mt-2 text-lg font-black text-gray-900">
-											{correiosPending
-												? "Integracao pendente"
-												: formatCurrency(
-														retirada.correiosFreteValor,
-														retirada.correiosFreteMoeda,
-													)}
-										</p>
-										<p className="mt-1 text-sm text-gray-600">
-											{correiosPending
-												? "Configure as credenciais dos Correios na VPS para calcular."
-												: retirada.correiosFreteServicoNome
-													? `${retirada.correiosFreteServicoNome} (${retirada.correiosFreteServicoCodigo})`
-													: "Ainda nao calculado."}
-										</p>
-										<p className="mt-1 text-xs text-gray-500">
-											Pacote padrao: 23 x 10 x 10 cm, 780 g.
-										</p>
-										{retirada.correiosFreteErro ? (
-											<p
-												className={`mt-2 text-xs font-medium ${
-													correiosPending ? "text-amber-700" : "text-rose-600"
-												}`}
-											>
-												{correiosPending
-													? "Preencha CORREIOS_CWS_USERNAME, CORREIOS_CWS_PASSWORD e CORREIOS_POSTING_CARD na VPS."
-													: retirada.correiosFreteErro}
-											</p>
-										) : null}
-									</div>
-									<button
-										type="button"
-										disabled={quoting || correiosPending}
-										onClick={() => onQuote(retirada.id)}
-										className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
-									>
-										{correiosPending
-											? "Configuracao pendente"
-											: quoting
-												? "Calculando..."
-												: "Calcular frete"}
-									</button>
-								</div>
-							</div>
-						</div>
+						<RetiradaCardDetails
+							retirada={retirada}
+							displayRetirada={displayRetirada}
+							emailStatusMeta={emailStatusMeta}
+							receiptEmailStatusMeta={receiptEmailStatusMeta}
+							isConcluded={isConcluded}
+							correiosPending={correiosPending}
+							quoting={quoting}
+							receiptSending={receiptSending}
+							onQuote={onQuote}
+							onSendReceipt={onSendReceipt}
+							handleGenerateReceipt={handleGenerateReceipt}
+						/>
 					)}
 
-					<div className="mt-5 flex flex-wrap justify-end gap-2">
-						{editing ? (
-							<>
-								<button
-									type="button"
-									onClick={cancelEditing}
-									className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-								>
-									Cancelar
-								</button>
-								<button
-									type="button"
-									disabled={saving}
-									onClick={handleSave}
-									className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-								>
-									{saving ? "Salvando..." : "Salvar alteracoes"}
-								</button>
-							</>
-						) : (
-							<button
-								type="button"
-								onClick={() => setEditing(true)}
-								className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
-							>
-								Editar solicitacao
-							</button>
-						)}
-					</div>
+					<RetiradaCardFooterActions
+						editing={editing}
+						saving={saving}
+						cancelEditing={cancelEditing}
+						handleSave={handleSave}
+						setEditing={setEditing}
+					/>
 				</div>
 			) : null}
 		</div>

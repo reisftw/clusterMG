@@ -485,315 +485,329 @@ async function buildReport(client, normalizedByCollection) {
 	};
 }
 
+// Extraidos de upsertRows (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// -- cada colecao ganhou sua propria funcao de upsert; mesma query/loop de
+// antes, so movida pra fora do if-chain.
+async function upsertMensageriaTemplates(client, rows) {
+	for (const row of rows) {
+		await client.query(
+			`insert into mensageria_templates
+			 (id, nome, conteudo, situacao, required_central_button, legacy_path,
+			  legacy_document_id, created_at, updated_at, source_payload)
+			 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
+			 on conflict (id) do update set
+			   nome = excluded.nome,
+			   conteudo = excluded.conteudo,
+			   situacao = excluded.situacao,
+			   required_central_button = excluded.required_central_button,
+			   legacy_path = excluded.legacy_path,
+			   legacy_document_id = excluded.legacy_document_id,
+			   source_payload = excluded.source_payload`,
+			[
+				row.id,
+				row.nome,
+				row.conteudo,
+				row.situacao,
+				row.requiredCentralButton,
+				row.legacyPath,
+				row.legacyDocumentId,
+				row.createdAt,
+				row.updatedAt,
+				JSON.stringify(row.sourcePayload || {}),
+			],
+		);
+	}
+	return;
+}
+
+async function upsertMensageriaConfig(client, rows) {
+	for (const row of rows) {
+		await client.query(
+			`insert into mensageria_config
+			 (id, data, updated_at, legacy_path, legacy_document_id, created_at, source_payload)
+			 values ($1,$2::jsonb,$3,$4,$5,$6,$7::jsonb)
+			 on conflict (id) do update set
+			   data = excluded.data,
+			   updated_at = excluded.updated_at,
+			   legacy_path = excluded.legacy_path,
+			   legacy_document_id = excluded.legacy_document_id,
+			   source_payload = excluded.source_payload`,
+			[
+				row.id,
+				JSON.stringify(row.data || {}),
+				row.updatedAt,
+				row.legacyPath,
+				row.legacyDocumentId,
+				row.createdAt,
+				JSON.stringify(row.sourcePayload || {}),
+			],
+		);
+	}
+	return;
+}
+
+async function upsertMensageriaFila(client, rows, references) {
+	for (const row of rows) {
+		const templateId =
+			row.templateId && references.templateIds?.has(row.templateId)
+				? row.templateId
+				: null;
+		await client.query(
+			`insert into mensageria_fila
+			 (id, codigo_cliente, cliente, telefone, telefone_digits, os, contrato,
+			  cidade, regional, endereco, status, template_id, origem, origem_tipo,
+			  status_os, tentativas, ultimo_erro, ultimo_envio_em, prioridade_em,
+			  envio_lock_id, envio_lock_em, criado_por, criado_em, atualizado_em,
+			  legacy_path, legacy_document_id, created_at, updated_at, source_payload)
+			 values
+			 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+			  $20,$21,$22,$23,$24,$25,$26,$27,$28,$29::jsonb)
+			 on conflict (id) do update set
+			   codigo_cliente = excluded.codigo_cliente,
+			   cliente = excluded.cliente,
+			   telefone = excluded.telefone,
+			   telefone_digits = excluded.telefone_digits,
+			   os = excluded.os,
+			   contrato = excluded.contrato,
+			   cidade = excluded.cidade,
+			   regional = excluded.regional,
+			   endereco = excluded.endereco,
+			   status = excluded.status,
+			   template_id = excluded.template_id,
+			   origem = excluded.origem,
+			   origem_tipo = excluded.origem_tipo,
+			   status_os = excluded.status_os,
+			   tentativas = excluded.tentativas,
+			   ultimo_erro = excluded.ultimo_erro,
+			   ultimo_envio_em = excluded.ultimo_envio_em,
+			   prioridade_em = excluded.prioridade_em,
+			   envio_lock_id = excluded.envio_lock_id,
+			   envio_lock_em = excluded.envio_lock_em,
+			   criado_por = excluded.criado_por,
+			   criado_em = excluded.criado_em,
+			   atualizado_em = excluded.atualizado_em,
+			   legacy_path = excluded.legacy_path,
+			   legacy_document_id = excluded.legacy_document_id,
+			   source_payload = excluded.source_payload`,
+			[
+				row.id,
+				row.codigoCliente,
+				row.cliente,
+				row.telefone,
+				row.telefoneDigits,
+				row.os,
+				row.contrato,
+				row.cidade,
+				row.regional,
+				row.endereco,
+				row.status,
+				templateId,
+				row.origem,
+				row.origemTipo,
+				row.statusOs,
+				row.tentativas,
+				row.ultimoErro,
+				row.ultimoEnvioEm,
+				row.prioridadeEm,
+				row.envioLockId,
+				row.envioLockEm,
+				row.criadoPor,
+				row.criadoEm,
+				row.atualizadoEm,
+				row.legacyPath,
+				row.legacyDocumentId,
+				row.createdAt,
+				row.updatedAt,
+				JSON.stringify(row.sourcePayload || {}),
+			],
+		);
+	}
+	return;
+}
+
+async function upsertMensageriaHistorico(client, rows, references) {
+	for (const row of rows) {
+		const filaId =
+			row.filaId && references.queueIds?.has(row.filaId) ? row.filaId : null;
+		await client.query(
+			`insert into mensageria_historico
+			 (id, fila_id, codigo_cliente, cliente, telefone, cidade, os, direction,
+			  mensagem, provider, provider_status, status, erro, payload, criado_em,
+			  legacy_path, legacy_document_id, created_at, updated_at, source_payload)
+			 values
+			 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20::jsonb)
+			 on conflict (id) do update set
+			   fila_id = excluded.fila_id,
+			   codigo_cliente = excluded.codigo_cliente,
+			   cliente = excluded.cliente,
+			   telefone = excluded.telefone,
+			   cidade = excluded.cidade,
+			   os = excluded.os,
+			   direction = excluded.direction,
+			   mensagem = excluded.mensagem,
+			   provider = excluded.provider,
+			   provider_status = excluded.provider_status,
+			   status = excluded.status,
+			   erro = excluded.erro,
+			   payload = excluded.payload,
+			   criado_em = excluded.criado_em,
+			   legacy_path = excluded.legacy_path,
+			   legacy_document_id = excluded.legacy_document_id,
+			   source_payload = excluded.source_payload`,
+			[
+				row.id,
+				filaId,
+				row.codigoCliente,
+				row.cliente,
+				row.telefone,
+				row.cidade,
+				row.os,
+				row.direction,
+				row.mensagem,
+				row.provider,
+				row.providerStatus,
+				row.status,
+				row.erro,
+				JSON.stringify(row.payload || null),
+				row.criadoEm,
+				row.legacyPath,
+				row.legacyDocumentId,
+				row.createdAt,
+				row.updatedAt,
+				JSON.stringify(row.sourcePayload || {}),
+			],
+		);
+	}
+	return;
+}
+
+async function upsertMensageriaCallbacks(client, rows) {
+	for (const row of rows) {
+		await client.query(
+			`insert into mensageria_callbacks
+			 (id, agendamento_id, codigo_cliente, cliente, telefone, os, mensagem,
+			  motivo, agendado, resposta_automatica, payload, recebido_em, criado_em,
+			  legacy_path, legacy_document_id, created_at, updated_at, source_payload)
+			 values
+			 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18::jsonb)
+			 on conflict (id) do update set
+			   agendamento_id = excluded.agendamento_id,
+			   codigo_cliente = excluded.codigo_cliente,
+			   cliente = excluded.cliente,
+			   telefone = excluded.telefone,
+			   os = excluded.os,
+			   mensagem = excluded.mensagem,
+			   motivo = excluded.motivo,
+			   agendado = excluded.agendado,
+			   resposta_automatica = excluded.resposta_automatica,
+			   payload = excluded.payload,
+			   recebido_em = excluded.recebido_em,
+			   criado_em = excluded.criado_em,
+			   legacy_path = excluded.legacy_path,
+			   legacy_document_id = excluded.legacy_document_id,
+			   source_payload = excluded.source_payload`,
+			[
+				row.id,
+				row.agendamentoId,
+				row.codigoCliente,
+				row.cliente,
+				row.telefone,
+				row.os,
+				row.mensagem,
+				row.motivo,
+				row.agendado,
+				row.respostaAutomatica,
+				JSON.stringify(row.payload || null),
+				row.recebidoEm,
+				row.criadoEm,
+				row.legacyPath,
+				row.legacyDocumentId,
+				row.createdAt,
+				row.updatedAt,
+				JSON.stringify(row.sourcePayload || {}),
+			],
+		);
+	}
+	return;
+}
+
+async function upsertMensageriaConversas(client, rows) {
+	for (const row of rows) {
+		await client.query(
+			`insert into mensageria_agendamento_conversas
+			 (id, telefone, telefone_digits, codigo_cliente, cliente, os, contrato,
+			  cidade, regional, stage, agendamento_id, selected_date, selected_time,
+			  started_at, completed_at, last_message_at, atualizado_em, item_payload,
+			  schedule_payload, date_options, legacy_path, legacy_document_id,
+			  created_at, updated_at, source_payload)
+			 values
+			 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb,
+			  $19::jsonb,$20::jsonb,$21,$22,$23,$24,$25::jsonb)
+			 on conflict (id) do update set
+			   telefone = excluded.telefone,
+			   telefone_digits = excluded.telefone_digits,
+			   codigo_cliente = excluded.codigo_cliente,
+			   cliente = excluded.cliente,
+			   os = excluded.os,
+			   contrato = excluded.contrato,
+			   cidade = excluded.cidade,
+			   regional = excluded.regional,
+			   stage = excluded.stage,
+			   agendamento_id = excluded.agendamento_id,
+			   selected_date = excluded.selected_date,
+			   selected_time = excluded.selected_time,
+			   started_at = excluded.started_at,
+			   completed_at = excluded.completed_at,
+			   last_message_at = excluded.last_message_at,
+			   atualizado_em = excluded.atualizado_em,
+			   item_payload = excluded.item_payload,
+			   schedule_payload = excluded.schedule_payload,
+			   date_options = excluded.date_options,
+			   legacy_path = excluded.legacy_path,
+			   legacy_document_id = excluded.legacy_document_id,
+			   source_payload = excluded.source_payload`,
+			[
+				row.id,
+				row.telefone,
+				row.telefoneDigits,
+				row.codigoCliente,
+				row.cliente,
+				row.os,
+				row.contrato,
+				row.cidade,
+				row.regional,
+				row.stage,
+				row.agendamentoId,
+				row.selectedDate,
+				row.selectedTime,
+				row.startedAt,
+				row.completedAt,
+				row.lastMessageAt,
+				row.atualizadoEm,
+				JSON.stringify(row.itemPayload || null),
+				JSON.stringify(row.schedulePayload || null),
+				JSON.stringify(row.dateOptions || null),
+				row.legacyPath,
+				row.legacyDocumentId,
+				row.createdAt,
+				row.updatedAt,
+				JSON.stringify(row.sourcePayload || {}),
+			],
+		);
+	}
+}
+
 async function upsertRows(client, collection, rows, references = {}) {
-	if (collection === "mensageria_templates") {
-		for (const row of rows) {
-			await client.query(
-				`insert into mensageria_templates
-				 (id, nome, conteudo, situacao, required_central_button, legacy_path,
-				  legacy_document_id, created_at, updated_at, source_payload)
-				 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
-				 on conflict (id) do update set
-				   nome = excluded.nome,
-				   conteudo = excluded.conteudo,
-				   situacao = excluded.situacao,
-				   required_central_button = excluded.required_central_button,
-				   legacy_path = excluded.legacy_path,
-				   legacy_document_id = excluded.legacy_document_id,
-				   source_payload = excluded.source_payload`,
-				[
-					row.id,
-					row.nome,
-					row.conteudo,
-					row.situacao,
-					row.requiredCentralButton,
-					row.legacyPath,
-					row.legacyDocumentId,
-					row.createdAt,
-					row.updatedAt,
-					JSON.stringify(row.sourcePayload || {}),
-				],
-			);
-		}
-		return;
-	}
-
-	if (collection === "mensageria_config") {
-		for (const row of rows) {
-			await client.query(
-				`insert into mensageria_config
-				 (id, data, updated_at, legacy_path, legacy_document_id, created_at, source_payload)
-				 values ($1,$2::jsonb,$3,$4,$5,$6,$7::jsonb)
-				 on conflict (id) do update set
-				   data = excluded.data,
-				   updated_at = excluded.updated_at,
-				   legacy_path = excluded.legacy_path,
-				   legacy_document_id = excluded.legacy_document_id,
-				   source_payload = excluded.source_payload`,
-				[
-					row.id,
-					JSON.stringify(row.data || {}),
-					row.updatedAt,
-					row.legacyPath,
-					row.legacyDocumentId,
-					row.createdAt,
-					JSON.stringify(row.sourcePayload || {}),
-				],
-			);
-		}
-		return;
-	}
-
-	if (collection === "mensageria_fila") {
-		for (const row of rows) {
-			const templateId =
-				row.templateId && references.templateIds?.has(row.templateId)
-					? row.templateId
-					: null;
-			await client.query(
-				`insert into mensageria_fila
-				 (id, codigo_cliente, cliente, telefone, telefone_digits, os, contrato,
-				  cidade, regional, endereco, status, template_id, origem, origem_tipo,
-				  status_os, tentativas, ultimo_erro, ultimo_envio_em, prioridade_em,
-				  envio_lock_id, envio_lock_em, criado_por, criado_em, atualizado_em,
-				  legacy_path, legacy_document_id, created_at, updated_at, source_payload)
-				 values
-				 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-				  $20,$21,$22,$23,$24,$25,$26,$27,$28,$29::jsonb)
-				 on conflict (id) do update set
-				   codigo_cliente = excluded.codigo_cliente,
-				   cliente = excluded.cliente,
-				   telefone = excluded.telefone,
-				   telefone_digits = excluded.telefone_digits,
-				   os = excluded.os,
-				   contrato = excluded.contrato,
-				   cidade = excluded.cidade,
-				   regional = excluded.regional,
-				   endereco = excluded.endereco,
-				   status = excluded.status,
-				   template_id = excluded.template_id,
-				   origem = excluded.origem,
-				   origem_tipo = excluded.origem_tipo,
-				   status_os = excluded.status_os,
-				   tentativas = excluded.tentativas,
-				   ultimo_erro = excluded.ultimo_erro,
-				   ultimo_envio_em = excluded.ultimo_envio_em,
-				   prioridade_em = excluded.prioridade_em,
-				   envio_lock_id = excluded.envio_lock_id,
-				   envio_lock_em = excluded.envio_lock_em,
-				   criado_por = excluded.criado_por,
-				   criado_em = excluded.criado_em,
-				   atualizado_em = excluded.atualizado_em,
-				   legacy_path = excluded.legacy_path,
-				   legacy_document_id = excluded.legacy_document_id,
-				   source_payload = excluded.source_payload`,
-				[
-					row.id,
-					row.codigoCliente,
-					row.cliente,
-					row.telefone,
-					row.telefoneDigits,
-					row.os,
-					row.contrato,
-					row.cidade,
-					row.regional,
-					row.endereco,
-					row.status,
-					templateId,
-					row.origem,
-					row.origemTipo,
-					row.statusOs,
-					row.tentativas,
-					row.ultimoErro,
-					row.ultimoEnvioEm,
-					row.prioridadeEm,
-					row.envioLockId,
-					row.envioLockEm,
-					row.criadoPor,
-					row.criadoEm,
-					row.atualizadoEm,
-					row.legacyPath,
-					row.legacyDocumentId,
-					row.createdAt,
-					row.updatedAt,
-					JSON.stringify(row.sourcePayload || {}),
-				],
-			);
-		}
-		return;
-	}
-
-	if (collection === "mensageria_historico") {
-		for (const row of rows) {
-			const filaId =
-				row.filaId && references.queueIds?.has(row.filaId) ? row.filaId : null;
-			await client.query(
-				`insert into mensageria_historico
-				 (id, fila_id, codigo_cliente, cliente, telefone, cidade, os, direction,
-				  mensagem, provider, provider_status, status, erro, payload, criado_em,
-				  legacy_path, legacy_document_id, created_at, updated_at, source_payload)
-				 values
-				 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20::jsonb)
-				 on conflict (id) do update set
-				   fila_id = excluded.fila_id,
-				   codigo_cliente = excluded.codigo_cliente,
-				   cliente = excluded.cliente,
-				   telefone = excluded.telefone,
-				   cidade = excluded.cidade,
-				   os = excluded.os,
-				   direction = excluded.direction,
-				   mensagem = excluded.mensagem,
-				   provider = excluded.provider,
-				   provider_status = excluded.provider_status,
-				   status = excluded.status,
-				   erro = excluded.erro,
-				   payload = excluded.payload,
-				   criado_em = excluded.criado_em,
-				   legacy_path = excluded.legacy_path,
-				   legacy_document_id = excluded.legacy_document_id,
-				   source_payload = excluded.source_payload`,
-				[
-					row.id,
-					filaId,
-					row.codigoCliente,
-					row.cliente,
-					row.telefone,
-					row.cidade,
-					row.os,
-					row.direction,
-					row.mensagem,
-					row.provider,
-					row.providerStatus,
-					row.status,
-					row.erro,
-					JSON.stringify(row.payload || null),
-					row.criadoEm,
-					row.legacyPath,
-					row.legacyDocumentId,
-					row.createdAt,
-					row.updatedAt,
-					JSON.stringify(row.sourcePayload || {}),
-				],
-			);
-		}
-		return;
-	}
-
-	if (collection === "mensageria_callbacks") {
-		for (const row of rows) {
-			await client.query(
-				`insert into mensageria_callbacks
-				 (id, agendamento_id, codigo_cliente, cliente, telefone, os, mensagem,
-				  motivo, agendado, resposta_automatica, payload, recebido_em, criado_em,
-				  legacy_path, legacy_document_id, created_at, updated_at, source_payload)
-				 values
-				 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18::jsonb)
-				 on conflict (id) do update set
-				   agendamento_id = excluded.agendamento_id,
-				   codigo_cliente = excluded.codigo_cliente,
-				   cliente = excluded.cliente,
-				   telefone = excluded.telefone,
-				   os = excluded.os,
-				   mensagem = excluded.mensagem,
-				   motivo = excluded.motivo,
-				   agendado = excluded.agendado,
-				   resposta_automatica = excluded.resposta_automatica,
-				   payload = excluded.payload,
-				   recebido_em = excluded.recebido_em,
-				   criado_em = excluded.criado_em,
-				   legacy_path = excluded.legacy_path,
-				   legacy_document_id = excluded.legacy_document_id,
-				   source_payload = excluded.source_payload`,
-				[
-					row.id,
-					row.agendamentoId,
-					row.codigoCliente,
-					row.cliente,
-					row.telefone,
-					row.os,
-					row.mensagem,
-					row.motivo,
-					row.agendado,
-					row.respostaAutomatica,
-					JSON.stringify(row.payload || null),
-					row.recebidoEm,
-					row.criadoEm,
-					row.legacyPath,
-					row.legacyDocumentId,
-					row.createdAt,
-					row.updatedAt,
-					JSON.stringify(row.sourcePayload || {}),
-				],
-			);
-		}
-		return;
-	}
-
-	if (collection === "mensageria_agendamento_conversas") {
-		for (const row of rows) {
-			await client.query(
-				`insert into mensageria_agendamento_conversas
-				 (id, telefone, telefone_digits, codigo_cliente, cliente, os, contrato,
-				  cidade, regional, stage, agendamento_id, selected_date, selected_time,
-				  started_at, completed_at, last_message_at, atualizado_em, item_payload,
-				  schedule_payload, date_options, legacy_path, legacy_document_id,
-				  created_at, updated_at, source_payload)
-				 values
-				 ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb,
-				  $19::jsonb,$20::jsonb,$21,$22,$23,$24,$25::jsonb)
-				 on conflict (id) do update set
-				   telefone = excluded.telefone,
-				   telefone_digits = excluded.telefone_digits,
-				   codigo_cliente = excluded.codigo_cliente,
-				   cliente = excluded.cliente,
-				   os = excluded.os,
-				   contrato = excluded.contrato,
-				   cidade = excluded.cidade,
-				   regional = excluded.regional,
-				   stage = excluded.stage,
-				   agendamento_id = excluded.agendamento_id,
-				   selected_date = excluded.selected_date,
-				   selected_time = excluded.selected_time,
-				   started_at = excluded.started_at,
-				   completed_at = excluded.completed_at,
-				   last_message_at = excluded.last_message_at,
-				   atualizado_em = excluded.atualizado_em,
-				   item_payload = excluded.item_payload,
-				   schedule_payload = excluded.schedule_payload,
-				   date_options = excluded.date_options,
-				   legacy_path = excluded.legacy_path,
-				   legacy_document_id = excluded.legacy_document_id,
-				   source_payload = excluded.source_payload`,
-				[
-					row.id,
-					row.telefone,
-					row.telefoneDigits,
-					row.codigoCliente,
-					row.cliente,
-					row.os,
-					row.contrato,
-					row.cidade,
-					row.regional,
-					row.stage,
-					row.agendamentoId,
-					row.selectedDate,
-					row.selectedTime,
-					row.startedAt,
-					row.completedAt,
-					row.lastMessageAt,
-					row.atualizadoEm,
-					JSON.stringify(row.itemPayload || null),
-					JSON.stringify(row.schedulePayload || null),
-					JSON.stringify(row.dateOptions || null),
-					row.legacyPath,
-					row.legacyDocumentId,
-					row.createdAt,
-					row.updatedAt,
-					JSON.stringify(row.sourcePayload || {}),
-				],
-			);
-		}
-	}
+	const handlers = {
+		mensageria_templates: () => upsertMensageriaTemplates(client, rows),
+		mensageria_config: () => upsertMensageriaConfig(client, rows),
+		mensageria_fila: () => upsertMensageriaFila(client, rows, references),
+		mensageria_historico: () => upsertMensageriaHistorico(client, rows, references),
+		mensageria_callbacks: () => upsertMensageriaCallbacks(client, rows),
+		mensageria_agendamento_conversas: () => upsertMensageriaConversas(client, rows),
+	};
+	const handler = handlers[collection];
+	if (handler) await handler();
 }
 
 async function applyMigration(client, normalizedByCollection) {

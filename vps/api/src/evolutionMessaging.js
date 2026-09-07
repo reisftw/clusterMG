@@ -1448,6 +1448,129 @@ async function acquireQueueSendLock(item, config, now = new Date()) {
 	return { locked: true, lockId, item: confirmed };
 }
 
+// Extraido de processQueueOnce (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — processamento de um item da fila de envio
+// (lock, checagem de duplicidade, tentativa de envio), mesma logica de
+// antes. Devolve o desfecho em vez de mutar `sent`/`failed`/`lastSkipped`
+// diretamente (quem chama decide o que fazer com o resultado).
+async function processQueueCandidate(item, config) {
+	const lock = await acquireQueueSendLock(item, config);
+	if (!lock.locked) {
+		return { locked: false, reason: lock.reason };
+	}
+	const lockedItem = lock.item;
+	const phone = normalizePhone(lockedItem.telefone);
+	const template = await getTemplate(
+		lockedItem.templateId || config.activeTemplateId,
+	);
+	const message = renderTemplate(template.conteudo, lockedItem, config);
+	const duplicate = await findRecentDuplicateSent({
+		filaId: lockedItem.id,
+		telefone: lockedItem.telefone,
+		mensagem: message,
+	});
+	if (duplicate) {
+		await upsertQueueItem(lockedItem.id, {
+			...lockedItem,
+			status: "duplicado",
+			duplicadoDe: duplicate.filaId || duplicate.id,
+			ultimoErro: "Envio ignorado para evitar mensagem duplicada.",
+			envioLockId: "",
+			envioLockEm: "",
+			atualizadoEm: nowIso(),
+		});
+		await createHistory({
+			cliente: lockedItem.cliente,
+			telefone: lockedItem.telefone,
+			os: lockedItem.os,
+			cidade: lockedItem.cidade,
+			templateId: template.id,
+			mensagem: message,
+			status: "duplicado",
+			origem: getProviderName(config),
+			filaId: lockedItem.id,
+			erro: `Envio bloqueado por duplicidade com ${duplicate.filaId || duplicate.id}.`,
+		});
+		broadcastRealtime("mensageria", {
+			action: "duplicate_blocked",
+			id: lockedItem.id,
+		});
+		return {
+			locked: true,
+			outcome: "failed",
+			id: lockedItem.id,
+			error: "Duplicado bloqueado antes do envio.",
+		};
+	}
+	const attempts = Number(lockedItem.tentativas || 0) + 1;
+	try {
+		const response = await sendWhatsAppMessage(
+			withoutEvolutionAutoRetries(config),
+			phone,
+			message,
+			lockedItem,
+		);
+		await upsertQueueItem(lockedItem.id, {
+			...lockedItem,
+			status: "enviado",
+			tentativas: attempts,
+			ultimoEnvioEm: nowIso(),
+			envioLockId: "",
+			envioLockEm: "",
+			evolutionResponse: response.response,
+			evolutionMode: response.mode,
+			evolutionButtonError: response.buttonError || "",
+			atualizadoEm: nowIso(),
+		});
+		await createHistory({
+			cliente: lockedItem.cliente,
+			telefone: lockedItem.telefone,
+			os: lockedItem.os,
+			cidade: lockedItem.cidade,
+			templateId: template.id,
+			mensagem: message,
+			status: "enviado",
+			origem: getProviderName(config),
+			filaId: lockedItem.id,
+			evolutionMode: response.mode,
+			evolutionButtonError: response.buttonError || "",
+		});
+		lastQueueExecutionItem = summarizeQueueExecutionItem(lockedItem);
+		broadcastRealtime("mensageria", { action: "sent", id: lockedItem.id });
+		return { locked: true, outcome: "sent", id: lockedItem.id };
+	} catch (error) {
+		const retryAt = new Date(
+			Date.now() + Number(config.retryAfterMinutes || 30) * 60 * 1000,
+		).toISOString();
+		lastQueueExecutionItem = summarizeQueueExecutionItem({
+			...lockedItem,
+			ultimoErro: error?.message || "Falha no envio.",
+		});
+		await upsertQueueItem(lockedItem.id, {
+			...lockedItem,
+			status:
+				attempts >= Number(config.retryLimit || 3) ? "falhou" : "aprovado",
+			tentativas: attempts,
+			ultimoErro: error?.message || "Falha no envio.",
+			proximaTentativaEm: retryAt,
+			envioLockId: "",
+			envioLockEm: "",
+			atualizadoEm: nowIso(),
+		});
+		await createHistory({
+			cliente: lockedItem.cliente,
+			telefone: lockedItem.telefone,
+			os: lockedItem.os,
+			cidade: lockedItem.cidade,
+			status: "falhou",
+			erro: error?.message || "Falha no envio.",
+			origem: getProviderName(config),
+			filaId: lockedItem.id,
+		});
+		return { locked: true, outcome: "failed", id: lockedItem.id, error: error?.message };
+	}
+}
+
 async function processQueueOnce({ manual = false } = {}) {
 	const config = await getConfig();
 	lastRun = nowIso();
@@ -1514,120 +1637,15 @@ async function processQueueOnce({ manual = false } = {}) {
 	const failed = [];
 
 	for (const item of candidates) {
-		const lock = await acquireQueueSendLock(item, config);
-		if (!lock.locked) {
-			lastSkipped = `Item ${item.id} ignorado: ${lock.reason}.`;
+		const result = await processQueueCandidate(item, config);
+		if (!result.locked) {
+			lastSkipped = `Item ${item.id} ignorado: ${result.reason}.`;
 			continue;
 		}
-		const lockedItem = lock.item;
-		const phone = normalizePhone(lockedItem.telefone);
-		const template = await getTemplate(
-			lockedItem.templateId || config.activeTemplateId,
-		);
-		const message = renderTemplate(template.conteudo, lockedItem, config);
-		const duplicate = await findRecentDuplicateSent({
-			filaId: lockedItem.id,
-			telefone: lockedItem.telefone,
-			mensagem: message,
-		});
-		if (duplicate) {
-			await upsertQueueItem(lockedItem.id, {
-				...lockedItem,
-				status: "duplicado",
-				duplicadoDe: duplicate.filaId || duplicate.id,
-				ultimoErro: "Envio ignorado para evitar mensagem duplicada.",
-				envioLockId: "",
-				envioLockEm: "",
-				atualizadoEm: nowIso(),
-			});
-			await createHistory({
-				cliente: lockedItem.cliente,
-				telefone: lockedItem.telefone,
-				os: lockedItem.os,
-				cidade: lockedItem.cidade,
-				templateId: template.id,
-				mensagem: message,
-				status: "duplicado",
-				origem: getProviderName(config),
-				filaId: lockedItem.id,
-				erro: `Envio bloqueado por duplicidade com ${duplicate.filaId || duplicate.id}.`,
-			});
-			failed.push({
-				id: lockedItem.id,
-				error: "Duplicado bloqueado antes do envio.",
-			});
-			broadcastRealtime("mensageria", {
-				action: "duplicate_blocked",
-				id: lockedItem.id,
-			});
-			continue;
-		}
-		const attempts = Number(lockedItem.tentativas || 0) + 1;
-		try {
-			const response = await sendWhatsAppMessage(
-				withoutEvolutionAutoRetries(config),
-				phone,
-				message,
-				lockedItem,
-			);
-			await upsertQueueItem(lockedItem.id, {
-				...lockedItem,
-				status: "enviado",
-				tentativas: attempts,
-				ultimoEnvioEm: nowIso(),
-				envioLockId: "",
-				envioLockEm: "",
-				evolutionResponse: response.response,
-				evolutionMode: response.mode,
-				evolutionButtonError: response.buttonError || "",
-				atualizadoEm: nowIso(),
-			});
-			await createHistory({
-				cliente: lockedItem.cliente,
-				telefone: lockedItem.telefone,
-				os: lockedItem.os,
-				cidade: lockedItem.cidade,
-				templateId: template.id,
-				mensagem: message,
-				status: "enviado",
-				origem: getProviderName(config),
-				filaId: lockedItem.id,
-				evolutionMode: response.mode,
-				evolutionButtonError: response.buttonError || "",
-			});
-			lastQueueExecutionItem = summarizeQueueExecutionItem(lockedItem);
-			sent.push(lockedItem.id);
-			broadcastRealtime("mensageria", { action: "sent", id: lockedItem.id });
-		} catch (error) {
-			const retryAt = new Date(
-				Date.now() + Number(config.retryAfterMinutes || 30) * 60 * 1000,
-			).toISOString();
-			lastQueueExecutionItem = summarizeQueueExecutionItem({
-				...lockedItem,
-				ultimoErro: error?.message || "Falha no envio.",
-			});
-			await upsertQueueItem(lockedItem.id, {
-				...lockedItem,
-				status:
-					attempts >= Number(config.retryLimit || 3) ? "falhou" : "aprovado",
-				tentativas: attempts,
-				ultimoErro: error?.message || "Falha no envio.",
-				proximaTentativaEm: retryAt,
-				envioLockId: "",
-				envioLockEm: "",
-				atualizadoEm: nowIso(),
-			});
-			await createHistory({
-				cliente: lockedItem.cliente,
-				telefone: lockedItem.telefone,
-				os: lockedItem.os,
-				cidade: lockedItem.cidade,
-				status: "falhou",
-				erro: error?.message || "Falha no envio.",
-				origem: getProviderName(config),
-				filaId: lockedItem.id,
-			});
-			failed.push({ id: lockedItem.id, error: error?.message });
+		if (result.outcome === "sent") {
+			sent.push(result.id);
+		} else if (result.outcome === "failed") {
+			failed.push({ id: result.id, error: result.error });
 		}
 		if (!manual && sent.length < candidates.length) {
 			const remainingAfterCurrent = Math.max(1, remainingToday - sent.length);
@@ -1765,39 +1783,50 @@ function getStatus() {
 	};
 }
 
+const WEBHOOK_TEXT_KEY_SUFFIXES = [
+	"message",
+	"body",
+	"text",
+	"caption",
+	"selecteddisplaytext",
+	"displaytext",
+	"title",
+	"description",
+];
+
+// Extraido de extractTextFromWebhook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — antes era uma closure recursiva `visit`
+// declarada dentro da funcao (a aninhamento de closure que pesa no score
+// de complexidade cognitiva do Sonar); mesma logica de antes, so que
+// como funcao de topo-nivel recebendo o array `out` pra empurrar os
+// candidatos encontrados.
+function collectWebhookTextCandidates(value, key = "", depth = 0, out = []) {
+	if (depth > 5 || value === null || value === undefined) return out;
+	if (typeof value === "string" || typeof value === "number") {
+		const lowerKey = String(key || "").toLowerCase();
+		if (
+			WEBHOOK_TEXT_KEY_SUFFIXES.some(
+				(part) => lowerKey === part || lowerKey.endsWith(part),
+			)
+		) {
+			out.push(String(value));
+		}
+		return out;
+	}
+	if (Array.isArray(value)) {
+		value.forEach((item) => collectWebhookTextCandidates(item, key, depth + 1, out));
+		return out;
+	}
+	if (typeof value === "object") {
+		Object.entries(value).forEach(([innerKey, innerValue]) =>
+			collectWebhookTextCandidates(innerValue, innerKey, depth + 1, out),
+		);
+	}
+	return out;
+}
+
 function extractTextFromWebhook(payload = {}) {
-	const deepCandidates = [];
-	const visit = (value, key = "", depth = 0) => {
-		if (depth > 5 || value === null || value === undefined) return;
-		if (typeof value === "string" || typeof value === "number") {
-			const lowerKey = String(key || "").toLowerCase();
-			if (
-				[
-					"message",
-					"body",
-					"text",
-					"caption",
-					"selecteddisplaytext",
-					"displaytext",
-					"title",
-					"description",
-				].some((part) => lowerKey === part || lowerKey.endsWith(part))
-			) {
-				deepCandidates.push(String(value));
-			}
-			return;
-		}
-		if (Array.isArray(value)) {
-			value.forEach((item) => visit(item, key, depth + 1));
-			return;
-		}
-		if (typeof value === "object") {
-			Object.entries(value).forEach(([innerKey, innerValue]) =>
-				visit(innerValue, innerKey, depth + 1),
-			);
-		}
-	};
-	visit(payload);
+	const deepCandidates = collectWebhookTextCandidates(payload);
 	const candidates = [
 		payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body,
 		payload.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.button?.text,
@@ -2749,23 +2778,11 @@ async function rejectScheduleDate(
 	};
 }
 
-async function continueGuidedScheduleFlow(
-	config,
-	phone,
-	item = {},
-	mensagem = "",
-	callbackId = "",
-) {
-	const conversation = await getScheduleConversation(phone);
-	if (
-		!conversation ||
-		!["awaiting_date", "awaiting_time"].includes(
-			String(conversation.stage || ""),
-		)
-	) {
-		return null;
-	}
-	const conversationItem = conversation.item || item || {};
+// Extraido de continueGuidedScheduleFlow (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — passo "aguardando data" do fluxo guiado de
+// agendamento, mesma logica de antes (mesmo `if` original, devolvendo
+// null quando o estagio nao e esse).
+async function handleGuidedDateStage(config, phone, conversationItem, conversation, mensagem) {
 	if (conversation.stage === "awaiting_date") {
 		if (isPositiveScheduleIntent(mensagem)) {
 			return resendGuidedDateOptions(
@@ -2819,7 +2836,13 @@ async function continueGuidedScheduleFlow(
 				DEFAULT_CONFIG.guidedScheduleTimeMessage,
 		);
 	}
+	return null;
+}
 
+// Extraido de continueGuidedScheduleFlow (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — passo "aguardando horario" do fluxo guiado de
+// agendamento, mesma logica de antes.
+async function handleGuidedTimeStage(config, phone, conversationItem, conversation, mensagem, callbackId) {
 	const selectedTime = parseGuidedTimeChoice(mensagem);
 	if (!selectedTime && isPositiveScheduleIntent(mensagem)) {
 		return sendConfiguredAutoReply(
@@ -2903,7 +2926,44 @@ async function continueGuidedScheduleFlow(
 		respostaAutomatica: confirmation,
 		respostaAutomaticaErro: confirmationError,
 	};
+
 }
+
+async function continueGuidedScheduleFlow(
+	config,
+	phone,
+	item = {},
+	mensagem = "",
+	callbackId = "",
+) {
+	const conversation = await getScheduleConversation(phone);
+	if (
+		!conversation ||
+		!["awaiting_date", "awaiting_time"].includes(
+			String(conversation.stage || ""),
+		)
+	) {
+		return null;
+	}
+	const conversationItem = conversation.item || item || {};
+	const dateStageResult = await handleGuidedDateStage(
+		config,
+		phone,
+		conversationItem,
+		conversation,
+		mensagem,
+	);
+	if (dateStageResult) return dateStageResult;
+	return handleGuidedTimeStage(
+		config,
+		phone,
+		conversationItem,
+		conversation,
+		mensagem,
+		callbackId,
+	);
+}
+
 
 async function sendHumanSupportAutoReply(config, phone, item = {}) {
 	const number = normalizePhone(phone || item?.telefone);
@@ -2936,7 +2996,11 @@ async function sendHumanSupportAutoReply(config, phone, item = {}) {
 	return response;
 }
 
-async function registerCallback(payload = {}) {
+// Extraido de registerCallback (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — evento de conexao/desconexao da Evolution,
+// mesma logica de antes (mesmo `if` original, devolvendo null quando nao
+// se aplica em vez de cair no restante do fluxo de callback).
+async function handleConnectionEventCallback(payload) {
 	if (isEvolutionConnectionEvent(payload)) {
 		const state = extractConnectionState(payload);
 		if (isDisconnectedConnectionState(state)) {
@@ -2967,100 +3031,30 @@ async function registerCallback(payload = {}) {
 			state,
 		};
 	}
-	if (isNonMessageWebhook(payload)) {
-		return { ok: true, ignored: true, reason: "Evento sem mensagem ignorado." };
-	}
-	if (isOutboundWebhook(payload)) {
-		return {
-			ok: true,
-			ignored: true,
-			reason: "Mensagem enviada pela propria instancia.",
-		};
-	}
-	if (isGroupWebhook(payload)) {
-		return { ok: true, ignored: true, reason: "Mensagem de grupo ignorada." };
-	}
-	const mensagem = String(
-		payload.mensagem || extractTextFromWebhook(payload) || "",
-	).trim();
-	if (isAutomationText(mensagem)) {
-		return { ok: true, ignored: true, reason: "Mensagem automatica ignorada." };
-	}
-	const telefone =
-		payload.telefone || payload.phone || extractPhoneFromWebhook(payload);
-	const codigoCliente = payload.codigo_cliente || payload.codigoCliente || "";
-	const cliente = payload.cliente || "";
-	const recebidoEm = extractTimestampFromWebhook(payload);
-	const webhookMessageId = extractWebhookMessageId(payload);
-	if (
-		markRecentInboundCallback({ phone: telefone, mensagem, webhookMessageId })
-	) {
-		return {
-			ok: true,
-			ignored: true,
-			reason: "Resposta repetida em processamento ignorada.",
-			status: "duplicado_em_processamento",
-		};
-	}
-	const schedule = parseScheduleFromText(mensagem);
-	const activeConversation = await getScheduleConversation(telefone);
-	const hasActiveGuidedConversation = [
-		"awaiting_date",
-		"awaiting_time",
-	].includes(String(activeConversation?.stage || ""));
-	const duplicate = await findDuplicateCallback({
-		phone: telefone,
-		mensagem,
-		webhookMessageId,
-		recebidoEm,
-		allowTextMatch: !hasActiveGuidedConversation,
-	});
-	if (duplicate) {
-		return {
-			ok: true,
-			ignored: true,
-			reason: "Resposta duplicada ignorada.",
-			callbackId: duplicate.id,
-			status: duplicate.status,
-			agendamento_id: duplicate.agendamento_id || null,
-		};
-	}
-	const queueItem = await findQueueItemForCallback({
-		phone: telefone,
-		codigoCliente,
-		cliente,
-	});
-	const historyItem = await findHistoryItemForCallback({
-		phone: telefone,
-		codigoCliente,
-		cliente,
-	});
-	const item = chooseCallbackItem(queueItem, historyItem);
-	const callbackId = randomId("cb");
+	return null;
+}
+
+// Extraido de registerCallback (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — classificacao da resposta do cliente (fluxo
+// guiado, "ja devolvi", sem match, pos-agendamento, sem data, data
+// invalida ou agendamento confirmado), mesma cadeia if/else if de antes,
+// sem mudanca de comportamento.
+async function classifyCallbackResponse({
+	guidedResult,
+	guidedError,
+	hasActiveGuidedConversation,
+	mensagem,
+	config,
+	telefone,
+	item,
+	schedule,
+	queueItem,
+	callbackId,
+}) {
 	let status = "recebido";
 	let agendamentoId = null;
 	let motivo = "";
 	let respostaAutomatica = null;
-	const config = await getConfig();
-	let guidedResult = null;
-	let guidedError = "";
-	if (
-		(item || hasActiveGuidedConversation) &&
-		config.guidedScheduleEnabled !== false
-	) {
-		try {
-			guidedResult = await continueGuidedScheduleFlow(
-				config,
-				telefone,
-				item || activeConversation?.item || { telefone },
-				mensagem,
-				callbackId,
-			);
-		} catch (error) {
-			guidedError = String(error?.message || error);
-		}
-	}
-
 	if (guidedResult) {
 		status =
 			guidedResult.status ||
@@ -3200,6 +3194,116 @@ async function registerCallback(payload = {}) {
 			}
 		}
 	}
+
+	return { status, agendamentoId, motivo, respostaAutomatica };
+}
+
+async function registerCallback(payload = {}) {
+	const connectionResult = await handleConnectionEventCallback(payload);
+	if (connectionResult) return connectionResult;
+	if (isNonMessageWebhook(payload)) {
+		return { ok: true, ignored: true, reason: "Evento sem mensagem ignorado." };
+	}
+	if (isOutboundWebhook(payload)) {
+		return {
+			ok: true,
+			ignored: true,
+			reason: "Mensagem enviada pela propria instancia.",
+		};
+	}
+	if (isGroupWebhook(payload)) {
+		return { ok: true, ignored: true, reason: "Mensagem de grupo ignorada." };
+	}
+	const mensagem = String(
+		payload.mensagem || extractTextFromWebhook(payload) || "",
+	).trim();
+	if (isAutomationText(mensagem)) {
+		return { ok: true, ignored: true, reason: "Mensagem automatica ignorada." };
+	}
+	const telefone =
+		payload.telefone || payload.phone || extractPhoneFromWebhook(payload);
+	const codigoCliente = payload.codigo_cliente || payload.codigoCliente || "";
+	const cliente = payload.cliente || "";
+	const recebidoEm = extractTimestampFromWebhook(payload);
+	const webhookMessageId = extractWebhookMessageId(payload);
+	if (
+		markRecentInboundCallback({ phone: telefone, mensagem, webhookMessageId })
+	) {
+		return {
+			ok: true,
+			ignored: true,
+			reason: "Resposta repetida em processamento ignorada.",
+			status: "duplicado_em_processamento",
+		};
+	}
+	const schedule = parseScheduleFromText(mensagem);
+	const activeConversation = await getScheduleConversation(telefone);
+	const hasActiveGuidedConversation = [
+		"awaiting_date",
+		"awaiting_time",
+	].includes(String(activeConversation?.stage || ""));
+	const duplicate = await findDuplicateCallback({
+		phone: telefone,
+		mensagem,
+		webhookMessageId,
+		recebidoEm,
+		allowTextMatch: !hasActiveGuidedConversation,
+	});
+	if (duplicate) {
+		return {
+			ok: true,
+			ignored: true,
+			reason: "Resposta duplicada ignorada.",
+			callbackId: duplicate.id,
+			status: duplicate.status,
+			agendamento_id: duplicate.agendamento_id || null,
+		};
+	}
+	const queueItem = await findQueueItemForCallback({
+		phone: telefone,
+		codigoCliente,
+		cliente,
+	});
+	const historyItem = await findHistoryItemForCallback({
+		phone: telefone,
+		codigoCliente,
+		cliente,
+	});
+	const item = chooseCallbackItem(queueItem, historyItem);
+	const callbackId = randomId("cb");
+	const config = await getConfig();
+	let guidedResult = null;
+	let guidedError = "";
+	if (
+		(item || hasActiveGuidedConversation) &&
+		config.guidedScheduleEnabled !== false
+	) {
+		try {
+			guidedResult = await continueGuidedScheduleFlow(
+				config,
+				telefone,
+				item || activeConversation?.item || { telefone },
+				mensagem,
+				callbackId,
+			);
+		} catch (error) {
+			guidedError = String(error?.message || error);
+		}
+	}
+
+	const classified = await classifyCallbackResponse({
+		guidedResult,
+		guidedError,
+		hasActiveGuidedConversation,
+		mensagem,
+		config,
+		telefone,
+		item,
+		schedule,
+		queueItem,
+		callbackId,
+	});
+	const { status, agendamentoId, motivo, respostaAutomatica } = classified;
 
 	await mensageriaRepository.recordCallback(
 		{

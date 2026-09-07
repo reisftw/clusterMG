@@ -41,7 +41,10 @@ function getTemplateLabel(type) {
 	return DEFAULT_EMAIL_TEMPLATES[type]?.label || type || "E-mail";
 }
 
-const EmailSettingsPage = () => {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useEmailSettingsController() {
 	const [config, setConfig] = useState(DEFAULT_EMAIL_CONFIG);
 	const [testTo, setTestTo] = useState("administracao@retiradas.tech");
 	const [loading, setLoading] = useState(true);
@@ -157,6 +160,80 @@ const EmailSettingsPage = () => {
 		}
 	};
 
+	const templateKeys = Object.keys(DEFAULT_EMAIL_TEMPLATES);
+	const activeTemplateConfig = {
+		...(DEFAULT_EMAIL_TEMPLATES[activeTemplate] || {}),
+		...((config.templates || {})[activeTemplate] || {}),
+	};
+
+	return {
+		config,
+		testTo,
+		setTestTo,
+		loading,
+		mfaEmailToggleId,
+		saving,
+		testing,
+		feedback,
+		activeTemplate,
+		setActiveTemplate,
+		activeTab,
+		setActiveTab,
+		logs,
+		logsTotal,
+		logsLoading,
+		logsPage,
+		logsStatus,
+		setLogsStatus,
+		logsType,
+		setLogsType,
+		logsSearch,
+		setLogsSearch,
+		loadData,
+		loadLogs,
+		update,
+		updateTemplate,
+		save,
+		test,
+		templateKeys,
+		activeTemplateConfig,
+	};
+}
+
+const EmailSettingsPage = () => {
+	const {
+		config,
+		testTo,
+		setTestTo,
+		loading,
+		mfaEmailToggleId,
+		saving,
+		testing,
+		feedback,
+		activeTemplate,
+		setActiveTemplate,
+		activeTab,
+		setActiveTab,
+		logs,
+		logsTotal,
+		logsLoading,
+		logsPage,
+		logsStatus,
+		setLogsStatus,
+		logsType,
+		setLogsType,
+		logsSearch,
+		setLogsSearch,
+		loadData,
+		loadLogs,
+		update,
+		updateTemplate,
+		save,
+		test,
+		templateKeys,
+		activeTemplateConfig,
+	} = useEmailSettingsController();
+
 	if (loading) {
 		return (
 			<div className="flex min-h-[420px] items-center justify-center rounded-lg border border-slate-200 bg-white">
@@ -167,12 +244,6 @@ const EmailSettingsPage = () => {
 			</div>
 		);
 	}
-
-	const templateKeys = Object.keys(DEFAULT_EMAIL_TEMPLATES);
-	const activeTemplateConfig = {
-		...(DEFAULT_EMAIL_TEMPLATES[activeTemplate] || {}),
-		...((config.templates || {})[activeTemplate] || {}),
-	};
 
 	return (
 		<div className="space-y-6">

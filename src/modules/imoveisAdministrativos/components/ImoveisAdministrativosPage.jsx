@@ -454,7 +454,10 @@ async function generatePdf(relatorio, filtro) {
 	);
 }
 
-export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado, mesmos efeitos e mesmos handlers, sem mudanca de comportamento.
+function useImoveisAdministrativosController(page) {
 	const navigate = useNavigate();
 	const { id: routeImovelId } = useParams();
 	const { currentUser } = useAuthContext();
@@ -819,183 +822,117 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 		.map((placa) => placa.trim().toUpperCase())
 		.filter(Boolean);
 	const isDetalhePage = tab === "detalhe";
+	return {
+	navigate,
+	tab,
+	setTab,
+	imoveis,
+	setImoveis,
+	selectedId,
+	setSelectedId,
+	form,
+	setForm,
+	registros,
+	setRegistros,
+	relatorio,
+	setRelatorio,
+	dashboardRelatorio,
+	setDashboardRelatorio,
+	filtroRelatorio,
+	setFiltroRelatorio,
+	loading,
+	setLoading,
+	saving,
+	setSaving,
+	message,
+	setMessage,
+	config,
+	setConfig,
+	configOpen,
+	setConfigOpen,
+	configDraft,
+	setConfigDraft,
+	importFile,
+	setImportFile,
+	importResult,
+	setImportResult,
+	aluguelModalOpen,
+	setAluguelModalOpen,
+	aguaEnergiaModalOpen,
+	setAguaEnergiaModalOpen,
+	deleteModalOpen,
+	setDeleteModalOpen,
+	deleteSelection,
+	setDeleteSelection,
+	reajuste,
+	setReajuste,
+	iptu,
+	setIptu,
+	aluguel,
+	setAluguel,
+	anexo,
+	setAnexo,
+	aditivo,
+	setAditivo,
+	contratoFile,
+	setContratoFile,
+	placasModalOpen,
+	setPlacasModalOpen,
+	placasDraft,
+	setPlacasDraft,
+	selected,
+	podeGerenciar,
+	localReport,
+	carregar,
+	carregarRelatorio,
+	handleSave,
+	refreshSelectedRecords,
+	submitRelated,
+	handleSalvarConfig,
+	handleImportarPlanilha,
+	handleEditarContrato,
+	handleExcluirContrato,
+	handleExcluirImovel,
+	handleExcluirSelecionados,
+	imoveisHistorico,
+	placasList,
+	isDetalhePage,
+	};
+}
 
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — aba de cadastro/edicao de imovel, mesma JSX de
+// antes, sem mudanca de comportamento.
+function ImovelCadastroTab(props) {
+	const {
+	selectedId,
+	form,
+	setForm,
+	saving,
+	setSaving,
+	setMessage,
+	config,
+	setAluguelModalOpen,
+	setAguaEnergiaModalOpen,
+	reajuste,
+	setReajuste,
+	iptu,
+	setIptu,
+	aluguel,
+	setAluguel,
+	anexo,
+	setAnexo,
+	aditivo,
+	setAditivo,
+	setPlacasModalOpen,
+	setPlacasDraft,
+	selected,
+	carregar,
+	handleSave,
+	submitRelated,
+	placasList,
+	} = props;
 	return (
-		<div className="space-y-6 p-6">
-			{!isDetalhePage ? (
-				<>
-					<div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-						<div className="flex items-center gap-3">
-							<span className="rounded-2xl bg-blue-50 p-3 text-blue-700">
-								<Building2 size={26} />
-							</span>
-							<div>
-								<h1 className="text-2xl font-black text-slate-950">Imóveis</h1>
-								<p className="text-sm font-semibold text-slate-500">
-									Cadastro, contratos, reajustes, IPTU e relatórios dos imóveis
-									administrativos.
-								</p>
-							</div>
-						</div>
-						<div className="flex flex-wrap gap-2">
-							{podeGerenciar ? (
-								<>
-									<ActionButton
-										icon={Settings}
-										tone="slate"
-										onClick={() => {
-											setConfigDraft({
-												...config,
-												empresasText: (config.empresas || []).join("\n"),
-												classificacoesText: (config.classificacoes || []).join(
-													"\n",
-												),
-												diretoriasText: (config.diretorias || []).join("\n"),
-											});
-											setConfigOpen(true);
-										}}
-									>
-										Configurações
-									</ActionButton>
-									<ActionButton
-										icon={Trash2}
-										tone="slate"
-										onClick={() => {
-											setDeleteSelection([]);
-											setDeleteModalOpen(true);
-										}}
-									>
-										Excluir imóveis
-									</ActionButton>
-								</>
-							) : null}
-							<ActionButton
-								icon={RefreshCw}
-								tone="slate"
-								loading={loading}
-								onClick={carregar}
-							>
-								Atualizar
-							</ActionButton>
-							<ActionButton
-								icon={Plus}
-								onClick={() => {
-									setSelectedId("");
-									setForm(EMPTY_FORM);
-									setRegistros(null);
-									setTab("cadastro");
-								}}
-							>
-								Novo imóvel
-							</ActionButton>
-						</div>
-					</div>
-
-					{message ? (
-						<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
-							{message}
-						</div>
-					) : null}
-
-					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-						<StatCard
-							icon={Home}
-							label="Imóveis ativos"
-							value={localReport.ativos}
-							hint="Em operação"
-						/>
-						<StatCard
-							icon={Building2}
-							label="Imóveis próprios"
-							value={localReport.proprios}
-							hint="Sem aluguel mensal"
-							tone="green"
-						/>
-						<StatCard
-							icon={CalendarClock}
-							label="Alugados"
-							value={localReport.alugados}
-							hint="Com aluguel mensal"
-							tone="orange"
-						/>
-						<StatCard
-							icon={History}
-							label="Contratos cancelados"
-							value={localReport.finalizados}
-							hint="Histórico/cancelados"
-							tone="slate"
-						/>
-					</div>
-				</>
-			) : null}
-
-			{tab === "dashboard" ? (
-				<ImoveisDashboard
-					imoveis={imoveis}
-					relatorio={dashboardRelatorio}
-					canManage={podeGerenciar}
-					onEdit={(item) => {
-						setSelectedId(item.id);
-						setTab("cadastro");
-					}}
-					onDelete={(item) => handleExcluirImovel(item.id)}
-					onOpenImovel={(id) => {
-						navigate(`/administrativo/imoveis/${encodeURIComponent(id)}`);
-					}}
-				/>
-			) : null}
-
-			{tab === "detalhe" ? (
-				<ImovelDetailPage
-					imovel={selected}
-					registros={registros}
-					loading={loading}
-					onBack={() => navigate("/administrativo/imoveis")}
-					onEdit={() => {
-						setSelectedId(selected?.id || "");
-						setTab("cadastro");
-					}}
-					canManage={podeGerenciar}
-					onDelete={() => (selected ? handleExcluirImovel(selected.id) : null)}
-				/>
-			) : null}
-
-			{tab !== "dashboard" && tab !== "detalhe" ? (
-				<div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-					<aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-						<h2 className="font-black text-slate-950">Imóveis cadastrados</h2>
-						<div className="mt-3 max-h-[620px] space-y-2 overflow-auto pr-1">
-							{imoveis.map((item) => (
-								<button
-									key={item.id}
-									type="button"
-									onClick={() => setSelectedId(item.id)}
-									className={`w-full rounded-xl border p-3 text-left transition ${selectedId === item.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
-								>
-									<div className="flex items-center justify-between gap-2">
-										<p className="font-black text-slate-950">{item.seniorId}</p>
-										<span
-											className={`rounded-full px-2 py-0.5 text-[11px] font-black ${item.ativo === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
-										>
-											{item.ativo === false ? "Inativo" : "Ativo"}
-										</span>
-									</div>
-									<p className="mt-1 truncate text-xs font-black text-slate-700">
-										{item.nome || "Sem título"}
-									</p>
-									<p className="mt-1 truncate text-xs font-semibold text-slate-500">
-										{item.endereco || "Sem endereço"}
-									</p>
-									<p className="mt-1 text-xs font-black uppercase text-blue-700">
-										{item.base || "-"} · {item.tipoContrato || "-"}
-									</p>
-								</button>
-							))}
-						</div>
-					</aside>
-
-					<main className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-						{tab === "cadastro" ? (
 							<div className="space-y-5">
 								<div className="grid gap-4 md:grid-cols-3">
 									<Field label="ID Sênior obrigatório">
@@ -1946,9 +1883,25 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 									</div>
 								) : null}
 							</div>
-						) : null}
+	);
+}
 
-						{tab === "contratos" ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImovelContratosTab(props) {
+	const {
+	registros,
+	saving,
+	setMessage,
+	contratoFile,
+	setContratoFile,
+	selected,
+	submitRelated,
+	handleEditarContrato,
+	handleExcluirContrato,
+	} = props;
+	return (
 							<div className="space-y-5">
 								{!selected ? (
 									<p className="font-bold text-slate-500">
@@ -2059,9 +2012,18 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 									</>
 								)}
 							</div>
-						) : null}
+	);
+}
 
-						{tab === "historico" ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImovelHistoricoTab(props) {
+	const {
+	registros,
+	imoveisHistorico,
+	} = props;
+	return (
 							<div className="space-y-5">
 								<DataTable
 									title="Imóveis cancelados ou inativos"
@@ -2096,9 +2058,21 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 									}
 								/>
 							</div>
-						) : null}
+	);
+}
 
-						{tab === "relatorios" ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImovelRelatoriosTab(props) {
+	const {
+	relatorio,
+	filtroRelatorio,
+	setFiltroRelatorio,
+	loading,
+	carregarRelatorio,
+	} = props;
+	return (
 							<div className="space-y-5">
 								<div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
 									<Field label="Mês">
@@ -2232,12 +2206,22 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 									</p>
 								)}
 							</div>
-						) : null}
-					</main>
-				</div>
-			) : null}
+	);
+}
 
-			{deleteModalOpen ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImoveisDeleteModal(props) {
+	const {
+	imoveis,
+	saving,
+	setDeleteModalOpen,
+	deleteSelection,
+	setDeleteSelection,
+	handleExcluirSelecionados,
+	} = props;
+	return (
 				<ModalShell
 					title="Excluir imóveis"
 					description="Selecione um ou mais imóveis para excluir junto com registros e anexos vinculados."
@@ -2338,9 +2322,24 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 						</ActionButton>
 					</div>
 				</ModalShell>
-			) : null}
+	);
+}
 
-			{configOpen ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImoveisConfigModal(props) {
+	const {
+	saving,
+	setConfigOpen,
+	configDraft,
+	setConfigDraft,
+	setImportFile,
+	importResult,
+	handleSalvarConfig,
+	handleImportarPlanilha,
+	} = props;
+	return (
 				<ModalShell
 					title="Configurações de imóveis"
 					description="Cadastre opções do formulário e importe a planilha oficial de imóveis."
@@ -2487,9 +2486,19 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 						</ActionButton>
 					</div>
 				</ModalShell>
-			) : null}
+	);
+}
 
-			{aluguelModalOpen ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImoveisAluguelModal(props) {
+	const {
+	form,
+	setForm,
+	setAluguelModalOpen,
+	} = props;
+	return (
 				<ModalShell
 					onClose={() => setAluguelModalOpen(false)}
 					showClose={false}
@@ -2716,9 +2725,19 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 						</ActionButton>
 					</div>
 				</ModalShell>
-			) : null}
+	);
+}
 
-			{aguaEnergiaModalOpen ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImoveisAguaEnergiaModal(props) {
+	const {
+	form,
+	setForm,
+	setAguaEnergiaModalOpen,
+	} = props;
+	return (
 				<ModalShell
 					onClose={() => setAguaEnergiaModalOpen(false)}
 					showClose={false}
@@ -2812,9 +2831,20 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 						</ActionButton>
 					</div>
 				</ModalShell>
-			) : null}
+	);
+}
 
-			{placasModalOpen ? (
+// Extraido de ImoveisAdministrativosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function ImoveisPlacasModal(props) {
+	const {
+	setForm,
+	setPlacasModalOpen,
+	placasDraft,
+	setPlacasDraft,
+	} = props;
+	return (
 				<ModalShell
 					onClose={() => setPlacasModalOpen(false)}
 					showClose={false}
@@ -2890,7 +2920,238 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 						</ActionButton>
 					</div>
 				</ModalShell>
+	);
+}
+
+export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
+	const controller = useImoveisAdministrativosController(page);
+	const {
+	navigate,
+	tab,
+	setTab,
+	imoveis,
+	selectedId,
+	setSelectedId,
+	setForm,
+	registros,
+	setRegistros,
+	dashboardRelatorio,
+	loading,
+	message,
+	config,
+	configOpen,
+	setConfigOpen,
+	setConfigDraft,
+	aluguelModalOpen,
+	aguaEnergiaModalOpen,
+	deleteModalOpen,
+	setDeleteModalOpen,
+	setDeleteSelection,
+	placasModalOpen,
+	selected,
+	podeGerenciar,
+	localReport,
+	carregar,
+	handleExcluirImovel,
+	isDetalhePage,
+	} = controller;
+
+	return (
+		<div className="space-y-6 p-6">
+			{!isDetalhePage ? (
+				<>
+					<div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+						<div className="flex items-center gap-3">
+							<span className="rounded-2xl bg-blue-50 p-3 text-blue-700">
+								<Building2 size={26} />
+							</span>
+							<div>
+								<h1 className="text-2xl font-black text-slate-950">Imóveis</h1>
+								<p className="text-sm font-semibold text-slate-500">
+									Cadastro, contratos, reajustes, IPTU e relatórios dos imóveis
+									administrativos.
+								</p>
+							</div>
+						</div>
+						<div className="flex flex-wrap gap-2">
+							{podeGerenciar ? (
+								<>
+									<ActionButton
+										icon={Settings}
+										tone="slate"
+										onClick={() => {
+											setConfigDraft({
+												...config,
+												empresasText: (config.empresas || []).join("\n"),
+												classificacoesText: (config.classificacoes || []).join(
+													"\n",
+												),
+												diretoriasText: (config.diretorias || []).join("\n"),
+											});
+											setConfigOpen(true);
+										}}
+									>
+										Configurações
+									</ActionButton>
+									<ActionButton
+										icon={Trash2}
+										tone="slate"
+										onClick={() => {
+											setDeleteSelection([]);
+											setDeleteModalOpen(true);
+										}}
+									>
+										Excluir imóveis
+									</ActionButton>
+								</>
+							) : null}
+							<ActionButton
+								icon={RefreshCw}
+								tone="slate"
+								loading={loading}
+								onClick={carregar}
+							>
+								Atualizar
+							</ActionButton>
+							<ActionButton
+								icon={Plus}
+								onClick={() => {
+									setSelectedId("");
+									setForm(EMPTY_FORM);
+									setRegistros(null);
+									setTab("cadastro");
+								}}
+							>
+								Novo imóvel
+							</ActionButton>
+						</div>
+					</div>
+
+					{message ? (
+						<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
+							{message}
+						</div>
+					) : null}
+
+					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+						<StatCard
+							icon={Home}
+							label="Imóveis ativos"
+							value={localReport.ativos}
+							hint="Em operação"
+						/>
+						<StatCard
+							icon={Building2}
+							label="Imóveis próprios"
+							value={localReport.proprios}
+							hint="Sem aluguel mensal"
+							tone="green"
+						/>
+						<StatCard
+							icon={CalendarClock}
+							label="Alugados"
+							value={localReport.alugados}
+							hint="Com aluguel mensal"
+							tone="orange"
+						/>
+						<StatCard
+							icon={History}
+							label="Contratos cancelados"
+							value={localReport.finalizados}
+							hint="Histórico/cancelados"
+							tone="slate"
+						/>
+					</div>
+				</>
 			) : null}
+
+			{tab === "dashboard" ? (
+				<ImoveisDashboard
+					imoveis={imoveis}
+					relatorio={dashboardRelatorio}
+					canManage={podeGerenciar}
+					onEdit={(item) => {
+						setSelectedId(item.id);
+						setTab("cadastro");
+					}}
+					onDelete={(item) => handleExcluirImovel(item.id)}
+					onOpenImovel={(id) => {
+						navigate(`/administrativo/imoveis/${encodeURIComponent(id)}`);
+					}}
+				/>
+			) : null}
+
+			{tab === "detalhe" ? (
+				<ImovelDetailPage
+					imovel={selected}
+					registros={registros}
+					loading={loading}
+					onBack={() => navigate("/administrativo/imoveis")}
+					onEdit={() => {
+						setSelectedId(selected?.id || "");
+						setTab("cadastro");
+					}}
+					canManage={podeGerenciar}
+					onDelete={() => (selected ? handleExcluirImovel(selected.id) : null)}
+				/>
+			) : null}
+
+			{tab !== "dashboard" && tab !== "detalhe" ? (
+				<div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+					<aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+						<h2 className="font-black text-slate-950">Imóveis cadastrados</h2>
+						<div className="mt-3 max-h-[620px] space-y-2 overflow-auto pr-1">
+							{imoveis.map((item) => (
+								<button
+									key={item.id}
+									type="button"
+									onClick={() => setSelectedId(item.id)}
+									className={`w-full rounded-xl border p-3 text-left transition ${selectedId === item.id ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+								>
+									<div className="flex items-center justify-between gap-2">
+										<p className="font-black text-slate-950">{item.seniorId}</p>
+										<span
+											className={`rounded-full px-2 py-0.5 text-[11px] font-black ${item.ativo === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}
+										>
+											{item.ativo === false ? "Inativo" : "Ativo"}
+										</span>
+									</div>
+									<p className="mt-1 truncate text-xs font-black text-slate-700">
+										{item.nome || "Sem título"}
+									</p>
+									<p className="mt-1 truncate text-xs font-semibold text-slate-500">
+										{item.endereco || "Sem endereço"}
+									</p>
+									<p className="mt-1 text-xs font-black uppercase text-blue-700">
+										{item.base || "-"} · {item.tipoContrato || "-"}
+									</p>
+								</button>
+							))}
+						</div>
+					</aside>
+
+					<main className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+						{tab === "cadastro" ? <ImovelCadastroTab {...controller} /> : null}
+
+
+						{tab === "contratos" ? <ImovelContratosTab {...controller} /> : null}
+
+						{tab === "historico" ? <ImovelHistoricoTab {...controller} /> : null}
+
+						{tab === "relatorios" ? <ImovelRelatoriosTab {...controller} /> : null}
+					</main>
+				</div>
+			) : null}
+
+			{deleteModalOpen ? <ImoveisDeleteModal {...controller} /> : null}
+
+			{configOpen ? <ImoveisConfigModal {...controller} /> : null}
+
+			{aluguelModalOpen ? <ImoveisAluguelModal {...controller} /> : null}
+
+			{aguaEnergiaModalOpen ? <ImoveisAguaEnergiaModal {...controller} /> : null}
+
+			{placasModalOpen ? <ImoveisPlacasModal {...controller} /> : null}
 		</div>
 	);
 }

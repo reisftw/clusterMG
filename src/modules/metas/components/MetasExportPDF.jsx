@@ -30,6 +30,45 @@ function isDiaUtil(mes, dia, feriadosSet) {
 	return !feriadosSet.has(key);
 }
 
+// Extraidos de gerarPDF (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — cada um e o mesmo callback didParseCell de antes, so nomeado e
+// movido pra fora do literal de opcoes do autoTable() (sem mudar nenhuma
+// regra de estilo/cor).
+function styleResumoAnualCell(data) {
+	if (data.section === "body" && data.column.index === 7) {
+		const v = data.cell.raw;
+		if (v === "Atingido") data.cell.styles.textColor = [22, 163, 74];
+		else if (String(v).startsWith("Faltam"))
+			data.cell.styles.textColor = [220, 38, 38];
+	}
+	if (data.section === "body" && data.column.index === 6) {
+		const v = String(data.cell.raw);
+		data.cell.styles.textColor = v.startsWith("+")
+			? [22, 163, 74]
+			: v.startsWith("-")
+				? [220, 38, 38]
+				: [30, 30, 30];
+	}
+}
+
+function styleSaldoMesCell(data, saldoRecalc) {
+	if (data.section !== "body") return;
+	const rowData = saldoRecalc[data.row.index];
+	if (rowData && !rowData.util) {
+		data.cell.styles.textColor = [180, 180, 180];
+	}
+	if (data.column.index === 7 && data.section === "body") {
+		const v = String(data.cell.raw);
+		if (v.startsWith("+")) data.cell.styles.textColor = [22, 163, 74];
+		else if (v.startsWith("-")) data.cell.styles.textColor = [220, 38, 38];
+	}
+	if (data.column.index === 8 && data.section === "body") {
+		const v = Number.parseFloat(data.cell.raw);
+		if (!Number.isNaN(v))
+			data.cell.styles.textColor = v >= 0 ? [22, 163, 74] : [220, 38, 38];
+	}
+}
+
 async function gerarPDF(dados, feriadosSet) {
 	const { default: jsPDF } = await import("jspdf");
 	const { default: autoTable } = await import("jspdf-autotable");
@@ -110,22 +149,7 @@ async function gerarPDF(dados, feriadosSet) {
 			6: { halign: "center" },
 			7: { halign: "center" },
 		},
-		didParseCell(data) {
-			if (data.section === "body" && data.column.index === 7) {
-				const v = data.cell.raw;
-				if (v === "Atingido") data.cell.styles.textColor = [22, 163, 74];
-				else if (String(v).startsWith("Faltam"))
-					data.cell.styles.textColor = [220, 38, 38];
-			}
-			if (data.section === "body" && data.column.index === 6) {
-				const v = String(data.cell.raw);
-				data.cell.styles.textColor = v.startsWith("+")
-					? [22, 163, 74]
-					: v.startsWith("-")
-						? [220, 38, 38]
-						: [30, 30, 30];
-			}
-		},
+		didParseCell: styleResumoAnualCell,
 	});
 
 	// -- detalhe por mes --------------------------------------------------------
@@ -322,26 +346,7 @@ async function gerarPDF(dados, feriadosSet) {
 					fontSize: 7,
 				},
 				alternateRowStyles: { fillColor: [243, 244, 246] },
-				didParseCell(data) {
-					if (data.section === "body") {
-						const rowData = saldoRecalc[data.row.index];
-						if (rowData && !rowData.util) {
-							data.cell.styles.textColor = [180, 180, 180];
-						}
-						if (data.column.index === 7 && data.section === "body") {
-							const v = String(data.cell.raw);
-							if (v.startsWith("+")) data.cell.styles.textColor = [22, 163, 74];
-							else if (v.startsWith("-"))
-								data.cell.styles.textColor = [220, 38, 38];
-						}
-						if (data.column.index === 8 && data.section === "body") {
-							const v = Number.parseFloat(data.cell.raw);
-							if (!Number.isNaN(v))
-								data.cell.styles.textColor =
-									v >= 0 ? [22, 163, 74] : [220, 38, 38];
-						}
-					}
-				},
+				didParseCell: (data) => styleSaldoMesCell(data, saldoRecalc),
 			});
 		}
 	}

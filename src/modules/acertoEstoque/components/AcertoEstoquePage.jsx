@@ -189,7 +189,10 @@ async function copyHtml(html, plainText) {
 	await navigator.clipboard.writeText(plainText);
 }
 
-const AcertoEstoquePage = () => {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useAcertoEstoqueController() {
 	const { currentUser } = useAuthContext();
 	const {
 		store,
@@ -467,8 +470,6 @@ const AcertoEstoquePage = () => {
 		return () => window.clearTimeout(timeoutId);
 	}, [copiedNotice]);
 
-	if (loading) return <Spinner fullScreen />;
-
 	const handleDelete = async (entity, id) => {
 		if (!window.confirm("Deseja realmente excluir este cadastro?")) return;
 
@@ -682,60 +683,77 @@ const AcertoEstoquePage = () => {
 		}));
 	};
 
+	return {
+		store,
+		metrics,
+		loading,
+		saving,
+		error,
+		successMessage,
+		lastCreatedAcerto,
+		carregar,
+		setLastCreatedAcerto,
+		activeTab,
+		setActiveTab,
+		cadastroTab,
+		setCadastroTab,
+		agendaForm,
+		setAgendaForm,
+		produtoForm,
+		setProdutoForm,
+		lancamentoForm,
+		setLancamentoForm,
+		cadastroProdutosPage,
+		setCadastroProdutosPage,
+		selectedAcertoId,
+		setSelectedAcertoId,
+		historyFilter,
+		setHistoryFilter,
+		historicoPage,
+		setHistoricoPage,
+		copiedMessage,
+		copiedNotice,
+		agendasOrdenadas,
+		empresasMap,
+		tecnicosDisponiveis,
+		cadastroProdutosTotalPages,
+		safeCadastroProdutosPage,
+		paginatedCadastroProdutos,
+		acertosFiltrados,
+		historicoTotalPages,
+		safeHistoricoPage,
+		paginatedAcertosFiltrados,
+		selectedAcerto,
+		previewData,
+		emailPreviewHtml,
+		selectedAcertoWhatsapp,
+		selectedAcertoEmailHtml,
+		selectedAcertoLancamentos,
+		handleDelete,
+		handleAgendaSubmit,
+		handleProdutoSubmit,
+		handleLancamentoSubmit,
+		handleDeleteAcerto,
+		showCopiedMessage,
+		addTecnicoLancamento,
+		updateTecnicoLancamento,
+		removeTecnicoLancamento,
+		addTecnicoItem,
+		updateTecnicoItem,
+		removeTecnicoItem,
+	};
+}
+
+// Extraido de AcertoEstoquePage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function AcertoDashboardTab(props) {
+	const {
+	metrics,
+	setActiveTab,
+	setCadastroTab,
+	} = props;
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-col gap-4 rounded-3xl border border-orange-100 bg-gradient-to-r from-orange-50 via-white to-blue-50 p-6 shadow-sm xl:flex-row xl:items-center xl:justify-between">
-				<div className="flex items-start gap-4">
-					<div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-200">
-						<Boxes size={22} />
-					</div>
-					<div>
-						<h1 className="text-2xl font-bold text-gray-900">
-							Acerto de Estoque
-						</h1>
-					</div>
-				</div>
-
-				<button
-					type="button"
-					onClick={carregar}
-					className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-				>
-					<RefreshCw size={16} />
-					Atualizar dados
-				</button>
-			</div>
-
-			{error ? (
-				<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-					{error}
-				</div>
-			) : null}
-
-			{successMessage ? (
-				<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
-					{successMessage}
-				</div>
-			) : null}
-
-			{copiedNotice ? (
-				<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
-					{copiedNotice}
-				</div>
-			) : null}
-
-			<div className="flex flex-wrap gap-2">
-				{ACERTO_TAB_ITEMS.map((item) => (
-					<TabButton
-						key={item.id}
-						active={activeTab === item.id}
-						label={item.label}
-						onClick={() => setActiveTab(item.id)}
-					/>
-				))}
-			</div>
-
-			{activeTab === "dashboard" ? (
 				<div className="space-y-6">
 					<SectionCard
 						title="Acoes rapidas"
@@ -961,9 +979,32 @@ const AcertoEstoquePage = () => {
 						</SectionCard>
 					</div>
 				</div>
-			) : null}
+	);
+}
 
-			{activeTab === "cadastros" ? (
+// Extraido de AcertoEstoquePage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function AcertoCadastrosTab(props) {
+	const {
+	store,
+	saving,
+	cadastroTab,
+	setCadastroTab,
+	agendaForm,
+	setAgendaForm,
+	produtoForm,
+	setProdutoForm,
+	setCadastroProdutosPage,
+	agendasOrdenadas,
+	cadastroProdutosTotalPages,
+	safeCadastroProdutosPage,
+	paginatedCadastroProdutos,
+	handleDelete,
+	handleAgendaSubmit,
+	handleProdutoSubmit,
+	} = props;
+	return (
 				<div className="space-y-6">
 					<div className="flex flex-wrap gap-2">
 						{CADASTRO_TABS.map((item) => {
@@ -1283,9 +1324,34 @@ const AcertoEstoquePage = () => {
 						</div>
 					) : null}
 				</div>
-			) : null}
+	);
+}
 
-			{activeTab === "lancamento" ? (
+// Extraido de AcertoEstoquePage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function AcertoLancamentoTab(props) {
+	const {
+	store,
+	saving,
+	lancamentoForm,
+	setLancamentoForm,
+	copiedMessage,
+	agendasOrdenadas,
+	empresasMap,
+	tecnicosDisponiveis,
+	previewData,
+	emailPreviewHtml,
+	handleLancamentoSubmit,
+	showCopiedMessage,
+	addTecnicoLancamento,
+	updateTecnicoLancamento,
+	removeTecnicoLancamento,
+	addTecnicoItem,
+	updateTecnicoItem,
+	removeTecnicoItem,
+	} = props;
+	return (
 				<div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
 					<SectionCard
 						title="Novo acerto"
@@ -1548,9 +1614,33 @@ const AcertoEstoquePage = () => {
 						</SectionCard>
 					</div>
 				</div>
-			) : null}
+	);
+}
 
-			{activeTab === "historico" ? (
+// Extraido de AcertoEstoquePage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX de antes, sem mudanca de
+// comportamento.
+function AcertoHistoricoTab(props) {
+	const {
+	saving,
+	setLastCreatedAcerto,
+	setSelectedAcertoId,
+	historyFilter,
+	setHistoryFilter,
+	setHistoricoPage,
+	copiedMessage,
+	acertosFiltrados,
+	historicoTotalPages,
+	safeHistoricoPage,
+	paginatedAcertosFiltrados,
+	selectedAcerto,
+	selectedAcertoWhatsapp,
+	selectedAcertoEmailHtml,
+	selectedAcertoLancamentos,
+	handleDeleteAcerto,
+	showCopiedMessage,
+	} = props;
+	return (
 				<div className="grid items-start gap-6 xl:grid-cols-[0.95fr_1.05fr]">
 					<SectionCard
 						title="Historico de acertos"
@@ -1818,7 +1908,83 @@ const AcertoEstoquePage = () => {
 						)}
 					</SectionCard>
 				</div>
+	);
+}
+
+const AcertoEstoquePage = () => {
+	const controller = useAcertoEstoqueController();
+	const {
+	loading,
+	carregar,
+	error,
+	successMessage,
+	copiedNotice,
+	activeTab,
+	setActiveTab,
+	} = controller;
+
+	if (loading) return <Spinner fullScreen />;
+
+	return (
+		<div className="space-y-6">
+			<div className="flex flex-col gap-4 rounded-3xl border border-orange-100 bg-gradient-to-r from-orange-50 via-white to-blue-50 p-6 shadow-sm xl:flex-row xl:items-center xl:justify-between">
+				<div className="flex items-start gap-4">
+					<div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-200">
+						<Boxes size={22} />
+					</div>
+					<div>
+						<h1 className="text-2xl font-bold text-gray-900">
+							Acerto de Estoque
+						</h1>
+					</div>
+				</div>
+
+				<button
+					type="button"
+					onClick={carregar}
+					className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+				>
+					<RefreshCw size={16} />
+					Atualizar dados
+				</button>
+			</div>
+
+			{error ? (
+				<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+					{error}
+				</div>
 			) : null}
+
+			{successMessage ? (
+				<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+					{successMessage}
+				</div>
+			) : null}
+
+			{copiedNotice ? (
+				<div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+					{copiedNotice}
+				</div>
+			) : null}
+
+			<div className="flex flex-wrap gap-2">
+				{ACERTO_TAB_ITEMS.map((item) => (
+					<TabButton
+						key={item.id}
+						active={activeTab === item.id}
+						label={item.label}
+						onClick={() => setActiveTab(item.id)}
+					/>
+				))}
+			</div>
+
+			{activeTab === "dashboard" ? <AcertoDashboardTab {...controller} /> : null}
+
+			{activeTab === "cadastros" ? <AcertoCadastrosTab {...controller} /> : null}
+
+			{activeTab === "lancamento" ? <AcertoLancamentoTab {...controller} /> : null}
+
+			{activeTab === "historico" ? <AcertoHistoricoTab {...controller} /> : null}
 		</div>
 	);
 };

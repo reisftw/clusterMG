@@ -479,205 +479,271 @@ function SectionEditor({
 			</div>
 
 			{open ? (
-			<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-				{rows.map((row, index) => (
-					<div
-						key={row.id}
-						className="rounded-2xl border border-gray-100 bg-gray-50 p-4"
-					>
-						<div className="flex items-start justify-between gap-3">
-							<div className="min-w-0">
-								<p className="truncate text-sm font-black text-gray-950">
-									{row.name || `${nameLabel} ${index + 1}`}
-								</p>
-								<p className="mt-1 text-xs font-bold text-gray-400">
-									{showSourceScope
-										? SOURCE_SCOPE_OPTIONS.find(
-												(option) => option.id === row.sourceScope,
-											)?.label || "Sempre e Onnet"
-										: `${dayCount} dias para preencher`}
-								</p>
-							</div>
-							{allowRemove ? (
-								<button
-									type="button"
-									onClick={() => removeRow(row.id)}
-									className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
-									title="Remover linha"
-								>
-									<Trash2 size={15} />
-								</button>
-							) : null}
-						</div>
-						<div className="mt-4 flex items-end justify-between gap-3">
-							<div>
-								<span className="text-[11px] font-bold uppercase text-gray-400">
-									Total lançado
-								</span>
-								<p className="mt-1 text-2xl font-black text-blue-700">
-									{formatNumber(sumDailyValues(row, dayCount) || row.total)}
-								</p>
-							</div>
-							<button
-								type="button"
-								onClick={() => openEditor(row)}
-								className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700"
-							>
-								Preencher
-							</button>
-						</div>
-						{showGoalFields ? (
-							<div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold text-gray-500">
-								<span>Cancel.: {formatNumber(row.cancelamentos)}</span>
-								<span>Meta: {formatNumber(getRowGoal(row))}</span>
-							</div>
-						) : null}
-					</div>
-				))}
-			</div>
+				<SectionRowGrid
+					rows={rows}
+					dayCount={dayCount}
+					nameLabel={nameLabel}
+					showSourceScope={showSourceScope}
+					showGoalFields={showGoalFields}
+					allowRemove={allowRemove}
+					removeRow={removeRow}
+					openEditor={openEditor}
+					getRowGoal={getRowGoal}
+				/>
 			) : null}
 
 			{open && editingRow ? (
-				<ModalShell
-					open
-					title={editingRow.name || title}
-					description={`Preencha os lançamentos diarios de ${title.toLowerCase()}.`}
-					onClose={closeEditor}
-					size="6xl"
-					footer={
-						<div className="flex justify-end gap-2">
-							<button
-								type="button"
-								onClick={closeEditor}
-								className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
-							>
-								Cancelar
-							</button>
-							<button
-								type="button"
-								onClick={saveCard}
-								disabled={savingCard}
-								className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{savingCard ? "Salvando..." : "Salvar card"}
-							</button>
-						</div>
-					}
-				>
-					<div className="space-y-4">
-						<div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_120px]">
-							<label className="space-y-1">
-								<span className="text-[11px] font-bold uppercase text-gray-400">
-									{nameLabel}
-								</span>
-								{nameOptions.length && !allowCustomName ? (
-									<select
-										value={editingRow.name}
-										onChange={(event) =>
-											updateRow(editingRow.id, { name: event.target.value })
-										}
-										className="input-field bg-white"
-									>
-										<option value="">Selecionar</option>
-										{nameOptions.map((option) => (
-											<option key={option} value={option}>
-												{option}
-											</option>
-										))}
-									</select>
-								) : (
-									<input
-										type="text"
-										value={editingRow.name}
-										onChange={(event) =>
-											updateRow(editingRow.id, { name: event.target.value })
-										}
-										className="input-field bg-white"
-										placeholder={nameLabel}
-										list={nameOptions.length ? `${title}-options` : undefined}
-									/>
-								)}
-								{nameOptions.length && allowCustomName ? (
-									<datalist id={`${title}-options`}>
-										{nameOptions.map((option) => (
-											<option key={option} value={option} />
-										))}
-									</datalist>
-								) : null}
-							</label>
-							{showSourceScope ? (
-								<label className="space-y-1">
-									<span className="text-[11px] font-bold uppercase text-gray-400">
-										Aparece em
-									</span>
-									<select
-										value={editingRow.sourceScope || "ambos"}
-										onChange={(event) =>
-											updateRow(editingRow.id, {
-												sourceScope: event.target.value,
-											})
-										}
-										className="input-field bg-white"
-									>
-										{SOURCE_SCOPE_OPTIONS.map((option) => (
-											<option key={option.id} value={option.id}>
-												{option.label}
-											</option>
-										))}
-									</select>
-								</label>
-							) : null}
-							<div className="rounded-xl border border-gray-100 bg-white px-3 py-2">
-								<span className="text-[11px] font-bold uppercase text-gray-400">
-									Total
-								</span>
-								<p className="mt-1 text-2xl font-black text-blue-700">
-									{formatNumber(
-										sumDailyValues(editingRow, dayCount) || editingRow.total,
-									)}
-								</p>
-							</div>
-						</div>
-						<DailyGrid
-							row={editingRow}
-							dayCount={dayCount}
-							onChangeDay={(dayIndex, value) =>
-								updateDay(editingRow, dayIndex, value)
-							}
-						/>
-						{showGoalFields ? (
-							<div className="mt-3 grid gap-2 sm:grid-cols-2">
-								<label className="space-y-1">
-									<span className="text-[11px] font-bold uppercase text-gray-400">
-										Cancelamentos da cidade
-									</span>
-									<input
-										type="number"
-										min="0"
-										value={editingRow.cancelamentos}
-										onChange={(event) =>
-											updateRow(editingRow.id, {
-												cancelamentos: event.target.value,
-											})
-										}
-										className="input-field"
-										placeholder="0"
-									/>
-								</label>
-								<div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
-									<span className="text-[11px] font-bold uppercase text-blue-600">
-										Meta calculada ({formatNumber(goalPercent)}%)
-									</span>
-									<p className="mt-1 text-2xl font-black text-blue-700">
-										{formatNumber(getRowGoal(editingRow))}
-									</p>
-								</div>
-							</div>
-						) : null}
-					</div>
-				</ModalShell>
+				<SectionEditingModal
+					editingRow={editingRow}
+					title={title}
+					nameLabel={nameLabel}
+					nameOptions={nameOptions}
+					allowCustomName={allowCustomName}
+					showSourceScope={showSourceScope}
+					showGoalFields={showGoalFields}
+					goalPercent={goalPercent}
+					dayCount={dayCount}
+					updateRow={updateRow}
+					updateDay={updateDay}
+					closeEditor={closeEditor}
+					saveCard={saveCard}
+					savingCard={savingCard}
+					getRowGoal={getRowGoal}
+				/>
 			) : null}
 		</section>
+	);
+}
+
+// Extraido de SectionEditor (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — a grade de cards da secao, mesma JSX/logica de antes.
+function SectionRowGrid({
+	rows,
+	dayCount,
+	nameLabel,
+	showSourceScope,
+	showGoalFields,
+	allowRemove,
+	removeRow,
+	openEditor,
+	getRowGoal,
+}) {
+	return (
+		<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+			{rows.map((row, index) => (
+				<div
+					key={row.id}
+					className="rounded-2xl border border-gray-100 bg-gray-50 p-4"
+				>
+					<div className="flex items-start justify-between gap-3">
+						<div className="min-w-0">
+							<p className="truncate text-sm font-black text-gray-950">
+								{row.name || `${nameLabel} ${index + 1}`}
+							</p>
+							<p className="mt-1 text-xs font-bold text-gray-400">
+								{showSourceScope
+									? SOURCE_SCOPE_OPTIONS.find(
+											(option) => option.id === row.sourceScope,
+										)?.label || "Sempre e Onnet"
+									: `${dayCount} dias para preencher`}
+							</p>
+						</div>
+						{allowRemove ? (
+							<button
+								type="button"
+								onClick={() => removeRow(row.id)}
+								className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-100 text-red-500 hover:bg-red-50"
+								title="Remover linha"
+							>
+								<Trash2 size={15} />
+							</button>
+						) : null}
+					</div>
+					<div className="mt-4 flex items-end justify-between gap-3">
+						<div>
+							<span className="text-[11px] font-bold uppercase text-gray-400">
+								Total lançado
+							</span>
+							<p className="mt-1 text-2xl font-black text-blue-700">
+								{formatNumber(sumDailyValues(row, dayCount) || row.total)}
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={() => openEditor(row)}
+							className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-black text-white hover:bg-blue-700"
+						>
+							Preencher
+						</button>
+					</div>
+					{showGoalFields ? (
+						<div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold text-gray-500">
+							<span>Cancel.: {formatNumber(row.cancelamentos)}</span>
+							<span>Meta: {formatNumber(getRowGoal(row))}</span>
+						</div>
+					) : null}
+				</div>
+			))}
+		</div>
+	);
+}
+
+// Extraido de SectionEditor (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// — o modal de edicao de um card, mesma JSX/logica de antes.
+function SectionEditingModal({
+	editingRow,
+	title,
+	nameLabel,
+	nameOptions,
+	allowCustomName,
+	showSourceScope,
+	showGoalFields,
+	goalPercent,
+	dayCount,
+	updateRow,
+	updateDay,
+	closeEditor,
+	saveCard,
+	savingCard,
+	getRowGoal,
+}) {
+	return (
+		<ModalShell
+			open
+			title={editingRow.name || title}
+			description={`Preencha os lançamentos diarios de ${title.toLowerCase()}.`}
+			onClose={closeEditor}
+			size="6xl"
+			footer={
+				<div className="flex justify-end gap-2">
+					<button
+						type="button"
+						onClick={closeEditor}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						onClick={saveCard}
+						disabled={savingCard}
+						className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{savingCard ? "Salvando..." : "Salvar card"}
+					</button>
+				</div>
+			}
+		>
+			<div className="space-y-4">
+				<div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_120px]">
+					<label className="space-y-1">
+						<span className="text-[11px] font-bold uppercase text-gray-400">
+							{nameLabel}
+						</span>
+						{nameOptions.length && !allowCustomName ? (
+							<select
+								value={editingRow.name}
+								onChange={(event) =>
+									updateRow(editingRow.id, { name: event.target.value })
+								}
+								className="input-field bg-white"
+							>
+								<option value="">Selecionar</option>
+								{nameOptions.map((option) => (
+									<option key={option} value={option}>
+										{option}
+									</option>
+								))}
+							</select>
+						) : (
+							<input
+								type="text"
+								value={editingRow.name}
+								onChange={(event) =>
+									updateRow(editingRow.id, { name: event.target.value })
+								}
+								className="input-field bg-white"
+								placeholder={nameLabel}
+								list={nameOptions.length ? `${title}-options` : undefined}
+							/>
+						)}
+						{nameOptions.length && allowCustomName ? (
+							<datalist id={`${title}-options`}>
+								{nameOptions.map((option) => (
+									<option key={option} value={option} />
+								))}
+							</datalist>
+						) : null}
+					</label>
+					{showSourceScope ? (
+						<label className="space-y-1">
+							<span className="text-[11px] font-bold uppercase text-gray-400">
+								Aparece em
+							</span>
+							<select
+								value={editingRow.sourceScope || "ambos"}
+								onChange={(event) =>
+									updateRow(editingRow.id, {
+										sourceScope: event.target.value,
+									})
+								}
+								className="input-field bg-white"
+							>
+								{SOURCE_SCOPE_OPTIONS.map((option) => (
+									<option key={option.id} value={option.id}>
+										{option.label}
+									</option>
+								))}
+							</select>
+						</label>
+					) : null}
+					<div className="rounded-xl border border-gray-100 bg-white px-3 py-2">
+						<span className="text-[11px] font-bold uppercase text-gray-400">
+							Total
+						</span>
+						<p className="mt-1 text-2xl font-black text-blue-700">
+							{formatNumber(
+								sumDailyValues(editingRow, dayCount) || editingRow.total,
+							)}
+						</p>
+					</div>
+				</div>
+				<DailyGrid
+					row={editingRow}
+					dayCount={dayCount}
+					onChangeDay={(dayIndex, value) => updateDay(editingRow, dayIndex, value)}
+				/>
+				{showGoalFields ? (
+					<div className="mt-3 grid gap-2 sm:grid-cols-2">
+						<label className="space-y-1">
+							<span className="text-[11px] font-bold uppercase text-gray-400">
+								Cancelamentos da cidade
+							</span>
+							<input
+								type="number"
+								min="0"
+								value={editingRow.cancelamentos}
+								onChange={(event) =>
+									updateRow(editingRow.id, {
+										cancelamentos: event.target.value,
+									})
+								}
+								className="input-field"
+								placeholder="0"
+							/>
+						</label>
+						<div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+							<span className="text-[11px] font-bold uppercase text-blue-600">
+								Meta calculada ({formatNumber(goalPercent)}%)
+							</span>
+							<p className="mt-1 text-2xl font-black text-blue-700">
+								{formatNumber(getRowGoal(editingRow))}
+							</p>
+						</div>
+					</div>
+				) : null}
+			</div>
+		</ModalShell>
 	);
 }
 

@@ -116,7 +116,10 @@ const toQrImageSrc = (value) => {
 	return "";
 };
 
-export default function AgendamentoConfirmacaoPage() {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useAgendamentoConfirmacaoController() {
 	const [config, setConfig] = useState(null);
 	const [worker, setWorker] = useState({});
 	const [tracks, setTracks] = useState([]);
@@ -428,6 +431,119 @@ export default function AgendamentoConfirmacaoPage() {
 			setPreviewLoading(false);
 		}
 	};
+
+	return {
+		config,
+		worker,
+		tracks,
+		logs,
+		report,
+		evolutionStatus,
+		qr,
+		acceptedRepliesOpen,
+		setAcceptedRepliesOpen,
+		acceptedReplyDraft,
+		setAcceptedReplyDraft,
+		logsOpen,
+		setLogsOpen,
+		logsPage,
+		setLogsPage,
+		logsPageSize,
+		setLogsPageSize,
+		logsLoading,
+		previewOpen,
+		setPreviewOpen,
+		preview,
+		previewLoading,
+		manualResponsibleTrack,
+		setManualResponsibleTrack,
+		manualResponsibleForm,
+		setManualResponsibleForm,
+		testForm,
+		setTestForm,
+		pageSize,
+		setPageSize,
+		page,
+		setPage,
+		loading,
+		working,
+		feedback,
+		setFeedback,
+		loadData,
+		loadLogs,
+		stats,
+		updateConfig,
+		addAcceptedReply,
+		removeAcceptedReply,
+		handleSave,
+		handleSaveAcceptedReplies,
+		handleConnectEvolution,
+		handleDisconnectEvolution,
+		handleConfigureEvolutionWebhook,
+		handleSendTest,
+		openManualResponsible,
+		handleSaveManualResponsible,
+		handleToggleAutomation,
+		openLogs,
+		openTomorrowPreview,
+	};
+}
+
+export default function AgendamentoConfirmacaoPage() {
+	const {
+		config,
+		worker,
+		tracks,
+		logs,
+		report,
+		evolutionStatus,
+		qr,
+		acceptedRepliesOpen,
+		setAcceptedRepliesOpen,
+		acceptedReplyDraft,
+		setAcceptedReplyDraft,
+		logsOpen,
+		setLogsOpen,
+		logsPage,
+		setLogsPage,
+		logsPageSize,
+		setLogsPageSize,
+		logsLoading,
+		previewOpen,
+		setPreviewOpen,
+		preview,
+		previewLoading,
+		manualResponsibleTrack,
+		setManualResponsibleTrack,
+		manualResponsibleForm,
+		setManualResponsibleForm,
+		testForm,
+		setTestForm,
+		pageSize,
+		setPageSize,
+		page,
+		setPage,
+		loading,
+		working,
+		feedback,
+		loadData,
+		loadLogs,
+		stats,
+		updateConfig,
+		addAcceptedReply,
+		removeAcceptedReply,
+		handleSave,
+		handleSaveAcceptedReplies,
+		handleConnectEvolution,
+		handleDisconnectEvolution,
+		handleConfigureEvolutionWebhook,
+		handleSendTest,
+		openManualResponsible,
+		handleSaveManualResponsible,
+		handleToggleAutomation,
+		openLogs,
+		openTomorrowPreview,
+	} = useAgendamentoConfirmacaoController();
 
 	if (loading && !config) {
 		return (

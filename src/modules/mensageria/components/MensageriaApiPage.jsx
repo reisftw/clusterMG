@@ -428,7 +428,10 @@ function EvolutionDisconnectLogsModal({ logs, loading, onClose, onRefresh }) {
 	);
 }
 
-const MensageriaApiPage = () => {
+// Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
+// pra reduzir a complexidade cognitiva da funcao de render — mesmo
+// estado e mesmas chamadas, sem mudanca de comportamento.
+function useMensageriaApiController() {
 	const { currentUser } = useAuthContext();
 	const canManage =
 		hasPermission(currentUser, "mensageria.api.manage") ||
@@ -606,6 +609,63 @@ const MensageriaApiPage = () => {
 		setDisconnectLogsOpen(true);
 		loadDisconnectLogs();
 	};
+
+	return {
+		canManage,
+		config,
+		setConfig,
+		status,
+		guidedScheduleToggleId,
+		qr,
+		loading,
+		saving,
+		feedback,
+		disconnectLogsOpen,
+		setDisconnectLogsOpen,
+		disconnectLogs,
+		disconnectLogsLoading,
+		connection,
+		connectionLabel,
+		provider,
+		loadData,
+		updateConfig,
+		updateProvider,
+		handleSave,
+		handleConnect,
+		handleDisconnect,
+		handleConfigureWebhook,
+		loadDisconnectLogs,
+		openDisconnectLogs,
+	};
+}
+
+const MensageriaApiPage = () => {
+	const {
+		canManage,
+		config,
+		status,
+		guidedScheduleToggleId,
+		qr,
+		loading,
+		saving,
+		feedback,
+		disconnectLogsOpen,
+		setDisconnectLogsOpen,
+		disconnectLogs,
+		disconnectLogsLoading,
+		connection,
+		connectionLabel,
+		provider,
+		loadData,
+		updateConfig,
+		updateProvider,
+		handleSave,
+		handleConnect,
+		handleDisconnect,
+		handleConfigureWebhook,
+		loadDisconnectLogs,
+		openDisconnectLogs,
+	} = useMensageriaApiController();
 
 	if (loading) {
 		return <LoadingApiState />;

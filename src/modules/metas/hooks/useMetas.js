@@ -556,16 +556,16 @@ function combineMonthlyData(sempreData, onnetData, mes, feriadosExtras = []) {
 	};
 }
 
-export function parseMetasWorkbook(wb, feriadosExtras = []) {
-	const result = {};
-
-	const wsDash = findSheet(wb, "DASHBOARD");
-	const wsMult = findSheet(wb, "MULTAS");
-
-	MONTHORDER.forEach((mes) => {
+// Extraido de parseMetasWorkbook (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — corpo do forEach por mes, mesma logica de
+// antes, sem mudanca de comportamento. Retorna a entrada de `result[mes]`
+// ou null quando o mes nao tem linha no dashboard (mesmo `return` early
+// que existia no forEach).
+function buildMetasMonthResult(wb, wsDash, wsMult, mes, feriadosExtras) {
+	{
 		const wsMonth = findSheet(wb, mes);
 		const dRow = DASHROW[mes];
-		if (!dRow) return;
+		if (!dRow) return null;
 
 		const cfg = findMonthlyLayout(
 			wsMonth,
@@ -746,7 +746,7 @@ export function parseMetasWorkbook(wb, feriadosExtras = []) {
 		};
 
 		const onnet = parseOnnetMonth(wb, mes, feriadosExtras);
-		result[mes] = {
+		return {
 			...sempreData,
 			...(onnet
 				? {
@@ -760,9 +760,45 @@ export function parseMetasWorkbook(wb, feriadosExtras = []) {
 					}
 				: {}),
 		};
+	}
+}
+
+export function parseMetasWorkbook(wb, feriadosExtras = []) {
+	const result = {};
+
+	const wsDash = findSheet(wb, "DASHBOARD");
+	const wsMult = findSheet(wb, "MULTAS");
+
+	MONTHORDER.forEach((mes) => {
+		const monthResult = buildMetasMonthResult(wb, wsDash, wsMult, mes, feriadosExtras);
+		if (monthResult) result[mes] = monthResult;
 	});
 
 	return result;
+}
+
+// Extraido do forEach de salvarLancamentoManual (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma logica de antes, sem mudanca de
+// comportamento. Muta `recordsBySource` (mesma semantica do Map
+// compartilhado) e devolve as novas cidades de agente quando a fonte for
+// SEMPRE, ou null quando nao ha nada a aplicar (equivalente ao `return`
+// early do forEach original).
+function applyManualEntry(entry, { mes, ano, baseConfig, feriadosSet, recordsBySource }) {
+	if (!entry?.fonte || !entry?.lancamento) return null;
+	const manualRecord = buildManualMetasRecord({
+		month: mes,
+		source: entry.fonte,
+		year: ano,
+		baseConfig,
+		feriadosSet,
+		...entry.lancamento,
+	});
+	const { agentesData: nextAgentCities, ...recordData } = manualRecord;
+	recordsBySource.set(entry.fonte, recordData);
+	if (entry.fonte === MANUAL_META_SOURCES.SEMPRE) {
+		return nextAgentCities || [];
+	}
+	return null;
 }
 
 export const useMetas = () => {
@@ -946,20 +982,14 @@ export const useMetas = () => {
 				const recordsBySource = new Map();
 				let manualAgentCities = agentesData?.[mes] || [];
 				entries.forEach((entry) => {
-					if (!entry?.fonte || !entry?.lancamento) return;
-					const manualRecord = buildManualMetasRecord({
-						month: mes,
-						source: entry.fonte,
-						year: ano,
+					const nextAgentCities = applyManualEntry(entry, {
+						mes,
+						ano,
 						baseConfig,
 						feriadosSet,
-						...entry.lancamento,
+						recordsBySource,
 					});
-					const { agentesData: nextAgentCities, ...recordData } = manualRecord;
-					recordsBySource.set(entry.fonte, recordData);
-					if (entry.fonte === MANUAL_META_SOURCES.SEMPRE) {
-						manualAgentCities = nextAgentCities || [];
-					}
+					if (nextAgentCities) manualAgentCities = nextAgentCities;
 				});
 				const currentMonthData = allData[mes] || {};
 				const currentSempre =

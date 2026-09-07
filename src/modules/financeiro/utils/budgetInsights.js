@@ -891,6 +891,105 @@ function buildBudgetCategoryGroups(
 		});
 }
 
+// Extraido de buildAccountRows (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — so a decisao de qual valor realizado usar pra
+// uma linha da matriz, exatamente o mesmo encadeamento de ternarios de
+// antes (dado financeiro sensivel: NENHUMA formula foi alterada, so o
+// nome das condicoes ficou explicito).
+function computeMatrixRowRealized({
+	rowMatchesSelectedYear,
+	hasDirectBreakdown,
+	breakdownRealized,
+	canFallbackToCenterRealized,
+	centerRealized,
+	configuredCenterPlanned,
+	planned,
+	centerTotalPlanned,
+	rawPlanned,
+}) {
+	if (rowMatchesSelectedYear && hasDirectBreakdown) return breakdownRealized;
+	if (!(rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized)) {
+		return 0;
+	}
+	if (configuredCenterPlanned && planned) {
+		return (planned / configuredCenterPlanned) * centerRealized;
+	}
+	return centerTotalPlanned ? (rawPlanned / centerTotalPlanned) * centerRealized : 0;
+}
+
+// Extraido de buildAccountRows (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — monta UMA linha de orcamento planejado x
+// realizado a partir de uma linha da matriz. Mesma logica de antes,
+// so movida pra fora do .map() principal.
+function buildMatrixRow(row, {
+	accounts,
+	centers,
+	matrix,
+	periodKeys,
+	projectPeriodKeys,
+	rowPeriodTotal,
+	configuredBudgetForCenter,
+	realizedTotalForCenter,
+	selectedYears,
+}) {
+	const account = accounts.find((item) => item.id === row.accountId);
+	const center = centers.find((item) => item.id === row.costCenterId);
+	if (isSyntheticCenter(center)) return null;
+	const rawPlanned = rowPeriodTotal(row);
+	const rowYear = Number(row.year || row.ano || 0);
+	const rowMatchesSelectedYear = !rowYear || selectedYears.has(rowYear);
+	const periodBreakdowns = centerBreakdowns(center).filter(
+		(item) =>
+			(
+				normalizeBudgetText(item.quebra2 || item.Quebra2) === "projeto" ||
+				(!normalizeBudgetText(item.quebra2 || item.Quebra2) && isProjectCenter(center))
+					? projectPeriodKeys
+					: periodKeys
+			).has(getBudgetPeriodKey(item)) &&
+			shouldIncludeAccessBudgetItem(item),
+	);
+	const hasAccountScopedBreakdowns = periodBreakdowns.some((item) =>
+		String(item.accountId || "").trim(),
+	);
+	const matchingBreakdowns = periodBreakdowns.filter(
+		(item) => item.accountId === row.accountId,
+	);
+	const breakdownRealized = sumBy(matchingBreakdowns, breakdownRealizedValue);
+	const hasDirectBreakdown = matchingBreakdowns.length > 0;
+	const accountForGrouping =
+		hasDirectBreakdown && matchingBreakdowns[0]
+			? classifyBreakdownBudgetRow(account, center, matchingBreakdowns[0])
+			: account;
+	const canFallbackToCenterRealized = !hasAccountScopedBreakdowns;
+	const centerTotalPlanned = sumBy(
+		matrix.filter((item) => item.costCenterId === row.costCenterId),
+		rowPeriodTotal,
+	);
+	const configuredCenterPlanned = center ? configuredBudgetForCenter(center) : 0;
+	const planned =
+		configuredCenterPlanned && centerTotalPlanned
+			? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
+			: rawPlanned;
+	const centerRealized = realizedTotalForCenter(center || {});
+	const realized = computeMatrixRowRealized({
+		rowMatchesSelectedYear,
+		hasDirectBreakdown,
+		breakdownRealized,
+		canFallbackToCenterRealized,
+		centerRealized,
+		configuredCenterPlanned,
+		planned,
+		centerTotalPlanned,
+		rawPlanned,
+	});
+	return {
+		row,
+		account: accountForGrouping,
+		center,
+		...budgetMetric(planned, realized),
+	};
+}
+
 function buildAccountRows({
 	accounts = [],
 	centers = [],
@@ -916,67 +1015,19 @@ function buildAccountRows({
 		),
 	);
 	const matrixRows = matrix
-		.map((row) => {
-			const account = accounts.find((item) => item.id === row.accountId);
-			const center = centers.find((item) => item.id === row.costCenterId);
-			if (isSyntheticCenter(center)) return null;
-			const rawPlanned = rowPeriodTotal(row);
-			const rowYear = Number(row.year || row.ano || 0);
-			const rowMatchesSelectedYear = !rowYear || selectedYears.has(rowYear);
-			const periodBreakdowns = centerBreakdowns(center).filter(
-				(item) =>
-					(
-						normalizeBudgetText(item.quebra2 || item.Quebra2) === "projeto" ||
-						(!normalizeBudgetText(item.quebra2 || item.Quebra2) && isProjectCenter(center))
-							? projectPeriodKeys
-							: periodKeys
-					).has(getBudgetPeriodKey(item)) &&
-					shouldIncludeAccessBudgetItem(item),
-			);
-			const hasAccountScopedBreakdowns = periodBreakdowns.some((item) =>
-				String(item.accountId || "").trim(),
-			);
-			const matchingBreakdowns = periodBreakdowns.filter(
-				(item) => item.accountId === row.accountId,
-			);
-			const breakdownRealized = sumBy(
-				matchingBreakdowns,
-				breakdownRealizedValue,
-			);
-			const hasDirectBreakdown = matchingBreakdowns.length > 0;
-			const accountForGrouping =
-				hasDirectBreakdown && matchingBreakdowns[0]
-					? classifyBreakdownBudgetRow(account, center, matchingBreakdowns[0])
-					: account;
-			const canFallbackToCenterRealized = !hasAccountScopedBreakdowns;
-			const centerTotalPlanned = sumBy(
-				matrix.filter((item) => item.costCenterId === row.costCenterId),
+		.map((row) =>
+			buildMatrixRow(row, {
+				accounts,
+				centers,
+				matrix,
+				periodKeys,
+				projectPeriodKeys,
 				rowPeriodTotal,
-			);
-			const configuredCenterPlanned = center
-				? configuredBudgetForCenter(center)
-				: 0;
-			const planned =
-				configuredCenterPlanned && centerTotalPlanned
-					? (rawPlanned / centerTotalPlanned) * configuredCenterPlanned
-					: rawPlanned;
-			const centerRealized = realizedTotalForCenter(center || {});
-			const realized = rowMatchesSelectedYear && hasDirectBreakdown
-				? breakdownRealized
-				: rowMatchesSelectedYear && canFallbackToCenterRealized && centerRealized
-					? configuredCenterPlanned && planned
-						? (planned / configuredCenterPlanned) * centerRealized
-						: centerTotalPlanned
-							? (rawPlanned / centerTotalPlanned) * centerRealized
-							: 0
-					: 0;
-			return {
-				row,
-				account: accountForGrouping,
-				center,
-				...budgetMetric(planned, realized),
-			};
-		})
+				configuredBudgetForCenter,
+				realizedTotalForCenter,
+				selectedYears,
+			}),
+		)
 		.filter((item) => item && (item.planned || item.realized));
 	const breakdownRows = centers.flatMap((center) => {
 		if (isSyntheticCenter(center)) return [];

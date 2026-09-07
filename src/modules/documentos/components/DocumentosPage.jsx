@@ -240,7 +240,10 @@ function PaginationControls({
 	);
 }
 
-function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
+// Extraido de SubmissionModal (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) pra reduzir a complexidade cognitiva da funcao
+// de render — mesmo estado e mesmas chamadas, sem mudanca de comportamento.
+function useSubmissionModalController({ submission, currentUser, onChanged }) {
 	const [selectedFileId, setSelectedFileId] = useState(
 		submission?.files?.[0]?.id || "",
 	);
@@ -296,8 +299,6 @@ function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
 			if (objectUrl) URL.revokeObjectURL(objectUrl);
 		};
 	}, [selectedFile]);
-
-	if (!submission) return null;
 
 	const selectedStatus = String(
 		selectedFile?.status || "pendente",
@@ -363,6 +364,62 @@ function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
 			setRenaming(false);
 		}
 	};
+
+	return {
+		setSelectedFileId,
+		motivo,
+		setMotivo,
+		showRejectReason,
+		setShowRejectReason,
+		modalMessage,
+		setModalMessage,
+		pdfUrl,
+		loadingPdf,
+		saving,
+		renameOpen,
+		setRenameOpen,
+		renameName,
+		setRenameName,
+		renaming,
+		motivoRef,
+		selectedFile,
+		canReviewSelected,
+		canRenameSelected,
+		approveLabel,
+		rejectLabel,
+		reviewFile,
+		renameFile,
+	};
+}
+
+function SubmissionModal({ submission, currentUser, onClose, onChanged }) {
+	const {
+		setSelectedFileId,
+		motivo,
+		setMotivo,
+		showRejectReason,
+		setShowRejectReason,
+		modalMessage,
+		setModalMessage,
+		pdfUrl,
+		loadingPdf,
+		saving,
+		renameOpen,
+		setRenameOpen,
+		renameName,
+		setRenameName,
+		renaming,
+		motivoRef,
+		selectedFile,
+		canReviewSelected,
+		canRenameSelected,
+		approveLabel,
+		rejectLabel,
+		reviewFile,
+		renameFile,
+	} = useSubmissionModalController({ submission, currentUser, onChanged });
+
+	if (!submission) return null;
 
 	return (
 		<ModalShell

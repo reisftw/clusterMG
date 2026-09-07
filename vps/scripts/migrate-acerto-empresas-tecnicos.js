@@ -162,24 +162,11 @@ function findEmpresaIdForTecnico(tecnico, empresasByLegacyId, empresasByName) {
 	return "";
 }
 
-async function main() {
-	const [targetEmpresas, legacyEmpresas, legacyTecnicos] = await Promise.all([
-		listCollection(TARGET_COLLECTION),
-		listCollection(LEGACY_EMPRESAS_COLLECTION),
-		listCollection(LEGACY_TECNICOS_COLLECTION),
-	]);
-
-	const empresasById = new Map();
-	const empresasByName = new Map();
-	const empresasByLegacyId = new Map();
-
-	for (const empresa of targetEmpresas) {
-		const normalized = buildEmpresaPayload(empresa.id, empresa);
-		empresasById.set(empresa.id, normalized);
-		if (normalized.nome)
-			empresasByName.set(normalizeText(normalized.nome), empresa.id);
-	}
-
+// Extraido de main() (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
+// mescla as empresas legadas nas empresas atuais (mutando os 3 Maps in
+// place, mesmo estilo imperativo de antes). Devolve os contadores usados
+// no relatorio final.
+function mergeLegacyEmpresas(legacyEmpresas, empresasById, empresasByName, empresasByLegacyId) {
 	let empresasCriadas = 0;
 	let empresasAtualizadas = 0;
 
@@ -213,12 +200,14 @@ async function main() {
 		else empresasCriadas += 1;
 	}
 
-	for (const empresa of targetEmpresas) {
-		if (!empresasByLegacyId.has(text(empresa.id))) {
-			empresasByLegacyId.set(text(empresa.id), empresa.id);
-		}
-	}
+	return { empresasCriadas, empresasAtualizadas };
+}
 
+// Extraido de main() (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
+// migra os tecnicos legados pras empresas correspondentes (ou cria um
+// placeholder quando nao acha a empresa), mutando empresasById in place.
+// Devolve os contadores usados no relatorio final.
+function migrateTecnicos(legacyTecnicos, empresasById, empresasByName, empresasByLegacyId) {
 	let tecnicosMigrados = 0;
 	let tecnicosIgnorados = 0;
 	let placeholdersCriados = 0;
@@ -280,6 +269,43 @@ async function main() {
 		empresasById.set(empresaId, empresa);
 		tecnicosMigrados += 1;
 	}
+
+	return { tecnicosMigrados, tecnicosIgnorados, placeholdersCriados };
+}
+
+async function main() {
+	const [targetEmpresas, legacyEmpresas, legacyTecnicos] = await Promise.all([
+		listCollection(TARGET_COLLECTION),
+		listCollection(LEGACY_EMPRESAS_COLLECTION),
+		listCollection(LEGACY_TECNICOS_COLLECTION),
+	]);
+
+	const empresasById = new Map();
+	const empresasByName = new Map();
+	const empresasByLegacyId = new Map();
+
+	for (const empresa of targetEmpresas) {
+		const normalized = buildEmpresaPayload(empresa.id, empresa);
+		empresasById.set(empresa.id, normalized);
+		if (normalized.nome)
+			empresasByName.set(normalizeText(normalized.nome), empresa.id);
+	}
+
+	const { empresasCriadas, empresasAtualizadas } = mergeLegacyEmpresas(
+		legacyEmpresas,
+		empresasById,
+		empresasByName,
+		empresasByLegacyId,
+	);
+
+	for (const empresa of targetEmpresas) {
+		if (!empresasByLegacyId.has(text(empresa.id))) {
+			empresasByLegacyId.set(text(empresa.id), empresa.id);
+		}
+	}
+
+	const { tecnicosMigrados, tecnicosIgnorados, placeholdersCriados } =
+		migrateTecnicos(legacyTecnicos, empresasById, empresasByName, empresasByLegacyId);
 
 	for (const [empresaId, empresa] of empresasById.entries()) {
 		await upsertEmpresa(empresaId, empresa);

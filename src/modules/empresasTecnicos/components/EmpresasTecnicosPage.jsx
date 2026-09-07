@@ -1620,16 +1620,11 @@ function CriarLiderEmpresaModal({ empresa, onClose, onCreated }) {
 	);
 }
 
-function EmpresaProfile({
-	empresa,
-	acertos,
-	loadingAcertos,
-	canEdit,
-	onEdit,
-	ownerUser,
-	canCreateOwnerUser,
-	onCreateOwnerUser,
-}) {
+// Extraido de EmpresaProfile (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — todo o estado, efeitos e handlers do perfil
+// da empresa (documentos, navegacao de pasta do Drive, e-mail
+// financeiro). Mesma logica de antes, sem mudanca de comportamento.
+function useEmpresaProfileController({ empresa, acertos }) {
 	const latestAcertos = acertos.slice(0, 20);
 	const [documentos, setDocumentos] = useState([]);
 	const [loadingDocumentos, setLoadingDocumentos] = useState(false);
@@ -1810,6 +1805,83 @@ function EmpresaProfile({
 		);
 		return { ...area, supervisores };
 	});
+
+	return {
+		latestAcertos,
+		documentos,
+		loadingDocumentos,
+		documentosError,
+		driveMessage,
+		creatingFolder,
+		financeiroEmailText,
+		setFinanceiroEmailText,
+		financeiroLoadingId,
+		driveFolder,
+		driveItems,
+		drivePath,
+		loadingDrive,
+		drivePreview,
+		drivePreviewUrl,
+		setDrivePreview,
+		setDrivePreviewUrl,
+		showPerfilCidadesModal,
+		setShowPerfilCidadesModal,
+		perfilCidades,
+		perfilCidadesPreview,
+		hasMorePerfilCidades,
+		setDocumentosError,
+		loadDriveFolder,
+		handleEnsureFolder,
+		handleOpenDriveFolder,
+		handleBackDriveFolder,
+		handlePreviewDriveItem,
+		handleFinanceiroEmail,
+		supervisaoPorGrupo,
+	};
+}
+
+function EmpresaProfile({
+	empresa,
+	acertos,
+	loadingAcertos,
+	canEdit,
+	onEdit,
+	ownerUser,
+	canCreateOwnerUser,
+	onCreateOwnerUser,
+}) {
+	const {
+		latestAcertos,
+		documentos,
+		loadingDocumentos,
+		documentosError,
+		driveMessage,
+		creatingFolder,
+		financeiroEmailText,
+		setFinanceiroEmailText,
+		financeiroLoadingId,
+		driveFolder,
+		driveItems,
+		drivePath,
+		loadingDrive,
+		drivePreview,
+		drivePreviewUrl,
+		setDrivePreview,
+		setDrivePreviewUrl,
+		showPerfilCidadesModal,
+		setShowPerfilCidadesModal,
+		perfilCidades,
+		perfilCidadesPreview,
+		hasMorePerfilCidades,
+		setDocumentosError,
+		loadDriveFolder,
+		handleEnsureFolder,
+		handleOpenDriveFolder,
+		handleBackDriveFolder,
+		handlePreviewDriveItem,
+		handleFinanceiroEmail,
+		supervisaoPorGrupo,
+	} = useEmpresaProfileController({ empresa, acertos });
 
 	return (
 		<div className="space-y-5">
@@ -2429,6 +2501,89 @@ function EmpresaProfile({
 	);
 }
 
+// Extraido de EmpresasTecnicosPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — a tela de detalhe de UMA empresa (quando ha
+// slug na URL) e uma arvore JSX independente da tela de lista, mesma
+// logica de antes, so movida pra seu proprio componente.
+function EmpresaDetailView({
+	selectedEmpresa,
+	currentUser,
+	selectedOwnerUser,
+	acertos,
+	loadingAcertos,
+	showCreateOwnerUser,
+	setShowCreateOwnerUser,
+	showForm,
+	setShowForm,
+	editing,
+	setEditing,
+	regionais,
+	handleSave,
+	saving,
+	carregar,
+}) {
+	if (!selectedEmpresa) {
+		return (
+			<div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
+				<Building2 size={34} className="mx-auto text-slate-300" />
+				<h1 className="mt-3 text-xl font-black text-slate-900">
+					Empresa não encontrada
+				</h1>
+				<p className="mt-1 text-sm text-slate-500">
+					Verifique o endereço ou seu vínculo de acesso.
+				</p>
+				<Link
+					to={ROUTES.EMPRESAS_TECNICOS}
+					className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white"
+				>
+					<ArrowLeft size={16} /> Voltar
+				</Link>
+			</div>
+		);
+	}
+
+	return (
+		<div className="space-y-5">
+			{showCreateOwnerUser &&
+			canCreateEmpresaUser(currentUser, selectedEmpresa) ? (
+				<CriarLiderEmpresaModal
+					empresa={selectedEmpresa}
+					onClose={() => setShowCreateOwnerUser(false)}
+					onCreated={() => {
+						setShowCreateOwnerUser(false);
+						carregar();
+					}}
+				/>
+			) : null}
+			{showForm && canEditEmpresa(currentUser, selectedEmpresa) ? (
+				<EmpresaFormModal
+					initialValue={editing || selectedEmpresa}
+					regionais={regionais}
+					onSave={handleSave}
+					onCancel={() => {
+						setShowForm(false);
+						setEditing(null);
+					}}
+					saving={saving}
+				/>
+			) : null}
+			<EmpresaProfile
+				empresa={selectedEmpresa}
+				acertos={acertos}
+				loadingAcertos={loadingAcertos}
+				canEdit={canEditEmpresa(currentUser, selectedEmpresa)}
+				ownerUser={selectedOwnerUser}
+				canCreateOwnerUser={canCreateEmpresaUser(currentUser, selectedEmpresa)}
+				onCreateOwnerUser={() => setShowCreateOwnerUser(true)}
+				onEdit={() => {
+					setEditing(selectedEmpresa);
+					setShowForm(true);
+				}}
+			/>
+		</div>
+	);
+}
+
 export default function EmpresasTecnicosPage() {
 	const { slug } = useParams();
 	const { currentUser } = useAuthContext();
@@ -2561,68 +2716,24 @@ export default function EmpresasTecnicosPage() {
 	if (loading) return <Spinner fullScreen />;
 
 	if (slug) {
-		if (!selectedEmpresa) {
-			return (
-				<div className="rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
-					<Building2 size={34} className="mx-auto text-slate-300" />
-					<h1 className="mt-3 text-xl font-black text-slate-900">
-						Empresa não encontrada
-					</h1>
-					<p className="mt-1 text-sm text-slate-500">
-						Verifique o endereço ou seu vínculo de acesso.
-					</p>
-					<Link
-						to={ROUTES.EMPRESAS_TECNICOS}
-						className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white"
-					>
-						<ArrowLeft size={16} /> Voltar
-					</Link>
-				</div>
-			);
-		}
-
 		return (
-			<div className="space-y-5">
-				{showCreateOwnerUser &&
-				canCreateEmpresaUser(currentUser, selectedEmpresa) ? (
-					<CriarLiderEmpresaModal
-						empresa={selectedEmpresa}
-						onClose={() => setShowCreateOwnerUser(false)}
-						onCreated={() => {
-							setShowCreateOwnerUser(false);
-							carregar();
-						}}
-					/>
-				) : null}
-				{showForm && canEditEmpresa(currentUser, selectedEmpresa) ? (
-					<EmpresaFormModal
-						initialValue={editing || selectedEmpresa}
-						regionais={regionais}
-						onSave={handleSave}
-						onCancel={() => {
-							setShowForm(false);
-							setEditing(null);
-						}}
-						saving={saving}
-					/>
-				) : null}
-				<EmpresaProfile
-					empresa={selectedEmpresa}
-					acertos={acertos}
-					loadingAcertos={loadingAcertos}
-					canEdit={canEditEmpresa(currentUser, selectedEmpresa)}
-					ownerUser={selectedOwnerUser}
-					canCreateOwnerUser={canCreateEmpresaUser(
-						currentUser,
-						selectedEmpresa,
-					)}
-					onCreateOwnerUser={() => setShowCreateOwnerUser(true)}
-					onEdit={() => {
-						setEditing(selectedEmpresa);
-						setShowForm(true);
-					}}
-				/>
-			</div>
+			<EmpresaDetailView
+				selectedEmpresa={selectedEmpresa}
+				currentUser={currentUser}
+				selectedOwnerUser={selectedOwnerUser}
+				acertos={acertos}
+				loadingAcertos={loadingAcertos}
+				showCreateOwnerUser={showCreateOwnerUser}
+				setShowCreateOwnerUser={setShowCreateOwnerUser}
+				showForm={showForm}
+				setShowForm={setShowForm}
+				editing={editing}
+				setEditing={setEditing}
+				regionais={regionais}
+				handleSave={handleSave}
+				saving={saving}
+				carregar={carregar}
+			/>
 		);
 	}
 
