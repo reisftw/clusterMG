@@ -554,6 +554,834 @@ function useLogisticaController() {
 	};
 }
 
+// Extraido de LogisticaPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — aba "Cotações" inteira (formulario + tabela),
+// mesma JSX/logica de antes.
+function LogisticaCotacoesTab({
+	clienteBusca,
+	setClienteBusca,
+	sugestoesClientes,
+	aplicarCliente,
+	cotacaoForm,
+	updateCotacao,
+	handleGeocodeCotacao,
+	geocodingTarget,
+	pontosDaCidade,
+	config,
+	handleLalamoveQuote,
+	saving,
+	handleSaveCotacao,
+	search,
+	setSearch,
+	pageSize,
+	setPageSize,
+	pageItems,
+	handleDeleteCotacao,
+	currentPage,
+	totalPages,
+	list,
+	setPage,
+}) {
+	return (
+		<section className="grid gap-6 xl:grid-cols-[420px_1fr]">
+			<form
+				onSubmit={handleSaveCotacao}
+				className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+			>
+				<div className="mb-4 flex items-center gap-2">
+					<Plus size={18} className="text-blue-600" />
+					<h2 className="text-lg font-black text-slate-950">
+						Nova cotação manual
+					</h2>
+				</div>
+				<div className="grid gap-3">
+					<Field label="Buscar cliente do mapa">
+						<div className="relative">
+							<input
+								className={inputClass}
+								value={clienteBusca}
+								onChange={(event) => setClienteBusca(event.target.value)}
+								placeholder="Digite primeiro nome, código do cliente ou O.S."
+							/>
+							{sugestoesClientes.length ? (
+								<div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
+									{sugestoesClientes.map((cliente) => (
+										<button
+											key={cliente.id}
+											type="button"
+											onClick={() => aplicarCliente(cliente)}
+											className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-blue-50"
+										>
+											<span className="block font-black text-slate-900">
+												{cliente.cliente}
+											</span>
+											<span className="block text-xs font-semibold text-slate-500">
+												{cliente.codigoCliente || "Sem código"} ·{" "}
+												{cliente.os || "Sem O.S."} · {cliente.cidade || "Sem cidade"}
+											</span>
+										</button>
+									))}
+								</div>
+							) : null}
+						</div>
+					</Field>
+					<Field label="Cliente">
+						<input
+							className={inputClass}
+							value={cotacaoForm.cliente}
+							onChange={(event) => updateCotacao("cliente", event.target.value)}
+						/>
+					</Field>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Código do cliente">
+							<input
+								className={inputClass}
+								value={cotacaoForm.codigoCliente}
+								onChange={(event) =>
+									updateCotacao("codigoCliente", event.target.value)
+								}
+							/>
+						</Field>
+						<Field label="O.S.">
+							<input
+								className={inputClass}
+								value={cotacaoForm.os}
+								onChange={(event) => updateCotacao("os", event.target.value)}
+							/>
+						</Field>
+					</div>
+					<Field label="Telefone">
+						<input
+							className={inputClass}
+							value={cotacaoForm.telefone}
+							onChange={(event) => updateCotacao("telefone", event.target.value)}
+						/>
+					</Field>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Cidade">
+							<input
+								list="logistica-cidades"
+								className={inputClass}
+								value={cotacaoForm.cidade}
+								onChange={(event) => updateCotacao("cidade", event.target.value)}
+								onBlur={handleGeocodeCotacao}
+							/>
+						</Field>
+						<Field label="Regional">
+							<input
+								className={inputClass}
+								value={cotacaoForm.regional}
+								onChange={(event) =>
+									updateCotacao("regional", event.target.value)
+								}
+							/>
+						</Field>
+					</div>
+					<Field label="Endereço de coleta">
+						<input
+							className={inputClass}
+							value={cotacaoForm.enderecoColeta}
+							onChange={(event) =>
+								updateCotacao("enderecoColeta", event.target.value)
+							}
+							onBlur={handleGeocodeCotacao}
+						/>
+					</Field>
+					<button
+						type="button"
+						onClick={handleGeocodeCotacao}
+						disabled={
+							geocodingTarget === "cotacao" ||
+							!cotacaoForm.enderecoColeta ||
+							!cotacaoForm.cidade
+						}
+						className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+					>
+						<MapPin size={14} />
+						{geocodingTarget === "cotacao"
+							? "Buscando coordenadas..."
+							: "Buscar coordenadas da coleta"}
+					</button>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Latitude da coleta">
+							<input
+								className={inputClass}
+								value={cotacaoForm.latColeta || ""}
+								onChange={(event) =>
+									updateCotacao("latColeta", event.target.value)
+								}
+								placeholder="-19.9208"
+							/>
+						</Field>
+						<Field label="Longitude da coleta">
+							<input
+								className={inputClass}
+								value={cotacaoForm.lngColeta || ""}
+								onChange={(event) =>
+									updateCotacao("lngColeta", event.target.value)
+								}
+								placeholder="-43.9378"
+							/>
+						</Field>
+					</div>
+					<div className="grid gap-3 md:grid-cols-3">
+						<Field label="Número">
+							<input
+								className={inputClass}
+								value={cotacaoForm.numeroColeta}
+								onChange={(event) =>
+									updateCotacao("numeroColeta", event.target.value)
+								}
+							/>
+						</Field>
+						<Field label="Bairro">
+							<input
+								className={inputClass}
+								value={cotacaoForm.bairroColeta}
+								onChange={(event) =>
+									updateCotacao("bairroColeta", event.target.value)
+								}
+							/>
+						</Field>
+						<Field label="Compl.">
+							<input
+								className={inputClass}
+								value={cotacaoForm.complementoColeta}
+								onChange={(event) =>
+									updateCotacao("complementoColeta", event.target.value)
+								}
+							/>
+						</Field>
+					</div>
+					<Field label="Ponto estratégico">
+						<select
+							className={inputClass}
+							value={cotacaoForm.pontoId}
+							onChange={(event) => updateCotacao("pontoId", event.target.value)}
+						>
+							<option value="">Selecione</option>
+							{pontosDaCidade.map((ponto) => (
+								<option key={ponto.id} value={ponto.id}>
+									{ponto.cidade} - {ponto.nome}
+								</option>
+							))}
+						</select>
+					</Field>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Fornecedor">
+							<select
+								className={inputClass}
+								value={cotacaoForm.fornecedor}
+								onChange={(event) =>
+									updateCotacao("fornecedor", event.target.value)
+								}
+							>
+								{(config.providers || []).map((provider) => (
+									<option key={provider.id} value={provider.id}>
+										{provider.nome}
+										{provider.tipo === "api" && !provider.ativo
+											? " (em preparação)"
+											: ""}
+									</option>
+								))}
+							</select>
+						</Field>
+						<Field label="Veículo">
+							<select
+								className={inputClass}
+								value={cotacaoForm.veiculo}
+								onChange={(event) =>
+									updateCotacao("veiculo", event.target.value)
+								}
+							>
+								<option>Moto</option>
+								<option>Carro</option>
+								<option>Utilitário</option>
+								<option>Outro</option>
+							</select>
+						</Field>
+					</div>
+					<div className="grid gap-3 md:grid-cols-3">
+						<Field label="Valor">
+							<input
+								className={inputClass}
+								value={cotacaoForm.valorEstimado}
+								onChange={(event) =>
+									updateCotacao("valorEstimado", event.target.value)
+								}
+								placeholder="R$ 0,00"
+							/>
+						</Field>
+						<Field label="Prazo">
+							<input
+								className={inputClass}
+								value={cotacaoForm.prazoEstimado}
+								onChange={(event) =>
+									updateCotacao("prazoEstimado", event.target.value)
+								}
+								placeholder="Ex: 45 min"
+							/>
+						</Field>
+						<Field label="Distância">
+							<input
+								className={inputClass}
+								value={cotacaoForm.distanciaKm}
+								onChange={(event) =>
+									updateCotacao("distanciaKm", event.target.value)
+								}
+								placeholder="Ex: 8,4 km"
+							/>
+						</Field>
+					</div>
+					<Field label="Status">
+						<select
+							className={inputClass}
+							value={cotacaoForm.status}
+							onChange={(event) => updateCotacao("status", event.target.value)}
+						>
+							{COTACAO_STATUS.map((status) => (
+								<option key={status.value} value={status.value}>
+									{status.label}
+								</option>
+							))}
+						</select>
+					</Field>
+					<Field label="Observações">
+						<textarea
+							className={inputClass}
+							rows={3}
+							value={cotacaoForm.observacoes}
+							onChange={(event) =>
+								updateCotacao("observacoes", event.target.value)
+							}
+						/>
+					</Field>
+					{cotacaoForm.fornecedor === "lalamove" ? (
+						<button
+							type="button"
+							onClick={handleLalamoveQuote}
+							disabled={saving}
+							className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-black text-orange-700 hover:bg-orange-100 disabled:opacity-60"
+						>
+							<Truck size={16} />
+							Cotar Lalamove
+						</button>
+					) : null}
+					<button
+						type="submit"
+						disabled={saving}
+						className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+					>
+						<Save size={16} />
+						Salvar cotação
+					</button>
+				</div>
+			</form>
+
+			<div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+				<ListToolbar
+					search={search}
+					setSearch={setSearch}
+					pageSize={pageSize}
+					setPageSize={setPageSize}
+				/>
+				<div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+					<table className="min-w-[860px] w-full divide-y divide-slate-200 text-sm">
+						<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+							<tr>
+								<th className="px-4 py-3">Cliente</th>
+								<th className="px-4 py-3">Origem/Destino</th>
+								<th className="px-4 py-3">Fornecedor</th>
+								<th className="px-4 py-3">Valor</th>
+								<th className="px-4 py-3">Status</th>
+								<th className="px-4 py-3">Data</th>
+								<th className="px-4 py-3">Ações</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100 bg-white">
+							{pageItems.map((item) => (
+								<tr key={item.id} className="hover:bg-slate-50">
+									<td className="px-4 py-3">
+										<p className="font-black text-slate-950">{item.cliente}</p>
+										<p className="text-xs text-slate-500">
+											{item.codigoCliente || "-"} · {item.os || "Sem O.S."}
+										</p>
+									</td>
+									<td className="px-4 py-3">
+										<p className="font-semibold text-slate-700">
+											{item.cidade}
+										</p>
+										<p className="text-xs text-slate-500">
+											Para: {item.pontoNome || "-"}
+										</p>
+									</td>
+									<td className="px-4 py-3 text-slate-600">
+										{item.fornecedorNome || item.fornecedor}
+									</td>
+									<td className="px-4 py-3 font-black text-slate-900">
+										{formatMoney(item.valorEstimado)}
+									</td>
+									<td className="px-4 py-3">
+										<StatusBadge status={item.status} />
+									</td>
+									<td className="px-4 py-3 text-slate-500">
+										{formatDate(item.criadoEm)}
+									</td>
+									<td className="px-4 py-3">
+										<button
+											type="button"
+											onClick={() => handleDeleteCotacao(item.id)}
+											className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
+										>
+											<Trash2 size={15} />
+										</button>
+									</td>
+								</tr>
+							))}
+							{!pageItems.length ? (
+								<EmptyRow colSpan={7} label="Nenhuma cotação encontrada." />
+							) : null}
+						</tbody>
+					</table>
+				</div>
+				<Pagination
+					currentPage={currentPage}
+					totalPages={totalPages}
+					pageItems={pageItems}
+					total={list.length}
+					pageSize={pageSize}
+					setPage={setPage}
+				/>
+			</div>
+		</section>
+	);
+}
+
+// Extraido de LogisticaPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — aba "Pontos estratégicos" inteira (formulario
+// + lista), mesma JSX/logica de antes.
+function LogisticaPontosTab({
+	handleSavePonto,
+	editingPonto,
+	setEditingPonto,
+	setPontoForm,
+	pontoForm,
+	updatePonto,
+	preencherRegionalPonto,
+	handleGeocodePonto,
+	geocodingTarget,
+	saving,
+	handleCreateBasePoints,
+	cidades,
+	search,
+	setSearch,
+	pageSize,
+	setPageSize,
+	pageItems,
+	handleDeletePonto,
+	currentPage,
+	totalPages,
+	list,
+	setPage,
+}) {
+	return (
+		<section className="grid gap-6 xl:grid-cols-[420px_1fr]">
+			<form
+				onSubmit={handleSavePonto}
+				className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+			>
+				<div className="mb-4 flex items-center justify-between gap-2">
+					<div className="flex items-center gap-2">
+						<MapPin size={18} className="text-blue-600" />
+						<h2 className="text-lg font-black text-slate-950">
+							{editingPonto ? "Editar ponto" : "Novo ponto"}
+						</h2>
+					</div>
+					{editingPonto ? (
+						<button
+							type="button"
+							onClick={() => {
+								setEditingPonto(false);
+								setPontoForm(DEFAULT_PONTO_FORM);
+							}}
+							className="rounded-lg border border-slate-200 p-2 text-slate-500"
+						>
+							<X size={16} />
+						</button>
+					) : null}
+				</div>
+				<div className="grid gap-3">
+					<Field label="Nome do ponto">
+						<input
+							className={inputClass}
+							value={pontoForm.nome}
+							onChange={(event) => updatePonto("nome", event.target.value)}
+						/>
+					</Field>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Cidade">
+							<input
+								list="logistica-cidades"
+								className={inputClass}
+								value={pontoForm.cidade}
+								onChange={(event) => updatePonto("cidade", event.target.value)}
+								onBlur={(event) => {
+									preencherRegionalPonto(event.target.value);
+									handleGeocodePonto();
+								}}
+							/>
+						</Field>
+						<Field label="Regional">
+							<input
+								className={inputClass}
+								value={pontoForm.regional}
+								onChange={(event) =>
+									updatePonto("regional", event.target.value)
+								}
+							/>
+						</Field>
+					</div>
+					<Field label="Endereço">
+						<input
+							className={inputClass}
+							value={pontoForm.endereco}
+							onChange={(event) => updatePonto("endereco", event.target.value)}
+							onBlur={handleGeocodePonto}
+						/>
+					</Field>
+					<button
+						type="button"
+						onClick={handleGeocodePonto}
+						disabled={
+							geocodingTarget === "ponto" ||
+							!pontoForm.endereco ||
+							!pontoForm.cidade
+						}
+						className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+					>
+						<MapPin size={14} />
+						{geocodingTarget === "ponto"
+							? "Buscando coordenadas..."
+							: "Buscar coordenadas do ponto"}
+					</button>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Latitude do ponto">
+							<input
+								className={inputClass}
+								value={pontoForm.lat || ""}
+								onChange={(event) => updatePonto("lat", event.target.value)}
+								placeholder="-19.9208"
+							/>
+						</Field>
+						<Field label="Longitude do ponto">
+							<input
+								className={inputClass}
+								value={pontoForm.lng || ""}
+								onChange={(event) => updatePonto("lng", event.target.value)}
+								placeholder="-43.9378"
+							/>
+						</Field>
+					</div>
+					<div className="grid gap-3 md:grid-cols-3">
+						<Field label="Número">
+							<input
+								className={inputClass}
+								value={pontoForm.numero}
+								onChange={(event) => updatePonto("numero", event.target.value)}
+								onBlur={handleGeocodePonto}
+							/>
+						</Field>
+						<Field label="Bairro">
+							<input
+								className={inputClass}
+								value={pontoForm.bairro}
+								onChange={(event) => updatePonto("bairro", event.target.value)}
+								onBlur={handleGeocodePonto}
+							/>
+						</Field>
+						<Field label="Complemento">
+							<input
+								className={inputClass}
+								value={pontoForm.complemento}
+								onChange={(event) =>
+									updatePonto("complemento", event.target.value)
+								}
+							/>
+						</Field>
+					</div>
+					<Field label="Referência">
+						<input
+							className={inputClass}
+							value={pontoForm.referencia}
+							onChange={(event) =>
+								updatePonto("referencia", event.target.value)
+							}
+						/>
+					</Field>
+					<div className="grid gap-3 md:grid-cols-2">
+						<Field label="Contato">
+							<input
+								className={inputClass}
+								value={pontoForm.contatoNome}
+								onChange={(event) =>
+									updatePonto("contatoNome", event.target.value)
+								}
+							/>
+						</Field>
+						<Field label="Telefone">
+							<input
+								className={inputClass}
+								value={pontoForm.contatoTelefone}
+								onChange={(event) =>
+									updatePonto("contatoTelefone", event.target.value)
+								}
+							/>
+						</Field>
+					</div>
+					<label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
+						<input
+							type="checkbox"
+							checked={pontoForm.ativo !== false}
+							onChange={(event) => updatePonto("ativo", event.target.checked)}
+						/>
+						Ponto ativo
+					</label>
+					<button
+						type="submit"
+						disabled={saving}
+						className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+					>
+						<Save size={16} />
+						Salvar ponto
+					</button>
+					<button
+						type="button"
+						onClick={handleCreateBasePoints}
+						disabled={saving || !cidades.length}
+						className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+					>
+						<Building2 size={16} />
+						Criar base pelas cidades
+					</button>
+				</div>
+			</form>
+			<div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+				<ListToolbar
+					search={search}
+					setSearch={setSearch}
+					pageSize={pageSize}
+					setPageSize={setPageSize}
+				/>
+				<div className="mt-4 grid gap-3">
+					{pageItems.map((ponto) => (
+						<div key={ponto.id} className="rounded-lg border border-slate-200 p-4">
+							<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+								<div>
+									<p className="text-lg font-black text-slate-950">
+										{ponto.nome}
+									</p>
+									<p className="text-sm font-semibold text-slate-600">
+										{ponto.cidade} · {ponto.regional || "Sem regional"}
+									</p>
+									<p className="mt-2 text-sm text-slate-500">
+										{[
+											ponto.endereco,
+											ponto.numero,
+											ponto.bairro,
+											ponto.complemento,
+										]
+											.filter(Boolean)
+											.join(", ") || "Endereço não preenchido"}
+									</p>
+									<p className="mt-1 text-xs text-slate-400">
+										{ponto.referencia || "-"}
+									</p>
+								</div>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={() => {
+											setPontoForm(ponto);
+											setEditingPonto(true);
+										}}
+										className="rounded-lg border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
+									>
+										<Pencil size={15} />
+									</button>
+									<button
+										type="button"
+										onClick={() => handleDeletePonto(ponto.id)}
+										className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
+									>
+										<Trash2 size={15} />
+									</button>
+								</div>
+							</div>
+						</div>
+					))}
+					{!pageItems.length ? (
+						<div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">
+							Nenhum ponto estratégico encontrado.
+						</div>
+					) : null}
+				</div>
+				<Pagination
+					currentPage={currentPage}
+					totalPages={totalPages}
+					pageItems={pageItems}
+					total={list.length}
+					pageSize={pageSize}
+					setPage={setPage}
+				/>
+			</div>
+		</section>
+	);
+}
+
+// Extraido de LogisticaPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — aba "Configuração" inteira, mesma
+// JSX/logica de antes.
+function LogisticaConfigTab({
+	config,
+	updateProvider,
+	setConfig,
+	handleSaveConfig,
+	saving,
+}) {
+	return (
+		<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="mb-4 flex items-center gap-2">
+				<Settings size={18} className="text-blue-600" />
+				<h2 className="text-lg font-black text-slate-950">
+					Fornecedores e regras
+				</h2>
+			</div>
+			<div className="grid gap-4">
+				{(config.providers || []).map((provider) => (
+					<div key={provider.id} className="rounded-lg border border-slate-200 p-4">
+						<div className="grid gap-3 lg:grid-cols-[1.2fr_120px_120px_1fr]">
+							<Field label="Fornecedor">
+								<input
+									className={inputClass}
+									value={provider.nome}
+									onChange={(event) =>
+										updateProvider(provider.id, "nome", event.target.value)
+									}
+								/>
+							</Field>
+							<Field label="Tipo">
+								<input className={inputClass} value={provider.tipo} disabled />
+							</Field>
+							<Field label="Ativo">
+								<select
+									className={inputClass}
+									value={provider.ativo ? "sim" : "nao"}
+									onChange={(event) =>
+										updateProvider(
+											provider.id,
+											"ativo",
+											event.target.value === "sim",
+										)
+									}
+								>
+									<option value="sim">Sim</option>
+									<option value="nao">Não</option>
+								</select>
+							</Field>
+							<Field label="Referência de credencial">
+								<input
+									className={inputClass}
+									value={provider.credentialRef || ""}
+									onChange={(event) =>
+										updateProvider(
+											provider.id,
+											"credentialRef",
+											event.target.value,
+										)
+									}
+									placeholder="Ex: integração cadastrada / env"
+								/>
+							</Field>
+						</div>
+					</div>
+				))}
+				<div className="grid gap-3 md:grid-cols-3">
+					<Field label="Fornecedor preferencial">
+						<select
+							className={inputClass}
+							value={config.providerPreferencial}
+							onChange={(event) =>
+								setConfig((current) => ({
+									...current,
+									providerPreferencial: event.target.value,
+								}))
+							}
+						>
+							{(config.providers || []).map((provider) => (
+								<option key={provider.id} value={provider.id}>
+									{provider.nome}
+								</option>
+							))}
+						</select>
+					</Field>
+					<Field label="Cotação por API">
+						<select
+							className={inputClass}
+							value={config.cotacaoAutomaticaAtiva ? "sim" : "nao"}
+							onChange={(event) =>
+								setConfig((current) => ({
+									...current,
+									cotacaoAutomaticaAtiva: event.target.value === "sim",
+								}))
+							}
+						>
+							<option value="nao">Desativada</option>
+							<option value="sim">Ativada</option>
+						</select>
+					</Field>
+					<Field label="Aprovação antes do pedido">
+						<select
+							className={inputClass}
+							value={config.exigeAprovacaoAntesPedido ? "sim" : "nao"}
+							onChange={(event) =>
+								setConfig((current) => ({
+									...current,
+									exigeAprovacaoAntesPedido: event.target.value === "sim",
+								}))
+							}
+						>
+							<option value="sim">Obrigatória</option>
+							<option value="nao">Não obrigatória</option>
+						</select>
+					</Field>
+				</div>
+				<Field label="Observações">
+					<textarea
+						className={inputClass}
+						rows={3}
+						value={config.observacoes || ""}
+						onChange={(event) =>
+							setConfig((current) => ({
+								...current,
+								observacoes: event.target.value,
+							}))
+						}
+					/>
+				</Field>
+				<button
+					type="button"
+					onClick={handleSaveConfig}
+					disabled={saving}
+					className="inline-flex w-fit items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
+				>
+					<Save size={16} />
+					Salvar configuração
+				</button>
+			</div>
+		</section>
+	);
+}
+
 const LogisticaPage = () => {
 	const {
 		activeTab,
@@ -755,798 +1583,68 @@ const LogisticaPage = () => {
 			</section>
 
 			{activeTab === "cotacoes" ? (
-				<section className="grid gap-6 xl:grid-cols-[420px_1fr]">
-					<form
-						onSubmit={handleSaveCotacao}
-						className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-					>
-						<div className="mb-4 flex items-center gap-2">
-							<Plus size={18} className="text-blue-600" />
-							<h2 className="text-lg font-black text-slate-950">
-								Nova cotação manual
-							</h2>
-						</div>
-						<div className="grid gap-3">
-							<Field label="Buscar cliente do mapa">
-								<div className="relative">
-									<input
-										className={inputClass}
-										value={clienteBusca}
-										onChange={(event) => setClienteBusca(event.target.value)}
-										placeholder="Digite primeiro nome, código do cliente ou O.S."
-									/>
-									{sugestoesClientes.length ? (
-										<div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-xl">
-											{sugestoesClientes.map((cliente) => (
-												<button
-													key={cliente.id}
-													type="button"
-													onClick={() => aplicarCliente(cliente)}
-													className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-blue-50"
-												>
-													<span className="block font-black text-slate-900">
-														{cliente.cliente}
-													</span>
-													<span className="block text-xs font-semibold text-slate-500">
-														{cliente.codigoCliente || "Sem código"} ·{" "}
-														{cliente.os || "Sem O.S."} ·{" "}
-														{cliente.cidade || "Sem cidade"}
-													</span>
-												</button>
-											))}
-										</div>
-									) : null}
-								</div>
-							</Field>
-							<Field label="Cliente">
-								<input
-									className={inputClass}
-									value={cotacaoForm.cliente}
-									onChange={(event) =>
-										updateCotacao("cliente", event.target.value)
-									}
-								/>
-							</Field>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Código do cliente">
-									<input
-										className={inputClass}
-										value={cotacaoForm.codigoCliente}
-										onChange={(event) =>
-											updateCotacao("codigoCliente", event.target.value)
-										}
-									/>
-								</Field>
-								<Field label="O.S.">
-									<input
-										className={inputClass}
-										value={cotacaoForm.os}
-										onChange={(event) =>
-											updateCotacao("os", event.target.value)
-										}
-									/>
-								</Field>
-							</div>
-							<Field label="Telefone">
-								<input
-									className={inputClass}
-									value={cotacaoForm.telefone}
-									onChange={(event) =>
-										updateCotacao("telefone", event.target.value)
-									}
-								/>
-							</Field>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Cidade">
-									<input
-										list="logistica-cidades"
-										className={inputClass}
-										value={cotacaoForm.cidade}
-										onChange={(event) =>
-											updateCotacao("cidade", event.target.value)
-										}
-										onBlur={handleGeocodeCotacao}
-									/>
-								</Field>
-								<Field label="Regional">
-									<input
-										className={inputClass}
-										value={cotacaoForm.regional}
-										onChange={(event) =>
-											updateCotacao("regional", event.target.value)
-										}
-									/>
-								</Field>
-							</div>
-							<Field label="Endereço de coleta">
-								<input
-									className={inputClass}
-									value={cotacaoForm.enderecoColeta}
-									onChange={(event) =>
-										updateCotacao("enderecoColeta", event.target.value)
-									}
-									onBlur={handleGeocodeCotacao}
-								/>
-							</Field>
-							<button
-								type="button"
-								onClick={handleGeocodeCotacao}
-								disabled={
-									geocodingTarget === "cotacao" ||
-									!cotacaoForm.enderecoColeta ||
-									!cotacaoForm.cidade
-								}
-								className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-							>
-								<MapPin size={14} />
-								{geocodingTarget === "cotacao"
-									? "Buscando coordenadas..."
-									: "Buscar coordenadas da coleta"}
-							</button>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Latitude da coleta">
-									<input
-										className={inputClass}
-										value={cotacaoForm.latColeta || ""}
-										onChange={(event) =>
-											updateCotacao("latColeta", event.target.value)
-										}
-										placeholder="-19.9208"
-									/>
-								</Field>
-								<Field label="Longitude da coleta">
-									<input
-										className={inputClass}
-										value={cotacaoForm.lngColeta || ""}
-										onChange={(event) =>
-											updateCotacao("lngColeta", event.target.value)
-										}
-										placeholder="-43.9378"
-									/>
-								</Field>
-							</div>
-							<div className="grid gap-3 md:grid-cols-3">
-								<Field label="Número">
-									<input
-										className={inputClass}
-										value={cotacaoForm.numeroColeta}
-										onChange={(event) =>
-											updateCotacao("numeroColeta", event.target.value)
-										}
-									/>
-								</Field>
-								<Field label="Bairro">
-									<input
-										className={inputClass}
-										value={cotacaoForm.bairroColeta}
-										onChange={(event) =>
-											updateCotacao("bairroColeta", event.target.value)
-										}
-									/>
-								</Field>
-								<Field label="Compl.">
-									<input
-										className={inputClass}
-										value={cotacaoForm.complementoColeta}
-										onChange={(event) =>
-											updateCotacao("complementoColeta", event.target.value)
-										}
-									/>
-								</Field>
-							</div>
-							<Field label="Ponto estratégico">
-								<select
-									className={inputClass}
-									value={cotacaoForm.pontoId}
-									onChange={(event) =>
-										updateCotacao("pontoId", event.target.value)
-									}
-								>
-									<option value="">Selecione</option>
-									{pontosDaCidade.map((ponto) => (
-										<option key={ponto.id} value={ponto.id}>
-											{ponto.cidade} - {ponto.nome}
-										</option>
-									))}
-								</select>
-							</Field>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Fornecedor">
-									<select
-										className={inputClass}
-										value={cotacaoForm.fornecedor}
-										onChange={(event) =>
-											updateCotacao("fornecedor", event.target.value)
-										}
-									>
-										{(config.providers || []).map((provider) => (
-											<option key={provider.id} value={provider.id}>
-												{provider.nome}
-												{provider.tipo === "api" && !provider.ativo
-													? " (em preparação)"
-													: ""}
-											</option>
-										))}
-									</select>
-								</Field>
-								<Field label="Veículo">
-									<select
-										className={inputClass}
-										value={cotacaoForm.veiculo}
-										onChange={(event) =>
-											updateCotacao("veiculo", event.target.value)
-										}
-									>
-										<option>Moto</option>
-										<option>Carro</option>
-										<option>Utilitário</option>
-										<option>Outro</option>
-									</select>
-								</Field>
-							</div>
-							<div className="grid gap-3 md:grid-cols-3">
-								<Field label="Valor">
-									<input
-										className={inputClass}
-										value={cotacaoForm.valorEstimado}
-										onChange={(event) =>
-											updateCotacao("valorEstimado", event.target.value)
-										}
-										placeholder="R$ 0,00"
-									/>
-								</Field>
-								<Field label="Prazo">
-									<input
-										className={inputClass}
-										value={cotacaoForm.prazoEstimado}
-										onChange={(event) =>
-											updateCotacao("prazoEstimado", event.target.value)
-										}
-										placeholder="Ex: 45 min"
-									/>
-								</Field>
-								<Field label="Distância">
-									<input
-										className={inputClass}
-										value={cotacaoForm.distanciaKm}
-										onChange={(event) =>
-											updateCotacao("distanciaKm", event.target.value)
-										}
-										placeholder="Ex: 8,4 km"
-									/>
-								</Field>
-							</div>
-							<Field label="Status">
-								<select
-									className={inputClass}
-									value={cotacaoForm.status}
-									onChange={(event) =>
-										updateCotacao("status", event.target.value)
-									}
-								>
-									{COTACAO_STATUS.map((status) => (
-										<option key={status.value} value={status.value}>
-											{status.label}
-										</option>
-									))}
-								</select>
-							</Field>
-							<Field label="Observações">
-								<textarea
-									className={inputClass}
-									rows={3}
-									value={cotacaoForm.observacoes}
-									onChange={(event) =>
-										updateCotacao("observacoes", event.target.value)
-									}
-								/>
-							</Field>
-							{cotacaoForm.fornecedor === "lalamove" ? (
-								<button
-									type="button"
-									onClick={handleLalamoveQuote}
-									disabled={saving}
-									className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-black text-orange-700 hover:bg-orange-100 disabled:opacity-60"
-								>
-									<Truck size={16} />
-									Cotar Lalamove
-								</button>
-							) : null}
-							<button
-								type="submit"
-								disabled={saving}
-								className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
-							>
-								<Save size={16} />
-								Salvar cotação
-							</button>
-						</div>
-					</form>
-
-					<div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-						<ListToolbar
-							search={search}
-							setSearch={setSearch}
-							pageSize={pageSize}
-							setPageSize={setPageSize}
-						/>
-						<div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-							<table className="min-w-[860px] w-full divide-y divide-slate-200 text-sm">
-								<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
-									<tr>
-										<th className="px-4 py-3">Cliente</th>
-										<th className="px-4 py-3">Origem/Destino</th>
-										<th className="px-4 py-3">Fornecedor</th>
-										<th className="px-4 py-3">Valor</th>
-										<th className="px-4 py-3">Status</th>
-										<th className="px-4 py-3">Data</th>
-										<th className="px-4 py-3">Ações</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-slate-100 bg-white">
-									{pageItems.map((item) => (
-										<tr key={item.id} className="hover:bg-slate-50">
-											<td className="px-4 py-3">
-												<p className="font-black text-slate-950">
-													{item.cliente}
-												</p>
-												<p className="text-xs text-slate-500">
-													{item.codigoCliente || "-"} · {item.os || "Sem O.S."}
-												</p>
-											</td>
-											<td className="px-4 py-3">
-												<p className="font-semibold text-slate-700">
-													{item.cidade}
-												</p>
-												<p className="text-xs text-slate-500">
-													Para: {item.pontoNome || "-"}
-												</p>
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.fornecedorNome || item.fornecedor}
-											</td>
-											<td className="px-4 py-3 font-black text-slate-900">
-												{formatMoney(item.valorEstimado)}
-											</td>
-											<td className="px-4 py-3">
-												<StatusBadge status={item.status} />
-											</td>
-											<td className="px-4 py-3 text-slate-500">
-												{formatDate(item.criadoEm)}
-											</td>
-											<td className="px-4 py-3">
-												<button
-													type="button"
-													onClick={() => handleDeleteCotacao(item.id)}
-													className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
-												>
-													<Trash2 size={15} />
-												</button>
-											</td>
-										</tr>
-									))}
-									{!pageItems.length ? (
-										<EmptyRow colSpan={7} label="Nenhuma cotação encontrada." />
-									) : null}
-								</tbody>
-							</table>
-						</div>
-						<Pagination
-							currentPage={currentPage}
-							totalPages={totalPages}
-							pageItems={pageItems}
-							total={list.length}
-							pageSize={pageSize}
-							setPage={setPage}
-						/>
-					</div>
-				</section>
+				<LogisticaCotacoesTab
+					clienteBusca={clienteBusca}
+					setClienteBusca={setClienteBusca}
+					sugestoesClientes={sugestoesClientes}
+					aplicarCliente={aplicarCliente}
+					cotacaoForm={cotacaoForm}
+					updateCotacao={updateCotacao}
+					handleGeocodeCotacao={handleGeocodeCotacao}
+					geocodingTarget={geocodingTarget}
+					pontosDaCidade={pontosDaCidade}
+					config={config}
+					handleLalamoveQuote={handleLalamoveQuote}
+					saving={saving}
+					handleSaveCotacao={handleSaveCotacao}
+					search={search}
+					setSearch={setSearch}
+					pageSize={pageSize}
+					setPageSize={setPageSize}
+					pageItems={pageItems}
+					handleDeleteCotacao={handleDeleteCotacao}
+					currentPage={currentPage}
+					totalPages={totalPages}
+					list={list}
+					setPage={setPage}
+				/>
 			) : null}
 
 			{activeTab === "pontos" ? (
-				<section className="grid gap-6 xl:grid-cols-[420px_1fr]">
-					<form
-						onSubmit={handleSavePonto}
-						className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-					>
-						<div className="mb-4 flex items-center justify-between gap-2">
-							<div className="flex items-center gap-2">
-								<MapPin size={18} className="text-blue-600" />
-								<h2 className="text-lg font-black text-slate-950">
-									{editingPonto ? "Editar ponto" : "Novo ponto"}
-								</h2>
-							</div>
-							{editingPonto ? (
-								<button
-									type="button"
-									onClick={() => {
-										setEditingPonto(false);
-										setPontoForm(DEFAULT_PONTO_FORM);
-									}}
-									className="rounded-lg border border-slate-200 p-2 text-slate-500"
-								>
-									<X size={16} />
-								</button>
-							) : null}
-						</div>
-						<div className="grid gap-3">
-							<Field label="Nome do ponto">
-								<input
-									className={inputClass}
-									value={pontoForm.nome}
-									onChange={(event) => updatePonto("nome", event.target.value)}
-								/>
-							</Field>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Cidade">
-									<input
-										list="logistica-cidades"
-										className={inputClass}
-										value={pontoForm.cidade}
-										onChange={(event) =>
-											updatePonto("cidade", event.target.value)
-										}
-										onBlur={(event) => {
-											preencherRegionalPonto(event.target.value);
-											handleGeocodePonto();
-										}}
-									/>
-								</Field>
-								<Field label="Regional">
-									<input
-										className={inputClass}
-										value={pontoForm.regional}
-										onChange={(event) =>
-											updatePonto("regional", event.target.value)
-										}
-									/>
-								</Field>
-							</div>
-							<Field label="Endereço">
-								<input
-									className={inputClass}
-									value={pontoForm.endereco}
-									onChange={(event) =>
-										updatePonto("endereco", event.target.value)
-									}
-									onBlur={handleGeocodePonto}
-								/>
-							</Field>
-							<button
-								type="button"
-								onClick={handleGeocodePonto}
-								disabled={
-									geocodingTarget === "ponto" ||
-									!pontoForm.endereco ||
-									!pontoForm.cidade
-								}
-								className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-							>
-								<MapPin size={14} />
-								{geocodingTarget === "ponto"
-									? "Buscando coordenadas..."
-									: "Buscar coordenadas do ponto"}
-							</button>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Latitude do ponto">
-									<input
-										className={inputClass}
-										value={pontoForm.lat || ""}
-										onChange={(event) => updatePonto("lat", event.target.value)}
-										placeholder="-19.9208"
-									/>
-								</Field>
-								<Field label="Longitude do ponto">
-									<input
-										className={inputClass}
-										value={pontoForm.lng || ""}
-										onChange={(event) => updatePonto("lng", event.target.value)}
-										placeholder="-43.9378"
-									/>
-								</Field>
-							</div>
-							<div className="grid gap-3 md:grid-cols-3">
-								<Field label="Número">
-									<input
-										className={inputClass}
-										value={pontoForm.numero}
-										onChange={(event) =>
-											updatePonto("numero", event.target.value)
-										}
-										onBlur={handleGeocodePonto}
-									/>
-								</Field>
-								<Field label="Bairro">
-									<input
-										className={inputClass}
-										value={pontoForm.bairro}
-										onChange={(event) =>
-											updatePonto("bairro", event.target.value)
-										}
-										onBlur={handleGeocodePonto}
-									/>
-								</Field>
-								<Field label="Complemento">
-									<input
-										className={inputClass}
-										value={pontoForm.complemento}
-										onChange={(event) =>
-											updatePonto("complemento", event.target.value)
-										}
-									/>
-								</Field>
-							</div>
-							<Field label="Referência">
-								<input
-									className={inputClass}
-									value={pontoForm.referencia}
-									onChange={(event) =>
-										updatePonto("referencia", event.target.value)
-									}
-								/>
-							</Field>
-							<div className="grid gap-3 md:grid-cols-2">
-								<Field label="Contato">
-									<input
-										className={inputClass}
-										value={pontoForm.contatoNome}
-										onChange={(event) =>
-											updatePonto("contatoNome", event.target.value)
-										}
-									/>
-								</Field>
-								<Field label="Telefone">
-									<input
-										className={inputClass}
-										value={pontoForm.contatoTelefone}
-										onChange={(event) =>
-											updatePonto("contatoTelefone", event.target.value)
-										}
-									/>
-								</Field>
-							</div>
-							<label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700">
-								<input
-									type="checkbox"
-									checked={pontoForm.ativo !== false}
-									onChange={(event) =>
-										updatePonto("ativo", event.target.checked)
-									}
-								/>
-								Ponto ativo
-							</label>
-							<button
-								type="submit"
-								disabled={saving}
-								className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
-							>
-								<Save size={16} />
-								Salvar ponto
-							</button>
-							<button
-								type="button"
-								onClick={handleCreateBasePoints}
-								disabled={saving || !cidades.length}
-								className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-							>
-								<Building2 size={16} />
-								Criar base pelas cidades
-							</button>
-						</div>
-					</form>
-					<div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-						<ListToolbar
-							search={search}
-							setSearch={setSearch}
-							pageSize={pageSize}
-							setPageSize={setPageSize}
-						/>
-						<div className="mt-4 grid gap-3">
-							{pageItems.map((ponto) => (
-								<div
-									key={ponto.id}
-									className="rounded-lg border border-slate-200 p-4"
-								>
-									<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-										<div>
-											<p className="text-lg font-black text-slate-950">
-												{ponto.nome}
-											</p>
-											<p className="text-sm font-semibold text-slate-600">
-												{ponto.cidade} · {ponto.regional || "Sem regional"}
-											</p>
-											<p className="mt-2 text-sm text-slate-500">
-												{[
-													ponto.endereco,
-													ponto.numero,
-													ponto.bairro,
-													ponto.complemento,
-												]
-													.filter(Boolean)
-													.join(", ") || "Endereço não preenchido"}
-											</p>
-											<p className="mt-1 text-xs text-slate-400">
-												{ponto.referencia || "-"}
-											</p>
-										</div>
-										<div className="flex gap-2">
-											<button
-												type="button"
-												onClick={() => {
-													setPontoForm(ponto);
-													setEditingPonto(true);
-												}}
-												className="rounded-lg border border-blue-200 p-2 text-blue-700 hover:bg-blue-50"
-											>
-												<Pencil size={15} />
-											</button>
-											<button
-												type="button"
-												onClick={() => handleDeletePonto(ponto.id)}
-												className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
-											>
-												<Trash2 size={15} />
-											</button>
-										</div>
-									</div>
-								</div>
-							))}
-							{!pageItems.length ? (
-								<div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm font-semibold text-slate-500">
-									Nenhum ponto estratégico encontrado.
-								</div>
-							) : null}
-						</div>
-						<Pagination
-							currentPage={currentPage}
-							totalPages={totalPages}
-							pageItems={pageItems}
-							total={list.length}
-							pageSize={pageSize}
-							setPage={setPage}
-						/>
-					</div>
-				</section>
+				<LogisticaPontosTab
+					handleSavePonto={handleSavePonto}
+					editingPonto={editingPonto}
+					setEditingPonto={setEditingPonto}
+					setPontoForm={setPontoForm}
+					pontoForm={pontoForm}
+					updatePonto={updatePonto}
+					preencherRegionalPonto={preencherRegionalPonto}
+					handleGeocodePonto={handleGeocodePonto}
+					geocodingTarget={geocodingTarget}
+					saving={saving}
+					handleCreateBasePoints={handleCreateBasePoints}
+					cidades={cidades}
+					search={search}
+					setSearch={setSearch}
+					pageSize={pageSize}
+					setPageSize={setPageSize}
+					pageItems={pageItems}
+					handleDeletePonto={handleDeletePonto}
+					currentPage={currentPage}
+					totalPages={totalPages}
+					list={list}
+					setPage={setPage}
+				/>
 			) : null}
 
 			{activeTab === "config" ? (
-				<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="mb-4 flex items-center gap-2">
-						<Settings size={18} className="text-blue-600" />
-						<h2 className="text-lg font-black text-slate-950">
-							Fornecedores e regras
-						</h2>
-					</div>
-					<div className="grid gap-4">
-						{(config.providers || []).map((provider) => (
-							<div
-								key={provider.id}
-								className="rounded-lg border border-slate-200 p-4"
-							>
-								<div className="grid gap-3 lg:grid-cols-[1.2fr_120px_120px_1fr]">
-									<Field label="Fornecedor">
-										<input
-											className={inputClass}
-											value={provider.nome}
-											onChange={(event) =>
-												updateProvider(provider.id, "nome", event.target.value)
-											}
-										/>
-									</Field>
-									<Field label="Tipo">
-										<input
-											className={inputClass}
-											value={provider.tipo}
-											disabled
-										/>
-									</Field>
-									<Field label="Ativo">
-										<select
-											className={inputClass}
-											value={provider.ativo ? "sim" : "nao"}
-											onChange={(event) =>
-												updateProvider(
-													provider.id,
-													"ativo",
-													event.target.value === "sim",
-												)
-											}
-										>
-											<option value="sim">Sim</option>
-											<option value="nao">Não</option>
-										</select>
-									</Field>
-									<Field label="Referência de credencial">
-										<input
-											className={inputClass}
-											value={provider.credentialRef || ""}
-											onChange={(event) =>
-												updateProvider(
-													provider.id,
-													"credentialRef",
-													event.target.value,
-												)
-											}
-											placeholder="Ex: integração cadastrada / env"
-										/>
-									</Field>
-								</div>
-							</div>
-						))}
-						<div className="grid gap-3 md:grid-cols-3">
-							<Field label="Fornecedor preferencial">
-								<select
-									className={inputClass}
-									value={config.providerPreferencial}
-									onChange={(event) =>
-										setConfig((current) => ({
-											...current,
-											providerPreferencial: event.target.value,
-										}))
-									}
-								>
-									{(config.providers || []).map((provider) => (
-										<option key={provider.id} value={provider.id}>
-											{provider.nome}
-										</option>
-									))}
-								</select>
-							</Field>
-							<Field label="Cotação por API">
-								<select
-									className={inputClass}
-									value={config.cotacaoAutomaticaAtiva ? "sim" : "nao"}
-									onChange={(event) =>
-										setConfig((current) => ({
-											...current,
-											cotacaoAutomaticaAtiva: event.target.value === "sim",
-										}))
-									}
-								>
-									<option value="nao">Desativada</option>
-									<option value="sim">Ativada</option>
-								</select>
-							</Field>
-							<Field label="Aprovação antes do pedido">
-								<select
-									className={inputClass}
-									value={config.exigeAprovacaoAntesPedido ? "sim" : "nao"}
-									onChange={(event) =>
-										setConfig((current) => ({
-											...current,
-											exigeAprovacaoAntesPedido: event.target.value === "sim",
-										}))
-									}
-								>
-									<option value="sim">Obrigatória</option>
-									<option value="nao">Não obrigatória</option>
-								</select>
-							</Field>
-						</div>
-						<Field label="Observações">
-							<textarea
-								className={inputClass}
-								rows={3}
-								value={config.observacoes || ""}
-								onChange={(event) =>
-									setConfig((current) => ({
-										...current,
-										observacoes: event.target.value,
-									}))
-								}
-							/>
-						</Field>
-						<button
-							type="button"
-							onClick={handleSaveConfig}
-							disabled={saving}
-							className="inline-flex w-fit items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-700 disabled:opacity-60"
-						>
-							<Save size={16} />
-							Salvar configuração
-						</button>
-					</div>
-				</section>
+				<LogisticaConfigTab
+					config={config}
+					updateProvider={updateProvider}
+					setConfig={setConfig}
+					handleSaveConfig={handleSaveConfig}
+					saving={saving}
+				/>
 			) : null}
 
 			<datalist id="logistica-cidades">

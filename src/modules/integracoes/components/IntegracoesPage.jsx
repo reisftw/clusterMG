@@ -921,6 +921,138 @@ function useIntegracoesController() {
 	};
 }
 
+// Extraido de IntegracoesPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — linha da tabela de integracoes, mesma
+// JSX/logica de antes.
+function IntegracaoTableRow({ item, podeEditar, handleEdit, setConfirmDelete }) {
+	return (
+		<tr className="hover:bg-gray-50">
+			<td className="px-5 py-4">
+				<div className="flex items-start gap-3">
+					<span
+						className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg ${
+							item.active
+								? "bg-blue-50 text-blue-600"
+								: "bg-gray-100 text-gray-400"
+						}`}
+					>
+						<Plug size={16} />
+					</span>
+					<div>
+						<p className="font-bold text-gray-900">{item.name}</p>
+						<p className="text-xs text-gray-500">
+							{item.provider} ·{" "}
+							{getLabel(INTEGRATION_ENVIRONMENTS, item.environment)} ·{" "}
+							{getLabel(SYNC_FREQUENCIES, item.syncFrequency)}
+						</p>
+						{item.systemManaged ? (
+							<span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+								Sistema
+							</span>
+						) : null}
+					</div>
+				</div>
+			</td>
+			<td className="max-w-[300px] px-5 py-4">
+				<div className="flex items-center gap-2 text-gray-700">
+					<Link size={14} className="shrink-0 text-gray-400" />
+					<span className="truncate font-mono text-xs">{item.baseUrl}</span>
+				</div>
+				{item.healthcheckPath ? (
+					<p className="mt-1 text-xs text-gray-400">
+						Healthcheck: {item.healthcheckPath}
+					</p>
+				) : null}
+			</td>
+			<td className="px-5 py-4">
+				<div className="flex items-center gap-2">
+					<KeyRound size={14} className="text-gray-400" />
+					<span className="text-xs font-semibold text-gray-700">
+						{getLabel(AUTH_TYPES, item.authType)}
+					</span>
+				</div>
+				<p className="mt-1 text-xs text-gray-400">
+					{item.secretConfigured
+						? `${item.credentialRef || "Credencial"} configurada`
+						: item.credentialRef || "Sem referência"}
+				</p>
+				{item.loginConfigured || item.tokenExpiresAt ? (
+					<p className="mt-1 text-xs text-gray-400">
+						{item.loginConfigured ? "Login automático configurado" : ""}
+						{item.loginConfigured && item.tokenExpiresAt ? " · " : ""}
+						{item.tokenExpiresAt
+							? `Token expira em ${new Date(item.tokenExpiresAt).toLocaleString("pt-BR")}`
+							: ""}
+					</p>
+				) : null}
+			</td>
+			<td className="px-5 py-4">
+				<div className="flex max-w-[240px] flex-wrap gap-1">
+					{(item.modules || []).length ? (
+						item.modules.map((module) => (
+							<span
+								key={module}
+								className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600"
+							>
+								{module}
+							</span>
+						))
+					) : (
+						<span className="text-xs text-gray-400">Nenhum módulo</span>
+					)}
+				</div>
+			</td>
+			<td className="px-5 py-4">
+				<span
+					className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+						STATUS_CLASS[item.lastStatus] || STATUS_CLASS.not_tested
+					}`}
+				>
+					{item.lastStatus === "ok" ? (
+						<CheckCircle2 size={13} />
+					) : (
+						<AlertCircle size={13} />
+					)}
+					{item.lastStatus === "ok"
+						? "Ok"
+						: item.lastStatus === "error"
+							? "Erro"
+							: "Não testada"}
+				</span>
+			</td>
+			{podeEditar ? (
+				<td className="px-5 py-4">
+					<div className="flex gap-1">
+						<button
+							type="button"
+							onClick={() => handleEdit(item)}
+							className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
+							aria-label="Editar integração"
+							title="Editar integração"
+						>
+							<Pencil size={15} />
+						</button>
+						<button
+							type="button"
+							onClick={() => setConfirmDelete(item)}
+							disabled={item.systemManaged}
+							className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+							aria-label="Excluir integração"
+							title={
+								item.systemManaged
+									? "Integração gerenciada pelo sistema"
+									: "Excluir integração"
+							}
+						>
+							<Trash2 size={15} />
+						</button>
+					</div>
+				</td>
+			) : null}
+		</tr>
+	);
+}
+
 export default function IntegracoesPage() {
 	const {
 		integracoes,
@@ -1088,142 +1220,13 @@ export default function IntegracoesPage() {
 							</thead>
 							<tbody className="divide-y divide-gray-100 bg-white">
 								{integracoes.map((item) => (
-									<tr key={item.id} className="hover:bg-gray-50">
-										<td className="px-5 py-4">
-											<div className="flex items-start gap-3">
-												<span
-													className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg ${
-														item.active
-															? "bg-blue-50 text-blue-600"
-															: "bg-gray-100 text-gray-400"
-													}`}
-												>
-													<Plug size={16} />
-												</span>
-												<div>
-													<p className="font-bold text-gray-900">{item.name}</p>
-													<p className="text-xs text-gray-500">
-														{item.provider} ·{" "}
-														{getLabel(
-															INTEGRATION_ENVIRONMENTS,
-															item.environment,
-														)}{" "}
-														· {getLabel(SYNC_FREQUENCIES, item.syncFrequency)}
-													</p>
-													{item.systemManaged ? (
-														<span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
-															Sistema
-														</span>
-													) : null}
-												</div>
-											</div>
-										</td>
-										<td className="max-w-[300px] px-5 py-4">
-											<div className="flex items-center gap-2 text-gray-700">
-												<Link size={14} className="shrink-0 text-gray-400" />
-												<span className="truncate font-mono text-xs">
-													{item.baseUrl}
-												</span>
-											</div>
-											{item.healthcheckPath ? (
-												<p className="mt-1 text-xs text-gray-400">
-													Healthcheck: {item.healthcheckPath}
-												</p>
-											) : null}
-										</td>
-										<td className="px-5 py-4">
-											<div className="flex items-center gap-2">
-												<KeyRound size={14} className="text-gray-400" />
-												<span className="text-xs font-semibold text-gray-700">
-													{getLabel(AUTH_TYPES, item.authType)}
-												</span>
-											</div>
-											<p className="mt-1 text-xs text-gray-400">
-												{item.secretConfigured
-													? `${item.credentialRef || "Credencial"} configurada`
-													: item.credentialRef || "Sem referência"}
-											</p>
-											{item.loginConfigured || item.tokenExpiresAt ? (
-												<p className="mt-1 text-xs text-gray-400">
-													{item.loginConfigured
-														? "Login automático configurado"
-														: ""}
-													{item.loginConfigured && item.tokenExpiresAt
-														? " · "
-														: ""}
-													{item.tokenExpiresAt
-														? `Token expira em ${new Date(item.tokenExpiresAt).toLocaleString("pt-BR")}`
-														: ""}
-												</p>
-											) : null}
-										</td>
-										<td className="px-5 py-4">
-											<div className="flex max-w-[240px] flex-wrap gap-1">
-												{(item.modules || []).length ? (
-													item.modules.map((module) => (
-														<span
-															key={module}
-															className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-600"
-														>
-															{module}
-														</span>
-													))
-												) : (
-													<span className="text-xs text-gray-400">
-														Nenhum módulo
-													</span>
-												)}
-											</div>
-										</td>
-										<td className="px-5 py-4">
-											<span
-												className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
-													STATUS_CLASS[item.lastStatus] ||
-													STATUS_CLASS.not_tested
-												}`}
-											>
-												{item.lastStatus === "ok" ? (
-													<CheckCircle2 size={13} />
-												) : (
-													<AlertCircle size={13} />
-												)}
-												{item.lastStatus === "ok"
-													? "Ok"
-													: item.lastStatus === "error"
-														? "Erro"
-														: "Não testada"}
-											</span>
-										</td>
-										{podeEditar ? (
-											<td className="px-5 py-4">
-												<div className="flex gap-1">
-													<button
-														type="button"
-														onClick={() => handleEdit(item)}
-														className="rounded-lg p-2 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
-														aria-label="Editar integração"
-														title="Editar integração"
-													>
-														<Pencil size={15} />
-													</button>
-													<button
-														type="button"
-														onClick={() => setConfirmDelete(item)}
-														disabled={item.systemManaged}
-														className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40"
-														aria-label="Excluir integração"
-														title={
-															item.systemManaged
-																? "Integração gerenciada pelo sistema"
-																: "Excluir integração"
-														}
-													>
-														<Trash2 size={15} />
-													</button>
-												</div>
-											</td>
-										) : null}
-									</tr>
+									<IntegracaoTableRow
+										key={item.id}
+										item={item}
+										podeEditar={podeEditar}
+										handleEdit={handleEdit}
+										setConfirmDelete={setConfirmDelete}
+									/>
 								))}
 							</tbody>
 						</table>

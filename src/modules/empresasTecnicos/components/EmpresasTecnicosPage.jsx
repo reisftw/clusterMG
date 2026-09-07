@@ -1840,6 +1840,471 @@ function useEmpresaProfileController({ empresa, acertos }) {
 	};
 }
 
+// Extraido de EmpresaProfile (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX/logica de antes.
+function EmpresaDriveSection({
+	loadingDrive,
+	drivePath,
+	handleBackDriveFolder,
+	loadDriveFolder,
+	driveFolder,
+	driveItems,
+	handleOpenDriveFolder,
+	handlePreviewDriveItem,
+	empresa,
+	setDocumentosError,
+}) {
+	return (
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div className="flex items-center gap-3">
+						<FolderOpen className="text-blue-600" size={20} />
+						<div>
+							<h2 className="text-lg font-black text-slate-950">
+								Arquivos da empresa
+							</h2>
+							<p className="text-sm text-slate-500">
+								Navegue pelas pastas e documentos do Drive sem sair do sistema.
+							</p>
+						</div>
+					</div>
+					<div className="flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							disabled={loadingDrive || drivePath.length <= 1}
+							onClick={handleBackDriveFolder}
+							className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+						>
+							<ArrowLeft size={14} /> Voltar
+						</button>
+						<button
+							type="button"
+							disabled={loadingDrive}
+							onClick={() => loadDriveFolder(driveFolder?.id || "")}
+							className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+						>
+							<RefreshCw
+								className={loadingDrive ? "animate-spin" : ""}
+								size={14}
+							/>{" "}
+							Atualizar
+						</button>
+					</div>
+				</div>
+
+				<div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+					{(drivePath.length ? drivePath : [{ id: "root", name: "Raiz" }]).map(
+						(part, index) => (
+							<button
+								key={`${part.id}-${index}`}
+								type="button"
+								disabled={loadingDrive || index === drivePath.length - 1}
+								onClick={() => {
+									const nextPath = drivePath.slice(0, index + 1);
+									loadDriveFolder(part.id, nextPath);
+								}}
+								className="rounded-lg px-2 py-1 hover:bg-slate-100 disabled:cursor-default disabled:bg-blue-50 disabled:text-blue-700"
+							>
+								{part.name}
+							</button>
+						),
+					)}
+				</div>
+
+				<div className="overflow-hidden rounded-2xl border border-slate-100">
+					<div className="overflow-x-auto">
+						<table className="min-w-[760px] w-full divide-y divide-slate-100 text-sm">
+							<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+								<tr>
+									<th className="px-4 py-3">Nome</th>
+									<th className="px-4 py-3">Tipo</th>
+									<th className="px-4 py-3">Tamanho</th>
+									<th className="px-4 py-3">Atualizado</th>
+									<th className="px-4 py-3 text-right">Ações</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{loadingDrive ? (
+									<tr>
+										<td
+											colSpan={5}
+											className="px-4 py-8 text-center text-sm font-bold text-blue-700"
+										>
+											<RefreshCw
+												className="mx-auto mb-2 animate-spin"
+												size={20}
+											/>
+											Carregando arquivos...
+										</td>
+									</tr>
+								) : driveItems.length ? (
+									driveItems.map((item) => (
+										<tr key={item.id}>
+											<td className="px-4 py-3 font-black text-slate-900">
+												<div className="flex items-center gap-2">
+													{item.isFolder ? (
+														<FolderOpen className="text-amber-500" size={18} />
+													) : (
+														<File className="text-blue-600" size={18} />
+													)}
+													<span className="max-w-[360px] truncate">
+														{item.name}
+													</span>
+												</div>
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.isFolder ? "Pasta" : item.mimeType || "Arquivo"}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.isFolder ? "-" : formatFileSize(item.size)}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{formatDate(item.modifiedTime || item.createdTime)}
+											</td>
+											<td className="px-4 py-3 text-right">
+												{item.isFolder ? (
+													<button
+														type="button"
+														onClick={() => handleOpenDriveFolder(item)}
+														className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-700"
+													>
+														Abrir <ExternalLink size={14} />
+													</button>
+												) : (
+													<div className="flex justify-end gap-2">
+														<button
+															type="button"
+															onClick={() => handlePreviewDriveItem(item)}
+															className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
+														>
+															<Eye size={14} />{" "}
+															{canPreviewDriveItem(item) ? "Ver" : "Baixar"}
+														</button>
+														<button
+															type="button"
+															onClick={() =>
+																baixarDriveItemEmpresa(
+																	empresa.id,
+																	item,
+																	driveFolder?.id || "",
+																).catch((error) =>
+																	setDocumentosError(
+																		error?.message ||
+																			"Não foi possível baixar o arquivo.",
+																	),
+																)
+															}
+															className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
+														>
+															<Download size={14} /> Baixar
+														</button>
+													</div>
+												)}
+											</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td
+											colSpan={5}
+											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
+										>
+											Nenhum arquivo encontrado nesta pasta.
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
+	);
+}
+
+// Extraido de EmpresaProfile (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX/logica de antes.
+function EmpresaDocumentosSection({
+	loadingDocumentos,
+	canEdit,
+	creatingFolder,
+	handleEnsureFolder,
+	driveMessage,
+	documentosError,
+	documentos,
+	setDocumentosError,
+	financeiroLoadingId,
+	handleFinanceiroEmail,
+}) {
+	return (
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div className="flex items-center gap-3">
+						<FileText className="text-blue-600" size={20} />
+						<div>
+							<h2 className="text-lg font-black text-slate-950">
+								Documentação mensal
+							</h2>
+							<p className="text-sm text-slate-500">
+								Meses enviados, status de aprovação e acesso ao pacote
+								financeiro.
+							</p>
+						</div>
+					</div>
+					<div className="flex items-center gap-2">
+						{loadingDocumentos ? (
+							<RefreshCw className="animate-spin text-blue-600" size={18} />
+						) : null}
+						{canEdit ? (
+							<button
+								type="button"
+								disabled={creatingFolder}
+								onClick={handleEnsureFolder}
+								className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+							>
+								{creatingFolder ? (
+									<RefreshCw className="animate-spin" size={14} />
+								) : (
+									<FolderPlus size={14} />
+								)}
+								Criar pasta
+							</button>
+						) : null}
+					</div>
+				</div>
+				{driveMessage ? (
+					<div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-bold text-emerald-700">
+						{driveMessage}
+					</div>
+				) : null}{" "}
+				{documentosError ? (
+					<div className="mb-3 rounded-2xl border border-red-100 bg-red-50 p-3 text-sm font-bold text-red-700">
+						{documentosError}
+					</div>
+				) : null}
+				<div className="overflow-hidden rounded-2xl border border-slate-100">
+					<div className="overflow-x-auto">
+						<table className="min-w-[760px] w-full divide-y divide-slate-100 text-sm">
+							<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+								<tr>
+									<th className="px-4 py-3">Mês</th>
+									<th className="px-4 py-3">Status</th>
+									<th className="px-4 py-3">Enviado em</th>
+									<th className="px-4 py-3">Arquivos</th>
+									<th className="px-4 py-3 text-right">Financeiro</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{documentos.length ? (
+									documentos.map((item) => (
+										<tr key={item.id}>
+											<td className="px-4 py-3 font-black text-slate-900">
+												{formatMonthLabel(item.mesReferencia)}
+											</td>
+											<td className="px-4 py-3">
+												<span className={statusBadgeClass(item.status)}>
+													{item.status}
+												</span>
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{formatDate(item.submittedAt)}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.files?.length || 0}
+											</td>
+											<td className="px-4 py-3 text-right">
+												{item.status === "aprovado" ? (
+													<div className="flex justify-end gap-2">
+														<button
+															type="button"
+															onClick={() =>
+																baixarEnvioDocumentosZip(item).catch((error) =>
+																	setDocumentosError(
+																		error?.message ||
+																			"Não foi possível baixar o ZIP.",
+																	),
+																)
+															}
+															className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
+														>
+															<Download size={14} /> ZIP
+														</button>
+														<button
+															type="button"
+															disabled={financeiroLoadingId === item.id}
+															onClick={() => handleFinanceiroEmail(item)}
+															className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-60"
+														>
+															{financeiroLoadingId === item.id ? (
+																<RefreshCw className="animate-spin" size={14} />
+															) : (
+																<Send size={14} />
+															)}
+															E-mail
+														</button>
+													</div>
+												) : (
+													<span className="text-xs font-bold text-slate-400">
+														Aguardando aprovação
+													</span>
+												)}
+											</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td
+											colSpan={5}
+											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
+										>
+											Nenhum envio de documentação encontrado para esta empresa.
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
+	);
+}
+
+// Extraido de EmpresaProfile (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX/logica de antes.
+function EmpresaTecnicosSection({
+	empresa,
+}) {
+	return (
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="mb-4 flex items-center gap-3">
+					<Users className="text-blue-600" size={20} />
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Técnicos cadastrados
+						</h2>
+						<p className="text-sm text-slate-500">
+							Equipe vinculada à empresa.
+						</p>
+					</div>
+				</div>
+				<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+					{empresa.tecnicos.length ? (
+						empresa.tecnicos.map((tecnico) => (
+							<div
+								key={tecnico.id}
+								className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+							>
+								<p className="font-black text-slate-950">{tecnico.nome}</p>
+								<span className="mt-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">
+									{OPERATIONAL_AREA_LABELS[
+										normalizeOperationalArea(tecnico.areaOperacional)
+									] || "Delivery"}
+								</span>
+								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
+									<Phone size={14} /> {tecnico.telefone || "-"}
+								</p>
+								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
+									<Mail size={14} />{" "}
+									{tecnico.emailHubsoft ||
+										tecnico.email ||
+										"Sem e-mail Hubsoft"}
+								</p>
+								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
+									<MapPin size={14} /> {tecnico.cidade || "-"}
+								</p>
+								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
+									<ShieldCheck size={14} />{" "}
+									{tecnico.supervisor?.nome ||
+										tecnico.supervisor?.email ||
+										"Sem supervisor"}
+								</p>
+							</div>
+						))
+					) : (
+						<p className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-400">
+							Nenhum técnico cadastrado.
+						</p>
+					)}
+				</div>
+			</section>
+	);
+}
+
+// Extraido de EmpresaProfile (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma JSX/logica de antes.
+function EmpresaAcertosSection({
+	loadingAcertos,
+	latestAcertos,
+}) {
+	return (
+			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="mb-4 flex items-center justify-between gap-3">
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Histórico de acerto de estoque
+						</h2>
+						<p className="text-sm text-slate-500">
+							Últimos registros vinculados à empresa.
+						</p>
+					</div>
+					{loadingAcertos ? (
+						<RefreshCw className="animate-spin text-blue-600" size={18} />
+					) : null}
+				</div>
+				<div className="overflow-hidden rounded-2xl border border-slate-100">
+					<div className="overflow-x-auto">
+						<table className="min-w-[760px] w-full divide-y divide-slate-100 text-sm">
+							<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+								<tr>
+									<th className="px-4 py-3">Código</th>
+									<th className="px-4 py-3">Data</th>
+									<th className="px-4 py-3">Cidade / turno</th>
+									<th className="px-4 py-3">Técnico</th>
+									<th className="px-4 py-3">Feito por</th>
+									<th className="px-4 py-3">Itens</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{latestAcertos.length ? (
+									latestAcertos.map((item) => (
+										<tr key={item.id}>
+											<td className="px-4 py-3 font-black text-slate-900">
+												{item.codigo}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{formatDate(item.dataAcerto)}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.cidade || "-"} / {item.turno || "-"}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.tecnico || "-"}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.feitoPor || "-"}
+											</td>
+											<td className="px-4 py-3 text-slate-600">
+												{item.produtos.length}
+											</td>
+										</tr>
+									))
+								) : (
+									<tr>
+										<td
+											colSpan={6}
+											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
+										>
+											Nenhum acerto encontrado para esta empresa.
+										</td>
+									</tr>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
+	);
+}
+
 function EmpresaProfile({
 	empresa,
 	acertos,
@@ -2084,419 +2549,40 @@ function EmpresaProfile({
 				</div>
 			</section>
 
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-					<div className="flex items-center gap-3">
-						<FolderOpen className="text-blue-600" size={20} />
-						<div>
-							<h2 className="text-lg font-black text-slate-950">
-								Arquivos da empresa
-							</h2>
-							<p className="text-sm text-slate-500">
-								Navegue pelas pastas e documentos do Drive sem sair do sistema.
-							</p>
-						</div>
-					</div>
-					<div className="flex flex-wrap items-center gap-2">
-						<button
-							type="button"
-							disabled={loadingDrive || drivePath.length <= 1}
-							onClick={handleBackDriveFolder}
-							className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-						>
-							<ArrowLeft size={14} /> Voltar
-						</button>
-						<button
-							type="button"
-							disabled={loadingDrive}
-							onClick={() => loadDriveFolder(driveFolder?.id || "")}
-							className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-						>
-							<RefreshCw
-								className={loadingDrive ? "animate-spin" : ""}
-								size={14}
-							/>{" "}
-							Atualizar
-						</button>
-					</div>
-				</div>
+			<EmpresaDriveSection
+				loadingDrive={loadingDrive}
+				drivePath={drivePath}
+				handleBackDriveFolder={handleBackDriveFolder}
+				loadDriveFolder={loadDriveFolder}
+				driveFolder={driveFolder}
+				driveItems={driveItems}
+				handleOpenDriveFolder={handleOpenDriveFolder}
+				handlePreviewDriveItem={handlePreviewDriveItem}
+				empresa={empresa}
+				setDocumentosError={setDocumentosError}
+			/>
 
-				<div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
-					{(drivePath.length ? drivePath : [{ id: "root", name: "Raiz" }]).map(
-						(part, index) => (
-							<button
-								key={`${part.id}-${index}`}
-								type="button"
-								disabled={loadingDrive || index === drivePath.length - 1}
-								onClick={() => {
-									const nextPath = drivePath.slice(0, index + 1);
-									loadDriveFolder(part.id, nextPath);
-								}}
-								className="rounded-lg px-2 py-1 hover:bg-slate-100 disabled:cursor-default disabled:bg-blue-50 disabled:text-blue-700"
-							>
-								{part.name}
-							</button>
-						),
-					)}
-				</div>
+			<EmpresaDocumentosSection
+				loadingDocumentos={loadingDocumentos}
+				canEdit={canEdit}
+				creatingFolder={creatingFolder}
+				handleEnsureFolder={handleEnsureFolder}
+				driveMessage={driveMessage}
+				documentosError={documentosError}
+				documentos={documentos}
+				setDocumentosError={setDocumentosError}
+				financeiroLoadingId={financeiroLoadingId}
+				handleFinanceiroEmail={handleFinanceiroEmail}
+			/>
 
-				<div className="overflow-hidden rounded-2xl border border-slate-100">
-					<div className="overflow-x-auto">
-						<table className="min-w-[760px] w-full divide-y divide-slate-100 text-sm">
-							<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
-								<tr>
-									<th className="px-4 py-3">Nome</th>
-									<th className="px-4 py-3">Tipo</th>
-									<th className="px-4 py-3">Tamanho</th>
-									<th className="px-4 py-3">Atualizado</th>
-									<th className="px-4 py-3 text-right">Ações</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-slate-100">
-								{loadingDrive ? (
-									<tr>
-										<td
-											colSpan={5}
-											className="px-4 py-8 text-center text-sm font-bold text-blue-700"
-										>
-											<RefreshCw
-												className="mx-auto mb-2 animate-spin"
-												size={20}
-											/>
-											Carregando arquivos...
-										</td>
-									</tr>
-								) : driveItems.length ? (
-									driveItems.map((item) => (
-										<tr key={item.id}>
-											<td className="px-4 py-3 font-black text-slate-900">
-												<div className="flex items-center gap-2">
-													{item.isFolder ? (
-														<FolderOpen className="text-amber-500" size={18} />
-													) : (
-														<File className="text-blue-600" size={18} />
-													)}
-													<span className="max-w-[360px] truncate">
-														{item.name}
-													</span>
-												</div>
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.isFolder ? "Pasta" : item.mimeType || "Arquivo"}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.isFolder ? "-" : formatFileSize(item.size)}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{formatDate(item.modifiedTime || item.createdTime)}
-											</td>
-											<td className="px-4 py-3 text-right">
-												{item.isFolder ? (
-													<button
-														type="button"
-														onClick={() => handleOpenDriveFolder(item)}
-														className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-700"
-													>
-														Abrir <ExternalLink size={14} />
-													</button>
-												) : (
-													<div className="flex justify-end gap-2">
-														<button
-															type="button"
-															onClick={() => handlePreviewDriveItem(item)}
-															className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
-														>
-															<Eye size={14} />{" "}
-															{canPreviewDriveItem(item) ? "Ver" : "Baixar"}
-														</button>
-														<button
-															type="button"
-															onClick={() =>
-																baixarDriveItemEmpresa(
-																	empresa.id,
-																	item,
-																	driveFolder?.id || "",
-																).catch((error) =>
-																	setDocumentosError(
-																		error?.message ||
-																			"Não foi possível baixar o arquivo.",
-																	),
-																)
-															}
-															className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50"
-														>
-															<Download size={14} /> Baixar
-														</button>
-													</div>
-												)}
-											</td>
-										</tr>
-									))
-								) : (
-									<tr>
-										<td
-											colSpan={5}
-											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
-										>
-											Nenhum arquivo encontrado nesta pasta.
-										</td>
-									</tr>
-								)}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			</section>
+			<EmpresaTecnicosSection
+				empresa={empresa}
+			/>
 
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<div className="flex items-center gap-3">
-						<FileText className="text-blue-600" size={20} />
-						<div>
-							<h2 className="text-lg font-black text-slate-950">
-								Documentação mensal
-							</h2>
-							<p className="text-sm text-slate-500">
-								Meses enviados, status de aprovação e acesso ao pacote
-								financeiro.
-							</p>
-						</div>
-					</div>
-					<div className="flex items-center gap-2">
-						{loadingDocumentos ? (
-							<RefreshCw className="animate-spin text-blue-600" size={18} />
-						) : null}
-						{canEdit ? (
-							<button
-								type="button"
-								disabled={creatingFolder}
-								onClick={handleEnsureFolder}
-								className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50 disabled:opacity-60"
-							>
-								{creatingFolder ? (
-									<RefreshCw className="animate-spin" size={14} />
-								) : (
-									<FolderPlus size={14} />
-								)}
-								Criar pasta
-							</button>
-						) : null}
-					</div>
-				</div>
-				{driveMessage ? (
-					<div className="mb-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-bold text-emerald-700">
-						{driveMessage}
-					</div>
-				) : null}{" "}
-				{documentosError ? (
-					<div className="mb-3 rounded-2xl border border-red-100 bg-red-50 p-3 text-sm font-bold text-red-700">
-						{documentosError}
-					</div>
-				) : null}
-				<div className="overflow-hidden rounded-2xl border border-slate-100">
-					<div className="overflow-x-auto">
-						<table className="min-w-[760px] w-full divide-y divide-slate-100 text-sm">
-							<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
-								<tr>
-									<th className="px-4 py-3">Mês</th>
-									<th className="px-4 py-3">Status</th>
-									<th className="px-4 py-3">Enviado em</th>
-									<th className="px-4 py-3">Arquivos</th>
-									<th className="px-4 py-3 text-right">Financeiro</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-slate-100">
-								{documentos.length ? (
-									documentos.map((item) => (
-										<tr key={item.id}>
-											<td className="px-4 py-3 font-black text-slate-900">
-												{formatMonthLabel(item.mesReferencia)}
-											</td>
-											<td className="px-4 py-3">
-												<span className={statusBadgeClass(item.status)}>
-													{item.status}
-												</span>
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{formatDate(item.submittedAt)}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.files?.length || 0}
-											</td>
-											<td className="px-4 py-3 text-right">
-												{item.status === "aprovado" ? (
-													<div className="flex justify-end gap-2">
-														<button
-															type="button"
-															onClick={() =>
-																baixarEnvioDocumentosZip(item).catch((error) =>
-																	setDocumentosError(
-																		error?.message ||
-																			"Não foi possível baixar o ZIP.",
-																	),
-																)
-															}
-															className="inline-flex items-center gap-2 rounded-xl border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-50"
-														>
-															<Download size={14} /> ZIP
-														</button>
-														<button
-															type="button"
-															disabled={financeiroLoadingId === item.id}
-															onClick={() => handleFinanceiroEmail(item)}
-															className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-60"
-														>
-															{financeiroLoadingId === item.id ? (
-																<RefreshCw className="animate-spin" size={14} />
-															) : (
-																<Send size={14} />
-															)}
-															E-mail
-														</button>
-													</div>
-												) : (
-													<span className="text-xs font-bold text-slate-400">
-														Aguardando aprovação
-													</span>
-												)}
-											</td>
-										</tr>
-									))
-								) : (
-									<tr>
-										<td
-											colSpan={5}
-											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
-										>
-											Nenhum envio de documentação encontrado para esta empresa.
-										</td>
-									</tr>
-								)}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			</section>
-
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="mb-4 flex items-center gap-3">
-					<Users className="text-blue-600" size={20} />
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Técnicos cadastrados
-						</h2>
-						<p className="text-sm text-slate-500">
-							Equipe vinculada à empresa.
-						</p>
-					</div>
-				</div>
-				<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-					{empresa.tecnicos.length ? (
-						empresa.tecnicos.map((tecnico) => (
-							<div
-								key={tecnico.id}
-								className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-							>
-								<p className="font-black text-slate-950">{tecnico.nome}</p>
-								<span className="mt-2 inline-flex rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-blue-700">
-									{OPERATIONAL_AREA_LABELS[
-										normalizeOperationalArea(tecnico.areaOperacional)
-									] || "Delivery"}
-								</span>
-								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
-									<Phone size={14} /> {tecnico.telefone || "-"}
-								</p>
-								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
-									<Mail size={14} />{" "}
-									{tecnico.emailHubsoft ||
-										tecnico.email ||
-										"Sem e-mail Hubsoft"}
-								</p>
-								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
-									<MapPin size={14} /> {tecnico.cidade || "-"}
-								</p>
-								<p className="mt-1 flex items-center gap-2 text-sm font-semibold text-slate-500">
-									<ShieldCheck size={14} />{" "}
-									{tecnico.supervisor?.nome ||
-										tecnico.supervisor?.email ||
-										"Sem supervisor"}
-								</p>
-							</div>
-						))
-					) : (
-						<p className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm font-bold text-slate-400">
-							Nenhum técnico cadastrado.
-						</p>
-					)}
-				</div>
-			</section>
-
-			<section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="mb-4 flex items-center justify-between gap-3">
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Histórico de acerto de estoque
-						</h2>
-						<p className="text-sm text-slate-500">
-							Últimos registros vinculados à empresa.
-						</p>
-					</div>
-					{loadingAcertos ? (
-						<RefreshCw className="animate-spin text-blue-600" size={18} />
-					) : null}
-				</div>
-				<div className="overflow-hidden rounded-2xl border border-slate-100">
-					<div className="overflow-x-auto">
-						<table className="min-w-[760px] w-full divide-y divide-slate-100 text-sm">
-							<thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
-								<tr>
-									<th className="px-4 py-3">Código</th>
-									<th className="px-4 py-3">Data</th>
-									<th className="px-4 py-3">Cidade / turno</th>
-									<th className="px-4 py-3">Técnico</th>
-									<th className="px-4 py-3">Feito por</th>
-									<th className="px-4 py-3">Itens</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-slate-100">
-								{latestAcertos.length ? (
-									latestAcertos.map((item) => (
-										<tr key={item.id}>
-											<td className="px-4 py-3 font-black text-slate-900">
-												{item.codigo}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{formatDate(item.dataAcerto)}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.cidade || "-"} / {item.turno || "-"}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.tecnico || "-"}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.feitoPor || "-"}
-											</td>
-											<td className="px-4 py-3 text-slate-600">
-												{item.produtos.length}
-											</td>
-										</tr>
-									))
-								) : (
-									<tr>
-										<td
-											colSpan={6}
-											className="px-4 py-8 text-center text-sm font-bold text-slate-400"
-										>
-											Nenhum acerto encontrado para esta empresa.
-										</td>
-									</tr>
-								)}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			</section>
+			<EmpresaAcertosSection
+				loadingAcertos={loadingAcertos}
+				latestAcertos={latestAcertos}
+			/>
 		</div>
 	);
 }
