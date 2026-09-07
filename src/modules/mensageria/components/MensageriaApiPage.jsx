@@ -639,6 +639,252 @@ function useMensageriaApiController() {
 	};
 }
 
+// Extraido de MensageriaApiPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesmo JSX/logica de antes (inclusive o
+// guard `(config.whatsappProvider || "evolution") === "evolution"`,
+// que virou early-return), so tirado da funcao do componente principal.
+function EvolutionApiSection({
+	config,
+	updateConfig,
+	canManage,
+	connection,
+	connectionLabel,
+	saving,
+	openDisconnectLogs,
+	handleConnect,
+	handleDisconnect,
+	handleConfigureWebhook,
+	qr,
+}) {
+	if ((config.whatsappProvider || "evolution") !== "evolution") return null;
+	return (
+		<section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+			<div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+					<div className="flex items-center gap-2 text-slate-900">
+						<MessageCircle size={18} className="text-emerald-600" />
+						<h2 className="text-lg font-bold">Evolution API</h2>
+					</div>
+					<button
+						type="button"
+						onClick={openDisconnectLogs}
+						className="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+					>
+						<FileClock size={16} />
+						Logs
+					</button>
+				</div>
+				<div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
+					<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+						<div>
+							<p className="text-sm font-bold text-blue-900">
+								Conta principal Evolution
+							</p>
+							<p className="mt-1 text-xs font-semibold text-blue-700">
+								O envio utiliza somente a instância configurada abaixo. Ao
+								pausar e iniciar novamente, a fila continua do próximo cliente
+								pendente.
+							</p>
+						</div>
+						<span
+							className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+								connection.connected
+									? "bg-emerald-100 text-emerald-800"
+									: "bg-slate-100 text-slate-600"
+							}`}
+						>
+							{connection.connected ? "Conectada" : connectionLabel}
+						</span>
+					</div>
+					<div className="mt-3 grid gap-3 md:grid-cols-3">
+						<div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+							<p className="text-xs font-bold uppercase text-blue-500">
+								Instância
+							</p>
+							<p className="mt-1 text-sm font-bold text-blue-950">
+								{config.evolutionInstance || "-"}
+							</p>
+						</div>
+						<div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+							<p className="text-xs font-bold uppercase text-blue-500">
+								Número conectado
+							</p>
+							<p className="mt-1 text-sm font-bold text-blue-950">
+								{connection.number || "-"}
+							</p>
+						</div>
+						<div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
+							<p className="text-xs font-bold uppercase text-blue-500">Fila</p>
+							<p className="mt-1 text-sm font-bold text-blue-950">
+								{config.evolutionPaused ? "Pausada" : "Automática"}
+							</p>
+						</div>
+					</div>
+				</div>
+				<div className="mt-5 grid gap-4 md:grid-cols-2">
+					<label className="block">
+						<span className="text-sm font-semibold text-slate-700">
+							URL da Evolution
+						</span>
+						<input
+							value={config.evolutionBaseUrl || ""}
+							onChange={(event) =>
+								updateConfig("evolutionBaseUrl", event.target.value)
+							}
+							disabled={!canManage}
+							placeholder="http://127.0.0.1:8080"
+							className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+						/>
+					</label>
+					<label className="block">
+						<span className="text-sm font-semibold text-slate-700">
+							Instância
+						</span>
+						<input
+							value={config.evolutionInstance || ""}
+							onChange={(event) =>
+								updateConfig("evolutionInstance", event.target.value)
+							}
+							disabled={!canManage}
+							placeholder="retiradas"
+							className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+						/>
+					</label>
+					<label className="block md:col-span-2">
+						<span className="text-sm font-semibold text-slate-700">
+							API Key
+						</span>
+						<input
+							value={config.evolutionApiKey || ""}
+							onChange={(event) =>
+								updateConfig("evolutionApiKey", event.target.value)
+							}
+							disabled={!canManage}
+							placeholder="apikey da Evolution"
+							className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+						/>
+					</label>
+					<label className="block">
+						<span className="text-sm font-semibold text-slate-700">
+							Delay mínimo entre envios
+						</span>
+						<input
+							type="number"
+							min="5"
+							value={config.evolutionMinDelaySeconds || 45}
+							onChange={(event) =>
+								updateConfig("evolutionMinDelaySeconds", event.target.value)
+							}
+							disabled={!canManage}
+							className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+						/>
+					</label>
+					<label className="block">
+						<span className="text-sm font-semibold text-slate-700">
+							Delay máximo entre envios
+						</span>
+						<input
+							type="number"
+							min="10"
+							value={config.evolutionMaxDelaySeconds || 120}
+							onChange={(event) =>
+								updateConfig("evolutionMaxDelaySeconds", event.target.value)
+							}
+							disabled={!canManage}
+							className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+						/>
+					</label>
+					<label className="block md:col-span-2">
+						<span className="text-sm font-semibold text-slate-700">
+							Webhook de respostas
+						</span>
+						<input
+							value={config.evolutionWebhookUrl || ""}
+							onChange={(event) =>
+								updateConfig("evolutionWebhookUrl", event.target.value)
+							}
+							disabled={!canManage}
+							placeholder="https://retiradas.tech/api/webhooks/evolution"
+							className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+						/>
+						<p className="mt-1 text-xs font-medium text-slate-500">
+							Esse endpoint recebe as mensagens dos clientes para registrar
+							respostas e criar agendamentos.
+						</p>
+					</label>
+				</div>
+			</div>
+
+			<div className="rounded-lg border border-blue-200 bg-white p-5 shadow-sm">
+				<div className="flex items-center gap-2 text-slate-900">
+					<ShieldCheck size={18} className="text-blue-600" />
+					<h2 className="text-lg font-bold">Conexão WhatsApp</h2>
+				</div>
+				<button
+					type="button"
+					onClick={handleConnect}
+					disabled={saving || !canManage}
+					className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					<QrCode size={17} />
+					{saving ? "Gerando..." : "Gerar QR Code"}
+				</button>
+				{connection.connected ? (
+					<button
+						type="button"
+						onClick={handleDisconnect}
+						disabled={saving || !canManage}
+						className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<LogOut size={17} />
+						Desconectar aparelho
+					</button>
+				) : null}
+				<button
+					type="button"
+					onClick={handleConfigureWebhook}
+					disabled={saving || !canManage}
+					className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+				>
+					Configurar respostas
+				</button>
+				{config.evolutionWebhookConfiguredAt ? (
+					<p className="mt-2 text-xs font-semibold text-emerald-700">
+						Webhook configurado em{" "}
+						{new Date(config.evolutionWebhookConfiguredAt).toLocaleString(
+							"pt-BR",
+						)}
+					</p>
+				) : null}
+
+				{qr ? (
+					<div className="mt-4">
+						{qr.imageSrc ? (
+							<img
+								src={qr.imageSrc}
+								alt="QR Code WhatsApp Evolution"
+								className="mx-auto h-64 w-64 rounded-lg border border-blue-200 bg-white object-contain p-2"
+							/>
+						) : (
+							<code className="block break-all rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-slate-800">
+								{qr.raw || "QR Code não retornado pela Evolution."}
+							</code>
+						)}
+						<p className="mt-3 text-sm text-slate-600">
+							Abra o WhatsApp, acesse aparelhos conectados e escaneie o QR
+							Code.
+						</p>
+					</div>
+				) : (
+					<p className="mt-4 text-sm text-slate-500">
+						Salve a API e gere o QR Code para conectar o aparelho.
+					</p>
+				)}
+			</div>
+		</section>
+	);
+}
+
 const MensageriaApiPage = () => {
 	const {
 		canManage,
@@ -698,234 +944,19 @@ const MensageriaApiPage = () => {
 				canManage={canManage}
 			/>
 
-			{(config.whatsappProvider || "evolution") === "evolution" ? (
-				<section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-					<div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-						<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-							<div className="flex items-center gap-2 text-slate-900">
-								<MessageCircle size={18} className="text-emerald-600" />
-								<h2 className="text-lg font-bold">Evolution API</h2>
-							</div>
-							<button
-								type="button"
-								onClick={openDisconnectLogs}
-								className="inline-flex w-fit items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-							>
-								<FileClock size={16} />
-								Logs
-							</button>
-						</div>
-						<div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-4">
-							<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-								<div>
-									<p className="text-sm font-bold text-blue-900">
-										Conta principal Evolution
-									</p>
-									<p className="mt-1 text-xs font-semibold text-blue-700">
-										O envio utiliza somente a instância configurada abaixo. Ao
-										pausar e iniciar novamente, a fila continua do próximo
-										cliente pendente.
-									</p>
-								</div>
-								<span
-									className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
-										connection.connected
-											? "bg-emerald-100 text-emerald-800"
-											: "bg-slate-100 text-slate-600"
-									}`}
-								>
-									{connection.connected ? "Conectada" : connectionLabel}
-								</span>
-							</div>
-							<div className="mt-3 grid gap-3 md:grid-cols-3">
-								<div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
-									<p className="text-xs font-bold uppercase text-blue-500">
-										Instância
-									</p>
-									<p className="mt-1 text-sm font-bold text-blue-950">
-										{config.evolutionInstance || "-"}
-									</p>
-								</div>
-								<div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
-									<p className="text-xs font-bold uppercase text-blue-500">
-										Número conectado
-									</p>
-									<p className="mt-1 text-sm font-bold text-blue-950">
-										{connection.number || "-"}
-									</p>
-								</div>
-								<div className="rounded-lg border border-blue-200 bg-white px-3 py-2">
-									<p className="text-xs font-bold uppercase text-blue-500">
-										Fila
-									</p>
-									<p className="mt-1 text-sm font-bold text-blue-950">
-										{config.evolutionPaused ? "Pausada" : "Automática"}
-									</p>
-								</div>
-							</div>
-						</div>
-						<div className="mt-5 grid gap-4 md:grid-cols-2">
-							<label className="block">
-								<span className="text-sm font-semibold text-slate-700">
-									URL da Evolution
-								</span>
-								<input
-									value={config.evolutionBaseUrl || ""}
-									onChange={(event) =>
-										updateConfig("evolutionBaseUrl", event.target.value)
-									}
-									disabled={!canManage}
-									placeholder="http://127.0.0.1:8080"
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-								/>
-							</label>
-							<label className="block">
-								<span className="text-sm font-semibold text-slate-700">
-									Instância
-								</span>
-								<input
-									value={config.evolutionInstance || ""}
-									onChange={(event) =>
-										updateConfig("evolutionInstance", event.target.value)
-									}
-									disabled={!canManage}
-									placeholder="retiradas"
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-								/>
-							</label>
-							<label className="block md:col-span-2">
-								<span className="text-sm font-semibold text-slate-700">
-									API Key
-								</span>
-								<input
-									value={config.evolutionApiKey || ""}
-									onChange={(event) =>
-										updateConfig("evolutionApiKey", event.target.value)
-									}
-									disabled={!canManage}
-									placeholder="apikey da Evolution"
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-								/>
-							</label>
-							<label className="block">
-								<span className="text-sm font-semibold text-slate-700">
-									Delay mínimo entre envios
-								</span>
-								<input
-									type="number"
-									min="5"
-									value={config.evolutionMinDelaySeconds || 45}
-									onChange={(event) =>
-										updateConfig("evolutionMinDelaySeconds", event.target.value)
-									}
-									disabled={!canManage}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-								/>
-							</label>
-							<label className="block">
-								<span className="text-sm font-semibold text-slate-700">
-									Delay máximo entre envios
-								</span>
-								<input
-									type="number"
-									min="10"
-									value={config.evolutionMaxDelaySeconds || 120}
-									onChange={(event) =>
-										updateConfig("evolutionMaxDelaySeconds", event.target.value)
-									}
-									disabled={!canManage}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-								/>
-							</label>
-							<label className="block md:col-span-2">
-								<span className="text-sm font-semibold text-slate-700">
-									Webhook de respostas
-								</span>
-								<input
-									value={config.evolutionWebhookUrl || ""}
-									onChange={(event) =>
-										updateConfig("evolutionWebhookUrl", event.target.value)
-									}
-									disabled={!canManage}
-									placeholder="https://retiradas.tech/api/webhooks/evolution"
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-								/>
-								<p className="mt-1 text-xs font-medium text-slate-500">
-									Esse endpoint recebe as mensagens dos clientes para registrar
-									respostas e criar agendamentos.
-								</p>
-							</label>
-						</div>
-					</div>
-
-					<div className="rounded-lg border border-blue-200 bg-white p-5 shadow-sm">
-						<div className="flex items-center gap-2 text-slate-900">
-							<ShieldCheck size={18} className="text-blue-600" />
-							<h2 className="text-lg font-bold">Conexão WhatsApp</h2>
-						</div>
-						<button
-							type="button"
-							onClick={handleConnect}
-							disabled={saving || !canManage}
-							className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<QrCode size={17} />
-							{saving ? "Gerando..." : "Gerar QR Code"}
-						</button>
-						{connection.connected ? (
-							<button
-								type="button"
-								onClick={handleDisconnect}
-								disabled={saving || !canManage}
-								className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								<LogOut size={17} />
-								Desconectar aparelho
-							</button>
-						) : null}
-						<button
-							type="button"
-							onClick={handleConfigureWebhook}
-							disabled={saving || !canManage}
-							className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							Configurar respostas
-						</button>
-						{config.evolutionWebhookConfiguredAt ? (
-							<p className="mt-2 text-xs font-semibold text-emerald-700">
-								Webhook configurado em{" "}
-								{new Date(config.evolutionWebhookConfiguredAt).toLocaleString(
-									"pt-BR",
-								)}
-							</p>
-						) : null}
-
-						{qr ? (
-							<div className="mt-4">
-								{qr.imageSrc ? (
-									<img
-										src={qr.imageSrc}
-										alt="QR Code WhatsApp Evolution"
-										className="mx-auto h-64 w-64 rounded-lg border border-blue-200 bg-white object-contain p-2"
-									/>
-								) : (
-									<code className="block break-all rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-slate-800">
-										{qr.raw || "QR Code não retornado pela Evolution."}
-									</code>
-								)}
-								<p className="mt-3 text-sm text-slate-600">
-									Abra o WhatsApp, acesse aparelhos conectados e escaneie o QR
-									Code.
-								</p>
-							</div>
-						) : (
-							<p className="mt-4 text-sm text-slate-500">
-								Salve a API e gere o QR Code para conectar o aparelho.
-							</p>
-						)}
-					</div>
-				</section>
-			) : null}
+			<EvolutionApiSection
+				config={config}
+				updateConfig={updateConfig}
+				canManage={canManage}
+				connection={connection}
+				connectionLabel={connectionLabel}
+				saving={saving}
+				openDisconnectLogs={openDisconnectLogs}
+				handleConnect={handleConnect}
+				handleDisconnect={handleDisconnect}
+				handleConfigureWebhook={handleConfigureWebhook}
+				qr={qr}
+			/>
 
 			{disconnectLogsOpen ? (
 				<EvolutionDisconnectLogsModal

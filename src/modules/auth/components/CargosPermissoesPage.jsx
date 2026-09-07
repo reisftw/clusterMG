@@ -436,6 +436,158 @@ function useCargosPermissoesController() {
 	};
 }
 
+// Extraidos de CargosPermissoesPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesmo JSX/logica de antes, so tirando os
+// .map/ternarios aninhados da funcao do componente principal.
+function RoleListButton({ role, isSelected, permissionCatalog, onSelect }) {
+	const expanded = expandCatalogPermissions(
+		role.permissions || [],
+		permissionCatalog,
+	);
+	return (
+		<button
+			type="button"
+			onClick={() => onSelect(role.id)}
+			className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+				isSelected
+					? "border-blue-300 bg-blue-50 text-blue-900"
+					: "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+			}`}
+		>
+			<div className="flex items-center justify-between gap-2">
+				<span className="font-black">{role.name || getRoleLabel(role.id)}</span>
+				{role.id === ROLES.ADMIN ? <LockKeyhole size={16} /> : null}
+			</div>
+			<p className="mt-1 text-xs font-semibold text-slate-500">
+				{role.permissions?.includes("*")
+					? "Acesso total"
+					: `${expanded.length} permissão(ões) novas`}
+			</p>
+		</button>
+	);
+}
+
+function PermissionFeatureRow({
+	feature,
+	isAdminRole,
+	selectedPermissions,
+	canEditDraft,
+	togglePermission,
+}) {
+	const viewPermission = feature.permissions.view;
+	const managePermission = feature.permissions.manage;
+	const hasView = viewPermission
+		? isAdminRole || selectedPermissions.includes(viewPermission.id)
+		: false;
+	const hasManage = managePermission
+		? isAdminRole || selectedPermissions.includes(managePermission.id)
+		: false;
+	return (
+		<div className="grid grid-cols-[minmax(0,1fr)_120px_120px] items-center gap-2 border-t border-slate-100 px-4 py-3">
+			<div className="min-w-0">
+				<p className="break-anywhere text-sm font-black text-slate-900">
+					{feature.label}
+				</p>
+				{feature.description ? (
+					<p className="mt-1 break-anywhere text-xs font-semibold text-slate-500">
+						{feature.description}
+					</p>
+				) : null}
+			</div>
+			<label className="flex justify-center">
+				{viewPermission ? (
+					<input
+						type="checkbox"
+						checked={hasView}
+						disabled={!canEditDraft}
+						onChange={(event) =>
+							togglePermission(viewPermission.id, event.target.checked)
+						}
+						aria-label={`${ACTION_LABELS.view} ${feature.label}`}
+						className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+					/>
+				) : (
+					<span className="text-xs font-bold text-slate-300">-</span>
+				)}
+			</label>
+			<label className="flex justify-center">
+				{managePermission ? (
+					<input
+						type="checkbox"
+						checked={hasManage}
+						disabled={!canEditDraft}
+						onChange={(event) =>
+							togglePermission(managePermission.id, event.target.checked)
+						}
+						aria-label={`${ACTION_LABELS.manage} ${feature.label}`}
+						className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+					/>
+				) : (
+					<span className="text-xs font-bold text-slate-300">-</span>
+				)}
+			</label>
+		</div>
+	);
+}
+
+function PermissionMatrixSection({
+	section,
+	isAdminRole,
+	selectedPermissions,
+	canEditDraft,
+	togglePermission,
+}) {
+	return (
+		<div className="rounded-2xl border border-slate-200 p-4">
+			<h3 className="font-black text-slate-900">{section.label}</h3>
+			<div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+				<div className="grid grid-cols-[minmax(0,1fr)_120px_120px] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500">
+					<span>Funcionalidade</span>
+					<span className="text-center">Visualizar</span>
+					<span className="text-center">Gerenciar</span>
+				</div>
+				{section.features.map((feature) => (
+					<PermissionFeatureRow
+						key={feature.id}
+						feature={feature}
+						isAdminRole={isAdminRole}
+						selectedPermissions={selectedPermissions}
+						canEditDraft={canEditDraft}
+						togglePermission={togglePermission}
+					/>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function PermissionMatrix({
+	groupedCatalog,
+	isAdminRole,
+	selectedPermissions,
+	canEditDraft,
+	togglePermission,
+}) {
+	if (!groupedCatalog.length) {
+		return (
+			<div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-400">
+				Catálogo novo de permissões não carregado. Rode a migration 017 antes
+				de editar cargos.
+			</div>
+		);
+	}
+	return groupedCatalog.map((section) => (
+		<PermissionMatrixSection
+			key={section.id}
+			section={section}
+			isAdminRole={isAdminRole}
+			selectedPermissions={selectedPermissions}
+			canEditDraft={canEditDraft}
+			togglePermission={togglePermission}
+		/>
+	));
+}
+
 export default function CargosPermissoesPage() {
 	const {
 		viewAsRole,
@@ -582,36 +734,15 @@ export default function CargosPermissoesPage() {
 						Cargos cadastrados
 					</div>
 					<div className="space-y-2">
-						{roles.map((role) => {
-							const expanded = expandCatalogPermissions(
-								role.permissions || [],
-								permissionCatalog,
-							);
-							return (
-								<button
-									type="button"
-									key={role.id}
-									onClick={() => setSelectedId(role.id)}
-									className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-										selectedId === role.id
-											? "border-blue-300 bg-blue-50 text-blue-900"
-											: "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-									}`}
-								>
-									<div className="flex items-center justify-between gap-2">
-										<span className="font-black">
-											{role.name || getRoleLabel(role.id)}
-										</span>
-										{role.id === ROLES.ADMIN ? <LockKeyhole size={16} /> : null}
-									</div>
-									<p className="mt-1 text-xs font-semibold text-slate-500">
-										{role.permissions?.includes("*")
-											? "Acesso total"
-											: `${expanded.length} permissão(ões) novas`}
-									</p>
-								</button>
-							);
-						})}
+						{roles.map((role) => (
+							<RoleListButton
+								key={role.id}
+								role={role}
+								isSelected={selectedId === role.id}
+								permissionCatalog={permissionCatalog}
+								onSelect={setSelectedId}
+							/>
+						))}
 					</div>
 				</aside>
 
@@ -687,101 +818,13 @@ export default function CargosPermissoesPage() {
 							</div>
 
 							<div className="mt-5 space-y-4">
-								{groupedCatalog.length ? (
-									groupedCatalog.map((section) => (
-										<div
-											key={section.id}
-											className="rounded-2xl border border-slate-200 p-4"
-										>
-											<h3 className="font-black text-slate-900">
-												{section.label}
-											</h3>
-											<div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
-												<div className="grid grid-cols-[minmax(0,1fr)_120px_120px] bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-wide text-slate-500">
-													<span>Funcionalidade</span>
-													<span className="text-center">Visualizar</span>
-													<span className="text-center">Gerenciar</span>
-												</div>
-												{section.features.map((feature) => {
-													const viewPermission = feature.permissions.view;
-													const managePermission = feature.permissions.manage;
-													const hasView = viewPermission
-														? isAdminRole ||
-															selectedPermissions.includes(viewPermission.id)
-														: false;
-													const hasManage = managePermission
-														? isAdminRole ||
-															selectedPermissions.includes(managePermission.id)
-														: false;
-													return (
-														<div
-															key={feature.id}
-															className="grid grid-cols-[minmax(0,1fr)_120px_120px] items-center gap-2 border-t border-slate-100 px-4 py-3"
-														>
-															<div className="min-w-0">
-																<p className="break-anywhere text-sm font-black text-slate-900">
-																	{feature.label}
-																</p>
-																{feature.description ? (
-																	<p className="mt-1 break-anywhere text-xs font-semibold text-slate-500">
-																		{feature.description}
-																	</p>
-																) : null}
-															</div>
-															<label className="flex justify-center">
-																{viewPermission ? (
-																	<input
-																		type="checkbox"
-																		checked={hasView}
-																		disabled={!canEditDraft}
-																		onChange={(event) =>
-																			togglePermission(
-																				viewPermission.id,
-																				event.target.checked,
-																			)
-																		}
-																		aria-label={`${ACTION_LABELS.view} ${feature.label}`}
-																		className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-																	/>
-																) : (
-																	<span className="text-xs font-bold text-slate-300">
-																		-
-																	</span>
-																)}
-															</label>
-															<label className="flex justify-center">
-																{managePermission ? (
-																	<input
-																		type="checkbox"
-																		checked={hasManage}
-																		disabled={!canEditDraft}
-																		onChange={(event) =>
-																			togglePermission(
-																				managePermission.id,
-																				event.target.checked,
-																			)
-																		}
-																		aria-label={`${ACTION_LABELS.manage} ${feature.label}`}
-																		className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-																	/>
-																) : (
-																	<span className="text-xs font-bold text-slate-300">
-																		-
-																	</span>
-																)}
-															</label>
-														</div>
-													);
-												})}
-											</div>
-										</div>
-									))
-								) : (
-									<div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm font-bold text-slate-400">
-										Catálogo novo de permissões não carregado. Rode a migration
-										017 antes de editar cargos.
-									</div>
-								)}
+								<PermissionMatrix
+									groupedCatalog={groupedCatalog}
+									isAdminRole={isAdminRole}
+									selectedPermissions={selectedPermissions}
+									canEditDraft={canEditDraft}
+									togglePermission={togglePermission}
+								/>
 							</div>
 
 							<div className="mt-5 flex flex-wrap justify-end gap-2">

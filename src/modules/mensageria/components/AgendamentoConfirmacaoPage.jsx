@@ -489,6 +489,564 @@ function useAgendamentoConfirmacaoController() {
 	};
 }
 
+// Extraidos de AgendamentoConfirmacaoPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — cada modal era um bloco `{condicao ? (<ModalShell>...)
+// : null}` dentro da funcao do componente principal; viraram componentes
+// dedicados que guardam a propria condicao (mesmo JSX/logica de antes).
+function AgendamentoLogsModal({
+	logsOpen,
+	logsPageSize,
+	setLogsPageSize,
+	setLogsPage,
+	loadLogs,
+	setLogsOpen,
+	logsLoading,
+	logs,
+	logsPage,
+}) {
+	if (!logsOpen) return null;
+	return (
+		<ModalShell
+			onClose={() => setLogsOpen(false)}
+			showClose={false}
+			size="4xl"
+			bodyClassName="p-0"
+		>
+			<div className="flex min-h-0 flex-col p-5">
+				<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<h3 className="text-xl font-black text-slate-950">
+							Logs da confirmação
+						</h3>
+						<p className="text-sm font-semibold text-slate-500">
+							Eventos de envio, confirmação, escalonamento e falhas da rotina.
+						</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<select
+							className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700"
+							value={logsPageSize}
+							onChange={(event) => {
+								setLogsPageSize(Number(event.target.value));
+								setLogsPage(1);
+							}}
+						>
+							{PAGE_SIZES.map((size) => (
+								<option key={size} value={size}>
+									{size} por página
+								</option>
+							))}
+						</select>
+						<button
+							type="button"
+							onClick={() => loadLogs()}
+							className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
+						>
+							Atualizar
+						</button>
+						<button
+							type="button"
+							onClick={() => setLogsOpen(false)}
+							className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
+						>
+							Fechar
+						</button>
+					</div>
+				</div>
+
+				<div className="min-h-0 flex-1 overflow-y-auto pr-1">
+					<div className="space-y-2">
+						{logsLoading ? (
+							<div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500">
+								Carregando logs...
+							</div>
+						) : (
+							logs.map((log) => (
+								<div
+									key={log.id}
+									className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+								>
+									<div className="flex flex-wrap items-center justify-between gap-2">
+										<p className="font-black text-slate-900">
+											{log.type || "evento"}
+										</p>
+										<p className="text-xs font-bold text-slate-500">
+											{formatDateTime(log.criadoEm)}
+										</p>
+									</div>
+									<p className="mt-1 text-sm font-semibold text-slate-600">
+										{log.regional || "-"}{" "}
+										{log.step?.nome ? `• ${log.step.nome}` : ""}{" "}
+										{log.responder?.nome ? `• ${log.responder.nome}` : ""}
+									</p>
+									{log.reason || log.message ? (
+										<p className="mt-2 line-clamp-3 text-xs font-semibold text-slate-500">
+											{log.reason || log.message}
+										</p>
+									) : null}
+								</div>
+							))
+						)}
+						{!logsLoading && !logs.length ? (
+							<div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500">
+								Sem logs nesta página.
+							</div>
+						) : null}
+					</div>
+				</div>
+
+				<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+					<p className="text-sm font-bold text-slate-500">Página {logsPage}</p>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							disabled={logsPage <= 1 || logsLoading}
+							onClick={() => setLogsPage((current) => Math.max(1, current - 1))}
+							className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"
+						>
+							Anterior
+						</button>
+						<button
+							type="button"
+							disabled={logs.length < logsPageSize || logsLoading}
+							onClick={() => setLogsPage((current) => current + 1)}
+							className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"
+						>
+							Próxima
+						</button>
+					</div>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function AgendamentoPreviewModal({
+	previewOpen,
+	preview,
+	previewLoading,
+	openTomorrowPreview,
+	setPreviewOpen,
+}) {
+	if (!previewOpen) return null;
+	return (
+		<ModalShell
+			onClose={() => setPreviewOpen(false)}
+			showClose={false}
+			size="5xl"
+			bodyClassName="p-0"
+		>
+			<div className="flex min-h-0 flex-col p-5">
+				<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<h3 className="text-xl font-black text-slate-950">
+							Prévia de amanhã
+						</h3>
+						<p className="text-sm font-semibold text-slate-500">
+							Simulação da rotina das 08h para{" "}
+							{formatDateKey(preview?.dateKey)}. Nenhuma mensagem é enviada
+							aqui.
+						</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={openTomorrowPreview}
+							className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-black text-blue-700 hover:bg-blue-100"
+						>
+							Recalcular
+						</button>
+						<button
+							type="button"
+							onClick={() => setPreviewOpen(false)}
+							className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
+						>
+							Fechar
+						</button>
+					</div>
+				</div>
+
+				<div className="mb-4 grid gap-3 md:grid-cols-3">
+					<div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+						<p className="text-xs font-black uppercase tracking-wide text-blue-700">
+							Data
+						</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">
+							{formatDateKey(preview?.dateKey)}
+						</p>
+					</div>
+					<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+						<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+							Clientes
+						</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">
+							{preview?.total || 0}
+						</p>
+					</div>
+					<div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+						<p className="text-xs font-black uppercase tracking-wide text-amber-700">
+							Regionais
+						</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">
+							{safeArray(preview?.groups).length}
+						</p>
+					</div>
+				</div>
+
+				<div className="min-h-0 flex-1 overflow-y-auto pr-1">
+					{previewLoading ? (
+						<div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-slate-500">
+							Calculando prévia...
+						</div>
+					) : (
+						<div className="space-y-3">
+							{safeArray(preview?.groups).map((group) => (
+								<div
+									key={group.regional}
+									className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+								>
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div>
+											<h4 className="text-base font-black text-slate-950">
+												{group.regional || "Sem regional"}
+											</h4>
+											<p className="text-sm font-semibold text-slate-500">
+												{group.total} cliente(s) • Responsável inicial:{" "}
+												<strong>
+													{group.responsavelInicial?.nome || "não configurado"}
+												</strong>
+												{group.responsavelInicial?.label
+													? ` (${group.responsavelInicial.label})`
+													: ""}
+											</p>
+										</div>
+										{group.semResponsavel ? (
+											<span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
+												Sem responsável
+											</span>
+										) : null}
+									</div>
+									<div className="mt-3 grid gap-2 md:grid-cols-2">
+										{safeArray(group.appointments).map((item) => (
+											<div
+												key={item.id || `${item.codigo_cliente}-${item.hora}`}
+												className="rounded-xl border border-white bg-white p-3"
+											>
+												<p className="font-black text-slate-900">
+													{item.cliente_nome || "Cliente sem nome"}
+												</p>
+												<p className="text-sm font-semibold text-slate-600">
+													Código {item.codigo_cliente || "-"} • {item.hora || "-"}{" "}
+													• {item.cidade || "-"}
+												</p>
+												<p className="text-xs font-bold text-slate-400">
+													Agendado por: {item.agendado_por || "-"}
+												</p>
+											</div>
+										))}
+									</div>
+								</div>
+							))}
+							{!safeArray(preview?.groups).length ? (
+								<div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-slate-500">
+									Nenhum agendamento encontrado para amanhã.
+								</div>
+							) : null}
+						</div>
+					)}
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function AcceptedRepliesModal({
+	acceptedRepliesOpen,
+	acceptedReplyDraft,
+	setAcceptedReplyDraft,
+	addAcceptedReply,
+	config,
+	removeAcceptedReply,
+	setAcceptedRepliesOpen,
+	working,
+	handleSaveAcceptedReplies,
+}) {
+	if (!acceptedRepliesOpen) return null;
+	return (
+		<ModalShell
+			onClose={() => setAcceptedRepliesOpen(false)}
+			showClose={false}
+			size="lg"
+			bodyClassName="p-0"
+		>
+			<div className="p-5">
+				<div className="mb-4 flex items-start justify-between gap-3">
+					<div>
+						<h3 className="text-xl font-black text-slate-950">
+							Respostas aceitas
+						</h3>
+						<p className="text-sm font-semibold text-slate-500">
+							Cadastre as palavras que confirmam ciência e param o
+							escalonamento.
+						</p>
+					</div>
+					<button
+						type="button"
+						onClick={() => setAcceptedRepliesOpen(false)}
+						className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
+					>
+						Fechar
+					</button>
+				</div>
+
+				<div className="flex gap-2">
+					<input
+						className={inputClass}
+						value={acceptedReplyDraft}
+						onChange={(event) => setAcceptedReplyDraft(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+								addAcceptedReply();
+							}
+						}}
+						placeholder="Ex: SIM"
+					/>
+					<button
+						type="button"
+						onClick={addAcceptedReply}
+						className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700"
+					>
+						Adicionar
+					</button>
+				</div>
+
+				<div className="mt-4 flex flex-wrap gap-2">
+					{safeArray(config?.acceptedReplies).map((reply) => (
+						<button
+							key={reply}
+							type="button"
+							onClick={() => removeAcceptedReply(reply)}
+							className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+							title="Clique para remover"
+						>
+							{reply} ×
+						</button>
+					))}
+					{!safeArray(config?.acceptedReplies).length ? (
+						<p className="text-sm font-semibold text-slate-500">
+							Nenhuma resposta cadastrada.
+						</p>
+					) : null}
+				</div>
+
+				<div className="mt-5 flex justify-end gap-2">
+					<button
+						type="button"
+						onClick={() => setAcceptedRepliesOpen(false)}
+						className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						disabled={working}
+						onClick={handleSaveAcceptedReplies}
+						className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+					>
+						Salvar respostas
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function ManualResponsibleModal({
+	manualResponsibleTrack,
+	setManualResponsibleTrack,
+	manualResponsibleForm,
+	setManualResponsibleForm,
+	working,
+	handleSaveManualResponsible,
+}) {
+	if (!manualResponsibleTrack) return null;
+	return (
+		<ModalShell
+			onClose={() => setManualResponsibleTrack(null)}
+			showClose={false}
+			size="lg"
+			bodyClassName="p-0"
+		>
+			<div className="p-5">
+				<div className="mb-4">
+					<h3 className="text-xl font-black text-slate-950">
+						Preencher responsável
+					</h3>
+					<p className="mt-1 text-sm font-semibold text-slate-500">
+						Este envio não encontrou BackOffice. Ao salvar, o contato será
+						gravado na regional{" "}
+						<strong>{manualResponsibleTrack.regional || "-"}</strong> e a
+						mensagem será reenviada.
+					</p>
+				</div>
+
+				<div className="space-y-3">
+					<Field label="Nome do responsável">
+						<input
+							className={inputClass}
+							value={manualResponsibleForm.nome}
+							onChange={(event) =>
+								setManualResponsibleForm((current) => ({
+									...current,
+									nome: event.target.value,
+								}))
+							}
+							placeholder="Nome completo"
+						/>
+					</Field>
+					<Field label="Telefone">
+						<input
+							className={inputClass}
+							value={manualResponsibleForm.telefone}
+							onChange={(event) =>
+								setManualResponsibleForm((current) => ({
+									...current,
+									telefone: event.target.value,
+								}))
+							}
+							placeholder="31999999999"
+						/>
+					</Field>
+					<Field label="E-mail">
+						<input
+							className={inputClass}
+							type="email"
+							value={manualResponsibleForm.email}
+							onChange={(event) =>
+								setManualResponsibleForm((current) => ({
+									...current,
+									email: event.target.value,
+								}))
+							}
+							placeholder="opcional"
+						/>
+					</Field>
+				</div>
+
+				<div className="mt-5 flex justify-end gap-2">
+					<button
+						type="button"
+						onClick={() => setManualResponsibleTrack(null)}
+						className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						disabled={
+							working ||
+							!manualResponsibleForm.nome.trim() ||
+							!manualResponsibleForm.telefone.trim()
+						}
+						onClick={handleSaveManualResponsible}
+						className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
+					>
+						Salvar e reenviar
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+// Extraidos de AgendamentoConfirmacaoPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma linha de tabela/logica de antes, so
+// tirado do `tracks.map` inline do componente principal.
+function TrackRow({ track, openManualResponsible }) {
+	const step =
+		safeArray(track.steps)[Number(track.currentStepIndex || 0)] || {};
+	return (
+		<tr className="align-top">
+			<td className="px-4 py-3 font-bold text-slate-900">
+				{track.regional || "-"}
+			</td>
+			<td className="px-4 py-3 font-bold text-slate-700">
+				{track.dateKey ? track.dateKey.split("-").reverse().join("/") : "-"}
+			</td>
+			<td className="px-4 py-3 text-slate-600">
+				{track.origin === "rotina_08h" ? "Rotina 08h" : "Agendamento do dia"}
+			</td>
+			<td className="px-4 py-3 text-slate-700">
+				<p className="font-black">
+					{safeArray(track.appointments).length} cliente(s)
+				</p>
+				<p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">
+					{safeArray(track.appointments)
+						.map(
+							(item) =>
+								`${item.cliente_nome || "Cliente"} (${item.codigo_cliente || "-"})`,
+						)
+						.join(", ")}
+				</p>
+			</td>
+			<td className="px-4 py-3">
+				<span
+					className={`inline-flex rounded-full border px-2 py-1 text-xs font-black ${statusClass[track.status] || statusClass.novo}`}
+				>
+					{statusLabels[track.status] || track.status || "Novo"}
+				</span>
+			</td>
+			<td className="px-4 py-3 text-slate-700">
+				<p className="font-bold">
+					{step.nome || track.confirmedBy?.nome || "-"}
+				</p>
+				<p className="text-xs text-slate-500">
+					{step.label || track.confirmedBy?.label || ""}
+				</p>
+			</td>
+			<td className="px-4 py-3 text-slate-600">
+				{formatDateTime(track.nextCheckAt)}
+			</td>
+			<td className="px-4 py-3">
+				{track.status === "sem_responsavel" ? (
+					<button
+						type="button"
+						onClick={() => openManualResponsible(track)}
+						className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
+					>
+						Preencher e reenviar
+					</button>
+				) : (
+					<span className="text-xs font-semibold text-slate-400">-</span>
+				)}
+			</td>
+		</tr>
+	);
+}
+
+function TracksTableBody({ tracks, openManualResponsible }) {
+	if (!tracks.length) {
+		return (
+			<tr>
+				<td
+					colSpan={8}
+					className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
+				>
+					Nenhum envio registrado.
+				</td>
+			</tr>
+		);
+	}
+	return tracks.map((track) => (
+		<TrackRow
+			key={track.id}
+			track={track}
+			openManualResponsible={openManualResponsible}
+		/>
+	));
+}
+
 export default function AgendamentoConfirmacaoPage() {
 	const {
 		config,
@@ -1084,518 +1642,55 @@ export default function AgendamentoConfirmacaoPage() {
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100 bg-white">
-							{tracks.map((track) => {
-								const step =
-									safeArray(track.steps)[Number(track.currentStepIndex || 0)] ||
-									{};
-								return (
-									<tr key={track.id} className="align-top">
-										<td className="px-4 py-3 font-bold text-slate-900">
-											{track.regional || "-"}
-										</td>
-										<td className="px-4 py-3 font-bold text-slate-700">
-											{track.dateKey
-												? track.dateKey.split("-").reverse().join("/")
-												: "-"}
-										</td>
-										<td className="px-4 py-3 text-slate-600">
-											{track.origin === "rotina_08h"
-												? "Rotina 08h"
-												: "Agendamento do dia"}
-										</td>
-										<td className="px-4 py-3 text-slate-700">
-											<p className="font-black">
-												{safeArray(track.appointments).length} cliente(s)
-											</p>
-											<p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-500">
-												{safeArray(track.appointments)
-													.map(
-														(item) =>
-															`${item.cliente_nome || "Cliente"} (${item.codigo_cliente || "-"})`,
-													)
-													.join(", ")}
-											</p>
-										</td>
-										<td className="px-4 py-3">
-											<span
-												className={`inline-flex rounded-full border px-2 py-1 text-xs font-black ${statusClass[track.status] || statusClass.novo}`}
-											>
-												{statusLabels[track.status] || track.status || "Novo"}
-											</span>
-										</td>
-										<td className="px-4 py-3 text-slate-700">
-											<p className="font-bold">
-												{step.nome || track.confirmedBy?.nome || "-"}
-											</p>
-											<p className="text-xs text-slate-500">
-												{step.label || track.confirmedBy?.label || ""}
-											</p>
-										</td>
-										<td className="px-4 py-3 text-slate-600">
-											{formatDateTime(track.nextCheckAt)}
-										</td>
-										<td className="px-4 py-3">
-											{track.status === "sem_responsavel" ? (
-												<button
-													type="button"
-													onClick={() => openManualResponsible(track)}
-													className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 hover:bg-blue-100"
-												>
-													Preencher e reenviar
-												</button>
-											) : (
-												<span className="text-xs font-semibold text-slate-400">
-													-
-												</span>
-											)}
-										</td>
-									</tr>
-								);
-							})}
-							{!tracks.length ? (
-								<tr>
-									<td
-										colSpan={8}
-										className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
-									>
-										Nenhum envio registrado.
-									</td>
-								</tr>
-							) : null}
+							<TracksTableBody
+								tracks={tracks}
+								openManualResponsible={openManualResponsible}
+							/>
 						</tbody>
 					</table>
 				</div>
 			</section>
 
-			{logsOpen ? (
-				<ModalShell
-					onClose={() => setLogsOpen(false)}
-					showClose={false}
-					size="4xl"
-					bodyClassName="p-0"
-				>
-					<div className="flex min-h-0 flex-col p-5">
-						<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-							<div>
-								<h3 className="text-xl font-black text-slate-950">
-									Logs da confirmação
-								</h3>
-								<p className="text-sm font-semibold text-slate-500">
-									Eventos de envio, confirmação, escalonamento e falhas da
-									rotina.
-								</p>
-							</div>
-							<div className="flex flex-wrap gap-2">
-								<select
-									className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700"
-									value={logsPageSize}
-									onChange={(event) => {
-										setLogsPageSize(Number(event.target.value));
-										setLogsPage(1);
-									}}
-								>
-									{PAGE_SIZES.map((size) => (
-										<option key={size} value={size}>
-											{size} por página
-										</option>
-									))}
-								</select>
-								<button
-									type="button"
-									onClick={() => loadLogs()}
-									className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
-								>
-									Atualizar
-								</button>
-								<button
-									type="button"
-									onClick={() => setLogsOpen(false)}
-									className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
-								>
-									Fechar
-								</button>
-							</div>
-						</div>
+			<AgendamentoLogsModal
+				logsOpen={logsOpen}
+				logsPageSize={logsPageSize}
+				setLogsPageSize={setLogsPageSize}
+				setLogsPage={setLogsPage}
+				loadLogs={loadLogs}
+				setLogsOpen={setLogsOpen}
+				logsLoading={logsLoading}
+				logs={logs}
+				logsPage={logsPage}
+			/>
 
-						<div className="min-h-0 flex-1 overflow-y-auto pr-1">
-							<div className="space-y-2">
-								{logsLoading ? (
-									<div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500">
-										Carregando logs...
-									</div>
-								) : (
-									logs.map((log) => (
-										<div
-											key={log.id}
-											className="rounded-xl border border-slate-100 bg-slate-50 p-3"
-										>
-											<div className="flex flex-wrap items-center justify-between gap-2">
-												<p className="font-black text-slate-900">
-													{log.type || "evento"}
-												</p>
-												<p className="text-xs font-bold text-slate-500">
-													{formatDateTime(log.criadoEm)}
-												</p>
-											</div>
-											<p className="mt-1 text-sm font-semibold text-slate-600">
-												{log.regional || "-"}{" "}
-												{log.step?.nome ? `• ${log.step.nome}` : ""}{" "}
-												{log.responder?.nome ? `• ${log.responder.nome}` : ""}
-											</p>
-											{log.reason || log.message ? (
-												<p className="mt-2 line-clamp-3 text-xs font-semibold text-slate-500">
-													{log.reason || log.message}
-												</p>
-											) : null}
-										</div>
-									))
-								)}
-								{!logsLoading && !logs.length ? (
-									<div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500">
-										Sem logs nesta página.
-									</div>
-								) : null}
-							</div>
-						</div>
+			<AgendamentoPreviewModal
+				previewOpen={previewOpen}
+				preview={preview}
+				previewLoading={previewLoading}
+				openTomorrowPreview={openTomorrowPreview}
+				setPreviewOpen={setPreviewOpen}
+			/>
 
-						<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-							<p className="text-sm font-bold text-slate-500">
-								Página {logsPage}
-							</p>
-							<div className="flex gap-2">
-								<button
-									type="button"
-									disabled={logsPage <= 1 || logsLoading}
-									onClick={() =>
-										setLogsPage((current) => Math.max(1, current - 1))
-									}
-									className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"
-								>
-									Anterior
-								</button>
-								<button
-									type="button"
-									disabled={logs.length < logsPageSize || logsLoading}
-									onClick={() => setLogsPage((current) => current + 1)}
-									className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"
-								>
-									Próxima
-								</button>
-							</div>
-						</div>
-					</div>
-				</ModalShell>
-			) : null}
+			<AcceptedRepliesModal
+				acceptedRepliesOpen={acceptedRepliesOpen}
+				acceptedReplyDraft={acceptedReplyDraft}
+				setAcceptedReplyDraft={setAcceptedReplyDraft}
+				addAcceptedReply={addAcceptedReply}
+				config={config}
+				removeAcceptedReply={removeAcceptedReply}
+				setAcceptedRepliesOpen={setAcceptedRepliesOpen}
+				working={working}
+				handleSaveAcceptedReplies={handleSaveAcceptedReplies}
+			/>
 
-			{previewOpen ? (
-				<ModalShell
-					onClose={() => setPreviewOpen(false)}
-					showClose={false}
-					size="5xl"
-					bodyClassName="p-0"
-				>
-					<div className="flex min-h-0 flex-col p-5">
-						<div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-							<div>
-								<h3 className="text-xl font-black text-slate-950">
-									Prévia de amanhã
-								</h3>
-								<p className="text-sm font-semibold text-slate-500">
-									Simulação da rotina das 08h para{" "}
-									{formatDateKey(preview?.dateKey)}. Nenhuma mensagem é enviada
-									aqui.
-								</p>
-							</div>
-							<div className="flex flex-wrap gap-2">
-								<button
-									type="button"
-									onClick={openTomorrowPreview}
-									className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-black text-blue-700 hover:bg-blue-100"
-								>
-									Recalcular
-								</button>
-								<button
-									type="button"
-									onClick={() => setPreviewOpen(false)}
-									className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
-								>
-									Fechar
-								</button>
-							</div>
-						</div>
-
-						<div className="mb-4 grid gap-3 md:grid-cols-3">
-							<div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-								<p className="text-xs font-black uppercase tracking-wide text-blue-700">
-									Data
-								</p>
-								<p className="mt-1 text-2xl font-black text-slate-950">
-									{formatDateKey(preview?.dateKey)}
-								</p>
-							</div>
-							<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-								<p className="text-xs font-black uppercase tracking-wide text-emerald-700">
-									Clientes
-								</p>
-								<p className="mt-1 text-2xl font-black text-slate-950">
-									{preview?.total || 0}
-								</p>
-							</div>
-							<div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-								<p className="text-xs font-black uppercase tracking-wide text-amber-700">
-									Regionais
-								</p>
-								<p className="mt-1 text-2xl font-black text-slate-950">
-									{safeArray(preview?.groups).length}
-								</p>
-							</div>
-						</div>
-
-						<div className="min-h-0 flex-1 overflow-y-auto pr-1">
-							{previewLoading ? (
-								<div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-slate-500">
-									Calculando prévia...
-								</div>
-							) : (
-								<div className="space-y-3">
-									{safeArray(preview?.groups).map((group) => (
-										<div
-											key={group.regional}
-											className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-										>
-											<div className="flex flex-wrap items-start justify-between gap-3">
-												<div>
-													<h4 className="text-base font-black text-slate-950">
-														{group.regional || "Sem regional"}
-													</h4>
-													<p className="text-sm font-semibold text-slate-500">
-														{group.total} cliente(s) • Responsável inicial:{" "}
-														<strong>
-															{group.responsavelInicial?.nome ||
-																"não configurado"}
-														</strong>
-														{group.responsavelInicial?.label
-															? ` (${group.responsavelInicial.label})`
-															: ""}
-													</p>
-												</div>
-												{group.semResponsavel ? (
-													<span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-black text-red-700">
-														Sem responsável
-													</span>
-												) : null}
-											</div>
-											<div className="mt-3 grid gap-2 md:grid-cols-2">
-												{safeArray(group.appointments).map((item) => (
-													<div
-														key={
-															item.id || `${item.codigo_cliente}-${item.hora}`
-														}
-														className="rounded-xl border border-white bg-white p-3"
-													>
-														<p className="font-black text-slate-900">
-															{item.cliente_nome || "Cliente sem nome"}
-														</p>
-														<p className="text-sm font-semibold text-slate-600">
-															Código {item.codigo_cliente || "-"} •{" "}
-															{item.hora || "-"} • {item.cidade || "-"}
-														</p>
-														<p className="text-xs font-bold text-slate-400">
-															Agendado por: {item.agendado_por || "-"}
-														</p>
-													</div>
-												))}
-											</div>
-										</div>
-									))}
-									{!safeArray(preview?.groups).length ? (
-										<div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm font-semibold text-slate-500">
-											Nenhum agendamento encontrado para amanhã.
-										</div>
-									) : null}
-								</div>
-							)}
-						</div>
-					</div>
-				</ModalShell>
-			) : null}
-
-			{acceptedRepliesOpen ? (
-				<ModalShell
-					onClose={() => setAcceptedRepliesOpen(false)}
-					showClose={false}
-					size="lg"
-					bodyClassName="p-0"
-				>
-					<div className="p-5">
-						<div className="mb-4 flex items-start justify-between gap-3">
-							<div>
-								<h3 className="text-xl font-black text-slate-950">
-									Respostas aceitas
-								</h3>
-								<p className="text-sm font-semibold text-slate-500">
-									Cadastre as palavras que confirmam ciência e param o
-									escalonamento.
-								</p>
-							</div>
-							<button
-								type="button"
-								onClick={() => setAcceptedRepliesOpen(false)}
-								className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-600 hover:bg-slate-50"
-							>
-								Fechar
-							</button>
-						</div>
-
-						<div className="flex gap-2">
-							<input
-								className={inputClass}
-								value={acceptedReplyDraft}
-								onChange={(event) => setAcceptedReplyDraft(event.target.value)}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										event.preventDefault();
-										addAcceptedReply();
-									}
-								}}
-								placeholder="Ex: SIM"
-							/>
-							<button
-								type="button"
-								onClick={addAcceptedReply}
-								className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700"
-							>
-								Adicionar
-							</button>
-						</div>
-
-						<div className="mt-4 flex flex-wrap gap-2">
-							{safeArray(config?.acceptedReplies).map((reply) => (
-								<button
-									key={reply}
-									type="button"
-									onClick={() => removeAcceptedReply(reply)}
-									className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
-									title="Clique para remover"
-								>
-									{reply} ×
-								</button>
-							))}
-							{!safeArray(config?.acceptedReplies).length ? (
-								<p className="text-sm font-semibold text-slate-500">
-									Nenhuma resposta cadastrada.
-								</p>
-							) : null}
-						</div>
-
-						<div className="mt-5 flex justify-end gap-2">
-							<button
-								type="button"
-								onClick={() => setAcceptedRepliesOpen(false)}
-								className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-							>
-								Cancelar
-							</button>
-							<button
-								type="button"
-								disabled={working}
-								onClick={handleSaveAcceptedReplies}
-								className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-50"
-							>
-								Salvar respostas
-							</button>
-						</div>
-					</div>
-				</ModalShell>
-			) : null}
-
-			{manualResponsibleTrack ? (
-				<ModalShell
-					onClose={() => setManualResponsibleTrack(null)}
-					showClose={false}
-					size="lg"
-					bodyClassName="p-0"
-				>
-					<div className="p-5">
-						<div className="mb-4">
-							<h3 className="text-xl font-black text-slate-950">
-								Preencher responsável
-							</h3>
-							<p className="mt-1 text-sm font-semibold text-slate-500">
-								Este envio não encontrou BackOffice. Ao salvar, o contato será
-								gravado na regional{" "}
-								<strong>{manualResponsibleTrack.regional || "-"}</strong> e a
-								mensagem será reenviada.
-							</p>
-						</div>
-
-						<div className="space-y-3">
-							<Field label="Nome do responsável">
-								<input
-									className={inputClass}
-									value={manualResponsibleForm.nome}
-									onChange={(event) =>
-										setManualResponsibleForm((current) => ({
-											...current,
-											nome: event.target.value,
-										}))
-									}
-									placeholder="Nome completo"
-								/>
-							</Field>
-							<Field label="Telefone">
-								<input
-									className={inputClass}
-									value={manualResponsibleForm.telefone}
-									onChange={(event) =>
-										setManualResponsibleForm((current) => ({
-											...current,
-											telefone: event.target.value,
-										}))
-									}
-									placeholder="31999999999"
-								/>
-							</Field>
-							<Field label="E-mail">
-								<input
-									className={inputClass}
-									type="email"
-									value={manualResponsibleForm.email}
-									onChange={(event) =>
-										setManualResponsibleForm((current) => ({
-											...current,
-											email: event.target.value,
-										}))
-									}
-									placeholder="opcional"
-								/>
-							</Field>
-						</div>
-
-						<div className="mt-5 flex justify-end gap-2">
-							<button
-								type="button"
-								onClick={() => setManualResponsibleTrack(null)}
-								className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-							>
-								Cancelar
-							</button>
-							<button
-								type="button"
-								disabled={
-									working ||
-									!manualResponsibleForm.nome.trim() ||
-									!manualResponsibleForm.telefone.trim()
-								}
-								onClick={handleSaveManualResponsible}
-								className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-50"
-							>
-								Salvar e reenviar
-							</button>
-						</div>
-					</div>
-				</ModalShell>
-			) : null}
+			<ManualResponsibleModal
+				manualResponsibleTrack={manualResponsibleTrack}
+				setManualResponsibleTrack={setManualResponsibleTrack}
+				manualResponsibleForm={manualResponsibleForm}
+				setManualResponsibleForm={setManualResponsibleForm}
+				working={working}
+				handleSaveManualResponsible={handleSaveManualResponsible}
+			/>
 		</div>
 	);
 }

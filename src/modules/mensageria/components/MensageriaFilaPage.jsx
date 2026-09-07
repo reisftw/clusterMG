@@ -110,6 +110,65 @@ const isQueueItemSendableNow = (item = {}, config = {}, now = new Date()) => {
 	return true;
 };
 
+// Extraidos de useMensageriaFilaController (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesma logica de antes, so tirados do hook
+// pra funcoes puras (nao dependem de estado do React).
+function matchesQueueFilters(item, filters, searchText) {
+	const itemStatus = String(item.status || "novo");
+	if (
+		filters.status === "pendentes" &&
+		["enviado", "ignorado"].includes(itemStatus)
+	) {
+		return false;
+	}
+	if (
+		filters.status !== "todos" &&
+		filters.status !== "pendentes" &&
+		itemStatus !== filters.status
+	) {
+		return false;
+	}
+	if (
+		filters.origem !== "todas" &&
+		String(item.origem || "Sem origem") !== filters.origem
+	) {
+		return false;
+	}
+	if (!searchText) return true;
+	return normalize(
+		[
+			item.cliente,
+			item.telefone,
+			item.os,
+			item.cidade,
+			item.origem,
+			item.tipo,
+		].join(" "),
+	).includes(searchText);
+}
+
+function resolveStartButtonState({
+	queueHasError,
+	queueWaiting,
+	queueRunning,
+	workerActive,
+}) {
+	if (queueHasError) return "error";
+	if (queueWaiting) return "waiting";
+	if (queueRunning && workerActive) return "active";
+	return "idle";
+}
+
+function resolveStartButtonLabel({ working, startButtonState, workerRunning }) {
+	if (working) return "Processando...";
+	if (startButtonState === "active") {
+		return workerRunning ? "Enviando agora" : "Fila funcionando";
+	}
+	if (startButtonState === "waiting") return "Aguardando janela";
+	if (startButtonState === "error") return "Fila com erro";
+	return "Iniciar fila";
+}
+
 // Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // pra reduzir a complexidade cognitiva da funcao de render — mesmo
 // estado e mesmas chamadas, sem mudanca de comportamento.
@@ -172,36 +231,7 @@ function useMensageriaFilaController() {
 
 	const filteredFila = useMemo(() => {
 		const text = normalize(filters.search);
-		return fila.filter((item) => {
-			const itemStatus = String(item.status || "novo");
-			if (
-				filters.status === "pendentes" &&
-				["enviado", "ignorado"].includes(itemStatus)
-			)
-				return false;
-			if (
-				filters.status !== "todos" &&
-				filters.status !== "pendentes" &&
-				itemStatus !== filters.status
-			)
-				return false;
-			if (
-				filters.origem !== "todas" &&
-				String(item.origem || "Sem origem") !== filters.origem
-			)
-				return false;
-			if (!text) return true;
-			return normalize(
-				[
-					item.cliente,
-					item.telefone,
-					item.os,
-					item.cidade,
-					item.origem,
-					item.tipo,
-				].join(" "),
-			).includes(text);
-		});
+		return fila.filter((item) => matchesQueueFilters(item, filters, text));
 	}, [fila, filters]);
 
 	const totalPages = Math.max(1, Math.ceil(filteredFila.length / pageSize));
@@ -237,13 +267,12 @@ function useMensageriaFilaController() {
 	const queueHasError = Boolean(status?.worker?.lastError);
 	const queueWaiting =
 		queueRunning && !queueHasError && Boolean(status?.worker?.lastSkipped);
-	const startButtonState = queueHasError
-		? "error"
-		: queueWaiting
-			? "waiting"
-			: queueRunning && workerActive
-				? "active"
-				: "idle";
+	const startButtonState = resolveStartButtonState({
+		queueHasError,
+		queueWaiting,
+		queueRunning,
+		workerActive,
+	});
 	const startButtonClass = {
 		active: "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700",
 		waiting: "bg-amber-500 text-white shadow-sm hover:bg-amber-600",
@@ -251,17 +280,11 @@ function useMensageriaFilaController() {
 		idle: "bg-blue-600 text-white shadow-sm hover:bg-blue-700",
 	}[startButtonState];
 	const StartButtonIcon = startButtonState === "active" ? CheckCircle2 : Play;
-	const startButtonLabel = working
-		? "Processando..."
-		: startButtonState === "active"
-			? workerRunning
-				? "Enviando agora"
-				: "Fila funcionando"
-			: startButtonState === "waiting"
-				? "Aguardando janela"
-				: startButtonState === "error"
-					? "Fila com erro"
-					: "Iniciar fila";
+	const startButtonLabel = resolveStartButtonLabel({
+		working,
+		startButtonState,
+		workerRunning,
+	});
 
 	const handleStartQueue = async () => {
 		setWorking(true);

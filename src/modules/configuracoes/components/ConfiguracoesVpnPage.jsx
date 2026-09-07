@@ -159,6 +159,50 @@ function useVpnConfigController() {
 	};
 }
 
+// Extraido de ConfiguracoesVpnPage (achado javascript:S3776,
+// docs/SONARQUBE-MAP.md) — mesmo JSX/logica de antes, so tira o
+// ternario + .map da funcao do componente principal.
+function VpnLogRows({ logs }) {
+	if (!logs.length) {
+		return (
+			<tr>
+				<td
+					colSpan={6}
+					className="px-3 py-6 text-center font-bold text-slate-500"
+				>
+					Nenhum log registrado ainda.
+				</td>
+			</tr>
+		);
+	}
+	return logs.map((log) => (
+		<tr key={log.id} className="align-top">
+			<td className="px-3 py-3 font-bold text-slate-700">
+				{formatDateTime(log.createdAt)}
+			</td>
+			<td className="px-3 py-3 font-black text-slate-900">
+				{log.action || "-"}
+			</td>
+			<td className="px-3 py-3">
+				<span
+					className={`rounded-full px-2.5 py-1 text-xs font-black ${log.status === "blocked" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}
+				>
+					{log.status || "-"}
+				</span>
+			</td>
+			<td className="px-3 py-3 font-mono text-xs font-semibold text-slate-600">
+				{log.route || "-"}
+			</td>
+			<td className="px-3 py-3 font-mono text-xs font-semibold text-slate-600">
+				{log.ip || "-"}
+			</td>
+			<td className="px-3 py-3 font-semibold text-slate-600">
+				{log.reason || "-"}
+			</td>
+		</tr>
+	));
+}
+
 export default function ConfiguracoesVpnPage() {
 	const { currentUser } = useAuthContext();
 	const canManage =
@@ -414,43 +458,7 @@ export default function ConfiguracoesVpnPage() {
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100">
-							{logs.length ? (
-								logs.map((log) => (
-									<tr key={log.id} className="align-top">
-										<td className="px-3 py-3 font-bold text-slate-700">
-											{formatDateTime(log.createdAt)}
-										</td>
-										<td className="px-3 py-3 font-black text-slate-900">
-											{log.action || "-"}
-										</td>
-										<td className="px-3 py-3">
-											<span
-												className={`rounded-full px-2.5 py-1 text-xs font-black ${log.status === "blocked" ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}
-											>
-												{log.status || "-"}
-											</span>
-										</td>
-										<td className="px-3 py-3 font-mono text-xs font-semibold text-slate-600">
-											{log.route || "-"}
-										</td>
-										<td className="px-3 py-3 font-mono text-xs font-semibold text-slate-600">
-											{log.ip || "-"}
-										</td>
-										<td className="px-3 py-3 font-semibold text-slate-600">
-											{log.reason || "-"}
-										</td>
-									</tr>
-								))
-							) : (
-								<tr>
-									<td
-										colSpan={6}
-										className="px-3 py-6 text-center font-bold text-slate-500"
-									>
-										Nenhum log registrado ainda.
-									</td>
-								</tr>
-							)}
+							<VpnLogRows logs={logs} />
 						</tbody>
 					</table>
 				</div>
