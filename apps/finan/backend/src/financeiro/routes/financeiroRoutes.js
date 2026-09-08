@@ -4,11 +4,17 @@ const {
 	createFinanceiroController,
 } = require("../controllers/financeiroController");
 
+// Limite reduzido pra achado de seguranca javascript:S5693 (limite de
+// upload nao conservador) — planilhas XLSX de orcamento normalmente
+// pesam poucos MB; 7MB x 5 arquivos (35MB por requisicao) fica abaixo do
+// limiar padrao da regra (fileUploadSizeLimit=8MB) com folga e cobre o
+// caso de uso real, com bem menos superficie de DoS que os 300MB
+// anteriores (30MB x 10).
 const budgetUpload = multer({
 	storage: multer.memoryStorage(),
 	limits: {
-		fileSize: 30 * 1024 * 1024,
-		files: 10,
+		fileSize: 7 * 1024 * 1024,
+		files: 5,
 	},
 	fileFilter: (_req, file, callback) => {
 		if (/\.xlsx$/i.test(file.originalname || "")) {
@@ -111,7 +117,7 @@ function createFinanceiroRouter({
 		requireAuthenticated,
 		requireCsrfToken,
 		requireBudgetConfigManage,
-		budgetUpload.array("files", 10),
+		budgetUpload.array("files", 5),
 		controller.createBudgetDataImportJob,
 	);
 	router.get(
