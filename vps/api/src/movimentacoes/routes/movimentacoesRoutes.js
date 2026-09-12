@@ -6,6 +6,7 @@ const {
 function createMovimentacoesRouter({
 	movimentacoesRepository,
 	movimentacoesEntregas,
+	movimentacoesOrdensFechadas,
 	requireAuthenticated,
 	requireAnyPermission,
 	requireCsrfToken,
@@ -17,6 +18,7 @@ function createMovimentacoesRouter({
 	const controller = createMovimentacoesController({
 		movimentacoesRepository,
 		movimentacoesEntregas,
+		movimentacoesOrdensFechadas,
 	});
 	const requireView = requireAnyPermission(viewPermissions, fallbackRoles);
 	const requireManage = requireAnyPermission(managePermissions, fallbackRoles);
@@ -53,6 +55,19 @@ function createMovimentacoesRouter({
 		controller.startScan,
 	);
 	router.get("/scan/:jobId", requireAuthenticated, requireView, controller.getScanJob);
+	router.post(
+		"/ordens-fechadas/conciliar",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireManage,
+		controller.startOrdensFechadasConciliacao,
+	);
+	router.get(
+		"/ordens-fechadas/conciliar/:jobId",
+		requireAuthenticated,
+		requireView,
+		controller.getOrdensFechadasJob,
+	);
 
 	return router;
 }

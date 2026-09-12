@@ -1,6 +1,7 @@
 function createMovimentacoesController({
 	movimentacoesRepository,
 	movimentacoesEntregas,
+	movimentacoesOrdensFechadas,
 }) {
 	async function getDashboard(req, res, next) {
 		try {
@@ -62,6 +63,34 @@ function createMovimentacoesController({
 			res.json(
 				await movimentacoesRepository.saveProdutoConfig(req.body || {}, req.user),
 			);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function startOrdensFechadasConciliacao(req, res, next) {
+		try {
+			const { rows, dataInicio, dataFim } = req.body || {};
+			const job = await movimentacoesOrdensFechadas.runConciliacao({
+				rows,
+				dataInicio,
+				dataFim,
+				user: req.user,
+			});
+			res.status(202).json(job);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function getOrdensFechadasJob(req, res, next) {
+		try {
+			const job = await movimentacoesOrdensFechadas.getJob(req.params.jobId);
+			if (!job) {
+				res.status(404).json({ error: "Job não encontrado." });
+				return;
+			}
+			res.json(job);
 		} catch (error) {
 			next(error);
 		}
@@ -145,8 +174,10 @@ function createMovimentacoesController({
 		getCidades,
 		getDashboard,
 		getEquipamentos,
+		getOrdensFechadasJob,
 		getScanJob,
 		saveEquipamentoConfig,
+		startOrdensFechadasConciliacao,
 		listMovimentacoes,
 		readConfig,
 		saveConfig,

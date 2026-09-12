@@ -19,11 +19,14 @@ import {
 	buscarCidadesMovimentacoes,
 	buscarDashboardMovimentacoes,
 	buscarEquipamentosMovimentacoes,
+	buscarJobConciliacaoOrdensFechadas,
 	buscarJobVarreduraMovimentacoes,
+	iniciarConciliacaoOrdensFechadas,
 	iniciarVarreduraMovimentacoes,
 	listarMovimentacoes,
 	salvarEquipamentoConfig,
 } from "../services/movimentacoesService";
+import { readRowsFromPlanilha } from "../utils/readPlanilhaOrdensFechadas";
 
 const STATUS_LABEL = {
 	pendente: "Pendente",
@@ -151,6 +154,7 @@ const ABAS = {
 	PAINEL: "painel",
 	CIDADES: "cidades",
 	EQUIPAMENTOS: "equipamentos",
+	ORDENS_FECHADAS: "ordens_fechadas",
 };
 
 export default function MovimentacoesPage() {
@@ -193,6 +197,16 @@ export default function MovimentacoesPage() {
 	});
 	const [diaModalLoading, setDiaModalLoading] = useState(false);
 	const [diaModalError, setDiaModalError] = useState("");
+
+	const [ofArquivo, setOfArquivo] = useState(null);
+	const [ofDataInicio, setOfDataInicio] = useState(hojeYMD());
+	const [ofDataFim, setOfDataFim] = useState(hojeYMD());
+	const [ofJob, setOfJob] = useState(null);
+	const [ofProcessando, setOfProcessando] = useState(false);
+	const [ofError, setOfError] = useState("");
+	const [ofFiltro, setOfFiltro] = useState("todos");
+	const [ofPage, setOfPage] = useState(1);
+	const ofPollTimerRef = useRef(null);
 
 	const [lista, setLista] = useState({ items: [], page: 1, totalPages: 1, total: 0 });
 	const [loadingLista, setLoadingLista] = useState(true);
@@ -306,6 +320,93 @@ export default function MovimentacoesPage() {
 			ativo = false;
 		};
 	}, [diaSelecionado, diaModalPage]);
+
+	const ofPararPolling = useCallback(() => {
+		if (ofPollTimerRef.current) {
+			clearTimeout(ofPollTimerRef.current);
+			ofPollTimerRef.current = null;
+		}
+	}, []);
+
+	const ofAcompanharJob = useCallback(
+		(jobId, startedAt) => {
+			buscarJobConciliacaoOrdensFechadas(jobId)
+				.then((job) => {
+					setOfJob(job);
+					const finalizado = job.status === "completed" || job.status === "failed";
+					if (finalizado) {
+						setOfProcessando(false);
+						setOfPage(1);
+						return;
+					}
+					if (Date.now() - startedAt > SCAN_POLL_TIMEOUT_MS) {
+						setOfProcessando(false);
+						setOfError(
+							"A conciliação está demorando mais que o esperado. Confira novamente em instantes.",
+						);
+						return;
+					}
+					ofPollTimerRef.current = setTimeout(
+						() => ofAcompanharJob(jobId, startedAt),
+						SCAN_POLL_INTERVAL_MS,
+					);
+				})
+				.catch(() => {
+					setOfProcessando(false);
+					setOfError("Não foi possível acompanhar a conciliação.");
+				});
+		},
+		[],
+	);
+
+	useEffect(() => {
+		return () => ofPararPolling();
+	}, [ofPararPolling]);
+
+	const handleConciliarOrdensFechadas = async () => {
+		if (!ofArquivo) {
+			setOfError("Selecione a planilha com nome e cidade do cliente.");
+			return;
+		}
+		if (!ofDataInicio || !ofDataFim) {
+			setOfError("Informe o período (data início e fim).");
+			return;
+		}
+		ofPararPolling();
+		setOfError("");
+		setOfProcessando(true);
+		setOfJob(null);
+		try {
+			const rows = await readRowsFromPlanilha(ofArquivo);
+			const job = await iniciarConciliacaoOrdensFechadas({
+				rows,
+				dataInicio: new Date(`${ofDataInicio}T00:00:00`).toISOString(),
+				dataFim: new Date(`${ofDataFim}T23:59:59.999`).toISOString(),
+			});
+			setOfJob(job);
+			ofAcompanharJob(job.id, Date.now());
+		} catch {
+			setOfProcessando(false);
+			setOfError(
+				"Não foi possível ler a planilha ou iniciar a conciliação. Confira as colunas (nome e cidade).",
+			);
+		}
+	};
+
+	const ofItensFiltrados = useMemo(() => {
+		const itens = ofJob?.resultado?.itens || [];
+		if (ofFiltro === "entregues") return itens.filter((item) => item.entregue);
+		if (ofFiltro === "nao_entregues") return itens.filter((item) => !item.entregue);
+		return itens;
+	}, [ofJob, ofFiltro]);
+
+	const OF_PAGE_SIZE = 20;
+	const ofTotalPages = Math.max(1, Math.ceil(ofItensFiltrados.length / OF_PAGE_SIZE));
+	const ofPageSegura = Math.min(ofPage, ofTotalPages);
+	const ofItensPaginados = ofItensFiltrados.slice(
+		(ofPageSegura - 1) * OF_PAGE_SIZE,
+		ofPageSegura * OF_PAGE_SIZE,
+	);
 
 	const carregarEquipamentos = useCallback(async () => {
 		setLoadingEquipamentos(true);
@@ -654,6 +755,17 @@ export default function MovimentacoesPage() {
 					}`}
 				>
 					Equipamentos
+				</button>
+				<button
+					type="button"
+					onClick={() => setAba(ABAS.ORDENS_FECHADAS)}
+					className={`border-b-2 px-4 py-2 text-sm font-bold ${
+						aba === ABAS.ORDENS_FECHADAS
+							? "border-blue-600 text-blue-700"
+							: "border-transparent text-gray-500 hover:text-gray-700"
+					}`}
+				>
+					Ordens Fechadas
 				</button>
 			</div>
 
@@ -1034,7 +1146,7 @@ export default function MovimentacoesPage() {
 						</div>
 					</div>
 				</section>
-			) : (
+			) : aba === ABAS.EQUIPAMENTOS ? (
 				<section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
 					<div className="mb-4 flex items-center justify-between">
 						<h2 className="text-base font-bold text-gray-900">
@@ -1116,6 +1228,221 @@ export default function MovimentacoesPage() {
 							</table>
 						</div>
 					</div>
+				</section>
+			) : (
+				<section className="space-y-5">
+					<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+						<h2 className="mb-1 text-base font-bold text-gray-900">
+							Conciliar O.S. fechadas x movimentações
+						</h2>
+						<p className="mb-4 text-sm text-gray-500">
+							Suba a planilha com nome e cidade do cliente (mesmo formato do
+							upload do Mapa), escolha o período e o sistema confronta cada
+							linha com{" "}
+							<strong>qualquer movimentação</strong> registrada no Portal de
+							Movimentações no período — não só retirada/devolução de comodato.
+						</p>
+
+						{ofError ? (
+							<p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{ofError}
+							</p>
+						) : null}
+
+						<div className="grid gap-3 sm:grid-cols-4">
+							<label className="block sm:col-span-2">
+								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+									Planilha (nome e cidade do cliente)
+								</span>
+								<input
+									type="file"
+									accept=".xlsx,.xls,.csv"
+									onChange={(event) => setOfArquivo(event.target.files?.[0] || null)}
+									className="input-field w-full"
+								/>
+							</label>
+							<label className="block">
+								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+									Data início
+								</span>
+								<input
+									type="date"
+									value={ofDataInicio}
+									onChange={(event) => setOfDataInicio(event.target.value)}
+									className="input-field w-full"
+								/>
+							</label>
+							<label className="block">
+								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+									Data fim
+								</span>
+								<input
+									type="date"
+									value={ofDataFim}
+									onChange={(event) => setOfDataFim(event.target.value)}
+									className="input-field w-full"
+								/>
+							</label>
+						</div>
+
+						<button
+							type="button"
+							onClick={handleConciliarOrdensFechadas}
+							disabled={ofProcessando}
+							className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<RefreshCw size={16} className={ofProcessando ? "animate-spin" : ""} />
+							{ofProcessando ? "Conciliando..." : "Conciliar"}
+						</button>
+
+						{ofJob && ofJob.status !== "completed" ? (
+							<div className="mt-4">
+								<div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+									<div
+										className="h-full bg-blue-600 transition-all"
+										style={{ width: `${ofJob.percent || 0}%` }}
+									/>
+								</div>
+								<p className="mt-2 text-sm text-gray-600">{ofJob.stage}</p>
+								{ofJob.status === "failed" ? (
+									<p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+										{ofJob.error || "Falha na conciliação."}
+									</p>
+								) : null}
+							</div>
+						) : null}
+					</div>
+
+					{ofJob?.status === "completed" ? (
+						<>
+							<div className="grid gap-3 sm:grid-cols-3">
+								<div className="rounded-lg border border-gray-100 bg-white px-4 py-3">
+									<p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+										O.S. analisadas
+									</p>
+									<p className="mt-1 text-2xl font-black text-gray-900">
+										{ofJob.total}
+									</p>
+								</div>
+								<div className="rounded-lg border border-green-100 bg-green-50 px-4 py-3">
+									<p className="text-xs font-semibold uppercase tracking-wide text-green-600">
+										Entregues
+									</p>
+									<p className="mt-1 text-2xl font-black text-green-800">
+										{ofJob.entregues}
+									</p>
+								</div>
+								<div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+									<p className="text-xs font-semibold uppercase tracking-wide text-red-600">
+										Não entregues
+									</p>
+									<p className="mt-1 text-2xl font-black text-red-700">
+										{ofJob.naoEntregues}
+									</p>
+								</div>
+							</div>
+
+							<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+								<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+									<h2 className="text-base font-bold text-gray-900">
+										Detalhamento (para análise dos não entregues)
+									</h2>
+									<select
+										value={ofFiltro}
+										onChange={(event) => {
+											setOfFiltro(event.target.value);
+											setOfPage(1);
+										}}
+										className="input-field sm:w-auto"
+									>
+										<option value="todos">Todas</option>
+										<option value="entregues">Entregues</option>
+										<option value="nao_entregues">Não entregues</option>
+									</select>
+								</div>
+
+								<div className="overflow-hidden rounded-lg border border-gray-100">
+									<div className="overflow-x-auto">
+										<table className="min-w-[640px] w-full divide-y divide-gray-100 text-sm">
+											<thead className="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+												<tr>
+													<th className="px-4 py-3">Cliente</th>
+													<th className="px-4 py-3">Cidade</th>
+													<th className="px-4 py-3">Status</th>
+													<th className="px-4 py-3">Movimentação encontrada</th>
+												</tr>
+											</thead>
+											<tbody className="divide-y divide-gray-100 bg-white">
+												{ofItensPaginados.map((item, index) => (
+													<tr key={`${item.nome}-${index}`}>
+														<td className="px-4 py-3 font-semibold text-gray-900">
+															{item.nome}
+														</td>
+														<td className="px-4 py-3 text-gray-600">
+															{item.cidade || "-"}
+														</td>
+														<td className="px-4 py-3">
+															<span
+																className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+																	item.entregue
+																		? "border-green-200 bg-green-50 text-green-700"
+																		: "border-red-200 bg-red-50 text-red-700"
+																}`}
+															>
+																{item.entregue ? (
+																	<CheckCircle2 size={13} />
+																) : (
+																	<AlertTriangle size={13} />
+																)}
+																{item.entregue ? "Entregue" : "Não entregue"}
+															</span>
+														</td>
+														<td className="px-4 py-3 text-xs text-gray-500">
+															{item.movimentacao
+																? `${item.movimentacao.tipoOperacao || "-"} · ${formatDateTime(item.movimentacao.emitidoEm)}`
+																: "Nenhuma movimentação encontrada no período"}
+														</td>
+													</tr>
+												))}
+												{!ofItensPaginados.length ? (
+													<tr>
+														<td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+															Nenhum item para este filtro.
+														</td>
+													</tr>
+												) : null}
+											</tbody>
+										</table>
+									</div>
+								</div>
+
+								<div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+									<span>
+										Página {ofPageSegura} de {ofTotalPages} ·{" "}
+										{ofItensFiltrados.length} registro(s)
+									</span>
+									<div className="flex gap-2">
+										<button
+											type="button"
+											disabled={ofPageSegura <= 1}
+											onClick={() => setOfPage((current) => Math.max(1, current - 1))}
+											className="rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+										>
+											Anterior
+										</button>
+										<button
+											type="button"
+											disabled={ofPageSegura >= ofTotalPages}
+											onClick={() => setOfPage((current) => current + 1)}
+											className="rounded-lg border border-gray-200 px-3 py-1.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+										>
+											Próxima
+										</button>
+									</div>
+								</div>
+							</div>
+						</>
+					) : null}
 				</section>
 			)}
 

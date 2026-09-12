@@ -51,6 +51,17 @@ export async function salvarEquipamentoConfig(payload) {
 	});
 }
 
+export async function iniciarConciliacaoOrdensFechadas({ rows, dataInicio, dataFim }) {
+	return requestVpsApi("/movimentacoes/ordens-fechadas/conciliar", {
+		method: "POST",
+		body: JSON.stringify({ rows, dataInicio, dataFim }),
+	});
+}
+
+export async function buscarJobConciliacaoOrdensFechadas(jobId) {
+	return requestVpsApi(`/movimentacoes/ordens-fechadas/conciliar/${jobId}`);
+}
+
 export async function buscarConfigMovimentacoes() {
 	return requestVpsApi("/movimentacoes/config");
 }

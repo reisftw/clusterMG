@@ -29,6 +29,7 @@ const sempreIntegration = require("./sempreIntegration");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
 const movimentacoesRepository = require("./movimentacoesRepository");
 const movimentacoesEntregas = require("./movimentacoesEntregas");
+const movimentacoesOrdensFechadas = require("./movimentacoesOrdensFechadas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
@@ -4617,6 +4618,7 @@ function createApp() {
 		createMovimentacoesRouter({
 			movimentacoesRepository,
 			movimentacoesEntregas,
+			movimentacoesOrdensFechadas,
 			requireAuthenticated,
 			requireAnyPermission,
 			requireCsrfToken,
