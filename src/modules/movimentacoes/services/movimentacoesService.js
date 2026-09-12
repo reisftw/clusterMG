@@ -83,10 +83,14 @@ export async function salvarConfigMovimentacoes(payload) {
 	});
 }
 
-export async function iniciarVarreduraMovimentacoes({ dataInicio, dataFim } = {}) {
+export async function iniciarVarreduraMovimentacoes({
+	dataInicio,
+	dataFim,
+	anoTodo,
+} = {}) {
 	return requestVpsApi("/movimentacoes/scan", {
 		method: "POST",
-		body: JSON.stringify({ dataInicio, dataFim }),
+		body: JSON.stringify({ dataInicio, dataFim, anoTodo: Boolean(anoTodo) }),
 	});
 }
 

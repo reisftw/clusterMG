@@ -10,10 +10,16 @@
 // sem entrega correspondente.
 const sempreIntegration = require("./sempreIntegration");
 const movimentacoesOrdensFechadasRepository = require("./movimentacoesOrdensFechadasRepository");
+const { buildDateWindows } = require("./movimentacoesDateWindows");
 
 const NOTES_TIMEOUT_MS = 60 * 1000;
 const NOTES_PAGE_LIMIT = 100;
+// Confirmado direto na API: um periodo largo tem volume grande demais pra
+// paginar de uma vez (ex.: so janeiro/2026 = 29408 notas, 295 paginas).
+// Por isso o periodo pedido e quebrado em janelas de WINDOW_DAYS (ver
+// fetchTodasNotas) — o teto abaixo e por janela, nao pro periodo inteiro.
 const NOTES_MAX_PAGES = 5000;
+const WINDOW_DAYS = 15;
 
 function cleanText(value) {
 	return String(value || "").trim();
@@ -47,10 +53,11 @@ async function fetchNotesPage({ page, start, end }) {
 	});
 }
 
-// Todas as notas do periodo (qualquer tipo_operacao) — bem mais amplo que
-// fetchNotasDevolucaoComodato de movimentacoesEntregas.js, que so olha
-// "Devolucao de comodato".
-async function fetchTodasNotas({ start, end, onProgress }) {
+// Todas as notas de UMA janela (qualquer tipo_operacao) — bem mais amplo
+// que fetchNotasDevolucaoComodatoJanela de movimentacoesEntregas.js, que so
+// olha "Devolucao de comodato". Quem quebra o periodo pedido em janelas e
+// chama isso repetidas vezes e executeJob.
+async function fetchNotasDaJanela({ start, end, onProgress }) {
 	const notas = [];
 	let page = 1;
 	let totalPages = 1;
@@ -58,6 +65,9 @@ async function fetchTodasNotas({ start, end, onProgress }) {
 		const payload = await fetchNotesPage({ page, start, end });
 		const pageNotes = extractArray(payload, ["data"]);
 		for (const note of pageNotes) {
+			// So nome — o codigo do parceiro no Playground (parceiro.externo_id)
+			// nao corresponde ao codigo_cliente do Hubsoft (confirmado pelo
+			// time), entao nao da pra usar como chave de match.
 			const parceiroNome = cleanText(
 				note.parceiro?.nome_razaosocial || note.parceiro?.nome,
 			);
@@ -83,17 +93,39 @@ function extrairLinhasPlanilha(rows = []) {
 	return rows
 		.map((row) => {
 			const nome = cleanText(
-				row.nome ?? row.nome_cliente ?? row.cliente ?? row.Nome ?? row.Cliente,
+				row.nome ??
+					row.nome_razaosocial ??
+					row.nome_cliente ??
+					row.cliente ??
+					row.Nome ??
+					row.Cliente,
+			);
+			const codigo = cleanText(
+				row.codigo_cliente ??
+					row.codigo ??
+					row.cod_cliente ??
+					row.Codigo ??
+					row.CodigoCliente,
 			);
 			const cidade = cleanText(
 				row.cidade ?? row.pop ?? row.Cidade ?? row.municipio ?? row.Municipio,
 			);
-			return { nome, cidade };
+			const fechamento = cleanText(
+				row.data_termino_executado ??
+					row.data_fechamento ??
+					row.fechamento ??
+					row.DataFechamento,
+			);
+			return { nome, codigo, cidade, fechamento };
 		})
 		.filter((row) => row.nome);
 }
 
-function encontrarMatch(nome, notas) {
+// So bate por nome — o codigo do parceiro no Playground NAO corresponde ao
+// codigo_cliente do Hubsoft (confirmado pelo time), entao nao da pra usar
+// como chave de match. codigo/fechamento da planilha ficam so como
+// informacao extra no resultado (ver executeJob), nao entram na comparacao.
+function encontrarMatch({ nome }, notas) {
 	const nomeNormalizado = normalizeText(nome);
 	if (!nomeNormalizado) return null;
 	return (
@@ -119,47 +151,83 @@ async function executeJob(jobId, { rows, dataInicio, dataFim }) {
 	try {
 		const start = new Date(dataInicio);
 		const end = new Date(dataFim);
-		const { notas, limiteAtingido } = await fetchTodasNotas({
-			start,
-			end,
-			onProgress: async ({ page, totalPages, notasEncontradas }) => {
-				await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
-					stage: `Consultando movimentações (página ${page} de ${totalPages || "?"}, ${notasEncontradas} nota(s) encontrada(s))`,
-					percent: Math.min(60, 10 + Math.round((page / Math.max(totalPages, page)) * 50)),
-				});
-			},
-		});
+		const janelas = buildDateWindows(start, end, WINDOW_DAYS);
 
 		const linhas = extrairLinhasPlanilha(rows);
-		await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
-			stage: "Cruzando O.S. fechadas com as movimentações encontradas",
-			percent: 70,
-			total: linhas.length,
-		});
+		// Um item por linha da planilha, atualizado a medida que cada janela
+		// e consultada — comeca tudo como "nao entregue" e vira "entregue" na
+		// primeira janela onde aparecer uma movimentacao do cliente.
+		const itens = linhas.map((linha) => ({
+			nome: linha.nome,
+			codigo: linha.codigo,
+			cidade: linha.cidade,
+			fechamento: linha.fechamento,
+			entregue: false,
+			movimentacao: null,
+		}));
+		let totalNotasConsultadas = 0;
+		let algumLimiteAtingido = false;
 
-		const itens = linhas.map((linha) => {
-			const match = encontrarMatch(linha.nome, notas);
-			return {
-				nome: linha.nome,
-				cidade: linha.cidade,
-				entregue: Boolean(match),
-				movimentacao: match
-					? {
-							parceiroNome: match.parceiroNome,
-							tipoOperacao: match.tipoOperacao,
-							emitidoEm: match.emitidoEm,
-							numero: match.numero,
-						}
-					: null,
-			};
-		});
+		for (const [indiceJanela, janela] of janelas.entries()) {
+			const rotuloJanela = `${janela.start.toLocaleDateString("pt-BR")} a ${janela.end.toLocaleDateString("pt-BR")}`;
+			const { notas, limiteAtingido } = await fetchNotasDaJanela({
+				start: janela.start,
+				end: janela.end,
+				onProgress: async ({ page, totalPages }) => {
+					await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
+						stage: `Período ${indiceJanela + 1} de ${janelas.length} (${rotuloJanela}) — página ${page} de ${totalPages || "?"}`,
+						percent: Math.min(
+							90,
+							Math.round(((indiceJanela + page / Math.max(totalPages, page)) / janelas.length) * 90),
+						),
+					});
+				},
+			});
+			if (limiteAtingido) algumLimiteAtingido = true;
+			totalNotasConsultadas += notas.length;
+
+			// So tenta casar quem ainda nao foi encontrado numa janela anterior
+			// — evita reprocessar e ja deixa o resultado salvo (resultado
+			// parcial no job) a cada janela concluida.
+			for (const item of itens) {
+				if (item.entregue) continue;
+				const match = encontrarMatch(item, notas);
+				if (!match) continue;
+				item.entregue = true;
+				item.movimentacao = {
+					parceiroNome: match.parceiroNome,
+					tipoOperacao: match.tipoOperacao,
+					emitidoEm: match.emitidoEm,
+					numero: match.numero,
+				};
+			}
+
+			const entreguesAteAqui = itens.filter((item) => item.entregue).length;
+			await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
+				stage: `Período ${indiceJanela + 1} de ${janelas.length} concluído (${rotuloJanela})`,
+				total: itens.length,
+				entregues: entreguesAteAqui,
+				naoEntregues: itens.length - entreguesAteAqui,
+				resultado: {
+					itens,
+					totalNotasConsultadas,
+					limiteAtingido: algumLimiteAtingido,
+					janelasProcessadas: indiceJanela + 1,
+					janelasTotal: janelas.length,
+					periodo: { inicio: start.toISOString(), fim: end.toISOString() },
+				},
+			});
+
+			// Todo mundo ja casou — nao precisa consultar as janelas restantes.
+			if (itens.every((item) => item.entregue)) break;
+		}
+
 		const entregues = itens.filter((item) => item.entregue).length;
 		const naoEntregues = itens.length - entregues;
-
 		const resultadoFinal = {
 			itens,
-			totalNotasConsultadas: notas.length,
-			limiteAtingido,
+			totalNotasConsultadas,
+			limiteAtingido: algumLimiteAtingido,
 			periodo: { inicio: start.toISOString(), fim: end.toISOString() },
 		};
 

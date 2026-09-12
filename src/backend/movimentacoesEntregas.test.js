@@ -288,7 +288,7 @@ describe("movimentacoesEntregas", () => {
 		expect(findOrdensAbertasBySerie).not.toHaveBeenCalled();
 	});
 
-	it("usa a janela de datas informada (varredura do ano todo) em vez das ultimas 24h", async () => {
+	it("quebra o periodo pedido (varredura do ano todo) em janelas de 15 dias", async () => {
 		const requestSempreRaw = vi.fn(async () => ({ data: [], meta: { totalPages: 1 } }));
 		const service = loadService({
 			requestSempreRaw,
@@ -303,12 +303,17 @@ describe("movimentacoesEntregas", () => {
 			user: { uid: "u1" },
 			manual: true,
 			dataInicio: "2026-01-01T00:00:00.000Z",
-			dataFim: "2026-08-30T00:00:00.000Z",
+			dataFim: "2026-02-14T00:00:00.000Z",
 		});
-		await new Promise((resolve) => setImmediate(resolve));
+		for (let i = 0; i < 10; i += 1) {
+			await new Promise((resolve) => setImmediate(resolve));
+		}
 
-		const url = requestSempreRaw.mock.calls[0][0];
-		expect(url).toContain("filter.emitido_em=%24gte%3A2026-01-01T00%3A00%3A00.000Z");
-		expect(url).toContain("filter.emitido_em=%24lte%3A2026-08-30T00%3A00%3A00.000Z");
+		// 2026-01-01 a 2026-02-14 (45 dias) em janelas de 15 dias -> 3 chamadas.
+		expect(requestSempreRaw).toHaveBeenCalledTimes(3);
+		const primeiraUrl = requestSempreRaw.mock.calls[0][0];
+		expect(primeiraUrl).toContain("filter.emitido_em=%24gte%3A2026-01-01T00%3A00%3A00.000Z");
+		const ultimaUrl = requestSempreRaw.mock.calls[2][0];
+		expect(ultimaUrl).toContain("filter.emitido_em=%24lte%3A2026-02-14T00%3A00%3A00.000Z");
 	});
 });

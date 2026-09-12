@@ -158,4 +158,29 @@ describe("movimentacoesRepository", () => {
 		expect(dbQuery.mock.calls[0][0]).toContain("Não definida");
 		expect(dbQuery.mock.calls[0][0]).toContain("sum(coalesce(c.valor, 0))");
 	});
+
+	it("saveConfig grava backfillAnualConcluidoEm (marca a varredura do ano como ja rodada)", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [] }) // readConfig() interno ao saveConfig
+			.mockResolvedValueOnce({ rows: [] }); // insert/update
+		const repository = loadRepository(dbQuery);
+
+		const next = await repository.saveConfig(
+			{ backfillAnualConcluidoEm: "2026-09-12T12:00:00.000Z" },
+			{ uid: "admin1" },
+		);
+
+		expect(next.backfillAnualConcluidoEm).toBe("2026-09-12T12:00:00.000Z");
+		expect(dbQuery.mock.calls[1][1]).toContain("2026-09-12T12:00:00.000Z");
+	});
+
+	it("readConfig traz backfillAnualConcluidoEm nulo por padrao (nunca rodou)", async () => {
+		const dbQuery = vi.fn(async () => ({ rows: [] }));
+		const repository = loadRepository(dbQuery);
+
+		const config = await repository.readConfig();
+
+		expect(config.backfillAnualConcluidoEm).toBeNull();
+	});
 });

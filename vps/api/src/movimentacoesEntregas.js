@@ -9,16 +9,22 @@
 const sempreIntegration = require("./sempreIntegration");
 const ordensRepository = require("./ordensRepository");
 const movimentacoesRepository = require("./movimentacoesRepository");
+const { buildDateWindows } = require("./movimentacoesDateWindows");
 
 const NOTES_TIMEOUT_MS = 60 * 1000;
 const NOTES_PAGE_LIMIT = 100;
-// Teto de seguranca, nao um alvo esperado: uma varredura de "ano todo"
-// percorre TODAS as notas do periodo (todos os tipos de operacao), so
-// filtrando por "Devolucao de comodato" depois de buscar a pagina — entao
-// precisa de bem mais que as ~80 paginas (8000 notas) que bastavam pra
-// janela padrao de 24h. Historico: com 80 paginas a varredura anual parava
-// em ~822 devolucoes encontradas sem avisar que ainda havia mais.
+// Teto de seguranca por JANELA (ver WINDOW_DAYS abaixo), nao um alvo
+// esperado. Confirmado direto na API (teste manual, janeiro/2026 sozinho:
+// 29408 notas, 295 paginas) que o volume real e grande demais pra paginar
+// um periodo largo de uma vez so — uma varredura de "ano todo" parava
+// sempre por volta de ~800-850 devolucoes encontradas, bem antes do fim
+// real dos dados. Nao era um bug de contagem daqui; e volume/tempo.
 const NOTES_MAX_PAGES = 5000;
+// Quebra o periodo pedido em janelas de 15 dias (sugestao validada com o
+// time) e processa uma de cada vez, salvando o resultado de cada janela
+// antes de seguir pra proxima — se uma janela futura falhar, o que ja foi
+// encontrado continua salvo.
+const WINDOW_DAYS = 15;
 
 function cleanText(value) {
 	return String(value || "").trim();
@@ -121,12 +127,14 @@ async function fetchNotesPage({ page, start, end }) {
 	});
 }
 
-// Ponto unico de acesso ao "Portal de Movimentacoes". Hoje aponta pro
-// Playground/Sempre; quando o Hubsoft nativo expuser o mesmo dado, troca
-// so aqui (mantendo o formato de retorno: lista de movimentos por item).
+// Ponto unico de acesso ao "Portal de Movimentacoes" pra UMA janela (ver
+// WINDOW_DAYS) — quem varre o periodo inteiro em janelas e chama isso
+// repetidas vezes e executeScanJob. Hoje aponta pro Playground/Sempre;
+// quando o Hubsoft nativo expuser o mesmo dado, troca so aqui (mantendo o
+// formato de retorno: lista de movimentos por item).
 // onProgress (opcional) e chamado a cada pagina consultada — usado pelo job
 // pra mostrar "pagina X de Y" em vez de parecer travado numa varredura longa.
-async function fetchNotasDevolucaoComodato({ start, end, onProgress }) {
+async function fetchNotasDevolucaoComodatoJanela({ start, end, onProgress }) {
 	const movimentos = [];
 	let page = 1;
 	let totalPages = 1;
@@ -222,10 +230,16 @@ function getScanWindow({ dataInicio, dataFim } = {}) {
 	return { start: boundedStart, end };
 }
 
-async function runScan({ user = {}, manual = false, dataInicio, dataFim } = {}) {
+async function runScan({
+	user = {},
+	manual = false,
+	dataInicio,
+	dataFim,
+	anoTodo = false,
+} = {}) {
 	const job = await movimentacoesRepository.createScanJob({ manual, user });
 	setImmediate(() => {
-		executeScanJob(job.id, { dataInicio, dataFim }).catch((error) => {
+		executeScanJob(job.id, { dataInicio, dataFim, anoTodo, user }).catch((error) => {
 			console.error(
 				`[movimentacoesEntregas] Falha no job de varredura ${job.id}:`,
 				error?.message || error,
@@ -235,7 +249,13 @@ async function runScan({ user = {}, manual = false, dataInicio, dataFim } = {}) 
 	return job;
 }
 
-async function executeScanJob(jobId, { dataInicio, dataFim } = {}) {
+// anoTodo marca que essa varredura e o backfill do historico (periodo
+// largo, disparado pelo botao "Varredura do ano todo" — visivel so pra
+// admin, ver Sidebar/MovimentacoesPage). Quando ELA termina com sucesso a
+// gente grava backfillAnualConcluidoEm na config, so como informacao (a
+// tela mostra "ultima varredura completa em: DD/MM") — o botao continua
+// disponivel pra admin rodar de novo se precisar, nao some.
+async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, user = {} } = {}) {
 	await movimentacoesRepository.updateScanJob(jobId, {
 		status: "running",
 		stage: "Consultando devoluções no Portal de Movimentações",
@@ -245,52 +265,64 @@ async function executeScanJob(jobId, { dataInicio, dataFim } = {}) {
 
 	try {
 		const { start, end } = getScanWindow({ dataInicio, dataFim });
-		const { movimentos, limiteAtingido, paginasConsultadas, totalPages } =
-			await fetchNotasDevolucaoComodato({
-				start,
-				end,
-				onProgress: async ({ page, totalPages: total, devolucoesEncontradas }) => {
-					await movimentacoesRepository.updateScanJob(jobId, {
-						stage: `Consultando Portal de Movimentações (página ${page} de ${total || "?"}, ${devolucoesEncontradas} devolução(ões) encontrada(s) até agora)`,
-						percent: Math.min(48, 10 + Math.round((page / Math.max(total, page)) * 38)),
-					});
-				},
-			});
-		if (limiteAtingido) {
-			console.warn(
-				`[movimentacoesEntregas] Varredura atingiu o teto de ${NOTES_MAX_PAGES} páginas (consultou ${paginasConsultadas} de ${totalPages}) — pode haver devoluções não processadas nesta rodada.`,
-			);
-		}
-		await movimentacoesRepository.updateScanJob(jobId, {
-			stage: "Cruzando com O.S. abertas no mapa/match",
-			percent: 50,
-			total: movimentos.length,
-		});
+		const janelas = buildDateWindows(start, end, WINDOW_DAYS);
 
+		let totalEncontradas = 0;
 		let processed = 0;
 		let casadas = 0;
 		let semMatch = 0;
-		for (const movimento of movimentos) {
-			const resultado = await processarMovimento(movimento);
-			processed += 1;
-			if (resultado?.statusMatch === "casada") casadas += 1;
-			if (resultado?.statusMatch === "sem_match") semMatch += 1;
+		let algumLimiteAtingido = false;
+
+		for (const [indiceJanela, janela] of janelas.entries()) {
+			const rotuloJanela = `${janela.start.toLocaleDateString("pt-BR")} a ${janela.end.toLocaleDateString("pt-BR")}`;
+			const { movimentos, limiteAtingido } = await fetchNotasDevolucaoComodatoJanela({
+				start: janela.start,
+				end: janela.end,
+				onProgress: async ({ page, totalPages: total }) => {
+					await movimentacoesRepository.updateScanJob(jobId, {
+						stage: `Período ${indiceJanela + 1} de ${janelas.length} (${rotuloJanela}) — página ${page} de ${total || "?"}`,
+						percent: Math.min(
+							95,
+							Math.round(((indiceJanela + page / Math.max(total, page)) / janelas.length) * 95),
+						),
+					});
+				},
+			});
+			if (limiteAtingido) algumLimiteAtingido = true;
+			totalEncontradas += movimentos.length;
+
+			// Salva o resultado de cada movimento assim que a janela termina de
+			// ser consultada, em vez de acumular tudo em memoria pro fim da
+			// varredura — se uma janela mais pra frente falhar, o que ja foi
+			// processado continua valendo.
+			for (const movimento of movimentos) {
+				const resultado = await processarMovimento(movimento);
+				processed += 1;
+				if (resultado?.statusMatch === "casada") casadas += 1;
+				if (resultado?.statusMatch === "sem_match") semMatch += 1;
+			}
 			await movimentacoesRepository.updateScanJob(jobId, {
+				stage: `Período ${indiceJanela + 1} de ${janelas.length} concluído (${rotuloJanela})`,
+				total: totalEncontradas,
 				processed,
 				casadas,
 				semMatch,
-				percent: 50 + Math.round((processed / Math.max(movimentos.length, 1)) * 45),
 			});
 		}
 
+		if (algumLimiteAtingido) {
+			console.warn(
+				`[movimentacoesEntregas] Ao menos uma janela da varredura atingiu o teto de ${NOTES_MAX_PAGES} páginas — pode haver devoluções não processadas nesta rodada.`,
+			);
+		}
+
 		const resultadoFinal = {
-			totalMovimentacoes: movimentos.length,
+			totalMovimentacoes: totalEncontradas,
 			totalCasadas: casadas,
 			totalSemMatch: semMatch,
 			periodo: { inicio: start.toISOString(), fim: end.toISOString() },
-			paginasConsultadas,
-			totalPaginasNoPeriodo: totalPages,
-			limiteAtingido,
+			janelasProcessadas: janelas.length,
+			limiteAtingido: algumLimiteAtingido,
 		};
 		await movimentacoesRepository.updateScanJob(jobId, {
 			status: "completed",
@@ -299,6 +331,12 @@ async function executeScanJob(jobId, { dataInicio, dataFim } = {}) {
 			resultado: resultadoFinal,
 			finishedAt: new Date().toISOString(),
 		});
+		if (anoTodo && !algumLimiteAtingido) {
+			await movimentacoesRepository.saveConfig(
+				{ backfillAnualConcluidoEm: new Date().toISOString() },
+				user,
+			);
+		}
 		return resultadoFinal;
 	} catch (error) {
 		await movimentacoesRepository.updateScanJob(jobId, {

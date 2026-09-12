@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = Object.freeze({
 	timezone: "America/Sao_Paulo",
 	lastRunDate: "",
 	lastRunAt: null,
+	backfillAnualConcluidoEm: null,
 });
 
 function text(value) {
@@ -417,6 +418,7 @@ async function readConfig() {
 		timezone: row.timezone,
 		lastRunDate: row.last_run_date || "",
 		lastRunAt: row.last_run_at || null,
+		backfillAnualConcluidoEm: row.backfill_anual_concluido_em || null,
 	};
 }
 
@@ -428,17 +430,21 @@ async function saveConfig(payload = {}, user = {}) {
 		timezone: text(payload.timezone || current.timezone),
 		lastRunDate: text(payload.lastRunDate ?? current.lastRunDate),
 		lastRunAt: payload.lastRunAt ?? current.lastRunAt,
+		backfillAnualConcluidoEm:
+			payload.backfillAnualConcluidoEm ?? current.backfillAnualConcluidoEm,
 	};
 	await db.query(
 		`insert into movimentacoes_config
-		 (id, enabled, daily_scan_time, timezone, last_run_date, last_run_at, updated_at, updated_by)
-		 values ($1,$2,$3,$4,$5,$6,now(),$7)
+		 (id, enabled, daily_scan_time, timezone, last_run_date, last_run_at,
+		  backfill_anual_concluido_em, updated_at, updated_by)
+		 values ($1,$2,$3,$4,$5,$6,$7,now(),$8)
 		 on conflict (id) do update set
 		   enabled = excluded.enabled,
 		   daily_scan_time = excluded.daily_scan_time,
 		   timezone = excluded.timezone,
 		   last_run_date = excluded.last_run_date,
 		   last_run_at = excluded.last_run_at,
+		   backfill_anual_concluido_em = excluded.backfill_anual_concluido_em,
 		   updated_at = now(),
 		   updated_by = excluded.updated_by`,
 		[
@@ -448,6 +454,7 @@ async function saveConfig(payload = {}, user = {}) {
 			next.timezone,
 			next.lastRunDate,
 			next.lastRunAt,
+			next.backfillAnualConcluidoEm,
 			nullableText(user?.uid || user?.email),
 		],
 	);

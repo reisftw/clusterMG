@@ -15,10 +15,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
+import { useAuthContext } from "../../../context/AuthContext";
 import { addClusterLogo } from "../../../utils/pdfBranding";
 import MovimentacoesCalendario from "./MovimentacoesCalendario";
 import {
 	buscarCidadesMovimentacoes,
+	buscarConfigMovimentacoes,
 	buscarDashboardMovimentacoes,
 	buscarResumoCategoriaEquipamentos,
 	buscarEquipamentosMovimentacoes,
@@ -142,6 +144,22 @@ function descreverPeriodo(tipo, valor) {
 	return "Todo o período";
 }
 
+// Pro PDF: "Todo o período" sozinho fica vago — troca pelas datas reais
+// (primeiro e ultimo dia com devolução registrada), calculadas a partir do
+// que ja esta carregado no painel. Quando ha filtro de periodo aplicado,
+// usa descreverPeriodo normalmente.
+function descreverPeriodoComDatas(tipo, valor, resumoPorEmpresaDia) {
+	if (tipo !== PERIODO_TIPOS.TODOS) return descreverPeriodo(tipo, valor);
+	const dias = [...new Set((resumoPorEmpresaDia || []).map((item) => String(item.dia || "").slice(0, 10)))]
+		.filter(Boolean)
+		.sort();
+	if (!dias.length) return "Sem registros";
+	const formatar = (data) => new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR");
+	const inicio = formatar(dias[0]);
+	const fim = formatar(dias[dias.length - 1]);
+	return inicio === fim ? inicio : `${inicio} a ${fim}`;
+}
+
 function groupResumoPorDia(resumo) {
 	const map = new Map();
 	for (const item of resumo || []) {
@@ -161,6 +179,22 @@ const ABAS = {
 };
 
 export default function MovimentacoesPage() {
+	const { currentUser } = useAuthContext();
+	const isAdmin = String(currentUser?.role || "").toLowerCase() === "admin";
+	const [config, setConfig] = useState(null);
+
+	useEffect(() => {
+		let ativo = true;
+		buscarConfigMovimentacoes()
+			.then((data) => {
+				if (ativo) setConfig(data);
+			})
+			.catch(() => {});
+		return () => {
+			ativo = false;
+		};
+	}, []);
+
 	const [aba, setAba] = useState(ABAS.PAINEL);
 
 	const [dashboard, setDashboard] = useState({
@@ -505,7 +539,11 @@ export default function MovimentacoesPage() {
 
 		pdf.setFont("helvetica", "normal");
 		pdf.setFontSize(9);
-		const periodoTexto = descreverPeriodo(periodoAplicado.tipo, periodoAplicado.valor);
+		const periodoTexto = descreverPeriodoComDatas(
+			periodoAplicado.tipo,
+			periodoAplicado.valor,
+			dashboard.resumoPorEmpresaDia,
+		);
 		pdf.text(`Período: ${periodoTexto}`, 40, 62);
 
 		const valorTotalGeral = resumoCategorias.reduce(
@@ -567,6 +605,9 @@ export default function MovimentacoesPage() {
 						carregarDashboard();
 						carregarLista();
 						carregarCidades();
+						buscarConfigMovimentacoes()
+							.then(setConfig)
+							.catch(() => {});
 						return;
 					}
 					if (Date.now() - startedAt > SCAN_POLL_TIMEOUT_MS) {
@@ -635,6 +676,7 @@ export default function MovimentacoesPage() {
 				? {
 						dataInicio: new Date(ANO_ATUAL, 0, 1, 0, 0, 0, 0).toISOString(),
 						dataFim: new Date().toISOString(),
+						anoTodo: true,
 					}
 				: {};
 			const job = await iniciarVarreduraMovimentacoes(intervalo);
@@ -786,16 +828,22 @@ export default function MovimentacoesPage() {
 							<RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
 							{scanning ? "Varredura em andamento..." : "Varredura agora"}
 						</button>
-						<button
-							type="button"
-							onClick={() => handleIniciarVarredura({ anoTodo: true })}
-							disabled={scanning}
-							title={`Reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} — útil para achar O.S. antigas com equipamento já retirado.`}
-							className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<CalendarRange size={16} />
-							Varredura do ano todo
-						</button>
+						{isAdmin ? (
+							<button
+								type="button"
+								onClick={() => handleIniciarVarredura({ anoTodo: true })}
+								disabled={scanning}
+								title={
+									config?.backfillAnualConcluidoEm
+										? `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL}. Última varredura completa em ${formatDateTime(config.backfillAnualConcluidoEm)}.`
+										: `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} (demorado: consulta todo o histórico do ano em janelas de 15 dias). Rode uma vez para coletar o histórico; depois disso o botão "Varredura agora" cobre o dia a dia.`
+								}
+								className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<CalendarRange size={13} />
+								Ano todo (admin)
+							</button>
+						) : null}
 					</div>
 				</div>
 			</section>
@@ -1427,7 +1475,9 @@ export default function MovimentacoesPage() {
 											<thead className="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
 												<tr>
 													<th className="px-4 py-3">Cliente</th>
+													<th className="px-4 py-3">Código</th>
 													<th className="px-4 py-3">Cidade</th>
+													<th className="px-4 py-3">Fechamento</th>
 													<th className="px-4 py-3">Status</th>
 													<th className="px-4 py-3">Movimentação encontrada</th>
 												</tr>
@@ -1438,8 +1488,14 @@ export default function MovimentacoesPage() {
 														<td className="px-4 py-3 font-semibold text-gray-900">
 															{item.nome}
 														</td>
+														<td className="px-4 py-3 font-mono text-xs text-gray-600">
+															{item.codigo || "-"}
+														</td>
 														<td className="px-4 py-3 text-gray-600">
 															{item.cidade || "-"}
+														</td>
+														<td className="px-4 py-3 text-gray-600">
+															{item.fechamento || "-"}
 														</td>
 														<td className="px-4 py-3">
 															<span
@@ -1466,7 +1522,7 @@ export default function MovimentacoesPage() {
 												))}
 												{!ofItensPaginados.length ? (
 													<tr>
-														<td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+														<td colSpan={6} className="px-4 py-8 text-center text-gray-500">
 															Nenhum item para este filtro.
 														</td>
 													</tr>
