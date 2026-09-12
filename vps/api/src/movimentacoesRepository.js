@@ -48,6 +48,8 @@ function mapMovimentacao(row = {}) {
 		statusMatch: row.status_match || "pendente",
 		osNumero: row.os_numero || "",
 		osCollection: row.os_collection || "",
+		cidade: row.cidade || "",
+		estoqueDestino: row.estoque_destino || "",
 		casadaEm: row.casada_em || null,
 		removidoMapaEm: row.removido_mapa_em || null,
 		removidoMatchEm: row.removido_match_em || null,
@@ -82,8 +84,8 @@ async function upsertMovimentacao(movimento = {}) {
 		`insert into movimentacoes_estoque
 		 (id, nota_id, numero, movimento_estoque_id, tipo_operacao, emitido_em,
 		  empresa_nome, parceiro_nome, registrado_por, produto_nome, produto_codigo,
-		  serie, observacao_raw, raw_payload, criado_em, atualizado_em)
-		 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,now(),now())
+		  serie, observacao_raw, estoque_destino, raw_payload, criado_em, atualizado_em)
+		 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,now(),now())
 		 on conflict (id) do update set
 		   atualizado_em = now()
 		 returning *`,
@@ -101,18 +103,22 @@ async function upsertMovimentacao(movimento = {}) {
 			nullableText(movimento.produtoCodigo),
 			nullableText(movimento.serie),
 			nullableText(movimento.observacaoRaw),
+			nullableText(movimento.estoqueDestino),
 			JSON.stringify(movimento.rawPayload || {}),
 		],
 	);
 	return mapMovimentacao(result.rows[0]);
 }
 
-async function marcarComoCasada(id, { osNumero, osCollection } = {}) {
+// cidade vem da O.S. casada (ordens_servico.cidade) — a nota do Portal de
+// Movimentacoes nao traz cidade do cliente, so dá pra saber depois do match.
+async function marcarComoCasada(id, { osNumero, osCollection, cidade } = {}) {
 	const result = await db.query(
 		`update movimentacoes_estoque
 		    set status_match = 'casada',
 		        os_numero = $2,
 		        os_collection = $3,
+		        cidade = coalesce($4, cidade),
 		        casada_em = now(),
 		        removido_mapa_em = case when $3 in ('ordens_abertas', 'match_os_abertas')
 		          then coalesce(removido_mapa_em, now()) else removido_mapa_em end,
@@ -121,7 +127,7 @@ async function marcarComoCasada(id, { osNumero, osCollection } = {}) {
 		        atualizado_em = now()
 		  where id = $1
 		  returning *`,
-		[id, nullableText(osNumero), nullableText(osCollection)],
+		[id, nullableText(osNumero), nullableText(osCollection), nullableText(cidade)],
 	);
 	return result.rows[0] ? mapMovimentacao(result.rows[0]) : null;
 }
@@ -245,6 +251,56 @@ async function getRankingProdutos({ dataInicio, dataFim, limit = 20 } = {}) {
 		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
 	);
 	return result.rows.map((row) => ({ produto: row.produto, total: row.total }));
+}
+
+// Cidades com mais retirada de equipamento — conta toda devolucao que
+// casou com O.S. (cidade so fica conhecida via a O.S., ver marcarComoCasada).
+async function getRankingCidadesRetiradas({ dataInicio, dataFim, limit = 20 } = {}) {
+	const result = await db.query(
+		`select cidade, count(*)::int as total
+		 from movimentacoes_estoque
+		 where cidade is not null
+		   and ($1::timestamptz is null or emitido_em >= $1)
+		   and ($2::timestamptz is null or emitido_em <= $2)
+		 group by 1
+		 order by total desc
+		 limit $3`,
+		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
+	);
+	return result.rows.map((row) => ({ cidade: row.cidade, total: row.total }));
+}
+
+// Cidades com devolucao confirmada (O.S. efetivamente baixada do mapa/match).
+async function getRankingCidadesDevolvidas({ dataInicio, dataFim, limit = 20 } = {}) {
+	const result = await db.query(
+		`select cidade, count(*)::int as total
+		 from movimentacoes_estoque
+		 where cidade is not null
+		   and status_match = 'casada'
+		   and ($1::timestamptz is null or emitido_em >= $1)
+		   and ($2::timestamptz is null or emitido_em <= $2)
+		 group by 1
+		 order by total desc
+		 limit $3`,
+		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
+	);
+	return result.rows.map((row) => ({ cidade: row.cidade, total: row.total }));
+}
+
+// Estoques (destino do item na nota) que mais receberam equipamento de volta.
+async function getRankingEstoquesRecebimento({ dataInicio, dataFim, limit = 20 } = {}) {
+	const result = await db.query(
+		`select estoque_destino as estoque, count(*)::int as total
+		 from movimentacoes_estoque
+		 where estoque_destino is not null
+		   and ($1::timestamptz is null or emitido_em >= $1)
+		   and ($2::timestamptz is null or emitido_em <= $2)
+		 group by 1
+		 order by total desc
+		 limit $3`,
+		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
+	);
+	return result.rows.map((row) => ({ estoque: row.estoque, total: row.total }));
 }
 
 async function readConfig() {
@@ -377,6 +433,9 @@ async function getScanJob(id) {
 module.exports = {
 	createScanJob,
 	getResumoPorEmpresaDia,
+	getRankingCidadesDevolvidas,
+	getRankingCidadesRetiradas,
+	getRankingEstoquesRecebimento,
 	getRankingProdutos,
 	getRankingTecnicos,
 	getScanJob,

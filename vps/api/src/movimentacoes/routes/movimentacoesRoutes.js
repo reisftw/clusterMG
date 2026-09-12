@@ -22,6 +22,7 @@ function createMovimentacoesRouter({
 	const requireManage = requireAnyPermission(managePermissions, fallbackRoles);
 
 	router.get("/dashboard", requireAuthenticated, requireView, controller.getDashboard);
+	router.get("/cidades", requireAuthenticated, requireView, controller.getCidades);
 	router.get("/lista", requireAuthenticated, requireView, controller.listMovimentacoes);
 	router.get("/config", requireAuthenticated, requireView, controller.readConfig);
 	router.put(

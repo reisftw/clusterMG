@@ -94,6 +94,10 @@ function extractMovimentos(note = {}) {
 			produtoCodigo: cleanText(item.produto?.codigo || item.produto_id),
 			serie: cleanText(item.serie),
 			observacaoRaw: cleanText(note.observacao),
+			estoqueDestino: cleanText(
+				item.estoque_local_destino?.descricao ||
+					item.estoque_local_destino?.display,
+			),
 			rawPayload: { nota: note.id, item },
 		}));
 }
@@ -155,7 +159,11 @@ async function removerOrdemDoMapaEMatch(ordem) {
 	const collectionPath = ordem.collectionPath;
 	const documentPath = ordem.path;
 	await ordensRepository.deleteDocument(documentPath);
-	return { osNumero: ordem.data?.num_os || "", osCollection: collectionPath };
+	return {
+		osNumero: ordem.data?.num_os || "",
+		osCollection: collectionPath,
+		cidade: ordem.data?.cidade || "",
+	};
 }
 
 async function processarMovimento(movimento) {
@@ -168,10 +176,11 @@ async function processarMovimento(movimento) {
 	if (!ordem) {
 		return movimentacoesRepository.marcarComoSemMatch(salvo.id);
 	}
-	const { osNumero, osCollection } = await removerOrdemDoMapaEMatch(ordem);
+	const { osNumero, osCollection, cidade } = await removerOrdemDoMapaEMatch(ordem);
 	return movimentacoesRepository.marcarComoCasada(salvo.id, {
 		osNumero,
 		osCollection,
+		cidade,
 	});
 }
 

@@ -39,6 +39,34 @@ function createMovimentacoesController({
 		}
 	}
 
+	async function getCidades(req, res, next) {
+		try {
+			const { dataInicio, dataFim } = req.query;
+			const [rankingCidadesRetiradas, rankingCidadesDevolvidas, rankingEstoques] =
+				await Promise.all([
+					movimentacoesRepository.getRankingCidadesRetiradas({
+						dataInicio,
+						dataFim,
+					}),
+					movimentacoesRepository.getRankingCidadesDevolvidas({
+						dataInicio,
+						dataFim,
+					}),
+					movimentacoesRepository.getRankingEstoquesRecebimento({
+						dataInicio,
+						dataFim,
+					}),
+				]);
+			res.json({
+				rankingCidadesRetiradas,
+				rankingCidadesDevolvidas,
+				rankingEstoques,
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function readConfig(_req, res, next) {
 		try {
 			res.json(await movimentacoesRepository.readConfig());
@@ -86,6 +114,7 @@ function createMovimentacoesController({
 	}
 
 	return {
+		getCidades,
 		getDashboard,
 		getScanJob,
 		listMovimentacoes,

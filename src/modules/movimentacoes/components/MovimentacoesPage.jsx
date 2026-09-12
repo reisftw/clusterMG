@@ -1,16 +1,20 @@
 import {
 	AlertTriangle,
+	Building2,
 	CalendarRange,
 	CheckCircle2,
 	Clock3,
+	MapPin,
 	PackageSearch,
 	RefreshCw,
 	Trophy,
+	Warehouse,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import {
+	buscarCidadesMovimentacoes,
 	buscarDashboardMovimentacoes,
 	buscarJobVarreduraMovimentacoes,
 	iniciarVarreduraMovimentacoes,
@@ -124,7 +128,14 @@ function groupResumoPorDia(resumo) {
 	return [...map.values()].sort((a, b) => b.dia.localeCompare(a.dia));
 }
 
+const ABAS = {
+	PAINEL: "painel",
+	CIDADES: "cidades",
+};
+
 export default function MovimentacoesPage() {
+	const [aba, setAba] = useState(ABAS.PAINEL);
+
 	const [dashboard, setDashboard] = useState({
 		resumoPorEmpresaDia: [],
 		rankingTecnicos: [],
@@ -132,6 +143,14 @@ export default function MovimentacoesPage() {
 	});
 	const [loadingDashboard, setLoadingDashboard] = useState(true);
 	const [dashboardError, setDashboardError] = useState("");
+
+	const [cidades, setCidades] = useState({
+		rankingCidadesRetiradas: [],
+		rankingCidadesDevolvidas: [],
+		rankingEstoques: [],
+	});
+	const [loadingCidades, setLoadingCidades] = useState(true);
+	const [cidadesError, setCidadesError] = useState("");
 
 	const [lista, setLista] = useState({ items: [], page: 1, totalPages: 1, total: 0 });
 	const [loadingLista, setLoadingLista] = useState(true);
@@ -196,6 +215,26 @@ export default function MovimentacoesPage() {
 		}
 	}, [page, statusFiltro, intervaloPeriodo]);
 
+	const carregarCidades = useCallback(async () => {
+		setLoadingCidades(true);
+		setCidadesError("");
+		try {
+			const data = await buscarCidadesMovimentacoes({
+				dataInicio: intervaloPeriodo.dataInicio,
+				dataFim: intervaloPeriodo.dataFim,
+			});
+			setCidades(data);
+		} catch {
+			setCidadesError("Não foi possível carregar o ranking de cidades.");
+		} finally {
+			setLoadingCidades(false);
+		}
+	}, [intervaloPeriodo]);
+
+	useEffect(() => {
+		if (aba === ABAS.CIDADES) carregarCidades();
+	}, [aba, carregarCidades]);
+
 	useEffect(() => {
 		carregarDashboard();
 	}, [carregarDashboard]);
@@ -227,6 +266,7 @@ export default function MovimentacoesPage() {
 						setScanning(false);
 						carregarDashboard();
 						carregarLista();
+						carregarCidades();
 						return;
 					}
 					if (Date.now() - startedAt > SCAN_POLL_TIMEOUT_MS) {
@@ -246,7 +286,7 @@ export default function MovimentacoesPage() {
 					setScanError("Não foi possível acompanhar a varredura.");
 				});
 		},
-		[carregarDashboard, carregarLista],
+		[carregarDashboard, carregarLista, carregarCidades],
 	);
 
 	const handleAplicarFiltroPeriodo = () => {
@@ -435,6 +475,33 @@ export default function MovimentacoesPage() {
 				</div>
 			</section>
 
+			<div className="flex gap-2 border-b border-gray-200">
+				<button
+					type="button"
+					onClick={() => setAba(ABAS.PAINEL)}
+					className={`border-b-2 px-4 py-2 text-sm font-bold ${
+						aba === ABAS.PAINEL
+							? "border-blue-600 text-blue-700"
+							: "border-transparent text-gray-500 hover:text-gray-700"
+					}`}
+				>
+					Painel
+				</button>
+				<button
+					type="button"
+					onClick={() => setAba(ABAS.CIDADES)}
+					className={`border-b-2 px-4 py-2 text-sm font-bold ${
+						aba === ABAS.CIDADES
+							? "border-blue-600 text-blue-700"
+							: "border-transparent text-gray-500 hover:text-gray-700"
+					}`}
+				>
+					Cidades
+				</button>
+			</div>
+
+			{aba === ABAS.PAINEL ? (
+			<>
 			<section className="grid gap-3 md:grid-cols-4">
 				<div className="rounded-lg border border-gray-100 bg-white px-4 py-3">
 					<p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -698,6 +765,121 @@ export default function MovimentacoesPage() {
 					</div>
 				</div>
 			</section>
+			</>
+			) : (
+				<section className="space-y-5">
+					{cidadesError ? (
+						<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+							{cidadesError}
+						</p>
+					) : null}
+
+					<div className="grid gap-5 lg:grid-cols-3">
+						<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+							<div className="mb-3 flex items-center gap-2">
+								<MapPin size={18} className="text-red-500" />
+								<h2 className="text-base font-bold text-gray-900">
+									Cidades com mais retirada
+								</h2>
+							</div>
+							<p className="mb-3 text-xs text-gray-500">
+								Baseado na cidade da O.S. do cliente, quando a devolução casa
+								com uma O.S.
+							</p>
+							<div className="space-y-2">
+								{loadingCidades ? (
+									<p className="text-sm text-gray-500">Carregando...</p>
+								) : (
+									(cidades.rankingCidadesRetiradas || []).map((item, index) => (
+										<div
+											key={item.cidade}
+											className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+										>
+											<span className="text-sm font-semibold text-gray-700">
+												{index + 1}. {item.cidade}
+											</span>
+											<span className="text-sm font-black text-gray-900">
+												{item.total}
+											</span>
+										</div>
+									))
+								)}
+								{!loadingCidades && !cidades.rankingCidadesRetiradas?.length ? (
+									<p className="text-sm text-gray-500">Sem dados no período.</p>
+								) : null}
+							</div>
+						</div>
+
+						<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+							<div className="mb-3 flex items-center gap-2">
+								<Building2 size={18} className="text-green-600" />
+								<h2 className="text-base font-bold text-gray-900">
+									Cidades com devolução confirmada
+								</h2>
+							</div>
+							<p className="mb-3 text-xs text-gray-500">
+								Somente devoluções que já baixaram a O.S. do mapa/match.
+							</p>
+							<div className="space-y-2">
+								{loadingCidades ? (
+									<p className="text-sm text-gray-500">Carregando...</p>
+								) : (
+									(cidades.rankingCidadesDevolvidas || []).map((item, index) => (
+										<div
+											key={item.cidade}
+											className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+										>
+											<span className="text-sm font-semibold text-gray-700">
+												{index + 1}. {item.cidade}
+											</span>
+											<span className="text-sm font-black text-gray-900">
+												{item.total}
+											</span>
+										</div>
+									))
+								)}
+								{!loadingCidades && !cidades.rankingCidadesDevolvidas?.length ? (
+									<p className="text-sm text-gray-500">Sem dados no período.</p>
+								) : null}
+							</div>
+						</div>
+
+						<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+							<div className="mb-3 flex items-center gap-2">
+								<Warehouse size={18} className="text-blue-600" />
+								<h2 className="text-base font-bold text-gray-900">
+									Estoques que mais receberam
+								</h2>
+							</div>
+							<p className="mb-3 text-xs text-gray-500">
+								Local de estoque de destino do equipamento devolvido.
+							</p>
+							<div className="space-y-2">
+								{loadingCidades ? (
+									<p className="text-sm text-gray-500">Carregando...</p>
+								) : (
+									(cidades.rankingEstoques || []).map((item, index) => (
+										<div
+											key={item.estoque}
+											className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+										>
+											<span className="text-sm font-semibold text-gray-700">
+												{index + 1}. {item.estoque}
+											</span>
+											<span className="text-sm font-black text-gray-900">
+												{item.total}
+											</span>
+										</div>
+									))
+								)}
+								{!loadingCidades && !cidades.rankingEstoques?.length ? (
+									<p className="text-sm text-gray-500">Sem dados no período.</p>
+								) : null}
+							</div>
+						</div>
+					</div>
+				</section>
+			)}
 
 			{showScanModal ? (
 				<ModalShell

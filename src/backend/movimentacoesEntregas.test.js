@@ -90,7 +90,11 @@ describe("movimentacoesEntregas", () => {
 			{
 				path: "match_os_abertas/321",
 				collectionPath: "match_os_abertas",
-				data: { num_os: "321", nome_cliente: "Cleide dos Anjos de Souza" },
+				data: {
+					num_os: "321",
+					nome_cliente: "Cleide dos Anjos de Souza",
+					cidade: "Belo Horizonte",
+				},
 			},
 		]);
 		const deleteDocument = vi.fn(async () => {});
@@ -127,6 +131,7 @@ describe("movimentacoesEntregas", () => {
 		expect(marcarComoCasada).toHaveBeenCalledWith("mov-1", {
 			osNumero: "321",
 			osCollection: "match_os_abertas",
+			cidade: "Belo Horizonte",
 		});
 		expect(marcarComoSemMatch).not.toHaveBeenCalled();
 	});

@@ -28,6 +28,14 @@ export async function listarMovimentacoes({
 	return requestVpsApi(`/movimentacoes/lista?${params.toString()}`);
 }
 
+export async function buscarCidadesMovimentacoes({ dataInicio, dataFim } = {}) {
+	const params = new URLSearchParams();
+	if (dataInicio) params.set("dataInicio", dataInicio);
+	if (dataFim) params.set("dataFim", dataFim);
+	const query = params.toString();
+	return requestVpsApi(`/movimentacoes/cidades${query ? `?${query}` : ""}`);
+}
+
 export async function buscarConfigMovimentacoes() {
 	return requestVpsApi("/movimentacoes/config");
 }
