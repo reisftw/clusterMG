@@ -11,6 +11,13 @@ import {
 	parseFerramentasDate,
 } from "../../utils/ferramentasTabUtils";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDropzoneClass(status) {
+	if (status === "ok" || status === "gerando") return "border-green-400 bg-green-50";
+	if (status === "err") return "border-red-400 bg-red-50";
+	return "border-gray-200 bg-white hover:border-orange-400";
+}
+
 const TabDiario = () => {
 	const { regionais } = useFerramentasRegionais();
 	const [status, setStatus] = useState(null);
@@ -297,7 +304,7 @@ const TabDiario = () => {
 			{/* Upload */}
 			<div
 				className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
-          ${status === "ok" || status === "gerando" ? "border-green-400 bg-green-50" : status === "err" ? "border-red-400 bg-red-50" : "border-gray-200 bg-white hover:border-orange-400"}`}
+          ${resolveDropzoneClass(status)}`}
 				onClick={() => inputRef.current?.click()}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" || event.key === " ") {
@@ -316,28 +323,36 @@ const TabDiario = () => {
 					onChange={load}
 				/>
 				<span className="text-4xl block mb-3">📋</span>
-				{status === "ok" || status === "gerando" ? (
-					<>
-						<p className="font-semibold text-green-700">{fname}</p>
-						<p className="text-sm text-green-600">
-							{rows.length} linhas · clique para trocar
-						</p>
-					</>
-				) : status === "loading" ? (
-					<p className="text-sm text-gray-500">Carregando...</p>
-				) : (
-					<>
-						<p className="font-semibold text-gray-700">
-							Clique ou arraste o arquivo .xlsx
-						</p>
-						<p className="text-xs text-gray-400 mt-1">
-							Campos esperados:{" "}
-							<code>
-								numos · tecnicos · endereco_instalacao · data_termino_executado
-							</code>
-						</p>
-					</>
-				)}
+				{(() => {
+					// Extraido pra achado javascript:S3358 (ternario aninhado).
+					if (status === "ok" || status === "gerando") {
+						return (
+							<>
+								<p className="font-semibold text-green-700">{fname}</p>
+								<p className="text-sm text-green-600">
+									{rows.length} linhas · clique para trocar
+								</p>
+							</>
+						);
+					}
+					if (status === "loading") {
+						return <p className="text-sm text-gray-500">Carregando...</p>;
+					}
+					return (
+						<>
+							<p className="font-semibold text-gray-700">
+								Clique ou arraste o arquivo .xlsx
+							</p>
+							<p className="text-xs text-gray-400 mt-1">
+								Campos esperados:{" "}
+								<code>
+									numos · tecnicos · endereco_instalacao ·
+									data_termino_executado
+								</code>
+							</p>
+						</>
+					);
+				})()}
 			</div>
 
 			{/* Filtro de data */}

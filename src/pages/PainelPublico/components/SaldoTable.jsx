@@ -1,4 +1,23 @@
-﻿export default function SaldoTable({ saldoDiario = [] }) {
+﻿// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveTipoDia(item) {
+	if (item.feriado) return "feriado";
+	if (item.fimDeSemana) return "fim-de-semana";
+	return "util";
+}
+
+function resolveTipoLabel(item) {
+	if (item.feriado) return "Feriado";
+	if (item.fimDeSemana) return "Fim de semana";
+	return "";
+}
+
+function resolveSaldoTone(value) {
+	if (value > 0) return "pos";
+	if (value < 0) return "neg";
+	return "zero";
+}
+
+export default function SaldoTable({ saldoDiario = [] }) {
 	if (!saldoDiario.length) {
 		return (
 			<tr>
@@ -15,16 +34,8 @@
 	return (
 		<>
 			{saldoDiario.map((s, i) => {
-				const tipoDia = s.feriado
-					? "feriado"
-					: s.fimDeSemana
-						? "fim-de-semana"
-						: "util";
-				const tipoLabel = s.feriado
-					? "Feriado"
-					: s.fimDeSemana
-						? "Fim de semana"
-						: "";
+				const tipoDia = resolveTipoDia(s);
+				const tipoLabel = resolveTipoLabel(s);
 
 				return (
 					<tr key={i} className={`saldo-row saldo-row-${tipoDia}`}>
@@ -48,7 +59,7 @@
 						<td data-label="Meta Diaria">{s.metaDia}</td>
 						<td data-label="Saldo Dia">
 							<span
-								className={`badge ${s.saldoDia > 0 ? "pos" : s.saldoDia < 0 ? "neg" : "zero"}`}
+								className={`badge ${resolveSaldoTone(s.saldoDia)}`}
 							>
 								{s.saldoDia > 0 ? "+" : ""}
 								{s.saldoDia}
@@ -56,7 +67,7 @@
 						</td>
 						<td data-label="Saldo Mes">
 							<span
-								className={`badge ${s.saldoMes > 0 ? "pos" : s.saldoMes < 0 ? "neg" : "zero"}`}
+								className={`badge ${resolveSaldoTone(s.saldoMes)}`}
 							>
 								{s.saldoMes > 0 ? "+" : ""}
 								{s.saldoMes}

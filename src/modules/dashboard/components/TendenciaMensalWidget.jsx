@@ -112,11 +112,17 @@ export default function TendenciaMensalWidget() {
 			title="Tendência Mensal"
 			subtitle="Últimos meses com produção registrada"
 		>
-			{loading ? (
-				<RetorninhoLoader compact size="sm" title="Carregando tendência..." />
-			) : items.length === 0 ? (
-				<p className="text-sm text-gray-400">Sem histórico suficiente.</p>
-			) : (
+			{(() => {
+				// Extraido pra achado javascript:S3358 (ternario aninhado).
+				if (loading) {
+					return (
+						<RetorninhoLoader compact size="sm" title="Carregando tendência..." />
+					);
+				}
+				if (items.length === 0) {
+					return <p className="text-sm text-gray-400">Sem histórico suficiente.</p>;
+				}
+				return (
 				<>
 					<div className="space-y-4">
 						{items.map((item) => (
@@ -152,7 +158,8 @@ export default function TendenciaMensalWidget() {
 						</div>
 					)}
 				</>
-			)}
+				);
+			})()}
 		</DashboardWidgetCard>
 	);
 }

@@ -12,12 +12,10 @@ function escapeHtml(value) {
 }
 
 function asDate(value) {
-	const date =
-		typeof value?.toDate === "function"
-			? value.toDate()
-			: value
-				? new Date(value)
-				: null;
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let date = null;
+	if (typeof value?.toDate === "function") date = value.toDate();
+	else if (value) date = new Date(value);
 	return date && !Number.isNaN(date.getTime()) ? date : null;
 }
 

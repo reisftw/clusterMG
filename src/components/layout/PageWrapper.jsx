@@ -119,11 +119,7 @@ const PageWrapper = ({ children }) => {
 			}
 		>
 			<div
-				className={
-					isModernLayout
-						? `${sidebarCollapsed ? "w-16" : "w-60"} hidden h-full shrink-0 shadow-sidebar transition-[width] duration-200 lg:block`
-						: `${sidebarCollapsed ? "w-16" : "w-60"} hidden h-full shrink-0 shadow-sm transition-[width] duration-200 lg:block`
-				}
+				className={`${sidebarCollapsed ? "w-16" : "w-60"} hidden h-full shrink-0 ${isModernLayout ? "shadow-sidebar" : "shadow-sm"} transition-[width] duration-200 lg:block`}
 			>
 				<Sidebar
 					collapsed={sidebarCollapsed}

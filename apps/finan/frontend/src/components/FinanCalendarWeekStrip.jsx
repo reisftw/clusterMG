@@ -10,6 +10,12 @@ const COLOR_DOT = {
 };
 
 // Pra strings vindas da API (ex.: "2026-09-08" ou "2026-09-08T00:00:00.000Z").
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveWeekdayCellClass(isToday, holiday) {
+	if (isToday) return "border-blue-300 bg-blue-50";
+	return holiday ? "border-orange-200 bg-orange-50" : "border-slate-100 bg-slate-50";
+}
+
 function dateKey(value) {
 	return String(value || "").slice(0, 10);
 }
@@ -174,13 +180,7 @@ export default function FinanCalendarWeekStrip() {
 					return (
 						<div
 							key={key}
-							className={`rounded-xl border p-2 ${
-								isToday
-									? "border-blue-300 bg-blue-50"
-									: holiday
-										? "border-orange-200 bg-orange-50"
-										: "border-slate-100 bg-slate-50"
-							}`}
+							className={`rounded-xl border p-2 ${resolveWeekdayCellClass(isToday, holiday)}`}
 							title={holiday ? holiday.name : undefined}
 						>
 							<p className="text-[10px] font-bold uppercase text-slate-400">{WEEKDAY_LABELS[index]}</p>

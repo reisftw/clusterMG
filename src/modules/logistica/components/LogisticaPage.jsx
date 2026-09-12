@@ -53,6 +53,13 @@ const statusClass = {
 	cancelado: "border-red-200 bg-red-50 text-red-700",
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFeedbackIconClass(feedbackType) {
+	if (feedbackType === "error") return "bg-red-50 text-red-600";
+	if (feedbackType === "success") return "bg-emerald-50 text-emerald-600";
+	return "bg-blue-50 text-blue-600";
+}
+
 function normalize(value) {
 	return String(value || "")
 		.normalize("NFD")
@@ -1446,13 +1453,7 @@ const LogisticaPage = () => {
 					<div className="p-6">
 						<div className="flex items-start gap-3">
 							<span
-								className={`rounded-lg p-2 ${
-									feedbackType === "error"
-										? "bg-red-50 text-red-600"
-										: feedbackType === "success"
-											? "bg-emerald-50 text-emerald-600"
-											: "bg-blue-50 text-blue-600"
-								}`}
+								className={`rounded-lg p-2 ${resolveFeedbackIconClass(feedbackType)}`}
 							>
 								{feedbackType === "error" ? (
 									<AlertCircle size={22} />

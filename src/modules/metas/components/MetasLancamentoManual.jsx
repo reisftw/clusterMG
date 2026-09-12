@@ -625,11 +625,12 @@ function SectionEditingModal({
 	cardError,
 	getRowGoal,
 }) {
-	const saveButtonLabel = savingCard
-		? "Salvando..."
-		: justSaved
-			? "Salvo!"
-			: "Salvar card";
+	let saveButtonLabel = "Salvar card";
+	if (savingCard) {
+		saveButtonLabel = "Salvando...";
+	} else if (justSaved) {
+		saveButtonLabel = "Salvo!";
+	}
 	return (
 		<ModalShell
 			open

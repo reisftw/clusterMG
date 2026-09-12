@@ -139,12 +139,18 @@ export default function MapaPublicoPage() {
 							disableMapa
 						/>
 
-						{loading ? (
-							<PublicPageLoading
-								title="Carregando mapa"
-								description="Estamos lendo as ordens em aberto e montando a visão do mapa para você."
-							/>
-						) : summary.totalOrdens === 0 ? (
+						{(() => {
+							// Extraido pra achado javascript:S3358 (ternario aninhado).
+							if (loading) {
+								return (
+									<PublicPageLoading
+										title="Carregando mapa"
+										description="Estamos lendo as ordens em aberto e montando a visão do mapa para você."
+									/>
+								);
+							}
+							if (summary.totalOrdens === 0) {
+								return (
 							<div className="flex flex-col items-center justify-center py-20 text-center">
 								<span className="text-5xl mb-4">Mapa</span>
 								<p className="text-gray-600 font-semibold text-base">
@@ -158,31 +164,34 @@ export default function MapaPublicoPage() {
 										: "Não há O.S para exibir"}
 								</p>
 							</div>
-						) : (
-							<>
-								<MapaGrafico seriesOverride={summary.chartRegionais} />
+								);
+							}
+							return (
+								<>
+									<MapaGrafico seriesOverride={summary.chartRegionais} />
 
-								<div className="mb-8 flex min-w-0 flex-wrap gap-4">
-									<RankingRegionais
-										rankingOverride={summary.rankingRegionais}
-									/>
-									<RankingAgentes rankingOverride={summary.rankingAgentes} />
-								</div>
+									<div className="mb-8 flex min-w-0 flex-wrap gap-4">
+										<RankingRegionais
+											rankingOverride={summary.rankingRegionais}
+										/>
+										<RankingAgentes rankingOverride={summary.rankingAgentes} />
+									</div>
 
-								<div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
-									<MapaRegionais
-										ordens={[]}
-										dataOverride={summary.regionais}
-										alertaThreshold={alertaThreshold}
-									/>
-									<MapaAgentes
-										ordens={[]}
-										dataOverride={summary.agentes}
-										alertaThreshold={alertaThreshold}
-									/>
-								</div>
-							</>
-						)}
+									<div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+										<MapaRegionais
+											ordens={[]}
+											dataOverride={summary.regionais}
+											alertaThreshold={alertaThreshold}
+										/>
+										<MapaAgentes
+											ordens={[]}
+											dataOverride={summary.agentes}
+											alertaThreshold={alertaThreshold}
+										/>
+									</div>
+								</>
+							);
+						})()}
 					</>
 				)}
 			</div>

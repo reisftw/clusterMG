@@ -27,6 +27,9 @@ const emailService = require("./emailService");
 const operationalImports = require("./operationalImports");
 const sempreIntegration = require("./sempreIntegration");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
+const movimentacoesRepository = require("./movimentacoesRepository");
+const movimentacoesEntregas = require("./movimentacoesEntregas");
+const movimentacoesOrdensFechadas = require("./movimentacoesOrdensFechadas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
@@ -41,6 +44,7 @@ const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
+const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesRoutes");
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const metrics = require("./metrics");
@@ -260,6 +264,17 @@ const TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS = [
 const TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS = [
 	"tecnicos.auditoria_bolsa.manage",
 ];
+const MOVIMENTACOES_ROLES = [
+	"admin",
+	"supervisor",
+	"backoffice",
+	"backoffice_retirada",
+];
+const MOVIMENTACOES_VIEW_PERMISSIONS = [
+	"movimentacoes.view",
+	"movimentacoes.manage",
+];
+const MOVIMENTACOES_MANAGE_PERMISSIONS = ["movimentacoes.manage"];
 const REGIONAL_SCOPED_ACERTO_ROLES = ["supervisor"];
 const EMPRESAS_COLLECTION = "empresas_tecnicos";
 const ADMINISTRATIVO_DOCUMENTOS_ROLES = [
@@ -682,11 +697,9 @@ function hasRole(user, roles) {
 }
 
 function getUserPermissions(user = {}) {
-	return Array.isArray(user?.profile?.permissions)
-		? user.profile.permissions
-		: Array.isArray(user?.permissions)
-			? user.permissions
-			: [];
+	if (Array.isArray(user?.profile?.permissions)) return user.profile.permissions;
+	if (Array.isArray(user?.permissions)) return user.permissions;
+	return [];
 }
 
 function hasPermission(user, permission) {
@@ -723,7 +736,8 @@ function requireAnyPermission(permissions, fallbackRoles = []) {
 
 function getPublicStaticCacheKey(domain, { compact = false } = {}) {
 	const key = String(domain || "").trim();
-	return key ? `${key}:${compact ? "compact" : "full"}` : "";
+	if (!key) return "";
+	return `${key}:${compact ? "compact" : "full"}`;
 }
 
 function getCachedPublicStaticSnapshot(domain, options = {}) {
@@ -1361,11 +1375,12 @@ function canAdministrativoManageUserRole(role) {
 }
 
 function getUserPermissionList(user = {}) {
-	const permissions = Array.isArray(user?.permissions)
-		? user.permissions
-		: Array.isArray(user?.profile?.permissions)
-			? user.profile.permissions
-			: [];
+	let permissions = [];
+	if (Array.isArray(user?.permissions)) {
+		permissions = user.permissions;
+	} else if (Array.isArray(user?.profile?.permissions)) {
+		permissions = user.profile.permissions;
+	}
 	return permissions
 		.map((permission) => String(permission || "").trim())
 		.filter(Boolean);
@@ -1867,11 +1882,12 @@ function getAuthCookieOptions(maxAgeSeconds) {
 function setCsrfCookie(res, csrfToken, maxAgeSeconds) {
 	const cookie = `${CSRF_COOKIE_NAME}=${encodeURIComponent(csrfToken || "")}; ${getBaseCookieOptions(maxAgeSeconds).join("; ")}`;
 	const previous = res.getHeader("Set-Cookie");
-	const cookies = Array.isArray(previous)
-		? previous
-		: previous
-			? [previous]
-			: [];
+	let cookies = [];
+	if (Array.isArray(previous)) {
+		cookies = previous;
+	} else if (previous) {
+		cookies = [previous];
+	}
 	res.setHeader("Set-Cookie", [...cookies, cookie]);
 }
 
@@ -3584,6 +3600,32 @@ function createApp() {
 		}
 	});
 
+	// Extraido do handler GET /api/documents abaixo (achado
+	// javascript:S3358 — ternario aninhado), mesma cadeia de resolucao por
+	// tipo de colecao de antes.
+	async function resolveCollectionDocuments(collectionPath, query) {
+		if (isLegacySchedulingCollection(collectionPath)) {
+			return listLegacySchedulingDocuments(collectionPath, query);
+		}
+		if (collectionPath === "regionais") {
+			return regionaisRepository.listRegionalDocuments({
+				limit: query.limit,
+				offset: query.offset,
+			});
+		}
+		if (collectionPath === "usuarios") {
+			return usersRepository.listUserDocuments({
+				limit: query.limit,
+				offset: query.offset,
+			});
+		}
+		return documents.listDocuments({
+			collectionPath,
+			limit: query.limit,
+			offset: query.offset,
+		});
+	}
+
 	app.get("/api/documents", requireAuthenticated, async (req, res, next) => {
 		try {
 			const collectionPath = String(req.query.collection || "").trim();
@@ -3597,24 +3639,7 @@ function createApp() {
 				return;
 			}
 
-			const items =
-				isLegacySchedulingCollection(collectionPath)
-					? await listLegacySchedulingDocuments(collectionPath, req.query)
-					: collectionPath === "regionais"
-					? await regionaisRepository.listRegionalDocuments({
-							limit: req.query.limit,
-							offset: req.query.offset,
-						})
-					: collectionPath === "usuarios"
-						? await usersRepository.listUserDocuments({
-								limit: req.query.limit,
-								offset: req.query.offset,
-							})
-						: await documents.listDocuments({
-								collectionPath,
-								limit: req.query.limit,
-								offset: req.query.offset,
-							});
+			const items = await resolveCollectionDocuments(collectionPath, req.query);
 			const visibleItems = await filterUserDocumentsForManager(
 				req.user,
 				collectionPath,
@@ -4588,6 +4613,21 @@ function createApp() {
 		}),
 	);
 
+	app.use(
+		"/api/movimentacoes",
+		createMovimentacoesRouter({
+			movimentacoesRepository,
+			movimentacoesEntregas,
+			movimentacoesOrdensFechadas,
+			requireAuthenticated,
+			requireAnyPermission,
+			requireCsrfToken,
+			viewPermissions: MOVIMENTACOES_VIEW_PERMISSIONS,
+			managePermissions: MOVIMENTACOES_MANAGE_PERMISSIONS,
+			fallbackRoles: MOVIMENTACOES_ROLES,
+		}),
+	);
+
 	app.post(
 		"/api/admin/documents",
 		requireAuthenticated,
@@ -5225,6 +5265,32 @@ function createApp() {
 		);
 		timer.unref?.();
 		app.locals.tecnicosBolsaAuditoriaTimer = timer;
+	}
+
+	// Varredura automatica de Movimentacoes (devolucao de comodato -> baixa
+	// de O.S. no mapa/match). Mesmo padrao de polling do
+	// tecnicosBolsaAuditoriaTimer acima: roda a cada minuto so pra checar se
+	// ja passou do horario configurado (padrao 03:00) e ainda nao rodou hoje.
+	if (!app.locals.movimentacoesScanTimer) {
+		const timer = setInterval(
+			() => {
+				movimentacoesEntregas
+					.runDailyIfDue({
+						uid: "system",
+						role: "admin",
+						profile: { nome: "Rotina automática", role: "admin" },
+					})
+					.catch((error) => {
+						console.error(
+							"[movimentacoesEntregas] Falha na rotina diaria:",
+							error?.message || error,
+						);
+					});
+			},
+			Number(process.env.MOVIMENTACOES_SCAN_INTERVAL_MS || 60 * 1000),
+		);
+		timer.unref?.();
+		app.locals.movimentacoesScanTimer = timer;
 	}
 
 	app.use((error, req, res, next) => {

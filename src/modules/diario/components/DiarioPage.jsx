@@ -39,6 +39,13 @@ const emptyFormFor = (date) => ({
 	notes: "",
 });
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function formatDeliveredPercentLabel(deliveredPercent) {
+	if (deliveredPercent === null) return "Sem base anterior";
+	const sign = deliveredPercent >= 0 ? "+" : "";
+	return `${sign}${deliveredPercent}%`;
+}
+
 function numberOrEmpty(value) {
 	const number = Number(value || 0);
 	return number > 0 ? String(number) : "";
@@ -300,9 +307,7 @@ function DiarioGoalsHistoryModal({
 										{formatValue(comparison.deliveredDiff)}
 									</strong>
 									<small>
-										{comparison.deliveredPercent === null
-											? "Sem base anterior"
-											: `${comparison.deliveredPercent >= 0 ? "+" : ""}${comparison.deliveredPercent}%`}
+										{formatDeliveredPercentLabel(comparison.deliveredPercent)}
 									</small>
 								</div>
 							</div>

@@ -142,12 +142,10 @@ const AgendaPage = () => {
 
 		return eventos.filter((e) => {
 			const fim = parseLocal(e.data_fim || e.data_inicio);
-			const periodoOk =
-				filtro === "proximos"
-					? fim >= hoje
-					: filtro === "passados"
-						? fim < hoje
-						: true;
+			// Extraido pra achado javascript:S3358 (ternario aninhado).
+			let periodoOk = true;
+			if (filtro === "proximos") periodoOk = fim >= hoje;
+			else if (filtro === "passados") periodoOk = fim < hoje;
 			const textoOk = !termo
 				? true
 				: `${e.atividade || ""} ${e.cidade || ""} ${e.descricao || ""}`

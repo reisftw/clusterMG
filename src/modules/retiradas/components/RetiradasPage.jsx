@@ -104,12 +104,10 @@ const RECEIPT_EMAIL_STATUS_META = {
 };
 
 function formatDate(value) {
-	const date =
-		typeof value?.toDate === "function"
-			? value.toDate()
-			: value
-				? new Date(value)
-				: null;
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let date = null;
+	if (typeof value?.toDate === "function") date = value.toDate();
+	else if (value) date = new Date(value);
 	if (!date || Number.isNaN(date.getTime())) return "-";
 	return date.toLocaleString("pt-BR", {
 		day: "2-digit",
@@ -647,6 +645,21 @@ function RetiradaCardEditForm({ form, updateField }) {
 // Extraido de RetiradaCardDetails (achado javascript:S3776,
 // docs/SONARQUBE-MAP.md) — bloco de custo estimado dos Correios, mesma
 // JSX/logica de antes.
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveCorreiosServicoLabel(correiosPending, retirada) {
+	if (correiosPending)
+		return "Configure as credenciais dos Correios na VPS para calcular.";
+	if (retirada.correiosFreteServicoNome)
+		return `${retirada.correiosFreteServicoNome} (${retirada.correiosFreteServicoCodigo})`;
+	return "Ainda nao calculado.";
+}
+
+function resolveCorreiosQuoteButtonLabel(correiosPending, quoting) {
+	if (correiosPending) return "Configuracao pendente";
+	if (quoting) return "Calculando...";
+	return "Calcular frete";
+}
+
 function RetiradaCorreiosCostCard({ retirada, correiosPending, quoting, onQuote }) {
 	return (
 		<div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
@@ -664,11 +677,7 @@ function RetiradaCorreiosCostCard({ retirada, correiosPending, quoting, onQuote 
 								)}
 					</p>
 					<p className="mt-1 text-sm text-gray-600">
-						{correiosPending
-							? "Configure as credenciais dos Correios na VPS para calcular."
-							: retirada.correiosFreteServicoNome
-								? `${retirada.correiosFreteServicoNome} (${retirada.correiosFreteServicoCodigo})`
-								: "Ainda nao calculado."}
+						{resolveCorreiosServicoLabel(correiosPending, retirada)}
 					</p>
 					<p className="mt-1 text-xs text-gray-500">
 						Pacote padrao: 23 x 10 x 10 cm, 780 g.
@@ -691,11 +700,7 @@ function RetiradaCorreiosCostCard({ retirada, correiosPending, quoting, onQuote 
 					onClick={() => onQuote(retirada.id)}
 					className="rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
 				>
-					{correiosPending
-						? "Configuracao pendente"
-						: quoting
-							? "Calculando..."
-							: "Calcular frete"}
+					{resolveCorreiosQuoteButtonLabel(correiosPending, quoting)}
 				</button>
 			</div>
 		</div>

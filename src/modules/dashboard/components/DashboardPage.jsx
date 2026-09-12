@@ -549,6 +549,13 @@ function resolveLeaderDocumentState({ isLeader, status, monthSubmission }) {
 	return "missing";
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDocumentosPendentesIcon(approved, rejected, missing) {
+	if (approved) return CheckCircle2;
+	if (rejected || missing) return AlertTriangle;
+	return FileText;
+}
+
 function buildDocumentosPendentesModel({
 	isSupervisor,
 	isLeader,
@@ -588,11 +595,7 @@ function buildDocumentosPendentesModel({
 		helper: isSupervisor
 			? "Envios aguardando avaliação"
 			: helperByStatus[leaderState],
-		Icon: approved
-			? CheckCircle2
-			: rejected || missing
-				? AlertTriangle
-				: FileText,
+		Icon: resolveDocumentosPendentesIcon(approved, rejected, missing),
 	};
 }
 
@@ -764,9 +767,10 @@ function ModernDashboardView({
 			<div className="grid min-w-0 items-stretch gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
 				{showDocumentsInHero ? (
 					<DocumentosPendentesCard currentUser={currentUser} />
-				) : currentRole === ROLES.BACKOFFICE ? null : (
+				) : null}
+				{!showDocumentsInHero && currentRole !== ROLES.BACKOFFICE ? (
 					<AgendamentosHojeCard defaultOpen featured maxVisibleItems={4} />
-				)}
+				) : null}
 				<FeaturedMetasPanel />
 			</div>
 
@@ -836,9 +840,10 @@ function ClassicDashboardView({
 
 			{showDocumentsInHero ? (
 				<DocumentosPendentesCard currentUser={currentUser} />
-			) : currentRole === ROLES.BACKOFFICE ? null : (
+			) : null}
+			{!showDocumentsInHero && currentRole !== ROLES.BACKOFFICE ? (
 				<AgendamentosHojeCard />
-			)}
+			) : null}
 
 			<MapaKPICards ordens={[]} kpisOverride={mapaKpisOverride} />
 			<SummaryCards resumo={resumo} hiddenKeys={summaryHiddenKeys} />

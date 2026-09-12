@@ -17,6 +17,12 @@ const buildInitialForm = (evento) => ({
 	participantes: evento?.participantes || [],
 });
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSalvarButtonLabel(saving, editando) {
+	if (saving) return "Salvando...";
+	return editando ? "Salvar alteracoes" : "Criar evento";
+}
+
 const AgendaModalContent = ({ evento, onSalvar, onClose }) => {
 	const editando = !!evento;
 	const { colaboradores } = useColaboradores();
@@ -225,11 +231,7 @@ const AgendaModalContent = ({ evento, onSalvar, onClose }) => {
 						disabled={saving || !form.atividade.trim() || !form.data_inicio}
 						className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						{saving
-							? "Salvando..."
-							: editando
-								? "Salvar alteracoes"
-								: "Criar evento"}
+						{resolveSalvarButtonLabel(saving, editando)}
 					</button>
 				</div>
 			</div>

@@ -34,6 +34,14 @@ const RETIRADAS_DATA_SOURCES = [
 	{ key: "onnetSempre", label: "ONNET + SEMPRE" },
 ];
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function formatRitmoDiferencaLabel(ritmo) {
+	if (!ritmo) return "--";
+	const diff = Number(ritmo.ratio || 0) - 100;
+	const sign = diff > 0 ? "+" : "";
+	return `${sign}${diff.toFixed(1)}%`;
+}
+
 function normalizeMonthName(value) {
 	return String(value || "")
 		.normalize("NFD")
@@ -1221,9 +1229,7 @@ export default function TabRetiradas({
 							<strong
 								className={ritmo?.status === "ok" ? "positive" : "negative"}
 							>
-								{ritmo
-									? `${Number(ritmo.ratio || 0) - 100 > 0 ? "+" : ""}${(Number(ritmo.ratio || 0) - 100).toFixed(1)}%`
-									: "--"}
+								{formatRitmoDiferencaLabel(ritmo)}
 							</strong>
 						</div>
 					</div>

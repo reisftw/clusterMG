@@ -23,6 +23,12 @@ function normalizaTexto(valor) {
 		.toUpperCase();
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function formatVariacaoLabel(valor) {
+	if (valor === "—") return valor;
+	return Number.parseFloat(valor) > 0 ? `+${valor}pp` : `${valor}pp`;
+}
+
 function EvIcon({ atual, anterior }) {
 	if (!anterior || anterior.pct === undefined)
 		return <Minus size={14} className="text-gray-400" />;
@@ -182,11 +188,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
 					h.total,
 					h.cancelamentos,
 					`${pct}%`,
-					evo !== "—"
-						? Number.parseFloat(evo) > 0
-							? `+${evo}pp`
-							: `${evo}pp`
-						: "—",
+					formatVariacaoLabel(evo),
 				];
 			});
 
@@ -391,13 +393,23 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
 						<h3 className="text-xs font-bold text-gray-500 uppercase mb-2">
 							Historico de evolucao
 						</h3>
-						{loadingHist ? (
-							<p className="text-xs text-gray-400">Carregando historico...</p>
-						) : historico.length === 0 ? (
-							<p className="text-xs text-gray-400">
-								Nenhum historico registrado ainda.
-							</p>
-						) : (
+						{(() => {
+							// Extraido pra achado javascript:S3358 (ternario aninhado).
+							if (loadingHist) {
+								return (
+									<p className="text-xs text-gray-400">
+										Carregando historico...
+									</p>
+								);
+							}
+							if (historico.length === 0) {
+								return (
+									<p className="text-xs text-gray-400">
+										Nenhum historico registrado ainda.
+									</p>
+								);
+							}
+							return (
 							<div className="overflow-x-auto">
 								<table className="min-w-[620px] w-full text-xs">
 									<thead>
@@ -472,9 +484,7 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
 																	atual={pctAtual}
 																	anterior={{ pct: pctAnt }}
 																/>
-																{Number.parseFloat(variacao) > 0
-																	? `+${variacao}pp`
-																	: `${variacao}pp`}
+																{formatVariacaoLabel(variacao)}
 															</span>
 														) : (
 															<span className="text-gray-300">—</span>
@@ -486,7 +496,8 @@ const MetasAuditoriaRelatorio = ({ cidade, mes, onClose }) => {
 									</tbody>
 								</table>
 							</div>
-						)}
+							);
+						})()}
 					</div>
 				</div>
 			</div>

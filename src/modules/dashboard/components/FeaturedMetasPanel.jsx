@@ -23,6 +23,15 @@ const MESES_DASHBOARD = [
 	"Dezembro",
 ];
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFonteButtonClass(ativo, disponivel) {
+	if (ativo) return "border-orange-500 bg-orange-500 text-white shadow-orange";
+	if (disponivel) {
+		return "border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50";
+	}
+	return "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300";
+}
+
 function getMetaMesPorFonte(metaMes, fonte) {
 	if (!metaMes) return null;
 	if (fonte === "onnet") return metaMes.onnet || null;
@@ -144,13 +153,7 @@ const FeaturedMetasPanel = () => {
 								type="button"
 								onClick={() => disponivel && setFonteDados(fonte.id)}
 								disabled={!disponivel}
-								className={`rounded-lg border px-3 py-1.5 text-xs font-black transition ${
-									ativo
-										? "border-orange-500 bg-orange-500 text-white shadow-orange"
-										: disponivel
-											? "border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:bg-orange-50"
-											: "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300"
-								}`}
+								className={`rounded-lg border px-3 py-1.5 text-xs font-black transition ${resolveFonteButtonClass(ativo, disponivel)}`}
 								title={
 									disponivel
 										? `Ver dados ${fonte.label}`

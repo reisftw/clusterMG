@@ -1,3 +1,48 @@
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveDropzoneClass(isReady, status, activeTone, toneClasses) {
+	if (isReady) return "border-green-400 bg-green-50";
+	if (status === "err") return "border-red-400 bg-red-50";
+	return `border-gray-200 bg-white ${toneClasses[activeTone] || toneClasses.orange}`;
+}
+
+function TabUploadDropzoneContent({
+	isReady,
+	status,
+	fileName,
+	rowCount,
+	loadingContent,
+	expectedFields,
+}) {
+	if (isReady) {
+		return (
+			<>
+				<p className="font-semibold text-green-700">{fileName}</p>
+				<p className="text-sm text-green-600">
+					{rowCount} linhas · clique para trocar
+				</p>
+			</>
+		);
+	}
+	if (status === "loading") {
+		if (typeof loadingContent === "string") {
+			return <p className="text-sm text-gray-500">{loadingContent}</p>;
+		}
+		return loadingContent;
+	}
+	return (
+		<>
+			<p className="font-semibold text-gray-700">
+				Clique ou arraste o arquivo .xlsx
+			</p>
+			{expectedFields ? (
+				<p className="mt-1 text-xs text-gray-400">
+					Campos esperados: <code>{expectedFields}</code>
+				</p>
+			) : null}
+		</>
+	);
+}
+
 export function TabUploadDropzone({
 	inputRef,
 	onChange,
@@ -18,13 +63,12 @@ export function TabUploadDropzone({
 
 	return (
 		<div
-			className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
-				isReady
-					? "border-green-400 bg-green-50"
-					: status === "err"
-						? "border-red-400 bg-red-50"
-						: `border-gray-200 bg-white ${toneClasses[activeTone] || toneClasses.orange}`
-			}`}
+			className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition-colors ${resolveDropzoneClass(
+				isReady,
+				status,
+				activeTone,
+				toneClasses,
+			)}`}
 			onClick={() => inputRef.current?.click()}
 			onKeyDown={(event) => {
 				if (event.key === "Enter" || event.key === " ") {
@@ -43,31 +87,14 @@ export function TabUploadDropzone({
 				onChange={onChange}
 			/>
 			<span className="mb-3 block text-4xl">{icon}</span>
-			{isReady ? (
-				<>
-					<p className="font-semibold text-green-700">{fileName}</p>
-					<p className="text-sm text-green-600">
-						{rowCount} linhas · clique para trocar
-					</p>
-				</>
-			) : status === "loading" ? (
-				typeof loadingContent === "string" ? (
-					<p className="text-sm text-gray-500">{loadingContent}</p>
-				) : (
-					loadingContent
-				)
-			) : (
-				<>
-					<p className="font-semibold text-gray-700">
-						Clique ou arraste o arquivo .xlsx
-					</p>
-					{expectedFields ? (
-						<p className="mt-1 text-xs text-gray-400">
-							Campos esperados: <code>{expectedFields}</code>
-						</p>
-					) : null}
-				</>
-			)}
+			<TabUploadDropzoneContent
+				isReady={isReady}
+				status={status}
+				fileName={fileName}
+				rowCount={rowCount}
+				loadingContent={loadingContent}
+				expectedFields={expectedFields}
+			/>
 		</div>
 	);
 }

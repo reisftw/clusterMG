@@ -5,12 +5,11 @@ import { buscarFeriadosNacionais } from "./feriados";
 
 export async function calcRitmo(d, month, feriadosInput = null) {
 	const year = Number(d?.ano || d?.year) || new Date().getFullYear();
-	const feriadosSet =
-		feriadosInput instanceof Set
-			? feriadosInput
-			: Array.isArray(feriadosInput)
-				? new Set(feriadosInput)
-				: await buscarFeriadosNacionais(year);
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let feriadosSet;
+	if (feriadosInput instanceof Set) feriadosSet = feriadosInput;
+	else if (Array.isArray(feriadosInput)) feriadosSet = new Set(feriadosInput);
+	else feriadosSet = await buscarFeriadosNacionais(year);
 	const { metaDiariaMedia } = buildMetaDiariaSchedule({
 		month,
 		meta: d.meta,

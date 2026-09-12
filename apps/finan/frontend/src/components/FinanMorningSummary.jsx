@@ -10,6 +10,16 @@ const COLOR_DOT = {
 	azul: "bg-blue-500",
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveMorningSummaryMessage(loading, relevant, criticalCount) {
+	if (loading) return "Carregando...";
+	if (relevant.length === 0) {
+		return "Nenhum evento do calendário financeiro para hoje.";
+	}
+	const criticalSuffix = criticalCount ? `, ${criticalCount} crítico(s)` : "";
+	return `Hoje há ${relevant.length} evento(s) no calendário financeiro${criticalSuffix}.`;
+}
+
 function todayKey() {
 	const now = new Date();
 	return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
@@ -71,15 +81,7 @@ export default function FinanMorningSummary() {
 				</div>
 				<div>
 					<h2>Resumo matinal</h2>
-					<p>
-						{loading
-							? "Carregando..."
-							: relevant.length === 0
-								? "Nenhum evento do calendário financeiro para hoje."
-								: `Hoje há ${relevant.length} evento(s) no calendário financeiro${
-										criticalCount ? `, ${criticalCount} crítico(s)` : ""
-									}.`}
-					</p>
+					<p>{resolveMorningSummaryMessage(loading, relevant, criticalCount)}</p>
 				</div>
 			</div>
 			{error ? <div className="finan-error mt-3">{error}</div> : null}

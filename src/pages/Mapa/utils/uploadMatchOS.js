@@ -4,6 +4,14 @@ import { invalidateInternalStaticDataCache } from "../../../services/internalSta
 import { persistMatchImport } from "../../../services/operationalImportService";
 import { invalidateDashboardDataCache } from "../../PainelPublico/hooks/useDashboardData";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFonteLabel(fontesUnicas) {
+	if (fontesUnicas.includes("sempre") && fontesUnicas.includes("onnet")) {
+		return "SEMPRE + ONNET";
+	}
+	return fontesUnicas.includes("onnet") ? "ONNET" : "SEMPRE";
+}
+
 async function readRowsFromFile(file) {
 	const buffer = await file.arrayBuffer();
 	const workbook = XLSX.read(buffer, { type: "array" });
@@ -40,12 +48,7 @@ export async function processarUploadMatch(
 	const fontesUnicas = [
 		...new Set(fontes.length > 0 ? fontes : ["sempre", "onnet"]),
 	];
-	const fonteLabel =
-		fontesUnicas.includes("sempre") && fontesUnicas.includes("onnet")
-			? "SEMPRE + ONNET"
-			: fontesUnicas.includes("onnet")
-				? "ONNET"
-				: "SEMPRE";
+	const fonteLabel = resolveFonteLabel(fontesUnicas);
 
 	onProgress?.(`Enviando planilha ${fonteLabel} para processamento...`);
 	const persistResult = await persistMatchImport(

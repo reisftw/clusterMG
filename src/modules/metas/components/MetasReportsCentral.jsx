@@ -7,6 +7,13 @@ import {
 	METAS_CENTRAL_REPORT_ITEMS,
 } from "../services/metasCentralReportService";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSelectedMonth(current, availableMonths, currentMonth) {
+	if (availableMonths.includes(current)) return current;
+	if (availableMonths.includes(currentMonth)) return currentMonth;
+	return availableMonths[0];
+}
+
 export default function MetasReportsCentral({
 	allData,
 	agentesData,
@@ -34,11 +41,7 @@ export default function MetasReportsCentral({
 	useEffect(() => {
 		if (!availableMonths.length) return;
 		setSelectedMonth((current) =>
-			availableMonths.includes(current)
-				? current
-				: availableMonths.includes(currentMonth)
-					? currentMonth
-					: availableMonths[0],
+			resolveSelectedMonth(current, availableMonths, currentMonth),
 		);
 	}, [availableMonths, currentMonth]);
 

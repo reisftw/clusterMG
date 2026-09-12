@@ -72,11 +72,16 @@ export default function InternalStaticDataStatus({
 		? "border-blue-100 bg-blue-50 text-blue-900"
 		: "border-amber-200 bg-amber-50 text-amber-900";
 	const title = available ? "JSON interno ativo" : "Leitura pela VPS";
-	const description = available
-		? "Base padrao desta tela: snapshots internos segmentados, com metadados lidos em internal/dashboard.json."
-		: fallbackIsHealthy
-			? "Esta tela segue operando normalmente com leitura direta pela API da VPS enquanto o snapshot interno segmentado fica indisponivel."
-			: "Sem snapshot interno segmentado disponivel agora. Os dados serao lidos pela API da VPS ou pela republicacao dos JSONs internos.";
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let description =
+		"Sem snapshot interno segmentado disponivel agora. Os dados serao lidos pela API da VPS ou pela republicacao dos JSONs internos.";
+	if (available) {
+		description =
+			"Base padrao desta tela: snapshots internos segmentados, com metadados lidos em internal/dashboard.json.";
+	} else if (fallbackIsHealthy) {
+		description =
+			"Esta tela segue operando normalmente com leitura direta pela API da VPS enquanto o snapshot interno segmentado fica indisponivel.";
+	}
 
 	return (
 		<div

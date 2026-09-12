@@ -1,14 +1,16 @@
 ﻿import { useMemo } from "react";
 import { recalcularSaldoDiario } from "../utils/metasSaldo";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveBadgeClass(v) {
+	if (v > 0) return "bg-green-50 text-green-700 border-green-100";
+	if (v < 0) return "bg-red-50 text-red-600 border-red-100";
+	return "bg-gray-50 text-gray-500 border-gray-100";
+}
+
 const Badge = ({ v }) => {
 	if (v == null) return <span className="text-gray-300 text-xs">—</span>;
-	const cls =
-		v > 0
-			? "bg-green-50 text-green-700 border-green-100"
-			: v < 0
-				? "bg-red-50 text-red-600 border-red-100"
-				: "bg-gray-50 text-gray-500 border-gray-100";
+	const cls = resolveBadgeClass(v);
 	return (
 		<span
 			className={`inline-block px-2 py-0.5 rounded-lg text-xs font-bold border ${cls}`}

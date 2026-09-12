@@ -218,29 +218,40 @@ export default function DuvidasPublicoPage() {
 					</div>
 
 					<div className="space-y-4">
-						{loading ? (
-							<div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-								<RetorninhoLoader
-									compact
-									title="Carregando wiki..."
-									description="O Retorninho esta separando as respostas."
-								/>
-							</div>
-						) : error ? (
-							<div className="rounded-[32px] border border-red-200 bg-red-50 p-8 text-sm text-red-700 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-								{error}
-							</div>
-						) : duvidasFiltradas.length === 0 ? (
-							<div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
-								<p className="text-lg font-bold text-slate-900">
-									Nenhuma resposta encontrada
-								</p>
-								<p className="mt-2 text-sm text-slate-500">
-									Tente outra busca ou volte mais tarde para novas publicacoes.
-								</p>
-							</div>
-						) : (
-							duvidasFiltradas.map((item) => (
+						{(() => {
+							// Extraido pra achado javascript:S3358 (ternario aninhado).
+							if (loading) {
+								return (
+									<div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+										<RetorninhoLoader
+											compact
+											title="Carregando wiki..."
+											description="O Retorninho esta separando as respostas."
+										/>
+									</div>
+								);
+							}
+							if (error) {
+								return (
+									<div className="rounded-[32px] border border-red-200 bg-red-50 p-8 text-sm text-red-700 shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+										{error}
+									</div>
+								);
+							}
+							if (duvidasFiltradas.length === 0) {
+								return (
+									<div className="rounded-[32px] border border-slate-200 bg-white p-10 text-center shadow-[0_20px_50px_rgba(15,23,42,0.08)]">
+										<p className="text-lg font-bold text-slate-900">
+											Nenhuma resposta encontrada
+										</p>
+										<p className="mt-2 text-sm text-slate-500">
+											Tente outra busca ou volte mais tarde para novas
+											publicacoes.
+										</p>
+									</div>
+								);
+							}
+							return duvidasFiltradas.map((item) => (
 								<FaqItem
 									key={item.id}
 									item={item}
@@ -251,8 +262,8 @@ export default function DuvidasPublicoPage() {
 										)
 									}
 								/>
-							))
-						)}
+							));
+						})()}
 					</div>
 				</div>
 			</div>

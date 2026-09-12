@@ -11,6 +11,12 @@ const buildInitialState = (agente) => ({
 	responsavel: agente?.responsavel || emptyPessoa(),
 });
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSalvarButtonLabel(saving, editando) {
+	if (saving) return "Salvando...";
+	return editando ? "Salvar alteracoes" : "Cadastrar";
+}
+
 const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 	const editando = !!agente;
 	const { regionais } = useRegionais();
@@ -119,11 +125,7 @@ const AgenteModalContent = ({ agente, onSalvar, onClose }) => {
 						disabled={saving || !cidade.trim()}
 						className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40 transition-colors"
 					>
-						{saving
-							? "Salvando..."
-							: editando
-								? "Salvar alteracoes"
-								: "Cadastrar"}
+						{resolveSalvarButtonLabel(saving, editando)}
 					</button>
 				</div>
 			</div>

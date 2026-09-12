@@ -11,6 +11,14 @@ const DATE_FIELD_ALIASES = new Set([
 	"abertura",
 ]);
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFonteLabel(fontesUnicas) {
+	if (fontesUnicas.includes("sempre") && fontesUnicas.includes("onnet")) {
+		return "SEMPRE + ONNET";
+	}
+	return fontesUnicas.includes("onnet") ? "ONNET" : "SEMPRE";
+}
+
 function normalizeHeader(value) {
 	return String(value || "")
 		.normalize("NFD")
@@ -75,12 +83,7 @@ export async function processarUploadMapa(
 			? periodo.fontes.filter((fonte) => ["sempre", "onnet"].includes(fonte))
 			: [periodo?.fonte === "onnet" ? "onnet" : "sempre"];
 	const fontesUnicas = [...new Set(fontes.length > 0 ? fontes : ["sempre"])];
-	const fonteLabel =
-		fontesUnicas.includes("sempre") && fontesUnicas.includes("onnet")
-			? "SEMPRE + ONNET"
-			: fontesUnicas.includes("onnet")
-				? "ONNET"
-				: "SEMPRE";
+	const fonteLabel = resolveFonteLabel(fontesUnicas);
 
 	onProgress?.(`Enviando planilha ${fonteLabel} para processamento...`);
 	const persistResult = await persistMapaImport(

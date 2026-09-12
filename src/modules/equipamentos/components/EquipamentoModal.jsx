@@ -15,6 +15,12 @@ const buildInitialForm = (equipamento) => ({
 	observacao: equipamento?.observacao || "",
 });
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSalvarButtonLabel(saving, editando) {
+	if (saving) return "Salvando...";
+	return editando ? "Salvar alteracoes" : "Cadastrar";
+}
+
 const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 	const { colaboradores } = useColaboradores();
 	const ativos = colaboradores.filter(
@@ -194,11 +200,7 @@ const EquipamentoModalContent = ({ equipamento, onSalvar, onClose }) => {
 						disabled={saving || !form.tipo || !form.modelo}
 						className="flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
 					>
-						{saving
-							? "Salvando..."
-							: editando
-								? "Salvar alteracoes"
-								: "Cadastrar"}
+						{resolveSalvarButtonLabel(saving, editando)}
 					</button>
 				</div>
 			</div>

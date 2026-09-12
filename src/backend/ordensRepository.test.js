@@ -197,6 +197,45 @@ describe("ordensRepository", () => {
 		]);
 	});
 
+	it("busca O.S. abertas (mapa/match) por serie/MAC do equipamento", async () => {
+		const dbQuery = vi.fn(async () => ({
+			rows: [
+				{
+					id: "match_os_abertas:sempre:321",
+					source_collection: "match_os_abertas",
+					source: "sempre",
+					num_os: "321",
+					legacy_path: "match_os_abertas/321",
+					legacy_document_id: "321",
+					nome_cliente: "Cleide dos Anjos de Souza",
+					macs_equipamento: ["6C4CBCC488B8"],
+					source_payload: {},
+				},
+			],
+		}));
+		const repository = loadRepository(dbQuery);
+
+		const rows = await repository.findOrdensAbertasBySerie("6c:4c:bc:c4:88:b8");
+
+		expect(rows).toHaveLength(1);
+		expect(rows[0].data.nome_cliente).toBe("Cleide dos Anjos de Souza");
+		expect(dbQuery.mock.calls[0][0]).toContain("macs_equipamento::jsonb ? $2");
+		expect(dbQuery.mock.calls[0][1]).toEqual([
+			["ordens_abertas", "match_os_abertas"],
+			"6C4CBCC488B8",
+		]);
+	});
+
+	it("ignora serie/MAC invalido na busca por O.S. abertas", async () => {
+		const dbQuery = vi.fn();
+		const repository = loadRepository(dbQuery);
+
+		const rows = await repository.findOrdensAbertasBySerie("nao e um mac");
+
+		expect(rows).toEqual([]);
+		expect(dbQuery).not.toHaveBeenCalled();
+	});
+
 	it("busca snapshot publico somente pelo legacy_path exato", async () => {
 		const dbQuery = vi.fn(async () => ({
 			rows: [

@@ -102,6 +102,56 @@ async function loadEntity(entity) {
 	return entity === "acertos" ? sortAcertos(items) : sortByName(items);
 }
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function buildLegacyItens(lancamento, produtosMap) {
+	return (Array.isArray(lancamento.itens) ? lancamento.itens : []).map(
+		(item) => {
+			const produto = produtosMap.get(item.produtoId);
+			return {
+				produtoId: item.produtoId || "",
+				nome: item.nome || produto?.nome || "",
+				categoria: item.categoria || produto?.categoria || "",
+				unidade: item.unidade || produto?.unidade || "un",
+				quantidade: Number(item.quantidade) || 0,
+			};
+		},
+	);
+}
+
+function buildLegacyTecnicoLancamentos(acerto, tecnicosMap, empresasMap, produtosMap) {
+	return (Array.isArray(acerto.lancamentos) ? acerto.lancamentos : []).map(
+		(lancamento) => {
+			const tecnico = tecnicosMap.get(lancamento.tecnicoId);
+			const empresa = tecnico ? empresasMap.get(tecnico.empresaId) : null;
+
+			return {
+				tecnicoId: lancamento.tecnicoId || "",
+				tecnicoNome: tecnico?.nome || lancamento.tecnicoNome || "",
+				tecnicoEmail: tecnico?.email || lancamento.tecnicoEmail || "",
+				empresaId: tecnico?.empresaId || lancamento.empresaId || "",
+				empresaNome: empresa?.nome || lancamento.empresaNome || "",
+				responsavel: empresa?.responsavel || lancamento.responsavel || "",
+				itens: buildLegacyItens(lancamento, produtosMap),
+			};
+		},
+	);
+}
+
+function resolveTecnicoLancamentos(acerto, tecnicosMap, empresasMap, produtosMap) {
+	if (
+		Array.isArray(acerto.tecnicoLancamentos) &&
+		acerto.tecnicoLancamentos.length > 0
+	) {
+		return acerto.tecnicoLancamentos;
+	}
+	return buildLegacyTecnicoLancamentos(
+		acerto,
+		tecnicosMap,
+		empresasMap,
+		produtosMap,
+	);
+}
+
 export async function fetchAcertoEstoqueData() {
 	const [empresas, agendas, produtos, acertos] = await Promise.all([
 		loadEntity("empresas"),
@@ -118,41 +168,12 @@ export async function fetchAcertoEstoqueData() {
 
 	const acertosNormalizados = acertos.map((acerto) => {
 		const agenda = agendasMap.get(acerto.agendaId);
-		const tecnicoLancamentos =
-			Array.isArray(acerto.tecnicoLancamentos) &&
-			acerto.tecnicoLancamentos.length > 0
-				? acerto.tecnicoLancamentos
-				: (Array.isArray(acerto.lancamentos) ? acerto.lancamentos : []).map(
-						(lancamento) => {
-							const tecnico = tecnicosMap.get(lancamento.tecnicoId);
-							const empresa = tecnico
-								? empresasMap.get(tecnico.empresaId)
-								: null;
-
-							return {
-								tecnicoId: lancamento.tecnicoId || "",
-								tecnicoNome: tecnico?.nome || lancamento.tecnicoNome || "",
-								tecnicoEmail: tecnico?.email || lancamento.tecnicoEmail || "",
-								empresaId: tecnico?.empresaId || lancamento.empresaId || "",
-								empresaNome: empresa?.nome || lancamento.empresaNome || "",
-								responsavel:
-									empresa?.responsavel || lancamento.responsavel || "",
-								itens: (Array.isArray(lancamento.itens)
-									? lancamento.itens
-									: []
-								).map((item) => {
-									const produto = produtosMap.get(item.produtoId);
-									return {
-										produtoId: item.produtoId || "",
-										nome: item.nome || produto?.nome || "",
-										categoria: item.categoria || produto?.categoria || "",
-										unidade: item.unidade || produto?.unidade || "un",
-										quantidade: Number(item.quantidade) || 0,
-									};
-								}),
-							};
-						},
-					);
+		const tecnicoLancamentos = resolveTecnicoLancamentos(
+			acerto,
+			tecnicosMap,
+			empresasMap,
+			produtosMap,
+		);
 
 		const tecnicoNomes = uniqueValues(
 			tecnicoLancamentos.map((item) => item.tecnicoNome),

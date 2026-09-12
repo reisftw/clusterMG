@@ -170,6 +170,19 @@ const formatPeríodo = (dates) => {
 
 const formatDate = (date) => (date ? date.toLocaleDateString("pt-BR") : "");
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveCategoriaMotivo(motivo) {
+	if (motivo.startsWith("VOL")) return "Voluntario";
+	if (motivo.startsWith("INV")) return "Involuntario";
+	return "Outros";
+}
+
+function resolveDropzoneClass(status) {
+	if (status === "ok" || status === "generating") return "border-green-400 bg-green-50";
+	if (status === "err") return "border-red-400 bg-red-50";
+	return "border-gray-200 bg-white hover:border-orange-400";
+}
+
 const buildSummaryRows = (map, formatter) =>
 	Object.entries(map)
 		.sort((a, b) => b[1].total - a[1].total)
@@ -217,11 +230,7 @@ const TabCancelamentosMes = () => {
 					String(
 						row.motivocancelamento || row.motivo || "Não informado",
 					).trim() || "Não informado";
-				const categoriaMotivo = motivo.startsWith("VOL")
-					? "Voluntario"
-					: motivo.startsWith("INV")
-						? "Involuntario"
-						: "Outros";
+				const categoriaMotivo = resolveCategoriaMotivo(motivo);
 
 				return {
 					...row,
@@ -742,13 +751,7 @@ const TabCancelamentosMes = () => {
 	return (
 		<div className="space-y-4">
 			<div
-				className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
-					status === "ok" || status === "generating"
-						? "border-green-400 bg-green-50"
-						: status === "err"
-							? "border-red-400 bg-red-50"
-							: "border-gray-200 bg-white hover:border-orange-400"
-				}`}
+				className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${resolveDropzoneClass(status)}`}
 				onClick={() => inputRef.current?.click()}
 				onKeyDown={(event) => {
 					if (event.key === "Enter" || event.key === " ") {
@@ -767,28 +770,35 @@ const TabCancelamentosMes = () => {
 					onChange={loadFile}
 				/>
 				<span className="text-4xl block mb-3">📉</span>
-				{rows.length > 0 ? (
-					<>
-						<p className="font-semibold text-green-700">{fileName}</p>
-						<p className="text-sm text-green-600">
-							{rows.length} linhas processadas • clique para trocar
-						</p>
-					</>
-				) : status === "loading" ? (
-					<p className="text-sm text-gray-500">Carregando planilha...</p>
-				) : (
-					<>
-						<p className="font-semibold text-gray-700">
-							Clique ou arraste a planilha de cancelamentos do mes
-						</p>
-						<p className="text-xs text-gray-400 mt-1">
-							Campos esperados:{" "}
-							<code>
-								cidade • tecnologia • motivo_cancelamento • data_cancelamento
-							</code>
-						</p>
-					</>
-				)}
+				{(() => {
+					// Extraido pra achado javascript:S3358 (ternario aninhado).
+					if (rows.length > 0) {
+						return (
+							<>
+								<p className="font-semibold text-green-700">{fileName}</p>
+								<p className="text-sm text-green-600">
+									{rows.length} linhas processadas • clique para trocar
+								</p>
+							</>
+						);
+					}
+					if (status === "loading") {
+						return <p className="text-sm text-gray-500">Carregando planilha...</p>;
+					}
+					return (
+						<>
+							<p className="font-semibold text-gray-700">
+								Clique ou arraste a planilha de cancelamentos do mes
+							</p>
+							<p className="text-xs text-gray-400 mt-1">
+								Campos esperados:{" "}
+								<code>
+									cidade • tecnologia • motivo_cancelamento • data_cancelamento
+								</code>
+							</p>
+						</>
+					);
+				})()}
 			</div>
 
 			{rows.length > 0 && (

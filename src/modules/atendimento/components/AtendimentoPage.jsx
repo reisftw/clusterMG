@@ -1700,6 +1700,19 @@ function TemplatesPage({ config, setConfig, loading, onSave }) {
 		</section>
 	);
 }
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveConnectionStatusClasses(connection) {
+	if (connection.connected) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+	if (connection.error) return "border-red-200 bg-red-50 text-red-700";
+	return "border-amber-200 bg-amber-50 text-amber-700";
+}
+
+function resolveConnectionStatusLabel(connection) {
+	if (connection.connected) return "Conectado";
+	if (connection.error) return "Erro na conexão";
+	return "Aguardando conexão";
+}
+
 function ConfigPage({
 	config,
 	setConfig,
@@ -1759,11 +1772,7 @@ function ConfigPage({
 	const qrCode = findQrCode(status);
 	const connection = readConnectionDetails(status, config);
 	const webhookOk = Boolean(status?.webhook?.ok || status?.webhookResult?.ok);
-	const statusClasses = connection.connected
-		? "border-emerald-200 bg-emerald-50 text-emerald-700"
-		: connection.error
-			? "border-red-200 bg-red-50 text-red-700"
-			: "border-amber-200 bg-amber-50 text-amber-700";
+	const statusClasses = resolveConnectionStatusClasses(connection);
 
 	return (
 		<div className="grid gap-4">
@@ -1780,11 +1789,7 @@ function ConfigPage({
 					<span
 						className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${statusClasses}`}
 					>
-						{connection.connected
-							? "Conectado"
-							: connection.error
-								? "Erro na conexão"
-								: "Aguardando conexão"}
+						{resolveConnectionStatusLabel(connection)}
 					</span>
 				</div>
 
@@ -2477,7 +2482,12 @@ export default function AtendimentoPage({ page = "cases" }) {
 				/>
 			)}
 
-			{page === "config" ? (
+			{/* Extraido pra achado javascript:S3358 (ternario aninhado) — IIFE
+			com if/return em vez da cadeia `page === "x" ? (...) : page === "y" ? ...`,
+			mesma logica/JSX de antes em cada ramo. */}
+			{(() => {
+				if (page === "config")
+					return (
 				<ConfigPage
 					config={config}
 					setConfig={setConfig}
@@ -2498,7 +2508,9 @@ export default function AtendimentoPage({ page = "cases" }) {
 					onResetData={() => setResetDataOpen(true)}
 					canResetData={currentRole === "admin"}
 				/>
-			) : page === "templates" ? (
+					);
+				if (page === "templates")
+					return (
 				<TemplatesPage
 					config={config}
 					setConfig={setConfig}
@@ -2518,7 +2530,9 @@ export default function AtendimentoPage({ page = "cases" }) {
 						}
 					}}
 				/>
-			) : page === "messages" ? (
+					);
+				if (page === "messages")
+					return (
 				<MessagesPage
 					items={items}
 					summary={summary}
@@ -2528,13 +2542,16 @@ export default function AtendimentoPage({ page = "cases" }) {
 						setPagination((current) => ({ ...current, page: 1 }));
 					}}
 				/>
-			) : page === "ratings" ? (
+					);
+				if (page === "ratings")
+					return (
 				<RatingsPage
 					items={items}
 					summary={summary}
 					onView={(item) => openCaseModal(item, "conversation")}
 				/>
-			) : (
+					);
+				return (
 				<ListPage
 					items={items}
 					type={page}
@@ -2562,7 +2579,8 @@ export default function AtendimentoPage({ page = "cases" }) {
 						)
 					}
 				/>
-			)}
+					);
+			})()}
 			{showPagination && items.length > 0 && (
 				<PaginationControls
 					page={Math.min(pagination.page, totalPages)}

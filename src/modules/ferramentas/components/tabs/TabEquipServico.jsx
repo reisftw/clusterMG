@@ -124,6 +124,13 @@ const parseMoneyInput = (value) => {
 	return Number.isFinite(parsed) ? parsed : 0;
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolvePrioridadeLabel(index) {
+	if (index < 10) return "ALTA";
+	if (index < 30) return "MEDIA";
+	return "BAIXA";
+}
+
 const parseClientName = (row) => {
 	const rawCode = pickFirst(row, [
 		"codigocliente",
@@ -161,11 +168,10 @@ const parsePlanSpeedMbps = (servico) => {
 		const value = Number(match[1]);
 		if (!Number.isFinite(value)) continue;
 		const unit = match[2];
-		const mbps = unit.startsWith("g")
-			? value * 1000
-			: unit === "k"
-				? value / 1000
-				: value;
+		// Extraido pra achado javascript:S3358 (ternario aninhado).
+		let mbps = value;
+		if (unit.startsWith("g")) mbps = value * 1000;
+		else if (unit === "k") mbps = value / 1000;
 		if (mbps > 0 && (!best || mbps > best)) best = mbps;
 	}
 
@@ -1834,8 +1840,7 @@ const TabEquipServiço = () => {
 					},
 					{
 						label: "Prioridade",
-						value: (_item, _row, index) =>
-							index < 10 ? "ALTA" : index < 30 ? "MEDIA" : "BAIXA",
+						value: (_item, _row, index) => resolvePrioridadeLabel(index),
 						width: 14,
 						align: "center",
 						bold: true,

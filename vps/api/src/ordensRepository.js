@@ -467,6 +467,23 @@ async function upsertImportRun(record) {
 	return getDocument(row.legacy_path);
 }
 
+// Usado pela feature de Movimentacoes (devolucao de equipamento ao estoque)
+// para achar a O.S. aberta (mapa/match) vinculada a um MAC/serie, antes de
+// remove-la via deleteDocument. macs_equipamento e jsonb (ver upsertOrder),
+// por isso o operador `?` (contains key) em vez de `@>`/`any`.
+async function findOrdensAbertasBySerie(serieRaw) {
+	const serie = normalizeMac(serieRaw);
+	if (!isValidMac(serie)) return [];
+	const result = await db.query(
+		`select * from ordens_servico
+		  where source_collection = any($1::text[])
+		    and macs_equipamento::jsonb ? $2
+		  order by updated_at desc`,
+		[[COLLECTIONS.ordens, COLLECTIONS.match], serie],
+	);
+	return result.rows.map(mapOrder);
+}
+
 async function deleteDocument(documentPath) {
 	const collectionPath = collectionFromPath(documentPath);
 	const documentId = documentIdFromPath(documentPath);
@@ -518,6 +535,7 @@ module.exports = {
 	COLLECTIONS,
 	deleteDocument,
 	deleteDocumentsByCollectionAndSources,
+	findOrdensAbertasBySerie,
 	getDocument,
 	getCollectionLatestUpdatedAt,
 	isOrdersCollection,

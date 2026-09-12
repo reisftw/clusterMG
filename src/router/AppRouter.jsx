@@ -120,6 +120,9 @@ const Retiradas = lazy(
 const EntregasTecnicos = lazy(
 	() => import("../modules/entregasTecnicos/components/EntregasTecnicosPage"),
 );
+const Movimentacoes = lazy(
+	() => import("../modules/movimentacoes/components/MovimentacoesPage"),
+);
 const Logistica = lazy(
 	() => import("../modules/logistica/components/LogisticaPage"),
 );
@@ -494,6 +497,16 @@ const AppRouter = () => (
 									]}
 								>
 									<EntregasTecnicos />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.MOVIMENTACOES}
+							element={
+								<ProtectedRoute
+									requiredPermission={["movimentacoes.view", "movimentacoes.manage"]}
+								>
+									<Movimentacoes />
 								</ProtectedRoute>
 							}
 						/>

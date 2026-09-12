@@ -169,6 +169,22 @@ function resolveStartButtonLabel({ working, startButtonState, workerRunning }) {
 	return "Iniciar fila";
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveStartButtonTitle(startButtonState, status) {
+	if (startButtonState === "active") {
+		return "A fila esta ativa e enviando conforme a janela configurada.";
+	}
+	if (startButtonState === "waiting") {
+		return (
+			status?.worker?.lastSkipped || "A fila esta aguardando a proxima janela."
+		);
+	}
+	if (startButtonState === "error") {
+		return status?.worker?.lastError || "A fila encontrou um erro.";
+	}
+	return "Clique para iniciar a fila automatica.";
+}
+
 // Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // pra reduzir a complexidade cognitiva da funcao de render — mesmo
 // estado e mesmas chamadas, sem mudanca de comportamento.
@@ -520,16 +536,7 @@ const MensageriaFilaPage = () => {
 							type="button"
 							onClick={handleStartQueue}
 							disabled={working || !canManage}
-							title={
-								startButtonState === "active"
-									? "A fila esta ativa e enviando conforme a janela configurada."
-									: startButtonState === "waiting"
-										? status?.worker?.lastSkipped ||
-											"A fila esta aguardando a proxima janela."
-										: startButtonState === "error"
-											? status?.worker?.lastError || "A fila encontrou um erro."
-											: "Clique para iniciar a fila automatica."
-							}
+							title={resolveStartButtonTitle(startButtonState, status)}
 							className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-60 ${startButtonClass}`}
 						>
 							<StartButtonIcon

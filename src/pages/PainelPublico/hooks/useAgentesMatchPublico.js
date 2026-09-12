@@ -21,11 +21,12 @@ function normalizeAgentesSlice(slice) {
 	if (slice.data?.agentes || slice.data?.resumo) return slice.data;
 	if (slice.agentes || slice.resumo) return slice;
 
-	const ordens = Array.isArray(slice.ordens)
-		? slice.ordens
-		: Array.isArray(slice.data?.ordens)
-			? slice.data.ordens
-			: null;
+	let ordens = null;
+	if (Array.isArray(slice.ordens)) {
+		ordens = slice.ordens;
+	} else if (Array.isArray(slice.data?.ordens)) {
+		ordens = slice.data.ordens;
+	}
 
 	if (!ordens) return null;
 
@@ -55,6 +56,15 @@ function hasMatches(matchData) {
 
 function isCompactMatchData(matchData) {
 	return Boolean(matchData?.compact);
+}
+
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveMatchAgentesData({ detail, detailData, matchData }) {
+	if (detail) {
+		if (detailData) return detailData;
+		return isCompactMatchData(matchData) ? null : matchData;
+	}
+	return hasMatches(matchData) ? matchData : null;
 }
 
 export function useAgentesMatchPublico(options = {}) {
@@ -136,11 +146,7 @@ export function useAgentesMatchPublico(options = {}) {
 	const detailData =
 		detailState.version === matchVersion ? detailState.data : null;
 
-	const resolvedData = detail
-		? detailData || (isCompactMatchData(matchData) ? null : matchData)
-		: hasMatches(matchData)
-			? matchData
-			: null;
+	const resolvedData = resolveMatchAgentesData({ detail, detailData, matchData });
 
 	return {
 		data: resolvedData,

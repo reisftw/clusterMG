@@ -143,23 +143,32 @@ export default function MapaHistoricoModal({ onClose }) {
 
 				{/* Conteúdo */}
 				<div className="overflow-y-auto p-4 flex flex-col gap-3">
-					{loading ? (
-						<div className="flex justify-center py-12">
-							<div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-						</div>
-					) : historico.length === 0 ? (
-						<div className="flex flex-col items-center py-12 text-center">
-							<span className="text-4xl mb-3">📭</span>
-							<p className="text-gray-500 font-medium text-sm">
-								Nenhum histórico ainda
-							</p>
-							<p className="text-gray-400 text-xs mt-1">
-								Importe uma planilha para começar
-							</p>
-						</div>
-					) : (
-						historico.map((item) => <HistoricoCard key={item.id} item={item} />)
-					)}
+					{(() => {
+						// Extraido pra achado javascript:S3358 (ternario aninhado).
+						if (loading) {
+							return (
+								<div className="flex justify-center py-12">
+									<div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+								</div>
+							);
+						}
+						if (historico.length === 0) {
+							return (
+								<div className="flex flex-col items-center py-12 text-center">
+									<span className="text-4xl mb-3">📭</span>
+									<p className="text-gray-500 font-medium text-sm">
+										Nenhum histórico ainda
+									</p>
+									<p className="text-gray-400 text-xs mt-1">
+										Importe uma planilha para começar
+									</p>
+								</div>
+							);
+						}
+						return historico.map((item) => (
+							<HistoricoCard key={item.id} item={item} />
+						));
+					})()}
 				</div>
 			</div>
 		</ModalShell>

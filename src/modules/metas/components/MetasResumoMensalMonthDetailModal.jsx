@@ -2,6 +2,14 @@
 
 import ModalShell from "../../../components/ui/ModalShell";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDetailStatusMessage(detail) {
+	const metaLabel = String(detail.metaModeLabel || "meta sazonal").toLowerCase();
+	if (detail.atingiu) return `Mes entregue dentro da ${metaLabel}.`;
+	if (detail.mesEncerrado) return `Mes encerrado sem atingir a ${metaLabel}.`;
+	return `Mes ainda em andamento abaixo da ${metaLabel}.`;
+}
+
 const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
 	if (!detail) return null;
 
@@ -135,11 +143,7 @@ const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
 						<p
 							className={`text-sm font-bold ${detail.atingiu ? "text-green-700" : "text-red-700"}`}
 						>
-							{detail.atingiu
-								? `Mes entregue dentro da ${String(detail.metaModeLabel || "meta sazonal").toLowerCase()}.`
-								: detail.mesEncerrado
-									? `Mes encerrado sem atingir a ${String(detail.metaModeLabel || "meta sazonal").toLowerCase()}.`
-									: `Mes ainda em andamento abaixo da ${String(detail.metaModeLabel || "meta sazonal").toLowerCase()}.`}
+							{resolveDetailStatusMessage(detail)}
 						</p>
 
 						{!detail.atingiu && (

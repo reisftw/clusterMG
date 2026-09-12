@@ -142,6 +142,15 @@ function normalizeDriveFolderId(value) {
 	return source;
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolvePlacas(body, existing) {
+	if (Array.isArray(body.placas)) return body.placas.map(text).filter(Boolean);
+	return text(body.placas ?? existing.placas)
+		.split(/[,;\n]/)
+		.map(text)
+		.filter(Boolean);
+}
+
 function composeEndereco(body = {}, existing = {}) {
 	const cep = text(body.cep ?? existing.cep);
 	const estado = text(body.estado ?? existing.estado);
@@ -336,14 +345,7 @@ function buildImovelPayload(body = {}, user = {}, existing = {}) {
 		vagas: estacionamento
 			? Math.max(Math.trunc(Number(body.vagas ?? existing.vagas ?? 0)), 0)
 			: 0,
-		placas: estacionamento
-			? Array.isArray(body.placas)
-				? body.placas.map(text).filter(Boolean)
-				: text(body.placas ?? existing.placas)
-						.split(/[,;\n]/)
-						.map(text)
-						.filter(Boolean)
-			: [],
+		placas: estacionamento ? resolvePlacas(body, existing) : [],
 		metrosQuadrados: numberValue(
 			body.metrosQuadrados ?? body.m2 ?? existing.metrosQuadrados,
 		),

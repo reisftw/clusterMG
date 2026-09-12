@@ -1,3 +1,9 @@
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFaltaBadgeTone(falta) {
+	if (falta > 0) return "neg";
+	return falta < 0 ? "pos" : "zero";
+}
+
 export default function CityTable({ cidades = [], onCityClick }) {
 	function pctClass(pct) {
 		if (pct > 100) return "over";
@@ -63,7 +69,7 @@ export default function CityTable({ cidades = [], onCityClick }) {
 								</td>
 								<td data-label="Falta">
 									<span
-										className={`badge ${c.falta > 0 ? "neg" : c.falta < 0 ? "pos" : "zero"}`}
+										className={`badge ${resolveFaltaBadgeTone(c.falta)}`}
 									>
 										{c.falta > 0 ? `-${c.falta}` : `+${Math.abs(c.falta)}`}
 									</span>

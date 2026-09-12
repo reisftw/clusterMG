@@ -202,6 +202,12 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Movimentações",
+		path: ROUTES.MOVIMENTACOES,
+		icon: PackageSearch,
+		permission: ["movimentacoes.view", "movimentacoes.manage"],
+	},
+	{
 		label: "Logística",
 		path: ROUTES.LOGISTICA,
 		icon: Truck,
@@ -586,6 +592,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.EMPRESAS_TECNICOS,
 	ROUTES.AGENDAMENTOS,
 	ROUTES.ENTREGAS_TECNICOS,
+	ROUTES.MOVIMENTACOES,
 	ROUTES.TECNICOS_AUDITORIA_BOLSA,
 	ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
 	ROUTES.ESTOQUE_BOLSA_TECNICO,
@@ -663,6 +670,26 @@ const TECNICOS_AUDITORIA_PATHS = [
 	ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
 ];
 
+const TECNICOS_EMPRESAS_PATHS = [ROUTES.EMPRESAS_TECNICOS];
+
+const LOGISTICA_ESTOQUE_PATHS = [
+	ROUTES.ESTOQUE_EQUIPAMENTOS,
+	ROUTES.ESTOQUE_CONSULTA,
+	ROUTES.ACERTO_ESTOQUE,
+	ROUTES.INSUMOS_REQUISICOES,
+];
+
+const CLIENTE_MENSAGERIA_PATHS = [
+	ROUTES.MENSAGERIA_ENVIADOS,
+	ROUTES.MENSAGERIA_RELATORIOS,
+	ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
+	ROUTES.MENSAGERIA_FILA,
+	ROUTES.MENSAGERIA_BACKLOG,
+	ROUTES.MENSAGERIA_CALLBACK,
+	ROUTES.MENSAGERIA_API,
+	ROUTES.MENSAGERIA,
+];
+
 const DIRECT_MENU_DUPLICATE_PATHS = new Set();
 
 const ATENDIMENTO_PATHS = [
@@ -677,22 +704,31 @@ const ATENDIMENTO_PATHS = [
 
 const MENU_GROUPS = [
 	{
-		id: "empresas",
-		label: "Empresas",
-		icon: Building2,
-		paths: [ROUTES.EMPRESAS_TECNICOS],
-	},
-	{
 		id: "cliente",
 		label: "Cliente",
 		icon: Users,
-		paths: [ROUTES.AGENDAMENTOS],
+		// Atendimento e Mensageria entraram aqui dentro (pedido do time: menos
+		// itens soltos no topo do menu).
+		paths: [
+			ROUTES.AGENDAMENTOS,
+			...ATENDIMENTO_PATHS,
+			ROUTES.MENSAGERIA_ENVIADOS,
+			ROUTES.MENSAGERIA_RELATORIOS,
+			ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
+			ROUTES.MENSAGERIA_FILA,
+			ROUTES.MENSAGERIA_BACKLOG,
+			ROUTES.MENSAGERIA_CALLBACK,
+			ROUTES.MENSAGERIA_API,
+			ROUTES.MENSAGERIA,
+		],
 	},
 	{
 		id: "tecnicos",
 		label: "Técnicos",
 		icon: UserSquare2,
+		// Empresas entrou aqui dentro (pedido do time).
 		paths: [
+			ROUTES.EMPRESAS_TECNICOS,
 			ROUTES.ENTREGAS_TECNICOS,
 			ROUTES.TECNICOS_AUDITORIA_BOLSA,
 			ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
@@ -702,19 +738,9 @@ const MENU_GROUPS = [
 		id: "logistica",
 		label: "Logística",
 		icon: Truck,
-		paths: [ROUTES.LOGISTICA],
-	},
-	{
-		id: "atendimento",
-		label: "Atendimento",
-		icon: MessagesSquare,
-		paths: ATENDIMENTO_PATHS,
-	},
-	{
-		id: "estoque",
-		label: "Estoque",
-		icon: Boxes,
+		// Estoque entrou aqui dentro (pedido do time).
 		paths: [
+			ROUTES.LOGISTICA,
 			ROUTES.ESTOQUE_EQUIPAMENTOS,
 			ROUTES.ESTOQUE_CONSULTA,
 			ROUTES.ACERTO_ESTOQUE,
@@ -748,21 +774,6 @@ const MENU_GROUPS = [
 			ROUTES.AGENDA,
 			ROUTES.FERIADOS,
 			ROUTES.FERIAS,
-		],
-	},
-	{
-		id: "mensageria",
-		label: "Mensageria",
-		icon: MessageCircle,
-		paths: [
-			ROUTES.MENSAGERIA_ENVIADOS,
-			ROUTES.MENSAGERIA_RELATORIOS,
-			ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
-			ROUTES.MENSAGERIA_FILA,
-			ROUTES.MENSAGERIA_BACKLOG,
-			ROUTES.MENSAGERIA_CALLBACK,
-			ROUTES.MENSAGERIA_API,
-			ROUTES.MENSAGERIA,
 		],
 	},
 	{
@@ -848,11 +859,12 @@ function SidebarSectionLabel({
 	isModernLayout,
 	tone = "default",
 }) {
-	const colorClass = isModernLayout
-		? "text-slate-400"
-		: tone === "blue"
-			? "text-blue-500"
-			: "text-gray-400";
+	let colorClass = "text-gray-400";
+	if (isModernLayout) {
+		colorClass = "text-slate-400";
+	} else if (tone === "blue") {
+		colorClass = "text-blue-500";
+	}
 	return (
 		<p
 			className={`${collapsed ? "sr-only" : ""} mb-2 px-4 text-[10px] font-bold uppercase tracking-wider ${colorClass}`}
@@ -860,6 +872,16 @@ function SidebarSectionLabel({
 			{children}
 		</p>
 	);
+}
+
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFeaturedNavClassName(state, isModernLayout, navClass) {
+	if (isModernLayout) return navClass(state);
+	return `nav-item ${
+		state.isActive
+			? "nav-item-active"
+			: "border border-blue-100 bg-blue-50/70 text-blue-700 hover:bg-blue-100"
+	}`;
 }
 
 function FeaturedMenuItems({
@@ -888,13 +910,7 @@ function FeaturedMenuItems({
 					displayLabel={displayLabel}
 					labelClass={collapsed ? "sr-only" : "truncate"}
 					className={(state) =>
-						isModernLayout
-							? navClass(state)
-							: `nav-item ${
-									state.isActive
-										? "nav-item-active"
-										: "border border-blue-100 bg-blue-50/70 text-blue-700 hover:bg-blue-100"
-								}`
+						resolveFeaturedNavClassName(state, isModernLayout, navClass)
 					}
 				/>
 			))}
@@ -924,6 +940,7 @@ function AdminNestedSection({
 	onNavigate,
 	displayLabel,
 	labelClass = "min-w-0 flex-1 truncate text-left",
+	badge,
 }) {
 	if (!items.length) return null;
 	return (
@@ -941,7 +958,15 @@ function AdminNestedSection({
 				title={title}
 			>
 				<Icon size={15} className="shrink-0" />
-				<span className={labelClass}>{title}</span>
+				<span className={labelClass}>
+					{title}
+					{badge > 0 ? (
+						<>
+							{" "}
+							(<span className="text-red-500">{badge}</span>)
+						</>
+					) : null}
+				</span>
 				<ChevronDown
 					size={14}
 					className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
@@ -1085,13 +1110,31 @@ function TecnicosGroupItems({
 	const auditoriaItems = group.items.filter((item) =>
 		TECNICOS_AUDITORIA_PATHS.includes(item.path),
 	);
-	const nestedPaths = new Set(TECNICOS_AUDITORIA_PATHS);
+	const empresasItems = group.items.filter((item) =>
+		TECNICOS_EMPRESAS_PATHS.includes(item.path),
+	);
+	const nestedPaths = new Set([...TECNICOS_AUDITORIA_PATHS, ...TECNICOS_EMPRESAS_PATHS]);
 	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
 	const isActive = (items) =>
 		items.some((item) => isMenuPathActive(pathname, item));
 
 	return (
 		<>
+			<AdminNestedSection
+				title="Empresas"
+				icon={Building2}
+				items={empresasItems}
+				open={Boolean(clickedGroups.tecnicos_empresas)}
+				active={isActive(empresasItems)}
+				toggleKey="tecnicos_empresas"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+			/>
 			{directItems.map((item) => {
 				const ChildIcon = item.icon;
 				return (
@@ -1127,6 +1170,140 @@ function TecnicosGroupItems({
 	);
 }
 
+function LogisticaGroupItems({
+	group,
+	pathname,
+	clickedGroups,
+	setClickedGroups,
+	isModernLayout,
+	nestedButtonClass,
+	submenuClass,
+	onNavigate,
+	displayLabel,
+}) {
+	const submenuWrapClass = getSubmenuWrapClass(isModernLayout);
+	const estoqueItems = group.items.filter((item) =>
+		LOGISTICA_ESTOQUE_PATHS.includes(item.path),
+	);
+	const nestedPaths = new Set(LOGISTICA_ESTOQUE_PATHS);
+	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
+	const isActive = (items) =>
+		items.some((item) => isMenuPathActive(pathname, item));
+
+	return (
+		<>
+			{directItems.map((item) => {
+				const ChildIcon = item.icon;
+				return (
+					<NavLink
+						key={item.path}
+						to={item.path}
+						onClick={onNavigate}
+						className={submenuClass}
+					>
+						<ChildIcon size={15} className="shrink-0" />
+						<span className="truncate">
+							{displayLabel(item.label, item.path)}
+						</span>
+					</NavLink>
+				);
+			})}
+			<AdminNestedSection
+				title="Estoque"
+				icon={Boxes}
+				items={estoqueItems}
+				open={Boolean(clickedGroups.logistica_estoque)}
+				active={isActive(estoqueItems)}
+				toggleKey="logistica_estoque"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+			/>
+		</>
+	);
+}
+
+function ClienteGroupItems({
+	group,
+	pathname,
+	clickedGroups,
+	setClickedGroups,
+	isModernLayout,
+	nestedButtonClass,
+	submenuClass,
+	onNavigate,
+	displayLabel,
+	atendimentoAbertos,
+}) {
+	const submenuWrapClass = getSubmenuWrapClass(isModernLayout);
+	const atendimentoItems = group.items.filter((item) =>
+		ATENDIMENTO_PATHS.includes(item.path),
+	);
+	const mensageriaItems = group.items.filter((item) =>
+		CLIENTE_MENSAGERIA_PATHS.includes(item.path),
+	);
+	const nestedPaths = new Set([...ATENDIMENTO_PATHS, ...CLIENTE_MENSAGERIA_PATHS]);
+	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
+	const isActive = (items) =>
+		items.some((item) => isMenuPathActive(pathname, item));
+
+	return (
+		<>
+			{directItems.map((item) => {
+				const ChildIcon = item.icon;
+				return (
+					<NavLink
+						key={item.path}
+						to={item.path}
+						onClick={onNavigate}
+						className={submenuClass}
+					>
+						<ChildIcon size={15} className="shrink-0" />
+						<span className="truncate">
+							{displayLabel(item.label, item.path)}
+						</span>
+					</NavLink>
+				);
+			})}
+			<AdminNestedSection
+				title="Atendimento"
+				icon={MessagesSquare}
+				items={atendimentoItems}
+				open={Boolean(clickedGroups.cliente_atendimento)}
+				active={isActive(atendimentoItems)}
+				toggleKey="cliente_atendimento"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+				badge={atendimentoAbertos}
+			/>
+			<AdminNestedSection
+				title="Mensageria"
+				icon={MessageCircle}
+				items={mensageriaItems}
+				open={Boolean(clickedGroups.cliente_mensageria)}
+				active={isActive(mensageriaItems)}
+				toggleKey="cliente_mensageria"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+			/>
+		</>
+	);
+}
+
 // Extraido de MenuGroup (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // — substitui a cadeia de ternarios encadeados (administrativo/tecnicos/
 // fallback) por uma tabela de despacho; os 2 componentes ja recebem
@@ -1134,6 +1311,8 @@ function TecnicosGroupItems({
 const GROUP_ITEMS_COMPONENTS = {
 	administrativo: AdministrativeGroupItems,
 	tecnicos: TecnicosGroupItems,
+	logistica: LogisticaGroupItems,
+	cliente: ClienteGroupItems,
 };
 
 function MenuGroup({
@@ -1151,12 +1330,10 @@ function MenuGroup({
 	onNavigate,
 	displayLabel,
 	pathname,
+	atendimentoAbertos,
 }) {
 	const IconComponent = group.icon;
-	const label =
-		group.id === "atendimento"
-			? displayLabel(group.label, "__atendimento_group")
-			: group.label;
+	const label = group.label;
 	const GroupItemsComponent = GROUP_ITEMS_COMPONENTS[group.id];
 	return (
 		<div key={group.id}>
@@ -1200,6 +1377,7 @@ function MenuGroup({
 							submenuClass={submenuClass}
 							onNavigate={onNavigate}
 							displayLabel={displayLabel}
+							atendimentoAbertos={atendimentoAbertos}
 						/>
 					) : (
 						group.items.map((item) => {
@@ -1272,25 +1450,26 @@ function getNestedButtonClass({ active, open, isModernLayout }) {
 	}`;
 }
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveNavToneClass(tone) {
+	if (tone === "orange") return "text-orange-500";
+	if (tone === "blue") return "text-blue-600";
+	return "";
+}
+
+function resolveNavModernToneClass(tone) {
+	if (tone === "orange") return "text-orange-200 hover:bg-white/10 hover:text-white";
+	if (tone === "blue") return "text-blue-100 hover:bg-white/10 hover:text-white";
+	return "text-slate-300 hover:bg-white/10 hover:text-white";
+}
+
 function getNavClass({ isActive, tone, isModernLayout }) {
 	if (!isModernLayout) {
-		return `nav-item ${isActive ? "nav-item-active" : "nav-item-inactive"} ${
-			tone === "orange"
-				? "text-orange-500"
-				: tone === "blue"
-					? "text-blue-600"
-					: ""
-		}`;
+		return `nav-item ${isActive ? "nav-item-active" : "nav-item-inactive"} ${resolveNavToneClass(tone)}`;
 	}
 
 	return `nav-item-modern ${
-		isActive
-			? "nav-item-modern-active"
-			: tone === "orange"
-				? "text-orange-200 hover:bg-white/10 hover:text-white"
-				: tone === "blue"
-					? "text-blue-100 hover:bg-white/10 hover:text-white"
-					: "text-slate-300 hover:bg-white/10 hover:text-white"
+		isActive ? "nav-item-modern-active" : resolveNavModernToneClass(tone)
 	}`;
 }
 
@@ -1407,11 +1586,12 @@ function useSidebarMenuItems({ currentUser, isModernLayout }) {
 // os dois blocos de cabecalho (moderno/classico) sao arvores JSX
 // independentes, so um renderiza por vez.
 function SidebarHeader({ collapsed, isModernLayout, isMobileDrawer, onToggleCollapsed }) {
-	const toggleTitle = isMobileDrawer
-		? "Fechar menu"
-		: collapsed
-			? "Expandir menu"
-			: "Ocultar menu";
+	let toggleTitle = "Ocultar menu";
+	if (isMobileDrawer) {
+		toggleTitle = "Fechar menu";
+	} else if (collapsed) {
+		toggleTitle = "Expandir menu";
+	}
 	const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
 
 	if (isModernLayout) {
@@ -1501,6 +1681,17 @@ function SidebarUserFooter({ currentUser, signOut }) {
 	);
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado dentro de
+// template literal) — mesma logica de antes.
+function getSidebarHeaderWrapClassName(isModernLayout, collapsed) {
+	let padding = "px-3";
+	if (!collapsed) {
+		padding = isModernLayout ? "px-5" : "px-6";
+	}
+	const border = isModernLayout ? "border-white/10" : "border-gray-100";
+	return `${padding} border-b ${border} py-5`;
+}
+
 const Sidebar = ({
 	collapsed = false,
 	onToggleCollapsed,
@@ -1569,11 +1760,7 @@ const Sidebar = ({
 			}
 		>
 			<div
-				className={
-					isModernLayout
-						? `${collapsed ? "px-3" : "px-5"} border-b border-white/10 py-5`
-						: `${collapsed ? "px-3" : "px-6"} border-b border-gray-100 py-5`
-				}
+				className={getSidebarHeaderWrapClassName(isModernLayout, collapsed)}
 			>
 				<SidebarHeader
 					collapsed={collapsed}
@@ -1622,6 +1809,7 @@ const Sidebar = ({
 						onNavigate={handleNavigation}
 						displayLabel={displayLabel}
 						pathname={location.pathname}
+						atendimentoAbertos={atendimentoAbertos}
 					/>
 				))}
 

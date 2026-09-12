@@ -7,6 +7,12 @@ import {
 import { isDiaUtil } from "./diasUteis";
 import { buscarFeriadosNacionais } from "./feriados";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveTipoDia(feriado, fimDeSemana) {
+	if (feriado) return "feriado";
+	return fimDeSemana ? "fim-de-semana" : "util";
+}
+
 function buildProjectionSeries({
 	month,
 	year,
@@ -38,12 +44,11 @@ function buildProjectionSeries({
 
 export async function calcSaldoDiario(d, month, feriadosInput = null) {
 	const year = Number(d?.ano || d?.year) || new Date().getFullYear();
-	const feriadosSet =
-		feriadosInput instanceof Set
-			? feriadosInput
-			: Array.isArray(feriadosInput)
-				? new Set(feriadosInput)
-				: await buscarFeriadosNacionais(year);
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let feriadosSet;
+	if (feriadosInput instanceof Set) feriadosSet = feriadosInput;
+	else if (Array.isArray(feriadosInput)) feriadosSet = new Set(feriadosInput);
+	else feriadosSet = await buscarFeriadosNacionais(year);
 	const {
 		diasUteis: duMes,
 		metaDiariaMedia,
@@ -83,7 +88,7 @@ export async function calcSaldoDiario(d, month, feriadosInput = null) {
 			util,
 			fimDeSemana,
 			feriado,
-			tipoDia: feriado ? "feriado" : fimDeSemana ? "fim-de-semana" : "util",
+			tipoDia: resolveTipoDia(feriado, fimDeSemana),
 			metaDia: metaDoDia,
 			metaAcumulada: metaAcumuladaPorDia.get(dia) || 0,
 			saldoDia,

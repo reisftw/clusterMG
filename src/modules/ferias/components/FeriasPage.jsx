@@ -16,6 +16,13 @@ import { useFerias } from "../hooks/useFerias";
 import FeriasCalendario from "./FeriasCalendario";
 import FeriasSolicitacaoForm from "./FeriasSolicitacaoForm";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+const FERIAS_STATUS_FILTER_LABELS = {
+	todos: "Todos",
+	pendente: "Pendentes",
+	aprovado: "Aprovadas",
+};
+
 const STATUS_CONFIG = {
 	pendente: {
 		label: "Pendente",
@@ -202,13 +209,7 @@ const FeriasPage = () => {
 										: "bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600"
 								}`}
 							>
-								{status === "todos"
-									? "Todos"
-									: status === "pendente"
-										? "Pendentes"
-										: status === "aprovado"
-											? "Aprovadas"
-											: "Reprovadas"}
+								{FERIAS_STATUS_FILTER_LABELS[status] || "Reprovadas"}
 							</button>
 						))}
 						<span className="ml-auto text-xs text-gray-400 font-medium">

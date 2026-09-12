@@ -48,12 +48,10 @@ export default function MatchPublicoPage() {
 			: "";
 	const fromExternalApp = from === "terceiros" || from === "terceirizados";
 	const suffix = fromExternalApp ? `?from=${from}` : "";
-	const homeRoute =
-		from === "terceirizados"
-			? ROUTES.TERCEIRIZADOS
-			: from === "terceiros"
-				? ROUTES.TERCEIROS
-				: ROUTES.PAINEL_PUBLICO;
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let homeRoute = ROUTES.PAINEL_PUBLICO;
+	if (from === "terceirizados") homeRoute = ROUTES.TERCEIRIZADOS;
+	else if (from === "terceiros") homeRoute = ROUTES.TERCEIROS;
 
 	return (
 		<div className="painel-publico-page">

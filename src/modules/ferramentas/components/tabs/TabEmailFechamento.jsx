@@ -45,6 +45,12 @@ const getMesAnterior = (mes) => {
 	return MESES[index === 0 ? MESES.length - 1 : index - 1] || mes;
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveStatusRegLabel(status, qtd) {
+	if (status) return "Atingida";
+	return qtd > 0 ? "Parcial" : "Não atingida";
+}
+
 const TabEmailFechamento = () => {
 	useFerramentasRegionais();
 
@@ -100,7 +106,7 @@ const TabEmailFechamento = () => {
           <td style="text-align:center">${r.qtd}</td>
           <td style="text-align:center">110</td>
           <td style="text-align:center;color:${cor};font-weight:bold">${pct}%</td>
-          <td style="text-align:center">${emoji} ${status ? "Atingida" : r.qtd > 0 ? "Parcial" : "Não atingida"}</td>
+          <td style="text-align:center">${emoji} ${resolveStatusRegLabel(status, r.qtd)}</td>
         </tr>`;
 		});
 

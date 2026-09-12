@@ -9,6 +9,22 @@ import RankingList from "../components/RankingList";
 import { MONTH_ORDER } from "../utils/constants";
 import { gerarPDFMetaMensal } from "../utils/pdfAgentes";
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveDailyTotals(cityFilter, d, filteredCities) {
+	if (cityFilter === "todas") {
+		return Array.isArray(d.totalDaily)
+			? d.totalDaily.map((v) => Math.round(Number(v) || 0))
+			: [];
+	}
+	return filteredCities.reduce((acc, cidade) => {
+		const cityDaily = Array.isArray(cidade.daily) ? cidade.daily : [];
+		cityDaily.forEach((value, index) => {
+			acc[index] = (acc[index] || 0) + Math.round(Number(value) || 0);
+		});
+		return acc;
+	}, []);
+}
+
 function normalizeMonthName(value) {
 	return String(value || "")
 		.normalize("NFD")
@@ -304,18 +320,7 @@ export default function TabAgentes({ allData, month, lastUpdate }) {
 		if (!d || !chartDailyRef.current) return;
 		if (chartDailyInst.current) chartDailyInst.current.destroy();
 
-		let daily =
-			cityFilter === "todas"
-				? Array.isArray(d.totalDaily)
-					? d.totalDaily.map((v) => Math.round(Number(v) || 0))
-					: []
-				: filteredCities.reduce((acc, cidade) => {
-						const cityDaily = Array.isArray(cidade.daily) ? cidade.daily : [];
-						cityDaily.forEach((value, index) => {
-							acc[index] = (acc[index] || 0) + Math.round(Number(value) || 0);
-						});
-						return acc;
-					}, []);
+		let daily = resolveDailyTotals(cityFilter, d, filteredCities);
 
 		let lastActive = -1;
 		daily.forEach((v, i) => {

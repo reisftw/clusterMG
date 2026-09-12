@@ -616,12 +616,12 @@ function getMetaPace(metaMes, month, feriadosSet = null) {
 }
 
 function formatRealtimeUpdateDate(value) {
-	const date =
-		typeof value?.toDate === "function"
-			? value.toDate()
-			: value
-				? new Date(value)
-				: null;
+	let date = null;
+	if (typeof value?.toDate === "function") {
+		date = value.toDate();
+	} else if (value) {
+		date = new Date(value);
+	}
 	if (!date || Number.isNaN(date.getTime())) return "";
 	return date.toLocaleString("pt-BR", {
 		day: "2-digit",
@@ -631,12 +631,18 @@ function formatRealtimeUpdateDate(value) {
 	});
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado) — devolve o
+// primeiro candidato que for array, senao []. Usado nos varios pontos
+// deste arquivo que escolhem entre rawDays/saldoDiario (ou o inverso).
+function firstArray(...candidates) {
+	for (const candidate of candidates) {
+		if (Array.isArray(candidate)) return candidate;
+	}
+	return [];
+}
+
 function getLastDayWithData(metaMes) {
-	const rows = Array.isArray(metaMes?.rawDays)
-		? metaMes.rawDays
-		: Array.isArray(metaMes?.saldoDiario)
-			? metaMes.saldoDiario
-			: [];
+	const rows = firstArray(metaMes?.rawDays, metaMes?.saldoDiario);
 
 	return rows.reduce((lastDay, row, index) => {
 		const dia = Number(row?.dia || index + 1);
@@ -696,11 +702,7 @@ function getRegionalPaceText(item, daysRemaining) {
 }
 
 function buildDailyTrend(metaMes) {
-	const rows = Array.isArray(metaMes?.rawDays)
-		? metaMes.rawDays
-		: Array.isArray(metaMes?.saldoDiario)
-			? metaMes.saldoDiario
-			: [];
+	const rows = firstArray(metaMes?.rawDays, metaMes?.saldoDiario);
 
 	return rows
 		.map((item, index) => ({
@@ -712,11 +714,7 @@ function buildDailyTrend(metaMes) {
 }
 
 function buildPreviousDeliverySummary(metaMes) {
-	const rows = Array.isArray(metaMes?.saldoDiario)
-		? metaMes.saldoDiario
-		: Array.isArray(metaMes?.rawDays)
-			? metaMes.rawDays
-			: [];
+	const rows = firstArray(metaMes?.saldoDiario, metaMes?.rawDays);
 	if (!rows.length) {
 		return {
 			dayLabel: "Sem dados",
@@ -943,6 +941,13 @@ function getMetaSourceData(monthData, source) {
 	return monthData;
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveMetaTileTone(hasMonthlyBalance, balanceStatus) {
+	if (hasMonthlyBalance && balanceStatus === "low") return "meta-low";
+	if (hasMonthlyBalance && balanceStatus === "ok") return "meta-ok";
+	return "purple";
+}
+
 function buildMetaTileData(metaMes, label, month, feriadosSet) {
 	const pace = getMetaPace(metaMes, month, feriadosSet);
 	const total = formatNumber(metaMes?.totalOS || 0);
@@ -992,12 +997,7 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		helper: metaMes
 			? `${total}/${meta} O.S - Saldo ${balanceText} - Meta dia ${dailyGoalText} - Proj. ${pace.projectionPercent.toFixed(1)}%`
 			: "Sem meta carregada",
-		tone:
-			hasMonthlyBalance && balanceStatus === "low"
-				? "meta-low"
-				: hasMonthlyBalance && balanceStatus === "ok"
-					? "meta-ok"
-					: "purple",
+		tone: resolveMetaTileTone(hasMonthlyBalance, balanceStatus),
 	};
 }
 
@@ -1396,16 +1396,15 @@ function AdsConfig({
 	);
 }
 
+const FESTIVE_PREVIEW_LABELS = {
+	september7: "7 de Setembro",
+	christmas: "Natal",
+	easter: "Páscoa",
+};
+
 function FestivePreview({ festive }) {
 	const theme = getFestiveSelectValue(festive);
-	const label =
-		theme === "september7"
-			? "7 de Setembro"
-			: theme === "christmas"
-				? "Natal"
-				: theme === "easter"
-					? "Páscoa"
-					: "Padrão";
+	const label = FESTIVE_PREVIEW_LABELS[theme] || "Padrão";
 
 	return (
 		<div className={`acomp-theme-preview is-${theme}`}>
@@ -1754,15 +1753,18 @@ function buildSpotlightContent(scene, data, festiveTheme) {
 		: data[sceneConfig.dataKey];
 	const hasData = sceneConfig.dataKey === "totalMatches" ? dataItem > 0 : Boolean(dataItem);
 
+	let value = "0";
+	if (sceneConfig.dataKey === "totalMatches") {
+		value = formatNumber(dataItem);
+	} else if (dataItem) {
+		value = formatNumber(dataItem.total);
+	}
+
 	return {
 		...copy,
 		tone: sceneConfig.tone,
 		title: hasData ? copy.titleWithData(dataItem) : copy.emptyTitle,
-		value: sceneConfig.dataKey === "totalMatches"
-			? formatNumber(dataItem)
-			: dataItem
-				? formatNumber(dataItem.total)
-				: "0",
+		value,
 	};
 }
 
@@ -2056,32 +2058,60 @@ function AdOverlay({ image }) {
 	);
 }
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado). Mesma
+// logica de antes: contagem/duracao/tamanho das particulas variam por
+// tema festivo.
+const FESTIVE_PARTICLE_COUNTS = { christmas: 42, september7: 34 };
+
+function getFestiveParticleDuration(theme, index) {
+	if (theme === "christmas") return 8 + (index % 7);
+	if (theme === "september7") return 9 + (index % 8);
+	return 10 + (index % 6);
+}
+
+function getFestiveParticleSize(theme, index) {
+	if (theme === "christmas") return 5 + (index % 6);
+	if (theme === "september7") return 18 + (index % 8);
+	return 14 + (index % 5);
+}
+
+function renderFestiveFlight(theme, flightKey) {
+	if (theme === "christmas") {
+		return (
+			<img
+				key={`sleigh-${flightKey}`}
+				className="acomp-sleigh-flight"
+				src="/retorninho-xmas-sleigh.png"
+				alt=""
+			/>
+		);
+	}
+	if (theme === "september7") {
+		return (
+			<img
+				key={`september-${flightKey}`}
+				className="acomp-september-flight"
+				src="/themes/september7/retorninho-ind-v2.png"
+				alt=""
+			/>
+		);
+	}
+	return <div key={`egg-${flightKey}`} className="acomp-egg-flight" />;
+}
+
 function FestiveOverlay({ config, flightKey, grinchPeek }) {
 	const festive = {
 		...DEFAULT_CONFIG.festive,
 		...(config || {}),
 	};
 	const theme = normalizeFestiveTheme(festive.theme);
-	const particleCount =
-		theme === "christmas" ? 42 : theme === "september7" ? 34 : 28;
+	const particleCount = FESTIVE_PARTICLE_COUNTS[theme] ?? 28;
 	const particles = Array.from({ length: particleCount }, (_, index) => ({
 		id: index,
 		left: `${(index * 37) % 100}%`,
 		delay: `${-((index * 0.73) % 9).toFixed(2)}s`,
-		duration: `${
-			theme === "christmas"
-				? 8 + (index % 7)
-				: theme === "september7"
-					? 9 + (index % 8)
-					: 10 + (index % 6)
-		}s`,
-		size: `${
-			theme === "christmas"
-				? 5 + (index % 6)
-				: theme === "september7"
-					? 18 + (index % 8)
-					: 14 + (index % 5)
-		}px`,
+		duration: `${getFestiveParticleDuration(theme, index)}s`,
+		size: `${getFestiveParticleSize(theme, index)}px`,
 		drift: `${((index % 9) - 4) * 10}px`,
 	}));
 
@@ -2103,25 +2133,7 @@ function FestiveOverlay({ config, flightKey, grinchPeek }) {
 					/>
 				))}
 			</div>
-			{flightKey ? (
-				theme === "christmas" ? (
-					<img
-						key={`sleigh-${flightKey}`}
-						className="acomp-sleigh-flight"
-						src="/retorninho-xmas-sleigh.png"
-						alt=""
-					/>
-				) : theme === "september7" ? (
-					<img
-						key={`september-${flightKey}`}
-						className="acomp-september-flight"
-						src="/themes/september7/retorninho-ind-v2.png"
-						alt=""
-					/>
-				) : (
-					<div key={`egg-${flightKey}`} className="acomp-egg-flight" />
-				)
-			) : null}
+			{flightKey ? renderFestiveFlight(theme, flightKey) : null}
 			{theme === "christmas" && grinchPeek ? (
 				<img
 					key={`grinch-${grinchPeek.key}`}
@@ -2333,6 +2345,11 @@ function AcompanhamentoThemeStage({
 	);
 }
 
+const ACOMPANHAMENTO_HEADER_LABELS = {
+	christmas: "OPERAÇÃO NATAL",
+	september7: "7 DE SETEMBRO",
+};
+
 function AcompanhamentoHeader({
 	festiveTheme,
 	lastRefresh,
@@ -2341,11 +2358,7 @@ function AcompanhamentoHeader({
 	onOpenConfig,
 }) {
 	const label =
-		festiveTheme === "christmas"
-			? "OPERAÇÃO NATAL"
-			: festiveTheme === "september7"
-				? "7 DE SETEMBRO"
-				: "ACOMPANHAMENTO AO VIVO";
+		ACOMPANHAMENTO_HEADER_LABELS[festiveTheme] || "ACOMPANHAMENTO AO VIVO";
 
 	return (
 		<header className="acomp-header">
@@ -2425,11 +2438,12 @@ function AcompanhamentoKpis({ dashboard }) {
 function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 	const isChristmas = festiveTheme === "christmas";
 	const isSeptember7 = festiveTheme === "september7";
-	const imageSrc = isChristmas
-		? "/retorninho-xmas-sleigh.png"
-		: isSeptember7
-			? "/themes/september7/retorninho-selecao.png"
-			: "/retorninho-esteira.png";
+	let imageSrc = "/retorninho-esteira.png";
+	if (isChristmas) {
+		imageSrc = "/retorninho-xmas-sleigh.png";
+	} else if (isSeptember7) {
+		imageSrc = "/themes/september7/retorninho-selecao.png";
+	}
 
 	return (
 		<>

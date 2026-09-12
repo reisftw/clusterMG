@@ -44,6 +44,15 @@ const COLOR_CLASSES = {
 	azul: { dot: "bg-blue-500", badge: "bg-blue-600", chip: "bg-blue-50 text-blue-700 border-blue-200" },
 };
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveCalendarioDayClass(isToday, holiday, isNonBusinessDay, currentMonth) {
+	if (isToday) return "border-blue-300 bg-blue-50";
+	if (holiday && currentMonth) return "border-orange-200 bg-orange-50";
+	if (isNonBusinessDay && currentMonth) return "border-slate-300 bg-slate-200";
+	if (currentMonth) return "border-slate-100 bg-slate-50 hover:bg-blue-50";
+	return "border-slate-50 bg-slate-50/50 text-slate-300";
+}
+
 function dateKey(value) {
 	return String(value || "").slice(0, 10);
 }
@@ -337,17 +346,7 @@ export default function FinanCalendarioPage() {
 								}}
 								disabled={!itens.length}
 								title={holiday ? holiday.name : undefined}
-								className={`min-h-16 rounded-xl border p-2 text-left transition-colors disabled:cursor-default ${
-									isToday
-										? "border-blue-300 bg-blue-50"
-										: holiday && dia.currentMonth
-											? "border-orange-200 bg-orange-50"
-											: isNonBusinessDay && dia.currentMonth
-												? "border-slate-300 bg-slate-200"
-												: dia.currentMonth
-													? "border-slate-100 bg-slate-50 hover:bg-blue-50"
-													: "border-slate-50 bg-slate-50/50 text-slate-300"
-								} ${itens.length ? "cursor-pointer" : ""}`}
+								className={`min-h-16 rounded-xl border p-2 text-left transition-colors disabled:cursor-default ${resolveCalendarioDayClass(isToday, holiday, isNonBusinessDay, dia.currentMonth)} ${itens.length ? "cursor-pointer" : ""}`}
 							>
 								<div className="flex items-center justify-between gap-1">
 									<span className={`text-xs font-semibold ${dia.currentMonth ? "text-slate-700" : "text-slate-300"}`}>
@@ -1153,11 +1152,13 @@ function CatalogEditor({ kind, items, label, withColor, withDays, onChanged }) {
 		setError("");
 		setSaving(true);
 		try {
-			const payload = withDays
-				? { days: Number(newDays), label: newLabel.trim() || undefined }
-				: withColor
-					? { label: newLabel.trim(), color: newColor }
-					: { label: newLabel.trim() };
+			// Extraido pra achado javascript:S3358 (ternario aninhado).
+			let payload = { label: newLabel.trim() };
+			if (withDays) {
+				payload = { days: Number(newDays), label: newLabel.trim() || undefined };
+			} else if (withColor) {
+				payload = { label: newLabel.trim(), color: newColor };
+			}
 			await createFinanCalendarCatalogItem(kind, payload);
 			setNewLabel("");
 			await onChanged();

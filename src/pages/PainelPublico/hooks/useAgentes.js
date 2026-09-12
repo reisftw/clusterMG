@@ -54,6 +54,12 @@ function recalcPcts(data) {
 	return out;
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveFbStatus(error, loading) {
+	if (error) return "Erro ao carregar dados";
+	return loading ? "Carregando..." : "Sincronizado";
+}
+
 export function useAgentes(enabled = true) {
 	const { data, loading, error } = useDashboardData();
 
@@ -70,11 +76,7 @@ export function useAgentes(enabled = true) {
 	return {
 		allData,
 		loading: enabled ? loading : false,
-		fbStatus: error
-			? "Erro ao carregar dados"
-			: loading
-				? "Carregando..."
-				: "Sincronizado",
+		fbStatus: resolveFbStatus(error, loading),
 		lastUpdate,
 	};
 }

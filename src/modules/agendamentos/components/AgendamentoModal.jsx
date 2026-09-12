@@ -18,6 +18,18 @@ const buildInitialForm = (agendamento) => ({
 	observacao: agendamento?.observacao || "",
 });
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveSalvarButtonLabel(saving, editando) {
+	if (saving) return "Salvando...";
+	return editando ? "Salvar alteracoes" : "Criar agendamento";
+}
+
+function resolveClienteEncontradoStatus(cliente) {
+	if (!cliente.cliente_nome) return "Cliente localizado no mapa atual.";
+	const cidadeSufixo = cliente.cidade ? ` • ${cliente.cidade}` : "";
+	return `Dados preenchidos: ${cliente.cliente_nome}${cidadeSufixo}.`;
+}
+
 const AgendamentoModal = ({
 	agendamento,
 	tecnicos = [],
@@ -74,11 +86,7 @@ const AgendamentoModal = ({
 								.join(" - "),
 					};
 				});
-				setClienteStatus(
-					cliente.cliente_nome
-						? `Dados preenchidos: ${cliente.cliente_nome}${cliente.cidade ? ` • ${cliente.cidade}` : ""}.`
-						: "Cliente localizado no mapa atual.",
-				);
+				setClienteStatus(resolveClienteEncontradoStatus(cliente));
 			} catch (error) {
 				setClienteStatus(
 					/404|nao encontrado|não encontrado/i.test(
@@ -362,11 +370,7 @@ const AgendamentoModal = ({
 							disabled={saving}
 							className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
 						>
-							{saving
-								? "Salvando..."
-								: editando
-									? "Salvar alteracoes"
-									: "Criar agendamento"}
+							{resolveSalvarButtonLabel(saving, editando)}
 						</button>
 					</div>
 				</div>

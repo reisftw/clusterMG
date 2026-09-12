@@ -162,11 +162,10 @@ function getMapaFonteConfig(value) {
 }
 
 function getMapaFontesSelecionadas(data = {}, fallbackFontes = ["sempre"]) {
-	const rawFontes = Array.isArray(data?.fontes)
-		? data.fontes
-		: Array.isArray(data?.periodo?.fontes)
-			? data.periodo.fontes
-			: [data?.fonte || data?.periodo?.fonte].filter(Boolean);
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let rawFontes = [data?.fonte || data?.periodo?.fonte].filter(Boolean);
+	if (Array.isArray(data?.fontes)) rawFontes = data.fontes;
+	else if (Array.isArray(data?.periodo?.fontes)) rawFontes = data.periodo.fontes;
 
 	const fontes = [...new Set(rawFontes.map(normalizeMapaFonte))].filter(
 		(fonte) => MAPA_FONTES[fonte],
@@ -873,13 +872,19 @@ async function runImportJob(jobId, type, payload = {}, user = {}) {
 	}
 }
 
+// Extraido pra achado javascript:S3358 (ternario aninhado).
+function resolveImportSourceLabel(source) {
+	if (source === "match") return "MATCH";
+	if (source === "mapa") return "Mapa";
+	return "Operacional";
+}
+
 function broadcastImportResult(type, result = {}) {
 	const source = result?.source || type;
 	const payload = {
 		...result,
 		source,
-		sourceLabel:
-			source === "match" ? "MATCH" : source === "mapa" ? "Mapa" : "Operacional",
+		sourceLabel: resolveImportSourceLabel(source),
 		message:
 			result?.message ||
 			(source === "match"

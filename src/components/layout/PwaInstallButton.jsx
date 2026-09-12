@@ -45,7 +45,10 @@ export default function PwaInstallButton({
 		return "Baixar app";
 	}, [installPrompt, installed]);
 
-	const Icon = installed ? Check : installPrompt ? Download : Smartphone;
+	// Extraido pra achado javascript:S3358 (ternario aninhado).
+	let Icon = Smartphone;
+	if (installed) Icon = Check;
+	else if (installPrompt) Icon = Download;
 
 	const handleInstall = async () => {
 		if (installed) return;

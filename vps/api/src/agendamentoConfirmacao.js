@@ -514,22 +514,32 @@ function normalizePessoa(pessoa = {}) {
 	};
 }
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveLegacyBackoffices(regional) {
+	if (Array.isArray(regional.backoffices) && regional.backoffices.length) {
+		return regional.backoffices;
+	}
+	if (regional.backoffice?.nome) return [regional.backoffice];
+	return [];
+}
+
+function resolveDeliveryBackoffices(delivery, legacyBackoffices) {
+	if (Array.isArray(delivery.backoffices) && delivery.backoffices.length) {
+		return delivery.backoffices;
+	}
+	if (delivery.backoffice?.nome) return [delivery.backoffice];
+	return legacyBackoffices;
+}
+
 function getDeliveryGroup(regional = {}) {
 	const groups =
 		regional.gruposOperacionais || regional.grupos_operacionais || {};
 	const delivery = groups.delivery || {};
-	const legacyBackoffices =
-		Array.isArray(regional.backoffices) && regional.backoffices.length
-			? regional.backoffices
-			: regional.backoffice?.nome
-				? [regional.backoffice]
-				: [];
-	const deliveryBackoffices =
-		Array.isArray(delivery.backoffices) && delivery.backoffices.length
-			? delivery.backoffices
-			: delivery.backoffice?.nome
-				? [delivery.backoffice]
-				: legacyBackoffices;
+	const legacyBackoffices = resolveLegacyBackoffices(regional);
+	const deliveryBackoffices = resolveDeliveryBackoffices(
+		delivery,
+		legacyBackoffices,
+	);
 	return {
 		lider: normalizePessoa(delivery.lider || regional.lider || {}),
 		backoffices: deliveryBackoffices.map(normalizePessoa),
@@ -762,12 +772,12 @@ async function sendTrackStep(track, stepIndex = 0, config = null) {
 		.join("\n");
 	const first = appointments[0] || {};
 	const previousStep = stepIndex > 0 ? track.steps[stepIndex - 1] : null;
-	const template =
-		stepIndex > 0
-			? currentConfig.escalationTemplate
-			: track.origin === "agendamento_dia"
-				? currentConfig.sameDayTemplate
-				: currentConfig.morningTemplate;
+	let template = currentConfig.morningTemplate;
+	if (stepIndex > 0) {
+		template = currentConfig.escalationTemplate;
+	} else if (track.origin === "agendamento_dia") {
+		template = currentConfig.sameDayTemplate;
+	}
 	const message = render(template, {
 		responsavel_nome: step.nome,
 		responsavel_cargo: step.label,
@@ -1122,12 +1132,12 @@ async function sendTestMessage(payload = {}, user = {}) {
 		.map((item, index) => buildClientLine(item, index))
 		.join("\n");
 	const first = sampleAppointments[0];
-	const template =
-		testType === "same_day"
-			? config.sameDayTemplate
-			: testType === "escalation"
-				? config.escalationTemplate
-				: config.morningTemplate;
+	let template = config.morningTemplate;
+	if (testType === "same_day") {
+		template = config.sameDayTemplate;
+	} else if (testType === "escalation") {
+		template = config.escalationTemplate;
+	}
 	const message = render(template, {
 		responsavel_nome: payload.nome || "Responsável Teste",
 		responsavel_cargo: "Teste",

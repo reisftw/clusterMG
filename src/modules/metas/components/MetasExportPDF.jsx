@@ -19,6 +19,18 @@ const MESES = [
 	"Dezembro",
 ];
 
+// Extraidos pra achado javascript:S3358 (ternario aninhado).
+function resolveStatusLabel(percentAchieved, falta) {
+	if (Number.parseFloat(percentAchieved) >= 100) return "Atingido";
+	if (falta > 0) return `Faltam ${falta.toLocaleString("pt-BR")} OS`;
+	return "Em andamento";
+}
+
+function formatSaldoDiaLabel(util, saldoDia) {
+	if (!util) return "—";
+	return saldoDia >= 0 ? `+${saldoDia}` : String(saldoDia);
+}
+
 function isDiaUtil(mes, dia, feriadosSet) {
 	const mIdx = MESES.indexOf(mes);
 	if (mIdx < 0) return true;
@@ -43,11 +55,10 @@ function styleResumoAnualCell(data) {
 	}
 	if (data.section === "body" && data.column.index === 6) {
 		const v = String(data.cell.raw);
-		data.cell.styles.textColor = v.startsWith("+")
-			? [22, 163, 74]
-			: v.startsWith("-")
-				? [220, 38, 38]
-				: [30, 30, 30];
+		let color = [30, 30, 30];
+		if (v.startsWith("+")) color = [22, 163, 74];
+		else if (v.startsWith("-")) color = [220, 38, 38];
+		data.cell.styles.textColor = color;
 	}
 }
 
@@ -107,12 +118,7 @@ async function gerarPDF(dados, feriadosSet) {
 			? m.saldoDiario[m.saldoDiario.length - 1].saldoMes
 			: 0;
 		const falta = Math.max(0, m.meta - m.totalOS);
-		const status =
-			Number.parseFloat(m.percentAchieved) >= 100
-				? "Atingido"
-				: falta > 0
-					? `Faltam ${falta.toLocaleString("pt-BR")} OS`
-					: "Em andamento";
+		const status = resolveStatusLabel(m.percentAchieved, falta);
 		return [
 			mes,
 			Math.round(m.cancelamentos).toLocaleString("pt-BR"),
@@ -331,11 +337,7 @@ async function gerarPDF(dados, feriadosSet) {
 					String(r.regionais ?? 0),
 					String(r.totalDia ?? 0),
 					r.util ? String(metaDiaria) : "—",
-					r.util
-						? r.totalDia - metaDiaria >= 0
-							? `+${r.totalDia - metaDiaria}`
-							: String(r.totalDia - metaDiaria)
-						: "—",
+					formatSaldoDiaLabel(r.util, r.totalDia - metaDiaria),
 					String(r.saldoMes ?? 0),
 				]),
 				styles: { fontSize: 7, cellPadding: 1.5, halign: "center" },
