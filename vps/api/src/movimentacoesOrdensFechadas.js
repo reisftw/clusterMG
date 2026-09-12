@@ -117,7 +117,28 @@ function extrairLinhasPlanilha(rows = []) {
 					row.fechamento ??
 					row.DataFechamento,
 			);
-			return { nome, codigo, cidade, fechamento };
+			// Pedido explicito: mostrar o tipo de O.S. e o tecnico que fechou na
+			// conciliacao. Igual codigo/fechamento, ficam so como informacao
+			// extra vinda da planilha — nao entram na comparacao com o Portal de
+			// Movimentacoes (que so bate por nome).
+			const tipoOs = cleanText(
+				row.tipo_os ??
+					row.tipo_ordem_servico ??
+					row.tipo_de_servico ??
+					row.tipo_servico ??
+					row.TipoOS ??
+					row.Tipo ??
+					row.tipo,
+			);
+			const tecnico = cleanText(
+				row.tecnico ??
+					row.tecnico_responsavel ??
+					row.nome_tecnico ??
+					row.Tecnico ??
+					row.TecnicoResponsavel ??
+					row.NomeTecnico,
+			);
+			return { nome, codigo, cidade, fechamento, tipoOs, tecnico };
 		})
 		.filter((row) => row.nome);
 }
@@ -163,6 +184,8 @@ async function executeJob(jobId, { rows, dataInicio, dataFim }) {
 			codigo: linha.codigo,
 			cidade: linha.cidade,
 			fechamento: linha.fechamento,
+			tipoOs: linha.tipoOs,
+			tecnico: linha.tecnico,
 			entregue: false,
 			movimentacao: null,
 		}));

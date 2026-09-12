@@ -790,62 +790,40 @@ export default function MovimentacoesPage() {
 
 	// Exporta exatamente o que esta filtrado na tela (entregue/nao entregue +
 	// periodo) — sem filtro nenhum aplicado, exporta a lista inteira.
+	// Usa a biblioteca "xlsx" (SheetJS, ja usada pra ler as planilhas de
+	// upload nesta mesma pagina) em vez de exceljs: o bundle do exceljs
+	// recorre a `new Function(...)` internamente (efeito colateral de como o
+	// bundler resolve o modulo CJS dele), o que a CSP do site bloqueia
+	// (script-src 'self', sem unsafe-eval — de proposito, pra nao afrouxar
+	// essa protecao). O xlsx nao tem esse problema.
 	const handleExportarOrdensFechadasXlsx = async () => {
-		const { default: ExcelJS } = await import("exceljs");
-		const wb = new ExcelJS.Workbook();
-		wb.creator = "Cluster MG";
-		const ws = wb.addWorksheet("Ordens Fechadas");
-		ws.views = [{ showGridLines: false }];
-
-		const cor = (hex) => ({ argb: `FF${hex}` });
-		const headerRow = ws.addRow([
-			"Cliente",
-			"Código",
-			"Cidade",
-			"Fechamento",
-			"Status",
-			"Movimentação encontrada",
-		]);
-		headerRow.eachCell((cell) => {
-			cell.font = { name: "Arial", bold: true, size: 10, color: cor("FFFFFF") };
-			cell.fill = { type: "pattern", pattern: "solid", fgColor: cor("003087") };
-			cell.alignment = { horizontal: "center", vertical: "middle" };
-		});
-		headerRow.height = 22;
-
-		ofItensFiltrados.forEach((item) => {
-			const row = ws.addRow([
-				item.nome,
-				item.codigo || "",
-				item.cidade || "",
-				item.fechamento || "",
-				item.entregue ? "Entregue" : "Não entregue",
-				item.movimentacao
-					? `${item.movimentacao.tipoOperacao || ""} · ${formatDateTime(item.movimentacao.emitidoEm)}`
-					: "",
-			]);
-			const bg = item.entregue ? "EAFAF1" : "FDEDEC";
-			row.eachCell((cell) => {
-				cell.font = { name: "Arial", size: 10 };
-				cell.fill = { type: "pattern", pattern: "solid", fgColor: cor(bg) };
-				cell.alignment = { vertical: "middle" };
-			});
-		});
-
-		[28, 16, 22, 16, 14, 32].forEach((width, index) => {
-			ws.getColumn(index + 1).width = width;
-		});
-
-		const buffer = await wb.xlsx.writeBuffer();
-		const blob = new Blob([buffer], {
-			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		});
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `ordens-fechadas-${hojeYMD()}.xlsx`;
-		a.click();
-		URL.revokeObjectURL(url);
+		const XLSX = await import("xlsx");
+		const linhas = ofItensFiltrados.map((item) => ({
+			Cliente: item.nome,
+			Código: item.codigo || "",
+			Cidade: item.cidade || "",
+			"Tipo de O.S.": item.tipoOs || "",
+			Técnico: item.tecnico || "",
+			Fechamento: item.fechamento || "",
+			Status: item.entregue ? "Entregue" : "Não entregue",
+			"Movimentação encontrada": item.movimentacao
+				? `${item.movimentacao.tipoOperacao || ""} · ${formatDateTime(item.movimentacao.emitidoEm)}`
+				: "",
+		}));
+		const worksheet = XLSX.utils.json_to_sheet(linhas);
+		worksheet["!cols"] = [
+			{ wch: 28 },
+			{ wch: 14 },
+			{ wch: 20 },
+			{ wch: 22 },
+			{ wch: 20 },
+			{ wch: 14 },
+			{ wch: 14 },
+			{ wch: 34 },
+		];
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(workbook, worksheet, "Ordens Fechadas");
+		XLSX.writeFile(workbook, `ordens-fechadas-${hojeYMD()}.xlsx`);
 	};
 
 	const handleExportarOrdensFechadasPdf = async () => {
@@ -869,11 +847,24 @@ export default function MovimentacoesPage() {
 
 		autoTable(pdf, {
 			startY: 80,
-			head: [["Cliente", "Código", "Cidade", "Fechamento", "Status", "Movimentação encontrada"]],
+			head: [
+				[
+					"Cliente",
+					"Código",
+					"Cidade",
+					"Tipo de O.S.",
+					"Técnico",
+					"Fechamento",
+					"Status",
+					"Movimentação encontrada",
+				],
+			],
 			body: ofItensFiltrados.map((item) => [
 				item.nome,
 				item.codigo || "-",
 				item.cidade || "-",
+				item.tipoOs || "-",
+				item.tecnico || "-",
 				item.fechamento || "-",
 				item.entregue ? "Entregue" : "Não entregue",
 				item.movimentacao
@@ -881,7 +872,7 @@ export default function MovimentacoesPage() {
 					: "Nenhuma movimentação encontrada",
 			]),
 			theme: "grid",
-			styles: { fontSize: 8, cellPadding: 5 },
+			styles: { fontSize: 7, cellPadding: 5 },
 			headStyles: { fillColor: [37, 99, 235], textColor: 255 },
 			didParseCell: (data) => {
 				if (data.section !== "body") return;
@@ -2050,12 +2041,14 @@ export default function MovimentacoesPage() {
 
 								<div className="overflow-hidden rounded-lg border border-gray-100">
 									<div className="overflow-x-auto">
-										<table className="min-w-[640px] w-full divide-y divide-gray-100 text-sm">
+										<table className="min-w-[880px] w-full divide-y divide-gray-100 text-sm">
 											<thead className="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
 												<tr>
 													<th className="px-4 py-3">Cliente</th>
 													<th className="px-4 py-3">Código</th>
 													<th className="px-4 py-3">Cidade</th>
+													<th className="px-4 py-3">Tipo de O.S.</th>
+													<th className="px-4 py-3">Técnico</th>
 													<th className="px-4 py-3">Fechamento</th>
 													<th className="px-4 py-3">Status</th>
 													<th className="px-4 py-3">Movimentação encontrada</th>
@@ -2072,6 +2065,12 @@ export default function MovimentacoesPage() {
 														</td>
 														<td className="px-4 py-3 text-gray-600">
 															{item.cidade || "-"}
+														</td>
+														<td className="px-4 py-3 text-gray-600">
+															{item.tipoOs || "-"}
+														</td>
+														<td className="px-4 py-3 text-gray-600">
+															{item.tecnico || "-"}
 														</td>
 														<td className="px-4 py-3 text-gray-600">
 															{item.fechamento || "-"}
@@ -2101,7 +2100,7 @@ export default function MovimentacoesPage() {
 												))}
 												{!ofItensPaginados.length ? (
 													<tr>
-														<td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+														<td colSpan={8} className="px-4 py-8 text-center text-gray-500">
 															Nenhum item para este filtro.
 														</td>
 													</tr>

@@ -44,5 +44,25 @@ export function reduzirLinhasPlanilha(rows = []) {
 			"fechamento",
 			"DataFechamento",
 		]),
+		// Pedido explicito: mostrar o tipo de O.S. e o tecnico que fechou na
+		// conciliacao — mesmos aliases reconhecidos no backend
+		// (movimentacoesOrdensFechadas.js:extrairLinhasPlanilha).
+		tipo_os: pick(row, [
+			"tipo_os",
+			"tipo_ordem_servico",
+			"tipo_de_servico",
+			"tipo_servico",
+			"TipoOS",
+			"Tipo",
+			"tipo",
+		]),
+		tecnico: pick(row, [
+			"tecnico",
+			"tecnico_responsavel",
+			"nome_tecnico",
+			"Tecnico",
+			"TecnicoResponsavel",
+			"NomeTecnico",
+		]),
 	}));
 }
