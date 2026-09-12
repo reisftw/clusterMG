@@ -684,22 +684,31 @@ const ATENDIMENTO_PATHS = [
 
 const MENU_GROUPS = [
 	{
-		id: "empresas",
-		label: "Empresas",
-		icon: Building2,
-		paths: [ROUTES.EMPRESAS_TECNICOS],
-	},
-	{
 		id: "cliente",
 		label: "Cliente",
 		icon: Users,
-		paths: [ROUTES.AGENDAMENTOS],
+		// Atendimento e Mensageria entraram aqui dentro (pedido do time: menos
+		// itens soltos no topo do menu).
+		paths: [
+			ROUTES.AGENDAMENTOS,
+			...ATENDIMENTO_PATHS,
+			ROUTES.MENSAGERIA_ENVIADOS,
+			ROUTES.MENSAGERIA_RELATORIOS,
+			ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
+			ROUTES.MENSAGERIA_FILA,
+			ROUTES.MENSAGERIA_BACKLOG,
+			ROUTES.MENSAGERIA_CALLBACK,
+			ROUTES.MENSAGERIA_API,
+			ROUTES.MENSAGERIA,
+		],
 	},
 	{
 		id: "tecnicos",
 		label: "Técnicos",
 		icon: UserSquare2,
+		// Empresas entrou aqui dentro (pedido do time).
 		paths: [
+			ROUTES.EMPRESAS_TECNICOS,
 			ROUTES.ENTREGAS_TECNICOS,
 			ROUTES.TECNICOS_AUDITORIA_BOLSA,
 			ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
@@ -709,19 +718,9 @@ const MENU_GROUPS = [
 		id: "logistica",
 		label: "Logística",
 		icon: Truck,
-		paths: [ROUTES.LOGISTICA],
-	},
-	{
-		id: "atendimento",
-		label: "Atendimento",
-		icon: MessagesSquare,
-		paths: ATENDIMENTO_PATHS,
-	},
-	{
-		id: "estoque",
-		label: "Estoque",
-		icon: Boxes,
+		// Estoque entrou aqui dentro (pedido do time).
 		paths: [
+			ROUTES.LOGISTICA,
 			ROUTES.ESTOQUE_EQUIPAMENTOS,
 			ROUTES.ESTOQUE_CONSULTA,
 			ROUTES.ACERTO_ESTOQUE,
@@ -755,21 +754,6 @@ const MENU_GROUPS = [
 			ROUTES.AGENDA,
 			ROUTES.FERIADOS,
 			ROUTES.FERIAS,
-		],
-	},
-	{
-		id: "mensageria",
-		label: "Mensageria",
-		icon: MessageCircle,
-		paths: [
-			ROUTES.MENSAGERIA_ENVIADOS,
-			ROUTES.MENSAGERIA_RELATORIOS,
-			ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
-			ROUTES.MENSAGERIA_FILA,
-			ROUTES.MENSAGERIA_BACKLOG,
-			ROUTES.MENSAGERIA_CALLBACK,
-			ROUTES.MENSAGERIA_API,
-			ROUTES.MENSAGERIA,
 		],
 	},
 	{
