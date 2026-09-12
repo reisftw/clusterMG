@@ -31,7 +31,10 @@ import {
 	listarMovimentacoes,
 	salvarEquipamentoConfig,
 } from "../services/movimentacoesService";
-import { readRowsFromPlanilha } from "../utils/readPlanilhaOrdensFechadas";
+import {
+	readRowsFromPlanilha,
+	reduzirLinhasPlanilha,
+} from "../utils/readPlanilhaOrdensFechadas";
 
 const STATUS_LABEL = {
 	pendente: "Pendente",
@@ -313,6 +316,12 @@ export default function MovimentacoesPage() {
 	const [cidadesPageRetiradas, setCidadesPageRetiradas] = useState(1);
 	const [cidadesPageDevolvidas, setCidadesPageDevolvidas] = useState(1);
 	const [cidadesPageEstoques, setCidadesPageEstoques] = useState(1);
+	// Filtro proprio da aba Cidades (independente do filtro geral da
+	// pagina) — mesmo padrao do modal "Resumo por categoria" em Equipamentos.
+	const [cidadesPeriodoTipo, setCidadesPeriodoTipo] = useState(PERIODO_TIPOS.TODOS);
+	const [cidadesDia, setCidadesDia] = useState(hojeYMD());
+	const [cidadesMes, setCidadesMes] = useState(mesAtualYM());
+	const [cidadesAno, setCidadesAno] = useState(String(ANO_ATUAL));
 
 	const [cidadeDetalhe, setCidadeDetalhe] = useState(null);
 	const [cidadeDetalheData, setCidadeDetalheData] = useState({
@@ -440,13 +449,21 @@ export default function MovimentacoesPage() {
 		}
 	}, [page, statusFiltro, intervaloPeriodo]);
 
+	const cidadesValorAtual = () => {
+		if (cidadesPeriodoTipo === PERIODO_TIPOS.DIA) return cidadesDia;
+		if (cidadesPeriodoTipo === PERIODO_TIPOS.MES) return cidadesMes;
+		if (cidadesPeriodoTipo === PERIODO_TIPOS.ANO) return cidadesAno;
+		return "";
+	};
+
 	const carregarCidades = useCallback(async () => {
 		setLoadingCidades(true);
 		setCidadesError("");
 		try {
+			const intervalo = calcularIntervaloPeriodo(cidadesPeriodoTipo, cidadesValorAtual());
 			const data = await buscarCidadesMovimentacoes({
-				dataInicio: intervaloPeriodo.dataInicio,
-				dataFim: intervaloPeriodo.dataFim,
+				dataInicio: intervalo.dataInicio,
+				dataFim: intervalo.dataFim,
 				pageRetiradas: cidadesPageRetiradas,
 				pageDevolvidas: cidadesPageDevolvidas,
 				pageEstoques: cidadesPageEstoques,
@@ -457,7 +474,15 @@ export default function MovimentacoesPage() {
 		} finally {
 			setLoadingCidades(false);
 		}
-	}, [intervaloPeriodo, cidadesPageRetiradas, cidadesPageDevolvidas, cidadesPageEstoques]);
+	}, [
+		cidadesPeriodoTipo,
+		cidadesDia,
+		cidadesMes,
+		cidadesAno,
+		cidadesPageRetiradas,
+		cidadesPageDevolvidas,
+		cidadesPageEstoques,
+	]);
 
 	useEffect(() => {
 		if (aba === ABAS.CIDADES) carregarCidades();
@@ -592,7 +617,10 @@ export default function MovimentacoesPage() {
 			const rowsPorArquivo = await Promise.all(
 				ofArquivos.map((arquivo) => readRowsFromPlanilha(arquivo)),
 			);
-			const rows = rowsPorArquivo.flat();
+			// So os 4 campos usados na conciliacao — a planilha real vem com
+			// muito mais colunas, e mandar tudo infla o payload a toa (ja bateu
+			// em limite de tamanho de requisicao com 10k+ linhas).
+			const rows = reduzirLinhasPlanilha(rowsPorArquivo.flat());
 			const job = await iniciarConciliacaoOrdensFechadas({
 				rows,
 				dataInicio: new Date(`${ofDataInicio}T00:00:00`).toISOString(),
@@ -1370,6 +1398,68 @@ export default function MovimentacoesPage() {
 			</>
 			) : aba === ABAS.CIDADES ? (
 				<section className="space-y-5">
+					<div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+						<p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+							Filtrar período
+						</p>
+						<div className="flex flex-wrap items-center gap-2">
+							{[
+								{ tipo: PERIODO_TIPOS.TODOS, label: "Todos" },
+								{ tipo: PERIODO_TIPOS.DIA, label: "Dia" },
+								{ tipo: PERIODO_TIPOS.MES, label: "Mês" },
+								{ tipo: PERIODO_TIPOS.ANO, label: "Ano" },
+							].map((opcao) => (
+								<button
+									key={opcao.tipo}
+									type="button"
+									onClick={() => {
+										setCidadesPeriodoTipo(opcao.tipo);
+										setCidadesPageRetiradas(1);
+										setCidadesPageDevolvidas(1);
+										setCidadesPageEstoques(1);
+									}}
+									className={`rounded-lg border px-3 py-2 text-xs font-bold ${
+										cidadesPeriodoTipo === opcao.tipo
+											? "border-blue-500 bg-blue-50 text-blue-700"
+											: "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+									}`}
+								>
+									{opcao.label}
+								</button>
+							))}
+
+							{cidadesPeriodoTipo === PERIODO_TIPOS.DIA ? (
+								<input
+									type="date"
+									value={cidadesDia}
+									onChange={(event) => setCidadesDia(event.target.value)}
+									className="input-field w-auto"
+								/>
+							) : null}
+							{cidadesPeriodoTipo === PERIODO_TIPOS.MES ? (
+								<input
+									type="month"
+									value={cidadesMes}
+									onChange={(event) => setCidadesMes(event.target.value)}
+									className="input-field w-auto"
+								/>
+							) : null}
+							{cidadesPeriodoTipo === PERIODO_TIPOS.ANO ? (
+								<select
+									value={cidadesAno}
+									onChange={(event) => setCidadesAno(event.target.value)}
+									className="input-field w-auto"
+								>
+									{ANOS_DISPONIVEIS.map((ano) => (
+										<option key={ano} value={ano}>
+											{ano}
+										</option>
+									))}
+								</select>
+							) : null}
+						</div>
+					</div>
+
 					{cidadesError ? (
 						<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
 							{cidadesError}
