@@ -26,6 +26,7 @@ import {
 	buscarEquipamentosMovimentacoes,
 	buscarJobConciliacaoOrdensFechadas,
 	buscarJobVarreduraMovimentacoes,
+	buscarUltimaConciliacaoOrdensFechadas,
 	iniciarConciliacaoOrdensFechadas,
 	iniciarVarreduraMovimentacoes,
 	listarMovimentacoes,
@@ -373,10 +374,16 @@ export default function MovimentacoesPage() {
 
 	const [showOfModal, setShowOfModal] = useState(false);
 	const [ofArquivos, setOfArquivos] = useState([]);
+	// "dia" = intervalo livre (dataInicio/dataFim escolhidos a dedo); "mes" =
+	// escolhe so o mes e a gente calcula o 1o/ultimo dia — pedido explicito
+	// pra facilitar rodar a conciliacao pro mes inteiro sem contar dias.
+	const [ofPeriodoTipo, setOfPeriodoTipo] = useState(PERIODO_TIPOS.MES);
 	const [ofDataInicio, setOfDataInicio] = useState(hojeYMD());
 	const [ofDataFim, setOfDataFim] = useState(hojeYMD());
+	const [ofMes, setOfMes] = useState(mesAtualYM());
 	const [ofJob, setOfJob] = useState(null);
 	const [ofProcessando, setOfProcessando] = useState(false);
+	const [ofHidratando, setOfHidratando] = useState(true);
 	const [ofError, setOfError] = useState("");
 	const [ofFiltro, setOfFiltro] = useState("todos");
 	const [ofPage, setOfPage] = useState(1);
@@ -598,13 +605,58 @@ export default function MovimentacoesPage() {
 		return () => ofPararPolling();
 	}, [ofPararPolling]);
 
+	// Re-hidrata a conciliacao ao abrir a pagina/aba — a conciliacao roda em
+	// segundo plano no backend (setImmediate, igual o import do Mapa) e
+	// sobrevive a pagina fechada/recarregada; o que faltava era o front
+	// buscar esse resultado de novo em vez de depender so do estado do React
+	// (perdido a cada remount). Sem isso o usuario sobe a planilha, sai da
+	// aba, e quando volta parece que "nao fez nada" — o job so nao aparecia
+	// mais em lugar nenhum.
+	useEffect(() => {
+		let ativo = true;
+		buscarUltimaConciliacaoOrdensFechadas()
+			.then((job) => {
+				if (!ativo || !job) return;
+				setOfJob(job);
+				const emAndamento = job.status === "queued" || job.status === "running";
+				if (emAndamento) {
+					setOfProcessando(true);
+					ofAcompanharJob(job.id, Date.now());
+				}
+			})
+			.catch(() => {})
+			.finally(() => {
+				if (ativo) setOfHidratando(false);
+			});
+		return () => {
+			ativo = false;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	// Resolve o periodo escolhido no modal pro par ISO que a API espera —
+	// "mes" usa o mesmo calculo ja usado nos outros filtros de periodo da
+	// pagina (1o ao ultimo dia do mes); "dia" mantem o intervalo livre.
+	const resolverPeriodoOrdensFechadas = () => {
+		if (ofPeriodoTipo === PERIODO_TIPOS.MES) {
+			if (!ofMes) return null;
+			return calcularIntervaloPeriodo(PERIODO_TIPOS.MES, ofMes);
+		}
+		if (!ofDataInicio || !ofDataFim) return null;
+		return {
+			dataInicio: new Date(`${ofDataInicio}T00:00:00`).toISOString(),
+			dataFim: new Date(`${ofDataFim}T23:59:59.999`).toISOString(),
+		};
+	};
+
 	const handleConciliarOrdensFechadas = async () => {
 		if (!ofArquivos.length) {
 			setOfError("Selecione ao menos uma planilha com nome e cidade do cliente.");
 			return;
 		}
-		if (!ofDataInicio || !ofDataFim) {
-			setOfError("Informe o período (data início e fim).");
+		const periodo = resolverPeriodoOrdensFechadas();
+		if (!periodo) {
+			setOfError("Informe o período (mês, ou data início e fim).");
 			return;
 		}
 		ofPararPolling();
@@ -623,8 +675,8 @@ export default function MovimentacoesPage() {
 			const rows = reduzirLinhasPlanilha(rowsPorArquivo.flat());
 			const job = await iniciarConciliacaoOrdensFechadas({
 				rows,
-				dataInicio: new Date(`${ofDataInicio}T00:00:00`).toISOString(),
-				dataFim: new Date(`${ofDataFim}T23:59:59.999`).toISOString(),
+				dataInicio: periodo.dataInicio,
+				dataFim: periodo.dataFim,
 			});
 			setOfJob(job);
 			ofAcompanharJob(job.id, Date.now());
@@ -1630,12 +1682,21 @@ export default function MovimentacoesPage() {
 							</button>
 						</div>
 
+						{ofHidratando ? (
+							<p className="mt-4 flex items-center gap-2 text-xs font-semibold text-gray-400">
+								<RefreshCw size={12} className="animate-spin" />
+								Verificando se há alguma conciliação em andamento ou recém-concluída...
+							</p>
+						) : null}
+
 						{ofProcessando ? (
 							<div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
 								<p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
 									<RefreshCw size={14} className="animate-spin" />
 									Conciliação em andamento no backend — pode ficar à vontade
-									para usar as outras abas enquanto isso.
+									para usar as outras abas enquanto isso. Pode navegar,
+									recarregar ou fechar a página: quando voltar, o resultado
+									estará aqui.
 								</p>
 								{ofJob ? (
 									<>
@@ -2346,29 +2407,76 @@ export default function MovimentacoesPage() {
 							) : null}
 						</label>
 
-						<div className="grid gap-3 sm:grid-cols-2">
-							<label className="block">
-								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
-									Data início
-								</span>
-								<input
-									type="date"
-									value={ofDataInicio}
-									onChange={(event) => setOfDataInicio(event.target.value)}
-									className="input-field w-full"
-								/>
-							</label>
-							<label className="block">
-								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
-									Data fim
-								</span>
-								<input
-									type="date"
-									value={ofDataFim}
-									onChange={(event) => setOfDataFim(event.target.value)}
-									className="input-field w-full"
-								/>
-							</label>
+						<div>
+							<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+								Período da conciliação
+							</span>
+							<div className="mb-3 inline-flex rounded-lg border border-gray-200 p-1">
+								<button
+									type="button"
+									onClick={() => setOfPeriodoTipo(PERIODO_TIPOS.MES)}
+									className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+										ofPeriodoTipo === PERIODO_TIPOS.MES
+											? "bg-gray-900 text-white"
+											: "text-gray-600 hover:bg-gray-50"
+									}`}
+								>
+									Por mês
+								</button>
+								<button
+									type="button"
+									onClick={() => setOfPeriodoTipo(PERIODO_TIPOS.DIA)}
+									className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+										ofPeriodoTipo === PERIODO_TIPOS.DIA
+											? "bg-gray-900 text-white"
+											: "text-gray-600 hover:bg-gray-50"
+									}`}
+								>
+									Intervalo de datas
+								</button>
+							</div>
+
+							{ofPeriodoTipo === PERIODO_TIPOS.MES ? (
+								<label className="block">
+									<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+										Mês
+									</span>
+									<input
+										type="month"
+										value={ofMes}
+										onChange={(event) => setOfMes(event.target.value)}
+										className="input-field w-full sm:w-56"
+									/>
+									<p className="mt-1.5 text-xs text-gray-500">
+										Varre o mês inteiro, do dia 1 ao último dia.
+									</p>
+								</label>
+							) : (
+								<div className="grid gap-3 sm:grid-cols-2">
+									<label className="block">
+										<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+											Data início
+										</span>
+										<input
+											type="date"
+											value={ofDataInicio}
+											onChange={(event) => setOfDataInicio(event.target.value)}
+											className="input-field w-full"
+										/>
+									</label>
+									<label className="block">
+										<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+											Data fim
+										</span>
+										<input
+											type="date"
+											value={ofDataFim}
+											onChange={(event) => setOfDataFim(event.target.value)}
+											className="input-field w-full"
+										/>
+									</label>
+								</div>
+							)}
 						</div>
 					</div>
 

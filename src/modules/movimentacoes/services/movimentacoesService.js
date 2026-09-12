@@ -85,6 +85,19 @@ export async function buscarJobConciliacaoOrdensFechadas(jobId) {
 	return requestVpsApi(`/movimentacoes/ordens-fechadas/conciliar/${jobId}`);
 }
 
+// Busca a ultima conciliacao iniciada (rodando ou ja concluida), pra
+// pagina se re-hidratar sozinha ao abrir a aba — sem isso, fechar a
+// pagina/recarregar perdia o resultado mesmo com o backend tendo
+// processado tudo certinho (o job so ficava preso no estado do React).
+export async function buscarUltimaConciliacaoOrdensFechadas() {
+	try {
+		return await requestVpsApi("/movimentacoes/ordens-fechadas/conciliar/ultimo");
+	} catch (error) {
+		if (Number(error?.status) === 404) return null;
+		throw error;
+	}
+}
+
 export async function buscarConfigMovimentacoes() {
 	return requestVpsApi("/movimentacoes/config");
 }

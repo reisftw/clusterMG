@@ -340,7 +340,12 @@ async function getJob(jobId) {
 	return movimentacoesOrdensFechadasRepository.getJob(jobId);
 }
 
+async function getLatestJob() {
+	return movimentacoesOrdensFechadasRepository.getLatestJob();
+}
+
 module.exports = {
 	getJob,
+	getLatestJob,
 	runConciliacao,
 };

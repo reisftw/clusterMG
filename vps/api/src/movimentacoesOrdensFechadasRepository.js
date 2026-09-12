@@ -85,8 +85,22 @@ async function getJob(id) {
 	return mapJob(result.rows[0]);
 }
 
+// A conciliacao roda em background (setImmediate) igual o import do Mapa —
+// continua rodando mesmo se o usuario fechar a pagina. O problema era o
+// front so guardar o jobId em estado React (perdido ao fechar/recarregar a
+// pagina), sem jeito de reencontrar o resultado depois. Este metodo cobre
+// isso: busca a ultima conciliacao iniciada (rodando ou ja concluida), pra
+// pagina se re-hidratar sozinha ao abrir a aba, sem precisar do jobId.
+async function getLatestJob() {
+	const result = await db.query(
+		"select * from movimentacoes_ordens_fechadas_jobs order by created_at desc limit 1",
+	);
+	return mapJob(result.rows[0]);
+}
+
 module.exports = {
 	createJob,
 	getJob,
+	getLatestJob,
 	updateJob,
 };

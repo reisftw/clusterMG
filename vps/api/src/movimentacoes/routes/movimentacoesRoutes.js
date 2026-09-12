@@ -68,6 +68,14 @@ function createMovimentacoesRouter({
 		requireManage,
 		controller.startOrdensFechadasConciliacao,
 	);
+	// Precisa vir antes de "/:jobId" abaixo — senao "ultimo" seria
+	// interpretado como jobId pelo Express (primeira rota que casar vence).
+	router.get(
+		"/ordens-fechadas/conciliar/ultimo",
+		requireAuthenticated,
+		requireView,
+		controller.getLatestOrdensFechadasJob,
+	);
 	router.get(
 		"/ordens-fechadas/conciliar/:jobId",
 		requireAuthenticated,

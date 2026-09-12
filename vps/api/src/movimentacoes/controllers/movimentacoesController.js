@@ -112,6 +112,22 @@ function createMovimentacoesController({
 		}
 	}
 
+	// Permite a pagina se re-hidratar sozinha (aba aberta/recarregada) sem
+	// depender do jobId ter sobrevivido no estado do React — mesmo problema
+	// que motivou o pedido de "ficar igual o Mapa".
+	async function getLatestOrdensFechadasJob(req, res, next) {
+		try {
+			const job = await movimentacoesOrdensFechadas.getLatestJob();
+			if (!job) {
+				res.status(404).json({ error: "Nenhuma conciliação encontrada." });
+				return;
+			}
+			res.json(job);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function getCidades(req, res, next) {
 		try {
 			const { dataInicio, dataFim, pageRetiradas, pageDevolvidas, pageEstoques } =
@@ -196,6 +212,7 @@ function createMovimentacoesController({
 		getDashboard,
 		getEquipamentos,
 		getOrdensFechadasJob,
+		getLatestOrdensFechadasJob,
 		getResumoCategoriaEquipamentos,
 		getScanJob,
 		saveEquipamentoConfig,
