@@ -253,14 +253,90 @@ async function getRankingProdutos({ dataInicio, dataFim, limit = 20 } = {}) {
 	return result.rows.map((row) => ({ produto: row.produto, total: row.total }));
 }
 
+// Igual getRankingProdutos, mas ja traz a categoria (FAST/AC/AX) e o valor
+// cadastrados pra cada produto — usado na aba Equipamentos.
+async function getRankingProdutosComConfig({ dataInicio, dataFim, limit = 100 } = {}) {
+	const result = await db.query(
+		`select
+		   m.produto_nome as produto,
+		   count(*)::int as total,
+		   c.categoria,
+		   c.valor
+		 from movimentacoes_estoque m
+		 left join movimentacoes_produtos_config c on c.produto_nome = m.produto_nome
+		 where m.produto_nome is not null
+		   and ($1::timestamptz is null or m.emitido_em >= $1)
+		   and ($2::timestamptz is null or m.emitido_em <= $2)
+		 group by 1, c.categoria, c.valor
+		 order by total desc
+		 limit $3`,
+		[dataInicio || null, dataFim || null, normalizeLimit(limit, 100)],
+	);
+	return result.rows.map((row) => ({
+		produto: row.produto,
+		total: row.total,
+		categoria: row.categoria || "",
+		valor: row.valor === null ? null : Number(row.valor),
+	}));
+}
+
+async function saveProdutoConfig(
+	{ produtoNome, categoria, valor } = {},
+	user = {},
+) {
+	const nome = text(produtoNome);
+	if (!nome) {
+		const error = new Error("Nome do produto obrigatório.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const categoriaNormalizada = text(categoria).toUpperCase();
+	if (categoriaNormalizada && !["FAST", "AC", "AX"].includes(categoriaNormalizada)) {
+		const error = new Error("Categoria inválida. Use FAST, AC ou AX.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const valorNumero =
+		valor === null || valor === undefined || valor === ""
+			? null
+			: Number(valor);
+	if (valorNumero !== null && !Number.isFinite(valorNumero)) {
+		const error = new Error("Valor inválido.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const result = await db.query(
+		`insert into movimentacoes_produtos_config
+		 (produto_nome, categoria, valor, atualizado_em, atualizado_por)
+		 values ($1, $2, $3, now(), $4)
+		 on conflict (produto_nome) do update set
+		   categoria = excluded.categoria,
+		   valor = excluded.valor,
+		   atualizado_em = now(),
+		   atualizado_por = excluded.atualizado_por
+		 returning *`,
+		[nome, categoriaNormalizada || null, valorNumero, nullableText(user?.uid || user?.email)],
+	);
+	const row = result.rows[0];
+	return {
+		produto: row.produto_nome,
+		categoria: row.categoria || "",
+		valor: row.valor === null ? null : Number(row.valor),
+	};
+}
+
 // Cidades com mais retirada de equipamento — conta toda devolucao que
 // casou com O.S. (cidade so fica conhecida via a O.S., ver marcarComoCasada).
+// Nao descarta linha sem cidade — agrupa como "Nao identificada" pra ficar
+// visivel quando a maioria das devolucoes ainda nao tem cidade confirmada
+// (normalmente porque ainda esta "sem_match" ou a O.S. casada nao tinha
+// cidade cadastrada), em vez de o ranking parecer "sem dados" por sumir.
 async function getRankingCidadesRetiradas({ dataInicio, dataFim, limit = 20 } = {}) {
 	const result = await db.query(
-		`select cidade, count(*)::int as total
+		`select coalesce(nullif(trim(cidade), ''), 'Não identificada') as cidade,
+		        count(*)::int as total
 		 from movimentacoes_estoque
-		 where cidade is not null
-		   and ($1::timestamptz is null or emitido_em >= $1)
+		 where ($1::timestamptz is null or emitido_em >= $1)
 		   and ($2::timestamptz is null or emitido_em <= $2)
 		 group by 1
 		 order by total desc
@@ -273,10 +349,10 @@ async function getRankingCidadesRetiradas({ dataInicio, dataFim, limit = 20 } = 
 // Cidades com devolucao confirmada (O.S. efetivamente baixada do mapa/match).
 async function getRankingCidadesDevolvidas({ dataInicio, dataFim, limit = 20 } = {}) {
 	const result = await db.query(
-		`select cidade, count(*)::int as total
+		`select coalesce(nullif(trim(cidade), ''), 'Não identificada') as cidade,
+		        count(*)::int as total
 		 from movimentacoes_estoque
-		 where cidade is not null
-		   and status_match = 'casada'
+		 where status_match = 'casada'
 		   and ($1::timestamptz is null or emitido_em >= $1)
 		   and ($2::timestamptz is null or emitido_em <= $2)
 		 group by 1
@@ -290,10 +366,10 @@ async function getRankingCidadesDevolvidas({ dataInicio, dataFim, limit = 20 } =
 // Estoques (destino do item na nota) que mais receberam equipamento de volta.
 async function getRankingEstoquesRecebimento({ dataInicio, dataFim, limit = 20 } = {}) {
 	const result = await db.query(
-		`select estoque_destino as estoque, count(*)::int as total
+		`select coalesce(nullif(trim(estoque_destino), ''), 'Não identificado') as estoque,
+		        count(*)::int as total
 		 from movimentacoes_estoque
-		 where estoque_destino is not null
-		   and ($1::timestamptz is null or emitido_em >= $1)
+		 where ($1::timestamptz is null or emitido_em >= $1)
 		   and ($2::timestamptz is null or emitido_em <= $2)
 		 group by 1
 		 order by total desc
@@ -437,6 +513,7 @@ module.exports = {
 	getRankingCidadesRetiradas,
 	getRankingEstoquesRecebimento,
 	getRankingProdutos,
+	getRankingProdutosComConfig,
 	getRankingTecnicos,
 	getScanJob,
 	listMovimentacoes,
@@ -444,6 +521,7 @@ module.exports = {
 	marcarComoSemMatch,
 	readConfig,
 	saveConfig,
+	saveProdutoConfig,
 	updateScanJob,
 	upsertMovimentacao,
 };

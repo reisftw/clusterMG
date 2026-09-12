@@ -12,7 +12,11 @@ function createMovimentacoesController({
 						dataFim,
 					}),
 					movimentacoesRepository.getRankingTecnicos({ dataInicio, dataFim }),
-					movimentacoesRepository.getRankingProdutos({ dataInicio, dataFim }),
+					movimentacoesRepository.getRankingProdutosComConfig({
+						dataInicio,
+						dataFim,
+						limit: 20,
+					}),
 				]);
 			res.json({ resumoPorEmpresaDia, rankingTecnicos, rankingProdutos });
 		} catch (error) {
@@ -33,6 +37,30 @@ function createMovimentacoesController({
 					produto: req.query.produto,
 					status: req.query.status,
 				}),
+			);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function getEquipamentos(req, res, next) {
+		try {
+			const { dataInicio, dataFim } = req.query;
+			res.json({
+				produtos: await movimentacoesRepository.getRankingProdutosComConfig({
+					dataInicio,
+					dataFim,
+				}),
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function saveEquipamentoConfig(req, res, next) {
+		try {
+			res.json(
+				await movimentacoesRepository.saveProdutoConfig(req.body || {}, req.user),
 			);
 		} catch (error) {
 			next(error);
@@ -116,7 +144,9 @@ function createMovimentacoesController({
 	return {
 		getCidades,
 		getDashboard,
+		getEquipamentos,
 		getScanJob,
+		saveEquipamentoConfig,
 		listMovimentacoes,
 		readConfig,
 		saveConfig,

@@ -7,18 +7,22 @@ import {
 	MapPin,
 	PackageSearch,
 	RefreshCw,
+	RotateCw,
 	Trophy,
 	Warehouse,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
+import MovimentacoesCalendario from "./MovimentacoesCalendario";
 import {
 	buscarCidadesMovimentacoes,
 	buscarDashboardMovimentacoes,
+	buscarEquipamentosMovimentacoes,
 	buscarJobVarreduraMovimentacoes,
 	iniciarVarreduraMovimentacoes,
 	listarMovimentacoes,
+	salvarEquipamentoConfig,
 } from "../services/movimentacoesService";
 
 const STATUS_LABEL = {
@@ -32,6 +36,21 @@ const STATUS_STYLE = {
 	casada: "border-green-200 bg-green-50 text-green-700",
 	sem_match: "border-gray-200 bg-gray-50 text-gray-600",
 };
+
+const CATEGORIA_OPCOES = ["FAST", "AC", "AX"];
+const CATEGORIA_STYLE = {
+	FAST: "border-purple-200 bg-purple-50 text-purple-700",
+	AC: "border-sky-200 bg-sky-50 text-sky-700",
+	AX: "border-emerald-200 bg-emerald-50 text-emerald-700",
+};
+
+function formatMoney(value) {
+	if (value === null || value === undefined || value === "") return "";
+	return Number(value).toLocaleString("pt-BR", {
+		style: "currency",
+		currency: "BRL",
+	});
+}
 
 const STATUS_ICON = {
 	pendente: Clock3,
@@ -131,6 +150,7 @@ function groupResumoPorDia(resumo) {
 const ABAS = {
 	PAINEL: "painel",
 	CIDADES: "cidades",
+	EQUIPAMENTOS: "equipamentos",
 };
 
 export default function MovimentacoesPage() {
@@ -151,6 +171,28 @@ export default function MovimentacoesPage() {
 	});
 	const [loadingCidades, setLoadingCidades] = useState(true);
 	const [cidadesError, setCidadesError] = useState("");
+
+	const [equipamentos, setEquipamentos] = useState({ produtos: [] });
+	const [loadingEquipamentos, setLoadingEquipamentos] = useState(true);
+	const [equipamentosError, setEquipamentosError] = useState("");
+
+	const [equipamentoModal, setEquipamentoModal] = useState(null);
+	const [salvandoEquipamento, setSalvandoEquipamento] = useState(false);
+	const [equipamentoModalError, setEquipamentoModalError] = useState("");
+
+	const [mesCalendario, setMesCalendario] = useState(
+		() => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+	);
+	const [diaSelecionado, setDiaSelecionado] = useState(null);
+	const [diaModalPage, setDiaModalPage] = useState(1);
+	const [diaModalData, setDiaModalData] = useState({
+		items: [],
+		page: 1,
+		totalPages: 1,
+		total: 0,
+	});
+	const [diaModalLoading, setDiaModalLoading] = useState(false);
+	const [diaModalError, setDiaModalError] = useState("");
 
 	const [lista, setLista] = useState({ items: [], page: 1, totalPages: 1, total: 0 });
 	const [loadingLista, setLoadingLista] = useState(true);
@@ -235,6 +277,85 @@ export default function MovimentacoesPage() {
 		if (aba === ABAS.CIDADES) carregarCidades();
 	}, [aba, carregarCidades]);
 
+	const handleSelecionarDia = (diaChave) => {
+		setDiaSelecionado(diaChave);
+		setDiaModalPage(1);
+	};
+
+	useEffect(() => {
+		if (!diaSelecionado) return;
+		let ativo = true;
+		setDiaModalLoading(true);
+		setDiaModalError("");
+		listarMovimentacoes({
+			page: diaModalPage,
+			limit: 10,
+			dataInicio: `${diaSelecionado}T00:00:00.000`,
+			dataFim: `${diaSelecionado}T23:59:59.999`,
+		})
+			.then((data) => {
+				if (ativo) setDiaModalData(data);
+			})
+			.catch(() => {
+				if (ativo) setDiaModalError("Não foi possível carregar as entregas do dia.");
+			})
+			.finally(() => {
+				if (ativo) setDiaModalLoading(false);
+			});
+		return () => {
+			ativo = false;
+		};
+	}, [diaSelecionado, diaModalPage]);
+
+	const carregarEquipamentos = useCallback(async () => {
+		setLoadingEquipamentos(true);
+		setEquipamentosError("");
+		try {
+			const data = await buscarEquipamentosMovimentacoes({
+				dataInicio: intervaloPeriodo.dataInicio,
+				dataFim: intervaloPeriodo.dataFim,
+			});
+			setEquipamentos(data);
+		} catch {
+			setEquipamentosError("Não foi possível carregar os equipamentos.");
+		} finally {
+			setLoadingEquipamentos(false);
+		}
+	}, [intervaloPeriodo]);
+
+	useEffect(() => {
+		if (aba === ABAS.EQUIPAMENTOS) carregarEquipamentos();
+	}, [aba, carregarEquipamentos]);
+
+	const handleAbrirEquipamento = (item) => {
+		setEquipamentoModalError("");
+		setEquipamentoModal({
+			produto: item.produto,
+			categoria: item.categoria || "",
+			valor: item.valor ?? "",
+		});
+	};
+
+	const handleSalvarEquipamento = async () => {
+		if (!equipamentoModal) return;
+		setSalvandoEquipamento(true);
+		setEquipamentoModalError("");
+		try {
+			await salvarEquipamentoConfig({
+				produtoNome: equipamentoModal.produto,
+				categoria: equipamentoModal.categoria || null,
+				valor: equipamentoModal.valor === "" ? null : equipamentoModal.valor,
+			});
+			setEquipamentoModal(null);
+			carregarDashboard();
+			if (aba === ABAS.EQUIPAMENTOS) carregarEquipamentos();
+		} catch {
+			setEquipamentoModalError("Não foi possível salvar a categoria/valor.");
+		} finally {
+			setSalvandoEquipamento(false);
+		}
+	};
+
 	useEffect(() => {
 		carregarDashboard();
 	}, [carregarDashboard]);
@@ -308,6 +429,21 @@ export default function MovimentacoesPage() {
 		setPeriodoAplicado({ tipo: PERIODO_TIPOS.TODOS, valor: "" });
 		setPage(1);
 		setShowFiltroPeriodo(false);
+	};
+
+	const [atualizando, setAtualizando] = useState(false);
+
+	const handleAtualizar = async () => {
+		setAtualizando(true);
+		try {
+			await Promise.all([
+				carregarDashboard(),
+				carregarLista(),
+				aba === ABAS.CIDADES ? carregarCidades() : Promise.resolve(),
+			]);
+		} finally {
+			setAtualizando(false);
+		}
 	};
 
 	const handleIniciarVarredura = async ({ anoTodo = false } = {}) => {
@@ -454,6 +590,16 @@ export default function MovimentacoesPage() {
 
 						<button
 							type="button"
+							onClick={handleAtualizar}
+							disabled={atualizando}
+							title="Recarrega os dados já salvos, sem consultar o Portal de Movimentações."
+							className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<RotateCw size={16} className={atualizando ? "animate-spin" : ""} />
+							Atualizar
+						</button>
+						<button
+							type="button"
 							onClick={() => handleIniciarVarredura()}
 							disabled={scanning}
 							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -498,6 +644,17 @@ export default function MovimentacoesPage() {
 				>
 					Cidades
 				</button>
+				<button
+					type="button"
+					onClick={() => setAba(ABAS.EQUIPAMENTOS)}
+					className={`border-b-2 px-4 py-2 text-sm font-bold ${
+						aba === ABAS.EQUIPAMENTOS
+							? "border-blue-600 text-blue-700"
+							: "border-transparent text-gray-500 hover:text-gray-700"
+					}`}
+				>
+					Equipamentos
+				</button>
 			</div>
 
 			{aba === ABAS.PAINEL ? (
@@ -541,47 +698,23 @@ export default function MovimentacoesPage() {
 				</p>
 			) : null}
 
-			<section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-				<h2 className="mb-4 text-base font-bold text-gray-900">
-					Devoluções por dia e empresa
-				</h2>
+			<section>
 				{loadingDashboard ? (
 					<p className="text-sm text-gray-500">Carregando...</p>
 				) : (
-					<div className="space-y-3">
-						{resumoPorDia.map((dia) => (
-							<div key={dia.dia} className="rounded-lg border border-gray-100 p-3">
-								<p className="mb-2 text-sm font-bold text-gray-700">
-									{dia.dia
-										? new Date(`${dia.dia}T00:00:00`).toLocaleDateString("pt-BR")
-										: "Sem data"}
-								</p>
-								<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-									{dia.empresas.map((item) => (
-										<div
-											key={`${dia.dia}-${item.empresa}`}
-											className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-										>
-											<p className="text-sm font-semibold text-gray-800">
-												{item.empresa}
-											</p>
-											<p className="mt-1 text-xs text-gray-500">
-												{item.total} devolução(ões) · {item.casadas} entregue(s) ·{" "}
-												{item.semMatch} sem O.S.
-											</p>
-										</div>
-									))}
-								</div>
-							</div>
-						))}
-						{!resumoPorDia.length ? (
-							<p className="text-sm text-gray-500">
-								Nenhuma devolução encontrada ainda. Use "Varredura agora" para
-								consultar o Portal de Movimentações.
-							</p>
-						) : null}
-					</div>
+					<MovimentacoesCalendario
+						resumoPorEmpresaDia={dashboard.resumoPorEmpresaDia}
+						mes={mesCalendario}
+						onMesChange={setMesCalendario}
+						onSelecionarDia={handleSelecionarDia}
+					/>
 				)}
+				{!loadingDashboard && !resumoPorDia.length ? (
+					<p className="mt-3 text-sm text-gray-500">
+						Nenhuma devolução encontrada ainda. Use "Varredura agora" para
+						consultar o Portal de Movimentações.
+					</p>
+				) : null}
 			</section>
 
 			<section className="grid gap-5 lg:grid-cols-2">
@@ -619,19 +752,41 @@ export default function MovimentacoesPage() {
 							Ranking de produtos
 						</h2>
 					</div>
+					<p className="mb-3 text-xs text-gray-500">
+						Clique em um equipamento para definir a categoria e o valor.
+					</p>
 					<div className="space-y-2">
 						{(dashboard.rankingProdutos || []).map((item, index) => (
-							<div
+							<button
 								key={item.produto}
-								className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+								type="button"
+								onClick={() => handleAbrirEquipamento(item)}
+								className="flex w-full items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left hover:bg-gray-100"
 							>
-								<span className="text-sm font-semibold text-gray-700">
-									{index + 1}. {item.produto}
+								<span className="flex min-w-0 items-center gap-2">
+									<span className="truncate text-sm font-semibold text-gray-700">
+										{index + 1}. {item.produto}
+									</span>
+									{item.categoria ? (
+										<span
+											className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+												CATEGORIA_STYLE[item.categoria] ||
+												"border-gray-200 bg-gray-50 text-gray-600"
+											}`}
+										>
+											{item.categoria}
+										</span>
+									) : null}
+									{item.valor ? (
+										<span className="text-[11px] font-semibold text-gray-500">
+											{formatMoney(item.valor)}
+										</span>
+									) : null}
 								</span>
 								<span className="text-sm font-black text-gray-900">
 									{item.total}
 								</span>
-							</div>
+							</button>
 						))}
 						{!dashboard.rankingProdutos?.length ? (
 							<p className="text-sm text-gray-500">Sem dados no período.</p>
@@ -766,7 +921,7 @@ export default function MovimentacoesPage() {
 				</div>
 			</section>
 			</>
-			) : (
+			) : aba === ABAS.CIDADES ? (
 				<section className="space-y-5">
 					{cidadesError ? (
 						<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -879,7 +1034,292 @@ export default function MovimentacoesPage() {
 						</div>
 					</div>
 				</section>
+			) : (
+				<section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+					<div className="mb-4 flex items-center justify-between">
+						<h2 className="text-base font-bold text-gray-900">
+							Equipamentos rastreados
+						</h2>
+						<p className="text-xs text-gray-500">
+							ONT/ONU, roteador e câmera de vídeo — clique para definir categoria
+							e valor.
+						</p>
+					</div>
+
+					{equipamentosError ? (
+						<p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+							{equipamentosError}
+						</p>
+					) : null}
+
+					<div className="overflow-hidden rounded-lg border border-gray-100">
+						<div className="overflow-x-auto">
+							<table className="min-w-[640px] w-full divide-y divide-gray-100 text-sm">
+								<thead className="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+									<tr>
+										<th className="px-4 py-3">Produto</th>
+										<th className="px-4 py-3">Categoria</th>
+										<th className="px-4 py-3">Valor</th>
+										<th className="px-4 py-3">Devoluções</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-gray-100 bg-white">
+									{loadingEquipamentos ? (
+										<tr>
+											<td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+												Carregando...
+											</td>
+										</tr>
+									) : (
+										(equipamentos.produtos || []).map((item) => (
+											<tr
+												key={item.produto}
+												className="cursor-pointer hover:bg-gray-50"
+												onClick={() => handleAbrirEquipamento(item)}
+											>
+												<td className="px-4 py-3 font-semibold text-gray-800">
+													{item.produto}
+												</td>
+												<td className="px-4 py-3">
+													{item.categoria ? (
+														<span
+															className={`rounded-full border px-2 py-0.5 text-xs font-bold ${
+																CATEGORIA_STYLE[item.categoria] ||
+																"border-gray-200 bg-gray-50 text-gray-600"
+															}`}
+														>
+															{item.categoria}
+														</span>
+													) : (
+														<span className="text-xs text-gray-400">
+															Não definida
+														</span>
+													)}
+												</td>
+												<td className="px-4 py-3 text-gray-700">
+													{formatMoney(item.valor) || "-"}
+												</td>
+												<td className="px-4 py-3 font-bold text-gray-900">
+													{item.total}
+												</td>
+											</tr>
+										))
+									)}
+									{!loadingEquipamentos && !equipamentos.produtos?.length ? (
+										<tr>
+											<td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+												Nenhum equipamento encontrado no período.
+											</td>
+										</tr>
+									) : null}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</section>
 			)}
+
+			{equipamentoModal ? (
+				<ModalShell
+					onClose={() => setEquipamentoModal(null)}
+					showClose={false}
+					size="md"
+					bodyClassName="p-0"
+				>
+					<div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5">
+						<div>
+							<h2 className="text-base font-bold text-gray-900">
+								{equipamentoModal.produto}
+							</h2>
+							<p className="text-sm text-gray-500">
+								Categoria e valor de referência do equipamento.
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={() => setEquipamentoModal(null)}
+							className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+							aria-label="Fechar"
+						>
+							<X size={16} />
+						</button>
+					</div>
+
+					<div className="space-y-4 p-5">
+						{equipamentoModalError ? (
+							<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{equipamentoModalError}
+							</p>
+						) : null}
+
+						<label className="block">
+							<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+								Categoria
+							</span>
+							<select
+								value={equipamentoModal.categoria}
+								onChange={(event) =>
+									setEquipamentoModal((current) => ({
+										...current,
+										categoria: event.target.value,
+									}))
+								}
+								className="input-field w-full"
+							>
+								<option value="">Não definida</option>
+								{CATEGORIA_OPCOES.map((categoria) => (
+									<option key={categoria} value={categoria}>
+										{categoria}
+									</option>
+								))}
+							</select>
+						</label>
+
+						<label className="block">
+							<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+								Valor (R$)
+							</span>
+							<input
+								type="number"
+								min="0"
+								step="0.01"
+								value={equipamentoModal.valor}
+								onChange={(event) =>
+									setEquipamentoModal((current) => ({
+										...current,
+										valor: event.target.value,
+									}))
+								}
+								className="input-field w-full"
+								placeholder="0,00"
+							/>
+						</label>
+					</div>
+
+					<div className="flex justify-end gap-2 border-t border-gray-100 p-4">
+						<button
+							type="button"
+							onClick={() => setEquipamentoModal(null)}
+							className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+						>
+							Cancelar
+						</button>
+						<button
+							type="button"
+							onClick={handleSalvarEquipamento}
+							disabled={salvandoEquipamento}
+							className="rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{salvandoEquipamento ? "Salvando..." : "Salvar"}
+						</button>
+					</div>
+				</ModalShell>
+			) : null}
+
+			{diaSelecionado ? (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+					<div className="w-full max-w-2xl rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl">
+						<div className="mb-4 flex items-start justify-between gap-4">
+							<div>
+								<p className="text-base font-bold text-gray-900">
+									Entregas de{" "}
+									{new Date(`${diaSelecionado}T00:00:00`).toLocaleDateString("pt-BR")}
+								</p>
+								<p className="text-sm text-gray-500">
+									{diaModalData.total} entrega(s)
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => setDiaSelecionado(null)}
+								className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+							>
+								Fechar
+							</button>
+						</div>
+
+						{diaModalError ? (
+							<p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{diaModalError}
+							</p>
+						) : null}
+
+						<div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+							{diaModalLoading ? (
+								<p className="py-6 text-center text-sm text-gray-500">
+									Carregando...
+								</p>
+							) : (
+								diaModalData.items.map((item) => {
+									const StatusIcon = STATUS_ICON[item.statusMatch] || AlertTriangle;
+									return (
+										<div key={item.id} className="rounded-xl bg-gray-50 p-3">
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												<div className="min-w-0">
+													<p className="truncate text-sm font-bold text-gray-800">
+														{item.parceiroNome || "-"}
+													</p>
+													<p className="mt-0.5 text-xs text-gray-500">
+														{item.empresaNome || "-"} · {item.registradoPor || "-"}
+													</p>
+												</div>
+												<span
+													className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+														STATUS_STYLE[item.statusMatch] || STATUS_STYLE.pendente
+													}`}
+												>
+													<StatusIcon size={13} />
+													{STATUS_LABEL[item.statusMatch] || item.statusMatch}
+												</span>
+											</div>
+											<p className="mt-1 text-xs text-gray-500">
+												{item.produtoNome || "-"} ·{" "}
+												<span className="font-mono">{item.serie}</span>
+												{item.osNumero ? ` · O.S. ${item.osNumero}` : ""}
+											</p>
+										</div>
+									);
+								})
+							)}
+							{!diaModalLoading && !diaModalData.items.length ? (
+								<p className="py-6 text-center text-sm text-gray-500">
+									Nenhuma entrega encontrada neste dia.
+								</p>
+							) : null}
+						</div>
+
+						{diaModalData.totalPages > 1 ? (
+							<div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+								<p className="text-sm text-gray-500">
+									Página {diaModalData.page} de {diaModalData.totalPages}
+								</p>
+								<div className="flex items-center gap-2">
+									<button
+										type="button"
+										onClick={() => setDiaModalPage((current) => Math.max(1, current - 1))}
+										disabled={diaModalData.page <= 1}
+										className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:opacity-40"
+									>
+										Anterior
+									</button>
+									<button
+										type="button"
+										onClick={() =>
+											setDiaModalPage((current) =>
+												Math.min(diaModalData.totalPages, current + 1),
+											)
+										}
+										disabled={diaModalData.page >= diaModalData.totalPages}
+										className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:opacity-40"
+									>
+										Próxima
+									</button>
+								</div>
+							</div>
+						) : null}
+					</div>
+				</div>
+			) : null}
 
 			{showScanModal ? (
 				<ModalShell
@@ -950,6 +1390,16 @@ export default function MovimentacoesPage() {
 											</p>
 										</div>
 									</div>
+								) : null}
+
+								{scanJob.status === "completed" && scanJob.resultado?.limiteAtingido ? (
+									<p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+										Atenção: o período escolhido tem mais páginas de movimentações
+										do que a varredura conseguiu consultar desta vez (
+										{scanJob.resultado.paginasConsultadas} de{" "}
+										{scanJob.resultado.totalPaginasNoPeriodo}). Rode a varredura
+										novamente para continuar cobrindo o restante.
+									</p>
 								) : null}
 
 								{scanJob.status === "failed" ? (

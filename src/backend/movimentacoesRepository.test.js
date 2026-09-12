@@ -69,7 +69,10 @@ describe("movimentacoesRepository", () => {
 		});
 
 		expect(ranking).toEqual([{ cidade: "Belo Horizonte", total: 5 }]);
-		expect(dbQuery.mock.calls[0][0]).toContain("cidade is not null");
+		// Nao filtra linha sem cidade — agrupa como "Nao identificada" (senao
+		// o ranking parece "sem dados" quando a maioria ainda esta sem match).
+		expect(dbQuery.mock.calls[0][0]).toContain("Não identificada");
+		expect(dbQuery.mock.calls[0][0]).not.toContain("cidade is not null");
 		expect(dbQuery.mock.calls[0][0]).not.toContain("status_match = 'casada'");
 	});
 
@@ -91,6 +94,49 @@ describe("movimentacoesRepository", () => {
 		const ranking = await repository.getRankingEstoquesRecebimento({});
 
 		expect(ranking).toEqual([{ estoque: "Estoque Central", total: 3 }]);
-		expect(dbQuery.mock.calls[0][0]).toContain("estoque_destino as estoque");
+		expect(dbQuery.mock.calls[0][0]).toContain("trim(estoque_destino)");
+	});
+
+	it("saveProdutoConfig grava categoria e valor do equipamento", async () => {
+		const dbQuery = vi.fn(async () => ({
+			rows: [{ produto_nome: "ONT GPON XX530V", categoria: "AX", valor: "349.90" }],
+		}));
+		const repository = loadRepository(dbQuery);
+
+		const result = await repository.saveProdutoConfig(
+			{ produtoNome: "ONT GPON XX530V", categoria: "ax", valor: "349.90" },
+			{ uid: "u1" },
+		);
+
+		expect(result).toEqual({
+			produto: "ONT GPON XX530V",
+			categoria: "AX",
+			valor: 349.9,
+		});
+		expect(dbQuery.mock.calls[0][1]).toEqual([
+			"ONT GPON XX530V",
+			"AX",
+			349.9,
+			"u1",
+		]);
+	});
+
+	it("saveProdutoConfig rejeita categoria fora de FAST/AC/AX", async () => {
+		const repository = loadRepository(vi.fn());
+
+		await expect(
+			repository.saveProdutoConfig({
+				produtoNome: "ONT GPON XX530V",
+				categoria: "PREMIUM",
+			}),
+		).rejects.toThrow(/Categoria inválida/);
+	});
+
+	it("saveProdutoConfig rejeita nome de produto vazio", async () => {
+		const repository = loadRepository(vi.fn());
+
+		await expect(
+			repository.saveProdutoConfig({ produtoNome: "  ", categoria: "AX" }),
+		).rejects.toThrow(/Nome do produto/);
 	});
 });

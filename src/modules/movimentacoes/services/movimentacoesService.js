@@ -36,6 +36,21 @@ export async function buscarCidadesMovimentacoes({ dataInicio, dataFim } = {}) {
 	return requestVpsApi(`/movimentacoes/cidades${query ? `?${query}` : ""}`);
 }
 
+export async function buscarEquipamentosMovimentacoes({ dataInicio, dataFim } = {}) {
+	const params = new URLSearchParams();
+	if (dataInicio) params.set("dataInicio", dataInicio);
+	if (dataFim) params.set("dataFim", dataFim);
+	const query = params.toString();
+	return requestVpsApi(`/movimentacoes/equipamentos${query ? `?${query}` : ""}`);
+}
+
+export async function salvarEquipamentoConfig(payload) {
+	return requestVpsApi("/movimentacoes/equipamentos", {
+		method: "PUT",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
 export async function buscarConfigMovimentacoes() {
 	return requestVpsApi("/movimentacoes/config");
 }

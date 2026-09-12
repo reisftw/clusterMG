@@ -12,7 +12,13 @@ const movimentacoesRepository = require("./movimentacoesRepository");
 
 const NOTES_TIMEOUT_MS = 60 * 1000;
 const NOTES_PAGE_LIMIT = 100;
-const NOTES_MAX_PAGES = 80;
+// Teto de seguranca, nao um alvo esperado: uma varredura de "ano todo"
+// percorre TODAS as notas do periodo (todos os tipos de operacao), so
+// filtrando por "Devolucao de comodato" depois de buscar a pagina — entao
+// precisa de bem mais que as ~80 paginas (8000 notas) que bastavam pra
+// janela padrao de 24h. Historico: com 80 paginas a varredura anual parava
+// em ~822 devolucoes encontradas sem avisar que ainda havia mais.
+const NOTES_MAX_PAGES = 5000;
 
 function cleanText(value) {
 	return String(value || "").trim();
@@ -118,21 +124,35 @@ async function fetchNotesPage({ page, start, end }) {
 // Ponto unico de acesso ao "Portal de Movimentacoes". Hoje aponta pro
 // Playground/Sempre; quando o Hubsoft nativo expuser o mesmo dado, troca
 // so aqui (mantendo o formato de retorno: lista de movimentos por item).
-async function fetchNotasDevolucaoComodato({ start, end }) {
+// onProgress (opcional) e chamado a cada pagina consultada — usado pelo job
+// pra mostrar "pagina X de Y" em vez de parecer travado numa varredura longa.
+async function fetchNotasDevolucaoComodato({ start, end, onProgress }) {
 	const movimentos = [];
 	let page = 1;
+	let totalPages = 1;
+	let notasConsultadas = 0;
 	while (page <= NOTES_MAX_PAGES) {
 		const payload = await fetchNotesPage({ page, start, end });
 		const notes = extractArray(payload, ["data"]);
+		notasConsultadas += notes.length;
 		for (const note of notes) {
 			if (!isDevolucaoComodato(note)) continue;
 			movimentos.push(...extractMovimentos(note));
 		}
-		const totalPages = Number(payload?.meta?.totalPages || 1);
+		totalPages = Number(payload?.meta?.totalPages || 1);
+		if (onProgress) {
+			await onProgress({
+				page,
+				totalPages,
+				notasConsultadas,
+				devolucoesEncontradas: movimentos.length,
+			});
+		}
 		if (!notes.length || page >= totalPages) break;
 		page += 1;
 	}
-	return movimentos;
+	const limiteAtingido = page >= NOTES_MAX_PAGES && page < totalPages;
+	return { movimentos, limiteAtingido, paginasConsultadas: page, totalPages };
 }
 
 // Confronta uma devolucao contra as O.S. abertas no mapa/match: mesma
@@ -225,7 +245,22 @@ async function executeScanJob(jobId, { dataInicio, dataFim } = {}) {
 
 	try {
 		const { start, end } = getScanWindow({ dataInicio, dataFim });
-		const movimentos = await fetchNotasDevolucaoComodato({ start, end });
+		const { movimentos, limiteAtingido, paginasConsultadas, totalPages } =
+			await fetchNotasDevolucaoComodato({
+				start,
+				end,
+				onProgress: async ({ page, totalPages: total, devolucoesEncontradas }) => {
+					await movimentacoesRepository.updateScanJob(jobId, {
+						stage: `Consultando Portal de Movimentações (página ${page} de ${total || "?"}, ${devolucoesEncontradas} devolução(ões) encontrada(s) até agora)`,
+						percent: Math.min(48, 10 + Math.round((page / Math.max(total, page)) * 38)),
+					});
+				},
+			});
+		if (limiteAtingido) {
+			console.warn(
+				`[movimentacoesEntregas] Varredura atingiu o teto de ${NOTES_MAX_PAGES} páginas (consultou ${paginasConsultadas} de ${totalPages}) — pode haver devoluções não processadas nesta rodada.`,
+			);
+		}
 		await movimentacoesRepository.updateScanJob(jobId, {
 			stage: "Cruzando com O.S. abertas no mapa/match",
 			percent: 50,
@@ -253,6 +288,9 @@ async function executeScanJob(jobId, { dataInicio, dataFim } = {}) {
 			totalCasadas: casadas,
 			totalSemMatch: semMatch,
 			periodo: { inicio: start.toISOString(), fim: end.toISOString() },
+			paginasConsultadas,
+			totalPaginasNoPeriodo: totalPages,
+			limiteAtingido,
 		};
 		await movimentacoesRepository.updateScanJob(jobId, {
 			status: "completed",

@@ -23,6 +23,19 @@ function createMovimentacoesRouter({
 
 	router.get("/dashboard", requireAuthenticated, requireView, controller.getDashboard);
 	router.get("/cidades", requireAuthenticated, requireView, controller.getCidades);
+	router.get(
+		"/equipamentos",
+		requireAuthenticated,
+		requireView,
+		controller.getEquipamentos,
+	);
+	router.put(
+		"/equipamentos",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireManage,
+		controller.saveEquipamentoConfig,
+	);
 	router.get("/lista", requireAuthenticated, requireView, controller.listMovimentacoes);
 	router.get("/config", requireAuthenticated, requireView, controller.readConfig);
 	router.put(
