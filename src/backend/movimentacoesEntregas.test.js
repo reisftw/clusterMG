@@ -227,4 +227,83 @@ describe("movimentacoesEntregas", () => {
 		expect(upsertMovimentacao).not.toHaveBeenCalled();
 		expect(findOrdensAbertasBySerie).not.toHaveBeenCalled();
 	});
+
+	it("ignora Devolucao de comodato cuja Operacao na observacao nao e Retirada", async () => {
+		const notaEntrada = noteDevolucaoComodato();
+		notaEntrada.observacao =
+			"Operacao: Entrada | Origem: Estoque | movimento_estoque_id: 2369047";
+		const requestSempreRaw = vi.fn(async () => ({
+			data: [notaEntrada],
+			meta: { totalPages: 1 },
+		}));
+		const upsertMovimentacao = vi.fn();
+		const findOrdensAbertasBySerie = vi.fn();
+
+		const service = loadService({
+			requestSempreRaw,
+			findOrdensAbertasBySerie,
+			deleteDocument: vi.fn(),
+			upsertMovimentacao,
+			marcarComoCasada: vi.fn(),
+			marcarComoSemMatch: vi.fn(),
+		});
+
+		await service.runScan({ user: { uid: "u1" }, manual: true });
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(upsertMovimentacao).not.toHaveBeenCalled();
+		expect(findOrdensAbertasBySerie).not.toHaveBeenCalled();
+	});
+
+	it("ignora item cujo produto nao e ONT/ONU, roteador ou camera de video (insumo/conector)", async () => {
+		const notaComInsumo = noteDevolucaoComodato();
+		notaComInsumo.itens = [
+			{ serie: "AA11BB22CC33", produto: { descricao: "Conector RJ45", codigo: "X1" } },
+		];
+		const requestSempreRaw = vi.fn(async () => ({
+			data: [notaComInsumo],
+			meta: { totalPages: 1 },
+		}));
+		const upsertMovimentacao = vi.fn();
+		const findOrdensAbertasBySerie = vi.fn();
+
+		const service = loadService({
+			requestSempreRaw,
+			findOrdensAbertasBySerie,
+			deleteDocument: vi.fn(),
+			upsertMovimentacao,
+			marcarComoCasada: vi.fn(),
+			marcarComoSemMatch: vi.fn(),
+		});
+
+		await service.runScan({ user: { uid: "u1" }, manual: true });
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(upsertMovimentacao).not.toHaveBeenCalled();
+		expect(findOrdensAbertasBySerie).not.toHaveBeenCalled();
+	});
+
+	it("usa a janela de datas informada (varredura do ano todo) em vez das ultimas 24h", async () => {
+		const requestSempreRaw = vi.fn(async () => ({ data: [], meta: { totalPages: 1 } }));
+		const service = loadService({
+			requestSempreRaw,
+			findOrdensAbertasBySerie: vi.fn(),
+			deleteDocument: vi.fn(),
+			upsertMovimentacao: vi.fn(),
+			marcarComoCasada: vi.fn(),
+			marcarComoSemMatch: vi.fn(),
+		});
+
+		await service.runScan({
+			user: { uid: "u1" },
+			manual: true,
+			dataInicio: "2026-01-01T00:00:00.000Z",
+			dataFim: "2026-08-30T00:00:00.000Z",
+		});
+		await new Promise((resolve) => setImmediate(resolve));
+
+		const url = requestSempreRaw.mock.calls[0][0];
+		expect(url).toContain("filter.emitido_em=%24gte%3A2026-01-01T00%3A00%3A00.000Z");
+		expect(url).toContain("filter.emitido_em=%24lte%3A2026-08-30T00%3A00%3A00.000Z");
+	});
 });

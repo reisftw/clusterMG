@@ -59,9 +59,12 @@ function createMovimentacoesController({
 
 	async function startScan(req, res, next) {
 		try {
+			const { dataInicio, dataFim } = req.body || {};
 			const job = await movimentacoesEntregas.runScan({
 				user: req.user,
 				manual: true,
+				dataInicio,
+				dataFim,
 			});
 			res.status(202).json(job);
 		} catch (error) {

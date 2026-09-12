@@ -33,18 +33,47 @@ function extractArray(payload, keys = ["data"]) {
 	return [];
 }
 
+// Extrai o campo "Operacao" de dentro da observacao livre da nota (mesmo
+// formato usado por tecnicosBolsaAuditoria.js: "Operacao: Retirada | Origem:
+// ... | Destino: ...").
+function extractOperacaoDaObservacao(observacao) {
+	const match = cleanText(observacao).match(/Operacao:\s*([^|\n]+)/i);
+	return cleanText(match?.[1]);
+}
+
+// So conta como devolucao relevante quando a nota e "Devolucao de comodato"
+// E a operacao registrada na observacao e "Retirada" — os dois juntos, como
+// no exemplo real (movimento_estoque_id=2369046): tipo_operacao "Devolução
+// de comodato" com "Operacao: Retirada" na observacao. Uma nota so com um
+// dos dois nao e a devolucao de equipamento ao estoque que a feature trata.
 function isDevolucaoComodato(note = {}) {
-	return normalizeText(note.tipo_operacao?.descricao).includes(
+	const tipoOperacaoOk = normalizeText(note.tipo_operacao?.descricao).includes(
 		"devolucao de comodato",
 	);
+	const operacaoOk =
+		normalizeText(extractOperacaoDaObservacao(note.observacao)) === "retirada";
+	return tipoOperacaoOk && operacaoOk;
+}
+
+// Categorias de equipamento que a feature acompanha — o resto (insumos,
+// cabos, etc.) nao entra em Movimentacoes/ranking de produtos.
+const EQUIPAMENTO_TERMS = ["ont", "onu", "gpon", "xpon", "epon", "roteador", "router", "camera", "câmera"];
+
+function isEquipamentoRelevante(produtoNome) {
+	const nome = normalizeText(produtoNome);
+	return EQUIPAMENTO_TERMS.some((term) => nome.includes(term));
 }
 
 // Extrai os movimentos de nivel "item" de uma nota (uma nota de devolucao
-// pode carregar mais de um equipamento).
+// pode carregar mais de um equipamento). So considera ONT/ONU, roteador e
+// camera de video — os demais itens da nota (insumos, cabos) sao ignorados.
 function extractMovimentos(note = {}) {
 	const itens = Array.isArray(note.itens) ? note.itens : [];
 	return itens
 		.filter((item) => cleanText(item.serie))
+		.filter((item) =>
+			isEquipamentoRelevante(item.produto?.descricao || item.descricao),
+		)
 		.map((item) => ({
 			notaId: note.id ? String(note.id) : "",
 			numero: cleanText(note.numero),
@@ -146,16 +175,28 @@ async function processarMovimento(movimento) {
 	});
 }
 
-function getScanWindow() {
-	const end = new Date();
-	const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-	return { start, end };
+const SCAN_WINDOW_MAX_DAYS = 366;
+
+// Janela padrao (rotina diaria e botao manual sem periodo escolhido): so as
+// ultimas 24h. Quando vem dataInicio/dataFim (ex.: filtro "Ano" na tela),
+// usa o intervalo pedido — permite reprocessar o historico inteiro e achar
+// O.S. que ficaram abertas mesmo com o equipamento ja retirado ha tempos.
+function getScanWindow({ dataInicio, dataFim } = {}) {
+	const end = dataFim ? new Date(dataFim) : new Date();
+	const defaultStart = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+	const start = dataInicio ? new Date(dataInicio) : defaultStart;
+	const maxRangeMs = SCAN_WINDOW_MAX_DAYS * 24 * 60 * 60 * 1000;
+	const boundedStart =
+		end.getTime() - start.getTime() > maxRangeMs
+			? new Date(end.getTime() - maxRangeMs)
+			: start;
+	return { start: boundedStart, end };
 }
 
-async function runScan({ user = {}, manual = false } = {}) {
+async function runScan({ user = {}, manual = false, dataInicio, dataFim } = {}) {
 	const job = await movimentacoesRepository.createScanJob({ manual, user });
 	setImmediate(() => {
-		executeScanJob(job.id).catch((error) => {
+		executeScanJob(job.id, { dataInicio, dataFim }).catch((error) => {
 			console.error(
 				`[movimentacoesEntregas] Falha no job de varredura ${job.id}:`,
 				error?.message || error,
@@ -165,7 +206,7 @@ async function runScan({ user = {}, manual = false } = {}) {
 	return job;
 }
 
-async function executeScanJob(jobId) {
+async function executeScanJob(jobId, { dataInicio, dataFim } = {}) {
 	await movimentacoesRepository.updateScanJob(jobId, {
 		status: "running",
 		stage: "Consultando devoluções no Portal de Movimentações",
@@ -174,7 +215,7 @@ async function executeScanJob(jobId) {
 	});
 
 	try {
-		const { start, end } = getScanWindow();
+		const { start, end } = getScanWindow({ dataInicio, dataFim });
 		const movimentos = await fetchNotasDevolucaoComodato({ start, end });
 		await movimentacoesRepository.updateScanJob(jobId, {
 			stage: "Cruzando com O.S. abertas no mapa/match",

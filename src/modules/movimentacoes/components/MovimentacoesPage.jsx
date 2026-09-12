@@ -1,5 +1,6 @@
 import {
 	AlertTriangle,
+	CalendarRange,
 	CheckCircle2,
 	Clock3,
 	PackageSearch,
@@ -44,6 +45,74 @@ function formatDateTime(value) {
 	return date.toLocaleString("pt-BR");
 }
 
+const PERIODO_TIPOS = {
+	TODOS: "todos",
+	DIA: "dia",
+	MES: "mes",
+	ANO: "ano",
+};
+
+const ANO_ATUAL = new Date().getFullYear();
+const ANOS_DISPONIVEIS = Array.from({ length: 6 }, (_, index) => ANO_ATUAL - index);
+
+function pad2(value) {
+	return String(value).padStart(2, "0");
+}
+
+function hojeYMD() {
+	const agora = new Date();
+	return `${agora.getFullYear()}-${pad2(agora.getMonth() + 1)}-${pad2(agora.getDate())}`;
+}
+
+function mesAtualYM() {
+	const agora = new Date();
+	return `${agora.getFullYear()}-${pad2(agora.getMonth() + 1)}`;
+}
+
+// Converte o filtro de periodo (dia/mes/ano) num intervalo absoluto
+// (dataInicio/dataFim em ISO) que a API entende. "todos" nao filtra.
+function calcularIntervaloPeriodo(tipo, valor) {
+	if (tipo === PERIODO_TIPOS.DIA && valor) {
+		const [ano, mes, dia] = valor.split("-").map(Number);
+		return {
+			dataInicio: new Date(ano, mes - 1, dia, 0, 0, 0, 0).toISOString(),
+			dataFim: new Date(ano, mes - 1, dia, 23, 59, 59, 999).toISOString(),
+		};
+	}
+	if (tipo === PERIODO_TIPOS.MES && valor) {
+		const [ano, mes] = valor.split("-").map(Number);
+		return {
+			dataInicio: new Date(ano, mes - 1, 1, 0, 0, 0, 0).toISOString(),
+			dataFim: new Date(ano, mes, 0, 23, 59, 59, 999).toISOString(),
+		};
+	}
+	if (tipo === PERIODO_TIPOS.ANO && valor) {
+		const ano = Number(valor);
+		return {
+			dataInicio: new Date(ano, 0, 1, 0, 0, 0, 0).toISOString(),
+			dataFim: new Date(ano, 11, 31, 23, 59, 59, 999).toISOString(),
+		};
+	}
+	return { dataInicio: undefined, dataFim: undefined };
+}
+
+function descreverPeriodo(tipo, valor) {
+	if (tipo === PERIODO_TIPOS.DIA && valor) {
+		return new Date(`${valor}T00:00:00`).toLocaleDateString("pt-BR");
+	}
+	if (tipo === PERIODO_TIPOS.MES && valor) {
+		const [ano, mes] = valor.split("-").map(Number);
+		return new Date(ano, mes - 1, 1).toLocaleDateString("pt-BR", {
+			month: "long",
+			year: "numeric",
+		});
+	}
+	if (tipo === PERIODO_TIPOS.ANO && valor) {
+		return valor;
+	}
+	return "Todo o período";
+}
+
 function groupResumoPorDia(resumo) {
 	const map = new Map();
 	for (const item of resumo || []) {
@@ -70,24 +139,43 @@ export default function MovimentacoesPage() {
 	const [page, setPage] = useState(1);
 	const [statusFiltro, setStatusFiltro] = useState("");
 
+	const [showFiltroPeriodo, setShowFiltroPeriodo] = useState(false);
+	const [periodoTipo, setPeriodoTipo] = useState(PERIODO_TIPOS.TODOS);
+	const [periodoDia, setPeriodoDia] = useState(hojeYMD());
+	const [periodoMes, setPeriodoMes] = useState(mesAtualYM());
+	const [periodoAno, setPeriodoAno] = useState(String(ANO_ATUAL));
+	const [periodoAplicado, setPeriodoAplicado] = useState({
+		tipo: PERIODO_TIPOS.TODOS,
+		valor: "",
+	});
+
 	const [scanJob, setScanJob] = useState(null);
 	const [scanning, setScanning] = useState(false);
 	const [scanError, setScanError] = useState("");
 	const [showScanModal, setShowScanModal] = useState(false);
 	const pollTimerRef = useRef(null);
 
+	const intervaloPeriodo = useMemo(
+		() =>
+			calcularIntervaloPeriodo(periodoAplicado.tipo, periodoAplicado.valor),
+		[periodoAplicado],
+	);
+
 	const carregarDashboard = useCallback(async () => {
 		setLoadingDashboard(true);
 		setDashboardError("");
 		try {
-			const data = await buscarDashboardMovimentacoes();
+			const data = await buscarDashboardMovimentacoes({
+				dataInicio: intervaloPeriodo.dataInicio,
+				dataFim: intervaloPeriodo.dataFim,
+			});
 			setDashboard(data);
 		} catch {
 			setDashboardError("Não foi possível carregar o painel de movimentações.");
 		} finally {
 			setLoadingDashboard(false);
 		}
-	}, []);
+	}, [intervaloPeriodo]);
 
 	const carregarLista = useCallback(async () => {
 		setLoadingLista(true);
@@ -97,6 +185,8 @@ export default function MovimentacoesPage() {
 				page,
 				limit: 20,
 				status: statusFiltro || undefined,
+				dataInicio: intervaloPeriodo.dataInicio,
+				dataFim: intervaloPeriodo.dataFim,
 			});
 			setLista(data);
 		} catch {
@@ -104,7 +194,7 @@ export default function MovimentacoesPage() {
 		} finally {
 			setLoadingLista(false);
 		}
-	}, [page, statusFiltro]);
+	}, [page, statusFiltro, intervaloPeriodo]);
 
 	useEffect(() => {
 		carregarDashboard();
@@ -159,13 +249,40 @@ export default function MovimentacoesPage() {
 		[carregarDashboard, carregarLista],
 	);
 
-	const handleIniciarVarredura = async () => {
+	const handleAplicarFiltroPeriodo = () => {
+		const valor =
+			periodoTipo === PERIODO_TIPOS.DIA
+				? periodoDia
+				: periodoTipo === PERIODO_TIPOS.MES
+					? periodoMes
+					: periodoTipo === PERIODO_TIPOS.ANO
+						? periodoAno
+						: "";
+		setPeriodoAplicado({ tipo: periodoTipo, valor });
+		setPage(1);
+		setShowFiltroPeriodo(false);
+	};
+
+	const handleLimparFiltroPeriodo = () => {
+		setPeriodoTipo(PERIODO_TIPOS.TODOS);
+		setPeriodoAplicado({ tipo: PERIODO_TIPOS.TODOS, valor: "" });
+		setPage(1);
+		setShowFiltroPeriodo(false);
+	};
+
+	const handleIniciarVarredura = async ({ anoTodo = false } = {}) => {
 		pararPolling();
 		setScanError("");
 		setScanning(true);
 		setShowScanModal(true);
 		try {
-			const job = await iniciarVarreduraMovimentacoes();
+			const intervalo = anoTodo
+				? {
+						dataInicio: new Date(ANO_ATUAL, 0, 1, 0, 0, 0, 0).toISOString(),
+						dataFim: new Date().toISOString(),
+					}
+				: {};
+			const job = await iniciarVarreduraMovimentacoes(intervalo);
 			setScanJob(job);
 			acompanharJob(job.id, Date.now());
 		} catch {
@@ -207,15 +324,114 @@ export default function MovimentacoesPage() {
 							</p>
 						</div>
 					</div>
-					<button
-						type="button"
-						onClick={handleIniciarVarredura}
-						disabled={scanning}
-						className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						<RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
-						{scanning ? "Varredura em andamento..." : "Varredura agora"}
-					</button>
+					<div className="flex flex-wrap items-center gap-2">
+						<div className="relative">
+							<button
+								type="button"
+								onClick={() => setShowFiltroPeriodo((current) => !current)}
+								className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+							>
+								<CalendarRange size={16} />
+								{descreverPeriodo(periodoAplicado.tipo, periodoAplicado.valor)}
+							</button>
+
+							{showFiltroPeriodo ? (
+								<div className="absolute right-0 z-10 mt-2 w-72 rounded-xl border border-gray-100 bg-white p-4 shadow-lg">
+									<p className="mb-3 text-xs font-bold uppercase tracking-wide text-gray-500">
+										Filtrar por período
+									</p>
+									<div className="mb-3 grid grid-cols-2 gap-2">
+										{[
+											{ tipo: PERIODO_TIPOS.TODOS, label: "Todos" },
+											{ tipo: PERIODO_TIPOS.DIA, label: "Dia" },
+											{ tipo: PERIODO_TIPOS.MES, label: "Mês" },
+											{ tipo: PERIODO_TIPOS.ANO, label: "Ano" },
+										].map((opcao) => (
+											<button
+												key={opcao.tipo}
+												type="button"
+												onClick={() => setPeriodoTipo(opcao.tipo)}
+												className={`rounded-lg border px-3 py-2 text-xs font-bold ${
+													periodoTipo === opcao.tipo
+														? "border-blue-500 bg-blue-50 text-blue-700"
+														: "border-gray-200 text-gray-600 hover:bg-gray-50"
+												}`}
+											>
+												{opcao.label}
+											</button>
+										))}
+									</div>
+
+									{periodoTipo === PERIODO_TIPOS.DIA ? (
+										<input
+											type="date"
+											value={periodoDia}
+											onChange={(event) => setPeriodoDia(event.target.value)}
+											className="input-field mb-3 w-full"
+										/>
+									) : null}
+									{periodoTipo === PERIODO_TIPOS.MES ? (
+										<input
+											type="month"
+											value={periodoMes}
+											onChange={(event) => setPeriodoMes(event.target.value)}
+											className="input-field mb-3 w-full"
+										/>
+									) : null}
+									{periodoTipo === PERIODO_TIPOS.ANO ? (
+										<select
+											value={periodoAno}
+											onChange={(event) => setPeriodoAno(event.target.value)}
+											className="input-field mb-3 w-full"
+										>
+											{ANOS_DISPONIVEIS.map((ano) => (
+												<option key={ano} value={ano}>
+													{ano}
+												</option>
+											))}
+										</select>
+									) : null}
+
+									<div className="flex justify-end gap-2">
+										<button
+											type="button"
+											onClick={handleLimparFiltroPeriodo}
+											className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50"
+										>
+											Limpar
+										</button>
+										<button
+											type="button"
+											onClick={handleAplicarFiltroPeriodo}
+											className="rounded-lg bg-gray-900 px-3 py-2 text-xs font-bold text-white hover:bg-gray-800"
+										>
+											Aplicar
+										</button>
+									</div>
+								</div>
+							) : null}
+						</div>
+
+						<button
+							type="button"
+							onClick={() => handleIniciarVarredura()}
+							disabled={scanning}
+							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
+							{scanning ? "Varredura em andamento..." : "Varredura agora"}
+						</button>
+						<button
+							type="button"
+							onClick={() => handleIniciarVarredura({ anoTodo: true })}
+							disabled={scanning}
+							title={`Reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} — útil para achar O.S. antigas com equipamento já retirado.`}
+							className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<CalendarRange size={16} />
+							Varredura do ano todo
+						</button>
+					</div>
 				</div>
 			</section>
 

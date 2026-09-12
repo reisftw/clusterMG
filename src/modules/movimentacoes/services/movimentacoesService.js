@@ -39,8 +39,11 @@ export async function salvarConfigMovimentacoes(payload) {
 	});
 }
 
-export async function iniciarVarreduraMovimentacoes() {
-	return requestVpsApi("/movimentacoes/scan", { method: "POST" });
+export async function iniciarVarreduraMovimentacoes({ dataInicio, dataFim } = {}) {
+	return requestVpsApi("/movimentacoes/scan", {
+		method: "POST",
+		body: JSON.stringify({ dataInicio, dataFim }),
+	});
 }
 
 export async function buscarJobVarreduraMovimentacoes(jobId) {
