@@ -264,8 +264,30 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 	});
 
 	try {
-		const { start, end } = getScanWindow({ dataInicio, dataFim });
+		let { start, end } = getScanWindow({ dataInicio, dataFim });
+
+		// Retomada: se essa e a varredura do ano (anoTodo) e uma rodada
+		// anterior ja tinha avancado ate uma certa janela antes de parar (erro,
+		// timeout etc.), comeca dali em vez de do zero — evita reprocessar
+		// meses inteiros que ja foram consultados com sucesso.
+		let retomandoDe = null;
+		if (anoTodo) {
+			const config = await movimentacoesRepository.readConfig();
+			if (config.backfillUltimaJanelaFim) {
+				const ultimaJanelaFim = new Date(config.backfillUltimaJanelaFim);
+				if (ultimaJanelaFim > start && ultimaJanelaFim < end) {
+					retomandoDe = ultimaJanelaFim;
+					start = new Date(ultimaJanelaFim.getTime() + 1);
+				}
+			}
+		}
+
 		const janelas = buildDateWindows(start, end, WINDOW_DAYS);
+		if (retomandoDe) {
+			await movimentacoesRepository.updateScanJob(jobId, {
+				stage: `Retomando de onde parou (já processado até ${retomandoDe.toLocaleDateString("pt-BR")})`,
+			});
+		}
 
 		let totalEncontradas = 0;
 		let processed = 0;
@@ -308,6 +330,16 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 				casadas,
 				semMatch,
 			});
+
+			// So marca o "ponto de retomada" quando a janela NAO bateu no teto
+			// de paginas — se bateu, ela pode ter ficado incompleta e vale a
+			// pena reprocessar essa mesma janela na proxima tentativa.
+			if (anoTodo && !limiteAtingido) {
+				await movimentacoesRepository.saveConfig(
+					{ backfillUltimaJanelaFim: janela.end.toISOString() },
+					user,
+				);
+			}
 		}
 
 		if (algumLimiteAtingido) {
@@ -332,8 +364,13 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 			finishedAt: new Date().toISOString(),
 		});
 		if (anoTodo && !algumLimiteAtingido) {
+			// Terminou o periodo inteiro com sucesso — limpa o ponto de
+			// retomada (nao ha mais nada pra continuar) e marca a conclusao.
 			await movimentacoesRepository.saveConfig(
-				{ backfillAnualConcluidoEm: new Date().toISOString() },
+				{
+					backfillAnualConcluidoEm: new Date().toISOString(),
+					backfillUltimaJanelaFim: null,
+				},
 				user,
 			);
 		}

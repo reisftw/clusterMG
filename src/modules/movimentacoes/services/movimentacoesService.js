@@ -17,6 +17,8 @@ export async function listarMovimentacoes({
 	tecnico,
 	produto,
 	status,
+	cidade,
+	estoqueDestino,
 } = {}) {
 	const params = new URLSearchParams({ page: String(page), limit: String(limit) });
 	if (dataInicio) params.set("dataInicio", dataInicio);
@@ -25,13 +27,24 @@ export async function listarMovimentacoes({
 	if (tecnico) params.set("tecnico", tecnico);
 	if (produto) params.set("produto", produto);
 	if (status) params.set("status", status);
+	if (cidade) params.set("cidade", cidade);
+	if (estoqueDestino) params.set("estoqueDestino", estoqueDestino);
 	return requestVpsApi(`/movimentacoes/lista?${params.toString()}`);
 }
 
-export async function buscarCidadesMovimentacoes({ dataInicio, dataFim } = {}) {
+export async function buscarCidadesMovimentacoes({
+	dataInicio,
+	dataFim,
+	pageRetiradas,
+	pageDevolvidas,
+	pageEstoques,
+} = {}) {
 	const params = new URLSearchParams();
 	if (dataInicio) params.set("dataInicio", dataInicio);
 	if (dataFim) params.set("dataFim", dataFim);
+	if (pageRetiradas) params.set("pageRetiradas", String(pageRetiradas));
+	if (pageDevolvidas) params.set("pageDevolvidas", String(pageDevolvidas));
+	if (pageEstoques) params.set("pageEstoques", String(pageEstoques));
 	const query = params.toString();
 	return requestVpsApi(`/movimentacoes/cidades${query ? `?${query}` : ""}`);
 }

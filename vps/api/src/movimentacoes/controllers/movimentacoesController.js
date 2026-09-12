@@ -37,6 +37,8 @@ function createMovimentacoesController({
 					tecnico: req.query.tecnico,
 					produto: req.query.produto,
 					status: req.query.status,
+					cidade: req.query.cidade,
+					estoqueDestino: req.query.estoqueDestino,
 				}),
 			);
 		} catch (error) {
@@ -112,20 +114,24 @@ function createMovimentacoesController({
 
 	async function getCidades(req, res, next) {
 		try {
-			const { dataInicio, dataFim } = req.query;
+			const { dataInicio, dataFim, pageRetiradas, pageDevolvidas, pageEstoques } =
+				req.query;
 			const [rankingCidadesRetiradas, rankingCidadesDevolvidas, rankingEstoques] =
 				await Promise.all([
 					movimentacoesRepository.getRankingCidadesRetiradas({
 						dataInicio,
 						dataFim,
+						page: pageRetiradas,
 					}),
 					movimentacoesRepository.getRankingCidadesDevolvidas({
 						dataInicio,
 						dataFim,
+						page: pageDevolvidas,
 					}),
 					movimentacoesRepository.getRankingEstoquesRecebimento({
 						dataInicio,
 						dataFim,
+						page: pageEstoques,
 					}),
 				]);
 			res.json({

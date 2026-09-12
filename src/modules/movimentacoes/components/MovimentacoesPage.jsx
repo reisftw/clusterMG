@@ -68,6 +68,11 @@ const STATUS_ICON = {
 
 const SCAN_POLL_INTERVAL_MS = 1500;
 const SCAN_POLL_TIMEOUT_MS = 2 * 60 * 1000;
+// Varredura do ano todo: centenas de paginas por janela de 15 dias, dezenas
+// de janelas — pode legitimamente levar mais de uma hora. Timeout de
+// acompanhamento bem mais generoso (o job roda no backend de qualquer
+// forma; isso so controla quando o front para de fazer polling sozinho).
+const SCAN_POLL_TIMEOUT_ANO_TODO_MS = 3 * 60 * 60 * 1000;
 
 function formatDateTime(value) {
 	if (!value) return "-";
@@ -160,6 +165,17 @@ function descreverPeriodoComDatas(tipo, valor, resumoPorEmpresaDia) {
 	return inicio === fim ? inicio : `${inicio} a ${fim}`;
 }
 
+// Extraido pra evitar ternario aninhado (mesmo padrao usado em Sidebar.jsx).
+function resolveAnoTodoTitle(scanning, config) {
+	if (scanning) {
+		return "Já tem uma varredura em andamento — clique para reabrir o progresso.";
+	}
+	if (config?.backfillAnualConcluidoEm) {
+		return `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL}. Última varredura completa em ${formatDateTime(config.backfillAnualConcluidoEm)}.`;
+	}
+	return `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} (demorado: consulta todo o histórico do ano em janelas de 15 dias). Rode uma vez para coletar o histórico; depois disso o botão "Varredura agora" cobre o dia a dia.`;
+}
+
 function groupResumoPorDia(resumo) {
 	const map = new Map();
 	for (const item of resumo || []) {
@@ -177,6 +193,82 @@ const ABAS = {
 	EQUIPAMENTOS: "equipamentos",
 	ORDENS_FECHADAS: "ordens_fechadas",
 };
+
+// Card de ranking de Cidades: 10 itens por pagina (pedido explicito), cada
+// linha clicavel abre o modal de detalhe (abrirDetalheCidade, na pagina).
+function RankingCidadeCard({
+	icon: Icon,
+	iconClassName,
+	titulo,
+	descricao,
+	loading,
+	ranking,
+	itemKey,
+	page,
+	onPageChange,
+	onSelecionar,
+}) {
+	const items = ranking?.items || [];
+	const totalPages = ranking?.totalPages || 1;
+	return (
+		<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+			<div className="mb-3 flex items-center gap-2">
+				<Icon size={18} className={iconClassName} />
+				<h2 className="text-base font-bold text-gray-900">{titulo}</h2>
+			</div>
+			<p className="mb-3 text-xs text-gray-500">{descricao}</p>
+			<div className="space-y-2">
+				{loading ? (
+					<p className="text-sm text-gray-500">Carregando...</p>
+				) : (
+					items.map((item, index) => (
+						<button
+							key={item[itemKey]}
+							type="button"
+							onClick={() => onSelecionar(item[itemKey])}
+							className="flex w-full items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left hover:bg-gray-100"
+						>
+							<span className="truncate text-sm font-semibold text-gray-700">
+								{(page - 1) * (ranking?.limit || 10) + index + 1}. {item[itemKey]}
+							</span>
+							<span className="ml-2 shrink-0 text-sm font-black text-gray-900">
+								{item.total}
+							</span>
+						</button>
+					))
+				)}
+				{!loading && !items.length ? (
+					<p className="text-sm text-gray-500">Sem dados no período.</p>
+				) : null}
+			</div>
+			{!loading && totalPages > 1 ? (
+				<div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+					<span>
+						Página {page} de {totalPages}
+					</span>
+					<div className="flex gap-1">
+						<button
+							type="button"
+							disabled={page <= 1}
+							onClick={() => onPageChange(Math.max(1, page - 1))}
+							className="rounded-md border border-gray-200 px-2 py-1 font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Anterior
+						</button>
+						<button
+							type="button"
+							disabled={page >= totalPages}
+							onClick={() => onPageChange(page + 1)}
+							className="rounded-md border border-gray-200 px-2 py-1 font-semibold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Próxima
+						</button>
+					</div>
+				</div>
+			) : null}
+		</div>
+	);
+}
 
 export default function MovimentacoesPage() {
 	const { currentUser } = useAuthContext();
@@ -205,13 +297,33 @@ export default function MovimentacoesPage() {
 	const [loadingDashboard, setLoadingDashboard] = useState(true);
 	const [dashboardError, setDashboardError] = useState("");
 
+	const CIDADES_VAZIO = {
+		items: [],
+		page: 1,
+		totalPages: 1,
+		total: 0,
+	};
 	const [cidades, setCidades] = useState({
-		rankingCidadesRetiradas: [],
-		rankingCidadesDevolvidas: [],
-		rankingEstoques: [],
+		rankingCidadesRetiradas: CIDADES_VAZIO,
+		rankingCidadesDevolvidas: CIDADES_VAZIO,
+		rankingEstoques: CIDADES_VAZIO,
 	});
 	const [loadingCidades, setLoadingCidades] = useState(true);
 	const [cidadesError, setCidadesError] = useState("");
+	const [cidadesPageRetiradas, setCidadesPageRetiradas] = useState(1);
+	const [cidadesPageDevolvidas, setCidadesPageDevolvidas] = useState(1);
+	const [cidadesPageEstoques, setCidadesPageEstoques] = useState(1);
+
+	const [cidadeDetalhe, setCidadeDetalhe] = useState(null);
+	const [cidadeDetalheData, setCidadeDetalheData] = useState({
+		items: [],
+		page: 1,
+		totalPages: 1,
+		total: 0,
+	});
+	const [cidadeDetalhePage, setCidadeDetalhePage] = useState(1);
+	const [cidadeDetalheLoading, setCidadeDetalheLoading] = useState(false);
+	const [cidadeDetalheError, setCidadeDetalheError] = useState("");
 
 	const [equipamentos, setEquipamentos] = useState({ produtos: [] });
 	const [loadingEquipamentos, setLoadingEquipamentos] = useState(true);
@@ -225,6 +337,16 @@ export default function MovimentacoesPage() {
 	const [resumoCategorias, setResumoCategorias] = useState([]);
 	const [loadingResumoCategoria, setLoadingResumoCategoria] = useState(false);
 	const [resumoCategoriaError, setResumoCategoriaError] = useState("");
+	// Filtro proprio do modal (independente do filtro geral da pagina) —
+	// pedido explicito: o resumo por categoria estava sempre herdando o
+	// periodo do painel, entao trocar o filtro geral pra "Mes" fazia o
+	// resumo tambem ficar preso no mes sem o usuario perceber.
+	const [resumoCategoriaPeriodoTipo, setResumoCategoriaPeriodoTipo] = useState(
+		PERIODO_TIPOS.TODOS,
+	);
+	const [resumoCategoriaDia, setResumoCategoriaDia] = useState(hojeYMD());
+	const [resumoCategoriaMes, setResumoCategoriaMes] = useState(mesAtualYM());
+	const [resumoCategoriaAno, setResumoCategoriaAno] = useState(String(ANO_ATUAL));
 
 	const [mesCalendario, setMesCalendario] = useState(
 		() => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -269,6 +391,10 @@ export default function MovimentacoesPage() {
 
 	const [scanJob, setScanJob] = useState(null);
 	const [scanning, setScanning] = useState(false);
+	// Varredura "ano todo" e sabidamente longa (centenas de paginas por
+	// janela, dezenas de janelas) — usa um timeout de acompanhamento bem
+	// maior do que a varredura normal (24h), que costuma terminar rapido.
+	const [scanAnoTodoAtivo, setScanAnoTodoAtivo] = useState(false);
 	const [scanError, setScanError] = useState("");
 	const [showScanModal, setShowScanModal] = useState(false);
 	const pollTimerRef = useRef(null);
@@ -321,6 +447,9 @@ export default function MovimentacoesPage() {
 			const data = await buscarCidadesMovimentacoes({
 				dataInicio: intervaloPeriodo.dataInicio,
 				dataFim: intervaloPeriodo.dataFim,
+				pageRetiradas: cidadesPageRetiradas,
+				pageDevolvidas: cidadesPageDevolvidas,
+				pageEstoques: cidadesPageEstoques,
 			});
 			setCidades(data);
 		} catch {
@@ -328,7 +457,7 @@ export default function MovimentacoesPage() {
 		} finally {
 			setLoadingCidades(false);
 		}
-	}, [intervaloPeriodo]);
+	}, [intervaloPeriodo, cidadesPageRetiradas, cidadesPageDevolvidas, cidadesPageEstoques]);
 
 	useEffect(() => {
 		if (aba === ABAS.CIDADES) carregarCidades();
@@ -338,6 +467,44 @@ export default function MovimentacoesPage() {
 		setDiaSelecionado(diaChave);
 		setDiaModalPage(1);
 	};
+
+	// Abre o detalhe (clientes/movimentacoes) de uma linha do ranking de
+	// Cidades — tipo "cidade" cobre os rankings de retiradas/devolvidas
+	// (statusFiltro opcional restringe a "casada" no ranking de devolvidas),
+	// tipo "estoque" cobre o ranking de estoques.
+	const abrirDetalheCidade = ({ tipo, valor, statusFiltro }) => {
+		setCidadeDetalhe({ tipo, valor, statusFiltro });
+		setCidadeDetalhePage(1);
+	};
+
+	useEffect(() => {
+		if (!cidadeDetalhe) return;
+		let ativo = true;
+		setCidadeDetalheLoading(true);
+		setCidadeDetalheError("");
+		listarMovimentacoes({
+			page: cidadeDetalhePage,
+			limit: 10,
+			dataInicio: intervaloPeriodo.dataInicio,
+			dataFim: intervaloPeriodo.dataFim,
+			status: cidadeDetalhe.statusFiltro,
+			...(cidadeDetalhe.tipo === "estoque"
+				? { estoqueDestino: cidadeDetalhe.valor }
+				: { cidade: cidadeDetalhe.valor }),
+		})
+			.then((data) => {
+				if (ativo) setCidadeDetalheData(data);
+			})
+			.catch(() => {
+				if (ativo) setCidadeDetalheError("Não foi possível carregar o detalhe.");
+			})
+			.finally(() => {
+				if (ativo) setCidadeDetalheLoading(false);
+			});
+		return () => {
+			ativo = false;
+		};
+	}, [cidadeDetalhe, cidadeDetalhePage, intervaloPeriodo]);
 
 	useEffect(() => {
 		if (!diaSelecionado) return;
@@ -438,10 +605,11 @@ export default function MovimentacoesPage() {
 			// pelas outras abas de Movimentacoes enquanto isso.
 			setShowOfModal(false);
 			setOfArquivos([]);
-		} catch {
+		} catch (error) {
 			setOfProcessando(false);
 			setOfError(
-				"Não foi possível ler a(s) planilha(s) ou iniciar a conciliação. Confira as colunas (nome e cidade).",
+				error?.message ||
+					"Não foi possível ler a(s) planilha(s) ou iniciar a conciliação. Confira as colunas (nome e cidade).",
 			);
 		}
 	};
@@ -510,14 +678,24 @@ export default function MovimentacoesPage() {
 		}
 	};
 
-	const handleAbrirResumoCategoria = async () => {
-		setShowResumoCategoriaModal(true);
+	const resumoCategoriaValorAtual = () => {
+		if (resumoCategoriaPeriodoTipo === PERIODO_TIPOS.DIA) return resumoCategoriaDia;
+		if (resumoCategoriaPeriodoTipo === PERIODO_TIPOS.MES) return resumoCategoriaMes;
+		if (resumoCategoriaPeriodoTipo === PERIODO_TIPOS.ANO) return resumoCategoriaAno;
+		return "";
+	};
+
+	const carregarResumoCategoria = async () => {
 		setLoadingResumoCategoria(true);
 		setResumoCategoriaError("");
 		try {
+			const intervalo = calcularIntervaloPeriodo(
+				resumoCategoriaPeriodoTipo,
+				resumoCategoriaValorAtual(),
+			);
 			const data = await buscarResumoCategoriaEquipamentos({
-				dataInicio: intervaloPeriodo.dataInicio,
-				dataFim: intervaloPeriodo.dataFim,
+				dataInicio: intervalo.dataInicio,
+				dataFim: intervalo.dataFim,
 			});
 			setResumoCategorias(data.categorias || []);
 		} catch {
@@ -525,6 +703,11 @@ export default function MovimentacoesPage() {
 		} finally {
 			setLoadingResumoCategoria(false);
 		}
+	};
+
+	const handleAbrirResumoCategoria = async () => {
+		setShowResumoCategoriaModal(true);
+		await carregarResumoCategoria();
 	};
 
 	const handleGerarPdfResumoCategoria = async () => {
@@ -540,8 +723,8 @@ export default function MovimentacoesPage() {
 		pdf.setFont("helvetica", "normal");
 		pdf.setFontSize(9);
 		const periodoTexto = descreverPeriodoComDatas(
-			periodoAplicado.tipo,
-			periodoAplicado.valor,
+			resumoCategoriaPeriodoTipo,
+			resumoCategoriaValorAtual(),
 			dashboard.resumoPorEmpresaDia,
 		);
 		pdf.text(`Período: ${periodoTexto}`, 40, 62);
@@ -602,6 +785,7 @@ export default function MovimentacoesPage() {
 					const finalizado = job.status === "completed" || job.status === "failed";
 					if (finalizado) {
 						setScanning(false);
+						setScanAnoTodoAtivo(false);
 						carregarDashboard();
 						carregarLista();
 						carregarCidades();
@@ -610,10 +794,16 @@ export default function MovimentacoesPage() {
 							.catch(() => {});
 						return;
 					}
-					if (Date.now() - startedAt > SCAN_POLL_TIMEOUT_MS) {
-						setScanning(false);
+					const timeoutMs = scanAnoTodoAtivo
+						? SCAN_POLL_TIMEOUT_ANO_TODO_MS
+						: SCAN_POLL_TIMEOUT_MS;
+					if (Date.now() - startedAt > timeoutMs) {
+						// So para de acompanhar automaticamente — o job continua
+						// rodando no backend. Nao mexe em "scanning" nem no job:
+						// reabrir o modal (botao "Varredura em andamento") retoma
+						// o polling de onde parou.
 						setScanError(
-							"A varredura está demorando mais que o esperado. Confira novamente em instantes.",
+							"Parou de atualizar sozinho, mas a varredura continua rodando no backend. Feche e reabra o modal para retomar o acompanhamento.",
 						);
 						return;
 					}
@@ -623,11 +813,12 @@ export default function MovimentacoesPage() {
 					);
 				})
 				.catch(() => {
-					setScanning(false);
-					setScanError("Não foi possível acompanhar a varredura.");
+					setScanError(
+						"Não foi possível acompanhar a varredura agora. Feche e reabra o modal para tentar de novo.",
+					);
 				});
 		},
-		[carregarDashboard, carregarLista, carregarCidades],
+		[carregarDashboard, carregarLista, carregarCidades, scanAnoTodoAtivo],
 	);
 
 	const handleAplicarFiltroPeriodo = () => {
@@ -670,6 +861,7 @@ export default function MovimentacoesPage() {
 		pararPolling();
 		setScanError("");
 		setScanning(true);
+		setScanAnoTodoAtivo(anoTodo);
 		setShowScanModal(true);
 		try {
 			const intervalo = anoTodo
@@ -684,7 +876,19 @@ export default function MovimentacoesPage() {
 			acompanharJob(job.id, Date.now());
 		} catch {
 			setScanning(false);
+			setScanAnoTodoAtivo(false);
 			setScanError("Não foi possível iniciar a varredura.");
+		}
+	};
+
+	// Reabre o modal de uma varredura que continua rodando no backend. Se o
+	// polling automatico tinha parado (timeout do front), retoma dali —
+	// senao so mostra o progresso que ja esta sendo acompanhado.
+	const handleReabrirVarredura = () => {
+		setShowScanModal(true);
+		if (!pollTimerRef.current && scanJob?.id) {
+			setScanError("");
+			acompanharJob(scanJob.id, Date.now());
 		}
 	};
 
@@ -821,24 +1025,29 @@ export default function MovimentacoesPage() {
 						</button>
 						<button
 							type="button"
-							onClick={() => handleIniciarVarredura()}
-							disabled={scanning}
-							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+							onClick={() =>
+								scanning ? handleReabrirVarredura() : handleIniciarVarredura()
+							}
+							title={
+								scanning
+									? "Já tem uma varredura em andamento — clique para reabrir o progresso."
+									: undefined
+							}
+							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"
 						>
 							<RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
-							{scanning ? "Varredura em andamento..." : "Varredura agora"}
+							{scanning ? "Varredura em andamento (ver progresso)" : "Varredura agora"}
 						</button>
 						{isAdmin ? (
 							<button
 								type="button"
-								onClick={() => handleIniciarVarredura({ anoTodo: true })}
-								disabled={scanning}
-								title={
-									config?.backfillAnualConcluidoEm
-										? `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL}. Última varredura completa em ${formatDateTime(config.backfillAnualConcluidoEm)}.`
-										: `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} (demorado: consulta todo o histórico do ano em janelas de 15 dias). Rode uma vez para coletar o histórico; depois disso o botão "Varredura agora" cobre o dia a dia.`
+								onClick={() =>
+									scanning
+										? handleReabrirVarredura()
+										: handleIniciarVarredura({ anoTodo: true })
 								}
-								className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+								title={resolveAnoTodoTitle(scanning, config)}
+								className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50"
 							>
 								<CalendarRange size={13} />
 								Ano todo (admin)
@@ -1168,108 +1377,46 @@ export default function MovimentacoesPage() {
 					) : null}
 
 					<div className="grid gap-5 lg:grid-cols-3">
-						<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-							<div className="mb-3 flex items-center gap-2">
-								<MapPin size={18} className="text-red-500" />
-								<h2 className="text-base font-bold text-gray-900">
-									Cidades com mais retirada
-								</h2>
-							</div>
-							<p className="mb-3 text-xs text-gray-500">
-								Baseado na cidade da O.S. do cliente, quando a devolução casa
-								com uma O.S.
-							</p>
-							<div className="space-y-2">
-								{loadingCidades ? (
-									<p className="text-sm text-gray-500">Carregando...</p>
-								) : (
-									(cidades.rankingCidadesRetiradas || []).map((item, index) => (
-										<div
-											key={item.cidade}
-											className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-										>
-											<span className="text-sm font-semibold text-gray-700">
-												{index + 1}. {item.cidade}
-											</span>
-											<span className="text-sm font-black text-gray-900">
-												{item.total}
-											</span>
-										</div>
-									))
-								)}
-								{!loadingCidades && !cidades.rankingCidadesRetiradas?.length ? (
-									<p className="text-sm text-gray-500">Sem dados no período.</p>
-								) : null}
-							</div>
-						</div>
+						<RankingCidadeCard
+							icon={MapPin}
+							iconClassName="text-red-500"
+							titulo="Cidades com mais retirada"
+							descricao="Baseado na cidade da O.S. do cliente, quando a devolução casa com uma O.S."
+							loading={loadingCidades}
+							ranking={cidades.rankingCidadesRetiradas}
+							itemKey="cidade"
+							page={cidadesPageRetiradas}
+							onPageChange={setCidadesPageRetiradas}
+							onSelecionar={(valor) => abrirDetalheCidade({ tipo: "cidade", valor })}
+						/>
 
-						<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-							<div className="mb-3 flex items-center gap-2">
-								<Building2 size={18} className="text-green-600" />
-								<h2 className="text-base font-bold text-gray-900">
-									Cidades com devolução confirmada
-								</h2>
-							</div>
-							<p className="mb-3 text-xs text-gray-500">
-								Somente devoluções que já baixaram a O.S. do mapa/match.
-							</p>
-							<div className="space-y-2">
-								{loadingCidades ? (
-									<p className="text-sm text-gray-500">Carregando...</p>
-								) : (
-									(cidades.rankingCidadesDevolvidas || []).map((item, index) => (
-										<div
-											key={item.cidade}
-											className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-										>
-											<span className="text-sm font-semibold text-gray-700">
-												{index + 1}. {item.cidade}
-											</span>
-											<span className="text-sm font-black text-gray-900">
-												{item.total}
-											</span>
-										</div>
-									))
-								)}
-								{!loadingCidades && !cidades.rankingCidadesDevolvidas?.length ? (
-									<p className="text-sm text-gray-500">Sem dados no período.</p>
-								) : null}
-							</div>
-						</div>
+						<RankingCidadeCard
+							icon={Building2}
+							iconClassName="text-green-600"
+							titulo="Cidades com devolução confirmada"
+							descricao="Somente devoluções que já baixaram a O.S. do mapa/match."
+							loading={loadingCidades}
+							ranking={cidades.rankingCidadesDevolvidas}
+							itemKey="cidade"
+							page={cidadesPageDevolvidas}
+							onPageChange={setCidadesPageDevolvidas}
+							onSelecionar={(valor) =>
+								abrirDetalheCidade({ tipo: "cidade", valor, statusFiltro: "casada" })
+							}
+						/>
 
-						<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-							<div className="mb-3 flex items-center gap-2">
-								<Warehouse size={18} className="text-blue-600" />
-								<h2 className="text-base font-bold text-gray-900">
-									Estoques que mais receberam
-								</h2>
-							</div>
-							<p className="mb-3 text-xs text-gray-500">
-								Local de estoque de destino do equipamento devolvido.
-							</p>
-							<div className="space-y-2">
-								{loadingCidades ? (
-									<p className="text-sm text-gray-500">Carregando...</p>
-								) : (
-									(cidades.rankingEstoques || []).map((item, index) => (
-										<div
-											key={item.estoque}
-											className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
-										>
-											<span className="text-sm font-semibold text-gray-700">
-												{index + 1}. {item.estoque}
-											</span>
-											<span className="text-sm font-black text-gray-900">
-												{item.total}
-											</span>
-										</div>
-									))
-								)}
-								{!loadingCidades && !cidades.rankingEstoques?.length ? (
-									<p className="text-sm text-gray-500">Sem dados no período.</p>
-								) : null}
-							</div>
-						</div>
+						<RankingCidadeCard
+							icon={Warehouse}
+							iconClassName="text-blue-600"
+							titulo="Estoques que mais receberam"
+							descricao="Local de estoque de destino do equipamento devolvido."
+							loading={loadingCidades}
+							ranking={cidades.rankingEstoques}
+							itemKey="estoque"
+							page={cidadesPageEstoques}
+							onPageChange={setCidadesPageEstoques}
+							onSelecionar={(valor) => abrirDetalheCidade({ tipo: "estoque", valor })}
+						/>
 					</div>
 				</section>
 			) : aba === ABAS.EQUIPAMENTOS ? (
@@ -1687,6 +1834,73 @@ export default function MovimentacoesPage() {
 					</div>
 
 					<div className="space-y-4 p-5">
+						<div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+							<p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+								Filtrar período
+							</p>
+							<div className="mb-2 grid grid-cols-4 gap-2">
+								{[
+									{ tipo: PERIODO_TIPOS.TODOS, label: "Todos" },
+									{ tipo: PERIODO_TIPOS.DIA, label: "Dia" },
+									{ tipo: PERIODO_TIPOS.MES, label: "Mês" },
+									{ tipo: PERIODO_TIPOS.ANO, label: "Ano" },
+								].map((opcao) => (
+									<button
+										key={opcao.tipo}
+										type="button"
+										onClick={() => {
+											setResumoCategoriaPeriodoTipo(opcao.tipo);
+										}}
+										className={`rounded-lg border px-2 py-2 text-xs font-bold ${
+											resumoCategoriaPeriodoTipo === opcao.tipo
+												? "border-blue-500 bg-blue-50 text-blue-700"
+												: "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+										}`}
+									>
+										{opcao.label}
+									</button>
+								))}
+							</div>
+
+							{resumoCategoriaPeriodoTipo === PERIODO_TIPOS.DIA ? (
+								<input
+									type="date"
+									value={resumoCategoriaDia}
+									onChange={(event) => setResumoCategoriaDia(event.target.value)}
+									className="input-field mb-2 w-full"
+								/>
+							) : null}
+							{resumoCategoriaPeriodoTipo === PERIODO_TIPOS.MES ? (
+								<input
+									type="month"
+									value={resumoCategoriaMes}
+									onChange={(event) => setResumoCategoriaMes(event.target.value)}
+									className="input-field mb-2 w-full"
+								/>
+							) : null}
+							{resumoCategoriaPeriodoTipo === PERIODO_TIPOS.ANO ? (
+								<select
+									value={resumoCategoriaAno}
+									onChange={(event) => setResumoCategoriaAno(event.target.value)}
+									className="input-field mb-2 w-full"
+								>
+									{ANOS_DISPONIVEIS.map((ano) => (
+										<option key={ano} value={ano}>
+											{ano}
+										</option>
+									))}
+								</select>
+							) : null}
+
+							<button
+								type="button"
+								onClick={carregarResumoCategoria}
+								className="w-full rounded-lg bg-gray-900 px-3 py-2 text-xs font-bold text-white hover:bg-gray-800"
+							>
+								Aplicar filtro
+							</button>
+						</div>
+
 						{resumoCategoriaError ? (
 							<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
 								{resumoCategoriaError}
@@ -1861,6 +2075,117 @@ export default function MovimentacoesPage() {
 											)
 										}
 										disabled={diaModalData.page >= diaModalData.totalPages}
+										className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:opacity-40"
+									>
+										Próxima
+									</button>
+								</div>
+							</div>
+						) : null}
+					</div>
+				</div>
+			) : null}
+
+			{cidadeDetalhe ? (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+					<div className="w-full max-w-2xl rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl">
+						<div className="mb-4 flex items-start justify-between gap-4">
+							<div>
+								<p className="text-base font-bold text-gray-900">
+									{cidadeDetalhe.tipo === "estoque" ? "Estoque" : "Cidade"}:{" "}
+									{cidadeDetalhe.valor}
+								</p>
+								<p className="text-sm text-gray-500">
+									{cidadeDetalhe.statusFiltro === "casada"
+										? "Devoluções confirmadas (O.S. baixada)"
+										: "Clientes que entregaram"}{" "}
+									· {cidadeDetalheData.total} registro(s)
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => setCidadeDetalhe(null)}
+								className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 transition-colors hover:bg-gray-50"
+							>
+								Fechar
+							</button>
+						</div>
+
+						{cidadeDetalheError ? (
+							<p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{cidadeDetalheError}
+							</p>
+						) : null}
+
+						<div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+							{cidadeDetalheLoading ? (
+								<p className="py-6 text-center text-sm text-gray-500">
+									Carregando...
+								</p>
+							) : (
+								cidadeDetalheData.items.map((item) => {
+									const StatusIcon = STATUS_ICON[item.statusMatch] || AlertTriangle;
+									return (
+										<div key={item.id} className="rounded-xl bg-gray-50 p-3">
+											<div className="flex flex-wrap items-center justify-between gap-2">
+												<div className="min-w-0">
+													<p className="truncate text-sm font-bold text-gray-800">
+														{item.parceiroNome || "-"}
+													</p>
+													<p className="mt-0.5 text-xs text-gray-500">
+														{item.empresaNome || "-"} · {item.registradoPor || "-"}
+													</p>
+												</div>
+												<span
+													className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${
+														STATUS_STYLE[item.statusMatch] || STATUS_STYLE.pendente
+													}`}
+												>
+													<StatusIcon size={13} />
+													{STATUS_LABEL[item.statusMatch] || item.statusMatch}
+												</span>
+											</div>
+											<p className="mt-1 text-xs text-gray-500">
+												{item.produtoNome || "-"} ·{" "}
+												<span className="font-mono">{item.serie}</span>
+												{item.osNumero ? ` · O.S. ${item.osNumero}` : ""} ·{" "}
+												{formatDateTime(item.emitidoEm)}
+											</p>
+										</div>
+									);
+								})
+							)}
+							{!cidadeDetalheLoading && !cidadeDetalheData.items.length ? (
+								<p className="py-6 text-center text-sm text-gray-500">
+									Nenhum registro encontrado.
+								</p>
+							) : null}
+						</div>
+
+						{cidadeDetalheData.totalPages > 1 ? (
+							<div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+								<p className="text-sm text-gray-500">
+									Página {cidadeDetalheData.page} de {cidadeDetalheData.totalPages}
+								</p>
+								<div className="flex items-center gap-2">
+									<button
+										type="button"
+										onClick={() =>
+											setCidadeDetalhePage((current) => Math.max(1, current - 1))
+										}
+										disabled={cidadeDetalheData.page <= 1}
+										className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:opacity-40"
+									>
+										Anterior
+									</button>
+									<button
+										type="button"
+										onClick={() =>
+											setCidadeDetalhePage((current) =>
+												Math.min(cidadeDetalheData.totalPages, current + 1),
+											)
+										}
+										disabled={cidadeDetalheData.page >= cidadeDetalheData.totalPages}
 										className="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-600 disabled:opacity-40"
 									>
 										Próxima

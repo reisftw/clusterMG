@@ -57,10 +57,11 @@ describe("movimentacoesRepository", () => {
 		]);
 	});
 
-	it("getRankingCidadesRetiradas agrupa por cidade dentro do periodo", async () => {
-		const dbQuery = vi.fn(async () => ({
-			rows: [{ cidade: "Belo Horizonte", total: 5 }],
-		}));
+	it("getRankingCidadesRetiradas agrupa por cidade dentro do periodo, paginado", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [{ total: 1 }] })
+			.mockResolvedValueOnce({ rows: [{ label: "Belo Horizonte", total: 5 }] });
 		const repository = loadRepository(dbQuery);
 
 		const ranking = await repository.getRankingCidadesRetiradas({
@@ -68,12 +69,17 @@ describe("movimentacoesRepository", () => {
 			dataFim: "2026-12-31T23:59:59.999Z",
 		});
 
-		expect(ranking).toEqual([{ cidade: "Belo Horizonte", total: 5 }]);
+		expect(ranking).toMatchObject({
+			items: [{ cidade: "Belo Horizonte", total: 5 }],
+			page: 1,
+			total: 1,
+			totalPages: 1,
+		});
 		// Nao filtra linha sem cidade — agrupa como "Nao identificada" (senao
 		// o ranking parece "sem dados" quando a maioria ainda esta sem match).
-		expect(dbQuery.mock.calls[0][0]).toContain("Não identificada");
-		expect(dbQuery.mock.calls[0][0]).not.toContain("cidade is not null");
-		expect(dbQuery.mock.calls[0][0]).not.toContain("status_match = 'casada'");
+		expect(dbQuery.mock.calls[1][0]).toContain("Não identificada");
+		expect(dbQuery.mock.calls[1][0]).not.toContain("cidade is not null");
+		expect(dbQuery.mock.calls[1][0]).not.toContain("status_match = 'casada'");
 	});
 
 	it("getRankingCidadesDevolvidas so conta status_match = casada", async () => {
@@ -85,16 +91,20 @@ describe("movimentacoesRepository", () => {
 		expect(dbQuery.mock.calls[0][0]).toContain("status_match = 'casada'");
 	});
 
-	it("getRankingEstoquesRecebimento agrupa por estoque_destino", async () => {
-		const dbQuery = vi.fn(async () => ({
-			rows: [{ estoque: "Estoque Central", total: 3 }],
-		}));
+	it("getRankingEstoquesRecebimento agrupa por estoque_destino, paginado", async () => {
+		const dbQuery = vi
+			.fn()
+			.mockResolvedValueOnce({ rows: [{ total: 1 }] })
+			.mockResolvedValueOnce({ rows: [{ label: "Estoque Central", total: 3 }] });
 		const repository = loadRepository(dbQuery);
 
 		const ranking = await repository.getRankingEstoquesRecebimento({});
 
-		expect(ranking).toEqual([{ estoque: "Estoque Central", total: 3 }]);
-		expect(dbQuery.mock.calls[0][0]).toContain("trim(estoque_destino)");
+		expect(ranking).toMatchObject({
+			items: [{ estoque: "Estoque Central", total: 3 }],
+			total: 1,
+		});
+		expect(dbQuery.mock.calls[1][0]).toContain("trim(estoque_destino)");
 	});
 
 	it("saveProdutoConfig grava categoria e valor do equipamento", async () => {

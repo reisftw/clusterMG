@@ -8,11 +8,16 @@ const sempreIntegrationPath = require.resolve("./api/src/sempreIntegration.js");
 const repositoryPath = require.resolve(
 	"./api/src/movimentacoesOrdensFechadasRepository.js",
 );
+const movimentacoesRepositoryPath = require.resolve(
+	"./api/src/movimentacoesRepository.js",
+);
 
 function clearModules() {
-	[servicePath, sempreIntegrationPath, repositoryPath].forEach((modulePath) => {
-		delete require.cache[modulePath];
-	});
+	[servicePath, sempreIntegrationPath, repositoryPath, movimentacoesRepositoryPath].forEach(
+		(modulePath) => {
+			delete require.cache[modulePath];
+		},
+	);
 }
 
 function stubModule(modulePath, exportsValue) {
@@ -24,10 +29,19 @@ function stubModule(modulePath, exportsValue) {
 	};
 }
 
-function loadService({ requestSempreRaw, createJob, updateJob, getJob }) {
+function loadService({
+	requestSempreRaw,
+	createJob,
+	updateJob,
+	getJob,
+	// Padrao: ninguem ja salvo no painel — cai direto pra busca ao vivo (o
+	// mesmo comportamento que os testes ja esperavam antes da pre-checagem).
+	buscarMovimentacaoPorParceiro = vi.fn(async () => null),
+}) {
 	clearModules();
 	stubModule(sempreIntegrationPath, { requestSempreRaw });
 	stubModule(repositoryPath, { createJob, updateJob, getJob });
+	stubModule(movimentacoesRepositoryPath, { buscarMovimentacaoPorParceiro });
 	return require("./api/src/movimentacoesOrdensFechadas.js");
 }
 
@@ -230,5 +244,46 @@ describe("movimentacoesOrdensFechadas", () => {
 		expect(requestSempreRaw).toHaveBeenCalledTimes(1);
 		expect(jobSalvo.entregues).toBe(1);
 		expect(jobSalvo.resultado.itens[0].entregue).toBe(true);
+	});
+
+	it("evita retrabalho: quando o cliente ja esta salvo no painel, nem consulta o Portal de Movimentacoes ao vivo", async () => {
+		const requestSempreRaw = vi.fn();
+		const buscarMovimentacaoPorParceiro = vi.fn(async ({ nome }) => ({
+			parceiroNome: nome,
+			tipoOperacao: "Devolução de comodato",
+			emitidoEm: "2026-08-05T00:00:00.000Z",
+			numero: "1234",
+		}));
+		let jobSalvo = null;
+		const updateJob = vi.fn(async (id, patch) => {
+			if (patch.resultado) jobSalvo = patch;
+			return { id, ...patch };
+		});
+
+		const service = loadService({
+			requestSempreRaw,
+			buscarMovimentacaoPorParceiro,
+			createJob: vi.fn(async () => ({ id: "job-painel", status: "queued" })),
+			updateJob,
+			getJob: vi.fn(),
+		});
+
+		await service.runConciliacao({
+			rows: [{ nome: "Cliente Já Salvo", cidade: "BH" }],
+			dataInicio: "2026-08-01T00:00:00.000Z",
+			dataFim: "2026-08-31T23:59:59.000Z",
+		});
+		await new Promise((resolve) => setImmediate(resolve));
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(buscarMovimentacaoPorParceiro).toHaveBeenCalledWith({
+			nome: "Cliente Já Salvo",
+			dataInicio: "2026-08-01T00:00:00.000Z",
+			dataFim: "2026-08-31T23:59:59.000Z",
+		});
+		expect(requestSempreRaw).not.toHaveBeenCalled();
+		expect(jobSalvo.status).toBe("completed");
+		expect(jobSalvo.entregues).toBe(1);
+		expect(jobSalvo.resultado.itens[0].movimentacao.numero).toBe("1234");
 	});
 });

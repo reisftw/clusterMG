@@ -9,6 +9,7 @@ const DEFAULT_CONFIG = Object.freeze({
 	lastRunDate: "",
 	lastRunAt: null,
 	backfillAnualConcluidoEm: null,
+	backfillUltimaJanelaFim: null,
 });
 
 function text(value) {
@@ -145,6 +146,38 @@ async function marcarComoSemMatch(id) {
 	return result.rows[0] ? mapMovimentacao(result.rows[0]) : null;
 }
 
+// Usado pela aba Ordens Fechadas como pre-checagem: antes de sair
+// consultando o Portal de Movimentacoes ao vivo (lento, ver
+// movimentacoesOrdensFechadas.js), confere se o cliente ja aparece no que
+// foi salvo em movimentacoes_estoque (painel de Movimentacoes) — evita
+// retrabalho quando a devolucao ja foi capturada por uma varredura normal.
+// Comparacao tolerante nos dois sentidos (mesmo criterio usado no match ao
+// vivo), so por "Devolucao de comodato"/"Retirada" (o que essa tabela
+// guarda) — nao substitui a busca ampla, so adianta quem ja bate aqui.
+async function buscarMovimentacaoPorParceiro({ nome, dataInicio, dataFim } = {}) {
+	const nomeNormalizado = text(nome);
+	if (!nomeNormalizado) return null;
+	const result = await db.query(
+		`select parceiro_nome, tipo_operacao, emitido_em, numero
+		 from movimentacoes_estoque
+		 where parceiro_nome is not null
+		   and (parceiro_nome ilike ('%' || $1 || '%') or $1 ilike ('%' || parceiro_nome || '%'))
+		   and ($2::timestamptz is null or emitido_em >= $2)
+		   and ($3::timestamptz is null or emitido_em <= $3)
+		 order by emitido_em desc
+		 limit 1`,
+		[nomeNormalizado, dataInicio || null, dataFim || null],
+	);
+	const row = result.rows[0];
+	if (!row) return null;
+	return {
+		parceiroNome: row.parceiro_nome,
+		tipoOperacao: row.tipo_operacao,
+		emitidoEm: row.emitido_em,
+		numero: row.numero,
+	};
+}
+
 async function listMovimentacoes({
 	page = 1,
 	limit = 20,
@@ -154,6 +187,8 @@ async function listMovimentacoes({
 	tecnico,
 	produto,
 	status,
+	cidade,
+	estoqueDestino,
 } = {}) {
 	const normalizedLimit = normalizeLimit(limit);
 	const normalizedPage = normalizePage(page);
@@ -171,6 +206,15 @@ async function listMovimentacoes({
 	if (tecnico) addCondition("registrado_por ilike $$", `%${tecnico}%`);
 	if (produto) addCondition("produto_nome ilike $$", `%${produto}%`);
 	if (status) addCondition("status_match = $$", status);
+	// "Não identificada"/"Não identificado" (ver rankings de cidades/
+	// estoques) representa linha com o campo vazio — filtra por is null em
+	// vez de tentar casar o texto literal (sem parametro, pra nao desalinhar
+	// a numeracao posicional dos $N seguintes).
+	if (cidade === "Não identificada") conditions.push("coalesce(nullif(trim(cidade), ''), '') = ''");
+	else if (cidade) addCondition("cidade = $$", cidade);
+	if (estoqueDestino === "Não identificado") {
+		conditions.push("coalesce(nullif(trim(estoque_destino), ''), '') = ''");
+	} else if (estoqueDestino) addCondition("estoque_destino = $$", estoqueDestino);
 
 	const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
 	const totalResult = await db.query(
@@ -351,58 +395,100 @@ async function saveProdutoConfig(
 	};
 }
 
+// Base paginada compartilhada pelos 3 rankings de Cidades — mesmo formato
+// {items, page, limit, total, totalPages} de listMovimentacoes, agora que
+// a tela pagina 10 por vez em vez de trazer um top-20 fixo sem paginacao.
+async function getPaginatedRanking({
+	groupExpr,
+	labelKey,
+	extraWhere = "",
+	dataInicio,
+	dataFim,
+	page = 1,
+	limit = 10,
+}) {
+	const normalizedLimit = normalizeLimit(limit, 10);
+	const normalizedPage = normalizePage(page);
+	const offset = (normalizedPage - 1) * normalizedLimit;
+	const params = [dataInicio || null, dataFim || null];
+
+	const countResult = await db.query(
+		`select count(*)::int as total from (
+		   select 1 from movimentacoes_estoque
+		   where ($1::timestamptz is null or emitido_em >= $1)
+		     and ($2::timestamptz is null or emitido_em <= $2)
+		     ${extraWhere}
+		   group by ${groupExpr}
+		 ) contagem`,
+		params,
+	);
+	const total = countResult.rows[0]?.total || 0;
+
+	const rowsResult = await db.query(
+		`select ${groupExpr} as label, count(*)::int as total
+		 from movimentacoes_estoque
+		 where ($1::timestamptz is null or emitido_em >= $1)
+		   and ($2::timestamptz is null or emitido_em <= $2)
+		   ${extraWhere}
+		 group by 1
+		 order by total desc
+		 limit ${normalizedLimit} offset ${offset}`,
+		params,
+	);
+
+	return {
+		items: rowsResult.rows.map((row) => ({ [labelKey]: row.label, total: row.total })),
+		page: normalizedPage,
+		limit: normalizedLimit,
+		total,
+		totalPages: Math.max(1, Math.ceil(total / normalizedLimit)),
+	};
+}
+
+const CIDADE_GROUP_EXPR = "coalesce(nullif(trim(cidade), ''), 'Não identificada')";
+const ESTOQUE_GROUP_EXPR =
+	"coalesce(nullif(trim(estoque_destino), ''), 'Não identificado')";
+
 // Cidades com mais retirada de equipamento — conta toda devolucao que
 // casou com O.S. (cidade so fica conhecida via a O.S., ver marcarComoCasada).
 // Nao descarta linha sem cidade — agrupa como "Nao identificada" pra ficar
 // visivel quando a maioria das devolucoes ainda nao tem cidade confirmada
 // (normalmente porque ainda esta "sem_match" ou a O.S. casada nao tinha
 // cidade cadastrada), em vez de o ranking parecer "sem dados" por sumir.
-async function getRankingCidadesRetiradas({ dataInicio, dataFim, limit = 20 } = {}) {
-	const result = await db.query(
-		`select coalesce(nullif(trim(cidade), ''), 'Não identificada') as cidade,
-		        count(*)::int as total
-		 from movimentacoes_estoque
-		 where ($1::timestamptz is null or emitido_em >= $1)
-		   and ($2::timestamptz is null or emitido_em <= $2)
-		 group by 1
-		 order by total desc
-		 limit $3`,
-		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
-	);
-	return result.rows.map((row) => ({ cidade: row.cidade, total: row.total }));
+async function getRankingCidadesRetiradas({ dataInicio, dataFim, page, limit } = {}) {
+	return getPaginatedRanking({
+		groupExpr: CIDADE_GROUP_EXPR,
+		labelKey: "cidade",
+		dataInicio,
+		dataFim,
+		page,
+		limit,
+	});
 }
 
 // Cidades com devolucao confirmada (O.S. efetivamente baixada do mapa/match).
-async function getRankingCidadesDevolvidas({ dataInicio, dataFim, limit = 20 } = {}) {
-	const result = await db.query(
-		`select coalesce(nullif(trim(cidade), ''), 'Não identificada') as cidade,
-		        count(*)::int as total
-		 from movimentacoes_estoque
-		 where status_match = 'casada'
-		   and ($1::timestamptz is null or emitido_em >= $1)
-		   and ($2::timestamptz is null or emitido_em <= $2)
-		 group by 1
-		 order by total desc
-		 limit $3`,
-		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
-	);
-	return result.rows.map((row) => ({ cidade: row.cidade, total: row.total }));
+async function getRankingCidadesDevolvidas({ dataInicio, dataFim, page, limit } = {}) {
+	return getPaginatedRanking({
+		groupExpr: CIDADE_GROUP_EXPR,
+		labelKey: "cidade",
+		extraWhere: "and status_match = 'casada'",
+		dataInicio,
+		dataFim,
+		page,
+		limit,
+	});
 }
 
 // Estoques (destino do item na nota) que mais receberam equipamento de volta.
-async function getRankingEstoquesRecebimento({ dataInicio, dataFim, limit = 20 } = {}) {
-	const result = await db.query(
-		`select coalesce(nullif(trim(estoque_destino), ''), 'Não identificado') as estoque,
-		        count(*)::int as total
-		 from movimentacoes_estoque
-		 where ($1::timestamptz is null or emitido_em >= $1)
-		   and ($2::timestamptz is null or emitido_em <= $2)
-		 group by 1
-		 order by total desc
-		 limit $3`,
-		[dataInicio || null, dataFim || null, normalizeLimit(limit, 20)],
-	);
-	return result.rows.map((row) => ({ estoque: row.estoque, total: row.total }));
+async function getRankingEstoquesRecebimento({ dataInicio, dataFim, page, limit } = {}) {
+	return getPaginatedRanking({
+		groupExpr: ESTOQUE_GROUP_EXPR,
+		labelKey: "estoque",
+		dataInicio,
+		dataFim,
+		page,
+		limit,
+	});
 }
 
 async function readConfig() {
@@ -419,6 +505,7 @@ async function readConfig() {
 		lastRunDate: row.last_run_date || "",
 		lastRunAt: row.last_run_at || null,
 		backfillAnualConcluidoEm: row.backfill_anual_concluido_em || null,
+		backfillUltimaJanelaFim: row.backfill_ultima_janela_fim || null,
 	};
 }
 
@@ -432,12 +519,16 @@ async function saveConfig(payload = {}, user = {}) {
 		lastRunAt: payload.lastRunAt ?? current.lastRunAt,
 		backfillAnualConcluidoEm:
 			payload.backfillAnualConcluidoEm ?? current.backfillAnualConcluidoEm,
+		backfillUltimaJanelaFim:
+			payload.backfillUltimaJanelaFim !== undefined
+				? payload.backfillUltimaJanelaFim
+				: current.backfillUltimaJanelaFim,
 	};
 	await db.query(
 		`insert into movimentacoes_config
 		 (id, enabled, daily_scan_time, timezone, last_run_date, last_run_at,
-		  backfill_anual_concluido_em, updated_at, updated_by)
-		 values ($1,$2,$3,$4,$5,$6,$7,now(),$8)
+		  backfill_anual_concluido_em, backfill_ultima_janela_fim, updated_at, updated_by)
+		 values ($1,$2,$3,$4,$5,$6,$7,$8,now(),$9)
 		 on conflict (id) do update set
 		   enabled = excluded.enabled,
 		   daily_scan_time = excluded.daily_scan_time,
@@ -445,6 +536,7 @@ async function saveConfig(payload = {}, user = {}) {
 		   last_run_date = excluded.last_run_date,
 		   last_run_at = excluded.last_run_at,
 		   backfill_anual_concluido_em = excluded.backfill_anual_concluido_em,
+		   backfill_ultima_janela_fim = excluded.backfill_ultima_janela_fim,
 		   updated_at = now(),
 		   updated_by = excluded.updated_by`,
 		[
@@ -455,6 +547,7 @@ async function saveConfig(payload = {}, user = {}) {
 			next.lastRunDate,
 			next.lastRunAt,
 			next.backfillAnualConcluidoEm,
+			next.backfillUltimaJanelaFim,
 			nullableText(user?.uid || user?.email),
 		],
 	);
@@ -539,6 +632,7 @@ async function getScanJob(id) {
 }
 
 module.exports = {
+	buscarMovimentacaoPorParceiro,
 	createScanJob,
 	getResumoPorEmpresaDia,
 	getRankingCidadesDevolvidas,

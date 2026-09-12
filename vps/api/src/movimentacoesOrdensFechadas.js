@@ -10,6 +10,7 @@
 // sem entrega correspondente.
 const sempreIntegration = require("./sempreIntegration");
 const movimentacoesOrdensFechadasRepository = require("./movimentacoesOrdensFechadasRepository");
+const movimentacoesRepository = require("./movimentacoesRepository");
 const { buildDateWindows } = require("./movimentacoesDateWindows");
 
 const NOTES_TIMEOUT_MS = 60 * 1000;
@@ -167,6 +168,56 @@ async function executeJob(jobId, { rows, dataInicio, dataFim }) {
 		}));
 		let totalNotasConsultadas = 0;
 		let algumLimiteAtingido = false;
+
+		// Pre-checagem: antes de sair consultando o Portal de Movimentacoes
+		// janela por janela (lento), confere se o cliente ja aparece no que
+		// foi salvo pelo painel de Movimentacoes (movimentacoes_estoque) —
+		// evita retrabalho pra quem ja foi capturado por uma varredura normal.
+		// So cobre "Devolucao de comodato"/"Retirada" (o que aquela tabela
+		// guarda); quem nao casar aqui ainda passa pela busca ampla abaixo.
+		await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
+			stage: "Conferindo com o que já está salvo no painel de Movimentações",
+			percent: 5,
+		});
+		for (const item of itens) {
+			const jaSalvo = await movimentacoesRepository.buscarMovimentacaoPorParceiro({
+				nome: item.nome,
+				dataInicio,
+				dataFim,
+			});
+			if (!jaSalvo) continue;
+			item.entregue = true;
+			item.movimentacao = jaSalvo;
+		}
+		const entreguesNaPreChecagem = itens.filter((item) => item.entregue).length;
+		if (entreguesNaPreChecagem) {
+			await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
+				stage: `${entreguesNaPreChecagem} de ${itens.length} já encontrados no painel — consultando o restante ao vivo`,
+				entregues: entreguesNaPreChecagem,
+				naoEntregues: itens.length - entreguesNaPreChecagem,
+			});
+		}
+		// Todo mundo ja casou so com o que ja estava salvo — nem precisa
+		// consultar o Portal de Movimentacoes ao vivo.
+		if (itens.every((item) => item.entregue)) {
+			const resultadoFinal = {
+				itens,
+				totalNotasConsultadas: 0,
+				limiteAtingido: false,
+				periodo: { inicio: start.toISOString(), fim: end.toISOString() },
+			};
+			await movimentacoesOrdensFechadasRepository.updateJob(jobId, {
+				status: "completed",
+				stage: "Conciliação concluída (tudo já estava no painel)",
+				percent: 100,
+				total: itens.length,
+				entregues: itens.length,
+				naoEntregues: 0,
+				resultado: resultadoFinal,
+				finishedAt: new Date().toISOString(),
+			});
+			return resultadoFinal;
+		}
 
 		for (const [indiceJanela, janela] of janelas.entries()) {
 			const rotuloJanela = `${janela.start.toLocaleDateString("pt-BR")} a ${janela.end.toLocaleDateString("pt-BR")}`;
