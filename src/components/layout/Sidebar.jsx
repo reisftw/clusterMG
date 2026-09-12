@@ -670,6 +670,26 @@ const TECNICOS_AUDITORIA_PATHS = [
 	ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
 ];
 
+const TECNICOS_EMPRESAS_PATHS = [ROUTES.EMPRESAS_TECNICOS];
+
+const LOGISTICA_ESTOQUE_PATHS = [
+	ROUTES.ESTOQUE_EQUIPAMENTOS,
+	ROUTES.ESTOQUE_CONSULTA,
+	ROUTES.ACERTO_ESTOQUE,
+	ROUTES.INSUMOS_REQUISICOES,
+];
+
+const CLIENTE_MENSAGERIA_PATHS = [
+	ROUTES.MENSAGERIA_ENVIADOS,
+	ROUTES.MENSAGERIA_RELATORIOS,
+	ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
+	ROUTES.MENSAGERIA_FILA,
+	ROUTES.MENSAGERIA_BACKLOG,
+	ROUTES.MENSAGERIA_CALLBACK,
+	ROUTES.MENSAGERIA_API,
+	ROUTES.MENSAGERIA,
+];
+
 const DIRECT_MENU_DUPLICATE_PATHS = new Set();
 
 const ATENDIMENTO_PATHS = [
@@ -920,6 +940,7 @@ function AdminNestedSection({
 	onNavigate,
 	displayLabel,
 	labelClass = "min-w-0 flex-1 truncate text-left",
+	badge,
 }) {
 	if (!items.length) return null;
 	return (
@@ -937,7 +958,15 @@ function AdminNestedSection({
 				title={title}
 			>
 				<Icon size={15} className="shrink-0" />
-				<span className={labelClass}>{title}</span>
+				<span className={labelClass}>
+					{title}
+					{badge > 0 ? (
+						<>
+							{" "}
+							(<span className="text-red-500">{badge}</span>)
+						</>
+					) : null}
+				</span>
 				<ChevronDown
 					size={14}
 					className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
@@ -1081,13 +1110,31 @@ function TecnicosGroupItems({
 	const auditoriaItems = group.items.filter((item) =>
 		TECNICOS_AUDITORIA_PATHS.includes(item.path),
 	);
-	const nestedPaths = new Set(TECNICOS_AUDITORIA_PATHS);
+	const empresasItems = group.items.filter((item) =>
+		TECNICOS_EMPRESAS_PATHS.includes(item.path),
+	);
+	const nestedPaths = new Set([...TECNICOS_AUDITORIA_PATHS, ...TECNICOS_EMPRESAS_PATHS]);
 	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
 	const isActive = (items) =>
 		items.some((item) => isMenuPathActive(pathname, item));
 
 	return (
 		<>
+			<AdminNestedSection
+				title="Empresas"
+				icon={Building2}
+				items={empresasItems}
+				open={Boolean(clickedGroups.tecnicos_empresas)}
+				active={isActive(empresasItems)}
+				toggleKey="tecnicos_empresas"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+			/>
 			{directItems.map((item) => {
 				const ChildIcon = item.icon;
 				return (
@@ -1123,6 +1170,140 @@ function TecnicosGroupItems({
 	);
 }
 
+function LogisticaGroupItems({
+	group,
+	pathname,
+	clickedGroups,
+	setClickedGroups,
+	isModernLayout,
+	nestedButtonClass,
+	submenuClass,
+	onNavigate,
+	displayLabel,
+}) {
+	const submenuWrapClass = getSubmenuWrapClass(isModernLayout);
+	const estoqueItems = group.items.filter((item) =>
+		LOGISTICA_ESTOQUE_PATHS.includes(item.path),
+	);
+	const nestedPaths = new Set(LOGISTICA_ESTOQUE_PATHS);
+	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
+	const isActive = (items) =>
+		items.some((item) => isMenuPathActive(pathname, item));
+
+	return (
+		<>
+			{directItems.map((item) => {
+				const ChildIcon = item.icon;
+				return (
+					<NavLink
+						key={item.path}
+						to={item.path}
+						onClick={onNavigate}
+						className={submenuClass}
+					>
+						<ChildIcon size={15} className="shrink-0" />
+						<span className="truncate">
+							{displayLabel(item.label, item.path)}
+						</span>
+					</NavLink>
+				);
+			})}
+			<AdminNestedSection
+				title="Estoque"
+				icon={Boxes}
+				items={estoqueItems}
+				open={Boolean(clickedGroups.logistica_estoque)}
+				active={isActive(estoqueItems)}
+				toggleKey="logistica_estoque"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+			/>
+		</>
+	);
+}
+
+function ClienteGroupItems({
+	group,
+	pathname,
+	clickedGroups,
+	setClickedGroups,
+	isModernLayout,
+	nestedButtonClass,
+	submenuClass,
+	onNavigate,
+	displayLabel,
+	atendimentoAbertos,
+}) {
+	const submenuWrapClass = getSubmenuWrapClass(isModernLayout);
+	const atendimentoItems = group.items.filter((item) =>
+		ATENDIMENTO_PATHS.includes(item.path),
+	);
+	const mensageriaItems = group.items.filter((item) =>
+		CLIENTE_MENSAGERIA_PATHS.includes(item.path),
+	);
+	const nestedPaths = new Set([...ATENDIMENTO_PATHS, ...CLIENTE_MENSAGERIA_PATHS]);
+	const directItems = group.items.filter((item) => !nestedPaths.has(item.path));
+	const isActive = (items) =>
+		items.some((item) => isMenuPathActive(pathname, item));
+
+	return (
+		<>
+			{directItems.map((item) => {
+				const ChildIcon = item.icon;
+				return (
+					<NavLink
+						key={item.path}
+						to={item.path}
+						onClick={onNavigate}
+						className={submenuClass}
+					>
+						<ChildIcon size={15} className="shrink-0" />
+						<span className="truncate">
+							{displayLabel(item.label, item.path)}
+						</span>
+					</NavLink>
+				);
+			})}
+			<AdminNestedSection
+				title="Atendimento"
+				icon={MessagesSquare}
+				items={atendimentoItems}
+				open={Boolean(clickedGroups.cliente_atendimento)}
+				active={isActive(atendimentoItems)}
+				toggleKey="cliente_atendimento"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+				badge={atendimentoAbertos}
+			/>
+			<AdminNestedSection
+				title="Mensageria"
+				icon={MessageCircle}
+				items={mensageriaItems}
+				open={Boolean(clickedGroups.cliente_mensageria)}
+				active={isActive(mensageriaItems)}
+				toggleKey="cliente_mensageria"
+				labelFormatter={(label) => label}
+				setClickedGroups={setClickedGroups}
+				nestedButtonClass={nestedButtonClass}
+				submenuClass={submenuClass}
+				submenuWrapClass={submenuWrapClass}
+				onNavigate={onNavigate}
+				displayLabel={displayLabel}
+			/>
+		</>
+	);
+}
+
 // Extraido de MenuGroup (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // — substitui a cadeia de ternarios encadeados (administrativo/tecnicos/
 // fallback) por uma tabela de despacho; os 2 componentes ja recebem
@@ -1130,6 +1311,8 @@ function TecnicosGroupItems({
 const GROUP_ITEMS_COMPONENTS = {
 	administrativo: AdministrativeGroupItems,
 	tecnicos: TecnicosGroupItems,
+	logistica: LogisticaGroupItems,
+	cliente: ClienteGroupItems,
 };
 
 function MenuGroup({
@@ -1147,12 +1330,10 @@ function MenuGroup({
 	onNavigate,
 	displayLabel,
 	pathname,
+	atendimentoAbertos,
 }) {
 	const IconComponent = group.icon;
-	const label =
-		group.id === "atendimento"
-			? displayLabel(group.label, "__atendimento_group")
-			: group.label;
+	const label = group.label;
 	const GroupItemsComponent = GROUP_ITEMS_COMPONENTS[group.id];
 	return (
 		<div key={group.id}>
@@ -1196,6 +1377,7 @@ function MenuGroup({
 							submenuClass={submenuClass}
 							onNavigate={onNavigate}
 							displayLabel={displayLabel}
+							atendimentoAbertos={atendimentoAbertos}
 						/>
 					) : (
 						group.items.map((item) => {
@@ -1627,6 +1809,7 @@ const Sidebar = ({
 						onNavigate={handleNavigation}
 						displayLabel={displayLabel}
 						pathname={location.pathname}
+						atendimentoAbertos={atendimentoAbertos}
 					/>
 				))}
 

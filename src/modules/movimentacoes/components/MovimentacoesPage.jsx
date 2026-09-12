@@ -9,15 +9,18 @@ import {
 	RefreshCw,
 	RotateCw,
 	Trophy,
+	Upload,
 	Warehouse,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
+import { addClusterLogo } from "../../../utils/pdfBranding";
 import MovimentacoesCalendario from "./MovimentacoesCalendario";
 import {
 	buscarCidadesMovimentacoes,
 	buscarDashboardMovimentacoes,
+	buscarResumoCategoriaEquipamentos,
 	buscarEquipamentosMovimentacoes,
 	buscarJobConciliacaoOrdensFechadas,
 	buscarJobVarreduraMovimentacoes,
@@ -184,6 +187,11 @@ export default function MovimentacoesPage() {
 	const [salvandoEquipamento, setSalvandoEquipamento] = useState(false);
 	const [equipamentoModalError, setEquipamentoModalError] = useState("");
 
+	const [showResumoCategoriaModal, setShowResumoCategoriaModal] = useState(false);
+	const [resumoCategorias, setResumoCategorias] = useState([]);
+	const [loadingResumoCategoria, setLoadingResumoCategoria] = useState(false);
+	const [resumoCategoriaError, setResumoCategoriaError] = useState("");
+
 	const [mesCalendario, setMesCalendario] = useState(
 		() => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
 	);
@@ -198,7 +206,8 @@ export default function MovimentacoesPage() {
 	const [diaModalLoading, setDiaModalLoading] = useState(false);
 	const [diaModalError, setDiaModalError] = useState("");
 
-	const [ofArquivo, setOfArquivo] = useState(null);
+	const [showOfModal, setShowOfModal] = useState(false);
+	const [ofArquivos, setOfArquivos] = useState([]);
 	const [ofDataInicio, setOfDataInicio] = useState(hojeYMD());
 	const [ofDataFim, setOfDataFim] = useState(hojeYMD());
 	const [ofJob, setOfJob] = useState(null);
@@ -364,8 +373,8 @@ export default function MovimentacoesPage() {
 	}, [ofPararPolling]);
 
 	const handleConciliarOrdensFechadas = async () => {
-		if (!ofArquivo) {
-			setOfError("Selecione a planilha com nome e cidade do cliente.");
+		if (!ofArquivos.length) {
+			setOfError("Selecione ao menos uma planilha com nome e cidade do cliente.");
 			return;
 		}
 		if (!ofDataInicio || !ofDataFim) {
@@ -377,7 +386,12 @@ export default function MovimentacoesPage() {
 		setOfProcessando(true);
 		setOfJob(null);
 		try {
-			const rows = await readRowsFromPlanilha(ofArquivo);
+			// Suporta mais de uma planilha: junta as linhas de todas antes de
+			// mandar pro backend, que processa como uma conciliacao so.
+			const rowsPorArquivo = await Promise.all(
+				ofArquivos.map((arquivo) => readRowsFromPlanilha(arquivo)),
+			);
+			const rows = rowsPorArquivo.flat();
 			const job = await iniciarConciliacaoOrdensFechadas({
 				rows,
 				dataInicio: new Date(`${ofDataInicio}T00:00:00`).toISOString(),
@@ -385,10 +399,15 @@ export default function MovimentacoesPage() {
 			});
 			setOfJob(job);
 			ofAcompanharJob(job.id, Date.now());
+			// Fecha o modal assim que o job comeca a rodar no backend — a
+			// conciliacao continua em segundo plano e o usuario pode navegar
+			// pelas outras abas de Movimentacoes enquanto isso.
+			setShowOfModal(false);
+			setOfArquivos([]);
 		} catch {
 			setOfProcessando(false);
 			setOfError(
-				"Não foi possível ler a planilha ou iniciar a conciliação. Confira as colunas (nome e cidade).",
+				"Não foi possível ler a(s) planilha(s) ou iniciar a conciliação. Confira as colunas (nome e cidade).",
 			);
 		}
 	};
@@ -455,6 +474,65 @@ export default function MovimentacoesPage() {
 		} finally {
 			setSalvandoEquipamento(false);
 		}
+	};
+
+	const handleAbrirResumoCategoria = async () => {
+		setShowResumoCategoriaModal(true);
+		setLoadingResumoCategoria(true);
+		setResumoCategoriaError("");
+		try {
+			const data = await buscarResumoCategoriaEquipamentos({
+				dataInicio: intervaloPeriodo.dataInicio,
+				dataFim: intervaloPeriodo.dataFim,
+			});
+			setResumoCategorias(data.categorias || []);
+		} catch {
+			setResumoCategoriaError("Não foi possível carregar o resumo por categoria.");
+		} finally {
+			setLoadingResumoCategoria(false);
+		}
+	};
+
+	const handleGerarPdfResumoCategoria = async () => {
+		const { default: jsPDF } = await import("jspdf");
+		const { default: autoTable } = await import("jspdf-autotable");
+		const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(15);
+		pdf.text("Resumo de Equipamentos por Categoria", 40, 42);
+		await addClusterLogo(pdf, { width: 76, height: 38, y: 22, marginRight: 40 });
+
+		pdf.setFont("helvetica", "normal");
+		pdf.setFontSize(9);
+		const periodoTexto = descreverPeriodo(periodoAplicado.tipo, periodoAplicado.valor);
+		pdf.text(`Período: ${periodoTexto}`, 40, 62);
+
+		const valorTotalGeral = resumoCategorias.reduce(
+			(soma, item) => soma + Number(item.valorTotal || 0),
+			0,
+		);
+		const quantidadeTotalGeral = resumoCategorias.reduce(
+			(soma, item) => soma + Number(item.quantidade || 0),
+			0,
+		);
+
+		autoTable(pdf, {
+			startY: 80,
+			head: [["Categoria", "Quantidade", "Valor total"]],
+			body: resumoCategorias.map((item) => [
+				item.categoria,
+				item.quantidade,
+				formatMoney(item.valorTotal) || "R$ 0,00",
+			]),
+			foot: [["Total", quantidadeTotalGeral, formatMoney(valorTotalGeral) || "R$ 0,00"]],
+			theme: "grid",
+			styles: { fontSize: 9, cellPadding: 6 },
+			headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+			footStyles: { fillColor: [17, 24, 39], textColor: 255, fontStyle: "bold" },
+		});
+
+		pdf.save("resumo-equipamentos-por-categoria.pdf");
 	};
 
 	useEffect(() => {
@@ -1148,14 +1226,24 @@ export default function MovimentacoesPage() {
 				</section>
 			) : aba === ABAS.EQUIPAMENTOS ? (
 				<section className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-					<div className="mb-4 flex items-center justify-between">
-						<h2 className="text-base font-bold text-gray-900">
-							Equipamentos rastreados
-						</h2>
-						<p className="text-xs text-gray-500">
-							ONT/ONU, roteador e câmera de vídeo — clique para definir categoria
-							e valor.
-						</p>
+					<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<h2 className="text-base font-bold text-gray-900">
+								Equipamentos rastreados
+							</h2>
+							<p className="text-xs text-gray-500">
+								ONT/ONU, roteador e câmera de vídeo — clique para definir
+								categoria e valor.
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={handleAbrirResumoCategoria}
+							className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+						>
+							<Trophy size={16} />
+							Resumo por categoria
+						</button>
 					</div>
 
 					{equipamentosError ? (
@@ -1232,84 +1320,56 @@ export default function MovimentacoesPage() {
 			) : (
 				<section className="space-y-5">
 					<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-						<h2 className="mb-1 text-base font-bold text-gray-900">
-							Conciliar O.S. fechadas x movimentações
-						</h2>
-						<p className="mb-4 text-sm text-gray-500">
-							Suba a planilha com nome e cidade do cliente (mesmo formato do
-							upload do Mapa), escolha o período e o sistema confronta cada
-							linha com{" "}
-							<strong>qualquer movimentação</strong> registrada no Portal de
-							Movimentações no período — não só retirada/devolução de comodato.
-						</p>
-
-						{ofError ? (
-							<p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-								{ofError}
-							</p>
-						) : null}
-
-						<div className="grid gap-3 sm:grid-cols-4">
-							<label className="block sm:col-span-2">
-								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
-									Planilha (nome e cidade do cliente)
-								</span>
-								<input
-									type="file"
-									accept=".xlsx,.xls,.csv"
-									onChange={(event) => setOfArquivo(event.target.files?.[0] || null)}
-									className="input-field w-full"
-								/>
-							</label>
-							<label className="block">
-								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
-									Data início
-								</span>
-								<input
-									type="date"
-									value={ofDataInicio}
-									onChange={(event) => setOfDataInicio(event.target.value)}
-									className="input-field w-full"
-								/>
-							</label>
-							<label className="block">
-								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
-									Data fim
-								</span>
-								<input
-									type="date"
-									value={ofDataFim}
-									onChange={(event) => setOfDataFim(event.target.value)}
-									className="input-field w-full"
-								/>
-							</label>
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<h2 className="text-base font-bold text-gray-900">
+									Conciliar O.S. fechadas x movimentações
+								</h2>
+								<p className="mt-1 text-sm text-gray-500">
+									Sobe uma ou mais planilhas (nome e cidade do cliente, mesmo
+									formato do upload do Mapa) e confronta com{" "}
+									<strong>qualquer movimentação</strong> do Portal de
+									Movimentações no período escolhido.
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => {
+									setOfError("");
+									setShowOfModal(true);
+								}}
+								className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"
+							>
+								<Upload size={16} />
+								Nova conciliação
+							</button>
 						</div>
 
-						<button
-							type="button"
-							onClick={handleConciliarOrdensFechadas}
-							disabled={ofProcessando}
-							className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<RefreshCw size={16} className={ofProcessando ? "animate-spin" : ""} />
-							{ofProcessando ? "Conciliando..." : "Conciliar"}
-						</button>
-
-						{ofJob && ofJob.status !== "completed" ? (
-							<div className="mt-4">
-								<div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-									<div
-										className="h-full bg-blue-600 transition-all"
-										style={{ width: `${ofJob.percent || 0}%` }}
-									/>
-								</div>
-								<p className="mt-2 text-sm text-gray-600">{ofJob.stage}</p>
-								{ofJob.status === "failed" ? (
-									<p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-										{ofJob.error || "Falha na conciliação."}
-									</p>
+						{ofProcessando ? (
+							<div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+								<p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+									<RefreshCw size={14} className="animate-spin" />
+									Conciliação em andamento no backend — pode ficar à vontade
+									para usar as outras abas enquanto isso.
+								</p>
+								{ofJob ? (
+									<>
+										<div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-blue-100">
+											<div
+												className="h-full bg-blue-600 transition-all"
+												style={{ width: `${ofJob.percent || 0}%` }}
+											/>
+										</div>
+										<p className="mt-1 text-xs text-blue-600">{ofJob.stage}</p>
+									</>
 								) : null}
 							</div>
+						) : null}
+
+						{ofJob?.status === "failed" ? (
+							<p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{ofJob.error || "Falha na conciliação."}
+							</p>
 						) : null}
 					</div>
 
@@ -1543,6 +1603,114 @@ export default function MovimentacoesPage() {
 				</ModalShell>
 			) : null}
 
+			{showResumoCategoriaModal ? (
+				<ModalShell
+					onClose={() => setShowResumoCategoriaModal(false)}
+					showClose={false}
+					size="lg"
+					bodyClassName="p-0"
+				>
+					<div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5">
+						<div>
+							<h2 className="text-base font-bold text-gray-900">
+								Resumo por categoria
+							</h2>
+							<p className="text-sm text-gray-500">
+								Quantidade e valor total por categoria de equipamento no
+								período selecionado.
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={() => setShowResumoCategoriaModal(false)}
+							className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+							aria-label="Fechar"
+						>
+							<X size={16} />
+						</button>
+					</div>
+
+					<div className="space-y-4 p-5">
+						{resumoCategoriaError ? (
+							<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{resumoCategoriaError}
+							</p>
+						) : null}
+
+						{loadingResumoCategoria ? (
+							<p className="py-6 text-center text-sm text-gray-500">
+								Carregando...
+							</p>
+						) : (
+							<div className="overflow-hidden rounded-lg border border-gray-100">
+								<table className="w-full divide-y divide-gray-100 text-sm">
+									<thead className="bg-gray-50 text-left text-xs font-bold uppercase tracking-wide text-gray-500">
+										<tr>
+											<th className="px-4 py-3">Categoria</th>
+											<th className="px-4 py-3">Quantidade</th>
+											<th className="px-4 py-3">Valor total</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-gray-100 bg-white">
+										{resumoCategorias.map((item) => (
+											<tr key={item.categoria}>
+												<td className="px-4 py-3">
+													{CATEGORIA_OPCOES.includes(item.categoria) ? (
+														<span
+															className={`rounded-full border px-2 py-0.5 text-xs font-bold ${
+																CATEGORIA_STYLE[item.categoria] ||
+																"border-gray-200 bg-gray-50 text-gray-600"
+															}`}
+														>
+															{item.categoria}
+														</span>
+													) : (
+														<span className="text-gray-600">
+															{item.categoria}
+														</span>
+													)}
+												</td>
+												<td className="px-4 py-3 font-bold text-gray-900">
+													{item.quantidade}
+												</td>
+												<td className="px-4 py-3 text-gray-700">
+													{formatMoney(item.valorTotal) || "R$ 0,00"}
+												</td>
+											</tr>
+										))}
+										{!resumoCategorias.length ? (
+											<tr>
+												<td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+													Nenhum dado no período.
+												</td>
+											</tr>
+										) : null}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</div>
+
+					<div className="flex justify-end gap-2 border-t border-gray-100 p-4">
+						<button
+							type="button"
+							onClick={() => setShowResumoCategoriaModal(false)}
+							className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+						>
+							Fechar
+						</button>
+						<button
+							type="button"
+							onClick={handleGerarPdfResumoCategoria}
+							disabled={loadingResumoCategoria || !resumoCategorias.length}
+							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							Gerar PDF
+						</button>
+					</div>
+				</ModalShell>
+			) : null}
+
 			{diaSelecionado ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
 					<div className="w-full max-w-2xl rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl">
@@ -1646,6 +1814,111 @@ export default function MovimentacoesPage() {
 						) : null}
 					</div>
 				</div>
+			) : null}
+
+			{showOfModal ? (
+				<ModalShell
+					onClose={() => setShowOfModal(false)}
+					showClose={false}
+					size="lg"
+					bodyClassName="p-0"
+				>
+					<div className="flex items-start justify-between gap-4 border-b border-gray-100 p-5">
+						<div className="flex items-center gap-3">
+							<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white">
+								<Upload size={18} />
+							</div>
+							<div>
+								<h2 className="text-base font-bold text-gray-900">
+									Nova conciliação de O.S. fechadas
+								</h2>
+								<p className="text-sm text-gray-500">
+									Pode selecionar mais de uma planilha de uma vez.
+								</p>
+							</div>
+						</div>
+						<button
+							type="button"
+							onClick={() => setShowOfModal(false)}
+							className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+							aria-label="Fechar"
+						>
+							<X size={16} />
+						</button>
+					</div>
+
+					<div className="space-y-4 p-5">
+						{ofError ? (
+							<p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+								{ofError}
+							</p>
+						) : null}
+
+						<label className="block">
+							<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+								Planilhas (nome e cidade do cliente)
+							</span>
+							<input
+								type="file"
+								multiple
+								accept=".xlsx,.xls,.csv"
+								onChange={(event) =>
+									setOfArquivos(Array.from(event.target.files || []))
+								}
+								className="input-field w-full"
+							/>
+							{ofArquivos.length ? (
+								<p className="mt-1.5 text-xs text-gray-500">
+									{ofArquivos.length} planilha(s) selecionada(s):{" "}
+									{ofArquivos.map((arquivo) => arquivo.name).join(", ")}
+								</p>
+							) : null}
+						</label>
+
+						<div className="grid gap-3 sm:grid-cols-2">
+							<label className="block">
+								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+									Data início
+								</span>
+								<input
+									type="date"
+									value={ofDataInicio}
+									onChange={(event) => setOfDataInicio(event.target.value)}
+									className="input-field w-full"
+								/>
+							</label>
+							<label className="block">
+								<span className="mb-1.5 block text-xs font-semibold text-gray-600">
+									Data fim
+								</span>
+								<input
+									type="date"
+									value={ofDataFim}
+									onChange={(event) => setOfDataFim(event.target.value)}
+									className="input-field w-full"
+								/>
+							</label>
+						</div>
+					</div>
+
+					<div className="flex justify-end gap-2 border-t border-gray-100 p-4">
+						<button
+							type="button"
+							onClick={() => setShowOfModal(false)}
+							className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+						>
+							Cancelar
+						</button>
+						<button
+							type="button"
+							onClick={handleConciliarOrdensFechadas}
+							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"
+						>
+							<Upload size={16} />
+							Iniciar conciliação
+						</button>
+					</div>
+				</ModalShell>
 			) : null}
 
 			{showScanModal ? (

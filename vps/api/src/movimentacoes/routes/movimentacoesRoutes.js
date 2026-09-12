@@ -31,6 +31,12 @@ function createMovimentacoesRouter({
 		requireView,
 		controller.getEquipamentos,
 	);
+	router.get(
+		"/equipamentos/resumo-categoria",
+		requireAuthenticated,
+		requireView,
+		controller.getResumoCategoriaEquipamentos,
+	);
 	router.put(
 		"/equipamentos",
 		requireAuthenticated,

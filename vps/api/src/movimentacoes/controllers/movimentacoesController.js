@@ -58,6 +58,20 @@ function createMovimentacoesController({
 		}
 	}
 
+	async function getResumoCategoriaEquipamentos(req, res, next) {
+		try {
+			const { dataInicio, dataFim } = req.query;
+			res.json({
+				categorias: await movimentacoesRepository.getResumoCategoriaProdutos({
+					dataInicio,
+					dataFim,
+				}),
+			});
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function saveEquipamentoConfig(req, res, next) {
 		try {
 			res.json(
@@ -175,6 +189,7 @@ function createMovimentacoesController({
 		getDashboard,
 		getEquipamentos,
 		getOrdensFechadasJob,
+		getResumoCategoriaEquipamentos,
 		getScanJob,
 		saveEquipamentoConfig,
 		startOrdensFechadasConciliacao,

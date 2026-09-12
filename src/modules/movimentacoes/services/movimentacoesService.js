@@ -44,6 +44,16 @@ export async function buscarEquipamentosMovimentacoes({ dataInicio, dataFim } = 
 	return requestVpsApi(`/movimentacoes/equipamentos${query ? `?${query}` : ""}`);
 }
 
+export async function buscarResumoCategoriaEquipamentos({ dataInicio, dataFim } = {}) {
+	const params = new URLSearchParams();
+	if (dataInicio) params.set("dataInicio", dataInicio);
+	if (dataFim) params.set("dataFim", dataFim);
+	const query = params.toString();
+	return requestVpsApi(
+		`/movimentacoes/equipamentos/resumo-categoria${query ? `?${query}` : ""}`,
+	);
+}
+
 export async function salvarEquipamentoConfig(payload) {
 	return requestVpsApi("/movimentacoes/equipamentos", {
 		method: "PUT",

@@ -280,6 +280,31 @@ async function getRankingProdutosComConfig({ dataInicio, dataFim, limit = 100 } 
 	}));
 }
 
+// Quantidade e valor total (soma do valor unitario cadastrado, uma vez por
+// devolucao) agrupados por categoria (FAST/AC/AX) — pro botao "Resumo por
+// categoria" na aba Equipamentos e pro PDF gerado a partir dele.
+async function getResumoCategoriaProdutos({ dataInicio, dataFim } = {}) {
+	const result = await db.query(
+		`select
+		   coalesce(c.categoria, 'Não definida') as categoria,
+		   count(*)::int as quantidade,
+		   sum(coalesce(c.valor, 0))::numeric as valor_total
+		 from movimentacoes_estoque m
+		 left join movimentacoes_produtos_config c on c.produto_nome = m.produto_nome
+		 where m.produto_nome is not null
+		   and ($1::timestamptz is null or m.emitido_em >= $1)
+		   and ($2::timestamptz is null or m.emitido_em <= $2)
+		 group by 1
+		 order by quantidade desc`,
+		[dataInicio || null, dataFim || null],
+	);
+	return result.rows.map((row) => ({
+		categoria: row.categoria,
+		quantidade: row.quantidade,
+		valorTotal: Number(row.valor_total || 0),
+	}));
+}
+
 async function saveProdutoConfig(
 	{ produtoNome, categoria, valor } = {},
 	user = {},
@@ -515,6 +540,7 @@ module.exports = {
 	getRankingProdutos,
 	getRankingProdutosComConfig,
 	getRankingTecnicos,
+	getResumoCategoriaProdutos,
 	getScanJob,
 	listMovimentacoes,
 	marcarComoCasada,

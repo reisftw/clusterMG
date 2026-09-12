@@ -139,4 +139,23 @@ describe("movimentacoesRepository", () => {
 			repository.saveProdutoConfig({ produtoNome: "  ", categoria: "AX" }),
 		).rejects.toThrow(/Nome do produto/);
 	});
+
+	it("getResumoCategoriaProdutos agrupa quantidade e valor total por categoria", async () => {
+		const dbQuery = vi.fn(async () => ({
+			rows: [
+				{ categoria: "AX", quantidade: 10, valor_total: "3499.00" },
+				{ categoria: "Não definida", quantidade: 3, valor_total: "0" },
+			],
+		}));
+		const repository = loadRepository(dbQuery);
+
+		const resumo = await repository.getResumoCategoriaProdutos({});
+
+		expect(resumo).toEqual([
+			{ categoria: "AX", quantidade: 10, valorTotal: 3499 },
+			{ categoria: "Não definida", quantidade: 3, valorTotal: 0 },
+		]);
+		expect(dbQuery.mock.calls[0][0]).toContain("Não definida");
+		expect(dbQuery.mock.calls[0][0]).toContain("sum(coalesce(c.valor, 0))");
+	});
 });
