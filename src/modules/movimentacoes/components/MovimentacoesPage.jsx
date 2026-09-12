@@ -4,6 +4,8 @@ import {
 	CalendarRange,
 	CheckCircle2,
 	Clock3,
+	FileSpreadsheet,
+	FileText,
 	MapPin,
 	PackageSearch,
 	RefreshCw,
@@ -107,6 +109,54 @@ function hojeYMD() {
 function mesAtualYM() {
 	const agora = new Date();
 	return `${agora.getFullYear()}-${pad2(agora.getMonth() + 1)}`;
+}
+
+// Epoch do serial de data do Excel (o mesmo "erro" de ano bissexto de 1900
+// que o proprio Excel comete, replicado de proposito pra bater com o valor
+// que a planilha realmente guarda).
+const EXCEL_DATE_EPOCH_MS = Date.UTC(1899, 11, 30);
+
+// A coluna "fechamento" da planilha de Ordens Fechadas vem sem normalizacao
+// nenhuma do backend (so texto cru, ver extrairLinhasPlanilha no
+// movimentacoesOrdensFechadas.js) — pode chegar como serial numerico do
+// Excel (quando a celula nao esta formatada como texto, o caso mais comum),
+// dd/mm/aaaa, aaaa-mm-dd, ou qualquer outro formato que o Date() nativo
+// entenda. Tenta cada formato nessa ordem antes de desistir.
+function parseFechamentoDate(value) {
+	const text = String(value ?? "").trim();
+	if (!text) return null;
+
+	if (/^\d{4,6}(\.\d+)?$/.test(text)) {
+		const serial = Number(text);
+		if (serial > 20000 && serial < 80000) {
+			const data = new Date(EXCEL_DATE_EPOCH_MS + Math.trunc(serial) * 86400000);
+			if (!Number.isNaN(data.getTime())) return data;
+		}
+	}
+
+	const brMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+	if (brMatch) {
+		const [, dia, mes, anoBruto] = brMatch;
+		const ano = anoBruto.length === 2 ? `20${anoBruto}` : anoBruto;
+		const data = new Date(Number(ano), Number(mes) - 1, Number(dia));
+		if (!Number.isNaN(data.getTime())) return data;
+	}
+
+	const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+	if (isoMatch) {
+		const [, ano, mes, dia] = isoMatch;
+		const data = new Date(Number(ano), Number(mes) - 1, Number(dia));
+		if (!Number.isNaN(data.getTime())) return data;
+	}
+
+	const generico = new Date(text);
+	return Number.isNaN(generico.getTime()) ? null : generico;
+}
+
+function fechamentoYMD(value) {
+	const data = parseFechamentoDate(value);
+	if (!data) return "";
+	return `${data.getFullYear()}-${pad2(data.getMonth() + 1)}-${pad2(data.getDate())}`;
 }
 
 // Converte o filtro de periodo (dia/mes/ano) num intervalo absoluto
@@ -386,6 +436,13 @@ export default function MovimentacoesPage() {
 	const [ofHidratando, setOfHidratando] = useState(true);
 	const [ofError, setOfError] = useState("");
 	const [ofFiltro, setOfFiltro] = useState("todos");
+	// Filtro por periodo de fechamento (dia/mes/ano) sobre os itens ja
+	// carregados no resultado — pedido explicito: "preciso filtrar por dia,
+	// mês e ano para ver a quantidade que não foi entregue".
+	const [ofPeriodoFiltroTipo, setOfPeriodoFiltroTipo] = useState(PERIODO_TIPOS.TODOS);
+	const [ofPeriodoFiltroDia, setOfPeriodoFiltroDia] = useState(hojeYMD());
+	const [ofPeriodoFiltroMes, setOfPeriodoFiltroMes] = useState(mesAtualYM());
+	const [ofPeriodoFiltroAno, setOfPeriodoFiltroAno] = useState(String(ANO_ATUAL));
 	const [ofPage, setOfPage] = useState(1);
 	const ofPollTimerRef = useRef(null);
 
@@ -695,11 +752,33 @@ export default function MovimentacoesPage() {
 	};
 
 	const ofItensFiltrados = useMemo(() => {
-		const itens = ofJob?.resultado?.itens || [];
-		if (ofFiltro === "entregues") return itens.filter((item) => item.entregue);
-		if (ofFiltro === "nao_entregues") return itens.filter((item) => !item.entregue);
+		let itens = ofJob?.resultado?.itens || [];
+		if (ofFiltro === "entregues") itens = itens.filter((item) => item.entregue);
+		if (ofFiltro === "nao_entregues") itens = itens.filter((item) => !item.entregue);
+		if (ofPeriodoFiltroTipo !== PERIODO_TIPOS.TODOS) {
+			itens = itens.filter((item) => {
+				const ymd = fechamentoYMD(item.fechamento);
+				if (!ymd) return false;
+				if (ofPeriodoFiltroTipo === PERIODO_TIPOS.DIA) return ymd === ofPeriodoFiltroDia;
+				if (ofPeriodoFiltroTipo === PERIODO_TIPOS.MES) return ymd.slice(0, 7) === ofPeriodoFiltroMes;
+				if (ofPeriodoFiltroTipo === PERIODO_TIPOS.ANO) return ymd.slice(0, 4) === ofPeriodoFiltroAno;
+				return true;
+			});
+		}
 		return itens;
-	}, [ofJob, ofFiltro]);
+	}, [
+		ofJob,
+		ofFiltro,
+		ofPeriodoFiltroTipo,
+		ofPeriodoFiltroDia,
+		ofPeriodoFiltroMes,
+		ofPeriodoFiltroAno,
+	]);
+
+	const ofNaoEntreguesFiltrados = useMemo(
+		() => ofItensFiltrados.filter((item) => !item.entregue).length,
+		[ofItensFiltrados],
+	);
 
 	const OF_PAGE_SIZE = 20;
 	const ofTotalPages = Math.max(1, Math.ceil(ofItensFiltrados.length / OF_PAGE_SIZE));
@@ -708,6 +787,113 @@ export default function MovimentacoesPage() {
 		(ofPageSegura - 1) * OF_PAGE_SIZE,
 		ofPageSegura * OF_PAGE_SIZE,
 	);
+
+	// Exporta exatamente o que esta filtrado na tela (entregue/nao entregue +
+	// periodo) — sem filtro nenhum aplicado, exporta a lista inteira.
+	const handleExportarOrdensFechadasXlsx = async () => {
+		const { default: ExcelJS } = await import("exceljs");
+		const wb = new ExcelJS.Workbook();
+		wb.creator = "Cluster MG";
+		const ws = wb.addWorksheet("Ordens Fechadas");
+		ws.views = [{ showGridLines: false }];
+
+		const cor = (hex) => ({ argb: `FF${hex}` });
+		const headerRow = ws.addRow([
+			"Cliente",
+			"Código",
+			"Cidade",
+			"Fechamento",
+			"Status",
+			"Movimentação encontrada",
+		]);
+		headerRow.eachCell((cell) => {
+			cell.font = { name: "Arial", bold: true, size: 10, color: cor("FFFFFF") };
+			cell.fill = { type: "pattern", pattern: "solid", fgColor: cor("003087") };
+			cell.alignment = { horizontal: "center", vertical: "middle" };
+		});
+		headerRow.height = 22;
+
+		ofItensFiltrados.forEach((item) => {
+			const row = ws.addRow([
+				item.nome,
+				item.codigo || "",
+				item.cidade || "",
+				item.fechamento || "",
+				item.entregue ? "Entregue" : "Não entregue",
+				item.movimentacao
+					? `${item.movimentacao.tipoOperacao || ""} · ${formatDateTime(item.movimentacao.emitidoEm)}`
+					: "",
+			]);
+			const bg = item.entregue ? "EAFAF1" : "FDEDEC";
+			row.eachCell((cell) => {
+				cell.font = { name: "Arial", size: 10 };
+				cell.fill = { type: "pattern", pattern: "solid", fgColor: cor(bg) };
+				cell.alignment = { vertical: "middle" };
+			});
+		});
+
+		[28, 16, 22, 16, 14, 32].forEach((width, index) => {
+			ws.getColumn(index + 1).width = width;
+		});
+
+		const buffer = await wb.xlsx.writeBuffer();
+		const blob = new Blob([buffer], {
+			type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		});
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `ordens-fechadas-${hojeYMD()}.xlsx`;
+		a.click();
+		URL.revokeObjectURL(url);
+	};
+
+	const handleExportarOrdensFechadasPdf = async () => {
+		const { default: jsPDF } = await import("jspdf");
+		const { default: autoTable } = await import("jspdf-autotable");
+		const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+
+		pdf.setFont("helvetica", "bold");
+		pdf.setFontSize(15);
+		pdf.text("Conciliação de Ordens Fechadas", 40, 42);
+		await addClusterLogo(pdf, { width: 76, height: 38, y: 22, marginRight: 40 });
+
+		pdf.setFont("helvetica", "normal");
+		pdf.setFontSize(9);
+		const entreguesNoFiltro = ofItensFiltrados.filter((item) => item.entregue).length;
+		pdf.text(
+			`Total: ${ofItensFiltrados.length} · Entregues: ${entreguesNoFiltro} · Não entregues: ${ofNaoEntreguesFiltrados}`,
+			40,
+			62,
+		);
+
+		autoTable(pdf, {
+			startY: 80,
+			head: [["Cliente", "Código", "Cidade", "Fechamento", "Status", "Movimentação encontrada"]],
+			body: ofItensFiltrados.map((item) => [
+				item.nome,
+				item.codigo || "-",
+				item.cidade || "-",
+				item.fechamento || "-",
+				item.entregue ? "Entregue" : "Não entregue",
+				item.movimentacao
+					? `${item.movimentacao.tipoOperacao || "-"} · ${formatDateTime(item.movimentacao.emitidoEm)}`
+					: "Nenhuma movimentação encontrada",
+			]),
+			theme: "grid",
+			styles: { fontSize: 8, cellPadding: 5 },
+			headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+			didParseCell: (data) => {
+				if (data.section !== "body") return;
+				const item = ofItensFiltrados[data.row.index];
+				if (item && !item.entregue) {
+					data.cell.styles.fillColor = [253, 237, 236];
+				}
+			},
+		});
+
+		pdf.save(`ordens-fechadas-${hojeYMD()}.pdf`);
+	};
 
 	const carregarEquipamentos = useCallback(async () => {
 		setLoadingEquipamentos(true);
@@ -1749,22 +1935,117 @@ export default function MovimentacoesPage() {
 							</div>
 
 							<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-								<div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-									<h2 className="text-base font-bold text-gray-900">
-										Detalhamento (para análise dos não entregues)
-									</h2>
-									<select
-										value={ofFiltro}
-										onChange={(event) => {
-											setOfFiltro(event.target.value);
-											setOfPage(1);
-										}}
-										className="input-field sm:w-auto"
-									>
-										<option value="todos">Todas</option>
-										<option value="entregues">Entregues</option>
-										<option value="nao_entregues">Não entregues</option>
-									</select>
+								<div className="mb-4 flex flex-col gap-3">
+									<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+										<h2 className="text-base font-bold text-gray-900">
+											Detalhamento (para análise dos não entregues)
+										</h2>
+										<div className="flex flex-wrap items-center gap-2">
+											<select
+												value={ofFiltro}
+												onChange={(event) => {
+													setOfFiltro(event.target.value);
+													setOfPage(1);
+												}}
+												className="input-field w-auto"
+											>
+												<option value="todos">Todas</option>
+												<option value="entregues">Entregues</option>
+												<option value="nao_entregues">Não entregues</option>
+											</select>
+											<button
+												type="button"
+												onClick={handleExportarOrdensFechadasXlsx}
+												disabled={!ofItensFiltrados.length}
+												className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+											>
+												<FileSpreadsheet size={14} />
+												Planilha
+											</button>
+											<button
+												type="button"
+												onClick={handleExportarOrdensFechadasPdf}
+												disabled={!ofItensFiltrados.length}
+												className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+											>
+												<FileText size={14} />
+												PDF
+											</button>
+										</div>
+									</div>
+
+									<div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+										<span className="text-xs font-semibold text-gray-500">
+											Filtrar por fechamento:
+										</span>
+										<div className="inline-flex rounded-lg border border-gray-200 p-1">
+											{[
+												{ tipo: PERIODO_TIPOS.TODOS, label: "Todos" },
+												{ tipo: PERIODO_TIPOS.DIA, label: "Dia" },
+												{ tipo: PERIODO_TIPOS.MES, label: "Mês" },
+												{ tipo: PERIODO_TIPOS.ANO, label: "Ano" },
+											].map(({ tipo, label }) => (
+												<button
+													key={tipo}
+													type="button"
+													onClick={() => {
+														setOfPeriodoFiltroTipo(tipo);
+														setOfPage(1);
+													}}
+													className={`rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${
+														ofPeriodoFiltroTipo === tipo
+															? "bg-gray-900 text-white"
+															: "text-gray-600 hover:bg-gray-50"
+													}`}
+												>
+													{label}
+												</button>
+											))}
+										</div>
+										{ofPeriodoFiltroTipo === PERIODO_TIPOS.DIA ? (
+											<input
+												type="date"
+												value={ofPeriodoFiltroDia}
+												onChange={(event) => {
+													setOfPeriodoFiltroDia(event.target.value);
+													setOfPage(1);
+												}}
+												className="input-field w-auto"
+											/>
+										) : null}
+										{ofPeriodoFiltroTipo === PERIODO_TIPOS.MES ? (
+											<input
+												type="month"
+												value={ofPeriodoFiltroMes}
+												onChange={(event) => {
+													setOfPeriodoFiltroMes(event.target.value);
+													setOfPage(1);
+												}}
+												className="input-field w-auto"
+											/>
+										) : null}
+										{ofPeriodoFiltroTipo === PERIODO_TIPOS.ANO ? (
+											<select
+												value={ofPeriodoFiltroAno}
+												onChange={(event) => {
+													setOfPeriodoFiltroAno(event.target.value);
+													setOfPage(1);
+												}}
+												className="input-field w-auto"
+											>
+												{ANOS_DISPONIVEIS.map((ano) => (
+													<option key={ano} value={String(ano)}>
+														{ano}
+													</option>
+												))}
+											</select>
+										) : null}
+										{ofPeriodoFiltroTipo !== PERIODO_TIPOS.TODOS ? (
+											<span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+												{ofNaoEntreguesFiltrados} não entregue(s) no período
+											</span>
+										) : null}
+									</div>
 								</div>
 
 								<div className="overflow-hidden rounded-lg border border-gray-100">
