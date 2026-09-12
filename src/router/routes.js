@@ -31,6 +31,7 @@ export const ROUTES = {
 	NOTIFICACOES: "/notificacoes",
 	RETIRADAS: "/retiradas",
 	ENTREGAS_TECNICOS: "/entregas-tecnicos",
+	MOVIMENTACOES: "/movimentacoes",
 	LOGISTICA: "/logistica",
 	ATENDIMENTO_CASOS: "/atendimento/casos",
 	ATENDIMENTO_TECNICOS: "/atendimento/tecnicos",

@@ -202,6 +202,12 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Movimentações",
+		path: ROUTES.MOVIMENTACOES,
+		icon: PackageSearch,
+		permission: ["movimentacoes.view", "movimentacoes.manage"],
+	},
+	{
 		label: "Logística",
 		path: ROUTES.LOGISTICA,
 		icon: Truck,
@@ -586,6 +592,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.EMPRESAS_TECNICOS,
 	ROUTES.AGENDAMENTOS,
 	ROUTES.ENTREGAS_TECNICOS,
+	ROUTES.MOVIMENTACOES,
 	ROUTES.TECNICOS_AUDITORIA_BOLSA,
 	ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
 	ROUTES.ESTOQUE_BOLSA_TECNICO,

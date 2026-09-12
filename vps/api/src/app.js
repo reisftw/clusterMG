@@ -27,6 +27,8 @@ const emailService = require("./emailService");
 const operationalImports = require("./operationalImports");
 const sempreIntegration = require("./sempreIntegration");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
+const movimentacoesRepository = require("./movimentacoesRepository");
+const movimentacoesEntregas = require("./movimentacoesEntregas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
 const cvortexIntegration = require("./cvortexIntegration");
@@ -41,6 +43,7 @@ const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
+const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesRoutes");
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const metrics = require("./metrics");
@@ -260,6 +263,17 @@ const TECNICOS_BOLSA_AUDITORIA_VIEW_PERMISSIONS = [
 const TECNICOS_BOLSA_AUDITORIA_MANAGE_PERMISSIONS = [
 	"tecnicos.auditoria_bolsa.manage",
 ];
+const MOVIMENTACOES_ROLES = [
+	"admin",
+	"supervisor",
+	"backoffice",
+	"backoffice_retirada",
+];
+const MOVIMENTACOES_VIEW_PERMISSIONS = [
+	"movimentacoes.view",
+	"movimentacoes.manage",
+];
+const MOVIMENTACOES_MANAGE_PERMISSIONS = ["movimentacoes.manage"];
 const REGIONAL_SCOPED_ACERTO_ROLES = ["supervisor"];
 const EMPRESAS_COLLECTION = "empresas_tecnicos";
 const ADMINISTRATIVO_DOCUMENTOS_ROLES = [
@@ -4598,6 +4612,20 @@ function createApp() {
 		}),
 	);
 
+	app.use(
+		"/api/movimentacoes",
+		createMovimentacoesRouter({
+			movimentacoesRepository,
+			movimentacoesEntregas,
+			requireAuthenticated,
+			requireAnyPermission,
+			requireCsrfToken,
+			viewPermissions: MOVIMENTACOES_VIEW_PERMISSIONS,
+			managePermissions: MOVIMENTACOES_MANAGE_PERMISSIONS,
+			fallbackRoles: MOVIMENTACOES_ROLES,
+		}),
+	);
+
 	app.post(
 		"/api/admin/documents",
 		requireAuthenticated,
@@ -5235,6 +5263,32 @@ function createApp() {
 		);
 		timer.unref?.();
 		app.locals.tecnicosBolsaAuditoriaTimer = timer;
+	}
+
+	// Varredura automatica de Movimentacoes (devolucao de comodato -> baixa
+	// de O.S. no mapa/match). Mesmo padrao de polling do
+	// tecnicosBolsaAuditoriaTimer acima: roda a cada minuto so pra checar se
+	// ja passou do horario configurado (padrao 03:00) e ainda nao rodou hoje.
+	if (!app.locals.movimentacoesScanTimer) {
+		const timer = setInterval(
+			() => {
+				movimentacoesEntregas
+					.runDailyIfDue({
+						uid: "system",
+						role: "admin",
+						profile: { nome: "Rotina automática", role: "admin" },
+					})
+					.catch((error) => {
+						console.error(
+							"[movimentacoesEntregas] Falha na rotina diaria:",
+							error?.message || error,
+						);
+					});
+			},
+			Number(process.env.MOVIMENTACOES_SCAN_INTERVAL_MS || 60 * 1000),
+		);
+		timer.unref?.();
+		app.locals.movimentacoesScanTimer = timer;
 	}
 
 	app.use((error, req, res, next) => {
