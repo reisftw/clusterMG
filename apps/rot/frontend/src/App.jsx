@@ -33,6 +33,9 @@ import RegionaisPage from "./modules/regionais/components/RegionaisPage";
 import RolesPage from "./pages/admin/RolesPage";
 import RompimentosPage from "./pages/admin/RompimentosPage";
 import SegurancaTrabalhoPage from "./pages/admin/SegurancaTrabalhoPage";
+import DssDashboardPage from "./pages/admin/DssDashboardPage";
+import DssCalendarPage from "./pages/admin/DssCalendarPage";
+import DssReportsPage from "./pages/admin/DssReportsPage";
 import DssThemesPage from "./pages/admin/DssThemesPage";
 import DssThemeDetailPage from "./pages/admin/DssThemeDetailPage";
 import DssSchedulesPage from "./pages/admin/DssSchedulesPage";
@@ -186,6 +189,9 @@ export default function App() {
 				<Route path="seguranca-trabalho" element={<PrivateRoute permission="sst.dashboard.visualizar"><SegurancaTrabalhoPage /></PrivateRoute>} />
 				<Route path="seguranca-trabalho/protocolos" element={<SstProtocolsPage />} />
 				<Route path="seguranca-trabalho/protocolos/:id" element={<SstProtocolDetailPage />} />
+				<Route path="seguranca-trabalho/dss" element={<PrivateRoute permission="dss.dashboard.visualizar"><DssDashboardPage /></PrivateRoute>} />
+				<Route path="seguranca-trabalho/dss/calendario" element={<DssCalendarPage />} />
+				<Route path="seguranca-trabalho/dss/relatorios" element={<PrivateRoute permission="dss.relatorio.visualizar"><DssReportsPage /></PrivateRoute>} />
 				<Route path="seguranca-trabalho/dss/temas" element={<PrivateRoute permission="dss.tema.visualizar"><DssThemesPage /></PrivateRoute>} />
 				<Route path="seguranca-trabalho/dss/temas/:id" element={<PrivateRoute permission="dss.tema.visualizar"><DssThemeDetailPage /></PrivateRoute>} />
 				<Route path="seguranca-trabalho/dss/programacao" element={<PrivateRoute permission="dss.programacao.visualizar"><DssSchedulesPage /></PrivateRoute>} />

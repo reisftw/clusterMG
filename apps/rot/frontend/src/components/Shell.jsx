@@ -138,9 +138,12 @@ const ASSETS_SECURITY_MENU_ITEMS = {
 const SST_MENU_ITEMS = {
 	"sst-overview": { label: "Visão Geral", path: "/seguranca-trabalho", icon: LayoutDashboard, permission: "sst.dashboard.visualizar", end: true },
 	"sst-protocolos": { label: "Protocolos", path: "/seguranca-trabalho/protocolos", icon: ClipboardList, permission: null },
+	"sst-dss-dashboard": { label: "DSS · Dashboard", path: "/seguranca-trabalho/dss", icon: LayoutDashboard, permission: "dss.dashboard.visualizar", end: true },
+	"sst-dss-calendario": { label: "DSS · Calendário", path: "/seguranca-trabalho/dss/calendario", icon: CalendarDays, permission: null },
 	"sst-dss-temas": { label: "DSS · Temas", path: "/seguranca-trabalho/dss/temas", icon: BookOpen, permission: "dss.tema.visualizar" },
 	"sst-dss-programacao": { label: "DSS · Programação", path: "/seguranca-trabalho/dss/programacao", icon: CalendarClock, permission: "dss.programacao.visualizar" },
 	"sst-dss-execucoes": { label: "DSS · Execuções", path: "/seguranca-trabalho/dss/execucoes", icon: ClipboardCheck, permission: null },
+	"sst-dss-relatorios": { label: "DSS · Relatórios", path: "/seguranca-trabalho/dss/relatorios", icon: BarChart3, permission: "dss.relatorio.visualizar" },
 	"sst-relatorios": { label: "Relatórios", path: "/seguranca-trabalho/relatorios", icon: BarChart3, permission: "sst.relatorio.visualizar" },
 };
 

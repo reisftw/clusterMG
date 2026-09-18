@@ -1449,3 +1449,20 @@ export async function validateDssExecution(executionId, approved, note) {
 	});
 	return data.item;
 }
+
+export async function fetchDssDashboardSummary(filters = {}) {
+	return requestRotApi(`/admin/dss/dashboard/summary${dssQuery(filters)}`);
+}
+
+export async function fetchDssDashboardIndicators(filters = {}) {
+	return requestRotApi(`/admin/dss/dashboard/indicators${dssQuery(filters)}`);
+}
+
+export async function fetchDssDashboardRanking(filters = {}) {
+	const data = await requestRotApi(`/admin/dss/dashboard/ranking${dssQuery(filters)}`);
+	return data.items || [];
+}
+
+export async function fetchDssReportsDetails(filters = {}) {
+	return requestRotApi(`/admin/dss/reports/details${dssQuery(filters)}`);
+}
