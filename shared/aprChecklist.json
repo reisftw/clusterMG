@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "rain",
+      "label": "Condições climáticas: está chovendo no local da atividade?",
+      "options": [
+        "SIM",
+        "NÃO"
+      ],
+      "stop": [
+        0
+      ],
+      "verify": [],
+      "help": "Se SIM, interrompa a atividade IMEDIATAMENTE."
+    },
+    {
+      "id": "structure",
+      "label": "A estrutura física (poste/torre) apresenta integridade visível, sem trincas, podridão na base ou inclinação excessiva?",
+      "options": [
+        "Sim",
+        "Não (PARAR A ATIVIDADE)",
+        "Não se aplica"
+      ],
+      "stop": [
+        1
+      ],
+      "verify": [],
+      "help": ""
+    },
+    {
+      "id": "voltage",
+      "label": "O detector de tensão foi testado e utilizado no poste, cordoalha e elemento mensageiro?",
+      "options": [
+        "Sim - Sem presença de tensão",
+        "Não - Foi detectada tensão acidental (PARAR A ATIVIDADE)",
+        "Não se aplica - Atividade sem presença de corrente elétrica"
+      ],
+      "stop": [
+        1
+      ],
+      "verify": [],
+      "help": ""
+    },
+    {
+      "id": "fallProtection",
+      "label": "Equipamentos de proteção contra quedas verificados e em uso: cinto de segurança, talabartes e trava-quedas.",
+      "options": [
+        "Sim, verificados e aptos",
+        "Não verificados - RETOMAR APENAS APÓS VERIFICAÇÃO"
+      ],
+      "stop": [],
+      "verify": [
+        1
+      ],
+      "help": ""
+    },
+    {
+      "id": "isolation",
+      "label": "A área abaixo e ao redor do local de trabalho foi devidamente sinalizada e isolada?",
+      "options": [
+        "Sim",
+        "Não"
+      ],
+      "stop": [],
+      "verify": [
+        1
+      ],
+      "help": ""
+    },
+    {
+      "id": "competence",
+      "label": "Competência e capacidade: você possui a capacidade física e técnica para executar esta atividade em altura?",
+      "options": [
+        "SIM",
+        "NÃO"
+      ],
+      "stop": [
+        1
+      ],
+      "verify": [],
+      "help": "Se NÃO, interrompa IMEDIATAMENTE e acione o líder imediato."
+    },
+    {
+      "id": "training",
+      "label": "Treinamentos obrigatórios: você recebeu os treinamentos NR-10 e NR-35 conforme aplicável à atividade?",
+      "options": [
+        "SIM",
+        "NÃO"
+      ],
+      "stop": [
+        1
+      ],
+      "verify": [],
+      "help": "Se NÃO, interrompa IMEDIATAMENTE e acione o líder imediato e a Segurança do Trabalho."
+    },
+    {
+      "id": "inspection",
+      "label": "Foi realizada a inspeção visual e funcional de todos os seus EPIs para a atividade?",
+      "options": [
+        "SIM",
+        "NÃO"
+      ],
+      "stop": [],
+      "verify": [
+        1
+      ],
+      "help": "Se NÃO, realize a inspeção ANTES de iniciar as atividades."
+    },
+    {
+      "id": "allPpe",
+      "label": "Possui todos os EPIs para a função?",
+      "options": [
+        "Sim",
+        "Não"
+      ],
+      "stop": [],
+      "verify": [
+        1
+      ],
+      "help": ""
+    },
+    {
+      "id": "ppeCondition",
+      "label": "Todos os EPIs inspecionados estão em perfeitas condições de uso e APTOS, sem desgastes, cortes, rasgos ou danos?",
+      "options": [
+        "SIM",
+        "NÃO",
+        "Atividade realizada no solo, ausente de riscos de corte, lesões, queda, escoriações e outros provenientes da função"
+      ],
+      "stop": [
+        1
+      ],
+      "verify": [],
+      "help": "Se NÃO, interrompa IMEDIATAMENTE e acione o líder imediato e a Segurança do Trabalho."
+    },
+    {
+      "id": "ladder",
+      "label": "Segurança de acesso: se a atividade envolve escadas, elas estão ancoradas/amarradas e em boas condições?",
+      "options": [
+        "SIM",
+        "NÃO",
+        "Não se aplica (não usarei escadas)"
+      ],
+      "stop": [
+        1
+      ],
+      "verify": [],
+      "help": "Se NÃO, interrompa IMEDIATAMENTE e acione o líder imediato e a Segurança do Trabalho."
+    }
+  ],
+  "ppe": [
+    "Luva de Multitato",
+    "Luva de Vaqueta",
+    "Botina de Segurança",
+    "Capacete de Segurança",
+    "Óculos Incolor",
+    "Óculos Fumê",
+    "Perneira",
+    "Cinto de Segurança Paraquedista",
+    "Talabarte de Posicionamento",
+    "Sistema de Proteção Individual contra Quedas (talabarte Y, trava-quedas etc.)"
+  ],
+  "notice": "SIGA TODAS AS ORIENTAÇÕES DAS PERGUNTAS E REALIZE O PROCEDIMENTO CORRETO ANTES DE INICIAR AS ATIVIDADES. SUA SEGURANÇA SEMPRE EM PRIMEIRO LUGAR!"
+}

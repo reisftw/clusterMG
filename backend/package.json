@@ -1,0 +1,29 @@
+{
+	"name": "rot-backend",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Backend REST do ROT (gestao operacional de campo) — Postgres dedicado, JWT + OAuth Google, RBAC. Mesmo padrao arquitetural do apps/finan/backend.",
+	"main": "src/index.js",
+	"scripts": {
+		"api:dev": "node --watch src/index.js",
+		"api:start": "node src/index.js",
+		"migrate": "node scripts/run-sql-migrations.js",
+		"backup:database": "node scripts/database-backup.js"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "^3.1131.0",
+		"@aws-sdk/s3-request-presigner": "^3.1131.0",
+		"argon2": "^0.45.1",
+		"compression": "^1.8.1",
+		"cors": "^2.8.5",
+		"express": "^4.22.2",
+		"express-rate-limit": "^8.6.1",
+		"google-auth-library": "^11.0.2",
+		"helmet": "^8.1.0",
+		"jsonwebtoken": "^9.0.2",
+		"multer": "^2.2.0",
+		"nodemailer": "^9.0.5",
+		"pg": "^8.16.3",
+		"prom-client": "^15.1.3"
+	}
+}

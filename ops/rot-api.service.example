@@ -1,0 +1,28 @@
+[Unit]
+Description=Operacao API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=operacao
+Group=operacao
+WorkingDirectory=/opt/retiradas/apps/rot/backend
+EnvironmentFile=/opt/retiradas/apps/rot/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+; EnvironmentFile e lido pelo systemd (PID 1, root) antes de trocar de
+; usuario, entao continua funcionando mesmo com o .env em modo 600 dono
+; root — nao precisa liberar leitura do .env pro usuario do servico.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+RestrictSUIDSGID=true
+PrivateDevices=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/opt/retiradas/apps/rot/backend/uploads /opt/retiradas/apps/rot/backend/logs /tmp
+
+[Install]
+WantedBy=multi-user.target
