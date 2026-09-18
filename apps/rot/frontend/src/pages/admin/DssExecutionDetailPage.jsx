@@ -11,6 +11,21 @@ import { exportDssAttendanceList } from "../../utils/exportDssAttendance";
 import { EXECUTION_STATUS_BADGE, EXECUTION_STATUS_LABEL } from "./DssScheduleDetailPage";
 
 const EDITABLE_STATUSES = ["planejado", "disponivel", "em_andamento", "rejeitado"];
+
+// Os endpoints de presença/envio/validação devolvem a execução via
+// publicExecution() sem `members`/`content` (esses dois só vêm
+// completos no GET de detalhe). Um `setExecution(objetoParcial)` direto
+// sobrescreve o estado inteiro e apaga a lista de colaboradores da
+// tela — bug real visto em produção ("cliquei em ausente e sumiu todos
+// os nomes"). Faz merge ignorando chaves undefined em vez de substituir.
+function mergeExecution(current, patch) {
+	if (!current) return patch;
+	const next = { ...current };
+	for (const [key, value] of Object.entries(patch)) {
+		if (value !== undefined) next[key] = value;
+	}
+	return next;
+}
 const PRESENCE_LABEL = { pendente: "Pendente", presente: "Presente", ausente: "Ausente" };
 const PRESENCE_BADGE = { pendente: "bg-slate-100 text-slate-500", presente: "bg-emerald-50 text-emerald-700", ausente: "bg-red-50 text-red-700" };
 const ABSENCE_REASON_OPTIONS = [
@@ -379,7 +394,7 @@ export default function DssExecutionDetailPage() {
 					<Users size={16} /> Equipe prevista ({(execution.members || []).length})
 				</h2>
 				<div className="p-4">
-					<PresenceTable execution={execution} canEdit={canEdit} onExecutionUpdated={setExecution} />
+					<PresenceTable execution={execution} canEdit={canEdit} onExecutionUpdated={(patch) => setExecution((current) => mergeExecution(current, patch))} />
 				</div>
 			</section>
 
@@ -396,15 +411,15 @@ export default function DssExecutionDetailPage() {
 				</div>
 			) : null}
 
-			{canValidate ? <ValidationPanel execution={execution} onValidated={setExecution} /> : null}
+			{canValidate ? <ValidationPanel execution={execution} onValidated={(patch) => setExecution((current) => mergeExecution(current, patch))} /> : null}
 
 			{submitOpen ? (
 				<SubmitModal
 					execution={execution}
 					evidenceCount={evidenceCount}
 					onClose={() => setSubmitOpen(false)}
-					onSubmitted={(updated) => {
-						setExecution(updated);
+					onSubmitted={(patch) => {
+						setExecution((current) => mergeExecution(current, patch));
 						setSubmitOpen(false);
 					}}
 				/>
