@@ -1,0 +1,18 @@
+[Unit]
+Description=Finan PostgreSQL backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/retiradas/apps/finan/backend
+EnvironmentFile=/opt/retiradas/apps/finan/.env
+Environment=NODE_ENV=production
+Environment=FINAN_BACKUP_DIR=/opt/retiradas/backups/finan
+Environment=FINAN_BACKUP_RETENTION=14
+ExecStart=/usr/bin/npm run backup:database -- --scheduled
+; O .env do Finan (permissao 600, dono root) so e legivel por root — mesmo
+; usuario que ja roda finan-api.service. Ajuste se a politica de usuario
+; mudar (ex.: criar um usuario dedicado finan-backup com leitura no .env).
+User=root
+NoNewPrivileges=true
+PrivateTmp=true

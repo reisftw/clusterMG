@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Retiradas API - Documentação</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui.css"
+      integrity="sha384-rcbEi6xgdPk0iWkAQzT2F3FeBJXdG+ydrawGlfHAFIZG7wU6aKbQaRewysYpmrlW"
+      crossorigin="anonymous"
+    />
+    <style>
+      :root {
+        --navy: #071b3a;
+        --blue: #155dfc;
+        --orange: #ff6b00;
+        --border: #dbe4f0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(255, 107, 0, 0.18), transparent 34rem),
+          radial-gradient(circle at top right, rgba(21, 93, 252, 0.24), transparent 32rem),
+          linear-gradient(180deg, #06172f 0, #092044 18rem, #f3f7fb 18.1rem);
+        color: #0f172a;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      }
+
+      .topbar,
+      .swagger-ui .topbar {
+        display: none;
+      }
+
+      .swagger-ui .auth-wrapper,
+      .swagger-ui .authorization__btn,
+      .swagger-ui .scheme-container .auth-wrapper {
+        display: none !important;
+      }
+
+      .shell {
+        width: min(1380px, calc(100% - 36px));
+        margin: 0 auto;
+        padding: 28px 0 40px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 24px;
+        align-items: center;
+        color: white;
+        padding: 22px 0 28px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: #ffb17a;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 58px);
+        line-height: 0.98;
+        font-weight: 950;
+      }
+
+      .hero p {
+        max-width: 760px;
+        margin: 14px 0 0;
+        color: #dbeafe;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.65;
+      }
+
+      .session-card {
+        width: min(360px, 100%);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 18px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+        backdrop-filter: blur(16px);
+      }
+
+      .session-card strong {
+        display: block;
+        color: white;
+        font-size: 14px;
+      }
+
+      .session-card span {
+        display: block;
+        margin-top: 4px;
+        color: #bfdbfe;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .stat-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.92);
+        padding: 16px;
+        box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+      }
+
+      .stat-card span {
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .stat-card strong {
+        display: block;
+        margin-top: 8px;
+        color: #0f172a;
+        font-size: 19px;
+        font-weight: 950;
+      }
+
+      .docs-panel {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        background: white;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.14);
+      }
+
+      .panel-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid #e8eef6;
+        background: linear-gradient(180deg, #ffffff, #f8fbff);
+        padding: 18px 22px;
+      }
+
+      .panel-header h2 {
+        margin: 0;
+        color: #0f172a;
+        font-size: 18px;
+        font-weight: 950;
+      }
+
+      .panel-header p {
+        margin: 4px 0 0;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .button {
+        border: 1px solid transparent;
+        border-radius: 12px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 900;
+        text-decoration: none;
+        transition: 0.18s ease;
+      }
+
+      .button-primary {
+        background: linear-gradient(135deg, var(--blue), #3b82f6);
+        color: white;
+        box-shadow: 0 12px 24px rgba(21, 93, 252, 0.22);
+      }
+
+      .button-primary:hover {
+        transform: translateY(-1px);
+      }
+
+      .button-muted {
+        border-color: #dbe4f0;
+        background: #fff;
+        color: #334155;
+      }
+
+      .button-danger {
+        border-color: #fecaca;
+        background: #fff1f2;
+        color: #be123c;
+      }
+
+      #swagger-ui {
+        padding: 10px 18px 28px;
+      }
+
+      .swagger-ui .scheme-container {
+        border-radius: 16px;
+        box-shadow: none;
+        background: #f8fafc;
+      }
+
+      .swagger-ui .info {
+        margin: 24px 0;
+      }
+
+      .swagger-ui .opblock {
+        overflow: hidden;
+        border-radius: 14px;
+        box-shadow: none;
+      }
+
+      .auth-screen {
+        display: none;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        background:
+          radial-gradient(circle at top left, rgba(255, 107, 0, 0.18), transparent 34rem),
+          radial-gradient(circle at bottom right, rgba(21, 93, 252, 0.28), transparent 34rem),
+          linear-gradient(135deg, #06172f, #092044 48%, #0c2e62);
+      }
+
+      .auth-card {
+        display: grid;
+        grid-template-columns: 1fr 390px;
+        width: min(980px, 100%);
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 32px 90px rgba(0, 0, 0, 0.32);
+      }
+
+      .auth-copy {
+        padding: 42px;
+        background:
+          radial-gradient(circle at 85% 20%, rgba(255, 107, 0, 0.22), transparent 16rem),
+          linear-gradient(135deg, #071b3a, #0f3b76);
+        color: white;
+      }
+
+      .auth-copy h1 {
+        margin: 0;
+        font-size: 42px;
+        line-height: 1;
+        font-weight: 950;
+      }
+
+      .auth-copy p {
+        margin: 16px 0 0;
+        color: #dbeafe;
+        font-weight: 650;
+        line-height: 1.65;
+      }
+
+      .auth-copy ul {
+        display: grid;
+        gap: 10px;
+        margin: 28px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .auth-copy li {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.08);
+        padding: 12px 14px;
+        color: #e0f2fe;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .auth-form {
+        padding: 42px 34px;
+      }
+
+      .auth-form h2 {
+        margin: 0;
+        color: #0f172a;
+        font-size: 24px;
+        font-weight: 950;
+      }
+
+      .auth-form p {
+        margin: 8px 0 24px;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 14px;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      input {
+        width: 100%;
+        margin-top: 7px;
+        border: 1px solid #dbe4f0;
+        border-radius: 13px;
+        padding: 12px 13px;
+        outline: none;
+        color: #0f172a;
+        font: 700 14px/1.4 inherit;
+      }
+
+      input:focus {
+        border-color: #93c5fd;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
+      }
+
+      .auth-error {
+        display: none;
+        margin: 0 0 14px;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        background: #fff1f2;
+        padding: 10px 12px;
+        color: #be123c;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      body.requires-auth .auth-screen {
+        display: flex;
+      }
+
+      body.requires-auth .shell {
+        display: none;
+      }
+
+      @media (max-width: 880px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+
+        .session-card {
+          width: 100%;
+        }
+
+        .stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .auth-card {
+          grid-template-columns: 1fr;
+        }
+
+        .auth-copy,
+        .auth-form {
+          padding: 28px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          width: min(100% - 20px, 1380px);
+        }
+
+        .stats {
+          grid-template-columns: 1fr;
+        }
+
+        .panel-header {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body class="requires-auth">
+    <main class="auth-screen">
+      <section class="auth-card">
+        <div class="auth-copy">
+          <p class="eyebrow">Retiradas API</p>
+          <h1>Documentação técnica protegida</h1>
+          <p>
+            Entre com o mesmo usuário do sistema Retiradas para consultar rotas, contratos REST,
+            webhooks e integrações. Não precisa colar token manualmente.
+          </p>
+          <ul>
+            <li>API Node.js/Express com JWT</li>
+            <li>Swagger com autorização automática após o login</li>
+          </ul>
+        </div>
+        <form id="login-form" class="auth-form">
+          <h2>Acessar docs</h2>
+          <p>Use seu e-mail e senha cadastrados no Retiradas.</p>
+          <div id="auth-error" class="auth-error"></div>
+          <div id="auth-status" class="auth-error"></div>
+          <label>
+            E-mail
+            <input id="email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            Senha
+            <input id="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button id="login-button" class="button button-primary" type="submit">Entrar e abrir documentação</button>
+          <p>Após o login, as rotas protegidas recebem a autorização automaticamente.</p>
+        </form>
+      </section>
+    </main>
+
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Documentação interna</p>
+          <h1>Retiradas API</h1>
+          <p>
+            Contratos REST, fluxos de integração, webhooks, autenticação, documentos, logística e mensageria
+            em um painel protegido pelo login do próprio sistema.
+          </p>
+        </div>
+        <aside class="session-card">
+          <strong id="session-name">Sessão autenticada</strong>
+          <span id="session-email">Carregando usuário...</span>
+        </aside>
+      </header>
+
+      <section class="stats" aria-label="Resumo da documentação">
+        <div class="stat-card">
+          <span>Base URL</span>
+          <strong>retiradas.tech/api</strong>
+        </div>
+        <div class="stat-card">
+          <span>Autenticação</span>
+          <strong>JWT do sistema</strong>
+        </div>
+        <div class="stat-card">
+          <span>Ambiente</span>
+          <strong>Produção</strong>
+        </div>
+        <div class="stat-card">
+          <span>Acesso</span>
+          <strong>Login Retiradas</strong>
+        </div>
+      </section>
+
+      <section class="docs-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Explorador da API</h2>
+            <p>As chamadas autenticadas usam automaticamente a sessão atual dos docs.</p>
+          </div>
+          <div class="actions">
+            <a class="button button-muted" href="./openapi.yaml" target="_blank" rel="noreferrer">Baixar OpenAPI</a>
+            <button id="logout-button" class="button button-danger" type="button">Sair</button>
+          </div>
+        </div>
+        <div id="swagger-ui"></div>
+      </section>
+    </div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-bundle.js"
+      integrity="sha384-NXtFPpN61oWCuN4D42K6Zd5Rt2+uxeIT36R7kpXBuY9tLnZorzrJ4ykpqwJfgjpZ"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-standalone-preset.js"
+      integrity="sha384-qr68CD0cvHa88PmVu7e1a58Ego4qvKtcvcLdS2a8Mo5zILI01gyIV9jVwJk7X2NU"
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      const SESSION_KEY = "retiradas_docs_session_v1";
+      const API_BASE = "/api";
+
+      const state = {
+        session: readSession(),
+        swaggerStarted: false,
+      };
+
+      function readSession() {
+        try {
+          const raw = window.localStorage.getItem(SESSION_KEY);
+          return raw ? JSON.parse(raw) : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function saveSession(session) {
+        state.session = session;
+        if (!session?.user) {
+          window.localStorage.removeItem(SESSION_KEY);
+          return;
+        }
+        window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      }
+
+      function authHeaders() {
+        return {};
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(`${API_BASE}${path}`, {
+          ...options,
+          cache: "no-store",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+            ...(options.headers || {}),
+          },
+        });
+        const responseText = await response.text();
+        let data = null;
+        try {
+          data = responseText ? JSON.parse(responseText) : null;
+        } catch {
+          data = null;
+        }
+        if (!response.ok || data?.ok === false) {
+          const detail = data?.error || data?.message || responseText.slice(0, 180);
+          throw new Error(detail || `Erro HTTP ${response.status}.`);
+        }
+        return data;
+      }
+
+      function setAuthError(message) {
+        const error = document.getElementById("auth-error");
+        error.textContent = message || "";
+        error.style.display = message ? "block" : "none";
+      }
+
+      function setAuthStatus(message) {
+        const status = document.getElementById("auth-status");
+        status.textContent = message || "";
+        status.style.display = message ? "block" : "none";
+        status.style.borderColor = "#bfdbfe";
+        status.style.background = "#eff6ff";
+        status.style.color = "#1d4ed8";
+      }
+
+      function showDocs(user) {
+        document.body.classList.remove("requires-auth");
+        document.getElementById("session-name").textContent = user?.nome || user?.name || user?.email || "Sessão autenticada";
+        document.getElementById("session-email").textContent = user?.email || "Usuário autorizado";
+        if (!state.swaggerStarted) startSwagger();
+      }
+
+      function showLogin() {
+        document.body.classList.add("requires-auth");
+      }
+
+      async function validateSession() {
+        try {
+          setAuthStatus("Validando sessão salva...");
+          const data = await api("/auth/me");
+          const user = data?.user || state.session.user;
+          saveSession({ ...state.session, csrfToken: data?.csrfToken || state.session.csrfToken || "", user });
+          setAuthStatus("");
+          showDocs(user);
+        } catch {
+          setAuthStatus("");
+          saveSession(null);
+          showLogin();
+        }
+      }
+
+      async function handleLogin(event) {
+        event.preventDefault();
+        setAuthError("");
+        const button = document.getElementById("login-button");
+        button.disabled = true;
+        button.textContent = "Entrando...";
+        setAuthStatus("Enviando login para a API...");
+        try {
+          const data = await api("/auth/login", {
+            method: "POST",
+            body: JSON.stringify({
+              email: document.getElementById("email").value,
+              password: document.getElementById("password").value,
+            }),
+          });
+          saveSession({
+            csrfToken: data?.csrfToken || "",
+            user: data?.user || null,
+          });
+          setAuthStatus("Login confirmado. Abrindo documentação...");
+          await validateSession();
+        } catch (error) {
+          setAuthStatus("");
+          setAuthError(error?.message || "Não foi possível entrar. Confira se o proxy /api dos docs foi aplicado no Nginx.");
+        } finally {
+          button.disabled = false;
+          button.textContent = "Entrar e abrir documentação";
+        }
+      }
+
+      function logout() {
+        saveSession(null);
+        state.swaggerStarted = false;
+        document.getElementById("swagger-ui").innerHTML = "";
+        showLogin();
+      }
+
+      function startSwagger() {
+        state.swaggerStarted = true;
+        if (!window.SwaggerUIBundle || !window.SwaggerUIStandalonePreset) {
+          document.getElementById("swagger-ui").innerHTML =
+            '<div style="padding:24px;color:#be123c;font-weight:800">Não foi possível carregar o Swagger UI pela CDN. Verifique a conexão do navegador e recarregue a página.</div>';
+          return;
+        }
+        window.ui = SwaggerUIBundle({
+          url: "./openapi.yaml",
+          dom_id: "#swagger-ui",
+          deepLinking: true,
+          presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+          layout: "BaseLayout",
+          displayRequestDuration: true,
+          tryItOutEnabled: false,
+          requestInterceptor: (request) => {
+            if (String(request.url || "").startsWith("https://retiradas.tech/api")) {
+              request.url = request.url.replace("https://retiradas.tech/api", "/api");
+            }
+            request.credentials = "include";
+            if (
+              state.session?.csrfToken &&
+              !["GET", "HEAD", "OPTIONS"].includes(String(request.method || "GET").toUpperCase())
+            ) {
+              request.headers["X-CSRF-Token"] = state.session.csrfToken;
+            }
+            return request;
+          },
+        });
+      }
+
+      document.getElementById("login-form").addEventListener("submit", handleLogin);
+      document.getElementById("logout-button").addEventListener("click", logout);
+      validateSession();
+    </script>
+  </body>
+</html>

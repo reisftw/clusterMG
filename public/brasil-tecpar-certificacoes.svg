@@ -1,0 +1,60 @@
+<svg width="1208" height="311" viewBox="0 0 1208 311" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="8" width="1200" height="303" rx="34" fill="white"/>
+  <rect x="4" y="8" width="1200" height="303" rx="34" stroke="#08245F" stroke-width="4"/>
+  <text x="604" y="90" text-anchor="middle" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="500">
+    As operações da Brasil TecPar são certificadas
+  </text>
+
+  <g transform="translate(74 157)">
+    <circle cx="27" cy="27" r="23" fill="#67C7D0"/>
+    <circle cx="27" cy="27" r="27" fill="#67C7D0"/>
+    <path d="M18 22C18 19.7909 19.7909 18 22 18C24.2091 18 26 19.7909 26 22C26 24.2091 24.2091 26 22 26C19.7909 26 18 24.2091 18 22Z" fill="white"/>
+    <path d="M29 33C29 30.7909 30.7909 29 33 29C35.2091 29 37 30.7909 37 33C37 35.2091 35.2091 37 33 37C30.7909 37 29 35.2091 29 33Z" fill="white"/>
+    <path d="M12 37C12 34.7909 13.7909 33 16 33C18.2091 33 20 34.7909 20 37C20 39.2091 18.2091 41 16 41C13.7909 41 12 39.2091 12 37Z" fill="white"/>
+    <path d="M20.5 24L28.5 31" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <path d="M19.5 35L29.5 34" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <path d="M24 22.5L31.5 20" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <text x="62" y="39" fill="#4962B8" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700">KIND</text>
+    <text x="183" y="39" fill="#67C7D0" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700">NS</text>
+  </g>
+
+  <g transform="translate(368 145)">
+    <path d="M36 0L68 20V55L36 74L4 55V20L36 0Z" fill="#3B82F6"/>
+    <path d="M36 0L68 20L36 35L4 20L36 0Z" fill="#5DA0FF"/>
+    <path d="M36 35L68 55L36 74L4 55L36 35Z" fill="#2747A8"/>
+    <path d="M20 41L36 28L52 41L36 47L20 41Z" fill="white"/>
+    <text x="95" y="46" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="47" font-weight="500" letter-spacing="6">MANRS</text>
+  </g>
+
+  <g transform="translate(723 132)">
+    <circle cx="52" cy="55" r="46" stroke="#111111" stroke-width="4"/>
+    <path d="M27 28C34 17 46 12 58 15C70 18 79 29 80 42C81 55 73 67 61 76L52 83L43 76C28 64 21 46 27 28Z" stroke="#111111" stroke-width="4" fill="none"/>
+    <path d="M37 40C44 34 53 33 60 38C68 44 68 55 59 63L52 69L45 63C36 56 35 46 42 40" stroke="#111111" stroke-width="4" fill="none"/>
+    <text x="24" y="20" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">bsi</text>
+  </g>
+
+  <g transform="translate(804 132)">
+    <rect x="0" y="10" width="168" height="90" rx="22" fill="white" stroke="#111111" stroke-width="4"/>
+    <path d="M53 10H146" stroke="#111111" stroke-width="4"/>
+    <text x="24" y="31" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">ISO/IEC</text>
+    <text x="24" y="53" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">27001</text>
+    <text x="24" y="73" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="500">Information Security</text>
+    <text x="24" y="92" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="500">Management System</text>
+    <text x="24" y="111" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">CERTIFIED</text>
+  </g>
+
+  <g transform="translate(995 138)">
+    <path d="M53 0L82 13L73 32H33L24 13L53 0Z" fill="#FDE047" stroke="#111111" stroke-width="3"/>
+    <path d="M29 30H77L80 109H26L29 30Z" fill="#16A34A" stroke="#111111" stroke-width="3"/>
+    <circle cx="53" cy="16" r="13" fill="white" stroke="#111111" stroke-width="2"/>
+    <path d="M48 17C49.6 19 56.4 19 58 17" stroke="#111111" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="49" cy="13" r="1.5" fill="#111111"/>
+    <circle cx="57" cy="13" r="1.5" fill="#111111"/>
+    <text x="36" y="55" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">FUNDAÇÃO</text>
+    <text x="36" y="72" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">ABRINQ</text>
+    <text x="96" y="58" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700">VOLUNTÁRIO</text>
+    <text x="96" y="73" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700">AMIGO DA</text>
+    <text x="96" y="88" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700">CRIANÇA</text>
+    <text x="76" y="109" text-anchor="middle" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">RECONHECE</text>
+  </g>
+</svg>

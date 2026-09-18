@@ -1,0 +1,33 @@
+{
+	"name": "Retirada Painel",
+	"short_name": "Retirada",
+	"id": "/",
+	"description": "Aplicativo de retiradas com painel publico, mapa, match, relatorios e area interna.",
+	"lang": "pt-BR",
+	"start_url": "/?source=pwa",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#f8fafc",
+	"theme_color": "#f97316",
+	"orientation": "portrait-primary",
+	"icons": [
+		{
+			"src": "/pwa-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/pwa-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/pwa-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}

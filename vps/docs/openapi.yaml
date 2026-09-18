@@ -1,0 +1,748 @@
+openapi: 3.0.3
+info:
+  title: Retiradas API
+  version: 1.0.0
+  description: |
+    Documentacao REST da API do sistema Retiradas.
+
+    A API roda em `https://retiradas.tech/api` e usa JWT para rotas autenticadas.
+    Rotas de escrita autenticadas tambem exigem CSRF via cookie/header, conforme o cliente web do sistema.
+
+    Esta documentacao foi criada para orientar integracoes internas e parceiros tecnicos.
+  contact:
+    name: Retiradas.tech
+servers:
+  - url: https://retiradas.tech/api
+    description: Producao
+tags:
+  - name: Health
+    description: Status basico da API
+  - name: Auth
+    description: Login, sessao e senha
+  - name: Documents
+    description: API generica de documentos do PostgreSQL
+  - name: Static
+    description: Snapshots estaticos usados pelo frontend
+  - name: Imports
+    description: Processamento de Mapa, Match e Metas
+  - name: Mensageria
+    description: WhatsApp, fila e automacao
+  - name: Webhooks
+    description: Recebimento de eventos externos
+  - name: Documentos
+    description: Documentos de empresas, Google Drive e aprovacao
+  - name: Logistica
+    description: Pontos estrategicos, cotacoes e fornecedores
+  - name: Admin
+    description: Rotas administrativas
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Verifica se a API e o banco estao online
+      security: []
+      responses:
+        "200":
+          description: API online
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Realiza login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: usuario@empresa.com.br
+                password:
+                  type: string
+                  format: password
+                  example: "senha"
+      responses:
+        "200":
+          description: Login realizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Retorna o usuario autenticado
+      responses:
+        "200":
+          description: Perfil atual
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Encerra a sessao atual
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Solicita recuperacao de senha
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  example: usuario@empresa.com.br
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /documents:
+    get:
+      tags: [Documents]
+      summary: Lista documentos por collection
+      parameters:
+        - in: query
+          name: collection
+          required: true
+          schema:
+            type: string
+          example: usuarios
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Lista de documentos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AppDocument"
+    post:
+      tags: [Documents]
+      summary: Cria documento em uma collection
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                collection:
+                  type: string
+                  example: integracoes
+                data:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Documento criado
+
+  /documents/{path}:
+    get:
+      tags: [Documents]
+      summary: Busca documento por caminho
+      parameters:
+        - $ref: "#/components/parameters/DocumentPath"
+      responses:
+        "200":
+          description: Documento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppDocument"
+    put:
+      tags: [Documents]
+      summary: Atualiza documento por caminho
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/DocumentPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    delete:
+      tags: [Documents]
+      summary: Remove documento por caminho
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      parameters:
+        - $ref: "#/components/parameters/DocumentPath"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /public/dashboard:
+    get:
+      tags: [Static]
+      summary: Retorna dashboard publico
+      security: []
+      responses:
+        "200":
+          description: Dados publicos de dashboard
+
+  /public/static/{domain}:
+    get:
+      tags: [Static]
+      summary: Retorna snapshot publico por dominio
+      security: []
+      parameters:
+        - in: path
+          name: domain
+          required: true
+          schema:
+            type: string
+          example: operacional
+      responses:
+        "200":
+          description: Snapshot publico
+
+  /imports/mapa:
+    post:
+      tags: [Imports]
+      summary: Envia e processa planilha do Mapa
+      description: Processamento assíncrono. Retorna jobId para acompanhamento.
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          $ref: "#/components/responses/JobCreated"
+
+  /imports/match:
+    post:
+      tags: [Imports]
+      summary: Envia e processa planilha do Match
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          $ref: "#/components/responses/JobCreated"
+
+  /imports/metas:
+    post:
+      tags: [Imports]
+      summary: Envia e processa planilha de Metas
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          $ref: "#/components/responses/JobCreated"
+
+  /imports/jobs/{jobId}:
+    get:
+      tags: [Imports]
+      summary: Consulta progresso de importacao
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status do job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportJob"
+
+  /mensageria/evolution/status:
+    get:
+      tags: [Mensageria]
+      summary: Status da mensageria, conexao e worker
+      responses:
+        "200":
+          description: Status da mensageria
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MensageriaStatus"
+
+  /mensageria/evolution/test:
+    post:
+      tags: [Mensageria]
+      summary: Envia mensagem de teste
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [number, templateId]
+              properties:
+                number:
+                  type: string
+                  example: "5531999999999"
+                templateId:
+                  type: string
+                  example: cancelamento
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /mensageria/evolution/resume:
+    post:
+      tags: [Mensageria]
+      summary: Inicia a fila automatica de mensageria
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /mensageria/evolution/pause:
+    post:
+      tags: [Mensageria]
+      summary: Pausa a fila automatica de mensageria
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /webhooks/evolution:
+    post:
+      tags: [Webhooks]
+      summary: Recebe eventos da Evolution API
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/WebhookPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /webhooks/whatsapp-official:
+    get:
+      tags: [Webhooks]
+      summary: Verificacao do webhook WhatsApp oficial
+      security: []
+      responses:
+        "200":
+          description: Challenge validado
+    post:
+      tags: [Webhooks]
+      summary: Recebe eventos do WhatsApp oficial
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/WebhookPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /webhooks/cvortex:
+    post:
+      tags: [Webhooks]
+      summary: Endpoint previsto para eventos da Cvortex
+      description: |
+        Endpoint planejado para integracao com Cvortex.
+        O parser final depende do payload oficial fornecido pela Cvortex.
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/WebhookPayload"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /documentos/submissions:
+    get:
+      tags: [Documentos]
+      summary: Lista envios de documentos
+      responses:
+        "200":
+          description: Lista de envios
+    post:
+      tags: [Documentos]
+      summary: Cria envio de documentos PDF para aprovacao
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                empresaId:
+                  type: string
+                mesReferencia:
+                  type: string
+                  example: "2026-08"
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          description: Envio criado
+
+  /documentos/submissions/{id}/review:
+    patch:
+      tags: [Documentos]
+      summary: Aprova ou reprova documentos
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /documentos/google/status:
+    get:
+      tags: [Documentos]
+      summary: Status da integracao Google Drive
+      responses:
+        "200":
+          description: Status Google Drive
+
+  /documentos/folders/{empresaId}:
+    post:
+      tags: [Documentos]
+      summary: Garante pasta da empresa no Google Drive
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      parameters:
+        - in: path
+          name: empresaId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pasta criada ou encontrada
+
+  /logistica/config:
+    get:
+      tags: [Logistica]
+      summary: Retorna configuracao de logistica
+      responses:
+        "200":
+          description: Configuracao
+    put:
+      tags: [Logistica]
+      summary: Atualiza configuracao de logistica
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /logistica/lalamove/quote:
+    post:
+      tags: [Logistica]
+      summary: Solicita cotacao Lalamove
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Cotacao retornada
+
+  /logistica/geocode:
+    post:
+      tags: [Logistica]
+      summary: Converte endereco em coordenadas
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Coordenadas encontradas
+
+  /admin/api-status:
+    get:
+      tags: [Admin]
+      summary: Lista status das APIs monitoradas
+      responses:
+        "200":
+          description: Status das APIs
+
+  /admin/database/backups:
+    get:
+      tags: [Admin]
+      summary: Lista backups do banco
+      responses:
+        "200":
+          description: Backups
+    post:
+      tags: [Admin]
+      summary: Gera backup do banco
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Backup criado
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Lista usuarios
+      responses:
+        "200":
+          description: Usuarios
+    post:
+      tags: [Admin]
+      summary: Cria usuario
+      security:
+        - bearerAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Usuario criado
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    csrfToken:
+      type: apiKey
+      in: header
+      name: x-csrf-token
+  parameters:
+    DocumentPath:
+      in: path
+      name: path
+      required: true
+      schema:
+        type: string
+      description: Caminho completo do documento. Exemplo `usuarios/uid`.
+  requestBodies:
+    WebhookPayload:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+  responses:
+    Ok:
+      description: Operacao realizada
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok:
+                type: boolean
+                example: true
+    Unauthorized:
+      description: Token ausente, invalido ou expirado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    JobCreated:
+      description: Job criado
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              ok:
+                type: boolean
+              jobId:
+                type: string
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        service:
+          type: string
+          example: retiradas-vps-api
+        databaseTime:
+          type: string
+          format: date-time
+    AuthResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+    User:
+      type: object
+      properties:
+        uid:
+          type: string
+        email:
+          type: string
+        nome:
+          type: string
+        role:
+          type: string
+          example: admin
+        regional:
+          type: string
+    AppDocument:
+      type: object
+      properties:
+        path:
+          type: string
+        collectionPath:
+          type: string
+        documentId:
+          type: string
+        parentPath:
+          type: string
+          nullable: true
+        data:
+          type: object
+          additionalProperties: true
+        updatedAt:
+          type: string
+          format: date-time
+    ImportJob:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        progress:
+          type: number
+        message:
+          type: string
+    MensageriaStatus:
+      type: object
+      properties:
+        config:
+          type: object
+          additionalProperties: true
+        worker:
+          type: object
+          properties:
+            workerActive:
+              type: boolean
+            workerRunning:
+              type: boolean
+            lastRun:
+              type: string
+              nullable: true
+            lastError:
+              type: string
+            lastSkipped:
+              type: string
+            nextRunAt:
+              type: string
+              nullable: true
+        connection:
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Autenticacao obrigatoria.

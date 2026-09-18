@@ -1,0 +1,519 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - homolog-dev
+      - develop
+      - finan
+      - 'feature/**'
+      - 'fix/**'
+      - 'hotfix/**'
+      - 'chore/**'
+  pull_request:
+
+concurrency:
+  group: retiradas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+            apps/finan/frontend/package-lock.json
+
+      - name: Install all dependencies
+        run: |
+          npm ci
+          npm ci --prefix vps
+
+      - name: Audit dependencies for high and critical vulnerabilities
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --audit-level=high 2>&1 | tee npm-audit.log; then
+              exit 0
+            fi
+
+            if grep -Eiq "503 Service Unavailable|Service Unavailable|audit endpoint returned an error" npm-audit.log; then
+              echo "npm audit registry endpoint unavailable on attempt ${attempt}/3."
+              sleep 10
+              continue
+            fi
+
+            exit 1
+          done
+
+          echo "::warning::npm audit skipped because the npm registry audit endpoint returned Service Unavailable after 3 attempts."
+
+      - name: Run Semgrep security scan
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/security-audit
+
+      - name: Scan diff for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    # Postgres isolado para os testes de integracao do Finan (nao e usado
+    # pelo resto da suite). Sobe e cai com o job automaticamente — GitHub
+    # Actions encerra service containers ao final do job mesmo se algum
+    # step falhar, entao nao precisa de um passo de teardown manual.
+    # Mesmas credenciais/nome de banco do apps/finan/docker-compose.test.yml
+    # (uso local), so a porta host muda porque aqui nao ha conflito com
+    # nenhum outro Postgres.
+    services:
+      finan-postgres-test:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: finan_test
+          POSTGRES_USER: finan_test
+          POSTGRES_PASSWORD: finan_test_only_local
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U finan_test -d finan_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+            apps/finan/frontend/package-lock.json
+            apps/finan/backend/package-lock.json
+
+      - name: Install all dependencies
+        run: |
+          npm ci
+          npm ci --prefix vps
+          npm ci --prefix apps/finan/frontend
+          npm ci --prefix apps/finan/backend
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Apply Finan migrations to test Postgres (001..010, from scratch)
+        env:
+          FINAN_TEST_DATABASE_URL: postgres://finan_test:finan_test_only_local@127.0.0.1:55432/finan_test
+        run: npm run finan:test:db:migrate
+
+      - name: Run Finan integration tests (real Postgres)
+        env:
+          FINAN_TEST_DATABASE_URL: postgres://finan_test:finan_test_only_local@127.0.0.1:55432/finan_test
+        run: npm run finan:test:integration
+
+      - name: Build application
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "homolog-dev" ]; then
+            export VITE_APP_ENV_LABEL="Homologação"
+            export VITE_API_BASE_URL="${{ secrets.HOMOLOG_PUBLIC_API_URL || 'https://homolog.retiradas.tech/api' }}"
+          else
+            export VITE_APP_ENV_LABEL="Produção"
+            export VITE_API_BASE_URL="${{ secrets.PROD_PUBLIC_API_URL || 'https://retiradas.tech/api' }}"
+          fi
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build
+
+      - name: Validate Finan dedicated app
+        run: |
+          npm run finan:frontend:build
+          node --check apps/finan/backend/src/app.js
+          node --check apps/finan/backend/src/auth/routes.js
+          node --check apps/finan/backend/src/index.js
+          node --check apps/finan/backend/scripts/migrate-from-retiradas.js
+          node --check apps/finan/backend/scripts/run-sql-migrations.js
+          node --check apps/finan/backend/scripts/database-backup.js
+
+  deploy-finan-vps:
+    name: Deploy Finan to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/finan' || github.ref == 'refs/heads/master')
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
+      FINAN_APP_PATH: ${{ secrets.PROD_FINAN_APP_PATH || secrets.FINAN_APP_PATH || '/opt/retiradas/apps/finan' }}
+      FINAN_API_SERVICE: ${{ secrets.PROD_FINAN_API_SERVICE || secrets.FINAN_API_SERVICE || 'finan-api.service' }}
+      FINAN_API_ENV_FILE: ${{ secrets.PROD_FINAN_API_ENV_FILE || secrets.FINAN_API_ENV_FILE || '/opt/retiradas/apps/finan/.env' }}
+      FINAN_PUBLIC_URL: ${{ secrets.PROD_FINAN_PUBLIC_URL || secrets.FINAN_PUBLIC_URL || 'https://finan.retiradas.tech' }}
+      REMOTE_FINAN_PACKAGE: /tmp/finan-app-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+            apps/finan/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/finan/frontend
+
+      - name: Build Finan frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_API_BASE_URL="${FINAN_PUBLIC_URL}/api"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run finan:frontend:build
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.HOMOLOG_VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret PROD_VPS_HOST, VPS_HOST or HOMOLOG_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret PROD_VPS_SSH_KEY, VPS_SSH_KEY or HOMOLOG_VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package Finan app
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -czf finan-app.tar.gz \
+            -C apps finan
+
+      - name: Upload Finan package to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            finan-app.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_FINAN_PACKAGE"
+
+      - name: Publish Finan on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             finan_app_path='$FINAN_APP_PATH'
+             finan_parent_path=\"\$(dirname \"\$finan_app_path\")\"
+             finan_service='$FINAN_API_SERVICE'
+             finan_env_file='$FINAN_API_ENV_FILE'
+             finan_package='$REMOTE_FINAN_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$finan_parent_path\"
+             \$SUDO rm -rf \"\$finan_app_path/frontend/dist\"
+             \$SUDO tar -xzf \"\$finan_package\" -C \"\$finan_parent_path\"
+             cd \"\$finan_app_path/backend\"
+             package_hash=\"\$(sha256sum package.json | awk '{print \$1}')\"
+             if [ -d node_modules ] && [ -f .package-json.sha256 ] && [ \"\$package_hash\" = \"\$(cat .package-json.sha256)\" ]; then
+               echo 'Finan backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing Finan backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               echo \"\$package_hash\" > /tmp/finan-package-json.sha256
+               \$SUDO mv /tmp/finan-package-json.sha256 .package-json.sha256
+             fi
+             if [ -f \"\$finan_env_file\" ]; then
+               set -a
+               . \"\$finan_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate
+             \$SUDO systemctl restart \"\$finan_service\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             rm -f \"\$finan_package\" || \$SUDO rm -f \"\$finan_package\""
+
+  deploy-vps:
+    name: Deploy frontend and backend to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
+      VPS_DEPLOY_PATH: ${{ secrets.PROD_VPS_DEPLOY_PATH || secrets.VPS_DEPLOY_PATH || '/var/www/retiradas/dist' }}
+      VPS_API_PATH: ${{ secrets.PROD_VPS_API_PATH || secrets.VPS_API_PATH || '/opt/retiradas/vps' }}
+      VPS_API_SERVICE: ${{ secrets.PROD_VPS_API_SERVICE || secrets.VPS_API_SERVICE || 'retiradas-api' }}
+      VPS_API_ENV_FILE: ${{ secrets.PROD_VPS_API_ENV_FILE || secrets.VPS_API_ENV_FILE || '/etc/retiradas/api.env' }}
+      REMOTE_FRONTEND_PACKAGE: /tmp/retiradas-dist-${{ github.sha }}.tar.gz
+      REMOTE_BACKEND_PACKAGE: /tmp/retiradas-vps-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+            apps/finan/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build production frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_API_BASE_URL="${{ secrets.PROD_PUBLIC_API_URL || 'https://retiradas.tech/api' }}"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.HOMOLOG_VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret PROD_VPS_HOST, VPS_HOST or HOMOLOG_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret PROD_VPS_SSH_KEY, VPS_SSH_KEY or HOMOLOG_VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package frontend build
+        run: tar -czf retiradas-dist.tar.gz -C dist .
+
+      - name: Package backend source
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='uploads' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -czf retiradas-vps.tar.gz \
+            -C vps .
+
+      - name: Upload packages to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-dist.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_FRONTEND_PACKAGE"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-vps.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_BACKEND_PACKAGE"
+
+      - name: Publish packages on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             deploy_path='$VPS_DEPLOY_PATH'
+             api_path='$VPS_API_PATH'
+             api_service='$VPS_API_SERVICE'
+             api_env_file='$VPS_API_ENV_FILE'
+             frontend_package='$REMOTE_FRONTEND_PACKAGE'
+             backend_package='$REMOTE_BACKEND_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$deploy_path\"
+             \$SUDO mkdir -p \"\$api_path\"
+             \$SUDO tar -xzf \"\$frontend_package\" -C \"\$deploy_path\"
+             \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
+             cd \"\$api_path\"
+             if [ -d node_modules ] && [ -f package-lock.json ] && [ -f .package-lock.sha256 ] && [ \"\$(sha256sum package-lock.json | awk '{print \$1}')\" = \"\$(cat .package-lock.sha256)\" ]; then
+               echo 'Backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               if [ -f package-lock.json ]; then
+                 sha256sum package-lock.json | awk '{print \$1}' > /tmp/retiradas-package-lock.sha256
+                 \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
+               fi
+             fi
+             \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
+             \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
+             \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
+             if [ -f \"\$api_env_file\" ]; then
+               set -a
+               . \"\$api_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate:sql
+             \$SUDO npm run migrate:normalized:apply
+             \$SUDO systemctl restart \"\$api_service\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             rm -f \"\$frontend_package\" \"\$backend_package\" || \$SUDO rm -f \"\$frontend_package\" \"\$backend_package\""
+
+  deploy-homolog-vps:
+    name: Deploy homolog frontend and backend to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/homolog-dev'
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.HOMOLOG_VPS_HOST || secrets.VPS_HOST || secrets.PROD_VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.HOMOLOG_VPS_PORT || secrets.VPS_PORT || secrets.PROD_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.HOMOLOG_VPS_USER || secrets.VPS_USER || secrets.PROD_VPS_USER || 'root' }}
+      VPS_DEPLOY_PATH: ${{ secrets.HOMOLOG_VPS_DEPLOY_PATH || '/var/www/retiradas-homolog/dist' }}
+      VPS_API_PATH: ${{ secrets.HOMOLOG_VPS_API_PATH || '/opt/retiradas/vps-homolog' }}
+      VPS_API_SERVICE: ${{ secrets.HOMOLOG_VPS_API_SERVICE || 'retiradas-api-homolog' }}
+      VPS_API_ENV_FILE: ${{ secrets.HOMOLOG_VPS_API_ENV_FILE || '/etc/retiradas/api-homolog.env' }}
+      REMOTE_FRONTEND_PACKAGE: /tmp/retiradas-homolog-dist-${{ github.sha }}.tar.gz
+      REMOTE_BACKEND_PACKAGE: /tmp/retiradas-homolog-vps-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            vps/package-lock.json
+            apps/finan/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build homolog frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Homologação"
+          export VITE_API_BASE_URL="${{ secrets.HOMOLOG_PUBLIC_API_URL || 'https://homolog.retiradas.tech/api' }}"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.HOMOLOG_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.PROD_VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret HOMOLOG_VPS_HOST, VPS_HOST or PROD_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret HOMOLOG_VPS_SSH_KEY, VPS_SSH_KEY or PROD_VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package homolog frontend build
+        run: tar -czf retiradas-homolog-dist.tar.gz -C dist .
+
+      - name: Package homolog backend source
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='uploads' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -czf retiradas-homolog-vps.tar.gz \
+            -C vps .
+
+      - name: Upload packages to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-homolog-dist.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_FRONTEND_PACKAGE"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            retiradas-homolog-vps.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_BACKEND_PACKAGE"
+
+      - name: Publish packages on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             deploy_path='$VPS_DEPLOY_PATH'
+             api_path='$VPS_API_PATH'
+             api_service='$VPS_API_SERVICE'
+             api_env_file='$VPS_API_ENV_FILE'
+             frontend_package='$REMOTE_FRONTEND_PACKAGE'
+             backend_package='$REMOTE_BACKEND_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$deploy_path\"
+             \$SUDO mkdir -p \"\$api_path\"
+             \$SUDO tar -xzf \"\$frontend_package\" -C \"\$deploy_path\"
+             \$SUDO tar -xzf \"\$backend_package\" -C \"\$api_path\"
+             cd \"\$api_path\"
+             if [ -d node_modules ] && [ -f package-lock.json ] && [ -f .package-lock.sha256 ] && [ \"\$(sha256sum package-lock.json | awk '{print \$1}')\" = \"\$(cat .package-lock.sha256)\" ]; then
+               echo 'Backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               if [ -f package-lock.json ]; then
+                 sha256sum package-lock.json | awk '{print \$1}' > /tmp/retiradas-package-lock.sha256
+                 \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
+               fi
+             fi
+             \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
+             \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
+             \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
+             if [ -f \"\$api_env_file\" ]; then
+               set -a
+               . \"\$api_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate:sql
+             \$SUDO npm run migrate:normalized:apply
+             \$SUDO systemctl restart \"\$api_service\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             rm -f \"\$frontend_package\" \"\$backend_package\" || \$SUDO rm -f \"\$frontend_package\" \"\$backend_package\""

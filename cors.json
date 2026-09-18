@@ -1,0 +1,11 @@
+[
+	{
+		"origin": [
+			"https://gestao-retirada.web.app",
+			"https://gestao-retirada.firebaseapp.com"
+		],
+		"method": ["GET", "HEAD"],
+		"responseHeader": ["Content-Type", "Cache-Control"],
+		"maxAgeSeconds": 3600
+	}
+]
