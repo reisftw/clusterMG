@@ -763,8 +763,8 @@ export async function createRotVehicleMaintenance(vehicleId, payload) {
 	return data.maintenance;
 }
 
-export async function finishRotVehicleMaintenance(maintenanceId, resolutionNote) {
-	const data = await requestRotApi(`/admin/fleet/maintenances/${encodeURIComponent(maintenanceId)}/finish`, { method: "POST", body: JSON.stringify({ resolutionNote }) });
+export async function finishRotVehicleMaintenance(maintenanceId, payload) {
+	const data = await requestRotApi(`/admin/fleet/maintenances/${encodeURIComponent(maintenanceId)}/finish`, { method: "POST", body: JSON.stringify(payload) });
 	return data.maintenance;
 }
 
@@ -784,6 +784,80 @@ export async function updateRotWorkshop(id, payload) {
 
 export async function deleteRotWorkshop(id) {
 	return requestRotApi(`/admin/fleet/workshops/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+// --- Frotas Fase 1: KM, transferência/custódia, bloqueio, inativação, documentos, Ficha 360 ---
+
+export async function fetchRotVehicleDetail(vehicleId) {
+	return requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/detail`);
+}
+
+export async function recordRotVehicleKm(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/km`, { method: "POST", body: JSON.stringify(payload) });
+	return data.reading;
+}
+
+export async function correctRotVehicleKm(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/km/correct`, { method: "POST", body: JSON.stringify(payload) });
+	return data.reading;
+}
+
+export async function transferRotVehicle(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/transfer`, { method: "POST", body: JSON.stringify(payload) });
+	return data.movement;
+}
+
+export async function confirmRotVehicleMovement(movementId, payload) {
+	const data = await requestRotApi(`/admin/fleet/movements/${encodeURIComponent(movementId)}/confirm`, { method: "POST", body: JSON.stringify(payload) });
+	return data.movement;
+}
+
+export async function cancelRotVehicleMovement(movementId) {
+	return requestRotApi(`/admin/fleet/movements/${encodeURIComponent(movementId)}/cancel`, { method: "POST" });
+}
+
+export async function returnRotVehicleToBase(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/return-to-base`, { method: "POST", body: JSON.stringify(payload) });
+	return data.vehicle;
+}
+
+export async function retrieveRotVehicleFromBase(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/retrieve-from-base`, { method: "POST", body: JSON.stringify(payload) });
+	return data.vehicle;
+}
+
+export async function blockRotVehicle(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/block`, { method: "POST", body: JSON.stringify(payload) });
+	return data.vehicle;
+}
+
+export async function unblockRotVehicle(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/unblock`, { method: "POST", body: JSON.stringify(payload) });
+	return data.vehicle;
+}
+
+export async function inactivateRotVehicle(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/inactivate`, { method: "POST", body: JSON.stringify(payload) });
+	return data.vehicle;
+}
+
+export async function fetchRotVehicleDocuments(vehicleId) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/documents`);
+	return data.items || [];
+}
+
+export async function createRotVehicleDocument(vehicleId, payload) {
+	const data = await requestRotApi(`/admin/fleet/${encodeURIComponent(vehicleId)}/documents`, { method: "POST", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function updateRotVehicleDocument(documentId, payload) {
+	const data = await requestRotApi(`/admin/fleet/documents/${encodeURIComponent(documentId)}`, { method: "PATCH", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function deleteRotVehicleDocument(documentId) {
+	return requestRotApi(`/admin/fleet/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" });
 }
 
 export async function fetchRotEquipments() {

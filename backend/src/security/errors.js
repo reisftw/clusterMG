@@ -67,7 +67,10 @@ function toClientResponse(error) {
 			body: { ok: false, error: error.message || "Dados inválidos.", code: error.code, fields: error.fields },
 		};
 	}
-	return { status, body: { ok: false, error: error?.message || "Erro interno da Operação." } };
+	// error.code opcional (ex.: KM_JUMP_CONFIRMATION_REQUIRED em
+	// fleet/helpers.js) — repassado sempre que existir, pra quem chama
+	// poder diferenciar tipos de erro 4xx sem parsear a mensagem.
+	return { status, body: { ok: false, error: error?.message || "Erro interno da Operação.", ...(error?.code ? { code: error.code } : {}) } };
 }
 
 module.exports = { isDatabaseError, resolveStatusCode, toClientResponse };
