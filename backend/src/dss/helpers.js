@@ -57,26 +57,35 @@ async function dssVisibilityClause(req, alias = "e") {
 // delivery, minusculo — convencao ja existente na tabela de tecnicos).
 const OPERATION_TO_AREA = { ROT: "rot", FIELD: "field_service", DELIVERY: "delivery" };
 
-// tipo de regional_responsaveis preferido por operacao, na ordem de
-// prioridade — nao ha tipo formal por DELIVERY hoje, entao cai direto
-// pra lider/supervisor genericos (mesmo fallback usado pelo SST).
-const RESPONSIBLE_TIPO_PRIORITY = {
-	ROT: ["supervisor_rot", "lider", "supervisor"],
-	FIELD: ["supervisor_field", "lider", "supervisor"],
-	DELIVERY: ["lider", "supervisor"],
-};
+// Cargo especifico de supervisor por operacao (feedback de producao:
+// "responsavel e sempre o Supervisor daquela regional pra aquela
+// operacao" — ex.: ROT usa quem tem o cargo Supervisor ROT). Achado
+// tambem em producao: regional_responsaveis (usado antes) esta quase
+// vazia (2 linhas no banco inteiro, uma sem userId) — a fonte real e
+// confiavel e o cargo (rot_roles) do proprio usuario em rot_users, nao
+// aquela tabela auxiliar.
+const SUPERVISOR_ROLE_BY_OPERATION = { ROT: "supervisor_rot", FIELD: "supervisor_field", DELIVERY: "supervisor_delivery" };
 
 async function resolveResponsible(client, { operationType, regionalId }) {
-	const priority = RESPONSIBLE_TIPO_PRIORITY[operationType] || ["lider", "supervisor"];
+	const specificRole = SUPERVISOR_ROLE_BY_OPERATION[operationType] || null;
 	const { rows } = await client.query(
-		`select source_payload->>'userId' as user_id, tipo
-		 from regional_responsaveis
-		 where regional_id = $1 and tipo = any($2::text[]) and source_payload->>'userId' is not null
-		 order by array_position($2::text[], tipo)
+		`select u.id
+		 from rot_users u
+		 join rot_roles r on r.id = u.role_id
+		 where u.status = 'ativo'
+		   and u.regional_id = $1
+		   and (
+		     r.id = $2
+		     or (
+		       r.id = 'regional_supervisor'
+		       and exists (select 1 from rot_user_operation_scopes s where s.user_id = u.id and s.operation_type = $3)
+		     )
+		   )
+		 order by (r.id = $2) desc
 		 limit 1`,
-		[regionalId, priority],
+		[regionalId, specificRole, operationType],
 	);
-	return rows[0]?.user_id || null;
+	return rows[0]?.id || null;
 }
 
 // Snapshot da equipe (secao 11/12 do pedido): colaboradores ATIVOS da

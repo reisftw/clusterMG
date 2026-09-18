@@ -62,7 +62,7 @@ export async function exportDssReportPdf(items, filtersLabel) {
 	pdf.setFontSize(9);
 	pdf.text(filtersLabel || "Todos os registros", 12, 20);
 	pdf.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 210, 20);
-	await addClusterLogo(pdf, { width: 24, height: 12, y: 6, marginRight: 12 });
+	await addClusterLogo(pdf, { width: 16, y: 5, marginRight: 12 });
 
 	autoTable(pdf, {
 		startY: 32,

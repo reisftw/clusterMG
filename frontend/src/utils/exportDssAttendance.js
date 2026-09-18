@@ -47,7 +47,7 @@ export async function exportDssAttendanceList(execution) {
 	}
 
 	const startY = header();
-	await addClusterLogo(pdf, { width: 26, height: 13, y: 8, marginRight: 12 });
+	await addClusterLogo(pdf, { width: 18, y: 8, marginRight: 12 });
 
 	const rows = (execution.members || []).map((member, index) => [String(index + 1), member.registration || "", member.name, member.role || "", ""]);
 
