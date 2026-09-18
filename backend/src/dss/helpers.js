@@ -230,10 +230,33 @@ async function generateExecutionsForSchedule(client, req, schedule, scopes) {
 	return generated;
 }
 
+// Quem tem uma permissao granular, considerando site_admin e o fallback
+// legado de coluna jsonb (mesmo padrao de GET /sst/team em
+// sst/routes.js:87-100 — nao existe helper compartilhado no projeto).
+async function findUsersWithPermission(client, permissionId) {
+	const { rows } = await client.query(
+		`select u.id, u.name, u.email, r.name as role_name from rot_users u
+		 join rot_roles r on r.id = u.role_id
+		 where u.status = 'ativo'
+		   and (
+		     r.id = 'site_admin'
+		     or exists (select 1 from rot_role_permissions rp where rp.role_id = r.id and rp.permission_id = $1)
+		     or (
+		       not exists (select 1 from rot_role_permissions rp2 where rp2.role_id = r.id)
+		       and (r.permissions ? $1 or r.permissions ? '*')
+		     )
+		   )
+		 order by u.name`,
+		[permissionId],
+	);
+	return rows;
+}
+
 module.exports = {
 	isRegionalLeadership,
 	myTeamClause,
 	dssVisibilityClause,
+	findUsersWithPermission,
 	resolveResponsible,
 	resolveTeamSnapshot,
 	generateExecutionsForSchedule,

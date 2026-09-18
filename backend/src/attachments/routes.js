@@ -18,6 +18,7 @@ const allowedMime = new Set([...allowedImageMime, ...allowedPdfMime]);
 // assinada do DSS); as demais continuam so-imagem, sem mudanca de
 // comportamento.
 const PDF_CAPABLE_ENTITY_TYPES = new Set(["DSS_THEME", "DSS_EXECUTION"]);
+const DSS_EXECUTION_EDITABLE_STATUSES = new Set(["planejado", "disponivel", "em_andamento", "rejeitado"]);
 const uploadLimit = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 
 router.use(requireRotAuth, noStore);
@@ -102,6 +103,10 @@ async function assertEntityAccess(client, req, entityType, entityId, mode = "vie
 		const isResponsible = item.responsible_id === req.rotUser.id;
 		if (mode === "view" && !isDssStaff && !isResponsible) fail(403, "Sem permissão para ver evidências desta execução.");
 		if (mode !== "view" && !isDssStaff && !isResponsible) fail(403, "Sem permissão para anexar evidências nesta execução.");
+		// Integridade historica (secao 37 do pedido): depois de enviada ou
+		// validada, evidencia nao pode mais ser trocada — so volta a ser
+		// editavel se o SST rejeitar (-> 'rejeitado').
+		if (mode !== "view" && !DSS_EXECUTION_EDITABLE_STATUSES.has(item.status)) fail(409, "Esta execução não pode mais receber evidência no status atual.");
 		if (scope && !isDssStaff && item.regional_id !== scope) fail(403, "Regional não autorizada.");
 		return item;
 	}

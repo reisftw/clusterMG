@@ -4,7 +4,8 @@ const { auditLog } = require("../audit/auditLog");
 const { requireRotAuth, requireRotPermission, userHasRotPermission } = require("../auth/middleware");
 const { randomId } = require("../secureRandom");
 const { noStore } = require("../security/noStore");
-const { myTeamClause, dssVisibilityClause, generateExecutionsForSchedule } = require("./helpers");
+const { notifyUsers } = require("../notifications/helpers");
+const { myTeamClause, dssVisibilityClause, generateExecutionsForSchedule, findUsersWithPermission } = require("./helpers");
 
 // Fase 1 do dominio DSS (Dialogo Semanal de Seguranca), dentro de
 // Seguranca do Trabalho: Temas -> Programacao -> geracao automatica de
@@ -40,6 +41,12 @@ const THEME_STATUSES = ["rascunho", "publicado", "arquivado"];
 const SCHEDULE_STATUSES = ["rascunho", "publicado", "cancelado"];
 const EXECUTION_STATUSES = ["planejado", "disponivel", "em_andamento", "enviado", "validado", "rejeitado", "cancelado"];
 const OPERATION_TYPES = ["ROT", "FIELD", "DELIVERY"];
+const PRESENCE_STATUSES = ["pendente", "presente", "ausente"];
+const ABSENCE_REASONS = ["ferias", "afastamento", "folga", "atestado", "ausencia_operacional", "outro"];
+// Integridade historica (secao 37 do pedido): depois de enviada ou
+// validada, a execucao nao aceita mais edicao de presenca/evidencia —
+// "enviado" so volta a ser editavel se o SST rejeitar (-> 'rejeitado').
+const EXECUTION_EDITABLE_STATUSES = ["planejado", "disponivel", "em_andamento", "rejeitado"];
 
 function sanitizeContentBlocks(raw) {
 	if (!Array.isArray(raw)) return [];
@@ -642,6 +649,200 @@ router.get("/executions/:id", async (req, res, next) => {
 		res.json({ ok: true, item: { ...publicExecution(execution, members, timeline), content } });
 	} catch (error) {
 		next(error);
+	}
+});
+
+// ---------------------------------------------------------------------
+// Registro de presença, evidência (upload via /admin/attachments com
+// entityType=DSS_EXECUTION, já habilitado desde a Fase 1), envio e
+// validação — Fase 2.
+// ---------------------------------------------------------------------
+
+async function loadExecutionForWrite(req, executionId) {
+	const { rows } = await db.query("select * from dss_executions where id = $1", [executionId]);
+	const execution = rows[0];
+	if (!execution) fail(404, "Execução não encontrada.");
+	const isDssStaff = userHasRotPermission(req.rotUser, ["dss.execucao.visualizar_abrangencia", "dss.execucao.visualizar_todos"]);
+	const isResponsible = execution.responsible_id === req.rotUser.id;
+	if (!isDssStaff && !isResponsible) fail(404, "Execução não encontrada.");
+	return execution;
+}
+
+function assertEditable(execution) {
+	if (!EXECUTION_EDITABLE_STATUSES.includes(execution.status)) {
+		fail(409, "Esta execução não pode mais ser editada no status atual.");
+	}
+}
+
+async function recomputeAttendance(client, executionId) {
+	const { rows } = await client.query(
+		`select count(*)::int as previstos,
+			count(*) filter (where presence_status = 'presente')::int as presentes,
+			count(*) filter (where presence_status = 'ausente')::int as ausentes
+		 from dss_execution_members where execution_id = $1`,
+		[executionId],
+	);
+	const { previstos, presentes, ausentes } = rows[0];
+	const participation = previstos > 0 ? Math.round((presentes / previstos) * 10000) / 100 : null;
+	await client.query(
+		`update dss_executions set previstos_count=$2, presentes_count=$3, ausentes_count=$4, participation_pct=$5 where id=$1`,
+		[executionId, previstos, presentes, ausentes, participation],
+	);
+	return { previstos, presentes, ausentes, participation };
+}
+
+router.patch("/executions/:id/members/:memberId", async (req, res, next) => {
+	let client;
+	try {
+		const execution = await loadExecutionForWrite(req, req.params.id);
+		assertEditable(execution);
+		const presenceStatus = String(req.body?.presenceStatus || "");
+		if (!PRESENCE_STATUSES.includes(presenceStatus)) fail(400, "Status de presença inválido.");
+		const absenceReason = req.body?.absenceReason ? String(req.body.absenceReason) : null;
+		if (absenceReason && !ABSENCE_REASONS.includes(absenceReason)) fail(400, "Motivo de ausência inválido.");
+
+		client = await db.connect();
+		await client.query("begin");
+		const { rows } = await client.query(
+			`update dss_execution_members
+			 set presence_status=$3, absence_reason=$4, absence_note=$5
+			 where id=$1 and execution_id=$2 returning *`,
+			[req.params.memberId, req.params.id, presenceStatus, presenceStatus === "ausente" ? absenceReason : null, presenceStatus === "ausente" ? nullableText(req.body?.absenceNote, 500) : null],
+		);
+		if (!rows[0]) fail(404, "Colaborador não encontrado nesta execução.");
+		await recomputeAttendance(client, req.params.id);
+		if (execution.status === "disponivel" || execution.status === "planejado") {
+			await client.query(`update dss_executions set status='em_andamento' where id=$1`, [req.params.id]);
+		}
+		await client.query("commit");
+		await auditLog(req, { action: "update_presence", entity: "dss_executions", entityId: req.params.id, after: { memberId: req.params.memberId, presenceStatus, absenceReason } });
+		const { rows: updated } = await db.query(`select * from dss_executions where id = $1`, [req.params.id]);
+		res.json({ ok: true, member: publicExecutionMember(rows[0]), execution: publicExecution(updated[0]) });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
+	}
+});
+
+router.post("/executions/:id/mark-all-present", async (req, res, next) => {
+	let client;
+	try {
+		const execution = await loadExecutionForWrite(req, req.params.id);
+		assertEditable(execution);
+		client = await db.connect();
+		await client.query("begin");
+		await client.query(`update dss_execution_members set presence_status='presente', absence_reason=null, absence_note=null where execution_id=$1`, [req.params.id]);
+		await recomputeAttendance(client, req.params.id);
+		if (execution.status === "disponivel" || execution.status === "planejado") {
+			await client.query(`update dss_executions set status='em_andamento' where id=$1`, [req.params.id]);
+		}
+		await client.query("commit");
+		await auditLog(req, { action: "mark_all_present", entity: "dss_executions", entityId: req.params.id });
+		const { rows: members } = await db.query(`select * from dss_execution_members where execution_id = $1 order by name_snapshot`, [req.params.id]);
+		const { rows: updated } = await db.query(`select * from dss_executions where id = $1`, [req.params.id]);
+		res.json({ ok: true, execution: publicExecution(updated[0], members) });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
+	}
+});
+
+router.post("/executions/:id/submit", async (req, res, next) => {
+	let client;
+	try {
+		const execution = await loadExecutionForWrite(req, req.params.id);
+		assertEditable(execution);
+		const { rows: pending } = await db.query(`select count(*)::int as n from dss_execution_members where execution_id=$1 and presence_status='pendente'`, [req.params.id]);
+		if (pending[0].n > 0) fail(409, "Marque presença de todos os colaboradores antes de enviar.");
+		const { rows: evidence } = await db.query(
+			`select count(*)::int as n from rot_image_attachments where entidade_tipo='DSS_EXECUTION' and entidade_id=$1 and status='CONFIRMED' and removido_em is null`,
+			[req.params.id],
+		);
+		if (evidence[0].n < 1) fail(409, "Anexe a evidência (lista de presença assinada) antes de enviar.");
+
+		client = await db.connect();
+		await client.query("begin");
+		const { previstos, presentes, ausentes, participation } = await recomputeAttendance(client, req.params.id);
+		const { rows: updated } = await client.query(
+			`update dss_executions set status='enviado', submitted_by=$2, submitted_at=now(), rejection_reason=null where id=$1 returning *`,
+			[req.params.id, req.rotUser.id],
+		);
+		await client.query(
+			`insert into dss_execution_timeline (execution_id, event_type, title, description, created_by)
+			 values ($1,'submitted','Enviado para validação',$2,$3)`,
+			[req.params.id, `Previstos: ${previstos} · Presentes: ${presentes} · Ausentes: ${ausentes} · Participação: ${participation ?? 0}%.`, req.rotUser.id],
+		);
+		const staff = await findUsersWithPermission(client, "dss.execucao.validar");
+		const notifyIds = staff.map((row) => row.id).filter((uid) => uid !== req.rotUser.id);
+		if (notifyIds.length) {
+			await notifyUsers(client, {
+				userIds: notifyIds,
+				type: "dss_execution_submitted",
+				title: "DSS enviado para validação",
+				body: `${updated[0].week_label} · aguardando validação.`,
+				entityType: "DSS_EXECUTION",
+				entityId: req.params.id,
+				deepLink: `/seguranca-trabalho/dss/execucoes/${req.params.id}`,
+			});
+		}
+		await client.query("commit");
+		await auditLog(req, { action: "submit", entity: "dss_executions", entityId: req.params.id, after: { previstos, presentes, ausentes, participation } });
+		res.json({ ok: true, item: publicExecution(updated[0]) });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
+	}
+});
+
+router.post("/executions/:id/validate", requireRotPermission("dss.execucao.validar"), async (req, res, next) => {
+	let client;
+	try {
+		const { rows: beforeRows } = await db.query("select * from dss_executions where id = $1", [req.params.id]);
+		const before = beforeRows[0];
+		if (!before) fail(404, "Execução não encontrada.");
+		if (before.status !== "enviado") fail(409, "Só é possível validar execuções enviadas.");
+		const approved = Boolean(req.body?.approved);
+		const note = nullableText(req.body?.note, 1000);
+		if (!approved && !note) fail(400, "Informe o motivo da correção solicitada.");
+
+		client = await db.connect();
+		await client.query("begin");
+		const { rows: updated } = await client.query(
+			approved
+				? `update dss_executions set status='validado', validated_by=$2, validated_at=now(), validation_note=$3, rejection_reason=null where id=$1 returning *`
+				: `update dss_executions set status='rejeitado', validated_by=$2, validated_at=now(), rejection_reason=$3 where id=$1 returning *`,
+			[req.params.id, req.rotUser.id, note],
+		);
+		await client.query(
+			`insert into dss_execution_timeline (execution_id, event_type, title, description, created_by)
+			 values ($1,$2,$3,$4,$5)`,
+			[req.params.id, approved ? "validated" : "rejected", approved ? "DSS validado" : "Correção solicitada", note, req.rotUser.id],
+		);
+		if (before.responsible_id && before.responsible_id !== req.rotUser.id) {
+			await notifyUsers(client, {
+				userIds: [before.responsible_id],
+				type: approved ? "dss_execution_validated" : "dss_execution_rejected",
+				title: approved ? "DSS validado pelo SST" : "SST solicitou correção no DSS",
+				body: note || `${before.week_label} · ${approved ? "validado" : "correção solicitada"}.`,
+				entityType: "DSS_EXECUTION",
+				entityId: req.params.id,
+				deepLink: `/seguranca-trabalho/dss/execucoes/${req.params.id}`,
+			});
+		}
+		await client.query("commit");
+		await auditLog(req, { action: approved ? "validate" : "reject", entity: "dss_executions", entityId: req.params.id, before: { status: before.status }, after: { status: updated[0].status, note } });
+		res.json({ ok: true, item: publicExecution(updated[0]) });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
 	}
 });
 
