@@ -1,0 +1,648 @@
+const express = require("express");
+const db = require("../db");
+const { auditLog } = require("../audit/auditLog");
+const { requireRotAuth, requireRotPermission, userHasRotPermission } = require("../auth/middleware");
+const { randomId } = require("../secureRandom");
+const { noStore } = require("../security/noStore");
+const { myTeamClause, dssVisibilityClause, generateExecutionsForSchedule } = require("./helpers");
+
+// Fase 1 do dominio DSS (Dialogo Semanal de Seguranca), dentro de
+// Seguranca do Trabalho: Temas -> Programacao -> geracao automatica de
+// Execucoes (leitura). Registro de presenca/evidencia/validacao/
+// dashboard/relatorios/notificacoes sao fases seguintes — o schema ja
+// esta pronto pra elas (054_dss_schema.sql), so as rotas ainda nao.
+//
+// Mesmo estilo do SST (backend/src/sst/routes.js): sem controller/
+// service/repository, SQL inline, transacao manual em toda escrita.
+
+const router = express.Router();
+router.use(requireRotAuth, noStore);
+
+function fail(status, message) {
+	const error = new Error(message);
+	error.status = status;
+	throw error;
+}
+
+function nullableText(value, max = 2000) {
+	const text = String(value ?? "").trim();
+	return text ? text.slice(0, max) : null;
+}
+
+const CATEGORIES = [
+	"epi", "epc", "direcao_segura", "trabalho_altura", "seguranca_eletrica",
+	"acidentes", "ergonomia", "saude_ocupacional", "prevencao",
+	"procedimentos_operacionais", "outros",
+];
+const MODALITIES = ["semanal", "mensal"];
+const CONTENT_TYPES = ["editor", "pdf"];
+const THEME_STATUSES = ["rascunho", "publicado", "arquivado"];
+const SCHEDULE_STATUSES = ["rascunho", "publicado", "cancelado"];
+const EXECUTION_STATUSES = ["planejado", "disponivel", "em_andamento", "enviado", "validado", "rejeitado", "cancelado"];
+const OPERATION_TYPES = ["ROT", "FIELD", "DELIVERY"];
+
+function sanitizeContentBlocks(raw) {
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.filter((block) => block && typeof block === "object" && typeof block.type === "string")
+		.slice(0, 200)
+		.map((block) => ({
+			type: String(block.type).slice(0, 40),
+			text: nullableText(block.text, 4000) || "",
+			items: Array.isArray(block.items) ? block.items.map((item) => nullableText(item, 500) || "").filter(Boolean).slice(0, 50) : undefined,
+		}));
+}
+
+function publicTheme(row, weeks = null) {
+	return {
+		id: row.id,
+		title: row.title,
+		description: row.description,
+		objective: row.objective,
+		category: row.category,
+		notes: row.notes,
+		modality: row.modality,
+		contentType: row.content_type,
+		contentBlocks: row.content_blocks,
+		status: row.status,
+		authorId: row.author_id,
+		authorName: row.author_name || null,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		weeks: weeks ? weeks.map(publicThemeWeek) : undefined,
+	};
+}
+
+function publicThemeWeek(row) {
+	return {
+		id: row.id,
+		themeId: row.theme_id,
+		weekNumber: row.week_number,
+		title: row.title,
+		contentType: row.content_type,
+		contentBlocks: row.content_blocks,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+	};
+}
+
+function publicSchedule(row, scopes = null, executions = null) {
+	return {
+		id: row.id,
+		themeId: row.theme_id,
+		themeWeekId: row.theme_week_id,
+		themeTitle: row.theme_title || null,
+		weekLabel: row.week_label,
+		startDate: row.start_date,
+		endDate: row.end_date,
+		dueDate: row.due_date,
+		status: row.status,
+		createdBy: row.created_by,
+		publishedAt: row.published_at,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		scopes: scopes ? scopes.map(publicScope) : undefined,
+		executions: executions ? executions.map((execution) => publicExecution(execution)) : undefined,
+	};
+}
+
+function publicScope(row) {
+	return {
+		id: row.id,
+		operationType: row.operation_type,
+		regionalId: row.regional_id,
+		regionalName: row.regional_name || null,
+		baseId: row.base_id,
+		baseName: row.base_name || null,
+		roleId: row.role_id,
+		roleName: row.role_name || null,
+	};
+}
+
+// "atrasado" e calculado na leitura (sem cron): execucao ainda nao
+// enviada e com prazo vencido.
+const EXECUTION_STATUS_EXPR = `case when e.status in ('planejado','disponivel','em_andamento') and e.due_date < current_date then 'atrasado' else e.status end`;
+
+function publicExecution(row, members = null, timeline = null) {
+	return {
+		id: row.id,
+		scheduleId: row.schedule_id,
+		themeId: row.theme_id,
+		themeTitle: row.theme_title || null,
+		themeWeekId: row.theme_week_id,
+		weekLabel: row.week_label,
+		operationType: row.operation_type,
+		regionalId: row.regional_id,
+		regionalName: row.regional_name || null,
+		baseId: row.base_id,
+		baseName: row.base_name || null,
+		responsibleId: row.responsible_id,
+		responsibleName: row.responsible_name || null,
+		dueDate: row.due_date,
+		status: row.effective_status || row.status,
+		previstosCount: row.previstos_count,
+		presentesCount: row.presentes_count,
+		ausentesCount: row.ausentes_count,
+		participationPct: row.participation_pct,
+		submittedBy: row.submitted_by,
+		submittedAt: row.submitted_at,
+		validatedBy: row.validated_by,
+		validatedAt: row.validated_at,
+		validationNote: row.validation_note,
+		rejectionReason: row.rejection_reason,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		members: members ? members.map(publicExecutionMember) : undefined,
+		timeline: timeline ? timeline.map(publicTimelineEvent) : undefined,
+	};
+}
+
+function publicExecutionMember(row) {
+	return {
+		id: row.id,
+		userId: row.user_id,
+		tecnicoId: row.tecnico_id,
+		name: row.name_snapshot,
+		role: row.role_snapshot,
+		regional: row.regional_snapshot,
+		base: row.base_snapshot,
+		presenceStatus: row.presence_status,
+		absenceReason: row.absence_reason,
+		absenceNote: row.absence_note,
+	};
+}
+
+function publicTimelineEvent(row) {
+	return {
+		id: row.id,
+		eventType: row.event_type,
+		title: row.title,
+		description: row.description,
+		createdBy: row.created_by,
+		createdAt: row.created_at,
+	};
+}
+
+// ---------------------------------------------------------------------
+// Temas
+// ---------------------------------------------------------------------
+
+router.get("/themes", requireRotPermission("dss.tema.visualizar"), async (req, res, next) => {
+	try {
+		const conditions = [];
+		const params = [];
+		if (req.query.category) { params.push(req.query.category); conditions.push(`t.category = $${params.length}`); }
+		if (req.query.modality) { params.push(req.query.modality); conditions.push(`t.modality = $${params.length}`); }
+		if (req.query.status) { params.push(req.query.status); conditions.push(`t.status = $${params.length}`); }
+		if (req.query.q) { params.push(`%${req.query.q}%`); conditions.push(`t.title ilike $${params.length}`); }
+		const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+		const { rows } = await db.query(
+			`select t.*, u.name as author_name from dss_themes t
+			 left join rot_users u on u.id = t.author_id
+			 ${where} order by t.created_at desc limit 200`,
+			params,
+		);
+		res.json({ ok: true, items: rows.map((row) => publicTheme(row)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/themes/:id", requireRotPermission("dss.tema.visualizar"), async (req, res, next) => {
+	try {
+		const { rows } = await db.query(
+			`select t.*, u.name as author_name from dss_themes t left join rot_users u on u.id = t.author_id where t.id = $1`,
+			[req.params.id],
+		);
+		const theme = rows[0];
+		if (!theme) fail(404, "Tema não encontrado.");
+		let weeks = null;
+		if (theme.modality === "mensal") {
+			const { rows: weekRows } = await db.query(`select * from dss_theme_weeks where theme_id = $1 order by week_number`, [theme.id]);
+			weeks = weekRows;
+		}
+		res.json({ ok: true, item: publicTheme(theme, weeks) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/themes", requireRotPermission("dss.tema.criar"), async (req, res, next) => {
+	try {
+		const title = nullableText(req.body?.title, 200);
+		if (!title) fail(400, "Título é obrigatório.");
+		const category = String(req.body?.category || "");
+		if (!CATEGORIES.includes(category)) fail(400, "Categoria inválida.");
+		const modality = String(req.body?.modality || "");
+		if (!MODALITIES.includes(modality)) fail(400, "Modalidade inválida.");
+		const contentType = String(req.body?.contentType || "");
+		if (!CONTENT_TYPES.includes(contentType)) fail(400, "Tipo de conteúdo inválido.");
+
+		const id = randomId("dsst");
+		const { rows } = await db.query(
+			`insert into dss_themes (id, title, description, objective, category, notes, modality, content_type, content_blocks, author_id)
+			 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *`,
+			[
+				id,
+				title,
+				nullableText(req.body?.description, 500),
+				nullableText(req.body?.objective, 1000),
+				category,
+				nullableText(req.body?.notes, 1000),
+				modality,
+				contentType,
+				JSON.stringify(sanitizeContentBlocks(req.body?.contentBlocks)),
+				req.rotUser.id,
+			],
+		);
+		await auditLog(req, { action: "create", entity: "dss_themes", entityId: id, after: rows[0] });
+		res.status(201).json({ ok: true, item: publicTheme(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.patch("/themes/:id", requireRotPermission("dss.tema.editar"), async (req, res, next) => {
+	try {
+		const { rows: beforeRows } = await db.query("select * from dss_themes where id = $1", [req.params.id]);
+		const before = beforeRows[0];
+		if (!before) fail(404, "Tema não encontrado.");
+
+		const title = req.body?.title !== undefined ? nullableText(req.body.title, 200) : before.title;
+		if (!title) fail(400, "Título é obrigatório.");
+		const category = req.body?.category !== undefined ? String(req.body.category) : before.category;
+		if (!CATEGORIES.includes(category)) fail(400, "Categoria inválida.");
+		const contentType = req.body?.contentType !== undefined ? String(req.body.contentType) : before.content_type;
+		if (!CONTENT_TYPES.includes(contentType)) fail(400, "Tipo de conteúdo inválido.");
+		const contentBlocks = req.body?.contentBlocks !== undefined ? sanitizeContentBlocks(req.body.contentBlocks) : before.content_blocks;
+
+		const { rows } = await db.query(
+			`update dss_themes set title=$2, description=$3, objective=$4, category=$5, notes=$6, content_type=$7, content_blocks=$8
+			 where id=$1 returning *`,
+			[
+				req.params.id,
+				title,
+				req.body?.description !== undefined ? nullableText(req.body.description, 500) : before.description,
+				req.body?.objective !== undefined ? nullableText(req.body.objective, 1000) : before.objective,
+				category,
+				req.body?.notes !== undefined ? nullableText(req.body.notes, 1000) : before.notes,
+				contentType,
+				JSON.stringify(contentBlocks),
+			],
+		);
+		await auditLog(req, { action: "update", entity: "dss_themes", entityId: req.params.id, before, after: rows[0] });
+		res.json({ ok: true, item: publicTheme(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/themes/:id/publish", requireRotPermission("dss.tema.editar"), async (req, res, next) => {
+	try {
+		const { rows } = await db.query(`update dss_themes set status='publicado' where id=$1 and status='rascunho' returning *`, [req.params.id]);
+		if (!rows[0]) fail(409, "Tema não encontrado ou não está em rascunho.");
+		await auditLog(req, { action: "publish", entity: "dss_themes", entityId: req.params.id, after: rows[0] });
+		res.json({ ok: true, item: publicTheme(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/themes/:id/archive", requireRotPermission("dss.tema.arquivar"), async (req, res, next) => {
+	try {
+		const { rows } = await db.query(`update dss_themes set status='arquivado' where id=$1 returning *`, [req.params.id]);
+		if (!rows[0]) fail(404, "Tema não encontrado.");
+		await auditLog(req, { action: "archive", entity: "dss_themes", entityId: req.params.id, after: rows[0] });
+		res.json({ ok: true, item: publicTheme(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+// Substitui os 4 desdobramentos semanais de um tema mensal de uma vez.
+router.put("/themes/:id/weeks", requireRotPermission("dss.tema.editar"), async (req, res, next) => {
+	let client;
+	try {
+		const { rows: themeRows } = await db.query("select * from dss_themes where id = $1", [req.params.id]);
+		const theme = themeRows[0];
+		if (!theme) fail(404, "Tema não encontrado.");
+		if (theme.modality !== "mensal") fail(400, "Desdobramentos semanais só se aplicam a temas mensais.");
+		const weeks = Array.isArray(req.body?.weeks) ? req.body.weeks : [];
+		if (weeks.length < 1 || weeks.length > 4) fail(400, "Informe de 1 a 4 semanas.");
+		const seenNumbers = new Set();
+		for (const week of weeks) {
+			const weekNumber = Number(week.weekNumber);
+			if (!Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > 4) fail(400, "Semana inválida.");
+			if (seenNumbers.has(weekNumber)) fail(400, "Semanas duplicadas.");
+			seenNumbers.add(weekNumber);
+			if (!nullableText(week.title, 200)) fail(400, "Título da semana é obrigatório.");
+			if (!CONTENT_TYPES.includes(String(week.contentType))) fail(400, "Tipo de conteúdo da semana inválido.");
+		}
+
+		client = await db.connect();
+		await client.query("begin");
+		await client.query("delete from dss_theme_weeks where theme_id = $1", [req.params.id]);
+		const inserted = [];
+		for (const week of weeks) {
+			const id = randomId("dstw");
+			const { rows } = await client.query(
+				`insert into dss_theme_weeks (id, theme_id, week_number, title, content_type, content_blocks)
+				 values ($1,$2,$3,$4,$5,$6) returning *`,
+				[id, req.params.id, Number(week.weekNumber), nullableText(week.title, 200), String(week.contentType), JSON.stringify(sanitizeContentBlocks(week.contentBlocks))],
+			);
+			inserted.push(rows[0]);
+		}
+		await client.query("commit");
+		await auditLog(req, { action: "update_weeks", entity: "dss_themes", entityId: req.params.id, after: { weeks: inserted.map((row) => row.week_number) } });
+		res.json({ ok: true, items: inserted.map(publicThemeWeek) });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
+	}
+});
+
+// ---------------------------------------------------------------------
+// Programação
+// ---------------------------------------------------------------------
+
+router.get("/schedules", requireRotPermission("dss.programacao.visualizar"), async (req, res, next) => {
+	try {
+		const conditions = [];
+		const params = [];
+		if (req.query.status) { params.push(req.query.status); conditions.push(`s.status = $${params.length}`); }
+		if (req.query.themeId) { params.push(req.query.themeId); conditions.push(`s.theme_id = $${params.length}`); }
+		if (req.query.from) { params.push(req.query.from); conditions.push(`s.due_date >= $${params.length}`); }
+		if (req.query.to) { params.push(req.query.to); conditions.push(`s.due_date <= $${params.length}`); }
+		const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+		const { rows } = await db.query(
+			`select s.*, coalesce(t.title, tw.title) as theme_title
+			 from dss_schedules s
+			 left join dss_themes t on t.id = s.theme_id
+			 left join dss_theme_weeks tw on tw.id = s.theme_week_id
+			 ${where} order by s.due_date desc limit 200`,
+			params,
+		);
+		res.json({ ok: true, items: rows.map((row) => publicSchedule(row)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/schedules/:id", requireRotPermission("dss.programacao.visualizar"), async (req, res, next) => {
+	try {
+		const { rows } = await db.query(
+			`select s.*, coalesce(t.title, tw.title) as theme_title
+			 from dss_schedules s
+			 left join dss_themes t on t.id = s.theme_id
+			 left join dss_theme_weeks tw on tw.id = s.theme_week_id
+			 where s.id = $1`,
+			[req.params.id],
+		);
+		const schedule = rows[0];
+		if (!schedule) fail(404, "Programação não encontrada.");
+		const { rows: scopeRows } = await db.query(
+			`select sc.*, r.nome as regional_name, bc.nome as base_name, ro.name as role_name
+			 from dss_schedule_scopes sc
+			 left join regionais r on r.id = sc.regional_id
+			 left join regional_cidades bc on bc.id = sc.base_id
+			 left join rot_roles ro on ro.id = sc.role_id
+			 where sc.schedule_id = $1`,
+			[req.params.id],
+		);
+		const { rows: executionRows } = await db.query(
+			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name, ${EXECUTION_STATUS_EXPR} as effective_status
+			 from dss_executions e
+			 left join regionais r on r.id = e.regional_id
+			 left join regional_cidades bc on bc.id = e.base_id
+			 left join rot_users u on u.id = e.responsible_id
+			 where e.schedule_id = $1 order by r.nome, bc.nome`,
+			[req.params.id],
+		);
+		res.json({ ok: true, item: publicSchedule(schedule, scopeRows, executionRows) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/schedules", requireRotPermission("dss.programacao.gerenciar"), async (req, res, next) => {
+	let client;
+	try {
+		const themeId = req.body?.themeId ? String(req.body.themeId) : null;
+		const themeWeekId = req.body?.themeWeekId ? String(req.body.themeWeekId) : null;
+		if ((themeId && themeWeekId) || (!themeId && !themeWeekId)) fail(400, "Informe exatamente um de themeId ou themeWeekId.");
+		const weekLabel = nullableText(req.body?.weekLabel, 100);
+		if (!weekLabel) fail(400, "Rótulo da semana é obrigatório.");
+		const startDate = nullableText(req.body?.startDate, 10);
+		const endDate = nullableText(req.body?.endDate, 10);
+		const dueDate = nullableText(req.body?.dueDate, 10);
+		if (!startDate || !endDate || !dueDate) fail(400, "Datas de início, fim e prazo são obrigatórias.");
+		const scopes = Array.isArray(req.body?.scopes) ? req.body.scopes : [];
+		if (!scopes.length) fail(400, "Informe ao menos um público (escopo) para a programação.");
+		for (const scope of scopes) {
+			if (!OPERATION_TYPES.includes(scope.operationType)) fail(400, "Operação inválida em um dos escopos.");
+		}
+
+		if (themeId) {
+			const { rows } = await db.query("select id, modality, status from dss_themes where id = $1", [themeId]);
+			if (!rows[0]) fail(404, "Tema não encontrado.");
+			if (rows[0].modality !== "semanal") fail(400, "Este tema é mensal — programe por semana (themeWeekId).");
+		} else {
+			const { rows } = await db.query("select id from dss_theme_weeks where id = $1", [themeWeekId]);
+			if (!rows[0]) fail(404, "Semana de tema não encontrada.");
+		}
+
+		const id = randomId("dssc");
+		client = await db.connect();
+		await client.query("begin");
+		const { rows } = await client.query(
+			`insert into dss_schedules (id, theme_id, theme_week_id, week_label, start_date, end_date, due_date, created_by)
+			 values ($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
+			[id, themeId, themeWeekId, weekLabel, startDate, endDate, dueDate, req.rotUser.id],
+		);
+		for (const scope of scopes) {
+			await client.query(
+				`insert into dss_schedule_scopes (schedule_id, operation_type, regional_id, base_id, role_id) values ($1,$2,$3,$4,$5)`,
+				[id, scope.operationType, scope.regionalId || null, scope.baseId || null, scope.roleId || null],
+			);
+		}
+		await client.query("commit");
+		await auditLog(req, { action: "create", entity: "dss_schedules", entityId: id, after: rows[0] });
+		res.status(201).json({ ok: true, item: publicSchedule(rows[0]) });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
+	}
+});
+
+router.patch("/schedules/:id", requireRotPermission("dss.programacao.gerenciar"), async (req, res, next) => {
+	try {
+		const { rows: beforeRows } = await db.query("select * from dss_schedules where id = $1", [req.params.id]);
+		const before = beforeRows[0];
+		if (!before) fail(404, "Programação não encontrada.");
+		if (before.status !== "rascunho") fail(409, "Só é possível editar programações em rascunho.");
+		const { rows } = await db.query(
+			`update dss_schedules set week_label=$2, start_date=$3, end_date=$4, due_date=$5 where id=$1 returning *`,
+			[
+				req.params.id,
+				req.body?.weekLabel !== undefined ? nullableText(req.body.weekLabel, 100) : before.week_label,
+				req.body?.startDate !== undefined ? req.body.startDate : before.start_date,
+				req.body?.endDate !== undefined ? req.body.endDate : before.end_date,
+				req.body?.dueDate !== undefined ? req.body.dueDate : before.due_date,
+			],
+		);
+		await auditLog(req, { action: "update", entity: "dss_schedules", entityId: req.params.id, before, after: rows[0] });
+		res.json({ ok: true, item: publicSchedule(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/schedules/:id/publish", requireRotPermission("dss.programacao.publicar"), async (req, res, next) => {
+	let client;
+	try {
+		client = await db.connect();
+		await client.query("begin");
+		const { rows: scheduleRows } = await client.query("select * from dss_schedules where id = $1 for update", [req.params.id]);
+		const schedule = scheduleRows[0];
+		if (!schedule) fail(404, "Programação não encontrada.");
+		if (schedule.status !== "rascunho") fail(409, "Programação já foi publicada ou cancelada.");
+		const { rows: scopes } = await client.query("select * from dss_schedule_scopes where schedule_id = $1", [req.params.id]);
+		if (!scopes.length) fail(409, "Programação sem público definido.");
+
+		const generatedIds = await generateExecutionsForSchedule(client, req, schedule, scopes);
+
+		const { rows: updated } = await client.query(
+			`update dss_schedules set status='publicado', published_at=now() where id=$1 returning *`,
+			[req.params.id],
+		);
+		await client.query("commit");
+		await auditLog(req, { action: "publish", entity: "dss_schedules", entityId: req.params.id, after: { ...updated[0], executionsGenerated: generatedIds.length } });
+		res.json({ ok: true, item: publicSchedule(updated[0]), executionsGenerated: generatedIds.length });
+	} catch (error) {
+		if (client) await client.query("rollback").catch(() => {});
+		next(error);
+	} finally {
+		client?.release();
+	}
+});
+
+router.post("/schedules/:id/cancel", requireRotPermission("dss.programacao.gerenciar"), async (req, res, next) => {
+	try {
+		const { rows } = await db.query(
+			`update dss_schedules set status='cancelado' where id=$1 and status <> 'cancelado' returning *`,
+			[req.params.id],
+		);
+		if (!rows[0]) fail(404, "Programação não encontrada.");
+		await db.query(
+			`update dss_executions set status='cancelado' where schedule_id=$1 and status not in ('enviado','validado','cancelado')`,
+			[req.params.id],
+		);
+		await auditLog(req, { action: "cancel", entity: "dss_schedules", entityId: req.params.id, after: rows[0] });
+		res.json({ ok: true, item: publicSchedule(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+// ---------------------------------------------------------------------
+// Execuções (leitura — presença/evidência/validação chegam na Fase 2)
+// ---------------------------------------------------------------------
+
+router.get("/executions", async (req, res, next) => {
+	try {
+		let clause, params;
+		if (req.query.scope === "mine") {
+			// "DSS da minha equipe": visao automatica, sem escolha manual,
+			// mesmo pra quem tambem tem abrangencia/visao total de SST.
+			({ clause, params } = await myTeamClause(req));
+		} else {
+			if (!userHasRotPermission(req.rotUser, ["dss.execucao.visualizar_abrangencia", "dss.execucao.visualizar_todos"])) {
+				fail(403, "Sem permissão para visualizar todas as execuções. Use ?scope=mine para ver as suas.");
+			}
+			({ clause, params } = await dssVisibilityClause(req));
+		}
+		const conditions = [clause];
+		if (req.query.status) { params.push(req.query.status); conditions.push(`e.status = $${params.length}`); }
+		if (req.query.regionalId) { params.push(req.query.regionalId); conditions.push(`e.regional_id = $${params.length}`); }
+		if (req.query.themeId) { params.push(req.query.themeId); conditions.push(`e.theme_id = $${params.length}`); }
+
+		const { rows } = await db.query(
+			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name,
+				coalesce(t.title, tw.title) as theme_title, ${EXECUTION_STATUS_EXPR} as effective_status
+			 from dss_executions e
+			 left join regionais r on r.id = e.regional_id
+			 left join regional_cidades bc on bc.id = e.base_id
+			 left join rot_users u on u.id = e.responsible_id
+			 left join dss_themes t on t.id = e.theme_id
+			 left join dss_theme_weeks tw on tw.id = e.theme_week_id
+			 where ${conditions.join(" and ")}
+			 order by e.due_date desc limit 200`,
+			params,
+		);
+		res.json({ ok: true, items: rows.map((row) => publicExecution(row)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+// Visibilidade de um registro unico = mesma regra da listagem
+// (dssVisibilityClause ja cobre "minha equipe" como fallback pra quem
+// nao tem permissao de abrangencia/total — ver helpers.js). So
+// reaproveita a clausula, deslocando os indices de parametro em 1
+// porque $1 aqui e o id da execucao.
+async function canViewExecution(req, executionId) {
+	const { clause, params } = await dssVisibilityClause(req, "e");
+	const shiftedClause = clause.replace(/\$(\d+)/g, (_, n) => `$${Number(n) + 1}`);
+	const { rows } = await db.query(
+		`select 1 from dss_executions e where e.id = $1 and (${shiftedClause}) limit 1`,
+		[executionId, ...params],
+	);
+	return rows.length > 0;
+}
+
+router.get("/executions/:id", async (req, res, next) => {
+	try {
+		if (!(await canViewExecution(req, req.params.id))) fail(404, "Execução não encontrada.");
+		const { rows } = await db.query(
+			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name,
+				coalesce(t.title, tw.title) as theme_title, ${EXECUTION_STATUS_EXPR} as effective_status
+			 from dss_executions e
+			 left join regionais r on r.id = e.regional_id
+			 left join regional_cidades bc on bc.id = e.base_id
+			 left join rot_users u on u.id = e.responsible_id
+			 left join dss_themes t on t.id = e.theme_id
+			 left join dss_theme_weeks tw on tw.id = e.theme_week_id
+			 where e.id = $1`,
+			[req.params.id],
+		);
+		const execution = rows[0];
+		if (!execution) fail(404, "Execução não encontrada.");
+
+		let content = null;
+		if (execution.theme_week_id) {
+			const { rows: weekRows } = await db.query("select * from dss_theme_weeks where id = $1", [execution.theme_week_id]);
+			content = weekRows[0] ? { contentType: weekRows[0].content_type, contentBlocks: weekRows[0].content_blocks } : null;
+		} else if (execution.theme_id) {
+			const { rows: themeRows } = await db.query("select content_type, content_blocks from dss_themes where id = $1", [execution.theme_id]);
+			content = themeRows[0] ? { contentType: themeRows[0].content_type, contentBlocks: themeRows[0].content_blocks } : null;
+		}
+
+		const { rows: members } = await db.query(
+			`select * from dss_execution_members where execution_id = $1 order by name_snapshot`,
+			[req.params.id],
+		);
+		const { rows: timeline } = await db.query(
+			`select * from dss_execution_timeline where execution_id = $1 order by created_at`,
+			[req.params.id],
+		);
+		res.json({ ok: true, item: { ...publicExecution(execution, members, timeline), content } });
+	} catch (error) {
+		next(error);
+	}
+});
+
+module.exports = router;

@@ -2,6 +2,7 @@ import {
 	AlertTriangle,
 	BarChart3,
 	Bell,
+	BookOpen,
 	Boxes,
 	Building2,
 	CalendarClock,
@@ -137,6 +138,9 @@ const ASSETS_SECURITY_MENU_ITEMS = {
 const SST_MENU_ITEMS = {
 	"sst-overview": { label: "Visão Geral", path: "/seguranca-trabalho", icon: LayoutDashboard, permission: "sst.dashboard.visualizar", end: true },
 	"sst-protocolos": { label: "Protocolos", path: "/seguranca-trabalho/protocolos", icon: ClipboardList, permission: null },
+	"sst-dss-temas": { label: "DSS · Temas", path: "/seguranca-trabalho/dss/temas", icon: BookOpen, permission: "dss.tema.visualizar" },
+	"sst-dss-programacao": { label: "DSS · Programação", path: "/seguranca-trabalho/dss/programacao", icon: CalendarClock, permission: "dss.programacao.visualizar" },
+	"sst-dss-execucoes": { label: "DSS · Execuções", path: "/seguranca-trabalho/dss/execucoes", icon: ClipboardCheck, permission: null },
 	"sst-relatorios": { label: "Relatórios", path: "/seguranca-trabalho/relatorios", icon: BarChart3, permission: "sst.relatorio.visualizar" },
 };
 

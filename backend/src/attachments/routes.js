@@ -9,8 +9,15 @@ const { generateObjectKey, getDefaultStorageProvider, getStorageProvider } = req
 const router = express.Router();
 const MAX_IMAGES = 10;
 const MAX_BYTES = 1024 * 1024;
+const MAX_PDF_BYTES = 8 * 1024 * 1024;
 const PENDING_MINUTES = 15;
-const allowedMime = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedImageMime = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedPdfMime = new Set(["application/pdf"]);
+const allowedMime = new Set([...allowedImageMime, ...allowedPdfMime]);
+// Entidades que aceitam PDF alem de imagem (tema pronto / evidencia
+// assinada do DSS); as demais continuam so-imagem, sem mudanca de
+// comportamento.
+const PDF_CAPABLE_ENTITY_TYPES = new Set(["DSS_THEME", "DSS_EXECUTION"]);
 const uploadLimit = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 
 router.use(requireRotAuth, noStore);
@@ -23,24 +30,35 @@ function fail(status, message) {
 
 function normalizeEntityType(value) {
 	const type = String(value || "").trim().toUpperCase();
-	if (!["APR", "ROMPIMENTO", "ASSET", "SST_PROTOCOL"].includes(type)) fail(400, "Tipo de entidade inválido.");
+	if (!["APR", "ROMPIMENTO", "ASSET", "SST_PROTOCOL", "DSS_THEME", "DSS_EXECUTION"].includes(type)) fail(400, "Tipo de entidade inválido.");
 	return type;
 }
 
-function validateImageMeta(meta = {}) {
+function maxBytesFor(mimeType) {
+	return allowedPdfMime.has(mimeType) ? MAX_PDF_BYTES : MAX_BYTES;
+}
+
+function validateImageMeta(meta = {}, entityType) {
 	const mimeType = String(meta.mimeType || "").toLowerCase();
 	const sizeBytes = Number(meta.sizeBytes || 0);
 	const width = meta.width === undefined || meta.width === null ? null : Number(meta.width);
 	const height = meta.height === undefined || meta.height === null ? null : Number(meta.height);
-	if (!allowedMime.has(mimeType)) fail(400, "Formato de imagem inválido. Use JPEG, PNG ou WebP.");
-	if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > MAX_BYTES) fail(400, "Imagem deve ter até 1 MB após otimização.");
-	if (width !== null && (!Number.isFinite(width) || width <= 0 || width > 10000)) fail(400, "Largura inválida.");
-	if (height !== null && (!Number.isFinite(height) || height <= 0 || height > 10000)) fail(400, "Altura inválida.");
+	const isPdf = allowedPdfMime.has(mimeType);
+	if (isPdf && !PDF_CAPABLE_ENTITY_TYPES.has(entityType)) fail(400, "PDF não é aceito para este tipo de anexo.");
+	if (!allowedMime.has(mimeType)) fail(400, "Formato de arquivo inválido. Use JPEG, PNG, WebP ou PDF.");
+	const maxBytes = maxBytesFor(mimeType);
+	if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxBytes) {
+		fail(400, isPdf ? "PDF deve ter até 8 MB." : "Imagem deve ter até 1 MB após otimização.");
+	}
+	if (!isPdf) {
+		if (width === null || !Number.isFinite(width) || width <= 0 || width > 10000) fail(400, "Largura inválida.");
+		if (height === null || !Number.isFinite(height) || height <= 0 || height > 10000) fail(400, "Altura inválida.");
+	}
 	return {
 		mimeType,
 		sizeBytes: Math.round(sizeBytes),
-		width: width === null ? null : Math.round(width),
-		height: height === null ? null : Math.round(height),
+		width: isPdf ? null : Math.round(width),
+		height: isPdf ? null : Math.round(height),
 		originalName: String(meta.originalName || "").slice(0, 180),
 	};
 }
@@ -66,6 +84,25 @@ async function assertEntityAccess(client, req, entityType, entityId, mode = "vie
 		const isOwnerish = item.requested_by === req.rotUser.id || item.employee_id === req.rotUser.id;
 		if (!isSstStaff && !isOwnerish) fail(403, "Sem permissão para anexar imagens neste protocolo.");
 		if (scope && !isSstStaff && !isOwnerish && item.regional_id !== scope) fail(403, "Regional não autorizada.");
+		return item;
+	}
+	if (entityType === "DSS_THEME") {
+		const { rows } = await client.query("select * from dss_themes where id=$1", [entityId]);
+		const item = rows[0];
+		if (!item) fail(404, "Tema de DSS não encontrado.");
+		if (mode === "view" && !userHasRotPermission(req.rotUser, "dss.tema.visualizar")) fail(403, "Sem permissão para ver o conteúdo deste tema.");
+		if (mode !== "view" && !userHasRotPermission(req.rotUser, "dss.tema.editar")) fail(403, "Sem permissão para anexar arquivo neste tema.");
+		return item;
+	}
+	if (entityType === "DSS_EXECUTION") {
+		const { rows } = await client.query("select * from dss_executions where id=$1", [entityId]);
+		const item = rows[0];
+		if (!item) fail(404, "Execução de DSS não encontrada.");
+		const isDssStaff = userHasRotPermission(req.rotUser, ["dss.execucao.visualizar_abrangencia", "dss.execucao.visualizar_todos"]);
+		const isResponsible = item.responsible_id === req.rotUser.id;
+		if (mode === "view" && !isDssStaff && !isResponsible) fail(403, "Sem permissão para ver evidências desta execução.");
+		if (mode !== "view" && !isDssStaff && !isResponsible) fail(403, "Sem permissão para anexar evidências nesta execução.");
+		if (scope && !isDssStaff && item.regional_id !== scope) fail(403, "Regional não autorizada.");
 		return item;
 	}
 	if (entityType === "ROMPIMENTO") {
@@ -111,7 +148,7 @@ async function reserveSlot(client, req, { entityType, entityId, meta }) {
 		   and (status='CONFIRMED' or (status='PENDING' and expires_at >= now()))`,
 		[entityType, entityId],
 	);
-	if (counts[0].total >= MAX_IMAGES) fail(409, "Limite máximo de 10 fotos atingido.");
+	if (counts[0].total >= MAX_IMAGES) fail(409, "Limite máximo de 10 arquivos atingido.");
 
 	const provider = getDefaultStorageProvider();
 	const id = randomId("img");
@@ -131,7 +168,7 @@ router.post("/upload-url", uploadLimit, async (req, res, next) => {
 		const entityType = normalizeEntityType(req.body?.entityType);
 		const entityId = String(req.body?.entityId || "").trim();
 		if (!entityId) fail(400, "Entidade não informada.");
-		const meta = validateImageMeta(req.body?.file);
+		const meta = validateImageMeta(req.body?.file, entityType);
 		client = await db.connect();
 		await client.query("begin");
 		const reservation = await reserveSlot(client, req, { entityType, entityId, meta });
@@ -145,7 +182,7 @@ router.post("/upload-url", uploadLimit, async (req, res, next) => {
 			method: "PUT",
 			headers: { "Content-Type": meta.mimeType },
 			expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-			maxBytes: MAX_BYTES,
+			maxBytes: maxBytesFor(meta.mimeType),
 		});
 	} catch (error) {
 		if (client) await client.query("rollback").catch(() => {});
@@ -168,10 +205,10 @@ router.post("/:id/confirm", async (req, res, next) => {
 		await assertEntityAccess(client, req, attachment.entidade_tipo, attachment.entidade_id, "write");
 		const provider = getStorageProvider(attachment.storage_provider);
 		const head = await provider.headObject(attachment.storage_key);
-		if (!allowedMime.has(head.contentType) || head.contentType !== attachment.mime_type || head.contentLength <= 0 || head.contentLength > MAX_BYTES) {
+		if (!allowedMime.has(head.contentType) || head.contentType !== attachment.mime_type || head.contentLength <= 0 || head.contentLength > maxBytesFor(attachment.mime_type)) {
 			await provider.deleteObject(attachment.storage_key).catch(() => {});
 			await client.query("update rot_image_attachments set status='FAILED', removido_em=now() where id=$1", [attachment.id]);
-			fail(400, "Imagem enviada não passou na validação.");
+			fail(400, "Arquivo enviado não passou na validação.");
 		}
 		const { rows: updated } = await client.query(
 			`update rot_image_attachments
