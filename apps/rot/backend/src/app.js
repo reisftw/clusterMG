@@ -13,6 +13,7 @@ const assetsSecurityRoutes = require("./assetsSecurity/routes");
 const attachmentsRoutes = require("./attachments/routes");
 const notificationsRoutes = require("./notifications/routes");
 const sstRoutes = require("./sst/routes");
+const dssRoutes = require("./dss/routes");
 const auditRoutes = require("./audit/routes");
 const authRoutes = require("./auth/routes");
 const companiesRoutes = require("./companies/routes");
@@ -126,6 +127,7 @@ function createApp() {
 	app.use("/api/admin/assets-security", assetsSecurityRoutes);
 	app.use("/api/public/assets", assetsSecurityPublicRoutes);
 	app.use("/api/admin/sst", sstRoutes);
+	app.use("/api/admin/dss", dssRoutes);
 	app.use("/api/admin/notifications", notificationsRoutes);
 	app.use("/api/admin/shifts", shiftsRoutes);
 	app.use("/api/admin/rain", rainRoutes);

@@ -33,6 +33,12 @@ import RegionaisPage from "./modules/regionais/components/RegionaisPage";
 import RolesPage from "./pages/admin/RolesPage";
 import RompimentosPage from "./pages/admin/RompimentosPage";
 import SegurancaTrabalhoPage from "./pages/admin/SegurancaTrabalhoPage";
+import DssThemesPage from "./pages/admin/DssThemesPage";
+import DssThemeDetailPage from "./pages/admin/DssThemeDetailPage";
+import DssSchedulesPage from "./pages/admin/DssSchedulesPage";
+import DssScheduleDetailPage from "./pages/admin/DssScheduleDetailPage";
+import DssExecutionsPage from "./pages/admin/DssExecutionsPage";
+import DssExecutionDetailPage from "./pages/admin/DssExecutionDetailPage";
 import SstProtocolsPage from "./pages/admin/SstProtocolsPage";
 import SstProtocolDetailPage from "./pages/admin/SstProtocolDetailPage";
 import SstReportsPage from "./pages/admin/SstReportsPage";
@@ -180,6 +186,12 @@ export default function App() {
 				<Route path="seguranca-trabalho" element={<PrivateRoute permission="sst.dashboard.visualizar"><SegurancaTrabalhoPage /></PrivateRoute>} />
 				<Route path="seguranca-trabalho/protocolos" element={<SstProtocolsPage />} />
 				<Route path="seguranca-trabalho/protocolos/:id" element={<SstProtocolDetailPage />} />
+				<Route path="seguranca-trabalho/dss/temas" element={<PrivateRoute permission="dss.tema.visualizar"><DssThemesPage /></PrivateRoute>} />
+				<Route path="seguranca-trabalho/dss/temas/:id" element={<PrivateRoute permission="dss.tema.visualizar"><DssThemeDetailPage /></PrivateRoute>} />
+				<Route path="seguranca-trabalho/dss/programacao" element={<PrivateRoute permission="dss.programacao.visualizar"><DssSchedulesPage /></PrivateRoute>} />
+				<Route path="seguranca-trabalho/dss/programacao/:id" element={<PrivateRoute permission="dss.programacao.visualizar"><DssScheduleDetailPage /></PrivateRoute>} />
+				<Route path="seguranca-trabalho/dss/execucoes" element={<DssExecutionsPage />} />
+				<Route path="seguranca-trabalho/dss/execucoes/:id" element={<DssExecutionDetailPage />} />
 				<Route path="seguranca-trabalho/relatorios" element={<SstReportsPage />} />
 				<Route path="chamados" element={<PrivateRoute permission={["rot.tickets.view","rot.tickets.manage"]}><TicketsPage /></PrivateRoute>} />
 				<Route path="ausencias" element={<PrivateRoute permission={["rot.absences.view","rot.absences.manage","rot.timeoff.view","rot.timeoff.approve","rot.vacations.view","rot.vacations.approve"]}><AbsencesPage /></PrivateRoute>} />

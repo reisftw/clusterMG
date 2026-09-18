@@ -73,3 +73,29 @@ export async function uploadImage(file, entityType, entityId) {
 	if (!response.ok) throw new Error(`Falha no upload da imagem (${response.status}).`);
 	return confirmRotAttachment(reservation.attachmentId);
 }
+
+const MAX_PDF_BYTES = 8 * 1024 * 1024;
+
+// PDF nao passa por compressao/canvas (nao e imagem) — so upload direto,
+// pros entityType que aceitam PDF (DSS_THEME/DSS_EXECUTION no backend,
+// ver attachments/routes.js).
+export async function uploadPdf(file, entityType, entityId) {
+	if (file.type !== "application/pdf") throw new Error("Selecione um arquivo PDF.");
+	if (file.size > MAX_PDF_BYTES) throw new Error("O PDF deve ter até 8 MB.");
+	const reservation = await requestRotAttachmentUpload({
+		entityType,
+		entityId,
+		file: {
+			mimeType: file.type,
+			sizeBytes: file.size,
+			originalName: file.name || "documento.pdf",
+		},
+	});
+	const response = await fetch(reservation.uploadUrl, {
+		method: reservation.method || "PUT",
+		headers: reservation.headers || { "Content-Type": file.type },
+		body: file,
+	});
+	if (!response.ok) throw new Error(`Falha no upload do PDF (${response.status}).`);
+	return confirmRotAttachment(reservation.attachmentId);
+}

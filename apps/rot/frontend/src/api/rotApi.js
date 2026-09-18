@@ -1337,3 +1337,90 @@ export async function fetchSstReportsWorkload(filters = {}) {
 export async function fetchSstReportsDetails(filters = {}) {
 	return requestRotApi(`/admin/sst/reports/details${sstReportsQuery(filters)}`);
 }
+
+// ---------------------------------------------------------------------
+// DSS — Diálogo Semanal de Segurança (Fase 1: temas, programação,
+// execuções). Mesmo estilo das funções SST acima.
+// ---------------------------------------------------------------------
+
+function dssQuery(filters = {}) {
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(filters)) {
+		if (value !== undefined && value !== null && String(value).trim() !== "") params.set(key, value);
+	}
+	return params.toString() ? `?${params}` : "";
+}
+
+export async function fetchDssThemes(filters = {}) {
+	const data = await requestRotApi(`/admin/dss/themes${dssQuery(filters)}`);
+	return data.items || [];
+}
+
+export async function fetchDssTheme(id) {
+	const data = await requestRotApi(`/admin/dss/themes/${encodeURIComponent(id)}`);
+	return data.item;
+}
+
+export async function createDssTheme(payload) {
+	const data = await requestRotApi("/admin/dss/themes", { method: "POST", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function updateDssTheme(id, payload) {
+	const data = await requestRotApi(`/admin/dss/themes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function publishDssTheme(id) {
+	const data = await requestRotApi(`/admin/dss/themes/${encodeURIComponent(id)}/publish`, { method: "POST" });
+	return data.item;
+}
+
+export async function archiveDssTheme(id) {
+	const data = await requestRotApi(`/admin/dss/themes/${encodeURIComponent(id)}/archive`, { method: "POST" });
+	return data.item;
+}
+
+export async function saveDssThemeWeeks(id, weeks) {
+	const data = await requestRotApi(`/admin/dss/themes/${encodeURIComponent(id)}/weeks`, { method: "PUT", body: JSON.stringify({ weeks }) });
+	return data.items || [];
+}
+
+export async function fetchDssSchedules(filters = {}) {
+	const data = await requestRotApi(`/admin/dss/schedules${dssQuery(filters)}`);
+	return data.items || [];
+}
+
+export async function fetchDssSchedule(id) {
+	const data = await requestRotApi(`/admin/dss/schedules/${encodeURIComponent(id)}`);
+	return data.item;
+}
+
+export async function createDssSchedule(payload) {
+	const data = await requestRotApi("/admin/dss/schedules", { method: "POST", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function updateDssSchedule(id, payload) {
+	const data = await requestRotApi(`/admin/dss/schedules/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function publishDssSchedule(id) {
+	return requestRotApi(`/admin/dss/schedules/${encodeURIComponent(id)}/publish`, { method: "POST" });
+}
+
+export async function cancelDssSchedule(id) {
+	const data = await requestRotApi(`/admin/dss/schedules/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+	return data.item;
+}
+
+export async function fetchDssExecutions(filters = {}) {
+	const data = await requestRotApi(`/admin/dss/executions${dssQuery(filters)}`);
+	return data.items || [];
+}
+
+export async function fetchDssExecution(id) {
+	const data = await requestRotApi(`/admin/dss/executions/${encodeURIComponent(id)}`);
+	return data.item;
+}
