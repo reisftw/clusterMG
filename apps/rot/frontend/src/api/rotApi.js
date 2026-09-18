@@ -1424,3 +1424,28 @@ export async function fetchDssExecution(id) {
 	const data = await requestRotApi(`/admin/dss/executions/${encodeURIComponent(id)}`);
 	return data.item;
 }
+
+export async function updateDssExecutionMemberPresence(executionId, memberId, payload) {
+	return requestRotApi(`/admin/dss/executions/${encodeURIComponent(executionId)}/members/${encodeURIComponent(memberId)}`, {
+		method: "PATCH",
+		body: JSON.stringify(payload),
+	});
+}
+
+export async function markAllDssExecutionMembersPresent(executionId) {
+	const data = await requestRotApi(`/admin/dss/executions/${encodeURIComponent(executionId)}/mark-all-present`, { method: "POST" });
+	return data.execution;
+}
+
+export async function submitDssExecution(executionId) {
+	const data = await requestRotApi(`/admin/dss/executions/${encodeURIComponent(executionId)}/submit`, { method: "POST" });
+	return data.item;
+}
+
+export async function validateDssExecution(executionId, approved, note) {
+	const data = await requestRotApi(`/admin/dss/executions/${encodeURIComponent(executionId)}/validate`, {
+		method: "POST",
+		body: JSON.stringify({ approved, note }),
+	});
+	return data.item;
+}
