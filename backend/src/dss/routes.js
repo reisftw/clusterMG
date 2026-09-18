@@ -30,11 +30,22 @@ function nullableText(value, max = 2000) {
 	return text ? text.slice(0, max) : null;
 }
 
-const CATEGORIES = [
-	"epi", "epc", "direcao_segura", "trabalho_altura", "seguranca_eletrica",
-	"acidentes", "ergonomia", "saude_ocupacional", "prevencao",
-	"procedimentos_operacionais", "outros",
-];
+// Paginacao padrao das listagens do DSS (feedback de producao: limitar
+// a partir de 30 pra nao crescer sem controle). Mesmo padrao de
+// page/pageSize/total do /reports/details.
+function parsePagination(query, defaultSize = 30, maxSize = 100) {
+	const page = Math.max(1, Number(query.page) || 1);
+	const pageSize = Math.min(maxSize, Math.max(1, Number(query.pageSize) || defaultSize));
+	return { page, pageSize, offset: (page - 1) * pageSize };
+}
+
+// Categoria deixou de ser enum fixo no codigo (feedback de producao: o
+// gestor de SST quer configurar isso pelo sistema) — vira consulta a
+// dss_categories (056_dss_categories.sql), validada em cada escrita.
+async function isActiveCategory(id) {
+	const { rows } = await db.query("select 1 from dss_categories where id = $1 and active = true", [id]);
+	return rows.length > 0;
+}
 const MODALITIES = ["semanal", "mensal"];
 const CONTENT_TYPES = ["editor", "pdf"];
 const THEME_STATUSES = ["rascunho", "publicado", "arquivado"];
@@ -191,6 +202,89 @@ function publicTimelineEvent(row) {
 }
 
 // ---------------------------------------------------------------------
+// Categorias de tema — configuráveis pelo gestor de SST (feedback de
+// producao: nao pode ser lista fixa no codigo). Sem exclusao definitiva
+// (arquivar via active=false) pra nao invalidar temas que ja usam a
+// categoria; dss_themes.category tem FK pra esta tabela.
+// ---------------------------------------------------------------------
+
+function slugifyCategory(value) {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[̀-ͯ]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "")
+		.slice(0, 60);
+}
+
+function publicCategory(row) {
+	return { id: row.id, label: row.label, active: row.active, sortOrder: row.sort_order };
+}
+
+router.get("/categories", requireRotPermission("dss.tema.visualizar"), async (req, res, next) => {
+	try {
+		const onlyActive = req.query.all !== "true";
+		const { rows } = await db.query(
+			`select * from dss_categories ${onlyActive ? "where active = true" : ""} order by sort_order, label`,
+		);
+		res.json({ ok: true, items: rows.map(publicCategory) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/categories", requireRotPermission("dss.categoria.gerenciar"), async (req, res, next) => {
+	try {
+		const label = nullableText(req.body?.label, 100);
+		if (!label) fail(400, "Nome da categoria é obrigatório.");
+		const id = slugifyCategory(req.body?.id) || slugifyCategory(label);
+		if (!id) fail(400, "Não foi possível gerar um identificador para a categoria.");
+		const { rows: maxRows } = await db.query("select coalesce(max(sort_order), 0) + 10 as next from dss_categories");
+		const { rows } = await db.query(
+			`insert into dss_categories (id, label, sort_order) values ($1,$2,$3)
+			 on conflict (id) do update set label = excluded.label, active = true
+			 returning *`,
+			[id, label, maxRows[0].next],
+		);
+		await auditLog(req, { action: "create", entity: "dss_categories", entityId: id, after: rows[0] });
+		res.status(201).json({ ok: true, item: publicCategory(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.patch("/categories/:id", requireRotPermission("dss.categoria.gerenciar"), async (req, res, next) => {
+	try {
+		const { rows: beforeRows } = await db.query("select * from dss_categories where id = $1", [req.params.id]);
+		const before = beforeRows[0];
+		if (!before) fail(404, "Categoria não encontrada.");
+		const label = req.body?.label !== undefined ? nullableText(req.body.label, 100) : before.label;
+		if (!label) fail(400, "Nome da categoria é obrigatório.");
+		const active = req.body?.active !== undefined ? Boolean(req.body.active) : before.active;
+		const { rows } = await db.query(
+			`update dss_categories set label = $2, active = $3 where id = $1 returning *`,
+			[req.params.id, label, active],
+		);
+		await auditLog(req, { action: "update", entity: "dss_categories", entityId: req.params.id, before, after: rows[0] });
+		res.json({ ok: true, item: publicCategory(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/categories/:id/archive", requireRotPermission("dss.categoria.gerenciar"), async (req, res, next) => {
+	try {
+		const { rows } = await db.query(`update dss_categories set active = false where id = $1 returning *`, [req.params.id]);
+		if (!rows[0]) fail(404, "Categoria não encontrada.");
+		await auditLog(req, { action: "archive", entity: "dss_categories", entityId: req.params.id, after: rows[0] });
+		res.json({ ok: true, item: publicCategory(rows[0]) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+// ---------------------------------------------------------------------
 // Temas
 // ---------------------------------------------------------------------
 
@@ -203,13 +297,15 @@ router.get("/themes", requireRotPermission("dss.tema.visualizar"), async (req, r
 		if (req.query.status) { params.push(req.query.status); conditions.push(`t.status = $${params.length}`); }
 		if (req.query.q) { params.push(`%${req.query.q}%`); conditions.push(`t.title ilike $${params.length}`); }
 		const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+		const { page, pageSize, offset } = parsePagination(req.query);
+		const { rows: countRows } = await db.query(`select count(*)::int as n from dss_themes t ${where}`, params);
 		const { rows } = await db.query(
 			`select t.*, u.name as author_name from dss_themes t
 			 left join rot_users u on u.id = t.author_id
-			 ${where} order by t.created_at desc limit 200`,
-			params,
+			 ${where} order by t.created_at desc limit $${params.length + 1} offset $${params.length + 2}`,
+			[...params, pageSize, offset],
 		);
-		res.json({ ok: true, items: rows.map((row) => publicTheme(row)) });
+		res.json({ ok: true, items: rows.map((row) => publicTheme(row)), total: countRows[0].n, page, pageSize });
 	} catch (error) {
 		next(error);
 	}
@@ -239,7 +335,7 @@ router.post("/themes", requireRotPermission("dss.tema.criar"), async (req, res, 
 		const title = nullableText(req.body?.title, 200);
 		if (!title) fail(400, "Título é obrigatório.");
 		const category = String(req.body?.category || "");
-		if (!CATEGORIES.includes(category)) fail(400, "Categoria inválida.");
+		if (!(await isActiveCategory(category))) fail(400, "Categoria inválida.");
 		const modality = String(req.body?.modality || "");
 		if (!MODALITIES.includes(modality)) fail(400, "Modalidade inválida.");
 		const contentType = String(req.body?.contentType || "");
@@ -278,7 +374,7 @@ router.patch("/themes/:id", requireRotPermission("dss.tema.editar"), async (req,
 		const title = req.body?.title !== undefined ? nullableText(req.body.title, 200) : before.title;
 		if (!title) fail(400, "Título é obrigatório.");
 		const category = req.body?.category !== undefined ? String(req.body.category) : before.category;
-		if (!CATEGORIES.includes(category)) fail(400, "Categoria inválida.");
+		if (!(await isActiveCategory(category)) && category !== before.category) fail(400, "Categoria inválida.");
 		const contentType = req.body?.contentType !== undefined ? String(req.body.contentType) : before.content_type;
 		if (!CONTENT_TYPES.includes(contentType)) fail(400, "Tipo de conteúdo inválido.");
 		const contentBlocks = req.body?.contentBlocks !== undefined ? sanitizeContentBlocks(req.body.contentBlocks) : before.content_blocks;
@@ -382,16 +478,21 @@ router.get("/schedules", requireRotPermission("dss.programacao.visualizar"), asy
 		if (req.query.themeId) { params.push(req.query.themeId); conditions.push(`s.theme_id = $${params.length}`); }
 		if (req.query.from) { params.push(req.query.from); conditions.push(`s.due_date >= $${params.length}`); }
 		if (req.query.to) { params.push(req.query.to); conditions.push(`s.due_date <= $${params.length}`); }
+		if (req.query.q) {
+			params.push(`%${req.query.q}%`);
+			conditions.push(`(s.week_label ilike $${params.length} or coalesce(t.title, tw.title) ilike $${params.length})`);
+		}
+		const joins = `left join dss_themes t on t.id = s.theme_id left join dss_theme_weeks tw on tw.id = s.theme_week_id`;
 		const where = conditions.length ? `where ${conditions.join(" and ")}` : "";
+		const { page, pageSize, offset } = parsePagination(req.query);
+		const { rows: countRows } = await db.query(`select count(*)::int as n from dss_schedules s ${joins} ${where}`, params);
 		const { rows } = await db.query(
 			`select s.*, coalesce(t.title, tw.title) as theme_title
-			 from dss_schedules s
-			 left join dss_themes t on t.id = s.theme_id
-			 left join dss_theme_weeks tw on tw.id = s.theme_week_id
-			 ${where} order by s.due_date desc limit 200`,
-			params,
+			 from dss_schedules s ${joins}
+			 ${where} order by s.due_date desc limit $${params.length + 1} offset $${params.length + 2}`,
+			[...params, pageSize, offset],
 		);
-		res.json({ ok: true, items: rows.map((row) => publicSchedule(row)) });
+		res.json({ ok: true, items: rows.map((row) => publicSchedule(row)), total: countRows[0].n, page, pageSize });
 	} catch (error) {
 		next(error);
 	}
@@ -580,21 +681,30 @@ router.get("/executions", async (req, res, next) => {
 		// mês visível em vez de tudo.
 		if (req.query.dateFrom) { params.push(req.query.dateFrom); conditions.push(`e.due_date >= $${params.length}`); }
 		if (req.query.dateTo) { params.push(req.query.dateTo); conditions.push(`e.due_date <= $${params.length}`); }
-
-		const { rows } = await db.query(
-			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name,
-				coalesce(t.title, tw.title) as theme_title, ${EXECUTION_STATUS_EXPR} as effective_status
-			 from dss_executions e
-			 left join regionais r on r.id = e.regional_id
+		const joins = `left join regionais r on r.id = e.regional_id
 			 left join regional_cidades bc on bc.id = e.base_id
 			 left join rot_users u on u.id = e.responsible_id
 			 left join dss_themes t on t.id = e.theme_id
-			 left join dss_theme_weeks tw on tw.id = e.theme_week_id
+			 left join dss_theme_weeks tw on tw.id = e.theme_week_id`;
+		if (req.query.q) {
+			params.push(`%${req.query.q}%`);
+			conditions.push(`(e.week_label ilike $${params.length} or coalesce(t.title, tw.title) ilike $${params.length})`);
+		}
+
+		// dateFrom/dateTo (modo calendario) pedem tudo no intervalo de uma
+		// vez — pageSize alto explicito no client. Sem esse par, e a
+		// listagem "Execuções" normal: pagina a partir de 30.
+		const { page, pageSize, offset } = parsePagination(req.query);
+		const { rows: countRows } = await db.query(`select count(*)::int as n from dss_executions e ${joins} where ${conditions.join(" and ")}`, params);
+		const { rows } = await db.query(
+			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name,
+				coalesce(t.title, tw.title) as theme_title, ${EXECUTION_STATUS_EXPR} as effective_status
+			 from dss_executions e ${joins}
 			 where ${conditions.join(" and ")}
-			 order by e.due_date desc limit 500`,
-			params,
+			 order by e.due_date desc limit $${params.length + 1} offset $${params.length + 2}`,
+			[...params, pageSize, offset],
 		);
-		res.json({ ok: true, items: rows.map((row) => publicExecution(row)) });
+		res.json({ ok: true, items: rows.map((row) => publicExecution(row)), total: countRows[0].n, page, pageSize });
 	} catch (error) {
 		next(error);
 	}

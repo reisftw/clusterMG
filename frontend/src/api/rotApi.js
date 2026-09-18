@@ -1351,9 +1351,11 @@ function dssQuery(filters = {}) {
 	return params.toString() ? `?${params}` : "";
 }
 
+// Devolve {items, total, page, pageSize} — listagens paginadas usam os
+// 4 campos, seletores (dropdown de tema) usam so .items com pageSize
+// alto pra nao truncar em 30.
 export async function fetchDssThemes(filters = {}) {
-	const data = await requestRotApi(`/admin/dss/themes${dssQuery(filters)}`);
-	return data.items || [];
+	return requestRotApi(`/admin/dss/themes${dssQuery(filters)}`);
 }
 
 export async function fetchDssTheme(id) {
@@ -1387,8 +1389,7 @@ export async function saveDssThemeWeeks(id, weeks) {
 }
 
 export async function fetchDssSchedules(filters = {}) {
-	const data = await requestRotApi(`/admin/dss/schedules${dssQuery(filters)}`);
-	return data.items || [];
+	return requestRotApi(`/admin/dss/schedules${dssQuery(filters)}`);
 }
 
 export async function fetchDssSchedule(id) {
@@ -1416,8 +1417,27 @@ export async function cancelDssSchedule(id) {
 }
 
 export async function fetchDssExecutions(filters = {}) {
-	const data = await requestRotApi(`/admin/dss/executions${dssQuery(filters)}`);
+	return requestRotApi(`/admin/dss/executions${dssQuery(filters)}`);
+}
+
+export async function fetchDssCategories(filters = {}) {
+	const data = await requestRotApi(`/admin/dss/categories${dssQuery(filters)}`);
 	return data.items || [];
+}
+
+export async function createDssCategory(payload) {
+	const data = await requestRotApi("/admin/dss/categories", { method: "POST", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function updateDssCategory(id, payload) {
+	const data = await requestRotApi(`/admin/dss/categories/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
+	return data.item;
+}
+
+export async function archiveDssCategory(id) {
+	const data = await requestRotApi(`/admin/dss/categories/${encodeURIComponent(id)}/archive`, { method: "POST" });
+	return data.item;
 }
 
 export async function fetchDssExecution(id) {
