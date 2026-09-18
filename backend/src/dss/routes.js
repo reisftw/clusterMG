@@ -576,6 +576,10 @@ router.get("/executions", async (req, res, next) => {
 		if (req.query.status) { params.push(req.query.status); conditions.push(`e.status = $${params.length}`); }
 		if (req.query.regionalId) { params.push(req.query.regionalId); conditions.push(`e.regional_id = $${params.length}`); }
 		if (req.query.themeId) { params.push(req.query.themeId); conditions.push(`e.theme_id = $${params.length}`); }
+		// dateFrom/dateTo: usados pelo Calendário do DSS pra carregar so o
+		// mês visível em vez de tudo.
+		if (req.query.dateFrom) { params.push(req.query.dateFrom); conditions.push(`e.due_date >= $${params.length}`); }
+		if (req.query.dateTo) { params.push(req.query.dateTo); conditions.push(`e.due_date <= $${params.length}`); }
 
 		const { rows } = await db.query(
 			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name,
@@ -587,7 +591,7 @@ router.get("/executions", async (req, res, next) => {
 			 left join dss_themes t on t.id = e.theme_id
 			 left join dss_theme_weeks tw on tw.id = e.theme_week_id
 			 where ${conditions.join(" and ")}
-			 order by e.due_date desc limit 200`,
+			 order by e.due_date desc limit 500`,
 			params,
 		);
 		res.json({ ok: true, items: rows.map((row) => publicExecution(row)) });
@@ -843,6 +847,206 @@ router.post("/executions/:id/validate", requireRotPermission("dss.execucao.valid
 		next(error);
 	} finally {
 		client?.release();
+	}
+});
+
+// ---------------------------------------------------------------------
+// Dashboard, indicadores, ranking e relatório detalhado — Fase 3.
+// Mesmo padrão de escopo do SST (reportProtocolFilter): visibilidade
+// RBAC sempre resolvida no backend via dssVisibilityClause, nunca
+// confiando em filtro vindo do frontend.
+// ---------------------------------------------------------------------
+
+function parseDssPeriod(query) {
+	const to = query.dateTo ? new Date(`${query.dateTo}T23:59:59.999`) : new Date();
+	const from = query.dateFrom ? new Date(`${query.dateFrom}T00:00:00.000`) : new Date(to.getFullYear(), to.getMonth(), 1);
+	if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) fail(400, "Período inválido.");
+	return { from, to };
+}
+
+async function dssReportFilter(req, query, alias = "e") {
+	const { clause, params } = await dssVisibilityClause(req, alias);
+	const conditions = [clause];
+	const values = [...params];
+	const eq = (col, val) => {
+		values.push(val);
+		conditions.push(`${alias}.${col} = $${values.length}`);
+	};
+	if (query.operationType) eq("operation_type", query.operationType);
+	if (query.regionalId) eq("regional_id", query.regionalId);
+	if (query.baseId) eq("base_id", query.baseId);
+	if (query.themeId) eq("theme_id", query.themeId);
+	if (query.status) eq("status", query.status);
+	if (query.responsibleId) eq("responsible_id", query.responsibleId);
+	return { clause: conditions.join(" and "), params: values };
+}
+
+router.get("/dashboard/summary", requireRotPermission("dss.dashboard.visualizar"), async (req, res, next) => {
+	try {
+		const { from, to } = parseDssPeriod(req.query);
+		const { clause, params } = await dssReportFilter(req, req.query);
+		const values = [...params, from, to];
+		const { rows } = await db.query(
+			`select
+				count(*)::int as programados,
+				count(*) filter (where status in ('enviado','validado'))::int as realizados,
+				count(*) filter (where status in ('planejado','disponivel','em_andamento'))::int as pendentes,
+				count(*) filter (where status in ('planejado','disponivel','em_andamento') and due_date < current_date)::int as atrasados,
+				count(*) filter (where status = 'enviado')::int as aguardando_validacao,
+				avg(participation_pct) filter (where participation_pct is not null) as participacao_media,
+				coalesce(sum(presentes_count), 0)::int as total_presentes,
+				coalesce(sum(previstos_count), 0)::int as total_previstos
+			 from dss_executions e where ${clause} and e.due_date >= $${values.length - 1} and e.due_date <= $${values.length}`,
+			values,
+		);
+		const row = rows[0];
+		res.json({
+			ok: true,
+			programados: row.programados,
+			realizados: row.realizados,
+			pendentes: row.pendentes,
+			atrasados: row.atrasados,
+			awaitingValidation: row.aguardando_validacao,
+			participationAvg: row.participacao_media !== null ? Math.round(Number(row.participacao_media) * 10) / 10 : null,
+			coverage: row.total_previstos > 0 ? Math.round((row.total_presentes / row.total_previstos) * 1000) / 10 : null,
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/dashboard/indicators", requireRotPermission("dss.dashboard.visualizar"), async (req, res, next) => {
+	try {
+		const { from, to } = parseDssPeriod(req.query);
+		const { clause, params } = await dssReportFilter(req, req.query);
+		const values = [...params, from, to];
+		const dateFilter = `e.due_date >= $${values.length - 1} and e.due_date <= $${values.length}`;
+
+		const [byMonth, byRegional, byOperation, statusDist, absenceReasons] = await Promise.all([
+			db.query(
+				`select to_char(date_trunc('month', e.due_date), 'YYYY-MM') as bucket,
+					avg(e.participation_pct) filter (where e.participation_pct is not null) as avg_participation,
+					count(*)::int as total, count(*) filter (where e.status in ('enviado','validado'))::int as realizados
+				 from dss_executions e where ${clause} and ${dateFilter} group by 1 order by 1`,
+				values,
+			),
+			db.query(
+				`select r.nome as label, avg(e.participation_pct) filter (where e.participation_pct is not null) as avg_participation, count(*)::int as total
+				 from dss_executions e left join regionais r on r.id = e.regional_id
+				 where ${clause} and ${dateFilter} group by r.nome order by r.nome`,
+				values,
+			),
+			db.query(
+				`select e.operation_type as label, avg(e.participation_pct) filter (where e.participation_pct is not null) as avg_participation, count(*)::int as total
+				 from dss_executions e where ${clause} and ${dateFilter} group by e.operation_type order by e.operation_type`,
+				values,
+			),
+			db.query(
+				`select ${EXECUTION_STATUS_EXPR} as status, count(*)::int as total
+				 from dss_executions e where ${clause} and ${dateFilter} group by 1`,
+				values,
+			),
+			db.query(
+				`select coalesce(m.absence_reason, 'nao_informado') as reason, count(*)::int as total
+				 from dss_execution_members m join dss_executions e on e.id = m.execution_id
+				 where ${clause} and ${dateFilter} and m.presence_status = 'ausente' group by 1`,
+				values,
+			),
+		]);
+
+		const mapAvg = (rows) => rows.map((row) => ({
+			label: row.label ?? row.bucket,
+			bucket: row.bucket,
+			total: row.total,
+			realizados: row.realizados,
+			participationAvg: row.avg_participation !== null ? Math.round(Number(row.avg_participation) * 10) / 10 : null,
+		}));
+
+		res.json({
+			ok: true,
+			participationByMonth: mapAvg(byMonth.rows),
+			participationByRegional: mapAvg(byRegional.rows),
+			participationByOperation: mapAvg(byOperation.rows),
+			statusDistribution: statusDist.rows,
+			absenceReasons: absenceReasons.rows,
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/dashboard/ranking", requireRotPermission("dss.dashboard.visualizar"), async (req, res, next) => {
+	try {
+		const { from, to } = parseDssPeriod(req.query);
+		const { clause, params } = await dssReportFilter(req, req.query);
+		const values = [...params, from, to];
+		const { rows } = await db.query(
+			`select r.nome as regional_name, bc.nome as base_name, e.operation_type,
+				count(*)::int as previstos,
+				count(*) filter (where e.status in ('enviado', 'validado'))::int as realizados,
+				avg(e.participation_pct) filter (where e.participation_pct is not null) as participacao_media,
+				count(*) filter (where e.status in ('enviado', 'validado') and e.submitted_at::date <= e.due_date)::int as no_prazo
+			 from dss_executions e
+			 left join regionais r on r.id = e.regional_id
+			 left join regional_cidades bc on bc.id = e.base_id
+			 where ${clause} and e.due_date >= $${values.length - 1} and e.due_date <= $${values.length}
+			 group by r.nome, bc.nome, e.operation_type
+			 order by participacao_media desc nulls last`,
+			values,
+		);
+		res.json({
+			ok: true,
+			items: rows.map((row) => ({
+				regionalName: row.regional_name,
+				baseName: row.base_name,
+				operationType: row.operation_type,
+				previstos: row.previstos,
+				realizados: row.realizados,
+				participationAvg: row.participacao_media !== null ? Math.round(Number(row.participacao_media) * 10) / 10 : null,
+				onTimePct: row.realizados > 0 ? Math.round((row.no_prazo / row.realizados) * 1000) / 10 : null,
+			})),
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/reports/details", requireRotPermission("dss.relatorio.visualizar"), async (req, res, next) => {
+	try {
+		const { clause, params } = await dssReportFilter(req, req.query);
+		const conditions = [clause];
+		const values = [...params];
+		if (req.query.dateFrom) { values.push(req.query.dateFrom); conditions.push(`e.due_date >= $${values.length}`); }
+		if (req.query.dateTo) { values.push(req.query.dateTo); conditions.push(`e.due_date <= $${values.length}`); }
+		if (req.query.q) {
+			values.push(`%${req.query.q}%`);
+			conditions.push(`(coalesce(t.title, tw.title) ilike $${values.length} or e.week_label ilike $${values.length})`);
+		}
+		const page = Math.max(1, Number(req.query.page) || 1);
+		const pageSize = Math.min(200, Math.max(1, Number(req.query.pageSize) || 25));
+		const sortColumns = { dueDate: "e.due_date", status: "e.status", participation: "e.participation_pct", weekLabel: "e.week_label" };
+		const sortCol = sortColumns[req.query.sort] || "e.due_date";
+		const dir = req.query.dir === "asc" ? "asc" : "desc";
+		const joins = `left join regionais r on r.id = e.regional_id
+			 left join regional_cidades bc on bc.id = e.base_id
+			 left join rot_users u on u.id = e.responsible_id
+			 left join dss_themes t on t.id = e.theme_id
+			 left join dss_theme_weeks tw on tw.id = e.theme_week_id`;
+
+		const { rows: countRows } = await db.query(`select count(*)::int as n from dss_executions e ${joins} where ${conditions.join(" and ")}`, values);
+		const pagedValues = [...values, pageSize, (page - 1) * pageSize];
+		const { rows } = await db.query(
+			`select e.*, r.nome as regional_name, bc.nome as base_name, u.name as responsible_name,
+				coalesce(t.title, tw.title) as theme_title, ${EXECUTION_STATUS_EXPR} as effective_status
+			 from dss_executions e ${joins}
+			 where ${conditions.join(" and ")}
+			 order by ${sortCol} ${dir}
+			 limit $${pagedValues.length - 1} offset $${pagedValues.length}`,
+			pagedValues,
+		);
+		res.json({ ok: true, items: rows.map((row) => publicExecution(row)), total: countRows[0].n, page, pageSize });
+	} catch (error) {
+		next(error);
 	}
 });
 
