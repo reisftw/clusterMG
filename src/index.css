@@ -1,0 +1,133 @@
+@import "tailwindcss";
+@source "./**/*.{js,jsx,ts,tsx}";
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+
+  iframe,
+  canvas {
+    max-width: 100%;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    min-width: 0;
+  }
+
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  dd,
+  dt,
+  li,
+  label,
+  output,
+  blockquote {
+    overflow-wrap: anywhere;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #3b82f6, #f97316);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #2563eb, #ea580c);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3b82f6 transparent;
+  }
+}
+
+@layer components {
+  .nav-item {
+    @apply flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 cursor-pointer;
+  }
+  .nav-item-modern {
+    @apply relative flex min-h-11 min-w-0 items-center gap-3 overflow-hidden rounded-lg px-4 py-3 text-sm font-semibold transition-all duration-200 cursor-pointer;
+  }
+  .nav-item-modern-active {
+    @apply bg-blue-600/90 text-white shadow-md shadow-blue-950/20;
+  }
+  .nav-item-modern-active::before {
+    content: "";
+    @apply absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-orange-400;
+  }
+  .nav-item-active {
+    @apply bg-gradient-to-r from-orange-500 to-orange-400 text-white shadow-md shadow-orange-200 border border-orange-300;
+  }
+  .nav-item-inactive {
+    @apply text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:shadow-sm;
+  }
+  .btn-primary {
+    @apply bg-gradient-to-r from-orange-500 to-orange-400 text-white font-semibold rounded-xl px-5 py-2.5 text-sm transition-all hover:from-orange-600 hover:to-orange-500 hover:shadow-lg hover:shadow-orange-200 active:scale-95;
+  }
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent focus:bg-white transition-all;
+  }
+  .card {
+    @apply bg-white border border-gray-100 rounded-2xl shadow-sm;
+  }
+}
+
+@layer utilities {
+  .z-layout-base {
+    z-index: 10;
+  }
+
+  .z-layout-dropdown {
+    z-index: 20;
+  }
+
+  .z-layout-topbar {
+    z-index: 30;
+  }
+
+  .z-layout-sidebar {
+    z-index: 40;
+  }
+
+  .z-layout-modal {
+    z-index: 50;
+  }
+
+  .z-layout-notification {
+    z-index: 60;
+  }
+
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+}

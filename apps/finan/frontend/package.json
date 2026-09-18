@@ -1,0 +1,16 @@
+{
+	"name": "finan-frontend",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite --host 0.0.0.0 --port 5174",
+		"build": "vite build",
+		"preview": "vite preview --host 0.0.0.0 --port 4174"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "^4.2.1",
+		"tailwindcss": "^4.2.1"
+	},
+	"_comment_deps": "react, react-dom, react-router-dom, vite, @vitejs/plugin-react, lucide-react, chart.js e react-chartjs-2 sao propositalmente NAO declarados aqui. Este frontend renderiza FinanceiroPage.jsx do Retiradas (src/modules/financeiro), que resolve 'react' a partir da raiz do monorepo. Se esses pacotes forem instalados aqui, o Node passa a resolver DOIS 'react' fisicamente diferentes na mesma arvore (um local, um da raiz), quebrando hooks/Context (erro classico 'Cannot read properties of null (reading useContext)'). Eles precisam continuar resolvendo por heranca do node_modules da raiz (root sempre e instalado antes deste workspace no CI). So adicione dependencia aqui se ela nao existir/nao precisar ser a MESMA instancia usada pelo Retiradas."
+}

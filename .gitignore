@@ -1,0 +1,64 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+*.tgz
+*.zip
+
+# Generated reports and local tool output
+coverage
+playwright-report
+test-results
+.nyc_output
+.scannerwork
+.tmp-swagger
+tmp
+output
+outputs
+uploads
+reports
+deploy-*/
+package-*/
+jdk*_temp/
+jdk*.zip
+api-src-security.zip
+RELATORIO_QUALIDADE.*
+relatorio_*.csv
+relatorio_*.pdf
+relatorio-avaliacao-sistema.pdf
+docs/apresentacao-sistema.pdf
+sonar-project.properties.txt
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment files
+.env*
+!.env.example
+
+# Copia local do codigo-fonte Firebase do ROT (referencia durante a
+# migracao pra apps/rot — nao faz parte do sistema novo, nao versiona.
+/rot/
+
+# Chave de service account do Firebase (import unico Firestore ->
+# Postgres, ver apps/rot/backend/scripts/firebase-import/) — nunca
+# versiona, credencial de acesso total ao projeto Firebase.
+apps/rot/backend/scripts/firebase-import/service-account.json
+apps/rot/backend/scripts/firebase-import/**/*.json

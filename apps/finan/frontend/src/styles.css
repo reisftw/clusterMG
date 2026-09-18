@@ -1,0 +1,2838 @@
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: #eef3f8;
+	color: #0f172a;
+	font-family:
+		Inter,
+		ui-sans-serif,
+		system-ui,
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		sans-serif;
+}
+
+button,
+input,
+select {
+	font: inherit;
+}
+
+.finan-shell {
+	display: grid;
+	min-height: 100vh;
+	grid-template-columns: 280px minmax(0, 1fr);
+}
+
+.finan-sidebar {
+	position: sticky;
+	top: 0;
+	height: 100vh;
+	overflow-y: auto;
+	border-right: 1px solid #dbe4ee;
+	background: #07111f;
+	padding: 18px;
+	color: white;
+}
+
+.finan-brand {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	border-bottom: 1px solid rgb(255 255 255 / 10%);
+	padding-bottom: 18px;
+}
+
+.finan-brand-mark {
+	display: grid;
+	width: 72px;
+	height: 44px;
+	flex: 0 0 72px;
+	place-items: center;
+	border-radius: 12px;
+	background: white;
+	padding: 6px;
+	box-shadow: 0 10px 24px rgb(0 0 0 / 16%);
+}
+
+.finan-brand-mark img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.finan-brand strong,
+.finan-brand span {
+	display: block;
+}
+
+.finan-brand strong {
+	font-size: 1.1rem;
+	font-weight: 900;
+}
+
+.finan-brand span {
+	margin-top: 2px;
+	color: #9fb0c7;
+	font-size: 0.78rem;
+	font-weight: 800;
+}
+
+.finan-nav {
+	display: grid;
+	gap: 18px;
+	margin-top: 18px;
+}
+
+.finan-nav-compact {
+	position: relative;
+	display: flex;
+	min-height: 38px;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	overflow: hidden;
+	border-radius: 12px;
+	padding: 8px 10px;
+	font-size: 0.82rem;
+	font-weight: 850;
+	line-height: 1.15;
+	text-align: left;
+	text-decoration: none;
+	transition:
+		background-color 0.2s ease,
+		color 0.2s ease,
+		box-shadow 0.2s ease;
+}
+
+.finan-nav-compact.nav-item-modern-active::before {
+	top: 7px;
+	bottom: 7px;
+}
+
+.finan-nav-group {
+	display: grid;
+	gap: 6px;
+}
+
+.finan-nav-title {
+	display: block;
+	padding: 0 10px 4px;
+	color: #6f819b;
+	font-size: 0.68rem;
+	font-weight: 950;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.finan-nav-item {
+	display: grid;
+	gap: 4px;
+}
+
+.finan-nav-link {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 10px;
+	border-radius: 12px;
+	padding: 0 12px;
+	color: #c9d6e8;
+	font-size: 0.9rem;
+	font-weight: 850;
+	text-decoration: none;
+}
+
+.finan-nav-link:hover,
+.finan-nav-link.is-active {
+	background: #ffffff;
+	color: #0f172a;
+}
+
+.finan-nav-chevron {
+	margin-left: auto;
+	opacity: 0.6;
+}
+
+.finan-nav-sublist {
+	display: grid;
+	gap: 2px;
+	margin-left: 18px;
+	border-left: 1px solid rgb(255 255 255 / 12%);
+	padding-left: 10px;
+}
+
+.finan-nav-sublink {
+	display: flex;
+	min-height: 34px;
+	align-items: center;
+	border-radius: 10px;
+	padding: 0 10px;
+	color: #9fb0c7;
+	font-size: 0.78rem;
+	font-weight: 850;
+	text-decoration: none;
+}
+
+.finan-nav-sublink:hover,
+.finan-nav-sublink.is-active {
+	background: rgb(255 255 255 / 10%);
+	color: white;
+}
+
+.finan-main {
+	min-width: 0;
+}
+
+.finan-app-shell {
+	display: flex;
+	width: 100%;
+	min-height: 100dvh;
+	overflow-x: hidden;
+	background: #eef3f8;
+}
+
+.finan-app-sidebar-frame {
+	display: none;
+	height: 100dvh;
+	flex: 0 0 auto;
+	overflow: hidden;
+	box-shadow: 4px 0 24px rgb(0 48 135 / 18%);
+	transition: width 0.2s ease;
+}
+
+.finan-app-sidebar-frame.is-expanded {
+	width: 18rem;
+}
+
+.finan-app-sidebar-frame.is-collapsed {
+	width: 4rem;
+}
+
+.finan-app-sidebar-panel {
+	display: flex;
+	height: 100%;
+	width: 100%;
+	flex-direction: column;
+	border-right: 1px solid #020617;
+	background: linear-gradient(180deg, #061b38 0%, #06294d 54%, #04162c 100%);
+	color: #ffffff;
+}
+
+.finan-app-sidebar-panel img[alt="Sempre Internet"] {
+	display: block;
+	width: min(8rem, 100%);
+	height: auto;
+	max-height: 4.5rem;
+	object-fit: contain;
+}
+
+.finan-app-content {
+	display: flex;
+	min-width: 0;
+	min-height: 100dvh;
+	flex: 1 1 auto;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.finan-app-topbar {
+	position: relative;
+	z-index: 30;
+	display: flex;
+	min-height: 4.75rem;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	overflow: visible;
+	border-bottom: 1px solid rgb(226 232 240 / 80%);
+	background: rgb(255 255 255 / 95%);
+	padding: 0.625rem 0.75rem;
+	backdrop-filter: blur(14px);
+}
+
+.finan-app-main {
+	min-width: 0;
+	min-height: 0;
+	flex: 1 1 auto;
+	overflow-y: auto;
+	background:
+		radial-gradient(circle at top left, rgb(255 107 0 / 8%), transparent 34%),
+		linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
+	padding: 0.75rem;
+}
+
+@media (min-width: 640px) {
+	.finan-app-topbar {
+		padding-right: 1.25rem;
+		padding-left: 1.25rem;
+	}
+
+	.finan-app-main {
+		padding: 1rem;
+	}
+}
+
+@media (min-width: 1024px) {
+	.finan-app-shell {
+		height: 100dvh;
+		overflow: hidden;
+	}
+
+	.finan-app-sidebar-frame {
+		display: block;
+	}
+
+	.finan-app-content {
+		min-height: 0;
+	}
+
+	.finan-app-topbar {
+		padding-right: 2rem;
+		padding-left: 2rem;
+	}
+
+	.finan-app-main {
+		padding: 1.5rem;
+	}
+}
+
+.finan-topbar {
+	position: sticky;
+	z-index: 10;
+	top: 0;
+	display: flex;
+	min-height: 76px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	border-bottom: 1px solid #dbe4ee;
+	background: rgb(255 255 255 / 88%);
+	padding: 14px 24px;
+	backdrop-filter: blur(14px);
+}
+
+.finan-topbar-greeting {
+	min-width: 0;
+}
+
+.finan-topbar p,
+.finan-topbar strong {
+	display: block;
+	margin: 0;
+}
+
+.finan-topbar p {
+	color: #64748b;
+	font-size: 0.85rem;
+	font-weight: 800;
+}
+
+.finan-topbar strong {
+	margin-top: 2px;
+	font-size: 1.05rem;
+	font-weight: 950;
+}
+
+.finan-account-box {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 12px;
+	border: 1px solid #dbe4ee;
+	border-radius: 16px;
+	background: white;
+	padding: 8px 10px;
+	box-shadow: 0 10px 28px rgb(15 23 42 / 7%);
+}
+
+.finan-account-box > div {
+	min-width: 0;
+}
+
+.finan-account-box strong,
+.finan-account-box span {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.finan-account-box strong {
+	max-width: 180px;
+	color: #0f172a;
+	font-size: 0.82rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-account-box span {
+	max-width: 180px;
+	margin-top: 2px;
+	color: #64748b;
+	font-size: 0.72rem;
+	font-weight: 800;
+}
+
+.finan-topbar-avatar {
+	display: flex;
+	width: 44px;
+	height: 44px;
+	flex: 0 0 44px;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #2563eb;
+	color: white;
+	font-size: 0.8rem;
+	font-weight: 950;
+}
+
+.finan-topbar-avatar img,
+.finan-user-avatar img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.finan-icon-button {
+	display: inline-flex;
+	width: 40px;
+	height: 40px;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+	color: #64748b;
+	cursor: pointer;
+}
+
+.finan-icon-button:hover {
+	background: #fef2f2;
+	color: #dc2626;
+}
+
+
+.finan-content {
+	padding: 24px;
+}
+
+.finan-ghost-button {
+	display: inline-flex;
+	min-height: 42px;
+	align-items: center;
+	gap: 8px;
+	border: 1px solid #dbe4ee;
+	border-radius: 12px;
+	background: white;
+	padding: 0 14px;
+	color: #334155;
+	cursor: pointer;
+	font-weight: 850;
+}
+
+.finan-search-input {
+	display: block;
+	width: 100%;
+	min-height: 46px;
+	margin-top: 18px;
+	border: 1px solid #dbe4ee;
+	border-radius: 12px;
+	background: #f8fafc;
+	padding: 0 14px;
+	color: #0f172a;
+	outline: none;
+}
+
+.finan-search-input:focus {
+	border-color: #2563eb;
+	box-shadow: 0 0 0 4px rgb(37 99 235 / 12%);
+}
+
+.finan-page-title {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 18px;
+}
+
+.finan-page-title h1 {
+	margin: 0;
+	color: #020617;
+	font-size: clamp(2rem, 3vw, 3rem);
+	font-weight: 950;
+	letter-spacing: 0;
+}
+
+.finan-page-title p {
+	margin: 6px 0 0;
+	color: #52637a;
+	font-size: 1rem;
+	font-weight: 750;
+}
+
+.finan-page-title span {
+	border-radius: 999px;
+	background: #dbeafe;
+	padding: 8px 12px;
+	color: #1d4ed8;
+	font-size: 0.75rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-kpi-grid,
+.finan-settings-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 16px;
+}
+
+.finan-kpi-card,
+.finan-setting-card,
+.finan-work-card,
+.finan-login-card {
+	border: 1px solid #dbe4ee;
+	border-radius: 18px;
+	background: white;
+	box-shadow: 0 16px 40px rgb(15 23 42 / 7%);
+}
+
+.finan-kpi-card {
+	min-width: 0;
+	padding: 20px;
+}
+
+.finan-kpi-card span {
+	color: #64748b;
+	font-size: 0.76rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-kpi-card strong {
+	display: block;
+	margin-top: 8px;
+	overflow-wrap: break-word;
+	color: #020617;
+	font-size: clamp(1.45rem, 2vw, 2rem);
+	font-weight: 950;
+}
+
+.finan-kpi-card p,
+.finan-work-card p,
+.finan-setting-card p {
+	color: #64748b;
+	font-size: 0.9rem;
+	font-weight: 750;
+	line-height: 1.5;
+}
+
+.finan-work-card {
+	margin-top: 16px;
+	padding: 22px;
+}
+
+.finan-detail-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 16px;
+	margin-top: 16px;
+}
+
+.finan-detail-card {
+	margin-top: 0;
+	min-width: 0;
+}
+
+.finan-detail-row {
+	display: flex;
+	min-width: 0;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	border-top: 1px solid #e2e8f0;
+	padding: 12px 0;
+}
+
+.finan-detail-row:first-of-type {
+	margin-top: 10px;
+}
+
+.finan-detail-row > div {
+	min-width: 0;
+}
+
+.finan-detail-row > div:last-child {
+	flex: 0 0 auto;
+	text-align: right;
+}
+
+.finan-detail-row strong,
+.finan-detail-row span {
+	display: block;
+	overflow-wrap: break-word;
+}
+
+.finan-detail-row strong {
+	color: #020617;
+	font-size: 0.9rem;
+	font-weight: 950;
+}
+
+.finan-detail-row span {
+	margin-top: 2px;
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 800;
+}
+
+.finan-work-card h2,
+.finan-setting-card h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.finan-dashboard-page {
+	min-width: 0;
+}
+
+.finan-dashboard-alert {
+	margin-bottom: 16px;
+	border: 1px solid #fecaca;
+	border-radius: 16px;
+	background: #fff1f2;
+	padding: 14px 16px;
+	color: #991b1b;
+	font-weight: 900;
+}
+
+.finan-financial-reports-page {
+	display: grid;
+	gap: 1rem;
+}
+
+.finan-report-hero,
+.finan-report-focus-card,
+.finan-report-card {
+	border: 1px solid rgb(226 232 240 / 90%);
+	border-radius: 20px;
+	background: rgb(255 255 255 / 94%);
+	box-shadow: 0 18px 40px rgb(15 23 42 / 8%);
+}
+
+.finan-report-hero {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 1rem;
+	align-items: center;
+	padding: 1.25rem;
+}
+
+.finan-report-hero-icon,
+.finan-report-focus-icon,
+.finan-report-card-head > div {
+	display: inline-flex;
+	width: 3rem;
+	height: 3rem;
+	align-items: center;
+	justify-content: center;
+	border-radius: 16px;
+	background: #eff6ff;
+	color: #1d4ed8;
+}
+
+.finan-report-hero span,
+.finan-report-focus-card span,
+.finan-report-card-head span,
+.finan-report-card-section strong {
+	display: block;
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 950;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.finan-report-hero h2,
+.finan-report-focus-card h2,
+.finan-report-card h2 {
+	margin: 0.25rem 0 0;
+	color: #020617;
+	font-size: clamp(1.25rem, 2vw, 1.75rem);
+	font-weight: 950;
+	line-height: 1.05;
+}
+
+.finan-report-hero p,
+.finan-report-focus-card p,
+.finan-report-card p {
+	margin: 0.5rem 0 0;
+	color: #475569;
+	font-size: 0.94rem;
+	font-weight: 700;
+	line-height: 1.5;
+}
+
+.finan-report-focus-card {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 1rem;
+	align-items: center;
+	padding: 1rem;
+	border-left: 5px solid #2563eb;
+}
+
+.finan-report-focus-card.orange {
+	border-left-color: #f97316;
+}
+
+.finan-report-focus-card.green {
+	border-left-color: #10b981;
+}
+
+.finan-report-focus-card.orange .finan-report-focus-icon,
+.finan-report-card.orange .finan-report-card-head > div {
+	background: #fff7ed;
+	color: #ea580c;
+}
+
+.finan-report-focus-card.green .finan-report-focus-icon,
+.finan-report-card.green .finan-report-card-head > div {
+	background: #ecfdf5;
+	color: #059669;
+}
+
+.finan-report-focus-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	border-radius: 999px;
+	background: #f8fafc;
+	padding: 0.55rem 0.75rem;
+	color: #0f766e;
+	white-space: nowrap;
+}
+
+.finan-report-focus-status span {
+	color: inherit;
+	font-size: 0.72rem;
+}
+
+.finan-report-card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 1rem;
+	align-items: stretch;
+}
+
+.finan-report-card {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 1rem;
+	padding: 1rem;
+	border-top: 4px solid #2563eb;
+}
+
+.finan-report-card.orange {
+	border-top-color: #f97316;
+}
+
+.finan-report-card.green {
+	border-top-color: #10b981;
+}
+
+.finan-report-card.is-active {
+	box-shadow: 0 18px 40px rgb(37 99 235 / 18%);
+}
+
+.finan-report-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+}
+
+.finan-report-card-section {
+	display: grid;
+	gap: 0.25rem;
+}
+
+.finan-report-card-section p {
+	margin: 0;
+	overflow-wrap: break-word;
+}
+
+.finan-report-card a {
+	display: inline-flex;
+	min-height: 2.75rem;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	margin-top: auto;
+	border-radius: 14px;
+	background: #0f172a;
+	color: #ffffff;
+	font-size: 0.86rem;
+	font-weight: 950;
+	text-decoration: none;
+	transition:
+		transform 0.2s ease,
+		box-shadow 0.2s ease;
+}
+
+.finan-report-card a:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 14px 28px rgb(15 23 42 / 18%);
+}
+
+@media (max-width: 640px) {
+	.finan-report-hero,
+	.finan-report-focus-card {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-report-focus-status {
+		justify-content: center;
+		white-space: normal;
+	}
+}
+
+.finan-dashboard-kpis {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 16px;
+	align-items: stretch;
+}
+
+.finan-dashboard-kpi,
+.finan-dashboard-total-chart,
+.finan-dashboard-chart-card,
+.finan-dashboard-class-card {
+	min-width: 0;
+	border: 1px solid #dbe4ee;
+	border-radius: 18px;
+	background: #fff;
+	box-shadow: 0 18px 42px rgb(15 23 42 / 8%);
+}
+
+.finan-dashboard-kpi {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	padding: 16px;
+}
+
+.finan-dashboard-kpi-icon {
+	display: grid;
+	width: 42px;
+	height: 42px;
+	flex: 0 0 42px;
+	place-items: center;
+	border-radius: 16px;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.finan-dashboard-kpi.orange .finan-dashboard-kpi-icon {
+	background: #fff7ed;
+	color: #f97316;
+}
+
+.finan-dashboard-kpi.slate .finan-dashboard-kpi-icon {
+	background: #f1f5f9;
+	color: #334155;
+}
+
+.finan-dashboard-kpi.success .finan-dashboard-kpi-icon,
+.finan-dashboard-class-card.success {
+	border-color: #bbf7d0;
+	box-shadow: 0 16px 36px rgb(16 185 129 / 13%);
+}
+
+.finan-dashboard-kpi.success .finan-dashboard-kpi-icon {
+	background: #ecfdf5;
+	color: #059669;
+}
+
+.finan-dashboard-kpi.warning .finan-dashboard-kpi-icon,
+.finan-dashboard-class-card.warning {
+	border-color: #fed7aa;
+	box-shadow: 0 16px 36px rgb(249 115 22 / 13%);
+}
+
+.finan-dashboard-kpi.warning .finan-dashboard-kpi-icon {
+	background: #fff7ed;
+	color: #f97316;
+}
+
+.finan-dashboard-kpi.danger .finan-dashboard-kpi-icon,
+.finan-dashboard-class-card.danger {
+	border-color: #fecdd3;
+	box-shadow: 0 16px 36px rgb(225 29 72 / 13%);
+}
+
+.finan-dashboard-kpi.danger .finan-dashboard-kpi-icon {
+	background: #fff1f2;
+	color: #e11d48;
+}
+
+.finan-dashboard-kpi > div:last-child {
+	min-width: 0;
+}
+
+.finan-dashboard-kpi span,
+.finan-dashboard-chart-card span,
+.finan-dashboard-class-card button span {
+	display: block;
+	color: #64748b;
+	font-size: 0.75rem;
+	font-weight: 950;
+	letter-spacing: 0;
+	text-transform: uppercase;
+}
+
+.finan-dashboard-kpi strong {
+	display: block;
+	margin-top: 5px;
+	overflow-wrap: break-word;
+	color: #020617;
+	font-size: clamp(1.15rem, 1.6vw, 1.55rem);
+	font-weight: 950;
+	line-height: 1.12;
+}
+
+.finan-dashboard-kpi p {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 7px 0 0;
+	color: #64748b;
+	font-size: 0.84rem;
+	font-weight: 850;
+}
+
+.finan-dashboard-total-chart {
+	margin-top: 16px;
+	padding: 18px;
+}
+
+.finan-dashboard-total-chart.success {
+	border-color: #bbf7d0;
+	box-shadow: 0 16px 36px rgb(16 185 129 / 12%);
+}
+
+.finan-dashboard-total-chart.warning {
+	border-color: #fed7aa;
+	box-shadow: 0 16px 36px rgb(249 115 22 / 12%);
+}
+
+.finan-dashboard-total-chart.danger {
+	border-color: #fecdd3;
+	box-shadow: 0 16px 36px rgb(225 29 72 / 12%);
+}
+
+.finan-dashboard-total-chart-head,
+.finan-dashboard-total-foot {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.finan-dashboard-total-chart-head span,
+.finan-dashboard-total-foot span {
+	display: block;
+	color: #64748b;
+	font-size: 0.75rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-dashboard-total-chart-head h2 {
+	margin: 4px 0 0;
+	color: #020617;
+	font-size: clamp(1.2rem, 1.7vw, 1.55rem);
+	font-weight: 950;
+}
+
+.finan-dashboard-total-chart-head > strong {
+	border-radius: 999px;
+	background: #eff6ff;
+	padding: 8px 12px;
+	color: #1d4ed8;
+	font-size: 0.82rem;
+	font-weight: 950;
+	white-space: nowrap;
+}
+
+.finan-dashboard-total-chart.warning .finan-dashboard-total-chart-head > strong {
+	background: #fff7ed;
+	color: #c2410c;
+}
+
+.finan-dashboard-total-chart.danger .finan-dashboard-total-chart-head > strong {
+	background: #fff1f2;
+	color: #be123c;
+}
+
+.finan-dashboard-total-bars {
+	display: grid;
+	gap: 14px;
+	margin-top: 18px;
+}
+
+.finan-dashboard-total-bar {
+	display: grid;
+	grid-template-columns: 220px minmax(0, 1fr);
+	gap: 18px;
+	align-items: center;
+}
+
+.finan-dashboard-total-bar > div:first-child span,
+.finan-dashboard-total-bar > div:first-child strong {
+	display: block;
+}
+
+.finan-dashboard-total-bar > div:first-child span {
+	color: #64748b;
+	font-size: 0.76rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-dashboard-total-bar > div:first-child strong {
+	margin-top: 3px;
+	color: #020617;
+	font-size: clamp(1rem, 1.4vw, 1.3rem);
+	font-weight: 950;
+	overflow-wrap: break-word;
+}
+
+.finan-dashboard-total-bar > div:last-child {
+	height: 18px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #e2e8f0;
+}
+
+.finan-dashboard-total-bar i {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, #1d4ed8, #60a5fa);
+}
+
+.finan-dashboard-total-bar i.realizado {
+	background: linear-gradient(90deg, #f97316, #fb7185);
+}
+
+.finan-dashboard-total-foot {
+	margin-top: 14px;
+	border-top: 1px solid #e2e8f0;
+	padding-top: 12px;
+}
+
+.finan-dashboard-total-foot strong {
+	color: #059669;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.finan-dashboard-total-foot strong.positive {
+	color: #047857;
+}
+
+.finan-dashboard-total-foot strong.negative {
+	color: #be123c;
+}
+
+.finan-dashboard-budget-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+	gap: 18px;
+	margin-top: 18px;
+	align-items: start;
+}
+
+.finan-dashboard-chart-card {
+	padding: 20px;
+}
+
+.finan-dashboard-company-chart-card {
+	margin-top: 18px;
+}
+
+.finan-dashboard-chart-card h2 {
+	margin: 4px 0 0;
+	color: #020617;
+	font-size: clamp(1.2rem, 1.8vw, 1.65rem);
+	font-weight: 950;
+}
+
+.finan-dashboard-chart {
+	display: grid;
+	gap: 18px;
+	margin-top: 20px;
+}
+
+.finan-dashboard-bar-row {
+	display: grid;
+	grid-template-columns: 130px minmax(0, 1fr) minmax(0, 1fr);
+	gap: 14px;
+	align-items: center;
+	border-top: 1px solid #e2e8f0;
+	padding-top: 16px;
+}
+
+.finan-dashboard-bar-row:first-child {
+	border-top: 0;
+	padding-top: 0;
+}
+
+.finan-dashboard-bar-row > strong {
+	color: #020617;
+	font-size: 0.92rem;
+	font-weight: 950;
+}
+
+.finan-dashboard-bar-row > div {
+	display: grid;
+	grid-template-columns: 74px minmax(0, 1fr) 76px;
+	gap: 10px;
+	align-items: center;
+	min-width: 0;
+}
+
+.finan-dashboard-bar-row span,
+.finan-dashboard-bar-row em {
+	color: #64748b;
+	font-size: 0.76rem;
+	font-style: normal;
+	font-weight: 850;
+}
+
+.finan-dashboard-bar-row > div > div {
+	height: 12px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #e2e8f0;
+}
+
+.finan-dashboard-bar-row i {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: #2563eb;
+}
+
+.finan-dashboard-bar-row i.realizado {
+	background: #f97316;
+}
+
+.finan-dashboard-company-usage {
+	grid-column: 2 / -1;
+	width: max-content;
+	max-width: 100%;
+	border-radius: 999px;
+	padding: 5px 10px;
+	font-size: 0.72rem;
+	font-weight: 950;
+}
+
+.finan-dashboard-company-usage.success {
+	background: #dcfce7;
+	color: #047857;
+}
+
+.finan-dashboard-company-usage.warning {
+	background: #ffedd5;
+	color: #c2410c;
+}
+
+.finan-dashboard-company-usage.danger {
+	background: #ffe4e6;
+	color: #be123c;
+}
+
+.finan-dashboard-class-stack {
+	display: grid;
+	gap: 14px;
+}
+
+.finan-dashboard-class-card {
+	overflow: hidden;
+	border-top: 4px solid var(--class-color);
+}
+
+.finan-dashboard-class-card > button {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	border: 0;
+	background: transparent;
+	padding: 18px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.finan-dashboard-class-card > button strong {
+	display: block;
+	margin-top: 7px;
+	overflow-wrap: break-word;
+	color: #020617;
+	font-size: clamp(1.25rem, 1.8vw, 1.7rem);
+	font-weight: 950;
+}
+
+.finan-dashboard-class-card small {
+	display: block;
+	margin-top: 8px;
+	color: #64748b;
+	font-size: 0.82rem;
+	font-weight: 850;
+}
+
+.finan-dashboard-class-card > button svg {
+	flex: 0 0 auto;
+	color: #2563eb;
+}
+
+.finan-dashboard-mini-progress {
+	height: 8px;
+	margin: 0 18px 16px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #e2e8f0;
+}
+
+.finan-dashboard-mini-progress span {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--class-color);
+}
+
+.finan-dashboard-class-details {
+	border-top: 1px solid #e2e8f0;
+	padding: 4px 18px 16px;
+}
+
+.finan-dashboard-class-row {
+	display: flex;
+	min-width: 0;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+	border-top: 1px solid #eef2f7;
+	padding: 12px 0;
+}
+
+.finan-dashboard-class-row:first-child {
+	border-top: 0;
+}
+
+.finan-dashboard-class-row > div {
+	min-width: 0;
+}
+
+.finan-dashboard-class-row > div:last-child {
+	flex: 0 0 auto;
+	text-align: right;
+}
+
+.finan-dashboard-class-row strong,
+.finan-dashboard-class-row span {
+	display: block;
+	overflow-wrap: break-word;
+}
+
+.finan-dashboard-class-row strong {
+	color: #020617;
+	font-size: 0.86rem;
+	font-weight: 950;
+}
+
+.finan-dashboard-class-row span {
+	margin-top: 3px;
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 850;
+}
+
+.finan-dashboard-pager {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 10px;
+	padding-top: 6px;
+}
+
+.finan-dashboard-pager button {
+	display: grid;
+	width: 34px;
+	height: 34px;
+	place-items: center;
+	border: 1px solid #dbe4ee;
+	border-radius: 12px;
+	background: #fff;
+	color: #2563eb;
+	cursor: pointer;
+}
+
+.finan-dashboard-pager button:disabled {
+	color: #94a3b8;
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.finan-dashboard-pager span {
+	color: #64748b;
+	font-size: 0.82rem;
+	font-weight: 950;
+}
+
+@media (max-width: 1100px) {
+	.finan-dashboard-budget-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 980px) {
+	.finan-dashboard-kpis {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 720px) {
+	.finan-dashboard-kpis {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-dashboard-total-chart-head,
+	.finan-dashboard-total-foot,
+	.finan-dashboard-total-bar {
+		display: grid;
+		grid-template-columns: 1fr;
+	}
+
+	.finan-dashboard-total-chart-head > strong {
+		width: max-content;
+	}
+
+	.finan-dashboard-bar-row {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-dashboard-company-usage {
+		grid-column: auto;
+	}
+
+	.finan-dashboard-bar-row > div {
+		grid-template-columns: 74px minmax(0, 1fr) 70px;
+	}
+
+	.finan-dashboard-class-row {
+		display: grid;
+	}
+
+	.finan-dashboard-class-row > div:last-child {
+		text-align: left;
+	}
+}
+
+.finan-card-heading {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+.finan-card-heading > div:first-child {
+	display: grid;
+	width: 44px;
+	height: 44px;
+	flex: 0 0 44px;
+	place-items: center;
+	border-radius: 14px;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.finan-card-heading p {
+	margin: 6px 0 0;
+}
+
+.finan-snapshot-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 12px;
+	margin-top: 18px;
+}
+
+.finan-snapshot-metric {
+	min-width: 0;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	background: #f8fafc;
+	padding: 14px;
+}
+
+.finan-snapshot-metric span {
+	display: block;
+	color: #64748b;
+	font-size: 0.72rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-snapshot-metric strong {
+	display: block;
+	margin-top: 6px;
+	overflow-wrap: break-word;
+	color: #020617;
+	font-size: clamp(1.25rem, 2vw, 1.75rem);
+	font-weight: 950;
+}
+
+.finan-muted-warning {
+	border: 1px solid #fde68a;
+	border-radius: 14px;
+	background: #fffbeb;
+	padding: 12px 14px;
+	color: #92400e !important;
+}
+
+.finan-users-list {
+	display: grid;
+	gap: 12px;
+	margin-top: 16px;
+}
+
+.finan-user-row {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr) minmax(320px, auto);
+	gap: 12px;
+	align-items: center;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	background: #f8fafc;
+	padding: 14px;
+}
+
+.finan-user-avatar {
+	display: flex;
+	width: 44px;
+	height: 44px;
+	overflow: hidden;
+	align-items: center;
+	justify-content: center;
+	place-items: center;
+	border-radius: 999px;
+	background: #2563eb;
+	color: white;
+	font-size: 0.8rem;
+	font-weight: 950;
+}
+
+.finan-user-row strong,
+.finan-user-row span {
+	display: block;
+	overflow-wrap: break-word;
+}
+
+.finan-user-row strong {
+	color: #020617;
+	font-size: 0.95rem;
+	font-weight: 950;
+}
+
+.finan-user-row span {
+	margin-top: 2px;
+	color: #64748b;
+	font-size: 0.8rem;
+	font-weight: 800;
+}
+
+.finan-user-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.finan-user-actions select,
+.finan-user-actions button {
+	min-height: 38px;
+	border: 1px solid #dbe4ee;
+	border-radius: 10px;
+	background: white;
+	padding: 0 10px;
+	color: #334155;
+	cursor: pointer;
+	font-weight: 850;
+}
+
+.finan-user-actions button:disabled,
+.finan-user-actions select:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.finan-tabs {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 18px;
+	border: 1px solid #dbe4ee;
+	border-radius: 14px;
+	background: #f8fafc;
+	padding: 5px;
+}
+
+.finan-tabs button {
+	min-height: 40px;
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
+	padding: 0 14px;
+	color: #64748b;
+	cursor: pointer;
+	font-weight: 950;
+}
+
+.finan-tabs button.is-active {
+	background: #2563eb;
+	color: white;
+	box-shadow: 0 10px 22px rgb(37 99 235 / 20%);
+}
+
+.finan-roles-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 14px;
+	margin-top: 18px;
+}
+
+.finan-role-card {
+	min-width: 0;
+	border: 1px solid #e2e8f0;
+	border-radius: 16px;
+	background: #f8fafc;
+	padding: 16px;
+}
+
+.finan-role-card.is-muted {
+	opacity: 0.72;
+}
+
+.finan-role-card h3 {
+	margin: 0;
+	color: #020617;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.finan-role-card input:not([type="checkbox"]) {
+	display: block;
+	width: 100%;
+	min-height: 40px;
+	margin-top: 10px;
+	border: 1px solid #dbe4ee;
+	border-radius: 10px;
+	background: white;
+	padding: 0 12px;
+	color: #0f172a;
+	outline: none;
+}
+
+.finan-role-card button {
+	min-height: 42px;
+	margin-top: 12px;
+	border: 0;
+	border-radius: 12px;
+	background: #2563eb;
+	padding: 0 14px;
+	color: white;
+	cursor: pointer;
+	font-weight: 950;
+}
+
+.finan-role-card button:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.finan-role-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.finan-role-heading span {
+	display: block;
+	margin-top: 4px;
+	color: #64748b;
+	font-size: 0.75rem;
+	font-weight: 850;
+}
+
+.finan-checkline {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 12px;
+	margin-right: 12px;
+	color: #334155;
+	font-size: 0.84rem;
+	font-weight: 850;
+}
+
+.finan-checkline input {
+	width: 18px;
+	height: 18px;
+	accent-color: #2563eb;
+}
+
+.finan-permission-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 8px;
+	margin-top: 14px;
+}
+
+.finan-permission-grid label {
+	display: flex;
+	min-width: 0;
+	align-items: flex-start;
+	gap: 8px;
+	border: 1px solid #e2e8f0;
+	border-radius: 12px;
+	background: white;
+	padding: 10px;
+	color: #334155;
+	cursor: pointer;
+}
+
+.finan-permission-grid input {
+	width: 16px;
+	height: 16px;
+	margin-top: 2px;
+	accent-color: #2563eb;
+}
+
+.finan-permission-grid strong,
+.finan-permission-grid small {
+	display: block;
+	overflow-wrap: break-word;
+}
+
+.finan-permission-grid strong {
+	color: #0f172a;
+	font-size: 0.78rem;
+	font-weight: 950;
+}
+
+.finan-permission-grid small {
+	margin-top: 2px;
+	color: #64748b;
+	font-size: 0.72rem;
+	font-weight: 850;
+}
+
+.finan-setting-card {
+	padding: 20px;
+}
+
+.finan-setting-link-card {
+	display: block;
+	color: inherit;
+	text-decoration: none;
+}
+
+.finan-setting-card div {
+	display: grid;
+	width: 44px;
+	height: 44px;
+	place-items: center;
+	border-radius: 14px;
+	background: #eff6ff;
+	color: #2563eb;
+}
+
+.finan-config-layout {
+	display: grid;
+	grid-template-columns: 260px minmax(0, 1fr);
+	gap: 16px;
+	align-items: start;
+}
+
+.finan-config-sidebar {
+	position: sticky;
+	top: 94px;
+	display: grid;
+	gap: 6px;
+	border: 1px solid #dbe4ee;
+	border-radius: 18px;
+	background: white;
+	padding: 10px;
+	box-shadow: 0 16px 40px rgb(15 23 42 / 7%);
+}
+
+.finan-config-link {
+	display: flex;
+	min-height: 40px;
+	align-items: center;
+	border-radius: 12px;
+	padding: 0 12px;
+	color: #475569;
+	font-size: 0.86rem;
+	font-weight: 900;
+	text-decoration: none;
+}
+
+.finan-config-link:hover,
+.finan-config-link.is-active {
+	background: #eff6ff;
+	color: #1d4ed8;
+}
+
+.finan-config-panel {
+	margin-top: 0;
+}
+
+.finan-section-stack {
+	display: grid;
+	gap: 16px;
+	margin-top: 18px;
+}
+
+.finan-subpanel {
+	border: 1px solid #e2e8f0;
+	border-radius: 16px;
+	background: #f8fafc;
+	padding: 16px;
+}
+
+.finan-section-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.finan-section-toolbar h3 {
+	margin: 0;
+	color: #020617;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.finan-form-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 14px;
+	margin-top: 18px;
+}
+
+.finan-form-field {
+	display: grid;
+	gap: 8px;
+	min-width: 0;
+	color: #334155;
+	font-size: 0.84rem;
+	font-weight: 950;
+}
+
+.finan-form-field input:not([type="checkbox"]),
+.finan-form-field select {
+	width: 100%;
+	min-height: 44px;
+	border: 1px solid #dbe4ee;
+	border-radius: 12px;
+	background: white;
+	padding: 0 12px;
+	color: #0f172a;
+	outline: none;
+}
+
+.finan-form-field input[type="checkbox"] {
+	width: 22px;
+	height: 22px;
+	accent-color: #2563eb;
+}
+
+.finan-form-actions {
+	display: flex;
+	grid-column: 1 / -1;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+
+.finan-form-actions p {
+	margin: 0;
+	color: #166534;
+	font-size: 0.86rem;
+	font-weight: 850;
+}
+
+.finan-primary-button {
+	display: inline-flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 8px;
+	border: 0;
+	border-radius: 12px;
+	background: #2563eb;
+	padding: 0 16px;
+	color: white;
+	cursor: pointer;
+	font-weight: 950;
+}
+
+.finan-primary-button:disabled {
+	cursor: wait;
+	opacity: 0.7;
+}
+
+.finan-table-wrap {
+	overflow-x: auto;
+	margin-top: 18px;
+	border: 1px solid #e2e8f0;
+	border-radius: 16px;
+}
+
+.finan-data-table {
+	width: 100%;
+	min-width: 640px;
+	border-collapse: collapse;
+	background: white;
+}
+
+.finan-data-table th,
+.finan-data-table td {
+	border-bottom: 1px solid #e2e8f0;
+	padding: 12px 14px;
+	color: #0f172a;
+	font-size: 0.82rem;
+	font-weight: 850;
+	text-align: left;
+}
+
+.finan-data-table th {
+	background: #f8fafc;
+	color: #64748b;
+	font-size: 0.76rem;
+	font-weight: 950;
+	text-transform: uppercase;
+}
+
+.finan-login-screen {
+	display: grid;
+	width: 100%;
+	height: 100vh;
+	min-height: 640px;
+	grid-template-columns: minmax(0, 56fr) minmax(430px, 44fr);
+	overflow: hidden;
+	background: #f5f7fb;
+	color: #07152f;
+}
+
+.finan-login-showcase {
+	position: relative;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	min-width: 0;
+	overflow: hidden;
+	background:
+		radial-gradient(circle at 82% 18%, rgb(11 99 246 / 36%), transparent 28%),
+		radial-gradient(circle at 18% 76%, rgb(255 122 0 / 18%), transparent 24%),
+		linear-gradient(135deg, #061a3a 0%, #082653 42%, #063a85 72%, #065fe8 100%);
+	padding: clamp(24px, 3vw, 42px) clamp(34px, 4.2vw, 64px);
+	color: #ffffff;
+}
+
+.finan-login-showcase::before,
+.finan-login-showcase::after {
+	position: absolute;
+	content: "";
+	pointer-events: none;
+}
+
+.finan-login-showcase::before {
+	inset: 8% auto auto 56%;
+	width: 420px;
+	height: 420px;
+	border: 1px solid rgb(255 255 255 / 10%);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 4%);
+}
+
+.finan-login-showcase::after {
+	right: -90px;
+	bottom: -150px;
+	width: 360px;
+	height: 360px;
+	border-radius: 42px;
+	background: linear-gradient(135deg, rgb(255 149 0 / 24%), rgb(255 92 0 / 6%));
+	transform: rotate(18deg);
+}
+
+.finan-login-bg-line,
+.finan-login-bg-dot {
+	position: absolute;
+	pointer-events: none;
+}
+
+.finan-login-bg-line {
+	width: 260px;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgb(255 255 255 / 28%), transparent);
+	transform: rotate(-18deg);
+}
+
+.finan-login-bg-line.is-one {
+	top: 22%;
+	left: 48%;
+}
+
+.finan-login-bg-line.is-two {
+	right: 10%;
+	bottom: 26%;
+	transform: rotate(21deg);
+}
+
+.finan-login-bg-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	background: #ff9500;
+	box-shadow: 0 0 28px rgb(255 149 0 / 55%);
+}
+
+.finan-login-bg-dot.is-a {
+	top: 18%;
+	right: 20%;
+}
+
+.finan-login-bg-dot.is-b {
+	left: 12%;
+	bottom: 28%;
+	background: #7fb3ff;
+}
+
+.finan-login-brand,
+.finan-login-copy,
+.finan-login-character-wrap,
+.finan-login-benefits,
+.finan-login-institutional {
+	position: relative;
+	z-index: 2;
+}
+
+.finan-login-brand img {
+	width: clamp(150px, 13vw, 190px);
+	height: auto;
+	object-fit: contain;
+	filter: drop-shadow(0 14px 24px rgb(0 0 0 / 20%));
+}
+
+.finan-login-copy {
+	align-self: center;
+	max-width: min(52%, 520px);
+	margin-top: 0;
+}
+
+.finan-login-eyebrow {
+	display: block;
+	color: rgb(255 255 255 / 88%);
+	font-size: 0.8rem;
+	font-weight: 950;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+}
+
+.finan-login-eyebrow-line {
+	width: 76px;
+	height: 4px;
+	margin: 14px 0 22px;
+	border-radius: 999px;
+	background: linear-gradient(90deg, #ff9500, #ff5c00);
+}
+
+.finan-login-copy h1 {
+	max-width: 520px;
+	margin: 0;
+	font-size: clamp(2.65rem, 4vw, 4.25rem);
+	font-weight: 950;
+	letter-spacing: 0;
+	line-height: 0.98;
+}
+
+.finan-login-copy h1 span {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	background: linear-gradient(90deg, #ffb03a 0%, #ff7a00 48%, #ff5c00 100%);
+	background-clip: text;
+	color: transparent;
+}
+
+.finan-login-copy p {
+	max-width: 440px;
+	margin: 18px 0 0;
+	color: rgb(255 255 255 / 78%);
+	font-size: clamp(0.95rem, 1.1vw, 1.12rem);
+	font-weight: 650;
+	line-height: 1.58;
+}
+
+.finan-login-character-wrap {
+	position: absolute;
+	right: clamp(6px, 2vw, 34px);
+	bottom: clamp(58px, 7vh, 84px);
+	width: clamp(330px, 32vw, 540px);
+	max-width: 50%;
+}
+
+.finan-login-character {
+	display: block;
+	width: 100%;
+	height: auto;
+	object-fit: contain;
+	filter: drop-shadow(0 25px 40px rgb(0 0 0 / 25%));
+	animation: finan-login-float 6.4s ease-in-out infinite;
+}
+
+.finan-login-floating-card {
+	position: absolute;
+	z-index: 3;
+	display: inline-flex;
+	max-width: 166px;
+	align-items: center;
+	gap: 9px;
+	border: 1px solid rgb(255 255 255 / 14%);
+	border-radius: 16px;
+	background: rgb(255 255 255 / 7%);
+	padding: 10px 12px;
+	color: rgb(255 255 255 / 90%);
+	box-shadow: 0 10px 30px rgb(0 0 0 / 12%);
+	backdrop-filter: blur(14px);
+	font-size: 0.73rem;
+	font-weight: 850;
+	line-height: 1.25;
+	animation: finan-login-card-float 7s ease-in-out infinite;
+}
+
+.finan-login-floating-card svg {
+	flex: 0 0 auto;
+	color: #ff9500;
+}
+
+.finan-login-floating-card.is-plan {
+	top: 8%;
+	left: -10%;
+}
+
+.finan-login-floating-card.is-result {
+	top: 33%;
+	right: -7%;
+	animation-delay: -1.6s;
+}
+
+.finan-login-floating-card.is-control {
+	left: 0;
+	bottom: 12%;
+	animation-delay: -3.2s;
+}
+
+.finan-login-benefits {
+	display: grid;
+	width: min(100%, 500px);
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.finan-login-benefits > div {
+	display: grid;
+	min-height: 84px;
+	place-items: center;
+	border: 1px solid rgb(77 150 255 / 35%);
+	border-radius: 18px;
+	background: rgb(4 28 69 / 55%);
+	padding: 12px 10px;
+	text-align: center;
+	backdrop-filter: blur(16px);
+}
+
+.finan-login-benefits svg {
+	color: #ff9500;
+}
+
+.finan-login-benefits strong,
+.finan-login-benefits span {
+	display: block;
+}
+
+.finan-login-benefits strong {
+	margin-top: 6px;
+	font-size: 0.82rem;
+	font-weight: 950;
+}
+
+.finan-login-benefits span {
+	color: rgb(255 255 255 / 70%);
+	font-size: 0.72rem;
+	font-weight: 800;
+}
+
+.finan-login-institutional {
+	display: none;
+	margin-top: 22px;
+}
+
+.finan-login-institutional span {
+	display: block;
+	width: 68px;
+	height: 3px;
+	border-radius: 999px;
+	background: #ff7a00;
+}
+
+.finan-login-institutional p {
+	margin: 12px 0 0;
+	color: rgb(255 255 255 / 72%);
+	font-size: 0.72rem;
+	font-weight: 950;
+	letter-spacing: 0.24em;
+	line-height: 1.55;
+	text-transform: uppercase;
+}
+
+.finan-login-main {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background:
+		linear-gradient(135deg, transparent 0 58%, rgb(255 122 0 / 12%) 58% 64%, transparent 64%),
+		radial-gradient(circle at 8% 18%, rgb(0 87 231 / 18%), transparent 32%),
+		linear-gradient(145deg, #f5f8fe 0%, #d8e8ff 100%);
+	padding: clamp(18px, 3vw, 38px);
+}
+
+.finan-login-main::before {
+	position: absolute;
+	top: 12%;
+	right: -16%;
+	width: 56%;
+	height: 34%;
+	border-radius: 120px;
+	background: rgb(0 87 231 / 10%);
+	content: "";
+	transform: rotate(-18deg);
+}
+
+.finan-login-main::after {
+	position: absolute;
+	right: -18%;
+	bottom: 7%;
+	width: 54%;
+	height: 18%;
+	border-radius: 120px;
+	background: rgb(255 122 0 / 16%);
+	content: "";
+	transform: rotate(-24deg);
+}
+
+.finan-login-card {
+	position: relative;
+	z-index: 2;
+	width: min(560px, calc(100% - 20px));
+	border: 1px solid rgb(255 255 255 / 80%);
+	border-radius: 30px;
+	background: rgb(255 255 255 / 94%);
+	padding: clamp(26px, 3vw, 40px);
+	box-shadow: 0 25px 70px rgb(0 30 80 / 18%);
+	backdrop-filter: blur(20px);
+	animation: finan-login-enter 0.55s ease both;
+}
+
+.finan-login-mobile-logo {
+	display: none;
+	justify-content: center;
+	margin-bottom: 28px;
+}
+
+.finan-login-mobile-logo img {
+	height: 54px;
+	width: auto;
+	object-fit: contain;
+}
+
+.finan-login-title {
+	margin-top: 22px;
+	text-align: left;
+}
+
+.finan-login-product {
+	display: inline-flex;
+	align-items: center;
+	gap: 15px;
+	color: #07152f;
+}
+
+.finan-login-product-icon {
+	display: inline-flex;
+	width: 48px;
+	height: 48px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 18px;
+	background: linear-gradient(135deg, #ff9700, #ff5000);
+	color: white;
+	box-shadow: 0 16px 32px rgb(255 112 0 / 24%);
+}
+
+.finan-login-product strong,
+.finan-login-product span,
+.finan-login-product small {
+	display: block;
+}
+
+.finan-login-product strong {
+	font-size: clamp(2.35rem, 3.4vw, 3.05rem);
+	font-weight: 950;
+	letter-spacing: 0;
+	line-height: 0.92;
+}
+
+.finan-login-product span {
+	margin-top: 6px;
+	color: #5b6474;
+	font-size: 0.78rem;
+	font-weight: 950;
+	letter-spacing: 0.3em;
+	text-transform: uppercase;
+}
+
+.finan-login-product small {
+	margin-top: 6px;
+	color: #075eea;
+	font-size: 0.95rem;
+	font-weight: 900;
+}
+
+.finan-login-title h2 {
+	margin: 0;
+	color: #07152f;
+	font-size: clamp(1.7rem, 2.45vw, 2.1rem);
+	font-weight: 950;
+	letter-spacing: 0;
+	line-height: 1.14;
+}
+
+.finan-login-title p {
+	margin: 9px 0 0;
+	color: #67758c;
+	font-size: 0.98rem;
+	font-weight: 650;
+	line-height: 1.5;
+}
+
+.finan-login-form {
+	display: grid;
+	gap: 14px;
+	margin-top: 24px;
+}
+
+.finan-login-field {
+	display: block;
+	color: #0f172a;
+	font-size: 0.9rem;
+	font-weight: 950;
+}
+
+.finan-login-field > span {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.finan-login-field input,
+.finan-login-input-icon {
+	width: 100%;
+	min-width: 0;
+	height: 56px;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	background: #ffffff;
+	color: #0f172a;
+	transition:
+		border-color 0.18s ease,
+		box-shadow 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.finan-login-field input {
+	padding: 0 16px;
+	outline: none;
+	font-size: 1rem;
+	font-weight: 750;
+}
+
+.finan-login-input-icon {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 18px;
+}
+
+.finan-login-input-icon > svg {
+	flex: 0 0 auto;
+	color: #55709a;
+}
+
+.finan-login-input-icon input {
+	height: 100%;
+	border: 0;
+	background: transparent;
+	padding: 0;
+}
+
+.finan-login-input-icon button {
+	display: inline-flex;
+	width: 38px;
+	height: 38px;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+	color: #55709a;
+	cursor: pointer;
+}
+
+.finan-login-input-icon button:hover {
+	background: #eef5ff;
+	color: #075eea;
+}
+
+.finan-login-field input:focus,
+.finan-login-input-icon:focus-within {
+	border-color: #1769ff;
+	background: white;
+	box-shadow: 0 0 0 4px rgb(23 105 255 / 10%);
+}
+
+.finan-login-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	color: #64748b;
+	font-size: 0.9rem;
+	font-weight: 750;
+}
+
+.finan-login-row label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.finan-login-row input {
+	width: 18px;
+	height: 18px;
+	accent-color: #2563eb;
+}
+
+.finan-login-row button,
+.finan-link-button {
+	border: 0;
+	background: transparent;
+	color: #2563eb;
+	cursor: pointer;
+	font-weight: 950;
+}
+
+.finan-login-row button:hover,
+.finan-link-button:hover {
+	text-decoration: underline;
+}
+
+.finan-login-submit,
+.finan-login-secondary {
+	display: inline-flex;
+	min-height: 56px;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	border-radius: 16px;
+	cursor: pointer;
+	font-size: 0.98rem;
+	font-weight: 950;
+	transition:
+		transform 0.18s ease,
+		box-shadow 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.finan-login-submit {
+	border: 0;
+	background: linear-gradient(90deg, #ff9700 0%, #ff7a00 45%, #ff5000 100%);
+	color: white;
+	box-shadow: 0 14px 32px rgb(255 112 0 / 28%);
+}
+
+.finan-login-submit:hover:not(:disabled) {
+	box-shadow: 0 18px 38px rgb(255 112 0 / 34%);
+	transform: translateY(-1px);
+}
+
+.finan-login-submit:active:not(:disabled) {
+	transform: translateY(0) scale(0.995);
+}
+
+.finan-login-secondary {
+	border: 1px solid #dbe4ee;
+	background: white;
+	color: #2563eb;
+}
+
+.finan-login-submit:disabled,
+.finan-login-secondary:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.finan-login-spinner {
+	width: 20px;
+	height: 20px;
+	border: 2px solid rgb(255 255 255 / 38%);
+	border-top-color: white;
+	border-radius: 999px;
+	animation: finan-login-spin 0.75s linear infinite;
+}
+
+.finan-mfa-panel {
+	border: 1px solid #bfdbfe;
+	border-radius: 18px;
+	background: #eff6ff;
+	padding: 16px;
+}
+
+.finan-mfa-panel > span {
+	display: inline-flex;
+	width: 44px;
+	height: 44px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 14px;
+	background: white;
+	color: #1d4ed8;
+	box-shadow: 0 10px 24px rgb(37 99 235 / 12%);
+}
+
+.finan-mfa-panel strong,
+.finan-mfa-panel p {
+	display: block;
+}
+
+.finan-mfa-panel strong {
+	margin-top: 12px;
+	color: #020617;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.finan-mfa-panel p {
+	margin: 6px 0 0;
+	color: #1e40af;
+	font-size: 0.9rem;
+	font-weight: 750;
+}
+
+.finan-mfa-panel input {
+	width: 100%;
+	height: 56px;
+	margin-top: 12px;
+	border: 1px solid #bfdbfe;
+	border-radius: 16px;
+	background: white;
+	padding: 0 16px;
+	color: #020617;
+	font-size: 1.8rem;
+	font-weight: 950;
+	letter-spacing: 0.28em;
+	text-align: center;
+	outline: none;
+}
+
+.finan-login-trust {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
+	margin-top: 20px;
+	border-top: 1px solid #e2e8f0;
+	padding-top: 18px;
+	color: #55709a;
+	font-size: 0.8rem;
+	font-weight: 850;
+}
+
+.finan-login-trust div {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	text-align: center;
+}
+
+.finan-login-trust svg {
+	color: #3b82f6;
+}
+
+.finan-error {
+	display: flex;
+	align-items: flex-start;
+	gap: 9px;
+	margin-top: 0;
+	border: 1px solid #fecaca;
+	border-radius: 12px;
+	background: #fef2f2;
+	padding: 10px 12px;
+	color: #b91c1c;
+	font-size: 0.85rem;
+	font-weight: 850;
+}
+
+.finan-success {
+	display: flex;
+	align-items: flex-start;
+	gap: 9px;
+	margin-top: 0;
+	border: 1px solid #bbf7d0;
+	border-radius: 12px;
+	background: #f0fdf4;
+	padding: 10px 12px;
+	color: #166534;
+	font-size: 0.85rem;
+	font-weight: 850;
+}
+
+@keyframes finan-login-float {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-6px);
+	}
+}
+
+@keyframes finan-login-card-float {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-4px);
+	}
+}
+
+@keyframes finan-login-enter {
+	from {
+		opacity: 0;
+		transform: translateY(14px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes finan-login-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (max-width: 1280px) {
+	.finan-login-showcase {
+		padding-inline: 42px;
+	}
+
+	.finan-login-copy {
+		max-width: min(50%, 440px);
+	}
+
+	.finan-login-copy h1 {
+		font-size: clamp(2.45rem, 3.6vw, 3.7rem);
+	}
+
+	.finan-login-character-wrap {
+		width: clamp(300px, 30vw, 460px);
+		max-width: 48%;
+	}
+
+	.finan-login-benefits {
+		width: min(100%, 440px);
+	}
+}
+
+@media (max-width: 1024px) {
+	.finan-login-screen {
+		grid-template-columns: minmax(0, 48fr) minmax(390px, 52fr);
+	}
+
+	.finan-login-copy {
+		max-width: 72%;
+		align-self: start;
+		margin-top: 34px;
+	}
+
+	.finan-login-copy h1 {
+		font-size: clamp(2.25rem, 5vw, 3.1rem);
+	}
+
+	.finan-login-character-wrap {
+		opacity: 0.58;
+		right: -70px;
+		bottom: 72px;
+		width: 340px;
+	}
+
+	.finan-login-floating-card {
+		display: none;
+	}
+
+	.finan-login-benefits {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		width: 100%;
+	}
+
+	.finan-login-benefits > div {
+		min-height: 72px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.finan-login-card,
+	.finan-login-character,
+	.finan-login-floating-card,
+	.finan-login-spinner {
+		animation: none;
+	}
+}
+
+.finan-loading {
+	display: grid;
+	min-height: 100vh;
+	place-items: center;
+	color: #475569;
+	font-weight: 950;
+}
+
+@media (max-width: 860px) {
+	.finan-shell {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-login-screen {
+		grid-template-columns: 1fr;
+		height: 100vh;
+		min-height: 680px;
+		overflow: hidden;
+		background: linear-gradient(180deg, #061a3a 0%, #0b63f6 38%, #eef2f7 38%);
+	}
+
+	.finan-login-showcase {
+		display: flex;
+		height: 218px;
+		min-height: 0;
+		padding: 14px 22px 10px;
+		text-align: center;
+	}
+
+	.finan-login-main {
+		overflow: visible;
+		padding: 10px 12px 16px;
+		background: #eef2f7;
+	}
+
+	.finan-login-card {
+		width: calc(100% - 4px);
+		border-radius: 22px;
+		padding: 18px 18px 16px;
+	}
+
+	.finan-login-mobile-logo {
+		display: none;
+	}
+
+	.finan-login-trust {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-login-brand {
+		display: flex;
+		justify-content: center;
+	}
+
+	.finan-login-brand img {
+		width: min(150px, 48vw);
+	}
+
+	.finan-login-copy {
+		max-width: min(100%, 520px);
+		margin: 8px auto 0;
+	}
+
+	.finan-login-eyebrow-line {
+		margin-inline: auto;
+	}
+
+	.finan-login-copy h1 {
+		font-size: clamp(1.35rem, 7vw, 2rem);
+		line-height: 1.03;
+	}
+
+	.finan-login-copy h1 span {
+		margin-inline: auto;
+	}
+
+	.finan-login-copy p {
+		display: none;
+	}
+
+	.finan-login-character-wrap {
+		display: none;
+	}
+
+	.finan-login-benefits,
+	.finan-login-floating-card,
+	.finan-login-institutional,
+	.finan-login-bg-line,
+	.finan-login-bg-dot {
+		display: none;
+	}
+
+	.finan-login-product {
+		justify-content: center;
+		text-align: left;
+	}
+
+	.finan-login-product-icon {
+		width: 42px;
+		height: 42px;
+		border-radius: 14px;
+	}
+
+	.finan-login-product strong {
+		font-size: 1.8rem;
+	}
+
+	.finan-login-product span {
+		margin-top: 4px;
+		letter-spacing: 0.14em;
+	}
+
+	.finan-login-product small {
+		margin-top: 4px;
+		font-size: 0.82rem;
+	}
+
+	.finan-login-title {
+		margin-top: 12px;
+		text-align: center;
+	}
+
+	.finan-login-title h2 {
+		font-size: 1.5rem;
+	}
+
+	.finan-login-title p {
+		font-size: 0.86rem;
+	}
+
+	.finan-login-form {
+		gap: 10px;
+		margin-top: 16px;
+	}
+
+	.finan-login-input-icon,
+	.finan-login-field input {
+		height: 48px;
+	}
+
+	.finan-login-submit,
+	.finan-login-secondary {
+		min-height: 50px;
+	}
+
+	.finan-login-trust {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 6px;
+		margin-top: 12px;
+		padding-top: 12px;
+		font-size: 0.68rem;
+	}
+
+	.finan-sidebar {
+		position: static;
+		height: auto;
+	}
+
+	.finan-nav {
+		grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	}
+
+	.finan-nav-sublist {
+		margin-left: 0;
+		border-left: 0;
+		padding-left: 0;
+	}
+
+	.finan-content,
+	.finan-topbar {
+		padding-inline: 16px;
+	}
+
+	.finan-config-layout {
+		grid-template-columns: 1fr;
+	}
+
+	.finan-config-sidebar {
+		position: static;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	}
+
+	.finan-user-row {
+		grid-template-columns: 44px minmax(0, 1fr);
+	}
+
+	.finan-user-actions {
+		grid-column: 1 / -1;
+		justify-content: flex-start;
+	}
+
+	.finan-account-box > div {
+		display: none;
+	}
+}

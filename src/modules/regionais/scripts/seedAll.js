@@ -1,0 +1,276 @@
+﻿import { criarAgente } from "../services/agentesService";
+import { criarRegional } from "../services/regionaisService";
+
+const REGIONAIS = [
+	{
+		nome: "CENTRAL MINEIRA",
+		cidades: [
+			{ nome: "IGARATINGA", tipo: "Comum" },
+			{ nome: "PARA DE MINAS", tipo: "Comum" },
+			{ nome: "QUARTEL GERAL", tipo: "Comum" },
+			{ nome: "MARTINHO CAMPOS", tipo: "Agente Aut." },
+			{ nome: "BOM DESPACHO", tipo: "Agente Aut." },
+			{ nome: "CONCEICAO DO PARA", tipo: "Comum" },
+			{ nome: "SAO JOSE DA VARGINHA", tipo: "Comum" },
+			{ nome: "CEDRO DO ABAETE", tipo: "Comum" },
+			{ nome: "ONCA DE PITANGUI", tipo: "Comum" },
+			{ nome: "PITANGUI", tipo: "Comum" },
+			{ nome: "LEANDRO FERREIRA", tipo: "Comum" },
+			{ nome: "PAINEIRAS", tipo: "Comum" },
+			{ nome: "ABAETE", tipo: "Comum" },
+			{ nome: "SAO GONCALO DO PARA", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+	{
+		nome: "SUL DE MINAS",
+		cidades: [
+			{ nome: "INGAI", tipo: "Comum" },
+			{ nome: "ITUMIRIM", tipo: "Comum" },
+			{ nome: "NAZARENO", tipo: "Agente Aut." },
+			{ nome: "LUMINARIAS", tipo: "Comum" },
+			{ nome: "NEPOMUCENO", tipo: "Comum" },
+			{ nome: "CARMO DA CACHOEIRA", tipo: "Comum" },
+			{ nome: "BOM SUCESSO", tipo: "Agente Aut." },
+			{ nome: "TRES CORACOES", tipo: "Comum" },
+			{ nome: "SAO BENTO ABADE", tipo: "Comum" },
+			{ nome: "IBITURUNA", tipo: "Agente Aut." },
+			{ nome: "SAO TIAGO", tipo: "Agente Aut." },
+			{ nome: "LAVRAS", tipo: "Comum" },
+			{ nome: "SAO THOME DAS LETRAS", tipo: "Agente Aut." },
+			{ nome: "PERDOES", tipo: "Comum" },
+			{ nome: "SANTO ANTONIO DO AMPARO", tipo: "Comum" },
+			{ nome: "ITUTINGA", tipo: "Agente Aut." },
+			{ nome: "CARRANCAS", tipo: "Comum" },
+			{ nome: "IJACI", tipo: "Comum" },
+			{ nome: "RIBEIRAO VERMELHO", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+	{
+		nome: "OESTE DE MINAS",
+		cidades: [
+			{ nome: "PIUMHI", tipo: "Comum" },
+			{ nome: "PEDRA DO INDAIA", tipo: "Comum" },
+			{ nome: "JAPARAIBA", tipo: "Comum" },
+			{ nome: "DIVINOPOLIS", tipo: "Comum" },
+			{ nome: "LAGOA DA PRATA", tipo: "Agente Aut." },
+			{ nome: "CLAUDIO", tipo: "Comum" },
+			{ nome: "CARMOPOLIS DE MINAS", tipo: "Comum" },
+			{ nome: "SANTO ANTONIO DO MONTE", tipo: "Comum" },
+			{ nome: "PERDIGAO", tipo: "Agente Aut." },
+			{ nome: "CARMO DO CAJURU", tipo: "Comum" },
+			{ nome: "IGUATAMA", tipo: "Comum" },
+			{ nome: "ARAUJOS", tipo: "Agente Aut." },
+			{ nome: "SAO SEBASTIAO DO OESTE", tipo: "Comum" },
+			{ nome: "CAMACHO", tipo: "Comum" },
+			{ nome: "ITAPECERICA", tipo: "Comum" },
+			{ nome: "DORESOPOLIS", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+	{
+		nome: "METROPOLITANA SUB2",
+		cidades: [
+			{ nome: "IBIRITE", tipo: "Comum" },
+			{ nome: "PIEDADE DOS GERAIS", tipo: "Comum" },
+			{ nome: "MARIO CAMPOS", tipo: "Comum" },
+			{ nome: "BONFIM", tipo: "Comum" },
+			{ nome: "ITABIRITO", tipo: "Comum" },
+			{ nome: "BRUMADINHO", tipo: "Comum" },
+			{ nome: "BELO VALE", tipo: "Agente Aut." },
+			{ nome: "NOVA LIMA", tipo: "Comum" },
+			{ nome: "SARZEDO", tipo: "Comum" },
+			{ nome: "MOEDA", tipo: "Agente Aut." },
+			{ nome: "RIO MANSO", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+	{
+		nome: "CENTRO OESTE",
+		cidades: [
+			{ nome: "ARCOS", tipo: "Comum" },
+			{ nome: "SAO FRANCISCO DE PAULA", tipo: "Comum" },
+			{ nome: "AGUANIL", tipo: "Agente Aut." },
+			{ nome: "PAINS", tipo: "Comum" },
+			{ nome: "CRISTAIS", tipo: "Agente Aut." },
+			{ nome: "SANTANA DO JACARE", tipo: "Agente Aut." },
+			{ nome: "CAMPO BELO", tipo: "Comum" },
+			{ nome: "CORREGO FUNDO", tipo: "Agente Aut." },
+			{ nome: "CANDEIAS", tipo: "Comum" },
+			{ nome: "FORMIGA", tipo: "Agente Aut." },
+			{ nome: "CANA VERDE", tipo: "Agente Aut." },
+			{ nome: "OLIVEIRA", tipo: "Comum" },
+			{ nome: "CARMO DA MATA", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+	{
+		nome: "METROPOLITANA SUB3",
+		cidades: [
+			{ nome: "JEQUITIBA", tipo: "Comum" },
+			{ nome: "JABOTICATUBAS", tipo: "Comum" },
+			{ nome: "CORDISBURGO", tipo: "Comum" },
+			{ nome: "SETE LAGOAS", tipo: "Comum" },
+			{ nome: "SANTANA DE PIRAPAMA", tipo: "Comum" },
+			{ nome: "MATOZINHOS", tipo: "Comum" },
+			{ nome: "CACHOEIRA DA PRATA", tipo: "Comum" },
+			{ nome: "ARACAI", tipo: "Comum" },
+			{ nome: "PRUDENTE DE MORAIS", tipo: "Comum" },
+			{ nome: "FUNILANDIA", tipo: "Comum" },
+			{ nome: "CAPIM BRANCO", tipo: "Comum" },
+			{ nome: "BALDIM", tipo: "Comum" },
+			{ nome: "FORTUNA DE MINAS", tipo: "Comum" },
+			{ nome: "INHAUMA", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+	{
+		nome: "METROPOLITANA SUB1",
+		cidades: [
+			{ nome: "BELO HORIZONTE", tipo: "Comum" },
+			{ nome: "CRUCILANDIA", tipo: "Comum" },
+			{ nome: "IGARAPE", tipo: "Comum" },
+			{ nome: "FLORESTAL", tipo: "Comum" },
+			{ nome: "SAO JOAQUIM DE BICAS", tipo: "Comum" },
+			{ nome: "ITAGUARA", tipo: "Comum" },
+			{ nome: "MATEUS LEME", tipo: "Comum" },
+			{ nome: "PIRACEMA", tipo: "Comum" },
+			{ nome: "BETIM", tipo: "Comum" },
+			{ nome: "JUATUBA", tipo: "Comum" },
+			{ nome: "ESMERALDAS", tipo: "Comum" },
+			{ nome: "CONTAGEM", tipo: "Comum" },
+		],
+		supervisor: { nome: "", telefone: "", email: "" },
+		lider: { nome: "", telefone: "", email: "" },
+		backoffice: { nome: "", telefone: "", email: "" },
+	},
+];
+
+const AGENTES_SEED = [
+	{
+		cidade: "MARTINHO CAMPOS",
+		regional_nome: "CENTRAL MINEIRA",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "BOM DESPACHO",
+		regional_nome: "CENTRAL MINEIRA",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "NAZARENO",
+		regional_nome: "SUL DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "BOM SUCESSO",
+		regional_nome: "SUL DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "IBITURUNA",
+		regional_nome: "SUL DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "SAO TIAGO",
+		regional_nome: "SUL DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "SAO THOME DAS LETRAS",
+		regional_nome: "SUL DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "ITUTINGA",
+		regional_nome: "SUL DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "LAGOA DA PRATA",
+		regional_nome: "OESTE DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "PERDIGAO",
+		regional_nome: "OESTE DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "ARAUJOS",
+		regional_nome: "OESTE DE MINAS",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "BELO VALE",
+		regional_nome: "METROPOLITANA SUB2",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "MOEDA",
+		regional_nome: "METROPOLITANA SUB2",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "AGUANIL",
+		regional_nome: "CENTRO OESTE",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "CRISTAIS",
+		regional_nome: "CENTRO OESTE",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "SANTANA DO JACARE",
+		regional_nome: "CENTRO OESTE",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "CORREGO FUNDO",
+		regional_nome: "CENTRO OESTE",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "FORMIGA",
+		regional_nome: "CENTRO OESTE",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+	{
+		cidade: "CANA VERDE",
+		regional_nome: "CENTRO OESTE",
+		responsavel: { nome: "", telefone: "", email: "" },
+	},
+];
+
+export const seedAll = async () => {
+	console.log("Iniciando seed de regionais...");
+	for (const regional of REGIONAIS) {
+		await criarRegional(regional);
+		console.log(
+			`✅ Regional: ${regional.nome} (${regional.cidades.length} cidades)`,
+		);
+	}
+	console.log("\nIniciando seed de agentes autorizados...");
+	for (const agente of AGENTES_SEED) {
+		await criarAgente(agente);
+		console.log(`⭐ Agente: ${agente.cidade} — ${agente.regional_nome}`);
+	}
+	console.log(
+		"\n🎉 Seed concluido! 7 regionais, 99 cidades, 19 agentes autorizados.",
+	);
+};

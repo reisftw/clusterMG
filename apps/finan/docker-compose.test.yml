@@ -1,0 +1,33 @@
+---
+# PostgreSQL isolado para testes do Finan (unit tests continuam usando mocks
+# em src/backend/finan/*.test.js — isto e so para os testes de integracao
+# novos, que precisam de um Postgres de verdade).
+#
+# Isolamento de producao:
+#   - nome de banco/usuario contem "test" de proposito (a guarda em
+#     scripts/testDatabaseGuard.js recusa rodar se o nome nao bater);
+#   - porta 55432 (nao a 5432 padrao), so em 127.0.0.1;
+#   - dados em tmpfs: cada `docker compose down` (ou reinicio do container)
+#     apaga tudo, nunca compartilha volume com o Postgres de producao;
+#   - nenhuma credencial real, valor fixo so para uso local/CI.
+#
+# Subir:   docker compose -f apps/finan/docker-compose.test.yml up -d
+# Esperar: docker compose -f apps/finan/docker-compose.test.yml ps (ate "healthy")
+# Derrubar (destroi tudo, inclusive dados): docker compose -f apps/finan/docker-compose.test.yml down
+services:
+  finan-postgres-test:
+    image: postgres:16-alpine
+    container_name: finan_postgres_test
+    environment:
+      POSTGRES_DB: finan_test
+      POSTGRES_USER: finan_test
+      POSTGRES_PASSWORD: finan_test_only_local
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finan_test -d finan_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

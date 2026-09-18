@@ -1,0 +1,26 @@
+{
+	"name": "rot-frontend",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite --host 0.0.0.0 --port 5175",
+		"build": "vite build",
+		"preview": "vite preview --host 0.0.0.0 --port 4175"
+	},
+	"dependencies": {
+		"docx": "^9.7.1",
+		"jspdf": "^4.2.1",
+		"lucide-react": "^0.556.0",
+		"react": "^19.2.0",
+		"react-dom": "^19.2.0",
+		"react-router-dom": "^7.9.5",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "^4.2.1",
+		"@vitejs/plugin-react": "^5.1.1",
+		"tailwindcss": "^4.2.1",
+		"vite": "^7.2.4"
+	}
+}

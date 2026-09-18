@@ -1,0 +1,6 @@
+/* TabMapaOS.css — pode ficar vazio ou só com overrides pontuais.
+   O isolamento agora é feito pelo escopo .painel-classico no CSS global. */
+
+.mapa-os-root * {
+	box-sizing: border-box;
+}

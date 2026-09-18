@@ -1,0 +1,13 @@
+[Unit]
+Description=Agenda diaria do backup do banco Finan
+
+[Timer]
+; 00:30 UTC — 29 minutos depois do retiradas-db-backup.timer (00:01), pra
+; nao concorrer por I/O de disco/CPU do pg_dump dos dois bancos ao mesmo
+; tempo no mesmo host.
+OnCalendar=*-*-* 00:30:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

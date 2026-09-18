@@ -1,0 +1,393 @@
+/* Rebrand 2026 - MATCH */
+.match-public-header {
+	margin-bottom: 18px;
+}
+
+.match-public-header .header-left h1 {
+	color: #fff;
+}
+
+.match-update-strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	align-items: center;
+	min-height: 48px;
+	margin-bottom: 18px;
+	padding: 12px 18px;
+	border: 1px solid var(--panel-border, #dbe4f0);
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.94);
+	color: #52617c;
+	box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+	font:
+		800 13px / 1.4 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-update-strip strong {
+	color: #071b4d;
+}
+
+.match-dashboard {
+	display: grid;
+	gap: 26px;
+	width: 100%;
+	min-width: 0;
+}
+
+.match-hero-card,
+.match-detail-card,
+.match-sidebar-card,
+.match-agents-card,
+.match-kpi-card {
+	min-width: 0;
+	border: 1px solid var(--panel-border, #dbe4f0);
+	background: rgba(255, 255, 255, 0.94);
+	box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.match-hero-card {
+	padding: 30px;
+	border-radius: 26px;
+}
+
+.match-hero-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 18px;
+	margin-bottom: 24px;
+}
+
+.match-hero-card h1 {
+	margin: 0;
+	color: #071b4d;
+	font:
+		950 clamp(34px, 4vw, 48px) / 1 Outfit,
+		Inter,
+		sans-serif;
+	letter-spacing: -0.04em;
+}
+
+.match-hero-card p {
+	margin: 10px 0 0;
+	color: #63708b;
+	font:
+		700 15px / 1.5 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-hero-actions {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+
+.match-copy-btn,
+.match-export-btn {
+	min-height: 44px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 9px;
+	border-radius: 12px;
+	border: 1px solid #d9e3f1;
+	background: #fff;
+	color: #0a2f85;
+	padding: 0 18px;
+	font:
+		900 14px / 1 Inter,
+		system-ui,
+		sans-serif;
+	cursor: pointer;
+	transition: 0.18s ease;
+}
+
+.match-copy-btn:hover,
+.match-export-btn:hover {
+	transform: translateY(-1px);
+	border-color: #9bb8ef;
+	box-shadow: 0 10px 22px rgba(0, 48, 135, 0.1);
+}
+
+.match-copy-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+	transform: none;
+}
+
+.match-copy-btn.primary,
+.match-export-btn {
+	border-color: #0b5cff;
+	background: linear-gradient(135deg, #0b5cff, #0040b8);
+	color: #fff;
+}
+
+.match-copy-btn.whatsapp {
+	border-color: #bdebd0;
+	background: #f2fff7;
+	color: #119447;
+}
+
+.match-copy-btn.review.done {
+	border-color: #bdebd0;
+	background: #ebfff2;
+	color: #119447;
+}
+
+.match-copy-btn.compact {
+	min-height: 36px;
+	padding: 0 12px;
+	font-size: 12px;
+}
+
+.match-copy-btn.icon-only {
+	min-width: 42px;
+	width: 42px;
+	padding: 0;
+	font-size: 0;
+}
+
+.match-filter-grid {
+	display: grid;
+	grid-template-columns: minmax(260px, 1fr) minmax(300px, 0.9fr) 190px 190px;
+	gap: 14px;
+	min-width: 0;
+}
+
+.match-search-box,
+.match-client-code-box label,
+.match-filter-grid select {
+	min-width: 0;
+	min-height: 52px;
+	border: 1px solid #d9e3f1;
+	border-radius: 12px;
+	background: #fff;
+	color: #152448;
+}
+
+.match-search-box {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 16px;
+}
+
+.match-client-code-box {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	gap: 8px;
+	min-width: 0;
+}
+
+.match-client-code-box label {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 16px;
+}
+
+.match-client-code-box button {
+	min-height: 52px;
+	border: 0;
+	border-radius: 12px;
+	background: #0b5cff;
+	color: #fff;
+	padding: 0 14px;
+	font:
+		900 13px / 1 Inter,
+		system-ui,
+		sans-serif;
+	cursor: pointer;
+}
+
+.match-client-code-box button.ghost {
+	border: 1px solid #d9e3f1;
+	background: #fff;
+	color: #263555;
+}
+
+.match-search-box svg,
+.match-client-code-box svg {
+	color: #7c8aa5;
+}
+
+.match-search-box input,
+.match-client-code-box input {
+	width: 100%;
+	border: 0;
+	outline: none;
+	color: #152448;
+	font:
+		800 14px / 1 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-client-code-message {
+	margin-top: 12px;
+	border-radius: 12px;
+	padding: 12px 14px;
+	font:
+		800 13px / 1.35 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-client-code-message.success {
+	border: 1px solid #b7e4c7;
+	background: #f0fff4;
+	color: #176b36;
+}
+
+.match-client-code-message.warning {
+	border: 1px solid #fed7aa;
+	background: #fff7ed;
+	color: #9a3412;
+}
+
+.match-filter-grid select {
+	padding: 0 14px;
+	font:
+		900 14px / 1 Inter,
+		system-ui,
+		sans-serif;
+	outline: none;
+}
+
+.match-filter-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-top: 16px;
+}
+
+.match-filter-chips button {
+	min-height: 42px;
+	border: 1px solid #dbe4f0;
+	border-radius: 12px;
+	background: #fff;
+	color: #263555;
+	padding: 0 18px;
+	font:
+		900 13px / 1 Inter,
+		system-ui,
+		sans-serif;
+	cursor: pointer;
+}
+
+.match-filter-chips button.active {
+	border-color: #0b5cff;
+	background: #0b5cff;
+	color: #fff;
+	box-shadow: 0 10px 20px rgba(11, 92, 255, 0.18);
+}
+
+.match-kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 18px;
+}
+
+.match-kpi-card {
+	position: relative;
+	display: flex;
+	gap: 16px;
+	align-items: center;
+	min-height: 150px;
+	padding: 24px;
+	border-radius: 16px;
+	overflow: hidden;
+}
+
+.match-kpi-card::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 4px;
+}
+
+.match-kpi-card.blue::before {
+	background: #0b5cff;
+}
+.match-kpi-card.green::before {
+	background: #16a34a;
+}
+.match-kpi-card.orange::before {
+	background: #ff6b00;
+}
+.match-kpi-card.purple::before {
+	background: #7c3aed;
+}
+
+.match-kpi-icon {
+	width: 54px;
+	height: 54px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 16px;
+	background: #eef5ff;
+	color: #0b5cff;
+}
+
+.match-kpi-card.green .match-kpi-icon {
+	background: #eafaf0;
+	color: #16a34a;
+}
+
+.match-kpi-card.orange .match-kpi-icon {
+	background: #fff2e9;
+	color: #ff6b00;
+}
+
+.match-kpi-card.purple .match-kpi-icon {
+	background: #f4edff;
+	color: #7c3aed;
+}
+
+.match-kpi-card span {
+	display: block;
+	color: #2c3857;
+	font:
+		900 14px / 1 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-kpi-card strong {
+	display: block;
+	margin-top: 8px;
+	color: #071b4d;
+	font:
+		950 40px / 0.95 Outfit,
+		Inter,
+		sans-serif;
+}
+
+.match-kpi-card p {
+	margin: 10px 0 0;
+	color: #697792;
+	font:
+		700 13px / 1.35 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-note {
+	padding: 16px 18px;
+	border: 1px solid #dbe4f0;
+	border-radius: 16px;
+	background: #f8fbff;
+	color: #52617c;
+	font:
+		800 13px / 1.45 Inter,
+		system-ui,
+		sans-serif;
+}

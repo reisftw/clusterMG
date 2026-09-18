@@ -1,0 +1,69 @@
+{
+	"systemName": "Sistema de Retiradas | Cluster MG",
+	"testDate": "2026-08-24T10:00:00-03:00",
+	"environment": "Staging",
+	"tool": "k6",
+	"responsible": "Rodrigo Reis",
+	"thresholds": {
+		"maxErrorRate": 2,
+		"maxLatencyMs": 1200
+	},
+	"steps": [
+		{
+			"users": 25,
+			"avgResponseMs": 145,
+			"maxResponseMs": 410,
+			"errorRate": 0,
+			"requestsPerSecond": 28,
+			"cpuPercent": 22,
+			"memoryPercent": 41
+		},
+		{
+			"users": 50,
+			"avgResponseMs": 210,
+			"maxResponseMs": 760,
+			"errorRate": 0.2,
+			"requestsPerSecond": 54,
+			"cpuPercent": 37,
+			"memoryPercent": 48
+		},
+		{
+			"users": 100,
+			"avgResponseMs": 480,
+			"maxResponseMs": 1180,
+			"errorRate": 0.6,
+			"requestsPerSecond": 96,
+			"cpuPercent": 58,
+			"memoryPercent": 61
+		},
+		{
+			"users": 150,
+			"avgResponseMs": 820,
+			"maxResponseMs": 2050,
+			"errorRate": 1.4,
+			"requestsPerSecond": 132,
+			"cpuPercent": 74,
+			"memoryPercent": 70
+		},
+		{
+			"users": 200,
+			"avgResponseMs": 1380,
+			"maxResponseMs": 4210,
+			"errorRate": 4.8,
+			"requestsPerSecond": 118,
+			"cpuPercent": 91,
+			"memoryPercent": 82
+		}
+	],
+	"bottlenecks": [
+		"A latencia media ultrapassou o limite a partir de 200 usuarios simultaneos.",
+		"CPU ficou acima de 90% no ultimo degrau do teste.",
+		"A queda de requisicoes por segundo indica saturacao antes de 200 usuarios."
+	],
+	"recommendations": [
+		"Adicionar cache para endpoints de dashboard e consultas de leitura frequente.",
+		"Revisar queries mais acessadas durante login, dashboard e mensageria.",
+		"Separar jobs pesados de importacao/relatorios do processo principal da API.",
+		"Avaliar escalonamento horizontal da API se a meta for operar acima de 150 usuarios simultaneos."
+	]
+}
