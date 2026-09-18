@@ -1,0 +1,56 @@
+server {
+	server_name rot.retiradas.tech;
+
+	add_header Strict-Transport-Security "max-age=31536000" always;
+	add_header X-Content-Type-Options "nosniff" always;
+	add_header X-Frame-Options "SAMEORIGIN" always;
+	add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+	add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+	add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+
+	client_max_body_size 200M;
+	root /opt/retiradas/apps/rot/frontend/dist;
+	index index.html;
+
+	location /api/ {
+		proxy_pass http://127.0.0.1:3201/api/;
+		proxy_http_version 1.1;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto $scheme;
+	}
+
+	# Assets do build (Vite) tem hash no nome — cache "para sempre" e seguro.
+	location /assets/ {
+		add_header Strict-Transport-Security "max-age=31536000" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header Cache-Control "public, max-age=31536000, immutable" always;
+		try_files $uri =404;
+	}
+
+	# index.html NUNCA pode ser cacheado — mesma licao aprendida com
+	# finan.retiradas.tech (sem isso, deploy novo fica preso atras de
+	# index.html antigo apontando pra assets antigos).
+	location / {
+		add_header Strict-Transport-Security "max-age=31536000" always;
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+		add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+		add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; object-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';" always;
+		add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+		try_files $uri $uri/ /index.html;
+	}
+}
+
+server {
+	listen 80;
+	server_name rot.retiradas.tech;
+
+	return 301 https://rot.retiradas.tech$request_uri;
+}

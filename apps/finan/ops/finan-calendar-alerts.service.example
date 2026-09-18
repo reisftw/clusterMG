@@ -1,0 +1,21 @@
+[Unit]
+Description=Finan Calendario Financeiro - alertas por e-mail
+After=postgresql.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/retiradas/apps/finan/backend
+EnvironmentFile=/opt/retiradas/apps/finan/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run calendario:enviar-alertas
+; EnvironmentFile e lido pelo systemd (PID 1, root) antes de trocar de
+; usuario — o .env em modo 600 dono root nao exige rodar como root
+; (correcao de SEC-003; a suposicao anterior de que precisava estava
+; errada, ver finan-api.service.example).
+User=svc-finan
+Group=svc-finan
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/retiradas/backups/finan /tmp

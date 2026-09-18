@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Retiradas PostgreSQL backup daily
+
+[Timer]
+OnCalendar=*-*-* 00:01:00
+Persistent=true
+Unit=retiradas-db-backup.service
+
+[Install]
+WantedBy=timers.target

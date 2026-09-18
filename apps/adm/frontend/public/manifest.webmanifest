@@ -1,0 +1,48 @@
+{
+	"name": "Administrativo Cluster MG",
+	"short_name": "Administrativo",
+	"id": "/",
+	"description": "Aplicativo administrativo da Sempre Internet para documentos, empresas, imoveis e insumos.",
+	"lang": "pt-BR",
+	"start_url": "/?source=pwa",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#f8fafc",
+	"theme_color": "#f97316",
+	"orientation": "portrait-primary",
+	"shortcuts": [
+		{
+			"name": "Totem de Insumos",
+			"short_name": "Totem",
+			"description": "Abrir autoatendimento de solicitação de insumos.",
+			"url": "/totem?source=pwa",
+			"icons": [
+				{
+					"src": "/pwa-192.png",
+					"sizes": "192x192",
+					"type": "image/png"
+				}
+			]
+		}
+	],
+	"icons": [
+		{
+			"src": "/pwa-192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/pwa-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/pwa-maskable-512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}

@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@source "./**/*.{js,jsx,ts,tsx}";
+
+@theme {
+	--shadow-sidebar: 4px 0 24px rgba(6, 26, 58, 0.18);
+	--shadow-card: 0 1px 6px rgba(6, 26, 58, 0.05);
+}
+
+@layer base {
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
+
+	html {
+		overflow-x: hidden;
+		/* Sem isso, Chrome/Samsung Internet no Android aplicam "font
+		 * boosting": aumentam o font-size de blocos de texto (h1, p, label)
+		 * dentro de containers estreitos de forma imprevisível, maior que o
+		 * calculado em qualquer emulador/devtools. Isso empurrava textos e
+		 * inputs do card de login pra fora da largura da tela em celular
+		 * real, mesmo com overflow-x:hidden (o excesso so ficava cortado em
+		 * vez de nao existir). */
+		-webkit-text-size-adjust: 100%;
+		text-size-adjust: 100%;
+	}
+
+	body {
+		overflow-x: hidden;
+	}
+
+	img,
+	video {
+		max-width: 100%;
+		height: auto;
+	}
+
+	iframe,
+	canvas {
+		max-width: 100%;
+	}
+
+	input,
+	textarea,
+	select,
+	button {
+		min-width: 0;
+	}
+
+	p,
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6,
+	dd,
+	dt,
+	li,
+	label,
+	output,
+	blockquote {
+		overflow-wrap: anywhere;
+	}
+}
+
+/* Usado por Layout.jsx (item ativo do menu) — mesmo padrao do Finan. */
+@layer components {
+	.nav-item {
+		@apply flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200;
+	}
+	.nav-item-active {
+		@apply border border-orange-300 bg-gradient-to-r from-orange-500 to-orange-400 text-white shadow-md shadow-orange-200;
+	}
+	.nav-item-inactive {
+		@apply text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:shadow-sm;
+	}
+	.nav-item-modern-active {
+		@apply bg-blue-600/90 text-white shadow-md shadow-blue-950/20;
+	}
+	.nav-item-modern-active::before {
+		content: "";
+		@apply absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-orange-400;
+	}
+	.btn-primary {
+		@apply rounded-xl bg-gradient-to-r from-orange-500 to-orange-400 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:from-orange-600 hover:to-orange-500 hover:shadow-lg hover:shadow-orange-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60;
+	}
+	.input-field {
+		@apply w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 transition-all focus:border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400;
+	}
+	.card {
+		@apply rounded-2xl border border-gray-100 bg-white shadow-sm;
+	}
+}
+
+@layer utilities {
+	.z-layout-base {
+		z-index: 10;
+	}
+	.z-layout-dropdown {
+		z-index: 20;
+	}
+	.z-layout-topbar {
+		z-index: 30;
+	}
+	.z-layout-sidebar {
+		z-index: 40;
+	}
+	.z-layout-modal {
+		z-index: 50;
+	}
+	.z-layout-notification {
+		z-index: 60;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

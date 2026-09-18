@@ -1,0 +1,12 @@
+[Unit]
+Description=Agenda semanal da limpeza de backups/snapshots de deploy manual esquecidos
+
+[Timer]
+; Domingo 03:00 UTC — fora do horario dos backups diarios de banco
+; (00:01 Retiradas, 00:30 Finan) pra nao concorrer por I/O.
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

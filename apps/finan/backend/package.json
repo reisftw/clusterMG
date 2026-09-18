@@ -1,0 +1,33 @@
+{
+	"name": "finan-backend",
+	"version": "0.1.0",
+	"private": true,
+	"type": "commonjs",
+	"scripts": {
+		"api:start": "node src/index.js",
+		"api:dev": "node --watch src/index.js",
+		"migrate": "node scripts/run-sql-migrations.js",
+		"backup:database": "node scripts/database-backup.js",
+		"calendario:enviar-alertas": "node scripts/sendCalendarAlerts.js",
+		"audit:retiradas": "node scripts/audit-retiradas-sources.js",
+		"migrate:from-retiradas": "node scripts/migrate-from-retiradas.js"
+	},
+	"dependencies": {
+		"argon2": "^0.45.1",
+		"compression": "^1.8.1",
+		"cors": "^2.8.5",
+		"express": "^4.22.2",
+		"express-rate-limit": "^8.6.1",
+		"googleapis": "^166.0.0",
+		"helmet": "^8.1.0",
+		"multer": "^2.2.0",
+		"nodemailer": "^9.0.5",
+		"pg": "^8.16.3",
+		"prom-client": "^15.1.3",
+		"web-push": "^3.6.7",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+	},
+	"overrides": {
+		"qs": "^6.16.0"
+	}
+}

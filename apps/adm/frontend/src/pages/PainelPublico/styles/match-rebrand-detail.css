@@ -1,0 +1,265 @@
+.match-nearby-box {
+	margin: 0 26px 24px;
+	padding: 20px;
+	border: 1px solid #dbe4f0;
+	border-radius: 16px;
+	background: #f8fbff;
+}
+
+.match-nearby-box h4 {
+	margin: 0 0 14px;
+	color: #465774;
+	font:
+		950 14px / 1 Inter,
+		system-ui,
+		sans-serif;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.match-nearby-list {
+	display: grid;
+	gap: 12px;
+}
+
+.match-nearby-item {
+	padding: 18px;
+	border: 1px solid #dbe4f0;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.match-nearby-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 9px;
+}
+
+.match-nearby-title strong {
+	color: #071b4d;
+	font:
+		950 15px / 1.2 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-nearby-title .distance,
+.match-nearby-title .same-street {
+	display: inline-flex;
+	align-items: center;
+	min-height: 24px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font:
+		900 12px / 1 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-nearby-title .distance {
+	background: #fff2e9;
+	color: #ff5b00;
+}
+
+.match-nearby-title .same-street {
+	background: #eef5ff;
+	color: #0b5cff;
+}
+
+.match-nearby-item p {
+	margin: 12px 0 0;
+	color: #43516d;
+	font:
+		800 14px / 1.35 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-nearby-item p strong {
+	color: #ff5b00;
+}
+
+.match-nearby-item small {
+	display: block;
+	margin-top: 9px;
+	color: #697792;
+	font:
+		800 12px / 1.35 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-copy-preview {
+	padding: 0 26px 26px;
+}
+
+.match-copy-title {
+	margin-bottom: 10px;
+	color: #071b4d;
+	font:
+		950 15px / 1 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-copy-preview textarea {
+	width: 100%;
+	min-height: 170px;
+	resize: vertical;
+	border: 1px solid #b8c6d8;
+	border-radius: 12px;
+	background: #fbfdff;
+	color: #13213f;
+	padding: 16px;
+	font:
+		700 13px / 1.5 ui-monospace,
+		SFMono-Regular,
+		Menlo,
+		Consolas,
+		monospace;
+	outline: none;
+}
+
+.match-copy-actions {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 14px;
+	margin-top: 14px;
+}
+
+.match-other-card {
+	margin-top: 24px;
+}
+
+.match-other-title {
+	margin-bottom: 12px;
+	color: #071b4d;
+	font:
+		950 16px / 1 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-other-list {
+	display: grid;
+	gap: 10px;
+}
+
+.match-other-row {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 14px;
+	align-items: center;
+	padding: 14px 16px;
+	border: 1px solid #dbe4f0;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.match-other-row > svg {
+	color: #0b5cff;
+}
+
+.match-other-row strong {
+	display: block;
+	color: #071b4d;
+	font:
+		950 13px / 1.25 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-other-row span,
+.match-empty-inline {
+	display: block;
+	margin-top: 5px;
+	color: #66748e;
+	font:
+		800 12px / 1.35 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-agents-card {
+	padding: 24px;
+	border-radius: 18px;
+	background: linear-gradient(135deg, #fffdf8, #fff);
+	border-color: #ffdca8;
+}
+
+.match-agents-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 20px;
+}
+
+.match-agents-top h2 {
+	margin: 0;
+	color: #071b4d;
+	font:
+		950 22px / 1 Outfit,
+		Inter,
+		sans-serif;
+}
+
+.match-agents-top p {
+	margin: 8px 0 0;
+	color: #6d5c3a;
+	font:
+		800 13px / 1.4 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-agent-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 14px;
+}
+
+.match-agent-item {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	min-height: 82px;
+	padding: 14px;
+	border: 1px solid #ffe0b6;
+	border-left: 5px solid #ff6b00;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.match-agent-item > svg {
+	color: #ff6b00;
+}
+
+.match-agent-item strong {
+	display: block;
+	color: #071b4d;
+	font:
+		950 13px / 1.25 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-agent-item span {
+	display: block;
+	margin-top: 5px;
+	color: #138a3d;
+	font:
+		800 12px / 1.25 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-footer-note {
+	color: #66748e;
+	font:
+		800 12px / 1.4 Inter,
+		system-ui,
+		sans-serif;
+}

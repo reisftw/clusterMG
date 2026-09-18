@@ -1,0 +1,67 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+      monitor: 'retiradas-vps'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+
+  - job_name: 'node'
+    static_configs:
+      - targets: ['127.0.0.1:9100']
+        labels:
+          instance: 'vps-srv1873036'
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['127.0.0.1:9187']
+
+  # Apps Node.js (Finan, Retiradas, ADM e Operacao) — /metrics exposto so
+  # em localhost, nao passa pelo nginx publico. Instrumentado via
+  # prom-client (ver src/observabilidade/prometheusMetrics.js de cada app).
+  - job_name: 'finan-api'
+    static_configs:
+      - targets: ['127.0.0.1:3101']
+        labels:
+          app: 'finan'
+
+  - job_name: 'retiradas-api'
+    static_configs:
+      - targets: ['127.0.0.1:3001']
+        labels:
+          app: 'retiradas'
+
+  - job_name: 'adm-api'
+    static_configs:
+      - targets: ['127.0.0.1:3301']
+        labels:
+          app: 'adm'
+
+  - job_name: 'rot-api'
+    static_configs:
+      - targets: ['127.0.0.1:3201']
+        labels:
+          app: 'operacao'
+
+  # Uptime real (via HTTPS publico, o mesmo caminho que um usuario acessa)
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+        - https://finan.retiradas.tech
+        - https://retiradas.tech
+        - https://adm.retiradas.tech
+        - https://operacao.retiradas.tech
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9115

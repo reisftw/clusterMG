@@ -1,0 +1,17 @@
+[Unit]
+Description=Limpeza semanal de backups/snapshots de deploy manual esquecidos (Retiradas, ADM, Operacao, Finan)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/retiradas/vps/scripts/cleanup-deploy-backups.sh --apply
+; Precisa de root: os alvos (apps/adm, deploy-*/dist-* na raiz do
+; /opt/retiradas, /root/*-backup-*) pertencem a root, nao a www-data
+; (diferente do retiradas-db-backup.service, que so escreve em
+; /opt/retiradas/backups/postgres, esse sim www-data). E um job de
+; manutencao oneshot que so apaga arquivos por nome/idade — nao expoe
+; porta nem processa entrada de rede, diferente das APIs (ver SEC-003
+; em SECURITY-FIXES.md sobre por que as APIs nao rodam mais como root).
+User=root
+NoNewPrivileges=true
+PrivateTmp=true

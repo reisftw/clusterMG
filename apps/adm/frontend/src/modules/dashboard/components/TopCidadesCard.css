@@ -1,0 +1,140 @@
+.top-cidades-card {
+	background: #fff;
+	border-radius: 8px;
+	border: 1px solid #e2e8f0;
+	box-shadow: 0 1px 6px rgba(0, 48, 135, 0.05);
+	padding: 20px 24px;
+	min-width: 320px;
+}
+
+.top-cidades-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 20px;
+}
+
+.top-cidades-icon {
+	align-items: center;
+	background: #fff7ed;
+	border-radius: 8px;
+	color: #f97316;
+	display: inline-flex;
+	height: 34px;
+	justify-content: center;
+	width: 34px;
+}
+
+.top-cidades-header h2 {
+	font-size: 1rem;
+	font-weight: 600;
+	color: #0f172a;
+	margin: 0;
+}
+
+.top-cidades-subtitle {
+	font-size: 0.75rem;
+	color: #64748b;
+	margin-left: auto;
+}
+
+.top-cidades-lista {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.top-cidades-item {
+	display: grid;
+	grid-template-columns: 26px 1fr auto auto;
+	align-items: center;
+	gap: 10px;
+}
+
+.rank {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.72rem;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.rank-1 {
+	background: #fef3c7;
+	color: #b45309;
+}
+.rank-2 {
+	background: #f3f4f6;
+	color: #374151;
+}
+.rank-3 {
+	background: #fde8d0;
+	color: #92400e;
+}
+.rank-default {
+	background: #f1f5f9;
+	color: #64748b;
+}
+
+.cidade-info {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.cidade-nome {
+	font-size: 0.82rem;
+	font-weight: 500;
+	color: #0f172a;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.badge-agente {
+	font-size: 0.65rem;
+	font-weight: 600;
+	background: #ede9fe;
+	color: #6d28d9;
+	border-radius: 999px;
+	padding: 1px 7px;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.barra-wrapper {
+	width: 80px;
+	height: 6px;
+	background: #e2e8f0;
+	border-radius: 99px;
+	overflow: hidden;
+	flex-shrink: 0;
+}
+
+.barra-fill {
+	height: 100%;
+	border-radius: 99px;
+	background: #2563eb;
+	transition: width 0.4s ease;
+}
+
+.barra-agente {
+	background: #f97316;
+}
+
+.cidade-total {
+	font-size: 0.82rem;
+	font-weight: 700;
+	color: #0f172a;
+	font-variant-numeric: tabular-nums;
+	min-width: 32px;
+	text-align: right;
+}

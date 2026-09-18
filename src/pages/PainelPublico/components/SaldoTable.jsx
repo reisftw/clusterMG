@@ -1,0 +1,70 @@
+﻿export default function SaldoTable({ saldoDiario = [] }) {
+	if (!saldoDiario.length) {
+		return (
+			<tr>
+				<td
+					colSpan="9"
+					style={{ color: "var(--muted)", padding: 24, textAlign: "center" }}
+				>
+					Sem dados
+				</td>
+			</tr>
+		);
+	}
+
+	return (
+		<>
+			{saldoDiario.map((s, i) => {
+				const tipoDia = s.feriado
+					? "feriado"
+					: s.fimDeSemana
+						? "fim-de-semana"
+						: "util";
+				const tipoLabel = s.feriado
+					? "Feriado"
+					: s.fimDeSemana
+						? "Fim de semana"
+						: "";
+
+				return (
+					<tr key={i} className={`saldo-row saldo-row-${tipoDia}`}>
+						<td data-label="Dia">
+							<span className="saldo-dia">
+								<span>{s.dia}</span>
+								{tipoLabel ? (
+									<span className={`saldo-dia-tag ${tipoDia}`}>
+										{tipoLabel}
+									</span>
+								) : null}
+							</span>
+						</td>
+						<td data-label="Equipe Tecnica">{s.equipe}</td>
+						<td data-label="Agente Aut.">{s.agente}</td>
+						<td data-label="Entregue Loja">{s.loja}</td>
+						<td data-label="Regionais">{s.regionais}</td>
+						<td data-label="Total Dia">
+							<strong>{s.totalDia}</strong>
+						</td>
+						<td data-label="Meta Diaria">{s.metaDia}</td>
+						<td data-label="Saldo Dia">
+							<span
+								className={`badge ${s.saldoDia > 0 ? "pos" : s.saldoDia < 0 ? "neg" : "zero"}`}
+							>
+								{s.saldoDia > 0 ? "+" : ""}
+								{s.saldoDia}
+							</span>
+						</td>
+						<td data-label="Saldo Mes">
+							<span
+								className={`badge ${s.saldoMes > 0 ? "pos" : s.saldoMes < 0 ? "neg" : "zero"}`}
+							>
+								{s.saldoMes > 0 ? "+" : ""}
+								{s.saldoMes}
+							</span>
+						</td>
+					</tr>
+				);
+			})}
+		</>
+	);
+}

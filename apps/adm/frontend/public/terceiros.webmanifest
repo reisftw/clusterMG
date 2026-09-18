@@ -1,0 +1,33 @@
+{
+	"name": "Retiradas Terceiros",
+	"short_name": "Terceiros",
+	"id": "/terceiros",
+	"description": "Aplicativo de apoio para tecnicos terceiros.",
+	"lang": "pt-BR",
+	"start_url": "/terceiros?source=pwa",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#061b38",
+	"theme_color": "#061b38",
+	"orientation": "portrait-primary",
+	"icons": [
+		{
+			"src": "/terceiros-pwa-192-v2.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/terceiros-pwa-512-v2.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/terceiros-pwa-512-v2.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	]
+}
