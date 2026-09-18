@@ -152,11 +152,14 @@ async function resolveTeamSnapshot(client, { operationType, regionalId, baseId, 
 }
 
 // Motor de geracao de execucoes (secao 9 do pedido): para cada linha de
-// escopo da programacao, expande regional/base nulos ("todas") e gera
-// uma execucao por combinacao unica (operation_type, regional_id,
-// base_id). Idempotente via unique constraint + "on conflict do
-// nothing" — publicar de novo nao duplica execucao nem regrava snapshot
-// de uma execucao ja existente.
+// escopo da programacao, expande regional nula ("todas as regionais da
+// operacao") e gera uma execucao por regional — nunca por
+// cidade/base, mesmo quando a programacao nao restringe base. A base so
+// entra na chave da execucao quando o proprio escopo pede uma base
+// especifica (feedback de producao: lideranca e por regional, quem
+// direciona pra cidade e o lider, nao o sistema). Idempotente via
+// unique constraint + "on conflict do nothing" — publicar de novo nao
+// duplica execucao nem regrava snapshot de uma execucao ja existente.
 async function generateExecutionsForSchedule(client, req, schedule, scopes) {
 	// key "OP:regional:base" -> { operationType, regionalId, baseId, roleIds }
 	// roleIds = null significa "todos os cargos"; se QUALQUER linha de
@@ -178,24 +181,22 @@ async function generateExecutionsForSchedule(client, req, schedule, scopes) {
 			);
 			regionalRows = rows;
 		}
+		// Unidade de execucao = regional, nao cidade/base: a lideranca e
+		// resolvida por regional (regional_responsaveis) e e ela quem
+		// direciona a equipe a partir dali. So gera execucao por base
+		// especifica quando o proprio escopo da programacao pede
+		// explicitamente uma base — nunca expande "regional inteira" em uma
+		// execucao por cidade.
 		for (const regional of regionalRows) {
-			let baseRows;
-			if (scope.base_id) {
-				baseRows = [{ id: scope.base_id }];
-			} else {
-				const { rows } = await client.query(`select id from regional_cidades where regional_id = $1`, [regional.id]);
-				baseRows = rows.length ? rows : [{ id: null }];
-			}
-			for (const base of baseRows) {
-				const key = `${operationType}:${regional.id}:${base.id || "null"}`;
-				const existing = combos.get(key);
-				if (!existing) {
-					combos.set(key, { operationType, regionalId: regional.id, baseId: base.id, roleIds: scope.role_id ? [scope.role_id] : null });
-				} else if (existing.roleIds && scope.role_id) {
-					existing.roleIds.push(scope.role_id);
-				} else if (!scope.role_id) {
-					existing.roleIds = null;
-				}
+			const baseId = scope.base_id || null;
+			const key = `${operationType}:${regional.id}:${baseId || "null"}`;
+			const existing = combos.get(key);
+			if (!existing) {
+				combos.set(key, { operationType, regionalId: regional.id, baseId, roleIds: scope.role_id ? [scope.role_id] : null });
+			} else if (existing.roleIds && scope.role_id) {
+				existing.roleIds.push(scope.role_id);
+			} else if (!scope.role_id) {
+				existing.roleIds = null;
 			}
 		}
 	}
