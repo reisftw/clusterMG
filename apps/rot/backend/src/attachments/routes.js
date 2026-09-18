@@ -17,7 +17,7 @@ const allowedMime = new Set([...allowedImageMime, ...allowedPdfMime]);
 // Entidades que aceitam PDF alem de imagem (tema pronto / evidencia
 // assinada do DSS); as demais continuam so-imagem, sem mudanca de
 // comportamento.
-const PDF_CAPABLE_ENTITY_TYPES = new Set(["DSS_THEME", "DSS_EXECUTION"]);
+const PDF_CAPABLE_ENTITY_TYPES = new Set(["DSS_THEME", "DSS_EXECUTION", "VEHICLE_DOCUMENT"]);
 const DSS_EXECUTION_EDITABLE_STATUSES = new Set(["planejado", "disponivel", "em_andamento", "rejeitado"]);
 const uploadLimit = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 
@@ -31,7 +31,7 @@ function fail(status, message) {
 
 function normalizeEntityType(value) {
 	const type = String(value || "").trim().toUpperCase();
-	if (!["APR", "ROMPIMENTO", "ASSET", "SST_PROTOCOL", "DSS_THEME", "DSS_EXECUTION"].includes(type)) fail(400, "Tipo de entidade inválido.");
+	if (!["APR", "ROMPIMENTO", "ASSET", "SST_PROTOCOL", "DSS_THEME", "DSS_EXECUTION", "VEHICLE_DOCUMENT"].includes(type)) fail(400, "Tipo de entidade inválido.");
 	return type;
 }
 
@@ -108,6 +108,20 @@ async function assertEntityAccess(client, req, entityType, entityId, mode = "vie
 		// editavel se o SST rejeitar (-> 'rejeitado').
 		if (mode !== "view" && !DSS_EXECUTION_EDITABLE_STATUSES.has(item.status)) fail(409, "Esta execução não pode mais receber evidência no status atual.");
 		if (scope && !isDssStaff && item.regional_id !== scope) fail(403, "Regional não autorizada.");
+		return item;
+	}
+	if (entityType === "VEHICLE_DOCUMENT") {
+		const { rows } = await client.query(
+			`select d.*, v.regional_id as vehicle_regional_id, v.operation_scope as vehicle_operation_scope
+			 from rot_vehicle_documents d join rot_vehicles v on v.id = d.vehicle_id
+			 where d.id=$1`,
+			[entityId],
+		);
+		const item = rows[0];
+		if (!item) fail(404, "Documento não encontrado.");
+		if (scope && item.vehicle_regional_id !== scope) fail(403, "Regional não autorizada.");
+		if (mode === "view" && !userHasRotPermission(req.rotUser, ["rot.fleet.view", "rot.fleet.manage"])) fail(403, "Sem permissão para ver documentos deste veículo.");
+		if (mode !== "view" && !userHasRotPermission(req.rotUser, ["rot.fleet.documents.manage", "rot.fleet.manage"])) fail(403, "Sem permissão para anexar documentos neste veículo.");
 		return item;
 	}
 	if (entityType === "ROMPIMENTO") {

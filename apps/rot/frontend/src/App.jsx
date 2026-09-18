@@ -19,6 +19,7 @@ import CommandCenterPage from "./pages/admin/CommandCenterPage";
 import EquipmentsPage from "./pages/admin/EquipmentsPage";
 import EmailPage from "./pages/admin/EmailPage";
 import FleetPage from "./pages/admin/FleetPage";
+import FleetVehicleDetailPage from "./pages/admin/FleetVehicleDetailPage";
 import GeralPage from "./pages/admin/GeralPage";
 import HolidaysPage from "./pages/admin/HolidaysPage";
 import IntegrationsPage from "./modules/integracoes/components/IntegracoesPage";
@@ -184,6 +185,7 @@ export default function App() {
 				<Route path="entrega-tecnicos" element={<PrivateRoute permission={["rot.tech_deliveries.view","rot.tech_deliveries.manage"]}><TechDeliveriesPage /></PrivateRoute>} />
 				<Route path="auditoria-bolsa" element={<PrivateRoute permission={["rot.bag_audit.view","rot.bag_audit.manage"]}><BagAuditPage /></PrivateRoute>} />
 				<Route path="frota" element={<FleetPage />} />
+				<Route path="frota/:id" element={<FleetVehicleDetailPage />} />
 				<Route path="equipamentos" element={<EquipmentsPage />} />
 				<Route path="ativos-seguranca/*" element={<PrivateRoute permission={["ativos.visualizar","checklists.visualizar","ocorrencias.visualizar","manutencoes.visualizar"]}><AssetsSecurityPage /></PrivateRoute>} />
 				<Route path="seguranca-trabalho" element={<PrivateRoute permission="sst.dashboard.visualizar"><SegurancaTrabalhoPage /></PrivateRoute>} />

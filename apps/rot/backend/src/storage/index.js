@@ -17,7 +17,7 @@ function extensionForMime(mimeType) {
 function generateObjectKey({ entityType, entityId, mimeType }) {
 	const type = String(entityType || "").toLowerCase();
 	const safeEntityId = String(entityId || "").replace(/[^a-zA-Z0-9_-]/g, "");
-	if (!["apr", "rompimento", "asset", "sst_protocol", "dss_theme", "dss_execution"].includes(type) || !safeEntityId) throw new Error("Entidade inválida para anexo.");
+	if (!["apr", "rompimento", "asset", "sst_protocol", "dss_theme", "dss_execution", "vehicle_document"].includes(type) || !safeEntityId) throw new Error("Entidade inválida para anexo.");
 	const { year, month } = objectMonth();
 	const uuid = crypto.randomUUID();
 	return `rot/${type}/${year}/${month}/${safeEntityId}/${uuid}.${extensionForMime(mimeType)}`;

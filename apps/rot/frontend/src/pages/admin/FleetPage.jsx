@@ -1,28 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Car, CheckCircle, Edit3, Plus, RefreshCw, Store, Trash2, Wrench, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Car, ChevronRight, Plus, RefreshCw, Store, Trash2 } from "lucide-react";
 import {
-	assignRotVehicleResponsible,
 	createRotVehicle,
-	createRotVehicleClaim,
-	createRotVehicleMaintenance,
 	createRotWorkshop,
 	deleteRotVehicle,
-	deleteRotVehicleClaim,
-	deleteRotVehicleMaintenance,
 	deleteRotWorkshop,
 	fetchRotFleet,
 	fetchRotRegionals,
-	finishRotVehicleMaintenance,
 	updateRotVehicle,
 	updateRotWorkshop,
 } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
 import { useRotAuth } from "../../state/RotAuthContext";
+import { formatKm, VEHICLE_STATUS_BADGE, VEHICLE_STATUS_LABEL } from "../../utils/fleetKm";
 
-// Fiel a rot/src/pages/FleetPage.tsx — cards de veiculo (status por
-// manutencao aberta/responsavel), sinistros e manutencoes expansiveis,
-// oficinas geridas em modal a parte.
+// Fase 1 da reestruturacao de Frotas: o card fica so com informacao
+// operacional rapida (secao 3/51 do pedido) — toda a logica de
+// transferencia/KM/manutencao/bloqueio/documentos mora na Ficha 360
+// (FleetVehicleDetailPage), nao mais aqui.
 const OPERATION_SCOPE_LABELS = { ROT: "ROT", FIELD: "Field", DELIVERY: "Delivery" };
 const OPERATION_SCOPE_OPTIONS = [
 	{ value: "ROT", label: "ROT" },
@@ -36,28 +33,25 @@ function normalizeOperationScope(value) {
 }
 
 export default function FleetPage() {
+	const navigate = useNavigate();
 	const { hasPermission } = useRotAuth();
 	const canManage = hasPermission("rot.fleet.manage");
 	const [vehicles, setVehicles] = useState([]);
-	const [claims, setClaims] = useState([]);
-	const [maintenances, setMaintenances] = useState([]);
 	const [workshops, setWorkshops] = useState([]);
 	const [technicians, setTechnicians] = useState([]);
 	const [regionals, setRegionals] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
-	const [expanded, setExpanded] = useState({});
 	const [vehicleModal, setVehicleModal] = useState(null);
 	const [workshopsModalOpen, setWorkshopsModalOpen] = useState(false);
-	const [claimModalVehicle, setClaimModalVehicle] = useState(null);
-	const [maintModalVehicle, setMaintModalVehicle] = useState(null);
-	const [finishModal, setFinishModal] = useState(null);
 	const [operationFilter, setOperationFilter] = useState("");
+	const [statusFilter, setStatusFilter] = useState("");
 
 	const visibleVehicles = useMemo(() => {
-		if (!operationFilter) return vehicles;
-		return vehicles.filter((vehicle) => normalizeOperationScope(vehicle.operationScope) === operationFilter);
-	}, [vehicles, operationFilter]);
+		return vehicles
+			.filter((vehicle) => !operationFilter || normalizeOperationScope(vehicle.operationScope) === operationFilter)
+			.filter((vehicle) => !statusFilter || vehicle.status === statusFilter);
+	}, [vehicles, operationFilter, statusFilter]);
 
 	const load = async () => {
 		setLoading(true);
@@ -65,8 +59,6 @@ export default function FleetPage() {
 		try {
 			const [fleet, regionalList] = await Promise.all([fetchRotFleet(), fetchRotRegionals()]);
 			setVehicles(fleet.vehicles);
-			setClaims(fleet.claims);
-			setMaintenances(fleet.maintenances);
 			setWorkshops(fleet.workshops);
 			setTechnicians(fleet.technicians);
 			setRegionals(regionalList);
@@ -80,18 +72,6 @@ export default function FleetPage() {
 	useEffect(() => {
 		load();
 	}, []);
-
-	const toggle = (vehicleId, view) => setExpanded((current) => ({ ...current, [vehicleId]: current[vehicleId] === view ? null : view }));
-
-	const handleAssign = async (vehicle, responsibleId) => {
-		setError("");
-		try {
-			const updated = await assignRotVehicleResponsible(vehicle.id, responsibleId);
-			setVehicles((current) => current.map((v) => (v.id === updated.id ? updated : v)));
-		} catch (err) {
-			setError(err?.message || "Não foi possível atribuir o responsável.");
-		}
-	};
 
 	const handleDeleteVehicle = async (vehicle) => {
 		if (!window.confirm(`Excluir o veículo "${vehicle.model} — ${vehicle.plate}"?`)) return;
@@ -128,6 +108,14 @@ export default function FleetPage() {
 							<option key={option.value} value={option.value}>{option.label}</option>
 						))}
 					</select>
+					<select
+						value={statusFilter}
+						onChange={(event) => setStatusFilter(event.target.value)}
+						className="h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+					>
+						<option value="">Todo status</option>
+						{Object.entries(VEHICLE_STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+					</select>
 					<button type="button" onClick={load} className="rot-btn-tactile inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
 						<RefreshCw size={16} /> Atualizar
 					</button>
@@ -149,38 +137,28 @@ export default function FleetPage() {
 			{visibleVehicles.length ? (
 				<div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
 					{visibleVehicles.map((vehicle) => {
-						const vehicleClaims = claims.filter((c) => c.vehicleId === vehicle.id);
-						const vehicleMaint = maintenances.filter((m) => m.vehicleId === vehicle.id);
-						const openMaint = vehicleMaint.filter((m) => m.status === "OPEN");
-						const finishedMaint = vehicleMaint.filter((m) => m.status === "FINISHED").slice(0, 3);
-						const hasOpenMaint = openMaint.length > 0;
-						const hasResponsible = Boolean(vehicle.responsibleId);
 						const responsible = technicians.find((t) => t.id === vehicle.responsibleId);
-						const status = hasOpenMaint
-							? { label: "EM MANUTENÇÃO", color: "bg-red-600", icon: Wrench }
-							: hasResponsible
-								? { label: "EM OPERAÇÃO", color: "bg-emerald-600", icon: Zap }
-								: { label: "PARADO NA BASE", color: "bg-amber-500", icon: Store };
-						const StatusIcon = status.icon;
-						const activeView = expanded[vehicle.id];
-
 						return (
-							<article key={vehicle.id} className="rot-card-hover flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+							<article
+								key={vehicle.id}
+								onClick={() => navigate(`/frota/${vehicle.id}`)}
+								className="rot-card-hover flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+							>
 								<div className="relative overflow-hidden bg-blue-900 p-5 text-white">
 									<Car size={110} className="pointer-events-none absolute -bottom-4 -right-4 rotate-12 opacity-10" />
 									<div className="relative z-10">
-										<div className="mb-3 flex items-start justify-between">
+										<div className="mb-3 flex items-start justify-between gap-2">
 											<div className="flex flex-wrap gap-1.5">
-												<span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black shadow-md ${status.color}`}>
-													<StatusIcon size={13} /> {status.label}
+												<span className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black shadow-md ${VEHICLE_STATUS_BADGE[vehicle.status] || "bg-slate-600"}`}>
+													{VEHICLE_STATUS_LABEL[vehicle.status] || vehicle.status}
 												</span>
 												<span className="inline-flex items-center rounded-full bg-white/15 px-3 py-1 text-[10px] font-black text-white ring-1 ring-white/20">
 													{OPERATION_SCOPE_LABELS[normalizeOperationScope(vehicle.operationScope)]}
 												</span>
 											</div>
 											{canManage ? (
-												<button type="button" onClick={() => setVehicleModal({ vehicle })} className="rounded-lg bg-white/10 p-1.5 hover:bg-white/20">
-													<Edit3 size={14} />
+												<button type="button" onClick={(e) => { e.stopPropagation(); setVehicleModal({ vehicle }); }} className="rounded-lg bg-white/10 p-1.5 hover:bg-white/20">
+													<ChevronRight size={14} className="rotate-90" />
 												</button>
 											) : null}
 										</div>
@@ -192,119 +170,32 @@ export default function FleetPage() {
 									</div>
 								</div>
 
-								<div className="flex-1 p-5">
-									<div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-										<p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Responsável pelo carro</p>
-										{canManage ? (
-											<select
-												value={vehicle.responsibleId || ""}
-												onChange={(e) => handleAssign(vehicle, e.target.value)}
-												className={`w-full rounded-xl border-2 p-2.5 text-sm font-bold outline-none ${hasResponsible ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-100 bg-amber-50 text-amber-800"}`}
-											>
-												<option value="">-- Disponível (base) --</option>
-												{technicians
-													.filter((t) => t.regionalId === vehicle.regionalId)
-													.filter((t) => {
-														const scopes = Array.isArray(t.operationScopes) && t.operationScopes.length ? t.operationScopes : ["ROT"];
-														return scopes.map(normalizeOperationScope).includes(normalizeOperationScope(vehicle.operationScope));
-													})
-													.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-											</select>
-										) : (
-											<p className="text-sm font-bold text-slate-700">{responsible?.name || "Parado na base"}</p>
-										)}
+								<div className="flex-1 space-y-3 p-5">
+									<div>
+										<p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Responsável</p>
+										<p className="text-sm font-bold text-slate-700">{responsible?.name || "Sem responsável"}</p>
+									</div>
+									<div className="flex items-center justify-between">
+										<div>
+											<p className="text-[10px] font-black uppercase tracking-widest text-slate-400">KM atual</p>
+											<p className="text-sm font-bold text-slate-700">{formatKm(vehicle.currentKm)}</p>
+										</div>
+										<div className="text-right">
+											<p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Atualizado</p>
+											<p className="text-xs font-bold text-slate-500">{vehicle.currentKmAt ? new Date(vehicle.currentKmAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+										</div>
 									</div>
 								</div>
 
-								<div className="flex gap-2 border-t bg-slate-50 px-4 py-3">
-									<button type="button" onClick={() => toggle(vehicle.id, "claims")} className={`rot-btn-tactile flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[10px] font-black uppercase ${activeView === "claims" ? "bg-red-600 text-white" : "border border-red-100 bg-white text-red-600"}`}>
-										<AlertTriangle size={13} /> Sinistros ({vehicleClaims.length})
-									</button>
-									<button type="button" onClick={() => toggle(vehicle.id, "maintenances")} className={`rot-btn-tactile flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[10px] font-black uppercase ${activeView === "maintenances" ? "bg-blue-600 text-white" : "border border-blue-100 bg-white text-blue-600"}`}>
-										<Wrench size={13} /> Manutenções
-									</button>
+								<div className="flex items-center justify-between border-t bg-slate-50 px-5 py-3 text-xs font-black uppercase text-orange-600">
+									Ver ficha completa <ChevronRight size={15} />
 								</div>
-
-								{activeView === "claims" ? (
-									<div className="max-h-72 space-y-2 overflow-y-auto border-t border-slate-200 bg-slate-100 p-4">
-										<div className="mb-2 flex items-center justify-between">
-											<span className="text-[10px] font-black uppercase text-red-800">Histórico de ocorrências</span>
-											{canManage ? (
-												<button type="button" onClick={() => setClaimModalVehicle(vehicle)} className="rounded-full bg-red-600 p-1 text-white hover:bg-red-700">
-													<Plus size={15} />
-												</button>
-											) : null}
-										</div>
-										{vehicleClaims.length ? vehicleClaims.map((claim) => (
-											<div key={claim.id} className="group relative rounded-lg border-l-4 border-red-500 bg-white p-3 shadow-sm">
-												<div className="mb-1 flex justify-between pr-8 text-[9px] font-bold text-slate-400">
-													<span>{new Date(claim.date).toLocaleDateString("pt-BR")}</span>
-													<span>Por: {claim.createdByName?.split(" ")[0] || "—"}</span>
-												</div>
-												<p className="text-xs font-medium text-slate-700">{claim.description}</p>
-												{canManage ? (
-													<button type="button" onClick={() => deleteRotVehicleClaim(claim.id).then(() => setClaims((c) => c.filter((x) => x.id !== claim.id)))} className="absolute right-2 top-2 p-1 text-red-400 opacity-0 hover:bg-red-50 group-hover:opacity-100">
-														<Trash2 size={12} />
-													</button>
-												) : null}
-											</div>
-										)) : <p className="rounded-lg bg-white/50 py-4 text-center text-[10px] italic text-slate-400">Nenhum registro.</p>}
-									</div>
-								) : null}
-
-								{activeView === "maintenances" ? (
-									<div className="max-h-72 space-y-3 overflow-y-auto border-t border-slate-200 bg-slate-100 p-4">
-										<div className="mb-1 flex items-center justify-between">
-											<span className="text-[10px] font-black uppercase tracking-tighter text-blue-800">Agenda e histórico</span>
-											{canManage ? (
-												<button type="button" onClick={() => setMaintModalVehicle(vehicle)} className="rounded-full bg-blue-600 p-1 text-white hover:bg-blue-700">
-													<Plus size={15} />
-												</button>
-											) : null}
-										</div>
-										{openMaint.map((maint) => {
-											const workshop = workshops.find((w) => w.id === maint.workshopId);
-											return (
-												<div key={maint.id} className="flex items-center justify-between rounded-lg border-l-4 border-orange-500 bg-white p-3 shadow-sm">
-													<div className="min-w-0 flex-1 pr-2">
-														<p className="text-xs font-black text-slate-800">{new Date(maint.date).toLocaleDateString("pt-BR")} - {maint.time}</p>
-														<p className="truncate text-[10px] font-bold uppercase text-blue-700">{workshop?.name || "Oficina"}</p>
-													</div>
-													<div className="flex items-center gap-1">
-														{canManage ? (
-															<button type="button" onClick={() => deleteRotVehicleMaintenance(maint.id).then(() => setMaintenances((m) => m.filter((x) => x.id !== maint.id)))} className="p-1.5 text-red-600 hover:bg-red-50 rounded">
-																<Trash2 size={14} />
-															</button>
-														) : null}
-														<button type="button" onClick={() => setFinishModal(maint)} className="rounded-lg bg-emerald-600 p-1.5 text-white shadow hover:bg-emerald-700">
-															<CheckCircle size={16} />
-														</button>
-													</div>
-												</div>
-											);
-										})}
-										{finishedMaint.length ? (
-											<div className="border-t border-slate-200 pt-2">
-												<p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">Serviços concluídos</p>
-												{finishedMaint.map((maint) => (
-													<div key={maint.id} className="mb-2 rounded border border-emerald-100 bg-emerald-50 p-2 text-[10px]">
-														<div className="mb-1 flex justify-between font-bold text-emerald-800">
-															<span>{new Date(maint.finishedAt || maint.date).toLocaleDateString("pt-BR")}</span>
-															<CheckCircle size={10} />
-														</div>
-														<p className="italic text-slate-600 line-clamp-1">"{maint.resolutionNote}"</p>
-													</div>
-												))}
-											</div>
-										) : null}
-									</div>
-								) : null}
 							</article>
 						);
 					})}
 				</div>
 			) : (
-				<div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-bold text-slate-400">Nenhum veículo encontrado para essa operação.</div>
+				<div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-bold text-slate-400">Nenhum veículo encontrado para esses filtros.</div>
 			)}
 
 			{vehicleModal ? (
@@ -324,31 +215,6 @@ export default function FleetPage() {
 			) : null}
 
 			{workshopsModalOpen ? <WorkshopsModal workshops={workshops} regionals={regionals} onClose={() => setWorkshopsModalOpen(false)} onChanged={setWorkshops} /> : null}
-
-			{claimModalVehicle ? (
-				<ClaimFormModal
-					vehicle={claimModalVehicle}
-					onClose={() => setClaimModalVehicle(null)}
-					onCreated={(claim) => { setClaims((c) => [claim, ...c]); setClaimModalVehicle(null); }}
-				/>
-			) : null}
-
-			{maintModalVehicle ? (
-				<MaintenanceFormModal
-					vehicle={maintModalVehicle}
-					workshops={workshops}
-					onClose={() => setMaintModalVehicle(null)}
-					onCreated={(m) => { setMaintenances((current) => [m, ...current]); setMaintModalVehicle(null); }}
-				/>
-			) : null}
-
-			{finishModal ? (
-				<FinishMaintenanceModal
-					maintenance={finishModal}
-					onClose={() => setFinishModal(null)}
-					onFinished={(updated) => { setMaintenances((current) => current.map((m) => (m.id === updated.id ? updated : m))); setFinishModal(null); }}
-				/>
-			) : null}
 		</div>
 	);
 }
@@ -358,8 +224,10 @@ function VehicleFormModal({ vehicle, regionals, onClose, onSaved, onDeleted }) {
 	const [model, setModel] = useState(vehicle?.model || "");
 	const [plate, setPlate] = useState(vehicle?.plate || "");
 	const [manufacturer, setManufacturer] = useState(vehicle?.manufacturer || "");
+	const [year, setYear] = useState(vehicle?.year || "");
 	const [regionalId, setRegionalId] = useState(vehicle?.regionalId || regionals[0]?.id || "");
 	const [operationScope, setOperationScope] = useState(normalizeOperationScope(vehicle?.operationScope));
+	const [km, setKm] = useState(vehicle?.currentKm ?? "");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState("");
 
@@ -369,10 +237,15 @@ function VehicleFormModal({ vehicle, regionals, onClose, onSaved, onDeleted }) {
 			setError("Informe modelo e placa.");
 			return;
 		}
+		if (!isEdit && (km === "" || Number.isNaN(Number(km)) || Number(km) < 0)) {
+			setError("Informe a quilometragem atual do veículo.");
+			return;
+		}
 		setSaving(true);
 		setError("");
 		try {
-			const payload = { model: model.trim(), plate: plate.trim(), manufacturer, regionalId, operationScope };
+			const payload = { model: model.trim(), plate: plate.trim(), manufacturer, regionalId, operationScope, year: year ? Number(year) : null };
+			if (!isEdit) payload.km = Number(km);
 			const saved = isEdit ? await updateRotVehicle(vehicle.id, payload) : await createRotVehicle(payload);
 			onSaved(saved);
 		} catch (err) {
@@ -398,6 +271,17 @@ function VehicleFormModal({ vehicle, regionals, onClose, onSaved, onDeleted }) {
 					<label className="block">
 						<span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Fabricante</span>
 						<input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+					</label>
+				</div>
+				<div className="grid grid-cols-2 gap-3">
+					<label className="block">
+						<span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Ano/modelo</span>
+						<input type="number" inputMode="numeric" value={year} onChange={(e) => setYear(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+					</label>
+					<label className="block">
+						<span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Quilometragem atual{!isEdit ? <span className="text-red-500"> *</span> : null}</span>
+						<input type="number" inputMode="numeric" min={0} value={km} onChange={(e) => setKm(e.target.value)} disabled={isEdit} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 disabled:bg-slate-50 disabled:text-slate-400" />
+						{isEdit ? <span className="mt-1 block text-[11px] font-semibold text-slate-400">Use a Ficha do veículo para registrar nova leitura.</span> : null}
 					</label>
 				</div>
 				<label className="block">
@@ -476,126 +360,6 @@ function WorkshopsModal({ workshops, regionals, onClose, onChanged }) {
 				))}
 				{!workshops.length ? <p className="py-6 text-center text-sm font-bold text-slate-400">Nenhuma oficina cadastrada.</p> : null}
 			</div>
-		</ModalShell>
-	);
-}
-
-function ClaimFormModal({ vehicle, onClose, onCreated }) {
-	const [description, setDescription] = useState("");
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState("");
-
-	const submit = async (event) => {
-		event.preventDefault();
-		if (!description.trim()) {
-			setError("Descreva a ocorrência.");
-			return;
-		}
-		setSaving(true);
-		setError("");
-		try {
-			const created = await createRotVehicleClaim(vehicle.id, { description: description.trim() });
-			onCreated(created);
-		} catch (err) {
-			setError(err?.message || "Não foi possível registrar o sinistro.");
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	return (
-		<ModalShell open title={`Novo sinistro — ${vehicle.plate}`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><AlertTriangle size={22} /></span>} onClose={onClose} size="md">
-			{error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
-			<form onSubmit={submit} className="space-y-4">
-				<textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} autoFocus placeholder="Descreva o ocorrido..." className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-red-400 focus:ring-4 focus:ring-red-100" />
-				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-					<button type="submit" disabled={saving} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">{saving ? "Salvando..." : "Registrar"}</button>
-				</div>
-			</form>
-		</ModalShell>
-	);
-}
-
-function MaintenanceFormModal({ vehicle, workshops, onClose, onCreated }) {
-	const [workshopId, setWorkshopId] = useState(workshops[0]?.id || "");
-	const [date, setDate] = useState("");
-	const [time, setTime] = useState("");
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState("");
-
-	const submit = async (event) => {
-		event.preventDefault();
-		if (!date) {
-			setError("Informe a data.");
-			return;
-		}
-		setSaving(true);
-		setError("");
-		try {
-			const created = await createRotVehicleMaintenance(vehicle.id, { workshopId: workshopId || null, date, time });
-			onCreated(created);
-		} catch (err) {
-			setError(err?.message || "Não foi possível agendar a manutenção.");
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	return (
-		<ModalShell open title={`Agendar manutenção — ${vehicle.plate}`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Wrench size={22} /></span>} onClose={onClose} size="md">
-			{error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
-			<form onSubmit={submit} className="space-y-4">
-				<label className="block">
-					<span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Oficina</span>
-					<select value={workshopId} onChange={(e) => setWorkshopId(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-bold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100">
-						<option value="">Sem oficina definida</option>
-						{workshops.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-					</select>
-				</label>
-				<div className="grid grid-cols-2 gap-3">
-					<label className="block">
-						<span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Data</span>
-						<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-					</label>
-					<label className="block">
-						<span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">Hora</span>
-						<input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
-					</label>
-				</div>
-				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-					<button type="submit" disabled={saving} className="rot-btn-tactile rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60">{saving ? "Agendando..." : "Agendar"}</button>
-				</div>
-			</form>
-		</ModalShell>
-	);
-}
-
-function FinishMaintenanceModal({ maintenance, onClose, onFinished }) {
-	const [resolutionNote, setResolutionNote] = useState("");
-	const [saving, setSaving] = useState(false);
-
-	const submit = async (event) => {
-		event.preventDefault();
-		setSaving(true);
-		try {
-			const updated = await finishRotVehicleMaintenance(maintenance.id, resolutionNote.trim());
-			onFinished(updated);
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	return (
-		<ModalShell open title="Concluir manutenção" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle size={22} /></span>} onClose={onClose} size="sm">
-			<form onSubmit={submit} className="space-y-4">
-				<textarea value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} rows={3} autoFocus placeholder="O que foi feito?" className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
-				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-					<button type="submit" disabled={saving} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">{saving ? "Salvando..." : "Concluir"}</button>
-				</div>
-			</form>
 		</ModalShell>
 	);
 }
