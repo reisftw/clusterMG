@@ -258,6 +258,12 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Homologação: `https://homolog.retiradas.tech`, API interna `3002`, banco `retiradas_homolog`.
 - Versão visual:
   - O frontend recebe `VITE_APP_VERSION=${GITHUB_SHA::7}` e `VITE_APP_ENV_LABEL` pela pipeline para mostrar versão/ambiente no rodapé.
+- Fluxo de trabalho local entre os apps do monorepo (padrão fixado em 18/09/2026):
+  - O repositório tem uma única pasta de trabalho local (`retiradas`), sem worktrees separados por app.
+  - Cada app tem sua própria branch: `finan` atua em `apps/finan`, `adm` atua em `apps/adm`, `rot` atua em `apps/rot`. `master`/`homolog-dev` seguem cuidando do app original (`src/`, `vps/api`).
+  - Para mexer num app, troque a branch ativa na mesma pasta (`git checkout <branch>`) antes de editar — não crie worktree novo por padrão.
+  - Sempre trabalhar local primeiro (editar, testar, buildar) e só depois subir para a VPS via **deploy manual por SSH** (chave `~/.ssh/retiradas_github_actions_deploy`). Não depender do CI para publicar essas mudanças.
+  - Antes de qualquer deploy, o estado local deve ser tratado como a fonte da verdade a caminho da VPS: local vira produção, não o contrário — se a VPS estiver na frente do local (arquivo alterado direto lá), isso é excepcional e deve ser puxado e reconciliado explicitamente, não presumido. **Antes de confiar num arquivo baixado da VPS como "correto", compare com o último commit local conhecido** — já aconteceu de um backup manual da VPS estar desatualizado/regredido em relação ao que já estava commitado localmente (18/09/2026, apps `rot` e `finan`).
 
 ## 9. O que NÃO fazer
 
