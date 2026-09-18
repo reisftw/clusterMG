@@ -1,0 +1,90 @@
+# Exemplo de vhost do Finan. Adapte os caminhos de certificado (Let's
+# Encrypt/certbot costuma gerar em /etc/letsencrypt/live/<dominio>/) antes
+# de aplicar na VPS. Ajustes feitos na 4a etapa de auditoria (achados):
+#   - so havia "listen 80" sem HTTPS nem redirect;
+#   - so "/api/finan/" era proxied — as demais rotas da API
+#     (/api/auth, /api/admin/*, /api/financeiro/*) cairiam no
+#     "try_files ... /index.html" (SPA fallback) em vez de chegar no
+#     backend;
+#   - sem client_max_body_size (default do nginx e 1m; o import de
+#     orcamento aceita ate 30MB por arquivo — ficaria bloqueado no proxy
+#     antes mesmo de chegar no Express);
+#   - sem timeout de proxy maior pra operacoes longas (o backup manual usa
+#     pg_dump com timeout de 10 minutos no Node; o default do nginx de 60s
+#     cortaria a conexao do cliente bem antes disso);
+#   - arquivos estaticos (dist/) nao tinham nenhum header de seguranca —
+#     o Helmet so cobre respostas que passam pelo Node, e o HTML/JS/CSS do
+#     build e servido direto pelo nginx, sem tocar no backend;
+#   - sem bloqueio de arquivo oculto (.env, .git) nem "server_tokens off".
+
+server {
+	listen 80;
+	server_name finan.retiradas.tech;
+
+	# Redireciona tudo para HTTPS; nao serve nada em texto puro.
+	location / {
+		return 301 https://$host$request_uri;
+	}
+}
+
+server {
+	listen 443 ssl;
+	http2 on;
+	server_name finan.retiradas.tech;
+
+	# Ajuste para os caminhos reais do certificado na VPS.
+	ssl_certificate     /etc/letsencrypt/live/finan.retiradas.tech/fullchain.pem;
+	ssl_certificate_key /etc/letsencrypt/live/finan.retiradas.tech/privkey.pem;
+
+	# Nao anuncia versao do nginx em respostas de erro/headers.
+	server_tokens off;
+
+	# Upload de planilha de orcamento aceita ate 30MB por arquivo (ver
+	# apps/finan/backend/src/financeiro/routes/financeiroRoutes.js) — ajuste
+	# junto se esse limite mudar no backend.
+	client_max_body_size 35m;
+
+	root /opt/retiradas/apps/finan/frontend/dist;
+	index index.html;
+
+	# Nunca serve arquivo oculto (.env, .git, etc.) mesmo que caia por
+	# engano dentro de dist/.
+	location ~ /\. {
+		deny all;
+		return 404;
+	}
+
+	# Toda a API do Finan (auth, admin/*, financeiro/*, finan/orcamento,
+	# finan/integracoes, finan/configuracoes, finan/usuarios) vive sob
+	# /api — um unico proxy cobre tudo, em vez de listar prefixo por
+	# prefixo (evita esquecer uma rota nova no dia em que o backend
+	# adicionar outra).
+	location /api/ {
+		proxy_pass http://127.0.0.1:3101/api/;
+		proxy_http_version 1.1;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto $scheme;
+
+		# Backup manual roda pg_dump com timeout de 10 minutos no Node
+		# (ver runPgDump em compat/routes.js); o default do nginx (60s)
+		# cortaria a conexao do cliente bem antes disso.
+		proxy_connect_timeout 10s;
+		proxy_send_timeout 600s;
+		proxy_read_timeout 600s;
+	}
+
+	# Frontend SPA. Headers de seguranca aqui cobrem o que o Helmet nao
+	# alcanca (HTML/JS/CSS servidos direto pelo nginx, sem passar pelo
+	# Node) — mesmo espirito do app.js, adaptado para arquivo estatico.
+	location / {
+		try_files $uri $uri/ /index.html;
+
+		add_header X-Content-Type-Options "nosniff" always;
+		add_header X-Frame-Options "SAMEORIGIN" always;
+		add_header Referrer-Policy "no-referrer" always;
+		add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+		add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+	}
+}
