@@ -21,14 +21,14 @@ export default function DssReportsPage() {
 	const [items, setItems] = useState([]);
 	const [total, setTotal] = useState(0);
 	const [page, setPage] = useState(1);
-	const pageSize = 25;
+	const pageSize = 30;
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [exporting, setExporting] = useState("");
 
 	useEffect(() => {
 		fetchRotRegionals().then(setRegionals).catch(() => setRegionals([]));
-		fetchDssThemes().then(setThemes).catch(() => setThemes([]));
+		fetchDssThemes({ pageSize: 200 }).then((data) => setThemes(data.items || [])).catch(() => setThemes([]));
 	}, []);
 
 	const load = async (targetPage = 1) => {

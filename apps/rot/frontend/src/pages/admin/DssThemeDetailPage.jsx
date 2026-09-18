@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Archive, ArrowLeft, BookOpen, FileText, Plus, Save, Send, Trash2, Upload } from "lucide-react";
-import { archiveDssTheme, deleteRotAttachment, fetchDssTheme, fetchRotAttachments, publishDssTheme, saveDssThemeWeeks, updateDssTheme } from "../../api/rotApi";
+import { archiveDssTheme, deleteRotAttachment, fetchDssCategories, fetchDssTheme, fetchRotAttachments, publishDssTheme, saveDssThemeWeeks, updateDssTheme } from "../../api/rotApi";
 import Field from "../../components/ui/Field";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
 import { useRotAuth } from "../../state/RotAuthContext";
 import { uploadPdf } from "../../utils/imageUpload";
-import { CATEGORY_OPTIONS, CONTENT_TYPE_OPTIONS, THEME_STATUS_BADGE, THEME_STATUS_LABEL } from "./DssThemesPage";
+import { CONTENT_TYPE_OPTIONS, THEME_STATUS_BADGE, THEME_STATUS_LABEL } from "./DssThemesPage";
 
 const BLOCK_TYPE_OPTIONS = [
 	{ id: "titulo", name: "Título" },
@@ -173,6 +173,7 @@ export default function DssThemeDetailPage() {
 	const canEdit = hasPermission("dss.tema.editar");
 	const canArchive = hasPermission("dss.tema.arquivar");
 	const [theme, setTheme] = useState(null);
+	const [categories, setCategories] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -191,6 +192,7 @@ export default function DssThemeDetailPage() {
 
 	useEffect(() => {
 		load();
+		fetchDssCategories().then(setCategories).catch(() => setCategories([]));
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [id]);
 
@@ -236,7 +238,7 @@ export default function DssThemeDetailPage() {
 			{error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div> : null}
 
 			<div className="grid gap-4 sm:grid-cols-2">
-				<Field label="Categoria"><Select value={theme.category} onChange={(v) => saveField({ category: v })} items={CATEGORY_OPTIONS} /></Field>
+				<Field label="Categoria"><Select value={theme.category} onChange={(v) => saveField({ category: v })} items={categories.some((c) => c.id === theme.category) ? categories.map((c) => ({ id: c.id, name: c.label })) : [{ id: theme.category, name: theme.category }, ...categories.map((c) => ({ id: c.id, name: c.label }))]} /></Field>
 				<Field label="Modalidade" hint="Definida na criação, não pode ser alterada."><input value={theme.modality === "mensal" ? "Mensal" : "Semanal"} disabled className="rot-input opacity-60" /></Field>
 			</div>
 			<Field label="Descrição resumida"><textarea defaultValue={theme.description || ""} onBlur={(e) => saveField({ description: e.target.value })} rows={2} className="rot-input min-h-16 py-2" /></Field>

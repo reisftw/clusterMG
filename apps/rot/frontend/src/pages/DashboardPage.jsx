@@ -1,7 +1,7 @@
 import { AlertTriangle, Boxes, CalendarDays, CalendarRange, Check, ChevronLeft, ChevronRight, ClipboardCheck, Clock, HardHat, Medal, PackageCheck, Palmtree, Shuffle, ShieldCheck, Trophy, Undo2, UsersRound, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { acceptAssetsSecurityTransfer, declineAssetsSecurityTransfer, fetchAssetsSecurityAssetsMine, fetchAssetsSecurityChecklistTemplates, fetchAssetsSecurityMeta, fetchPendingAssetTransfersForMe, fetchRotAbsences, fetchRotActivities, fetchRotHolidays, fetchRotOperationDashboard, fetchRotRanking, fetchRotShifts } from "../api/rotApi";
+import { acceptAssetsSecurityTransfer, declineAssetsSecurityTransfer, fetchAssetsSecurityAssetsMine, fetchAssetsSecurityChecklistTemplates, fetchAssetsSecurityMeta, fetchDssExecutions, fetchPendingAssetTransfersForMe, fetchRotAbsences, fetchRotActivities, fetchRotHolidays, fetchRotOperationDashboard, fetchRotRanking, fetchRotShifts } from "../api/rotApi";
 import { AssetActionModal } from "./admin/AssetsSecurityPage";
 import ModalShell from "../components/ui/ModalShell";
 import Spinner from "../components/ui/Spinner";
@@ -137,6 +137,7 @@ export default function DashboardPage() {
 	const [absences, setAbsences] = useState({ items: [], users: [] });
 	const [holidays, setHolidays] = useState([]);
 	const [activities, setActivities] = useState({ items: [], technicians: [] });
+	const [dssExecutions, setDssExecutions] = useState([]);
 	const [weekSunday, setWeekSunday] = useState(() => sundayOf(new Date()));
 	const [modal, setModal] = useState(null);
 
@@ -156,12 +157,16 @@ export default function DashboardPage() {
 			try {
 				const now = new Date();
 				const firstOfMonth = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-01`;
-				const [rankingData, shiftsData, absencesData, holidaysData, activitiesData] = await Promise.all([
+				const lastOfMonth = dateObjKey(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+				const [rankingData, shiftsData, absencesData, holidaysData, activitiesData, dssData] = await Promise.all([
 					canRank ? fetchRotRanking({ dataInicio: firstOfMonth, dataFim: dateObjKey(now) }) : [],
 					canShift ? fetchRotShifts() : { items: [], technicians: [] },
 					canAbsence ? fetchRotAbsences() : { items: [], users: [] },
 					fetchRotHolidays(),
 					canActivity ? fetchRotActivities() : { items: [], technicians: [] },
+					// scope=mine nao exige permissao especial de SST — mesmo
+					// modo "DSS da minha equipe" usado nas telas de DSS.
+					fetchDssExecutions({ dateFrom: firstOfMonth, dateTo: lastOfMonth, scope: "mine", pageSize: 100 }).catch(() => ({ items: [] })),
 				]);
 				if (!active) return;
 				setRanking(rankingData);
@@ -169,6 +174,7 @@ export default function DashboardPage() {
 				setAbsences(absencesData);
 				setHolidays(holidaysData);
 				setActivities(activitiesData);
+				setDssExecutions(dssData.items || []);
 			} catch (err) {
 				if (active) setError(err?.message || "Não foi possível carregar os dados do dashboard.");
 			} finally {
@@ -201,6 +207,21 @@ export default function DashboardPage() {
 			.sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
 			.map((a) => ({ ...a, active: new Date(`${dateKey(a.startDate)}T00:00:00`) <= today }));
 	}, [absences]);
+
+	// Um tema pode gerar dezenas de execucoes (uma por regional/base) —
+	// o card mostra TEMAS distintos do mes, nao cada execucao, ordenado
+	// pelo prazo mais proximo de cada tema.
+	const dssThemesAll = useMemo(() => {
+		const byTheme = new Map();
+		for (const execution of dssExecutions) {
+			const key = execution.themeId || execution.themeTitle;
+			const existing = byTheme.get(key);
+			if (!existing || new Date(execution.dueDate) < new Date(existing.dueDate)) {
+				byTheme.set(key, execution);
+			}
+		}
+		return [...byTheme.values()].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+	}, [dssExecutions]);
 
 	const holidaysAll = useMemo(() => {
 		const today = todayStart();
@@ -333,25 +354,21 @@ export default function DashboardPage() {
 					)}
 				</DashboardCard>
 
-				<DashboardCard visible={canAbsence} icon={Palmtree} title="Férias e afastamentos" tone="bg-blue-50 text-blue-600" linkTo="/ausencias" onOpen={() => setModal({ type: "absences" })}>
-					{absencesAll.length ? (
+				<DashboardCard icon={HardHat} title="DSS" tone="bg-orange-50 text-orange-600" linkTo="/seguranca-trabalho/dss" onOpen={() => setModal({ type: "dss" })}>
+					{dssThemesAll.length ? (
 						<ul className="space-y-2.5">
-							{absencesAll.slice(0, DASHBOARD_LIST_PAGE_SIZE).map((a) => (
-								<li key={a.id} className="rounded-xl bg-slate-50 p-2.5">
+							{dssThemesAll.slice(0, DASHBOARD_LIST_PAGE_SIZE).map((d) => (
+								<li key={d.themeId || d.id} className="rounded-xl bg-slate-50 p-2.5">
 									<div className="flex items-center justify-between gap-2">
-										<span className="truncate text-xs font-black text-slate-800">{a.userName}</span>
-										<span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${a.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-											{a.active ? "Agora" : "Em breve"}
-										</span>
+										<span className="truncate text-xs font-black text-slate-800">{d.themeTitle || "—"}</span>
+										<span className="shrink-0 text-[10px] font-black text-orange-600">{formatShortDate(d.dueDate)}</span>
 									</div>
-									<p className="mt-1 text-[11px] font-bold text-slate-500">
-										{ABSENCE_TYPE_LABEL[a.type] || a.type} · {formatShortDate(a.startDate)} - {formatShortDate(a.endDate)}
-									</p>
+									<p className="mt-1 text-[11px] font-bold text-slate-500">{d.weekLabel}</p>
 								</li>
 							))}
 						</ul>
 					) : (
-						<EmptyMini label="Ninguém de férias ou afastado no momento." />
+						<EmptyMini label="Nenhum DSS programado para sua equipe este mês." />
 					)}
 				</DashboardCard>
 
@@ -448,7 +465,7 @@ export default function DashboardPage() {
 				</div>
 			</div>
 
-			{modal ? <DashboardModal modal={modal} onClose={() => setModal(null)} rankingSorted={rankingSorted} upcomingShiftsAll={upcomingShiftsAll} absencesAll={absencesAll} holidaysAll={holidaysAll} /> : null}
+			{modal ? <DashboardModal modal={modal} onClose={() => setModal(null)} rankingSorted={rankingSorted} upcomingShiftsAll={upcomingShiftsAll} absencesAll={absencesAll} holidaysAll={holidaysAll} dssThemesAll={dssThemesAll} /> : null}
 		</div>
 	);
 }
@@ -1043,7 +1060,33 @@ function OperationWeekCalendar({ weekDays, eventsByDay, monthLabel, setWeekSunda
 	);
 }
 
-function DashboardModal({ modal, onClose, rankingSorted, upcomingShiftsAll, absencesAll, holidaysAll }) {
+function DashboardModal({ modal, onClose, rankingSorted, upcomingShiftsAll, absencesAll, holidaysAll, dssThemesAll }) {
+	if (modal.type === "dss") {
+		return (
+			<ModalShell open title="DSS deste mês" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><HardHat size={22} /></span>} onClose={onClose} size="md">
+				{dssThemesAll.length ? (
+					<PaginatedList items={dssThemesAll}>
+						{(pageItems) => (
+							<ul className="space-y-2">
+								{pageItems.map((d) => (
+									<NavLink key={d.themeId || d.id} to={`/seguranca-trabalho/dss/execucoes/${d.id}`} className="block rounded-xl bg-slate-50 p-3 hover:bg-orange-50">
+										<div className="flex items-center justify-between gap-2">
+											<span className="truncate text-sm font-black text-slate-800">{d.themeTitle || "—"}</span>
+											<span className="shrink-0 text-xs font-black text-orange-600">{formatShortDate(d.dueDate)}</span>
+										</div>
+										<p className="mt-1 text-[11px] font-bold text-slate-500">{d.weekLabel} · {d.operationType} · {d.regionalName}</p>
+									</NavLink>
+								))}
+							</ul>
+						)}
+					</PaginatedList>
+				) : (
+					<EmptyMini label="Nenhum DSS programado para sua equipe este mês." />
+				)}
+			</ModalShell>
+		);
+	}
+
 	if (modal.type === "ranking") {
 		return (
 			<ModalShell open title="Ranking do mês" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><Trophy size={22} /></span>} onClose={onClose} size="md">

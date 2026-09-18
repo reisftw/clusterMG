@@ -33,8 +33,10 @@ export default function DssCalendarPage() {
 		setLoading(true);
 		setError("");
 		const { dateFrom, dateTo } = monthBounds(month);
-		fetchDssExecutions({ dateFrom, dateTo, scope: canSeeBroad ? undefined : "mine" })
-			.then(setItems)
+		// Intervalo de 3 meses ja e naturalmente limitado — pageSize alto
+		// pra nao truncar em 30 (padrao das listagens "de navegar").
+		fetchDssExecutions({ dateFrom, dateTo, scope: canSeeBroad ? undefined : "mine", pageSize: 500 })
+			.then((data) => setItems(data.items || []))
 			.catch((err) => setError(err?.message || "Não foi possível carregar o calendário."))
 			.finally(() => setLoading(false));
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,7 +57,12 @@ export default function DssCalendarPage() {
 			{loading ? <Spinner /> : (
 				<RotCalendar
 					items={items}
-					getDateKey={(item) => item.dueDate}
+					// item.dueDate vem do backend como datetime ISO completo
+					// ("2026-09-27T00:00:00.000Z"); as celulas do RotCalendar usam
+					// chave "YYYY-MM-DD" (sem hora) — sem o slice, a chave nunca
+					// batia e NENHUMA execucao aparecia no calendario (bug real
+					// visto em producao: "tema publicado nao aparece").
+					getDateKey={(item) => (item.dueDate ? String(item.dueDate).slice(0, 10) : null)}
 					month={month}
 					onMonthChange={setMonth}
 					dotColor="bg-orange-500"

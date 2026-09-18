@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarClock, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Plus, Search, Trash2 } from "lucide-react";
 import { createDssSchedule, fetchDssSchedules, fetchDssTheme, fetchDssThemes, fetchRotRegionals, fetchRotRoles, publishDssSchedule } from "../../api/rotApi";
 import Field from "../../components/ui/Field";
 import ModalShell from "../../components/ui/ModalShell";
+import Pagination from "../../components/ui/Pagination";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
 import { useRotAuth } from "../../state/RotAuthContext";
@@ -11,6 +12,7 @@ import { useRotAuth } from "../../state/RotAuthContext";
 const SCHEDULE_STATUS_BADGE = { rascunho: "bg-slate-100 text-slate-600", publicado: "bg-emerald-50 text-emerald-700", cancelado: "bg-red-50 text-red-700" };
 const SCHEDULE_STATUS_LABEL = { rascunho: "Rascunho", publicado: "Publicado", cancelado: "Cancelado" };
 const OPERATION_OPTIONS = [{ id: "ROT", name: "ROT" }, { id: "FIELD", name: "FIELD" }, { id: "DELIVERY", name: "DELIVERY" }];
+const PAGE_SIZE = 30;
 
 export default function DssSchedulesPage() {
 	const navigate = useNavigate();
@@ -18,16 +20,22 @@ export default function DssSchedulesPage() {
 	const canManage = hasPermission("dss.programacao.gerenciar");
 	const canPublish = hasPermission("dss.programacao.publicar");
 	const [items, setItems] = useState([]);
+	const [total, setTotal] = useState(0);
+	const [page, setPage] = useState(1);
+	const [filters, setFilters] = useState({ status: "", q: "" });
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [createOpen, setCreateOpen] = useState(false);
 	const [publishingId, setPublishingId] = useState("");
 
-	const load = async () => {
+	const load = async (targetPage = 1) => {
 		setLoading(true);
 		setError("");
 		try {
-			setItems(await fetchDssSchedules());
+			const data = await fetchDssSchedules({ ...filters, page: targetPage, pageSize: PAGE_SIZE });
+			setItems(data.items || []);
+			setTotal(data.total || 0);
+			setPage(targetPage);
 		} catch (err) {
 			setError(err?.message || "Não foi possível carregar as programações.");
 		} finally {
@@ -36,7 +44,8 @@ export default function DssSchedulesPage() {
 	};
 
 	useEffect(() => {
-		load();
+		load(1);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	const publish = async (schedule) => {
@@ -59,7 +68,7 @@ export default function DssSchedulesPage() {
 					<span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><CalendarClock size={24} /></span>
 					<div>
 						<h1 className="text-2xl font-black text-slate-950">DSS · Programação</h1>
-						<p className="text-sm font-semibold text-slate-500">{items.length} programação(ões).</p>
+						<p className="text-sm font-semibold text-slate-500">{total} programação(ões).</p>
 					</div>
 				</div>
 				{canManage ? (
@@ -68,6 +77,15 @@ export default function DssSchedulesPage() {
 					</button>
 				) : null}
 			</header>
+
+			<div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-card md:grid-cols-[1fr_180px_auto]">
+				<div className="relative">
+					<Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+					<input value={filters.q} onChange={(e) => setFilters((c) => ({ ...c, q: e.target.value }))} placeholder="Buscar por semana ou tema..." className="h-11 w-full rounded-xl border border-slate-200 pl-8 pr-3 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+				</div>
+				<Select value={filters.status} onChange={(v) => setFilters((c) => ({ ...c, status: v }))} items={[{ id: "rascunho", name: "Rascunho" }, { id: "publicado", name: "Publicado" }, { id: "cancelado", name: "Cancelado" }]} empty="Todo status" />
+				<button type="button" onClick={() => load(1)} className="rot-btn-tactile h-11 rounded-xl bg-slate-900 px-4 text-sm font-black text-white">Filtrar</button>
+			</div>
 
 			{error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div> : null}
 
@@ -102,6 +120,7 @@ export default function DssSchedulesPage() {
 						</tbody>
 					</table>
 					{!items.length ? <p className="px-4 py-10 text-center text-sm font-bold text-slate-400">Nenhuma programação encontrada.</p> : null}
+					<Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={load} />
 				</div>
 			)}
 
@@ -110,7 +129,7 @@ export default function DssSchedulesPage() {
 					onClose={() => setCreateOpen(false)}
 					onCreated={() => {
 						setCreateOpen(false);
-						load();
+						load(1);
 					}}
 				/>
 			) : null}
@@ -146,12 +165,12 @@ function CreateScheduleModal({ onClose, onCreated }) {
 	useEffect(() => {
 		(async () => {
 			try {
-				const [themeItems, regionalItems, roleItems] = await Promise.all([
-					fetchDssThemes({ status: "publicado" }),
+				const [themeData, regionalItems, roleItems] = await Promise.all([
+					fetchDssThemes({ status: "publicado", pageSize: 200 }),
 					fetchRotRegionals(),
 					fetchRotRoles(),
 				]);
-				setThemes(themeItems);
+				setThemes(themeData.items || []);
 				setRegionals(regionalItems || []);
 				setRoles(roleItems || []);
 			} catch (err) {
