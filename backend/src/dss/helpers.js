@@ -90,15 +90,20 @@ async function resolveResponsible(client, { operationType, regionalId }) {
 // area_operacional), entao tecnicos sao sempre incluidos quando a
 // combinacao bate, independente do filtro de cargo da programacao.
 async function resolveTeamSnapshot(client, { operationType, regionalId, baseId, roleIds = null }) {
+	// rot_users.city_id referencia o legado rot_cities(id) (text), NAO
+	// regional_cidades(id) (uuid) — bug real visto em producao ("operator
+	// does not exist: uuid = text"). O vinculo entre as duas so existe via
+	// regional_cidades.legacy_document_id = rot_cities.id, mesma convencao
+	// documentada na migration 038 pra regional_id.
 	const { rows: users } = await client.query(
 		`select u.id, u.name, r.name as role_name, reg.nome as regional_name, bc.nome as base_name
 		 from rot_users u
 		 join rot_roles r on r.id = u.role_id
 		 left join regionais reg on reg.id = u.regional_id
-		 left join regional_cidades bc on bc.id = u.city_id
+		 left join regional_cidades bc on bc.legacy_document_id = u.city_id
 		 where u.status = 'ativo'
 		   and u.regional_id = $1
-		   and ($2::uuid is null or u.city_id = $2)
+		   and ($2::uuid is null or bc.id = $2)
 		   and (
 		     not exists (select 1 from rot_user_operation_scopes s where s.user_id = u.id)
 		     or exists (select 1 from rot_user_operation_scopes s where s.user_id = u.id and s.operation_type = $3)
