@@ -628,7 +628,7 @@ export default function FinanceiroEquipePage({ canManage = false }) {
 		const pageHeight = pdf.internal.pageSize.getHeight();
 		const margin = 38;
 		const tree = buildEquipeTree(config, setores, colaboradores);
-		const logo = await loadImageDataUrl("/sempre-logo-documento.png");
+		const logo = await loadImageDataUrl("/sempre-logo-documento.webp");
 		if (logo) {
 			const logoSize = fitImageInsideBox(logo, 118, 42);
 			pdf.addImage(

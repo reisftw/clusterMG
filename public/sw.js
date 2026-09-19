@@ -22,9 +22,9 @@ const APP_SHELL = [
 	"/apple-touch-icon.png",
 	"/favicon-64.png",
 	"/cluster-mg.png",
-	"/melz-logo.png",
-	"/retorninho-loader.png",
-	"/retorninho-grinch.png",
+	"/melz-logo.webp",
+	"/retorninho-loader.webp",
+	"/retorninho-grinch.webp",
 ];
 
 function parsePushPayload(event) {

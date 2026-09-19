@@ -356,7 +356,7 @@ function BrandPanel() {
 					</div>
 				))}
 				<img
-					src="/retorninho-financeiro.png"
+					src="/retorninho-financeiro.webp"
 					alt="Retorninho com calculadora"
 					className="finan-login-character"
 				/>

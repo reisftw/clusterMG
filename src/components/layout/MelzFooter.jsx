@@ -26,7 +26,7 @@ const MelzFooter = ({ className = "", variant = "default" }) => {
 				className="group relative inline-flex items-center"
 			>
 				<img
-					src="/melz-logo.png"
+					src="/melz-logo.webp"
 					alt="Melz Tech"
 					loading="lazy"
 					decoding="async"

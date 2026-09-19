@@ -476,7 +476,7 @@ const TabEquipServiço = () => {
 				Outros: 0,
 			};
 			const withdrawalUnitCost = parseMoneyInput(withdrawalCost);
-			const logoBase64 = await loadImageBase64("/brasil-tecpar-logo.png");
+			const logoBase64 = await loadImageBase64("/brasil-tecpar-logo.webp");
 			const logoImageId = logoBase64
 				? wb.addImage({ base64: logoBase64, extension: "png" })
 				: null;
