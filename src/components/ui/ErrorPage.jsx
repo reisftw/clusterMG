@@ -177,7 +177,7 @@ const ErrorPage = ({ code = "404", extraActions = null }) => {
 
 					<div className="relative hidden min-h-0 self-stretch sm:block">
 						<img
-							src="/retorninho-pc.png"
+							src="/retorninho-pc.webp"
 							alt="Retorninho trabalhando no computador"
 							className="absolute bottom-0 right-[-16vw] max-h-full w-[128%] max-w-none object-contain sm:right-[-10vw] sm:w-[104%] lg:right-[-12vw] lg:w-[116%] xl:right-[-11vw] xl:w-[118%]"
 						/>

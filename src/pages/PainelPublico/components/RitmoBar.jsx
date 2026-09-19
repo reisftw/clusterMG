@@ -52,7 +52,7 @@
 						<div className="ritmo-retorninho-glow" />
 						<img
 							className="ritmo-retorninho-img"
-							src="/retorninho-triste.png"
+							src="/retorninho-triste.webp"
 							alt="Retorninho triste pedindo uma reacao do time"
 						/>
 					</div>

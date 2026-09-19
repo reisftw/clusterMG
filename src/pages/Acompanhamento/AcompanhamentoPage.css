@@ -2546,7 +2546,7 @@
 	width: clamp(76px, 8.5vw, 140px);
 	height: clamp(76px, 8.5vw, 140px);
 	pointer-events: none;
-	background: url("/retorninho-xmas-gift.png") right bottom / contain no-repeat;
+	background: url("/retorninho-xmas-gift.webp") right bottom / contain no-repeat;
 	filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.32));
 	opacity: 0.74;
 	transform: none;
@@ -2558,7 +2558,7 @@
 	bottom: -16px;
 	width: clamp(110px, 13vw, 205px);
 	height: clamp(88px, 10vw, 160px);
-	background-image: url("/retorninho-xmas-tree.png");
+	background-image: url("/retorninho-xmas-tree.webp");
 	opacity: 0.62;
 }
 
@@ -3141,17 +3141,17 @@
 
 .acomp-festive-page.is-christmas .acomp-tecnicos-panel::after,
 .acomp-festive-page.is-christmas .acomp-delivery-hours-panel::after {
-	background-image: url("/retorninho-xmas-list.png");
+	background-image: url("/retorninho-xmas-list.webp");
 }
 
 .acomp-festive-page.is-christmas .acomp-agenda-panel::after,
 .acomp-festive-page.is-christmas .acomp-fines-panel::after,
 .acomp-festive-page.is-christmas .acomp-weekly-production-panel::after {
-	background-image: url("/retorninho-xmas-gift.png");
+	background-image: url("/retorninho-xmas-gift.webp");
 }
 
 .acomp-festive-page.is-christmas .acomp-recent-deliveries-panel::after {
-	background-image: url("/retorninho-xmas-gift.png");
+	background-image: url("/retorninho-xmas-gift.webp");
 }
 
 .acomp-festive-page.is-christmas .acomp-tecnicos-panel,
@@ -3189,7 +3189,7 @@
 	width: clamp(72px, 8vw, 150px);
 	height: clamp(50px, 6vw, 104px);
 	pointer-events: none;
-	background: url("/retorninho-xmas-tree.png") right bottom / contain no-repeat;
+	background: url("/retorninho-xmas-tree.webp") right bottom / contain no-repeat;
 	filter: drop-shadow(0 12px 12px rgba(0, 0, 0, 0.28));
 	opacity: 0.78;
 	transform: none;
@@ -3207,7 +3207,7 @@
 .acomp-festive-page.is-christmas .acomp-regionais-panel::after {
 	right: -46px;
 	bottom: -34px;
-	background-image: url("/retorninho-xmas-gift.png");
+	background-image: url("/retorninho-xmas-gift.webp");
 	opacity: 0.24;
 }
 
@@ -3216,7 +3216,7 @@
 	bottom: -54px;
 	width: clamp(130px, 13vw, 240px);
 	height: clamp(130px, 13vw, 240px);
-	background-image: url("/retorninho-xmas-gift.png");
+	background-image: url("/retorninho-xmas-gift.webp");
 	opacity: 0.28;
 }
 
@@ -3225,7 +3225,7 @@
 	bottom: -52px;
 	width: clamp(150px, 14vw, 250px);
 	height: clamp(100px, 10vw, 180px);
-	background-image: url("/retorninho-xmas-sleigh.png");
+	background-image: url("/retorninho-xmas-sleigh.webp");
 	opacity: 0.24;
 }
 
@@ -3426,7 +3426,7 @@
 	bottom: clamp(38px, 7vh, 90px);
 	width: clamp(180px, 22vw, 380px);
 	aspect-ratio: 1;
-	background-image: url("/themes/september7/brazil-map-flag-v2.png");
+	background-image: url("/themes/september7/brazil-map-flag-v2.webp");
 }
 
 .acomp-september-watermark.is-cathedral {

@@ -453,7 +453,7 @@ const LoginForm = () => {
 					</div>
 
 					<img
-						src="/retorninho-cel.png"
+						src="/retorninho-cel.webp"
 						alt="Retorninho com celular"
 						className="pointer-events-none absolute bottom-28 right-14 z-10 w-[42vw] max-w-[560px] object-contain drop-shadow-[0_34px_58px_rgba(0,37,118,0.38)] xl:right-28"
 					/>
