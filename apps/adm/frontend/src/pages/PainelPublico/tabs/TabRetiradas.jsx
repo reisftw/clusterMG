@@ -1186,7 +1186,7 @@ export default function TabRetiradas({
 								comeca a virar esse placar.
 							</p>
 						</div>
-						<img src="/retorninho-triste.png" alt="" loading="lazy" />
+						<img src="/retorninho-triste.webp" alt="" loading="lazy" />
 					</div>
 
 					<button type="button" className="retiradas-action-button">
