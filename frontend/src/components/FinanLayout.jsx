@@ -490,7 +490,7 @@ function FinanSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, 
 			<div className={`${collapsed ? "px-3" : "px-4"} border-b border-white/10 py-4`}>
 				<div className={collapsed ? "flex flex-col items-center gap-3" : ""}>
 					<img
-						src="/sidebar-logo.png"
+						src="/sidebar-logo.webp"
 						alt="Finan"
 						className={`${collapsed ? "w-10" : "w-16"} mx-auto h-auto max-w-full rounded-2xl object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.32)]`}
 					/>

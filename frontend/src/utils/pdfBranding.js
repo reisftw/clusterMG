@@ -1,4 +1,4 @@
-const CLUSTER_LOGO_URL = "/cluster-mg.png";
+const CLUSTER_LOGO_URL = "/cluster-mg.webp";
 
 let cachedClusterLogoDataUrl = "";
 

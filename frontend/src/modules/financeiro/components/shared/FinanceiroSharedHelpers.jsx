@@ -308,7 +308,7 @@ let cachedSempreLogoDataUrl = "";
 
 export async function getSempreLogoDataUrl() {
 	if (cachedSempreLogoDataUrl) return cachedSempreLogoDataUrl;
-	const response = await fetch("/sempre-logo-azul.png", {
+	const response = await fetch("/sempre-logo-azul.webp", {
 		cache: "force-cache",
 	});
 	if (!response.ok) return "";
