@@ -13,7 +13,7 @@ import {
 } from "../api/finanApi";
 import { FINAN_ROUTES } from "../routes";
 
-const AVATAR_SRC = "/financeirinho-avatar.png";
+const AVATAR_SRC = "/financeirinho-avatar.webp";
 const WELCOME_MESSAGE = {
 	id: "boas-vindas",
 	papel: "assistente",
