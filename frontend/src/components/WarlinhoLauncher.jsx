@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { enviarMensagemWarlinho, fetchWarlinhoConversa, fetchWarlinhoConversas } from "../api/rotApi";
 
-const AVATAR_SRC = "/warlinho-avatar.png";
+const AVATAR_SRC = "/warlinho-avatar.webp";
 const WELCOME_MESSAGE = {
 	id: "boas-vindas",
 	papel: "assistente",

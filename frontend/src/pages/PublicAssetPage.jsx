@@ -57,7 +57,7 @@ export default function PublicAssetPage() {
 		<main className="min-h-dvh bg-[linear-gradient(180deg,#061b38_0%,#0f3a69_55%,#eef3f8_55%,#eef3f8_100%)] px-4 py-6">
 			<div className="mx-auto max-w-lg">
 				<div className="mb-6 flex justify-center">
-					<img src="/rot-menu.png" alt="Operação" className="h-20 w-auto object-contain drop-shadow-2xl" />
+					<img src="/rot-menu.webp" alt="Operação" className="h-20 w-auto object-contain drop-shadow-2xl" />
 				</div>
 				<section className="overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
 					<div className="bg-slate-950 px-6 py-5 text-white">

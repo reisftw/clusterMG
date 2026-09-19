@@ -1,6 +1,6 @@
 import checklist from "../../../shared/aprChecklist.json";
 import { getAprPhoto } from "../api/aprApi";
-const LOGO_URL="/sempre-logo-documento.png";
+const LOGO_URL="/sempre-logo-documento.webp";
 const statusLabels={interromper:"INTERROMPER A ATIVIDADE",verificar:"VERIFICAR ANTES DE INICIAR",sem_impedimento_informado:"Sem impedimento informado"};
 const statusColors={interromper:[220,38,38],verificar:[217,119,6],sem_impedimento_informado:[5,150,105]};
 function save(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}

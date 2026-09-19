@@ -1,4 +1,4 @@
-const CLUSTER_LOGO_URL = "/sempre-logo-documento.png";
+const CLUSTER_LOGO_URL = "/sempre-logo-documento.webp";
 
 let cachedClusterLogoDataUrl = "";
 let cachedClusterLogoAspect = 0; // height / width da imagem real

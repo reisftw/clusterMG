@@ -222,7 +222,7 @@ export default function LoginScreen() {
 					<div className="absolute bottom-0 right-16 h-64 w-64 rounded-full bg-orange-400/20 blur-3xl" />
 
 					<div className="relative z-10">
-						<img src="/operacao-logo.png" alt="Operação Cluster MG" className="h-24 w-auto object-contain drop-shadow-lg xl:h-28" />
+						<img src="/operacao-logo.webp" alt="Operação Cluster MG" className="h-24 w-auto object-contain drop-shadow-lg xl:h-28" />
 					</div>
 
 					<div className="relative z-20 mt-28 max-w-xl xl:mt-32">
@@ -237,7 +237,7 @@ export default function LoginScreen() {
 					</div>
 
 					<img
-						src="/operacao-boneco.png"
+						src="/operacao-boneco.webp"
 						alt=""
 						className="pointer-events-none absolute bottom-14 right-10 z-10 w-[38vw] max-w-[520px] object-contain drop-shadow-[0_34px_58px_rgba(0,37,118,0.38)] xl:right-20"
 						onError={(event) => {
