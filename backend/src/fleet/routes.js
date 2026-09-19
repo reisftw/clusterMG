@@ -496,17 +496,21 @@ router.post("/:id/transfer", requireRotPermission(["rot.fleet.transfer", "rot.fl
 		if (toResponsibleId === vehicle.responsible_id) fail(400, "O veículo já está com este responsável.");
 		await assertResponsibleMatchesOperation(client, toResponsibleId, vehicle.operation_scope);
 
+		// A movimentacao precisa existir ANTES da leitura de KM que a
+		// referencia (rot_vehicle_odometer_readings.movement_id tem FK pra
+		// rot_vehicle_movements) — bug real pego em dry-run: inserir a
+		// leitura primeiro estoura FK violation.
 		const movementId = randomId("mov");
-		const reading = await recordOdometerReading(client, {
-			vehicleId: vehicle.id, km, userId: req.rotUser.id, origin: "TRANSFERENCIA_ENTREGA",
-			movementId, note, jumpConfirmed,
-		});
 		await client.query(
 			`insert into rot_vehicle_movements
 			 (id, vehicle_id, type, status, operation_scope, regional_id, from_responsible_id, to_responsible_id, km_out, note, created_by)
 			 values ($1,$2,'TRANSFERENCIA','PENDENTE',$3,$4,$5,$6,$7,$8,$9)`,
-			[movementId, vehicle.id, vehicle.operation_scope, vehicle.regional_id, vehicle.responsible_id, toResponsibleId, reading.km, note, req.rotUser.id],
+			[movementId, vehicle.id, vehicle.operation_scope, vehicle.regional_id, vehicle.responsible_id, toResponsibleId, Number(km), note, req.rotUser.id],
 		);
+		const reading = await recordOdometerReading(client, {
+			vehicleId: vehicle.id, km, userId: req.rotUser.id, origin: "TRANSFERENCIA_ENTREGA",
+			movementId, note, jumpConfirmed,
+		});
 		await closeOpenCustody(client, { vehicleId: vehicle.id, endedKm: reading.km, endMovementId: movementId });
 		await changeVehicleStatus(client, { vehicleId: vehicle.id, toStatus: "AGUARDANDO_RECEBIMENTO", reason: "Transferência iniciada", movementId, userId: req.rotUser.id, storePrevious: true });
 		await client.query("commit");
@@ -619,14 +623,14 @@ router.post("/:id/return-to-base", requireRotPermission(["rot.fleet.transfer", "
 		if (LOCKED_STATUSES.has(vehicle.status) || vehicle.status === "EM_MANUTENCAO") fail(409, "Este veículo não pode ser devolvido à base no status atual.");
 
 		const movementId = randomId("mov");
-		const reading = await recordOdometerReading(client, {
-			vehicleId: vehicle.id, km, userId: req.rotUser.id, origin: "DEVOLUCAO_BASE", movementId, note, jumpConfirmed,
-		});
 		await client.query(
 			`insert into rot_vehicle_movements (id, vehicle_id, type, status, operation_scope, regional_id, from_responsible_id, km_out, reason, note, created_by)
 			 values ($1,$2,'DEVOLUCAO_BASE','CONCLUIDO',$3,$4,$5,$6,$7,$8,$9)`,
-			[movementId, vehicle.id, vehicle.operation_scope, vehicle.regional_id, vehicle.responsible_id, reading.km, reason, note, req.rotUser.id],
+			[movementId, vehicle.id, vehicle.operation_scope, vehicle.regional_id, vehicle.responsible_id, Number(km), reason, note, req.rotUser.id],
 		);
+		const reading = await recordOdometerReading(client, {
+			vehicleId: vehicle.id, km, userId: req.rotUser.id, origin: "DEVOLUCAO_BASE", movementId, note, jumpConfirmed,
+		});
 		await closeOpenCustody(client, { vehicleId: vehicle.id, endedKm: reading.km, endMovementId: movementId });
 		await client.query("update rot_vehicles set responsible_id = null where id = $1", [vehicle.id]);
 		await changeVehicleStatus(client, { vehicleId: vehicle.id, toStatus: "DISPONIVEL_BASE", reason, movementId, userId: req.rotUser.id });
@@ -659,14 +663,14 @@ router.post("/:id/retrieve-from-base", requireRotPermission(["rot.fleet.transfer
 		await assertResponsibleMatchesOperation(client, responsibleId, vehicle.operation_scope);
 
 		const movementId = randomId("mov");
-		const reading = await recordOdometerReading(client, {
-			vehicleId: vehicle.id, km, userId: req.rotUser.id, origin: "RETIRADA_BASE", movementId, note, jumpConfirmed,
-		});
 		await client.query(
 			`insert into rot_vehicle_movements (id, vehicle_id, type, status, operation_scope, regional_id, to_responsible_id, km_out, km_in, note, created_by, confirmed_by, confirmed_at)
 			 values ($1,$2,'RETIRADA_BASE','CONCLUIDO',$3,$4,$5,$6,$6,$7,$8,$8,now())`,
-			[movementId, vehicle.id, vehicle.operation_scope, vehicle.regional_id, responsibleId, reading.km, note, req.rotUser.id],
+			[movementId, vehicle.id, vehicle.operation_scope, vehicle.regional_id, responsibleId, Number(km), note, req.rotUser.id],
 		);
+		const reading = await recordOdometerReading(client, {
+			vehicleId: vehicle.id, km, userId: req.rotUser.id, origin: "RETIRADA_BASE", movementId, note, jumpConfirmed,
+		});
 		await openCustody(client, {
 			vehicleId: vehicle.id, responsibleId, operationScope: vehicle.operation_scope, regionalId: vehicle.regional_id,
 			startedKm: reading.km, startMovementId: movementId,
