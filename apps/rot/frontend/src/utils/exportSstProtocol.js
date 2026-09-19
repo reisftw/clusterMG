@@ -1,6 +1,6 @@
 // Exportacao de protocolo SST em PDF/DOCX, 1 pagina, com o logo da
 // Sempre — mesmo padrao ja usado pra APR (src/utils/exportApr.js).
-const LOGO_URL = "/sempre-logo-documento.png";
+const LOGO_URL = "/sempre-logo-documento.webp";
 
 const TYPE_LABELS = {
 	quase_acidente: "Quase acidente",

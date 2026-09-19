@@ -2,7 +2,7 @@
 // (logo da Sempre, cabecalho, rodape) ja usado em exportApr.js e
 // exportSstProtocol.js. Reusa os DADOS JA CARREGADOS na pagina (mesmos
 // filtros/periodo/RBAC do backend), nao busca nada novo.
-const LOGO_URL = "/sempre-logo-documento.png";
+const LOGO_URL = "/sempre-logo-documento.webp";
 
 function save(blob, name) {
 	const url = URL.createObjectURL(blob);

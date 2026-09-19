@@ -56,7 +56,7 @@ export default function PublicQrPage() {
 		<div className="min-h-screen bg-slate-100 px-5 py-10 font-sans">
 			<div className="mx-auto max-w-[450px] text-center">
 				<header className="mb-8">
-					<img src="/rot-menu.png" alt="Operação" className="mx-auto h-16 w-16 rounded-2xl object-contain" />
+					<img src="/rot-menu.webp" alt="Operação" className="mx-auto h-16 w-16 rounded-2xl object-contain" />
 					<p className="m-0 mt-3 text-xs font-black uppercase tracking-[3px] text-orange-500">Operação</p>
 					<h1 className="mt-2.5 text-[22px] font-black uppercase text-slate-900">{qrcode.title}</h1>
 					<div className="mx-auto my-4 h-1 w-10 bg-slate-900" />
