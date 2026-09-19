@@ -406,7 +406,7 @@ export default function TotemInsumosPage() {
 					</div>
 					<div className="relative hidden min-h-[520px] items-center justify-center lg:flex">
 						<div className="absolute inset-10 rounded-full bg-blue-500/10 blur-3xl" />
-						<img src="/retorninho-adm.png" alt="" className="relative max-h-[560px] object-contain drop-shadow-2xl" />
+						<img src="/retorninho-adm.webp" alt="" className="relative max-h-[560px] object-contain drop-shadow-2xl" />
 					</div>
 				</section>
 			) : null}

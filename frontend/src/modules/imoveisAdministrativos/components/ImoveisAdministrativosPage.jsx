@@ -2188,7 +2188,7 @@ function ImovelHistoricoTab(props) {
 }
 
 
-const SEMPRE_LOGO_URL = "/sempre-logo-documento.png";
+const SEMPRE_LOGO_URL = "/sempre-logo-documento.webp";
 let cachedSempreLogoDataUrl = "";
 
 async function imageAssetToDataUrl(url) {

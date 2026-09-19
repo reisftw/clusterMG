@@ -1043,7 +1043,7 @@ function MetaStatusVisual({ status }) {
 		return (
 			<img
 				className="acomp-meta-retorninho"
-				src="/retorninho-loader.png"
+				src="/retorninho-loader.webp"
 				alt=""
 				aria-hidden="true"
 			/>
@@ -1419,7 +1419,7 @@ function FestivePreview({ festive }) {
 				</small>
 			</div>
 			{theme === "september7" ? (
-				<img src="/themes/september7/retorninho-selecao.png" alt="" aria-hidden="true" />
+				<img src="/themes/september7/retorninho-selecao.webp" alt="" aria-hidden="true" />
 			) : null}
 		</div>
 	);
@@ -1677,14 +1677,14 @@ const SPOTLIGHT_COPY = {
 			titleWithData: (item) => `${item.label} lidera`,
 			emptyTitle: "Aguardando ajudantes",
 			helper: "agendamento(s) monitorados",
-			image: "/retorninho-xmas-list.png",
+			image: "/retorninho-xmas-list.webp",
 		},
 		september7: {
 			eyebrow: "Independência em operação",
 			titleWithData: (item) => `${item.label} puxa a tropa`,
 			emptyTitle: "Brasil conectado",
 			helper: "agendamento(s) na rota patriótica",
-			image: "/themes/september7/retorninho-ind-v2.png",
+			image: "/themes/september7/retorninho-ind-v2.webp",
 		},
 	},
 	cidades: {
@@ -1702,14 +1702,14 @@ const SPOTLIGHT_COPY = {
 			titleWithData: (item) => `${item.label} em foco`,
 			emptyTitle: "Oficina tranquila",
 			helper: "O.S abertas",
-			image: "/retorninho-xmas-tree.png",
+			image: "/retorninho-xmas-tree.webp",
 		},
 		september7: {
 			eyebrow: "Mapa do Brasil em campo",
 			titleWithData: (item) => `${item.label} no radar`,
 			emptyTitle: "Território em ordem",
 			helper: "O.S abertas no mapa",
-			image: "/themes/september7/brazil-map-flag-v2.png",
+			image: "/themes/september7/brazil-map-flag-v2.webp",
 		},
 	},
 	match: {
@@ -1720,21 +1720,21 @@ const SPOTLIGHT_COPY = {
 			titleWithData: () => "Matches prontos para aproveitar",
 			emptyTitle: "Sem match no momento",
 			helper: "serviços próximos de retiradas",
-			image: "/retorninho-loader.png",
+			image: "/retorninho-loader.webp",
 		},
 		christmas: {
 			eyebrow: "Presentes de rota",
 			titleWithData: () => "Rotas com presentes",
 			emptyTitle: "Sem presentes na rota",
 			helper: "serviços próximos",
-			image: "/retorninho-xmas-sleigh.png",
+			image: "/retorninho-xmas-sleigh.webp",
 		},
 		september7: {
 			eyebrow: "Rotas da independência",
 			titleWithData: () => "Rotas prontas para conectar",
 			emptyTitle: "Sem rota em marcha",
 			helper: "serviços próximos para otimizar",
-			image: "/themes/september7/retorninho-ind-v2.png",
+			image: "/themes/september7/retorninho-ind-v2.webp",
 		},
 	},
 };
@@ -2108,14 +2108,14 @@ function FestiveOverlay({ config, flightKey, grinchPeek }) {
 					<img
 						key={`sleigh-${flightKey}`}
 						className="acomp-sleigh-flight"
-						src="/retorninho-xmas-sleigh.png"
+						src="/retorninho-xmas-sleigh.webp"
 						alt=""
 					/>
 				) : theme === "september7" ? (
 					<img
 						key={`september-${flightKey}`}
 						className="acomp-september-flight"
-						src="/themes/september7/retorninho-ind-v2.png"
+						src="/themes/september7/retorninho-ind-v2.webp"
 						alt=""
 					/>
 				) : (
@@ -2126,7 +2126,7 @@ function FestiveOverlay({ config, flightKey, grinchPeek }) {
 				<img
 					key={`grinch-${grinchPeek.key}`}
 					className={`acomp-grinch-peeker is-${grinchPeek.side}`}
-					src="/retorninho-grinch.png"
+					src="/retorninho-grinch.webp"
 					alt=""
 					style={{ "--grinch-duration": `${grinchPeek.durationSeconds}s` }}
 				/>
@@ -2426,10 +2426,10 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 	const isChristmas = festiveTheme === "christmas";
 	const isSeptember7 = festiveTheme === "september7";
 	const imageSrc = isChristmas
-		? "/retorninho-xmas-sleigh.png"
+		? "/retorninho-xmas-sleigh.webp"
 		: isSeptember7
-			? "/themes/september7/retorninho-selecao.png"
-			: "/retorninho-esteira.png";
+			? "/themes/september7/retorninho-selecao.webp"
+			: "/retorninho-esteira.webp";
 
 	return (
 		<>

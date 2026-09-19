@@ -1843,7 +1843,7 @@ export default function DevolucaoPage() {
 
 							<div className="mt-5 flex flex-wrap items-center gap-4">
 								<img
-									src="/brasil-tecpar-logo.png"
+									src="/brasil-tecpar-logo.webp"
 									alt="Brasil TecPar"
 									className="h-12 w-auto shrink-0"
 								/>

@@ -29,7 +29,7 @@ export default function RetorninhoLoader({
 		<div className={wrapperClass} role="status" aria-live="polite">
 			<div className="retorninho-loader__stage" aria-hidden="true">
 				<div className="retorninho-loader__halo" />
-				<img src="/retorninho-loader.png" alt="" className={imageClass} />
+				<img src="/retorninho-loader.webp" alt="" className={imageClass} />
 			</div>
 
 			{title ? <div className="retorninho-loader__title">{title}</div> : null}
