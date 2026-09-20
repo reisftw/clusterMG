@@ -1,6 +1,5 @@
 const express = require("express");
 const crypto = require("crypto");
-const db = require("./db");
 const documents = require("./documents");
 const imoveisRepository = require("./imoveisRepository");
 const documentosService = require("./documentos/services/documentosService");
@@ -213,10 +212,6 @@ function dataFromRows(rows = []) {
 		id: row.documentId || row.document_id || row.id,
 		...(row.data || {}),
 	}));
-}
-
-function isLowStock(item = {}) {
-	return Number(item.estoque_atual || 0) <= Number(item.estoque_minimo || 0);
 }
 
 function normalizeStatus(value) {

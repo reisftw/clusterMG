@@ -2,7 +2,6 @@ const express = require("express");
 const multer = require("multer");
 const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
-const fsSync = require("node:fs");
 const path = require("node:path");
 const archiver = require("archiver");
 const drive = require("./documentos/services/googleDriveService");

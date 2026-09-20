@@ -353,11 +353,6 @@ function EmpresaRegionaisSummary({ empresa, className = "" }) {
 	);
 }
 
-function countTecnicosByArea(tecnicos = [], area) {
-	return (Array.isArray(tecnicos) ? tecnicos : []).filter(
-		(tecnico) => normalizeOperationalArea(tecnico.areaOperacional) === area,
-	).length;
-}
 
 function emptyPessoa() {
 	return { uid: "", nome: "", telefone: "", email: "" };

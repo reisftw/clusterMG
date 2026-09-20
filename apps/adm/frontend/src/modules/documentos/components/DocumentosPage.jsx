@@ -137,10 +137,6 @@ function isInvoiceFile(file) {
 	return String(file?.categoria || "").toLowerCase() === "nota_fiscal";
 }
 
-function countInvoiceFiles(submission) {
-	return (submission?.files || []).filter(isInvoiceFile).length;
-}
-
 function getInvoiceRows(submissions = []) {
 	return submissions.flatMap((submission) =>
 		(submission.files || [])

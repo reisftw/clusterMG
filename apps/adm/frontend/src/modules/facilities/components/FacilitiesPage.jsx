@@ -1223,7 +1223,10 @@ function PatrimonyInventoryPanel({ standaloneInventory = false }) {
 	const [modalOpen, setModalOpen] = useState(false);
 	const [selectedAsset, setSelectedAsset] = useState(null);
 	const [editingAsset, setEditingAsset] = useState(null);
-	const [selectedInventory, setSelectedInventory] = useState(null);
+	// selectedInventory nao e lido em nenhum lugar (so o setter e usado, pra
+	// marcar o item apos salvar/selecionar) — renomeado com _ pra nao
+	// disparar no-unused-vars sem apagar a logica que usa o setter.
+	const [_selectedInventory, setSelectedInventory] = useState(null);
 	const [inventoryDraft, setInventoryDraft] = useState(null);
 	const [saving, setSaving] = useState(false);
 	const [savingConfig, setSavingConfig] = useState(false);
@@ -1243,9 +1246,6 @@ function PatrimonyInventoryPanel({ standaloneInventory = false }) {
 		motivo: "",
 	});
 
-	const ativosEmManutencao = assets.filter((item) =>
-		["em manutenção", "em_manutencao"].includes(String(item.status || "").toLowerCase()),
-	).length;
 	const ativosComQr = assets.filter((item) => item.qrToken).length;
 	const debouncedAssetQuery = useDebouncedValue(assetQuery, 250);
 	const enrichedAssets = useMemo(() => assets.map((asset) => ({
@@ -3200,15 +3200,6 @@ function AccessKeysPanel() {
 		form.environmentId,
 		form.locationDescription,
 	].filter(Boolean);
-	const statusOptions = [
-		{ value: "DISPONIVEL", label: "Disponível" },
-		{ value: "EM_POSSE", label: "Em posse" },
-		{ value: "ATRASADA", label: "Atrasada" },
-		{ value: "PERDIDA", label: "Perdida" },
-		{ value: "BLOQUEADA", label: "Bloqueada" },
-		{ value: "INATIVA", label: "Inativa" },
-	];
-
 	return (
 		<section className="space-y-5">
 			<header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -5184,9 +5175,6 @@ function SuppliersContractsPanel() {
 	const update = (setter) => (field, value) => setter((current) => ({ ...current, [field]: value }));
 	const updateSupplier = update(setSupplierForm);
 	const updateContract = update(setContractForm);
-	const updateDocument = update(setDocumentForm);
-	const updateAdjustment = update(setAdjustmentForm);
-	const updateEvaluation = update(setEvaluationForm);
 	const withSave = async (action, fallback) => {
 		setSaving(true); setError("");
 		try { await action(); setModal(""); await load(); } catch (err) { setError(err?.message || fallback); } finally { setSaving(false); }
@@ -6383,7 +6371,9 @@ function ConsumptionPanel() {
 	const [error, setError] = useState("");
 	const [items, setItems] = useState([]);
 	const [modal, setModal] = useState("");
-	const [preview, setPreview] = useState([]);
+	// preview nunca e lido (setPreview so reseta pra []) — renomeado com _
+	// pra preservar o reset sem apagar logica.
+	const [_preview, setPreview] = useState([]);
 	const [form, setForm] = useState({
 		categoria: "consumo",
 		imovelId: "",

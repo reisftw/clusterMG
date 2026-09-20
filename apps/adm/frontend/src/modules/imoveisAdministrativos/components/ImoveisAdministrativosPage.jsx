@@ -544,7 +544,9 @@ function useImoveisAdministrativosController(page) {
 	const [registros, setRegistros] = useState(null);
 	const [relatorio, setRelatorio] = useState(null);
 	const [dashboardRelatorio, setDashboardRelatorio] = useState(null);
-	const [dashboardDados, setDashboardDados] = useState(null);
+	// dashboardDados nao e lido em nenhum lugar (so o setter popula apos
+	// fetch) — renomeado com _ pra nao apagar a logica de fetch.
+	const [_dashboardDados, setDashboardDados] = useState(null);
 	const [filtroRelatorio, setFiltroRelatorio] = useState({
 		mes: CURRENT_MONTH,
 		ano: CURRENT_YEAR,
@@ -2209,12 +2211,6 @@ async function getSempreLogoDataUrl() {
 	return cachedSempreLogoDataUrl;
 }
 
-function dataUrlFormat(dataUrl = "") {
-	if (dataUrl.startsWith("data:image/jpeg")) return "JPEG";
-	if (dataUrl.startsWith("data:image/webp")) return "WEBP";
-	return "PNG";
-}
-
 async function addImoveisReportBranding(pdf) {
 	try {
 		const logo = await getSempreLogoDataUrl();
@@ -3295,7 +3291,6 @@ function ImoveisPageHeader({
 	setTab,
 	setRelatoriosModalOpen,
 	message,
-	localReport,
 }) {
 	return (
 		<>
@@ -3602,14 +3597,6 @@ export default function ImoveisAdministrativosPage({ page = "dashboard" }) {
 			/>
 		</div>
 	);
-}
-
-function normalizePlacas(value) {
-	if (Array.isArray(value)) return value;
-	return String(value || "")
-		.split(/[,;\n]/)
-		.map((item) => item.trim())
-		.filter(Boolean);
 }
 
 function renderCurrencyDateCell(row, key) {
