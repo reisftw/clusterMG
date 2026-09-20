@@ -5,7 +5,7 @@ Aplicacao React/Vite para a operacao de retiradas, usando backend proprio em VPS
 ## Stack atual
 
 - Frontend: React, Vite, Tailwind e lucide-react.
-- Backend: Node.js/Express em `/vps/api`.
+- Backend: Node.js/Express em `apps/retiradas/backend/api`.
 - Banco: PostgreSQL na VPS.
 - Hospedagem: Nginx em `https://retiradas.tech`.
 - Autenticacao: usuarios locais na tabela `app_users`.
@@ -32,7 +32,7 @@ VITE_DATA_BACKEND=vps
 
 ## VPS
 
-Os arquivos da API, SQL, backups e services ficam em `vps/`.
+Os arquivos da API, SQL, backups e services ficam em `apps/retiradas/backend/` (local). Na VPS, o caminho remoto de deploy continua `vps/` dentro de `/opt/retiradas/`.
 
 Principais comandos no servidor:
 

@@ -59,7 +59,7 @@ scp -r .\dist\* root@145.223.27.204:/var/www/retiradas/dist/
 API:
 
 ```powershell
-scp .\vps\api\src\app.js root@145.223.27.204:/opt/retiradas/vps/api/src/app.js
+scp .\apps\retiradas\backend\api\src\app.js root@145.223.27.204:/opt/retiradas/vps/api/src/app.js
 ```
 
 Servidor:
