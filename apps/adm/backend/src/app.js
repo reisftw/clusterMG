@@ -9,6 +9,7 @@ const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const db = require("./db");
 const apiStatus = require("./apiStatus");
+const healthRoutes = require("./health/routes");
 const databaseBackups = require("./databaseBackups");
 const documents = require("./documents");
 const agendamentosRepository = require("./agendamentosRepository");
@@ -2679,6 +2680,7 @@ function createApp() {
 	// acima, que e o painel tecnico autenticado com dados em Postgres.
 	app.use(prometheusMetrics.prometheusMiddleware);
 	app.get("/metrics", prometheusMetrics.metricsRoute);
+	app.use("/api/health", healthRoutes);
 	app.use(auditLog.captureAuditRequestContext);
 	app.get(
 		"/api/admin/metrics",

@@ -19,6 +19,15 @@ usuário. O `.service` já traz `ReadWritePaths` apontando só para esses dois
 diretórios e para `/tmp`; o restante do filesystem fica somente leitura
 para o processo (`ProtectSystem=strict`).
 
+## Health check
+
+`GET /api/health` (via nginx, `adm.retiradas.tech/api/health`, ou direto em
+`127.0.0.1:3301/api/health`) responde `200 {"ok":true,"service":"adm-api"}`
+sem autenticação e sem consultar o banco — só confirma que o processo HTTP
+está vivo (Etapa 8, Fase 5). Um deploy manual pode usar isso com `curl -fsS`,
+no mesmo padrão que o Retiradas já usa em produção. O status autenticado e
+mais detalhado (com banco) continua em `/api/admin/api-status`.
+
 ## Aplicar (manual, uma vez por servidor)
 
 ```bash
