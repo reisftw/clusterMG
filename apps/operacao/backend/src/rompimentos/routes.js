@@ -94,13 +94,15 @@ function hasMateriais(value) {
 	return Object.keys(normalizeMateriais(value)).length > 0;
 }
 
-async function hasConfirmedImage(client, rompimentoId) {
+const MAX_ROMPIMENTO_IMAGES = 10;
+
+async function countConfirmedImages(client, rompimentoId) {
 	const { rows } = await client.query(
 		`select count(*)::int as total from rot_image_attachments
 		 where entidade_tipo='ROMPIMENTO' and entidade_id=$1 and status='CONFIRMED' and removido_em is null`,
 		[rompimentoId],
 	);
-	return rows[0]?.total > 0;
+	return rows[0]?.total || 0;
 }
 
 function publicRompimento(row) {
@@ -200,24 +202,30 @@ router.post("/draft", requireRotPermission(["rot.rompimentos.view", "rot.rompime
 	}
 });
 
+// POST / cria a tratativa (rot_rompimentos.status='em_tratativa') com o
+// conjunto completo de campos, quando o chamador ja sabe tudo de antemao
+// (alternativa mais rica ao POST /draft, que so pede ticket+regional).
+// Nao pode marcar 'concluido' aqui: rompimentos anexam imagens via
+// /admin/attachments (presigned URL, rot_image_attachments), que exige um
+// entidade_id existente — ou seja, a linha precisa existir ANTES de
+// qualquer upload. A finalizacao (status='concluido', exigindo 1-10
+// imagens confirmadas) so acontece em PUT /:id, depois do upload.
 router.post("/", requireRotPermission(["rot.rompimentos.view", "rot.rompimentos.manage"]), async (req, res, next) => {
 	try {
 		const { regionalId, ticketNumber, cidade, pontoA, pontoB, materiais, outros, fibraTipo, fibraMetros } = req.body || {};
 		checkRegional(req, regionalId);
 		if (!validPoint(pontoA) || !validPoint(pontoB)) { res.status(400).json({ok:false,error:"Marque os pontos A e B com coordenadas válidas."}); return; }
 		if (!regionalId || !ticketNumber?.trim() || !cidade?.trim() || !fibraTipo?.trim() || !(Number(fibraMetros) > 0) || !hasMateriais(materiais)) {
-			res.status(400).json({ ok: false, error: "Preencha ticket, regional, cidade/local, ponto A, ponto B, fibra, metragem, materiais e pelo menos 1 imagem antes de finalizar." });
+			res.status(400).json({ ok: false, error: "Preencha ticket, regional, cidade/local, ponto A, ponto B, fibra, metragem e materiais antes de abrir a tratativa." });
 			return;
 		}
-		res.status(400).json({ ok: false, error: "Abra uma tratativa e anexe pelo menos 1 imagem antes de finalizar o rompimento." });
-		return;
 		const base = await resolveBase(regionalId, cidade);
 		const distancia = base && pontoA ? haversineKm(base.lat, base.lng, pontoA.lat, pontoA.lng) : null;
 
 		const id = randomId();
 		const { rows } = await db.query(
 			`insert into rot_rompimentos (id, ticket_number, status, regional_id, cliente_nome, cidade, ponto_a_lat, ponto_a_lng, ponto_b_lat, ponto_b_lng, distancia_base, materiais, outros, fibra_tipo, fibra_metros, created_by)
-			 values ($1,$2,'concluido',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) returning *`,
+			 values ($1,$2,'em_tratativa',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) returning *`,
 			[
 				id,
 				String(ticketNumber || "").trim(),
@@ -236,8 +244,9 @@ router.post("/", requireRotPermission(["rot.rompimentos.view", "rot.rompimentos.
 				req.rotUser.id,
 			],
 		);
-		await auditLog(req, { action: "create", entity: "rot_rompimentos", entityId: id, after: rows[0] });
-		res.status(201).json({ ok: true, rompimento: publicRompimento(rows[0]) });
+		const enriched = { ...rows[0], created_by_name: req.rotUser.name };
+		await auditLog(req, { action: "create_draft", entity: "rot_rompimentos", entityId: id, after: rows[0] });
+		res.status(201).json({ ok: true, rompimento: publicRompimento(enriched) });
 	} catch (error) {
 		next(error);
 	}
@@ -278,8 +287,13 @@ router.put("/:id", requireRotPermission(["rot.rompimentos.view", "rot.rompimento
 				res.status(400).json({ ok: false, error: "Marque os pontos A e B antes de finalizar." });
 				return;
 			}
-			if (!(await hasConfirmedImage(db, req.params.id))) {
+			const confirmedImages = await countConfirmedImages(db, req.params.id);
+			if (confirmedImages < 1) {
 				res.status(400).json({ ok: false, error: "Anexe pelo menos 1 imagem antes de finalizar o rompimento." });
+				return;
+			}
+			if (confirmedImages > MAX_ROMPIMENTO_IMAGES) {
+				res.status(400).json({ ok: false, error: `Máximo de ${MAX_ROMPIMENTO_IMAGES} imagens por rompimento.` });
 				return;
 			}
 		}
