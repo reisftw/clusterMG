@@ -1,0 +1,38 @@
+{
+	"name": "adm-frontend",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite --host 0.0.0.0 --port 5176",
+		"build": "vite build",
+		"preview": "vite preview --host 0.0.0.0 --port 4176"
+	},
+	"dependencies": {
+		"@headlessui/react": "^2.2.9",
+		"@sentry/react": "^10.71.0",
+		"@zxing/browser": "^0.2.0",
+		"chart.js": "^4.5.1",
+		"dompurify": "^3.4.13",
+		"exceljs": "3.10.0",
+		"jspdf": "^4.2.1",
+		"jspdf-autotable": "^5.0.7",
+		"lucide-react": "^0.577.0",
+		"qrcode": "^1.5.4",
+		"react": "^19.2.4",
+		"react-chartjs-2": "^5.3.1",
+		"react-dom": "^19.2.4",
+		"react-router-dom": "7.18.2",
+		"tesseract.js": "^7.0.0",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "^4.2.1",
+		"@vitejs/plugin-react": "^6.0.0",
+		"tailwindcss": "^4.2.1",
+		"vite": "^8.0.0"
+	},
+	"overrides": {
+		"uuid": "11.1.1"
+	}
+}

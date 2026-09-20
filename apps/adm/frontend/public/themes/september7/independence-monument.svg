@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="Monumento da Independencia">
+  <path d="M110 16 154 86h-28v84h-32V86H66z" fill="#ffdf00" opacity=".92"/>
+  <path d="M52 170h116l18 32H34z" fill="#35d07f" opacity=".9"/>
+  <path d="M110 16 154 86h-28v84h-32V86H66zM52 170h116l18 32H34z" stroke="#ffffff" stroke-width="8" stroke-linejoin="round" opacity=".72"/>
+  <circle cx="110" cy="106" r="18" fill="#002776"/>
+</svg>
