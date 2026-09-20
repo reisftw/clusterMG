@@ -43,6 +43,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { fetchRotMenuSettings } from "../api/rotApi";
 import { useRotAuth } from "../state/useRotAuth";
+import { getAppBuildInfo } from "../utils/appBuildInfo";
 import UserAvatar from "./UserAvatar";
 import AprOfflineSync from "./AprOfflineSync";
 import WarlinhoLauncher from "./WarlinhoLauncher";
@@ -379,6 +380,7 @@ function RotSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, on
 	const location = useLocation();
 	const navigate = useNavigate();
 	const activeLocation = `${location.pathname}${location.search}`;
+	const { environment, version } = getAppBuildInfo();
 
 	const visibleTree = useMemo(() => {
 		const operationItemKeys = resolveVisibleOperationItemKeys(user, menuConfig);
@@ -450,6 +452,7 @@ function RotSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, on
 					))}
 				</div>
 			</nav>
+			<BuildVersionBadge collapsed={collapsed} environment={environment} version={version} />
 			{mobile ? (
 				// No mobile, o cabecalho com avatar/Sair fica escondido
 				// (breakpoint sm:flex) — sem isso nao haveria como sair ou
@@ -479,6 +482,24 @@ function RotSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, on
 					</button>
 				</div>
 			) : null}
+		</div>
+	);
+}
+
+function BuildVersionBadge({ collapsed, environment, version }) {
+	const label = `v${version} · ${environment}`;
+	return (
+		<div className="border-t border-white/10 px-2.5 py-2">
+			<span
+				className={[
+					"mx-auto flex max-w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold text-slate-300",
+					collapsed ? "h-8 w-8 px-0" : "min-h-7",
+				].join(" ")}
+				title={`Versão ${version} · ${environment}`}
+				aria-label={`Versão ${version} · ${environment}`}
+			>
+				{collapsed ? "v" : label}
+			</span>
 		</div>
 	);
 }

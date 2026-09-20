@@ -23,6 +23,7 @@ import {
 	FINAN_WELCOME_MODAL_EVENT,
 	hasSeenFinanWelcomeModal,
 } from "../utils/finanWelcomeModalStorage";
+import { getAppBuildInfo } from "../utils/appBuildInfo";
 import { disableFinanPush, enableFinanPush, isPushSupported } from "../utils/pushNotifications";
 import {
 	fetchFinanBusca,
@@ -414,6 +415,7 @@ function FinanSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, 
 	const location = useLocation();
 	const navigate = useNavigate();
 	const pathname = location.pathname;
+	const { environment, version } = getAppBuildInfo();
 
 	const visibleSections = useMemo(() => filterSectionsByPermission(NAV_SECTIONS, user), [user]);
 	const visibleFlatItems = useMemo(() => flattenNavItems(visibleSections), [visibleSections]);
@@ -613,6 +615,7 @@ function FinanSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, 
 					);
 				})}
 			</nav>
+			<BuildVersionBadge collapsed={collapsed} environment={environment} version={version} />
 			{mobile ? (
 				// No mobile/PWA, o cabecalho com avatar/Sair fica escondido
 				// (breakpoint sm:flex) — sem isto, nao existia NENHUM jeito de
@@ -653,6 +656,24 @@ function FinanSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, 
 					</button>
 				</div>
 			) : null}
+		</div>
+	);
+}
+
+function BuildVersionBadge({ collapsed, environment, version }) {
+	const label = `v${version} · ${environment}`;
+	return (
+		<div className="border-t border-white/10 px-2.5 py-2">
+			<span
+				className={[
+					"mx-auto flex max-w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold text-slate-300",
+					collapsed ? "h-8 w-8 px-0" : "min-h-7",
+				].join(" ")}
+				title={`Versão ${version} · ${environment}`}
+				aria-label={`Versão ${version} · ${environment}`}
+			>
+				{collapsed ? "v" : label}
+			</span>
 		</div>
 	);
 }
