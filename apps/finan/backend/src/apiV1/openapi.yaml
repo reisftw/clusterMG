@@ -1,0 +1,197 @@
+openapi: 3.0.3
+info:
+  title: API interna do Finan (v1)
+  version: "1.0.0"
+  description: >-
+    API interna oficial do Finan (Roteiro #26, Fase 4A). Ainda em migração —
+    convive em paralelo com as rotas legadas /api/finan/* e /api/* (sem
+    prazo de descontinuação definido). Envelope de sucesso sempre
+    `{ ok: true, data, meta? }`; erro sempre `{ ok: false, error: { code,
+    message, details? } }`. Paginação (quando a rota lista dados) via
+    query params `page`/`pageSize`, com `meta.total`/`meta.totalPages`.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token de sessão do Finan (mesmo usado por /api/finan/*).
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: NOT_FOUND
+            message:
+              type: string
+            details:
+              nullable: true
+      required: [ok, error]
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 3
+  responses:
+    Unauthorized:
+      description: Sem token válido.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Forbidden:
+      description: Autenticado, mas sem a permissão necessária.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: Recurso não encontrado.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+paths:
+  /health:
+    get:
+      summary: Healthcheck público (sem autenticação)
+      security: []
+      tags: [Health]
+      responses:
+        "200":
+          description: API e Postgres respondendo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      service: { type: string, example: finan-api }
+                      postgres: { type: string, enum: [up, down] }
+                      timestamp: { type: string, format: date-time }
+        "503":
+          description: Postgres não respondeu.
+  /qualidade-dados:
+    get:
+      summary: Score de qualidade de dados e checagens individuais
+      tags: [Qualidade de Dados]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      score: { type: number, example: 92.4 }
+                      checks:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            titulo: { type: string }
+                            severidade: { type: string, enum: [atencao, critico] }
+                            total: { type: integer }
+                            comProblema: { type: integer }
+                            percentualOk: { type: number }
+                            link: { type: string }
+                            amostra: { type: array, items: { type: string } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /jobs:
+    get:
+      summary: Visão geral dos jobs automáticos (última execução, taxa de sucesso)
+      tags: [Central de Jobs]
+      responses:
+        "200":
+          description: OK
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /jobs/{jobKey}/execucoes:
+    get:
+      summary: Histórico paginado de execuções de um job
+      tags: [Central de Jobs]
+      parameters:
+        - name: jobKey
+          in: path
+          required: true
+          schema: { type: string, enum: [backup_database, calendario_alertas, import_orcamento] }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 200 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  data: { type: array, items: { type: object } }
+                  meta: { $ref: "#/components/schemas/PaginationMeta" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /jobs/{jobKey}/reprocessar:
+    post:
+      summary: Dispara manualmente um job reprocessável (backup ou alertas de calendário)
+      tags: [Central de Jobs]
+      parameters:
+        - name: jobKey
+          in: path
+          required: true
+          schema: { type: string, enum: [backup_database, calendario_alertas, import_orcamento] }
+      responses:
+        "200":
+          description: Disparado com sucesso.
+        "400":
+          description: Job não é reprocessável (ex. import_orcamento, que depende de upload).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /observabilidade/overview:
+    get:
+      summary: Painel técnico — uptime, latência, erros, tamanho do Postgres, backup, jobs
+      tags: [Observabilidade]
+      responses:
+        "200":
+          description: OK
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /observabilidade/metricas:
+    get:
+      summary: Série temporal de métricas de requisição (buckets por minuto)
+      tags: [Observabilidade]
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, default: 24, maximum: 168 }
+      responses:
+        "200":
+          description: OK
+        "403": { $ref: "#/components/responses/Forbidden" }
