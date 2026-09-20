@@ -1,5 +1,11 @@
 server {
-	server_name rot.retiradas.tech;
+	# Dominio canonico: operacao.retiradas.tech. rot.retiradas.tech (nome
+	# antigo) continua ativo como alias nesta VPS — nao mexer no
+	# certificado/DNS dele so por causa desta troca de exemplo. Quando a
+	# equipe decidir aposentar o alias de vez, o bloco HTTP abaixo passa a
+	# fazer 301 pra operacao.retiradas.tech em vez de redirecionar pra si
+	# mesmo (ver comentario no segundo server{} deste arquivo).
+	server_name operacao.retiradas.tech rot.retiradas.tech;
 
 	add_header Strict-Transport-Security "max-age=31536000" always;
 	add_header X-Content-Type-Options "nosniff" always;
@@ -55,7 +61,20 @@ server {
 
 server {
 	listen 80;
-	server_name rot.retiradas.tech;
+	server_name operacao.retiradas.tech rot.retiradas.tech;
 
-	return 301 https://rot.retiradas.tech$request_uri;
+	return 301 https://operacao.retiradas.tech$request_uri;
 }
+
+# Proposta futura (NAO aplicar nesta etapa): quando operacao.retiradas.tech
+# estiver validado em producao e a equipe decidir aposentar o alias, trocar
+# o server_name do bloco HTTPS acima pra so `operacao.retiradas.tech` e
+# adicionar um bloco dedicado assim, fazendo rot.retiradas.tech redirecionar
+# (301) pro dominio canonico em vez de servir o mesmo conteudo:
+#
+# server {
+# 	listen 443 ssl;
+# 	server_name rot.retiradas.tech;
+# 	# certificado de rot.retiradas.tech continua valido pra esse redirect
+# 	return 301 https://operacao.retiradas.tech$request_uri;
+# }

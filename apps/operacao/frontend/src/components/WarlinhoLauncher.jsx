@@ -1,6 +1,6 @@
 // Warlinho — bolinha flutuante (canto inferior direito, visível em
 // qualquer página da Operação) que abre um chat com IA real restrita aos
-// dados da Operação (ver apps/rot/backend/src/warlinho/). Mesmo padrão do
+// dados da Operação (ver apps/operacao/backend/src/warlinho/). Mesmo padrão do
 // FinanceirinhoLauncher.jsx do Finan (mesma IA/token, reaproveitados —
 // pedido explícito do usuário), sem os "insights proativos" (o Operação
 // ainda não tem essa infraestrutura de achados automáticos).

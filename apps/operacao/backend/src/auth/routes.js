@@ -437,7 +437,7 @@ router.post("/forgot-password", passwordResetRateLimit, validateBody(["username"
 					values ($1, $2, $3, now() + ($4 || ' minutes')::interval)`,
 					[randomId("reset"), user.id, tokenHash(token), RESET_TTL_MINUTES],
 				);
-				const resetUrl = `${process.env.ROT_PUBLIC_URL || "https://rot.retiradas.tech"}/login?reset=${encodeURIComponent(token)}`;
+				const resetUrl = `${process.env.ROT_PUBLIC_URL || "https://operacao.retiradas.tech"}/login?reset=${encodeURIComponent(token)}`;
 				await sendPasswordResetEmail({ to: user.email, name: user.name, resetUrl }).catch((error) => {
 					console.error("[rot-auth] falha ao enviar e-mail de reset:", error?.message || error);
 				});

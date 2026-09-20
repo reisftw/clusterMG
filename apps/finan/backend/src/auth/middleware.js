@@ -2,7 +2,7 @@ const crypto = require("node:crypto");
 const db = require("../db");
 
 // SEC-004: sessao do Finan passa a viajar em cookie HttpOnly, igual ao
-// padrao ja usado e revisado em apps/rot/backend/src/auth/middleware.js.
+// padrao ja usado e revisado em apps/operacao/backend/src/auth/middleware.js.
 // SameSite=Strict (em vez de um token CSRF separado) e suficiente aqui
 // porque o cookie so e enviado em requisicoes de mesmo site — o mesmo
 // raciocinio usado no cookie "operacao_session" do Operacao.
