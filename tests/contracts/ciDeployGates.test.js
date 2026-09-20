@@ -71,3 +71,32 @@ test("validate-finan, validate-adm e validate-operacao existem como jobs no work
 		assert.match(workflow, new RegExp(`^  ${jobName}:$`, "m"));
 	}
 });
+
+test("security audita dependencias de todos os apps do monorepo", () => {
+	const workflow = readWorkflow();
+	const jobBlock = extractJobBlock(workflow, "security");
+	const expectedProjects = [
+		"package-lock.json",
+		"apps/retiradas/backend/package-lock.json",
+		"apps/finan/frontend/package-lock.json",
+		"apps/finan/backend/package-lock.json",
+		"apps/adm/frontend/package-lock.json",
+		"apps/adm/backend/package-lock.json",
+		"apps/operacao/frontend/package-lock.json",
+		"apps/operacao/backend/package-lock.json",
+		"apps/retiradas/backend",
+		"apps/finan/frontend",
+		"apps/finan/backend",
+		"apps/adm/frontend",
+		"apps/adm/backend",
+		"apps/operacao/frontend",
+		"apps/operacao/backend",
+	];
+
+	for (const expectedProject of expectedProjects) {
+		assert.ok(
+			jobBlock.includes(expectedProject),
+			`security deveria cobrir "${expectedProject}" no cache/install/audit`,
+		);
+	}
+});

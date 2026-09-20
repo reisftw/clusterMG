@@ -41,29 +41,64 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apps/retiradas/backend/package-lock.json
+            apps/finan/frontend/package-lock.json
+            apps/finan/backend/package-lock.json
+            apps/adm/frontend/package-lock.json
+            apps/adm/backend/package-lock.json
+            apps/operacao/frontend/package-lock.json
+            apps/operacao/backend/package-lock.json
 
       - name: Install all dependencies
         run: |
           npm ci
           npm ci --prefix apps/retiradas/backend
+          npm ci --prefix apps/finan/frontend
+          npm ci --prefix apps/finan/backend
+          npm ci --prefix apps/adm/frontend
+          npm ci --prefix apps/adm/backend
+          npm ci --prefix apps/operacao/frontend
+          npm ci --prefix apps/operacao/backend
 
       - name: Audit dependencies for high and critical vulnerabilities
         run: |
-          for attempt in 1 2 3; do
-            if npm audit --audit-level=high 2>&1 | tee npm-audit.log; then
-              exit 0
+          audit_paths=(
+            "."
+            "apps/retiradas/backend"
+            "apps/finan/frontend"
+            "apps/finan/backend"
+            "apps/adm/frontend"
+            "apps/adm/backend"
+            "apps/operacao/frontend"
+            "apps/operacao/backend"
+          )
+
+          for audit_path in "${audit_paths[@]}"; do
+            echo "::group::npm audit ${audit_path}"
+            audit_succeeded=0
+            audit_log="/tmp/npm-audit-${audit_path//\//-}.log"
+
+            for attempt in 1 2 3; do
+              if (cd "$audit_path" && npm audit --audit-level=high) 2>&1 | tee "$audit_log"; then
+                audit_succeeded=1
+                break
+              fi
+
+              if grep -Eiq "503 Service Unavailable|Service Unavailable|audit endpoint returned an error" "$audit_log"; then
+                echo "npm audit registry endpoint unavailable for ${audit_path} on attempt ${attempt}/3."
+                sleep 10
+                continue
+              fi
+
+              exit 1
+            done
+
+            if [ "$audit_succeeded" -ne 1 ]; then
+              echo "npm audit did not complete for ${audit_path} after 3 attempts." >&2
+              exit 1
             fi
 
-            if grep -Eiq "503 Service Unavailable|Service Unavailable|audit endpoint returned an error" npm-audit.log; then
-              echo "npm audit registry endpoint unavailable on attempt ${attempt}/3."
-              sleep 10
-              continue
-            fi
-
-            exit 1
+            echo "::endgroup::"
           done
-
-          echo "::warning::npm audit skipped because the npm registry audit endpoint returned Service Unavailable after 3 attempts."
 
       - name: Run Semgrep security scan
         uses: semgrep/semgrep-action@v1
