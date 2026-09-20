@@ -1,10 +1,8 @@
-import { createRequire } from "node:module";
-import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const assert = require("node:assert/strict");
+const test = require("node:test");
 
-const require = createRequire(path.join(process.cwd(), "apps/rot/backend/package.json"));
-const middlewarePath = require.resolve("./src/auth/middleware.js");
-const dbPath = require.resolve("./src/db.js");
+const middlewarePath = require.resolve("./middleware.js");
+const dbPath = require.resolve("../db.js");
 
 const originalEnv = { ...process.env };
 
@@ -17,7 +15,7 @@ function loadMiddleware(dbQuery) {
 		loaded: true,
 		exports: { query: dbQuery },
 	};
-	return require("./src/auth/middleware.js");
+	return require("./middleware.js");
 }
 
 function reqWithToken(token) {
@@ -32,24 +30,18 @@ function reqWithCookie(token) {
 	};
 }
 
-describe("Operacao auth sessions", () => {
-	beforeEach(() => {
-		process.env = {
-			...originalEnv,
-			NODE_ENV: "test",
-			ROT_JWT_SECRET: "01234567890123456789012345678901",
-			ROT_JWT_TTL: "1h",
-		};
-	});
+test("revokes a server-side session on logout", async () => {
+	process.env = {
+		...originalEnv,
+		NODE_ENV: "test",
+		ROT_JWT_SECRET: "01234567890123456789012345678901",
+		ROT_JWT_TTL: "1h",
+		// Bearer e desabilitado por padrao (so cookie HttpOnly) — habilita
+		// aqui de proposito pra continuar cobrindo o transporte legado.
+		ROT_ALLOW_LEGACY_BEARER: "true",
+	};
 
-	afterEach(() => {
-		delete require.cache[middlewarePath];
-		delete require.cache[dbPath];
-		process.env = { ...originalEnv };
-		vi.restoreAllMocks();
-	});
-
-	it("revokes a server-side session on logout", async () => {
+	try {
 		const user = {
 			id: "user-1",
 			name: "Tecnico",
@@ -67,7 +59,7 @@ describe("Operacao auth sessions", () => {
 			mfa_enabled: true,
 		};
 		const sessions = [];
-		const dbQuery = vi.fn(async (sql, params = []) => {
+		async function dbQuery(sql, params = []) {
 			const text = String(sql).replace(/\s+/g, " ").toLowerCase();
 			if (text.includes("insert into rot_sessions")) {
 				sessions.push({
@@ -95,20 +87,22 @@ describe("Operacao auth sessions", () => {
 				return { rows: params[0] === user.id ? [user] : [] };
 			}
 			return { rows: [] };
-		});
+		}
 		const auth = loadMiddleware(dbQuery);
 
 		const token = await auth.signSession(user);
-		await expect(auth.findUserByBearer(reqWithToken(token))).resolves.toMatchObject({
-			id: user.id,
-		});
-		await expect(auth.findUserByBearer(reqWithCookie(token))).resolves.toMatchObject({
-			id: user.id,
-		});
+		const byBearer = await auth.findUserByBearer(reqWithToken(token));
+		assert.equal(byBearer.id, user.id);
+		const byCookie = await auth.findUserByBearer(reqWithCookie(token));
+		assert.equal(byCookie.id, user.id);
 
 		await auth.revokeRotSession(reqWithCookie(token));
 
-		await expect(auth.findUserByBearer(reqWithToken(token))).resolves.toBeNull();
-		await expect(auth.findUserByBearer(reqWithCookie(token))).resolves.toBeNull();
-	});
+		assert.equal(await auth.findUserByBearer(reqWithToken(token)), null);
+		assert.equal(await auth.findUserByBearer(reqWithCookie(token)), null);
+	} finally {
+		delete require.cache[middlewarePath];
+		delete require.cache[dbPath];
+		process.env = { ...originalEnv };
+	}
 });
