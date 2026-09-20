@@ -23,7 +23,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import MelzFooter from "../../components/layout/MelzFooter";
 import Spinner from "../../components/ui/Spinner";
-import { useAuthContext } from "../../context/AuthContext";
+import { useAuthContext } from "../../context/useAuthContext";
 import {
 	fetchUserProfile,
 	loginWithEmail,

@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import Spinner from "../../../components/ui/Spinner";
 import { ROLES } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { normalizeText } from "../../empresasTecnicos/services/empresasTecnicosService";
 import {
 	alterarStatusDocumento,

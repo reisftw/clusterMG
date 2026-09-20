@@ -30,7 +30,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import ModalShell from "../../../components/ui/ModalShell";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { addClusterLogo, addPdfImageContained } from "../../../utils/pdfBranding";
 import {
 	editarContratoImovel,

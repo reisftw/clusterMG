@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { addClusterLogo } from "../../../utils/pdfBranding";
 import {
 	atualizarMovimentacoesRelatorioBolsa,

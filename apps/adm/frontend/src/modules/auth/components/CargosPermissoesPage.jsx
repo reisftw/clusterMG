@@ -18,7 +18,7 @@ import {
 	hasPermission,
 	ROLES,
 } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	excluirCargoPermissoes,
 	listarCargosPermissoes,

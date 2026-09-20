@@ -39,7 +39,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { hasAnyPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { ROUTES } from "../../../router/routes";
 import { listarImoveis } from "../../imoveisAdministrativos/services/imoveisAdministrativosService";
 import {

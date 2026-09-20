@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import { useAuthContext } from "../../context/AuthContext";
-import { useLayoutMode } from "../../context/LayoutModeContext";
+import { useAuthContext } from "../../context/useAuthContext";
+import { useLayoutMode } from "../../context/useLayoutMode";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
 import WelcomeModal from "../../modules/auth/components/WelcomeModal";
 import {

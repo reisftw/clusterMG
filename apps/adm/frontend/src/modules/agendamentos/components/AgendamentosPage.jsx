@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { useColaboradores } from "../../colaboradores/hooks/useColaboradores";
 import { getConfig } from "../../ferramentas/services/ferramentasService";
 import { buscarRegionais } from "../../regionais/services/regionaisService";

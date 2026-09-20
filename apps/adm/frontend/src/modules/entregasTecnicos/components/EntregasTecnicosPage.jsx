@@ -16,7 +16,7 @@
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { addClusterLogo } from "../../../utils/pdfBranding";
 import { useRegionais } from "../../regionais/hooks/useRegionais";
 import {

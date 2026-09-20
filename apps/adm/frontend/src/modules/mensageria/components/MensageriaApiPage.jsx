@@ -12,7 +12,7 @@ import {
 import { useEffect, useId, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	buscarConfigMensageria,
 	buscarLogsDisconnectEvolutionMensageria,

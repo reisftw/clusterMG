@@ -1,9 +1,8 @@
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { LayoutModeContext } from "./layoutModeContextObject";
 
 const STORAGE_KEY = "dashboard-layout-mode";
 const MODERN_LAYOUT = "modern";
-
-const LayoutModeContext = createContext(null);
 
 export const LayoutModeProvider = ({ children }) => {
 	useEffect(() => {
@@ -26,12 +25,4 @@ export const LayoutModeProvider = ({ children }) => {
 			{children}
 		</LayoutModeContext.Provider>
 	);
-};
-
-export const useLayoutMode = () => {
-	const context = useContext(LayoutModeContext);
-	if (!context) {
-		throw new Error("useLayoutMode must be used within LayoutModeProvider");
-	}
-	return context;
 };

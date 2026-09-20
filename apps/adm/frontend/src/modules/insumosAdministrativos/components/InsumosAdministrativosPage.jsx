@@ -33,7 +33,7 @@ import { Bar, Doughnut } from "react-chartjs-2";
 import ModalShell from "../../../components/ui/ModalShell";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	canUseInsumosCategory,
 	getAllowedInsumosCategories,

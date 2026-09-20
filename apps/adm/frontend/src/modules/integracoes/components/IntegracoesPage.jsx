@@ -15,7 +15,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission, ROLES } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	obterConfigGoogleOAuthAdmin,
 	obterConfigOktaOAuthAdmin,

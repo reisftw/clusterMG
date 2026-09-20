@@ -11,7 +11,7 @@ import {
 import { useEffect, useId, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission, ROLES } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	obterPreferenciasNotificacoes,
 	salvarPreferenciasNotificacoes,

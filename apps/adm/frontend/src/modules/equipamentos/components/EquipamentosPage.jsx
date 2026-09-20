@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { TIPOS_EQUIPAMENTO, useEquipamentos } from "../hooks/useEquipamentos";
 import EquipamentoModal from "./EquipamentoModal";
 

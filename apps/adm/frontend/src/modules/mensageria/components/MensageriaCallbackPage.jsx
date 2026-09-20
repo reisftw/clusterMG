@@ -8,7 +8,7 @@
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	buscarCallbacksMensageria,
 	registrarCallbackMensageria,

@@ -10,7 +10,7 @@ import {
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import MelzFooter from "../../../components/layout/MelzFooter";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { ROUTES } from "../../../router/routes";
 import {
 	obterConfigAntiBot,

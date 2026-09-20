@@ -52,8 +52,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { getRoleLabel, hasAnyPermission } from "../../constants/roles";
-import { useAuthContext } from "../../context/AuthContext";
-import { useLayoutMode } from "../../context/LayoutModeContext";
+import { useAuthContext } from "../../context/useAuthContext";
+import { useLayoutMode } from "../../context/useLayoutMode";
 import { buscarEstatisticasAtendimento } from "../../modules/atendimento/services/atendimentoService";
 import { ROUTES } from "../../router/routes";
 import { obterContadoresNotificacoes } from "../../services/internalNotificationsService";

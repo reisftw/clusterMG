@@ -1,9 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ROLES } from "../constants/roles";
 import { useAuth } from "../modules/auth/hooks/useAuth";
 import { listarCargosAdmin } from "../modules/auth/services/authService";
+import { AuthContext } from "./authContextObject";
 
-export const AuthContext = createContext(null);
 const EMPTY_VIEW_AS_ROLES = [];
 
 export const AuthProvider = ({ children }) => {
@@ -99,11 +99,4 @@ export const AuthProvider = ({ children }) => {
 	);
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuthContext = () => {
-	const context = useContext(AuthContext);
-	if (!context)
-		throw new Error("useAuthContext must be used within AuthProvider");
-	return context;
 };

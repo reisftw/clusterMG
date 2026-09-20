@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import Spinner from "../components/ui/Spinner";
 import { hasAnyPermission } from "../constants/roles";
-import { useAuthContext } from "../context/AuthContext";
+import { useAuthContext } from "../context/useAuthContext";
 import { ROUTES } from "./routes";
 
 const ProtectedRoute = ({ children, requiredPermission }) => {

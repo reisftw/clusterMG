@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import UserAvatar from "../ui/UserAvatar";
 import { getRoleLabel } from "../../constants/roles";
-import { useAuthContext } from "../../context/AuthContext";
+import { useAuthContext } from "../../context/useAuthContext";
 import { atualizarAvatarPerfil } from "../../modules/auth/services/authService";
 import {
 	listarNotificacoesInternas,

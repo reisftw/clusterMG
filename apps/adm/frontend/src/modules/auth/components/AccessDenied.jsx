@@ -1,5 +1,5 @@
 import ErrorPage from "../../../components/ui/ErrorPage";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { ROUTES } from "../../../router/routes";
 
 const AccessDenied = () => {

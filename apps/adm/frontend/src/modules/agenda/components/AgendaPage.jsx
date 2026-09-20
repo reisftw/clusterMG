@@ -12,7 +12,7 @@ import {
 import { useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { useAgenda } from "../hooks/useAgenda";
 import AgendaModal from "./AgendaModal";
 

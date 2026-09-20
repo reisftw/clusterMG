@@ -9,7 +9,7 @@
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { registrarAtividade } from "../../../services/activityLogService";
 import { useDiarioEntries } from "../hooks/useDiarioEntries";
 import {

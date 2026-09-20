@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import {
 	ACERTO_TAB_ITEMS,
 	CADASTRO_TABS,

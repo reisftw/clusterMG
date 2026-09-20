@@ -1,9 +1,4 @@
-﻿import { createContext, useContext } from "react";
-
-const SystemContext = createContext({
-	sistema: "retiradas",
-	trocarSistema: () => {},
-});
+import { SystemContext } from "./systemContextObject";
 
 export const SystemProvider = ({ children }) => (
 	<SystemContext.Provider
@@ -15,5 +10,3 @@ export const SystemProvider = ({ children }) => (
 		{children}
 	</SystemContext.Provider>
 );
-
-export const useSystem = () => useContext(SystemContext);

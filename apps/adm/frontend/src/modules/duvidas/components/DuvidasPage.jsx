@@ -12,7 +12,7 @@ import { useId, useMemo, useState } from "react";
 import InternalStaticDataStatus from "../../../components/ui/InternalStaticDataStatus";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { useDuvidas } from "../hooks/useDuvidas";
 
 const TEAM_LABELS = {

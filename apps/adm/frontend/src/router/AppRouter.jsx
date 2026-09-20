@@ -45,7 +45,8 @@ import {
 import ErrorPage from "../components/ui/ErrorPage";
 import Spinner from "../components/ui/Spinner";
 import { hasAnyPermission } from "../constants/roles";
-import { AuthProvider, useAuthContext } from "../context/AuthContext";
+import { AuthProvider } from "../context/AuthContext";
+import { useAuthContext } from "../context/useAuthContext";
 import { LayoutModeProvider } from "../context/LayoutModeContext";
 import { SystemProvider } from "../context/SystemContext";
 import { ThemeProvider } from "../context/ThemeContext";

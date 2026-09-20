@@ -1,6 +1,6 @@
 ﻿import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { useId, useState } from "react";
-import { useAuthContext } from "../../../context/AuthContext";
+import { useAuthContext } from "../../../context/useAuthContext";
 import { atualizarPerfilVps, trocarSenha } from "../services/authService";
 
 const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
