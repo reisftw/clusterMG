@@ -1,0 +1,915 @@
+/*
+ * Fix de responsividade (celular): item de grid herda min-width:auto
+ * por padrao, e o conteudo com "truncate" (white-space:nowrap) da
+ * Tailwind tem largura minima igual ao texto INTEIRO sem quebrar —
+ * nome de tecnico, titulo de plantao etc. Isso forcava a coluna do
+ * grid (e a pagina inteira) a abrir scroll horizontal no celular,
+ * mesmo com "truncate" no elemento certo (visto em producao: prints do
+ * usuario mostrando texto cortado + scrollbar horizontal no
+ * Dashboard). Corrigir so ali nao bastava — o mesmo padrao de grid de
+ * cards se repete em quase toda tela administrativa (Usuarios,
+ * Atividades, Ausencias, Feriados, Chaves, Regionais, Cargos,
+ * Rompimentos, Turnos, Logs...), entao a correcao e global aqui em vez
+ * de en cada pagina. Grid sempre e usado neste app pra cards que devem
+ * encolher pra caber na coluna, entao forcar min-width:0 e seguro.
+ */
+.grid > * {
+	min-width: 0;
+}
+
+/*
+ * Modais administrativos (ModalShell) — entrada suave em vez de
+ * aparecer seco. Backdrop com fade, painel com fade+scale+subida leve.
+ */
+.rot-modal-backdrop {
+	animation: rot-modal-backdrop-enter 0.2s ease both;
+}
+
+.rot-modal-panel {
+	animation: rot-modal-panel-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes rot-modal-backdrop-enter {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes rot-modal-panel-enter {
+	from {
+		opacity: 0;
+		transform: translateY(14px) scale(0.97);
+	}
+}
+
+/*
+ * Cards administrativos (usuarios/cargos/integracoes/regionais) — leve
+ * elevacao no hover pra dar sensacao de superficie "viva", mesmo padrao
+ * sutil usado no card de login.
+ */
+.rot-card-hover {
+	transition:
+		transform 0.18s ease,
+		box-shadow 0.18s ease,
+		border-color 0.18s ease;
+}
+
+.rot-card-hover:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 12px 28px rgb(15 23 42 / 8%);
+	border-color: #bfdbfe;
+}
+
+/*
+ * Botoes de acao administrativos — feedback tatil no clique (scale-down)
+ * junto do hover, sem depender so de mudanca de cor.
+ */
+.rot-btn-tactile {
+	transition:
+		transform 0.12s ease,
+		box-shadow 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.rot-btn-tactile:active:not(:disabled) {
+	transform: scale(0.96);
+}
+
+.rot-input {
+	height: 2.75rem;
+	width: 100%;
+	border-radius: 0.75rem;
+	border: 1px solid #e2e8f0;
+	background: #ffffff;
+	padding: 0 1rem;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #0f172a;
+	outline: none;
+	transition:
+		border-color 0.16s ease,
+		box-shadow 0.16s ease,
+		background-color 0.16s ease;
+}
+
+.rot-input:focus {
+	border-color: #60a5fa;
+	box-shadow: 0 0 0 4px rgb(59 130 246 / 12%);
+}
+
+.rot-input::placeholder {
+	color: #94a3b8;
+}
+
+.rot-apr-primary-button {
+	background: #172554 !important;
+	border-color: #172554 !important;
+	color: #ffffff !important;
+	box-shadow: 0 10px 22px rgb(23 37 84 / 18%);
+}
+
+.rot-apr-primary-button:hover:not(:disabled) {
+	background: #1e3a8a !important;
+	border-color: #1e3a8a !important;
+}
+
+.rot-apr-primary-button svg,
+.rot-apr-primary-button span {
+	color: inherit;
+}
+
+/*
+ * Linhas de tabela administrativa — realce suave no hover.
+ */
+.rot-row-hover {
+	transition: background-color 0.15s ease;
+}
+
+.rot-row-hover:hover {
+	background-color: #f8fafc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.rot-modal-backdrop,
+	.rot-modal-panel,
+	.rot-card-hover,
+	.rot-btn-tactile,
+	.rot-row-hover {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+/*
+ * Menu lateral / shell administrativo — mesmo padrao estrutural de
+ * apps/finan/frontend/src/styles.css (.finan-nav-compact), prefixo
+ * "rot-" por ser app independente sem CSS compartilhado.
+ */
+.rot-nav-compact {
+	position: relative;
+	display: flex;
+	min-height: 38px;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	overflow: hidden;
+	border-radius: 12px;
+	padding: 8px 10px;
+	font-size: 0.82rem;
+	font-weight: 500;
+	line-height: 1.15;
+	text-align: left;
+	text-decoration: none;
+	transition:
+		background-color 0.2s ease,
+		color 0.2s ease,
+		box-shadow 0.2s ease;
+}
+
+.rot-nav-compact.nav-item-modern-active::before {
+	top: 7px;
+	bottom: 7px;
+}
+
+/*
+ * Tela de login do ROT — mesmo padrão visual de FinanLoginPage.jsx
+ * (Retiradas/Finan): painel com gradiente azul/laranja + mascote,
+ * card branco com o formulário. Prefixo "rot-login-" em vez de
+ * "finan-login-" (app independente, sem CSS compartilhado).
+ */
+.rot-login-screen {
+	display: grid;
+	width: 100%;
+	height: 100vh;
+	min-height: 640px;
+	grid-template-columns: minmax(0, 56fr) minmax(430px, 44fr);
+	overflow: hidden;
+	background: #f5f7fb;
+	color: #07152f;
+}
+
+.rot-login-showcase {
+	position: relative;
+	display: grid;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	min-width: 0;
+	overflow: hidden;
+	background:
+		radial-gradient(circle at 82% 18%, rgb(11 99 246 / 36%), transparent 28%),
+		radial-gradient(circle at 18% 76%, rgb(255 122 0 / 18%), transparent 24%),
+		linear-gradient(135deg, #061a3a 0%, #082653 42%, #063a85 72%, #065fe8 100%);
+	padding: clamp(24px, 3vw, 42px) clamp(34px, 4.2vw, 64px);
+	color: #ffffff;
+}
+
+.rot-login-showcase::before,
+.rot-login-showcase::after {
+	position: absolute;
+	content: "";
+	pointer-events: none;
+}
+
+.rot-login-showcase::before {
+	inset: 8% auto auto 56%;
+	width: 420px;
+	height: 420px;
+	border: 1px solid rgb(255 255 255 / 10%);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 4%);
+}
+
+.rot-login-showcase::after {
+	right: -90px;
+	bottom: -150px;
+	width: 360px;
+	height: 360px;
+	border-radius: 42px;
+	background: linear-gradient(135deg, rgb(255 149 0 / 24%), rgb(255 92 0 / 6%));
+	transform: rotate(18deg);
+}
+
+.rot-login-bg-line,
+.rot-login-bg-dot {
+	position: absolute;
+	pointer-events: none;
+}
+
+.rot-login-bg-line {
+	width: 260px;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgb(255 255 255 / 28%), transparent);
+	transform: rotate(-18deg);
+}
+
+.rot-login-bg-line.is-one {
+	top: 22%;
+	left: 48%;
+}
+
+.rot-login-bg-line.is-two {
+	right: 10%;
+	bottom: 26%;
+	transform: rotate(21deg);
+}
+
+.rot-login-bg-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	background: #ff9500;
+	box-shadow: 0 0 28px rgb(255 149 0 / 55%);
+}
+
+.rot-login-bg-dot.is-a {
+	top: 18%;
+	right: 20%;
+}
+
+.rot-login-bg-dot.is-b {
+	left: 12%;
+	bottom: 28%;
+	background: #7fb3ff;
+}
+
+.rot-login-brand,
+.rot-login-copy,
+.rot-login-character-wrap,
+.rot-login-institutional {
+	position: relative;
+	z-index: 2;
+}
+
+.rot-login-brand img {
+	width: clamp(150px, 13vw, 190px);
+	height: auto;
+	object-fit: contain;
+	filter: drop-shadow(0 14px 24px rgb(0 0 0 / 20%));
+}
+
+.rot-login-brand-operation img {
+	width: clamp(260px, 32vw, 520px);
+	max-width: min(48vw, 560px);
+}
+
+.rot-login-copy {
+	align-self: center;
+	max-width: min(52%, 520px);
+	margin-top: 0;
+}
+
+.rot-login-eyebrow {
+	display: block;
+	color: rgb(255 255 255 / 88%);
+	font-size: 0.8rem;
+	font-weight: 950;
+	letter-spacing: 0.34em;
+	text-transform: uppercase;
+}
+
+.rot-login-eyebrow-line {
+	width: 76px;
+	height: 4px;
+	margin: 14px 0 22px;
+	border-radius: 999px;
+	background: linear-gradient(90deg, #ff9500, #ff5c00);
+}
+
+.rot-login-copy h1 {
+	max-width: 520px;
+	margin: 0;
+	font-size: clamp(2.65rem, 4vw, 4.25rem);
+	font-weight: 950;
+	letter-spacing: 0;
+	line-height: 0.98;
+}
+
+.rot-login-copy h1 span {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	background: linear-gradient(90deg, #ffb03a 0%, #ff7a00 48%, #ff5c00 100%);
+	background-clip: text;
+	color: transparent;
+}
+
+.rot-login-copy p {
+	max-width: 440px;
+	margin: 18px 0 0;
+	color: rgb(255 255 255 / 78%);
+	font-size: clamp(0.95rem, 1.1vw, 1.12rem);
+	font-weight: 650;
+	line-height: 1.58;
+}
+
+.rot-login-character-wrap {
+	position: absolute;
+	right: clamp(6px, 2vw, 34px);
+	bottom: clamp(58px, 7vh, 84px);
+	width: clamp(330px, 32vw, 540px);
+	max-width: 50%;
+}
+
+.rot-login-character {
+	display: block;
+	width: 100%;
+	height: auto;
+	object-fit: contain;
+	filter: drop-shadow(0 25px 40px rgb(0 0 0 / 25%));
+	animation: rot-login-float 6.4s ease-in-out infinite;
+}
+
+.rot-login-institutional {
+	display: none;
+	margin-top: 22px;
+}
+
+.rot-login-institutional span {
+	display: block;
+	width: 68px;
+	height: 3px;
+	border-radius: 999px;
+	background: #ff7a00;
+}
+
+.rot-login-institutional p {
+	margin: 12px 0 0;
+	color: rgb(255 255 255 / 72%);
+	font-size: 0.72rem;
+	font-weight: 950;
+	letter-spacing: 0.24em;
+	line-height: 1.55;
+	text-transform: uppercase;
+}
+
+.rot-login-main {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background:
+		linear-gradient(135deg, transparent 0 58%, rgb(255 122 0 / 12%) 58% 64%, transparent 64%),
+		radial-gradient(circle at 8% 18%, rgb(0 87 231 / 18%), transparent 32%),
+		linear-gradient(145deg, #f5f8fe 0%, #d8e8ff 100%);
+	padding: clamp(18px, 3vw, 38px);
+}
+
+.rot-login-main::before {
+	position: absolute;
+	top: 12%;
+	right: -16%;
+	width: 56%;
+	height: 34%;
+	border-radius: 120px;
+	background: rgb(0 87 231 / 10%);
+	content: "";
+	transform: rotate(-18deg);
+}
+
+.rot-login-main::after {
+	position: absolute;
+	right: -18%;
+	bottom: 7%;
+	width: 54%;
+	height: 18%;
+	border-radius: 120px;
+	background: rgb(255 122 0 / 16%);
+	content: "";
+	transform: rotate(-24deg);
+}
+
+.rot-login-card {
+	position: relative;
+	z-index: 2;
+	width: min(560px, calc(100% - 20px));
+	border: 1px solid rgb(255 255 255 / 80%);
+	border-radius: 30px;
+	background: rgb(255 255 255 / 94%);
+	padding: clamp(26px, 3vw, 40px);
+	box-shadow: 0 25px 70px rgb(0 30 80 / 18%);
+	backdrop-filter: blur(20px);
+	animation: rot-login-enter 0.55s ease both;
+}
+
+.rot-login-mobile-logo {
+	display: none;
+	justify-content: center;
+	margin-bottom: 28px;
+}
+
+.rot-login-mobile-logo img {
+	height: 54px;
+	width: auto;
+	object-fit: contain;
+}
+
+.rot-login-title {
+	margin-top: 22px;
+	text-align: left;
+}
+
+.rot-login-product {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #07152f;
+}
+
+.rot-login-product img {
+	width: clamp(220px, 22vw, 300px);
+	height: auto;
+	object-fit: contain;
+}
+
+.rot-login-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	margin-top: -6px;
+	color: #64748b;
+	font-size: 0.9rem;
+	font-weight: 750;
+}
+
+.rot-login-row button {
+	border: 0;
+	background: transparent;
+	color: #2563eb;
+	cursor: pointer;
+	font-weight: 950;
+}
+
+.rot-login-row button:hover {
+	text-decoration: underline;
+}
+
+.rot-login-row button:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.rot-login-title h2 {
+	margin: 0;
+	color: #07152f;
+	font-size: clamp(1.7rem, 2.45vw, 2.1rem);
+	font-weight: 950;
+	letter-spacing: 0;
+	line-height: 1.14;
+}
+
+.rot-login-title p {
+	margin: 9px 0 0;
+	color: #67758c;
+	font-size: 0.98rem;
+	font-weight: 650;
+	line-height: 1.5;
+}
+
+.rot-login-form {
+	display: grid;
+	gap: 14px;
+	margin-top: 24px;
+}
+
+.rot-login-field {
+	display: block;
+	color: #0f172a;
+	font-size: 0.9rem;
+	font-weight: 950;
+}
+
+.rot-login-field > span {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.rot-login-input-icon {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	height: 56px;
+	align-items: center;
+	gap: 12px;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	background: #ffffff;
+	padding: 0 18px;
+	transition:
+		border-color 0.18s ease,
+		box-shadow 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.rot-login-input-icon > svg {
+	flex: 0 0 auto;
+	color: #55709a;
+}
+
+.rot-login-input-icon input {
+	height: 100%;
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	padding: 0;
+	outline: none;
+	color: #0f172a;
+	font-size: 1rem;
+	font-weight: 750;
+}
+
+.rot-login-input-icon button {
+	display: inline-flex;
+	width: 38px;
+	height: 38px;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+	color: #55709a;
+	cursor: pointer;
+}
+
+.rot-login-input-icon button:hover {
+	background: #eef5ff;
+	color: #075eea;
+}
+
+.rot-login-input-icon:focus-within {
+	border-color: #1769ff;
+	background: white;
+	box-shadow: 0 0 0 4px rgb(23 105 255 / 10%);
+}
+
+.rot-login-submit {
+	display: inline-flex;
+	min-height: 56px;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	border: 0;
+	border-radius: 16px;
+	background: linear-gradient(90deg, #ff9700 0%, #ff7a00 45%, #ff5000 100%);
+	color: white;
+	cursor: pointer;
+	box-shadow: 0 14px 32px rgb(255 112 0 / 28%);
+	font-size: 0.98rem;
+	font-weight: 950;
+	transition:
+		transform 0.18s ease,
+		box-shadow 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.rot-login-submit:hover:not(:disabled) {
+	box-shadow: 0 18px 38px rgb(255 112 0 / 34%);
+	transform: translateY(-1px);
+}
+
+.rot-login-submit:active:not(:disabled) {
+	transform: translateY(0) scale(0.995);
+}
+
+.rot-login-submit:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.rot-login-spinner {
+	width: 20px;
+	height: 20px;
+	border: 2px solid rgb(255 255 255 / 38%);
+	border-top-color: white;
+	border-radius: 999px;
+	animation: rot-login-spin 0.75s linear infinite;
+}
+
+.rot-login-secondary {
+	display: inline-flex;
+	min-height: 56px;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	border: 1px solid #dbe4ee;
+	border-radius: 16px;
+	background: white;
+	color: #2563eb;
+	cursor: pointer;
+	font-size: 0.98rem;
+	font-weight: 950;
+	transition:
+		transform 0.18s ease,
+		box-shadow 0.18s ease,
+		background-color 0.18s ease;
+}
+
+.rot-login-secondary:disabled {
+	cursor: wait;
+	opacity: 0.6;
+}
+
+.rot-mfa-panel {
+	border: 1px solid #bfdbfe;
+	border-radius: 18px;
+	background: #eff6ff;
+	padding: 16px;
+}
+
+.rot-mfa-panel > span {
+	display: inline-flex;
+	width: 44px;
+	height: 44px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 14px;
+	background: white;
+	color: #1d4ed8;
+	box-shadow: 0 10px 24px rgb(37 99 235 / 12%);
+}
+
+.rot-mfa-panel strong,
+.rot-mfa-panel p {
+	display: block;
+}
+
+.rot-mfa-panel strong {
+	margin-top: 12px;
+	color: #020617;
+	font-size: 1rem;
+	font-weight: 950;
+}
+
+.rot-mfa-panel p {
+	margin: 6px 0 0;
+	color: #1e40af;
+	font-size: 0.9rem;
+	font-weight: 750;
+}
+
+.rot-mfa-panel input {
+	width: 100%;
+	height: 56px;
+	margin-top: 12px;
+	border: 1px solid #bfdbfe;
+	border-radius: 16px;
+	background: white;
+	padding: 0 16px;
+	color: #020617;
+	font-size: 1.8rem;
+	font-weight: 950;
+	letter-spacing: 0.28em;
+	text-align: center;
+	outline: none;
+}
+
+.rot-login-google {
+	margin-top: 18px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+}
+
+/* Fix de responsividade (celular): o botao do Google Identity Services e
+ * renderizado com largura fixa em px via JS (renderButton width), calculada
+ * dinamicamente a partir deste container (ver LoginScreen.jsx). */
+#google-signin-button {
+	width: 100%;
+	max-width: 320px;
+}
+
+.rot-login-divider {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 10px;
+	color: #94a3b8;
+	font-size: 0.78rem;
+	font-weight: 850;
+	text-transform: uppercase;
+}
+
+.rot-login-divider span {
+	height: 1px;
+	flex: 1;
+	background: #e2e8f0;
+}
+
+.rot-login-trust {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 10px;
+	margin-top: 20px;
+	border-top: 1px solid #e2e8f0;
+	padding-top: 18px;
+	color: #55709a;
+	font-size: 0.8rem;
+	font-weight: 850;
+}
+
+.rot-login-trust div {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	text-align: center;
+}
+
+.rot-login-trust svg {
+	color: #3b82f6;
+}
+
+.rot-error {
+	display: flex;
+	align-items: flex-start;
+	gap: 9px;
+	margin-top: 0;
+	border: 1px solid #fecaca;
+	border-radius: 12px;
+	background: #fef2f2;
+	padding: 10px 12px;
+	color: #b91c1c;
+	font-size: 0.85rem;
+	font-weight: 850;
+}
+
+.rot-success {
+	display: flex;
+	align-items: flex-start;
+	gap: 9px;
+	margin-top: 0;
+	border: 1px solid #bbf7d0;
+	border-radius: 12px;
+	background: #f0fdf4;
+	padding: 10px 12px;
+	color: #166534;
+	font-size: 0.85rem;
+	font-weight: 850;
+}
+
+@keyframes rot-login-float {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-6px);
+	}
+}
+
+@keyframes rot-login-enter {
+	from {
+		opacity: 0;
+		transform: translateY(14px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes rot-login-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.rot-login-character,
+	.rot-login-card,
+	.rot-login-spinner {
+		animation: none;
+	}
+}
+
+@media (max-width: 860px) {
+	.rot-login-screen {
+		grid-template-columns: 1fr;
+		/* Antes era height:100vh + overflow:hidden — quando o conteudo do
+		   card (ex.: painel de MFA + botao + selos de confianca) passava da
+		   altura da tela, o excesso simplesmente sumia sem chance de rolar:
+		   o botao "Validar codigo" ficava fora da area clicavel (bug real
+		   relatado pelo usuario no celular). Agora a tela cresce com o
+		   conteudo e a pagina inteira rola normalmente. */
+		height: auto;
+		min-height: 100dvh;
+		overflow: visible;
+		background: linear-gradient(180deg, #061a3a 0%, #0b63f6 38%, #eef2f7 38%);
+	}
+
+	.rot-login-showcase {
+		display: flex;
+		height: 200px;
+		min-height: 0;
+		padding: 14px 22px 10px;
+		text-align: center;
+	}
+
+	.rot-login-character-wrap,
+	.rot-login-institutional {
+		display: none;
+	}
+
+	.rot-login-main {
+		overflow: visible;
+		padding: 10px 12px 16px;
+		background: #eef2f7;
+	}
+
+	.rot-login-card {
+		width: calc(100% - 4px);
+		border-radius: 22px;
+		padding: 18px 18px 16px;
+	}
+
+	.rot-login-mobile-logo {
+		display: flex;
+	}
+
+	/* Sem isso o logo "grande" do card (pensado pro desktop, ao lado do
+	   formulario) ficava empilhado acima do logo mobile compacto. */
+	.rot-login-product {
+		display: none;
+	}
+
+	.rot-login-trust {
+		grid-template-columns: 1fr;
+	}
+
+	.rot-login-brand {
+		display: flex;
+		justify-content: center;
+	}
+
+	.rot-login-brand img {
+		width: min(150px, 48vw);
+	}
+
+	.rot-login-brand-operation img {
+		width: min(360px, 82vw);
+		max-width: 100%;
+	}
+
+	.rot-login-copy {
+		max-width: min(100%, 520px);
+		margin: 8px auto 0;
+		text-align: center;
+	}
+
+	.rot-login-eyebrow-line {
+		margin-inline: auto;
+	}
+
+	.rot-login-copy h1 {
+		font-size: clamp(1.5rem, 5vw, 2rem);
+	}
+
+	.rot-login-copy p {
+		display: none;
+	}
+}
