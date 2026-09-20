@@ -107,7 +107,6 @@ export default function FinanCalendarWeekStrip() {
 		return () => {
 			active = false;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [from, to]);
 
 	const eventsByDate = useMemo(() => {

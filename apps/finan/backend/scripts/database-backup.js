@@ -60,7 +60,6 @@ async function enforceRetention(outputDir) {
 	const backups = [];
 	for (const fileName of entries) {
 		if (!/^finan-.*\.dump$/.test(fileName)) continue;
-		// eslint-disable-next-line no-await-in-loop
 		const stat = await fs.stat(path.join(outputDir, fileName));
 		backups.push({ fileName, mtimeMs: stat.mtimeMs, sizeBytes: stat.size });
 	}
@@ -78,7 +77,6 @@ async function enforceRetention(outputDir) {
 	for (const fileName of toDelete) {
 		// So apaga dentro de outputDir, por nome de arquivo ja validado pelo
 		// regex acima — nunca um glob/variavel nao verificada.
-		// eslint-disable-next-line no-await-in-loop
 		await fs.unlink(path.join(outputDir, fileName)).catch(() => {});
 	}
 

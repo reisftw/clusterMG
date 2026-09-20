@@ -108,7 +108,6 @@ async function upsertFornecedores(records, { createdBy } = {}) {
 	let updated = 0;
 	for (const record of records) {
 		const cnpjDigits = onlyDigits(record.cnpj);
-		// eslint-disable-next-line no-await-in-loop
 		const existing = await db.query(
 			cnpjDigits
 				? `select id from finan_fornecedores where regexp_replace(coalesce(cnpj,''), '\\D', '', 'g') = $1 limit 1`
@@ -116,7 +115,6 @@ async function upsertFornecedores(records, { createdBy } = {}) {
 			[cnpjDigits || record.nome],
 		);
 		if (existing.rows[0]) {
-			// eslint-disable-next-line no-await-in-loop
 			await db.query(
 				`update finan_fornecedores set
 					nome = $2,
@@ -129,12 +127,10 @@ async function upsertFornecedores(records, { createdBy } = {}) {
 			);
 			updated += 1;
 			// Roteiro Finan #47 (Webhooks): supplier.updated. Melhor esforco.
-			// eslint-disable-next-line global-require
 			require("../webhooks/dispatchService")
 				.dispatchEvent("supplier.updated", { id: existing.rows[0].id, nome: record.nome, cnpj: record.cnpj || "" })
 				.catch(() => {});
 		} else {
-			// eslint-disable-next-line no-await-in-loop
 			await db.query(
 				`insert into finan_fornecedores (id, codigo, nome, cnpj, status, created_at, updated_at, created_by, updated_by)
 				values ($1, $2, $3, $4, 'ativo', now(), now(), $5, $5)`,
@@ -196,7 +192,6 @@ async function upsertExtratoBancario(records) {
 			ignorados += 1;
 			continue;
 		}
-		// eslint-disable-next-line no-await-in-loop
 		await db.query(
 			`insert into finan_extrato_bancario (id, data, descricao, valor) values ($1, $2, $3, $4)`,
 			[randomId("extrato"), data, record.descricao || "Sem descrição", valor],

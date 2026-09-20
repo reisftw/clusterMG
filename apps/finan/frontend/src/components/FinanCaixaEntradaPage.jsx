@@ -79,7 +79,6 @@ export default function FinanCaixaEntradaPage() {
 		setError("");
 		try {
 			for (const file of files) {
-				// eslint-disable-next-line no-await-in-loop
 				await uploadFinanDocumentoEntrada(file);
 			}
 			await load();

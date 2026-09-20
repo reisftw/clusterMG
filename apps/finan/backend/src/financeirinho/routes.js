@@ -149,7 +149,6 @@ router.post("/chat", validate({ body: ChatDTO }), async (req, res, next) => {
 
 		let resultado;
 		for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
-			// eslint-disable-next-line no-await-in-loop
 			resultado = await chat({ systemPrompt: SYSTEM_PROMPT, history, tools });
 			if (resultado.type === "text") break;
 

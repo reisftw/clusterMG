@@ -34,7 +34,6 @@ function dateRangeForPeriodo(periodo) {
 
 // Reune #1 (Finan Insights) — reaproveita as mesmas frases determinísticas
 // já existentes em insights/routes.js pra "riscos", sem duplicar a lógica.
-// eslint-disable-next-line global-require
 const { buildInsights } = require("../insights/routes");
 
 async function buildBriefing(periodo) {

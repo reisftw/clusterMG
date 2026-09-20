@@ -271,10 +271,9 @@ router.post(
 				const documentoId = String(item?.documentoId || "").trim();
 				if (!documentoId) {
 					resultados.push({ documentoId: null, ok: false, erro: "documentoId ausente." });
-					continue; // eslint-disable-line no-continue
+					continue;
 				}
 				try {
-					// eslint-disable-next-line no-await-in-loop
 					const resultado = await gerarNotaDeDocumento(documentoId, item, req.finanUser);
 					resultados.push({ documentoId, ok: true, notaId: resultado.notaId });
 				} catch (error) {

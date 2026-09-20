@@ -136,13 +136,11 @@ async function avaliarRegrasAtivas() {
 		const regra = publicRegra(regraRow);
 		const tipoMeta = TIPOS[regra.tipo];
 		if (!tipoMeta) continue;
-		// eslint-disable-next-line no-await-in-loop
 		const violacoes = await tipoMeta.avaliar(regra.parametros);
 		resultadosPorRegra.push({ regraId: regra.id, nome: regra.nome, violacoes: violacoes.length });
 		if (violacoes.length) {
 			totalViolacoes += violacoes.length;
 			const today = new Date().toISOString().slice(0, 10);
-			// eslint-disable-next-line no-await-in-loop
 			await notificationsService.createNotification({
 				type: "regra_financeira",
 				title: `Regra "${regra.nome}" disparada`,
@@ -156,7 +154,6 @@ async function avaliarRegrasAtivas() {
 			// tipo de regra que de fato representa um limiar orcamentario.
 			// Melhor esforco.
 			if (regra.tipo === "despesa_acima_limite") {
-				// eslint-disable-next-line no-await-in-loop
 				await dispatchEvent("budget.threshold_reached", {
 					regraId: regra.id,
 					regraNome: regra.nome,

@@ -213,7 +213,6 @@ async function reprocessJob(jobKey, { triggeredBy = {} } = {}) {
 	}
 
 	if (jobKey === "calendario_alertas") {
-		// eslint-disable-next-line global-require
 		const { runCalendarAlerts } = require("../calendario/alertsService");
 		const result = await runInstrumented(jobKey, { trigger: "manual", triggeredBy }, async () => {
 			const summary = await runCalendarAlerts();
@@ -223,16 +222,13 @@ async function reprocessJob(jobKey, { triggeredBy = {} } = {}) {
 	}
 
 	if (jobKey === "regras_financeiras") {
-		// eslint-disable-next-line global-require
 		const { avaliarRegrasAtivas } = require("../regras/service");
 		const result = await runInstrumented(jobKey, { trigger: "manual", triggeredBy }, avaliarRegrasAtivas);
 		return { kind: "summary", summary: result };
 	}
 
 	if (jobKey === "backup_database") {
-		// eslint-disable-next-line global-require
 		const { execFile } = require("node:child_process");
-		// eslint-disable-next-line global-require
 		const path = require("node:path");
 		const scriptPath = path.join(__dirname, "../../scripts/database-backup.js");
 		execFile(

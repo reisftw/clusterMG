@@ -84,7 +84,6 @@ async function fetchCotacaoMoeda(moeda) {
 		data.setDate(data.getDate() - diasAtras);
 		const dataStr = data.toISOString().slice(0, 10);
 		try {
-			// eslint-disable-next-line no-await-in-loop
 			const payload = await fetchJson(`${BASE_URL}/cambio/v1/cotacao/${moeda}/${dataStr}`);
 			const cotacoes = payload?.cotacoes || [];
 			if (cotacoes.length) {
