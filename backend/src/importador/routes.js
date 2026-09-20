@@ -11,7 +11,7 @@ const { id, enumField, jsonObject, object, string } = require("../dtos/schema");
 const { getTargetFields, parseWorkbookBuffer, applyTemplateToRows, TARGET_FIELDS } = require("./service");
 
 const router = express.Router();
-const MAX_BYTES = 15 * 1024 * 1024;
+const MAX_BYTES = 8_000_000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES } });
 const ENTIDADES = Object.keys(TARGET_FIELDS);
 

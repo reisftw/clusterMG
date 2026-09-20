@@ -14,7 +14,7 @@ const { randomId } = require("../secureRandom");
 const { id, enumField, object, string } = require("../dtos/schema");
 
 const router = express.Router();
-const MAX_BYTES = 15 * 1024 * 1024;
+const MAX_BYTES = 8_000_000;
 const CATEGORIAS = ["contrato", "nota_fiscal", "comprovante", "outro"];
 const VINCULO_TIPOS = ["fornecedor", "contrato", "nota_fiscal"];
 
