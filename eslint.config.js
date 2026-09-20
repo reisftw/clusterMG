@@ -14,7 +14,11 @@ export default defineConfig([
 		"tmp-generateStaticData_ordens_abertas",
 	]),
 	{
-		files: ["src/**/*.{js,jsx}", "public/**/*.js", "docs/**/*.js"],
+		files: [
+			"apps/retiradas/frontend/src/**/*.{js,jsx}",
+			"apps/retiradas/frontend/public/**/*.js",
+			"docs/**/*.js",
+		],
 		extends: [
 			js.configs.recommended,
 			reactHooks.configs.flat.recommended,
@@ -37,7 +41,7 @@ export default defineConfig([
 		},
 	},
 	{
-		files: ["vps/**/*.js"],
+		files: ["apps/retiradas/backend/**/*.js"],
 		extends: [js.configs.recommended],
 		languageOptions: {
 			ecmaVersion: 2020,
@@ -67,7 +71,7 @@ export default defineConfig([
 		},
 	},
 	{
-		files: ["**/*.test.{js,jsx}", "src/test/**/*.js"],
+		files: ["**/*.test.{js,jsx}", "apps/retiradas/frontend/src/test/**/*.js"],
 		languageOptions: {
 			globals: {
 				...globals.browser,
@@ -77,7 +81,10 @@ export default defineConfig([
 		},
 	},
 	{
-		files: ["tests/e2e/**/*.js", "playwright.config.js"],
+		files: [
+			"apps/retiradas/frontend/tests/e2e/**/*.js",
+			"apps/retiradas/frontend/playwright.config.js",
+		],
 		languageOptions: {
 			globals: {
 				...globals.node,
@@ -85,7 +92,7 @@ export default defineConfig([
 		},
 	},
 	{
-		files: ["src/context/**/*.jsx"],
+		files: ["apps/retiradas/frontend/src/context/**/*.jsx"],
 		rules: {
 			"react-refresh/only-export-components": "off",
 		},

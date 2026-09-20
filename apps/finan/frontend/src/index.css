@@ -24,7 +24,7 @@
  * esse acoplamento existir, o Tailwind precisa escanear tambem essa arvore
  * do Retiradas, senao as classes usadas so nelas nao entram no CSS final.
  */
-@source "../../../../src/**/*.{js,jsx,ts,tsx}";
+@source "../../../retiradas/frontend/src/**/*.{js,jsx,ts,tsx}";
 
 @theme {
 	--shadow-sidebar: 4px 0 24px rgba(0, 48, 135, 0.18);

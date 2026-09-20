@@ -21,13 +21,13 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Importação/relatórios com `xlsx`, `exceljs`, `jspdf`, `jspdf-autotable`, `html2pdf.js`.
   - Sentry opcional via `VITE_SENTRY_DSN`.
 - Backend:
-  - Node.js/CommonJS em `vps/api`.
+  - Node.js/CommonJS em `apps/retiradas/backend/api`.
   - Express `4.x`, PostgreSQL via `pg`, `helmet`, `cors`, `compression`, `multer`, `nodemailer`, `argon2`.
-  - Entrada em `vps/api/src/index.js`, que sobe API e workers de mensageria, confirmação de agendamento, financeiro e recuperação de jobs.
+  - Entrada em `apps/retiradas/backend/api/src/index.js`, que sobe API e workers de mensageria, confirmação de agendamento, financeiro e recuperação de jobs.
 - Banco de dados:
   - PostgreSQL.
   - Auth/RBAC: `app_users`, `app_roles`, `app_role_permissions`, `app_permissions`, `app_sessions`.
-  - Legado Firestore/Postgres: `app_documents`, acessado por `vps/api/src/documents.js`.
+  - Legado Firestore/Postgres: `app_documents`, acessado por `apps/retiradas/backend/api/src/documents.js`.
   - Tabelas normalizadas recentes: regionais/usuários, mensageria, agendamentos/esteira, financeiro reports/config/DRE, imóveis, ordens/snapshots, eventos operacionais e auxiliares de documentos.
 - Cache/filas:
   - Cache em memória no backend para documentos, auth, financeiro, dashboard público e status de mensageria.
@@ -108,15 +108,15 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
 ## 4. Arquitetura
 
 - Estrutura principal:
-  - `src/main.jsx`: entrada React, providers globais, service worker e error tracking.
-  - `src/router`: rotas públicas/protegidas e constantes de rota.
-  - `src/context`: autenticação, tema, modo de layout e estado global do sistema.
-  - `src/services`: cliente HTTP para a VPS, sessão local, snapshots, eventos em tempo real e serviços transversais.
-  - `src/modules`: módulos internos por domínio.
-  - `src/pages`: páginas públicas/especiais como Painel Público, Mapa, Acompanhamento e Terceiros.
-  - `vps/api/src`: API Express, repositórios, integrações, workers e rotas administrativas.
-  - `vps/sql`: migrations SQL numeradas.
-  - `vps/scripts`: importadores, migrations idempotentes, backup e reconciliações.
+  - `apps/retiradas/frontend/src/main.jsx`: entrada React, providers globais, service worker e error tracking.
+  - `apps/retiradas/frontend/src/router`: rotas públicas/protegidas e constantes de rota.
+  - `apps/retiradas/frontend/src/context`: autenticação, tema, modo de layout e estado global do sistema.
+  - `apps/retiradas/frontend/src/services`: cliente HTTP para a VPS, sessão local, snapshots, eventos em tempo real e serviços transversais.
+  - `apps/retiradas/frontend/src/modules`: módulos internos por domínio.
+  - `apps/retiradas/frontend/src/pages`: páginas públicas/especiais como Painel Público, Mapa, Acompanhamento e Terceiros.
+  - `apps/retiradas/backend/api/src`: API Express, repositórios, integrações, workers e rotas administrativas.
+  - `apps/retiradas/backend/sql`: migrations SQL numeradas.
+  - `apps/retiradas/backend/scripts`: importadores, migrations idempotentes, backup e reconciliações.
   - `tests/e2e`: fluxos Playwright.
 - Padrão arquitetural:
   - Monólito modular pragmático.
@@ -126,7 +126,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Frontend: rota React -> página/componente -> hook/service de módulo -> `requestVpsApi` -> API REST.
   - Backend: rota Express/controller -> service/repository -> `db.query`/`db.connect` -> PostgreSQL.
 - Camada de compatibilidade:
-  - `vps/api/src/documents.js` mantém `listDocuments`, `getDocument`, `upsertDocument`, `deleteDocument` para legado e compatibilidade.
+  - `apps/retiradas/backend/api/src/documents.js` mantém `listDocuments`, `getDocument`, `upsertDocument`, `deleteDocument` para legado e compatibilidade.
   - Coleções já cortadas para normalizado aparecem em `NORMALIZED_ONLY_COLLECTIONS`; novas chamadas genéricas devem falhar em vez de voltar silenciosamente para `app_documents`.
   - Ainda existem adapters de compatibilidade para alguns domínios, especialmente imóveis e ordens, porque parte do contrato antigo continua existindo no código/testes.
   - Novo código deve chamar repositórios/serviços de domínio diretamente, não `documents.js`.
@@ -184,7 +184,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Constantes de rotas/permissões em `UPPER_SNAKE_CASE`.
 - Imports:
   - Frontend usa ES modules.
-  - Backend em `vps` usa CommonJS (`require`/`module.exports`).
+  - Backend em `apps/retiradas/backend` usa CommonJS (`require`/`module.exports`).
 - Erros:
   - Frontend centraliza chamadas em `requestVpsApi`, que lança `Error` com `status`, `data` e `details`.
   - Backend usa `next(error)` e respostas JSON controladas; stacks não devem ir ao cliente.
@@ -192,8 +192,8 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Em módulos normalizados, preferir erro visível/log objetivo a fallback silencioso que esconda inconsistência.
 - Logging:
   - Backend usa `console.log`, `console.warn`, `console.error` com prefixos de módulo em workers e integrações.
-  - Frontend usa `src/utils/logger.js` e Sentry quando configurado.
-  - Auditoria fica em `vps/api/src/auditLog.js`.
+  - Frontend usa `apps/retiradas/frontend/src/utils/logger.js` e Sentry quando configurado.
+  - Auditoria fica em `apps/retiradas/backend/api/src/auditLog.js`.
 - Commits e branches:
   - `CONTRIBUTING.md` recomenda Conventional Commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
   - Branches recomendadas: `feature/<tema>`, `fix/<tema>`, `hotfix/<tema>`, `chore/<tema>`.
@@ -201,22 +201,22 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
 - Lint/formatação:
   - ESLint flat config em `eslint.config.js`.
   - Regra ativa importante: `no-unused-vars` como erro, ignorando variáveis/argumentos que casem com `^[A-Z_]`.
-  - Frontend usa globals de browser; backend `vps/**/*.js` usa globals Node/CommonJS.
+  - Frontend usa globals de browser; backend `apps/retiradas/backend/**/*.js` usa globals Node/CommonJS.
   - Biome existe em `biome.json` com tabs e aspas duplas, mas o script versionado de lint é `eslint .`.
 
 ## 7. Testes
 
 - Framework principal: Vitest `4.x`.
 - Ambiente frontend: `jsdom`, configurado em `vite.config.js`.
-- Setup global: `src/test/setup.js`, com `@testing-library/jest-dom/vitest`, `cleanup` e `vi.restoreAllMocks`.
+- Setup global: `apps/retiradas/frontend/src/test/setup.js`, com `@testing-library/jest-dom/vitest`, `cleanup` e `vi.restoreAllMocks`.
 - E2E: Playwright em `tests/e2e`, base URL padrão `http://127.0.0.1:5173`, retries no CI.
 - Convenções de nomes:
   - `*.test.js`, `*.test.jsx`, `*.test.mjs`.
-  - Testes backend ficam em `src/backend`, mas carregam módulos de `vps/api/src`.
-  - Testes de módulo também aparecem perto do domínio, como `src/modules/financeiro/utils/*.test.js`.
+  - Testes backend ficam em `apps/retiradas/frontend/src/backend`, mas carregam módulos de `apps/retiradas/backend/api/src`.
+  - Testes de módulo também aparecem perto do domínio, como `apps/retiradas/frontend/src/modules/financeiro/utils/*.test.js`.
 - Mocks:
   - Frontend usa `vi.mock`, `vi.stubGlobal("fetch", ...)`, Testing Library e `renderHook`.
-  - Backend usa `createRequire` apontando para `vps/package.json` e injeta mocks no `require.cache` para `db`, `auth`, repositórios e integrações.
+  - Backend usa `createRequire` apontando para `apps/retiradas/backend/package.json` e injeta mocks no `require.cache` para `db`, `auth`, repositórios e integrações.
 - Cobertura:
   - `npm run test:coverage` usa Istanbul e gera `text`, `html` e `lcov`.
   - Não há cobertura mínima obrigatória configurada em `vite.config.js`.
@@ -240,7 +240,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Backend valida com `requireAuthenticated`, `requireRoles`, `requireAnyPermission` e regras por regional/empresa.
 - Variáveis de ambiente:
   - Frontend: `.env.example` com `VITE_API_BASE_URL` e `VITE_DATA_BACKEND`.
-  - Backend: `vps/api/.env.example` com PostgreSQL, CORS, auth, rate limits, webhooks, Google Drive, SMTP e integrações.
+  - Backend: `apps/retiradas/backend/api/.env.example` com PostgreSQL, CORS, auth, rate limits, webhooks, Google Drive, SMTP e integrações.
   - Secrets devem ficar em GitHub Actions ou `/etc/retiradas/*.env`, nunca versionados.
 - API:
   - REST/JSON sob `/api`.
@@ -260,9 +260,9 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - O frontend recebe `VITE_APP_VERSION=${GITHUB_SHA::7}` e `VITE_APP_ENV_LABEL` pela pipeline para mostrar versão/ambiente no rodapé.
 - Fluxo de trabalho local entre os apps do monorepo (padrão fixado em 18/09/2026):
   - O repositório tem uma única pasta de trabalho local (`retiradas`), sem worktrees separados por app.
-  - Cada app do monorepo tem sua própria branch: `finan` atua em `apps/finan`, `adm` atua em `apps/adm`, `rot` atua em `apps/rot`. `master`/`homolog-dev` seguem cuidando do app original (`src/`, `vps/api`), que continua publicando via CI/GitHub Actions normalmente (não confundir com a regra abaixo).
+  - Cada app do monorepo tem sua própria branch: `finan` atua em `apps/finan`, `adm` atua em `apps/adm`, `rot` atua em `apps/rot`. `master`/`homolog-dev` seguem cuidando do app original (`src/`, `apps/retiradas/backend/api`), que continua publicando via CI/GitHub Actions normalmente (não confundir com a regra abaixo).
   - Para mexer num desses três apps (`finan`/`adm`/`rot`), troque a branch ativa na mesma pasta (`git checkout <branch>`) antes de editar — não crie worktree novo por padrão.
-  - Para `apps/finan`, `apps/adm` e `apps/rot`: trabalhar local primeiro (editar, testar, buildar) e só depois subir para a VPS via **deploy manual por SSH** (chave `~/.ssh/retiradas_github_actions_deploy`), sem depender do CI para publicar essas mudanças. Isso é diferente da regra de "não fazer deploy manual" da seção 9, que vale para o app original (`src/`/`vps/api`) publicado via GitHub Actions.
+  - Para `apps/finan`, `apps/adm` e `apps/rot`: trabalhar local primeiro (editar, testar, buildar) e só depois subir para a VPS via **deploy manual por SSH** (chave `~/.ssh/retiradas_github_actions_deploy`), sem depender do CI para publicar essas mudanças. Isso é diferente da regra de "não fazer deploy manual" da seção 9, que vale para o app original (`src/`/`apps/retiradas/backend/api`) publicado via GitHub Actions.
   - Antes de qualquer deploy desses três apps, o estado local deve ser tratado como a fonte da verdade a caminho da VPS: local vira produção, não o contrário — se a VPS estiver na frente do local (arquivo alterado direto lá), isso é excepcional e deve ser puxado e reconciliado explicitamente, não presumido.
 
 ## 9. O que NÃO fazer
@@ -276,7 +276,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
 - Não publicar dashboards públicos com informações financeiras sensíveis sem validação de regra de negócio.
 - Não editar deploy manualmente em produção como padrão; o fluxo atual deve passar por branch, commit, push e GitHub Actions.
 - Não versionar `dist`, `node_modules`, uploads, arquivos `.env`, pacotes de deploy (`*.tar.gz`, `*.zip`) ou temporários.
-- Não mexer em grandes refatorações recentes de `src/modules/financeiro/components/FinanceiroPage.jsx` sem contexto; várias partes já foram extraídas para hooks, utils e subcomponentes.
+- Não mexer em grandes refatorações recentes de `apps/retiradas/frontend/src/modules/financeiro/components/FinanceiroPage.jsx` sem contexto; várias partes já foram extraídas para hooks, utils e subcomponentes.
 - Não alterar `operationalImports.js`, `publicDashboard.js` ou snapshots dentro de refactors estruturais sem isolar o risco e validar manualmente painel/mapa/match.
 - Pode acessar via SSH utilizando as chaves do GIT HUB ACTIONS, apenas não faça deploy manual.
 
@@ -287,9 +287,9 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - `DOCUMENTATION.md`: arquitetura técnica inicial.
   - `CONTRIBUTING.md`: branches, commits e checklist de PR.
   - `SECURITY_REVIEW.md`: controles de autenticação, sessão, API, webhooks e infraestrutura.
-  - `vps/README.md`: estrutura da VPS e comandos de API/backup.
-  - `vps/docs/homologacao.md`: ambiente de homologação.
-  - `vps/api/src/webhooks/WEBHOOK_VALIDATIONS.md`: validações de webhooks.
+  - `apps/retiradas/backend/README.md`: estrutura da VPS e comandos de API/backup.
+  - `apps/retiradas/backend/docs/homologacao.md`: ambiente de homologação.
+  - `apps/retiradas/backend/api/src/webhooks/WEBHOOK_VALIDATIONS.md`: validações de webhooks.
   - `docs/estabilizacao`: notas de estabilização e migração.
 - Responsáveis/CODEOWNERS:
   - Não foi encontrado `CODEOWNERS`; responsáveis por módulo devem ser confirmados com o time.

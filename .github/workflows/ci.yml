@@ -40,12 +40,12 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vps/package-lock.json
+            apps/retiradas/backend/package-lock.json
 
       - name: Install all dependencies
         run: |
           npm ci
-          npm ci --prefix vps
+          npm ci --prefix apps/retiradas/backend
 
       - name: Audit dependencies for high and critical vulnerabilities
         run: |
@@ -93,12 +93,12 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vps/package-lock.json
+            apps/retiradas/backend/package-lock.json
 
       - name: Install all dependencies
         run: |
           npm ci
-          npm ci --prefix vps
+          npm ci --prefix apps/retiradas/backend
 
       - name: Run lint
         run: npm run lint
@@ -187,7 +187,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vps/package-lock.json
+            apps/retiradas/backend/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
@@ -318,7 +318,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vps/package-lock.json
+            apps/retiradas/backend/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
@@ -382,7 +382,7 @@ jobs:
             --exclude='.env' \
             --exclude='*.log' \
             -czf retiradas-vps.tar.gz \
-            -C vps .
+            -C apps/retiradas/backend .
 
       - name: Upload packages to VPS
         run: |
@@ -486,7 +486,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            vps/package-lock.json
+            apps/retiradas/backend/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci
@@ -546,7 +546,7 @@ jobs:
             --exclude='.env' \
             --exclude='*.log' \
             -czf retiradas-homolog-vps.tar.gz \
-            -C vps .
+            -C apps/retiradas/backend .
 
       - name: Upload packages to VPS
         run: |
