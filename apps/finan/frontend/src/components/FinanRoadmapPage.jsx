@@ -8,7 +8,7 @@
 import { CheckCircle2, Circle, Compass, Loader2, RefreshCw, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchFinanRoadmapStatus, saveFinanRoadmapStatus } from "../api/finanApi";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 const ROADMAP = [
 	{

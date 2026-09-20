@@ -17,13 +17,12 @@ import { buscarTarifasReportFinanceiro } from "../services/financeiroService";
 import { splitPdfTextToTwoLines } from "../utils/financeiroPdfText";
 import { brl, formatTariffFee, integer } from "../utils/financeiroFormatters";
 import {
-	BudgetDateRangeModal,
-	FeedbackModal,
 	formatUpdatedAt,
 	getSempreLogoDataUrl,
 	getVisibleError,
 	sanitizeFileName,
 } from "./shared/FinanceiroSharedHelpers";
+import { BudgetDateRangeModal, FeedbackModal } from "./shared/FinanceiroSharedModals";
 
 const TariffsDetailLayout = lazy(() => import("./tariffs/TariffsDetailLayout"));
 const TariffsDetectedBlocks = lazy(() => import("./tariffs/TariffsDetectedBlocks"));

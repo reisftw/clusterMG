@@ -5,7 +5,7 @@
 import { AlertCircle, CheckCircle2, Clock, ListChecks, PlayCircle, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchFinanJobExecucoes, fetchFinanJobs, reprocessarFinanJob } from "../api/finanApi";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 function hasManage(user) {
 	if (!user) return false;

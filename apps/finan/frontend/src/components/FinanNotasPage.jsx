@@ -11,7 +11,7 @@ import {
 	fetchFinanNotas,
 } from "../api/finanApi";
 import ConfirmDialog from "./ConfirmDialog";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 function hasManage(user) {
 	if (!user) return false;

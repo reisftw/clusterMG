@@ -15,7 +15,8 @@ import {
 import ConfirmDialog from "../../../components/ConfirmDialog";
 import ModalShell from "../../../components/ModalShell";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
-import { ChartCard, EmptyState, barOptions } from "./shared/DashboardPrimitives";
+import { ChartCard, EmptyState } from "./shared/DashboardPrimitives";
+import { barOptions } from "./shared/chartOptions";
 import {
 	buscarSerasaReportFinanceiro,
 	limparSerasaReportFinanceiro,
@@ -24,8 +25,6 @@ import {
 } from "../services/financeiroService";
 import { brl, integer } from "../utils/financeiroFormatters";
 import {
-	BudgetDateRangeModal,
-	FeedbackModal,
 	budgetMonthName,
 	dateFromInput,
 	formatUpdatedAt,
@@ -33,6 +32,7 @@ import {
 	getVisibleError,
 	sanitizeFileName,
 } from "./shared/FinanceiroSharedHelpers";
+import { BudgetDateRangeModal, FeedbackModal } from "./shared/FinanceiroSharedModals";
 
 const EMPTY_SERASA_LIST = [];
 

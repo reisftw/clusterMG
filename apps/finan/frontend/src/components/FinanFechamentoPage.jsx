@@ -15,8 +15,8 @@ import { CheckCircle2, Circle, Lock, LockOpen, RefreshCw, XCircle } from "lucide
 import { useEffect, useState } from "react";
 import { fecharFinanPeriodo, fetchFinanFechamento, reabrirFinanPeriodo } from "../api/finanApi";
 import ConfirmDialog from "./ConfirmDialog";
-import { useFinanAuth } from "../state/FinanAuthContext";
-import { useFinanToast } from "../state/FinanToastContext";
+import { useFinanAuth } from "../state/useFinanAuth";
+import { useFinanToast } from "../state/useFinanToast";
 
 function hasFinanBudgetManagePermission(user) {
 	if (!user) return false;

@@ -17,7 +17,7 @@
 // funcionaram (esta página é aditiva, não substitui nada).
 import { Database, FileSpreadsheet, Inbox, Upload } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 const FinanFinanceiroPage = lazy(() => import("./FinanFinanceiroPage"));
 const FinanImportadorPage = lazy(() => import("./FinanImportadorPage"));

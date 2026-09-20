@@ -1,9 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchFinanPinStatus, verifyFinanPin } from "../api/finanApi";
 import { isFinanStandalonePwa } from "../utils/pwaDisplayMode";
-import { useFinanAuth } from "./FinanAuthContext";
-
-const FinanPinLockContext = createContext(null);
+import { useFinanAuth } from "./useFinanAuth";
+import { FinanPinLockContext } from "./finanPinLockContextObject";
 
 const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "wheel"];
 
@@ -264,12 +263,4 @@ export function FinanPinLockProvider({ children }) {
 	return (
 		<FinanPinLockContext.Provider value={value}>{children}</FinanPinLockContext.Provider>
 	);
-}
-
-export function useFinanPinLock() {
-	const context = useContext(FinanPinLockContext);
-	if (!context) {
-		throw new Error("useFinanPinLock deve ser usado no FinanPinLockProvider.");
-	}
-	return context;
 }

@@ -10,8 +10,8 @@ import {
 	fetchFinanIndicadoresCatalogo,
 } from "../api/finanApi";
 import ConfirmDialog from "./ConfirmDialog";
-import { useFinanAuth } from "../state/FinanAuthContext";
-import { useFinanToast } from "../state/FinanToastContext";
+import { useFinanAuth } from "../state/useFinanAuth";
+import { useFinanToast } from "../state/useFinanToast";
 
 function hasFinanBudgetManagePermission(user) {
 	if (!user) return false;

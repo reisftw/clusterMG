@@ -25,7 +25,7 @@ import {
 import ConfirmDialog from "./ConfirmDialog";
 import EmptyState from "./EmptyState";
 import PageLoading from "./PageLoading";
-import { useFinanToast } from "../state/FinanToastContext";
+import { useFinanToast } from "../state/useFinanToast";
 
 export default function FinanImportadorPage() {
 	const [entidades, setEntidades] = useState([]);

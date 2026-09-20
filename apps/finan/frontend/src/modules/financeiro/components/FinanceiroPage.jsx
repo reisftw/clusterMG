@@ -55,9 +55,8 @@ import {
 	formatUpdatedAt,
 	normalizeDirectorates,
 	normalizeImportHeader,
-	FeedbackModal,
-	BudgetDateRangeModal,
 } from "./shared/FinanceiroSharedHelpers";
+import { FeedbackModal, BudgetDateRangeModal } from "./shared/FinanceiroSharedModals";
 import ModalShell from "../../../components/ModalShell";
 import { hasPermission } from "../financeiroPermissions";
 import { useAuthContext } from "../financeiroAuthContext";

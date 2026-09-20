@@ -28,7 +28,7 @@ import {
 	updateFinanCalendarRule,
 } from "../api/finanApi";
 import ConfirmDialog from "./ConfirmDialog";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 // Mesmo padrao estrutural do calendario de Agendamentos
 // (src/modules/agendamentos/components/AgendamentosPage.jsx): grade de 42

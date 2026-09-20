@@ -13,11 +13,8 @@ import {
 } from "../services/financeiroService";
 import { brl, formatBudgetCurrency, integer } from "../utils/financeiroFormatters";
 import { EmptyState } from "./shared/DashboardPrimitives";
-import {
-	FeedbackModal,
-	formatUpdatedAt,
-	getVisibleError,
-} from "./shared/FinanceiroSharedHelpers";
+import { formatUpdatedAt, getVisibleError } from "./shared/FinanceiroSharedHelpers";
+import { FeedbackModal } from "./shared/FinanceiroSharedModals";
 
 const BUDGET_IMPORT_FIELDS = [
 	{ key: "quebra", label: "Quebra" },

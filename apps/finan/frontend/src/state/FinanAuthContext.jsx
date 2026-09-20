@@ -1,12 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	fetchFinanMe,
 	loginFinan,
 	logoutFinan,
 	verifyFinanEmailMfa,
 } from "../api/finanApi";
-
-const FinanAuthContext = createContext(null);
+import { FinanAuthContext } from "./finanAuthContextObject";
 
 export function FinanAuthProvider({ children }) {
 	const [user, setUser] = useState(null);
@@ -91,10 +90,4 @@ export function FinanAuthProvider({ children }) {
 			{children}
 		</FinanAuthContext.Provider>
 	);
-}
-
-export function useFinanAuth() {
-	const context = useContext(FinanAuthContext);
-	if (!context) throw new Error("useFinanAuth deve ser usado no FinanAuthProvider.");
-	return context;
 }

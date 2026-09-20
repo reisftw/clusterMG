@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import FinanceiroPage from "../modules/financeiro/components/FinanceiroPage";
 import { AuthContext } from "../modules/financeiro/financeiroAuthContext";
 import { fetchFinanRoles } from "../api/finanApi";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 function toFinanceiroPermission(permission) {
 	const value = String(permission || "");

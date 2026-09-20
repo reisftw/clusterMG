@@ -22,8 +22,8 @@ import ModalShell from "./ModalShell";
 import PageLoading from "./PageLoading";
 import StatCard from "./StatCard";
 import StatusBadge from "./StatusBadge";
-import { useFinanAuth } from "../state/FinanAuthContext";
-import { useFinanToast } from "../state/FinanToastContext";
+import { useFinanAuth } from "../state/useFinanAuth";
+import { useFinanToast } from "../state/useFinanToast";
 
 function hasManage(user) {
 	if (!user) return false;

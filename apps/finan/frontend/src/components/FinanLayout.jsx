@@ -17,8 +17,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { FINAN_ROUTES } from "../routes";
 import { flattenNavItems, NAV_SECTIONS } from "../navigationConfig";
-import { useFinanAuth } from "../state/FinanAuthContext";
-import { useFinanPinLock } from "../state/FinanPinLockContext";
+import { useFinanAuth } from "../state/useFinanAuth";
+import { useFinanPinLock } from "../state/useFinanPinLock";
 import {
 	FINAN_WELCOME_MODAL_EVENT,
 	hasSeenFinanWelcomeModal,

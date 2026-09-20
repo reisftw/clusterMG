@@ -8,10 +8,9 @@
 // erro PERSISTENTES de carregamento de página (esses continuam como
 // <div> fixo no topo da tela, porque representam um estado, não um evento
 // pontual).
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
-
-const FinanToastContext = createContext(null);
+import { FinanToastContext } from "./finanToastContextObject";
 
 const TONE_STYLES = {
 	success: { icon: CheckCircle2, className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
@@ -81,14 +80,4 @@ export function FinanToastProvider({ children }) {
 			</div>
 		</FinanToastContext.Provider>
 	);
-}
-
-export function useFinanToast() {
-	const context = useContext(FinanToastContext);
-	if (!context) {
-		// Fallback seguro fora do provider (ex.: em testes isolados) — nunca
-		// deve quebrar a tela por causa de um aviso.
-		return { success() {}, error() {}, info() {}, dismiss() {} };
-	}
-	return context;
 }

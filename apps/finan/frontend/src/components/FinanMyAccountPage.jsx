@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { uploadFinanOwnAvatar } from "../api/finanApi";
 import { FINAN_ROUTES } from "../routes";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 import UserAvatar from "./UserAvatar";
 
 const cardClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6";

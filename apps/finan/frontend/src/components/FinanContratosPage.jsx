@@ -10,7 +10,7 @@ import {
 	updateFinanContrato,
 } from "../api/finanApi";
 import ConfirmDialog from "./ConfirmDialog";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 const PERIODICIDADES = [
 	{ value: "mensal", label: "Mensal" },

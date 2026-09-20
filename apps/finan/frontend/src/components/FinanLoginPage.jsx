@@ -13,7 +13,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { requestFinanPasswordReset, resetFinanPassword } from "../api/finanApi";
 import { FINAN_ROUTES } from "../routes";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 const trustItems = [
 	{ label: "Acesso seguro", icon: ShieldCheck },

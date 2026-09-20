@@ -50,10 +50,7 @@ import {
 	WalletCards,
 } from "lucide-react";
 import { FINAN_ROUTES } from "./routes";
-
-function ShieldIcon(props) {
-	return <FileCheck2 {...props} />;
-}
+import { ShieldIcon } from "./navigationIcons";
 
 export const NAV_SECTIONS = [
 	{

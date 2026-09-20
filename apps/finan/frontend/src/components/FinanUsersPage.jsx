@@ -42,7 +42,7 @@ import {
 	updateFinanRole,
 	uploadFinanAdminAvatar,
 } from "../api/finanApi";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 import ConfirmDialog from "./ConfirmDialog";
 import ModalShell from "./ModalShell";
 import UserAvatar from "./UserAvatar";

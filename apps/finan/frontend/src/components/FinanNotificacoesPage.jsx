@@ -6,7 +6,7 @@ import {
 	fetchFinanNotificationStats,
 	markFinanNotificationsRead,
 } from "../api/finanApi";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 const TYPE_OPTIONS = [
 	{ value: "", label: "Todos os tipos" },

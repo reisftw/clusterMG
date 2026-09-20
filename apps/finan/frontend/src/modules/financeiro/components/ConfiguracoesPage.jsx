@@ -14,10 +14,10 @@ import {
 import { integer } from "../utils/financeiroFormatters";
 import {
 	DEFAULT_SHEETS_CONFIG,
-	FeedbackModal,
 	formatUpdatedAt,
 	getVisibleError,
 } from "./shared/FinanceiroSharedHelpers";
+import { FeedbackModal } from "./shared/FinanceiroSharedModals";
 
 export default function ConfiguracoesPage({ canManage }) {
 	const [sheetsConfig, setSheetsConfig] = useState(DEFAULT_SHEETS_CONFIG);

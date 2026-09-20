@@ -10,8 +10,8 @@ import FinanPasswordChangePage from "./components/FinanPasswordChangePage";
 import FinanPinLockOverlay from "./components/FinanPinLockOverlay";
 import FinanPinRecoveryPage from "./components/FinanPinRecoveryPage";
 import FinanPinSetupPage from "./components/FinanPinSetupPage";
-import { useFinanAuth } from "./state/FinanAuthContext";
-import { useFinanPinLock } from "./state/FinanPinLockContext";
+import { useFinanAuth } from "./state/useFinanAuth";
+import { useFinanPinLock } from "./state/useFinanPinLock";
 import { FINAN_ROUTES } from "./routes";
 
 const FinanFinanceiroPage = lazy(() => import("./components/FinanFinanceiroPage"));

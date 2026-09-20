@@ -8,7 +8,6 @@
 // idêntico ao que estava no arquivao — só mudou de arquivo.
 import { ArrowRight, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
-import { brl } from "../../utils/financeiroFormatters";
 
 export function EmptyState({
 	text = "Nenhum dado encontrado para o período selecionado.",
@@ -116,27 +115,4 @@ export function ChartCard({
 			) : null}
 		</section>
 	);
-}
-
-export function barOptions(formatter = brl.format) {
-	return {
-		responsive: true,
-		maintainAspectRatio: false,
-		plugins: {
-			legend: {
-				display: true,
-				labels: { boxWidth: 10, font: { weight: "bold" } },
-			},
-			tooltip: {
-				callbacks: {
-					label: (context) =>
-						`${context.dataset.label}: ${formatter(Number(context.raw || 0))}`,
-				},
-			},
-		},
-		scales: {
-			x: { grid: { display: false } },
-			y: { ticks: { callback: (value) => formatter(Number(value)) } },
-		},
-	};
 }

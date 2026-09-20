@@ -1,7 +1,7 @@
 import { CalendarClock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchFinanCalendarCatalog, fetchFinanCalendarEvents } from "../api/finanApi";
-import { useFinanAuth } from "../state/FinanAuthContext";
+import { useFinanAuth } from "../state/useFinanAuth";
 
 const COLOR_DOT = {
 	vermelho: "bg-red-500",

@@ -5,8 +5,8 @@ import { Plus, RefreshCw, Target, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createFinanMeta, deleteFinanMeta, fetchFinanMetas, updateFinanMeta } from "../api/finanApi";
 import ConfirmDialog from "./ConfirmDialog";
-import { useFinanAuth } from "../state/FinanAuthContext";
-import { useFinanToast } from "../state/FinanToastContext";
+import { useFinanAuth } from "../state/useFinanAuth";
+import { useFinanToast } from "../state/useFinanToast";
 
 function hasFinanBudgetManagePermission(user) {
 	if (!user) return false;

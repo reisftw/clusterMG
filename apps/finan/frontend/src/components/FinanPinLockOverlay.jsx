@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock } from "lucide-react";
 import FinanPinDigitsInput from "./FinanPinDigitsInput";
-import { useFinanPinLock } from "../state/FinanPinLockContext";
+import { useFinanPinLock } from "../state/useFinanPinLock";
 import { FINAN_ROUTES } from "../routes";
 
 const overlayStyle = {

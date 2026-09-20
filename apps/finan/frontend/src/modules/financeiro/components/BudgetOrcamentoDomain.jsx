@@ -46,7 +46,8 @@ import CostCenterMovementsTab from "./budget/costcenter/CostCenterMovementsTab";
 import CostCenterRegistrationTab from "./budget/costcenter/CostCenterRegistrationTab";
 import { getBudgetDashboardDetailRenderer } from "./budget/details";
 import FinancialKpiCard from "./kpi/FinancialKpiCard";
-import { ChartCard, EmptyState, FinancePanel, PanelActionButton, barOptions } from "./shared/DashboardPrimitives";
+import { ChartCard, EmptyState, FinancePanel, PanelActionButton } from "./shared/DashboardPrimitives";
+import { barOptions } from "./shared/chartOptions";
 import { useBudgetConfig } from "../hooks/useBudgetConfig";
 import { useBudgetOperationalActions } from "../hooks/useBudgetOperationalActions";
 import { useCostCenterForm } from "../hooks/useCostCenterForm";
@@ -92,8 +93,6 @@ import {
 } from "../utils/costCenterMovements";
 import { brl, decimal, integer } from "../utils/financeiroFormatters";
 import {
-	BudgetDateRangeModal,
-	FeedbackModal,
 	budgetEntityId,
 	budgetMonthName,
 	buildBudgetPeriod,
@@ -105,6 +104,7 @@ import {
 	normalizeImportHeader,
 	sanitizeFileName,
 } from "./shared/FinanceiroSharedHelpers";
+import { BudgetDateRangeModal, FeedbackModal } from "./shared/FinanceiroSharedModals";
 
 const BudgetApprovalsView = lazy(() => import("./budget/BudgetApprovalsView"));
 const BudgetCostCentersView = lazy(() => import("./budget/BudgetCostCentersView"));

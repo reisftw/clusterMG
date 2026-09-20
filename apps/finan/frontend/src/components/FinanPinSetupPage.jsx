@@ -1,7 +1,7 @@
 import { AlertTriangle, KeyRound, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import { setupFinanPin } from "../api/finanApi";
-import { useFinanPinLock } from "../state/FinanPinLockContext";
+import { useFinanPinLock } from "../state/useFinanPinLock";
 import FinanPinDigitsInput from "./FinanPinDigitsInput";
 
 const inputClass =
