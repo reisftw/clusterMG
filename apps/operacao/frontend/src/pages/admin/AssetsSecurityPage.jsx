@@ -1953,6 +1953,12 @@ export function AssetActionModal({ kind, asset, meta, templates, onClose, onSave
 
 	useEffect(() => {
 		setAnswers(defaultAnswers(selectedTemplate));
+		// selectedTemplate e recalculado (novo objeto) a cada render via
+		// templates.find(...) — depender do objeto inteiro faria este efeito
+		// resetar as respostas do checklist a cada render, mesmo sem o
+		// template mudar de verdade. selectedTemplate?.id e o valor estavel
+		// que realmente importa aqui.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedTemplate?.id]);
 
 	const titleByKind = {

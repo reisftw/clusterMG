@@ -57,7 +57,11 @@ export default function ShiftsPage() {
 	const now = Date.now();
 	const isActive = (shift) => now >= new Date(shift.start).getTime() && now <= new Date(shift.end).getTime();
 
-	const activeGlobal = useMemo(() => shifts.filter(isActive), [shifts]);
+	// Sem useMemo de proposito: isActive fecha sobre `now` (Date.now(),
+	// recalculado a cada render), entao memoizar so por [shifts] deixaria o
+	// status "ativo" desatualizado num re-render sem mudanca em shifts mas
+	// com o tempo tendo avancado — mesmo padrao ja usado em myActive abaixo.
+	const activeGlobal = shifts.filter(isActive);
 
 	const myShifts = useMemo(() => shifts.filter((s) => s.teamIds.includes(user?.id)), [shifts, user]);
 	const myActive = myShifts.filter(isActive);

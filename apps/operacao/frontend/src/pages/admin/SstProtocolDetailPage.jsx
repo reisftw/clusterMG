@@ -66,6 +66,12 @@ export default function SstProtocolDetailPage() {
 
 	useEffect(() => {
 		if (protocol) setAssignTarget(protocol.assignedTo || "");
+		// Dependencia estreita de proposito: so importa o valor de
+		// assignedTo, nao a identidade do objeto protocol inteiro — depender
+		// do objeto faria este efeito resetar a selecao do usuario sempre
+		// que qualquer outro campo do protocolo mudasse (ex.: status), nao
+		// so quando o responsavel muda de verdade.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [protocol?.assignedTo]);
 
 	const runExport = async (format) => {

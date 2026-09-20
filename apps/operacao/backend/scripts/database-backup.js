@@ -34,7 +34,6 @@ async function enforceRetention(outputDir) {
 	const backups = [];
 	for (const fileName of entries) {
 		if (!/^operacao-.*\.dump$/.test(fileName)) continue;
-		// eslint-disable-next-line no-await-in-loop
 		const stat = await fs.stat(path.join(outputDir, fileName));
 		backups.push({ fileName, mtimeMs: stat.mtimeMs, sizeBytes: stat.size });
 	}
@@ -48,7 +47,6 @@ async function enforceRetention(outputDir) {
 	});
 
 	for (const fileName of toDelete) {
-		// eslint-disable-next-line no-await-in-loop
 		await fs.unlink(path.join(outputDir, fileName)).catch(() => {});
 	}
 

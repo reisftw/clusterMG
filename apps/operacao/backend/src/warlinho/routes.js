@@ -158,7 +158,6 @@ router.post("/chat", async (req, res, next) => {
 
 		let resultado;
 		for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
-			// eslint-disable-next-line no-await-in-loop
 			resultado = await chat({ systemPrompt: SYSTEM_PROMPT, history, tools });
 			if (resultado.type === "text") break;
 
@@ -169,14 +168,11 @@ router.post("/chat", async (req, res, next) => {
 
 			let toolResult;
 			try {
-				// eslint-disable-next-line no-await-in-loop
 				toolResult = tool ? await tool.handler(req, resultado.args) : { erro: "Ferramenta não disponível." };
-				// eslint-disable-next-line no-await-in-loop
 				await auditToolCall(req, { conversaId: conversa.id, name: resultado.name, args: resultado.args, status: tool ? "ok" : "unavailable" });
 			} catch (toolError) {
 				console.error(`[warlinho] erro na tool ${resultado.name}:`, toolError.message);
 				toolResult = { erro: "Não consegui buscar esse dado agora." };
-				// eslint-disable-next-line no-await-in-loop
 				await auditToolCall(req, { conversaId: conversa.id, name: resultado.name, args: resultado.args, status: `error:${toolError.status || 500}` });
 			}
 			toolCallsUsados.push({ name: resultado.name, args: resultado.args });

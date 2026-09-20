@@ -366,7 +366,10 @@ function TicketImportModal({ existingTickets, regionals, serviceTypes, technicia
 		}
 	};
 
-	const rows = importState?.rows || [];
+	// Memoizado pra nao virar uma referencia [] nova a cada render quando
+	// importState?.rows e undefined — sem isso, o useMemo de effectiveRows
+	// logo abaixo recalcularia sem necessidade a cada render.
+	const rows = useMemo(() => importState?.rows || [], [importState?.rows]);
 	const effectiveRows = useMemo(
 		() =>
 			rows.map((row, index) => {

@@ -145,7 +145,6 @@ function createApp() {
 	// automatico); sem isso um erro de banco nao tratado derruba o
 	// processo Node inteiro, nao so a requisicao (mesma causa raiz do
 	// crash loop real do Finan em 2026-09-05, documentado no CLAUDE.md).
-	// eslint-disable-next-line no-unused-vars
 	app.use((error, req, res, _next) => {
 		const { status, body } = toClientResponse(error);
 		if (status >= 500) {

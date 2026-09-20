@@ -56,7 +56,11 @@ export default function AuditReportsPage() {
 	useEffect(() => { load(); }, []);
 
 	const summary = data?.summary || {};
-	const audits = data?.audits || [];
+	// Memoizado pra nao virar uma referencia [] nova a cada render quando
+	// data?.audits e undefined — isso faria o useMemo de "average" logo
+	// abaixo recalcular sem necessidade (dependencia mudando de "identidade"
+	// mesmo com o mesmo conteudo).
+	const audits = useMemo(() => data?.audits || [], [data?.audits]);
 	const average = useMemo(() => audits.length ? Math.round(audits.reduce((sum, item) => sum + Number(item.score || 0), 0) / audits.length) : 0, [audits]);
 
 	if (loading) return <Spinner fullScreen />;

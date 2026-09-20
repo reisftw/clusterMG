@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Clipboard, Edit3, Eye, MapPin, Package, Plus, Route, Trash2, Zap } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -199,20 +199,20 @@ export default function RompimentosPage() {
 		}
 	};
 
-	const handleNewRompimento = () => {
+	const handleNewRompimento = useCallback(() => {
 		if (minhaTratativaAberta) {
 			setInfo("Você já tem um rompimento em tratativa. Finalize ele antes de abrir outro.");
 			setModal({ item: minhaTratativaAberta });
 			return;
 		}
 		setTicketModal(true);
-	};
+	}, [minhaTratativaAberta]);
 
 	useEffect(() => {
 		if (loading || searchParams.get("novo") !== "1" || !canCreate) return;
 		handleNewRompimento();
 		setSearchParams({}, { replace: true });
-	}, [loading, searchParams, canCreate, setSearchParams]);
+	}, [loading, searchParams, canCreate, setSearchParams, handleNewRompimento]);
 
 	if (loading) return <Spinner fullScreen />;
 

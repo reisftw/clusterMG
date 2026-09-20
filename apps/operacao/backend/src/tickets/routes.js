@@ -116,7 +116,6 @@ router.post("/import", requireRotPermission("rot.tickets.manage"), async (req, r
 		}
 		await client.query("commit");
 		for (const row of created) {
-			// eslint-disable-next-line no-await-in-loop
 			await auditLog(req, { action: "create", entity: "rot_tickets", entityId: row.id, after: row });
 		}
 		res.status(201).json({ ok: true, imported: created.length, skipped: rows.length - created.length, items: created.map(publicTicket) });

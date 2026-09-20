@@ -324,7 +324,6 @@ export default function SstReportsPage() {
 		loadSection(setOccurrences, fetchSstReportsOccurrences);
 		loadSection(setActionPlans, fetchSstReportsActionPlans);
 		loadSection(setWorkload, fetchSstReportsWorkload);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [loadSection]);
 
 	useEffect(() => { reloadAll(); }, [filtersKey]); // eslint-disable-line react-hooks/exhaustive-deps

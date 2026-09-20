@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, ImageIcon, Trash2, UploadCloud } from "lucide-react";
 import { deleteRotAttachment, fetchRotAttachments } from "../api/rotApi";
 import { uploadImage } from "../utils/imageUpload";
@@ -13,24 +13,36 @@ export default function ImageUploader({ entityType, entityId, required = false, 
 	const confirmedCount = items.filter((item) => item.status === "CONFIRMED" || item.url).length;
 	const remaining = Math.max(0, maxImages - confirmedCount);
 
-	const load = async () => {
+	// onCountChange vem do componente pai e nem sempre chega memoizado — um
+	// ref sempre atualizado evita que a identidade dele force o efeito de
+	// carregar imagens a rodar de novo a cada render (ver mensagem do
+	// eslint-plugin-react-hooks: "se onCountChange muda com frequencia,
+	// envolva a definicao no pai em useCallback" — preferimos nao depender
+	// disso em varios pontos de chamada, ja que o valor mais recente do
+	// callback e sempre lido via ref no momento da chamada).
+	const onCountChangeRef = useRef(onCountChange);
+	useEffect(() => {
+		onCountChangeRef.current = onCountChange;
+	}, [onCountChange]);
+
+	const load = useCallback(async () => {
 		if (!entityType || !entityId) return;
 		setError("");
 		try {
 			const data = await fetchRotAttachments(entityType, entityId);
 			setItems(data.items || []);
-			onCountChange?.((data.items || []).length);
+			onCountChangeRef.current?.((data.items || []).length);
 		} catch (err) {
 			setError(err?.message || "Não foi possível carregar as imagens.");
 		}
-	};
-
-	useEffect(() => {
-		load();
 	}, [entityType, entityId]);
 
 	useEffect(() => {
-		onCountChange?.(confirmedCount);
+		load();
+	}, [load]);
+
+	useEffect(() => {
+		onCountChangeRef.current?.(confirmedCount);
 	}, [confirmedCount]);
 
 	const selectFiles = async (event) => {
