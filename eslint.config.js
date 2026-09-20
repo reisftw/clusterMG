@@ -12,13 +12,16 @@ export default defineConfig([
 		"tmp/**",
 		"tmp-*",
 		"tmp-generateStaticData_ordens_abertas",
+		// Backups locais nao versionados (recuperacao/sync da VPS, 18/09/2026)
+		// — nao sao fonte real, so ficam no disco, nunca devem ser lintados.
+		"apps/*/tmp/**",
 	]),
 	{
-		files: [
-			"apps/retiradas/frontend/src/**/*.{js,jsx}",
-			"apps/retiradas/frontend/public/**/*.js",
-			"docs/**/*.js",
-		],
+		// Frontend dos 4 apps (retiradas, finan, adm, operacao), incluindo
+		// arquivos de teste (.test.jsx precisa de JSX habilitado aqui —
+		// era a causa dos 14 erros de parsing do ADM: antes so
+		// apps/retiradas/frontend tinha esse bloco).
+		files: ["apps/*/frontend/**/*.{js,jsx}", "docs/**/*.js"],
 		extends: [
 			js.configs.recommended,
 			reactHooks.configs.flat.recommended,
@@ -41,7 +44,8 @@ export default defineConfig([
 		},
 	},
 	{
-		files: ["apps/retiradas/backend/**/*.js"],
+		// Backend dos 4 apps — todos CommonJS, globals Node.
+		files: ["apps/*/backend/**/*.js"],
 		extends: [js.configs.recommended],
 		languageOptions: {
 			ecmaVersion: 2020,
@@ -71,13 +75,55 @@ export default defineConfig([
 		},
 	},
 	{
-		files: ["**/*.test.{js,jsx}", "apps/retiradas/frontend/src/test/**/*.js"],
+		// Testes de frontend: Vitest/jsdom/Testing Library. Camada aditiva
+		// sobre o bloco de frontend acima (so acrescenta globals, o parsing
+		// JSX ja vem do bloco de frontend).
+		files: [
+			"apps/*/frontend/**/*.test.{js,jsx}",
+			"apps/*/frontend/**/*.spec.{js,jsx}",
+			"apps/retiradas/frontend/src/test/**/*.js",
+		],
 		languageOptions: {
 			globals: {
 				...globals.browser,
 				...globals.node,
 				...globals.vitest,
 			},
+		},
+	},
+	{
+		// Testes de backend: parte usa Vitest (Retiradas/ADM, arquivos
+		// legados sob */frontend/src/backend — testam codigo de backend
+		// via createRequire, mas o arquivo de teste em si roda sob Vitest),
+		// parte usa o Node Test Runner nativo (Operacao, `require("node:test")`
+		// explicito). Os dois convivem: globals.vitest só é usado por quem
+		// importa de "vitest"; quem usa node:test explicito nao referencia
+		// globals nenhum, entao nao ha conflito.
+		files: ["apps/*/backend/**/*.test.js", "apps/*/backend/**/*.spec.js"],
+		languageOptions: {
+			globals: {
+				...globals.node,
+				...globals.vitest,
+			},
+		},
+	},
+	{
+		// Testes de contrato entre sistemas — Node puro (node:test), ESM
+		// (repositorio raiz é "type": "module").
+		files: ["tests/contracts/**/*.js"],
+		extends: [js.configs.recommended],
+		languageOptions: {
+			ecmaVersion: "latest",
+			sourceType: "module",
+			globals: {
+				...globals.node,
+			},
+		},
+		rules: {
+			"no-unused-vars": [
+				"error",
+				{ varsIgnorePattern: "^[A-Z_]", argsIgnorePattern: "^[A-Z_]" },
+			],
 		},
 	},
 	{
