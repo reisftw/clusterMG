@@ -19,9 +19,10 @@ Em nenhuma das etapas houve `git push`, merge/rebase/cherry-pick sobre `master`,
 | SHA antes da etapa final de segurança/CI | `20d8c3ce8751fe070ea1c381335962ab8bfc3c81` |
 | Correção final de dependências `high` | `2c67fbb` |
 | Correção final do job `security` | `29d0201` |
+| Correção do `build-and-test` pós-CI | `2c57c4b` |
 | **SHA final aprovado** | este próprio commit (consolidação final do relatório) |
 
-`git rev-list --left-right --count master...HEAD` = `0  72` (0 commits exclusivos de `master`, 72 exclusivos da branch, após este commit documental final). `git merge-base --is-ancestor master HEAD` = verdadeiro → **fast-forward mecanicamente possível**, sem merge-commit, sem conflito.
+Após o primeiro push da promoção, `origin/master` ficou em `2ddb1dd`; a correção final da CI/documentação ficou `0  2` em `git rev-list --left-right --count origin/master...HEAD` antes do segundo push. Considerando o `master` remoto original pré-promoção (`a594f54`), o total promovido é de 74 commits e `git merge-base --is-ancestor` permanece verdadeiro → **fast-forward mecanicamente possível**, sem merge-commit, sem conflito.
 
 ## 2. Estado do Git (inicial e final)
 
@@ -73,7 +74,7 @@ Diretórios locais não versionados encontrados (todos confirmados `git check-ig
 
 Único diff do arquivo. `validate-finan`/`validate-adm`/`validate-operacao` já rodavam em todo push para `master` (sem `if:` próprio) — sem risco de o deploy nunca disparar por dependência que não roda. `deploy-homolog-vps` e `deploy-finan-vps` inalterados. Nenhum secret/host/porta/usuário/caminho remoto tocado. Commit `206ce82`.
 
-Coberto por teste de contrato novo, `tests/contracts/ciDeployGates.test.js` (commit `85281d2`) — originalmente 2 testes: confirma que `deploy-vps` depende dos 5 jobs obrigatórios e que os 3 `validate-*` existem no workflow. A etapa final adicionou um terceiro contrato (commit `29d0201`) garantindo que o job `security` cubra lockfile/install/audit dos 8 projetos do monorepo. **Verificado negativamente** antes de confiar nele: removendo `validate-operacao` do `needs:` temporariamente, o teste falhou com mensagem explícita; revertido e reaplicado.
+Coberto por teste de contrato novo, `tests/contracts/ciDeployGates.test.js` (commit `85281d2`) — originalmente 2 testes: confirma que `deploy-vps` depende dos 5 jobs obrigatórios e que os 3 `validate-*` existem no workflow. A etapa final adicionou um terceiro contrato (commit `29d0201`) garantindo que o job `security` cubra lockfile/install/audit dos 8 projetos do monorepo e um quarto contrato (commit `2c57c4b`) garantindo que o `build-and-test` instale as dependências do Finan antes da validação legada. **Verificado negativamente** antes de confiar nele: removendo `validate-operacao` do `needs:` temporariamente, o teste falhou com mensagem explícita; revertido e reaplicado.
 
 ## 7. Matriz operacional por app
 
@@ -120,9 +121,9 @@ Investigação de scripts + execução isolada de cada `test:<app>` — corrige 
 | Finan | `test:finan` | **Não são testes** — `node --check` (sintaxe) de 118 arquivos do backend. Finan não tem nenhum teste automatizado hoje. | 0 testes / 118 arquivos verificados |
 | ADM | `test:adm` | Vitest (frontend) + `node --check` (sintaxe do backend, 82 arquivos) | 125 (121 + 4 do health check novo) |
 | Operação | `test:operacao` | `node --test` (backend, 10 arquivos) + Vitest (frontend, 3 arquivos) | 55 (42 + 13) |
-| Contratos | `test:contracts` | `node --test` (2 arquivos) | 5 (2 originais + 3 de `ciDeployGates.test.js`) |
+| Contratos | `test:contracts` | `node --test` (2 arquivos) | 6 (2 originais + 4 de `ciDeployGates.test.js`) |
 
-**Total: 538 testes.** `test:finan` não deve ser chamado de "teste unitário" em nenhuma documentação futura.
+**Total: 539 testes.** `test:finan` não deve ser chamado de "teste unitário" em nenhuma documentação futura.
 
 ## 11. Validação em clean-room
 
@@ -231,7 +232,8 @@ Da seção 12 — não corrigidas nesta auditoria (atualização de dependência
 7. `c269122` — `docs(release): reconcile test matrix and promotion runbook`
 8. `2c67fbb` — `fix(security): clear high npm audit findings`
 9. `29d0201` — `ci(security): audit all monorepo packages`
-10. este commit — `docs(release): refresh final monorepo promotion report`
+10. `2c57c4b` — `ci(finan): install dependencies before legacy validation`
+11. este commit — `docs(release): refresh final monorepo promotion report`
 
 Nenhum commit vazio. Nenhum push.
 
@@ -256,6 +258,6 @@ Nenhum commit vazio. Nenhum push.
 
 ## 19. Decisão final
 
-Todos os critérios de GO foram atendidos com evidência: fast-forward mecanicamente possível; diff limpo (zero segredos/artefatos indevidos, mesmo incluindo testes); a única "contradição" apontada (commit `6ef5d9f`) resolvida como não-contradição real; matriz de testes corrigida e comprovada por execução isolada; teste flaky do ADM corrigido com causa explicada e estabilidade comprovada (20/10/5/5 repetições, zero retry); `verify:all` verde (538 testes, lint/build/sintaxe nos 4 apps); `npm audit --audit-level=high` verde nos 8 projetos; deploy do Retiradas agora depende dos 5 gates obrigatórios, comprovado por teste de contrato; job `security` audita todo o monorepo, comprovado por contrato; health check do ADM implementado e testado; push a `master` comprovadamente isolado (não afeta Finan/ADM/Operação); runbook completo; nenhuma branch legada ou stash tocado.
+Todos os critérios de GO foram atendidos com evidência: fast-forward mecanicamente possível; diff limpo (zero segredos/artefatos indevidos, mesmo incluindo testes); a única "contradição" apontada (commit `6ef5d9f`) resolvida como não-contradição real; matriz de testes corrigida e comprovada por execução isolada; teste flaky do ADM corrigido com causa explicada e estabilidade comprovada (20/10/5/5 repetições, zero retry); `verify:all` verde (539 testes, lint/build/sintaxe nos 4 apps); `npm audit --audit-level=high` verde nos 8 projetos; deploy do Retiradas agora depende dos 5 gates obrigatórios, comprovado por teste de contrato; job `security` audita todo o monorepo, comprovado por contrato; `build-and-test` instala dependências do Finan antes da validação legada, comprovado por contrato; health check do ADM implementado e testado; push a `master` comprovadamente isolado (não afeta Finan/ADM/Operação); runbook completo; nenhuma branch legada ou stash tocado.
 
 **GO PARA PROMOÇÃO**
