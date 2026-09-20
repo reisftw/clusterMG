@@ -101,7 +101,7 @@ jobs:
           npm ci --prefix apps/retiradas/backend
 
       - name: Run lint
-        run: npm run lint
+        run: npm run lint:retiradas
 
       - name: Run tests
         run: npm test
@@ -127,6 +127,103 @@ jobs:
           node --check apps/finan/backend/scripts/migrate-from-retiradas.js
           node --check apps/finan/backend/scripts/run-sql-migrations.js
           node --check apps/finan/backend/scripts/database-backup.js
+
+  validate-finan:
+    name: Validar Finan (verify:finan)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Job independente, nao referenciado por "needs:" em nenhum job de
+    # deploy — visibilidade sobre o estado do Finan sem bloquear nada que
+    # ja existia. lint:finan tem debito pre-existente conhecido (ver
+    # docs/REORGANIZACAO-MONOREPO-ETAPA4-RELATORIO.md); falhar aqui e
+    # esperado ate esse debito ser pago, nao indica quebra desta etapa.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/finan/frontend/package-lock.json
+            apps/finan/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/finan/frontend
+          npm ci --prefix apps/finan/backend
+
+      - name: verify:finan (lint + validação sintática + build)
+        run: npm run verify:finan
+
+  validate-adm:
+    name: Validar ADM (verify:adm)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Job independente, mesma lógica do validate-finan. ADM tem debito de
+    # lint pre-existente e parte dos testes falha por causa de uma
+    # segunda instalacao de React com versao diferente da raiz — ambos
+    # documentados no relatorio da Etapa 4, fora do escopo desta etapa
+    # corrigir (exigiria devDependency propria/refactor).
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/adm/frontend/package-lock.json
+            apps/adm/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/adm/frontend
+          npm ci --prefix apps/adm/backend
+
+      - name: verify:adm (lint + testes + validação sintática + build)
+        run: npm run verify:adm
+
+  validate-operacao:
+    name: Validar Operação (verify:operacao)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Job independente, mesma lógica do validate-finan. lint:operacao tem
+    # debito pre-existente (mesma causa: app nunca tinha sido lintado de
+    # verdade antes desta etapa); test:operacao passa 100% hoje.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/operacao/frontend/package-lock.json
+            apps/operacao/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/operacao/frontend
+          npm ci --prefix apps/operacao/backend
+
+      - name: verify:operacao (lint + testes + build)
+        run: npm run verify:operacao
 
   detect-finan-changes:
     name: Detecta mudancas no Finan
