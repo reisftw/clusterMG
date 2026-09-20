@@ -490,7 +490,290 @@ function KmField({ value, onChange, label = "Quilometragem atual" }) {
 	);
 }
 
-function ActionModals({ modal, vehicle, onClose, onDone, setError }) {
+// Cada tipo de modal virou um componente proprio, com seus useState no
+// topo (incondicionais) — antes eram blocos `if (modal.type === "x") {
+// const [..] = useStatePatch(...); return (...) }` dentro do mesmo
+// componente ActionModals, chamando hooks condicionalmente (violacao real
+// de Rules of Hooks: se o usuario trocasse de modal.type sem desmontar
+// ActionModals, a quantidade/ordem de hooks chamados mudava entre renders
+// do mesmo componente). Como React trata cada tipo de modal como um
+// componente diferente, montar/desmontar entre eles agora é natural e
+// cada um so chama hooks incondicionalmente na propria raiz.
+
+function TransferModal({ vehicle, onClose, saving, localError, run, eligibleTechnicians }) {
+	const [toResponsibleId, setToResponsibleId] = useState("");
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Transferir veículo" description={`Veículo ${vehicle.plate}. Responsável atual: ${vehicle.responsibleName || "—"}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><ArrowLeftRight size={22} /></span>} onClose={onClose} size="md">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<Field label="Novo responsável" required>
+					<Select value={toResponsibleId} onChange={setToResponsibleId} items={eligibleTechnicians.map((t) => ({ id: t.id, name: t.name }))} empty="Selecione" />
+				</Field>
+				<KmField value={km} onChange={setKm} />
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !toResponsibleId || km === ""} onClick={() => run(() => submitKmAware((p) => transferRotVehicle(vehicle.id, p), { toResponsibleId, km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
+						{saving ? "Enviando..." : "Confirmar transferência"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function ConfirmModal({ vehicle, modal, onClose, saving, localError, run }) {
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Confirmar recebimento" description={`Entrega registrada com ${formatKm(modal.movement.kmOut)}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<KmField value={km} onChange={setKm} label="Quilometragem no recebimento" />
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || km === ""} onClick={() => run(() => submitKmAware((p) => confirmRotVehicleMovement(modal.movement.id, p), { km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">
+						{saving ? "Confirmando..." : "Confirmar recebimento"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function CancelModal({ modal, onClose, saving, localError, run }) {
+	return (
+		<ModalShell open title="Cancelar transferência" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><XCircle size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<p className="text-sm font-semibold text-slate-600">O veículo volta para o responsável anterior. Confirma o cancelamento?</p>
+			<div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
+				<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Voltar</button>
+				<button type="button" disabled={saving} onClick={() => run(() => cancelRotVehicleMovement(modal.movement.id))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">{saving ? "Cancelando..." : "Cancelar transferência"}</button>
+			</div>
+		</ModalShell>
+	);
+}
+
+function ReturnModal({ vehicle, onClose, saving, localError, run }) {
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [reason, setReason] = useState("");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Devolver à base" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><Store size={22} /></span>} onClose={onClose} size="md">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<KmField value={km} onChange={setKm} />
+				<Field label="Motivo" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" /></Field>
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !reason.trim() || km === ""} onClick={() => run(() => submitKmAware((p) => returnRotVehicleToBase(vehicle.id, p), { km: Number(km), reason, note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
+						{saving ? "Enviando..." : "Confirmar devolução"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function RetrieveModal({ vehicle, onClose, saving, localError, run, eligibleTechnicians }) {
+	const [responsibleId, setResponsibleId] = useState("");
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Retirar da base" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><UserCog size={22} /></span>} onClose={onClose} size="md">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<Field label="Responsável" required><Select value={responsibleId} onChange={setResponsibleId} items={eligibleTechnicians.map((t) => ({ id: t.id, name: t.name }))} empty="Selecione" /></Field>
+				<KmField value={km} onChange={setKm} />
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !responsibleId || km === ""} onClick={() => run(() => submitKmAware((p) => retrieveRotVehicleFromBase(vehicle.id, p), { responsibleId, km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
+						{saving ? "Enviando..." : "Confirmar retirada"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function KmModal({ vehicle, onClose, saving, localError, run }) {
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Registrar quilometragem" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><Gauge size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<KmField value={km} onChange={setKm} />
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || km === ""} onClick={() => run(() => submitKmAware((p) => recordRotVehicleKm(vehicle.id, p), { km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
+						{saving ? "Salvando..." : "Registrar"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function KmCorrectModal({ vehicle, onClose, saving, localError, run }) {
+	const [km, setKm] = useState("");
+	const [reason, setReason] = useState("");
+	return (
+		<ModalShell open title="Corrigir quilometragem" description={`Última leitura: ${formatKm(vehicle.currentKm)}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><Gauge size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<KmField value={km} onChange={setKm} label="Quilometragem correta" />
+				<Field label="Motivo da correção" required><textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || km === "" || !reason.trim()} onClick={() => run(() => correctRotVehicleKm(vehicle.id, { km: Number(km), reason }))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">
+						{saving ? "Salvando..." : "Corrigir"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function MaintenanceStartModal({ vehicle, onClose, saving, localError, run }) {
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [date, setDate] = useState("");
+	const [time, setTime] = useState("");
+	const [reason, setReason] = useState("");
+	const [intervalKm, setIntervalKm] = useState("");
+	return (
+		<ModalShell open title="Entrada em manutenção" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Wrench size={22} /></span>} onClose={onClose} size="md">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<KmField value={km} onChange={setKm} />
+				<div className="grid grid-cols-2 gap-3">
+					<Field label="Data" required><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rot-input" /></Field>
+					<Field label="Hora"><input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="rot-input" /></Field>
+				</div>
+				<Field label="Motivo"><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" placeholder="Ex.: Troca de óleo" /></Field>
+				<Field label="Intervalo até a próxima revisão (KM)" hint="Opcional — calcula a próxima revisão automaticamente."><input type="number" inputMode="numeric" value={intervalKm} onChange={(e) => setIntervalKm(e.target.value)} className="rot-input" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || km === "" || !date} onClick={() => run(() => submitKmAware((p) => createRotVehicleMaintenance(vehicle.id, p), { km: Number(km), date, time, reason, intervalKm: intervalKm ? Number(intervalKm) : null }))} className="rot-btn-tactile rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60">
+						{saving ? "Enviando..." : "Confirmar entrada"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function MaintenanceFinishModal({ modal, onClose, saving, localError, run }) {
+	const [km, setKm] = useState("");
+	const [resolutionNote, setResolutionNote] = useState("");
+	return (
+		<ModalShell open title="Retorno de manutenção" description={`Entrada registrada com ${formatKm(modal.maintenance.kmIn)}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<KmField value={km} onChange={setKm} label="Quilometragem de saída" />
+				<Field label="O que foi feito?"><textarea value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} rows={3} className="rot-input min-h-20 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || km === ""} onClick={() => run(() => submitKmAware((p) => finishRotVehicleMaintenance(modal.maintenance.id, p), { km: Number(km), resolutionNote }))} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">
+						{saving ? "Salvando..." : "Concluir manutenção"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function ClaimModal({ vehicle, onClose, saving, localError, run }) {
+	const [description, setDescription] = useState("");
+	const [affectsAvailability, setAffectsAvailability] = useState(true);
+	return (
+		<ModalShell open title="Registrar sinistro" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><ShieldAlert size={22} /></span>} onClose={onClose} size="md">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<Field label="Descrição" required><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="rot-input min-h-28 py-2" autoFocus /></Field>
+				<label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+					<input type="checkbox" checked={affectsAvailability} onChange={(e) => setAffectsAvailability(e.target.checked)} />
+					Este sinistro tira o veículo de operação
+				</label>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !description.trim()} onClick={() => run(() => createRotVehicleClaim(vehicle.id, { description, affectsAvailability }))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">
+						{saving ? "Salvando..." : "Registrar"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function BlockModal({ vehicle, onClose, saving, localError, run }) {
+	const [reason, setReason] = useState("");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Bloquear veículo" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"><Lock size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<Field label="Motivo" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" placeholder="Ex.: Manutenção crítica, Sinistro, Documentação..." autoFocus /></Field>
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !reason.trim()} onClick={() => run(() => blockRotVehicle(vehicle.id, { reason, note }))} className="rot-btn-tactile rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white hover:bg-black disabled:opacity-60">
+						{saving ? "Bloqueando..." : "Bloquear"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function UnblockModal({ vehicle, onClose, saving, localError, run }) {
+	const [reason, setReason] = useState("");
+	return (
+		<ModalShell open title="Desbloquear veículo" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Unlock size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<Field label="Motivo da liberação" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" autoFocus /></Field>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !reason.trim()} onClick={() => run(() => unblockRotVehicle(vehicle.id, { reason }))} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">
+						{saving ? "Desbloqueando..." : "Desbloquear"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function InactivateModal({ vehicle, onClose, saving, localError, run }) {
+	const [reason, setReason] = useState("");
+	const [km, setKm] = useState(vehicle.currentKm ?? "");
+	const [note, setNote] = useState("");
+	return (
+		<ModalShell open title="Dar baixa no veículo" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><Ban size={22} /></span>} onClose={onClose} size="sm">
+			{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
+			<div className="space-y-4">
+				<Field label="Motivo" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" autoFocus /></Field>
+				<KmField value={km} onChange={setKm} label="Quilometragem final" />
+				<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
+				<p className="text-xs font-bold text-red-600">Depois da baixa, o veículo não recebe mais movimentações normais.</p>
+				<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
+					<button type="button" disabled={saving || !reason.trim() || km === ""} onClick={() => run(() => inactivateRotVehicle(vehicle.id, { reason, km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">
+						{saving ? "Salvando..." : "Confirmar baixa"}
+					</button>
+				</div>
+			</div>
+		</ModalShell>
+	);
+}
+
+function ActionModals({ modal, vehicle, onClose, onDone }) {
 	const [saving, setSaving] = useState(false);
 	const [localError, setLocalError] = useState("");
 	const [technicians, setTechnicians] = useState(null);
@@ -516,286 +799,21 @@ function ActionModals({ modal, vehicle, onClose, onDone, setError }) {
 	};
 
 	const eligibleTechnicians = (technicians || []).filter((t) => (t.operationScopes || ["ROT"]).includes(vehicle.operationScope));
+	const shared = { vehicle, modal, onClose, saving, localError, run, eligibleTechnicians };
 
-	if (modal.type === "transfer") {
-		const [toResponsibleId, setToResponsibleId] = useStatePatch("");
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Transferir veículo" description={`Veículo ${vehicle.plate}. Responsável atual: ${vehicle.responsibleName || "—"}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><ArrowLeftRight size={22} /></span>} onClose={onClose} size="md">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<Field label="Novo responsável" required>
-						<Select value={toResponsibleId} onChange={setToResponsibleId} items={eligibleTechnicians.map((t) => ({ id: t.id, name: t.name }))} empty="Selecione" />
-					</Field>
-					<KmField value={km} onChange={setKm} />
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !toResponsibleId || km === ""} onClick={() => run(() => submitKmAware((p) => transferRotVehicle(vehicle.id, p), { toResponsibleId, km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
-							{saving ? "Enviando..." : "Confirmar transferência"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "confirm") {
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Confirmar recebimento" description={`Entrega registrada com ${formatKm(modal.movement.kmOut)}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<KmField value={km} onChange={setKm} label="Quilometragem no recebimento" />
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || km === ""} onClick={() => run(() => submitKmAware((p) => confirmRotVehicleMovement(modal.movement.id, p), { km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">
-							{saving ? "Confirmando..." : "Confirmar recebimento"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "cancel") {
-		return (
-			<ModalShell open title="Cancelar transferência" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><XCircle size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<p className="text-sm font-semibold text-slate-600">O veículo volta para o responsável anterior. Confirma o cancelamento?</p>
-				<div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-4">
-					<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Voltar</button>
-					<button type="button" disabled={saving} onClick={() => run(() => cancelRotVehicleMovement(modal.movement.id))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">{saving ? "Cancelando..." : "Cancelar transferência"}</button>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "return") {
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [reason, setReason] = useStatePatch("");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Devolver à base" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><Store size={22} /></span>} onClose={onClose} size="md">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<KmField value={km} onChange={setKm} />
-					<Field label="Motivo" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" /></Field>
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !reason.trim() || km === ""} onClick={() => run(() => submitKmAware((p) => returnRotVehicleToBase(vehicle.id, p), { km: Number(km), reason, note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
-							{saving ? "Enviando..." : "Confirmar devolução"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "retrieve") {
-		const [responsibleId, setResponsibleId] = useStatePatch("");
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Retirar da base" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><UserCog size={22} /></span>} onClose={onClose} size="md">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<Field label="Responsável" required><Select value={responsibleId} onChange={setResponsibleId} items={eligibleTechnicians.map((t) => ({ id: t.id, name: t.name }))} empty="Selecione" /></Field>
-					<KmField value={km} onChange={setKm} />
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !responsibleId || km === ""} onClick={() => run(() => submitKmAware((p) => retrieveRotVehicleFromBase(vehicle.id, p), { responsibleId, km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
-							{saving ? "Enviando..." : "Confirmar retirada"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "km") {
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Registrar quilometragem" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600"><Gauge size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<KmField value={km} onChange={setKm} />
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || km === ""} onClick={() => run(() => submitKmAware((p) => recordRotVehicleKm(vehicle.id, p), { km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white hover:bg-orange-700 disabled:opacity-60">
-							{saving ? "Salvando..." : "Registrar"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "kmCorrect") {
-		const [km, setKm] = useStatePatch("");
-		const [reason, setReason] = useStatePatch("");
-		return (
-			<ModalShell open title="Corrigir quilometragem" description={`Última leitura: ${formatKm(vehicle.currentKm)}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><Gauge size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<KmField value={km} onChange={setKm} label="Quilometragem correta" />
-					<Field label="Motivo da correção" required><textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || km === "" || !reason.trim()} onClick={() => run(() => correctRotVehicleKm(vehicle.id, { km: Number(km), reason }))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">
-							{saving ? "Salvando..." : "Corrigir"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "maintenanceStart") {
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [date, setDate] = useStatePatch("");
-		const [time, setTime] = useStatePatch("");
-		const [reason, setReason] = useStatePatch("");
-		const [intervalKm, setIntervalKm] = useStatePatch("");
-		return (
-			<ModalShell open title="Entrada em manutenção" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Wrench size={22} /></span>} onClose={onClose} size="md">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<KmField value={km} onChange={setKm} />
-					<div className="grid grid-cols-2 gap-3">
-						<Field label="Data" required><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rot-input" /></Field>
-						<Field label="Hora"><input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="rot-input" /></Field>
-					</div>
-					<Field label="Motivo"><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" placeholder="Ex.: Troca de óleo" /></Field>
-					<Field label="Intervalo até a próxima revisão (KM)" hint="Opcional — calcula a próxima revisão automaticamente."><input type="number" inputMode="numeric" value={intervalKm} onChange={(e) => setIntervalKm(e.target.value)} className="rot-input" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || km === "" || !date} onClick={() => run(() => submitKmAware((p) => createRotVehicleMaintenance(vehicle.id, p), { km: Number(km), date, time, reason, intervalKm: intervalKm ? Number(intervalKm) : null }))} className="rot-btn-tactile rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60">
-							{saving ? "Enviando..." : "Confirmar entrada"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "maintenanceFinish") {
-		const [km, setKm] = useStatePatch("");
-		const [resolutionNote, setResolutionNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Retorno de manutenção" description={`Entrada registrada com ${formatKm(modal.maintenance.kmIn)}.`} icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<KmField value={km} onChange={setKm} label="Quilometragem de saída" />
-					<Field label="O que foi feito?"><textarea value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)} rows={3} className="rot-input min-h-20 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || km === ""} onClick={() => run(() => submitKmAware((p) => finishRotVehicleMaintenance(modal.maintenance.id, p), { km: Number(km), resolutionNote }))} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">
-							{saving ? "Salvando..." : "Concluir manutenção"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "claim") {
-		const [description, setDescription] = useStatePatch("");
-		const [affectsAvailability, setAffectsAvailability] = useStatePatch(true);
-		return (
-			<ModalShell open title="Registrar sinistro" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><ShieldAlert size={22} /></span>} onClose={onClose} size="md">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<Field label="Descrição" required><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="rot-input min-h-28 py-2" autoFocus /></Field>
-					<label className="flex items-center gap-2 text-sm font-bold text-slate-700">
-						<input type="checkbox" checked={affectsAvailability} onChange={(e) => setAffectsAvailability(e.target.checked)} />
-						Este sinistro tira o veículo de operação
-					</label>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !description.trim()} onClick={() => run(() => createRotVehicleClaim(vehicle.id, { description, affectsAvailability }))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">
-							{saving ? "Salvando..." : "Registrar"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "block") {
-		const [reason, setReason] = useStatePatch("");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Bloquear veículo" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"><Lock size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<Field label="Motivo" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" placeholder="Ex.: Manutenção crítica, Sinistro, Documentação..." autoFocus /></Field>
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !reason.trim()} onClick={() => run(() => blockRotVehicle(vehicle.id, { reason, note }))} className="rot-btn-tactile rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white hover:bg-black disabled:opacity-60">
-							{saving ? "Bloqueando..." : "Bloquear"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "unblock") {
-		const [reason, setReason] = useStatePatch("");
-		return (
-			<ModalShell open title="Desbloquear veículo" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Unlock size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<Field label="Motivo da liberação" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" autoFocus /></Field>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !reason.trim()} onClick={() => run(() => unblockRotVehicle(vehicle.id, { reason }))} className="rot-btn-tactile rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60">
-							{saving ? "Desbloqueando..." : "Desbloquear"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
-
-	if (modal.type === "inactivate") {
-		const [reason, setReason] = useStatePatch("");
-		const [km, setKm] = useStatePatch(vehicle.currentKm ?? "");
-		const [note, setNote] = useStatePatch("");
-		return (
-			<ModalShell open title="Dar baixa no veículo" icon={<span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-50 text-red-600"><Ban size={22} /></span>} onClose={onClose} size="sm">
-				{localError ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{localError}</p> : null}
-				<div className="space-y-4">
-					<Field label="Motivo" required><input value={reason} onChange={(e) => setReason(e.target.value)} className="rot-input" autoFocus /></Field>
-					<KmField value={km} onChange={setKm} label="Quilometragem final" />
-					<Field label="Observação"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" /></Field>
-					<p className="text-xs font-bold text-red-600">Depois da baixa, o veículo não recebe mais movimentações normais.</p>
-					<div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-						<button type="button" onClick={onClose} disabled={saving} className="rot-btn-tactile rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 disabled:opacity-60">Cancelar</button>
-						<button type="button" disabled={saving || !reason.trim() || km === ""} onClick={() => run(() => inactivateRotVehicle(vehicle.id, { reason, km: Number(km), note }))} className="rot-btn-tactile rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700 disabled:opacity-60">
-							{saving ? "Salvando..." : "Confirmar baixa"}
-						</button>
-					</div>
-				</div>
-			</ModalShell>
-		);
-	}
+	if (modal.type === "transfer") return <TransferModal {...shared} />;
+	if (modal.type === "confirm") return <ConfirmModal {...shared} />;
+	if (modal.type === "cancel") return <CancelModal {...shared} />;
+	if (modal.type === "return") return <ReturnModal {...shared} />;
+	if (modal.type === "retrieve") return <RetrieveModal {...shared} />;
+	if (modal.type === "km") return <KmModal {...shared} />;
+	if (modal.type === "kmCorrect") return <KmCorrectModal {...shared} />;
+	if (modal.type === "maintenanceStart") return <MaintenanceStartModal {...shared} />;
+	if (modal.type === "maintenanceFinish") return <MaintenanceFinishModal {...shared} />;
+	if (modal.type === "claim") return <ClaimModal {...shared} />;
+	if (modal.type === "block") return <BlockModal {...shared} />;
+	if (modal.type === "unblock") return <UnblockModal {...shared} />;
+	if (modal.type === "inactivate") return <InactivateModal {...shared} />;
 
 	return null;
-}
-
-// Pequeno atalho pra useState com nome estavel dentro do bloco condicional
-// de ActionModals (cada "modal.type" so renderiza um bloco por vez, entao
-// os hooks continuam sendo chamados na mesma ordem a cada render).
-function useStatePatch(initial) {
-	return useState(initial);
 }
