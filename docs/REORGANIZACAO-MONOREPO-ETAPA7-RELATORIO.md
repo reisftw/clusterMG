@@ -84,9 +84,11 @@ Executada de fato, não apenas planejada: clone isolado do SHA `adb8801` em past
 - Isolado 3x (`npx vitest run` só esse arquivo): **3/3 passou**, confirmando flakiness por timing sob carga, não defeito funcional.
 - 3ª rodada (`verify:all` completo, do zero): **`EXIT:0`, 353+121+42+13+2 testes = todos passando** (total 531, correto — mas ver correção de atribuição por app na Etapa 8, abaixo).
 
-**Conclusão**: baseline verde confirmado em ambiente limpo. Existe um teste com timeout fixo de 5000ms suscetível a flakiness sob CPU carregada (`apps/adm/frontend/src/pages/PainelPublico/hooks/useDashboardData.test.js`) — registrado como risco residual (item 20), corrigido na Etapa 8 (ver `docs/REORGANIZACAO-MONOREPO-ETAPA8-RELATORIO.md`).
+**Conclusão**: baseline verde confirmado em ambiente limpo. Existe um teste com timeout fixo de 5000ms suscetível a flakiness sob CPU carregada (`apps/adm/frontend/src/pages/PainelPublico/hooks/useDashboardData.test.js`) — registrado como risco residual (item 20), corrigido na Etapa 8 (ver `docs/REORGANIZACAO-MONOREPO-RELATORIO-FINAL.md`, seção 8).
 
-> **Correção (Etapa 8, Fase 1)**: a tabela abaixo atribuiu os números de teste ao app errado. O total (531) e o `EXIT:0` continuam corretos — só a coluna "Testes" por linha estava trocada. A tabela real, verificada isolando cada script (`npm run test:<app>`), está em `docs/REORGANIZACAO-MONOREPO-ETAPA8-RELATORIO.md`, item 11. Resumo: Retiradas 353 (vitest), Finan **não tem testes automatizados** (apenas checagem de sintaxe de 118 arquivos backend via `node --check`, não é "teste unitário"), ADM 121 (vitest, não `node --test`), Operação 55 (42 backend via `node --test` + 13 frontend via vitest), Contratos 2 (`node --test`).
+> **Correção (Etapa 8)**: a tabela abaixo atribuiu os números de teste ao app errado. O total (531) e o `EXIT:0` continuam corretos — só a coluna "Testes" por linha estava trocada. A tabela real, verificada isolando cada script (`npm run test:<app>`), está em `docs/REORGANIZACAO-MONOREPO-RELATORIO-FINAL.md`, seção 10. Resumo: Retiradas 353 (vitest), Finan **não tem testes automatizados** (apenas checagem de sintaxe de 118 arquivos backend via `node --check`, não é "teste unitário"), ADM 121 (vitest, não `node --test`), Operação 55 (42 backend via `node --test` + 13 frontend via vitest), Contratos 2 (`node --test`).
+>
+> **Nota (Etapa 8)**: este relatório da Etapa 7 permanece como registro histórico. O relatório consolidado e atualizado (Etapas 7+8, runbook de promoção e backlog de hardening do Finan em um só arquivo) está em `docs/REORGANIZACAO-MONOREPO-RELATORIO-FINAL.md`.
 
 ## 12. Resultado lint/test/build por app (clean-room, 3ª rodada) — tabela mantida como registro histórico, ver correção acima
 
@@ -115,7 +117,7 @@ Executada de fato, não apenas planejada: clone isolado do SHA `adb8801` em past
 1. `CLAUDE.md` (seção 3): `cd vps` → `cd apps/retiradas/backend` em 5 blocos de comando (instalar backend, rodar backend local, migrations SQL gerais, migrations normalizadas, scripts de migração por domínio, backup manual) — caminho `vps/` não existe mais no repositório.
 2. `CLAUDE.md` (seção 3): removidas 2 linhas de scripts npm inexistentes (`migrate:financeiro-reports`, `migrate:financeiro-budget-config`) — confirmado que não existem em nenhum `package.json` do repo; as migrations financeiras já rodam via `migrate:normalized:apply`.
 
-Nenhuma outra alteração de escopo foi feita. `docs/runbooks/promocao-monorepo.md` foi criado (item 19) — não é uma "correção", é o entregável exigido pela Fase 8.
+Nenhuma outra alteração de escopo foi feita. O runbook de promoção (item 19) foi criado — não é uma "correção", é o entregável exigido pela Fase 8. Posteriormente consolidado em `docs/REORGANIZACAO-MONOREPO-RELATORIO-FINAL.md` (seção 13).
 
 ## 16. Commits criados nesta etapa
 
@@ -125,7 +127,7 @@ Nenhum outro commit. Nenhum push.
 
 ## 17. Runbook de promoção
 
-Criado em [`docs/runbooks/promocao-monorepo.md`](docs/runbooks/promocao-monorepo.md), com: comando exato `git merge --ff-only` (não merge-commit, já que `master` é ancestral estrito), verificação pós-merge, matriz de deploy por app (item 9), smoke tests, gatilhos e procedimento de rollback (manual, sem script de rollback automatizado identificado no CI), notas de migration/DB, confirmação de que `finan`/`adm`/`rot` não são apagadas, e validação manual pós-publicação do fluxo de rompimentos.
+Criado com: comando exato `git merge --ff-only` (não merge-commit, já que `master` é ancestral estrito), verificação pós-merge, matriz de deploy por app (item 9), smoke tests, gatilhos e procedimento de rollback (manual, sem script de rollback automatizado identificado no CI), notas de migration/DB, confirmação de que `finan`/`adm`/`rot` não são apagadas, e validação manual pós-publicação do fluxo de rompimentos. Conteúdo consolidado em [`docs/REORGANIZACAO-MONOREPO-RELATORIO-FINAL.md`](docs/REORGANIZACAO-MONOREPO-RELATORIO-FINAL.md), seção 13.
 
 ## 18. Riscos residuais
 
