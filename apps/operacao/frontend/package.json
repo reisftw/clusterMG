@@ -6,7 +6,8 @@
 	"scripts": {
 		"dev": "vite --host 0.0.0.0 --port 5175",
 		"build": "vite build",
-		"preview": "vite preview --host 0.0.0.0 --port 4175"
+		"preview": "vite preview --host 0.0.0.0 --port 4175",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"docx": "^9.7.1",
@@ -21,6 +22,7 @@
 		"@tailwindcss/postcss": "^4.2.1",
 		"@vitejs/plugin-react": "^5.1.1",
 		"tailwindcss": "^4.2.1",
-		"vite": "^7.2.4"
+		"vite": "^7.2.4",
+		"vitest": "4.1.10"
 	}
 }

@@ -18,6 +18,7 @@ import ImageUploader from "../../components/ImageUploader";
 import { captureLocation } from "../../utils/captureLocation";
 import { enqueueRotAction, isNetworkFailure, queuedRotActionCount } from "../../utils/offlineRotQueue";
 import { useRotAuth } from "../../state/RotAuthContext";
+import { buildRompimentoPayload } from "./rompimentoPayload";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const ROMPIMENTOS_CACHE_KEY = "rot-rompimentos-cache";
@@ -490,20 +491,24 @@ function RompimentoFormModal({ item, regionals, catalog, user, onClose, onSaved,
 		}
 		setSaving(true);
 		setError("");
+		// payload declarado fora do try: o catch precisa dele pra enfileirar
+		// a acao offline (era declarado com `const` dentro do try, fora de
+		// escopo no catch — ReferenceError sempre que a criacao falhasse por
+		// rede, exatamente o cenario que esse fallback deveria tratar).
+		const payload = buildRompimentoPayload({
+			regionalId,
+			ticketNumber,
+			nextStatus,
+			cidade,
+			pontoALat,
+			pontoALng,
+			pontoB,
+			materiais,
+			outros,
+			fibraTipo,
+			fibraMetros,
+		});
 		try {
-			const payload = {
-				regionalId,
-				ticketNumber: ticketNumber.trim(),
-				status: nextStatus,
-				clienteNome: "",
-				cidade,
-				pontoA: pontoALat !== "" && pontoALng !== "" ? { lat: Number(pontoALat), lng: Number(pontoALng) } : null,
-				pontoB,
-				materiais,
-				outros,
-				fibraTipo,
-				fibraMetros,
-			};
 			const saved = isEdit ? await updateRotRompimento(item.id, payload) : await createRotRompimento(payload);
 			onSaved(saved, { keepOpen: nextStatus === "em_tratativa" });
 		} catch (err) {
