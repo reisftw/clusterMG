@@ -36,7 +36,7 @@ import {
 	X,
 	Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { hasAnyPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/useAuthContext";
@@ -3020,12 +3020,12 @@ function AccessKeysPanel() {
 		"manage_imoveis_administrativos",
 	]);
 
-	const loadDashboard = async () => {
+	const loadDashboard = useCallback(async () => {
 		const data = await obterDashboardChavesFacilities();
 		setDashboard(data || null);
-	};
+	}, []);
 
-	const loadKeys = async () => {
+	const loadKeys = useCallback(async () => {
 		setLoading(true);
 		setError("");
 		try {
@@ -3049,7 +3049,7 @@ function AccessKeysPanel() {
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, [page, pageSize, debouncedQuery, sort, filters, loadDashboard]);
 
 	useEffect(() => {
 		let active = true;
@@ -3065,7 +3065,7 @@ function AccessKeysPanel() {
 
 	useEffect(() => {
 		loadKeys();
-	}, [page, pageSize, debouncedQuery, filters, sort]);
+	}, [loadKeys]);
 
 	useEffect(() => {
 		setPage(1);
@@ -6400,7 +6400,7 @@ function ConsumptionPanel() {
 		observacao: "",
 	});
 
-	const load = async () => {
+	const load = useCallback(async () => {
 		setLoading(true);
 		setError("");
 		try {
@@ -6411,9 +6411,9 @@ function ConsumptionPanel() {
 		} finally {
 			setLoading(false);
 		}
-	};
+	}, [competence]);
 
-	useEffect(() => { load(); }, [competence]);
+	useEffect(() => { load(); }, [load]);
 
 	const summary = useMemo(() => summarizeConsumption(items, competence), [items, competence]);
 	const filtered = useMemo(() => items.filter((item) => item.competencia === competence), [items, competence]);
