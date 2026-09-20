@@ -256,12 +256,14 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Homologação: `https://homolog.retiradas.tech`, API interna `3002`, banco `retiradas_homolog`.
 - Versão visual:
   - O frontend recebe `VITE_APP_VERSION=${GITHUB_SHA::7}` e `VITE_APP_ENV_LABEL` pela pipeline para mostrar versão/ambiente no rodapé.
-- Fluxo de trabalho local entre os apps do monorepo (padrão fixado em 18/09/2026):
-  - O repositório tem uma única pasta de trabalho local (`retiradas`), sem worktrees separados por app.
-  - Cada app do monorepo tem sua própria branch: `finan` atua em `apps/finan`, `adm` atua em `apps/adm`, `rot` (nome externo: Operação) atua em `apps/operacao`. `master`/`homolog-dev` seguem cuidando do app original (`src/`, `apps/retiradas/backend/api`), que continua publicando via CI/GitHub Actions normalmente (não confundir com a regra abaixo).
-  - Para mexer num desses três apps (`finan`/`adm`/`rot`), troque a branch ativa na mesma pasta (`git checkout <branch>`) antes de editar — não crie worktree novo por padrão.
-  - Para `apps/finan`, `apps/adm` e `apps/operacao`: trabalhar local primeiro (editar, testar, buildar) e só depois subir para a VPS via **deploy manual por SSH** (chave `~/.ssh/retiradas_github_actions_deploy`), sem depender do CI para publicar essas mudanças. Isso é diferente da regra de "não fazer deploy manual" da seção 9, que vale para o app original (`src/`/`apps/retiradas/backend/api`) publicado via GitHub Actions.
-  - Antes de qualquer deploy desses três apps, o estado local deve ser tratado como a fonte da verdade a caminho da VPS: local vira produção, não o contrário — se a VPS estiver na frente do local (arquivo alterado direto lá), isso é excepcional e deve ser puxado e reconciliado explicitamente, não presumido.
+- Fluxo de trabalho local entre os apps do monorepo (padrão atualizado em 20/09/2026):
+  - O repositório tem uma única pasta de trabalho local (`retiradas`), sem worktrees separados por app por padrão.
+  - `master` é a base integrada do monorepo. Antes de iniciar qualquer frente, atualizar `master` e criar uma branch curta a partir dela com prefixo `codex/`, por exemplo `codex/adm-ajuste-menu`, `codex/finan-dre` ou `codex/operacao-agendamentos`.
+  - Branches locais permanentes já reservadas para trabalho por app: `codex/retiradas-work` atua em `apps/retiradas/**`, `codex/finan-work` atua em `apps/finan/**`, `codex/adm-work` atua em `apps/adm/**` e `codex/operacao-work` atua em `apps/operacao/**`.
+  - As branches antigas `finan`, `adm` e `rot` são legado/recuperação. Não continuar desenvolvimento nelas salvo pedido explícito. O nome externo `rot` pode continuar aparecendo em serviços, domínios ou configuração de produção da Operação; não renomear esses pontos automaticamente.
+  - Ao mexer em um app, manter o escopo no diretório do app correspondente e tocar arquivos compartilhados ou de raiz somente quando a mudança realmente exigir. Validar com o script de verificação do app (`npm run verify:retiradas`, `npm run verify:finan`, `npm run verify:adm` ou `npm run verify:operacao`) antes de propor merge/deploy.
+  - Deploy segue a estratégia declarada na tarefa: push em `master` publica Retiradas via CI/GitHub Actions; Finan, ADM e Operação devem ter deploy confirmado por app antes de subir alterações. Não presumir mais que a branch legada de cada app é a fonte de produção.
+  - Antes de qualquer deploy manual, o estado local deve ser tratado como a fonte da verdade a caminho da VPS: local vira produção, não o contrário — se a VPS estiver na frente do local (arquivo alterado direto lá), isso é excepcional e deve ser puxado e reconciliado explicitamente, não presumido.
 
 ## 9. O que NÃO fazer
 
