@@ -82,13 +82,15 @@ Executada de fato, não apenas planejada: clone isolado do SHA `adb8801` em past
 - 1ª rodada: falha (`EXIT:1`) por engano metodológico meu (esqueci de instalar `apps/retiradas/backend`) — corrigido e re-executado, não é achado do código.
 - 2ª rodada (`verify:all` completo): `EXIT:1` — 1 teste falhou por timeout (`useDashboardData.test.js`, dentro de `apps/adm/frontend`, 5000ms excedidos sob carga).
 - Isolado 3x (`npx vitest run` só esse arquivo): **3/3 passou**, confirmando flakiness por timing sob carga, não defeito funcional.
-- 3ª rodada (`verify:all` completo, do zero): **`EXIT:0`, 353+121+42+13+2 testes = todos passando**, batendo exatamente com os números já reportados na Etapa 6.
+- 3ª rodada (`verify:all` completo, do zero): **`EXIT:0`, 353+121+42+13+2 testes = todos passando** (total 531, correto — mas ver correção de atribuição por app na Etapa 8, abaixo).
 
-**Conclusão**: baseline verde confirmado em ambiente limpo. Existe um teste com timeout fixo de 5000ms suscetível a flakiness sob CPU carregada (`apps/adm/frontend/src/pages/PainelPublico/hooks/useDashboardData.test.js`) — registrado como risco residual (item 20), não corrigido nesta etapa por estar fora do escopo estrito da Fase 9 (não é path quebrado, filtro de CI, comando de build/test quebrado por movimentação de diretório, doc inconsistente ou o bug específico do `6ef5d9f`).
+**Conclusão**: baseline verde confirmado em ambiente limpo. Existe um teste com timeout fixo de 5000ms suscetível a flakiness sob CPU carregada (`apps/adm/frontend/src/pages/PainelPublico/hooks/useDashboardData.test.js`) — registrado como risco residual (item 20), corrigido na Etapa 8 (ver `docs/REORGANIZACAO-MONOREPO-ETAPA8-RELATORIO.md`).
 
-## 12. Resultado lint/test/build por app (clean-room, 3ª rodada)
+> **Correção (Etapa 8, Fase 1)**: a tabela abaixo atribuiu os números de teste ao app errado. O total (531) e o `EXIT:0` continuam corretos — só a coluna "Testes" por linha estava trocada. A tabela real, verificada isolando cada script (`npm run test:<app>`), está em `docs/REORGANIZACAO-MONOREPO-ETAPA8-RELATORIO.md`, item 11. Resumo: Retiradas 353 (vitest), Finan **não tem testes automatizados** (apenas checagem de sintaxe de 118 arquivos backend via `node --check`, não é "teste unitário"), ADM 121 (vitest, não `node --test`), Operação 55 (42 backend via `node --test` + 13 frontend via vitest), Contratos 2 (`node --test`).
 
-| App | Lint | Testes | Build |
+## 12. Resultado lint/test/build por app (clean-room, 3ª rodada) — tabela mantida como registro histórico, ver correção acima
+
+| App | Lint | Testes (rótulo original — ver correção acima) | Build |
 |---|---|---|---|
 | Retiradas | 0 erros/0 warnings | 353/353 | OK |
 | Finan | 0 erros/0 warnings | 121/121 | OK |
