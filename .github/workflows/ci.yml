@@ -129,11 +129,15 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apps/retiradas/backend/package-lock.json
+            apps/finan/frontend/package-lock.json
+            apps/finan/backend/package-lock.json
 
       - name: Install all dependencies
         run: |
           npm ci
           npm ci --prefix apps/retiradas/backend
+          npm ci --prefix apps/finan/frontend
+          npm ci --prefix apps/finan/backend
 
       - name: Run lint
         run: npm run lint:retiradas

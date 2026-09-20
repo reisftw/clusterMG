@@ -100,3 +100,24 @@ test("security audita dependencias de todos os apps do monorepo", () => {
 		);
 	}
 });
+
+test("build-and-test instala dependencias do Finan antes da validacao legada", () => {
+	const workflow = readWorkflow();
+	const jobBlock = extractJobBlock(workflow, "build-and-test");
+
+	assert.ok(
+		jobBlock.includes("npm run finan:frontend:build"),
+		"build-and-test deveria manter a validacao legada do frontend Finan",
+	);
+	for (const expectedCommand of [
+		"apps/finan/frontend/package-lock.json",
+		"apps/finan/backend/package-lock.json",
+		"npm ci --prefix apps/finan/frontend",
+		"npm ci --prefix apps/finan/backend",
+	]) {
+		assert.ok(
+			jobBlock.includes(expectedCommand),
+			`build-and-test valida Finan, entao precisa conter "${expectedCommand}"`,
+		);
+	}
+});
