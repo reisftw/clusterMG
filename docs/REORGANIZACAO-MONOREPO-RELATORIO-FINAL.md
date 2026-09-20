@@ -2,7 +2,7 @@
 
 Branch: `refactor/monorepo-quatro-apps`. Este documento consolida em um único relatório o que antes estava em três arquivos separados: a auditoria de pré-promoção (Etapa 7), a estabilização final e correção dos gates (Etapa 8), o runbook de promoção e o backlog de hardening do Finan (agora seção 14). O relatório individual da Etapa 7 (`docs/REORGANIZACAO-MONOREPO-ETAPA7-RELATORIO.md`) permanece como registro histórico já commitado, com uma nota apontando para este documento consolidado.
 
-Em nenhuma das duas etapas houve `git push`, merge/rebase/cherry-pick sobre `master`, deploy, migration, alteração de DNS/Nginx/systemd/PM2/Docker, criação/aplicação/remoção de stash, ou alteração de branches legadas (`finan`, `adm`, `rot`).
+Em nenhuma das etapas houve `git push`, merge/rebase/cherry-pick sobre `master`, deploy, migration, alteração de DNS/Nginx/systemd/PM2/Docker, criação/aplicação/remoção de stash, ou alteração de branches legadas (`finan`, `adm`, `rot`). A etapa final corrigiu os achados `npm audit --audit-level=high` da raiz e do backend do Retiradas e ampliou o job `security` para auditar os 8 pacotes do monorepo.
 
 **Decisão final: GO PARA PROMOÇÃO.**
 
@@ -16,9 +16,12 @@ Em nenhuma das duas etapas houve `git push`, merge/rebase/cherry-pick sobre `mas
 | Fim da Etapa 7 | `b743a02fb486e3c383b06364f5f64cf402768ce2` |
 | Checkpoint Etapa 8 (`backup/pre-release-stabilization`) | `b743a02fb486e3c383b06364f5f64cf402768ce2` (mesmo HEAD inicial, sem checkout) |
 | SHA antes da consolidação (relatório da Etapa 8) | `3c1c92f` |
-| **SHA final aprovado** | este próprio commit (consolidação do relatório — sem mudança de código, só documentação) |
+| SHA antes da etapa final de segurança/CI | `20d8c3ce8751fe070ea1c381335962ab8bfc3c81` |
+| Correção final de dependências `high` | `2c67fbb` |
+| Correção final do job `security` | `29d0201` |
+| **SHA final aprovado** | este próprio commit (consolidação final do relatório) |
 
-`git rev-list --left-right --count master...HEAD` = `0  67` (0 commits exclusivos de `master`, 67 exclusivos da branch). `git merge-base --is-ancestor master HEAD` = verdadeiro → **fast-forward mecanicamente possível**, sem merge-commit, sem conflito.
+`git rev-list --left-right --count master...HEAD` = `0  72` (0 commits exclusivos de `master`, 72 exclusivos da branch, após este commit documental final). `git merge-base --is-ancestor master HEAD` = verdadeiro → **fast-forward mecanicamente possível**, sem merge-commit, sem conflito.
 
 ## 2. Estado do Git (inicial e final)
 
@@ -70,7 +73,7 @@ Diretórios locais não versionados encontrados (todos confirmados `git check-ig
 
 Único diff do arquivo. `validate-finan`/`validate-adm`/`validate-operacao` já rodavam em todo push para `master` (sem `if:` próprio) — sem risco de o deploy nunca disparar por dependência que não roda. `deploy-homolog-vps` e `deploy-finan-vps` inalterados. Nenhum secret/host/porta/usuário/caminho remoto tocado. Commit `206ce82`.
 
-Coberto por teste de contrato novo, `tests/contracts/ciDeployGates.test.js` (commit `85281d2`) — 2 testes: confirma que `deploy-vps` depende dos 5 jobs obrigatórios e que os 3 `validate-*` existem no workflow. **Verificado negativamente** antes de confiar nele: removendo `validate-operacao` do `needs:` temporariamente, o teste falhou com mensagem explícita; revertido e reaplicado.
+Coberto por teste de contrato novo, `tests/contracts/ciDeployGates.test.js` (commit `85281d2`) — originalmente 2 testes: confirma que `deploy-vps` depende dos 5 jobs obrigatórios e que os 3 `validate-*` existem no workflow. A etapa final adicionou um terceiro contrato (commit `29d0201`) garantindo que o job `security` cubra lockfile/install/audit dos 8 projetos do monorepo. **Verificado negativamente** antes de confiar nele: removendo `validate-operacao` do `needs:` temporariamente, o teste falhou com mensagem explícita; revertido e reaplicado.
 
 ## 7. Matriz operacional por app
 
@@ -117,9 +120,9 @@ Investigação de scripts + execução isolada de cada `test:<app>` — corrige 
 | Finan | `test:finan` | **Não são testes** — `node --check` (sintaxe) de 118 arquivos do backend. Finan não tem nenhum teste automatizado hoje. | 0 testes / 118 arquivos verificados |
 | ADM | `test:adm` | Vitest (frontend) + `node --check` (sintaxe do backend, 82 arquivos) | 125 (121 + 4 do health check novo) |
 | Operação | `test:operacao` | `node --test` (backend, 10 arquivos) + Vitest (frontend, 3 arquivos) | 55 (42 + 13) |
-| Contratos | `test:contracts` | `node --test` (2 arquivos) | 4 (2 originais + 2 novos de `ciDeployGates.test.js`) |
+| Contratos | `test:contracts` | `node --test` (2 arquivos) | 5 (2 originais + 3 de `ciDeployGates.test.js`) |
 
-**Total: 537 testes.** `test:finan` não deve ser chamado de "teste unitário" em nenhuma documentação futura.
+**Total: 538 testes.** `test:finan` não deve ser chamado de "teste unitário" em nenhuma documentação futura.
 
 ## 11. Validação em clean-room
 
@@ -132,18 +135,19 @@ Executada de fato em ambas as etapas — clone isolado fora do diretório de tra
 
 **Segredos** (Etapa 8 ampliou a varredura da Etapa 7 para incluir arquivos de teste): `git diff master...HEAD` completo buscado por chave privada, AWS/GitHub/Slack token, string de conexão com credencial embutida, Google API key — **zero ocorrências reais**. Ocorrências de `password=`/`api_key=`/`secret=`/`token=` hardcoded encontradas são todas placeholders óbvios (dígitos sequenciais, `"test-...-for-suite"`, `"[REDACTED]"`) ou fixtures que testam se um sanitizador de log redige corretamente campos sensíveis (`"senha-real"`, `"csrf-real"`) — nenhum segredo real. Nenhum nome de arquivo sensível (`.env`, `.pem`, `.key`, `id_rsa`) no diff. `.gitignore` cobre `.env*`/`dist/`/`node_modules/`/`uploads/` nos 4 apps (confirmado via `git check-ignore -v`). Gitleaks não é reproduzível localmente (binário Go) — depende do job `security` do CI.
 
-**Dependências** (`npm audit --audit-level=high`, reproduzido localmente nos 8 `package.json` do monorepo — achados reais, mas **não são segredos**, não acionam NO-GO):
+**Dependências** (`npm audit --audit-level=high`, reproduzido localmente nos 8 `package.json` do monorepo após a etapa final):
 
 | Projeto | Resultado |
 |---|---|
-| raiz | 1 high (`js-yaml`), 5 moderate — já presente em `master`, não introduzido por esta branch |
-| `apps/retiradas/backend` | 2 high (`multer`, `nodemailer`), 3 moderate — **não auditado pelo job `security` do CI hoje** (roda só na raiz) |
+| raiz | 0 `high/critical`; 4 moderate (`@vitest/mocker`/Vitest) |
+| `apps/retiradas/backend` | 0 `high/critical`; 3 moderate (`qs` via `express`/`body-parser`) |
 | `apps/finan/frontend`/`backend` | 0 vulnerabilidades |
-| `apps/adm/frontend`/`backend` | 2 moderate |
+| `apps/adm/frontend` | 0 `high/critical`; 2 moderate (`@vitest/mocker`/Vitest) |
+| `apps/adm/backend` | 0 `high/critical`; 2 low + 2 moderate (`cookie` via `csurf`, `uuid` via `exceljs`) |
 | `apps/operacao/frontend` | 2 moderate |
 | `apps/operacao/backend` | 0 vulnerabilidades |
 
-Registrado como risco residual — corrigir exigiria atualização de dependências fora do escopo desta auditoria.
+Correções aplicadas sem `npm audit fix --force`: raiz atualizada para `js-yaml@4.3.2` e `qs@6.16.0`; backend do Retiradas atualizado para `multer@2.4.0` e `nodemailer@10.0.10`. Observação operacional: `nodemailer@10.0.10` exige Node `>=20`; a VPS deve ser confirmada antes do deploy do Retiradas. O job `security` do CI agora instala e audita os 8 projetos com retry controlado e falha se a auditoria não completar ou detectar `high/critical`.
 
 ## 13. Runbook de promoção (comandos, não executados)
 
@@ -225,13 +229,16 @@ Da seção 12 — não corrigidas nesta auditoria (atualização de dependência
 5. `55d6350` — `feat(adm): add minimal unauthenticated health endpoint`
 6. `8e552c2` — `docs(security): plan finan service hardening`
 7. `c269122` — `docs(release): reconcile test matrix and promotion runbook`
+8. `2c67fbb` — `fix(security): clear high npm audit findings`
+9. `29d0201` — `ci(security): audit all monorepo packages`
+10. este commit — `docs(release): refresh final monorepo promotion report`
 
 Nenhum commit vazio. Nenhum push.
 
 ## 17. Riscos residuais
 
 1. Finan não tem nenhum teste automatizado (frontend ou backend) — só checagem de sintaxe. Estado pré-existente, agora corretamente documentado; criar testes novos é funcionalidade nova, fora do escopo.
-2. Vulnerabilidades de dependência reais (não segredos) na raiz e em `apps/retiradas/backend` (este último não coberto pelo job `security` do CI hoje) — seção 12.
+2. Vulnerabilidades moderadas/baixas residuais em dependências de teste ou bibliotecas transitivas (`@vitest/mocker`, `qs`, `cookie`/`csurf`, `uuid`/`exceljs`) — sem `high/critical`; corrigir as que exigem `--force` fica fora do escopo desta promoção.
 3. `finan-api.service` continua como `User=root` em produção — plano documentado, não executado.
 4. Gitleaks não é reproduzível localmente — o scan de segredos depende de padrões manuais + `npm audit`; o job `security` do CI continua sendo a fonte de verdade.
 
@@ -241,7 +248,7 @@ Nenhum commit vazio. Nenhum push.
 - Nenhum deploy, nenhuma migration executada; nenhum acesso ou alteração na VPS/DNS/Nginx/PM2/Docker/serviços.
 - Nenhum stash criado, aplicado ou removido; 12 stashes pré-existentes intactos.
 - Branches `finan`, `adm`, `rot` não tocadas; todas as branches `backup/*` preservadas.
-- Nenhum NPM Workspaces introduzido; nenhuma atualização de dependência não relacionada à auditoria.
+- Nenhum NPM Workspaces introduzido; atualizações de dependência limitadas aos achados de auditoria (`js-yaml`, `qs`, `multer`, `nodemailer`).
 - Nenhuma funcionalidade de produto implementada (o health check do ADM é infraestrutura operacional mínima, não feature de produto).
 - Nenhum segredo ou `.env` real alterado, lido além do necessário para classificação, ou impresso.
 - Nenhum `continue-on-error` adicionado; nenhum gate de lint/teste/CI enfraquecido — pelo contrário, o gate de deploy foi reforçado (seção 6).
@@ -249,6 +256,6 @@ Nenhum commit vazio. Nenhum push.
 
 ## 19. Decisão final
 
-Todos os critérios de GO foram atendidos com evidência: fast-forward mecanicamente possível; diff limpo (zero segredos/artefatos indevidos, mesmo incluindo testes); a única "contradição" apontada (commit `6ef5d9f`) resolvida como não-contradição real; matriz de testes corrigida e comprovada por execução isolada; teste flaky do ADM corrigido com causa explicada e estabilidade comprovada (20/10/5/5 repetições, zero retry); clean-room verde na primeira execução (537 testes, lint 0/0 nos 4 apps); deploy do Retiradas agora depende dos 5 gates obrigatórios, comprovado por teste de contrato; health check do ADM implementado e testado; push a `master` comprovadamente isolado (não afeta Finan/ADM/Operação); runbook completo; nenhuma branch legada ou stash tocado.
+Todos os critérios de GO foram atendidos com evidência: fast-forward mecanicamente possível; diff limpo (zero segredos/artefatos indevidos, mesmo incluindo testes); a única "contradição" apontada (commit `6ef5d9f`) resolvida como não-contradição real; matriz de testes corrigida e comprovada por execução isolada; teste flaky do ADM corrigido com causa explicada e estabilidade comprovada (20/10/5/5 repetições, zero retry); `verify:all` verde (538 testes, lint/build/sintaxe nos 4 apps); `npm audit --audit-level=high` verde nos 8 projetos; deploy do Retiradas agora depende dos 5 gates obrigatórios, comprovado por teste de contrato; job `security` audita todo o monorepo, comprovado por contrato; health check do ADM implementado e testado; push a `master` comprovadamente isolado (não afeta Finan/ADM/Operação); runbook completo; nenhuma branch legada ou stash tocado.
 
 **GO PARA PROMOÇÃO**
