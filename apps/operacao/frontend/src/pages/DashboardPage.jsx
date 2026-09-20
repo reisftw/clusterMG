@@ -516,6 +516,10 @@ function MyAssetsCard() {
 	};
 
 	useEffect(() => {
+		// load() chama setLoading(true) de forma síncrona — necessário porque a
+		// mesma função também é chamada por um botão de tentar de novo abaixo,
+		// onde loading já pode estar false.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		load();
 	}, []);
 
@@ -727,6 +731,9 @@ function OperationDashboard({ operation }) {
 
 	useEffect(() => {
 		let active = true;
+		// Reset síncrono intencional ao trocar de operação: precisa mostrar o
+		// estado de carregamento antes do fetch assíncrono iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		setError("");
 		fetchRotOperationDashboard(operation)
@@ -1313,6 +1320,9 @@ function PaginatedList({ items, children, pageSize = DASHBOARD_LIST_PAGE_SIZE })
 	const pageItems = items.slice(start, start + pageSize);
 
 	useEffect(() => {
+		// Corrige a página atual quando a lista encolhe (menos páginas do que a
+		// posição atual) — sincronização intencional com `items`.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		if (page > totalPages) setPage(totalPages);
 	}, [page, totalPages]);
 

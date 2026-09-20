@@ -682,6 +682,9 @@ function PaginatedCommandList({ items, children, pageSize = COMMAND_LIST_PAGE_SI
 	const pageItems = items.slice(start, start + pageSize);
 
 	useEffect(() => {
+		// Corrige a página atual quando a lista encolhe (menos páginas do que a
+		// posição atual) — sincronização intencional com `items`.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		if (page > totalPages) setPage(totalPages);
 	}, [page, totalPages]);
 

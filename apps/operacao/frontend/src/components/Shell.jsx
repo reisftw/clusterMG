@@ -392,6 +392,9 @@ function RotSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, on
 	useEffect(() => {
 		const match = findActiveMenuPath(visibleTree, activeLocation);
 		if (!match) return;
+		// Sincronização intencional com a rota ativa — abre o macro-item e a
+		// categoria do menu correspondentes sempre que a navegação muda.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setOpenMacroKey(match.macroKey);
 		if (match.categoryKey) {
 			setOpenCategoryByMacro((current) => ({ ...current, [match.macroKey]: match.categoryKey }));

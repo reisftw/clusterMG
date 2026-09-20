@@ -744,6 +744,9 @@ function TecnicoModal({ tecnico, onClose, onRefresh, refreshing }) {
 	useEffect(() => {
 		let alive = true;
 		const query = buildHistoryQuery(historyFilter);
+		// Reset síncrono intencional ao trocar o filtro: precisa mostrar o
+		// estado de carregamento antes do fetch assíncrono iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setHistoryLoading(true);
 		setHistoryError("");
 		buscarHistoricoAuditoriaBolsa({
@@ -1070,6 +1073,9 @@ function EmpresaHistoryModal({ empresa, onClose }) {
 	useEffect(() => {
 		let alive = true;
 		const query = buildHistoryQuery(historyFilter);
+		// Reset síncrono intencional ao trocar o filtro: precisa mostrar o
+		// estado de carregamento antes do fetch assíncrono iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		setError("");
 		buscarHistoricoAuditoriaBolsa({

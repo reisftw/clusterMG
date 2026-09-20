@@ -36,9 +36,15 @@ export default function AprPage() {
   window.addEventListener("rot-apr-offline-queue-changed",refresh);
   return()=>{active=false;window.removeEventListener("online",sync);window.removeEventListener("rot-apr-offline-queue-changed",refresh);};
  },[]);
- useEffect(()=>{if(search.get("novo")==="1"||search.get("new")==="1")setNewApr(true);},[search]);
+ // Abre o formulário de novo APR quando chega via link com ?novo=1 — sincronização intencional com a URL.
+ useEffect(()=>{if(search.get("novo")==="1"||search.get("new")==="1"){
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  setNewApr(true);}},[search]);
  useEffect(()=>{
-  let active=true; setLoading(true); setError("");
+  let active=true;
+  // Reset síncrono intencional ao trocar página/regional/revisão: mostra o estado de carregamento antes do fetch.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  setLoading(true); setError("");
   listAprs(page,regional).then(d=>{if(active){setItems(d.items);setTotal(d.total);}}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});
   return ()=>{active=false;};
  },[page,regional,revision]);

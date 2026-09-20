@@ -1431,6 +1431,9 @@ function ChecklistManagementPanel() {
 	};
 
 	useEffect(() => {
+		// load() chama setLoading(true) de forma síncrona — mantido reusável
+		// (não só para o mount) para uma eventual ação de recarregar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		load();
 	}, []);
 
@@ -1478,6 +1481,9 @@ function ChecklistExecutionDetailModal({ executionId, onClose }) {
 
 	useEffect(() => {
 		let cancelled = false;
+		// Reset síncrono intencional ao trocar de execução: mostra o estado de
+		// carregamento antes do fetch assíncrono iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		fetchAssetsSecurityChecklistExecution(executionId)
 			.then(async (res) => {
@@ -1733,6 +1739,9 @@ function ReturnDetailModal({ item, onClose }) {
 
 	useEffect(() => {
 		let cancelled = false;
+		// Reset síncrono intencional ao trocar de item: mostra o estado de
+		// carregamento antes do fetch assíncrono iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		Promise.all([
 			item.checklist_execution_id ? fetchAssetsSecurityChecklistExecution(item.checklist_execution_id).catch(() => null) : Promise.resolve(null),
