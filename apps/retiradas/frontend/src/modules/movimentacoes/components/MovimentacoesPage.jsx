@@ -513,12 +513,12 @@ export default function MovimentacoesPage() {
 		}
 	}, [page, statusFiltro, intervaloPeriodo]);
 
-	const cidadesValorAtual = () => {
+	const cidadesValorAtual = useCallback(() => {
 		if (cidadesPeriodoTipo === PERIODO_TIPOS.DIA) return cidadesDia;
 		if (cidadesPeriodoTipo === PERIODO_TIPOS.MES) return cidadesMes;
 		if (cidadesPeriodoTipo === PERIODO_TIPOS.ANO) return cidadesAno;
 		return "";
-	};
+	}, [cidadesPeriodoTipo, cidadesDia, cidadesMes, cidadesAno]);
 
 	const carregarCidades = useCallback(async () => {
 		setLoadingCidades(true);
@@ -540,9 +540,7 @@ export default function MovimentacoesPage() {
 		}
 	}, [
 		cidadesPeriodoTipo,
-		cidadesDia,
-		cidadesMes,
-		cidadesAno,
+		cidadesValorAtual,
 		cidadesPageRetiradas,
 		cidadesPageDevolvidas,
 		cidadesPageEstoques,
