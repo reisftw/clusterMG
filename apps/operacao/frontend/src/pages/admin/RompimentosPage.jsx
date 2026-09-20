@@ -17,7 +17,7 @@ import Spinner from "../../components/ui/Spinner";
 import ImageUploader from "../../components/ImageUploader";
 import { captureLocation } from "../../utils/captureLocation";
 import { enqueueRotAction, isNetworkFailure, queuedRotActionCount } from "../../utils/offlineRotQueue";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { buildRompimentoPayload } from "./rompimentoPayload";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];

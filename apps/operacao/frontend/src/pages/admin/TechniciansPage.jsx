@@ -3,7 +3,7 @@ import { Edit3, Plus, RefreshCw, Search, Trash2, UserRound, UsersRound } from "l
 import { createRotTechnician, deleteRotTechnician, fetchRotCompanies, fetchRotRegionals, fetchRotTechnicians, updateRotTechnician } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const AREAS = [
 	{ value: "delivery", label: "Delivery" },

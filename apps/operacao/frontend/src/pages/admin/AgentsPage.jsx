@@ -9,7 +9,7 @@ import {
 } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const OPERATION_OPTIONS = [
 	{ id: "ROT", label: "ROT" },

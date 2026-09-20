@@ -1,4 +1,4 @@
-import { useRotAuth } from "../state/RotAuthContext";
+import { useRotAuth } from "../state/useRotAuth";
 
 export function useAuthContext() {
 	const { user, ...rest } = useRotAuth();

@@ -12,7 +12,7 @@ import {
 } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { formatKm, VEHICLE_STATUS_BADGE, VEHICLE_STATUS_LABEL } from "../../utils/fleetKm";
 
 // Fase 1 da reestruturacao de Frotas: o card fica so com informacao

@@ -7,25 +7,9 @@ import ModalShell from "../../components/ui/ModalShell";
 import Pagination from "../../components/ui/Pagination";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
+import { CONTENT_TYPE_OPTIONS, MODALITY_OPTIONS, THEME_STATUS_BADGE, THEME_STATUS_LABEL } from "./dssThemeConstants";
 
-export const MODALITY_OPTIONS = [
-	{ id: "semanal", name: "Semanal (um conteúdo por semana)" },
-	{ id: "mensal", name: "Mensal (um tema com 4 desdobramentos semanais)" },
-];
-
-export const CONTENT_TYPE_OPTIONS = [
-	{ id: "editor", name: "Escrever no sistema" },
-	{ id: "pdf", name: "Anexar PDF pronto" },
-];
-
-export const THEME_STATUS_BADGE = {
-	rascunho: "bg-slate-100 text-slate-600",
-	publicado: "bg-emerald-50 text-emerald-700",
-	arquivado: "bg-slate-100 text-slate-400",
-};
-
-export const THEME_STATUS_LABEL = { rascunho: "Rascunho", publicado: "Publicado", arquivado: "Arquivado" };
 const PAGE_SIZE = 30;
 
 export default function DssThemesPage() {

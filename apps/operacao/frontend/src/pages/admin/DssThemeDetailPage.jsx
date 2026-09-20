@@ -5,9 +5,9 @@ import { archiveDssTheme, deleteRotAttachment, fetchDssCategories, fetchDssTheme
 import Field from "../../components/ui/Field";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { uploadPdf } from "../../utils/imageUpload";
-import { CONTENT_TYPE_OPTIONS, THEME_STATUS_BADGE, THEME_STATUS_LABEL } from "./DssThemesPage";
+import { CONTENT_TYPE_OPTIONS, THEME_STATUS_BADGE, THEME_STATUS_LABEL } from "./dssThemeConstants";
 
 const BLOCK_TYPE_OPTIONS = [
 	{ id: "titulo", name: "Título" },

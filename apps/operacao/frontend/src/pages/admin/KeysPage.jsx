@@ -14,7 +14,7 @@ import {
 } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const STATUS_LABEL = { available: "Disponível", in_use: "Em uso", awaiting_approval: "Pendente", rejected: "Recusada" };
 const STATUS_TONE = {

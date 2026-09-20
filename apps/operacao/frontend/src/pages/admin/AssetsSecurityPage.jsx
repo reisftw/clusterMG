@@ -70,7 +70,7 @@ import Spinner from "../../components/ui/Spinner";
 import Toggle from "../../components/ui/Toggle";
 import ToggleCard from "../../components/ui/ToggleCard";
 import ImageUploader from "../../components/ImageUploader";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const CONFIG_SECTIONS = [
 	{ kind: "categories", title: "Categorias de ativos", subtitle: "Agrupam escadas, ferramentas e equipamentos operacionais." },

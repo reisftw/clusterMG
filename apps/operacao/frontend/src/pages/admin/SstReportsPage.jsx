@@ -8,8 +8,8 @@ import {
 import Field from "../../components/ui/Field";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
-import { PRIORITY_OPTIONS, STATUS_OPTIONS, TYPE_OPTIONS, statusLabel, typeLabel } from "./SstProtocolsPage";
+import { useRotAuth } from "../../state/useRotAuth";
+import { PRIORITY_OPTIONS, STATUS_OPTIONS, TYPE_OPTIONS, statusLabel, typeLabel } from "./sstProtocolConstants";
 import { exportSstReports } from "../../utils/exportSstReports";
 
 const OPERATION_OPTIONS = [{ id: "ROT", name: "ROT" }, { id: "FIELD", name: "FIELD" }, { id: "DELIVERY", name: "DELIVERY" }];

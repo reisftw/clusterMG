@@ -18,7 +18,7 @@ import {
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
 import UserAvatar from "../../components/UserAvatar";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 // Fiel a rot/src/pages/MaterialsPage.tsx — cards por tecnico com estoque
 // aceito/pendente, remessas (envio + aceite) e vistorias (checklist).

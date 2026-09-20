@@ -5,7 +5,7 @@ import { deleteRotAttachment, fetchDssExecution, fetchRotAttachments, markAllDss
 import ModalShell from "../../components/ui/ModalShell";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { uploadImage, uploadPdf } from "../../utils/imageUpload";
 import { exportDssAttendanceList } from "../../utils/exportDssAttendance";
 import { EXECUTION_STATUS_BADGE, EXECUTION_STATUS_LABEL } from "./DssScheduleDetailPage";

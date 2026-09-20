@@ -4,7 +4,7 @@ import { BarChart3, Download, FileSpreadsheet, Search } from "lucide-react";
 import { fetchDssReportsDetails, fetchDssThemes, fetchRotRegionals } from "../../api/rotApi";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { exportDssReportPdf, exportDssReportXlsx } from "../../utils/exportDssReport";
 import { EXECUTION_STATUS_BADGE, EXECUTION_STATUS_LABEL } from "./DssScheduleDetailPage";
 

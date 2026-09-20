@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { useRotAuth } from "../state/RotAuthContext";
+import { useRotAuth } from "../state/useRotAuth";
 
 export default function PrivateRoute({ children, permission }) {
 	const { user, loading, hasPermission } = useRotAuth();

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, Trophy } from "lucide-react";
 import { fetchRotRanking, fetchRotRegionals } from "../../api/rotApi";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const FILTROS = [
 	{ id: "week", label: "Semana" },

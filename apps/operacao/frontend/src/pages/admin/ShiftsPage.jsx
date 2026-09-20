@@ -4,7 +4,7 @@ import { createRotShift, deleteRotShift, fetchRotRegionals, fetchRotShifts, upda
 import ModalShell from "../../components/ui/ModalShell";
 import RotCalendar from "../../components/ui/RotCalendar";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const SHIFT_TYPE_LABEL = { plantao: "Plantão", escala: "Escala", on_call: "Sobreaviso" };
 

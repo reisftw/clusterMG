@@ -10,7 +10,7 @@ import {
 } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { CardActions, Field, Kpi, ModalActions, PageHeader } from "./TechniciansPage";
 
 const STATUS = ["Pendente", "Aprovada", "Reprovada", "Revisar"];

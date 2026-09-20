@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Edit3, FileSpreadsheet, Plus, RefreshCw, S
 import { createRotTicket, deleteRotTicket, fetchRotRegionals, fetchRotServiceTypes, fetchRotTickets, importRotTickets, updateRotTicket } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { listTicketImportSheets, parseTicketWorkbook } from "../../utils/ticketImport";
 
 function formatDate(value) {

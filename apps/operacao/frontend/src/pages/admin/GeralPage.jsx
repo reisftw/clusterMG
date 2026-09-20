@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Camera, KeyRound, Loader2, Menu, Save, Settings, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { fetchRotAppearance, fetchRotMenuSettings, saveRotAppearance, saveRotMenuSettings, uploadRotDefaultAvatar } from "../../api/rotApi";
-import { DEFAULT_OPERATION_MENU_CONFIG, OPERATION_MENU_ITEMS } from "../../components/Shell";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { DEFAULT_OPERATION_MENU_CONFIG, OPERATION_MENU_ITEMS } from "../../components/operationMenuConfig";
+import { useRotAuth } from "../../state/useRotAuth";
 import Spinner from "../../components/ui/Spinner";
 
 // Mesmo padrao visual de ConfiguracoesGeraisPage.jsx do Retiradas:

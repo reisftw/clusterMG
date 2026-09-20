@@ -4,7 +4,7 @@ import { createRotHoliday, deleteRotHoliday, fetchRotHolidays, fetchRotRegionals
 import ModalShell from "../../components/ui/ModalShell";
 import RotCalendar from "../../components/ui/RotCalendar";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const TYPE_LABEL = { NATIONAL: "NACIONAL", MUNICIPAL: "MUNICIPAL", REGIONAL: "REGIONAL" };
 const TYPE_TONE = {

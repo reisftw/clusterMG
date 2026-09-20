@@ -4,7 +4,7 @@ import { createRotActivity, deleteRotActivity, fetchRotActivities, fetchRotRegio
 import ModalShell from "../../components/ui/ModalShell";
 import RotCalendar from "../../components/ui/RotCalendar";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const PRIORITY_TONE = { baixa: "bg-slate-100 text-slate-600", normal: "bg-blue-50 text-blue-700", alta: "bg-red-50 text-red-700" };
 const STATUS_TONE = { pendente: "bg-amber-50 text-amber-700", concluida: "bg-emerald-50 text-emerald-700", cancelada: "bg-slate-100 text-slate-500" };

@@ -7,9 +7,9 @@ import ImageUploader from "../../components/ImageUploader";
 import Select from "../../components/ui/Select";
 import SearchableSelect from "../../components/ui/SearchableSelect";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { exportSstProtocol } from "../../utils/exportSstProtocol";
-import { CONSEQUENCE_OPTIONS, MAX_REQUEST_PHOTOS, MIN_REQUEST_PHOTOS, PRIORITY_BADGE, PRIORITY_OPTIONS, STATUS_BADGE, STATUS_OPTIONS, typeLabel } from "./SstProtocolsPage";
+import { CONSEQUENCE_OPTIONS, MAX_REQUEST_PHOTOS, MIN_REQUEST_PHOTOS, PRIORITY_BADGE, PRIORITY_OPTIONS, STATUS_BADGE, STATUS_OPTIONS, typeLabel } from "./sstProtocolConstants";
 
 const ACTION_STATUS_LABEL = {
 	ABERTO: { label: "Aberto", className: "bg-blue-50 text-blue-700" },

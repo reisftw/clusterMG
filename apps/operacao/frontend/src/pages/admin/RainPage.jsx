@@ -4,7 +4,7 @@ import { createRotRainAlert, deleteRotRainAlert, fetchRotRainAlerts, fetchRotReg
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
 import { enqueueRotAction, isNetworkFailure, queuedRotActionCount } from "../../utils/offlineRotQueue";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const RAIN_CACHE_KEY = "rot-rain-cache";
 

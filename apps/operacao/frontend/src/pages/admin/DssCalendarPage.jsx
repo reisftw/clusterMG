@@ -4,7 +4,7 @@ import { CalendarDays } from "lucide-react";
 import { fetchDssExecutions } from "../../api/rotApi";
 import RotCalendar from "../../components/ui/RotCalendar";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { EXECUTION_STATUS_BADGE, EXECUTION_STATUS_LABEL } from "./DssScheduleDetailPage";
 
 function pad2(value) {

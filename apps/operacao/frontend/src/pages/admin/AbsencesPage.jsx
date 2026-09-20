@@ -4,7 +4,7 @@ import { createRotAbsence, decideRotAbsence, deleteRotAbsence, fetchRotAbsences,
 import ModalShell from "../../components/ui/ModalShell";
 import RotCalendar from "../../components/ui/RotCalendar";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const TYPE_LABEL = { ferias: "Férias", folga: "Folga", atestado: "Atestado" };
 const TYPE_TONE = { ferias: "bg-blue-50 text-blue-600 border-blue-100", folga: "bg-purple-50 text-purple-600 border-purple-100", atestado: "bg-red-50 text-red-600 border-red-100" };

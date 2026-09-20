@@ -6,7 +6,7 @@ import { AssetActionModal } from "./admin/AssetsSecurityPage";
 import ModalShell from "../components/ui/ModalShell";
 import Spinner from "../components/ui/Spinner";
 import UserAvatar from "../components/UserAvatar";
-import { useRotAuth } from "../state/RotAuthContext";
+import { useRotAuth } from "../state/useRotAuth";
 
 const ABSENCE_TYPE_LABEL = { ferias: "Férias", folga: "Folga", atestado: "Atestado" };
 const HOLIDAY_TYPE_LABEL = { NATIONAL: "Nacional", MUNICIPAL: "Municipal", REGIONAL: "Regional" };

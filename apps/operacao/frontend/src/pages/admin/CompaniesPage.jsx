@@ -10,7 +10,7 @@ import {
 	updateRotCompany,
 } from "../../api/rotApi";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const OPERATION_OPTIONS = ["ROT", "FIELD", "DELIVERY"];
 const STATUS_OPTIONS = ["Ativa", "Inativa"];

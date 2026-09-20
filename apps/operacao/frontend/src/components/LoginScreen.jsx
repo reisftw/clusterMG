@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Lock, LogIn, ShieldCheck, User } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { fetchRotGoogleAuthConfig, forgotRotPassword, resetRotPassword } from "../api/rotApi";
-import { useRotAuth } from "../state/RotAuthContext";
+import { useRotAuth } from "../state/useRotAuth";
 
 const trustItems = [
 	{ label: "Acesso seguro", icon: ShieldCheck },

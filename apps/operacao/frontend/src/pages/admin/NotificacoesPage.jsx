@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { BellRing, CheckCircle2, Mail, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
 import { fetchRotNotifications, saveRotMfaPreference } from "../../api/rotApi";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import Spinner from "../../components/ui/Spinner";
 
 const TYPE_LABEL = {

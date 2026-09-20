@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, ShieldCheck, MapPin, Download, FileText, RefreshCw, X, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import ModalShell from "../../components/ui/ModalShell";
 import { createApr, getApr, getAprMetadata, listAprs, getAprPhoto, acknowledgeApr } from "../../api/aprApi";
 import { captureLocation } from "../../utils/captureLocation";
 import { enqueueAprOffline, flushQueuedAprs, isNetworkFailure, queuedAprCount } from "../../utils/offlineAprQueue";
 import checklist from "../../../../shared/aprChecklist.json";
+import { statusLabels } from "./aprStatusLabels";
 
 const APR_METADATA_CACHE_KEY = "rot-apr-metadata-cache";
 const inputClass = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm min-w-0";
 const buttonClass = "inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-50";
-export const statusLabels = { interromper:"INTERROMPER A ATIVIDADE", verificar:"VERIFICAR ANTES DE INICIAR", sem_impedimento_informado:"Sem impedimento informado" };
 const tones = { interromper:"border-red-300 bg-red-50 text-red-800", verificar:"border-amber-300 bg-amber-50 text-amber-900", sem_impedimento_informado:"border-emerald-300 bg-emerald-50 text-emerald-900" };
 function today() { const d=new Date(); return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-"); }
 function Field({label,children}) { return <label className="block min-w-0 space-y-1"><span className="block text-sm font-semibold text-slate-700">{label}</span>{children}</label>; }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
 	fetchRotMe,
 	loginRot,
@@ -7,8 +7,8 @@ import {
 	verifyRotMfa,
 } from "../api/rotApi";
 import { clearRotOfflineStorage } from "../utils/offlineStorage";
+import { RotAuthContext } from "./rotAuthContextObject";
 
-const RotAuthContext = createContext(null);
 const CACHED_USER_KEY = "rot-auth-user";
 
 function cacheUser(profile) {
@@ -152,10 +152,4 @@ export function RotAuthProvider({ children }) {
 			{children}
 		</RotAuthContext.Provider>
 	);
-}
-
-export function useRotAuth() {
-	const context = useContext(RotAuthContext);
-	if (!context) throw new Error("useRotAuth must be used within a RotAuthProvider");
-	return context;
 }

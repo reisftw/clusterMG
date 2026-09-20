@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Camera, Loader } from "lucide-react";
 import { changeRotPassword, uploadRotAvatar } from "../api/rotApi";
-import { useRotAuth } from "../state/RotAuthContext";
+import { useRotAuth } from "../state/useRotAuth";
 
 export default function ProfilePage() {
 	const { user, refreshUser } = useRotAuth();

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CalendarClock, Send, XCircle } from "lucide-react";
 import { cancelDssSchedule, fetchDssSchedule, publishDssSchedule } from "../../api/rotApi";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { SCHEDULE_STATUS_BADGE, SCHEDULE_STATUS_LABEL } from "./DssSchedulesPage";
 
 const EXECUTION_STATUS_LABEL = {

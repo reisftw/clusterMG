@@ -7,7 +7,7 @@ import ModalShell from "../../components/ui/ModalShell";
 import Pagination from "../../components/ui/Pagination";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 const SCHEDULE_STATUS_BADGE = { rascunho: "bg-slate-100 text-slate-600", publicado: "bg-emerald-50 text-emerald-700", cancelado: "bg-red-50 text-red-700" };
 const SCHEDULE_STATUS_LABEL = { rascunho: "Rascunho", publicado: "Publicado", cancelado: "Cancelado" };

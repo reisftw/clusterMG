@@ -4,7 +4,7 @@ import { Check, Copy, ExternalLink, Eye, EyeOff, FileText, Image as ImageIcon, P
 import { createRotQrCode, deleteRotQrCode, fetchRotQrCodes, updateRotQrCode } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 
 // Gerenciador de QR Codes — marcado P0 pelo usuario ("hiper importante
 // mantermos ele funcionando"). Mesmo padrao visual das demais paginas

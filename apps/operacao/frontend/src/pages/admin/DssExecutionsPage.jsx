@@ -5,7 +5,7 @@ import { fetchDssExecutions, fetchRotRegionals } from "../../api/rotApi";
 import Pagination from "../../components/ui/Pagination";
 import Select from "../../components/ui/Select";
 import Spinner from "../../components/ui/Spinner";
-import { useRotAuth } from "../../state/RotAuthContext";
+import { useRotAuth } from "../../state/useRotAuth";
 import { EXECUTION_STATUS_BADGE, EXECUTION_STATUS_LABEL } from "./DssScheduleDetailPage";
 
 const STATUS_OPTIONS = Object.entries(EXECUTION_STATUS_LABEL).map(([id, name]) => ({ id, name }));
