@@ -17,11 +17,31 @@ async function loadModule() {
 	return import("./useDashboardData");
 }
 
+// Teste intermitente (Etapa 5, Fase 10): a cada montagem, useDashboardData.js
+// agenda com window.setTimeout(..., 750) um refresh silencioso em segundo
+// plano que ignora o cache (force: true) e chama fetch de novo. Com timers
+// reais (nenhum fake timer configurado aqui nem no setup global), esse
+// temporizador corre contra o relógio da própria suite: isolado (20/20
+// execuções) nunca deu tempo dele disparar, mas ao rodar a suite inteira em
+// paralelo (contenção de CPU entre os workers do Vitest) o teste ocasionalmente
+// levava tempo real suficiente para os 750ms passarem antes das asserções,
+// disparando um fetch extra e quebrando `toHaveBeenCalledTimes(1)`. A causa
+// raiz não é falta de tempo (não adianta só aumentar um timeout) — é esse
+// setTimeout de produção disparando durante o teste. Intercepta só essa
+// chamada específica (delay === 750), repassando qualquer outro delay pra
+// implementação real — waitFor continua funcionando normalmente porque seu
+// polling interno usa outros delays.
+const realSetTimeout = window.setTimeout.bind(window);
+
 describe("useDashboardData", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		window.localStorage.clear();
 		vi.stubGlobal("fetch", vi.fn());
+		vi.spyOn(window, "setTimeout").mockImplementation((handler, delay, ...args) => {
+			if (delay === 750) return 0;
+			return realSetTimeout(handler, delay, ...args);
+		});
 	});
 
 	afterEach(() => {
