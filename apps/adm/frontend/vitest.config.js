@@ -2,29 +2,19 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// O ADM ainda nao tem vite.config.js proprio nem vitest como
-// devDependency (fora do escopo desta etapa adicionar dependencia nova
-// ou build config) — este arquivo só dá um runner real pros ~60 testes
-// que já existem em apps/adm/frontend/src, reaproveitando vitest/jsdom/
-// testing-library já instalados na raiz (rodar com
-// `npx vitest --config apps/adm/frontend/vitest.config.js`).
-// 24 arquivos em src/backend/*.test.js importam vps/api (agora
-// apps/retiradas/backend/api) e nao sao testes do ADM de verdade — ver
-// docs/REORGANIZACAO-MONOREPO-ETAPA4-RELATORIO.md. Excluídos aqui pra
-// não quebrar a suíte legítima por causa de import quebrado alheio.
+// Ambiente de teste isolado do ADM: vitest/jsdom/testing-library sao
+// devDependencies proprias (apps/adm/frontend/package.json), nao
+// herdadas da raiz — o ADM tem sua propria versao de React (19.3.0,
+// diferente da raiz em 19.2.8) e compartilhar o Vitest da raiz causava
+// duas instancias de React no mesmo grafo de modulos ("Cannot read
+// properties of null (reading 'useState')" em qualquer teste que
+// renderiza componente). Rodar via `npm test` dentro desta pasta usa o
+// vitest instalado aqui, resolvendo tudo (react, react-dom,
+// testing-library) a partir deste node_modules.
 const frontendDir = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
 	root: frontendDir,
-	cacheDir: "../../../node_modules/.vite-adm",
-	// ADM tem sua propria copia de react/react-dom instalada (diferente do
-	// Finan, que roda sem essas deps de proposito). Sem isso, Vitest mistura
-	// a instancia de react daqui (apps/adm/frontend/node_modules) com a
-	// usada por @testing-library/react (resolvida a partir da raiz), e todo
-	// hook quebra com "Cannot read properties of null (reading 'useState')".
-	resolve: {
-		dedupe: ["react", "react-dom"],
-	},
 	plugins: [react()],
 	test: {
 		environment: "jsdom",
@@ -35,6 +25,10 @@ export default defineConfig({
 		exclude: [
 			"node_modules/**",
 			"dist/**",
+			// 24 arquivos importam vps/api (agora apps/retiradas/backend/api)
+			// via createRequire — nao sao testes do ADM de verdade, sao
+			// residuo da recuperacao via SSH de 18/09/2026. Ver
+			// docs/REORGANIZACAO-MONOREPO-ETAPA4-RELATORIO.md.
 			"src/backend/**",
 			"src/frontend/**",
 		],

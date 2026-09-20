@@ -31,7 +31,7 @@
 
 		"test:retiradas": "vitest run --config apps/retiradas/frontend/vite.config.js",
 		"test:finan": "node scripts/check-backend-syntax.mjs apps/finan/backend/src apps/finan/backend/scripts",
-		"test:adm": "vitest run --config apps/adm/frontend/vitest.config.js && node scripts/check-backend-syntax.mjs apps/adm/backend/src",
+		"test:adm": "npm test --prefix apps/adm/frontend && node scripts/check-backend-syntax.mjs apps/adm/backend/src",
 		"test:operacao": "node --test apps/operacao/backend/src/apr/validation.test.js apps/operacao/backend/src/auth/authSessions.test.js apps/operacao/backend/src/security/bodyValidation.test.js apps/operacao/backend/src/security/payloadLimits.test.js apps/operacao/backend/src/security/securityControls.test.js apps/operacao/backend/src/security/uploadFilters.test.js apps/operacao/backend/src/storage/storage.test.js apps/operacao/backend/src/warlinho/permissions.test.js apps/operacao/frontend/src/api/rotApiSessionCookie.test.js",
 		"test:contracts": "node --test tests/contracts/cspConfig.test.js",
 

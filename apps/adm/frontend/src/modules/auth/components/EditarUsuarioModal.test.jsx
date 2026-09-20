@@ -41,7 +41,9 @@ describe("EditarUsuarioModal", () => {
 					id: "u1",
 					nome: "Maria",
 					email: "maria@empresa.com",
-					role: "backoffice_retirada",
+					// "backoffice_retirada" e cargo do sistema Retiradas, nao
+					// existe em CARGOS_ADM — usando um cargo real do ADM aqui.
+					role: "supervisor_administrativo",
 					regional: "",
 				}}
 				currentUser={{ role: "admin" }}
@@ -60,7 +62,7 @@ describe("EditarUsuarioModal", () => {
 			expect(mocks.atualizarUsuarioAdmin).toHaveBeenCalledWith("u1", {
 				nome: "Maria Silva",
 				email: "maria@empresa.com",
-				role: "backoffice_retirada",
+				role: "supervisor_administrativo",
 				regional: "",
 				empresaId: "",
 				empresaNome: "",
