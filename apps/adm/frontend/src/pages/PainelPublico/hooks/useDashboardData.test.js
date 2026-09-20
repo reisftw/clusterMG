@@ -28,23 +28,41 @@ describe("useDashboardData", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it("carrega o data.json com sucesso e popula o estado", async () => {
-		const payload = { mapa: { total: 10 } };
-		global.fetch.mockResolvedValue({
-			ok: true,
-			json: vi.fn().mockResolvedValue(payload),
-		});
+	it(
+		"carrega o data.json com sucesso e popula o estado",
+		// Etapa 8, Fase 2: este e o primeiro teste do arquivo a montar um
+		// hook (renderHook -> useEffect -> jsdom real). Sob execucao
+		// paralela da suite completa (35 arquivos vitest concorrentes),
+		// o custo de inicializacao do ambiente jsdom para o primeiro
+		// teste de cada arquivo foi medido em dezenas de segundos
+		// somados entre workers (ver docs/REORGANIZACAO-MONOREPO-ETAPA8-RELATORIO.md,
+		// Fase 2) — isso e custo de cold-start do ambiente de teste, nao
+		// latencia da aplicacao (o fetch em si e mockado e resolve
+		// sincronamente). Nao ha timer ou promise real vazando entre
+		// testes: o efeito limpa seu proprio setTimeout no unmount, e
+		// cleanup() do RTL roda a cada afterEach (src/test/setup.js).
+		// Isolado ou em suites menores, este teste sempre passa em menos
+		// de 1s. O timeout especifico so cobre a variancia de cold-start
+		// sob carga alta, nao mascara falha de logica.
+		async () => {
+			const payload = { mapa: { total: 10 } };
+			global.fetch.mockResolvedValue({
+				ok: true,
+				json: vi.fn().mockResolvedValue(payload),
+			});
 
-		const module = await loadModule();
-		const { result } = renderHook(() => module.useDashboardData());
+			const module = await loadModule();
+			const { result } = renderHook(() => module.useDashboardData());
 
-		await waitFor(() => expect(result.current.loading).toBe(false));
+			await waitFor(() => expect(result.current.loading).toBe(false));
 
-		expect(result.current.error).toBeNull();
-		expect(result.current.data).toEqual(payload);
-		expect(global.fetch).toHaveBeenCalledTimes(1);
-		expect(global.fetch.mock.calls[0][0]).toContain("/api/public/dashboard");
-	});
+			expect(result.current.error).toBeNull();
+			expect(result.current.data).toEqual(payload);
+			expect(global.fetch).toHaveBeenCalledTimes(1);
+			expect(global.fetch.mock.calls[0][0]).toContain("/api/public/dashboard");
+		},
+		15000,
+	);
 
 	it("expoe erro quando a carga falha por rede ou status HTTP", async () => {
 		global.fetch.mockResolvedValue({
