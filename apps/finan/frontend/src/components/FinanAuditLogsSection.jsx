@@ -142,11 +142,11 @@ function RecordTimeline({ entity, recordId, currentLogId }) {
 	const [loading, setLoading] = useState(false);
 
 	useEffect(() => {
-		if (!entity || !recordId) {
-			setEvents([]);
-			return undefined;
-		}
+		if (!entity || !recordId) return undefined;
 		let active = true;
+		// Reset síncrono intencional: precisa mostrar o estado de carregamento
+		// antes do fetch assíncrono iniciar (loading começa em false).
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		fetchFinanAuditLogsByRecord(entity, recordId)
 			.then((items) => {

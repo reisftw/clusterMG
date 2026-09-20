@@ -424,6 +424,10 @@ function FinanSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, 
 	const [openItemId, setOpenItemId] = useState(() => findActiveTopItemId(visibleSections, pathname));
 	useEffect(() => {
 		const activeId = findActiveTopItemId(visibleSections, pathname);
+		// Sincronização intencional com a rota ativa a cada navegação — o
+		// acordeão precisa refletir de imediato qual item corresponde à URL
+		// atual.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		if (activeId) setOpenItemId(activeId);
 	}, [pathname, visibleSections]);
 
@@ -439,7 +443,11 @@ function FinanSidebar({ collapsed, onToggleCollapsed, onNavigate, user, mobile, 
 	});
 	useEffect(() => {
 		const adminSection = visibleSections.find((section) => section.id === "administracao");
+		// Abre a seção Administração sozinha quando a rota ativa está nela —
+		// sincronização intencional com a navegação, não um valor derivado
+		// puro (o usuário pode fechar de novo manualmente depois).
 		if (adminSection?.items.some((item) => isItemActive(item, pathname))) {
+			// eslint-disable-next-line react-hooks/set-state-in-effect
 			setAdminSectionOpen(true);
 		}
 	}, [pathname, visibleSections]);
@@ -960,6 +968,10 @@ function GlobalSearchBar() {
 
 	useEffect(() => {
 		if (query.trim().length < 2) {
+			// Reset síncrono intencional: sem isso, resultados de uma busca
+			// anterior ficariam visíveis (results.length > 0) mesmo depois do
+			// usuário apagar o texto abaixo de 2 caracteres.
+			// eslint-disable-next-line react-hooks/set-state-in-effect
 			setResults([]);
 			return undefined;
 		}

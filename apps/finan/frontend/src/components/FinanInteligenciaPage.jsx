@@ -109,6 +109,10 @@ function BriefingTab() {
 
 	useEffect(() => {
 		let active = true;
+		// Reset síncrono intencional ao trocar de período: precisa mostrar o
+		// estado de carregamento antes do fetch assíncrono iniciar. Migrar
+		// esse padrão pra uma lib de data-fetching é fora do escopo desta etapa.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		setError("");
 		fetchFinanBriefing(periodo)

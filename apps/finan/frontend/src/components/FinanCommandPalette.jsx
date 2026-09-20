@@ -87,11 +87,11 @@ export default function FinanCommandPalette() {
 	}, [open]);
 
 	useEffect(() => {
-		if (!open || query.trim().length < 2) {
-			setResults([]);
-			return undefined;
-		}
+		if (!open || query.trim().length < 2) return undefined;
 		let active = true;
+		// Reset síncrono intencional: precisa mostrar o estado de carregamento
+		// antes do fetch assíncrono (debounced) iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		const timer = window.setTimeout(() => {
 			fetchFinanBusca(query.trim())

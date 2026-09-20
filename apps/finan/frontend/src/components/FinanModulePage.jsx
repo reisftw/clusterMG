@@ -58,8 +58,6 @@ export default function FinanModulePage({ page }) {
 
 	useEffect(() => {
 		let active = true;
-		setLoading(true);
-		setError("");
 		Promise.allSettled([
 			requestFinanApi(`/orcamento/resumo?ano=${period.year}&mes=${period.month}`),
 			requestFinanApi(`/orcamento/detalhes?ano=${period.year}&mes=${period.month}`),

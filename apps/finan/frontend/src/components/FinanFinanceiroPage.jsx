@@ -53,6 +53,11 @@ export default function FinanFinanceiroPage({ page }) {
 		String(auth.user?.role || "").toLowerCase() === "admin";
 	useEffect(() => {
 		if (!isAdmin) {
+			// Reset síncrono e intencional: isAdmin raramente muda em runtime (só
+			// se o próprio usuário logado mudar de cargo), mas quando muda,
+			// viewAsRoles/viewAsRole precisam ser limpos antes de qualquer
+			// renderização que dependa deles via o contexto exposto abaixo.
+			// eslint-disable-next-line react-hooks/set-state-in-effect
 			setViewAsRoles([]);
 			setViewAsRole("");
 			return undefined;
