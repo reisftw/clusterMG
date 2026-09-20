@@ -16,15 +16,6 @@ async function loadLogo(){
  return {blob,data,...await dimensions(data)};
 }
 export async function exportApr(item,format){
- const entries=[
- ["Registro",item.id],["Preenchido por",item.author_name],["Participantes",item.participants],["Data",String(item.activity_date).slice(0,10)],["Regional",item.regional_name],["Gestor imediato",item.manager_names.join(", ")||"Não cadastrado"],["Ticket",item.ticket],
- ["Situação",statusLabels[item.risk_status]],["Localização",item.latitude+", "+item.longitude+" (precisão ±"+Math.round(item.accuracy)+" m)"],
- ["Localização capturada em",new Date(item.location_at).toLocaleString("pt-BR")],["Registrada em",new Date(item.created_at).toLocaleString("pt-BR")],
- ...checklist.questions.map(q=>[q.label,q.options[item.answers[q.id]]]),
- ["Proteção contra quedas", (item.answers.fallEquipment||[]).join(", ") || "Não verificados"],
- ["EPIs que não possui",item.missing_ppe.join(", ")||"Tenho todos corretamente."],["Observações",item.observations||"Nenhuma."],
- ["Atenção",checklist.notice],["Registro de segurança","Esta APR registra as respostas do colaborador. Não substitui a autorização para executar a atividade."]
- ];
  const logo=await loadLogo();
  const photos=[];
  for(const p of item.photos){const blob=await getAprPhoto(item.id,p.id);const data=await imageData(blob);photos.push({blob,data,...await dimensions(data)});}

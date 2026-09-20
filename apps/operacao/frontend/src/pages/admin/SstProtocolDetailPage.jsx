@@ -507,7 +507,6 @@ function InvestigationSection({ protocol, isReadOnly, onSaved }) {
 }
 
 function ActionPlanCard({ plan, canValidate, onChanged }) {
-	const [submitting, setSubmitting] = useState(false);
 	const [note, setNote] = useState("");
 	const [validating, setValidating] = useState(false);
 	const [error, setError] = useState("");
@@ -562,7 +561,7 @@ function ActionPlanCard({ plan, canValidate, onChanged }) {
 			{plan.canSubmit ? (
 				<div className="mt-3 space-y-2">
 					<textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="rot-input min-h-16 py-2" placeholder="O que foi feito? Descreva a evidência/conclusão." />
-					<button type="button" disabled={submitting || validating} onClick={submit} className="rot-btn-tactile inline-flex h-9 items-center rounded-xl bg-blue-600 px-4 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-60">{validating ? "Enviando..." : "Enviar para validação"}</button>
+					<button type="button" disabled={validating} onClick={submit} className="rot-btn-tactile inline-flex h-9 items-center rounded-xl bg-blue-600 px-4 text-xs font-black text-white hover:bg-blue-700 disabled:opacity-60">{validating ? "Enviando..." : "Enviar para validação"}</button>
 				</div>
 			) : null}
 			{canValidate && plan.status === "AGUARDANDO_VALIDACAO" ? (

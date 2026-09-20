@@ -6,7 +6,7 @@ export function getRotToken() {
 	return "";
 }
 
-export function setRotToken(token) {
+export function setRotToken(_token) {
 	window.localStorage.removeItem(TOKEN_KEY);
 }
 

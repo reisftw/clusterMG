@@ -265,7 +265,7 @@ function BigBarList({ items, labelFor = (k) => k, onSelect, activeKey, emptyMess
 }
 
 export default function SstReportsPage() {
-	const { hasPermission, user } = useRotAuth();
+	const { hasPermission } = useRotAuth();
 	const navigate = useNavigate();
 	const canExport = hasPermission("sst.relatorio.exportar");
 

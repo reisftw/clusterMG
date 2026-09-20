@@ -510,7 +510,7 @@ router.post("/protocols/:id/assign", requireRotPermission("sst.protocolo.atribui
 		const before = await loadProtocolForUpdate(client, req.params.id);
 		const { rows: userRows } = await client.query(`select name, email from rot_users where id = $1`, [assignedTo]);
 		if (!userRows[0]) fail(400, "Usuário responsável inválido.");
-		const { rows } = await client.query(`update sst_protocols set assigned_to = $2 where id = $1 returning *`, [req.params.id, assignedTo]);
+		await client.query(`update sst_protocols set assigned_to = $2 where id = $1 returning *`, [req.params.id, assignedTo]);
 		const beforeName = before.assigned_to_name || "Não atribuído";
 		await protocolTimeline(client, req, req.params.id, "assigned", "Responsável alterado", `${beforeName} → ${userRows[0].name}`, { assignedTo: before.assigned_to }, { assignedTo });
 		if (assignedTo !== req.rotUser.id) {
@@ -598,7 +598,7 @@ router.post("/protocols/:id/close", requireRotPermission("sst.protocolo.concluir
 		client = await db.connect();
 		await client.query("begin");
 		const before = await loadProtocolForUpdate(client, req.params.id);
-		const { rows } = await client.query(`update sst_protocols set status = 'CONCLUIDO', closed_at = now() where id = $1 returning *`, [req.params.id]);
+		await client.query(`update sst_protocols set status = 'CONCLUIDO', closed_at = now() where id = $1 returning *`, [req.params.id]);
 		await protocolTimeline(client, req, req.params.id, "closed", "Protocolo concluído", nullableText(req.body?.note, 1000) || "Tratativa encerrada pela Segurança do Trabalho.", { status: before.status }, { status: "CONCLUIDO" });
 		await notifyProtocolStakeholders(client, req, before, { type: "sst_protocol_closed", title: "Protocolo concluído", body: `${before.protocol_number} foi concluído.` });
 		await client.query("commit");

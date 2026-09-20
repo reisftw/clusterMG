@@ -16,7 +16,10 @@ export default function DssReportsPage() {
 	const { hasPermission } = useRotAuth();
 	const canExport = hasPermission("dss.relatorio.exportar");
 	const [regionals, setRegionals] = useState([]);
-	const [themes, setThemes] = useState([]);
+	// themes carregado para futuro filtro por tema (fetchDssThemes já busca
+	// os dados; falta o Select correspondente na UI — fora do escopo desta
+	// correção mecânica, decisão de produto).
+	const [_themes, setThemes] = useState([]);
 	const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", q: "", status: "", operationType: "", regionalId: "", themeId: "" });
 	const [items, setItems] = useState([]);
 	const [total, setTotal] = useState(0);

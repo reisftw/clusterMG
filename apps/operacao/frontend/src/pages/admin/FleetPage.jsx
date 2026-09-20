@@ -9,7 +9,6 @@ import {
 	fetchRotFleet,
 	fetchRotRegionals,
 	updateRotVehicle,
-	updateRotWorkshop,
 } from "../../api/rotApi";
 import ModalShell from "../../components/ui/ModalShell";
 import Spinner from "../../components/ui/Spinner";
@@ -313,7 +312,7 @@ function VehicleFormModal({ vehicle, regionals, onClose, onSaved, onDeleted }) {
 	);
 }
 
-function WorkshopsModal({ workshops, regionals, onClose, onChanged }) {
+function WorkshopsModal({ workshops, onClose, onChanged }) {
 	const [name, setName] = useState("");
 	const [address, setAddress] = useState("");
 	const [phone, setPhone] = useState("");

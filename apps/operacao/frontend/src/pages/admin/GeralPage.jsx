@@ -187,7 +187,7 @@ export default function GeralPage() {
 						</button>
 					</div>
 					<div className="mt-5 grid gap-4 xl:grid-cols-3">
-						{Object.entries(DEFAULT_OPERATION_MENU_CONFIG).map(([scope, defaults]) => (
+						{Object.entries(DEFAULT_OPERATION_MENU_CONFIG).map(([scope, _defaults]) => (
 							<div key={scope} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
 								<h3 className="text-sm font-black text-slate-950">{scope === "FIELD" ? "Field Service" : scope === "DELIVERY" ? "Delivery" : "ROT"}</h3>
 								<div className="mt-3 space-y-2">

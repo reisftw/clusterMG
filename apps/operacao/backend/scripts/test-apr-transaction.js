@@ -30,7 +30,7 @@ async function main(){
   };
   auth.requireRotAuth=(req,res,next)=>{req.rotUser=actors[req.headers["x-test-actor"]||"author"];next();};
   const express=require("express");const app=express();app.use(express.json());app.use("/apr",require("../src/apr/routes"));
-  app.use((e,req,res,next)=>res.status(e.status||500).json({error:e.message}));
+  app.use((e,req,res,_next)=>res.status(e.status||500).json({error:e.message}));
   server=app.listen(0,"127.0.0.1");await new Promise(r=>server.once("listening",r));
   const base="http://127.0.0.1:"+server.address().port+"/apr";
   const checklist=require("../"+"../shared/aprChecklist.json");

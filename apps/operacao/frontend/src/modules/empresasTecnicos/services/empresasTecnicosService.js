@@ -4,7 +4,6 @@ import {
 	deleteRotCompany,
 	fetchRotCompanies,
 	fetchRotRegionals,
-	fetchRotTechnicians,
 	fetchRotUsers,
 	updateRotCompany,
 	updateRotTechnician,

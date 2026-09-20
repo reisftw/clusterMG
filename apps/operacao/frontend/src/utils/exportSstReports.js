@@ -64,7 +64,11 @@ function filtersSummary(filters) {
 }
 
 export async function exportSstReports(format, payload) {
-	const { period, filters, summary, timeline, distribution, occurrences, actionPlans, workload, details } = payload;
+	// timeline e workload chegam com dados reais (SstReportsPage.jsx busca as
+	// duas séries antes de exportar), mas o documento gerado abaixo ainda não
+	// tem uma seção para elas — decisão de produto sobre incluir no PDF/XLSX,
+	// fora do escopo desta correção mecânica.
+	const { period, filters, summary, distribution, occurrences, actionPlans, details, timeline: _timeline, workload: _workload } = payload;
 	const logo = await loadLogo();
 	const generatedAt = new Date().toLocaleString("pt-BR");
 	const periodLabel = `${fmtDate(period.from)} a ${fmtDate(period.to)}`;

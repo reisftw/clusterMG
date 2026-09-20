@@ -20,7 +20,7 @@ function formatDate(value) {
 // de pendentes e historico, com visao de calendario (mesmo padrao do
 // agendamento do Retiradas, pedido explicito do usuario) alem da lista.
 export default function AbsencesPage() {
-	const { user, hasPermission } = useRotAuth();
+	const { hasPermission } = useRotAuth();
 	const canManage = hasPermission("rot.absences.manage");
 	const canApproveTimeoff = hasPermission("rot.timeoff.approve") || canManage;
 	const canApproveVacations = hasPermission("rot.vacations.approve") || canManage;

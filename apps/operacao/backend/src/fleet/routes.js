@@ -348,7 +348,7 @@ router.post("/", requireRotPermission("rot.fleet.manage"), async (req, res, next
 		const id = randomId();
 		client = await db.connect();
 		await client.query("begin");
-		const { rows } = await client.query(
+		await client.query(
 			`insert into rot_vehicles (id, model, plate, manufacturer, regional_id, operation_scope, year, status)
 			 values ($1,$2,$3,$4,$5,$6,$7,'DISPONIVEL_BASE') returning *`,
 			[id, model.trim(), plate.trim().toUpperCase(), String(manufacturer || ""), regionalId || req.rotUser.regional_id || null, operationScope, year],

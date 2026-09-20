@@ -55,10 +55,6 @@ function normalizeOperationScopes(scopes) {
 	return [...new Set(normalized)].length ? [...new Set(normalized)] : ["ROT"];
 }
 
-function formatOperationScopes(scopes) {
-	return normalizeOperationScopes(scopes).map((scope) => OPERATION_SCOPE_LABELS[scope] || scope).join(" / ");
-}
-
 export default function UsersPage() {
 	const [users, setUsers] = useState([]);
 	const [roles, setRoles] = useState([]);
