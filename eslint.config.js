@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import { defineConfig, globalIgnores } from "eslint/config";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
@@ -41,6 +42,24 @@ export default defineConfig([
 				"error",
 				{ varsIgnorePattern: "^[A-Z_]", argsIgnorePattern: "^[A-Z_]" },
 			],
+		},
+	},
+	{
+		// jsx-a11y/no-autofocus e no-static-element-interactions: o plugin
+		// nunca foi instalado neste repo (so existiam comentarios
+		// eslint-disable-next-line presumindo que existia — "Definition for
+		// rule not found"). Ativar como regra "error" pra todo apps/*/frontend
+		// quebraria retiradas/adm/operacao, que usam autoFocus em dezenas de
+		// lugares nunca revisados sob essa lente (auditoria de acessibilidade
+		// ampla, fora do escopo desta etapa). Escopado só ao Finan, onde os 3
+		// comentarios originais ja documentavam decisao consciente.
+		files: ["apps/finan/frontend/**/*.{js,jsx}"],
+		plugins: {
+			"jsx-a11y": jsxA11y,
+		},
+		rules: {
+			"jsx-a11y/no-autofocus": "error",
+			"jsx-a11y/no-static-element-interactions": "error",
 		},
 	},
 	{
