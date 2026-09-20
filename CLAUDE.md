@@ -43,7 +43,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   ```
 - Instalar dependências do backend:
   ```bash
-  npm ci --prefix vps
+  npm ci --prefix apps/retiradas/backend
   ```
 - Rodar frontend local:
   ```bash
@@ -51,7 +51,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   ```
 - Rodar backend local:
   ```bash
-  cd vps
+  cd apps/retiradas/backend
   npm run api:dev
   ```
 - Rodar lint:
@@ -80,28 +80,26 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   ```
 - Migrations SQL gerais:
   ```bash
-  cd vps
+  cd apps/retiradas/backend
   npm run migrate:sql
   ```
 - Migrations normalizadas:
   ```bash
-  cd vps
+  cd apps/retiradas/backend
   npm run migrate:normalized:apply
   ```
 - Scripts de migração por domínio:
   ```bash
-  cd vps
+  cd apps/retiradas/backend
   npm run migrate:regionais-usuarios
   npm run migrate:mensageria
   npm run migrate:agendamentos-esteira
-  npm run migrate:financeiro-reports
-  npm run migrate:financeiro-budget-config
   npm run migrate:imoveis
   npm run migrate:ordens
   ```
 - Backup manual:
   ```bash
-  cd vps
+  cd apps/retiradas/backend
   npm run backup:database
   ```
 
