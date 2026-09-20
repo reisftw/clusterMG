@@ -391,6 +391,9 @@ jobs:
     needs:
       - security
       - build-and-test
+      - validate-finan
+      - validate-adm
+      - validate-operacao
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     permissions:
