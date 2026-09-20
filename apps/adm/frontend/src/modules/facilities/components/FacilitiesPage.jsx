@@ -916,6 +916,9 @@ function PatrimonyAssetModal({
 
 	useEffect(() => {
 		if (!open) return;
+		// Preenche o formulário com os dados do ativo (ou limpa) sempre que o
+		// modal abre — sincronização intencional com a prop `asset`.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setForm(asset ? { ...DEFAULT_ASSET_FORM, ...asset } : DEFAULT_ASSET_FORM);
 	}, [asset, open]);
 
@@ -1062,6 +1065,9 @@ function PatrimonyConfigPanel({ config, onSave, saving }) {
 	const [newCategory, setNewCategory] = useState("");
 
 	useEffect(() => {
+		// Sincroniza o rascunho com a config vinda do backend sempre que ela
+		// mudar (ex.: após salvar) — sincronização intencional com a prop.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setDraft(config || {});
 	}, [config]);
 
@@ -2292,11 +2298,13 @@ function SafetyPropertySearch({ value, onChange }) {
 	useEffect(() => {
 		let active = true;
 		if (debounced.trim().length < 2) {
-			setResults([]);
 			return () => {
 				active = false;
 			};
 		}
+		// Reset síncrono intencional: mostra o estado de carregamento antes do
+		// fetch assíncrono (debounced) iniciar.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setLoading(true);
 		buscarImoveisSeguranca({ q: debounced, limit: 8 })
 			.then((items) => {
@@ -4554,7 +4562,6 @@ function ImoveisSpacesPanel() {
 
 	useEffect(() => {
 		let active = true;
-		setLoading(true);
 		listarImoveis()
 			.then((data) => {
 				if (active) setItems(data || []);
@@ -4648,6 +4655,9 @@ function ImoveisSpacesPanel() {
 		});
 	}, [debouncedQuery, enrichedItems, filters, quickFilter, sortBy]);
 
+	// Volta pra página 1 sempre que busca/filtros/ordenação mudam —
+	// sincronização intencional (evita ficar preso numa página vazia).
+	// eslint-disable-next-line react-hooks/set-state-in-effect
 	useEffect(() => setPage(1), [debouncedQuery, filters, pageSize, quickFilter, sortBy, viewMode]);
 
 	const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -5072,7 +5082,6 @@ function SupplierLookup({ value, onChange }) {
 	useEffect(() => {
 		let active = true;
 		if (debounced.trim().length < 2) {
-			setItems([]);
 			return () => { active = false; };
 		}
 		buscarFornecedoresFacilities({ q: debounced, limit: 8 }).then((data) => {
@@ -5104,7 +5113,6 @@ function ContractPropertyLookup({ value, onChange }) {
 	useEffect(() => {
 		let active = true;
 		if (debounced.trim().length < 2) {
-			setItems([]);
 			return () => { active = false; };
 		}
 		buscarImoveisContratosFacilities({ q: debounced, limit: 8 }).then((data) => {
@@ -6337,7 +6345,6 @@ function PropertyConsumptionLookup({ value, onChange }) {
 	useEffect(() => {
 		let active = true;
 		if (debounced.trim().length < 2) {
-			setItems([]);
 			return () => { active = false; };
 		}
 		buscarImoveisConsumosFacilities({ q: debounced, limit: 8 }).then((data) => {

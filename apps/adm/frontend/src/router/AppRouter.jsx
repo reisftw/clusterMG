@@ -1073,6 +1073,11 @@ function AdministrativoDashboard() {
 	}, []);
 
 	useEffect(() => {
+		// loadDashboard chama setLoading(true) de forma síncrona antes do
+		// primeiro await — necessário porque a mesma função também é chamada
+		// por um botão de atualizar (linha ~1376) e por outro fluxo async
+		// (linha ~1203), onde loading já pode estar false.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		loadDashboard();
 	}, [loadDashboard]);
 
@@ -1643,6 +1648,9 @@ function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed }) {
 
 	useEffect(() => {
 		if (!activeGroup?.title) return;
+		// Sincronização intencional com a rota ativa — abre o grupo do menu
+		// correspondente sempre que a navegação muda.
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setOpenGroupTitle(activeGroup.title);
 	}, [activeGroup?.title]);
 

@@ -4573,6 +4573,9 @@ function ImoveisDashboard({
 	const aluguelProximo = relatorio?.aluguelProximo || [];
 
 	useEffect(() => {
+		// Volta pra página 1 sempre que a busca muda — sincronização intencional
+		// (evita ficar preso numa página vazia após filtrar).
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setPaginaImoveis(1);
 	}, [buscaImoveis]);
 

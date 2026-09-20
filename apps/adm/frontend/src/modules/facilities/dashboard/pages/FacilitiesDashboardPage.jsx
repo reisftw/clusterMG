@@ -54,8 +54,6 @@ export default function FacilitiesDashboardPage() {
 
 	useEffect(() => {
 		let active = true;
-		setLoading(true);
-		setError("");
 		obterDashboardFacilities()
 			.then((data) => {
 				if (active) setDashboard(data || {});
