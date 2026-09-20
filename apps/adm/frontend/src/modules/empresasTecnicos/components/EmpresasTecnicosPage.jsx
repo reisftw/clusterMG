@@ -36,6 +36,7 @@ import { hasPermission, ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/useAuthContext";
 import { ROUTES } from "../../../router/routes";
 import { criarUsuarioAdmin } from "../../auth/services/authService";
+import { isInlineCompanyTechniciansEnabled } from "../inlineTechniciansFlag";
 import {
 	baixarDriveItemEmpresa,
 	baixarEnvioDocumentosZip,
@@ -589,7 +590,7 @@ function PaginationControls({
 	);
 }
 
-function EmpresaForm({
+export function EmpresaForm({
 	initialValue,
 	regionais,
 	usuariosEmpresa = [],
@@ -1408,7 +1409,7 @@ function EmpresaForm({
 					</div>
 				</div>
 
-				{false ? <div className="xl:col-span-12">
+				{isInlineCompanyTechniciansEnabled() ? <div className="xl:col-span-12">
 					<div className="mb-2 flex items-center justify-between gap-3">
 						<span className="block text-xs font-black uppercase tracking-wide text-slate-500">
 							Técnicos
