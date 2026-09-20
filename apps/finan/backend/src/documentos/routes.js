@@ -18,7 +18,7 @@ const { findDuplicateNotas } = require("./duplicidadeService");
 const { dispatchEvent } = require("../webhooks/dispatchService");
 
 const router = express.Router();
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 8_000_000;
 const upload = multer({
 	storage: multer.memoryStorage(),
 	limits: { fileSize: MAX_BYTES },
