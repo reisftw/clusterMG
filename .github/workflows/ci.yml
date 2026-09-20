@@ -133,11 +133,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Job independente, nao referenciado por "needs:" em nenhum job de
-    # deploy — visibilidade sobre o estado do Finan sem bloquear nada que
-    # ja existia. lint:finan tem debito pre-existente conhecido (ver
-    # docs/REORGANIZACAO-MONOREPO-ETAPA4-RELATORIO.md); falhar aqui e
-    # esperado ate esse debito ser pago, nao indica quebra desta etapa.
+    # Etapa 5 (docs/REORGANIZACAO-MONOREPO-ETAPA5-RELATORIO.md) pagou o
+    # debito de lint:finan/test:finan/build:finan que este job carregava
+    # desde a Etapa 4 — lint:finan agora esta 100% verde. deploy-finan-vps
+    # depende deste job (ver "needs:" la embaixo): nao publica Finan em
+    # producao se a validacao falhar.
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -166,11 +166,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Job independente, mesma lógica do validate-finan. ADM tem debito de
-    # lint pre-existente e parte dos testes falha por causa de uma
-    # segunda instalacao de React com versao diferente da raiz — ambos
-    # documentados no relatorio da Etapa 4, fora do escopo desta etapa
-    # corrigir (exigiria devDependency propria/refactor).
+    # Etapa 5 pagou o debito de lint:adm (100% verde) e isolou o ambiente
+    # de teste do ADM (devDependencies proprias de vitest/jsdom/testing-
+    # library) — a segunda instalacao de React que quebrava test:adm na
+    # Etapa 4 nao existe mais; test:adm passa 113/113. Job independente,
+    # validacao apenas (sem job de deploy pro ADM).
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -199,9 +199,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Job independente, mesma lógica do validate-finan. lint:operacao tem
-    # debito pre-existente (mesma causa: app nunca tinha sido lintado de
-    # verdade antes desta etapa); test:operacao passa 100% hoje.
+    # Etapa 5 pagou o debito de lint:operacao (100% verde, exceto um
+    # no-unreachable documentado como achado pendente de decisao de
+    # produto em rompimentos/routes.js). Job independente, validacao
+    # apenas (sem job de deploy pra Operação).
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -247,6 +248,7 @@ jobs:
     needs:
       - security
       - build-and-test
+      - validate-finan
       - detect-finan-changes
     # O Finan e um app totalmente separado do Retiradas (mesmo monorepo,
     # deploy independente) — so a propria branch finan pode reimplantar
