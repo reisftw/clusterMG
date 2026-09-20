@@ -3818,22 +3818,22 @@ function OperationTable({ columns = [], rows = [], emptyTitle, emptyDescription,
 function PropertyLookup({ label, value, onChange, imoveis = [], placeholder = "Buscar imóvel por nome, cidade, endereço ou código..." }) {
 	const [query, setQuery] = useState("");
 	const selected = imoveis.find((item) => getImovelId(item) === value);
-	const visible = useMemo(() => {
-		const normalized = normalizeText(query);
-		if (!normalized || normalized.length < 2) return [];
-		return imoveis
-			.filter((item) =>
-				normalizeText([
-					getImovelLabel(item),
-					item.cidade,
-					item.estado,
-					item.endereco,
-					item.codigo,
-					item.regional,
-				].filter(Boolean).join(" ")).includes(normalized),
-			)
-			.slice(0, 8);
-	}, [imoveis, query]);
+	const normalizedQuery = normalizeText(query);
+	const visible =
+		!normalizedQuery || normalizedQuery.length < 2
+			? []
+			: imoveis
+					.filter((item) =>
+						normalizeText([
+							getImovelLabel(item),
+							item.cidade,
+							item.estado,
+							item.endereco,
+							item.codigo,
+							item.regional,
+						].filter(Boolean).join(" ")).includes(normalizedQuery),
+					)
+					.slice(0, 8);
 
 	return (
 		<label className="space-y-2">
