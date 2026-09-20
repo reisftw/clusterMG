@@ -199,10 +199,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Etapa 5 pagou o debito de lint:operacao (100% verde, exceto um
-    # no-unreachable documentado como achado pendente de decisao de
-    # produto em rompimentos/routes.js). Job independente, validacao
-    # apenas (sem job de deploy pra Operação).
+    # Etapa 5 pagou o debito de lint:operacao; Etapa 6 corrigiu o ultimo
+    # achado pendente (no-unreachable em rompimentos/routes.js, que
+    # tambem tinha um bug real de fluxo de criacao). lint:operacao 100%
+    # verde, 0 warnings. Job independente, validacao apenas (sem job de
+    # deploy pra Operação).
     steps:
       - name: Checkout
         uses: actions/checkout@v5
