@@ -3,6 +3,7 @@ import {
 	Building2,
 	CalendarRange,
 	CheckCircle2,
+	ChevronDown,
 	Clock3,
 	FileSpreadsheet,
 	FileText,
@@ -74,11 +75,11 @@ const STATUS_ICON = {
 
 const SCAN_POLL_INTERVAL_MS = 1500;
 const SCAN_POLL_TIMEOUT_MS = 2 * 60 * 1000;
-// Varredura do ano todo: centenas de paginas por janela de 15 dias, dezenas
-// de janelas — pode legitimamente levar mais de uma hora. Timeout de
+// Varreduras de mes/ano: centenas de paginas por janela de 15 dias, dezenas
+// de janelas no ano — podem legitimamente levar bastante. Timeout de
 // acompanhamento bem mais generoso (o job roda no backend de qualquer
 // forma; isso so controla quando o front para de fazer polling sozinho).
-const SCAN_POLL_TIMEOUT_ANO_TODO_MS = 3 * 60 * 60 * 1000;
+const SCAN_POLL_TIMEOUT_PERIODO_LONGO_MS = 3 * 60 * 60 * 1000;
 
 function formatDateTime(value) {
 	if (!value) return "-";
@@ -186,6 +187,29 @@ function calcularIntervaloPeriodo(tipo, valor) {
 	return { dataInicio: undefined, dataFim: undefined };
 }
 
+function calcularIntervaloVarredura(tipo) {
+	const agora = new Date();
+	if (tipo === PERIODO_TIPOS.MES) {
+		return {
+			dataInicio: new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0, 0).toISOString(),
+			dataFim: agora.toISOString(),
+			anoTodo: false,
+		};
+	}
+	if (tipo === PERIODO_TIPOS.ANO) {
+		return {
+			dataInicio: new Date(agora.getFullYear(), 0, 1, 0, 0, 0, 0).toISOString(),
+			dataFim: agora.toISOString(),
+			anoTodo: true,
+		};
+	}
+	return {
+		dataInicio: new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 0, 0).toISOString(),
+		dataFim: agora.toISOString(),
+		anoTodo: false,
+	};
+}
+
 function descreverPeriodo(tipo, valor) {
 	if (tipo === PERIODO_TIPOS.DIA && valor) {
 		return new Date(`${valor}T00:00:00`).toLocaleDateString("pt-BR");
@@ -227,7 +251,7 @@ function resolveAnoTodoTitle(scanning, config) {
 	if (config?.backfillAnualConcluidoEm) {
 		return `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL}. Última varredura completa em ${formatDateTime(config.backfillAnualConcluidoEm)}.`;
 	}
-	return `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} (demorado: consulta todo o histórico do ano em janelas de 15 dias). Rode uma vez para coletar o histórico; depois disso o botão "Varredura agora" cobre o dia a dia.`;
+	return `Admin — reprocessa o Portal de Movimentações desde 01/01/${ANO_ATUAL} (demorado: consulta todo o histórico do ano em janelas de 15 dias). Rode uma vez para coletar o histórico; depois disso a varredura diária cobre o dia a dia.`;
 }
 
 function groupResumoPorDia(resumo) {
@@ -464,12 +488,10 @@ export default function MovimentacoesPage() {
 
 	const [scanJob, setScanJob] = useState(null);
 	const [scanning, setScanning] = useState(false);
-	// Varredura "ano todo" e sabidamente longa (centenas de paginas por
-	// janela, dezenas de janelas) — usa um timeout de acompanhamento bem
-	// maior do que a varredura normal (24h), que costuma terminar rapido.
-	const [scanAnoTodoAtivo, setScanAnoTodoAtivo] = useState(false);
+	const [scanPeriodoLongoAtivo, setScanPeriodoLongoAtivo] = useState(false);
 	const [scanError, setScanError] = useState("");
 	const [showScanModal, setShowScanModal] = useState(false);
+	const [showVarreduraMenu, setShowVarreduraMenu] = useState(false);
 	const pollTimerRef = useRef(null);
 
 	const intervaloPeriodo = useMemo(
@@ -1049,8 +1071,8 @@ export default function MovimentacoesPage() {
 							.catch(() => {});
 						return;
 					}
-					const timeoutMs = scanAnoTodoAtivo
-						? SCAN_POLL_TIMEOUT_ANO_TODO_MS
+					const timeoutMs = scanPeriodoLongoAtivo
+						? SCAN_POLL_TIMEOUT_PERIODO_LONGO_MS
 						: SCAN_POLL_TIMEOUT_MS;
 					if (Date.now() - startedAt > timeoutMs) {
 						// So para de acompanhar automaticamente — o job continua
@@ -1073,7 +1095,7 @@ export default function MovimentacoesPage() {
 					);
 				});
 		},
-		[carregarDashboard, carregarLista, carregarCidades, scanAnoTodoAtivo],
+		[carregarDashboard, carregarLista, carregarCidades, scanPeriodoLongoAtivo],
 	);
 
 	const handleAplicarFiltroPeriodo = () => {
@@ -1112,26 +1134,21 @@ export default function MovimentacoesPage() {
 		}
 	};
 
-	const handleIniciarVarredura = async ({ anoTodo = false } = {}) => {
+	const handleIniciarVarredura = async ({ tipo = PERIODO_TIPOS.DIA } = {}) => {
 		pararPolling();
 		setScanError("");
 		setScanning(true);
-		setScanAnoTodoAtivo(anoTodo);
+		setScanPeriodoLongoAtivo(tipo === PERIODO_TIPOS.MES || tipo === PERIODO_TIPOS.ANO);
+		setShowVarreduraMenu(false);
 		setShowScanModal(true);
 		try {
-			const intervalo = anoTodo
-				? {
-						dataInicio: new Date(ANO_ATUAL, 0, 1, 0, 0, 0, 0).toISOString(),
-						dataFim: new Date().toISOString(),
-						anoTodo: true,
-					}
-				: {};
+			const intervalo = calcularIntervaloVarredura(tipo);
 			const job = await iniciarVarreduraMovimentacoes(intervalo);
 			setScanJob(job);
 			acompanharJob(job.id, Date.now());
 		} catch {
 			setScanning(false);
-			setScanAnoTodoAtivo(false);
+			setScanPeriodoLongoAtivo(false);
 			setScanError("Não foi possível iniciar a varredura.");
 		}
 	};
@@ -1184,7 +1201,10 @@ export default function MovimentacoesPage() {
 						<div className="relative">
 							<button
 								type="button"
-								onClick={() => setShowFiltroPeriodo((current) => !current)}
+								onClick={() => {
+									setShowVarreduraMenu(false);
+									setShowFiltroPeriodo((current) => !current);
+								}}
 								className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
 							>
 								<CalendarRange size={16} />
@@ -1278,36 +1298,83 @@ export default function MovimentacoesPage() {
 							<RotateCw size={16} className={atualizando ? "animate-spin" : ""} />
 							Atualizar
 						</button>
-						<button
-							type="button"
-							onClick={() =>
-								scanning ? handleReabrirVarredura() : handleIniciarVarredura()
-							}
-							title={
-								scanning
-									? "Já tem uma varredura em andamento — clique para reabrir o progresso."
-									: undefined
-							}
-							className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"
-						>
-							<RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
-							{scanning ? "Varredura em andamento (ver progresso)" : "Varredura agora"}
-						</button>
-						{isAdmin ? (
+						<div className="relative">
 							<button
 								type="button"
-								onClick={() =>
+								onClick={() => {
+									if (scanning) {
+										handleReabrirVarredura();
+										return;
+									}
+									setShowFiltroPeriodo(false);
+									setShowVarreduraMenu((current) => !current);
+								}}
+								title={
 									scanning
-										? handleReabrirVarredura()
-										: handleIniciarVarredura({ anoTodo: true })
+										? "Já tem uma varredura em andamento — clique para reabrir o progresso."
+										: "Escolha se a varredura deve consultar o dia, o mês ou o ano atual."
 								}
-								title={resolveAnoTodoTitle(scanning, config)}
-								className="inline-flex items-center justify-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+								className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-gray-800"
 							>
-								<CalendarRange size={13} />
-								Ano todo (admin)
+								<RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
+								{scanning ? "Varredura em andamento (ver progresso)" : "Varredura"}
+								{scanning ? null : <ChevronDown size={15} />}
 							</button>
-						) : null}
+
+							{showVarreduraMenu && !scanning ? (
+								<div className="absolute right-0 z-10 mt-2 w-80 rounded-xl border border-gray-100 bg-white p-2 shadow-lg">
+									<p className="px-3 py-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+										Escolha o período da varredura
+									</p>
+									{[
+										{
+											tipo: PERIODO_TIPOS.DIA,
+											label: "Dia atual",
+											descricao: "Consulta devoluções registradas desde o início de hoje.",
+											visivel: true,
+										},
+										{
+											tipo: PERIODO_TIPOS.MES,
+											label: "Mês atual",
+											descricao: "Consulta do primeiro dia do mês até agora.",
+											visivel: true,
+										},
+										{
+											tipo: PERIODO_TIPOS.ANO,
+											label: "Ano atual",
+											descricao: "Reprocessa o ano em janelas de 15 dias. Pode demorar.",
+											visivel: isAdmin,
+										},
+									]
+										.filter((opcao) => opcao.visivel)
+										.map((opcao) => (
+											<button
+												key={opcao.tipo}
+												type="button"
+												onClick={() => handleIniciarVarredura({ tipo: opcao.tipo })}
+												title={
+													opcao.tipo === PERIODO_TIPOS.ANO
+														? resolveAnoTodoTitle(false, config)
+														: undefined
+												}
+												className="flex w-full items-start gap-3 rounded-lg px-3 py-3 text-left hover:bg-gray-50"
+											>
+												<span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+													<CalendarRange size={16} />
+												</span>
+												<span>
+													<span className="block text-sm font-black text-gray-900">
+														{opcao.label}
+													</span>
+													<span className="mt-0.5 block text-xs font-semibold leading-5 text-gray-500">
+														{opcao.descricao}
+													</span>
+												</span>
+											</button>
+										))}
+								</div>
+							) : null}
+						</div>
 					</div>
 				</div>
 			</section>
@@ -1413,7 +1480,7 @@ export default function MovimentacoesPage() {
 				)}
 				{!loadingDashboard && !resumoPorDia.length ? (
 					<p className="mt-3 text-sm text-gray-500">
-						Nenhuma devolução encontrada ainda. Use "Varredura agora" para
+						Nenhuma devolução encontrada ainda. Use "Varredura" para
 						consultar o Portal de Movimentações.
 					</p>
 				) : null}
