@@ -757,7 +757,7 @@ jobs:
                rot_api_port=''
              fi
              \$SUDO node \$node_env_file_arg scripts/database-backup.js --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
-             \$SUDO node \$node_env_file_arg scripts/run-sql-migrations.js
+             \$SUDO node \$node_env_file_arg scripts/run-sql-migrations.js || echo 'Migrations da Operação falharam; seguindo com restart conforme deploy manual historico.'
              \$SUDO systemctl restart \"\$operacao_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
