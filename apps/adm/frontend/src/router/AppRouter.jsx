@@ -43,6 +43,7 @@ import {
 	useParams,
 } from "react-router-dom";
 import ErrorPage from "../components/ui/ErrorPage";
+import MelzFooter from "../components/layout/MelzFooter";
 import Spinner from "../components/ui/Spinner";
 import { hasAnyPermission } from "../constants/roles";
 import { AuthProvider, useAuthContext } from "../context/AuthContext";
@@ -2089,6 +2090,7 @@ function AdmLayout() {
 				<main className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 sm:p-4 lg:p-6">
 					<Outlet />
 				</main>
+				<MelzFooter />
 			</div>
 		</div>
 	);
