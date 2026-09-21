@@ -69,5 +69,10 @@
 	},
 	"overrides": {
 		"uuid": "11.1.1"
+	},
+	"optionalDependencies": {
+		"@emnapi/core": "^1.7.1",
+		"@emnapi/runtime": "^1.7.1",
+		"@emnapi/wasi-threads": "^1.2.3"
 	}
 }
