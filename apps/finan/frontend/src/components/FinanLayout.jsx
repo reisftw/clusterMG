@@ -40,6 +40,8 @@ import UserAvatar from "./UserAvatar";
 
 const FINAN_SIDEBAR_COLLAPSED_KEY = "finan-sidebar-collapsed";
 const FINAN_ADMIN_SECTION_OPEN_KEY = "finan-sidebar-admin-open";
+const FINAN_APP_VERSION = import.meta.env.VITE_APP_VERSION || "local";
+const FINAN_APP_ENV_LABEL = import.meta.env.VITE_APP_ENV_LABEL || "Local";
 
 // Extraido pra achado javascript:S3358 (ternario aninhado).
 function resolvePushToggleLabel(pushBusy, pushSubscribed) {
@@ -218,14 +220,17 @@ export default function FinanLayout() {
 						<h2 className="truncate text-lg font-black text-slate-950">
 							Olá, {(user?.name || user?.email || "Usuário").split(" ")[0]}
 						</h2>
-						<p className="truncate text-xs font-medium text-slate-500">
-							{new Date().toLocaleDateString("pt-BR", {
-								weekday: "long",
-								day: "2-digit",
-								month: "long",
-								year: "numeric",
-							})}
-						</p>
+						<div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+							<p className="truncate text-xs font-medium text-slate-500">
+								{new Date().toLocaleDateString("pt-BR", {
+									weekday: "long",
+									day: "2-digit",
+									month: "long",
+									year: "numeric",
+								})}
+							</p>
+							<AppBuildBadge />
+						</div>
 					</div>
 					<GlobalSearchBar />
 					<div className="flex items-center gap-2">
@@ -327,6 +332,17 @@ export default function FinanLayout() {
 			<FinanceirinhoLauncher />
 			<FinanCommandPalette />
 		</div>
+	);
+}
+
+function AppBuildBadge() {
+	return (
+		<span
+			className="inline-flex max-w-full items-center rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-black text-orange-700"
+			title={`Versão ${FINAN_APP_VERSION} · ${FINAN_APP_ENV_LABEL}`}
+		>
+			<span className="truncate">v{FINAN_APP_VERSION} · {FINAN_APP_ENV_LABEL}</span>
+		</span>
 	);
 }
 
