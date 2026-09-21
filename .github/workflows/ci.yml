@@ -750,9 +750,31 @@ jobs:
              \$SUDO mkdir -p \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\"
              \$SUDO chown -R operacao:operacao \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\" || true
              if [ -f \"\$operacao_env_file\" ]; then
-               set -a
-               . \"\$operacao_env_file\"
-               set +a
+               eval \"\$(node - \"\$operacao_env_file\" <<'NODE'
+const fs = require('node:fs');
+
+const envFile = process.argv[2];
+const content = fs.readFileSync(envFile, 'utf8');
+const quote = String.fromCharCode(39);
+const escapeForSingleQuotes = (value) => String(value).replace(/'/g, quote + '\\' + quote + quote);
+
+for (const rawLine of content.split(/\\r?\\n/)) {
+  const line = rawLine.trim();
+  if (!line || line.startsWith('#')) continue;
+  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+  if (!match) continue;
+  const [, key, rawValue] = match;
+  let value = rawValue.trim();
+  if (
+    (value.startsWith('\"') && value.endsWith('\"')) ||
+    (value.startsWith(\"'\") && value.endsWith(\"'\"))
+  ) {
+    value = value.slice(1, -1);
+  }
+  console.log('export ' + key + '=' + quote + escapeForSingleQuotes(value) + quote);
+}
+NODE
+               )\"
              fi
              \$SUDO npm run backup:database -- --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
              \$SUDO npm run migrate
