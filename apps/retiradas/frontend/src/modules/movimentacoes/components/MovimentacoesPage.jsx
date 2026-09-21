@@ -1062,7 +1062,7 @@ export default function MovimentacoesPage() {
 					const finalizado = job.status === "completed" || job.status === "failed";
 					if (finalizado) {
 						setScanning(false);
-						setScanAnoTodoAtivo(false);
+						setScanPeriodoLongoAtivo(false);
 						carregarDashboard();
 						carregarLista();
 						carregarCidades();
