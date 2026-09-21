@@ -1,5 +1,6 @@
 {
-    "recommendations": [
-        "openai.chatgpt"
-    ]
+  "recommendations": [
+    "openai.chatgpt",
+    "repowise-dev.repowise"
+  ]
 }
