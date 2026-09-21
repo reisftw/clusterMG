@@ -1,5 +1,9 @@
 // hooks/useRetiradas.js
 import { useEffect, useMemo, useState } from "react";
+import {
+	getCancellationPercent,
+	getGoalPercent,
+} from "../../../modules/dashboard/utils/metasMetrics";
 import { applyMetasBaseConfigToAllData } from "../../../modules/metas/constants/metasBaseConfig";
 import { buscarMetasBaseConfig } from "../../../modules/metas/services/metasService";
 import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
@@ -32,16 +36,6 @@ function normalizeItem(item) {
 	};
 }
 
-function calculateDeliveredCancellationPercent(record) {
-	const total = toNumber(record?.totalOS);
-	const cancelamentos =
-		toNumber(record?.cancelamentos) || toNumber(record?.totalCancelamentos);
-	if (cancelamentos > 0) {
-		return Number(((total / cancelamentos) * 100).toFixed(1));
-	}
-	return toNumber(record?.percentAchieved);
-}
-
 function normalizeMonthRecord(record, monthName) {
 	if (!record) return record;
 	const d = { ...record };
@@ -53,7 +47,8 @@ function normalizeMonthRecord(record, monthName) {
 		toNumber(d.cancelamentos) ||
 		toNumber(d.totalCancelamentos) ||
 		(d.meta > 0 && d.metaSazonal > 0 ? d.meta / (d.metaSazonal / 100) : 0);
-	d.percentAchieved = calculateDeliveredCancellationPercent(d);
+	d.percentAchieved = Number(getGoalPercent(d).toFixed(1));
+	d.percentCancelamentos = Number(getCancellationPercent(d).toFixed(1));
 	d.status =
 		d.meta > 0 && d.totalOS >= d.meta
 			? "Meta atingida!"

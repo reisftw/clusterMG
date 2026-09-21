@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
 import { obterIndiceMes, obterMesAtual } from "../../../utils/mes";
 import { buildMonthProjection } from "../../../utils/metasProjection";
+import { getCancellationPercent } from "../../dashboard/utils/metasMetrics";
 import { METAS_RESUMO_MESES } from "../constants/metasResumoMensal.constants";
 import { recalcularSaldoDiario } from "../utils/metasSaldo";
 
@@ -142,6 +143,7 @@ export function useMetasResumoMensal(
 		const percentualAtingido = Number.parseFloat(
 			dadosMesSelecionado.percentAchieved,
 		);
+		const percentualCancelamentos = getCancellationPercent(dadosMesSelecionado);
 		const metaSazonal = dadosMesSelecionado.metaSazonal ?? 80;
 		const metaBrasilTecpar = calcularMetaBrasilTecpar({
 			cancelamentos: dadosMesSelecionado.cancelamentos,
@@ -185,6 +187,12 @@ export function useMetasResumoMensal(
 						? "bg-green-50 border-green-100"
 						: "bg-red-50 border-red-100",
 				text: percentualAtingido >= 100 ? "text-green-700" : "text-red-600",
+			},
+			{
+				label: "% dos cancelamentos",
+				value: `${percentualCancelamentos.toFixed(1)}%`,
+				color: "bg-orange-50 border-orange-100",
+				text: "text-orange-700",
 			},
 			{
 				label: "Falta",

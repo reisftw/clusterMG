@@ -815,6 +815,8 @@ export default function TabRetiradas({
 		() => formatTrend(d?.meta, previousMonthData?.meta),
 		[d, previousMonthData],
 	);
+	const atingimentoMeta = Number(d?.percentAchieved || 0);
+	const atingimentoCancelamentos = Number(d?.percentCancelamentos || 0);
 	const atingimentoTrend = useMemo(
 		() =>
 			formatTrend(
@@ -1109,8 +1111,8 @@ export default function TabRetiradas({
 				/>
 				<KpiCard
 					label="Atingimento"
-					value={`${Number(d.percentAchieved || 0).toFixed(1)}%`}
-					sub={d.status}
+					value={`${atingimentoMeta.toFixed(1)}%`}
+					sub={`${atingimentoMeta.toFixed(1)}% da meta · ${atingimentoCancelamentos.toFixed(1)}% dos cancelamentos`}
 					color="green"
 					trendValue={atingimentoTrend.value}
 					trendTone={atingimentoTrend.tone}
@@ -1158,8 +1160,12 @@ export default function TabRetiradas({
 							<strong>{Number(d.totalOS || 0).toLocaleString("pt-BR")}</strong>
 						</div>
 						<div>
-							<span>Atingimento</span>
-							<strong>{Number(d.percentAchieved || 0).toFixed(1)}%</strong>
+							<span>Ating. da meta</span>
+							<strong>{atingimentoMeta.toFixed(1)}%</strong>
+						</div>
+						<div>
+							<span>Sobre cancelamentos</span>
+							<strong>{atingimentoCancelamentos.toFixed(1)}%</strong>
 						</div>
 						<div>
 							<span>Meta</span>
@@ -1176,7 +1182,7 @@ export default function TabRetiradas({
 					<div className="retiradas-target-track" aria-hidden="true">
 						<span
 							style={{
-								width: `${Math.min(Number(d.percentAchieved || 0), 100)}%`,
+								width: `${Math.min(atingimentoMeta, 100)}%`,
 							}}
 						/>
 					</div>

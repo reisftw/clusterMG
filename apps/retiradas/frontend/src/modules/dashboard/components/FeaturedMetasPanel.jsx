@@ -5,6 +5,7 @@ import { META_BASES } from "../../metas/constants/metasBaseConfig";
 import { useMetasDashboard } from "../../metas/hooks/useMetasDashboard";
 import { buildMonthProjection } from "../../metas/hooks/useMetasResumoMensal";
 import { recalcularSaldoDiario } from "../../metas/utils/metasSaldo";
+import { getCancellationPercent, getGoalPercent } from "../utils/metasMetrics";
 
 const FONTES_DADOS_DASHBOARD = META_BASES;
 
@@ -46,25 +47,6 @@ function temDadosOperacionais(metaMes) {
 	);
 }
 
-function parsePercentValue(value) {
-	const parsed = Number(
-		String(value ?? 0)
-			.replace("%", "")
-			.replace(",", "."),
-	);
-	return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getGoalPercent(metaMes) {
-	if (!metaMes) return 0;
-
-	const total = Number(metaMes.totalOS || 0);
-	const meta = Number(metaMes.meta || 0);
-	if (meta > 0) return (total / meta) * 100;
-
-	return parsePercentValue(metaMes.percentAchieved);
-}
-
 const FeaturedMetasPanel = () => {
 	const { metaMes, allData, loading, feriadosSet } = useMetasDashboard();
 	const [fonteDados, setFonteDados] = useState("sempre");
@@ -93,6 +75,7 @@ const FeaturedMetasPanel = () => {
 					total: Number(dados.totalOS || 0),
 					meta: Number(dados.meta || 0),
 					percent,
+					percentCancelamentos: getCancellationPercent(dados),
 				};
 			})
 			.filter(Boolean)
@@ -113,6 +96,7 @@ const FeaturedMetasPanel = () => {
 		const meta = Number(metaMesFonte.meta || 0);
 		const total = Number(metaMesFonte.totalOS || 0);
 		const percent = getGoalPercent(metaMesFonte);
+		const percentCancelamentos = getCancellationPercent(metaMesFonte);
 		const percentVisual = Math.min(100, Math.max(0, percent));
 		const falta = Math.max(0, meta - total);
 		const saldoMesAtual = saldoDiario.at(-1)?.saldoMes ?? 0;
@@ -121,6 +105,7 @@ const FeaturedMetasPanel = () => {
 			meta,
 			total,
 			percent,
+			percentCancelamentos,
 			percentVisual,
 			falta,
 			metaDiaria,
@@ -203,6 +188,11 @@ const FeaturedMetasPanel = () => {
 		minimumFractionDigits: 1,
 		maximumFractionDigits: 1,
 	});
+	const percentCancelamentosLabel =
+		metaStats.percentCancelamentos.toLocaleString("pt-BR", {
+			minimumFractionDigits: 1,
+			maximumFractionDigits: 1,
+		});
 
 	return (
 		<section className="flex h-full flex-col overflow-hidden rounded-lg border border-orange-200 bg-white shadow-card">
@@ -236,6 +226,9 @@ const FeaturedMetasPanel = () => {
 								</span>
 								<span className="text-sm font-semibold text-slate-500">
 									da meta
+								</span>
+								<span className="mt-1 text-[11px] font-bold text-orange-600">
+									{percentCancelamentosLabel}% dos canc.
 								</span>
 							</div>
 						</div>
@@ -283,6 +276,9 @@ const FeaturedMetasPanel = () => {
 							<span className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
 								<TrendingUp size={14} className="mr-1 inline" />
 								{goalReached ? "No ritmo" : "Acompanhar"}
+							</span>
+							<span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+								{percentCancelamentosLabel}% dos cancelamentos
 							</span>
 						</div>
 					</div>
@@ -363,7 +359,11 @@ const FeaturedMetasPanel = () => {
 										{item.percent.toLocaleString("pt-BR", {
 											maximumFractionDigits: 1,
 										})}
-										% da meta
+										% da meta ·{" "}
+										{item.percentCancelamentos.toLocaleString("pt-BR", {
+											maximumFractionDigits: 1,
+										})}
+										% canc.
 									</p>
 								</div>
 								<p className="text-sm font-black text-blue-700">

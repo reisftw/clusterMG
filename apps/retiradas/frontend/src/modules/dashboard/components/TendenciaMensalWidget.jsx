@@ -4,7 +4,7 @@ import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 import DashboardWidgetCard from "./DashboardWidgetCard";
 import { INTERNAL_STATIC_DATA_UPDATED_EVENT } from "../../../services/internalStaticDataService";
 import { buscarTodasMetas } from "../../metas/services/metasService";
-import { getDeliveredCancellationPercent } from "../utils/metasMetrics";
+import { getCancellationPercent, getGoalPercent } from "../utils/metasMetrics";
 
 const MONTH_ORDER = {
 	Janeiro: 1,
@@ -87,11 +87,13 @@ export default function TendenciaMensalWidget() {
 
 		return lastMonths.map((month) => {
 			const total = Number(allData?.[month]?.totalOS || 0);
-			const percent = getDeliveredCancellationPercent(allData?.[month]);
+			const percent = getGoalPercent(allData?.[month]);
+			const percentCancelamentos = getCancellationPercent(allData?.[month]);
 			return {
 				month,
 				total,
 				percent,
+				percentCancelamentos,
 				width: `${Math.max(8, Math.round((total / maxTotal) * 100))}%`,
 			};
 		});
@@ -133,7 +135,8 @@ export default function TendenciaMensalWidget() {
 									</span>
 									<span className="text-xs font-semibold text-gray-500">
 										{item.total.toLocaleString("pt-BR")} O.S •{" "}
-										{item.percent.toFixed(1)}%
+										{item.percent.toFixed(1)}% meta •{" "}
+										{item.percentCancelamentos.toFixed(1)}% canc.
 									</span>
 								</div>
 								<div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">

@@ -2,26 +2,13 @@ import { MapPin, Target, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
 import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
+import {
+	getCancellationPercent,
+	getGoalPercent,
+} from "../../dashboard/utils/metasMetrics";
 import { useMetasDashboard } from "../hooks/useMetasDashboard";
 import { buildMonthProjection } from "../hooks/useMetasResumoMensal";
 import { recalcularSaldoDiario } from "../utils/metasSaldo";
-
-function getDeliveredCancellationPercent(metaMes) {
-	if (!metaMes) return 0;
-
-	const total = Number(metaMes.totalOS || 0);
-	const cancelamentos =
-		Number(metaMes.cancelamentos || 0) ||
-		Number(metaMes.totalCancelamentos || 0);
-	if (cancelamentos > 0) return (total / cancelamentos) * 100;
-
-	const fallback = Number(
-		String(metaMes.percentAchieved ?? 0)
-			.replace("%", "")
-			.replace(",", "."),
-	);
-	return Number.isFinite(fallback) ? fallback : 0;
-}
 
 const MetasDashboardWidget = () => {
 	const { metaMes, loading, feriadosSet } = useMetasDashboard();
@@ -79,7 +66,8 @@ const MetasDashboardWidget = () => {
 	const falta = Math.max(0, metaMes.meta - metaMes.totalOS);
 	const topTec = metaMes.technicians?.[0];
 	const topReg = metaMes.regionais?.[0];
-	const percentAchieved = getDeliveredCancellationPercent(metaMes);
+	const percentAchieved = getGoalPercent(metaMes);
+	const percentCancelamentos = getCancellationPercent(metaMes);
 	const atingido = percentAchieved >= 100;
 	const ritmoAtual = projecao?.ritmoAtual ?? 0;
 	const saldoMesAtual =
@@ -113,7 +101,7 @@ const MetasDashboardWidget = () => {
 								: "text-red-500 font-semibold"
 						}
 					>
-						{percentAchieved.toFixed(1)}%
+						{percentAchieved.toFixed(1)}% da meta
 					</span>
 				</div>
 			</div>
@@ -150,6 +138,17 @@ const MetasDashboardWidget = () => {
 					<p className="text-base font-bold text-orange-600">
 						{Number(metaMes.totalOS).toLocaleString("pt-BR")}
 					</p>
+				</div>
+			</div>
+
+			<div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+				<div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-blue-700">
+					<strong>{percentAchieved.toFixed(1)}%</strong> de atingimento sobre
+					a meta.
+				</div>
+				<div className="rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-orange-700">
+					<strong>{percentCancelamentos.toFixed(1)}%</strong> das O.S. sobre
+					os cancelamentos.
 				</div>
 			</div>
 
