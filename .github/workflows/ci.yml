@@ -750,38 +750,18 @@ jobs:
              \$SUDO mkdir -p \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\"
              \$SUDO chown -R operacao:operacao \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\" || true
              if [ -f \"\$operacao_env_file\" ]; then
-               eval \"\$(node - \"\$operacao_env_file\" <<'NODE'
-const fs = require('node:fs');
-
-const envFile = process.argv[2];
-const content = fs.readFileSync(envFile, 'utf8');
-const quote = String.fromCharCode(39);
-const escapeForSingleQuotes = (value) => String(value).replace(/'/g, quote + '\\' + quote + quote);
-
-for (const rawLine of content.split(/\\r?\\n/)) {
-  const line = rawLine.trim();
-  if (!line || line.startsWith('#')) continue;
-  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
-  if (!match) continue;
-  const [, key, rawValue] = match;
-  let value = rawValue.trim();
-  if (
-    (value.startsWith('\"') && value.endsWith('\"')) ||
-    (value.startsWith(\"'\") && value.endsWith(\"'\"))
-  ) {
-    value = value.slice(1, -1);
-  }
-  console.log('export ' + key + '=' + quote + escapeForSingleQuotes(value) + quote);
-}
-NODE
-               )\"
+               node_env_file_arg=\"--env-file=\$operacao_env_file\"
+               rot_api_port=\"\$(node \"\$node_env_file_arg\" -p \"process.env.ROT_API_PORT || ''\")\"
+             else
+               node_env_file_arg=''
+               rot_api_port=''
              fi
-             \$SUDO npm run backup:database -- --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
-             \$SUDO npm run migrate
+             \$SUDO node \$node_env_file_arg scripts/database-backup.js --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
+             \$SUDO node \$node_env_file_arg scripts/run-sql-migrations.js
              \$SUDO systemctl restart \"\$operacao_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
-             health_url=\"http://127.0.0.1:\${ROT_API_PORT:-3201}/api/health\"
+             health_url=\"http://127.0.0.1:\${rot_api_port:-3201}/api/health\"
              health_ok=0
              for attempt in 1 2 3 4 5 6 7 8 9 10; do
                if curl -fsS \"\$health_url\" >/dev/null 2>&1; then
