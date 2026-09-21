@@ -679,6 +679,26 @@ const LOGISTICA_ESTOQUE_PATHS = [
 	ROUTES.INSUMOS_REQUISICOES,
 ];
 
+const HIDDEN_RETIRADAS_MENU_PATHS = new Set([
+	ROUTES.EMPRESAS_TECNICOS,
+	ROUTES.ENTREGAS_TECNICOS,
+	ROUTES.TECNICOS_AUDITORIA_BOLSA,
+	ROUTES.TECNICOS_AUDITORIA_RELATORIOS,
+	ROUTES.ACERTO_ESTOQUE,
+	ROUTES.INSUMOS_REQUISICOES,
+	ROUTES.DOCUMENTOS_PENDENTES,
+	ROUTES.DOCUMENTOS_TRATATIVAS,
+	ROUTES.DOCUMENTOS_HISTORICO,
+	ROUTES.DOCUMENTOS_APROVADOS,
+	ROUTES.DOCUMENTOS_CONFIGURACAO,
+	ROUTES.DOCUMENTOS_RELATORIOS,
+	ROUTES.INSUMOS_ADMINISTRATIVOS,
+	ROUTES.IMOVEIS_ADMINISTRATIVOS,
+	ROUTES.IMOVEIS_ADMINISTRATIVOS_CONTRATOS,
+	ROUTES.IMOVEIS_ADMINISTRATIVOS_HISTORICO,
+	ROUTES.IMOVEIS_ADMINISTRATIVOS_RELATORIOS,
+]);
+
 const CLIENTE_MENSAGERIA_PATHS = [
 	ROUTES.MENSAGERIA_ENVIADOS,
 	ROUTES.MENSAGERIA_RELATORIOS,
@@ -1524,11 +1544,12 @@ function useSidebarBadgeCounters() {
 function useSidebarMenuItems({ currentUser, isModernLayout }) {
 	const visibleItems = useMemo(
 		() =>
-			NAV_ITEMS.filter((item) =>
-				item.publicAuthenticated
+			NAV_ITEMS.filter((item) => {
+				if (HIDDEN_RETIRADAS_MENU_PATHS.has(item.path)) return false;
+				return item.publicAuthenticated
 					? Boolean(currentUser)
-					: hasAnyPermission(currentUser, item.permission),
-			),
+					: hasAnyPermission(currentUser, item.permission);
+			}),
 		[currentUser],
 	);
 	const featuredItems = useMemo(
