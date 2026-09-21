@@ -53,7 +53,7 @@ export const useMetasDashboard = () => {
 			const [todos, feriados, baseConfig] = await Promise.all([
 				buscarTodasMetas(force),
 				buscarFeriados(force),
-				buscarMetasBaseConfig(force).catch(() => null),
+				buscarMetasBaseConfig(force, { preferLive: true }).catch(() => null),
 			]);
 			const metasConfiguradas = applyMetasBaseConfigToAllData(
 				todos || {},

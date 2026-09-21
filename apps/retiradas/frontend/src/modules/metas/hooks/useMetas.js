@@ -905,7 +905,7 @@ export const useMetas = () => {
 				buscarUltimaAtualizacao(),
 				buscarFeriadosVps(),
 				buscarForcaTarefaConfig(),
-				buscarMetasBaseConfig(),
+				buscarMetasBaseConfig(false, { preferLive: true }),
 				buscarTodosDashboardAgentes(),
 			]);
 			if (requestVersion !== dataVersionRef.current) return;
@@ -960,7 +960,9 @@ export const useMetas = () => {
 				const extras = await buscarFeriadosVps();
 				setFeriadosExtras(extras);
 
-				const baseConfig = await buscarMetasBaseConfig(true);
+				const baseConfig = await buscarMetasBaseConfig(true, {
+					preferLive: true,
+				});
 				const parsed = applyMetasBaseConfigToAllData(
 					parseMetasWorkbook(wb, extras),
 					baseConfig,

@@ -46,21 +46,23 @@ function temDadosOperacionais(metaMes) {
 	);
 }
 
-function getDeliveredCancellationPercent(metaMes) {
-	if (!metaMes) return 0;
-
-	const total = Number(metaMes.totalOS || 0);
-	const cancelamentos =
-		Number(metaMes.cancelamentos || 0) ||
-		Number(metaMes.totalCancelamentos || 0);
-	if (cancelamentos > 0) return (total / cancelamentos) * 100;
-
-	const fallback = Number(
-		String(metaMes.percentAchieved ?? 0)
+function parsePercentValue(value) {
+	const parsed = Number(
+		String(value ?? 0)
 			.replace("%", "")
 			.replace(",", "."),
 	);
-	return Number.isFinite(fallback) ? fallback : 0;
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getGoalPercent(metaMes) {
+	if (!metaMes) return 0;
+
+	const total = Number(metaMes.totalOS || 0);
+	const meta = Number(metaMes.meta || 0);
+	if (meta > 0) return (total / meta) * 100;
+
+	return parsePercentValue(metaMes.percentAchieved);
 }
 
 const FeaturedMetasPanel = () => {
@@ -85,7 +87,7 @@ const FeaturedMetasPanel = () => {
 			.map((mes) => {
 				const dados = getMetaMesPorFonte(allData?.[mes], fonteDados);
 				if (!temDadosOperacionais(dados)) return null;
-				const percent = getDeliveredCancellationPercent(dados);
+				const percent = getGoalPercent(dados);
 				return {
 					mes: mes === "Marco" ? "Março" : mes,
 					total: Number(dados.totalOS || 0),
@@ -110,7 +112,7 @@ const FeaturedMetasPanel = () => {
 			: null;
 		const meta = Number(metaMesFonte.meta || 0);
 		const total = Number(metaMesFonte.totalOS || 0);
-		const percent = getDeliveredCancellationPercent(metaMesFonte);
+		const percent = getGoalPercent(metaMesFonte);
 		const percentVisual = Math.min(100, Math.max(0, percent));
 		const falta = Math.max(0, meta - total);
 		const saldoMesAtual = saldoDiario.at(-1)?.saldoMes ?? 0;
