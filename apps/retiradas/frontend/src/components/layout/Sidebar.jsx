@@ -727,20 +727,19 @@ const MENU_GROUPS = [
 		id: "cliente",
 		label: "Cliente",
 		icon: Users,
-		// Atendimento e Mensageria entraram aqui dentro (pedido do time: menos
-		// itens soltos no topo do menu).
-		paths: [
-			ROUTES.AGENDAMENTOS,
-			...ATENDIMENTO_PATHS,
-			ROUTES.MENSAGERIA_ENVIADOS,
-			ROUTES.MENSAGERIA_RELATORIOS,
-			ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
-			ROUTES.MENSAGERIA_FILA,
-			ROUTES.MENSAGERIA_BACKLOG,
-			ROUTES.MENSAGERIA_CALLBACK,
-			ROUTES.MENSAGERIA_API,
-			ROUTES.MENSAGERIA,
-		],
+		paths: [ROUTES.AGENDAMENTOS],
+	},
+	{
+		id: "atendimento",
+		label: "Atendimento",
+		icon: MessagesSquare,
+		paths: ATENDIMENTO_PATHS,
+	},
+	{
+		id: "mensageria",
+		label: "Mensageria",
+		icon: MessageCircle,
+		paths: CLIENTE_MENSAGERIA_PATHS,
 	},
 	{
 		id: "tecnicos",
@@ -768,6 +767,17 @@ const MENU_GROUPS = [
 		],
 	},
 	{
+		id: "equipe",
+		label: "Equipe",
+		icon: UserSquare2,
+		paths: [
+			ROUTES.COLABORADORES,
+			ROUTES.AGENDA,
+			ROUTES.FERIADOS,
+			ROUTES.FERIAS,
+		],
+	},
+	{
 		id: "administrativo",
 		label: "Administrativo",
 		icon: Files,
@@ -783,17 +793,6 @@ const MENU_GROUPS = [
 			ROUTES.IMOVEIS_ADMINISTRATIVOS_CONTRATOS,
 			ROUTES.IMOVEIS_ADMINISTRATIVOS_HISTORICO,
 			ROUTES.IMOVEIS_ADMINISTRATIVOS_RELATORIOS,
-		],
-	},
-	{
-		id: "equipe",
-		label: "Equipe",
-		icon: UserSquare2,
-		paths: [
-			ROUTES.COLABORADORES,
-			ROUTES.AGENDA,
-			ROUTES.FERIADOS,
-			ROUTES.FERIAS,
 		],
 	},
 	{
@@ -1289,37 +1288,41 @@ function ClienteGroupItems({
 					</NavLink>
 				);
 			})}
-			<AdminNestedSection
-				title="Atendimento"
-				icon={MessagesSquare}
-				items={atendimentoItems}
-				open={Boolean(clickedGroups.cliente_atendimento)}
-				active={isActive(atendimentoItems)}
-				toggleKey="cliente_atendimento"
-				labelFormatter={(label) => label}
-				setClickedGroups={setClickedGroups}
-				nestedButtonClass={nestedButtonClass}
-				submenuClass={submenuClass}
-				submenuWrapClass={submenuWrapClass}
-				onNavigate={onNavigate}
-				displayLabel={displayLabel}
-				badge={atendimentoAbertos}
-			/>
-			<AdminNestedSection
-				title="Mensageria"
-				icon={MessageCircle}
-				items={mensageriaItems}
-				open={Boolean(clickedGroups.cliente_mensageria)}
-				active={isActive(mensageriaItems)}
-				toggleKey="cliente_mensageria"
-				labelFormatter={(label) => label}
-				setClickedGroups={setClickedGroups}
-				nestedButtonClass={nestedButtonClass}
-				submenuClass={submenuClass}
-				submenuWrapClass={submenuWrapClass}
-				onNavigate={onNavigate}
-				displayLabel={displayLabel}
-			/>
+			{atendimentoItems.length ? (
+				<AdminNestedSection
+					title="Atendimento"
+					icon={MessagesSquare}
+					items={atendimentoItems}
+					open={Boolean(clickedGroups.cliente_atendimento)}
+					active={isActive(atendimentoItems)}
+					toggleKey="cliente_atendimento"
+					labelFormatter={(label) => label}
+					setClickedGroups={setClickedGroups}
+					nestedButtonClass={nestedButtonClass}
+					submenuClass={submenuClass}
+					submenuWrapClass={submenuWrapClass}
+					onNavigate={onNavigate}
+					displayLabel={displayLabel}
+					badge={atendimentoAbertos}
+				/>
+			) : null}
+			{mensageriaItems.length ? (
+				<AdminNestedSection
+					title="Mensageria"
+					icon={MessageCircle}
+					items={mensageriaItems}
+					open={Boolean(clickedGroups.cliente_mensageria)}
+					active={isActive(mensageriaItems)}
+					toggleKey="cliente_mensageria"
+					labelFormatter={(label) => label}
+					setClickedGroups={setClickedGroups}
+					nestedButtonClass={nestedButtonClass}
+					submenuClass={submenuClass}
+					submenuWrapClass={submenuWrapClass}
+					onNavigate={onNavigate}
+					displayLabel={displayLabel}
+				/>
+			) : null}
 		</>
 	);
 }
@@ -1353,7 +1356,10 @@ function MenuGroup({
 	atendimentoAbertos,
 }) {
 	const IconComponent = group.icon;
-	const label = group.label;
+	const label =
+		group.id === "atendimento"
+			? displayLabel(group.label, "__atendimento_group")
+			: group.label;
 	const GroupItemsComponent = GROUP_ITEMS_COMPONENTS[group.id];
 	return (
 		<div key={group.id}>
@@ -1754,6 +1760,12 @@ const Sidebar = ({
 		currentUser,
 		isModernLayout,
 	});
+	const regularGroupedMenu = groupedMenu.filter(
+		(group) => group.id !== "configuracao",
+	);
+	const configurationGroup = groupedMenu.find(
+		(group) => group.id === "configuracao",
+	);
 	const isGroupActive = (group) =>
 		group.items.some((item) => isMenuPathActive(location.pathname, item));
 	const groupButtonClass = (active, open) =>
@@ -1813,7 +1825,7 @@ const Sidebar = ({
 				>
 					Menu
 				</SidebarSectionLabel>
-				{groupedMenu.map((group) => (
+				{regularGroupedMenu.map((group) => (
 					<MenuGroup
 						key={group.id}
 						group={group}
@@ -1846,6 +1858,30 @@ const Sidebar = ({
 						<span className={itemLabelClass}>{displayLabel(label, path)}</span>
 					</NavLink>
 				))}
+
+				{configurationGroup ? (
+					<MenuGroup
+						key={configurationGroup.id}
+						group={configurationGroup}
+						collapsed={collapsed}
+						active={isGroupActive(configurationGroup)}
+						open={
+							Boolean(clickedGroups[configurationGroup.id]) ||
+							isGroupActive(configurationGroup)
+						}
+						clickedGroups={clickedGroups}
+						setClickedGroups={setClickedGroups}
+						isModernLayout={isModernLayout}
+						groupButtonClass={groupButtonClass}
+						nestedButtonClass={nestedButtonClass}
+						submenuClass={submenuClass}
+						submenuWrapClass={submenuWrapClass}
+						onNavigate={handleNavigation}
+						displayLabel={displayLabel}
+						pathname={location.pathname}
+						atendimentoAbertos={atendimentoAbertos}
+					/>
+				) : null}
 
 				{!isEstoqueOnly ? (
 					<>

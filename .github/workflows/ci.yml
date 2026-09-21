@@ -8,6 +8,8 @@ on:
       - homolog-dev
       - develop
       - finan
+      - adm
+      - operacao
       - 'feature/**'
       - 'fix/**'
       - 'hotfix/**'
@@ -282,6 +284,30 @@ jobs:
         id: check
         run: echo "changed=true" >> "$GITHUB_OUTPUT"
 
+  detect-adm-changes:
+    name: Detecta mudancas no ADM
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/adm'
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+
+    steps:
+      - name: Sempre true na branch adm
+        id: check
+        run: echo "changed=true" >> "$GITHUB_OUTPUT"
+
+  detect-operacao-changes:
+    name: Detecta mudancas na Operação
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/operacao'
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+
+    steps:
+      - name: Sempre true na branch operacao
+        id: check
+        run: echo "changed=true" >> "$GITHUB_OUTPUT"
+
   deploy-finan-vps:
     name: Deploy Finan to VPS
     runs-on: ubuntu-latest
@@ -423,6 +449,430 @@ jobs:
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
              rm -f \"\$finan_package\" || \$SUDO rm -f \"\$finan_package\""
+
+  deploy-adm-vps:
+    name: Deploy ADM to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+      - validate-adm
+      - detect-adm-changes
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/adm' &&
+      needs.detect-adm-changes.outputs.changed == 'true'
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
+      ADM_APP_PATH: ${{ secrets.PROD_ADM_APP_PATH || secrets.ADM_APP_PATH || '/opt/retiradas/apps/adm' }}
+      ADM_API_SERVICE: ${{ secrets.PROD_ADM_API_SERVICE || secrets.ADM_API_SERVICE || 'adm-api.service' }}
+      ADM_API_ENV_FILE: ${{ secrets.PROD_ADM_API_ENV_FILE || secrets.ADM_API_ENV_FILE || '/opt/retiradas/apps/adm/.env' }}
+      ADM_PUBLIC_URL: ${{ secrets.PROD_ADM_PUBLIC_URL || secrets.ADM_PUBLIC_URL || 'https://adm.retiradas.tech' }}
+      REMOTE_ADM_PACKAGE: /tmp/adm-app-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/adm/frontend/package-lock.json
+            apps/adm/backend/package-lock.json
+
+      - name: Install ADM dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/adm/frontend
+          npm ci --prefix apps/adm/backend
+
+      - name: Build ADM frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_API_BASE_URL="${ADM_PUBLIC_URL}/api"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:adm
+
+      - name: Resolve ADM VPS deploy environment
+        env:
+          PROD_VPS_HOST_SECRET: ${{ secrets.PROD_VPS_HOST }}
+          VPS_HOST_SECRET: ${{ secrets.VPS_HOST }}
+          HOMOLOG_VPS_HOST_SECRET: ${{ secrets.HOMOLOG_VPS_HOST }}
+          PROD_VPS_PORT_SECRET: ${{ secrets.PROD_VPS_PORT }}
+          VPS_PORT_SECRET: ${{ secrets.VPS_PORT }}
+          HOMOLOG_VPS_PORT_SECRET: ${{ secrets.HOMOLOG_VPS_PORT }}
+          PROD_VPS_USER_SECRET: ${{ secrets.PROD_VPS_USER }}
+          VPS_USER_SECRET: ${{ secrets.VPS_USER }}
+          HOMOLOG_VPS_USER_SECRET: ${{ secrets.HOMOLOG_VPS_USER }}
+          PROD_ADM_APP_PATH_SECRET: ${{ secrets.PROD_ADM_APP_PATH }}
+          ADM_APP_PATH_SECRET: ${{ secrets.ADM_APP_PATH }}
+          PROD_ADM_API_SERVICE_SECRET: ${{ secrets.PROD_ADM_API_SERVICE }}
+          ADM_API_SERVICE_SECRET: ${{ secrets.ADM_API_SERVICE }}
+          PROD_ADM_API_ENV_FILE_SECRET: ${{ secrets.PROD_ADM_API_ENV_FILE }}
+          ADM_API_ENV_FILE_SECRET: ${{ secrets.ADM_API_ENV_FILE }}
+        run: |
+          echo "VPS_HOST=${PROD_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${HOMOLOG_VPS_HOST_SECRET:-145.223.27.204}}}" >> "$GITHUB_ENV"
+          echo "VPS_PORT=${PROD_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${HOMOLOG_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
+          echo "VPS_USER=${PROD_VPS_USER_SECRET:-${VPS_USER_SECRET:-${HOMOLOG_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
+          echo "ADM_APP_PATH=${PROD_ADM_APP_PATH_SECRET:-${ADM_APP_PATH_SECRET:-/opt/retiradas/apps/adm}}" >> "$GITHUB_ENV"
+          echo "ADM_API_SERVICE=${PROD_ADM_API_SERVICE_SECRET:-${ADM_API_SERVICE_SECRET:-adm-api.service}}" >> "$GITHUB_ENV"
+          echo "ADM_API_ENV_FILE=${PROD_ADM_API_ENV_FILE_SECRET:-${ADM_API_ENV_FILE_SECRET:-/opt/retiradas/apps/adm/.env}}" >> "$GITHUB_ENV"
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.HOMOLOG_VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret PROD_VPS_HOST, VPS_HOST or HOMOLOG_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret PROD_VPS_SSH_KEY, VPS_SSH_KEY or HOMOLOG_VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package ADM app
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            --exclude='backend/uploads' \
+            -czf adm-app.tar.gz \
+            -C apps adm
+
+      - name: Upload ADM package to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            adm-app.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_ADM_PACKAGE"
+
+      - name: Publish ADM on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             adm_app_path='$ADM_APP_PATH'
+             adm_parent_path=\"\$(dirname \"\$adm_app_path\")\"
+             adm_service='$ADM_API_SERVICE'
+             adm_env_file='$ADM_API_ENV_FILE'
+             adm_package='$REMOTE_ADM_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$adm_parent_path\"
+             \$SUDO tar -xzf \"\$adm_package\" -C \"\$adm_parent_path\"
+             cd \"\$adm_app_path/backend\"
+             package_hash=\"\$(sha256sum package.json | awk '{print \$1}')\"
+             if [ -d node_modules ] && [ -f .package-json.sha256 ] && [ \"\$package_hash\" = \"\$(cat .package-json.sha256)\" ]; then
+               echo 'ADM backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing ADM backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               echo \"\$package_hash\" > /tmp/adm-package-json.sha256
+               \$SUDO mv /tmp/adm-package-json.sha256 .package-json.sha256
+             fi
+             \$SUDO mkdir -p \"\$adm_app_path/backend/uploads\"
+             \$SUDO chown -R svc-adm:svc-adm \"\$adm_app_path/backend/uploads\" || true
+             if [ -f \"\$adm_env_file\" ]; then
+               set -a
+               . \"\$adm_env_file\"
+               set +a
+             fi
+             \$SUDO npm run migrate
+             \$SUDO systemctl restart \"\$adm_service\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             health_url=\"http://127.0.0.1:\${ADM_API_PORT:-3301}/api/health\"
+             health_ok=0
+             for attempt in 1 2 3 4 5 6 7 8 9 10; do
+               if curl -fsS \"\$health_url\" >/dev/null 2>&1; then
+                 health_ok=1
+                 break
+               fi
+               sleep 3
+             done
+             if [ \"\$health_ok\" -ne 1 ]; then
+               echo \"ADM health check falhou apos deploy (\$health_url).\" >&2
+               exit 1
+             fi
+             rm -f \"\$adm_package\" || \$SUDO rm -f \"\$adm_package\""
+
+  deploy-operacao-vps:
+    name: Deploy Operação to VPS
+    runs-on: ubuntu-latest
+    needs:
+      - security
+      - build-and-test
+      - validate-operacao
+      - detect-operacao-changes
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/operacao' &&
+      needs.detect-operacao-changes.outputs.changed == 'true'
+
+    permissions:
+      contents: read
+
+    env:
+      VPS_HOST: ${{ secrets.PROD_VPS_HOST || secrets.VPS_HOST || secrets.HOMOLOG_VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.PROD_VPS_PORT || secrets.VPS_PORT || secrets.HOMOLOG_VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.PROD_VPS_USER || secrets.VPS_USER || secrets.HOMOLOG_VPS_USER || 'root' }}
+      OPERACAO_APP_PATH: ${{ secrets.PROD_OPERACAO_APP_PATH || secrets.OPERACAO_APP_PATH || '/opt/retiradas/apps/rot' }}
+      OPERACAO_API_SERVICE: ${{ secrets.PROD_OPERACAO_API_SERVICE || secrets.OPERACAO_API_SERVICE || 'rot-api.service' }}
+      OPERACAO_API_ENV_FILE: ${{ secrets.PROD_OPERACAO_API_ENV_FILE || secrets.OPERACAO_API_ENV_FILE || '/opt/retiradas/apps/rot/.env' }}
+      OPERACAO_PUBLIC_URL: ${{ secrets.PROD_OPERACAO_PUBLIC_URL || secrets.OPERACAO_PUBLIC_URL || 'https://operacao.retiradas.tech' }}
+      REMOTE_OPERACAO_PACKAGE: /tmp/operacao-app-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/operacao/frontend/package-lock.json
+            apps/operacao/backend/package-lock.json
+
+      - name: Install Operação dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/operacao/frontend
+          npm ci --prefix apps/operacao/backend
+
+      - name: Build Operação frontend
+        run: |
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:operacao
+
+      - name: Resolve Operação VPS deploy environment
+        env:
+          PROD_VPS_HOST_SECRET: ${{ secrets.PROD_VPS_HOST }}
+          VPS_HOST_SECRET: ${{ secrets.VPS_HOST }}
+          HOMOLOG_VPS_HOST_SECRET: ${{ secrets.HOMOLOG_VPS_HOST }}
+          PROD_VPS_PORT_SECRET: ${{ secrets.PROD_VPS_PORT }}
+          VPS_PORT_SECRET: ${{ secrets.VPS_PORT }}
+          HOMOLOG_VPS_PORT_SECRET: ${{ secrets.HOMOLOG_VPS_PORT }}
+          PROD_VPS_USER_SECRET: ${{ secrets.PROD_VPS_USER }}
+          VPS_USER_SECRET: ${{ secrets.VPS_USER }}
+          HOMOLOG_VPS_USER_SECRET: ${{ secrets.HOMOLOG_VPS_USER }}
+          PROD_OPERACAO_APP_PATH_SECRET: ${{ secrets.PROD_OPERACAO_APP_PATH }}
+          OPERACAO_APP_PATH_SECRET: ${{ secrets.OPERACAO_APP_PATH }}
+          PROD_OPERACAO_API_SERVICE_SECRET: ${{ secrets.PROD_OPERACAO_API_SERVICE }}
+          OPERACAO_API_SERVICE_SECRET: ${{ secrets.OPERACAO_API_SERVICE }}
+          PROD_OPERACAO_API_ENV_FILE_SECRET: ${{ secrets.PROD_OPERACAO_API_ENV_FILE }}
+          OPERACAO_API_ENV_FILE_SECRET: ${{ secrets.OPERACAO_API_ENV_FILE }}
+        run: |
+          echo "VPS_HOST=${PROD_VPS_HOST_SECRET:-${VPS_HOST_SECRET:-${HOMOLOG_VPS_HOST_SECRET:-145.223.27.204}}}" >> "$GITHUB_ENV"
+          echo "VPS_PORT=${PROD_VPS_PORT_SECRET:-${VPS_PORT_SECRET:-${HOMOLOG_VPS_PORT_SECRET:-22}}}" >> "$GITHUB_ENV"
+          echo "VPS_USER=${PROD_VPS_USER_SECRET:-${VPS_USER_SECRET:-${HOMOLOG_VPS_USER_SECRET:-root}}}" >> "$GITHUB_ENV"
+          echo "OPERACAO_APP_PATH=${PROD_OPERACAO_APP_PATH_SECRET:-${OPERACAO_APP_PATH_SECRET:-/opt/retiradas/apps/rot}}" >> "$GITHUB_ENV"
+          echo "OPERACAO_API_SERVICE=${PROD_OPERACAO_API_SERVICE_SECRET:-${OPERACAO_API_SERVICE_SECRET:-rot-api.service}}" >> "$GITHUB_ENV"
+          echo "OPERACAO_API_ENV_FILE=${PROD_OPERACAO_API_ENV_FILE_SECRET:-${OPERACAO_API_ENV_FILE_SECRET:-/opt/retiradas/apps/rot/.env}}" >> "$GITHUB_ENV"
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_VPS_SSH_KEY || secrets.VPS_SSH_KEY || secrets.HOMOLOG_VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST" || (echo "Missing secret PROD_VPS_HOST, VPS_HOST or HOMOLOG_VPS_HOST" && exit 1)
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing secret PROD_VPS_SSH_KEY, VPS_SSH_KEY or HOMOLOG_VPS_SSH_KEY" && exit 1)
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Package Operação app
+        run: |
+          tar \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            --exclude='backend/uploads' \
+            --exclude='backend/logs' \
+            -czf operacao-app.tar.gz \
+            -C apps operacao
+
+      - name: Upload Operação package to VPS
+        run: |
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            operacao-app.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_OPERACAO_PACKAGE"
+
+      - name: Publish Operação on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "set -e
+             operacao_app_path='$OPERACAO_APP_PATH'
+             operacao_parent_path=\"\$(dirname \"\$operacao_app_path\")\"
+             operacao_service='$OPERACAO_API_SERVICE'
+             operacao_env_file='$OPERACAO_API_ENV_FILE'
+             operacao_package='$REMOTE_OPERACAO_PACKAGE'
+             if [ \"\$(id -u)\" -eq 0 ]; then SUDO=''; else SUDO='sudo -n'; fi
+             \$SUDO mkdir -p \"\$operacao_parent_path\"
+             tmp_extract=\"/tmp/operacao-extract-${{ github.sha }}\"
+             rm -rf \"\$tmp_extract\"
+             mkdir -p \"\$tmp_extract\"
+             tar -xzf \"\$operacao_package\" -C \"\$tmp_extract\"
+             if [ -d \"\$tmp_extract/operacao\" ]; then
+               \$SUDO rm -rf \"\$operacao_app_path.tmp\"
+               \$SUDO mv \"\$tmp_extract/operacao\" \"\$operacao_app_path.tmp\"
+               \$SUDO mkdir -p \"\$operacao_app_path\"
+               \$SUDO cp -a \"\$operacao_app_path.tmp/.\" \"\$operacao_app_path/\"
+               \$SUDO rm -rf \"\$operacao_app_path.tmp\"
+             else
+               echo 'Pacote da Operação não contém diretório operacao.' >&2
+               exit 1
+             fi
+             cd \"\$operacao_app_path/backend\"
+             package_hash=\"\$(sha256sum package.json | awk '{print \$1}')\"
+             if [ -d node_modules ] && [ -f .package-json.sha256 ] && [ \"\$package_hash\" = \"\$(cat .package-json.sha256)\" ]; then
+               echo 'Operação backend dependencies unchanged; skipping npm install'
+             else
+               echo 'Installing Operação backend dependencies'
+               \$SUDO npm install --omit=dev --no-audit --no-fund
+               echo \"\$package_hash\" > /tmp/operacao-package-json.sha256
+               \$SUDO mv /tmp/operacao-package-json.sha256 .package-json.sha256
+             fi
+             \$SUDO mkdir -p \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\"
+             \$SUDO chown -R operacao:operacao \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\" || true
+             if [ -f \"\$operacao_env_file\" ]; then
+               set -a
+               . \"\$operacao_env_file\"
+               set +a
+             fi
+             \$SUDO npm run backup:database -- --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
+             \$SUDO npm run migrate
+             \$SUDO systemctl restart \"\$operacao_service\"
+             \$SUDO nginx -t
+             \$SUDO systemctl reload nginx
+             health_url=\"http://127.0.0.1:\${ROT_API_PORT:-3201}/api/health\"
+             health_ok=0
+             for attempt in 1 2 3 4 5 6 7 8 9 10; do
+               if curl -fsS \"\$health_url\" >/dev/null 2>&1; then
+                 health_ok=1
+                 break
+               fi
+               sleep 3
+             done
+             if [ \"\$health_ok\" -ne 1 ]; then
+               echo \"Operação health check falhou apos deploy (\$health_url).\" >&2
+               exit 1
+             fi
+             rm -rf \"\$tmp_extract\"
+             rm -f \"\$operacao_package\" || \$SUDO rm -f \"\$operacao_package\""
+
+  smoke-finan-prod:
+    name: Smoke Finan produção
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-finan-vps
+    if: github.event_name == 'push' && github.ref == 'refs/heads/finan'
+
+    permissions:
+      contents: read
+
+    env:
+      FINAN_PUBLIC_URL: ${{ secrets.PROD_FINAN_PUBLIC_URL || secrets.FINAN_PUBLIC_URL || 'https://finan.retiradas.tech' }}
+
+    steps:
+      - name: Validar Finan público e API
+        run: |
+          set -e
+          for url in "$FINAN_PUBLIC_URL" "$FINAN_PUBLIC_URL/api/finan/health"; do
+            ok=0
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS --max-time 10 "$url" >/dev/null 2>&1; then
+                echo "OK: $url"
+                ok=1
+                break
+              fi
+              sleep 3
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Smoke falhou: $url" >&2
+              exit 1
+            fi
+          done
+
+  smoke-adm-prod:
+    name: Smoke ADM produção
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-adm-vps
+    if: github.event_name == 'push' && github.ref == 'refs/heads/adm'
+
+    permissions:
+      contents: read
+
+    env:
+      ADM_PUBLIC_URL: ${{ secrets.PROD_ADM_PUBLIC_URL || secrets.ADM_PUBLIC_URL || 'https://adm.retiradas.tech' }}
+
+    steps:
+      - name: Validar ADM público e API
+        run: |
+          set -e
+          for url in "$ADM_PUBLIC_URL" "$ADM_PUBLIC_URL/api/health"; do
+            ok=0
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS --max-time 10 "$url" >/dev/null 2>&1; then
+                echo "OK: $url"
+                ok=1
+                break
+              fi
+              sleep 3
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Smoke falhou: $url" >&2
+              exit 1
+            fi
+          done
+
+  smoke-operacao-prod:
+    name: Smoke Operação produção
+    runs-on: ubuntu-latest
+    needs:
+      - deploy-operacao-vps
+    if: github.event_name == 'push' && github.ref == 'refs/heads/operacao'
+
+    permissions:
+      contents: read
+
+    env:
+      OPERACAO_PUBLIC_URL: ${{ secrets.PROD_OPERACAO_PUBLIC_URL || secrets.OPERACAO_PUBLIC_URL || 'https://operacao.retiradas.tech' }}
+
+    steps:
+      - name: Validar Operação público e API
+        run: |
+          set -e
+          for url in "$OPERACAO_PUBLIC_URL" "$OPERACAO_PUBLIC_URL/api/health"; do
+            ok=0
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS --max-time 10 "$url" >/dev/null 2>&1; then
+                echo "OK: $url"
+                ok=1
+                break
+              fi
+              sleep 3
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Smoke falhou: $url" >&2
+              exit 1
+            fi
+          done
 
   deploy-vps:
     name: Deploy frontend and backend to VPS

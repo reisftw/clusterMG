@@ -72,6 +72,26 @@ test("validate-finan, validate-adm e validate-operacao existem como jobs no work
 	}
 });
 
+test("ADM, Operacao e Finan tem deploy/smoke dedicados e isolados por branch", () => {
+	const workflow = readWorkflow();
+	const expected = [
+		["deploy-finan-vps", "refs/heads/finan"],
+		["deploy-adm-vps", "refs/heads/adm"],
+		["deploy-operacao-vps", "refs/heads/operacao"],
+		["smoke-finan-prod", "refs/heads/finan"],
+		["smoke-adm-prod", "refs/heads/adm"],
+		["smoke-operacao-prod", "refs/heads/operacao"],
+	];
+
+	for (const [jobName, branchRef] of expected) {
+		const jobBlock = extractJobBlock(workflow, jobName);
+		assert.ok(
+			jobBlock.includes(branchRef),
+			`${jobName} deveria ficar isolado em ${branchRef}`,
+		);
+	}
+});
+
 test("security audita dependencias de todos os apps do monorepo", () => {
 	const workflow = readWorkflow();
 	const jobBlock = extractJobBlock(workflow, "security");
