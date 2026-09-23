@@ -9,6 +9,16 @@ const { validate } = require("../../dtos/middleware");
 const { AgendamentoWriteDTO, IdParamDTO } = require("../../dtos/agendamentoDto");
 
 const PAGE_SIZE = 1000;
+const CLIENT_ACTOR_FIELDS = [
+	"atendente_id",
+	"atendente_nome",
+	"agendado_por_id",
+	"agendado_por_nome",
+	"criado_por_id",
+	"criado_por_nome",
+	"atualizado_por_id",
+	"atualizado_por_nome",
+];
 
 function toPositiveInt(value, fallback) {
 	const parsed = Number(value || fallback);
@@ -29,6 +39,52 @@ async function listAll(fetchPage, { max = 10000 } = {}) {
 		offset += page.length;
 	}
 	return items;
+}
+
+function getActorId(user = {}) {
+	return String(user.uid || user.id || user.userId || user.email || "").trim();
+}
+
+function getActorName(user = {}) {
+	return String(
+		user.displayName ||
+			user.display_name ||
+			user.nome ||
+			user.profile?.displayName ||
+			user.profile?.display_name ||
+			user.profile?.nome ||
+			user.email ||
+			user.uid ||
+			"Usuario",
+	).trim();
+}
+
+function stripClientActorFields(data = {}) {
+	const payload = { ...data };
+	for (const field of CLIENT_ACTOR_FIELDS) delete payload[field];
+	return payload;
+}
+
+function withCreateActor(data = {}, user) {
+	const actorId = getActorId(user);
+	const actorName = getActorName(user);
+	return {
+		...data,
+		atendente_id: actorId,
+		atendente_nome: actorName,
+		agendado_por_id: actorId,
+		agendado_por_nome: actorName,
+		criado_por_id: actorId,
+		criado_por_nome: actorName,
+	};
+}
+
+function withUpdateActor(data = {}, user) {
+	return {
+		...data,
+		atualizado_por_id: getActorId(user),
+		atualizado_por_nome: getActorName(user),
+	};
 }
 
 function createAgendamentosRouter({
@@ -91,7 +147,11 @@ function createAgendamentosRouter({
 				// Defesa contra IDOR/escalada de escopo (docs/TECHNICAL-AUDIT.md,
 				// achado #3): um supervisor so pode criar agendamento pra propria
 				// regional — o campo `regional` do body nunca e confiavel por si so.
-				const payload = scopeWritePayload(req.user, req.validated.body);
+				const scopedPayload = scopeWritePayload(
+					req.user,
+					stripClientActorFields(req.validated.body),
+				);
+				const payload = withCreateActor(scopedPayload, req.user);
 				const item = await agendamentosRepository.createAppointment(payload);
 				// Auditoria (docs/TECHNICAL-AUDIT.md, achado #5): agendamento nao
 				// passava pela camada generica de "documents" que audita sozinha,
@@ -130,7 +190,11 @@ function createAgendamentosRouter({
 				// regional deste dominio: permissao de "manage_agendamentos" sozinha
 				// nao basta pra alterar um agendamento de outra regional.
 				assertRegionalRecordAccess(req.user, current);
-				const payload = scopeWritePayload(req.user, req.validated.body);
+				const scopedPayload = scopeWritePayload(
+					req.user,
+					stripClientActorFields(req.validated.body),
+				);
+				const payload = withUpdateActor(scopedPayload, req.user);
 				const item = await agendamentosRepository.updateAppointment(id, payload);
 				const changedFields = auditLog.calculateChangedFields(current, item);
 				if (changedFields.length) {

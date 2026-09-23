@@ -29,6 +29,17 @@ const AgendamentoWriteDTO = object(
 		hora: timeOnly(),
 		status: enumField(STATUS_VALUES),
 		observacao: string({ maxLength: 2000, allowEmpty: true }),
+		// Compatibilidade com bundles antigos do frontend: esses metadados
+		// podem chegar no body, mas a rota sempre remove/sobrescreve com o
+		// usuario autenticado antes de gravar.
+		atendente_id: string({ maxLength: 160, allowEmpty: true }),
+		atendente_nome: string({ maxLength: 200, allowEmpty: true }),
+		agendado_por_id: string({ maxLength: 160, allowEmpty: true }),
+		agendado_por_nome: string({ maxLength: 200, allowEmpty: true }),
+		criado_por_id: string({ maxLength: 160, allowEmpty: true }),
+		criado_por_nome: string({ maxLength: 200, allowEmpty: true }),
+		atualizado_por_id: string({ maxLength: 160, allowEmpty: true }),
+		atualizado_por_nome: string({ maxLength: 200, allowEmpty: true }),
 		// `regional` normalmente nao vem do formulario (a regional e
 		// escopada no backend — ver security/regionalScope.js), mas o campo
 		// fica no shape pra nao ser rejeitado caso algum fluxo legado ainda

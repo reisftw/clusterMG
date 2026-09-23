@@ -12,6 +12,28 @@ function emitAgendamentoUpsert(id, data) {
 	});
 }
 
+const AGENDAMENTO_WRITE_FIELDS = [
+	"tecnico_nome",
+	"codigo_cliente",
+	"cliente_nome",
+	"cidade",
+	"data",
+	"turno",
+	"hora",
+	"status",
+	"observacao",
+	"regional",
+	"criado_em",
+	"atualizado_em",
+];
+
+function buildAgendamentoWritePayload(dados = {}) {
+	return AGENDAMENTO_WRITE_FIELDS.reduce((payload, field) => {
+		if (dados[field] !== undefined) payload[field] = dados[field];
+		return payload;
+	}, {});
+}
+
 export const buscarAgendamentosDominio = async ({
 	max = 10000,
 	startDate = "",
@@ -46,11 +68,11 @@ export const buscarClienteAgendamentoPorCodigo = async (codigo) => {
 
 export const criarAgendamento = async (dados) => {
 	const now = new Date().toISOString();
-	const data = {
+	const data = buildAgendamentoWritePayload({
 		...dados,
 		criado_em: now,
 		atualizado_em: now,
-	};
+	});
 	const response = await requestVpsApi("/agendamentos", {
 		method: "POST",
 		body: JSON.stringify(data),
@@ -61,10 +83,10 @@ export const criarAgendamento = async (dados) => {
 };
 
 export const atualizarAgendamento = async (id, dados) => {
-	const data = {
+	const data = buildAgendamentoWritePayload({
 		...dados,
 		atualizado_em: new Date().toISOString(),
-	};
+	});
 	const response = await requestVpsApi(`/agendamentos/${encodeURIComponent(id)}`, {
 		method: "PUT",
 		body: JSON.stringify(data),

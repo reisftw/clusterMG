@@ -132,8 +132,8 @@ const AgendamentoModal = ({
 				observacao: form.observacao.trim(),
 			});
 			onClose();
-		} catch {
-			setErro("Erro ao salvar agendamento.");
+		} catch (error) {
+			setErro(error?.message || "Erro ao salvar agendamento.");
 		} finally {
 			setSaving(false);
 		}

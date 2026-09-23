@@ -67,8 +67,8 @@ function setRepoMock() {
 	delete require.cache[routesPath];
 }
 
-function fakeUser(role, regional) {
-	return { role, regional, profile: { role, regional } };
+function fakeUser(role, regional, extra = {}) {
+	return { role, regional, profile: { role, regional }, ...extra };
 }
 
 // Payload válido mínimo, batendo com o formulário real
@@ -409,6 +409,47 @@ describe("DTO: AgendamentoWriteDTO aplicado em POST/PUT /api/agendamentos", () =
 			.post("/api/agendamentos")
 			.send(validPayload({ criado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }));
 		expect(response.status).toBe(200);
+	});
+
+	it("metadados antigos do frontend são aceitos, ignorados e sobrescritos pelo usuário autenticado", async () => {
+		const app = buildApp(
+			fakeUser("admin", "Metropolitana SUB2", {
+				uid: "user-real",
+				displayName: "Usuario Real",
+				email: "real@example.com",
+			}),
+		);
+		const response = await request(app)
+			.post("/api/agendamentos")
+			.send(
+				validPayload({
+					atendente_id: "fake",
+					atendente_nome: "Nome Falso",
+					agendado_por_id: "fake",
+					agendado_por_nome: "Nome Falso",
+					criado_por_id: "fake",
+					criado_por_nome: "Nome Falso",
+					atualizado_por_id: "fake",
+					atualizado_por_nome: "Nome Falso",
+				}),
+			);
+		expect(response.status).toBe(200);
+		expect(repoMock.createAppointment).toHaveBeenCalledWith(
+			expect.objectContaining({
+				atendente_id: "user-real",
+				atendente_nome: "Usuario Real",
+				agendado_por_id: "user-real",
+				agendado_por_nome: "Usuario Real",
+				criado_por_id: "user-real",
+				criado_por_nome: "Usuario Real",
+			}),
+		);
+		expect(repoMock.createAppointment).toHaveBeenCalledWith(
+			expect.not.objectContaining({
+				atualizado_por_id: "fake",
+				atualizado_por_nome: "Nome Falso",
+			}),
+		);
 	});
 
 	it("PUT com :id de formato inválido → 400 (nunca chega a buscar o agendamento)", async () => {

@@ -567,21 +567,9 @@ const AgendamentosPage = () => {
 
 	const handleSalvar = async (dados) => {
 		if (modal?.id) {
-			await atualizar(modal.id, {
-				...dados,
-				atualizado_por_id: currentUser?.id || "",
-				atualizado_por_nome: currentUser?.nome || currentUser?.email || "",
-			});
+			await atualizar(modal.id, dados);
 		} else {
-			await criar({
-				...dados,
-				atendente_id: currentUser?.id || "",
-				atendente_nome: currentUser?.nome || currentUser?.email || "",
-				agendado_por_id: currentUser?.id || "",
-				agendado_por_nome: currentUser?.nome || currentUser?.email || "",
-				criado_por_id: currentUser?.id || "",
-				criado_por_nome: currentUser?.nome || currentUser?.email || "",
-			});
+			await criar(dados);
 		}
 	};
 
