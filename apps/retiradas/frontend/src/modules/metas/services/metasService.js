@@ -70,15 +70,17 @@ function withMonthAliases(metas = {}) {
 
 export const buscarTodasMetas = async (
 	force = false,
-	{ allowFallback = true } = {},
+	{ allowFallback = true, preferLive = false } = {},
 ) => {
-	const staticMetas = await getInternalSnapshotSlice(
-		SNAPSHOT_DOMAINS.DASHBOARD,
-		(payload) => payload?.metas?.all ?? null,
-		{ force },
-	);
-	if (staticMetas && typeof staticMetas === "object") {
-		return withMonthAliases(staticMetas);
+	if (!preferLive) {
+		const staticMetas = await getInternalSnapshotSlice(
+			SNAPSHOT_DOMAINS.DASHBOARD,
+			(payload) => payload?.metas?.all ?? null,
+			{ force },
+		);
+		if (staticMetas && typeof staticMetas === "object") {
+			return withMonthAliases(staticMetas);
+		}
 	}
 
 	if (!allowFallback) {

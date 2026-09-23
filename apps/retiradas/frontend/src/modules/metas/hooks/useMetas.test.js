@@ -770,6 +770,16 @@ describe("useMetas", () => {
 		);
 	});
 
+	it("carrega a tela de edicao de metas pela fonte viva, nao pelo snapshot estatico", async () => {
+		const { result } = renderHook(() => useMetas());
+
+		await waitFor(() => expect(result.current.loading).toBe(false));
+
+		expect(metasMocks.buscarTodasMetas).toHaveBeenCalledWith(false, {
+			preferLive: true,
+		});
+	});
+
 	it("carrega os lancamentos salvos de agentes para reabrir o formulario sem zerar", async () => {
 		metasMocks.buscarTodosDashboardAgentes.mockResolvedValue({
 			Setembro: [

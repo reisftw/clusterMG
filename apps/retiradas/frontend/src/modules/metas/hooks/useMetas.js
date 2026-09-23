@@ -901,7 +901,7 @@ export const useMetas = () => {
 		setLoading(true);
 		try {
 			const [dados, lu, extras, forcaConfig, baseConfig, agentes] = await Promise.all([
-				buscarTodasMetas(),
+				buscarTodasMetas(false, { preferLive: true }),
 				buscarUltimaAtualizacao(),
 				buscarFeriadosVps(),
 				buscarForcaTarefaConfig(),

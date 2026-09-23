@@ -888,7 +888,9 @@ export default function MetasLancamentoManual({
 	const markDirty = useCallback(() => {
 		setMessage("");
 		setError("");
-	}, []);
+		setPublishResult(null);
+		clearStoredPublishResult(publishResultCacheKey);
+	}, [publishResultCacheKey]);
 
 	useEffect(() => {
 		setCancelamentosSempre(initialState.cancelamentosSempre);
@@ -1007,7 +1009,14 @@ export default function MetasLancamentoManual({
 	);
 
 	const saveCurrentCard = useCallback(async () => {
-		if (!canManage || saving || savingCardRef.current) return false;
+		if (!canManage) {
+			setError("Você não tem permissão para salvar lançamentos.");
+			return false;
+		}
+		if (saving || savingCardRef.current) {
+			setError("Já existe um salvamento em andamento. Aguarde concluir.");
+			return false;
+		}
 		savingCardRef.current = true;
 		setSavingCard(true);
 		setError("");
@@ -1048,6 +1057,14 @@ export default function MetasLancamentoManual({
 		setError("");
 		setPublishResult(null);
 		clearStoredPublishResult(publishResultCacheKey);
+		if (!canManage) {
+			setError("Você não tem permissão para lançar metas nos painéis.");
+			return;
+		}
+		if (saving || savingCardRef.current) {
+			setError("Já existe um salvamento em andamento. Aguarde concluir.");
+			return;
+		}
 		try {
 			await onSave(buildSavePayload());
 			const successMessage =
