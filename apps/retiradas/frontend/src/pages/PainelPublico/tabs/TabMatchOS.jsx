@@ -16,6 +16,8 @@ import {
 import { useMemo, useState } from "react";
 import { buildMatchOSData } from "../../Mapa/utils/matchOs";
 
+const MATCH_CITY_PAGE_SIZE = 5;
+
 function normalizeText(value) {
 	return String(value || "")
 		.normalize("NFD")
@@ -147,6 +149,7 @@ function RegionList({
 		open: new Set(),
 		closed: new Set(),
 	}));
+	const [cityPages, setCityPages] = useState({});
 	const firstRegional = String(sections[0]?.regional || "");
 	const expanded = useMemo(() => {
 		const next = new Set(expandedState.open);
@@ -173,6 +176,19 @@ function RegionList({
 
 			return { open, closed };
 		});
+	}
+
+	function getCityPageKey(regional, cidade) {
+		return `${regional}::${cidade}`;
+	}
+
+	function updateCityPage(regional, cidade, page, maxPage) {
+		const key = getCityPageKey(regional, cidade);
+		const nextPage = Math.min(Math.max(page, 1), maxPage);
+		setCityPages((current) => ({
+			...current,
+			[key]: nextPage,
+		}));
 	}
 
 	const normalizedSearch = normalizeText(search);
@@ -290,54 +306,129 @@ function RegionList({
 											</div>
 										</div>
 										<div className="match-mini-list">
-											{cidade.matches.slice(0, 5).map((match) => {
-												const id = `${regional.regional}::${cidade.cidade}::${match.id}`;
-												const firstDistance =
-													match.relacionadas?.[0]?.distanceMeters;
-												return (
-													<button
-														type="button"
-														key={id}
-														onClick={() =>
-															onSelect({
-																id,
-																regional: regional.regional,
-																cidade: cidade.cidade,
-																cidadeTotalMatches: cidade.totalMatches,
-																cidadeTotalRetiradasRelacionadas:
-																	cidade.totalRetiradasRelacionadas,
-																regionalTotalMatches: regional.totalMatches,
-																regionalTotalCidades: regional.totalCidades,
-																isAgente: regional.isAgente,
-																match,
-																copyText:
-																	match.copyText ||
-																	buildCopyText(
-																		regional.regional,
-																		cidade.cidade,
-																		match,
-																		regional.isAgente,
-																	),
-															})
-														}
-														className={`match-mini-row ${selectedId === id ? "active" : ""}`}
-													>
-														<span>
-															<strong>
-																{match.principal?.tipo || "Serviço"}
-															</strong>
-															<small>
-																{formatNumber(match.totalRelacionadas)}{" "}
-																retirada(s) proxima(s)
-																{firstDistance != null
-																	? ` • ${firstDistance}m`
-																	: ""}
-															</small>
-														</span>
-														<ChevronRight size={16} />
-													</button>
+											{(() => {
+												const pageKey = getCityPageKey(
+													regional.regional,
+													cidade.cidade,
 												);
-											})}
+												const totalPages = Math.max(
+													1,
+													Math.ceil(
+														cidade.matches.length / MATCH_CITY_PAGE_SIZE,
+													),
+												);
+												const currentPage = Math.min(
+													cityPages[pageKey] || 1,
+													totalPages,
+												);
+												const startIndex =
+													(currentPage - 1) * MATCH_CITY_PAGE_SIZE;
+												const pageMatches = cidade.matches.slice(
+													startIndex,
+													startIndex + MATCH_CITY_PAGE_SIZE,
+												);
+												return (
+													<>
+														{pageMatches.map((match) => {
+															const id = `${regional.regional}::${cidade.cidade}::${match.id}`;
+															const firstDistance =
+																match.relacionadas?.[0]?.distanceMeters;
+															return (
+																<button
+																	type="button"
+																	key={id}
+																	onClick={() =>
+																		onSelect({
+																			id,
+																			regional: regional.regional,
+																			cidade: cidade.cidade,
+																			cidadeTotalMatches:
+																				cidade.totalMatches,
+																			cidadeTotalRetiradasRelacionadas:
+																				cidade.totalRetiradasRelacionadas,
+																			regionalTotalMatches:
+																				regional.totalMatches,
+																			regionalTotalCidades:
+																				regional.totalCidades,
+																			isAgente: regional.isAgente,
+																			match,
+																			copyText:
+																				match.copyText ||
+																				buildCopyText(
+																					regional.regional,
+																					cidade.cidade,
+																					match,
+																					regional.isAgente,
+																				),
+																		})
+																	}
+																	className={`match-mini-row ${selectedId === id ? "active" : ""}`}
+																>
+																	<span>
+																		<strong>
+																			{match.principal?.tipo || "Serviço"}
+																		</strong>
+																		<small>
+																			{formatNumber(
+																				match.totalRelacionadas,
+																			)}{" "}
+																			retirada(s) proxima(s)
+																			{firstDistance != null
+																				? ` • ${firstDistance}m`
+																				: ""}
+																		</small>
+																	</span>
+																	<ChevronRight size={16} />
+																</button>
+															);
+														})}
+														{cidade.matches.length > MATCH_CITY_PAGE_SIZE ? (
+															<div className="match-city-pagination">
+																<span>
+																	{formatNumber(startIndex + 1)}-
+																	{formatNumber(
+																		Math.min(
+																			startIndex + pageMatches.length,
+																			cidade.matches.length,
+																		),
+																	)}{" "}
+																	de {formatNumber(cidade.matches.length)}
+																</span>
+																<div>
+																	<button
+																		type="button"
+																		disabled={currentPage <= 1}
+																		onClick={() =>
+																			updateCityPage(
+																				regional.regional,
+																				cidade.cidade,
+																				currentPage - 1,
+																				totalPages,
+																			)
+																		}
+																	>
+																		Anterior
+																	</button>
+																	<button
+																		type="button"
+																		disabled={currentPage >= totalPages}
+																		onClick={() =>
+																			updateCityPage(
+																				regional.regional,
+																				cidade.cidade,
+																				currentPage + 1,
+																				totalPages,
+																			)
+																		}
+																	>
+																		Próxima
+																	</button>
+																</div>
+															</div>
+														) : null}
+													</>
+												);
+											})()}
 										</div>
 									</div>
 								))}
@@ -666,19 +757,16 @@ export default function TabMatchOS({
 		return `${customerCodeMatches.length} match(es) encontrado(s) para o ativo ${normalizedCustomerCode}.`;
 	}, [customerCodeMatches.length, normalizedCustomerCode]);
 
-	const totalMatches = agentesOnly
-		? dados.agentes.reduce((sum, item) => sum + item.totalMatches, 0)
-		: dados.resumo.totalMatches;
-	const totalRetiradasRelacionadas = agentesOnly
-		? sumRetiradasRelacionadas(dados.agentes)
-		: Number(
-				dados.resumo.totalRetiradasRelacionadas ??
-					sumRetiradasRelacionadas(dados.regionais) +
-						sumRetiradasRelacionadas(dados.agentes),
-			);
-	const totalCidades = agentesOnly
-		? dados.agentes.reduce((sum, item) => sum + item.totalCidades, 0)
-		: dados.resumo.totalCidades;
+	const totalRegionais = agentesOnly ? 0 : (dados.regionais || []).length;
+	const totalMatches = sections.reduce(
+		(sum, item) => sum + Number(item.totalMatches || 0),
+		0,
+	);
+	const totalRetiradasRelacionadas = sumRetiradasRelacionadas(sections);
+	const totalCidades = sections.reduce(
+		(sum, item) => sum + Number(item.totalCidades || 0),
+		0,
+	);
 	const totalAgentes = dados.agentes.reduce(
 		(sum, item) => sum + item.totalCidades,
 		0,
@@ -890,7 +978,7 @@ export default function TabMatchOS({
 				{!agentesOnly ? (
 					<MatchSummaryCard
 						label="Regionais"
-						value={formatNumber(dados.resumo.totalRegionais)}
+						value={formatNumber(totalRegionais)}
 						helper="Grupos regionais com match"
 						tone="blue"
 						icon={MapPin}

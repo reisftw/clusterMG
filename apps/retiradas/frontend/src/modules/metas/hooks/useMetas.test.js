@@ -807,6 +807,97 @@ describe("useMetas", () => {
 		]);
 	});
 
+	it("preserva dias anteriores ao salvar um lancamento manual de um dia especifico", async () => {
+		metasMocks.buscarTodasMetas.mockResolvedValue({
+			Setembro: {
+				mes: "Setembro",
+				ano: 2026,
+				cancelamentos: 100,
+				meta: 85,
+				totalOS: 60,
+				planilhaCarregada: true,
+				technicians: [
+					{
+						name: "Tecnico A",
+						total: 60,
+						daily: [10, 20, 30],
+						meta: 110,
+					},
+				],
+				regionais: [],
+				rawDays: [
+					{ dia: 1, equipe: 10, agente: 0, loja: 0, regionais: 0, totalDia: 10 },
+					{ dia: 2, equipe: 20, agente: 0, loja: 0, regionais: 0, totalDia: 20 },
+					{ dia: 3, equipe: 30, agente: 0, loja: 0, regionais: 0, totalDia: 30 },
+				],
+				saldoDiario: [
+					{ dia: 1, equipe: 10, agente: 0, loja: 0, regionais: 0, totalDia: 10 },
+					{ dia: 2, equipe: 20, agente: 0, loja: 0, regionais: 0, totalDia: 20 },
+					{ dia: 3, equipe: 30, agente: 0, loja: 0, regionais: 0, totalDia: 30 },
+				],
+			},
+		});
+
+		const { result } = renderHook(() => useMetas());
+
+		await waitFor(() => expect(result.current.loading).toBe(false));
+
+		await act(async () => {
+			await result.current.salvarLancamentoManual({
+				mes: "Setembro",
+				ano: 2026,
+				lancamentosPorFonte: [
+					{
+						fonte: "sempre",
+						lancamento: {
+							cancelamentos: 100,
+							tecnicos: [
+								{
+									name: "Tecnico A",
+									daily: [0, 0, 35],
+								},
+							],
+							regionais: [],
+							agentes: [],
+							agentesLoja: [],
+							loja: { daily: [] },
+						},
+					},
+				],
+				manualChanges: {
+					mes: "Setembro",
+					ano: 2026,
+					entries: [
+						{
+							sectionId: "tecnicosSempre",
+							rowId: "row-1",
+							name: "Tecnico A",
+							dayIndex: 2,
+							day: 3,
+							value: 35,
+						},
+					],
+				},
+			});
+		});
+
+		const payload = metasMocks.persistMetasImport.mock.calls.at(-1)[0];
+		expect(payload.parsed.Setembro.technicians[0].daily.slice(0, 3)).toEqual([
+			10,
+			20,
+			35,
+		]);
+		expect(payload.manualLaunchAudit.entries).toEqual([
+			expect.objectContaining({
+				sectionId: "tecnicosSempre",
+				name: "Tecnico A",
+				day: 3,
+				beforeValue: 30,
+				afterValue: 35,
+			}),
+		]);
+	});
+
 	it("continua carregando com feriados vazios quando a consulta de feriados falha", async () => {
 		metasMocks.buscarFeriados.mockRejectedValue(
 			new Error("feriados indisponiveis"),

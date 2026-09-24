@@ -1,5 +1,6 @@
 const documents = require("./documents");
 const db = require("./db");
+const auditLog = require("./auditLog");
 const mensageriaRepository = require("./mensageriaRepository");
 const regionaisRepository = require("./regionaisRepository");
 const { broadcastRealtime } = require("./realtime");
@@ -1548,6 +1549,7 @@ async function persistMetasImport(payload = {}, user = {}) {
 	const parsed = payload.parsed || {};
 	const agentesData = payload.agentesData || {};
 	const lastUpdate = payload.lastUpdate || null;
+	const manualLaunchAudit = payload.manualLaunchAudit || null;
 	const nowIso = new Date().toISOString();
 
 	for (const month of MONTHORDER) {
@@ -1657,6 +1659,50 @@ async function persistMetasImport(payload = {}, user = {}) {
 			documentId: "metas",
 			parentPath: null,
 			data: { ...config, lastUpdate, updatedAt: nowIso },
+		});
+	}
+	if (
+		manualLaunchAudit &&
+		Array.isArray(manualLaunchAudit.entries) &&
+		manualLaunchAudit.entries.length > 0
+	) {
+		await auditLog.recordAuditLog({
+			action: "update",
+			module: "metas",
+			entity: "metas_lancamento_manual",
+			recordId: `${manualLaunchAudit.mes || "mes"}-${manualLaunchAudit.ano || "ano"}`,
+			userId: user.uid || null,
+			userName: user.nome || user.name || user.displayName || null,
+			userEmail: user.email || null,
+			beforeData: {
+				mes: manualLaunchAudit.mes || null,
+				ano: manualLaunchAudit.ano || null,
+				lancamentos: manualLaunchAudit.entries.map((entry) => ({
+					fonte: entry.source,
+					secao: entry.sectionId,
+					nome: entry.name,
+					dia: entry.day,
+					valor: Number(entry.beforeValue || 0),
+				})),
+			},
+			afterData: {
+				mes: manualLaunchAudit.mes || null,
+				ano: manualLaunchAudit.ano || null,
+				lancamentos: manualLaunchAudit.entries.map((entry) => ({
+					fonte: entry.source,
+					secao: entry.sectionId,
+					nome: entry.name,
+					dia: entry.day,
+					valor: Number(entry.afterValue || 0),
+				})),
+			},
+			changedFields: [
+				...new Set(
+					manualLaunchAudit.entries.map(
+						(entry) => `${entry.sectionId || "secao"}.dia${entry.day || ""}`,
+					),
+				),
+			],
 		});
 	}
 	await publishAcompanhamentoUpdate("metas", {

@@ -295,6 +295,11 @@ function baseMocks(overrides = {}) {
 			saveMatchConfig: vi.fn(async () => ({})),
 		},
 		sempreIntegration: {
+			consultEquipment: vi.fn(async () => ({ ok: true })),
+			listMapEquipments: vi.fn(async () => ({ items: [] })),
+			listEquipmentTreatments: vi.fn(async () => ({ items: [] })),
+			saveEquipmentTreatment: vi.fn(async () => ({ ok: true })),
+			consultHistory: vi.fn(async () => ({ notes: [] })),
 			lookupEquipment: vi.fn(async () => ({ ok: true })),
 			listMapaEquipment: vi.fn(async () => ({ items: [] })),
 			listTreatments: vi.fn(async () => ({ items: [] })),
@@ -621,6 +626,57 @@ describe("vps api app characterization - roles", () => {
 });
 
 describe("vps api app characterization - scoped finance users", () => {
+	it("GET /api/integrations/sempre/equipment permite usuario com permissao granular de consulta", async () => {
+		const estoqueUser = {
+			uid: "estoque-1",
+			email: "estoque@example.com",
+			role: "cargo_estoque_consulta",
+			profile: {
+				uid: "estoque-1",
+				email: "estoque@example.com",
+				role: "cargo_estoque_consulta",
+				nome: "Consulta Estoque",
+				permissions: ["estoque.consulta.view"],
+			},
+			permissions: ["estoque.consulta.view"],
+		};
+		const app = loadApp({
+			auth: {
+				...makeAuthMock(),
+				requireAuthenticated: vi.fn((req, _res, next) => {
+					req.user = estoqueUser;
+					next();
+				}),
+			},
+			sempreIntegration: {
+				...baseMocks().sempreIntegration,
+				consultEquipment: vi.fn(async (mac) => ({
+					mac,
+					found: true,
+					primary: { status: "Disponivel" },
+				})),
+				consultHistory: vi.fn(async (mac) => ({ mac, notes: [] })),
+			},
+		});
+
+		const equipmentResponse = await request(app)
+			.get("/api/integrations/sempre/equipment?mac=544B542C68E0")
+			.set("Authorization", "Bearer valid");
+		const historyResponse = await request(app)
+			.get("/api/integrations/sempre/equipment/history?mac=544B542C68E0")
+			.set("Authorization", "Bearer valid");
+
+		expect(equipmentResponse.status).toBe(200);
+		expect(historyResponse.status).toBe(200);
+		expect(currentMocks.sempreIntegration.consultEquipment).toHaveBeenCalledWith(
+			"544B542C68E0",
+		);
+		expect(currentMocks.sempreIntegration.consultHistory).toHaveBeenCalledWith(
+			"544B542C68E0",
+			expect.objectContaining({ limit: undefined, page: undefined }),
+		);
+	});
+
 	it("POST /api/admin/users permite gestor financeiro criar usuario em cargo financeiro", async () => {
 		const financialManager = {
 			uid: "financeiro-1",

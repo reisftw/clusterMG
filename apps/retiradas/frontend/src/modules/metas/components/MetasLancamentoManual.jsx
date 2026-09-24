@@ -378,6 +378,7 @@ function SectionEditor({
 	allowAdd = true,
 	allowRemove = true,
 	onDirty,
+	onDailyChange,
 	onSaveCard,
 	openSections,
 	onSectionOpenChange,
@@ -435,7 +436,17 @@ function SectionEditor({
 	};
 	const updateDay = (row, dayIndex, value) => {
 		const daily = rowDaily(row, dayCount);
-		daily[dayIndex] = Math.max(0, Number(value || 0));
+		const nextValue = Math.max(0, Number(value || 0));
+		daily[dayIndex] = nextValue;
+		onDailyChange?.({
+			sectionId,
+			rowId: row.id,
+			name: row.name,
+			sourceScope: row.sourceScope,
+			dayIndex,
+			day: dayIndex + 1,
+			value: nextValue,
+		});
 		updateRow(row.id, {
 			daily,
 			dailyText: dailyToText(daily),
@@ -837,6 +848,7 @@ export default function MetasLancamentoManual({
 	// — cada chamada via uma closure diferente, mas todas leem/escrevem o
 	// mesmo ref, entao a segunda chamada sempre ve o bloqueio da primeira.
 	const savingCardRef = useRef(false);
+	const dailyChangesRef = useRef(new Map());
 	const dayCount = getDaysInMetaMonth(month, year);
 	const openSectionsCacheKey = getOpenSectionsStorageKey(month, year);
 	const publishResultCacheKey = getPublishResultStorageKey(month, year);
@@ -891,6 +903,28 @@ export default function MetasLancamentoManual({
 		setPublishResult(null);
 		clearStoredPublishResult(publishResultCacheKey);
 	}, [publishResultCacheKey]);
+	const recordDailyChange = useCallback((change = {}) => {
+		const key = [change.sectionId, change.rowId, change.dayIndex]
+			.map((item) => String(item ?? ""))
+			.join("|");
+		dailyChangesRef.current.set(key, {
+			sectionId: change.sectionId,
+			rowId: change.rowId,
+			name: change.name || "",
+			sourceScope: change.sourceScope || "",
+			dayIndex: Number(change.dayIndex || 0),
+			day: Number(change.day || Number(change.dayIndex || 0) + 1),
+			value: Number(change.value || 0),
+		});
+	}, []);
+	const buildManualChanges = useCallback(
+		() => ({
+			mes: month,
+			ano: year,
+			entries: Array.from(dailyChangesRef.current.values()),
+		}),
+		[month, year],
+	);
 
 	useEffect(() => {
 		setCancelamentosSempre(initialState.cancelamentosSempre);
@@ -916,6 +950,7 @@ export default function MetasLancamentoManual({
 		]);
 		setMessage("");
 		setError("");
+		dailyChangesRef.current.clear();
 	}, [initialState, month]);
 
 	useEffect(() => {
@@ -991,10 +1026,12 @@ export default function MetasLancamentoManual({
 					},
 				},
 			],
+			manualChanges: buildManualChanges(),
 		}),
 		[
 			agentes,
 			agentesLoja,
+			buildManualChanges,
 			cancelamentosOnnet,
 			cancelamentosSempre,
 			lojaOnnet,
@@ -1022,6 +1059,7 @@ export default function MetasLancamentoManual({
 		setError("");
 		try {
 			await onSave(buildSavePayload());
+			dailyChangesRef.current.clear();
 			setMessage("Card salvo.");
 			return true;
 		} catch (err) {
@@ -1067,6 +1105,7 @@ export default function MetasLancamentoManual({
 		}
 		try {
 			await onSave(buildSavePayload());
+			dailyChangesRef.current.clear();
 			const successMessage =
 				"Lançamento publicado no /acompanhamento, /painel e AA.";
 			const nextPublishResult = {
@@ -1236,6 +1275,7 @@ export default function MetasLancamentoManual({
 				setRows={setTecnicosSempre}
 				dayCount={dayCount}
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
@@ -1251,6 +1291,7 @@ export default function MetasLancamentoManual({
 				setRows={setTecnicosOnnet}
 				dayCount={dayCount}
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
@@ -1269,6 +1310,7 @@ export default function MetasLancamentoManual({
 				allowCustomName={false}
 				showSourceScope
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
@@ -1289,6 +1331,7 @@ export default function MetasLancamentoManual({
 				showGoalFields
 				goalPercent={metaPercentSempre}
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
@@ -1307,6 +1350,7 @@ export default function MetasLancamentoManual({
 				nameOptions={agenteOptions}
 				allowCustomName={false}
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
@@ -1324,6 +1368,7 @@ export default function MetasLancamentoManual({
 				allowAdd={false}
 				allowRemove={false}
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}
@@ -1341,6 +1386,7 @@ export default function MetasLancamentoManual({
 				allowAdd={false}
 				allowRemove={false}
 				onDirty={markDirty}
+				onDailyChange={recordDailyChange}
 				onSaveCard={saveCurrentCard}
 				openSections={openSections}
 				onSectionOpenChange={setSectionOpen}

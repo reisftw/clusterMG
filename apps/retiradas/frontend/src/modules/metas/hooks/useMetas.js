@@ -21,6 +21,7 @@ import {
 import {
 	buildManualMetasRecord,
 	combineMetasRecords,
+	getDaysInMetaMonth,
 	MANUAL_META_SOURCES,
 } from "../utils/manualMetasBuilder";
 import {
@@ -868,6 +869,209 @@ function applyManualEntry(entry, { mes, ano, baseConfig, feriadosSet, recordsByS
 	return null;
 }
 
+function normalizeManualName(value) {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.trim()
+		.toLowerCase();
+}
+
+function getManualRowName(row = {}) {
+	return row.name || row.nome || row.cidade || "";
+}
+
+function normalizeDailyArray(daily = [], dayCount = 31) {
+	return Array.from({ length: dayCount }, (_, index) => {
+		const value = Number(Array.isArray(daily) ? daily[index] || 0 : 0);
+		return Number.isFinite(value) && value > 0 ? value : 0;
+	});
+}
+
+function dailyFromRawDays(rawDays = [], field, dayCount = 31) {
+	const values = Array.from({ length: dayCount }, () => 0);
+	(Array.isArray(rawDays) ? rawDays : []).forEach((row) => {
+		const dayIndex = Number(row?.dia || 0) - 1;
+		if (dayIndex >= 0 && dayIndex < dayCount) {
+			values[dayIndex] = Number(row?.[field] || 0);
+		}
+	});
+	return values;
+}
+
+function buildManualChangeIndex(manualChanges = {}) {
+	const entries = Array.isArray(manualChanges?.entries)
+		? manualChanges.entries
+		: [];
+	return entries.reduce((map, change) => {
+		const sectionId = String(change?.sectionId || "");
+		const name = normalizeManualName(change?.name);
+		const keys = [`${sectionId}|${name}`];
+		if (sectionId === "lojaSempre" || sectionId === "lojaOnnet") {
+			keys.push(`${sectionId}|`);
+		}
+		keys.forEach((key) => {
+			if (!map.has(key)) map.set(key, new Set());
+			map.get(key).add(Number(change?.dayIndex || 0));
+		});
+		return map;
+	}, new Map());
+}
+
+function getChangedDaysForRow(changeIndex, sectionId, row = {}) {
+	const byName = changeIndex.get(
+		`${sectionId}|${normalizeManualName(getManualRowName(row))}`,
+	);
+	if (byName) return byName;
+	return changeIndex.get(`${sectionId}|`) || new Set();
+}
+
+function mergeDailyWithPrevious({
+	nextDaily,
+	previousDaily,
+	changedDays,
+	dayCount,
+	sectionId,
+	source,
+	name,
+	auditEntries,
+}) {
+	const next = normalizeDailyArray(nextDaily, dayCount);
+	const previous = normalizeDailyArray(previousDaily, dayCount);
+	if (!changedDays?.size) return previous;
+	const merged = previous.map((value, index) =>
+		changedDays.has(index) ? next[index] : value,
+	);
+	[...changedDays]
+		.sort((left, right) => left - right)
+		.forEach((index) => {
+			auditEntries?.push({
+				sectionId,
+				source,
+				name,
+				day: index + 1,
+				beforeValue: previous[index] || 0,
+				afterValue: merged[index] || 0,
+			});
+		});
+	return merged;
+}
+
+function mergeDailyRowsWithPrevious({
+	rows = [],
+	previousRows = [],
+	sectionId,
+	source,
+	dayCount,
+	changeIndex,
+	auditEntries,
+	previousDailyField = "daily",
+}) {
+	const previousByName = new Map(
+		(Array.isArray(previousRows) ? previousRows : [])
+			.map((row) => [normalizeManualName(getManualRowName(row)), row])
+			.filter(([name]) => name),
+	);
+	return (Array.isArray(rows) ? rows : []).map((row) => {
+		const name = getManualRowName(row);
+		const previous = previousByName.get(normalizeManualName(name));
+		const changedDays = getChangedDaysForRow(changeIndex, sectionId, row);
+		return {
+			...row,
+			daily: mergeDailyWithPrevious({
+				nextDaily: row.daily,
+				previousDaily: previous?.[previousDailyField] || row.daily,
+				changedDays,
+				dayCount,
+				sectionId,
+				source,
+				name,
+				auditEntries,
+			}),
+		};
+	});
+}
+
+function mergeManualEntryWithCurrent({
+	entry,
+	mes,
+	ano,
+	allData,
+	agentesData,
+	changeIndex,
+	hasManualChangeMetadata,
+	auditEntries,
+}) {
+	if (!hasManualChangeMetadata || !entry?.lancamento) return entry;
+	const dayCount = getDaysInMetaMonth(mes, ano);
+	const currentMonthData = allData?.[mes] || {};
+	const isOnnet = entry.fonte === MANUAL_META_SOURCES.ONNET;
+	const currentRecord = isOnnet ? currentMonthData.onnet || {} : currentMonthData;
+	const rawDays = currentRecord.rawDays || currentRecord.saldoDiario || [];
+	const source = isOnnet
+		? MANUAL_META_SOURCES.ONNET
+		: MANUAL_META_SOURCES.SEMPRE;
+	const lancamento = { ...entry.lancamento };
+	lancamento.tecnicos = mergeDailyRowsWithPrevious({
+		rows: lancamento.tecnicos,
+		previousRows: currentRecord.technicians,
+		sectionId: isOnnet ? "tecnicosOnnet" : "tecnicosSempre",
+		source,
+		dayCount,
+		changeIndex,
+		auditEntries,
+	});
+	lancamento.regionais = mergeDailyRowsWithPrevious({
+		rows: lancamento.regionais,
+		previousRows: currentRecord.regionais,
+		sectionId: "regionais",
+		source,
+		dayCount,
+		changeIndex,
+		auditEntries,
+	});
+	lancamento.loja = {
+		...(lancamento.loja || {}),
+		daily: mergeDailyWithPrevious({
+			nextDaily: lancamento.loja?.daily,
+			previousDaily: dailyFromRawDays(rawDays, "loja", dayCount),
+			changedDays: getChangedDaysForRow(
+				changeIndex,
+				isOnnet ? "lojaOnnet" : "lojaSempre",
+				lancamento.loja || {},
+			),
+			dayCount,
+			sectionId: isOnnet ? "lojaOnnet" : "lojaSempre",
+			source,
+			name: lancamento.loja?.name || "Entregue em loja",
+			auditEntries,
+		}),
+	};
+	if (!isOnnet) {
+		const previousAgents = agentesData?.[mes] || [];
+		lancamento.agentes = mergeDailyRowsWithPrevious({
+			rows: lancamento.agentes,
+			previousRows: previousAgents,
+			sectionId: "agentes",
+			source,
+			dayCount,
+			changeIndex,
+			auditEntries,
+		});
+		lancamento.agentesLoja = mergeDailyRowsWithPrevious({
+			rows: lancamento.agentesLoja,
+			previousRows: previousAgents,
+			sectionId: "agentesLoja",
+			source,
+			dayCount,
+			changeIndex,
+			auditEntries,
+			previousDailyField: "lojaAgentesDaily",
+		});
+	}
+	return { ...entry, lancamento };
+}
+
 export const useMetas = () => {
 	const [allData, setAllData] = useState({});
 	const [loading, setLoading] = useState(true);
@@ -1035,7 +1239,7 @@ export const useMetas = () => {
 	}, []);
 
 	const salvarLancamentoManual = useCallback(
-		async ({ mes, fonte, ano, lancamento, lancamentosPorFonte }) => {
+		async ({ mes, fonte, ano, lancamento, lancamentosPorFonte, manualChanges }) => {
 			const uploadVersion = dataVersionRef.current + 1;
 			dataVersionRef.current = uploadVersion;
 			setSavingManualEntry(true);
@@ -1048,9 +1252,26 @@ export const useMetas = () => {
 				const entries = Array.isArray(lancamentosPorFonte)
 					? lancamentosPorFonte
 					: [{ fonte, lancamento }];
+				const hasManualChangeMetadata =
+					Array.isArray(manualChanges?.entries) &&
+					manualChanges.entries.length > 0;
+				const changeIndex = buildManualChangeIndex(manualChanges);
+				const manualAuditEntries = [];
+				const mergedEntries = entries.map((entry) =>
+					mergeManualEntryWithCurrent({
+						entry,
+						mes,
+						ano,
+						allData,
+						agentesData,
+						changeIndex,
+						hasManualChangeMetadata,
+						auditEntries: manualAuditEntries,
+					}),
+				);
 				const recordsBySource = new Map();
 				let manualAgentCities = agentesData?.[mes] || [];
-				entries.forEach((entry) => {
+				mergedEntries.forEach((entry) => {
 					const nextAgentCities = applyManualEntry(entry, {
 						mes,
 						ano,
@@ -1098,6 +1319,13 @@ export const useMetas = () => {
 					parsed,
 					agentesData: nextAgentesData,
 					lastUpdate: txt,
+					manualLaunchAudit: hasManualChangeMetadata
+						? {
+								mes,
+								ano,
+								entries: manualAuditEntries,
+							}
+						: null,
 				});
 
 				if (uploadVersion !== dataVersionRef.current) return null;

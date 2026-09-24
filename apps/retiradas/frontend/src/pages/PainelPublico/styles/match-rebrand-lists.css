@@ -170,6 +170,43 @@
 		sans-serif;
 }
 
+.match-city-pagination {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	background: #f8fbff;
+	padding: 10px 12px;
+	color: #66748e;
+	font:
+		800 11px / 1.25 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-city-pagination div {
+	display: flex;
+	gap: 8px;
+}
+
+.match-city-pagination button {
+	border: 1px solid #d9e3f2;
+	border-radius: 999px;
+	background: #fff;
+	color: #174ea6;
+	cursor: pointer;
+	padding: 7px 10px;
+	font:
+		900 11px / 1 Inter,
+		system-ui,
+		sans-serif;
+}
+
+.match-city-pagination button:disabled {
+	cursor: not-allowed;
+	opacity: 0.45;
+}
+
 .match-empty-list,
 .match-empty-state {
 	padding: 34px 20px;

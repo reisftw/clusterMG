@@ -250,6 +250,16 @@ const ACERTO_ROLES = ["admin", "supervisor", "backoffice"];
 const ESTOQUE_INTEGRADO_ROLES = [
 	...new Set([...FULL_OPERATION_ROLES, ...ACERTO_ROLES]),
 ];
+const ESTOQUE_INTEGRADO_VIEW_PERMISSIONS = [
+	"view_estoque_integrado",
+	"estoque.consulta.view",
+	"estoque.equipamentos.view",
+	"estoque.equipamentos.manage",
+];
+const ESTOQUE_INTEGRADO_MANAGE_PERMISSIONS = [
+	"estoque.equipamentos.manage",
+	"manage_equipamentos",
+];
 const TECNICOS_BOLSA_AUDITORIA_ROLES = [
 	"admin",
 	"supervisor",
@@ -4283,7 +4293,10 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment",
 		requireAuthenticated,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(
+			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
+			ESTOQUE_INTEGRADO_ROLES,
+		),
 		async (req, res, next) => {
 			try {
 				res.json(await sempreIntegration.consultEquipment(req.query.mac));
@@ -4296,7 +4309,10 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/mapa",
 		requireAuthenticated,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(
+			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
+			ESTOQUE_INTEGRADO_ROLES,
+		),
 		async (req, res, next) => {
 			try {
 				res.json(
@@ -4324,7 +4340,10 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/treatments",
 		requireAuthenticated,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(
+			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
+			ESTOQUE_INTEGRADO_ROLES,
+		),
 		async (req, res, next) => {
 			try {
 				res.json(await sempreIntegration.listEquipmentTreatments());
@@ -4338,7 +4357,10 @@ function createApp() {
 		"/api/integrations/sempre/equipment/treatments",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(
+			ESTOQUE_INTEGRADO_MANAGE_PERMISSIONS,
+			ESTOQUE_INTEGRADO_ROLES,
+		),
 		async (req, res, next) => {
 			try {
 				const result = await sempreIntegration.saveEquipmentTreatment(
@@ -4357,7 +4379,10 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/history",
 		requireAuthenticated,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(
+			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
+			ESTOQUE_INTEGRADO_ROLES,
+		),
 		async (req, res, next) => {
 			try {
 				res.json(
