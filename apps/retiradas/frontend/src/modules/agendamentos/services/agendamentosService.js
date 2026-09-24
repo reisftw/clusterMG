@@ -57,6 +57,34 @@ export const buscarLogsAgendamentos = async ({ max = 3000 } = {}) => {
 	return response.items || [];
 };
 
+function getMatchData(slice) {
+	if (slice?.data?.resumo) return slice.data;
+	if (slice?.resumo) return slice;
+	return null;
+}
+
+export const buscarResumoMatchAtual = async () => {
+	const response = await requestVpsApi("/public/dashboard?detail=match");
+	const matchOS = getMatchData(response?.matchOS);
+	const agentesMatchOS = getMatchData(
+		response?.agentesMatchOS || response?.matchAgentes,
+	);
+
+	return {
+		totalMatches: Number(matchOS?.resumo?.totalMatches || 0),
+		totalCidades: Number(matchOS?.resumo?.totalCidades || 0),
+		totalRetiradasRelacionadas: Number(
+			matchOS?.resumo?.totalRetiradasRelacionadas || 0,
+		),
+		totalAgentesMatches: Number(agentesMatchOS?.resumo?.totalMatches || 0),
+		updatedAt:
+			matchOS?.meta?.generatedAt ||
+			matchOS?.meta?.data ||
+			response?.generatedAt ||
+			null,
+	};
+};
+
 export const buscarClienteAgendamentoPorCodigo = async (codigo) => {
 	const normalized = String(codigo || "").replace(/\D/g, "");
 	if (!normalized) return null;

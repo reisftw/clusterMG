@@ -24,7 +24,10 @@ import { getConfig } from "../../ferramentas/services/ferramentasService";
 import { buscarRegionais } from "../../regionais/services/regionaisService";
 import { AGENDAMENTO_STATUS, STATUS_STYLES } from "../constants";
 import { useAgendamentos } from "../hooks/useAgendamentos";
-import { buscarLogsAgendamentos } from "../services/agendamentosService";
+import {
+	buscarLogsAgendamentos,
+	buscarResumoMatchAtual,
+} from "../services/agendamentosService";
 import {
 	registrarNaoRecolhido,
 	registrarRecolhido,
@@ -86,6 +89,8 @@ const uniqueSorted = (items) =>
 	[...new Set(items.filter(Boolean))].sort((a, b) =>
 		a.localeCompare(b, "pt-BR"),
 	);
+
+const formatNumber = (value) => Number(value || 0).toLocaleString("pt-BR");
 
 const normalizeLocation = (value) =>
 	String(value || "")
@@ -455,6 +460,7 @@ const AgendamentosPage = () => {
 	const [busca, setBusca] = useState("");
 	const [page, setPage] = useState(1);
 	const [logsMapa, setLogsMapa] = useState([]);
+	const [matchResumo, setMatchResumo] = useState(null);
 	const [logsMapaOpen, setLogsMapaOpen] = useState(false);
 	const [mesCalendario, setMesCalendario] = useState(() => {
 		const hoje = new Date();
@@ -483,10 +489,15 @@ const AgendamentosPage = () => {
 
 	const carregarLogsMapa = async () => {
 		try {
-			const logs = await buscarLogsAgendamentos({ max: 3000 });
+			const [logs, resumoMatch] = await Promise.all([
+				buscarLogsAgendamentos({ max: 3000 }),
+				buscarResumoMatchAtual(),
+			]);
 			setLogsMapa(filterLatestMapCheckLogs(logs));
+			setMatchResumo(resumoMatch);
 		} catch {
 			setLogsMapa([]);
+			setMatchResumo(null);
 		}
 	};
 
@@ -717,12 +728,28 @@ const AgendamentosPage = () => {
 			<div className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
 				<div>
 					<h2 className="text-sm font-bold text-blue-950">
-						Verificação automática pelo mapa
+						Match atual e verificação automática
 					</h2>
-					<p className="text-xs text-blue-700">
-						{logsMapa.length
-							? `${logsMapa.length} alteração(ões) da última verificação do dia anterior.`
-							: "Nenhuma alteração do dia anterior registrada na última verificação."}
+					<div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+						<span className="rounded-full bg-white px-3 py-1 text-blue-800 shadow-sm">
+							Match atual:{" "}
+							{matchResumo
+								? `${formatNumber(matchResumo.totalMatches)} match(es)`
+								: "carregando"}
+						</span>
+						{matchResumo?.totalAgentesMatches ? (
+							<span className="rounded-full bg-white px-3 py-1 text-blue-700 shadow-sm">
+								Agentes: {formatNumber(matchResumo.totalAgentesMatches)}
+							</span>
+						) : null}
+						<span className="rounded-full bg-white px-3 py-1 text-blue-700 shadow-sm">
+							Verificação ontem:{" "}
+							{formatNumber(logsMapa.length)} alteração(ões)
+						</span>
+					</div>
+					<p className="mt-2 text-xs text-blue-700">
+						O match atual usa a mesma fonte do painel. As alterações são apenas
+						o resultado da última conferência dos agendamentos de ontem.
 					</p>
 				</div>
 				<button
