@@ -168,6 +168,8 @@ const MensageriaEnviadosPage = () => {
 	const [conversationModal, setConversationModal] = useState(null);
 	const [viewTab, setViewTab] = useState("todos");
 	const [scheduleWorking, setScheduleWorking] = useState(false);
+	const [scheduleFeedback, setScheduleFeedback] = useState("");
+	const [scheduleResult, setScheduleResult] = useState(null);
 
 	const latestCallbacksByPhone = useMemo(() => {
 		const groups = new Map();
@@ -275,12 +277,16 @@ const MensageriaEnviadosPage = () => {
 	};
 
 	const openConversationModal = (item, responses = [], sentItems = []) => {
+		setScheduleFeedback("");
+		setScheduleResult(null);
 		setConversationModal({ item, responses, sentItems });
 	};
 
 	const handleGenerateAppointment = async () => {
 		if (!conversationModal?.item) return;
 		setScheduleWorking(true);
+		setScheduleFeedback("");
+		setScheduleResult(null);
 		setFeedback("");
 		try {
 			const item = conversationModal.item;
@@ -292,16 +298,21 @@ const MensageriaEnviadosPage = () => {
 				filaId: item.filaId || response.filaId || sentItem.filaId || "",
 				historicoId: item.id || response.historicoId || sentItem.id || "",
 			});
-			setFeedback(
+			const message =
 				result?.message ||
-					(result?.created
-						? "Agendamento criado pelas respostas registradas."
-						: "Agendamento já existia para este cliente."),
-			);
-			setConversationModal(null);
+				(result?.created
+					? "Agendamento criado pelas respostas registradas."
+					: "Agendamento já existia para este cliente.");
+			setScheduleFeedback(message);
+			setScheduleResult(result || null);
+			setFeedback(message);
 			await loadData();
 		} catch (error) {
-			setFeedback(error?.message || "Não foi possível gerar o agendamento.");
+			const message =
+				error?.message || "Não foi possível gerar o agendamento.";
+			setScheduleFeedback(message);
+			setScheduleResult(null);
+			setFeedback(message);
 		} finally {
 			setScheduleWorking(false);
 		}
@@ -597,16 +608,41 @@ const MensageriaEnviadosPage = () => {
 								e cria o agendamento sem reenviar WhatsApp.
 							</p>
 						</div>
-						<button
-							type="button"
-							onClick={handleGenerateAppointment}
-							disabled={scheduleWorking || !conversationModal.responses?.length}
-							className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							<CalendarPlus size={16} />
-							{scheduleWorking ? "Gerando..." : "Gerar agendamento"}
-						</button>
+						{scheduleResult?.agendamento_id ? (
+							<a
+								href={`/agendamentos${
+									scheduleResult.schedule?.date
+										? `?data=${encodeURIComponent(scheduleResult.schedule.date)}`
+										: ""
+								}`}
+								className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
+							>
+								<CalendarPlus size={16} />
+								Ver no calendário
+							</a>
+						) : (
+							<button
+								type="button"
+								onClick={handleGenerateAppointment}
+								disabled={scheduleWorking || !conversationModal.responses?.length}
+								className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<CalendarPlus size={16} />
+								{scheduleWorking ? "Gerando..." : "Gerar agendamento"}
+							</button>
+						)}
 					</div>
+					{scheduleFeedback ? (
+						<div
+							className={`mb-4 rounded-lg border px-4 py-3 text-sm font-bold ${
+								scheduleResult?.agendamento_id
+									? "border-emerald-200 bg-emerald-50 text-emerald-800"
+									: "border-blue-200 bg-white text-blue-800"
+							}`}
+						>
+							{scheduleFeedback}
+						</div>
+					) : null}
 					<div className="grid gap-4 lg:grid-cols-2">
 						<div>
 							<h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-blue-700">

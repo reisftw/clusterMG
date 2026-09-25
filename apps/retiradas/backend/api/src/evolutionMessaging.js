@@ -468,6 +468,44 @@ async function saveConfigPatch(patch = {}) {
 	});
 }
 
+function parseQueueDateValue(value) {
+	if (!value) return 0;
+	if (typeof value === "object") {
+		return parseQueueDateValue(
+			value.value || value.date || value.data || value.createdAt,
+		);
+	}
+	const normalized = String(value || "").trim();
+	const brDate = normalized.match(
+		/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/,
+	);
+	if (brDate) {
+		const iso = `${brDate[3]}-${brDate[2].padStart(2, "0")}-${brDate[1].padStart(2, "0")}T${String(
+			brDate[4] || "00",
+		).padStart(2, "0")}:${brDate[5] || "00"}:${brDate[6] || "00"}-03:00`;
+		const parsed = new Date(iso).getTime();
+		return Number.isNaN(parsed) ? 0 : parsed;
+	}
+	const parsed = new Date(normalized).getTime();
+	return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getQueueOrderDate(item = {}) {
+	const payload = item.source_payload || item.payload || {};
+	return (
+		parseQueueDateValue(item.data_abertura_os) ||
+		parseQueueDateValue(item.data_cancelamento) ||
+		parseQueueDateValue(item.data_cadastro) ||
+		parseQueueDateValue(payload.data_abertura_os) ||
+		parseQueueDateValue(payload.data_cancelamento) ||
+		parseQueueDateValue(payload.data_cadastro) ||
+		parseQueueDateValue(item.prioridadeEm) ||
+		parseQueueDateValue(item.diffMapaEm) ||
+		parseQueueDateValue(item.criadoEm) ||
+		parseQueueDateValue(item.proximaTentativaEm)
+	);
+}
+
 async function getTemplate(templateId) {
 	const id = String(templateId || "cancelamento");
 	const template = (await mensageriaRepository.getMessageTemplate(id)) || {
@@ -490,22 +528,8 @@ async function listQueue(limit = 20) {
 			const rightPriority = right.prioridadeEm || rightIsMapDiff ? 0 : 1;
 			if (leftPriority !== rightPriority) return leftPriority - rightPriority;
 
-			const leftDate =
-				new Date(
-					left.prioridadeEm ||
-						left.diffMapaEm ||
-						left.criadoEm ||
-						left.proximaTentativaEm ||
-						0,
-				).getTime() || 0;
-			const rightDate =
-				new Date(
-					right.prioridadeEm ||
-						right.diffMapaEm ||
-						right.criadoEm ||
-						right.proximaTentativaEm ||
-						0,
-				).getTime() || 0;
+			const leftDate = getQueueOrderDate(left);
+			const rightDate = getQueueOrderDate(right);
 
 			return rightDate - leftDate;
 		})
@@ -2702,9 +2726,15 @@ function getQueueComparisonKeys(item = {}) {
 		payload.codigoCliente,
 		payload.contrato,
 	];
-	return values
-		.map((value) => String(value || "").trim())
-		.filter(Boolean);
+	const keys = new Set();
+	values.forEach((value) => {
+		const normalized = String(value || "").trim();
+		if (!normalized) return;
+		keys.add(normalized);
+		const numericTail = normalized.match(/(\d{8,})$/);
+		if (numericTail) keys.add(numericTail[1]);
+	});
+	return [...keys];
 }
 
 function hasSharedQueueKey(left = {}, right = {}) {
@@ -2763,6 +2793,13 @@ function extractScheduleFromStoredCallbacks(callbacks = []) {
 		if (schedule?.date) {
 			date = schedule.date;
 			sourceCallbackId = callback.id || sourceCallbackId;
+		}
+		if (!schedule?.date) {
+			const dateOnly = parseShortDateKey(message);
+			if (dateOnly) {
+				date = dateOnly;
+				sourceCallbackId = callback.id || sourceCallbackId;
+			}
 		}
 		if (schedule?.time) {
 			time = schedule.time;
@@ -2840,6 +2877,10 @@ async function generateAppointmentFromStoredResponses(payload = {}) {
 			ok: true,
 			created: false,
 			agendamento_id: existing.id || existing.documentId || "",
+			schedule: {
+				date: existing.data || existing.data_agendamento || "",
+				time: existing.hora || existing.hora_agendamento || "",
+			},
 			message: "Já existe agendamento para este cliente/O.S.",
 		};
 	}
