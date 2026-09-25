@@ -1435,12 +1435,6 @@ function AcertoLancamentoTab(props) {
 											setLancamentoForm((current) => ({
 												...current,
 												agendaId: event.target.value,
-												lancamentos: [
-													{
-														tecnicoId: "",
-														itens: [{ produtoId: "", quantidade: 1 }],
-													},
-												],
 											}))
 										}
 										required
@@ -1471,121 +1465,134 @@ function AcertoLancamentoTab(props) {
 								</div>
 
 								{(lancamentoForm.lancamentos || []).map(
-									(lancamento, lancamentoIndex) => (
-										<div
-											key={"lancamento-" + lancamentoIndex}
-											className="space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4"
-										>
-											<div className="flex items-start justify-between gap-3">
-												<div className="flex-1">
-													<InputField
-														label={"Tecnico " + (lancamentoIndex + 1)}
-													>
-														<select
-															className="input-field"
-															value={lancamento.tecnicoId}
-															onChange={(event) =>
-																updateTecnicoLancamento(
-																	lancamentoIndex,
-																	"tecnicoId",
-																	event.target.value,
-																)
-															}
-															required
+									(lancamento, lancamentoIndex) => {
+										const selectedTecnico = store.tecnicos.find(
+											(item) => item.id === lancamento.tecnicoId,
+										);
+										const tecnicosOptions = selectedTecnico
+											? [
+													selectedTecnico,
+													...tecnicosDisponiveis.filter(
+														(item) => item.id !== selectedTecnico.id,
+													),
+												]
+											: tecnicosDisponiveis;
+										return (
+											<div
+												key={"lancamento-" + lancamentoIndex}
+												className="space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4"
+											>
+												<div className="flex items-start justify-between gap-3">
+													<div className="flex-1">
+														<InputField
+															label={"Tecnico " + (lancamentoIndex + 1)}
 														>
-															<option value="">Selecione</option>
-															{tecnicosDisponiveis.map((item) => (
-																<option key={item.id} value={item.id}>
-																	{item.nome} •{" "}
-																	{empresasMap.get(item.empresaId)?.nome || "-"}
-																</option>
-															))}
-														</select>
-													</InputField>
-												</div>
+															<select
+																className="input-field"
+																value={lancamento.tecnicoId}
+																onChange={(event) =>
+																	updateTecnicoLancamento(
+																		lancamentoIndex,
+																		"tecnicoId",
+																		event.target.value,
+																	)
+																}
+																required
+															>
+																<option value="">Selecione</option>
+																{tecnicosOptions.map((item) => (
+																	<option key={item.id} value={item.id}>
+																		{item.nome} •{" "}
+																		{empresasMap.get(item.empresaId)?.nome || "-"}
+																	</option>
+																))}
+															</select>
+														</InputField>
+													</div>
 
-												<button
-													type="button"
-													className="mt-7 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 hover:bg-red-50"
-													onClick={() =>
-														removeTecnicoLancamento(lancamentoIndex)
-													}
-												>
-													<Trash2 size={16} />
-												</button>
-											</div>
-
-											<div className="space-y-3">
-												<div className="flex items-center justify-between">
-													<p className="text-xs font-bold uppercase tracking-wide text-gray-500">
-														Materiais deste tecnico
-													</p>
 													<button
 														type="button"
-														className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"
-														onClick={() => addTecnicoItem(lancamentoIndex)}
+														className="mt-7 inline-flex h-11 w-11 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 hover:bg-red-50"
+														onClick={() =>
+															removeTecnicoLancamento(lancamentoIndex)
+														}
 													>
-														<Plus size={14} />
-														Adicionar item
+														<Trash2 size={16} />
 													</button>
 												</div>
 
-												{(lancamento.itens || []).map((item, itemIndex) => (
-													<div
-														key={lancamentoIndex + "-" + itemIndex}
-														className="grid gap-3 rounded-2xl border border-gray-100 bg-white p-4 md:grid-cols-[1fr_120px_48px]"
-													>
-														<select
-															className="input-field"
-															value={item.produtoId}
-															onChange={(event) =>
-																updateTecnicoItem(
-																	lancamentoIndex,
-																	itemIndex,
-																	"produtoId",
-																	event.target.value,
-																)
-															}
-															required
-														>
-															<option value="">Selecione o produto</option>
-															{store.produtos.map((produto) => (
-																<option key={produto.id} value={produto.id}>
-																	{produto.nome} • {produto.unidade}
-																</option>
-															))}
-														</select>
-
-														<input
-															type="number"
-															min="1"
-															className="input-field"
-															value={item.quantidade}
-															onChange={(event) =>
-																updateTecnicoItem(
-																	lancamentoIndex,
-																	itemIndex,
-																	"quantidade",
-																	event.target.value,
-																)
-															}
-															required
-														/>
-
+												<div className="space-y-3">
+													<div className="flex items-center justify-between">
+														<p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+															Materiais deste tecnico
+														</p>
 														<button
 															type="button"
-															className="inline-flex h-12 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 hover:bg-red-50"
-															onClick={() =>
-																removeTecnicoItem(lancamentoIndex, itemIndex)
-															}
+															className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+															onClick={() => addTecnicoItem(lancamentoIndex)}
 														>
-															<Trash2 size={16} />
+															<Plus size={14} />
+															Adicionar item
 														</button>
 													</div>
-												))}
+
+													{(lancamento.itens || []).map((item, itemIndex) => (
+														<div
+															key={lancamentoIndex + "-" + itemIndex}
+															className="grid gap-3 rounded-2xl border border-gray-100 bg-white p-4 md:grid-cols-[1fr_120px_48px]"
+														>
+															<select
+																className="input-field"
+																value={item.produtoId}
+																onChange={(event) =>
+																	updateTecnicoItem(
+																		lancamentoIndex,
+																		itemIndex,
+																		"produtoId",
+																		event.target.value,
+																	)
+																}
+																required
+															>
+																<option value="">Selecione o produto</option>
+																{store.produtos.map((produto) => (
+																	<option key={produto.id} value={produto.id}>
+																		{produto.nome} • {produto.unidade}
+																	</option>
+																))}
+															</select>
+
+															<input
+																type="number"
+																min="1"
+																className="input-field"
+																value={item.quantidade}
+																onChange={(event) =>
+																	updateTecnicoItem(
+																		lancamentoIndex,
+																		itemIndex,
+																		"quantidade",
+																		event.target.value,
+																	)
+																}
+																required
+															/>
+
+															<button
+																type="button"
+																className="inline-flex h-12 items-center justify-center rounded-xl border border-red-100 bg-white text-red-500 hover:bg-red-50"
+																onClick={() =>
+																	removeTecnicoItem(lancamentoIndex, itemIndex)
+																}
+															>
+																<Trash2 size={16} />
+															</button>
+														</div>
+													))}
+												</div>
 											</div>
-										</div>
-									),
+										);
+									},
 								)}
 							</div>
 							<div className="flex flex-wrap items-center gap-3">

@@ -52,7 +52,7 @@ export async function requestVpsApi(path, options = {}) {
 
 export async function getVpsDocument(documentPath) {
 	const response = await requestVpsApi(`/documents/${encodeDocumentPath(documentPath)}`);
-	return response?.data ? { id: response.documentId, ...response.data } : null;
+	return response?.data ? { ...response.data, id: response.documentId } : null;
 }
 
 export async function listVpsDocuments(collectionPath, { limit = 100, offset = 0 } = {}) {
@@ -62,7 +62,7 @@ export async function listVpsDocuments(collectionPath, { limit = 100, offset = 0
 		offset: String(offset),
 	});
 	const response = await requestVpsApi(`/documents?${params.toString()}`);
-	return (response?.items || []).map((item) => ({ id: item.documentId, ...item.data }));
+	return (response?.items || []).map((item) => ({ ...(item.data || {}), id: item.documentId }));
 }
 
 export async function listAllVpsDocuments(collectionPath, { pageSize = 1000, max = Infinity } = {}) {
