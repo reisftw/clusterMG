@@ -59,6 +59,12 @@ const todayKey = () => {
 	return `${year}-${month}-${day}`;
 };
 
+const queryDateKey = () => {
+	if (typeof window === "undefined") return "";
+	const value = new URLSearchParams(window.location.search).get("data");
+	return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? value : "";
+};
+
 const dateKeyFromDate = (date) =>
 	[
 		date.getFullYear(),
@@ -218,7 +224,7 @@ const AgendamentosCalendar = ({
 	canEdit = false,
 	onEdit,
 }) => {
-	const [diaSelecionado, setDiaSelecionado] = useState(null);
+	const [diaSelecionado, setDiaSelecionado] = useState(() => queryDateKey() || null);
 	const [modalPage, setModalPage] = useState(1);
 	const dias = useMemo(() => buildCalendarDays(mes), [mes]);
 	const porData = useMemo(() => {
@@ -463,6 +469,8 @@ const AgendamentosPage = () => {
 	const [matchResumo, setMatchResumo] = useState(null);
 	const [logsMapaOpen, setLogsMapaOpen] = useState(false);
 	const [mesCalendario, setMesCalendario] = useState(() => {
+		const selected = parseLocal(queryDateKey());
+		if (selected) return new Date(selected.getFullYear(), selected.getMonth(), 1);
 		const hoje = new Date();
 		return new Date(hoje.getFullYear(), hoje.getMonth(), 1);
 	});

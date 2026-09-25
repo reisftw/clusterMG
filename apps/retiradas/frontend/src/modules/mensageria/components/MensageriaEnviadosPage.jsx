@@ -30,6 +30,65 @@ const formatDateTime = (value) => {
 	});
 };
 
+const toDateKey = (value) => {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+	const match = text.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+	if (!match) return "";
+	const day = Number(match[1]);
+	const month = Number(match[2]);
+	const rawYear = match[3] ? Number(match[3]) : new Date().getFullYear();
+	const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+	const date = new Date(year, month - 1, day);
+	if (
+		date.getFullYear() !== year ||
+		date.getMonth() !== month - 1 ||
+		date.getDate() !== day
+	) {
+		return "";
+	}
+	return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+};
+
+const toTimeValue = (value) => {
+	const text = String(value || "").trim();
+	const match =
+		text.match(/\b(\d{1,2})\s*[:h]\s*(\d{2})\b/i) ||
+		text.match(/\b(\d{1,2})\s*h(?:oras?)?\b/i);
+	if (!match) return "";
+	const hour = Number(match[1]);
+	const minute = Number(match[2] || 0);
+	if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return "";
+	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+};
+
+const resolveStoredScheduleResult = (item, responses = [], sentItems = []) => {
+	const related = [...responses, ...sentItems, item].filter(Boolean);
+	const appointmentId = related.find(
+		(entry) => entry.agendamento_id || entry.agendamentoId,
+	);
+	if (!appointmentId) return null;
+	const orderedResponses = [...responses].sort(
+		(left, right) => getItemTimestamp(left) - getItemTimestamp(right),
+	);
+	let date = "";
+	let time = "";
+	orderedResponses.forEach((response) => {
+		const message = readCallbackMessage(response);
+		date = toDateKey(response.schedule?.date || message) || date;
+		time = toTimeValue(response.schedule?.time || message) || time;
+	});
+	return {
+		ok: true,
+		created: false,
+		agendamento_id:
+			appointmentId.agendamento_id || appointmentId.agendamentoId || "",
+		schedule: { date, time },
+		message: "Agendamento já gerado para este cliente/O.S.",
+	};
+};
+
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
 
 const getPhoneVariants = (value) => {
@@ -277,8 +336,13 @@ const MensageriaEnviadosPage = () => {
 	};
 
 	const openConversationModal = (item, responses = [], sentItems = []) => {
-		setScheduleFeedback("");
-		setScheduleResult(null);
+		const existingSchedule = resolveStoredScheduleResult(
+			item,
+			responses,
+			sentItems,
+		);
+		setScheduleFeedback(existingSchedule?.message || "");
+		setScheduleResult(existingSchedule);
 		setConversationModal({ item, responses, sentItems });
 	};
 

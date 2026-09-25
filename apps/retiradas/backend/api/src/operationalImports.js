@@ -53,6 +53,61 @@ const DEFAULT_MATCH_IGNORED_TYPES = [];
 const IMPORT_JOB_COLLECTION = "operational_import_jobs";
 const importJobPromises = new Map();
 
+const ORDER_DATE_ALIASES = [
+	"data_cadastro",
+	"data_abertura",
+	"data_abertura_os",
+	"data_cadastro_os",
+	"data_criacao",
+	"data_criacao_os",
+	"data_inicio_programado",
+	"dt_cadastro",
+	"dt_abertura",
+	"dt_criacao",
+	"abertura",
+	"cadastro",
+];
+
+const ORDER_PRIMARY_PHONE_ALIASES = [
+	"telefone_primario",
+	"telefone_principal",
+	"telefone_cliente",
+	"telefone_contato",
+	"telefone",
+	"celular",
+	"celular_cliente",
+	"whatsapp",
+	"fone",
+	"fone_cliente",
+	"contato",
+	"phone",
+];
+
+const ORDER_SECONDARY_PHONE_ALIASES = [
+	"telefone_secundario",
+	"telefone_2",
+	"telefone2",
+	"celular_secundario",
+	"fone_2",
+	"fone2",
+];
+
+const ORDER_TERTIARY_PHONE_ALIASES = [
+	"telefone_terciario",
+	"telefone_3",
+	"telefone3",
+	"celular_terciario",
+	"fone_3",
+	"fone3",
+];
+
+const ORDER_PHONE_LIST_ALIASES = [
+	"telefones",
+	"lista_telefones",
+	"telefones_cliente",
+	"contatos",
+];
+
 function normalizeText(value) {
 	return String(value || "")
 		.normalize("NFD")
@@ -149,6 +204,23 @@ function readAnyField(source, fields = []) {
 		const value = source?.[field];
 		if (value !== undefined && value !== null && String(value).trim() !== "")
 			return value;
+	}
+	return "";
+}
+
+function readPhoneFromOrder(order = {}) {
+	const direct = readAnyField(order, [
+		"telefone",
+		"telefone_primario",
+		"celular",
+		"fone",
+		"whatsapp",
+		"contato",
+		"phone",
+	]);
+	if (direct) return direct;
+	if (Array.isArray(order.telefones)) {
+		return order.telefones.find((item) => normalizePhone(item)) || "";
 	}
 	return "";
 }
@@ -349,15 +421,12 @@ function extractOrderContactInfo(row) {
 	const bairro = getRowValue(row, ["bairro"]);
 	const coordenadas = getRowValue(row, ["coordenadas"]);
 	const coords = parseCoordinates(coordenadas);
-	const telefonePrimario = getFirstRowValue(row, [
-		"telefone_primario",
-		"telefone_principal",
-		"celular",
-		"telefone",
-		"whatsapp",
-	]);
-	const telefoneSecundario = getRowValue(row, ["telefone_secundario"]);
-	const telefoneTerciario = getRowValue(row, ["telefone_terciario"]);
+	const telefonePrimario = getFirstRowValue(row, ORDER_PRIMARY_PHONE_ALIASES);
+	const telefoneSecundario = getFirstRowValue(
+		row,
+		ORDER_SECONDARY_PHONE_ALIASES,
+	);
+	const telefoneTerciario = getFirstRowValue(row, ORDER_TERTIARY_PHONE_ALIASES);
 	const macAddr = getRowValue(row, [
 		"mac_addr",
 		"mac addr",
@@ -377,7 +446,7 @@ function extractOrderContactInfo(row) {
 		normalizePhone(telefonePrimario),
 		normalizePhone(telefoneSecundario),
 		normalizePhone(telefoneTerciario),
-		...parsePhoneList(getRowValue(row, ["telefones"])),
+		...parsePhoneList(getFirstRowValue(row, ORDER_PHONE_LIST_ALIASES)),
 	]);
 	return {
 		numero,
@@ -518,12 +587,7 @@ function buildOrderFromRow(row, { cityMap, ignoredTypes, fontesSet, forMatch }) 
 
 	const fonteConfig = getMapaFonteConfig(fonteDaLinha);
 	const dataCadastro = normalizeMapaDateValue(
-		getRowValue(row, [
-			"data_cadastro",
-			"data_abertura",
-			"data_abertura_os",
-			"abertura",
-		]),
+		getFirstRowValue(row, ORDER_DATE_ALIASES),
 	);
 	const contactInfo = extractOrderContactInfo(row);
 	const id = buildMapaDocumentId(numOs, fonteConfig.id);
@@ -1011,9 +1075,7 @@ function buildMensageriaQueueItemFromOrder(
 		.replace(/\s*\((?:INATIVO|ATIVO)\)\s*$/i, "")
 		.replace(/\s+/g, " ")
 		.trim();
-	const telefone = String(
-		readAnyField(order, ["telefone", "celular", "fone", "whatsapp", "contato"]),
-	);
+	const telefone = String(readPhoneFromOrder(order));
 	const endereco = String(
 		readAnyField(order, ["endereco_resumo", "endereco", "logradouro"]),
 	);
@@ -1093,6 +1155,26 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 	let created = 0;
 	let skipped = 0;
 	let reprioritized = 0;
+	const skippedReasons = {
+		semTelefone: 0,
+		cidadeForaFiltro: 0,
+	};
+	const skippedSamples = [];
+
+	function trackSkipped(reason, id, item) {
+		skipped += 1;
+		if (skippedReasons[reason] !== undefined) {
+			skippedReasons[reason] += 1;
+		}
+		if (skippedSamples.length < 10) {
+			skippedSamples.push({
+				id,
+				os: item?.os || id,
+				cidade: item?.cidade || "",
+				motivo: reason,
+			});
+		}
+	}
 
 	for (const [id, order] of newEntries) {
 		const item = buildMensageriaQueueItemFromOrder(
@@ -1102,14 +1184,14 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 			diffBatchAt,
 		);
 		if (!item.telefone_digits) {
-			skipped += 1;
+			trackSkipped("semTelefone", id, item);
 			continue;
 		}
 		if (
 			allowedCities.size &&
 			!allowedCities.has(normalizeCityKey(item.cidade))
 		) {
-			skipped += 1;
+			trackSkipped("cidadeForaFiltro", id, item);
 			continue;
 		}
 		const key = `${item.os}|${item.telefone_digits}`;
@@ -1156,6 +1238,8 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 		skipped,
 		disabled: false,
 		reprioritized,
+		skippedReasons,
+		skippedSamples,
 	};
 }
 

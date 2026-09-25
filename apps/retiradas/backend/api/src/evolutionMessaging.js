@@ -2628,6 +2628,7 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 	const id = randomId("wa");
 	const createdAt = nowIso();
 	const scheduleDate = dateKeyFromValue(schedule.date);
+	assertManualScheduleDateIsAllowed({ ...schedule, date: scheduleDate });
 	const appointmentData = {
 		tecnico_nome: item?.tecnico || "A definir",
 		codigo_cliente: String(item?.codigo_cliente || ""),
@@ -2753,6 +2754,71 @@ async function findExistingAppointmentForItem(item = {}) {
 	});
 }
 
+async function syncExistingAppointmentForItem({
+	existing,
+	item = {},
+	queueItem = null,
+	historyItem = null,
+	relatedCallbacks = [],
+	filters = {},
+	schedule = {},
+}) {
+	const agendamentoId = existing?.id || existing?.documentId || "";
+	const now = nowIso();
+	if (queueItem?.id) {
+		await upsertQueueItem(queueItem.id, {
+			...queueItem,
+			status: "agendado",
+			agendamento_id: agendamentoId,
+			ultimaRespostaCliente: relatedCallbacks
+				.map((callback) => extractStoredCallbackMessage(callback))
+				.filter(Boolean)
+				.join(" | "),
+			ultimaRespostaClienteEm: now,
+			atualizadoEm: now,
+		});
+	}
+	const alreadyLinked = relatedCallbacks.some(
+		(callback) =>
+			callback.agendado === true &&
+			String(callback.agendamento_id || callback.agendamentoId || "") ===
+				String(agendamentoId),
+	);
+	if (!alreadyLinked) {
+		await mensageriaRepository.recordCallback({
+			id: randomId("cb_admin_existing"),
+			telefone: item?.telefone || filters.telefone || "",
+			codigo_cliente: item?.codigo_cliente || "",
+			cliente: item?.cliente || "",
+			os: item?.os || filters.os || "",
+			filaId: queueItem?.id || filters.filaId || "",
+			historicoId: historyItem?.id || filters.historicoId || "",
+			mensagem:
+				"Agendamento existente vinculado pela ação administrativa Gerar agendamento.",
+			payload: { filters, schedule, existingAppointmentId: agendamentoId },
+			schedule,
+			status: "agendado",
+			motivo: "Agendamento existente confirmado pela ação administrativa.",
+			agendado: true,
+			agendamento_id: agendamentoId,
+			criado_em: now,
+			recebido_em: now,
+		});
+	}
+	broadcastRealtime("acompanhamento", {
+		action: "upsert",
+		collectionPath: APPOINTMENT_COLLECTION,
+		documentId: agendamentoId,
+		data: existing,
+		eventType: "agendamento_upsert",
+	});
+	broadcastRealtime("mensageria", {
+		action: "manual_schedule_existing",
+		status: "agendado",
+		agendamentoId,
+	});
+}
+
 function getCallbackTimestampValue(item = {}) {
 	const value =
 		item.criado_em?.value ||
@@ -2839,6 +2905,24 @@ function matchesHistoryItemForManualSchedule(history = {}, filters = {}) {
 	return false;
 }
 
+function isPastScheduleDate(value, now = new Date()) {
+	const dateKey = dateKeyFromValue(value);
+	return Boolean(dateKey && dateKey < getSaoPauloDateKey(now));
+}
+
+function assertManualScheduleDateIsAllowed(schedule = {}) {
+	const validation = validateScheduleDateWindow(schedule);
+	if (validation.ok) return;
+	const error = new Error(
+		validation.status === "data_anterior"
+			? "A resposta indica uma data anterior ao dia atual. Peça uma nova data ao cliente antes de gerar o agendamento."
+			: "Não é possível gerar agendamento para hoje após o horário limite.",
+	);
+	error.status = 400;
+	error.code = validation.status;
+	throw error;
+}
+
 async function generateAppointmentFromStoredResponses(payload = {}) {
 	const filters = {
 		telefone: payload.telefone || payload.phone || "",
@@ -2860,6 +2944,7 @@ async function generateAppointmentFromStoredResponses(payload = {}) {
 		error.status = 400;
 		throw error;
 	}
+	assertManualScheduleDateIsAllowed(schedule);
 	const queueItem =
 		queue.find((item) => matchesStoredCallback(item, filters)) ||
 		queue.find((item) => hasSharedQueueKey(item, filters));
@@ -2873,16 +2958,32 @@ async function generateAppointmentFromStoredResponses(payload = {}) {
 	};
 	const existing = await findExistingAppointmentForItem(item);
 	if (existing) {
-		return {
-			ok: true,
-			created: false,
-			agendamento_id: existing.id || existing.documentId || "",
-			schedule: {
-				date: existing.data || existing.data_agendamento || "",
-				time: existing.hora || existing.hora_agendamento || "",
-			},
-			message: "Já existe agendamento para este cliente/O.S.",
-		};
+		if (isPastScheduleDate(existing.data || existing.data_agendamento || "")) {
+			console.warn(
+				"[evolution] Ignorando agendamento existente em data passada ao gerar por respostas:",
+				existing.id || existing.documentId || "",
+			);
+		} else {
+			await syncExistingAppointmentForItem({
+				existing,
+				item,
+				queueItem,
+				historyItem,
+				relatedCallbacks,
+				filters,
+				schedule,
+			});
+			return {
+				ok: true,
+				created: false,
+				agendamento_id: existing.id || existing.documentId || "",
+				schedule: {
+					date: existing.data || existing.data_agendamento || "",
+					time: existing.hora || existing.hora_agendamento || "",
+				},
+				message: "Já existe agendamento para este cliente/O.S.",
+			};
+		}
 	}
 	const callbackId = schedule.sourceCallbackId || relatedCallbacks[0]?.id || randomId("cb");
 	const agendamentoId = await createAppointmentFromCallback(item, schedule, callbackId);
