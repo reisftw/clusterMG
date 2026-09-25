@@ -59,6 +59,7 @@ function toNumber(value, fallback) {
 
 function createMensageriaRouter({
 	adminRoles,
+	evolutionMessaging,
 	requireAnyPermission,
 	requireAuthenticated,
 	requireCsrfToken,
@@ -170,6 +171,23 @@ function createMensageriaRouter({
 		}
 	});
 
+	router.post(
+		"/fila/ajustar",
+		requireCsrfToken,
+		requireFilaManage,
+		async (_req, res, next) => {
+			try {
+				if (!evolutionMessaging?.adjustQueueAgainstOpenOrders) {
+					res.status(503).json({ error: "Ajuste de fila indisponível." });
+					return;
+				}
+				res.json(await evolutionMessaging.adjustQueueAgainstOpenOrders());
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.patch(
 		"/fila/:id",
 		requireCsrfToken,
@@ -236,6 +254,27 @@ function createMensageriaRouter({
 			try {
 				const item = await mensageriaRepository.recordCallback(req.body || {});
 				res.json({ ok: true, item, id: item.id });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/callbacks/gerar-agendamento",
+		requireCsrfToken,
+		requireCallbackManage,
+		async (req, res, next) => {
+			try {
+				if (!evolutionMessaging?.generateAppointmentFromStoredResponses) {
+					res.status(503).json({ error: "Geração de agendamento indisponível." });
+					return;
+				}
+				res.json(
+					await evolutionMessaging.generateAppointmentFromStoredResponses(
+						req.body || {},
+					),
+				);
 			} catch (error) {
 				next(error);
 			}

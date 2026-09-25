@@ -2475,6 +2475,7 @@ function createApp() {
 		createMensageriaRouter({
 			adminRoles: ADMIN_ROLES,
 			documents,
+			evolutionMessaging,
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,

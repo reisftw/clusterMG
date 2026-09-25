@@ -2,6 +2,7 @@ import {
 	AlertTriangle,
 	CheckCircle2,
 	Clock,
+	ListChecks,
 	Pause,
 	Play,
 	RefreshCw,
@@ -14,6 +15,7 @@ import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import {
 	atualizarItemFilaMensageria,
+	ajustarFilaMensageria,
 	buscarConfigMensageria,
 	buscarFilaMensageria,
 	buscarStatusEvolutionMensageria,
@@ -332,6 +334,22 @@ function useMensageriaFilaController() {
 		}
 	};
 
+	const handleAdjustQueue = async () => {
+		setWorking(true);
+		setFeedback("");
+		try {
+			const result = await ajustarFilaMensageria();
+			setFeedback(
+				`Fila ajustada: ${Number(result?.removed || 0).toLocaleString("pt-BR")} item(ns) removido(s) por não constarem mais em ordens abertas.`,
+			);
+			await loadData();
+		} catch (error) {
+			setFeedback(error?.message || "Não foi possível ajustar a fila.");
+		} finally {
+			setWorking(false);
+		}
+	};
+
 	const handleSendNow = async (item) => {
 		setWorking(true);
 		setFeedback("");
@@ -438,6 +456,7 @@ function useMensageriaFilaController() {
 		startButtonLabel,
 		handleStartQueue,
 		handlePauseQueue,
+		handleAdjustQueue,
 		handleSendNow,
 		updateQueueConfig,
 		toggleSendDay,
@@ -473,6 +492,7 @@ const MensageriaFilaPage = () => {
 		startButtonLabel,
 		handleStartQueue,
 		handlePauseQueue,
+		handleAdjustQueue,
 		handleSendNow,
 		updateQueueConfig,
 		toggleSendDay,
@@ -531,6 +551,15 @@ const MensageriaFilaPage = () => {
 						>
 							<Pause size={16} />
 							Pausar
+						</button>
+						<button
+							type="button"
+							onClick={handleAdjustQueue}
+							disabled={working || !canManage}
+							className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+						>
+							<ListChecks size={16} />
+							Ajustar fila
 						</button>
 						<button
 							type="button"

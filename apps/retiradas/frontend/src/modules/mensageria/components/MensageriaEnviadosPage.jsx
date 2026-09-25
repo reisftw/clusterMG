@@ -1,5 +1,6 @@
 import {
 	AlertTriangle,
+	CalendarPlus,
 	ChevronLeft,
 	ChevronRight,
 	MessageCircleReply,
@@ -10,7 +11,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import PageHeader from "../../../components/ui/PageHeader";
 import ResponsiveDataView from "../../../components/ui/ResponsiveDataView";
-import { buscarMensageriaEnviados } from "../services/mensageriaService";
+import {
+	buscarMensageriaEnviados,
+	gerarAgendamentoPorRespostasMensageria,
+} from "../services/mensageriaService";
 
 const PAGE_SIZE = 20;
 
@@ -163,6 +167,7 @@ const MensageriaEnviadosPage = () => {
 	const [feedback, setFeedback] = useState("");
 	const [conversationModal, setConversationModal] = useState(null);
 	const [viewTab, setViewTab] = useState("todos");
+	const [scheduleWorking, setScheduleWorking] = useState(false);
 
 	const latestCallbacksByPhone = useMemo(() => {
 		const groups = new Map();
@@ -271,6 +276,35 @@ const MensageriaEnviadosPage = () => {
 
 	const openConversationModal = (item, responses = [], sentItems = []) => {
 		setConversationModal({ item, responses, sentItems });
+	};
+
+	const handleGenerateAppointment = async () => {
+		if (!conversationModal?.item) return;
+		setScheduleWorking(true);
+		setFeedback("");
+		try {
+			const item = conversationModal.item;
+			const response = conversationModal.responses?.[0] || {};
+			const sentItem = conversationModal.sentItems?.[0] || {};
+			const result = await gerarAgendamentoPorRespostasMensageria({
+				telefone: item.telefone || response.telefone || sentItem.telefone || "",
+				os: item.os || response.os || sentItem.os || "",
+				filaId: item.filaId || response.filaId || sentItem.filaId || "",
+				historicoId: item.id || response.historicoId || sentItem.id || "",
+			});
+			setFeedback(
+				result?.message ||
+					(result?.created
+						? "Agendamento criado pelas respostas registradas."
+						: "Agendamento já existia para este cliente."),
+			);
+			setConversationModal(null);
+			await loadData();
+		} catch (error) {
+			setFeedback(error?.message || "Não foi possível gerar o agendamento.");
+		} finally {
+			setScheduleWorking(false);
+		}
 	};
 
 	return (
@@ -553,6 +587,26 @@ const MensageriaEnviadosPage = () => {
 					onClose={() => setConversationModal(null)}
 					size="4xl"
 				>
+					<div className="mb-4 flex flex-col gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<p className="text-sm font-bold text-blue-900">
+								Gerar agendamento por respostas
+							</p>
+							<p className="text-xs font-semibold text-blue-700">
+								O sistema relê as mensagens recebidas, identifica data e horário
+								e cria o agendamento sem reenviar WhatsApp.
+							</p>
+						</div>
+						<button
+							type="button"
+							onClick={handleGenerateAppointment}
+							disabled={scheduleWorking || !conversationModal.responses?.length}
+							className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<CalendarPlus size={16} />
+							{scheduleWorking ? "Gerando..." : "Gerar agendamento"}
+						</button>
+					</div>
 					<div className="grid gap-4 lg:grid-cols-2">
 						<div>
 							<h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-blue-700">

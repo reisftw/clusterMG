@@ -2684,6 +2684,259 @@ async function createAppointmentFromCallback(item, schedule, callbackId) {
 	return id;
 }
 
+function getQueueComparisonKeys(item = {}) {
+	const payload = item.source_payload || item.payload || {};
+	const values = [
+		item.id,
+		item.documentId,
+		item.os,
+		item.codigo_os,
+		item.codigoOs,
+		item.codigo_cliente,
+		item.codigoCliente,
+		item.contrato,
+		payload.os,
+		payload.codigo_os,
+		payload.codigoOs,
+		payload.codigo_cliente,
+		payload.codigoCliente,
+		payload.contrato,
+	];
+	return values
+		.map((value) => String(value || "").trim())
+		.filter(Boolean);
+}
+
+function hasSharedQueueKey(left = {}, right = {}) {
+	const rightKeys = new Set(getQueueComparisonKeys(right));
+	if (!rightKeys.size) return false;
+	return getQueueComparisonKeys(left).some((key) => rightKeys.has(key));
+}
+
+async function findExistingAppointmentForItem(item = {}) {
+	const appointments = await agendamentosRepository.listAllAppointments();
+	const itemPhone = normalizePhone(item.telefone);
+	return appointments.find((appointment) => {
+		if (hasSharedQueueKey(item, appointment)) return true;
+		if (itemPhone && phonesMatch(appointment.telefone, itemPhone)) return true;
+		return false;
+	});
+}
+
+function getCallbackTimestampValue(item = {}) {
+	const value =
+		item.criado_em?.value ||
+		item.criado_em ||
+		item.recebido_em?.value ||
+		item.recebido_em ||
+		item.criadoEm?.value ||
+		item.criadoEm ||
+		"";
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function extractStoredCallbackMessage(callback = {}) {
+	return String(
+		callback.mensagem ||
+			callback.message ||
+			callback.text ||
+			callback.payload?.message ||
+			callback.payload?.text ||
+			callback.payload?.data?.message?.conversation ||
+			callback.payload?.data?.message?.extendedTextMessage?.text ||
+			callback.payload?.data?.body ||
+			"",
+	).trim();
+}
+
+function extractScheduleFromStoredCallbacks(callbacks = []) {
+	const ordered = [...callbacks].sort(
+		(left, right) => getCallbackTimestampValue(left) - getCallbackTimestampValue(right),
+	);
+	let date = "";
+	let time = "";
+	let sourceCallbackId = "";
+	for (const callback of ordered) {
+		const message = extractStoredCallbackMessage(callback);
+		const schedule = parseScheduleFromText(message);
+		if (schedule?.date) {
+			date = schedule.date;
+			sourceCallbackId = callback.id || sourceCallbackId;
+		}
+		if (schedule?.time) {
+			time = schedule.time;
+			sourceCallbackId = callback.id || sourceCallbackId;
+		}
+		const guidedTime = parseGuidedTimeChoice(message);
+		if (guidedTime) {
+			time = guidedTime;
+			sourceCallbackId = callback.id || sourceCallbackId;
+		}
+	}
+	return date && time ? { date, time, sourceCallbackId } : null;
+}
+
+function matchesStoredCallback(callback = {}, filters = {}) {
+	const phone = normalizePhone(filters.telefone);
+	const callbackPhone = normalizePhone(callback.telefone);
+	if (phone && callbackPhone && phonesMatch(callbackPhone, phone)) return true;
+	if (filters.os && String(callback.os || "") === String(filters.os)) return true;
+	if (filters.filaId && String(callback.filaId || "") === String(filters.filaId)) return true;
+	if (
+		filters.historicoId &&
+		String(callback.historicoId || "") === String(filters.historicoId)
+	) {
+		return true;
+	}
+	return false;
+}
+
+function matchesHistoryItemForManualSchedule(history = {}, filters = {}) {
+	const phone = normalizePhone(filters.telefone);
+	const historyPhone = normalizePhone(history.telefone);
+	if (filters.historicoId && String(history.id || "") === String(filters.historicoId)) return true;
+	if (filters.filaId && String(history.filaId || "") === String(filters.filaId)) return true;
+	if (filters.os && String(history.os || "") === String(filters.os)) return true;
+	if (phone && historyPhone && phonesMatch(historyPhone, phone)) return true;
+	return false;
+}
+
+async function generateAppointmentFromStoredResponses(payload = {}) {
+	const filters = {
+		telefone: payload.telefone || payload.phone || "",
+		os: payload.os || "",
+		filaId: payload.filaId || "",
+		historicoId: payload.historicoId || "",
+	};
+	const [callbacks, queue, history] = await Promise.all([
+		mensageriaRepository.listAllCallbacks(),
+		mensageriaRepository.listAllQueueMessages(),
+		mensageriaRepository.listAllHistoryEntries(),
+	]);
+	const relatedCallbacks = callbacks.filter((callback) =>
+		matchesStoredCallback(callback, filters),
+	);
+	const schedule = extractScheduleFromStoredCallbacks(relatedCallbacks);
+	if (!schedule) {
+		const error = new Error("Não encontrei data e horário válidos nas respostas registradas.");
+		error.status = 400;
+		throw error;
+	}
+	const queueItem =
+		queue.find((item) => matchesStoredCallback(item, filters)) ||
+		queue.find((item) => hasSharedQueueKey(item, filters));
+	const historyItem = history
+		.filter((item) => String(item.status || "") === "enviado")
+		.sort((left, right) => getMessageTimestamp(right) - getMessageTimestamp(left))
+		.find((item) => matchesHistoryItemForManualSchedule(item, filters));
+	const item = chooseCallbackItem(queueItem, historyItem) || {
+		telefone: filters.telefone,
+		os: filters.os,
+	};
+	const existing = await findExistingAppointmentForItem(item);
+	if (existing) {
+		return {
+			ok: true,
+			created: false,
+			agendamento_id: existing.id || existing.documentId || "",
+			message: "Já existe agendamento para este cliente/O.S.",
+		};
+	}
+	const callbackId = schedule.sourceCallbackId || relatedCallbacks[0]?.id || randomId("cb");
+	const agendamentoId = await createAppointmentFromCallback(item, schedule, callbackId);
+	if (queueItem?.id) {
+		await upsertQueueItem(queueItem.id, {
+			...queueItem,
+			status: "agendado",
+			agendamento_id: agendamentoId,
+			ultimaRespostaCliente: relatedCallbacks
+				.map((callback) => extractStoredCallbackMessage(callback))
+				.filter(Boolean)
+				.join(" | "),
+			ultimaRespostaClienteEm: nowIso(),
+			atualizadoEm: nowIso(),
+		});
+	}
+	await mensageriaRepository.recordCallback(
+		{
+			id: randomId("cb_admin"),
+			telefone: item?.telefone || filters.telefone || "",
+			codigo_cliente: item?.codigo_cliente || "",
+			cliente: item?.cliente || "",
+			os: item?.os || filters.os || "",
+			filaId: queueItem?.id || filters.filaId || "",
+			historicoId: historyItem?.id || filters.historicoId || "",
+			mensagem: "Agendamento gerado manualmente a partir das respostas já recebidas.",
+			payload: { filters, schedule },
+			schedule,
+			status: "agendado",
+			motivo: "Agendamento criado pela ação administrativa Gerar agendamento.",
+			agendado: true,
+			agendamento_id: agendamentoId,
+			criado_em: nowIso(),
+			recebido_em: nowIso(),
+		},
+	);
+	broadcastRealtime("mensageria", { action: "manual_schedule", status: "agendado" });
+	return {
+		ok: true,
+		created: true,
+		agendamento_id: agendamentoId,
+		schedule,
+		message: "Agendamento criado com base nas respostas registradas.",
+	};
+}
+
+function addOpenOrderKeys(index, order = {}) {
+	getQueueComparisonKeys(order).forEach((key) => index.add(key));
+}
+
+async function adjustQueueAgainstOpenOrders() {
+	const [queue, openOrderDocuments] = await Promise.all([
+		mensageriaRepository.listAllQueueMessages(),
+		documents.listAllDocuments("ordens_abertas"),
+	]);
+	const openOrderKeys = new Set();
+	openOrderDocuments.forEach((document) => {
+		addOpenOrderKeys(openOrderKeys, { id: document.documentId, ...(document.data || {}) });
+	});
+	const activeStatuses = new Set([
+		"novo",
+		"aprovado",
+		"aguardando_janela",
+		"falhou",
+		"duplicado",
+	]);
+	let checked = 0;
+	let removed = 0;
+	for (const item of queue) {
+		if (!activeStatuses.has(String(item.status || "novo"))) continue;
+		checked += 1;
+		const hasOpenOrder = getQueueComparisonKeys(item).some((key) =>
+			openOrderKeys.has(key),
+		);
+		if (hasOpenOrder) continue;
+		removed += 1;
+		await upsertQueueItem(item.id, {
+			...item,
+			status: "ignorado",
+			ultimo_erro:
+				"Removido pelo ajuste de fila: cliente/O.S. não consta mais em ordens abertas.",
+			atualizadoEm: nowIso(),
+			ajustadoFilaEm: nowIso(),
+		});
+	}
+	broadcastRealtime("mensageria", { action: "queue_adjusted", removed });
+	return {
+		ok: true,
+		checked,
+		removed,
+		remaining: checked - removed,
+		openOrders: openOrderDocuments.length,
+	};
+}
+
 async function sendConfiguredAutoReply(
 	config,
 	phone,
@@ -3517,6 +3770,8 @@ module.exports = {
 	processQueueOnce,
 	pauseQueueForDisconnectedEvolution,
 	registerCallback,
+	generateAppointmentFromStoredResponses,
+	adjustQueueAgainstOpenOrders,
 	sendTestMessage,
 	saveConfigPatch,
 	startWorker,

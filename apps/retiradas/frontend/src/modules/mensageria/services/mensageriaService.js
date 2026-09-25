@@ -350,6 +350,17 @@ export async function registrarCallbackMensageria(payload) {
 	});
 }
 
+export async function gerarAgendamentoPorRespostasMensageria(payload) {
+	return requestVpsApi("/mensageria/callbacks/gerar-agendamento", {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function ajustarFilaMensageria() {
+	return requestVpsApi("/mensageria/fila/ajustar", { method: "POST" });
+}
+
 export async function buscarStatusEvolutionMensageria() {
 	return requestVpsApi("/mensageria/evolution/status");
 }
