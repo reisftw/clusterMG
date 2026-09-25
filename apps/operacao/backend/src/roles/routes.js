@@ -113,12 +113,13 @@ router.get("/", requireRotPermission("rot.users.manage"), noStore, async (req, r
 	}
 });
 
-router.post("/", requireRotPermission("rot.users.manage"), validateBody(["id", "name", "description", "level", "isGlobal", "permissions"], { allowEmpty: false }), async (req, res, next) => {
+router.post("/", requireRotPermission("rot.users.manage"), validateBody(["id", "name", "description", "level", "isGlobal", "permissions", "active"], { allowEmpty: false }), async (req, res, next) => {
 	try {
 		const name = String(req.body?.name || "").trim();
 		const description = String(req.body?.description || "").trim();
 		const level = Number(req.body?.level);
 		const isGlobal = Boolean(req.body?.isGlobal);
+		const active = req.body?.active !== false;
 		const permissions = Array.isArray(req.body?.permissions) ? req.body.permissions.map(String) : [];
 
 		if (!name || !Number.isFinite(level) || level < 0) {
@@ -140,8 +141,8 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["id", "
 			await client.query("begin");
 			await client.query(
 				`insert into rot_roles (id, name, description, level, is_global, permissions, system_role, active)
-				values ($1, $2, $3, $4, $5, $6::jsonb, false, true)`,
-				[id, name, description, level, isGlobal, JSON.stringify(permissions)],
+				values ($1, $2, $3, $4, $5, $6::jsonb, false, $7)`,
+				[id, name, description, level, isGlobal, JSON.stringify(permissions), active],
 			);
 			await syncRolePermissions(client, id, permissions, req.rotUser?.id || null);
 			const { rows } = await client.query(`${ROLE_SELECT} where r.id = $1`, [id]);
