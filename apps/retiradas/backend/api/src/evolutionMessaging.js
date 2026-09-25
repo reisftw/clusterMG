@@ -17,6 +17,8 @@ const SUPPORTED_WHATSAPP_PROVIDERS = new Set([
 const AUTOMATION_ATTENDANT_ID = "retorninho";
 const AUTOMATION_ATTENDANT_NAME = "RETORNINHO";
 const SEND_TIME_ZONE = "America/Sao_Paulo";
+const GUIDED_SCHEDULE_TIMES = new Set(["09:00", "12:00", "16:00"]);
+const GUIDED_SCHEDULE_TIME_OPTIONS = "1 - 09h\n2 - 12h\n3 - 16h";
 const CENTRAL_REDIRECT_MESSAGE =
 	"Olá! Este número é utilizado apenas por um sistema automático de mensagens.\n\n" +
 	"Não realizamos atendimento e não respondemos por este canal.\n\n" +
@@ -65,11 +67,11 @@ const DEFAULT_CONFIG = {
 	guidedScheduleDateMessage:
 		"Perfeito! Escolha uma das datas abaixo para agendarmos a retirada:\n\n{opcoes_datas}\n\nSe preferir outra data, responda com a data desejada. Exemplo: 25/08.",
 	guidedScheduleTimeMessage:
-		"Ótimo. Agora escolha um horário para o dia {data_agendamento}:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nSe preferir, responda com o horário desejado. Exemplo: 14:30.",
+		"Ótimo. Agora escolha um horário para o dia {data_agendamento}:\n\n1 - 09h\n2 - 12h\n3 - 16h.",
 	guidedScheduleInvalidDateMessage:
 		"Não entendi a data escolhida. Por favor, escolha uma das opções abaixo ou informe outra data:\n\n{opcoes_datas}\n\nExemplo: 25/08.",
 	guidedScheduleInvalidTimeMessage:
-		"Não entendi o horário escolhido. Por favor, escolha uma das opções abaixo ou informe outro horário:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nExemplo: 14:30.",
+		"Não entendi o horário escolhido. Por favor, escolha uma das opções abaixo:\n\n1 - 09h\n2 - 12h\n3 - 16h.",
 	sendWindowStart: "08:00",
 	sendWindowEnd: "18:00",
 	sendDays: ["seg", "ter", "qua", "qui", "sex", "sab"],
@@ -2470,7 +2472,7 @@ function parseGuidedTimeChoice(text) {
 		return "12:00";
 	if (value === "3" || value.includes("16") || value.includes("4 da tarde"))
 		return "16:00";
-	if (value === "4" || value.includes("outro")) return "other";
+	if (value === "4" || value.includes("outro")) return null;
 	const timeMatch =
 		String(text || "").match(/\b(\d{1,2})\s*[:h]\s*(\d{2})\b/i) ||
 		String(text || "").match(/\b(\d{1,2})\s*h(?:oras?)?\b/i) ||
@@ -2479,7 +2481,8 @@ function parseGuidedTimeChoice(text) {
 	const hour = Number(timeMatch[1]);
 	const minute = Number(timeMatch[2] || 0);
 	if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+	const parsed = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+	return GUIDED_SCHEDULE_TIMES.has(parsed) ? parsed : null;
 }
 
 function getConversationId(phone) {
@@ -2781,7 +2784,6 @@ function renderInvalidTimeMessage(config, conversation = {}) {
 	const template =
 		config.guidedScheduleInvalidTimeMessage ||
 		DEFAULT_CONFIG.guidedScheduleInvalidTimeMessage;
-	const fallbackOptions = "1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário";
 	const message = renderTemplate(
 		template,
 		{
@@ -2793,8 +2795,38 @@ function renderInvalidTimeMessage(config, conversation = {}) {
 		String(template).includes("1 - 09h") ||
 		String(template).includes("1 - 9h")
 	)
-		return message;
-	return `${message}\n\n${fallbackOptions}`;
+		return normalizeGuidedTimeOptionsMessage(message);
+	return `${message}\n\n${GUIDED_SCHEDULE_TIME_OPTIONS}`;
+}
+
+function normalizeGuidedTimeOptionsMessage(message = "") {
+	const withoutOtherOption = String(message || "")
+		.replace(/^\s*4\s*[-.)]\s*Outro hor[aá]rio\s*$/gim, "")
+		.replace(
+			/\n{2,}\s*(?:Se preferir,?\s*)?responda com (?:o )?hor[aá]rio[^.\n]*(?:\.\s*)?/gi,
+			"\n\n",
+		)
+		.replace(/^\s*Exemplo:\s*\d{1,2}\s*[:h]\s*\d{2}\.?\s*$/gim, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+	if (
+		withoutOtherOption.includes("1 - 09h") ||
+		withoutOtherOption.includes("1 - 9h")
+	) {
+		return withoutOtherOption;
+	}
+	return `${withoutOtherOption}\n\n${GUIDED_SCHEDULE_TIME_OPTIONS}`.trim();
+}
+
+function renderGuidedTimeMessage(config, item = {}) {
+	return normalizeGuidedTimeOptionsMessage(
+		renderTemplate(
+			config.guidedScheduleTimeMessage ||
+				DEFAULT_CONFIG.guidedScheduleTimeMessage,
+			item,
+			config,
+		),
+	);
 }
 
 function validateScheduleDateWindow(schedule, now = new Date()) {
@@ -2911,8 +2943,10 @@ async function handleGuidedDateStage(config, phone, conversationItem, conversati
 				...conversationItem,
 				data_agendamento: formatDateLabel(selectedDate),
 			},
-			config.guidedScheduleTimeMessage ||
-				DEFAULT_CONFIG.guidedScheduleTimeMessage,
+			renderGuidedTimeMessage(config, {
+				...conversationItem,
+				data_agendamento: formatDateLabel(selectedDate),
+			}),
 		);
 	}
 	return null;
@@ -2931,16 +2965,10 @@ async function handleGuidedTimeStage(config, phone, conversationItem, conversati
 				...conversationItem,
 				data_agendamento: formatDateLabel(conversation.selectedDate),
 			},
-			config.guidedScheduleTimeMessage ||
-				DEFAULT_CONFIG.guidedScheduleTimeMessage,
-		);
-	}
-	if (selectedTime === "other") {
-		return sendConfiguredAutoReply(
-			config,
-			phone,
-			conversationItem,
-			"Claro. Responda com o horário desejado. Exemplo: 14:30.",
+			renderGuidedTimeMessage(config, {
+				...conversationItem,
+				data_agendamento: formatDateLabel(conversation.selectedDate),
+			}),
 		);
 	}
 	if (!selectedTime) {
@@ -3503,7 +3531,9 @@ module.exports = {
 		getGuidedDateOptions,
 		getReusableGuidedDateOptions,
 		parseGuidedDateChoice,
+		parseGuidedTimeChoice,
 		parseScheduleFromText,
+		renderGuidedTimeMessage,
 		isConfirmedDisconnectedConnection,
 	},
 };

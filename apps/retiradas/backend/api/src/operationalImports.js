@@ -957,19 +957,46 @@ async function getMensageriaConfig() {
 	return mensageriaRepository.getMessagingConfig().catch(() => ({}));
 }
 
-async function getMensageriaQueueKeys() {
-	const items = await mensageriaRepository.listAllQueueMessages().catch(() => []);
-	return new Set(
-		items
-			.map((item) => {
-				return `${String(item.os || "").trim()}|${normalizeMensageriaPhone(item.telefone)}`;
-			})
-			.filter((key) => key !== "|"),
-	);
+const MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES = new Set([
+	"agendado",
+	"cancelado",
+	"concluido",
+	"concluído",
+	"descartado",
+	"duplicado",
+	"enviado",
+	"ignorado",
+]);
+
+function isActiveMensageriaQueueEntry(item = {}) {
+	const status = String(item.status || "").trim().toLowerCase();
+	return !MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES.has(status);
 }
 
-function buildMensageriaQueueItemFromOrder(order = {}, id = "", config = {}) {
-	const createdAt = new Date().toISOString();
+async function getMensageriaQueueItemsByKey() {
+	const items = await mensageriaRepository.listAllQueueMessages().catch(() => []);
+	const itemsByKey = new Map();
+	for (const item of items.filter(isActiveMensageriaQueueEntry)) {
+		const key = `${String(item.os || "").trim()}|${normalizeMensageriaPhone(item.telefone)}`;
+		if (key === "|") continue;
+		const current = itemsByKey.get(key);
+		const currentTime = new Date(
+			current?.prioridadeEm || current?.criadoEm || current?.createdAt || 0,
+		).getTime();
+		const itemTime = new Date(
+			item.prioridadeEm || item.criadoEm || item.createdAt || 0,
+		).getTime();
+		if (!current || itemTime > currentTime) itemsByKey.set(key, item);
+	}
+	return itemsByKey;
+}
+
+function buildMensageriaQueueItemFromOrder(
+	order = {},
+	id = "",
+	config = {},
+	createdAt = new Date().toISOString(),
+) {
 	const clienteRaw = String(
 		readAnyField(order, [
 			"nome_cliente",
@@ -1044,22 +1071,36 @@ function buildMensageriaQueueItemFromOrder(order = {}, id = "", config = {}) {
 }
 
 async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
-	if (!newEntries.length) return { created: 0, skipped: 0, disabled: true };
 	const config = await getMensageriaConfig();
 	if (!config.autoEnqueueMapDiff)
 		return { created: 0, skipped: newEntries.length, disabled: true };
+	const diffBatchAt = new Date().toISOString();
+	if (!newEntries.length) {
+		return {
+			created: 0,
+			skipped: 0,
+			disabled: false,
+			reprioritized: 0,
+		};
+	}
 
 	const allowedCities = new Set(
 		(Array.isArray(config.autoEnqueueCities) ? config.autoEnqueueCities : [])
 			.map(normalizeCityKey)
 			.filter(Boolean),
 	);
-	const queueKeys = await getMensageriaQueueKeys();
+	const queueItemsByKey = await getMensageriaQueueItemsByKey();
 	let created = 0;
 	let skipped = 0;
+	let reprioritized = 0;
 
 	for (const [id, order] of newEntries) {
-		const item = buildMensageriaQueueItemFromOrder(order, id, config);
+		const item = buildMensageriaQueueItemFromOrder(
+			order,
+			id,
+			config,
+			diffBatchAt,
+		);
 		if (!item.telefone_digits) {
 			skipped += 1;
 			continue;
@@ -1072,11 +1113,32 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 			continue;
 		}
 		const key = `${item.os}|${item.telefone_digits}`;
-		if (config.avoidDuplicates !== false && queueKeys.has(key)) {
-			skipped += 1;
+		const existingItem = queueItemsByKey.get(key);
+		if (config.avoidDuplicates !== false && existingItem) {
+			await mensageriaRepository.updateQueueMessage(existingItem.id, {
+				...existingItem,
+				...item,
+				id: existingItem.id,
+				criadoPor: existingItem.criadoPor || existingItem.criado_por || user.uid || null,
+				tentativas: 0,
+				ultimoErro: "",
+				ultimo_erro: "",
+				ultimoEnvioEm: "",
+				ultimo_envio_em: "",
+				envioLockId: "",
+				envio_lock_id: "",
+				envioLockEm: "",
+				envio_lock_em: "",
+				atualizadoEm: diffBatchAt,
+				atualizado_em: diffBatchAt,
+				repriorizadoEm: diffBatchAt,
+				repriorizadoPor: user.uid || null,
+				repriorizadoMotivo: "O.S. voltou na diferenca mais recente do mapa.",
+			});
+			queueItemsByKey.set(key, { ...existingItem, ...item, id: existingItem.id });
+			reprioritized += 1;
 			continue;
 		}
-		queueKeys.add(key);
 		const docId = `mapa_${sanitizeId(item.os || id)}_${Date.now()}_${created}`;
 		await mensageriaRepository.enqueueMessage(
 			{
@@ -1085,10 +1147,16 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 			},
 			{ id: docId },
 		);
+		queueItemsByKey.set(key, { ...item, id: docId });
 		created += 1;
 	}
 
-	return { created, skipped, disabled: false };
+	return {
+		created,
+		skipped,
+		disabled: false,
+		reprioritized,
+	};
 }
 
 async function persistMapaImport(payload = {}, user = {}, context = {}) {

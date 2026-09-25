@@ -186,6 +186,34 @@ describe("evolutionMessaging guided schedule dates", () => {
 		).toContain("05/09");
 	});
 
+	it("aceita somente os horarios padrao do fluxo guiado", () => {
+		const helpers = loadEvolutionMessaging();
+
+		expect(helpers.parseGuidedTimeChoice("1")).toBe("09:00");
+		expect(helpers.parseGuidedTimeChoice("12h")).toBe("12:00");
+		expect(helpers.parseGuidedTimeChoice("16:00")).toBe("16:00");
+		expect(helpers.parseGuidedTimeChoice("4")).toBeNull();
+		expect(helpers.parseGuidedTimeChoice("outro horario")).toBeNull();
+		expect(helpers.parseGuidedTimeChoice("14:30")).toBeNull();
+	});
+
+	it("remove opcao de outro horario de mensagem configurada antiga", () => {
+		const helpers = loadEvolutionMessaging();
+		const message = helpers.renderGuidedTimeMessage(
+			{
+				guidedScheduleTimeMessage:
+					"Perfeito. Escolha o horario para {data_agendamento}:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nSe preferir, responda com o horário exato. Exemplo: 14:30.",
+			},
+			{ data_agendamento: "25/09" },
+		);
+
+		expect(message).toContain("1 - 09h");
+		expect(message).toContain("2 - 12h");
+		expect(message).toContain("3 - 16h");
+		expect(message).not.toContain("Outro horário");
+		expect(message).not.toContain("14:30");
+	});
+
 	it("nao trata falha de consulta da Evolution como desconexao confirmada", () => {
 		const helpers = loadEvolutionMessaging();
 
