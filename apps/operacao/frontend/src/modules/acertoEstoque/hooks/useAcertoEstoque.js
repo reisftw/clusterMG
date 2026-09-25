@@ -131,10 +131,10 @@ export function useAcertoEstoque() {
 			setStore(nextStore);
 			setLastCreatedAcerto(null);
 			setSuccessMessage("Acerto removido com sucesso.");
-			return true;
+			return nextStore;
 		} catch (error) {
 			setError(getErrorMessage(error, "Erro ao excluir acerto."));
-			return false;
+			return null;
 		} finally {
 			setSaving(false);
 		}

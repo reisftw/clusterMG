@@ -191,6 +191,30 @@ async function copyHtml(html, plainText) {
 	await navigator.clipboard.writeText(plainText);
 }
 
+function getAcertoCreatedAt(acerto = {}) {
+	return (
+		acerto.createdAt ||
+		acerto.created_at ||
+		acerto.criadoEm ||
+		acerto.created_at?.seconds ||
+		acerto.updatedAt ||
+		acerto.atualizadoEm ||
+		acerto.dataAcerto ||
+		""
+	);
+}
+
+function getAcertoAuthor(acerto = {}) {
+	return (
+		acerto.createdByName ||
+		acerto.createdByEmail ||
+		acerto.createdBy ||
+		acerto.updatedByName ||
+		acerto.updatedByEmail ||
+		"Operação"
+	);
+}
+
 // Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // pra reduzir a complexidade cognitiva da funcao de render — mesmo
 // estado e mesmas chamadas, sem mudanca de comportamento.
@@ -576,13 +600,24 @@ function useAcertoEstoqueController() {
 
 		const isEditing = Boolean(lancamentoForm.id);
 		const acerto = isEditing
-			? await atualizarAcerto(lancamentoForm.id, acertoPayload)
+			? await atualizarAcerto(lancamentoForm.id, {
+					...acertoPayload,
+					createdAt: lancamentoForm.createdAt || undefined,
+					createdBy: lancamentoForm.createdBy || undefined,
+					createdByName: lancamentoForm.createdByName || undefined,
+					createdByEmail: lancamentoForm.createdByEmail || undefined,
+					updatedBy:
+						currentUser?.id || currentUser?.uid || currentUser?.email || "",
+					updatedByName:
+						currentUser?.name || currentUser?.nome || currentUser?.email || "",
+					updatedByEmail: currentUser?.email || "",
+				})
 			: await lancarAcerto({
 					...acertoPayload,
 					createdBy:
 						currentUser?.id || currentUser?.uid || currentUser?.email || "",
 					createdByName:
-						currentUser?.nome || currentUser?.name || currentUser?.email || "",
+						currentUser?.name || currentUser?.nome || currentUser?.email || "",
 					createdByEmail: currentUser?.email || "",
 				});
 
@@ -620,6 +655,10 @@ function useAcertoEstoqueController() {
 			id: acerto.id,
 			dataAcerto: acerto.dataAcerto || today,
 			agendaId: agenda?.id || acerto.agendaId || "",
+			createdAt: getAcertoCreatedAt(acerto),
+			createdBy: acerto.createdBy || "",
+			createdByName: acerto.createdByName || "",
+			createdByEmail: acerto.createdByEmail || "",
 			lancamentos: lancamentos.length
 				? lancamentos
 				: [{ tecnicoId: "", itens: [{ produtoId: "", quantidade: 1 }] }],
@@ -630,10 +669,10 @@ function useAcertoEstoqueController() {
 	const handleDeleteAcerto = async (id) => {
 		if (!window.confirm("Deseja realmente apagar este acerto?")) return;
 
-		const ok = await excluirAcerto(id);
-		if (!ok) return;
+		const nextStore = await excluirAcerto(id);
+		if (!nextStore) return;
 
-		const nextAcerto = store.acertos.find((item) => item.id !== id);
+		const nextAcerto = nextStore.acertos?.find((item) => item.id !== id);
 		setSelectedAcertoId(nextAcerto?.id || "");
 		setCopiedMessage("");
 		setCopiedNotice("");
@@ -1767,7 +1806,7 @@ function AcertoHistoricoTab(props) {
 													</p>
 													<p className="mt-1 text-xs text-gray-500">
 														Feito por:{" "}
-														{item.createdByName || item.createdBy || "-"}
+														{getAcertoAuthor(item)}
 													</p>
 												</div>
 												<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-600">
@@ -1862,7 +1901,7 @@ function AcertoHistoricoTab(props) {
 											Registrado em
 										</p>
 										<p className="mt-2 font-bold text-gray-900">
-											{formatDateTime(selectedAcerto.createdAt)}
+											{formatDateTime(getAcertoCreatedAt(selectedAcerto))}
 										</p>
 									</div>
 									<div className="rounded-2xl bg-gray-50 p-4">
@@ -1870,9 +1909,7 @@ function AcertoHistoricoTab(props) {
 											Feito por
 										</p>
 										<p className="mt-2 font-bold text-gray-900">
-											{selectedAcerto.createdByName ||
-												selectedAcerto.createdBy ||
-												"-"}
+											{getAcertoAuthor(selectedAcerto)}
 										</p>
 									</div>
 									<div className="rounded-2xl bg-gray-50 p-4">
