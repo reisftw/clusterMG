@@ -507,7 +507,7 @@ async function listQueue(limit = 20) {
 						0,
 				).getTime() || 0;
 
-			return leftPriority === 0 ? rightDate - leftDate : leftDate - rightDate;
+			return rightDate - leftDate;
 		})
 		.slice(0, Math.max(1, Number(limit || 20)));
 }
