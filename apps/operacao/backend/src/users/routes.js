@@ -47,6 +47,15 @@ function randomToken() {
 	return crypto.randomBytes(32).toString("base64url");
 }
 
+function generateTemporaryPassword() {
+	const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+	let password = "";
+	for (let index = 0; index < 14; index += 1) {
+		password += chars[crypto.randomInt(chars.length)];
+	}
+	return password;
+}
+
 function tokenHash(token) {
 	return crypto.createHash("sha256").update(token).digest("hex");
 }
@@ -216,7 +225,7 @@ router.get("/", requireRotPermission("rot.users.manage"), noStore, async (req, r
 	}
 });
 
-router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name", "username", "email", "role", "regionalId", "cityId", "phone", "operationScopes", "extraRegionalIds"], { allowEmpty: false }), async (req, res, next) => {
+router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name", "username", "email", "role", "regionalId", "cityId", "phone", "operationScopes", "extraRegionalIds", "generatePassword"], { allowEmpty: false }), async (req, res, next) => {
 	let client;
 	try {
 		const name = String(req.body?.name || "").trim();
@@ -228,12 +237,13 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name",
 		const cityId = req.body?.cityId || null;
 		const phone = req.body?.phone || null;
 		const operationScopes = normalizeOperationScopes(req.body?.operationScopes);
+		const generatePassword = req.body?.generatePassword === true;
 
 		if (!name || !username || !roleId) {
 			res.status(400).json({ ok: false, error: "Informe nome, usuário e cargo." });
 			return;
 		}
-		if (!email) {
+		if (!email && !generatePassword) {
 			res.status(400).json({ ok: false, error: "Informe um e-mail para enviar o link seguro de primeiro acesso." });
 			return;
 		}
@@ -270,7 +280,8 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name",
 			return;
 		}
 
-		const passwordHash = await argon2.hash(randomToken());
+		const temporaryPassword = generatePassword ? generateTemporaryPassword() : null;
+		const passwordHash = await argon2.hash(temporaryPassword || randomToken());
 		const id = randomId("rotuser");
 
 		client = await db.connect();
@@ -283,7 +294,7 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name",
 		);
 		await replaceUserOperationScopes(client, id, operationScopes, req.rotUser.id);
 		await replaceUserExtraRegionais(client, id, req.body?.extraRegionalIds, req.rotUser.id);
-		const firstAccessUrl = await createFirstAccessLink(client, id);
+		const firstAccessUrl = email && !temporaryPassword ? await createFirstAccessLink(client, id) : null;
 		await client.query("commit");
 
 		const { rows: withRole } = await db.query(
@@ -293,7 +304,7 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name",
 		await auditLog(req, { action: "create", entity: "rot_users", entityId: id, after: publicAdminUser(withRole[0]) });
 
 		let welcomeEmailSent = false;
-		if (email) {
+		if (email && firstAccessUrl) {
 			await sendWelcomeFirstAccessEmail({
 				to: email,
 				name,
@@ -313,6 +324,8 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name",
 			ok: true,
 			user: publicAdminUser(withRole[0]),
 			welcomeEmailSent,
+			temporaryPassword,
+			mustChangePassword: Boolean(temporaryPassword),
 		});
 		void rows;
 	} catch (error) {
@@ -331,15 +344,16 @@ router.post("/", requireRotPermission("rot.users.manage"), validateBody(["name",
 	}
 });
 
-// Gera um novo link seguro de primeiro acesso/redefinição. Não retorna
-// senha em texto puro; o token é aleatório, armazenado somente como hash
-// e consumido pelo fluxo /auth/reset-password.
-router.post("/:id/reset-password", requireRotPermission("rot.users.manage"), validateBody([]), async (req, res, next) => {
+// Por padrão gera um novo link seguro de primeiro acesso/redefinição.
+// Quando solicitado pelo admin, gera uma senha temporária visível apenas
+// nesta resposta e armazena somente o hash.
+router.post("/:id/reset-password", requireRotPermission("rot.users.manage"), validateBody(["generatePassword"]), async (req, res, next) => {
 	let client;
 	try {
 		const beforeRow = await loadUserWithRoleLevel(db, req.params.id);
 		assertUserManageable(req, beforeRow);
-		if (!beforeRow.email) {
+		const generatePassword = req.body?.generatePassword === true;
+		if (!beforeRow.email && !generatePassword) {
 			res.status(400).json({ ok: false, error: "Este usuário não possui e-mail cadastrado para receber o link seguro." });
 			return;
 		}
@@ -351,6 +365,28 @@ router.post("/:id/reset-password", requireRotPermission("rot.users.manage"), val
 			  where user_id = $1 and consumed_at is null and expires_at > now()`,
 			[req.params.id],
 		);
+		if (generatePassword) {
+			const temporaryPassword = generateTemporaryPassword();
+			const passwordHash = await argon2.hash(temporaryPassword);
+			await client.query(
+				`update rot_users
+				    set password_hash = $2,
+				        must_change_password = true,
+				        updated_at = now()
+				  where id = $1`,
+				[req.params.id, passwordHash],
+			);
+			await client.query("commit");
+			await auditLog(req, {
+				action: "temporary_password",
+				entity: "rot_users",
+				entityId: req.params.id,
+				before: { action: "temporary_password" },
+				after: { mustChangePassword: true },
+			});
+			res.json({ ok: true, temporaryPassword, mustChangePassword: true, welcomeEmailSent: false });
+			return;
+		}
 		const firstAccessUrl = await createFirstAccessLink(client, req.params.id);
 		await client.query("commit");
 		await auditLog(req, { action: "first_access_link", entity: "rot_users", entityId: req.params.id, before: { action: "first_access_link" } });

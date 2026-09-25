@@ -152,10 +152,10 @@ export async function updateRotUser(id, payload) {
 	return data.user;
 }
 
-export async function resetRotUserPassword(id) {
+export async function resetRotUserPassword(id, payload = {}) {
 	return requestRotApi(`/admin/users/${encodeURIComponent(id)}/reset-password`, {
 		method: "POST",
-		body: JSON.stringify({}),
+		body: JSON.stringify(payload),
 	});
 }
 

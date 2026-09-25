@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
 	Check,
+	Copy,
 	KeyRound,
 	Pencil,
 	Plus,
@@ -465,12 +466,13 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 	const [result, setResult] = useState(null);
 	const [gerandoSenha, setGerandoSenha] = useState(false);
 	const [senhaGerada, setSenhaGerada] = useState(null);
+	const [gerarSenhaInicial, setGerarSenhaInicial] = useState(!isEdit);
 
 	const handleGerarSenha = async () => {
 		setGerandoSenha(true);
 		setError("");
 		try {
-			const data = await resetRotUserPassword(user.id);
+			const data = await resetRotUserPassword(user.id, { generatePassword: true });
 			setSenhaGerada(data);
 		} catch (err) {
 			setError(err?.message || "Não foi possível gerar a nova senha.");
@@ -506,7 +508,7 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 			setError("Selecione pelo menos um tipo operacional: ROT, Field ou Delivery.");
 			return;
 		}
-		if (!form.email.trim()) {
+		if (!form.email.trim() && !gerarSenhaInicial) {
 			setError("Informe um e-mail. O acesso é enviado por link seguro e não por senha exibida na tela.");
 			return;
 		}
@@ -528,11 +530,12 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 				const data = await createRotUser({
 					name: form.name,
 					username: form.username,
-					email: form.email,
+					email: form.email || null,
 					role: form.role,
 					regionalId: form.regionalId || null,
 					extraRegionalIds: form.extraRegionalIds,
 					operationScopes: normalizeOperationScopes(form.operationScopes),
+					generatePassword: gerarSenhaInicial,
 				});
 				setResult(data);
 			}
@@ -556,10 +559,15 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 					Usuário <strong>{result.user.name}</strong> (@{result.user.username}) criado.
 				</p>
 				<p className="mt-2 text-xs font-semibold text-slate-500">
-					{result.welcomeEmailSent
+					{result.temporaryPassword
+						? "Entregue a senha temporária abaixo ao usuário. No primeiro acesso, ele deverá trocar a senha."
+						: result.welcomeEmailSent
 						? "Enviamos um link seguro de primeiro acesso por e-mail. O link é de uso único e expira automaticamente."
 						: "O usuário foi criado, mas o e-mail de primeiro acesso não foi enviado. Verifique a configuração SMTP e gere um novo link em editar usuário."}
 				</p>
+				{result.temporaryPassword ? (
+					<TemporaryPasswordBox password={result.temporaryPassword} className="mt-4" />
+				) : null}
 				<button type="button" onClick={() => onSaved()} className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700">
 					Fechar
 				</button>
@@ -674,15 +682,29 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 
 				{!isEdit ? (
 					<div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 sm:col-span-2">
-						<div className="flex items-center gap-3">
+						<div className="flex items-start gap-3">
 							<span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
 								<KeyRound size={18} />
 							</span>
-							<div>
+							<div className="min-w-0 flex-1">
 								<p className="text-sm font-black text-slate-900">Primeiro acesso seguro</p>
 								<p className="text-xs font-semibold text-slate-500">
-									O sistema enviará um link de uso único para o e-mail cadastrado. Senhas temporárias não são mais exibidas na tela.
+									Gere uma senha temporária para entregar ao usuário e evitar problema com link expirado.
 								</p>
+								<label className="mt-3 flex cursor-pointer items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-black text-blue-700">
+									<input
+										type="checkbox"
+										checked={gerarSenhaInicial}
+										onChange={(event) => setGerarSenhaInicial(event.target.checked)}
+										className="h-4 w-4 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
+									/>
+									Gerar senha temporária e mostrar após criar
+								</label>
+								{!gerarSenhaInicial ? (
+									<p className="mt-2 text-xs font-semibold text-slate-500">
+										Se desmarcar, o sistema volta ao fluxo de link por e-mail e o e-mail passa a ser obrigatório.
+									</p>
+								) : null}
 							</div>
 						</div>
 					</div>
@@ -711,14 +733,7 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 							</button>
 						</div>
 						{senhaGerada ? (
-							<p className="mt-3 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm font-bold text-amber-800">
-								Novo link seguro gerado. {senhaGerada.welcomeEmailSent ? "O e-mail foi enviado ao usuário." : "O e-mail não foi enviado; verifique o SMTP."}
-							</p>
-						) : null}
-						{senhaGerada ? (
-							<p className="mt-2 text-xs font-semibold text-amber-800">
-								O link é de uso único e expira automaticamente. Nenhuma senha foi exposta na resposta da API.
-							</p>
+							<TemporaryPasswordBox password={senhaGerada.temporaryPassword} className="mt-3" />
 						) : null}
 					</div>
 				) : null}
@@ -733,5 +748,35 @@ function UsuarioModal({ mode, user, roles, regionais, onClose, onSaved }) {
 				</div>
 			</form>
 		</ModalShell>
+	);
+}
+
+function TemporaryPasswordBox({ password, className = "" }) {
+	if (!password) return null;
+	const copyPassword = async () => {
+		await navigator.clipboard?.writeText(password);
+	};
+	return (
+		<div className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-4 ${className}`}>
+			<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<p className="text-xs font-black uppercase tracking-wide text-emerald-700">Senha temporária gerada</p>
+					<p className="mt-1 break-all rounded-xl border border-emerald-200 bg-white px-3 py-2 font-mono text-lg font-black text-slate-950">
+						{password}
+					</p>
+				</div>
+				<button
+					type="button"
+					onClick={copyPassword}
+					className="rot-btn-tactile inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-xs font-black text-white shadow-sm hover:bg-emerald-700"
+				>
+					<Copy size={14} />
+					Copiar
+				</button>
+			</div>
+			<p className="mt-2 text-xs font-semibold text-emerald-800">
+				Mostrada somente agora. O usuário deverá trocar a senha no próximo acesso.
+			</p>
+		</div>
 	);
 }
