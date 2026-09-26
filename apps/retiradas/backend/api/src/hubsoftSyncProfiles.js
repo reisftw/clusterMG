@@ -14,6 +14,7 @@ const SCHEDULER_USER = {
 	nome: "Rotina automática HubSoft",
 	role: "admin",
 };
+let schedulerTickRunning = false;
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -1254,8 +1255,10 @@ async function runProfile(profile, options = {}, user = {}) {
 	}
 	const run = await createRun(profile, user);
 	const started = Date.now();
-	await acquireLock(profile, run.id, user);
+	let lockAcquired = false;
 	try {
+		await acquireLock(profile, run.id, user);
+		lockAcquired = true;
 		if (options.discoverTechnicians !== false) {
 			await discoverWithdrawalTechnicians(user).catch(() => null);
 		}
@@ -1324,7 +1327,7 @@ async function runProfile(profile, options = {}, user = {}) {
 		});
 		throw error;
 	} finally {
-		await releaseLock(profile, run.id).catch(() => {});
+		if (lockAcquired) await releaseLock(profile, run.id).catch(() => {});
 	}
 }
 
@@ -1378,6 +1381,9 @@ async function runProfileSafely(profile, options = {}) {
 }
 
 async function runSchedulerTick() {
+	if (schedulerTickRunning) return { ok: true, skipped: "already_running" };
+	schedulerTickRunning = true;
+	try {
 	const rawConfig = await readConfig();
 	const config = normalizeAutomationConfig(rawConfig);
 	if (!config.autoSyncEnabled) return { ok: true, skipped: "disabled" };
@@ -1440,6 +1446,9 @@ async function runSchedulerTick() {
 	}
 
 	return { ok: true, results };
+	} finally {
+		schedulerTickRunning = false;
+	}
 }
 
 function startScheduler(app) {
