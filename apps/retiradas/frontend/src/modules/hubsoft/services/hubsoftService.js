@@ -113,6 +113,13 @@ export async function executarProfileHubsoft(profile, payload = {}) {
 	);
 }
 
+export async function executarAuditoriaMetasHubsoft(payload = {}) {
+	return requestVpsApi("/admin/hubsoft/profiles/meta-audit/run", {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
 export async function buscarRegistrosHubsoft(params = {}) {
 	const searchParams = new URLSearchParams();
 	Object.entries(params).forEach(([key, value]) => {

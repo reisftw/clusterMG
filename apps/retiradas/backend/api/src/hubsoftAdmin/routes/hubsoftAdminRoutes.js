@@ -83,6 +83,13 @@ function createHubsoftAdminRouter({
 		controller.listProfileRuns,
 	);
 	router.post(
+		"/profiles/meta-audit/run",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAdmin,
+		controller.runMetaAudit,
+	);
+	router.post(
 		"/profiles/:profile/run",
 		requireAuthenticated,
 		requireCsrfToken,

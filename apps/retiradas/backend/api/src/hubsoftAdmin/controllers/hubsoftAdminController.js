@@ -90,10 +90,33 @@ function createHubsoftAdminController({ hubsoftIntegration, hubsoftSyncProfiles 
 
 	async function runProfile(req, res, next) {
 		try {
+			if (req.body?.async === true) {
+				res.status(202).json(
+					await hubsoftSyncProfiles.startProfileRun(
+						req.params.profile,
+						req.body || {},
+						req.user || {},
+					),
+				);
+				return;
+			}
 			res.json(
 				await hubsoftSyncProfiles.runProfile(
 					req.params.profile,
 					req.body || {},
+					req.user || {},
+				),
+			);
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function runMetaAudit(req, res, next) {
+		try {
+			res.status(202).json(
+				await hubsoftSyncProfiles.startMetaAudit(
+					req.body?.dates || [],
 					req.user || {},
 				),
 			);
@@ -166,6 +189,7 @@ function createHubsoftAdminController({ hubsoftIntegration, hubsoftSyncProfiles 
 		listWithdrawalTechnicians,
 		readConfig,
 		runProfile,
+		runMetaAudit,
 		saveConfig,
 		saveWithdrawalTechnician,
 		searchOrdensServico,

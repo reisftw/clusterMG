@@ -22,6 +22,7 @@ const PROFILE = Object.freeze({
 	LOJA: "LOJA",
 	META_D0: "META_D0",
 	META_D_MINUS_ONE: "META_D_MINUS_ONE",
+	META_AUDIT: "META_AUDIT",
 });
 
 const RUN_STATUS = Object.freeze({
@@ -146,10 +147,19 @@ function addDays(dateText, days) {
 	return date.toISOString().slice(0, 10);
 }
 
-function toHubsoftDate(dateText) {
+function toHubsoftDate(dateText, endOfDay = false) {
 	const date = parseDateOnly(dateText);
 	if (!date) return "";
+	if (endOfDay) {
+		date.setUTCHours(23, 59, 59, 0);
+	}
 	return date.toISOString();
+}
+
+function toHubsoftDateOnly(dateText) {
+	const date = parseDateOnly(dateText);
+	if (!date) return "";
+	return date.toISOString().slice(0, 10);
 }
 
 function currentMapPeriod(referenceDate = todaySaoPaulo()) {
@@ -588,9 +598,12 @@ async function collectProfile(profile, options = {}) {
 	if (profile === PROFILE.LOJA) {
 		const date = options.date || addDays(todaySaoPaulo(), -1);
 		const basePayload = {
-			data_inicio: toHubsoftDate(date),
-			data_fim: toHubsoftDate(date),
+			data_inicio: toHubsoftDateOnly(date),
+			data_fim: toHubsoftDateOnly(date),
 			tipo_data: "data_cadastro",
+			order_by: "data_cadastro",
+			order_by_key: "ASC",
+			tipo_endereco: { valor: "instalacao" },
 			tipo_atendimento: [
 				{
 					id_tipo_atendimento: LOJA_ATTENDANCE_TYPE_ID,
@@ -605,32 +618,21 @@ async function collectProfile(profile, options = {}) {
 			session,
 			[
 				{
-					label: "relatorio/atendimento objeto",
+					label: "relatorio/atendimento concluido",
 					path: "/api/v1/relatorio/atendimento",
 					payload: basePayload,
 					pageMode: "body",
 					percent: 20,
 				},
 				{
-					label: "relatorio/atendimento valor",
+					label: "relatorio/atendimento sem status",
 					path: "/api/v1/relatorio/atendimento",
 					payload: {
 						...basePayload,
-						status_fechamento: ["concluido"],
+						status_fechamento: undefined,
 					},
 					pageMode: "body",
-					percent: 28,
-				},
-				{
-					label: "relatorio/atendimento plural",
-					path: "/api/v1/relatorio/atendimento",
-					payload: {
-						...basePayload,
-						tipo_atendimentos: basePayload.tipo_atendimento,
-						status_fechamento: ["concluido"],
-					},
-					pageMode: "body",
-					percent: 36,
+					percent: 32,
 				},
 			],
 			options.onProgress,
@@ -1332,14 +1334,15 @@ async function maybeApplyOperationalProfile(profile, rows, records, options, use
 	return operationalImports.persistMatchImport(payload, user, {});
 }
 
-async function runProfile(profile, options = {}, user = {}) {
-	if (!Object.values(PROFILE).includes(profile)) {
-		const error = new Error(`Profile HubSoft invalido: ${profile}`);
-		error.statusCode = 400;
-		throw error;
-	}
-	const run = await createRun(profile, user);
-	const started = Date.now();
+function assertValidProfile(profile) {
+	if (Object.values(PROFILE).filter((item) => item !== PROFILE.META_AUDIT).includes(profile)) return;
+	const error = new Error(`Profile HubSoft invalido: ${profile}`);
+	error.statusCode = 400;
+	throw error;
+}
+
+async function executeProfileRun(run, profile, options = {}, user = {}) {
+	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	let lockAcquired = false;
 	try {
 		await acquireLock(profile, run.id, user);
@@ -1450,6 +1453,128 @@ async function runProfile(profile, options = {}, user = {}) {
 	} finally {
 		if (lockAcquired) await releaseLock(profile, run.id).catch(() => {});
 	}
+}
+
+async function runProfile(profile, options = {}, user = {}) {
+	assertValidProfile(profile);
+	const run = await createRun(profile, user);
+	return executeProfileRun(run, profile, options, user);
+}
+
+async function startProfileRun(profile, options = {}, user = {}) {
+	assertValidProfile(profile);
+	const run = await createRun(profile, user);
+	setImmediate(() => {
+		executeProfileRun(run, profile, options, user).catch((error) => {
+			console.error(
+				`[hubsoftSyncProfiles] Falha na execucao async ${profile}:`,
+				error?.message || error,
+			);
+		});
+	});
+	return getRun(run.id);
+}
+
+function normalizeAuditDates(dates = []) {
+	return [
+		...new Set(
+			(Array.isArray(dates) ? dates : [])
+				.map((item) => cleanText(item).slice(0, 10))
+				.filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item)),
+		),
+	].sort();
+}
+
+async function executeMetaAuditRun(run, dates = [], user = {}) {
+	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
+	const validDates = normalizeAuditDates(dates);
+	const results = [];
+	try {
+		if (!validDates.length) {
+			const error = new Error("Informe ao menos uma data para auditar metas.");
+			error.code = "EMPTY_AUDIT_DATES";
+			throw error;
+		}
+		for (let index = 0; index < validDates.length; index += 1) {
+			const date = validDates[index];
+			await updateRunProgress(run.id, {
+				stage: `Auditando metas ${date}`,
+				percent: Math.max(1, Math.round((index / validDates.length) * 100)),
+			});
+			const metaRun = await runProfile(
+				PROFILE.META_D0,
+				{ date, discoverTechnicians: false },
+				user,
+			);
+			await updateRunProgress(run.id, {
+				stage: `Auditando entregas em loja ${date}`,
+				percent: Math.max(
+					1,
+					Math.round(((index + 0.5) / validDates.length) * 100),
+				),
+			});
+			const storeRun = await runProfile(
+				PROFILE.LOJA,
+				{ date, discoverTechnicians: false },
+				user,
+			);
+			results.push({
+				date,
+				metaRunId: metaRun?.id,
+				metaStatus: metaRun?.status,
+				metaTotal: metaRun?.unique_rows ?? metaRun?.received_rows ?? 0,
+				lojaRunId: storeRun?.id,
+				lojaStatus: storeRun?.status,
+				lojaTotal: storeRun?.unique_rows ?? storeRun?.received_rows ?? 0,
+			});
+		}
+		const finishedAt = new Date().toISOString();
+		await updateRun(run.id, {
+			status: RUN_STATUS.COMPLETE,
+			finished_at: finishedAt,
+			duration_ms: Date.now() - started,
+			expected_total: validDates.length,
+			received_rows: results.length,
+			unique_rows: results.length,
+			result_summary: {
+				stage: "Auditoria de metas concluida",
+				percent: 100,
+				heartbeatAt: finishedAt,
+				dates: validDates,
+				results,
+			},
+		});
+		return getRun(run.id);
+	} catch (error) {
+		await updateRun(run.id, {
+			status: RUN_STATUS.FAILED,
+			finished_at: new Date().toISOString(),
+			duration_ms: Date.now() - started,
+			error_code: error.code || RUN_STATUS.FAILED,
+			error_message: sanitizeErrorMessage(error),
+			result_summary: {
+				stage: "Auditoria de metas falhou",
+				percent: 0,
+				heartbeatAt: new Date().toISOString(),
+				dates: validDates,
+				results,
+			},
+		});
+		throw error;
+	}
+}
+
+async function startMetaAudit(dates = [], user = {}) {
+	const run = await createRun(PROFILE.META_AUDIT, user);
+	setImmediate(() => {
+		executeMetaAuditRun(run, dates, user).catch((error) => {
+			console.error(
+				"[hubsoftSyncProfiles] Falha na auditoria async de metas:",
+				error?.message || error,
+			);
+		});
+	});
+	return getRun(run.id);
 }
 
 function localDateParts(date = new Date()) {
@@ -1670,5 +1795,7 @@ module.exports = {
 	runSchedulerTick,
 	runProfile,
 	startScheduler,
+	startMetaAudit,
+	startProfileRun,
 	upsertWithdrawalTechnician,
 };

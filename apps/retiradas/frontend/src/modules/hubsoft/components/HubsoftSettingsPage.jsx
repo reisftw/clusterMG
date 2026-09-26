@@ -22,6 +22,7 @@ import {
 	buscarProfilesHubsoft,
 	buscarTecnicosRetiradaHubsoft,
 	descobrirTecnicosRetiradaHubsoft,
+	executarAuditoriaMetasHubsoft,
 	executarProfileHubsoft,
 	consultarOrdensHubsoft,
 	DEFAULT_HUBSOFT_CONFIG,
@@ -278,17 +279,6 @@ function useHubsoftSettingsController() {
 		loadConfig();
 	}, []);
 
-	useEffect(() => {
-		const hasRunningProfile =
-			Boolean(profileRunning) ||
-			profiles.some((profile) => profile.locked || profile.status === "RUNNING");
-		if (!hasRunningProfile) return undefined;
-		const timer = window.setInterval(() => {
-			loadConfig();
-		}, 5000);
-		return () => window.clearInterval(timer);
-	}, [profileRunning, profiles]);
-
 	const updateConfig = (field, value) => {
 		setConfig((current) => ({ ...current, [field]: value }));
 	};
@@ -426,9 +416,12 @@ function useHubsoftSettingsController() {
 		setError("");
 		setFeedback("");
 		try {
-			const result = await executarProfileHubsoft(profile, payload);
+			const result = await executarProfileHubsoft(profile, {
+				...payload,
+				async: true,
+			});
 			setFeedback(
-				`${profile} finalizado com status ${result?.status || "desconhecido"}.`,
+				`${profile} iniciado no backend. Use Atualizar para acompanhar o status.`,
 			);
 			await loadConfig();
 			return result;
@@ -457,35 +450,21 @@ function useHubsoftSettingsController() {
 			current: 0,
 			total: dates.length,
 			date: "",
-			status: "Iniciando auditoria de metas",
+			status: "Enviando auditoria para o backend",
 		});
-		const results = [];
 		try {
-			for (let index = 0; index < dates.length; index += 1) {
-				const date = dates[index];
-				setMetaAuditProgress({
-					current: index + 1,
-					total: dates.length,
-					date,
-					status: "Consultando e aplicando dia",
-				});
-				const result = await executarProfileHubsoft("META_D0", {
-					date,
-					discoverTechnicians: false,
-				});
-				results.push(result);
-			}
+			const result = await executarAuditoriaMetasHubsoft({ dates });
 			setFeedback(
-				`Auditoria de metas concluída: ${results.length} dia(s) atualizado(s).`,
+				`Auditoria de metas iniciada no backend: ${dates.length} dia(s), incluindo entrega em loja diária.`,
 			);
 			setMetaAuditProgress({
-				current: dates.length,
+				current: 1,
 				total: dates.length,
 				date: dates[dates.length - 1] || "",
-				status: "Auditoria de metas concluída",
+				status: "Auditoria enviada. Use Atualizar para acompanhar.",
 			});
 			await loadConfig();
-			return results;
+			return result;
 		} catch (err) {
 			setError(err?.message || "Não foi possível concluir a auditoria de metas.");
 			return null;
