@@ -174,11 +174,13 @@ async function authenticateWithOAuth(config) {
 async function authenticateWithPlaywright(config) {
 	const username = cleanText(
 		process.env.HUBSOFT_WEB_USERNAME ||
+			config.webUsername ||
 			process.env.HUBSOFT_USERNAME ||
 			config.username,
 	);
 	const password = cleanText(
 		process.env.HUBSOFT_WEB_PASSWORD ||
+			config.webPassword ||
 			process.env.HUBSOFT_PASSWORD ||
 			config.password,
 	);
@@ -187,10 +189,17 @@ async function authenticateWithPlaywright(config) {
 	try {
 		({ chromium } = require("playwright"));
 	} catch {
-		return null;
+		const error = new Error(
+			"Login HubSoft configurado, mas o Playwright nao esta instalado no backend.",
+		);
+		error.code = "FAILED_AUTH";
+		error.statusCode = 400;
+		throw error;
 	}
 	const webBase = normalizeBaseUrl(
-		process.env.HUBSOFT_WEB_BASE_URL || "https://sempre.hubsoft.com.br",
+		process.env.HUBSOFT_WEB_BASE_URL ||
+			config.webBaseUrl ||
+			"https://sempre.hubsoft.com.br",
 	);
 	const browser = await chromium.launch({ headless: true });
 	try {
@@ -262,16 +271,25 @@ async function getSession() {
 			tokenType: cleanText(config.tokenType || "Bearer"),
 		};
 	}
-	return (
+	const session =
 		(await authenticateWithOAuth(config)) ||
-		(await authenticateWithPlaywright(config))
-	);
+		(await authenticateWithPlaywright(config));
+	if (!session?.token) {
+		const error = new Error(
+			"Configure as credenciais do HubSoft antes de sincronizar: informe token, OAuth ou login/senha de acesso.",
+		);
+		error.code = "FAILED_AUTH";
+		error.statusCode = 400;
+		throw error;
+	}
+	return session;
 }
 
 async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 	if (!session?.token) {
 		const error = new Error("Sessao HubSoft indisponivel.");
 		error.code = "FAILED_AUTH";
+		error.statusCode = 400;
 		throw error;
 	}
 	const response = await fetch(`${session.baseUrl}${path}`, {

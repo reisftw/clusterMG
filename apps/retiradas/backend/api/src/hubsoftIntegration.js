@@ -17,6 +17,9 @@ const DEFAULT_CONFIG = {
 	clientSecret: "",
 	username: "",
 	password: "",
+	webBaseUrl: "https://sempre.hubsoft.com.br",
+	webUsername: "",
+	webPassword: "",
 	grantType: "password",
 	accessToken: "",
 	tokenType: "Bearer",
@@ -60,6 +63,11 @@ function normalizeConfig(config = {}) {
 		clientSecret: cleanText(config.clientSecret),
 		username: cleanText(config.username),
 		password: cleanText(config.password),
+		webBaseUrl: normalizeBaseUrl(
+			config.webBaseUrl || "https://sempre.hubsoft.com.br",
+		),
+		webUsername: cleanText(config.webUsername),
+		webPassword: cleanText(config.webPassword),
 		grantType: cleanText(config.grantType || "password"),
 		accessToken: cleanText(config.accessToken),
 		tokenType: cleanText(config.tokenType || "Bearer"),
@@ -89,14 +97,17 @@ function normalizeConfig(config = {}) {
 
 function sanitizeConfig(config = {}) {
 	const normalized = normalizeConfig(config);
-	const { clientSecret, password, accessToken, ...safe } = normalized;
+	const { clientSecret, password, webPassword, accessToken, ...safe } =
+		normalized;
 	return {
 		...safe,
 		clientSecret: "",
 		password: "",
+		webPassword: "",
 		accessToken: "",
 		clientSecretConfigured: Boolean(clientSecret),
 		passwordConfigured: Boolean(password),
+		webPasswordConfigured: Boolean(webPassword),
 		accessTokenConfigured: Boolean(accessToken),
 	};
 }
@@ -122,6 +133,7 @@ async function saveConfig(payload = {}, user = {}) {
 		...payload,
 		clientSecret: mergeSecretField(payload, current, "clientSecret"),
 		password: mergeSecretField(payload, current, "password"),
+		webPassword: mergeSecretField(payload, current, "webPassword"),
 		atualizadoEm: new Date().toISOString(),
 		atualizadoPor: user?.nome || user?.email || user?.uid || "",
 	});

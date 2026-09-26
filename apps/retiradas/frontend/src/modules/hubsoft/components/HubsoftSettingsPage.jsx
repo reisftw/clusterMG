@@ -1,4 +1,5 @@
 import {
+	ChevronDown,
 	CheckCircle2,
 	DatabaseZap,
 	Loader2,
@@ -440,6 +441,49 @@ function useHubsoftSettingsController() {
 	};
 }
 
+function CollapsibleSection({
+	title,
+	description,
+	icon,
+	iconClassName = "bg-slate-100 text-slate-700",
+	defaultOpen = false,
+	children,
+}) {
+	const [open, setOpen] = useState(defaultOpen);
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<button
+				type="button"
+				onClick={() => setOpen((current) => !current)}
+				className="flex w-full items-start justify-between gap-4 text-left"
+			>
+				<div className="flex items-start gap-3">
+					<div
+						className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${iconClassName}`}
+					>
+						{icon}
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">{title}</h2>
+						{description ? (
+							<p className="text-sm font-semibold text-slate-500">
+								{description}
+							</p>
+						) : null}
+					</div>
+				</div>
+				<ChevronDown
+					size={22}
+					className={`mt-2 shrink-0 text-slate-500 transition-transform ${
+						open ? "rotate-180" : ""
+					}`}
+				/>
+			</button>
+			{open ? <div className="mt-5">{children}</div> : null}
+		</section>
+	);
+}
+
 // Extraido de HubsoftSettingsPage (achado javascript:S3776,
 // docs/SONARQUBE-MAP.md) — secao inteira de sincronizacao Mapa/Match
 // (botoes, config, job em andamento e historico de execucoes), mesma
@@ -454,7 +498,13 @@ function HubsoftSyncSection({
 	syncRuns,
 }) {
 	return (
-		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+		<CollapsibleSection
+			title="Sincronização Mapa e Match"
+			description="Fluxo legado de prévia/produção. Mantenha fechado se for usar a Central de Sincronização."
+			icon={<DatabaseZap size={21} />}
+			iconClassName="bg-orange-50 text-orange-700"
+			defaultOpen={false}
+		>
 			<div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 				<div className="flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-700">
@@ -688,7 +738,7 @@ function HubsoftSyncSection({
 					</table>
 				</div>
 			) : null}
-		</section>
+		</CollapsibleSection>
 	);
 }
 
@@ -708,7 +758,13 @@ function statusTone(status) {
 function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 	const byProfile = new Map((profiles || []).map((item) => [item.profile, item]));
 	return (
-		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+		<CollapsibleSection
+			title="Central de Sincronização HubSoft"
+			description="Execute cada profile separadamente em homologação e confira totais, classificação e falhas antes de promover qualquer rotina."
+			icon={<PlayCircle size={21} />}
+			iconClassName="bg-indigo-50 text-indigo-700"
+			defaultOpen
+		>
 			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 				<div className="flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
@@ -786,7 +842,7 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 					);
 				})}
 			</div>
-		</section>
+		</CollapsibleSection>
 	);
 }
 
@@ -796,7 +852,13 @@ function HubsoftWithdrawalTechniciansSection({
 	onDiscover,
 }) {
 	return (
-		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+		<CollapsibleSection
+			title="Técnicos de Retirada"
+			description="Cadastro usado pela classificação. A descoberta inicial busca nomes HubSoft contendo “TÉCNICO RETIRADA” e grava o ID como chave."
+			icon={<Users size={21} />}
+			iconClassName="bg-emerald-50 text-emerald-700"
+			defaultOpen={false}
+		>
 			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 				<div className="flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
@@ -879,7 +941,59 @@ function HubsoftWithdrawalTechniciansSection({
 					</tbody>
 				</table>
 			</div>
-		</section>
+		</CollapsibleSection>
+	);
+}
+
+function HubsoftWebCredentialsSection({ config, updateConfig }) {
+	return (
+		<CollapsibleSection
+			title="Login HubSoft para sincronização"
+			description="Use aqui o login normal do HubSoft. Essas credenciais ficam salvas no banco do Retiradas homolog e serão usadas para buscar os relatórios automaticamente."
+			icon={<ShieldCheck size={21} />}
+			iconClassName="bg-blue-50 text-blue-700"
+			defaultOpen
+		>
+			<div className="grid gap-4 lg:grid-cols-3">
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						URL do HubSoft
+					</span>
+					<input
+						value={config.webBaseUrl || ""}
+						onChange={(event) => updateConfig("webBaseUrl", event.target.value)}
+						placeholder="https://sempre.hubsoft.com.br"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Login HubSoft
+					</span>
+					<input
+						value={config.webUsername || ""}
+						onChange={(event) => updateConfig("webUsername", event.target.value)}
+						placeholder="usuario@empresa.com.br"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Senha HubSoft{" "}
+						{config.webPasswordConfigured ? "(já configurada)" : ""}
+					</span>
+					<input
+						type="password"
+						value={config.webPassword || ""}
+						onChange={(event) => updateConfig("webPassword", event.target.value)}
+						placeholder={
+							config.webPasswordConfigured ? "Deixe em branco para manter" : ""
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+			</div>
+		</CollapsibleSection>
 	);
 }
 
@@ -929,6 +1043,10 @@ export default function HubsoftSettingsPage() {
 			/>
 			<HubsoftFeedback feedback={feedback} error={error} />
 			<HubsoftStatusCards config={config} />
+			<HubsoftWebCredentialsSection
+				config={config}
+				updateConfig={updateConfig}
+			/>
 			<HubsoftProfilesSection
 				profiles={profiles}
 				profileRunning={profileRunning}
@@ -940,7 +1058,13 @@ export default function HubsoftSettingsPage() {
 				onDiscover={handleDiscoverTechnicians}
 			/>
 
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<CollapsibleSection
+				title="Credenciais OAuth"
+				description="Opcional. Use somente se o HubSoft liberar client_id/client_secret para autenticação oficial por API."
+				icon={<ShieldCheck size={21} />}
+				iconClassName="bg-blue-50 text-blue-700"
+				defaultOpen={false}
+			>
 				<div className="mb-5 flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
 						<ShieldCheck size={21} />
@@ -1082,9 +1206,15 @@ export default function HubsoftSettingsPage() {
 						{formatDateTime(testResult.tokenExpiresAt)}.
 					</div>
 				) : null}
-			</section>
+			</CollapsibleSection>
 
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<CollapsibleSection
+				title="Consulta teste de O.S."
+				description="Uso auxiliar para consultar uma O.S. específica antes de substituir planilhas."
+				icon={<Search size={21} />}
+				iconClassName="bg-slate-100 text-slate-700"
+				defaultOpen={false}
+			>
 				<div className="mb-5 flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
 						<Search size={21} />
@@ -1160,7 +1290,7 @@ export default function HubsoftSettingsPage() {
 						{safePreview(queryResult)}
 					</pre>
 				) : null}
-			</section>
+			</CollapsibleSection>
 
 			<HubsoftSyncSection
 				syncing={syncing}
