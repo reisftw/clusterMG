@@ -7,6 +7,13 @@ const CONFIG_PATH = "hubsoft_config/global";
 const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
 const LOCK_TTL_MS = 30 * 60 * 1000;
 const PAGE_SIZE = 100;
+const SCHEDULER_CHECK_INTERVAL_MS = 60 * 1000;
+const SCHEDULER_USER = {
+	uid: "system",
+	email: "system@retiradas.local",
+	nome: "Rotina automática HubSoft",
+	role: "admin",
+};
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -52,6 +59,56 @@ const META_MOTIVO_CONCLUIDA_ID = 135;
 
 function cleanText(value) {
 	return String(value || "").trim();
+}
+
+function asPositiveNumber(value, fallback, { min = 1, max = 24 * 60 } = {}) {
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric)) return fallback;
+	return Math.min(Math.max(Math.round(numeric), min), max);
+}
+
+function normalizeTime(value, fallback = "03:00") {
+	const match = cleanText(value || fallback).match(/^(\d{1,2}):(\d{2})$/);
+	if (!match) return fallback;
+	const hour = Math.min(Math.max(Number(match[1]), 0), 23);
+	const minute = Math.min(Math.max(Number(match[2]), 0), 59);
+	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function normalizeCheckpointHours(value) {
+	const items = Array.isArray(value)
+		? value
+		: cleanText(value || "11,14,16,18,23").split(/[,;\s]+/);
+	return [
+		...new Set(
+			items
+				.map((item) => Number(item))
+				.filter((item) => Number.isInteger(item) && item >= 0 && item <= 23),
+		),
+	].sort((a, b) => a - b);
+}
+
+function normalizeAutomationConfig(config = {}) {
+	return {
+		autoSyncEnabled: config.autoSyncEnabled !== false,
+		autoDailyIntervalMinutes: asPositiveNumber(
+			config.autoDailyIntervalMinutes,
+			30,
+			{ min: 5, max: 24 * 60 },
+		),
+		autoDailyCheckpointHours: normalizeCheckpointHours(
+			config.autoDailyCheckpointHours,
+		),
+		autoMetaTime: normalizeTime(config.autoMetaTime, "03:00"),
+		autoMapMatchIntervalMinutes: asPositiveNumber(
+			config.autoMapMatchIntervalMinutes,
+			60,
+			{ min: 15, max: 24 * 60 },
+		),
+		autoMapMatchEnabled: config.autoMapMatchEnabled !== false,
+		autoMetaEnabled: config.autoMetaEnabled !== false,
+		autoDailyEnabled: config.autoDailyEnabled !== false,
+	};
 }
 
 function normalizeText(value) {
@@ -114,6 +171,21 @@ function normalizeBaseUrl(value) {
 async function readConfig() {
 	const item = await documents.getDocument(CONFIG_PATH).catch(() => null);
 	return item?.data || {};
+}
+
+async function saveSchedulerState(patch = {}) {
+	const current = await readConfig();
+	await documents.upsertDocument({
+		path: CONFIG_PATH,
+		collectionPath: "hubsoft_config",
+		documentId: "global",
+		parentPath: null,
+		data: {
+			...current,
+			...patch,
+			autoSyncLastSchedulerAt: new Date().toISOString(),
+		},
+	});
 }
 
 function sanitizeErrorMessage(error) {
@@ -377,10 +449,7 @@ function baseReportPayload({ period, types }) {
 		data_inicio: toHubsoftDate(period.inicio),
 		data_fim: toHubsoftDate(period.fim),
 		tipo_data: "data_cadastro",
-		status_ordem_servico: [
-			{ descricao: "Aguardando", valor: "aguardando_agendamento" },
-			{ descricao: "Pendente", valor: "pendente" },
-		],
+		status_ordem_servico: ["aguardando_agendamento", "pendente"],
 		tipo_ordem_servicos: types,
 		pagina: 1,
 		itens_por_pagina: PAGE_SIZE,
@@ -548,9 +617,9 @@ async function collectProfile(profile, options = {}) {
 	}
 	const payload = baseReportPayload({ period, types });
 	const collected = await collectPaginated(session, {
-		path: "/api/v1/relatorio/ordem_servico",
+		path: `/api/v1/ordem_servico/consultar/paginado/${PAGE_SIZE}`,
 		payload,
-		pageMode: "body",
+		pageMode: "query",
 	});
 	return {
 		...collected,
@@ -663,20 +732,52 @@ function normalizePhone(value) {
 	return cleanText(value).replace(/\D/g, "");
 }
 
+function extractPhonesFromText(value) {
+	const text = cleanText(value);
+	if (!text) return [];
+	const phoneLines = text
+		.split(/\n+/)
+		.filter((line) => /telefone|whats|celular/i.test(line));
+	const source = phoneLines.length ? phoneLines.join(" ") : text;
+	return [...source.matchAll(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\s?\d{4}[-.\s]?\d{4}/g)]
+		.map((match) => normalizePhone(match[0]))
+		.filter((phone) => phone.length >= 10 && phone.length <= 13);
+}
+
+function extractInstallationAddress(row = {}) {
+	const addresses = row?.cliente_servico?.cliente_servico_endereco || [];
+	const selected =
+		row?.cliente_servico?.endereco_instalacao?.endereco_numero ||
+		addresses.find?.((item) => item?.tipo === "instalacao")?.endereco_numero ||
+		addresses[0]?.endereco_numero ||
+		{};
+	return {
+		endereco:
+			selected.endereco ||
+			row.endereco ||
+			row.endereco_instalacao ||
+			row.cliente_servico?.endereco_numero_completo ||
+			"",
+		numero: selected.numero || row.numero || "",
+		bairro: selected.bairro || row.bairro || "",
+		coordenadas:
+			row.coordenadas ||
+			[selected.latitude, selected.longitude].filter(Boolean).join(", "),
+	};
+}
+
 function adaptReportRow(row = {}) {
 	const cliente = row.cliente || row.cliente_servico?.cliente || {};
 	const servico = row.cliente_servico || row.servico || {};
-	const endereco =
-		row.endereco ||
-		row.endereco_instalacao ||
-		row.cliente_servico?.endereco_numero_completo ||
-		"";
+	const address = extractInstallationAddress(row);
 	const telefones = [
 		row.telefone_primario,
 		row.telefone_secundario,
 		row.telefone_terciario,
 		row.telefone,
 		...(Array.isArray(row.telefones) ? row.telefones : []),
+		...extractPhonesFromText(row.descricao_abertura),
+		...extractPhonesFromText(row.descricao_servico),
 	]
 		.map(normalizePhone)
 		.filter(Boolean);
@@ -691,9 +792,9 @@ function adaptReportRow(row = {}) {
 		nome_razaosocial: cleanText(
 			row.nome_razaosocial || cliente.nome_razaosocial || cliente.nome,
 		),
-		endereco: cleanText(row.endereco || endereco),
-		numero: cleanText(row.numero),
-		bairro: cleanText(row.bairro),
+		endereco: cleanText(address.endereco),
+		numero: cleanText(address.numero),
+		bairro: cleanText(address.bairro),
 		telefone_primario: telefones[0] || "",
 		telefone_secundario: telefones[1] || "",
 		telefone_terciario: telefones[2] || "",
@@ -706,7 +807,7 @@ function adaptReportRow(row = {}) {
 		),
 		mac_addr: cleanText(row.mac_addr || row["Mac Addr"]),
 		phy_addr: cleanText(row.phy_addr || row["Phy Addr"]),
-		coordenadas: cleanText(row.coordenadas),
+		coordenadas: cleanText(address.coordenadas),
 		tecnicos: extractTechnicians(row)
 			.map((item) => item.name)
 			.filter(Boolean)
@@ -1101,15 +1202,34 @@ function validateCollected(collected, uniqueRows) {
 function summarizeRecords(records) {
 	const byChannel = {};
 	const byReason = {};
+	const byCity = {};
+	const byType = {};
 	for (const record of records) {
 		const channel = record.production_channel || "N/A";
 		byChannel[channel] = (byChannel[channel] || 0) + 1;
+		const city = record.source_city || "Sem cidade";
+		byCity[city] = (byCity[city] || 0) + 1;
+		const type = record.source_type || "Sem tipo";
+		byType[type] = (byType[type] || 0) + 1;
 		if (record.classification_reason) {
 			byReason[record.classification_reason] =
 				(byReason[record.classification_reason] || 0) + 1;
 		}
 	}
-	return { byChannel, byReason };
+	const rankingFrom = (source) =>
+		Object.entries(source)
+			.map(([label, total]) => ({ label, total }))
+			.sort((left, right) => right.total - left.total)
+			.slice(0, 10);
+	return {
+		byChannel,
+		byReason,
+		ranking: {
+			cidades: rankingFrom(byCity),
+			tipos: rankingFrom(byType),
+			canais: rankingFrom(byChannel),
+		},
+	};
 }
 
 async function maybeApplyOperationalProfile(profile, rows, options, user) {
@@ -1208,6 +1328,135 @@ async function runProfile(profile, options = {}, user = {}) {
 	}
 }
 
+function localDateParts(date = new Date()) {
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	})
+		.formatToParts(date)
+		.reduce((acc, item) => {
+			acc[item.type] = item.value;
+			return acc;
+		}, {});
+	return {
+		date: `${parts.year}-${parts.month}-${parts.day}`,
+		hour: Number(parts.hour),
+		minute: Number(parts.minute),
+		time: `${parts.hour}:${parts.minute}`,
+	};
+}
+
+function minutesSince(value) {
+	const time = value ? new Date(value).getTime() : 0;
+	if (!Number.isFinite(time) || time <= 0) return Infinity;
+	return (Date.now() - time) / 60_000;
+}
+
+function isTimeDue(nowTime, targetTime) {
+	return nowTime >= normalizeTime(targetTime);
+}
+
+async function runProfileSafely(profile, options = {}) {
+	try {
+		return await runProfile(
+			profile,
+			{ ...options, discoverTechnicians: false },
+			SCHEDULER_USER,
+		);
+	} catch (error) {
+		console.error(
+			`[hubsoftSyncProfiles] Falha na rotina ${profile}:`,
+			error?.message || error,
+		);
+		return null;
+	}
+}
+
+async function runSchedulerTick() {
+	const rawConfig = await readConfig();
+	const config = normalizeAutomationConfig(rawConfig);
+	if (!config.autoSyncEnabled) return { ok: true, skipped: "disabled" };
+
+	const now = localDateParts();
+	const results = [];
+
+	if (
+		config.autoDailyEnabled &&
+		minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes
+	) {
+		results.push({
+			profile: PROFILE.META_D0,
+			result: await runProfileSafely(PROFILE.META_D0, { date: now.date }),
+		});
+		const patch = { autoDailyLastRunAt: new Date().toISOString() };
+		if (config.autoDailyCheckpointHours.includes(now.hour)) {
+			const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
+			if (rawConfig.autoDailyLastCheckpointKey !== checkpointKey) {
+				patch.autoDailyLastCheckpointKey = checkpointKey;
+				patch.autoDailyLastCheckpointAt = new Date().toISOString();
+			}
+		}
+		await saveSchedulerState(patch);
+	}
+
+	if (
+		config.autoMetaEnabled &&
+		isTimeDue(now.time, config.autoMetaTime) &&
+		rawConfig.autoMetaLastRunDate !== now.date
+	) {
+		results.push({
+			profile: PROFILE.META_D_MINUS_ONE,
+			result: await runProfileSafely(PROFILE.META_D_MINUS_ONE, {
+				date: addDays(now.date, -1),
+			}),
+		});
+		await saveSchedulerState({
+			autoMetaLastRunDate: now.date,
+			autoMetaLastRunAt: new Date().toISOString(),
+		});
+	}
+
+	if (
+		config.autoMapMatchEnabled &&
+		minutesSince(rawConfig.autoMapMatchLastRunAt) >=
+			config.autoMapMatchIntervalMinutes
+	) {
+		results.push({
+			profile: PROFILE.MAPA,
+			result: await runProfileSafely(PROFILE.MAPA),
+		});
+		results.push({
+			profile: PROFILE.MATCH,
+			result: await runProfileSafely(PROFILE.MATCH),
+		});
+		await saveSchedulerState({
+			autoMapMatchLastRunAt: new Date().toISOString(),
+		});
+	}
+
+	return { ok: true, results };
+}
+
+function startScheduler(app) {
+	if (app?.locals?.hubsoftSyncProfilesTimer) return app.locals.hubsoftSyncProfilesTimer;
+	const timer = setInterval(() => {
+		runSchedulerTick().catch((error) => {
+			console.error(
+				"[hubsoftSyncProfiles] Falha no scheduler:",
+				error?.message || error,
+			);
+		});
+	}, Number(process.env.HUBSOFT_SYNC_SCHEDULER_INTERVAL_MS || SCHEDULER_CHECK_INTERVAL_MS));
+	timer.unref?.();
+	if (app?.locals) app.locals.hubsoftSyncProfilesTimer = timer;
+	return timer;
+}
+
 async function getRun(id) {
 	const result = await db.query(`select * from hubsoft_sync_runs where id = $1`, [
 		id,
@@ -1288,6 +1537,8 @@ module.exports = {
 	listRecords,
 	listRuns,
 	listWithdrawalTechnicians,
+	runSchedulerTick,
 	runProfile,
+	startScheduler,
 	upsertWithdrawalTechnician,
 };

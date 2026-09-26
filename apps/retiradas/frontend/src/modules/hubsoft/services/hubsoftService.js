@@ -19,6 +19,18 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	syncFontes: ["sempre", "onnet"],
 	syncLimit: 50,
 	syncMatchEnabled: true,
+	autoSyncEnabled: true,
+	autoDailyEnabled: true,
+	autoDailyIntervalMinutes: 30,
+	autoDailyCheckpointHours: [11, 14, 16, 18, 23],
+	autoMetaEnabled: true,
+	autoMetaTime: "03:00",
+	autoMapMatchEnabled: true,
+	autoMapMatchIntervalMinutes: 60,
+	autoDailyLastRunAt: "",
+	autoDailyLastCheckpointAt: "",
+	autoMetaLastRunAt: "",
+	autoMapMatchLastRunAt: "",
 };
 
 export async function buscarConfigHubsoft() {

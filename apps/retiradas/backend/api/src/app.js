@@ -5321,6 +5321,10 @@ function createApp() {
 		app.locals.movimentacoesScanTimer = timer;
 	}
 
+	if (!app.locals.hubsoftSyncProfilesTimer) {
+		hubsoftSyncProfiles.startScheduler(app);
+	}
+
 	app.use((error, req, res, next) => {
 		if (res.headersSent) {
 			next(error);

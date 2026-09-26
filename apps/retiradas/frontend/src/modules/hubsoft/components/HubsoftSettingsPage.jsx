@@ -1,6 +1,7 @@
 import {
 	ChevronDown,
 	CheckCircle2,
+	Clock3,
 	DatabaseZap,
 	Loader2,
 	PlugZap,
@@ -786,6 +787,7 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 				{HUBSOFT_PROFILES.map((profile) => {
 					const state = byProfile.get(profile.id) || {};
 					const lastRun = state.lastRun || {};
+					const ranking = lastRun.result_summary?.ranking || {};
 					const running = profileRunning === profile.id || state.locked;
 					return (
 						<div
@@ -825,6 +827,24 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 									<dd>{lastRun.unclassified ?? "-"}</dd>
 								</div>
 							</dl>
+							{ranking.cidades?.length ? (
+								<div className="mt-4 rounded-xl bg-slate-50 p-3">
+									<p className="text-[10px] font-black uppercase text-slate-500">
+										Ranking cidades
+									</p>
+									<div className="mt-2 space-y-1">
+										{ranking.cidades.slice(0, 3).map((item) => (
+											<div
+												key={item.label}
+												className="flex justify-between gap-3 text-xs font-bold text-slate-700"
+											>
+												<span className="truncate">{item.label}</span>
+												<span>{item.total}</span>
+											</div>
+										))}
+									</div>
+								</div>
+							) : null}
 							<button
 								type="button"
 								disabled={Boolean(profileRunning) || running}
@@ -841,6 +861,129 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 						</div>
 					);
 				})}
+			</div>
+		</CollapsibleSection>
+	);
+}
+
+function HubsoftAutomationSection({ config, updateConfig }) {
+	const checkpointText = Array.isArray(config.autoDailyCheckpointHours)
+		? config.autoDailyCheckpointHours.join(", ")
+		: config.autoDailyCheckpointHours || "";
+	return (
+		<CollapsibleSection
+			title="Automação e tempos"
+			description="Configure a frequência das leituras automáticas do HubSoft em homologação."
+			icon={<Clock3 size={21} />}
+			iconClassName="bg-violet-50 text-violet-700"
+			defaultOpen
+		>
+			<div className="grid gap-4 lg:grid-cols-3">
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoSyncEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoSyncEnabled", event.target.checked)
+						}
+					/>
+					Rotina automática ativa
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoDailyEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoDailyEnabled", event.target.checked)
+						}
+					/>
+					Atualizar diário
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoMapMatchEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoMapMatchEnabled", event.target.checked)
+						}
+					/>
+					Atualizar Mapa e Match
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Diário a cada quantos minutos
+					</span>
+					<input
+						type="number"
+						min="5"
+						value={config.autoDailyIntervalMinutes || 30}
+						onChange={(event) =>
+							updateConfig("autoDailyIntervalMinutes", event.target.value)
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Checkpoints do diário
+					</span>
+					<input
+						value={checkpointText}
+						onChange={(event) =>
+							updateConfig(
+								"autoDailyCheckpointHours",
+								event.target.value
+									.split(/[,;\s]+/)
+									.map((item) => Number(item))
+									.filter((item) => Number.isInteger(item)),
+							)
+						}
+						placeholder="11, 14, 16, 18, 23"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Metas D-1 às
+					</span>
+					<input
+						type="time"
+						value={config.autoMetaTime || "03:00"}
+						onChange={(event) => updateConfig("autoMetaTime", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoMetaEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoMetaEnabled", event.target.checked)
+						}
+					/>
+					Atualizar metas automaticamente
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Mapa/Match a cada quantos minutos
+					</span>
+					<input
+						type="number"
+						min="15"
+						value={config.autoMapMatchIntervalMinutes || 60}
+						onChange={(event) =>
+							updateConfig("autoMapMatchIntervalMinutes", event.target.value)
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold text-slate-600">
+					<p className="font-black uppercase text-slate-500">Últimas rotinas</p>
+					<p className="mt-2">Diário: {formatDateTime(config.autoDailyLastRunAt)}</p>
+					<p>Checkpoint: {formatDateTime(config.autoDailyLastCheckpointAt)}</p>
+					<p>Metas: {formatDateTime(config.autoMetaLastRunAt)}</p>
+					<p>Mapa/Match: {formatDateTime(config.autoMapMatchLastRunAt)}</p>
+				</div>
 			</div>
 		</CollapsibleSection>
 	);
@@ -1047,6 +1190,7 @@ export default function HubsoftSettingsPage() {
 				config={config}
 				updateConfig={updateConfig}
 			/>
+			<HubsoftAutomationSection config={config} updateConfig={updateConfig} />
 			<HubsoftProfilesSection
 				profiles={profiles}
 				profileRunning={profileRunning}

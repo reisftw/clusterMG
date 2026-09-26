@@ -1243,6 +1243,51 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 	};
 }
 
+async function reconcileMensageriaQueueWithOpenMap(finalMap = {}) {
+	const queue = await mensageriaRepository.listAllQueueMessages().catch(() => []);
+	const activeStatuses = new Set([
+		"novo",
+		"aprovado",
+		"aguardando_janela",
+		"falhou",
+		"duplicado",
+	]);
+	const openOs = new Set(
+		Object.entries(finalMap)
+			.flatMap(([id, order]) => [
+				id,
+				order?.num_os,
+				order?.os,
+				order?.numero_os,
+				order?.numero_ordem_servico,
+			])
+			.map((value) => String(value || "").trim())
+			.filter(Boolean),
+	);
+	let checked = 0;
+	let removed = 0;
+	for (const item of queue) {
+		if (!activeStatuses.has(String(item.status || "novo"))) continue;
+		checked += 1;
+		const os = String(item.os || item.num_os || item.numero_os || "").trim();
+		if (os && openOs.has(os)) continue;
+		removed += 1;
+		await mensageriaRepository.updateQueueMessage(item.id, {
+			...item,
+			status: "ignorado",
+			ultimoErro:
+				"Removido automaticamente: cliente/O.S. não consta mais no mapa de O.S abertas.",
+			ultimo_erro:
+				"Removido automaticamente: cliente/O.S. não consta mais no mapa de O.S abertas.",
+			atualizadoEm: new Date().toISOString(),
+			atualizado_em: new Date().toISOString(),
+			ajustadoFilaEm: new Date().toISOString(),
+		});
+	}
+	broadcastRealtime("mensageria", { action: "queue_reconciled", removed });
+	return { checked, removed, remaining: checked - removed, openOrders: openOs.size };
+}
+
 async function persistMapaImport(payload = {}, user = {}, context = {}) {
 	const fontes = getMapaFontesSelecionadas(payload, ["sempre"]);
 	const fonteLabel = getMapaFonteLabel(fontes);
@@ -1367,6 +1412,17 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		newMapEntries,
 		user,
 	);
+	const mensageriaReconciliation =
+		await reconcileMensageriaQueueWithOpenMap(finalMap).catch((error) => {
+			console.error(
+				"[operationalImports] Falha ao reconciliar fila da mensageria:",
+				error,
+			);
+			return {
+				ok: false,
+				error: error?.message || "Falha ao reconciliar fila da mensageria.",
+			};
+		});
 	await context.update?.({
 		stage: "Conferindo agendamentos no mapa",
 		percent: 88,
@@ -1403,6 +1459,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 			totalOnnet,
 			fontes,
 			mensageriaDiff,
+			mensageriaReconciliation,
 			agendamentosMapa,
 		},
 	});
@@ -1440,6 +1497,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		notify: meta.novasSalvas > 0,
 		notifyAcompanhamento: meta.novasSalvas > 0,
 		mensageriaDiff,
+		mensageriaReconciliation,
 		agendamentosMapa,
 		atualizadas: Object.keys(incoming).length,
 		removidas: deleted,
