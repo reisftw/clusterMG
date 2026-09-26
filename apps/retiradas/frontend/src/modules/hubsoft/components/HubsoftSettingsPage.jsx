@@ -66,6 +66,39 @@ function formatDateTime(value) {
 	});
 }
 
+function toInputDate(value = new Date()) {
+	const date = value instanceof Date ? value : new Date(value);
+	if (Number.isNaN(date.getTime())) return toInputDate(new Date());
+	return [
+		date.getFullYear(),
+		String(date.getMonth() + 1).padStart(2, "0"),
+		String(date.getDate()).padStart(2, "0"),
+	].join("-");
+}
+
+function buildMetaAuditDates({ mode, endDate }) {
+	const finalDate = endDate || toInputDate();
+	const end = new Date(`${finalDate}T12:00:00`);
+	if (Number.isNaN(end.getTime())) return [toInputDate()];
+	let start = new Date(end);
+	if (mode === "weekly") {
+		start.setDate(end.getDate() - 6);
+	} else if (mode === "monthly") {
+		start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+	} else if (mode === "yearly") {
+		start = new Date(end.getFullYear(), 0, 1, 12, 0, 0);
+	}
+	const dates = [];
+	for (
+		const cursor = new Date(start);
+		cursor.getTime() <= end.getTime();
+		cursor.setDate(cursor.getDate() + 1)
+	) {
+		dates.push(toInputDate(cursor));
+	}
+	return dates;
+}
+
 function safePreview(payload) {
 	if (!payload) return "";
 	try {
@@ -198,6 +231,12 @@ function useHubsoftSettingsController() {
 	const [syncRuns, setSyncRuns] = useState([]);
 	const [profiles, setProfiles] = useState([]);
 	const [profileRunning, setProfileRunning] = useState("");
+	const [metaAuditRunning, setMetaAuditRunning] = useState(false);
+	const [metaAuditProgress, setMetaAuditProgress] = useState(null);
+	const [metaAuditForm, setMetaAuditForm] = useState({
+		mode: "daily",
+		endDate: toInputDate(),
+	});
 	const [technicians, setTechnicians] = useState([]);
 	const [discoveringTechnicians, setDiscoveringTechnicians] = useState(false);
 	const [query, setQuery] = useState({
@@ -238,6 +277,17 @@ function useHubsoftSettingsController() {
 	useEffect(() => {
 		loadConfig();
 	}, []);
+
+	useEffect(() => {
+		const hasRunningProfile =
+			Boolean(profileRunning) ||
+			profiles.some((profile) => profile.locked || profile.status === "RUNNING");
+		if (!hasRunningProfile) return undefined;
+		const timer = window.setInterval(() => {
+			loadConfig();
+		}, 5000);
+		return () => window.clearInterval(timer);
+	}, [profileRunning, profiles]);
 
 	const updateConfig = (field, value) => {
 		setConfig((current) => ({ ...current, [field]: value }));
@@ -390,6 +440,60 @@ function useHubsoftSettingsController() {
 		}
 	};
 
+	const handleRunMetaAudit = async () => {
+		const dates = buildMetaAuditDates(metaAuditForm);
+		if (
+			dates.length > 31 &&
+			!window.confirm(
+				`A auditoria vai executar ${dates.length} dias de metas. Deseja continuar?`,
+			)
+		) {
+			return null;
+		}
+		setMetaAuditRunning(true);
+		setError("");
+		setFeedback("");
+		setMetaAuditProgress({
+			current: 0,
+			total: dates.length,
+			date: "",
+			status: "Iniciando auditoria de metas",
+		});
+		const results = [];
+		try {
+			for (let index = 0; index < dates.length; index += 1) {
+				const date = dates[index];
+				setMetaAuditProgress({
+					current: index + 1,
+					total: dates.length,
+					date,
+					status: "Consultando e aplicando dia",
+				});
+				const result = await executarProfileHubsoft("META_D0", {
+					date,
+					discoverTechnicians: false,
+				});
+				results.push(result);
+			}
+			setFeedback(
+				`Auditoria de metas concluída: ${results.length} dia(s) atualizado(s).`,
+			);
+			setMetaAuditProgress({
+				current: dates.length,
+				total: dates.length,
+				date: dates[dates.length - 1] || "",
+				status: "Auditoria de metas concluída",
+			});
+			await loadConfig();
+			return results;
+		} catch (err) {
+			setError(err?.message || "Não foi possível concluir a auditoria de metas.");
+			return null;
+		} finally {
+			setMetaAuditRunning(false);
+		}
+	};
+
 	const handleDiscoverTechnicians = async () => {
 		setDiscoveringTechnicians(true);
 		setError("");
@@ -424,6 +528,10 @@ function useHubsoftSettingsController() {
 		syncRuns,
 		profiles,
 		profileRunning,
+		metaAuditForm,
+		setMetaAuditForm,
+		metaAuditRunning,
+		metaAuditProgress,
 		technicians,
 		discoveringTechnicians,
 		query,
@@ -436,6 +544,7 @@ function useHubsoftSettingsController() {
 		handleAssociate,
 		handleSearch,
 		handleRunProfile,
+		handleRunMetaAudit,
 		handleDiscoverTechnicians,
 		toggleArrayValue,
 		handleSync,
@@ -788,6 +897,7 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 					const state = byProfile.get(profile.id) || {};
 					const lastRun = state.lastRun || {};
 					const ranking = lastRun.result_summary?.ranking || {};
+					const progress = lastRun.result_summary || {};
 					const running = profileRunning === profile.id || state.locked;
 					return (
 						<div
@@ -810,6 +920,32 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 								</span>
 							</div>
 							<dl className="mt-4 space-y-2 text-xs font-semibold text-slate-600">
+								{running ? (
+									<div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+										<div className="flex items-center justify-between gap-3 text-blue-900">
+											<dt className="font-black">
+												{progress.stage || "Processando HubSoft"}
+											</dt>
+											<dd className="font-black">
+												{Number(progress.percent || 0)}%
+											</dd>
+										</div>
+										<div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+											<div
+												className="h-full rounded-full bg-blue-600 transition-all"
+												style={{
+													width: `${Math.min(
+														Math.max(Number(progress.percent || 0), 0),
+														100,
+													)}%`,
+												}}
+											/>
+										</div>
+										<p className="mt-2 text-[11px] font-bold text-blue-700">
+											Último sinal: {formatDateTime(progress.heartbeatAt)}
+										</p>
+									</div>
+								) : null}
 								<div className="flex justify-between gap-3">
 									<dt>Última execução</dt>
 									<dd>{formatDateTime(lastRun.started_at)}</dd>
@@ -862,6 +998,116 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 					);
 				})}
 			</div>
+		</CollapsibleSection>
+	);
+}
+
+function HubsoftMetaAuditSection({
+	form,
+	setForm,
+	running,
+	progress,
+	onRun,
+	profileRunning,
+}) {
+	const dates = buildMetaAuditDates(form);
+	const percent =
+		progress?.total > 0
+			? Math.round((Number(progress.current || 0) / Number(progress.total)) * 100)
+			: 0;
+	return (
+		<CollapsibleSection
+			title="Auditoria de metas"
+			description="Releia dias específicos do HubSoft e aplique cada resultado no dia correto do painel de metas."
+			icon={<CheckCircle2 size={21} />}
+			iconClassName="bg-emerald-50 text-emerald-700"
+			defaultOpen
+		>
+			<div className="grid gap-4 lg:grid-cols-4">
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Período
+					</span>
+					<select
+						value={form.mode}
+						onChange={(event) =>
+							setForm((current) => ({ ...current, mode: event.target.value }))
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
+					>
+						<option value="daily">Diário</option>
+						<option value="weekly">Semanal</option>
+						<option value="monthly">Mensal</option>
+						<option value="yearly">Anual</option>
+					</select>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Data final
+					</span>
+					<input
+						type="date"
+						value={form.endDate}
+						onChange={(event) =>
+							setForm((current) => ({
+								...current,
+								endDate: event.target.value,
+							}))
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
+					/>
+				</label>
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 lg:col-span-1">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Dias que serão validados
+					</p>
+					<p className="mt-2 text-lg font-black text-slate-950">
+						{dates.length}
+					</p>
+					<p className="text-xs font-semibold text-slate-500">
+						{dates[0]} até {dates[dates.length - 1]}
+					</p>
+				</div>
+				<div className="flex items-end">
+					<button
+						type="button"
+						disabled={running || Boolean(profileRunning)}
+						onClick={onRun}
+						className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-60"
+					>
+						{running ? (
+							<Loader2 className="animate-spin" size={17} />
+						) : (
+							<CheckCircle2 size={17} />
+						)}
+						Validar metas
+					</button>
+				</div>
+			</div>
+			{progress ? (
+				<div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<p className="text-sm font-black text-emerald-950">
+								{progress.status}
+							</p>
+							<p className="text-xs font-bold text-emerald-700">
+								Dia {progress.date || "-"} · {progress.current || 0} de{" "}
+								{progress.total || 0}
+							</p>
+						</div>
+						<span className="text-lg font-black text-emerald-950">
+							{percent}%
+						</span>
+					</div>
+					<div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
+						<div
+							className="h-full rounded-full bg-emerald-600 transition-all"
+							style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
+						/>
+					</div>
+				</div>
+			) : null}
 		</CollapsibleSection>
 	);
 }
@@ -1156,6 +1402,10 @@ export default function HubsoftSettingsPage() {
 		syncRuns,
 		profiles,
 		profileRunning,
+		metaAuditForm,
+		setMetaAuditForm,
+		metaAuditRunning,
+		metaAuditProgress,
 		technicians,
 		discoveringTechnicians,
 		query,
@@ -1168,6 +1418,7 @@ export default function HubsoftSettingsPage() {
 		handleAssociate,
 		handleSearch,
 		handleRunProfile,
+		handleRunMetaAudit,
 		handleDiscoverTechnicians,
 		toggleArrayValue,
 		handleSync,
@@ -1195,6 +1446,14 @@ export default function HubsoftSettingsPage() {
 				profiles={profiles}
 				profileRunning={profileRunning}
 				onRunProfile={handleRunProfile}
+			/>
+			<HubsoftMetaAuditSection
+				form={metaAuditForm}
+				setForm={setMetaAuditForm}
+				running={metaAuditRunning}
+				progress={metaAuditProgress}
+				onRun={handleRunMetaAudit}
+				profileRunning={profileRunning}
 			/>
 			<HubsoftWithdrawalTechniciansSection
 				technicians={technicians}

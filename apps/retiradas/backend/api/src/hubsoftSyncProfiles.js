@@ -487,12 +487,19 @@ function metaPayload({ date, createPayload }) {
 	};
 }
 
-async function collectPaginated(session, { path, payload, pageMode = "query" }) {
+async function collectPaginated(
+	session,
+	{ path, payload, pageMode = "query", onProgress },
+) {
 	const all = [];
 	let expectedTotal = 0;
 	let expectedPages = 1;
 	let receivedPages = 0;
 	for (let page = 1; page <= expectedPages; page += 1) {
+		await onProgress?.({
+			stage: `Consultando HubSoft pagina ${page}/${expectedPages}`,
+			percent: Math.min(45, 15 + page),
+		});
 		const body =
 			pageMode === "body" ? { ...payload, pagina: page, page } : payload;
 		const targetPath = pageMode === "query" ? `${path}?page=${page}` : path;
@@ -521,9 +528,32 @@ async function collectPaginated(session, { path, payload, pageMode = "query" }) 
 	};
 }
 
+async function collectFirstNonEmpty(session, attempts, onProgress) {
+	let last = null;
+	for (const attempt of attempts) {
+		await onProgress?.({
+			stage: `Consultando HubSoft (${attempt.label})`,
+			percent: attempt.percent || 20,
+		});
+		const collected = await collectPaginated(session, {
+			path: attempt.path,
+			payload: attempt.payload,
+			pageMode: attempt.pageMode || "body",
+			onProgress,
+		});
+		last = { ...collected, attemptLabel: attempt.label };
+		if (collected.rows.length > 0 || Number(collected.expectedTotal || 0) > 0) {
+			return last;
+		}
+	}
+	return last;
+}
+
 async function collectProfile(profile, options = {}) {
 	const session = await getSession();
+	await options.onProgress?.({ stage: "Sessao HubSoft autenticada", percent: 8 });
 	const createPayload = await fetchCreateMetadata(session);
+	await options.onProgress?.({ stage: "Metadados HubSoft carregados", percent: 12 });
 	if (profile === PROFILE.META_D0 || profile === PROFILE.META_D_MINUS_ONE) {
 		const date =
 			options.date ||
@@ -535,6 +565,7 @@ async function collectProfile(profile, options = {}) {
 			path: "/api/v1/ordem_servico/consultar/paginado/100",
 			payload,
 			pageMode: "query",
+			onProgress: options.onProgress,
 		});
 		return {
 			...collected,
@@ -556,7 +587,7 @@ async function collectProfile(profile, options = {}) {
 
 	if (profile === PROFILE.LOJA) {
 		const date = options.date || addDays(todaySaoPaulo(), -1);
-		const payload = {
+		const basePayload = {
 			data_inicio: toHubsoftDate(date),
 			data_fim: toHubsoftDate(date),
 			tipo_data: "data_cadastro",
@@ -570,18 +601,48 @@ async function collectProfile(profile, options = {}) {
 			pagina: 1,
 			itens_por_pagina: PAGE_SIZE,
 		};
-		const collected = await collectPaginated(session, {
-			path: "/api/v1/relatorio/atendimento",
-			payload,
-			pageMode: "body",
-		});
+		const collected = await collectFirstNonEmpty(
+			session,
+			[
+				{
+					label: "relatorio/atendimento objeto",
+					path: "/api/v1/relatorio/atendimento",
+					payload: basePayload,
+					pageMode: "body",
+					percent: 20,
+				},
+				{
+					label: "relatorio/atendimento valor",
+					path: "/api/v1/relatorio/atendimento",
+					payload: {
+						...basePayload,
+						status_fechamento: ["concluido"],
+					},
+					pageMode: "body",
+					percent: 28,
+				},
+				{
+					label: "relatorio/atendimento plural",
+					path: "/api/v1/relatorio/atendimento",
+					payload: {
+						...basePayload,
+						tipo_atendimentos: basePayload.tipo_atendimento,
+						status_fechamento: ["concluido"],
+					},
+					pageMode: "body",
+					percent: 36,
+				},
+			],
+			options.onProgress,
+		);
 		return {
 			...collected,
 			requestSummary: {
 				date,
-				tipo_data: payload.tipo_data,
-				tipo_atendimento: payload.tipo_atendimento,
-				status_fechamento: payload.status_fechamento,
+				attempt: collected?.attemptLabel || null,
+				tipo_data: basePayload.tipo_data,
+				tipo_atendimento: basePayload.tipo_atendimento,
+				status_fechamento: basePayload.status_fechamento,
 			},
 		};
 	}
@@ -621,6 +682,7 @@ async function collectProfile(profile, options = {}) {
 		path: `/api/v1/ordem_servico/consultar/paginado/${PAGE_SIZE}`,
 		payload,
 		pageMode: "query",
+		onProgress: options.onProgress,
 	});
 	return {
 		...collected,
@@ -1095,6 +1157,17 @@ async function updateRun(id, patch = {}) {
 	return next;
 }
 
+async function updateRunProgress(runId, patch = {}) {
+	await updateRun(runId, {
+		status: RUN_STATUS.RUNNING,
+		result_summary: {
+			stage: patch.stage || "Processando",
+			percent: Number(patch.percent || 0),
+			heartbeatAt: new Date().toISOString(),
+		},
+	});
+}
+
 async function acquireLock(profile, runId, user = {}) {
 	const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
 	const result = await db.query(
@@ -1233,9 +1306,21 @@ function summarizeRecords(records) {
 	};
 }
 
-async function maybeApplyOperationalProfile(profile, rows, options, user) {
-	if (![PROFILE.MAPA, PROFILE.MATCH].includes(profile)) return null;
+async function maybeApplyOperationalProfile(profile, rows, records, options, user) {
+	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(profile)) return null;
 	if (options.applyOperational === false) return null;
+	if ([PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(profile)) {
+		return operationalImports.persistHubsoftMetaRecords({
+			profile,
+			date:
+				options.date ||
+				(profile === PROFILE.META_D_MINUS_ONE || profile === PROFILE.LOJA
+					? addDays(todaySaoPaulo(), -1)
+					: todaySaoPaulo()),
+			records,
+			user,
+		});
+	}
 	const payload = {
 		rows: rows.map(adaptReportRow),
 		periodo: options.period || currentMapPeriod(options.date),
@@ -1259,10 +1344,25 @@ async function runProfile(profile, options = {}, user = {}) {
 	try {
 		await acquireLock(profile, run.id, user);
 		lockAcquired = true;
+		await updateRunProgress(run.id, {
+			stage: "Iniciando execucao",
+			percent: 3,
+		});
 		if (options.discoverTechnicians !== false) {
+			await updateRunProgress(run.id, {
+				stage: "Atualizando tecnicos de retirada",
+				percent: 5,
+			});
 			await discoverWithdrawalTechnicians(user).catch(() => null);
 		}
-		const collected = await collectProfile(profile, options);
+		const collected = await collectProfile(profile, {
+			...options,
+			onProgress: (progress) => updateRunProgress(run.id, progress),
+		});
+		await updateRunProgress(run.id, {
+			stage: "Normalizando registros",
+			percent: 55,
+		});
 		const keys = collected.rows.map((row) => uniqueKeyFor(profile, row)).filter(Boolean);
 		const uniqueRows = new Set(keys).size;
 		const duplicateRows = keys.length - uniqueRows;
@@ -1274,6 +1374,10 @@ async function runProfile(profile, options = {}, user = {}) {
 			uniqueRows,
 			duplicateRows,
 		};
+		await updateRunProgress(run.id, {
+			stage: "Classificando producao",
+			percent: 62,
+		});
 		const maps = await buildClassificationMaps();
 		const records = collected.rows
 			.filter((row) => uniqueKeyFor(profile, row))
@@ -1285,19 +1389,36 @@ async function runProfile(profile, options = {}, user = {}) {
 		let persistence = { inserted: 0, updated: 0, deactivated: 0 };
 		let operational = null;
 		if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(status)) {
+			await updateRunProgress(run.id, {
+				stage: "Salvando historico HubSoft",
+				percent: 72,
+			});
 			persistence = await persistRecords(run.id, profile, records);
-			operational = await maybeApplyOperationalProfile(profile, collected.rows, options, user);
+			await updateRunProgress(run.id, {
+				stage: "Aplicando nos paineis operacionais",
+				percent: 84,
+			});
+			operational = await maybeApplyOperationalProfile(
+				profile,
+				collected.rows,
+				records,
+				options,
+				user,
+			);
 		}
 		const unclassified = records.filter(
 			(record) => record.production_channel === "UNCLASSIFIED",
 		).length;
+		const finishedAt = new Date().toISOString();
 		const resultSummary = {
 			...summarizeRecords(records),
 			operational,
+			stage: "Concluido",
+			percent: 100,
+			heartbeatAt: finishedAt,
 			date: options.date || null,
 			period: options.period || null,
 		};
-		const finishedAt = new Date().toISOString();
 		await updateRun(run.id, {
 			status,
 			finished_at: finishedAt,

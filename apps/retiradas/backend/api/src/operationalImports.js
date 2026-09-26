@@ -1742,6 +1742,491 @@ function buildDashboardPayload(month, data, nowIso) {
 	};
 }
 
+function getMetaMonthFromDate(dateText) {
+	const date = dateText ? new Date(`${String(dateText).slice(0, 10)}T12:00:00Z`) : new Date();
+	const monthIndex = Number.isNaN(date.getTime()) ? new Date().getMonth() : date.getUTCMonth();
+	return MONTHORDER[monthIndex] || MONTHORDER[new Date().getMonth()];
+}
+
+function getMetaYearFromDate(dateText) {
+	const date = dateText ? new Date(`${String(dateText).slice(0, 10)}T12:00:00Z`) : new Date();
+	return Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getUTCFullYear();
+}
+
+function getMetaDayFromDate(dateText) {
+	const date = dateText ? new Date(`${String(dateText).slice(0, 10)}T12:00:00Z`) : new Date();
+	return Number.isNaN(date.getTime()) ? new Date().getDate() : date.getUTCDate();
+}
+
+function getDaysInMetaMonth(month, year = new Date().getFullYear()) {
+	const index = MONTHORDER.indexOf(month);
+	if (index < 0) return 31;
+	return new Date(Date.UTC(year, index + 1, 0)).getUTCDate();
+}
+
+function createDailyArray(dayCount) {
+	return Array.from({ length: dayCount }, () => 0);
+}
+
+function normalizeDailyForMonth(daily, dayCount) {
+	return Array.from({ length: dayCount }, (_, index) => Number(daily?.[index] || 0));
+}
+
+function setDailyTotal(items = [], name, dayIndex, value, dayCount) {
+	const normalizedName = String(name || "Sem classificacao HubSoft").trim();
+	const key = normalizeText(normalizedName);
+	const current = Array.isArray(items) ? [...items] : [];
+	let item = current.find((row) => normalizeText(row?.name) === key);
+	if (!item) {
+		item = {
+			name: normalizedName,
+			meta: 110,
+			daily: createDailyArray(dayCount),
+			total: 0,
+			percent: 0,
+		};
+		current.push(item);
+	}
+	item.daily = normalizeDailyForMonth(item.daily, dayCount);
+	item.daily[dayIndex] = Number(value || 0);
+	item.total = item.daily.reduce((sum, dailyValue) => sum + Number(dailyValue || 0), 0);
+	item.meta = Number(item.meta || 110);
+	item.percent = item.meta > 0 ? Number(((item.total / item.meta) * 100).toFixed(1)) : 0;
+	return current.sort((left, right) => Number(right.total || 0) - Number(left.total || 0));
+}
+
+function clearDailyTotal(items = [], dayIndex, dayCount) {
+	return (Array.isArray(items) ? items : []).map((item) => {
+		const daily = normalizeDailyForMonth(item.daily, dayCount);
+		daily[dayIndex] = 0;
+		const total = daily.reduce((sum, dailyValue) => sum + Number(dailyValue || 0), 0);
+		const meta = Number(item.meta || 110);
+		return {
+			...item,
+			daily,
+			total,
+			percent: meta > 0 ? Number(((total / meta) * 100).toFixed(1)) : 0,
+		};
+	});
+}
+
+function getRawDaysByDay(record = {}) {
+	const map = new Map();
+	for (const row of record.rawDays || record.saldoDiario || []) {
+		const dia = Number(row?.dia || 0);
+		if (!dia) continue;
+		map.set(dia, {
+			dia,
+			equipe: Number(row.equipe || 0),
+			agente: Number(row.agente || 0),
+			loja: Number(row.loja || 0),
+			regionais: Number(row.regionais || 0),
+			totalDia: Number(row.totalDia || 0),
+		});
+	}
+	return map;
+}
+
+function setRawDayField(record = {}, day, field, value) {
+	const rawByDay = getRawDaysByDay(record);
+	const current = rawByDay.get(day) || {
+		dia: day,
+		equipe: 0,
+		agente: 0,
+		loja: 0,
+		regionais: 0,
+		totalDia: 0,
+	};
+	current[field] = Number(value || 0);
+	current.totalDia =
+		Number(current.equipe || 0) +
+		Number(current.agente || 0) +
+		Number(current.loja || 0) +
+		Number(current.regionais || 0);
+	rawByDay.set(day, current);
+	return [...rawByDay.values()]
+		.filter((row) => Number(row.totalDia || 0) > 0)
+		.sort((left, right) => Number(left.dia || 0) - Number(right.dia || 0));
+}
+
+function recalculateSimpleSaldoDiario(record = {}, month, year) {
+	const dayCount = getDaysInMetaMonth(month, year);
+	const meta = Number(record.meta || 0);
+	const rawDays = record.rawDays || record.saldoDiario || [];
+	const activeDays = Math.max(1, dayCount);
+	const metaDiaria = meta > 0 ? Math.ceil(meta / activeDays) : 0;
+	let saldoMes = 0;
+	const saldoDiario = rawDays.map((row) => {
+		const dia = Number(row.dia || 0);
+		const totalDia = Number(row.totalDia || 0);
+		const metaDia = metaDiaria;
+		const saldoDia = totalDia - metaDia;
+		saldoMes += saldoDia;
+		return {
+			...row,
+			dia,
+			totalDia,
+			util: true,
+			metaDia,
+			metaAcumulada: metaDiaria * dia,
+			saldoDia,
+			saldoMes,
+		};
+	});
+	return { metaDiaria, saldoDiario };
+}
+
+function recalculateMetaRecord(record = {}, month, year) {
+	const rawDays = (record.rawDays || record.saldoDiario || []).filter(
+		(row) => Number(row?.totalDia || 0) > 0,
+	);
+	const totalOS = rawDays.reduce((sum, row) => sum + Number(row.totalDia || 0), 0);
+	const meta = Number(record.meta || 0);
+	const percentAchieved = meta > 0 ? Number(((totalOS / meta) * 100).toFixed(1)) : 0;
+	const saldo = recalculateSimpleSaldoDiario({ ...record, rawDays }, month, year);
+	return {
+		...record,
+		mes: record.mes || month,
+		month: record.month || month,
+		ano: Number(record.ano || year),
+		year: Number(record.year || year),
+		totalOS,
+		planilhaCarregada: true,
+		temLancamentos: totalOS > 0,
+		percentAchieved,
+		rawDays,
+		saldoDiario: saldo.saldoDiario,
+		metaDiaria: saldo.metaDiaria,
+		status:
+			percentAchieved >= 100
+				? "Meta atingida!"
+				: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
+	};
+}
+
+function combineMetaRecords(sempre = {}, onnet = {}, month, year) {
+	const rawByDay = new Map();
+	for (const record of [sempre, onnet]) {
+		for (const row of record.rawDays || record.saldoDiario || []) {
+			const dia = Number(row?.dia || 0);
+			if (!dia) continue;
+			const current = rawByDay.get(dia) || {
+				dia,
+				equipe: 0,
+				agente: 0,
+				loja: 0,
+				regionais: 0,
+				totalDia: 0,
+			};
+			current.equipe += Number(row.equipe || 0);
+			current.agente += Number(row.agente || 0);
+			current.loja += Number(row.loja || 0);
+			current.regionais += Number(row.regionais || 0);
+			current.totalDia += Number(row.totalDia || 0);
+			rawByDay.set(dia, current);
+		}
+	}
+	return recalculateMetaRecord(
+		{
+			...sempre,
+			mes: month,
+			month,
+			ano: year,
+			year,
+			origem: "ONNET + SEMPRE",
+			cancelamentos:
+				Number(sempre.cancelamentos || 0) + Number(onnet.cancelamentos || 0),
+			meta: Number(sempre.meta || 0) + Number(onnet.meta || 0),
+			technicians: [
+				...(sempre.technicians || []),
+				...(onnet.technicians || []),
+			].sort((left, right) => Number(right.total || 0) - Number(left.total || 0)),
+			regionais: [
+				...(sempre.regionais || []),
+				...(onnet.regionais || []),
+			].sort((left, right) => Number(right.total || 0) - Number(left.total || 0)),
+			agenteTotal: Number(sempre.agenteTotal || 0),
+			lojaTotal: Number(sempre.lojaTotal || 0) + Number(onnet.lojaTotal || 0),
+			rawDays: [...rawByDay.values()].sort((left, right) => left.dia - right.dia),
+		},
+		month,
+		year,
+	);
+}
+
+async function resolveMetaFonteByCity() {
+	const cityMap = await loadCityMap();
+	return (record) => {
+		const cityKey = normalizeCityKey(record?.source_city);
+		const info = cityMap[cityKey];
+		return getFonteMapaPorRegional(info?.regional);
+	};
+}
+
+function updateAgentDashboardCity(cities = [], cityName, dayIndex, value, dayCount) {
+	const name = normalizeCity(cityName) || "Sem cidade";
+	const key = normalizeCityKey(name);
+	const current = Array.isArray(cities) ? [...cities] : [];
+	let city = current.find((item) => normalizeCityKey(item?.nome || item?.cidade) === key);
+	if (!city) {
+		city = {
+			nome: name,
+			cancelamentos: 0,
+			meta80: 0,
+			realizado: 0,
+			falta: 0,
+			pct: 0,
+			daily: createDailyArray(dayCount),
+			lojaAgentesTotal: 0,
+			lojaAgentesDaily: createDailyArray(dayCount),
+		};
+		current.push(city);
+	}
+	city.daily = normalizeDailyForMonth(city.daily, dayCount);
+	city.daily[dayIndex] = Number(value || 0);
+	city.realizado = city.daily.reduce((sum, item) => sum + Number(item || 0), 0);
+	city.meta80 = Number(city.meta80 || city.meta || 0);
+	city.cancelamentos = Number(city.cancelamentos || 0);
+	city.falta = Math.max(0, Number(city.meta80 || 0) - city.realizado);
+	city.pct =
+		Number(city.meta80 || 0) > 0
+			? Number(((city.realizado / Number(city.meta80 || 0)) * 100).toFixed(1))
+			: 0;
+	return current.sort((left, right) => Number(right.realizado || 0) - Number(left.realizado || 0));
+}
+
+function clearAgentDashboardDay(cities = [], dayIndex, dayCount) {
+	return (Array.isArray(cities) ? cities : []).map((city) => {
+		const daily = normalizeDailyForMonth(city.daily, dayCount);
+		daily[dayIndex] = 0;
+		const realizado = daily.reduce((sum, value) => sum + Number(value || 0), 0);
+		const meta80 = Number(city.meta80 || city.meta || 0);
+		return {
+			...city,
+			daily,
+			realizado,
+			falta: Math.max(0, meta80 - realizado),
+			pct: meta80 > 0 ? Number(((realizado / meta80) * 100).toFixed(1)) : 0,
+		};
+	});
+}
+
+function recalculateAgentDashboard(month, data = {}, year) {
+	const cities = Array.isArray(data.cidades) ? data.cidades : [];
+	const dayCount = getDaysInMetaMonth(month, year);
+	const normalizedCities = cities.map((city) => ({
+		...city,
+		daily: normalizeDailyForMonth(city.daily, dayCount),
+		lojaAgentesDaily: normalizeDailyForMonth(city.lojaAgentesDaily, dayCount),
+		realizado: normalizeDailyForMonth(city.daily, dayCount).reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		),
+	}));
+	const totalRealizado = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.realizado || 0),
+		0,
+	);
+	const totalMeta = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.meta80 || city.meta || 0),
+		0,
+	);
+	const totalCancelamentos = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.cancelamentos || 0),
+		0,
+	);
+	return {
+		...data,
+		month,
+		cidades: normalizedCities,
+		cidadesRanking: [...normalizedCities].sort(
+			(left, right) => Number(right.realizado || 0) - Number(left.realizado || 0),
+		),
+		dayCount,
+		totalCancelamentos,
+		totalMeta,
+		totalRealizado,
+		totalFalta: totalMeta - totalRealizado,
+		percentAchieved:
+			totalMeta > 0 ? Number(((totalRealizado / totalMeta) * 100).toFixed(1)) : 0,
+		totalDaily: createDailyArray(dayCount).map((_, index) =>
+			normalizedCities.reduce(
+				(sum, city) => sum + Number(city.daily?.[index] || 0),
+				0,
+			),
+		),
+		status:
+			totalRealizado >= totalMeta && totalMeta > 0
+				? "Meta atingida!"
+				: `Faltam ${Math.max(0, Math.round(totalMeta - totalRealizado))} retiradas`,
+	};
+}
+
+async function persistHubsoftMetaRecords({
+	profile,
+	date,
+	records = [],
+	user = {},
+} = {}) {
+	const day = getMetaDayFromDate(date);
+	const month = getMetaMonthFromDate(date);
+	const year = getMetaYearFromDate(date);
+	const dayCount = getDaysInMetaMonth(month, year);
+	const dayIndex = day - 1;
+	const nowIso = new Date().toISOString();
+	const currentDoc = (await documents.getDocument(`metas/${month}`).catch(() => null))?.data || {
+		mes: month,
+		month,
+		ano: year,
+		year,
+		onnet: { mes: month, month, ano: year, year, origem: "ONNET" },
+	};
+	const currentAgents =
+		(await documents.getDocument(`dashboardagentes/${month}`).catch(() => null))?.data || {
+			month,
+			cidades: [],
+		};
+	const resolveFonte = await resolveMetaFonteByCity(records);
+	const grouped = {
+		sempre: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0 },
+		onnet: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0 },
+	};
+	for (const record of records) {
+		const fonte = resolveFonte(record);
+		const channel = record.production_channel || "UNCLASSIFIED";
+		if (profile === "LOJA") {
+			grouped[fonte].LOJA += 1;
+			continue;
+		}
+		const bucket = channel === "AA" ? "AA" : channel === "RETIRADA" ? "RETIRADA" : "REGIONAL";
+		const name =
+			bucket === "AA"
+				? normalizeCity(record.source_city) || record.production_owner_name
+				: record.production_owner_name || "Sem classificacao HubSoft";
+		const map = grouped[fonte][bucket];
+		map.set(name, Number(map.get(name) || 0) + 1);
+	}
+
+	const updateBase = (baseId, sourceRecord) => {
+		let next = {
+			...sourceRecord,
+			mes: month,
+			month,
+			ano: year,
+			year,
+			origem: baseId === "onnet" ? "ONNET" : "SEMPRE",
+		};
+		next.technicians = clearDailyTotal(next.technicians, dayIndex, dayCount);
+		next.regionais = clearDailyTotal(next.regionais, dayIndex, dayCount);
+		for (const [name, total] of grouped[baseId].RETIRADA.entries()) {
+			next.technicians = setDailyTotal(next.technicians, name, dayIndex, total, dayCount);
+		}
+		for (const [name, total] of grouped[baseId].REGIONAL.entries()) {
+			next.regionais = setDailyTotal(next.regionais, name, dayIndex, total, dayCount);
+		}
+		const equipe = [...grouped[baseId].RETIRADA.values()].reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		);
+		const regionaisTotal = [...grouped[baseId].REGIONAL.values()].reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		);
+		const agentesTotal = [...grouped[baseId].AA.values()].reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		);
+		next.rawDays = setRawDayField(next, day, "equipe", equipe);
+		next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "regionais", regionaisTotal);
+		next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "agente", agentesTotal);
+		next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "loja", grouped[baseId].LOJA);
+		next.agenteTotal =
+			(next.rawDays || []).reduce((sum, row) => sum + Number(row.agente || 0), 0);
+		next.lojaTotal =
+			(next.rawDays || []).reduce((sum, row) => sum + Number(row.loja || 0), 0);
+		return recalculateMetaRecord(next, month, year);
+	};
+
+	const sempre = updateBase("sempre", currentDoc);
+	const onnet = updateBase("onnet", currentDoc.onnet || {});
+	let nextAgents = currentAgents;
+	nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
+	for (const [city, total] of grouped.sempre.AA.entries()) {
+		nextAgents.cidades = updateAgentDashboardCity(
+			nextAgents.cidades,
+			city,
+			dayIndex,
+			total,
+			dayCount,
+		);
+	}
+	nextAgents = recalculateAgentDashboard(month, nextAgents, year);
+	const combined = combineMetaRecords(sempre, onnet, month, year);
+	const nextMonth = {
+		...sempre,
+		onnet,
+		onnetSempre: combined,
+		hubsoftUpdatedAt: nowIso,
+		hubsoftLastProfile: profile,
+	};
+
+	await documents.upsertDocument({
+		path: `metas/${month}`,
+		collectionPath: "metas",
+		documentId: month,
+		parentPath: null,
+		data: { ...nextMonth, updatedAt: nowIso },
+	});
+	await documents.upsertDocument({
+		path: `dashboard/${month}`,
+		collectionPath: "dashboard",
+		documentId: month,
+		parentPath: null,
+		data: buildDashboardPayload(month, nextMonth, nowIso),
+	});
+	await documents.upsertDocument({
+		path: `dashboardagentes/${month}`,
+		collectionPath: "dashboardagentes",
+		documentId: month,
+		parentPath: null,
+		data: { ...nextAgents, updatedAt: nowIso },
+	});
+	await publishAcompanhamentoUpdate("metas", {
+		generatedAt: nowIso,
+		updatedBy: user.uid || null,
+		message: `Metas atualizadas pelo HubSoft (${profile}) para ${String(day).padStart(2, "0")}/${String(MONTHORDER.indexOf(month) + 1).padStart(2, "0")}/${year}.`,
+		summary: {
+			profile,
+			date,
+			total: records.length,
+			sempre: {
+				equipe: [...grouped.sempre.RETIRADA.values()].reduce((sum, value) => sum + value, 0),
+				regionais: [...grouped.sempre.REGIONAL.values()].reduce((sum, value) => sum + value, 0),
+				agentes: [...grouped.sempre.AA.values()].reduce((sum, value) => sum + value, 0),
+				loja: grouped.sempre.LOJA,
+			},
+			onnet: {
+				equipe: [...grouped.onnet.RETIRADA.values()].reduce((sum, value) => sum + value, 0),
+				regionais: [...grouped.onnet.REGIONAL.values()].reduce((sum, value) => sum + value, 0),
+				agentes: [...grouped.onnet.AA.values()].reduce((sum, value) => sum + value, 0),
+				loja: grouped.onnet.LOJA,
+			},
+		},
+	});
+	await refreshDashboardSnapshot(nowIso);
+	return {
+		source: "hubsoft-metas",
+		profile,
+		generatedAt: nowIso,
+		month,
+		day,
+		total: records.length,
+		sempreTotal: Number(sempre.totalOS || 0),
+		onnetTotal: Number(onnet.totalOS || 0),
+		combinedTotal: Number(combined.totalOS || 0),
+	};
+}
+
 function dedupeAgentCities(cities = []) {
 	const map = new Map();
 	(Array.isArray(cities) ? cities : []).forEach((city) => {
@@ -2263,6 +2748,7 @@ module.exports = {
 	markInterruptedImportJobs,
 	persistMapaImport,
 	persistMatchImport,
+	persistHubsoftMetaRecords,
 	persistMetasImport,
 	saveMatchConfig,
 	saveMetasBaseConfig,
