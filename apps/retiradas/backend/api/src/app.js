@@ -32,6 +32,7 @@ const movimentacoesEntregas = require("./movimentacoesEntregas");
 const movimentacoesOrdensFechadas = require("./movimentacoesOrdensFechadas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
+const hubsoftSyncProfiles = require("./hubsoftSyncProfiles");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
@@ -4212,6 +4213,7 @@ function createApp() {
 		createHubsoftAdminRouter({
 			adminRoles: ADMIN_ROLES,
 			hubsoftIntegration,
+			hubsoftSyncProfiles,
 			requireAuthenticated,
 			requireCsrfToken,
 			requireRoles,

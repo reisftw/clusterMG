@@ -71,3 +71,50 @@ export async function buscarHistoricoSyncHubsoft(limit = 10) {
 		`/admin/hubsoft/sync/runs?limit=${encodeURIComponent(limit)}`,
 	);
 }
+
+export async function buscarProfilesHubsoft() {
+	return requestVpsApi("/admin/hubsoft/profiles");
+}
+
+export async function buscarRunsProfilesHubsoft(params = {}) {
+	const searchParams = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && String(value).trim() !== "") {
+			searchParams.set(key, String(value));
+		}
+	});
+	return requestVpsApi(
+		`/admin/hubsoft/profiles/runs?${searchParams.toString()}`,
+	);
+}
+
+export async function executarProfileHubsoft(profile, payload = {}) {
+	return requestVpsApi(
+		`/admin/hubsoft/profiles/${encodeURIComponent(profile)}/run`,
+		{
+			method: "POST",
+			body: JSON.stringify(payload || {}),
+		},
+	);
+}
+
+export async function buscarRegistrosHubsoft(params = {}) {
+	const searchParams = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && String(value).trim() !== "") {
+			searchParams.set(key, String(value));
+		}
+	});
+	return requestVpsApi(`/admin/hubsoft/records?${searchParams.toString()}`);
+}
+
+export async function buscarTecnicosRetiradaHubsoft() {
+	return requestVpsApi("/admin/hubsoft/withdrawal-technicians");
+}
+
+export async function descobrirTecnicosRetiradaHubsoft() {
+	return requestVpsApi("/admin/hubsoft/withdrawal-technicians/discover", {
+		method: "POST",
+		body: JSON.stringify({}),
+	});
+}

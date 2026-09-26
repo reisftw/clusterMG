@@ -3,10 +3,12 @@ import {
 	DatabaseZap,
 	Loader2,
 	PlugZap,
+	PlayCircle,
 	RefreshCw,
 	Save,
 	Search,
 	ShieldCheck,
+	Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
@@ -15,6 +17,10 @@ import {
 	buscarConfigHubsoft,
 	buscarHistoricoSyncHubsoft,
 	buscarJobSyncHubsoft,
+	buscarProfilesHubsoft,
+	buscarTecnicosRetiradaHubsoft,
+	descobrirTecnicosRetiradaHubsoft,
+	executarProfileHubsoft,
 	consultarOrdensHubsoft,
 	DEFAULT_HUBSOFT_CONFIG,
 	iniciarSyncHubsoft,
@@ -36,6 +42,13 @@ const SYNC_STATUSES = [
 const SYNC_FONTES = [
 	{ value: "sempre", label: "Sempre" },
 	{ value: "onnet", label: "Onnet" },
+];
+const HUBSOFT_PROFILES = [
+	{ id: "MAPA", label: "Mapa", helper: "O.S. abertas para Mensageria" },
+	{ id: "MATCH", label: "Match", helper: "O.S. abertas para conciliação" },
+	{ id: "LOJA", label: "Loja D-1", helper: "Entregas em loja concluídas" },
+	{ id: "META_D0", label: "Meta D+0", helper: "Acompanhamento do dia" },
+	{ id: "META_D_MINUS_ONE", label: "Meta D-1", helper: "Fechamento do dia anterior" },
 ];
 const JOB_POLL_MS = 1500;
 
@@ -181,6 +194,10 @@ function useHubsoftSettingsController() {
 	const [testResult, setTestResult] = useState(null);
 	const [syncJob, setSyncJob] = useState(null);
 	const [syncRuns, setSyncRuns] = useState([]);
+	const [profiles, setProfiles] = useState([]);
+	const [profileRunning, setProfileRunning] = useState("");
+	const [technicians, setTechnicians] = useState([]);
+	const [discoveringTechnicians, setDiscoveringTechnicians] = useState(false);
 	const [query, setQuery] = useState({
 		busca: "codigo_cliente",
 		termo_busca: "",
@@ -201,6 +218,12 @@ function useHubsoftSettingsController() {
 				items: [],
 			}));
 			setSyncRuns(runs?.items || []);
+			const [profileResult, technicianResult] = await Promise.all([
+				buscarProfilesHubsoft().catch(() => ({ items: [] })),
+				buscarTecnicosRetiradaHubsoft().catch(() => ({ items: [] })),
+			]);
+			setProfiles(profileResult?.items || []);
+			setTechnicians(technicianResult?.items || []);
 		} catch (err) {
 			setError(
 				err?.message || "Não foi possível carregar a configuração do Hubsoft.",
@@ -346,6 +369,44 @@ function useHubsoftSettingsController() {
 		}
 	};
 
+	const handleRunProfile = async (profile, payload = {}) => {
+		setProfileRunning(profile);
+		setError("");
+		setFeedback("");
+		try {
+			const result = await executarProfileHubsoft(profile, payload);
+			setFeedback(
+				`${profile} finalizado com status ${result?.status || "desconhecido"}.`,
+			);
+			await loadConfig();
+			return result;
+		} catch (err) {
+			setError(err?.message || `Não foi possível executar ${profile}.`);
+			return null;
+		} finally {
+			setProfileRunning("");
+		}
+	};
+
+	const handleDiscoverTechnicians = async () => {
+		setDiscoveringTechnicians(true);
+		setError("");
+		setFeedback("");
+		try {
+			const result = await descobrirTecnicosRetiradaHubsoft();
+			setFeedback(
+				`Técnicos de retirada atualizados: ${result?.saved?.length || 0}.`,
+			);
+			await loadConfig();
+		} catch (err) {
+			setError(
+				err?.message || "Não foi possível descobrir técnicos de retirada.",
+			);
+		} finally {
+			setDiscoveringTechnicians(false);
+		}
+	};
+
 	return {
 		config,
 		loading,
@@ -359,6 +420,10 @@ function useHubsoftSettingsController() {
 		testResult,
 		syncJob,
 		syncRuns,
+		profiles,
+		profileRunning,
+		technicians,
+		discoveringTechnicians,
 		query,
 		setQuery,
 		queryResult,
@@ -368,6 +433,8 @@ function useHubsoftSettingsController() {
 		handleTest,
 		handleAssociate,
 		handleSearch,
+		handleRunProfile,
+		handleDiscoverTechnicians,
 		toggleArrayValue,
 		handleSync,
 	};
@@ -625,6 +692,197 @@ function HubsoftSyncSection({
 	);
 }
 
+function statusTone(status) {
+	if (["COMPLETE", "VALID_EMPTY_RESULT", "completed"].includes(status)) {
+		return "bg-emerald-50 text-emerald-800 border-emerald-200";
+	}
+	if (["RUNNING", "queued", "running"].includes(status)) {
+		return "bg-blue-50 text-blue-800 border-blue-200";
+	}
+	if (["NEVER_RUN"].includes(status)) {
+		return "bg-slate-50 text-slate-700 border-slate-200";
+	}
+	return "bg-red-50 text-red-800 border-red-200";
+}
+
+function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
+	const byProfile = new Map((profiles || []).map((item) => [item.profile, item]));
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+						<PlayCircle size={21} />
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Central de Sincronização HubSoft
+						</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Execute cada profile separadamente em homologação e confira totais,
+							classificação e falhas antes de promover qualquer rotina.
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div className="grid gap-4 xl:grid-cols-5">
+				{HUBSOFT_PROFILES.map((profile) => {
+					const state = byProfile.get(profile.id) || {};
+					const lastRun = state.lastRun || {};
+					const running = profileRunning === profile.id || state.locked;
+					return (
+						<div
+							key={profile.id}
+							className="rounded-2xl border border-slate-200 p-4"
+						>
+							<div className="flex items-start justify-between gap-3">
+								<div>
+									<p className="text-sm font-black text-slate-950">
+										{profile.label}
+									</p>
+									<p className="mt-1 text-xs font-semibold text-slate-500">
+										{profile.helper}
+									</p>
+								</div>
+								<span
+									className={`rounded-full border px-2 py-1 text-[10px] font-black ${statusTone(state.status)}`}
+								>
+									{state.status || "NEVER_RUN"}
+								</span>
+							</div>
+							<dl className="mt-4 space-y-2 text-xs font-semibold text-slate-600">
+								<div className="flex justify-between gap-3">
+									<dt>Última execução</dt>
+									<dd>{formatDateTime(lastRun.started_at)}</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Total</dt>
+									<dd>{lastRun.expected_total ?? "-"}</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Únicos</dt>
+									<dd>{lastRun.unique_rows ?? "-"}</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Não classificados</dt>
+									<dd>{lastRun.unclassified ?? "-"}</dd>
+								</div>
+							</dl>
+							<button
+								type="button"
+								disabled={Boolean(profileRunning) || running}
+								onClick={() => onRunProfile(profile.id)}
+								className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-60"
+							>
+								{running ? (
+									<Loader2 className="animate-spin" size={17} />
+								) : (
+									<PlayCircle size={17} />
+								)}
+								Sincronizar agora
+							</button>
+						</div>
+					);
+				})}
+			</div>
+		</section>
+	);
+}
+
+function HubsoftWithdrawalTechniciansSection({
+	technicians,
+	discovering,
+	onDiscover,
+}) {
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+						<Users size={21} />
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Técnicos de Retirada
+						</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Cadastro usado pela classificação. A descoberta inicial busca nomes
+							HubSoft contendo “TÉCNICO RETIRADA” e grava o ID como chave.
+						</p>
+					</div>
+				</div>
+				<button
+					type="button"
+					disabled={discovering}
+					onClick={onDiscover}
+					className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+				>
+					{discovering ? (
+						<Loader2 className="animate-spin" size={17} />
+					) : (
+						<RefreshCw size={17} />
+					)}
+					Descobrir técnicos
+				</button>
+			</div>
+			<div className="overflow-x-auto rounded-2xl border border-slate-200">
+				<table className="min-w-[760px] w-full divide-y divide-slate-200 text-sm">
+					<thead className="bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+						<tr>
+							<th className="px-4 py-3">ID HubSoft</th>
+							<th className="px-4 py-3">Nome HubSoft</th>
+							<th className="px-4 py-3">Nome exibido</th>
+							<th className="px-4 py-3">Status</th>
+							<th className="px-4 py-3">Atualizado</th>
+						</tr>
+					</thead>
+					<tbody className="divide-y divide-slate-100 bg-white">
+						{(technicians || []).length ? (
+							technicians.map((item) => (
+								<tr key={item.id || item.hubsoft_technician_id}>
+									<td className="px-4 py-3 font-black text-slate-900">
+										{item.hubsoft_technician_id}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{item.nome_hubsoft}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{item.nome_exibicao || item.nome_hubsoft}
+									</td>
+									<td className="px-4 py-3">
+										<span
+											className={`rounded-full px-2 py-1 text-xs font-black ${
+												item.ativo
+													? "bg-emerald-50 text-emerald-700"
+													: "bg-slate-100 text-slate-500"
+											}`}
+										>
+											{item.ativo ? "Ativo" : "Inativo"}
+										</span>
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{formatDateTime(item.updated_at)}
+									</td>
+								</tr>
+							))
+						) : (
+							<tr>
+								<td
+									colSpan={5}
+									className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
+								>
+									Nenhum técnico cadastrado ainda.
+								</td>
+							</tr>
+						)}
+					</tbody>
+				</table>
+			</div>
+		</section>
+	);
+}
+
 export default function HubsoftSettingsPage() {
 	const {
 		config,
@@ -639,6 +897,10 @@ export default function HubsoftSettingsPage() {
 		testResult,
 		syncJob,
 		syncRuns,
+		profiles,
+		profileRunning,
+		technicians,
+		discoveringTechnicians,
 		query,
 		setQuery,
 		queryResult,
@@ -648,6 +910,8 @@ export default function HubsoftSettingsPage() {
 		handleTest,
 		handleAssociate,
 		handleSearch,
+		handleRunProfile,
+		handleDiscoverTechnicians,
 		toggleArrayValue,
 		handleSync,
 	} = useHubsoftSettingsController();
@@ -665,6 +929,16 @@ export default function HubsoftSettingsPage() {
 			/>
 			<HubsoftFeedback feedback={feedback} error={error} />
 			<HubsoftStatusCards config={config} />
+			<HubsoftProfilesSection
+				profiles={profiles}
+				profileRunning={profileRunning}
+				onRunProfile={handleRunProfile}
+			/>
+			<HubsoftWithdrawalTechniciansSection
+				technicians={technicians}
+				discovering={discoveringTechnicians}
+				onDiscover={handleDiscoverTechnicians}
+			/>
 
 			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 				<div className="mb-5 flex items-start gap-3">
