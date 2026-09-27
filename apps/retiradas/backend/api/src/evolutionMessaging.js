@@ -549,6 +549,25 @@ async function createHistory(data) {
 	return id;
 }
 
+function recordEvidenceSafely(methodName, payload = {}) {
+	try {
+		const evidenciasService = require("./evidencias/services/evidenciasService");
+		const action = evidenciasService[methodName];
+		if (typeof action !== "function") return;
+		action(payload).catch((error) => {
+			console.warn(
+				"[evidencias] Falha ao registrar evidencia:",
+				error?.message || error,
+			);
+		});
+	} catch (error) {
+		console.warn(
+			"[evidencias] Falha ao registrar evidencia:",
+			error?.message || error,
+		);
+	}
+}
+
 async function getQueueItem(id) {
 	return mensageriaRepository.getQueueMessage(id);
 }
@@ -1505,7 +1524,7 @@ async function processQueueCandidate(item, config) {
 			envioLockEm: "",
 			atualizadoEm: nowIso(),
 		});
-		await createHistory({
+		const historicoId = await createHistory({
 			cliente: lockedItem.cliente,
 			telefone: lockedItem.telefone,
 			os: lockedItem.os,
@@ -1516,6 +1535,24 @@ async function processQueueCandidate(item, config) {
 			origem: getProviderName(config),
 			filaId: lockedItem.id,
 			erro: `Envio bloqueado por duplicidade com ${duplicate.filaId || duplicate.id}.`,
+		});
+		recordEvidenceSafely("recordOutbound", {
+			filaId: lockedItem.id,
+			historicoId,
+			osNumber: lockedItem.os,
+			customerCode: lockedItem.codigoCliente || lockedItem.codigo_cliente,
+			customerName: lockedItem.cliente,
+			phone: lockedItem.telefone,
+			city: lockedItem.cidade,
+			regional: lockedItem.regional,
+			contract: lockedItem.contrato,
+			messageSent: message,
+			sentAt: nowIso(),
+			provider: getProviderName(config),
+			providerStatus: "duplicado",
+			result: "duplicado",
+			error: `Envio bloqueado por duplicidade com ${duplicate.filaId || duplicate.id}.`,
+			sourcePayload: { duplicate, item: lockedItem },
 		});
 		broadcastRealtime("mensageria", {
 			action: "duplicate_blocked",
@@ -1548,7 +1585,7 @@ async function processQueueCandidate(item, config) {
 			evolutionButtonError: response.buttonError || "",
 			atualizadoEm: nowIso(),
 		});
-		await createHistory({
+		const historicoId = await createHistory({
 			cliente: lockedItem.cliente,
 			telefone: lockedItem.telefone,
 			os: lockedItem.os,
@@ -1560,6 +1597,28 @@ async function processQueueCandidate(item, config) {
 			filaId: lockedItem.id,
 			evolutionMode: response.mode,
 			evolutionButtonError: response.buttonError || "",
+		});
+		recordEvidenceSafely("recordOutbound", {
+			filaId: lockedItem.id,
+			historicoId,
+			osNumber: lockedItem.os,
+			customerCode: lockedItem.codigoCliente || lockedItem.codigo_cliente,
+			customerName: lockedItem.cliente,
+			phone: lockedItem.telefone,
+			city: lockedItem.cidade,
+			regional: lockedItem.regional,
+			contract: lockedItem.contrato,
+			messageSent: message,
+			sentAt: nowIso(),
+			provider: getProviderName(config),
+			providerStatus: "enviado",
+			providerMessageId:
+				response.response?.key?.id ||
+				response.response?.messageId ||
+				response.response?.id ||
+				"",
+			result: "enviado",
+			sourcePayload: { providerResponse: response.response, item: lockedItem },
 		});
 		lastQueueExecutionItem = summarizeQueueExecutionItem(lockedItem);
 		broadcastRealtime("mensageria", { action: "sent", id: lockedItem.id });
@@ -1583,7 +1642,7 @@ async function processQueueCandidate(item, config) {
 			envioLockEm: "",
 			atualizadoEm: nowIso(),
 		});
-		await createHistory({
+		const historicoId = await createHistory({
 			cliente: lockedItem.cliente,
 			telefone: lockedItem.telefone,
 			os: lockedItem.os,
@@ -1592,6 +1651,23 @@ async function processQueueCandidate(item, config) {
 			erro: error?.message || "Falha no envio.",
 			origem: getProviderName(config),
 			filaId: lockedItem.id,
+		});
+		recordEvidenceSafely("recordOutbound", {
+			filaId: lockedItem.id,
+			historicoId,
+			osNumber: lockedItem.os,
+			customerCode: lockedItem.codigoCliente || lockedItem.codigo_cliente,
+			customerName: lockedItem.cliente,
+			phone: lockedItem.telefone,
+			city: lockedItem.cidade,
+			regional: lockedItem.regional,
+			contract: lockedItem.contrato,
+			sentAt: nowIso(),
+			provider: getProviderName(config),
+			providerStatus: "falhou",
+			result: "falhou",
+			error: error?.message || "Falha no envio.",
+			sourcePayload: { item: lockedItem },
 		});
 		return { locked: true, outcome: "failed", id: lockedItem.id, error: error?.message };
 	}
@@ -3867,6 +3943,28 @@ async function registerCallback(payload = {}) {
 		},
 		{ id: callbackId },
 	);
+	recordEvidenceSafely("recordCallback", {
+		callbackId,
+		filaId: queueItem?.id || item?.filaId || "",
+		historicoId: historyItem?.id || "",
+		agendamentoId,
+		osNumber: item?.os || "",
+		customerCode: codigoCliente || item?.codigo_cliente || "",
+		customerName: cliente || item?.cliente || "",
+		phone: telefone,
+		city: item?.cidade || "",
+		regional: item?.regional || "",
+		contract: item?.contrato || "",
+		customerResponse: mensagem,
+		responseAt: recebidoEm,
+		result: status,
+		schedule,
+		sourcePayload: {
+			payload,
+			motivo,
+			respostaAutomatica,
+		},
+	});
 
 	broadcastRealtime("mensageria", { action: "callback", status });
 	broadcastRealtime("acompanhamento", { collectionPath: CALLBACK_COLLECTION });

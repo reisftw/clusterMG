@@ -160,6 +160,9 @@ const MensageriaBacklog = lazy(
 const MensageriaCallback = lazy(
 	() => import("../modules/mensageria/components/MensageriaCallbackPage"),
 );
+const Evidencias = lazy(
+	() => import("../modules/evidencias/components/EvidenciasPage"),
+);
 const ApiStatus = lazy(
 	() => import("../modules/apiStatus/components/ApiStatusPage"),
 );
@@ -738,6 +741,21 @@ const AppRouter = () => (
 									]}
 								>
 									<MensageriaCallback />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.EVIDENCIAS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"evidencias.view",
+										"evidencias.manage",
+										"view_mensageria",
+										"manage_mensageria",
+									]}
+								>
+									<Evidencias />
 								</ProtectedRoute>
 							}
 						/>

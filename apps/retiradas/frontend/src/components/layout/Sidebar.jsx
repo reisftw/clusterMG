@@ -359,6 +359,17 @@ const NAV_ITEMS = [
 		permission: ["view_mensageria", "mensageria.enviados.view"],
 	},
 	{
+		label: "Evidências",
+		path: ROUTES.EVIDENCIAS,
+		icon: FileSearch,
+		permission: [
+			"evidencias.view",
+			"evidencias.manage",
+			"view_mensageria",
+			"manage_mensageria",
+		],
+	},
+	{
 		label: "Relatórios",
 		path: ROUTES.MENSAGERIA_RELATORIOS,
 		icon: BarChart3,
@@ -648,6 +659,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.FERIADOS,
 	ROUTES.FERIAS,
 	ROUTES.MENSAGERIA_ENVIADOS,
+	ROUTES.EVIDENCIAS,
 	ROUTES.MENSAGERIA_RELATORIOS,
 	ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
 	ROUTES.MENSAGERIA_FILA,
@@ -725,6 +737,7 @@ const HIDDEN_RETIRADAS_MENU_PATHS = new Set([
 
 const CLIENTE_MENSAGERIA_PATHS = [
 	ROUTES.MENSAGERIA_ENVIADOS,
+	ROUTES.EVIDENCIAS,
 	ROUTES.MENSAGERIA_RELATORIOS,
 	ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS,
 	ROUTES.MENSAGERIA_FILA,

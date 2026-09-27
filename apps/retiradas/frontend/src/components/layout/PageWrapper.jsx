@@ -47,6 +47,7 @@ const PAGE_TITLES = {
 	[ROUTES.MENSAGERIA_CONFIRMACAO_AGENDAMENTOS]: "Confirmação de Agendamentos",
 	[ROUTES.MENSAGERIA_BACKLOG]: "Backlog da Mensageria",
 	[ROUTES.MENSAGERIA_CALLBACK]: "Callback da Mensageria",
+	[ROUTES.EVIDENCIAS]: "Evidências",
 	[ROUTES.API_STATUS]: "APIs",
 	[ROUTES.HUBSOFT_SETTINGS]: "Hubsoft",
 	[ROUTES.CVORTEX_SETTINGS]: "Cvortex",
