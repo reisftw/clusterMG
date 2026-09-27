@@ -61,6 +61,12 @@ const MATCH_IGNORED_TYPE_IDS = new Set(
 	MATCH_IGNORED_OS_TYPES.map(([id]) => Number(id)),
 );
 
+const EQUIPMENT_KEYWORDS = Object.freeze({
+	FAST: ["FAST", "100 MB", "100MB", "200 MB", "200MB", "250 MB", "250MB", "299 MB", "299MB"],
+	AC: ["AC", "300 MB", "300MB", "400 MB", "400MB", "500 MB", "500MB"],
+	AX: ["AX", "600 MB", "600MB", "700 MB", "800 MB", "900 MB", "1 GB", "1GB", "GIGA"],
+});
+
 function featureEnabled(name, fallback = true) {
 	const value = process.env[name];
 	if (value === undefined || value === null || value === "") return fallback;
@@ -88,39 +94,72 @@ function isIgnoredForMatch(value) {
 }
 
 function parseServiceSpeedMbps(value) {
-	const text = normalizeText(value).replace(",", ".");
+	const text = normalizeText(value).replace(/(\d),(?=\d)/g, "$1.");
 	if (!text) return null;
-	const gb = text.match(/(\d+(?:\.\d+)?)\s*(GIGA|GB|G\b)/);
-	if (gb) return Number(gb[1]) * 1000;
-	const mb = text.match(/(\d+(?:\.\d+)?)\s*(MEGA|MB|M\b|MBPS)/);
-	if (mb) return Number(mb[1]);
+	const regex =
+		/(\d+(?:\.\d+)?)\s*(GIGA|GBPS|GB|G\b|MEGAS|MEGA|MBPS|MB|M\b|K)(?=[^A-Z0-9]|$)/g;
+	let match;
+	let best = null;
+	while ((match = regex.exec(text))) {
+		const valueNumber = Number(match[1]);
+		if (!Number.isFinite(valueNumber)) continue;
+		const unit = match[2];
+		let mbps = valueNumber;
+		if (unit.startsWith("G")) mbps = valueNumber * 1000;
+		else if (unit === "K") mbps = valueNumber / 1000;
+		if (mbps > 0 && (!best || mbps > best)) best = mbps;
+	}
+	const fiberOn = text.match(/FIBER\s+ON\s+(\d+(?:\.\d+)?)\s+INTERNET/);
+	if (fiberOn) {
+		const mbps = Number(fiberOn[1]);
+		if (Number.isFinite(mbps) && mbps > 0 && (!best || mbps > best)) best = mbps;
+	}
+	if (best) return best;
 	const plain = text.match(/(?:^|\D)(\d{2,4})(?:\D|$)/);
 	if (!plain) return null;
 	const number = Number(plain[1]);
 	return Number.isFinite(number) && number > 0 ? number : null;
 }
 
+function keywordMatch(value, keywords = []) {
+	const text = normalizeText(value);
+	return keywords.some((keyword) => {
+		const normalized = normalizeText(keyword);
+		return normalized && text.includes(normalized);
+	});
+}
+
 function classifyEquipmentByServiceSpeed(value) {
 	const speedMbps = parseServiceSpeedMbps(value);
-	if (!speedMbps || !Number.isFinite(speedMbps)) {
-		return {
-			equipmentType: "UNKNOWN",
-			speedMbps: null,
-			reason: "SERVICE_SPEED_MISSING",
-		};
+	if (speedMbps && Number.isFinite(speedMbps)) {
+		if (speedMbps <= 299) {
+			return { equipmentType: "FAST", speedMbps, reason: "SPEED_LTE_299" };
+		}
+		if (speedMbps <= 500) {
+			return { equipmentType: "AC", speedMbps, reason: "SPEED_300_500" };
+		}
+		return { equipmentType: "AX", speedMbps, reason: "SPEED_GT_500" };
 	}
-	if (speedMbps <= 100) {
-		return { equipmentType: "FAST", speedMbps, reason: "SPEED_LTE_100" };
+	if (keywordMatch(value, EQUIPMENT_KEYWORDS.AX)) {
+		return { equipmentType: "AX", speedMbps: null, reason: "KEYWORD_AX" };
 	}
-	if (speedMbps <= 500) {
-		return { equipmentType: "AC", speedMbps, reason: "SPEED_101_500" };
+	if (keywordMatch(value, EQUIPMENT_KEYWORDS.AC)) {
+		return { equipmentType: "AC", speedMbps: null, reason: "KEYWORD_AC" };
 	}
-	return { equipmentType: "AX", speedMbps, reason: "SPEED_GT_500" };
+	if (keywordMatch(value, EQUIPMENT_KEYWORDS.FAST)) {
+		return { equipmentType: "FAST", speedMbps: null, reason: "KEYWORD_FAST" };
+	}
+	return {
+		equipmentType: "UNKNOWN",
+		speedMbps: null,
+		reason: "SERVICE_SPEED_MISSING",
+	};
 }
 
 module.exports = {
 	MATCH_IGNORED_OS_TYPES,
 	MATCH_IGNORED_TYPE_IDS,
+	EQUIPMENT_KEYWORDS,
 	NEW_PRODUCTION_OS_TYPE_IDS,
 	OS_TYPES,
 	PRODUCTION_OS_TYPE_IDS,

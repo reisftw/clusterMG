@@ -52,9 +52,12 @@ const EQUIPMENT_LABELS = {
 
 const REASON_LABELS = {
 	SERVICE_SPEED_MISSING: "Velocidade do serviço não encontrada",
-	SPEED_LTE_100: "Velocidade até 100 Mbps",
-	SPEED_101_500: "Velocidade entre 101 e 500 Mbps",
+	SPEED_LTE_299: "Velocidade até 299 Mbps",
+	SPEED_300_500: "Velocidade entre 300 e 500 Mbps",
 	SPEED_GT_500: "Velocidade acima de 500 Mbps",
+	KEYWORD_FAST: "Palavra-chave FAST reconhecida",
+	KEYWORD_AC: "Palavra-chave AC reconhecida",
+	KEYWORD_AX: "Palavra-chave AX reconhecida",
 	UNKNOWN: "Dados insuficientes",
 };
 
