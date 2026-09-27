@@ -106,6 +106,12 @@ export async function buscarRunsProfilesHubsoft(params = {}) {
 	);
 }
 
+export async function buscarDetalhesExecucaoHubsoft(runId) {
+	return requestVpsApi(
+		`/admin/hubsoft/profiles/runs?limit=1&id=${encodeURIComponent(runId)}`,
+	);
+}
+
 export async function executarProfileHubsoft(profile, payload = {}) {
 	return requestVpsApi(
 		`/admin/hubsoft/profiles/${encodeURIComponent(profile)}/run`,

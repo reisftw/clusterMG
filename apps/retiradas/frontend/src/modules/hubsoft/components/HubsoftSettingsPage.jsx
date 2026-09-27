@@ -1,8 +1,11 @@
 import {
+	AlertTriangle,
+	CalendarClock,
 	ChevronDown,
 	CheckCircle2,
 	Clock3,
 	DatabaseZap,
+	History,
 	Loader2,
 	PlugZap,
 	PlayCircle,
@@ -10,6 +13,7 @@ import {
 	Save,
 	Search,
 	ShieldCheck,
+	X,
 	Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -20,6 +24,8 @@ import {
 	buscarHistoricoSyncHubsoft,
 	buscarJobSyncHubsoft,
 	buscarProfilesHubsoft,
+	buscarRegistrosHubsoft,
+	buscarRunsProfilesHubsoft,
 	buscarTecnicosRetiradaHubsoft,
 	descobrirTecnicosRetiradaHubsoft,
 	executarAuditoriaMetasHubsoft,
@@ -110,7 +116,108 @@ function safePreview(payload) {
 	}
 }
 
-function HubsoftHeader({ onRefresh, onSave, saving, testing, associating }) {
+function formatNumber(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return "-";
+	return new Intl.NumberFormat("pt-BR").format(number);
+}
+
+function getStatusKind(status) {
+	if (["COMPLETE", "VALID_EMPTY_RESULT", "completed", "Operacional"].includes(status)) {
+		return "success";
+	}
+	if (["RUNNING", "queued", "running", "Sincronizando"].includes(status)) return "running";
+	if (["NEVER_RUN", "Pendente", undefined, null, ""].includes(status)) return "neutral";
+	return "error";
+}
+
+function StatusBadge({ status, label }) {
+	const kind = getStatusKind(status);
+	const classes = {
+		success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+		running: "border-blue-200 bg-blue-50 text-blue-800",
+		neutral: "border-slate-200 bg-slate-50 text-slate-700",
+		error: "border-red-200 bg-red-50 text-red-800",
+	};
+	return (
+		<span
+			className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-black uppercase ${classes[kind]}`}
+		>
+			{label || status || "NEVER_RUN"}
+		</span>
+	);
+}
+
+function getProfileState(profiles, profile) {
+	return (profiles || []).find((item) => item.profile === profile) || {};
+}
+
+function getLatestRun(profiles, profileIds) {
+	const ids = Array.isArray(profileIds) ? profileIds : [profileIds];
+	return ids
+		.map((id) => getProfileState(profiles, id)?.lastRun)
+		.filter(Boolean)
+		.sort(
+			(a, b) =>
+				new Date(b.started_at || 0).getTime() -
+				new Date(a.started_at || 0).getTime(),
+		)[0];
+}
+
+function addMinutes(value, minutes) {
+	const date = value ? new Date(value) : null;
+	if (!date || Number.isNaN(date.getTime())) return "-";
+	date.setMinutes(date.getMinutes() + Number(minutes || 0));
+	return formatDateTime(date);
+}
+
+function nextDailyTime(time, enabled = true) {
+	if (!enabled) return "Automação desativada";
+	const [hour = "0", minute = "0"] = String(time || "00:00").split(":");
+	const now = new Date();
+	const next = new Date(now);
+	next.setHours(Number(hour), Number(minute), 0, 0);
+	if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+	return formatDateTime(next);
+}
+
+function nextCheckpoint(config) {
+	if (config.autoDailyEnabled === false || config.autoSyncEnabled === false) {
+		return "Automação desativada";
+	}
+	const hours = Array.isArray(config.autoDailyCheckpointHours)
+		? config.autoDailyCheckpointHours
+		: [];
+	if (!hours.length) return "-";
+	const now = new Date();
+	const sorted = [...hours].sort((a, b) => a - b);
+	const nextHour = sorted.find((hour) => hour > now.getHours());
+	const date = new Date(now);
+	date.setHours(nextHour ?? sorted[0], 0, 0, 0);
+	if (nextHour === undefined) date.setDate(date.getDate() + 1);
+	return formatDateTime(date);
+}
+
+function getOverallStatus(config, profiles) {
+	if (!config.webUsername || !config.webPasswordConfigured) return "Pendente";
+	if ((profiles || []).some((item) => getStatusKind(item.status) === "running")) {
+		return "Sincronizando";
+	}
+	if ((profiles || []).some((item) => getStatusKind(item.status) === "error")) {
+		return "Atenção";
+	}
+	return "Operacional";
+}
+
+function HubsoftHeader({
+	onRefresh,
+	onSave,
+	saving,
+	testing,
+	associating,
+	config,
+	profiles,
+}) {
 	const busy = saving || testing || associating;
 	return (
 		<section className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
@@ -122,12 +229,16 @@ function HubsoftHeader({ onRefresh, onSave, saving, testing, associating }) {
 					<div>
 						<h1 className="text-2xl font-black text-slate-950">Hubsoft</h1>
 						<p className="text-sm font-semibold text-slate-500">
-							Configure o endpoint, valide o OAuth e prepare a leitura das O.S.
-							direto do Hubsoft.
+							Integração, sincronização e auditoria operacional
+						</p>
+						<p className="mt-1 max-w-3xl text-xs font-semibold text-slate-500">
+							Configure credenciais, automações e acompanhe as execuções de
+							Mapa, Match, Metas, Loja, Multas e técnicos de retirada.
 						</p>
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-2">
+					<StatusBadge status={getOverallStatus(config, profiles)} />
 					<button
 						type="button"
 						onClick={onRefresh}
@@ -147,7 +258,7 @@ function HubsoftHeader({ onRefresh, onSave, saving, testing, associating }) {
 						) : (
 							<Save size={17} />
 						)}{" "}
-						Salvar
+						Salvar alterações
 					</button>
 				</div>
 			</div>
@@ -172,45 +283,92 @@ function HubsoftFeedback({ feedback, error }) {
 	);
 }
 
-function resolveHubsoftStatusLabel(config) {
-	if (config.useHubsoftAsSource) return "Associado";
-	return config.enabled ? "Configurado" : "Pendente";
+function OverviewCard({ label, value, helper, icon, tone = "blue" }) {
+	const tones = {
+		blue: "border-blue-100 bg-blue-50 text-blue-700",
+		emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+		orange: "border-orange-100 bg-orange-50 text-orange-700",
+		slate: "border-slate-100 bg-slate-50 text-slate-700",
+		red: "border-red-100 bg-red-50 text-red-700",
+	};
+	return (
+		<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+			<div className="flex items-start justify-between gap-3">
+				<div>
+					<p className="text-xs font-black uppercase tracking-wide text-slate-500">
+						{label}
+					</p>
+					<p className="mt-2 text-lg font-black text-slate-950">{value}</p>
+				</div>
+				<div
+					className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${tones[tone]}`}
+				>
+					{icon}
+				</div>
+			</div>
+			<p className="mt-2 text-xs font-semibold text-slate-500">{helper}</p>
+		</div>
+	);
 }
 
-function HubsoftStatusCards({ config }) {
+function HubsoftStatusCards({ config, profiles }) {
+	const latestRun = getLatestRun(
+		profiles,
+		HUBSOFT_PROFILES.map((profile) => profile.id),
+	);
+	const failed = (profiles || []).filter(
+		(item) => getStatusKind(item.status) === "error",
+	).length;
+	const activeRoutines = [
+		config.autoDailyEnabled,
+		config.autoMetaEnabled,
+		config.autoFinesEnabled,
+		config.autoMapMatchEnabled,
+	].filter((item) => item !== false).length;
+	const overall = getOverallStatus(config, profiles);
 	return (
-		<section className="grid gap-4 lg:grid-cols-3">
-			<div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-				<p className="text-xs font-black uppercase text-emerald-700">Status</p>
-				<p className="mt-2 text-lg font-black text-emerald-950">
-					{resolveHubsoftStatusLabel(config)}
-				</p>
-				<p className="mt-1 text-xs font-semibold text-emerald-700">
-					Origem Hubsoft: {config.useHubsoftAsSource ? "ativa" : "não ativa"}
-				</p>
-			</div>
-			<div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-				<p className="text-xs font-black uppercase text-blue-700">Token</p>
-				<p className="mt-2 text-lg font-black text-blue-950">
-					{config.accessTokenConfigured ? "Armazenado" : "Ausente"}
-				</p>
-				<p className="mt-1 text-xs font-semibold text-blue-700">
-					Expira em: {formatDateTime(config.tokenExpiresAt)}
-				</p>
-			</div>
-			<div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
-				<p className="text-xs font-black uppercase text-orange-700">
-					Última validação
-				</p>
-				<p className="mt-2 text-lg font-black text-orange-950">
-					{formatDateTime(config.lastValidatedAt)}
-				</p>
-				<p className="mt-1 text-xs font-semibold text-orange-700">
-					{config.lastError
-						? `Erro: ${config.lastError}`
-						: "Sem erro registrado"}
-				</p>
-			</div>
+		<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+			<OverviewCard
+				label="Status geral"
+				value={overall}
+				helper={`Origem HubSoft: ${config.useHubsoftAsSource ? "ativa" : "não ativa"}`}
+				icon={<PlugZap size={20} />}
+				tone={overall === "Atenção" ? "red" : "emerald"}
+			/>
+			<OverviewCard
+				label="Autenticação"
+				value={config.webPasswordConfigured ? "Login salvo" : "Pendente"}
+				helper={config.webUsername || "Credenciais web não configuradas"}
+				icon={<ShieldCheck size={20} />}
+			/>
+			<OverviewCard
+				label="Última execução"
+				value={formatDateTime(latestRun?.started_at)}
+				helper={latestRun?.profile || "Nenhuma rotina executada"}
+				icon={<History size={20} />}
+				tone="slate"
+			/>
+			<OverviewCard
+				label="Próximo checkpoint"
+				value={nextCheckpoint(config)}
+				helper="Diário operacional"
+				icon={<CalendarClock size={20} />}
+				tone="orange"
+			/>
+			<OverviewCard
+				label="Erros recentes"
+				value={formatNumber(failed)}
+				helper={failed ? "Há rotinas com falha" : "Sem falhas nos profiles"}
+				icon={<AlertTriangle size={20} />}
+				tone={failed ? "red" : "emerald"}
+			/>
+			<OverviewCard
+				label="Rotinas ativas"
+				value={`${activeRoutines}/4`}
+				helper="Diário, metas, multas, mapa/match"
+				icon={<Clock3 size={20} />}
+				tone="blue"
+			/>
 		</section>
 	);
 }
@@ -232,6 +390,7 @@ function useHubsoftSettingsController() {
 	const [syncJob, setSyncJob] = useState(null);
 	const [syncRuns, setSyncRuns] = useState([]);
 	const [profiles, setProfiles] = useState([]);
+	const [profileRuns, setProfileRuns] = useState([]);
 	const [profileRunning, setProfileRunning] = useState("");
 	const [metaAuditRunning, setMetaAuditRunning] = useState(false);
 	const [metaAuditProgress, setMetaAuditProgress] = useState(null);
@@ -267,6 +426,14 @@ function useHubsoftSettingsController() {
 			]);
 			setProfiles(profileResult?.items || []);
 			setTechnicians(technicianResult?.items || []);
+			const profileRunResult = await buscarRunsProfilesHubsoft({ limit: 60 }).catch(
+				() => [],
+			);
+			setProfileRuns(
+				Array.isArray(profileRunResult)
+					? profileRunResult
+					: profileRunResult?.items || [],
+			);
 		} catch (err) {
 			setError(
 				err?.message || "Não foi possível carregar a configuração do Hubsoft.",
@@ -507,6 +674,7 @@ function useHubsoftSettingsController() {
 		syncJob,
 		syncRuns,
 		profiles,
+		profileRuns,
 		profileRunning,
 		metaAuditForm,
 		setMetaAuditForm,
@@ -537,6 +705,11 @@ function CollapsibleSection({
 	icon,
 	iconClassName = "bg-slate-100 text-slate-700",
 	defaultOpen = false,
+	status,
+	summary,
+	lastUpdate,
+	nextUpdate,
+	onLastUpdateClick,
 	children,
 }) {
 	const [open, setOpen] = useState(defaultOpen);
@@ -547,18 +720,57 @@ function CollapsibleSection({
 				onClick={() => setOpen((current) => !current)}
 				className="flex w-full items-start justify-between gap-4 text-left"
 			>
-				<div className="flex items-start gap-3">
+				<div className="flex min-w-0 items-start gap-3">
 					<div
 						className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${iconClassName}`}
 					>
 						{icon}
 					</div>
-					<div>
-						<h2 className="text-lg font-black text-slate-950">{title}</h2>
+					<div className="min-w-0">
+						<div className="flex flex-wrap items-center gap-2">
+							<h2 className="text-lg font-black text-slate-950">{title}</h2>
+							{status ? <StatusBadge status={status} /> : null}
+						</div>
 						{description ? (
 							<p className="text-sm font-semibold text-slate-500">
 								{description}
 							</p>
+						) : null}
+						{summary || lastUpdate || nextUpdate ? (
+							<div className="mt-3 flex flex-wrap gap-2">
+								{summary ? (
+									<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
+										{summary}
+									</span>
+								) : null}
+								{lastUpdate ? (
+									<span
+										role={onLastUpdateClick ? "button" : undefined}
+										tabIndex={onLastUpdateClick ? 0 : undefined}
+										onClick={(event) => {
+											event.stopPropagation();
+											onLastUpdateClick?.();
+										}}
+										onKeyDown={(event) => {
+											if (event.key === "Enter" || event.key === " ") {
+												event.preventDefault();
+												event.stopPropagation();
+												onLastUpdateClick?.();
+											}
+										}}
+										className={`rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700 ${
+											onLastUpdateClick ? "cursor-pointer hover:bg-blue-100" : ""
+										}`}
+									>
+										Última: {lastUpdate}
+									</span>
+								) : null}
+								{nextUpdate ? (
+									<span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-700">
+										Próxima: {nextUpdate}
+									</span>
+								) : null}
+							</div>
 						) : null}
 					</div>
 				</div>
@@ -596,20 +808,10 @@ function HubsoftSyncSection({
 			defaultOpen={false}
 		>
 			<div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-				<div className="flex items-start gap-3">
-					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-700">
-						<DatabaseZap size={21} />
-					</div>
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Sincronização Mapa e Match
-						</h2>
-						<p className="text-sm font-semibold text-slate-500">
-							Prepare a leitura automática do Hubsoft. Use prévia primeiro;
-							produção substitui os dados atuais.
-						</p>
-					</div>
-				</div>
+				<p className="text-sm font-semibold text-slate-500">
+					Prepare a leitura automática do HubSoft. Use prévia primeiro; produção
+					substitui os dados atuais.
+				</p>
 				<div className="flex flex-wrap gap-2">
 					<button
 						type="button"
@@ -845,44 +1047,95 @@ function statusTone(status) {
 	return "bg-red-50 text-red-800 border-red-200";
 }
 
-function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
+function getNextProfileRun(profileId, state, config) {
+	if (state?.status === "RUNNING" || state?.locked) return "Após conclusão";
+	const lastRun = state?.lastRun;
+	if (["MAPA", "MATCH"].includes(profileId)) {
+		if (config.autoMapMatchEnabled === false || config.autoSyncEnabled === false) {
+			return "Automação desativada";
+		}
+		return addMinutes(lastRun?.started_at, config.autoMapMatchIntervalMinutes || 60);
+	}
+	if (profileId === "META_D0") {
+		if (config.autoDailyEnabled === false || config.autoSyncEnabled === false) {
+			return "Automação desativada";
+		}
+		return addMinutes(lastRun?.started_at, config.autoDailyIntervalMinutes || 30);
+	}
+	if (profileId === "META_D_MINUS_ONE" || profileId === "LOJA") {
+		return nextDailyTime(
+			config.autoMetaTime || "03:00",
+			config.autoMetaEnabled !== false && config.autoSyncEnabled !== false,
+		);
+	}
+	if (profileId === "MULTAS") {
+		return nextDailyTime(
+			config.autoFinesTime || "18:00",
+			config.autoFinesEnabled !== false && config.autoSyncEnabled !== false,
+		);
+	}
+	return "-";
+}
+
+function ProfileHistoryButton({ run, onOpenRun }) {
+	if (!run?.id) return null;
+	return (
+		<button
+			type="button"
+			onClick={() => onOpenRun(run)}
+			className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 transition hover:bg-slate-200"
+		>
+			{formatDateTime(run.started_at)}
+		</button>
+	);
+}
+
+function HubsoftProfilesSection({
+	profiles,
+	profileRuns,
+	profileRunning,
+	onRunProfile,
+	onOpenRun,
+	config,
+}) {
 	const byProfile = new Map((profiles || []).map((item) => [item.profile, item]));
+	const latestRun = getLatestRun(
+		profiles,
+		HUBSOFT_PROFILES.map((profile) => profile.id),
+	);
 	return (
 		<CollapsibleSection
-			title="Central de Sincronização HubSoft"
-			description="Execute cada profile separadamente em homologação e confira totais, classificação e falhas antes de promover qualquer rotina."
+			title="Central Técnica de Integração HubSoft"
+			description="Rotinas operacionais separadas por domínio, com histórico e snapshots auditáveis."
 			icon={<PlayCircle size={21} />}
 			iconClassName="bg-indigo-50 text-indigo-700"
+			status={
+				(profiles || []).some((item) => item.status === "RUNNING")
+					? "RUNNING"
+					: (profiles || []).some((item) => getStatusKind(item.status) === "error")
+						? "FAILED"
+						: "COMPLETE"
+			}
+			summary={`${formatNumber(HUBSOFT_PROFILES.length)} rotinas`}
+			lastUpdate={formatDateTime(latestRun?.started_at)}
+			nextUpdate={nextCheckpoint(config)}
+			onLastUpdateClick={() => latestRun && onOpenRun(latestRun)}
 			defaultOpen
 		>
-			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-				<div className="flex items-start gap-3">
-					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
-						<PlayCircle size={21} />
-					</div>
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Central de Sincronização HubSoft
-						</h2>
-						<p className="text-sm font-semibold text-slate-500">
-							Execute cada profile separadamente em homologação e confira totais,
-							classificação e falhas antes de promover qualquer rotina.
-						</p>
-					</div>
-				</div>
-			</div>
-
-			<div className="grid gap-4 xl:grid-cols-5">
+			<div className="grid gap-4 xl:grid-cols-3">
 				{HUBSOFT_PROFILES.map((profile) => {
 					const state = byProfile.get(profile.id) || {};
 					const lastRun = state.lastRun || {};
 					const ranking = lastRun.result_summary?.ranking || {};
 					const progress = lastRun.result_summary || {};
 					const running = profileRunning === profile.id || state.locked;
+					const history = (profileRuns || [])
+						.filter((run) => run.profile === profile.id)
+						.slice(0, 3);
 					return (
 						<div
 							key={profile.id}
-							className="rounded-2xl border border-slate-200 p-4"
+							className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
 						>
 							<div className="flex items-start justify-between gap-3">
 								<div>
@@ -928,19 +1181,32 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 								) : null}
 								<div className="flex justify-between gap-3">
 									<dt>Última execução</dt>
-									<dd>{formatDateTime(lastRun.started_at)}</dd>
+									<dd>
+										<button
+											type="button"
+											disabled={!lastRun.id}
+											onClick={() => onOpenRun(lastRun)}
+											className="font-black text-blue-700 disabled:text-slate-500"
+										>
+											{formatDateTime(lastRun.started_at)}
+										</button>
+									</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Próxima</dt>
+									<dd>{getNextProfileRun(profile.id, state, config)}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
 									<dt>Total</dt>
-									<dd>{lastRun.expected_total ?? "-"}</dd>
+									<dd>{formatNumber(lastRun.expected_total)}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
 									<dt>Únicos</dt>
-									<dd>{lastRun.unique_rows ?? "-"}</dd>
+									<dd>{formatNumber(lastRun.unique_rows)}</dd>
 								</div>
 								<div className="flex justify-between gap-3">
 									<dt>Não classificados</dt>
-									<dd>{lastRun.unclassified ?? "-"}</dd>
+									<dd>{formatNumber(lastRun.unclassified)}</dd>
 								</div>
 							</dl>
 							{ranking.cidades?.length ? (
@@ -955,8 +1221,24 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 												className="flex justify-between gap-3 text-xs font-bold text-slate-700"
 											>
 												<span className="truncate">{item.label}</span>
-												<span>{item.total}</span>
+												<span>{formatNumber(item.total)}</span>
 											</div>
+										))}
+									</div>
+								</div>
+							) : null}
+							{history.length ? (
+								<div className="mt-4">
+									<p className="text-[10px] font-black uppercase text-slate-500">
+										Histórico
+									</p>
+									<div className="mt-2 flex flex-wrap gap-2">
+										{history.map((run) => (
+											<ProfileHistoryButton
+												key={run.id}
+												run={run}
+												onOpenRun={onOpenRun}
+											/>
 										))}
 									</div>
 								</div>
@@ -1015,7 +1297,10 @@ function HubsoftMetaAuditSection({
 			description="Releia dias específicos do HubSoft e aplique cada resultado no dia correto do painel de metas."
 			icon={<CheckCircle2 size={21} />}
 			iconClassName="bg-emerald-50 text-emerald-700"
-			defaultOpen
+			status={auditState?.status || "NEVER_RUN"}
+			summary={`${dates.length} dia(s) selecionado(s)`}
+			lastUpdate={formatDateTime(auditLastRun.started_at)}
+			defaultOpen={false}
 		>
 			<div className="grid gap-4 lg:grid-cols-4">
 				<label className="block">
@@ -1122,11 +1407,15 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 		: config.autoDailyCheckpointHours || "";
 	return (
 		<CollapsibleSection
-			title="Automação e tempos"
+			title="Automação e Agendamentos"
 			description="Configure a frequência das leituras automáticas do HubSoft em homologação."
 			icon={<Clock3 size={21} />}
 			iconClassName="bg-violet-50 text-violet-700"
-			defaultOpen
+			status={config.autoSyncEnabled === false ? "NEVER_RUN" : "COMPLETE"}
+			summary={`Mapa/Match a cada ${config.autoMapMatchIntervalMinutes || 60} min`}
+			lastUpdate={formatDateTime(config.autoMapMatchLastRunAt)}
+			nextUpdate={nextCheckpoint(config)}
+			defaultOpen={false}
 		>
 			<div className="grid gap-4 lg:grid-cols-3">
 				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
@@ -1248,13 +1537,15 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
 					/>
 				</label>
-				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold text-slate-600">
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold text-slate-600 lg:col-span-3">
 					<p className="font-black uppercase text-slate-500">Últimas rotinas</p>
-					<p className="mt-2">Diário: {formatDateTime(config.autoDailyLastRunAt)}</p>
-					<p>Checkpoint: {formatDateTime(config.autoDailyLastCheckpointAt)}</p>
-					<p>Metas: {formatDateTime(config.autoMetaLastRunAt)}</p>
-					<p>Multas: {formatDateTime(config.autoFinesLastRunAt)}</p>
-					<p>Mapa/Match: {formatDateTime(config.autoMapMatchLastRunAt)}</p>
+					<div className="mt-3 grid gap-2 md:grid-cols-5">
+						<p>Diário: {formatDateTime(config.autoDailyLastRunAt)}</p>
+						<p>Checkpoint: {formatDateTime(config.autoDailyLastCheckpointAt)}</p>
+						<p>Metas: {formatDateTime(config.autoMetaLastRunAt)}</p>
+						<p>Multas: {formatDateTime(config.autoFinesLastRunAt)}</p>
+						<p>Mapa/Match: {formatDateTime(config.autoMapMatchLastRunAt)}</p>
+					</div>
 				</div>
 			</div>
 		</CollapsibleSection>
@@ -1266,29 +1557,30 @@ function HubsoftWithdrawalTechniciansSection({
 	discovering,
 	onDiscover,
 }) {
+	const [search, setSearch] = useState("");
+	const filtered = (technicians || []).filter((item) =>
+		[item.nome_hubsoft, item.nome_exibicao, item.hubsoft_technician_id]
+			.join(" ")
+			.toLowerCase()
+			.includes(search.toLowerCase()),
+	);
 	return (
 		<CollapsibleSection
 			title="Técnicos de Retirada"
 			description="Cadastro usado pela classificação. A descoberta inicial busca nomes HubSoft contendo “TÉCNICO RETIRADA” e grava o ID como chave."
 			icon={<Users size={21} />}
 			iconClassName="bg-emerald-50 text-emerald-700"
+			status={(technicians || []).length ? "COMPLETE" : "NEVER_RUN"}
+			summary={`${formatNumber((technicians || []).length)} técnico(s)`}
 			defaultOpen={false}
 		>
-			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-				<div className="flex items-start gap-3">
-					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-						<Users size={21} />
-					</div>
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Técnicos de Retirada
-						</h2>
-						<p className="text-sm font-semibold text-slate-500">
-							Cadastro usado pela classificação. A descoberta inicial busca nomes
-							HubSoft contendo “TÉCNICO RETIRADA” e grava o ID como chave.
-						</p>
-					</div>
-				</div>
+			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+				<input
+					value={search}
+					onChange={(event) => setSearch(event.target.value)}
+					placeholder="Buscar técnico"
+					className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 lg:max-w-sm"
+				/>
 				<button
 					type="button"
 					disabled={discovering}
@@ -1315,8 +1607,8 @@ function HubsoftWithdrawalTechniciansSection({
 						</tr>
 					</thead>
 					<tbody className="divide-y divide-slate-100 bg-white">
-						{(technicians || []).length ? (
-							technicians.map((item) => (
+						{filtered.length ? (
+							filtered.map((item) => (
 								<tr key={item.id || item.hubsoft_technician_id}>
 									<td className="px-4 py-3 font-black text-slate-900">
 										{item.hubsoft_technician_id}
@@ -1349,7 +1641,7 @@ function HubsoftWithdrawalTechniciansSection({
 									colSpan={5}
 									className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
 								>
-									Nenhum técnico cadastrado ainda.
+									Nenhum técnico encontrado.
 								</td>
 							</tr>
 						)}
@@ -1360,13 +1652,23 @@ function HubsoftWithdrawalTechniciansSection({
 	);
 }
 
-function HubsoftWebCredentialsSection({ config, updateConfig }) {
+function HubsoftWebCredentialsSection({
+	config,
+	updateConfig,
+	onSave,
+	onTest,
+	saving,
+	testing,
+}) {
 	return (
 		<CollapsibleSection
-			title="Login HubSoft para sincronização"
+			title="Conexão com HubSoft"
 			description="Use aqui o login normal do HubSoft. Essas credenciais ficam salvas no banco do Retiradas homolog e serão usadas para buscar os relatórios automaticamente."
 			icon={<ShieldCheck size={21} />}
 			iconClassName="bg-blue-50 text-blue-700"
+			status={config.webPasswordConfigured ? "COMPLETE" : "NEVER_RUN"}
+			summary={config.webUsername || "Login não configurado"}
+			lastUpdate={formatDateTime(config.lastValidatedAt)}
 			defaultOpen
 		>
 			<div className="grid gap-4 lg:grid-cols-3">
@@ -1408,7 +1710,236 @@ function HubsoftWebCredentialsSection({ config, updateConfig }) {
 					/>
 				</label>
 			</div>
+			<div className="mt-5 flex flex-wrap gap-3">
+				<button
+					type="button"
+					onClick={onSave}
+					disabled={saving || testing}
+					className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+				>
+					{saving ? <Loader2 className="animate-spin" size={17} /> : <Save size={17} />}
+					Salvar conexão
+				</button>
+				<button
+					type="button"
+					onClick={onTest}
+					disabled={saving || testing}
+					className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+				>
+					{testing ? (
+						<Loader2 className="animate-spin" size={17} />
+					) : (
+						<CheckCircle2 size={17} />
+					)}
+					Testar conexão
+				</button>
+			</div>
 		</CollapsibleSection>
+	);
+}
+
+function RunDetailModal({ run, records, loading, page, setPage, onClose }) {
+	useEffect(() => {
+		if (!run) return undefined;
+		const onKeyDown = (event) => {
+			if (event.key === "Escape") onClose();
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [run, onClose]);
+
+	if (!run) return null;
+	const summary = run.result_summary || {};
+	const ranking = summary.ranking || {};
+	const rows = Array.isArray(records) ? records : [];
+	const pageSize = 10;
+	const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+	const safePage = Math.min(Math.max(page, 1), totalPages);
+	const visibleRows = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+	return (
+		<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/55 p-4">
+			<div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+				<div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+					<div>
+						<p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">
+							Execução HubSoft
+						</p>
+						<h2 className="mt-1 text-2xl font-black text-slate-950">
+							{run.profile || "Rotina"} · {formatDateTime(run.started_at)}
+						</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Snapshot salvo na execução. Não depende do estado atual do sistema.
+						</p>
+					</div>
+					<button
+						type="button"
+						onClick={onClose}
+						className="rounded-2xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50"
+					>
+						<X size={20} />
+					</button>
+				</div>
+				<div className="max-h-[calc(90vh-98px)] overflow-y-auto p-5">
+					<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+						<OverviewCard
+							label="Status"
+							value={run.status || "-"}
+							helper={`Finalizado em ${formatDateTime(run.finished_at)}`}
+							icon={<CheckCircle2 size={20} />}
+							tone={getStatusKind(run.status) === "error" ? "red" : "emerald"}
+						/>
+						<OverviewCard
+							label="Total"
+							value={formatNumber(run.expected_total)}
+							helper="Linhas esperadas"
+							icon={<DatabaseZap size={20} />}
+						/>
+						<OverviewCard
+							label="Únicos"
+							value={formatNumber(run.unique_rows)}
+							helper="Registros deduplicados"
+							icon={<ShieldCheck size={20} />}
+							tone="emerald"
+						/>
+						<OverviewCard
+							label="Não classificados"
+							value={formatNumber(run.unclassified)}
+							helper="Itens sem regra final"
+							icon={<AlertTriangle size={20} />}
+							tone={Number(run.unclassified || 0) ? "orange" : "emerald"}
+						/>
+						<OverviewCard
+							label="Duração"
+							value={
+								run.duration_ms ? `${Math.round(run.duration_ms / 1000)}s` : "-"
+							}
+							helper="Tempo de processamento"
+							icon={<Clock3 size={20} />}
+							tone="slate"
+						/>
+					</div>
+					{run.error_message ? (
+						<div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-black text-red-800">
+							{run.error_message}
+						</div>
+					) : null}
+					<div className="mt-5 grid gap-4 lg:grid-cols-3">
+						{["cidades", "canais", "responsaveis"].map((key) => {
+							const items = ranking[key] || [];
+							return (
+								<div key={key} className="rounded-2xl border border-slate-200 p-4">
+									<p className="text-xs font-black uppercase text-slate-500">
+										Ranking {key}
+									</p>
+									<div className="mt-3 space-y-2">
+										{items.slice(0, 10).map((item) => (
+											<div
+												key={`${key}-${item.label}`}
+												className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700"
+											>
+												<span className="truncate">{item.label || "-"}</span>
+												<span>{formatNumber(item.total)}</span>
+											</div>
+										))}
+										{!items.length ? (
+											<p className="rounded-xl bg-slate-50 px-3 py-4 text-sm font-semibold text-slate-500">
+												Sem dados gravados nesta execução.
+											</p>
+										) : null}
+									</div>
+								</div>
+							);
+						})}
+					</div>
+					<div className="mt-5 rounded-2xl border border-slate-200">
+						<div className="flex flex-col gap-2 border-b border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="text-sm font-black text-slate-950">
+									Amostra de registros
+								</p>
+								<p className="text-xs font-semibold text-slate-500">
+									Mostrando até 50 registros, paginados de 10 em 10.
+								</p>
+							</div>
+							<div className="flex items-center gap-2 text-xs font-black text-slate-600">
+								<button
+									type="button"
+									disabled={safePage <= 1}
+									onClick={() => setPage((current) => Math.max(current - 1, 1))}
+									className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-50"
+								>
+									Anterior
+								</button>
+								<span>
+									{safePage}/{totalPages}
+								</span>
+								<button
+									type="button"
+									disabled={safePage >= totalPages}
+									onClick={() =>
+										setPage((current) => Math.min(current + 1, totalPages))
+									}
+									className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-50"
+								>
+									Próxima
+								</button>
+							</div>
+						</div>
+						{loading ? (
+							<div className="flex items-center justify-center gap-2 p-8 text-sm font-black text-slate-600">
+								<Loader2 className="animate-spin" size={18} />
+								Carregando registros
+							</div>
+						) : (
+							<div className="overflow-x-auto">
+								<table className="min-w-[900px] w-full divide-y divide-slate-200 text-sm">
+									<thead className="bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+										<tr>
+											<th className="px-4 py-3">O.S.</th>
+											<th className="px-4 py-3">Cliente</th>
+											<th className="px-4 py-3">Cidade</th>
+											<th className="px-4 py-3">Canal</th>
+											<th className="px-4 py-3">Data origem</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-slate-100">
+										{visibleRows.map((item) => (
+											<tr key={item.id || item.hubsoft_number}>
+												<td className="px-4 py-3 font-black text-blue-700">
+													{item.hubsoft_number || "-"}
+												</td>
+												<td className="px-4 py-3 font-semibold text-slate-700">
+													{item.customer_name || "-"}
+												</td>
+												<td className="px-4 py-3 font-semibold text-slate-700">
+													{item.city || "-"}
+												</td>
+												<td className="px-4 py-3 font-semibold text-slate-700">
+													{item.production_channel || "-"}
+												</td>
+												<td className="px-4 py-3 font-semibold text-slate-700">
+													{formatDateTime(item.source_date)}
+												</td>
+											</tr>
+										))}
+										{!visibleRows.length ? (
+											<tr>
+												<td
+													colSpan={5}
+													className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
+												>
+													Nenhum registro salvo para esta execução.
+												</td>
+											</tr>
+										) : null}
+									</tbody>
+								</table>
+							</div>
+						)}
+					</div>
+				</div>
+			</div>
+		</div>
 	);
 }
 
@@ -1427,6 +1958,7 @@ export default function HubsoftSettingsPage() {
 		syncJob,
 		syncRuns,
 		profiles,
+		profileRuns,
 		profileRunning,
 		metaAuditForm,
 		setMetaAuditForm,
@@ -1449,6 +1981,28 @@ export default function HubsoftSettingsPage() {
 		toggleArrayValue,
 		handleSync,
 	} = useHubsoftSettingsController();
+	const [selectedRun, setSelectedRun] = useState(null);
+	const [selectedRunRecords, setSelectedRunRecords] = useState([]);
+	const [selectedRunLoading, setSelectedRunLoading] = useState(false);
+	const [selectedRunPage, setSelectedRunPage] = useState(1);
+
+	const openRunDetails = async (run) => {
+		if (!run?.id) return;
+		setSelectedRun(run);
+		setSelectedRunRecords([]);
+		setSelectedRunPage(1);
+		setSelectedRunLoading(true);
+		try {
+			const result = await buscarRegistrosHubsoft({ runId: run.id, limit: 50 });
+			setSelectedRunRecords(
+				Array.isArray(result) ? result : result?.items || result?.rows || [],
+			);
+		} catch {
+			setSelectedRunRecords([]);
+		} finally {
+			setSelectedRunLoading(false);
+		}
+	};
 
 	if (loading) return <Spinner fullScreen={false} />;
 
@@ -1460,18 +2014,27 @@ export default function HubsoftSettingsPage() {
 				saving={saving}
 				testing={testing}
 				associating={associating}
+				config={config}
+				profiles={profiles}
 			/>
 			<HubsoftFeedback feedback={feedback} error={error} />
-			<HubsoftStatusCards config={config} />
+			<HubsoftStatusCards config={config} profiles={profiles} />
 			<HubsoftWebCredentialsSection
 				config={config}
 				updateConfig={updateConfig}
+				onSave={handleSave}
+				onTest={handleTest}
+				saving={saving}
+				testing={testing}
 			/>
 			<HubsoftAutomationSection config={config} updateConfig={updateConfig} />
 			<HubsoftProfilesSection
 				profiles={profiles}
+				profileRuns={profileRuns}
 				profileRunning={profileRunning}
 				onRunProfile={handleRunProfile}
+				onOpenRun={openRunDetails}
+				config={config}
 			/>
 			<HubsoftMetaAuditSection
 				form={metaAuditForm}
@@ -1495,21 +2058,6 @@ export default function HubsoftSettingsPage() {
 				iconClassName="bg-blue-50 text-blue-700"
 				defaultOpen={false}
 			>
-				<div className="mb-5 flex items-start gap-3">
-					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-						<ShieldCheck size={21} />
-					</div>
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Credenciais OAuth
-						</h2>
-						<p className="text-sm font-semibold text-slate-500">
-							O backend usa essas credenciais para gerar o Bearer token.
-							Segredos salvos não são exibidos novamente.
-						</p>
-					</div>
-				</div>
-
 				<div className="grid gap-4 lg:grid-cols-2">
 					<label className="block">
 						<span className="text-xs font-black uppercase text-slate-500">
@@ -1645,20 +2193,6 @@ export default function HubsoftSettingsPage() {
 				iconClassName="bg-slate-100 text-slate-700"
 				defaultOpen={false}
 			>
-				<div className="mb-5 flex items-start gap-3">
-					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-						<Search size={21} />
-					</div>
-					<div>
-						<h2 className="text-lg font-black text-slate-950">
-							Consulta teste de O.S.
-						</h2>
-						<p className="text-sm font-semibold text-slate-500">
-							Use uma busca real para confirmar o retorno antes de substituir as
-							planilhas.
-						</p>
-					</div>
-				</div>
 				<div className="grid gap-3 lg:grid-cols-[220px_1fr_160px_140px]">
 					<select
 						value={query.busca}
@@ -1730,6 +2264,14 @@ export default function HubsoftSettingsPage() {
 				toggleArrayValue={toggleArrayValue}
 				syncJob={syncJob}
 				syncRuns={syncRuns}
+			/>
+			<RunDetailModal
+				run={selectedRun}
+				records={selectedRunRecords}
+				loading={selectedRunLoading}
+				page={selectedRunPage}
+				setPage={setSelectedRunPage}
+				onClose={() => setSelectedRun(null)}
 			/>
 		</div>
 	);

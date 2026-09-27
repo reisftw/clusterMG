@@ -2239,14 +2239,19 @@ async function getRun(id) {
 	return result.rows[0] || null;
 }
 
-async function listRuns({ limit = 20, profile } = {}) {
+async function listRuns({ limit = 20, profile, id } = {}) {
+	const clauses = [];
 	const params = [];
-	let where = "";
+	if (id) {
+		params.push(id);
+		clauses.push(`id = $${params.length}`);
+	}
 	if (profile) {
 		params.push(profile);
-		where = "where profile = $1";
+		clauses.push(`profile = $${params.length}`);
 	}
 	params.push(Math.min(Math.max(Number(limit || 20), 1), 100));
+	const where = clauses.length ? `where ${clauses.join(" and ")}` : "";
 	const result = await db.query(
 		`select *
        from hubsoft_sync_runs
