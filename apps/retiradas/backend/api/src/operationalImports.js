@@ -2,6 +2,7 @@ const documents = require("./documents");
 const db = require("./db");
 const auditLog = require("./auditLog");
 const mensageriaRepository = require("./mensageriaRepository");
+const ordensRepository = require("./ordensRepository");
 const regionaisRepository = require("./regionaisRepository");
 const { broadcastRealtime } = require("./realtime");
 const {
@@ -751,13 +752,18 @@ async function upsertMany(collectionPath, docsMap, progress = null) {
 	const total = entries.length;
 	let processed = 0;
 	for (const [documentId, data] of entries) {
-		await documents.upsertDocument({
+		const record = {
 			path: `${collectionPath}/${documentId}`,
 			collectionPath,
 			documentId,
 			parentPath: null,
 			data,
-		});
+		};
+		if (ordensRepository.isOrdersCollection(collectionPath)) {
+			await ordensRepository.upsertDocument(record, { returnDocument: false });
+		} else {
+			await documents.upsertDocument(record);
+		}
 		processed += 1;
 		if (
 			progress?.update &&
