@@ -185,6 +185,12 @@ function addDays(dateText, days) {
 	return date.toISOString().slice(0, 10);
 }
 
+function addMonths(dateText, months) {
+	const date = parseDateOnly(dateText) || parseDateOnly(todaySaoPaulo());
+	date.setUTCMonth(date.getUTCMonth() + months);
+	return date.toISOString().slice(0, 10);
+}
+
 function toSaoPauloDateOnly(value) {
 	const date = value ? new Date(value) : null;
 	if (!date || Number.isNaN(date.getTime())) return null;
@@ -474,6 +480,141 @@ async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 	return payload;
 }
 
+function flattenFinanceCharges(payload = {}) {
+	const groups = payload?.cobrancas_agrupadas?.data || [];
+	const charges = [];
+	for (const group of groups) {
+		const rows = group?.cobrancas?.data || [];
+		for (const row of rows) {
+			charges.push({
+				...row,
+				groupVencimento: group.vencimento,
+				groupVencimentoBr: group.vencimento_br,
+			});
+		}
+	}
+	return charges;
+}
+
+function isEquipmentFineCharge(charge = {}) {
+	const description = normalizeText(charge.descricao);
+	return description.includes("MULTA") && description.includes("EQUIPAMENTO");
+}
+
+function pickFineCharges(record, charges) {
+	const serviceId = cleanText(record?.raw_excerpt?.id_cliente_servico);
+	const candidates = charges.filter(isEquipmentFineCharge);
+	if (!serviceId) return candidates;
+	const exact = candidates.filter(
+		(charge) => cleanText(charge.id_cliente_servico) === serviceId,
+	);
+	return exact.length ? exact : candidates;
+}
+
+async function fetchFinanceCharges(session, record) {
+	const clientId = cleanText(record?.raw_excerpt?.id_cliente);
+	if (!clientId) return [];
+	const baseDate = toSaoPauloDateOnly(record.source_date) || todaySaoPaulo();
+	const payload = await hubsoftRequest(
+		session,
+		"/api/v1/cliente/financeiro/cobranca/agrupadas/paginado/50?page=1",
+		{
+			method: "POST",
+			body: {
+				filtros: {
+					id_cliente: clientId,
+					cliente_servico: null,
+					data_inicio: addMonths(baseDate, -6),
+					data_fim: addMonths(baseDate, 12),
+					tipo: "ativo",
+					situacao: "todos",
+				},
+			},
+		},
+	);
+	return flattenFinanceCharges(payload);
+}
+
+async function enrichFineRecordsWithFinance(session, records = [], onProgress) {
+	if (!session?.token || !records.length) return records;
+	const cache = new Map();
+	const enriched = new Array(records.length);
+	let cursor = 0;
+	let processed = 0;
+	const concurrency = Math.min(6, records.length);
+	const enrichRecord = async (record) => {
+		const clientId = cleanText(record?.raw_excerpt?.id_cliente);
+		if (!clientId) return record;
+		if (!cache.has(clientId)) {
+			cache.set(
+				clientId,
+				fetchFinanceCharges(session, record).catch((error) => ({ error })),
+			);
+		}
+		const result = await cache.get(clientId);
+		const charges = Array.isArray(result) ? result : [];
+		const fineCharges = pickFineCharges(record, charges);
+		if (!fineCharges.length) return record;
+		const valorLancado = fineCharges.reduce(
+			(total, charge) => total + (Number(charge.valor) || 0),
+			0,
+		);
+		const saldo = fineCharges.reduce(
+			(total, charge) => total + (Number(charge.saldo) || 0),
+			0,
+		);
+		const finance = {
+			totalCharges: fineCharges.length,
+			ids: fineCharges.map((charge) => charge.id_cobranca),
+			descriptions: fineCharges.map((charge) => charge.descricao),
+			dueDates: [
+				...new Set(
+					fineCharges
+						.map((charge) => charge.data_vencimento_br || charge.data_vencimento)
+						.filter(Boolean),
+				),
+			],
+			lancadoPor:
+				[
+					...new Set(
+						fineCharges
+							.map((charge) => cleanText(charge.id_usuario_cadastro))
+							.filter(Boolean),
+					),
+				].join(", ") || "",
+			valorLancado,
+			saldo,
+			auditReason: fineCharges
+				.map((charge) => `${charge.id_cobranca} - ${charge.descricao}`)
+				.join("; "),
+			reconciledAt: new Date().toISOString(),
+		};
+		return {
+			...record,
+			raw_excerpt: {
+				...(record.raw_excerpt || {}),
+				finance,
+			},
+		};
+	};
+	const workers = Array.from({ length: concurrency }, async () => {
+		while (cursor < records.length) {
+			const index = cursor;
+			cursor += 1;
+			enriched[index] = await enrichRecord(records[index]);
+			processed += 1;
+			if (processed % 10 === 0 || processed === records.length) {
+				await onProgress?.({
+					stage: `Conciliando financeiro ${processed}/${records.length}`,
+					percent: Math.min(70, 62 + Math.round((processed / records.length) * 8)),
+				});
+			}
+		}
+	});
+	await Promise.all(workers);
+	return enriched;
+}
+
 async function requestHubsoft(path, options = {}) {
 	const session = await getSession();
 	return hubsoftRequest(session, path, options);
@@ -743,6 +884,7 @@ async function collectProfile(profile, options = {}) {
 		);
 		return {
 			...collected,
+			hubsoftSession: session,
 			requestSummary: {
 				date,
 				startDate,
@@ -1758,6 +1900,13 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 		const records = collected.rows
 			.filter((row) => uniqueKeyFor(profile, row))
 			.map((row) => recordFor(profile, row, maps));
+		const recordsToPersist = isFinesProfile(profile)
+			? await enrichFineRecordsWithFinance(
+					collected.hubsoftSession,
+					records,
+					(progress) => updateRunProgress(run.id, progress),
+				)
+			: records;
 		const status = validateCollected(
 			{ ...collectedStats, receivedRows: collected.rows.length },
 			uniqueRows,
@@ -1772,7 +1921,7 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 			if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
 				previousMapSnapshot = await mapSyncUpdates.captureActiveMapSnapshot(profile);
 			}
-			persistence = await persistRecords(run.id, profile, records);
+			persistence = await persistRecords(run.id, profile, recordsToPersist);
 			await updateRunProgress(run.id, {
 				stage: "Aplicando nos paineis operacionais",
 				percent: 84,
@@ -1780,7 +1929,7 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 			operational = await maybeApplyOperationalProfile(
 				profile,
 				collected.rows,
-				records,
+				recordsToPersist,
 				options,
 				user,
 			);

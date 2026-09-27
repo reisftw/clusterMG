@@ -18,6 +18,34 @@ const MONEY = new Intl.NumberFormat("pt-BR", {
 	currency: "BRL",
 });
 
+function dateKey(date = new Date()) {
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(date);
+}
+
+function currentWeekRange() {
+	const now = new Date();
+	const saoPauloDate = new Date(`${dateKey(now)}T12:00:00.000Z`);
+	const day = saoPauloDate.getUTCDay();
+	const start = new Date(saoPauloDate);
+	start.setUTCDate(saoPauloDate.getUTCDate() - day);
+	return { startDate: dateKey(start), endDate: dateKey(now) };
+}
+
+function currentMonthRange() {
+	const today = dateKey();
+	return { startDate: `${today.slice(0, 8)}01`, endDate: today };
+}
+
+function currentYearRange() {
+	const today = dateKey();
+	return { startDate: `${today.slice(0, 4)}-01-01`, endDate: today };
+}
+
 function formatCurrency(value) {
 	if (value === null || value === undefined || value === "") return "Sem referência";
 	const number = Number(value);
@@ -112,16 +140,26 @@ export default function ServiceOrderFinesPage() {
 	}, [submittedSearch, startDate, endDate]);
 
 	async function handleSimulate() {
+		return handleSimulateRange({ startDate, endDate });
+	}
+
+	async function handleSimulateRange(range) {
 		setSimulating(true);
 		setError("");
+		const nextStartDate = range.startDate || startDate;
+		const nextEndDate = range.endDate || endDate;
 		try {
 			await simularAuditoriaMultas({
-				startDate,
-				endDate,
+				startDate: nextStartDate,
+				endDate: nextEndDate,
 			});
+			if (range.startDate || range.endDate) {
+				setStartDate(nextStartDate);
+				setEndDate(nextEndDate);
+			}
 			await load(1);
 		} catch (err) {
-			setError(err?.message || "Não foi possível iniciar a simulação.");
+			setError(err?.message || "Não foi possível iniciar a varredura.");
 		} finally {
 			setSimulating(false);
 		}
@@ -167,8 +205,23 @@ export default function ServiceOrderFinesPage() {
 							disabled={simulating}
 							className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm"
 						>
-							<RefreshCw size={16} /> {simulating ? "Simulando..." : "Simular auditoria"}
+							<RefreshCw size={16} /> {simulating ? "Rodando..." : "Salvar período"}
 						</button>
+						{[
+							["Semana", currentWeekRange()],
+							["Mês", currentMonthRange()],
+							["Ano", currentYearRange()],
+						].map(([label, range]) => (
+							<button
+								key={label}
+								type="button"
+								onClick={() => handleSimulateRange(range)}
+								disabled={simulating}
+								className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700"
+							>
+								<RefreshCw size={16} /> Varredura {label}
+							</button>
+						))}
 						<button
 							type="button"
 							disabled
