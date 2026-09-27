@@ -3,6 +3,10 @@ const documents = require("./documents");
 const mapSyncUpdates = require("./mapSyncUpdatesService");
 const operationalImports = require("./operationalImports");
 const regionaisRepository = require("./regionaisRepository");
+const {
+	MATCH_IGNORED_OS_TYPES,
+	productionOsTypeIds,
+} = require("./hubsoftOsRules");
 
 const CONFIG_PATH = "hubsoft_config/global";
 const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
@@ -58,24 +62,11 @@ const RUN_STATUS = Object.freeze({
 	DIVERGENT: "DIVERGENT",
 });
 
-const MAPA_TYPE_IDS = new Set([1487, 1488, 1495, 5]);
-const MATCH_IGNORED_TYPE_IDS = new Set([
-	1496, 522, 63, 449, 48, 1490, 571, 665, 1494, 1493, 67, 66,
-]);
-const MATCH_KNOWN_IGNORED = [
-	[1496, "CANCELAMENTO - OUTROS"],
-	[522, "DESMONTE DE POP"],
-	[63, "EXPANSÃO DE REDE"],
-	[449, "FALHA DE INFRAESTRUTURA"],
-	[48, "INSERÇÃO DE EQUIPAMENTO"],
-	[1490, "LIBERAÇÃO DE PORTAS"],
-	[571, "LISTAGEM DE TA"],
-	[665, "MIGRAÇÃO EPON / GPON"],
-	[1494, "MULTA DE EQUIPAMENTO"],
-	[1493, "RETIRADA - OUTROS"],
-	[67, "TROCA EPON/GPON"],
-	[66, "VIABILIDADE"],
-];
+const MAPA_TYPE_IDS = productionOsTypeIds();
+const MATCH_IGNORED_TYPE_IDS = new Set(
+	MATCH_IGNORED_OS_TYPES.map(([id]) => Number(id)),
+);
+const MATCH_KNOWN_IGNORED = MATCH_IGNORED_OS_TYPES;
 const META_TYPE_IDS = MAPA_TYPE_IDS;
 const LOJA_ATTENDANCE_TYPE_ID = 826;
 const META_MOTIVO_CONCLUIDA_ID = 135;
@@ -939,6 +930,31 @@ function extractMotivo(row = {}) {
 	return row?.motivo_fechamento?.descricao || row?.motivo_fechamento || "";
 }
 
+function extractServiceName(row = {}) {
+	const servico = row?.cliente_servico || row?.servico || {};
+	return cleanText(
+		row.servico ||
+			row.plano ||
+			row.nome_plano ||
+			servico.display ||
+			servico.descricao ||
+			servico.servico?.descricao ||
+			servico.plano?.descricao ||
+			"",
+	);
+}
+
+function extractClientName(row = {}) {
+	const cliente = row.cliente || row.cliente_servico?.cliente || {};
+	return cleanText(
+		row.nome_razaosocial ||
+			cliente.nome_razaosocial ||
+			cliente.nome ||
+			row.cliente_nome ||
+			"",
+	);
+}
+
 function extractStatus(row = {}) {
 	return row?.status || row?.status_ordem_servico || "";
 }
@@ -1320,6 +1336,16 @@ function recordFor(profile, row, maps) {
 			tecnicos: extractTechnicians(row),
 			id_tipo_ordem_servico: extractOrderTypeId(row),
 			motivo_fechamento: extractMotivo(row),
+			servico: extractServiceName(row),
+			numero_plano: cleanText(
+				row.numero_plano || row?.cliente_servico?.numero_plano || "",
+			),
+			id_cliente_servico: cleanText(
+				row.id_cliente_servico ||
+					row?.cliente_servico?.id_cliente_servico ||
+					"",
+			),
+			cliente_nome: extractClientName(row),
 		},
 		...classification,
 		classified_at: isMeta ? new Date().toISOString() : null,

@@ -228,6 +228,17 @@ const NAV_ITEMS = [
 		permission: ["movimentacoes.view", "movimentacoes.manage"],
 	},
 	{
+		label: "Recuperação de ativos",
+		path: ROUTES.TECNICOS_RECUPERACAO_ATIVOS,
+		icon: PackageCheck,
+		permission: [
+			"tecnicos.auditoria_bolsa.view",
+			"tecnicos.auditoria_bolsa.manage",
+			"movimentacoes.view",
+			"movimentacoes.manage",
+		],
+	},
+	{
 		label: "Logística",
 		path: ROUTES.LOGISTICA,
 		icon: Truck,

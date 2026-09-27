@@ -40,6 +40,9 @@ const TecnicosAuditoriaRelatorios = lazy(
 			"../modules/tecnicosAuditoria/components/TecnicosAuditoriaRelatoriosPage"
 		),
 );
+const EquipmentRecovery = lazy(
+	() => import("../modules/equipmentRecovery/components/EquipmentRecoveryPage"),
+);
 const Colaboradores = lazy(
 	() => import("../modules/colaboradores/components/ColaboradoresPage"),
 );
@@ -435,6 +438,21 @@ const AppRouter = () => (
 									]}
 								>
 									<TecnicosAuditoriaRelatorios />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.TECNICOS_RECUPERACAO_ATIVOS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"tecnicos.auditoria_bolsa.view",
+										"tecnicos.auditoria_bolsa.manage",
+										"movimentacoes.view",
+										"movimentacoes.manage",
+									]}
+								>
+									<EquipmentRecovery />
 								</ProtectedRoute>
 							}
 						/>
