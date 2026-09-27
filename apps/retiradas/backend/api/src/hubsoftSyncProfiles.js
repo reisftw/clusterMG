@@ -859,6 +859,10 @@ function extractSourceDate(row = {}) {
 function safeTimestamp(value) {
 	const text = cleanText(value);
 	if (!text) return null;
+	if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+		const date = new Date(`${text}T12:00:00.000-03:00`);
+		return Number.isNaN(date.getTime()) ? null : date.toISOString();
+	}
 	const iso = text.includes(" ") ? text.replace(" ", "T") : text;
 	const date = new Date(iso);
 	return Number.isNaN(date.getTime()) ? null : date.toISOString();
@@ -1291,6 +1295,9 @@ async function persistRecords(runId, profile, records) {
 	let updated = 0;
 	const activeIds = [];
 	for (const record of records) {
+		const sourceDate =
+			record.source_date ||
+			safeTimestamp(extractDateFromHubsoftProtocol(record.hubsoft_number));
 		activeIds.push(record.hubsoft_id);
 		const result = await db.query(
 			`insert into hubsoft_sync_records
@@ -1328,7 +1335,7 @@ async function persistRecords(runId, profile, records) {
 				record.source_type,
 				record.source_city,
 				record.source_city_id,
-				record.source_date,
+				sourceDate,
 				record.production_channel,
 				record.production_owner_id,
 				record.production_owner_name,
@@ -1602,10 +1609,59 @@ function normalizeAuditDates(dates = []) {
 	].sort();
 }
 
+function hasSameAuditRange(summary = {}, startDate, endDate) {
+	const dates = Array.isArray(summary?.dates) ? summary.dates : [];
+	return dates[0] === startDate && dates[dates.length - 1] === endDate;
+}
+
+async function findReusableAuditRun(profile, startDate, endDate) {
+	const result = await db.query(
+		`select *
+       from hubsoft_sync_runs
+      where profile = $1
+        and status in ($2, $3)
+        and result_summary->'dates' is not null
+      order by started_at desc
+      limit 10`,
+		[profile, RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT],
+	);
+	return (
+		result.rows.find((row) =>
+			hasSameAuditRange(row.result_summary || {}, startDate, endDate),
+		) || null
+	);
+}
+
+async function findLatestMetaAuditCheckpoint(startDate, endDate) {
+	const result = await db.query(
+		`select result_summary
+       from hubsoft_sync_runs
+      where profile = $1
+        and result_summary->'dates' is not null
+      order by started_at desc
+      limit 10`,
+		[PROFILE.META_AUDIT],
+	);
+	for (const row of result.rows) {
+		const summary = row.result_summary || {};
+		if (!hasSameAuditRange(summary, startDate, endDate)) continue;
+		const appliedDates = Array.isArray(summary.appliedDates)
+			? summary.appliedDates
+			: [];
+		if (appliedDates.length) return new Set(appliedDates);
+		const results = Array.isArray(summary.results) ? summary.results : [];
+		if (results.length) {
+			return new Set(results.map((item) => item?.date).filter(Boolean));
+		}
+	}
+	return new Set();
+}
+
 async function executeMetaAuditRun(run, dates = [], user = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	const validDates = normalizeAuditDates(dates);
 	const results = [];
+	const appliedDates = new Set();
 	let lockAcquired = false;
 	try {
 		await acquireLock(PROFILE.META_AUDIT, run.id, user);
@@ -1617,40 +1673,77 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 		}
 		const startDate = validDates[0];
 		const endDate = validDates[validDates.length - 1];
-		await updateRunProgress(run.id, {
-			stage: `Coletando metas HubSoft ${startDate} a ${endDate}`,
-			percent: 2,
-			current: 0,
-			total: validDates.length,
-			date: startDate,
+		await updateRun(run.id, {
+			result_summary: {
+				stage: "Preparando auditoria de metas",
+				percent: 1,
+				heartbeatAt: new Date().toISOString(),
+				dates: validDates,
+				appliedDates: [],
+				results,
+			},
 		});
-		const metaRun = await runInternalProfile(
+		const previousAppliedDates = await findLatestMetaAuditCheckpoint(
+			startDate,
+			endDate,
+		);
+		for (const date of previousAppliedDates) {
+			appliedDates.add(date);
+		}
+		let metaRun = await findReusableAuditRun(
 			PROFILE.META_AUDIT_DAILY,
-			{
-				startDate,
-				endDate,
-				discoverTechnicians: false,
-				applyOperational: false,
-			},
-			user,
+			startDate,
+			endDate,
 		);
-		await updateRunProgress(run.id, {
-			stage: `Coletando entregas em loja ${startDate} a ${endDate}`,
-			percent: 35,
-			current: 0,
-			total: validDates.length,
-			date: startDate,
-		});
-		const storeRun = await runInternalProfile(
+		if (!metaRun) {
+			await updateRunProgress(run.id, {
+				stage: `Coletando metas HubSoft ${startDate} a ${endDate}`,
+				percent: 2,
+				current: 0,
+				total: validDates.length,
+				date: startDate,
+				dates: validDates,
+				appliedDates: [...previousAppliedDates],
+				results,
+			});
+			metaRun = await runInternalProfile(
+				PROFILE.META_AUDIT_DAILY,
+				{
+					startDate,
+					endDate,
+					discoverTechnicians: false,
+					applyOperational: false,
+				},
+				user,
+			);
+		}
+		let storeRun = await findReusableAuditRun(
 			PROFILE.META_AUDIT_STORE,
-			{
-				startDate,
-				endDate,
-				discoverTechnicians: false,
-				applyOperational: false,
-			},
-			user,
+			startDate,
+			endDate,
 		);
+		if (!storeRun) {
+			await updateRunProgress(run.id, {
+				stage: `Coletando entregas em loja ${startDate} a ${endDate}`,
+				percent: 35,
+				current: 0,
+				total: validDates.length,
+				date: startDate,
+				dates: validDates,
+				appliedDates: [...previousAppliedDates],
+				results,
+			});
+			storeRun = await runInternalProfile(
+				PROFILE.META_AUDIT_STORE,
+				{
+					startDate,
+					endDate,
+					discoverTechnicians: false,
+					applyOperational: false,
+				},
+				user,
+			);
+		}
 		const [metaRecords, storeRecords] = await Promise.all([
 			listAllRecordsForRun(metaRun?.id),
 			listAllRecordsForRun(storeRun?.id),
@@ -1659,30 +1752,26 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 		const storeByDate = groupRecordsBySourceDate(storeRecords);
 		for (let index = 0; index < validDates.length; index += 1) {
 			const date = validDates[index];
-			await updateRunProgress(run.id, {
-				stage: `Aplicando metas e loja ${date}`,
-				percent: Math.max(
-					40,
-					Math.round(40 + (index / validDates.length) * 58),
-				),
-				current: index + 1,
-				total: validDates.length,
-				date,
-			});
+			if (appliedDates.has(date)) {
+				results.push({ date, skipped: true, reason: "checkpoint" });
+				continue;
+			}
 			const metaDayRecords = metaByDate.get(date) || [];
 			const storeDayRecords = storeByDate.get(date) || [];
-			const metaOperational = await operationalImports.persistHubsoftMetaRecords({
-				profile: PROFILE.META_D0,
-				date,
-				records: metaDayRecords,
-				user,
-			});
-			const storeOperational = await operationalImports.persistHubsoftMetaRecords({
-				profile: PROFILE.LOJA,
-				date,
-				records: storeDayRecords,
-				user,
-			});
+			const [metaOperational, storeOperational] = await Promise.all([
+				operationalImports.persistHubsoftMetaRecords({
+					profile: PROFILE.META_D0,
+					date,
+					records: metaDayRecords,
+					user,
+				}),
+				operationalImports.persistHubsoftMetaRecords({
+					profile: PROFILE.LOJA,
+					date,
+					records: storeDayRecords,
+					user,
+				}),
+			]);
 			results.push({
 				date,
 				metaRunId: metaRun?.id,
@@ -1693,6 +1782,20 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				lojaTotal: storeDayRecords.length,
 				metaOperational,
 				lojaOperational: storeOperational,
+			});
+			appliedDates.add(date);
+			await updateRunProgress(run.id, {
+				stage: `Aplicado ${date}`,
+				percent: Math.max(
+					40,
+					Math.round(40 + ((index + 1) / validDates.length) * 58),
+				),
+				current: index + 1,
+				total: validDates.length,
+				date,
+				dates: validDates,
+				appliedDates: [...appliedDates],
+				results,
 			});
 		}
 		const finishedAt = new Date().toISOString();
@@ -1708,6 +1811,7 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				percent: 100,
 				heartbeatAt: finishedAt,
 				dates: validDates,
+				appliedDates: [...appliedDates],
 				results,
 			},
 		});
@@ -1724,6 +1828,7 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				percent: 0,
 				heartbeatAt: new Date().toISOString(),
 				dates: validDates,
+				appliedDates: [...appliedDates],
 				results,
 			},
 		});
