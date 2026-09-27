@@ -88,6 +88,62 @@ function movementQuantity(row = {}) {
 	return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 1;
 }
 
+function mapJob(row = {}) {
+	if (!row) return null;
+	return {
+		id: row.id,
+		status: row.status,
+		mode: row.mode,
+		dateStart: row.date_start,
+		dateEnd: row.date_end,
+		startedAt: row.started_at,
+		finishedAt: row.finished_at,
+		createdBy: row.created_by,
+		errorMessage: row.error_message,
+		summary: row.summary || {},
+	};
+}
+
+async function updateJob(jobId, patch = {}) {
+	const fields = [];
+	const params = [jobId];
+	function set(column, value) {
+		params.push(value);
+		fields.push(`${column} = $${params.length}`);
+	}
+	if (patch.status !== undefined) set("status", patch.status);
+	if (patch.finishedAt !== undefined) set("finished_at", patch.finishedAt);
+	if (patch.errorMessage !== undefined) set("error_message", patch.errorMessage);
+	if (patch.summary !== undefined) {
+		params.push(JSON.stringify(patch.summary || {}));
+		fields.push(`summary = coalesce(summary, '{}'::jsonb) || $${params.length}::jsonb`);
+	}
+	if (!fields.length) return getJob(jobId);
+	await db.query(
+		`update equipment_recovery_jobs set ${fields.join(", ")} where id = $1`,
+		params,
+	);
+	return getJob(jobId);
+}
+
+async function getJob(jobId) {
+	const result = await db.query(
+		`select * from equipment_recovery_jobs where id = $1`,
+		[jobId],
+	);
+	return mapJob(result.rows[0]);
+}
+
+async function getLatestJob() {
+	const result = await db.query(
+		`select *
+		 from equipment_recovery_jobs
+		 order by started_at desc
+		 limit 1`,
+	);
+	return mapJob(result.rows[0]);
+}
+
 async function getEquipmentValues() {
 	const result = await db.query(
 		`select distinct on (categoria)
@@ -318,6 +374,7 @@ async function buildMovementInventory(query = {}) {
 	const used = new Map();
 	return result.rows.map((row) => ({
 		row,
+		technician: movementTechnician(row),
 		quantity: movementQuantity(row),
 		remaining() {
 			return Math.max(0, this.quantity - (used.get(row.id) || 0));
@@ -328,6 +385,34 @@ async function buildMovementInventory(query = {}) {
 	}));
 }
 
+function addIndexedMovement(index, key, item) {
+	if (!key) return;
+	if (!index.has(key)) index.set(key, []);
+	index.get(key).push(item);
+}
+
+function buildMovementIndex(movements = []) {
+	const byCategory = new Map();
+	const byCategoryAndTechnicianId = new Map();
+	const byCategoryAndTechnicianName = new Map();
+	for (const item of movements) {
+		const category = item.row.equipment_type;
+		const technician = item.technician || movementTechnician(item.row);
+		addIndexedMovement(byCategory, category, item);
+		addIndexedMovement(
+			byCategoryAndTechnicianId,
+			`${category}|${technician.id}`,
+			item,
+		);
+		addIndexedMovement(
+			byCategoryAndTechnicianName,
+			`${category}|${technician.normalizedName}`,
+			item,
+		);
+	}
+	return { byCategory, byCategoryAndTechnicianId, byCategoryAndTechnicianName };
+}
+
 function daysBetween(left, right) {
 	const a = new Date(left);
 	const b = new Date(right);
@@ -335,26 +420,39 @@ function daysBetween(left, right) {
 	return Math.abs(a - b) / 86_400_000;
 }
 
-function findMovementMatch(snapshot, movements) {
+function findAvailableInsideWindow(snapshot, candidates = []) {
+	return candidates.find(
+		(item) =>
+			item.remaining() > 0 &&
+			daysBetween(snapshot.closed_at, item.row.emitido_em) <= MATCH_WINDOW_DAYS,
+	);
+}
+
+function findMovementMatch(snapshot, movementsOrIndex) {
 	if (!featureEnabled("ENABLE_STOCK_MATCH", true)) return null;
 	if (!snapshot || snapshot.equipment_type === "UNKNOWN") return null;
 	const technicianName = normalizeText(snapshot.technician_name);
 	const technicianId = cleanText(snapshot.technician_id);
-	const candidates = movements.filter(
-		(item) =>
-			item.remaining() > 0 &&
-			item.row.equipment_type === snapshot.equipment_type &&
-			daysBetween(snapshot.closed_at, item.row.emitido_em) <= MATCH_WINDOW_DAYS,
-	);
-	const byId = candidates.find((item) => {
-		const technician = movementTechnician(item.row);
-		return technicianId && technician.id && technician.id === technicianId;
-	});
+	const index = Array.isArray(movementsOrIndex)
+		? buildMovementIndex(movementsOrIndex)
+		: movementsOrIndex;
+	const byId = technicianId
+		? findAvailableInsideWindow(
+				snapshot,
+				index.byCategoryAndTechnicianId.get(
+					`${snapshot.equipment_type}|${technicianId}`,
+				) || [],
+			)
+		: null;
 	if (byId) return { item: byId, confidence: "CONFIRMED", type: "TECHNICIAN_ID" };
-	const byName = candidates.find((item) => {
-		const technician = movementTechnician(item.row);
-		return technicianName && technician.normalizedName === technicianName;
-	});
+	const byName = technicianName
+		? findAvailableInsideWindow(
+				snapshot,
+				index.byCategoryAndTechnicianName.get(
+					`${snapshot.equipment_type}|${technicianName}`,
+				) || [],
+			)
+		: null;
 	if (byName) {
 		return {
 			item: byName,
@@ -367,10 +465,11 @@ function findMovementMatch(snapshot, movements) {
 
 async function applyMovementMatches(snapshots, query = {}) {
 	const movements = await buildMovementInventory(query);
+	const movementIndex = buildMovementIndex(movements);
 	let matched = 0;
 	let probable = 0;
 	for (const snapshot of snapshots) {
-		const match = findMovementMatch(snapshot, movements);
+		const match = findMovementMatch(snapshot, movementIndex);
 		if (!match) {
 			await db.query(
 				`update equipment_recovery_snapshots
@@ -415,21 +514,12 @@ async function applyMovementMatches(snapshots, query = {}) {
 	return { matched, probable };
 }
 
-async function reprocess(query = {}, user = {}) {
+async function runReprocess(jobId, query = {}) {
 	const mode = query.apply === false || query.mode === "SIMULATE" ? "SIMULATE" : "APPLY";
-	const jobResult = await db.query(
-		`insert into equipment_recovery_jobs (status, mode, date_start, date_end, created_by)
-		 values ('RUNNING', $1, $2, $3, $4)
-		 returning *`,
-		[
-			mode,
-			defaultDateRange(query).startDate,
-			defaultDateRange(query).endDate,
-			user?.uid || user?.email || null,
-		],
-	);
-	const job = jobResult.rows[0];
 	try {
+		await updateJob(jobId, {
+			summary: { stage: "Carregando registros HubSoft", percent: 8 },
+		});
 		const valuesByCategory = await getEquipmentValues();
 		const source = await getSourceRecords(query);
 		const snapshots = source.records.map((record) =>
@@ -438,26 +528,81 @@ async function reprocess(query = {}, user = {}) {
 		const summary = summarizeSnapshots(snapshots);
 		if (mode === "APPLY") {
 			const saved = [];
-			for (const snapshot of snapshots) saved.push(await upsertSnapshot(snapshot));
+			for (const [index, snapshot] of snapshots.entries()) {
+				saved.push(await upsertSnapshot(snapshot));
+				if (index % 100 === 0) {
+					await updateJob(jobId, {
+						summary: {
+							stage: "Gravando snapshots",
+							percent: Math.min(
+								70,
+								15 + Math.round(((index + 1) / Math.max(1, snapshots.length)) * 55),
+							),
+							processed: index + 1,
+							total: snapshots.length,
+						},
+					});
+				}
+			}
+			await updateJob(jobId, {
+				summary: {
+					stage: "Conciliando movimentações de estoque",
+					percent: 78,
+					processed: saved.length,
+					total: snapshots.length,
+				},
+			});
 			const matchSummary = await applyMovementMatches(saved, query);
 			Object.assign(summary, matchSummary, { persisted: saved.length });
 		}
 		await db.query(
 			`update equipment_recovery_jobs
-				set status = 'COMPLETE', finished_at = now(), summary = $2::jsonb
+				set status = 'COMPLETE',
+				    finished_at = now(),
+				    summary = coalesce(summary, '{}'::jsonb) || $2::jsonb
 			 where id = $1`,
-			[job.id, JSON.stringify(summary)],
+			[jobId, JSON.stringify({ ...summary, stage: "Concluído", percent: 100 })],
 		);
-		return { jobId: job.id, mode, ...source, summary };
+		return { jobId, mode, ...source, summary };
 	} catch (error) {
 		await db.query(
 			`update equipment_recovery_jobs
 				set status = 'FAILED', finished_at = now(), error_message = $2
 			 where id = $1`,
-			[job.id, error?.message || "Falha ao reprocessar recuperação."],
+			[jobId, error?.message || "Falha ao reprocessar recuperação."],
 		);
 		throw error;
 	}
+}
+
+async function reprocess(query = {}, user = {}) {
+	const mode = query.apply === false || query.mode === "SIMULATE" ? "SIMULATE" : "APPLY";
+	const { startDate, endDate } = defaultDateRange(query);
+	const jobResult = await db.query(
+		`insert into equipment_recovery_jobs
+			(status, mode, date_start, date_end, created_by, summary)
+		 values ('RUNNING', $1, $2, $3, $4, $5::jsonb)
+		 returning *`,
+		[
+			mode,
+			startDate,
+			endDate,
+			user?.uid || user?.email || null,
+			JSON.stringify({
+				stage: "Na fila",
+				percent: 1,
+				startDate,
+				endDate,
+			}),
+		],
+	);
+	const job = jobResult.rows[0];
+	setImmediate(() => {
+		runReprocess(job.id, query).catch((error) => {
+			console.error("[equipmentRecovery] Falha no job de reprocessamento:", error);
+		});
+	});
+	return mapJob(job);
 }
 
 function summarizeSnapshots(snapshots = []) {
@@ -637,8 +782,11 @@ module.exports = {
 	getSummary,
 	listPending,
 	listTechnicians,
+	getJob,
+	getLatestJob,
 	reprocess,
 	_private: {
+		buildMovementIndex,
 		findMovementMatch,
 		movementQuantity,
 		movementTechnician,

@@ -576,6 +576,19 @@ async function getDetail(query = {}) {
 			group by 1,2
 			order by total desc, name asc
 			limit 20
+		),
+		equipment_distribution as (
+			select
+				coalesce(snapshot.equipment_type, 'UNKNOWN') as category,
+				count(distinct filtered.hubsoft_id) as total,
+				sum(coalesce(snapshot.equipment_unit_value, 0)) as estimated_value,
+				sum(coalesce(snapshot.equipment_unit_value, 0)) filter (where snapshot.return_status = 'MATCHED') as returned_value,
+				sum(coalesce(snapshot.equipment_unit_value, 0)) filter (where snapshot.return_status <> 'MATCHED' or snapshot.return_status is null) as pending_value,
+				count(distinct filtered.hubsoft_id) filter (where snapshot.return_status = 'MATCHED') as returned,
+				count(distinct filtered.hubsoft_id) filter (where snapshot.return_status <> 'MATCHED' or snapshot.return_status is null) as pending
+			from filtered
+			left join equipment_recovery_snapshots snapshot on snapshot.os_id = filtered.hubsoft_id
+			group by 1
 		)
 		select
 			(select count(distinct hubsoft_id) from filtered) as production,
@@ -587,6 +600,15 @@ async function getDetail(query = {}) {
 			coalesce((select jsonb_agg(jsonb_build_object('name', name, 'total', total) order by total desc) from owner_distribution), '[]'::jsonb) as owners,
 			coalesce((select jsonb_agg(jsonb_build_object('name', name, 'total', total) order by total desc) from city_distribution), '[]'::jsonb) as cities,
 			coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'total', total) order by total desc) from technician_ranking), '[]'::jsonb) as technician_ranking,
+			coalesce((select jsonb_agg(jsonb_build_object(
+				'category', category,
+				'total', total,
+				'returned', returned,
+				'pending', pending,
+				'estimatedValue', estimated_value,
+				'returnedValue', returned_value,
+				'pendingValue', pending_value
+			) order by case category when 'FAST' then 1 when 'AC' then 2 when 'AX' then 3 else 9 end) from equipment_distribution), '[]'::jsonb) as equipment,
 			coalesce((
 				select jsonb_agg(
 					jsonb_build_object(
@@ -630,6 +652,7 @@ async function getDetail(query = {}) {
 		owners: row.owners || [],
 		cities: row.cities || [],
 		technicianRanking: row.technician_ranking || [],
+		equipment: row.equipment || [],
 		records: row.records || [],
 	};
 }

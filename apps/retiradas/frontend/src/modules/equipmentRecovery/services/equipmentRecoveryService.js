@@ -34,6 +34,14 @@ export function reprocessarRecuperacao(payload) {
 	});
 }
 
+export function buscarJobRecuperacao(jobId) {
+	return requestVpsApi(`/equipment-recovery/jobs/${jobId}`);
+}
+
+export function buscarUltimoJobRecuperacao() {
+	return requestVpsApi("/equipment-recovery/jobs/latest");
+}
+
 export function urlExportPendencias(params) {
 	return `${getApiBaseUrl()}/equipment-recovery/pending.csv${queryString(params)}`;
 }

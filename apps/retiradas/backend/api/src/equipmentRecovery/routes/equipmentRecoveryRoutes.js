@@ -58,6 +58,27 @@ function createEquipmentRecoveryRouter({
 		}
 	});
 
+	router.get("/jobs/latest", ...authorize, async (_req, res, next) => {
+		try {
+			res.json(await equipmentRecoveryService.getLatestJob());
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/jobs/:id", ...authorize, async (req, res, next) => {
+		try {
+			const job = await equipmentRecoveryService.getJob(req.params.id);
+			if (!job) {
+				res.status(404).json({ error: "Job não encontrado." });
+				return;
+			}
+			res.json(job);
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.post("/reprocess", ...authorize, async (req, res, next) => {
 		try {
 			res.json(

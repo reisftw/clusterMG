@@ -118,6 +118,7 @@ function createHubsoftAdminController({ hubsoftIntegration, hubsoftSyncProfiles 
 				await hubsoftSyncProfiles.startMetaAudit(
 					req.body?.dates || [],
 					req.user || {},
+					{ force: req.body?.force === true },
 				),
 			);
 		} catch (error) {

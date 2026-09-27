@@ -621,7 +621,7 @@ function useHubsoftSettingsController() {
 			status: "Enviando auditoria para o backend",
 		});
 		try {
-			const result = await executarAuditoriaMetasHubsoft({ dates });
+			const result = await executarAuditoriaMetasHubsoft({ dates, force: true });
 			setFeedback(
 				`Auditoria de metas iniciada no backend: ${dates.length} dia(s), incluindo entrega em loja diária.`,
 			);

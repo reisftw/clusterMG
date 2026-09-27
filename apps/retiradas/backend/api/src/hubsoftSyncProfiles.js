@@ -1890,7 +1890,7 @@ async function findLatestMetaAuditCheckpoint(startDate, endDate) {
 	return new Set();
 }
 
-async function executeMetaAuditRun(run, dates = [], user = {}) {
+async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	const validDates = normalizeAuditDates(dates);
 	const results = [];
@@ -1916,18 +1916,15 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				results,
 			},
 		});
-		const previousAppliedDates = await findLatestMetaAuditCheckpoint(
-			startDate,
-			endDate,
-		);
+		const previousAppliedDates = options.force
+			? new Set()
+			: await findLatestMetaAuditCheckpoint(startDate, endDate);
 		for (const date of previousAppliedDates) {
 			appliedDates.add(date);
 		}
-		let metaRun = await findReusableAuditRun(
-			PROFILE.META_AUDIT_DAILY,
-			startDate,
-			endDate,
-		);
+		let metaRun = options.force
+			? null
+			: await findReusableAuditRun(PROFILE.META_AUDIT_DAILY, startDate, endDate);
 		if (!metaRun) {
 			await updateRunProgress(run.id, {
 				stage: `Coletando metas HubSoft ${startDate} a ${endDate}`,
@@ -1950,11 +1947,9 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				user,
 			);
 		}
-		let storeRun = await findReusableAuditRun(
-			PROFILE.META_AUDIT_STORE,
-			startDate,
-			endDate,
-		);
+		let storeRun = options.force
+			? null
+			: await findReusableAuditRun(PROFILE.META_AUDIT_STORE, startDate, endDate);
 		if (!storeRun) {
 			await updateRunProgress(run.id, {
 				stage: `Coletando entregas em loja ${startDate} a ${endDate}`,
@@ -2084,10 +2079,10 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 	}
 }
 
-async function startMetaAudit(dates = [], user = {}) {
+async function startMetaAudit(dates = [], user = {}, options = {}) {
 	const run = await createRun(PROFILE.META_AUDIT, user);
 	setImmediate(() => {
-		executeMetaAuditRun(run, dates, user).catch((error) => {
+		executeMetaAuditRun(run, dates, user, options).catch((error) => {
 			console.error(
 				"[hubsoftSyncProfiles] Falha na auditoria async de metas:",
 				error?.message || error,

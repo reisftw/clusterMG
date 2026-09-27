@@ -2,9 +2,11 @@ import { RefreshCw, ShieldCheck, TrendingUp, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	buscarImpactoRecuperacao,
+	buscarJobRecuperacao,
 	buscarPendenciasRecuperacao,
 	buscarResumoRecuperacao,
 	buscarTecnicosRecuperacao,
+	buscarUltimoJobRecuperacao,
 	reprocessarRecuperacao,
 	urlExportPendencias,
 } from "../services/equipmentRecoveryService";
@@ -60,6 +62,7 @@ export default function EquipmentRecoveryPage() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
+	const [job, setJob] = useState(null);
 
 	const params = useMemo(
 		() => ({ ...filters, page, limit: 10 }),
@@ -93,18 +96,57 @@ export default function EquipmentRecoveryPage() {
 		load();
 	}, [load]);
 
+	useEffect(() => {
+		let cancelled = false;
+		buscarUltimoJobRecuperacao()
+			.then((latest) => {
+				if (!cancelled && latest?.status === "RUNNING") setJob(latest);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!job?.id || job.status !== "RUNNING") return undefined;
+		let cancelled = false;
+		const timer = window.setInterval(async () => {
+			try {
+				const next = await buscarJobRecuperacao(job.id);
+				if (cancelled) return;
+				setJob(next);
+				if (next.status === "COMPLETE") {
+					setMessage(
+						`Reprocessamento concluído: ${next.summary?.persisted || next.summary?.total || 0} O.S.`,
+					);
+					load();
+				}
+				if (next.status === "FAILED") {
+					setError(next.errorMessage || "Falha no reprocessamento.");
+				}
+			} catch (err) {
+				if (!cancelled) setError(err.message || "Falha ao acompanhar job.");
+			}
+		}, 3000);
+		return () => {
+			cancelled = true;
+			window.clearInterval(timer);
+		};
+	}, [job?.id, job?.status, load]);
+
 	async function handleReprocess(apply) {
 		setLoading(true);
 		setError("");
 		setMessage("");
 		try {
 			const result = await reprocessarRecuperacao({ ...filters, apply });
+			setJob(result);
 			setMessage(
 				apply
-					? `Reprocessamento aplicado: ${result.summary?.persisted || 0} O.S.`
-					: `Simulação concluída: ${result.summary?.total || 0} O.S.`,
+					? "Reprocessamento iniciado no backend. Pode atualizar a página que o job continua."
+					: "Simulação iniciada no backend. Pode atualizar a página que o job continua.",
 			);
-			await load();
 		} catch (err) {
 			setError(err.message || "Falha ao reprocessar.");
 		} finally {
@@ -188,6 +230,34 @@ export default function EquipmentRecoveryPage() {
 				{message ? (
 					<div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
 						{message}
+					</div>
+				) : null}
+				{job?.id ? (
+					<div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+						<div className="flex flex-wrap items-center justify-between gap-3">
+							<div>
+								<p className="text-sm font-black text-blue-900">
+									Job {job.status}
+								</p>
+								<p className="text-sm font-semibold text-blue-700">
+									{job.summary?.stage || "Processando"} ·{" "}
+									{Number(job.summary?.percent || 0)}%
+								</p>
+							</div>
+							<div className="min-w-[220px] flex-1 rounded-full bg-blue-100">
+								<div
+									className="h-3 rounded-full bg-blue-600 transition-all"
+									style={{
+										width: `${Math.min(100, Number(job.summary?.percent || 0))}%`,
+									}}
+								/>
+							</div>
+						</div>
+						{job.errorMessage ? (
+							<p className="mt-2 text-sm font-bold text-red-700">
+								{job.errorMessage}
+							</p>
+						) : null}
 					</div>
 				) : null}
 			</section>
