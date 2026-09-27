@@ -38,6 +38,48 @@ function normalizeRole(role) {
 	return String(role || "").toLowerCase();
 }
 
+const MAPA_MONTHS = [
+	"Janeiro",
+	"Fevereiro",
+	"Março",
+	"Abril",
+	"Maio",
+	"Junho",
+	"Julho",
+	"Agosto",
+	"Setembro",
+	"Outubro",
+	"Novembro",
+	"Dezembro",
+];
+
+function normalizeRankingKey(item) {
+	return String(item?.cidade || item?.name || item?.label || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
+}
+
+function mergeMapaRanking(regionais = [], agentes = []) {
+	const map = new Map();
+	const add = (item, tipo) => {
+		const key = `${tipo}:${normalizeRankingKey(item)}`;
+		if (!normalizeRankingKey(item)) return;
+		const total = Number(item.total || 0);
+		const current = map.get(key);
+		if (!current || total > Number(current.total || 0)) {
+			map.set(key, { ...item, tipo, total });
+		}
+	};
+	(regionais || []).forEach((item) => add(item, "regional"));
+	(agentes || []).forEach((item) => add(item, "agente"));
+	return [...map.values()]
+		.sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
+		.slice(0, 10);
+}
+
 function currentMonthReference() {
 	const date = new Date();
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -703,17 +745,13 @@ const OperationalDashboardContent = ({ currentUser }) => {
 	if (isLimitedDashboardRole) kpiHiddenKeys.push("ferias");
 	const summaryHiddenKeys = ["visitasNoMes"];
 	if (isLimitedDashboardRole) summaryHiddenKeys.push("tecnicosEmFerias");
-	const mapaSummaryOverride = publicMapa.allData?.Janeiro?.summary || null;
+	const mapaMonth = MAPA_MONTHS[new Date().getMonth()] || "Janeiro";
+	const mapaSummaryOverride = publicMapa.allData?.[mapaMonth]?.summary || null;
 	const mapaKpisOverride = mapaSummaryOverride?.kpis || null;
-	const topCidadesOverride = [
-		...(mapaSummaryOverride?.rankingRegionais || []),
-		...(mapaSummaryOverride?.rankingAgentes || []).map((item) => ({
-			...item,
-			tipo: "agente",
-		})),
-	]
-		.sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
-		.slice(0, 10);
+	const topCidadesOverride = mergeMapaRanking(
+		mapaSummaryOverride?.rankingRegionais || [],
+		mapaSummaryOverride?.rankingAgentes || [],
+	);
 
 	if (loading) return <Spinner fullScreen />;
 

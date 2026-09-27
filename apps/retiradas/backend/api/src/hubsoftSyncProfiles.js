@@ -1169,6 +1169,14 @@ async function buildClassificationMaps() {
 	const techById = new Map(
 		technicians.map((item) => [Number(item.hubsoft_technician_id), item]),
 	);
+	const techByName = new Map(
+		technicians
+			.map((item) => [
+				normalizeText(item.nome_hubsoft || item.nome_exibicao),
+				item,
+			])
+			.filter(([key]) => key),
+	);
 	const regionalsByCity = new Map();
 	const duplicateRegionalCities = new Map();
 	for (const row of regionais) {
@@ -1205,13 +1213,15 @@ async function buildClassificationMaps() {
 			ownerId: row.id,
 		});
 	}
-	return { techById, regionalsByCity, duplicateRegionalCities, agentsByCity };
+	return { techById, techByName, regionalsByCity, duplicateRegionalCities, agentsByCity };
 }
 
 function classifyOrder(row, maps) {
 	const technicians = extractTechnicians(row);
 	for (const technician of technicians) {
-		const registered = maps.techById.get(Number(technician.id));
+		const registered =
+			maps.techById.get(Number(technician.id)) ||
+			maps.techByName?.get(normalizeText(technician.name));
 		if (registered) {
 			return {
 				production_channel: "RETIRADA",
@@ -1222,6 +1232,23 @@ function classifyOrder(row, maps) {
 				classification_reason: "TECHNICIAN_MATCH",
 			};
 		}
+	}
+	if (technicians.length === 1) {
+		const technician = technicians[0];
+		return {
+			production_channel: "RETIRADA",
+			production_owner_id: technician.id ? String(technician.id) : normalizeText(technician.name),
+			production_owner_name: technician.name || "Técnico de retirada",
+			classification_rule: "HUBSOFT_TECHNICIAN_FALLBACK",
+			classification_reason: "TECHNICIAN_PRESENT",
+		};
+	}
+	if (technicians.length > 1) {
+		return {
+			production_channel: "UNCLASSIFIED",
+			classification_rule: "UNCLASSIFIED",
+			classification_reason: "MULTIPLE_TECHNICIANS",
+		};
 	}
 
 	const city = extractCity(row);

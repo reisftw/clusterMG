@@ -35,16 +35,41 @@ const EmptyRanking = ({ children }) => (
 	</p>
 );
 
+function normalizeNameKey(value) {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
+}
+
+function mergePerformanceItems(items = []) {
+	const map = new Map();
+	(Array.isArray(items) ? items : []).forEach((item) => {
+		const key = normalizeNameKey(item?.name);
+		if (!key) return;
+		const current = map.get(key) || { ...item, total: 0 };
+		map.set(key, {
+			...current,
+			...item,
+			name: current.name || item.name,
+			total: Number(current.total || 0) + Number(item.total || 0),
+		});
+	});
+	return [...map.values()].sort((a, b) => Number(b.total || 0) - Number(a.total || 0));
+}
+
 const MetasPerformance = ({ dados }) => {
 	if (!dados) return null;
-	const technicians = dados.technicians || [];
-	const regionais = dados.regionais || [];
+	const technicians = mergePerformanceItems(dados.technicians || []);
+	const regionais = mergePerformanceItems(dados.regionais || []);
 
 	return (
 		<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 			<div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
 				<h3 className="text-sm font-bold text-gray-800 mb-4">
-					Ranking Tecnicos
+					Ranking Técnicos de Retirada
 				</h3>
 				<div className="space-y-4">
 					{technicians.length > 0 ? (

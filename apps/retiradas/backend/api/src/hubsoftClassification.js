@@ -46,7 +46,9 @@ function extractCity(row = {}) {
 function classifyOrder(row, maps) {
 	const technicians = extractTechnicians(row);
 	for (const technician of technicians) {
-		const registered = maps.techById.get(Number(technician.id));
+		const registered =
+			maps.techById.get(Number(technician.id)) ||
+			maps.techByName?.get(normalizeText(technician.name));
 		if (registered) {
 			return {
 				production_channel: "RETIRADA",
@@ -57,6 +59,23 @@ function classifyOrder(row, maps) {
 				classification_reason: "TECHNICIAN_MATCH",
 			};
 		}
+	}
+	if (technicians.length === 1) {
+		const technician = technicians[0];
+		return {
+			production_channel: "RETIRADA",
+			production_owner_id: technician.id ? String(technician.id) : normalizeText(technician.name),
+			production_owner_name: technician.name || "Técnico de retirada",
+			classification_rule: "HUBSOFT_TECHNICIAN_FALLBACK",
+			classification_reason: "TECHNICIAN_PRESENT",
+		};
+	}
+	if (technicians.length > 1) {
+		return {
+			production_channel: "UNCLASSIFIED",
+			classification_rule: "UNCLASSIFIED",
+			classification_reason: "MULTIPLE_TECHNICIANS",
+		};
 	}
 
 	const city = extractCity(row);

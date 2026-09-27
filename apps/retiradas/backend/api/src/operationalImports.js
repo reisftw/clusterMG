@@ -2288,6 +2288,7 @@ async function persistHubsoftMetaRecords({
 			grouped[fonte].LOJA += 1;
 			continue;
 		}
+		if (!["AA", "RETIRADA", "REGIONAL"].includes(channel)) continue;
 		const bucket = channel === "AA" ? "AA" : channel === "RETIRADA" ? "RETIRADA" : "REGIONAL";
 		const name =
 			bucket === "AA"
