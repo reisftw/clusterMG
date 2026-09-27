@@ -1611,7 +1611,10 @@ function normalizeAuditDates(dates = []) {
 
 function hasSameAuditRange(summary = {}, startDate, endDate) {
 	const dates = Array.isArray(summary?.dates) ? summary.dates : [];
-	return dates[0] === startDate && dates[dates.length - 1] === endDate;
+	if (dates[0] === startDate && dates[dates.length - 1] === endDate) {
+		return true;
+	}
+	return summary?.startDate === startDate && summary?.endDate === endDate;
 }
 
 async function findReusableAuditRun(profile, startDate, endDate) {
@@ -1620,14 +1623,18 @@ async function findReusableAuditRun(profile, startDate, endDate) {
        from hubsoft_sync_runs
       where profile = $1
         and status in ($2, $3)
-        and result_summary->'dates' is not null
+        and (
+          result_summary->'dates' is not null
+          or (request_summary->>'startDate' = $4 and request_summary->>'endDate' = $5)
+        )
       order by started_at desc
       limit 10`,
-		[profile, RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT],
+		[profile, RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT, startDate, endDate],
 	);
 	return (
 		result.rows.find((row) =>
-			hasSameAuditRange(row.result_summary || {}, startDate, endDate),
+			hasSameAuditRange(row.result_summary || {}, startDate, endDate) ||
+			hasSameAuditRange(row.request_summary || {}, startDate, endDate),
 		) || null
 	);
 }
