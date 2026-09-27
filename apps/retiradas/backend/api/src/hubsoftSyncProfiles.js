@@ -1144,18 +1144,20 @@ function recordFor(profile, row, maps) {
 				classification_rule: null,
 				classification_reason: null,
 		};
+	const hubsoftNumber = cleanText(
+		row.numero_ordem_servico || row.protocolo || row.id_atendimento,
+	);
+	const sourceDate = extractSourceDate(row) || extractDateFromHubsoftProtocol(hubsoftNumber);
 	return {
 		profile,
 		entity_type: isStoreProfile(profile) ? "attendance" : "order",
 		hubsoft_id: String(uniqueKeyFor(profile, row)),
-		hubsoft_number: cleanText(
-			row.numero_ordem_servico || row.protocolo || row.id_atendimento,
-		),
+		hubsoft_number: hubsoftNumber,
 		source_status: cleanText(extractStatus(row)),
 		source_type: cleanText(extractOrderType(row) || row.tipo_atendimento?.descricao),
 		source_city: cleanText(extractCity(row) || row.cidade),
 		source_city_id: cleanText(extractCityId(row)),
-		source_date: safeTimestamp(extractSourceDate(row)),
+		source_date: safeTimestamp(sourceDate),
 		raw_excerpt: {
 			tecnicos: extractTechnicians(row),
 			id_tipo_ordem_servico: extractOrderTypeId(row),
