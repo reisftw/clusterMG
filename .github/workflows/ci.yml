@@ -1011,6 +1011,8 @@ jobs:
                  \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
                fi
              fi
+             echo 'Ensuring Playwright Chromium is available for HubSoft sync'
+             \$SUDO npx playwright install chromium
              \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
              \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
@@ -1182,6 +1184,8 @@ jobs:
                  \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
                fi
              fi
+             echo 'Ensuring Playwright Chromium is available for HubSoft sync'
+             \$SUDO npx playwright install chromium
              \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
              \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"

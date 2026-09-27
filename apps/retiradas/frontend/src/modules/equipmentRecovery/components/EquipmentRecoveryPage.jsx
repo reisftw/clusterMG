@@ -481,7 +481,7 @@ export default function EquipmentRecoveryPage() {
 				<div className="flex flex-wrap items-start justify-between gap-4">
 					<div>
 						<div className="flex flex-wrap items-center gap-2">
-							<p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Técnicos & estoque</p>
+							<p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Ordem de Serviço / Recuperação de ativos</p>
 							<span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black uppercase text-orange-700">
 								Ambiente: Homologação
 							</span>

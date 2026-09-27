@@ -228,10 +228,22 @@ const NAV_ITEMS = [
 		permission: ["movimentacoes.view", "movimentacoes.manage"],
 	},
 	{
+		label: "Multas",
+		path: ROUTES.ORDENS_SERVICO_MULTAS,
+		icon: BadgeDollarSign,
+		permission: [
+			"service_orders.fines.view",
+			"service_orders.fines.simulate",
+			"manage_metas",
+			"view_metas",
+		],
+	},
+	{
 		label: "Recuperação de ativos",
-		path: ROUTES.TECNICOS_RECUPERACAO_ATIVOS,
+		path: ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
 		icon: PackageCheck,
 		permission: [
+			"service_orders.asset_recovery.view",
 			"tecnicos.auditoria_bolsa.view",
 			"tecnicos.auditoria_bolsa.manage",
 			"movimentacoes.view",
@@ -637,6 +649,8 @@ const MODERN_MENU_ORDER = [
 	ROUTES.MAPA_HISTORICO,
 	ROUTES.EMPRESAS_TECNICOS,
 	ROUTES.AGENDAMENTOS,
+	ROUTES.ORDENS_SERVICO_MULTAS,
+	ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
 	ROUTES.ENTREGAS_TECNICOS,
 	ROUTES.MOVIMENTACOES,
 	ROUTES.TECNICOS_AUDITORIA_BOLSA,
@@ -794,6 +808,15 @@ const MENU_GROUPS = [
 		label: "Mensageria",
 		icon: MessageCircle,
 		paths: CLIENTE_MENSAGERIA_PATHS,
+	},
+	{
+		id: "ordens_servico",
+		label: "Ordem de Serviço",
+		icon: ClipboardCheck,
+		paths: [
+			ROUTES.ORDENS_SERVICO_MULTAS,
+			ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
+		],
 	},
 	{
 		id: "tecnicos",

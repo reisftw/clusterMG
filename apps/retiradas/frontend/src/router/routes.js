@@ -13,6 +13,8 @@ export const ROUTES = {
 	TECNICOS_AUDITORIA_BOLSA: "/tecnicos/auditoria/bolsa-tecnico",
 	TECNICOS_AUDITORIA_RELATORIOS: "/tecnicos/auditoria/relatorios",
 	TECNICOS_RECUPERACAO_ATIVOS: "/tecnicos/recuperacao-ativos",
+	ORDENS_SERVICO_MULTAS: "/ordens-servico/multas",
+	ORDENS_SERVICO_RECUPERACAO_ATIVOS: "/ordens-servico/recuperacao-ativos",
 	ESTOQUE_CONSULTA: "/estoque/consulta",
 	FERIAS: "/ferias",
 	ATESTADOS: "/atestados",

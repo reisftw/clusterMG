@@ -52,6 +52,7 @@ const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesR
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createEvidenciasRouter = require("./evidencias/routes/evidenciasRoutes");
+const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const equipmentRecoveryService = require("./equipmentRecovery/equipmentRecoveryService");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
@@ -4673,6 +4674,17 @@ function createApp() {
 			viewPermissions: MOVIMENTACOES_VIEW_PERMISSIONS,
 			managePermissions: MOVIMENTACOES_MANAGE_PERMISSIONS,
 			fallbackRoles: MOVIMENTACOES_ROLES,
+		}),
+	);
+
+	app.use(
+		"/api/service-orders/fines",
+		createServiceOrderFinesRouter({
+			fallbackRoles: FULL_OPERATION_ROLES,
+			hubsoftSyncProfiles,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
 		}),
 	);
 

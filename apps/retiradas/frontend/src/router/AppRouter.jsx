@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import PageWrapper from "../components/layout/PageWrapper";
 import ErrorPage from "../components/ui/ErrorPage";
 import Spinner from "../components/ui/Spinner";
@@ -42,6 +42,9 @@ const TecnicosAuditoriaRelatorios = lazy(
 );
 const EquipmentRecovery = lazy(
 	() => import("../modules/equipmentRecovery/components/EquipmentRecoveryPage"),
+);
+const ServiceOrderFines = lazy(
+	() => import("../modules/serviceOrders/fines/components/ServiceOrderFinesPage"),
 );
 const Colaboradores = lazy(
 	() => import("../modules/colaboradores/components/ColaboradoresPage"),
@@ -444,8 +447,32 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.TECNICOS_RECUPERACAO_ATIVOS}
 							element={
+								<Navigate
+									to={ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS}
+									replace
+								/>
+							}
+						/>
+						<Route
+							path={ROUTES.ORDENS_SERVICO_MULTAS}
+							element={
 								<ProtectedRoute
 									requiredPermission={[
+										"service_orders.fines.view",
+										"manage_metas",
+										"view_metas",
+									]}
+								>
+									<ServiceOrderFines />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"service_orders.asset_recovery.view",
 										"tecnicos.auditoria_bolsa.view",
 										"tecnicos.auditoria_bolsa.manage",
 										"movimentacoes.view",
