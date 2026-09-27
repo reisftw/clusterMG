@@ -981,19 +981,33 @@ function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
 	);
 }
 
+function resolveMetaAuditState(profiles = []) {
+	return (profiles || []).find((item) => item.profile === "META_AUDIT") || null;
+}
+
 function HubsoftMetaAuditSection({
 	form,
 	setForm,
 	running,
 	progress,
+	auditState,
 	onRun,
 	profileRunning,
 }) {
 	const dates = buildMetaAuditDates(form);
+	const auditLastRun = auditState?.lastRun || {};
+	const auditProgress = auditLastRun.result_summary || {};
+	const backendRunning = auditState?.locked || auditState?.status === "RUNNING";
+	const displayProgress = backendRunning || auditLastRun.id ? auditProgress : progress;
 	const percent =
-		progress?.total > 0
-			? Math.round((Number(progress.current || 0) / Number(progress.total)) * 100)
-			: 0;
+		Number(displayProgress?.percent) ||
+		(displayProgress?.total > 0
+			? Math.round(
+					(Number(displayProgress.current || 0) /
+						Number(displayProgress.total)) *
+						100,
+				)
+			: 0);
 	return (
 		<CollapsibleSection
 			title="Auditoria de metas"
@@ -1050,29 +1064,39 @@ function HubsoftMetaAuditSection({
 				<div className="flex items-end">
 					<button
 						type="button"
-						disabled={running || Boolean(profileRunning)}
+						disabled={running || backendRunning || Boolean(profileRunning)}
 						onClick={onRun}
 						className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-60"
 					>
-						{running ? (
+						{running || backendRunning ? (
 							<Loader2 className="animate-spin" size={17} />
 						) : (
 							<CheckCircle2 size={17} />
 						)}
-						Validar metas
+						{backendRunning ? "Auditoria em execução" : "Validar metas"}
 					</button>
 				</div>
 			</div>
-			{progress ? (
+			{displayProgress || auditLastRun.id ? (
 				<div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<p className="text-sm font-black text-emerald-950">
-								{progress.status}
+								{displayProgress?.status ||
+									displayProgress?.stage ||
+									auditState?.status ||
+									"Auditoria de metas"}
 							</p>
 							<p className="text-xs font-bold text-emerald-700">
-								Dia {progress.date || "-"} · {progress.current || 0} de{" "}
-								{progress.total || 0}
+								Dia {displayProgress?.date || "-"} ·{" "}
+								{displayProgress?.current || 0} de{" "}
+								{displayProgress?.total || dates.length}
+							</p>
+							<p className="mt-1 text-[11px] font-bold text-emerald-700">
+								Último sinal:{" "}
+								{formatDateTime(
+									displayProgress?.heartbeatAt || auditLastRun.started_at,
+								)}
 							</p>
 						</div>
 						<span className="text-lg font-black text-emerald-950">
@@ -1431,6 +1455,7 @@ export default function HubsoftSettingsPage() {
 				setForm={setMetaAuditForm}
 				running={metaAuditRunning}
 				progress={metaAuditProgress}
+				auditState={resolveMetaAuditState(profiles)}
 				onRun={handleRunMetaAudit}
 				profileRunning={profileRunning}
 			/>

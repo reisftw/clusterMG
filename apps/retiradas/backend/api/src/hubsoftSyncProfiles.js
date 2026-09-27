@@ -23,7 +23,18 @@ const PROFILE = Object.freeze({
 	META_D0: "META_D0",
 	META_D_MINUS_ONE: "META_D_MINUS_ONE",
 	META_AUDIT: "META_AUDIT",
+	META_AUDIT_DAILY: "META_AUDIT_DAILY",
+	META_AUDIT_STORE: "META_AUDIT_STORE",
 });
+
+const VISIBLE_PROFILES = [
+	PROFILE.MAPA,
+	PROFILE.MATCH,
+	PROFILE.LOJA,
+	PROFILE.META_D0,
+	PROFILE.META_D_MINUS_ONE,
+	PROFILE.META_AUDIT,
+];
 
 const RUN_STATUS = Object.freeze({
 	RUNNING: "RUNNING",
@@ -111,6 +122,24 @@ function normalizeAutomationConfig(config = {}) {
 		autoMetaEnabled: config.autoMetaEnabled !== false,
 		autoDailyEnabled: config.autoDailyEnabled !== false,
 	};
+}
+
+function isMetaProfile(profile) {
+	return [
+		PROFILE.META_D0,
+		PROFILE.META_D_MINUS_ONE,
+		PROFILE.META_AUDIT_DAILY,
+	].includes(profile);
+}
+
+function isStoreProfile(profile) {
+	return [PROFILE.LOJA, PROFILE.META_AUDIT_STORE].includes(profile);
+}
+
+function operationalProfileFor(profile) {
+	if (profile === PROFILE.META_AUDIT_DAILY) return PROFILE.META_D0;
+	if (profile === PROFILE.META_AUDIT_STORE) return PROFILE.LOJA;
+	return profile;
 }
 
 function normalizeText(value) {
@@ -564,7 +593,7 @@ async function collectProfile(profile, options = {}) {
 	await options.onProgress?.({ stage: "Sessao HubSoft autenticada", percent: 8 });
 	const createPayload = await fetchCreateMetadata(session);
 	await options.onProgress?.({ stage: "Metadados HubSoft carregados", percent: 12 });
-	if (profile === PROFILE.META_D0 || profile === PROFILE.META_D_MINUS_ONE) {
+	if (isMetaProfile(profile)) {
 		const date =
 			options.date ||
 			(profile === PROFILE.META_D_MINUS_ONE
@@ -595,7 +624,7 @@ async function collectProfile(profile, options = {}) {
 		};
 	}
 
-	if (profile === PROFILE.LOJA) {
+	if (isStoreProfile(profile)) {
 		const date = options.date || addDays(todaySaoPaulo(), -1);
 		const basePayload = {
 			data_inicio: toHubsoftDateOnly(date),
@@ -701,7 +730,7 @@ async function collectProfile(profile, options = {}) {
 }
 
 function uniqueKeyFor(profile, row) {
-	if (profile === PROFILE.LOJA) {
+	if (isStoreProfile(profile)) {
 		return cleanText(row.id_atendimento || row.protocolo);
 	}
 	return cleanText(row.id_ordem_servico || row.numero_ordem_servico);
@@ -1063,7 +1092,7 @@ function classifyOrder(row, maps) {
 }
 
 function recordFor(profile, row, maps) {
-	const isMeta = profile === PROFILE.META_D0 || profile === PROFILE.META_D_MINUS_ONE;
+	const isMeta = isMetaProfile(profile);
 	const classification = isMeta
 		? classifyOrder(row, maps)
 		: {
@@ -1072,10 +1101,10 @@ function recordFor(profile, row, maps) {
 				production_owner_name: null,
 				classification_rule: null,
 				classification_reason: null,
-			};
+		};
 	return {
 		profile,
-		entity_type: profile === PROFILE.LOJA ? "attendance" : "order",
+		entity_type: isStoreProfile(profile) ? "attendance" : "order",
 		hubsoft_id: String(uniqueKeyFor(profile, row)),
 		hubsoft_number: cleanText(
 			row.numero_ordem_servico || row.protocolo || row.id_atendimento,
@@ -1160,9 +1189,23 @@ async function updateRun(id, patch = {}) {
 }
 
 async function updateRunProgress(runId, patch = {}) {
+	const run = await getRun(runId);
+	if (run?.profile) {
+		await db.query(
+			`update hubsoft_sync_locks
+          set expires_at = $3
+        where profile = $1 and sync_run_id = $2`,
+			[
+				run.profile,
+				runId,
+				new Date(Date.now() + LOCK_TTL_MS).toISOString(),
+			],
+		);
+	}
 	await updateRun(runId, {
 		status: RUN_STATUS.RUNNING,
 		result_summary: {
+			...patch,
 			stage: patch.stage || "Processando",
 			percent: Number(patch.percent || 0),
 			heartbeatAt: new Date().toISOString(),
@@ -1309,14 +1352,22 @@ function summarizeRecords(records) {
 }
 
 async function maybeApplyOperationalProfile(profile, rows, records, options, user) {
-	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(profile)) return null;
+	const operationalProfile = operationalProfileFor(profile);
+	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(operationalProfile)) return null;
 	if (options.applyOperational === false) return null;
-	if ([PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(profile)) {
+	if ([PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(operationalProfile)) {
+		if (!records.length) {
+			return {
+				skipped: true,
+				reason: "EMPTY_RESULT_NOT_APPLIED",
+				message: "Resultado vazio registrado sem alterar metas/painéis.",
+			};
+		}
 		return operationalImports.persistHubsoftMetaRecords({
-			profile,
+			profile: operationalProfile,
 			date:
 				options.date ||
-				(profile === PROFILE.META_D_MINUS_ONE || profile === PROFILE.LOJA
+				(operationalProfile === PROFILE.META_D_MINUS_ONE || operationalProfile === PROFILE.LOJA
 					? addDays(todaySaoPaulo(), -1)
 					: todaySaoPaulo()),
 			records,
@@ -1335,10 +1386,26 @@ async function maybeApplyOperationalProfile(profile, rows, records, options, use
 }
 
 function assertValidProfile(profile) {
-	if (Object.values(PROFILE).filter((item) => item !== PROFILE.META_AUDIT).includes(profile)) return;
+	const blockedProfiles = [
+		PROFILE.META_AUDIT,
+		PROFILE.META_AUDIT_DAILY,
+		PROFILE.META_AUDIT_STORE,
+	];
+	if (
+		Object.values(PROFILE)
+			.filter((item) => !blockedProfiles.includes(item))
+			.includes(profile)
+	) {
+		return;
+	}
 	const error = new Error(`Profile HubSoft invalido: ${profile}`);
 	error.statusCode = 400;
 	throw error;
+}
+
+function assertValidInternalProfile(profile) {
+	if ([PROFILE.META_AUDIT_DAILY, PROFILE.META_AUDIT_STORE].includes(profile)) return;
+	assertValidProfile(profile);
 }
 
 async function executeProfileRun(run, profile, options = {}, user = {}) {
@@ -1461,6 +1528,12 @@ async function runProfile(profile, options = {}, user = {}) {
 	return executeProfileRun(run, profile, options, user);
 }
 
+async function runInternalProfile(profile, options = {}, user = {}) {
+	assertValidInternalProfile(profile);
+	const run = await createRun(profile, user);
+	return executeProfileRun(run, profile, options, user);
+}
+
 async function startProfileRun(profile, options = {}, user = {}) {
 	assertValidProfile(profile);
 	const run = await createRun(profile, user);
@@ -1489,7 +1562,10 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	const validDates = normalizeAuditDates(dates);
 	const results = [];
+	let lockAcquired = false;
 	try {
+		await acquireLock(PROFILE.META_AUDIT, run.id, user);
+		lockAcquired = true;
 		if (!validDates.length) {
 			const error = new Error("Informe ao menos uma data para auditar metas.");
 			error.code = "EMPTY_AUDIT_DATES";
@@ -1500,9 +1576,12 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 			await updateRunProgress(run.id, {
 				stage: `Auditando metas ${date}`,
 				percent: Math.max(1, Math.round((index / validDates.length) * 100)),
+				current: index + 1,
+				total: validDates.length,
+				date,
 			});
-			const metaRun = await runProfile(
-				PROFILE.META_D0,
+			const metaRun = await runInternalProfile(
+				PROFILE.META_AUDIT_DAILY,
 				{ date, discoverTechnicians: false },
 				user,
 			);
@@ -1512,9 +1591,12 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 					1,
 					Math.round(((index + 0.5) / validDates.length) * 100),
 				),
+				current: index + 1,
+				total: validDates.length,
+				date,
 			});
-			const storeRun = await runProfile(
-				PROFILE.LOJA,
+			const storeRun = await runInternalProfile(
+				PROFILE.META_AUDIT_STORE,
 				{ date, discoverTechnicians: false },
 				user,
 			);
@@ -1561,6 +1643,8 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 			},
 		});
 		throw error;
+	} finally {
+		if (lockAcquired) await releaseLock(PROFILE.META_AUDIT, run.id).catch(() => {});
 	}
 }
 
@@ -1767,11 +1851,26 @@ async function listRecords({ runId, profile, channel, limit = 200 } = {}) {
 }
 
 async function getProfilesOverview() {
-	const runs = await listRuns({ limit: 50 });
-	const locks = await db.query(`select * from hubsoft_sync_locks`);
+	const visibleProfiles = VISIBLE_PROFILES;
+	const runs = await db.query(
+		`select distinct on (profile) *
+       from hubsoft_sync_runs
+      where profile = any($1::text[])
+      order by profile, started_at desc`,
+		[visibleProfiles],
+	);
+	const locks = await db.query(
+		`select *
+       from hubsoft_sync_locks
+      where profile = any($1::text[])`,
+		[visibleProfiles],
+	);
 	const lockByProfile = new Map(locks.rows.map((lock) => [lock.profile, lock]));
-	return Object.values(PROFILE).map((profile) => {
-		const lastRun = runs.find((run) => run.profile === profile) || null;
+	const lastRunByProfile = new Map(
+		runs.rows.map((run) => [run.profile, run]),
+	);
+	return visibleProfiles.map((profile) => {
+		const lastRun = lastRunByProfile.get(profile) || null;
 		const lock = lockByProfile.get(profile) || null;
 		return {
 			profile,
