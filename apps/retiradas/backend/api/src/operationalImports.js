@@ -2068,6 +2068,7 @@ async function persistHubsoftMetaRecords({
 	records = [],
 	user = {},
 } = {}) {
+	const isStoreProfile = profile === "LOJA";
 	const day = getMetaDayFromDate(date);
 	const month = getMetaMonthFromDate(date);
 	const year = getMetaYearFromDate(date);
@@ -2116,13 +2117,15 @@ async function persistHubsoftMetaRecords({
 			year,
 			origem: baseId === "onnet" ? "ONNET" : "SEMPRE",
 		};
-		next.technicians = clearDailyTotal(next.technicians, dayIndex, dayCount);
-		next.regionais = clearDailyTotal(next.regionais, dayIndex, dayCount);
-		for (const [name, total] of grouped[baseId].RETIRADA.entries()) {
-			next.technicians = setDailyTotal(next.technicians, name, dayIndex, total, dayCount);
-		}
-		for (const [name, total] of grouped[baseId].REGIONAL.entries()) {
-			next.regionais = setDailyTotal(next.regionais, name, dayIndex, total, dayCount);
+		if (!isStoreProfile) {
+			next.technicians = clearDailyTotal(next.technicians, dayIndex, dayCount);
+			next.regionais = clearDailyTotal(next.regionais, dayIndex, dayCount);
+			for (const [name, total] of grouped[baseId].RETIRADA.entries()) {
+				next.technicians = setDailyTotal(next.technicians, name, dayIndex, total, dayCount);
+			}
+			for (const [name, total] of grouped[baseId].REGIONAL.entries()) {
+				next.regionais = setDailyTotal(next.regionais, name, dayIndex, total, dayCount);
+			}
 		}
 		const equipe = [...grouped[baseId].RETIRADA.values()].reduce(
 			(sum, value) => sum + Number(value || 0),
@@ -2136,10 +2139,13 @@ async function persistHubsoftMetaRecords({
 			(sum, value) => sum + Number(value || 0),
 			0,
 		);
-		next.rawDays = setRawDayField(next, day, "equipe", equipe);
-		next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "regionais", regionaisTotal);
-		next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "agente", agentesTotal);
-		next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "loja", grouped[baseId].LOJA);
+		if (isStoreProfile) {
+			next.rawDays = setRawDayField(next, day, "loja", grouped[baseId].LOJA);
+		} else {
+			next.rawDays = setRawDayField(next, day, "equipe", equipe);
+			next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "regionais", regionaisTotal);
+			next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "agente", agentesTotal);
+		}
 		next.agenteTotal =
 			(next.rawDays || []).reduce((sum, row) => sum + Number(row.agente || 0), 0);
 		next.lojaTotal =
@@ -2150,15 +2156,17 @@ async function persistHubsoftMetaRecords({
 	const sempre = updateBase("sempre", currentDoc);
 	const onnet = updateBase("onnet", currentDoc.onnet || {});
 	let nextAgents = currentAgents;
-	nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
-	for (const [city, total] of grouped.sempre.AA.entries()) {
-		nextAgents.cidades = updateAgentDashboardCity(
-			nextAgents.cidades,
-			city,
-			dayIndex,
-			total,
-			dayCount,
-		);
+	if (!isStoreProfile) {
+		nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
+		for (const [city, total] of grouped.sempre.AA.entries()) {
+			nextAgents.cidades = updateAgentDashboardCity(
+				nextAgents.cidades,
+				city,
+				dayIndex,
+				total,
+				dayCount,
+			);
+		}
 	}
 	nextAgents = recalculateAgentDashboard(month, nextAgents, year);
 	const combined = combineMetaRecords(sempre, onnet, month, year);

@@ -6,7 +6,10 @@ const regionaisRepository = require("./regionaisRepository");
 const CONFIG_PATH = "hubsoft_config/global";
 const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
 const LOCK_TTL_MS = 30 * 60 * 1000;
-const PAGE_SIZE = 100;
+const PAGE_SIZE = Math.min(
+	Math.max(Number(process.env.HUBSOFT_PAGE_SIZE || 500), 100),
+	1000,
+);
 const SCHEDULER_CHECK_INTERVAL_MS = 60 * 1000;
 const SCHEDULER_USER = {
 	uid: "system",
@@ -174,6 +177,17 @@ function addDays(dateText, days) {
 	const date = parseDateOnly(dateText) || parseDateOnly(todaySaoPaulo());
 	date.setUTCDate(date.getUTCDate() + days);
 	return date.toISOString().slice(0, 10);
+}
+
+function toSaoPauloDateOnly(value) {
+	const date = value ? new Date(value) : null;
+	if (!date || Number.isNaN(date.getTime())) return null;
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(date);
 }
 
 function toHubsoftDate(dateText, endOfDay = false) {
@@ -496,7 +510,9 @@ function baseReportPayload({ period, types }) {
 	};
 }
 
-function metaPayload({ date, createPayload }) {
+function metaPayload({ date, startDate, endDate, createPayload }) {
+	const initialDate = startDate || date;
+	const finalDate = endDate || date || initialDate;
 	return {
 		tipo_data: "data_termino_executado",
 		order_by: "data_termino_executado",
@@ -521,8 +537,8 @@ function metaPayload({ date, createPayload }) {
 		grupos_clientes_servicos: [],
 		bairros: null,
 		condominios: null,
-		data_inicio: toHubsoftDate(date),
-		data_fim: toHubsoftDate(date),
+		data_inicio: toHubsoftDate(initialDate),
+		data_fim: toHubsoftDate(finalDate, true),
 	};
 }
 
@@ -599,9 +615,11 @@ async function collectProfile(profile, options = {}) {
 			(profile === PROFILE.META_D_MINUS_ONE
 				? addDays(todaySaoPaulo(), -1)
 				: todaySaoPaulo());
-		const payload = metaPayload({ date, createPayload });
+		const startDate = options.startDate || date;
+		const endDate = options.endDate || date;
+		const payload = metaPayload({ date, startDate, endDate, createPayload });
 		const collected = await collectPaginated(session, {
-			path: "/api/v1/ordem_servico/consultar/paginado/100",
+			path: `/api/v1/ordem_servico/consultar/paginado/${PAGE_SIZE}`,
 			payload,
 			pageMode: "query",
 			onProgress: options.onProgress,
@@ -610,6 +628,8 @@ async function collectProfile(profile, options = {}) {
 			...collected,
 			requestSummary: {
 				date,
+				startDate,
+				endDate,
 				tipo_data: payload.tipo_data,
 				status_ordem_servico: payload.status_ordem_servico,
 				motivo_fechamento: payload.motivo_fechamento.map((item) => ({
@@ -626,9 +646,11 @@ async function collectProfile(profile, options = {}) {
 
 	if (isStoreProfile(profile)) {
 		const date = options.date || addDays(todaySaoPaulo(), -1);
+		const startDate = options.startDate || date;
+		const endDate = options.endDate || date;
 		const basePayload = {
-			data_inicio: toHubsoftDateOnly(date),
-			data_fim: toHubsoftDateOnly(date),
+			data_inicio: toHubsoftDateOnly(startDate),
+			data_fim: toHubsoftDateOnly(endDate),
 			tipo_data: "data_cadastro",
 			order_by: "data_cadastro",
 			order_by_key: "ASC",
@@ -670,6 +692,8 @@ async function collectProfile(profile, options = {}) {
 			...collected,
 			requestSummary: {
 				date,
+				startDate,
+				endDate,
 				attempt: collected?.attemptLabel || null,
 				tipo_data: basePayload.tipo_data,
 				tipo_atendimento: basePayload.tipo_atendimento,
@@ -1571,43 +1595,84 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 			error.code = "EMPTY_AUDIT_DATES";
 			throw error;
 		}
+		const startDate = validDates[0];
+		const endDate = validDates[validDates.length - 1];
+		await updateRunProgress(run.id, {
+			stage: `Coletando metas HubSoft ${startDate} a ${endDate}`,
+			percent: 2,
+			current: 0,
+			total: validDates.length,
+			date: startDate,
+		});
+		const metaRun = await runInternalProfile(
+			PROFILE.META_AUDIT_DAILY,
+			{
+				startDate,
+				endDate,
+				discoverTechnicians: false,
+				applyOperational: false,
+			},
+			user,
+		);
+		await updateRunProgress(run.id, {
+			stage: `Coletando entregas em loja ${startDate} a ${endDate}`,
+			percent: 35,
+			current: 0,
+			total: validDates.length,
+			date: startDate,
+		});
+		const storeRun = await runInternalProfile(
+			PROFILE.META_AUDIT_STORE,
+			{
+				startDate,
+				endDate,
+				discoverTechnicians: false,
+				applyOperational: false,
+			},
+			user,
+		);
+		const [metaRecords, storeRecords] = await Promise.all([
+			listAllRecordsForRun(metaRun?.id),
+			listAllRecordsForRun(storeRun?.id),
+		]);
+		const metaByDate = groupRecordsBySourceDate(metaRecords);
+		const storeByDate = groupRecordsBySourceDate(storeRecords);
 		for (let index = 0; index < validDates.length; index += 1) {
 			const date = validDates[index];
 			await updateRunProgress(run.id, {
-				stage: `Auditando metas ${date}`,
-				percent: Math.max(1, Math.round((index / validDates.length) * 100)),
-				current: index + 1,
-				total: validDates.length,
-				date,
-			});
-			const metaRun = await runInternalProfile(
-				PROFILE.META_AUDIT_DAILY,
-				{ date, discoverTechnicians: false },
-				user,
-			);
-			await updateRunProgress(run.id, {
-				stage: `Auditando entregas em loja ${date}`,
+				stage: `Aplicando metas e loja ${date}`,
 				percent: Math.max(
-					1,
-					Math.round(((index + 0.5) / validDates.length) * 100),
+					40,
+					Math.round(40 + (index / validDates.length) * 58),
 				),
 				current: index + 1,
 				total: validDates.length,
 				date,
 			});
-			const storeRun = await runInternalProfile(
-				PROFILE.META_AUDIT_STORE,
-				{ date, discoverTechnicians: false },
+			const metaDayRecords = metaByDate.get(date) || [];
+			const storeDayRecords = storeByDate.get(date) || [];
+			const metaOperational = await operationalImports.persistHubsoftMetaRecords({
+				profile: PROFILE.META_D0,
+				date,
+				records: metaDayRecords,
 				user,
-			);
+			});
+			const storeOperational = await operationalImports.persistHubsoftMetaRecords({
+				profile: PROFILE.LOJA,
+				date,
+				records: storeDayRecords,
+				user,
+			});
 			results.push({
 				date,
 				metaRunId: metaRun?.id,
 				metaStatus: metaRun?.status,
-				metaTotal: metaRun?.unique_rows ?? metaRun?.received_rows ?? 0,
+				metaTotal: metaDayRecords.length,
 				lojaRunId: storeRun?.id,
 				lojaStatus: storeRun?.status,
-				lojaTotal: storeRun?.unique_rows ?? storeRun?.received_rows ?? 0,
+				lojaTotal: storeDayRecords.length,
+				metaOperational,
+				lojaOperational: storeOperational,
 			});
 		}
 		const finishedAt = new Date().toISOString();
@@ -1848,6 +1913,28 @@ async function listRecords({ runId, profile, channel, limit = 200 } = {}) {
 		params,
 	);
 	return result.rows;
+}
+
+async function listAllRecordsForRun(runId) {
+	const result = await db.query(
+		`select *
+       from hubsoft_sync_records
+      where sync_run_id = $1
+      order by source_date nulls last, hubsoft_number`,
+		[runId],
+	);
+	return result.rows;
+}
+
+function groupRecordsBySourceDate(records = []) {
+	const grouped = new Map();
+	for (const record of records) {
+		const date = toSaoPauloDateOnly(record.source_date);
+		if (!date) continue;
+		if (!grouped.has(date)) grouped.set(date, []);
+		grouped.get(date).push(record);
+	}
+	return grouped;
 }
 
 async function getProfilesOverview() {
