@@ -993,8 +993,9 @@ async function publishAcompanhamentoUpdate(source, payload = {}) {
 async function refreshStaticSnapshot(
 	domain,
 	generatedAt = new Date().toISOString(),
+	options = {},
 ) {
-	const snapshot = await buildSnapshotDomain(domain);
+	const snapshot = await buildSnapshotDomain(domain, options);
 	if (!snapshot) return;
 	await db.query(
 		`insert into static_snapshots (domain, data, generated_at)
@@ -1014,7 +1015,7 @@ async function refreshDashboardSnapshot(generatedAt = new Date().toISOString()) 
 async function refreshOperationalSnapshot(
 	generatedAt = new Date().toISOString(),
 ) {
-	await refreshStaticSnapshot("operacional", generatedAt);
+	await refreshStaticSnapshot("operacional", generatedAt, { compact: true });
 }
 
 async function getMensageriaConfig() {
