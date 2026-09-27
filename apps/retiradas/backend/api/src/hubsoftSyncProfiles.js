@@ -828,12 +828,30 @@ function extractStatus(row = {}) {
 	return row?.status || row?.status_ordem_servico || "";
 }
 
+function extractDateFromHubsoftProtocol(value) {
+	const digits = cleanText(value).replace(/\D/g, "");
+	if (digits.length < 8) return null;
+	const year = digits.slice(0, 4);
+	const month = digits.slice(4, 6);
+	const day = digits.slice(6, 8);
+	if (!/^20\d{2}$/.test(year)) return null;
+	const parsed = new Date(`${year}-${month}-${day}T00:00:00-03:00`);
+	if (Number.isNaN(parsed.getTime())) return null;
+	return `${year}-${month}-${day}`;
+}
+
 function extractSourceDate(row = {}) {
 	return (
 		row?.data_termino_executado ||
 		row?.data_termino_executado_br ||
+		row?.data_fechamento ||
+		row?.data_fechamento_br ||
+		row?.data_resolucao ||
+		row?.data_resolucao_br ||
 		row?.data_cadastro ||
 		row?.data_cadastro_br ||
+		row?.created_at ||
+		extractDateFromHubsoftProtocol(row?.protocolo || row?.numero_protocolo) ||
 		null
 	);
 }
