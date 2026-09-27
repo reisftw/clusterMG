@@ -139,6 +139,73 @@ describe("publicDashboard", () => {
 		);
 	});
 
+	it("gera snapshot compacto de dashboard sem carregar listas pesadas no static_snapshots", async () => {
+		const rowsByCollection = {
+			dashboard: [
+				{
+					documentId: "Setembro",
+					data: { totalOS: 10, meta: 20, month: "Setembro" },
+				},
+			],
+			feriados: [
+				{ documentId: "feriado-1", data: { date: "2026-09-07" } },
+				{ documentId: "feriado-2", data: { data: "2026-09-16" } },
+			],
+			ferias: Array.from({ length: 5 }, (_, index) => ({
+				documentId: `ferias-${index}`,
+				data: { nome: `Pessoa ${index}` },
+			})),
+			colaboradores: Array.from({ length: 5 }, (_, index) => ({
+				documentId: `colaborador-${index}`,
+				data: { nome: `Colaborador ${index}` },
+			})),
+			metas: [
+				{
+					documentId: "Setembro",
+					data: { totalOS: 10, meta: 20, month: "Setembro" },
+				},
+			],
+		};
+		const dbQuery = vi.fn(async (sql, params = []) => {
+			if (String(sql).includes("where path = $1")) {
+				return {
+					rows: [
+						{
+							data: {
+								lastUpdate: "Atualizado",
+								baseConfig: { metaSazonal: 65 },
+								forcaTarefa: { ativa: false },
+							},
+						},
+					],
+				};
+			}
+			const collection = params[0];
+			return { rows: rowsByCollection[collection] || [] };
+		});
+		const ordensRepository = {
+			isOrdersCollection: vi.fn(() => false),
+			getDocument: vi.fn(async () => null),
+			getCollectionLatestUpdatedAt: vi.fn(async () => null),
+			listAllDocuments: vi.fn(async () => []),
+		};
+		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
+
+		const payload = await publicDashboard.buildSnapshotDomain("dashboard", {
+			compact: true,
+		});
+
+		expect(payload.compact).toBe(true);
+		expect(payload.dashboard.data).toEqual({
+			feriadosTotal: 2,
+			feriasTotal: 5,
+			colaboradoresTotal: 5,
+		});
+		expect(payload.metas.all).toBeUndefined();
+		expect(payload.metas.baseConfig).toEqual({ metaSazonal: 65 });
+		expect(payload.painel.retiradas.result.Setembro.totalOS).toBe(10);
+	});
+
 	it("reconstroi match publico quando snapshot salvo esta mais antigo que a tabela normalizada", async () => {
 		const dbQuery = vi.fn(async () => ({ rows: [] }));
 		const ordensRepository = {

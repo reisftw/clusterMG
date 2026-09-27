@@ -3,6 +3,11 @@ const documents = require("./documents");
 const mapSyncUpdates = require("./mapSyncUpdatesService");
 const operationalImports = require("./operationalImports");
 const regionaisRepository = require("./regionaisRepository");
+const {
+	MATCH_IGNORED_OS_TYPES,
+	classifyEquipmentByServiceSpeed,
+	productionOsTypeIds,
+} = require("./hubsoftOsRules");
 
 const CONFIG_PATH = "hubsoft_config/global";
 const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
@@ -58,29 +63,15 @@ const RUN_STATUS = Object.freeze({
 	DIVERGENT: "DIVERGENT",
 });
 
-const MAPA_TYPE_IDS = new Set([1487, 1488, 1495, 5]);
-const MATCH_IGNORED_TYPE_IDS = new Set([
-	1496, 522, 63, 449, 48, 1490, 571, 665, 1494, 1493, 67, 66,
-]);
-const MATCH_KNOWN_IGNORED = [
-	[1496, "CANCELAMENTO - OUTROS"],
-	[522, "DESMONTE DE POP"],
-	[63, "EXPANSÃO DE REDE"],
-	[449, "FALHA DE INFRAESTRUTURA"],
-	[48, "INSERÇÃO DE EQUIPAMENTO"],
-	[1490, "LIBERAÇÃO DE PORTAS"],
-	[571, "LISTAGEM DE TA"],
-	[665, "MIGRAÇÃO EPON / GPON"],
-	[1494, "MULTA DE EQUIPAMENTO"],
-	[1493, "RETIRADA - OUTROS"],
-	[67, "TROCA EPON/GPON"],
-	[66, "VIABILIDADE"],
-];
+const MAPA_TYPE_IDS = productionOsTypeIds();
+const MATCH_IGNORED_TYPE_IDS = new Set(
+	MATCH_IGNORED_OS_TYPES.map(([id]) => Number(id)),
+);
+const MATCH_KNOWN_IGNORED = MATCH_IGNORED_OS_TYPES;
 const META_TYPE_IDS = MAPA_TYPE_IDS;
 const LOJA_ATTENDANCE_TYPE_ID = 826;
+const MULTA_EQUIPAMENTO_ATTENDANCE_TYPE_ID = 944;
 const META_MOTIVO_CONCLUIDA_ID = 135;
-const MULTA_EQUIPAMENTO_TYPE_IDS = new Set([1494]);
-const MULTA_MOTIVO_TEXT = "INDISPONIBILIDADE DO CLIENTE";
 
 function cleanText(value) {
 	return String(value || "").trim();
@@ -461,7 +452,8 @@ async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 		error.statusCode = 400;
 		throw error;
 	}
-	const response = await fetchWithTimeout(`${session.baseUrl}${path}`, {
+	const url = /^https?:\/\//i.test(path) ? path : `${session.baseUrl}${path}`;
+	const response = await fetchWithTimeout(url, {
 		method,
 		headers: {
 			Accept: "application/json",
@@ -480,6 +472,11 @@ async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 		throw error;
 	}
 	return payload;
+}
+
+async function requestHubsoft(path, options = {}) {
+	const session = await getSession();
+	return hubsoftRequest(session, path, options);
 }
 
 function rowsOf(payload) {
@@ -541,15 +538,6 @@ function findMotivoConcluida(createPayload) {
 	);
 }
 
-function findMotivoByText(createPayload, text) {
-	const target = normalizeText(text);
-	const found = (createPayload?.motivo_fechamento || []).find((item) =>
-		normalizeText(item.descricao || item.display || item.nome).includes(target),
-	);
-	if (found) return found;
-	return { descricao: text };
-}
-
 function baseReportPayload({ period, types }) {
 	return {
 		data_inicio: toHubsoftDate(period.inicio),
@@ -594,35 +582,32 @@ function metaPayload({ date, startDate, endDate, createPayload }) {
 	};
 }
 
-function finesPayload({ date, startDate, endDate, createPayload }) {
+function finesPayload({ date, startDate, endDate }) {
 	const initialDate = startDate || date;
 	const finalDate = endDate || date || initialDate;
 	return {
-		tipo_data: "data_termino_executado",
-		order_by: "data_termino_executado",
+		data_inicio: toHubsoftDateOnly(initialDate),
+		data_fim: toHubsoftDateOnly(finalDate),
+		tipo_data: "data_fechamento",
+		order_by: "data_fechamento",
 		order_by_key: "ASC",
-		status_ordem_servico: ["finalizado"],
-		prioridade: [],
-		reservada: null,
-		assinatura_cliente: null,
-		motivo_fechamento: [findMotivoByText(createPayload, MULTA_MOTIVO_TEXT)],
-		pop: [],
-		periodos: [],
-		tipo_ordem_servicos: findTypes(createPayload, MULTA_EQUIPAMENTO_TYPE_IDS),
-		usuario_abertura: [],
-		tecnicos: [],
-		participantes: [],
-		agendas: [],
-		fluxo_aprovacao_configuracao: [],
-		cidades: [],
-		servico: [],
-		servico_status: [],
-		grupos_clientes: [],
-		grupos_clientes_servicos: [],
-		bairros: null,
-		condominios: null,
-		data_inicio: toHubsoftDate(initialDate),
-		data_fim: toHubsoftDate(finalDate, true),
+		tipo_endereco: { valor: "instalacao" },
+		tipo_atendimento: [
+			{
+				id_tipo_atendimento: MULTA_EQUIPAMENTO_ATTENDANCE_TYPE_ID,
+				descricao: "MULTA - EQUIPAMENTO",
+			},
+		],
+		status_atendimento: [
+			{
+				id_atendimento_status: 3,
+				prefixo: "resolvido",
+				descricao: "RESOLVIDO",
+			},
+		],
+		status_fechamento: [{ descricao: "Concluído", valor: "concluido" }],
+		pagina: 1,
+		itens_por_pagina: PAGE_SIZE,
 	};
 }
 
@@ -732,29 +717,41 @@ async function collectProfile(profile, options = {}) {
 		const date = options.date || todaySaoPaulo();
 		const startDate = options.startDate || date;
 		const endDate = options.endDate || date;
-		const payload = finesPayload({ date, startDate, endDate, createPayload });
-		const collected = await collectPaginated(session, {
-			path: `/api/v1/ordem_servico/consultar/paginado/${PAGE_SIZE}`,
-			payload,
-			pageMode: "query",
-			onProgress: options.onProgress,
-		});
+		const payload = finesPayload({ date, startDate, endDate });
+		const collected = await collectFirstNonEmpty(
+			session,
+			[
+				{
+					label: "relatorio/atendimento multa equipamento resolvido",
+					path: "/api/v1/relatorio/atendimento",
+					payload,
+					pageMode: "body",
+					percent: 20,
+				},
+				{
+					label: "relatorio/atendimento multa equipamento concluido",
+					path: "/api/v1/relatorio/atendimento",
+					payload: {
+						...payload,
+						status_atendimento: undefined,
+					},
+					pageMode: "body",
+					percent: 32,
+				},
+			],
+			options.onProgress,
+		);
 		return {
 			...collected,
 			requestSummary: {
 				date,
 				startDate,
 				endDate,
+				attempt: collected?.attemptLabel || null,
 				tipo_data: payload.tipo_data,
-				status_ordem_servico: payload.status_ordem_servico,
-				motivo_fechamento: payload.motivo_fechamento.map((item) => ({
-					id_motivo_fechamento: item.id_motivo_fechamento,
-					descricao: item.descricao,
-				})),
-				tipo_ordem_servicos: payload.tipo_ordem_servicos.map((item) => ({
-					id_tipo_ordem_servico: item.id_tipo_ordem_servico,
-					descricao: item.descricao,
-				})),
+				tipo_atendimento: payload.tipo_atendimento,
+				status_atendimento: payload.status_atendimento,
+				status_fechamento: payload.status_fechamento,
 			},
 		};
 	}
@@ -869,7 +866,7 @@ async function collectProfile(profile, options = {}) {
 }
 
 function uniqueKeyFor(profile, row) {
-	if (isStoreProfile(profile)) {
+	if (isStoreProfile(profile) || isFinesProfile(profile)) {
 		return cleanText(row.id_atendimento || row.protocolo);
 	}
 	return cleanText(row.id_ordem_servico || row.numero_ordem_servico);
@@ -921,6 +918,8 @@ function extractCityId(row = {}) {
 function extractOrderType(row = {}) {
 	return (
 		row?.tipo_ordem_servico?.descricao ||
+		row?.tipo_atendimento?.descricao ||
+		(typeof row?.tipo_atendimento === "string" ? row.tipo_atendimento : "") ||
 		row?.tipo_ordem_servico ||
 		row?.tipo ||
 		""
@@ -930,6 +929,8 @@ function extractOrderType(row = {}) {
 function extractOrderTypeId(row = {}) {
 	return Number(
 		row?.tipo_ordem_servico?.id_tipo_ordem_servico ||
+			row?.tipo_atendimento?.id_tipo_atendimento ||
+			row?.id_tipo_atendimento ||
 			row?.id_tipo_ordem_servico ||
 			0,
 	);
@@ -937,6 +938,50 @@ function extractOrderTypeId(row = {}) {
 
 function extractMotivo(row = {}) {
 	return row?.motivo_fechamento?.descricao || row?.motivo_fechamento || "";
+}
+
+function extractServiceName(row = {}) {
+	const servico = row?.cliente_servico || row?.servico || {};
+	return cleanText(
+		row.servico ||
+			row.plano ||
+			row.nome_plano ||
+			servico.display ||
+			servico.descricao ||
+			servico.servico?.descricao ||
+			servico.plano?.descricao ||
+			"",
+	);
+}
+
+function extractClientId(row = {}) {
+	return cleanText(
+		row.id_cliente ||
+			row.cliente?.id_cliente ||
+			row.cliente_servico?.id_cliente ||
+			row.cliente_servico?.cliente?.id_cliente ||
+			"",
+	);
+}
+
+function extractClientCode(row = {}) {
+	return cleanText(
+		row.codigo_cliente ||
+			row.cliente?.codigo_cliente ||
+			row.cliente_servico?.cliente?.codigo_cliente ||
+			"",
+	);
+}
+
+function extractClientName(row = {}) {
+	const cliente = row.cliente || row.cliente_servico?.cliente || {};
+	return cleanText(
+		row.nome_razaosocial ||
+			cliente.nome_razaosocial ||
+			cliente.nome ||
+			row.cliente_nome ||
+			"",
+	);
 }
 
 function extractStatus(row = {}) {
@@ -1306,9 +1351,21 @@ function recordFor(profile, row, maps) {
 		row.numero_ordem_servico || row.protocolo || row.id_atendimento,
 	);
 	const sourceDate = extractSourceDate(row) || extractDateFromHubsoftProtocol(hubsoftNumber);
+	const serviceName = extractServiceName(row);
+	const equipment = classifyEquipmentByServiceSpeed(
+		[
+			serviceName,
+			row.numero_plano,
+			row?.cliente_servico?.numero_plano,
+			row?.cliente_servico?.display,
+			row?.cliente_servico?.servico?.descricao,
+		]
+			.filter(Boolean)
+			.join(" "),
+	);
 	return {
 		profile,
-		entity_type: isStoreProfile(profile) ? "attendance" : "order",
+		entity_type: isStoreProfile(profile) || isFinesProfile(profile) ? "attendance" : "order",
 		hubsoft_id: String(uniqueKeyFor(profile, row)),
 		hubsoft_number: hubsoftNumber,
 		source_status: cleanText(extractStatus(row)),
@@ -1320,6 +1377,34 @@ function recordFor(profile, row, maps) {
 			tecnicos: extractTechnicians(row),
 			id_tipo_ordem_servico: extractOrderTypeId(row),
 			motivo_fechamento: extractMotivo(row),
+			servico: serviceName,
+			numero_plano: cleanText(
+				row.numero_plano || row?.cliente_servico?.numero_plano || "",
+			),
+			id_cliente: extractClientId(row),
+			codigo_cliente: extractClientCode(row),
+			id_cliente_servico: cleanText(
+				row.id_cliente_servico ||
+					row?.cliente_servico?.id_cliente_servico ||
+					"",
+			),
+			equipment_type: equipment.equipmentType,
+			equipment_speed_mbps: equipment.speedMbps,
+			equipment_classification_reason: equipment.reason,
+			cliente_nome: extractClientName(row),
+			usuario_abertura: cleanText(
+				row.usuario_abertura?.name ||
+					row.usuario_abertura?.nome ||
+					row.usuario_abertura ||
+					"",
+			),
+			usuario_fechamento: cleanText(
+				row.usuario_fechamento?.name ||
+					row.usuario_fechamento?.nome ||
+					row.usuario_fechamento ||
+					"",
+			),
+			usuarios_responsaveis: cleanText(row.usuarios_responsaveis || ""),
 		},
 		...classification,
 		classified_at: isMeta ? new Date().toISOString() : null,
@@ -1864,7 +1949,7 @@ async function findLatestMetaAuditCheckpoint(startDate, endDate) {
 	return new Set();
 }
 
-async function executeMetaAuditRun(run, dates = [], user = {}) {
+async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	const validDates = normalizeAuditDates(dates);
 	const results = [];
@@ -1890,18 +1975,15 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				results,
 			},
 		});
-		const previousAppliedDates = await findLatestMetaAuditCheckpoint(
-			startDate,
-			endDate,
-		);
+		const previousAppliedDates = options.force
+			? new Set()
+			: await findLatestMetaAuditCheckpoint(startDate, endDate);
 		for (const date of previousAppliedDates) {
 			appliedDates.add(date);
 		}
-		let metaRun = await findReusableAuditRun(
-			PROFILE.META_AUDIT_DAILY,
-			startDate,
-			endDate,
-		);
+		let metaRun = options.force
+			? null
+			: await findReusableAuditRun(PROFILE.META_AUDIT_DAILY, startDate, endDate);
 		if (!metaRun) {
 			await updateRunProgress(run.id, {
 				stage: `Coletando metas HubSoft ${startDate} a ${endDate}`,
@@ -1924,11 +2006,9 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 				user,
 			);
 		}
-		let storeRun = await findReusableAuditRun(
-			PROFILE.META_AUDIT_STORE,
-			startDate,
-			endDate,
-		);
+		let storeRun = options.force
+			? null
+			: await findReusableAuditRun(PROFILE.META_AUDIT_STORE, startDate, endDate);
 		if (!storeRun) {
 			await updateRunProgress(run.id, {
 				stage: `Coletando entregas em loja ${startDate} a ${endDate}`,
@@ -2058,10 +2138,10 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 	}
 }
 
-async function startMetaAudit(dates = [], user = {}) {
+async function startMetaAudit(dates = [], user = {}, options = {}) {
 	const run = await createRun(PROFILE.META_AUDIT, user);
 	setImmediate(() => {
-		executeMetaAuditRun(run, dates, user).catch((error) => {
+		executeMetaAuditRun(run, dates, user, options).catch((error) => {
 			console.error(
 				"[hubsoftSyncProfiles] Falha na auditoria async de metas:",
 				error?.message || error,
@@ -2379,6 +2459,7 @@ module.exports = {
 	listRecords,
 	listRuns,
 	listWithdrawalTechnicians,
+	requestHubsoft,
 	runSchedulerTick,
 	runProfile,
 	startScheduler,

@@ -1011,6 +1011,8 @@ jobs:
                  \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
                fi
              fi
+             echo 'Ensuring Playwright Chromium is available for HubSoft sync'
+             \$SUDO npx playwright install chromium
              \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
              \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
@@ -1019,12 +1021,19 @@ jobs:
                . \"\$api_env_file\"
                set +a
              fi
+             run_api_env() {
+               if [ \"\$(id -u)\" -eq 0 ]; then
+                 \"\$@\"
+               else
+                 sudo -n sh -c 'set -a; if [ -f "$1" ]; then . "$1"; fi; set +a; cd "$2"; shift 2; exec "$@"' sh \"\$api_env_file\" \"\$api_path\" \"\$@\"
+               fi
+             }
              echo '--- Migration preflight (Fase B) ---'
-             \$SUDO npm run migrate:preflight
+             run_api_env npm run migrate:preflight
              echo '--- Backup pre-migration (Fase B) ---'
-             \$SUDO npm run backup:database -- --scheduled
-             \$SUDO npm run migrate:sql
-             \$SUDO npm run migrate:normalized:apply
+             run_api_env npm run backup:database -- --scheduled
+             run_api_env npm run migrate:sql
+             run_api_env npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx
@@ -1175,6 +1184,8 @@ jobs:
                  \$SUDO mv /tmp/retiradas-package-lock.sha256 .package-lock.sha256
                fi
              fi
+             echo 'Ensuring Playwright Chromium is available for HubSoft sync'
+             \$SUDO npx playwright install chromium
              \$SUDO mkdir -p \"\$api_path/uploads/avatars\"
              \$SUDO chown -R www-data:www-data \"\$api_path/uploads\"
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
@@ -1183,12 +1194,19 @@ jobs:
                . \"\$api_env_file\"
                set +a
              fi
+             run_api_env() {
+               if [ \"\$(id -u)\" -eq 0 ]; then
+                 \"\$@\"
+               else
+                 sudo -n sh -c 'set -a; if [ -f "$1" ]; then . "$1"; fi; set +a; cd "$2"; shift 2; exec "$@"' sh \"\$api_env_file\" \"\$api_path\" \"\$@\"
+               fi
+             }
              echo '--- Migration preflight (Fase B) ---'
-             \$SUDO npm run migrate:preflight
+             run_api_env npm run migrate:preflight
              echo '--- Backup pre-migration (Fase B) ---'
-             \$SUDO npm run backup:database -- --scheduled
-             \$SUDO npm run migrate:sql
-             \$SUDO npm run migrate:normalized:apply
+             run_api_env npm run backup:database -- --scheduled
+             run_api_env npm run migrate:sql
+             run_api_env npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx

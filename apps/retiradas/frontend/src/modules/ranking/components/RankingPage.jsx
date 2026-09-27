@@ -107,6 +107,13 @@ function formatDateTime(value) {
 	}).format(new Date(value));
 }
 
+function formatCurrency(value) {
+	return Number(value || 0).toLocaleString("pt-BR", {
+		style: "currency",
+		currency: "BRL",
+	});
+}
+
 function formatSyncAge(lastSync) {
 	if (!lastSync?.updatedAt) return "Sem sincronizacao";
 	if (Number.isFinite(lastSync.ageMinutes)) {
@@ -520,6 +527,69 @@ function DistributionList({ title, items = [], empty = "Sem dados", pageSize = 5
 	);
 }
 
+function EquipmentDetailCards({ items = [] }) {
+	const categories = ["FAST", "AC", "AX", "UNKNOWN"].map((category) => {
+		const found = items.find((item) => item.category === category) || {};
+		return {
+			category,
+			total: Number(found.total || 0),
+			returned: Number(found.returned || 0),
+			pending: Number(found.pending || 0),
+			estimatedValue: Number(found.estimatedValue || 0),
+			returnedValue: Number(found.returnedValue || 0),
+			pendingValue: Number(found.pendingValue || 0),
+		};
+	});
+	const total = categories.reduce((sum, item) => sum + item.total, 0);
+	if (!total) {
+		return (
+			<div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+				<h4 className="text-sm font-black text-amber-900">Equipamentos estimados</h4>
+				<p className="mt-1 text-sm font-bold text-amber-700">
+					Sem snapshots para este recorte. Reprocesse em Recuperação de ativos para
+					preencher FAST/AC/AX e valores.
+				</p>
+			</div>
+		);
+	}
+	return (
+		<div className="rounded-2xl border border-slate-200 bg-white p-4">
+			<div className="flex flex-wrap items-center justify-between gap-3">
+				<div>
+					<h4 className="text-sm font-black text-slate-950">Equipamentos estimados</h4>
+					<p className="mt-0.5 text-xs font-bold text-slate-500">
+						Baseado na velocidade do serviço e nos valores de Movimentações.
+					</p>
+				</div>
+				<strong className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">
+					{formatNumber(total)} item(ns)
+				</strong>
+			</div>
+			<div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+				{categories.map((item) => (
+					<div key={item.category} className="rounded-2xl bg-slate-50 p-3">
+						<div className="flex items-center justify-between gap-2">
+							<span className="text-xs font-black uppercase text-slate-500">
+								{item.category === "UNKNOWN" ? "Sem classe" : item.category}
+							</span>
+							<strong className="text-lg font-black text-slate-950">
+								{formatNumber(item.total)}
+							</strong>
+						</div>
+						<div className="mt-2 space-y-1 text-xs font-bold text-slate-600">
+							<p>Devolvidos: {formatNumber(item.returned)}</p>
+							<p>Pendentes: {formatNumber(item.pending)}</p>
+							<p>Valor total: {formatCurrency(item.estimatedValue)}</p>
+							<p className="text-emerald-700">Recuperado: {formatCurrency(item.returnedValue)}</p>
+							<p className="text-orange-700">Pendente: {formatCurrency(item.pendingValue)}</p>
+						</div>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
 function DetailDrawer({ item, filters, onClose }) {
 	const [detail, setDetail] = useState(null);
 	const [loading, setLoading] = useState(false);
@@ -642,6 +712,7 @@ function DetailDrawer({ item, filters, onClose }) {
 								<DistributionList title="Cidades" items={detail.cities} />
 								<DistributionList title="Ranking interno de tecnicos" items={detail.technicianRanking} />
 							</div>
+							<EquipmentDetailCards items={detail.equipment || []} />
 							<div className="rounded-2xl border border-slate-200 bg-white p-4">
 								<h3 className="text-sm font-black text-slate-950">Evolucao diaria</h3>
 								<div className="mt-4 space-y-2">

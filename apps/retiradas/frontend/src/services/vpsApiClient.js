@@ -124,7 +124,11 @@ export async function requestVpsApi(path, options = {}) {
 	}
 
 	if (!response.ok) {
-		const message = data?.error || `Erro HTTP ${response.status}.`;
+		if (response.status === 401) clearVpsAuthSession();
+		const message =
+			response.status === 401
+				? "Sessão expirada. Entre novamente."
+				: data?.error || `Erro HTTP ${response.status}.`;
 		const error = new Error(message);
 		error.status = response.status;
 		error.data = data;

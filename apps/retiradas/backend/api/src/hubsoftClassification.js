@@ -1,18 +1,8 @@
-function cleanText(value) {
-	return String(value || "").trim();
-}
-
-function normalizeText(value) {
-	return cleanText(value)
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/\s+/g, " ")
-		.toUpperCase();
-}
-
-function normalizeCityKey(value) {
-	return normalizeText(value).replace(/[^A-Z0-9]+/g, " ").trim();
-}
+const {
+	cleanText,
+	normalizeCityKey,
+	normalizeText,
+} = require("./hubsoftOsRules");
 
 function extractTechnicians(row = {}) {
 	const list = Array.isArray(row.tecnicos)

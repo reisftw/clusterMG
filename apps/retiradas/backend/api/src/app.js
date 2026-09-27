@@ -44,6 +44,7 @@ const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes"
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
+const createEquipmentRecoveryRouter = require("./equipmentRecovery/routes/equipmentRecoveryRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
@@ -51,6 +52,8 @@ const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesR
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createEvidenciasRouter = require("./evidencias/routes/evidenciasRoutes");
+const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
+const equipmentRecoveryService = require("./equipmentRecovery/equipmentRecoveryService");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
@@ -4674,6 +4677,17 @@ function createApp() {
 		}),
 	);
 
+	app.use(
+		"/api/service-orders/fines",
+		createServiceOrderFinesRouter({
+			fallbackRoles: FULL_OPERATION_ROLES,
+			hubsoftSyncProfiles,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
 	app.post(
 		"/api/admin/documents",
 		requireAuthenticated,
@@ -5167,6 +5181,16 @@ function createApp() {
 				next(error);
 			}
 		},
+	);
+
+	app.use(
+		"/api/equipment-recovery",
+		createEquipmentRecoveryRouter({
+			equipmentRecoveryService,
+			requireAuthenticated,
+			requireRoles,
+			fullOperationRoles: FULL_OPERATION_ROLES,
+		}),
 	);
 
 	app.post(

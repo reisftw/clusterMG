@@ -1024,7 +1024,7 @@ async function refreshStaticSnapshot(
 }
 
 async function refreshDashboardSnapshot(generatedAt = new Date().toISOString()) {
-	await refreshStaticSnapshot("dashboard", generatedAt);
+	await refreshStaticSnapshot("dashboard", generatedAt, { compact: true });
 }
 
 async function refreshOperationalSnapshot(

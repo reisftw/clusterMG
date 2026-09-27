@@ -1,0 +1,176 @@
+function cleanText(value) {
+	return String(value || "").trim();
+}
+
+function normalizeText(value) {
+	return cleanText(value)
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.replace(/\s+/g, " ")
+		.toUpperCase();
+}
+
+function normalizeCityKey(value) {
+	return normalizeText(value).replace(/[^A-Z0-9]+/g, " ").trim();
+}
+
+const OS_TYPES = Object.freeze({
+	RETIRADA_FTTH: { id: 1487, label: "RETIRADA FTTH", legacy: true },
+	RETIRADA_CANCELAMENTO_SEGUNDA_TENTATIVA: {
+		id: 1488,
+		label: "RETIRADA & CANCELAMENTO - SEGUNDA TENTATIVA",
+		legacy: true,
+	},
+	CANCELAMENTO_FTTH: { id: 1495, label: "CANCELAMENTO FTTH", legacy: true },
+	CANCELAMENTO_LOJA: { id: 5, label: "CANCELAMENTO LOJA", legacy: true },
+	RETIRADA_OUTROS: { id: 1493, label: "RETIRADA - OUTROS", legacy: false },
+	CANCELAMENTO_OUTROS: {
+		id: 1496,
+		label: "CANCELAMENTO - OUTROS",
+		legacy: false,
+	},
+});
+
+const LEGACY_PRODUCTION_OS_TYPE_IDS = new Set(
+	Object.values(OS_TYPES)
+		.filter((item) => item.legacy)
+		.map((item) => item.id),
+);
+const NEW_PRODUCTION_OS_TYPE_IDS = new Set(
+	Object.values(OS_TYPES)
+		.filter((item) => !item.legacy)
+		.map((item) => item.id),
+);
+const PRODUCTION_OS_TYPE_IDS = new Set(
+	Object.values(OS_TYPES).map((item) => item.id),
+);
+
+const MATCH_IGNORED_OS_TYPES = Object.freeze([
+	[522, "DESMONTE DE POP"],
+	[63, "EXPANSÃO DE REDE"],
+	[449, "FALHA DE INFRAESTRUTURA"],
+	[48, "INSERÇÃO DE EQUIPAMENTO"],
+	[1490, "LIBERAÇÃO DE PORTAS"],
+	[571, "LISTAGEM DE TA"],
+	[665, "MIGRAÇÃO EPON / GPON"],
+	[1494, "MULTA DE EQUIPAMENTO"],
+	[67, "TROCA EPON/GPON"],
+	[66, "VIABILIDADE"],
+]);
+const MATCH_IGNORED_TYPE_IDS = new Set(
+	MATCH_IGNORED_OS_TYPES.map(([id]) => Number(id)),
+);
+
+const EQUIPMENT_KEYWORDS = Object.freeze({
+	FAST: ["FAST", "100 MB", "100MB", "200 MB", "200MB", "250 MB", "250MB", "299 MB", "299MB"],
+	AC: ["AC", "300 MB", "300MB", "400 MB", "400MB", "500 MB", "500MB"],
+	AX: ["AX", "600 MB", "600MB", "700 MB", "800 MB", "900 MB", "1 GB", "1GB", "GIGA"],
+});
+
+function featureEnabled(name, fallback = true) {
+	const value = process.env[name];
+	if (value === undefined || value === null || value === "") return fallback;
+	return !["0", "false", "FALSE", "no", "NO"].includes(String(value).trim());
+}
+
+function productionOsTypeIds({ includeNewTypes } = {}) {
+	const include =
+		includeNewTypes === undefined
+			? featureEnabled("ENABLE_NEW_OS_TYPES", true)
+			: Boolean(includeNewTypes);
+	return include ? new Set(PRODUCTION_OS_TYPE_IDS) : new Set(LEGACY_PRODUCTION_OS_TYPE_IDS);
+}
+
+function isProductionOsType(value, options = {}) {
+	return productionOsTypeIds(options).has(Number(value));
+}
+
+function isNewProductionOsType(value) {
+	return NEW_PRODUCTION_OS_TYPE_IDS.has(Number(value));
+}
+
+function isIgnoredForMatch(value) {
+	return MATCH_IGNORED_TYPE_IDS.has(Number(value));
+}
+
+function parseServiceSpeedMbps(value) {
+	const text = normalizeText(value).replace(/(\d),(?=\d)/g, "$1.");
+	if (!text) return null;
+	const regex =
+		/(\d+(?:\.\d+)?)\s*(GIGA|GBPS|GB|G\b|MEGAS|MEGA|MBPS|MB|M\b|K)(?=[^A-Z0-9]|$)/g;
+	let match;
+	let best = null;
+	while ((match = regex.exec(text))) {
+		const valueNumber = Number(match[1]);
+		if (!Number.isFinite(valueNumber)) continue;
+		const unit = match[2];
+		let mbps = valueNumber;
+		if (unit.startsWith("G")) mbps = valueNumber * 1000;
+		else if (unit === "K") mbps = valueNumber / 1000;
+		if (mbps > 0 && (!best || mbps > best)) best = mbps;
+	}
+	const fiberOn = text.match(/FIBER\s+ON\s+(\d+(?:\.\d+)?)\s+INTERNET/);
+	if (fiberOn) {
+		const mbps = Number(fiberOn[1]);
+		if (Number.isFinite(mbps) && mbps > 0 && (!best || mbps > best)) best = mbps;
+	}
+	if (best) return best;
+	const plain = text.match(/(?:^|\D)(\d{2,4})(?:\D|$)/);
+	if (!plain) return null;
+	const number = Number(plain[1]);
+	return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function keywordMatch(value, keywords = []) {
+	const text = normalizeText(value);
+	return keywords.some((keyword) => {
+		const normalized = normalizeText(keyword);
+		return normalized && text.includes(normalized);
+	});
+}
+
+function classifyEquipmentByServiceSpeed(value) {
+	const speedMbps = parseServiceSpeedMbps(value);
+	if (speedMbps && Number.isFinite(speedMbps)) {
+		if (speedMbps <= 299) {
+			return { equipmentType: "FAST", speedMbps, reason: "SPEED_LTE_299" };
+		}
+		if (speedMbps <= 500) {
+			return { equipmentType: "AC", speedMbps, reason: "SPEED_300_500" };
+		}
+		return { equipmentType: "AX", speedMbps, reason: "SPEED_GT_500" };
+	}
+	if (keywordMatch(value, EQUIPMENT_KEYWORDS.AX)) {
+		return { equipmentType: "AX", speedMbps: null, reason: "KEYWORD_AX" };
+	}
+	if (keywordMatch(value, EQUIPMENT_KEYWORDS.AC)) {
+		return { equipmentType: "AC", speedMbps: null, reason: "KEYWORD_AC" };
+	}
+	if (keywordMatch(value, EQUIPMENT_KEYWORDS.FAST)) {
+		return { equipmentType: "FAST", speedMbps: null, reason: "KEYWORD_FAST" };
+	}
+	return {
+		equipmentType: "UNKNOWN",
+		speedMbps: null,
+		reason: "SERVICE_SPEED_MISSING",
+	};
+}
+
+module.exports = {
+	MATCH_IGNORED_OS_TYPES,
+	MATCH_IGNORED_TYPE_IDS,
+	EQUIPMENT_KEYWORDS,
+	NEW_PRODUCTION_OS_TYPE_IDS,
+	OS_TYPES,
+	PRODUCTION_OS_TYPE_IDS,
+	classifyEquipmentByServiceSpeed,
+	cleanText,
+	featureEnabled,
+	isIgnoredForMatch,
+	isNewProductionOsType,
+	isProductionOsType,
+	normalizeCityKey,
+	normalizeText,
+	parseServiceSpeedMbps,
+	productionOsTypeIds,
+};
