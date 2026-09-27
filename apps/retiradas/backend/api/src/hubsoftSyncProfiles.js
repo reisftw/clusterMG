@@ -1233,21 +1233,18 @@ function classifyOrder(row, maps) {
 			};
 		}
 	}
-	if (technicians.length === 1) {
-		const technician = technicians[0];
+	const withdrawalTechnician = technicians.find((technician) =>
+		normalizeText(technician.name).includes("RETIRADA"),
+	);
+	if (withdrawalTechnician) {
 		return {
 			production_channel: "RETIRADA",
-			production_owner_id: technician.id ? String(technician.id) : normalizeText(technician.name),
-			production_owner_name: technician.name || "Técnico de retirada",
-			classification_rule: "HUBSOFT_TECHNICIAN_FALLBACK",
-			classification_reason: "TECHNICIAN_PRESENT",
-		};
-	}
-	if (technicians.length > 1) {
-		return {
-			production_channel: "UNCLASSIFIED",
-			classification_rule: "UNCLASSIFIED",
-			classification_reason: "MULTIPLE_TECHNICIANS",
+			production_owner_id: withdrawalTechnician.id
+				? String(withdrawalTechnician.id)
+				: normalizeText(withdrawalTechnician.name),
+			production_owner_name: withdrawalTechnician.name || "Técnico de retirada",
+			classification_rule: "HUBSOFT_WITHDRAWAL_TECHNICIAN_NAME",
+			classification_reason: "WITHDRAWAL_TECHNICIAN_NAME",
 		};
 	}
 

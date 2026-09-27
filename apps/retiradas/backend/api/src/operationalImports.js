@@ -2009,6 +2009,7 @@ function getRawDaysByDay(record = {}) {
 			agente: Number(row.agente || 0),
 			loja: Number(row.loja || 0),
 			regionais: Number(row.regionais || 0),
+			naoClassificado: Number(row.naoClassificado || row.unclassified || 0),
 			totalDia: Number(row.totalDia || 0),
 		});
 	}
@@ -2023,6 +2024,7 @@ function setRawDayField(record = {}, day, field, value) {
 		agente: 0,
 		loja: 0,
 		regionais: 0,
+		naoClassificado: 0,
 		totalDia: 0,
 	};
 	current[field] = Number(value || 0);
@@ -2030,7 +2032,8 @@ function setRawDayField(record = {}, day, field, value) {
 		Number(current.equipe || 0) +
 		Number(current.agente || 0) +
 		Number(current.loja || 0) +
-		Number(current.regionais || 0);
+		Number(current.regionais || 0) +
+		Number(current.naoClassificado || 0);
 	rawByDay.set(day, current);
 	return [...rawByDay.values()]
 		.filter((row) => Number(row.totalDia || 0) > 0)
@@ -2104,12 +2107,14 @@ function combineMetaRecords(sempre = {}, onnet = {}, month, year) {
 				agente: 0,
 				loja: 0,
 				regionais: 0,
+				naoClassificado: 0,
 				totalDia: 0,
 			};
 			current.equipe += Number(row.equipe || 0);
 			current.agente += Number(row.agente || 0);
 			current.loja += Number(row.loja || 0);
 			current.regionais += Number(row.regionais || 0);
+			current.naoClassificado += Number(row.naoClassificado || row.unclassified || 0);
 			current.totalDia += Number(row.totalDia || 0);
 			rawByDay.set(dia, current);
 		}
@@ -2278,8 +2283,8 @@ async function persistHubsoftMetaRecords({
 		};
 	const resolveFonte = await resolveMetaFonteByCity(records);
 	const grouped = {
-		sempre: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0 },
-		onnet: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0 },
+		sempre: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0, UNCLASSIFIED: 0 },
+		onnet: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0, UNCLASSIFIED: 0 },
 	};
 	for (const record of records) {
 		const fonte = resolveFonte(record);
@@ -2288,7 +2293,10 @@ async function persistHubsoftMetaRecords({
 			grouped[fonte].LOJA += 1;
 			continue;
 		}
-		if (!["AA", "RETIRADA", "REGIONAL"].includes(channel)) continue;
+		if (!["AA", "RETIRADA", "REGIONAL"].includes(channel)) {
+			grouped[fonte].UNCLASSIFIED += 1;
+			continue;
+		}
 		const bucket = channel === "AA" ? "AA" : channel === "RETIRADA" ? "RETIRADA" : "REGIONAL";
 		const name =
 			bucket === "AA"
@@ -2335,6 +2343,12 @@ async function persistHubsoftMetaRecords({
 			next.rawDays = setRawDayField(next, day, "equipe", equipe);
 			next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "regionais", regionaisTotal);
 			next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "agente", agentesTotal);
+			next.rawDays = setRawDayField(
+				{ ...next, rawDays: next.rawDays },
+				day,
+				"naoClassificado",
+				grouped[baseId].UNCLASSIFIED,
+			);
 		}
 		next.agenteTotal =
 			(next.rawDays || []).reduce((sum, row) => sum + Number(row.agente || 0), 0);

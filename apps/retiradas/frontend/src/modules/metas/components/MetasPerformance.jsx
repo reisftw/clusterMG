@@ -57,7 +57,9 @@ function mergePerformanceItems(items = []) {
 			total: Number(current.total || 0) + Number(item.total || 0),
 		});
 	});
-	return [...map.values()].sort((a, b) => Number(b.total || 0) - Number(a.total || 0));
+	return [...map.values()]
+		.filter((item) => Number(item.total || 0) > 0)
+		.sort((a, b) => Number(b.total || 0) - Number(a.total || 0));
 }
 
 const MetasPerformance = ({ dados }) => {
