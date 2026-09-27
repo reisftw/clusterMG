@@ -58,6 +58,35 @@ describe("equipmentRecoveryService", () => {
 		expect(snapshot.equipmentValueSource).toBe("movimentacoes_produtos_config");
 	});
 
+	it("classifica usando candidatos alternativos do cliente_servico", () => {
+		const values = new Map([
+			["AC", { value: 240, productName: "ONU AC", source: "movimentacoes_produtos_config" }],
+		]);
+		const snapshot = snapshotFromRecord(
+			{
+				id: "record-2",
+				hubsoft_id: "os-2",
+				hubsoft_number: "124",
+				source_type: "RETIRADA FTTH",
+				source_date: "2026-09-10T12:00:00.000Z",
+				source_city: "Betim",
+				raw_excerpt: {
+					id_tipo_ordem_servico: 1487,
+					servico: "",
+					numero_plano: "",
+					cliente_servico: {
+						plano: { descricao: "Internet Fibra 300 Mega" },
+					},
+					tecnicos: [{ id: 101, name: "Joao Silva" }],
+				},
+			},
+			values,
+		);
+		expect(snapshot.equipmentType).toBe("AC");
+		expect(snapshot.serviceSpeedMbps).toBe(300);
+		expect(snapshot.serviceName).toBe("Internet Fibra 300 Mega");
+	});
+
 	it("nao reutiliza movimento alem da quantidade disponivel", () => {
 		const stock = [movement({ id: "mov-1", quantity: 1 })];
 		const first = findMovementMatch(

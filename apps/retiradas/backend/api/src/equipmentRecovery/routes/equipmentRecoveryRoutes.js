@@ -36,6 +36,22 @@ function createEquipmentRecoveryRouter({
 		}
 	});
 
+	router.get("/records", ...authorize, async (req, res, next) => {
+		try {
+			res.json(await equipmentRecoveryService.listRecords(req.query || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/options", ...authorize, async (req, res, next) => {
+		try {
+			res.json(await equipmentRecoveryService.getOptions(req.query || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/pending", ...authorize, async (req, res, next) => {
 		try {
 			res.json(await equipmentRecoveryService.listPending(req.query || {}));

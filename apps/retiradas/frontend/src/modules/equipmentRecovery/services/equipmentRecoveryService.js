@@ -23,8 +23,16 @@ export function buscarTecnicosRecuperacao(params) {
 	return requestVpsApi(`/equipment-recovery/technicians${queryString(params)}`);
 }
 
+export function buscarRegistrosRecuperacao(params) {
+	return requestVpsApi(`/equipment-recovery/records${queryString(params)}`);
+}
+
 export function buscarPendenciasRecuperacao(params) {
 	return requestVpsApi(`/equipment-recovery/pending${queryString(params)}`);
+}
+
+export function buscarOpcoesRecuperacao(params) {
+	return requestVpsApi(`/equipment-recovery/options${queryString(params)}`);
 }
 
 export function reprocessarRecuperacao(payload) {
