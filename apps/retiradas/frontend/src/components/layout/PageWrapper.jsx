@@ -56,6 +56,7 @@ const PAGE_TITLES = {
 	[ROUTES.AUDITORIA_LOGS]: "Logs de Auditoria",
 	[ROUTES.EMPRESAS_TECNICOS]: "Empresas",
 	[ROUTES.METAS]: "Metas",
+	[ROUTES.RANKING]: "Ranking",
 	[ROUTES.NOTIFICACOES]: "Notificações",
 	[ROUTES.RELATORIOS]: "Central de Relatorios",
 	[ROUTES.FERIADOS]: "Feriados e Calendario",

@@ -28,6 +28,7 @@ export const ROUTES = {
 	VISITAS: "/visitas",
 	GESTAO_DUVIDAS: "/gestao-duvidas",
 	METAS: "/metas",
+	RANKING: "/ranking",
 	NOTIFICACOES: "/notificacoes",
 	RETIRADAS: "/retiradas",
 	ENTREGAS_TECNICOS: "/entregas-tecnicos",
@@ -78,6 +79,7 @@ export const ROUTES = {
 	FERRAMENTAS: "/ferramentas",
 	MAPA: "/mapa",
 	MAPA_HISTORICO: "/mapa/historico",
+	MAPAS_ATUALIZACOES: "/mapas/atualizacoes",
 
 	PAINEL_PUBLICO: "/painel",
 	PAINEL_AGENTES: "/painel/agentes",

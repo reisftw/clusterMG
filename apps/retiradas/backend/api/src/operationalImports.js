@@ -2,6 +2,7 @@ const documents = require("./documents");
 const db = require("./db");
 const auditLog = require("./auditLog");
 const mensageriaRepository = require("./mensageriaRepository");
+const ordensRepository = require("./ordensRepository");
 const regionaisRepository = require("./regionaisRepository");
 const { broadcastRealtime } = require("./realtime");
 const {
@@ -13,6 +14,15 @@ const {
 } = require("./operationalMatchSnapshot");
 const { buildSnapshotDomain } = require("./publicDashboard");
 const { randomId } = require("./secureRandom");
+
+const DIARIO_AFTER_HOURS_HORARIO = "23:59";
+const DIARIO_CADASTRO_HORARIOS = [
+	"11h",
+	"14h",
+	"16h",
+	"18h",
+	DIARIO_AFTER_HOURS_HORARIO,
+];
 
 const MAPA_FONTES = {
 	sempre: {
@@ -751,13 +761,18 @@ async function upsertMany(collectionPath, docsMap, progress = null) {
 	const total = entries.length;
 	let processed = 0;
 	for (const [documentId, data] of entries) {
-		await documents.upsertDocument({
+		const record = {
 			path: `${collectionPath}/${documentId}`,
 			collectionPath,
 			documentId,
 			parentPath: null,
 			data,
-		});
+		};
+		if (ordensRepository.isOrdersCollection(collectionPath)) {
+			await ordensRepository.upsertDocument(record, { returnDocument: false });
+		} else {
+			await documents.upsertDocument(record);
+		}
 		processed += 1;
 		if (
 			progress?.update &&
@@ -993,8 +1008,9 @@ async function publishAcompanhamentoUpdate(source, payload = {}) {
 async function refreshStaticSnapshot(
 	domain,
 	generatedAt = new Date().toISOString(),
+	options = {},
 ) {
-	const snapshot = await buildSnapshotDomain(domain);
+	const snapshot = await buildSnapshotDomain(domain, options);
 	if (!snapshot) return;
 	await db.query(
 		`insert into static_snapshots (domain, data, generated_at)
@@ -1014,7 +1030,7 @@ async function refreshDashboardSnapshot(generatedAt = new Date().toISOString()) 
 async function refreshOperationalSnapshot(
 	generatedAt = new Date().toISOString(),
 ) {
-	await refreshStaticSnapshot("operacional", generatedAt);
+	await refreshStaticSnapshot("operacional", generatedAt, { compact: true });
 }
 
 async function getMensageriaConfig() {
@@ -1243,6 +1259,51 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 	};
 }
 
+async function reconcileMensageriaQueueWithOpenMap(finalMap = {}) {
+	const queue = await mensageriaRepository.listAllQueueMessages().catch(() => []);
+	const activeStatuses = new Set([
+		"novo",
+		"aprovado",
+		"aguardando_janela",
+		"falhou",
+		"duplicado",
+	]);
+	const openOs = new Set(
+		Object.entries(finalMap)
+			.flatMap(([id, order]) => [
+				id,
+				order?.num_os,
+				order?.os,
+				order?.numero_os,
+				order?.numero_ordem_servico,
+			])
+			.map((value) => String(value || "").trim())
+			.filter(Boolean),
+	);
+	let checked = 0;
+	let removed = 0;
+	for (const item of queue) {
+		if (!activeStatuses.has(String(item.status || "novo"))) continue;
+		checked += 1;
+		const os = String(item.os || item.num_os || item.numero_os || "").trim();
+		if (os && openOs.has(os)) continue;
+		removed += 1;
+		await mensageriaRepository.updateQueueMessage(item.id, {
+			...item,
+			status: "ignorado",
+			ultimoErro:
+				"Removido automaticamente: cliente/O.S. não consta mais no mapa de O.S abertas.",
+			ultimo_erro:
+				"Removido automaticamente: cliente/O.S. não consta mais no mapa de O.S abertas.",
+			atualizadoEm: new Date().toISOString(),
+			atualizado_em: new Date().toISOString(),
+			ajustadoFilaEm: new Date().toISOString(),
+		});
+	}
+	broadcastRealtime("mensageria", { action: "queue_reconciled", removed });
+	return { checked, removed, remaining: checked - removed, openOrders: openOs.size };
+}
+
 async function persistMapaImport(payload = {}, user = {}, context = {}) {
 	const fontes = getMapaFontesSelecionadas(payload, ["sempre"]);
 	const fonteLabel = getMapaFonteLabel(fontes);
@@ -1367,6 +1428,17 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		newMapEntries,
 		user,
 	);
+	const mensageriaReconciliation =
+		await reconcileMensageriaQueueWithOpenMap(finalMap).catch((error) => {
+			console.error(
+				"[operationalImports] Falha ao reconciliar fila da mensageria:",
+				error,
+			);
+			return {
+				ok: false,
+				error: error?.message || "Falha ao reconciliar fila da mensageria.",
+			};
+		});
 	await context.update?.({
 		stage: "Conferindo agendamentos no mapa",
 		percent: 88,
@@ -1403,6 +1475,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 			totalOnnet,
 			fontes,
 			mensageriaDiff,
+			mensageriaReconciliation,
 			agendamentosMapa,
 		},
 	});
@@ -1440,6 +1513,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		notify: meta.novasSalvas > 0,
 		notifyAcompanhamento: meta.novasSalvas > 0,
 		mensageriaDiff,
+		mensageriaReconciliation,
 		agendamentosMapa,
 		atualizadas: Object.keys(incoming).length,
 		removidas: deleted,
@@ -1451,7 +1525,6 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 async function persistMatchImport(payload = {}, user = {}, context = {}) {
 	const fontes = getMapaFontesSelecionadas(payload, ["sempre", "onnet"]);
 	const fonteLabel = getMapaFonteLabel(fontes);
-	const fontesSet = new Set(fontes);
 	const periodo = payload.periodo || {};
 	await context.update?.({
 		stage: "Lendo e normalizando linhas do match",
@@ -1463,6 +1536,34 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 		? await buildOrdersFromRows(payload.rows, fontes, { forMatch: true })
 		: { ordensNovas: payload.ordens || {} };
 	const incoming = prepared.ordensNovas || {};
+	if (!Object.keys(incoming).length) {
+		await context.update?.({
+			stage: "Resultado vazio do match ignorado",
+			percent: 100,
+			totalDocuments: 0,
+		});
+		await publishAcompanhamentoUpdate("match", {
+			generatedAt: new Date().toISOString(),
+			updatedBy: user.uid || null,
+			message:
+				"Match retornou vazio e a base atual foi preservada para evitar rollback.",
+			summary: {
+				fontes,
+				fonteLabel,
+				skipped: true,
+				reason: "EMPTY_MATCH_IMPORT_NOT_APPLIED",
+			},
+		});
+		return {
+			source: "match",
+			skipped: true,
+			reason: "EMPTY_MATCH_IMPORT_NOT_APPLIED",
+			message: "Resultado vazio do match ignorado; base atual preservada.",
+			total: 0,
+			atualizadas: 0,
+			removidas: 0,
+		};
+	}
 	await context.update?.({
 		stage: "Comparando base atual do match",
 		percent: 30,
@@ -1471,7 +1572,6 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 			: Object.keys(incoming).length,
 		totalDocuments: Object.keys(incoming).length,
 	});
-	const current = await getCollectionMap("match_os_abertas");
 	const deleted = await documents.deleteDocumentsByCollectionAndSources(
 		"match_os_abertas",
 		fontes,
@@ -1494,16 +1594,8 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 		totalDocuments: Object.keys(incoming).length,
 	});
 
-	const finalMap = {
-		...Object.fromEntries(
-			Object.entries(current).filter(
-				([, order]) =>
-					!fontesSet.has(normalizeMapaFonte(order?.fonte || order?.empresa)),
-			),
-		),
-		...incoming,
-	};
-	const finalOrders = Object.entries(finalMap).map(([id, data]) => ({
+	const persistedMatchMap = await getCollectionMap("match_os_abertas");
+	const finalOrders = Object.entries(persistedMatchMap).map(([id, data]) => ({
 		id,
 		...data,
 	}));
@@ -1684,6 +1776,660 @@ function buildDashboardPayload(month, data, nowIso) {
 	};
 }
 
+function getMetaMonthFromDate(dateText) {
+	const date = dateText ? new Date(`${String(dateText).slice(0, 10)}T12:00:00Z`) : new Date();
+	const monthIndex = Number.isNaN(date.getTime()) ? new Date().getMonth() : date.getUTCMonth();
+	return MONTHORDER[monthIndex] || MONTHORDER[new Date().getMonth()];
+}
+
+function getMetaYearFromDate(dateText) {
+	const date = dateText ? new Date(`${String(dateText).slice(0, 10)}T12:00:00Z`) : new Date();
+	return Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getUTCFullYear();
+}
+
+function getMetaDayFromDate(dateText) {
+	const date = dateText ? new Date(`${String(dateText).slice(0, 10)}T12:00:00Z`) : new Date();
+	return Number.isNaN(date.getTime()) ? new Date().getDate() : date.getUTCDate();
+}
+
+function metaMonthDateKey(month, year, day) {
+	const monthNumber = MONTHORDER.indexOf(month) + 1;
+	if (!monthNumber || !day || !year) return null;
+	return [
+		String(year).padStart(4, "0"),
+		String(monthNumber).padStart(2, "0"),
+		String(day).padStart(2, "0"),
+	].join("-");
+}
+
+function buildDiarioEntryFromSaldoDay({ dateKey, row, nowIso, user = {} }) {
+	const total = Number(row?.totalDia || 0);
+	const horarios = DIARIO_CADASTRO_HORARIOS.reduce((result, horario) => {
+		result[horario] = horario === DIARIO_AFTER_HOURS_HORARIO ? total : 0;
+		return result;
+	}, {});
+
+	return {
+		date: dateKey,
+		monthKey: String(dateKey).slice(0, 7),
+		horarios,
+		deliveredTotal: total,
+		hourlyTotal: total,
+		afterHoursTotal: total,
+		fines: Number(row?.multas || row?.fines || 0),
+		notes: "Preenchido automaticamente pela sincronizacao de metas HubSoft.",
+		autoGeneratedFromMetas: true,
+		source: "hubsoft-metas",
+		sourceTotals: {
+			equipe: Number(row?.equipe || 0),
+			agente: Number(row?.agente || 0),
+			loja: Number(row?.loja || 0),
+			regionais: Number(row?.regionais || 0),
+			totalDia: total,
+		},
+		updatedBy: user.uid || null,
+		updatedByName: user.nome || user.name || user.displayName || "HubSoft",
+		updatedAt: nowIso,
+	};
+}
+
+function shouldUpdateDiarioFromMetas(existing = {}) {
+	if (!existing || !Object.keys(existing).length) return true;
+	if (existing.autoGeneratedFromMetas === true) return true;
+	const horarios = existing.horarios || {};
+	const detailedTotal = ["11h", "14h", "16h", "18h"].reduce(
+		(sum, horario) => sum + Number(horarios[horario] || 0),
+		0,
+	);
+	const total = Number(existing.hourlyTotal || existing.deliveredTotal || 0);
+	return detailedTotal === 0 && total === 0;
+}
+
+async function syncDiarioFromMetaRecord(record = {}, month, year, user = {}, options) {
+	const rows = Array.isArray(record?.saldoDiario) ? record.saldoDiario : [];
+	const nowIso = new Date().toISOString();
+	for (const row of rows) {
+		const dateKey = metaMonthDateKey(month, year, Number(row?.dia));
+		const total = Number(row?.totalDia || 0);
+		if (!dateKey || total <= 0) continue;
+		const path = `acompanhamento_diario/${dateKey}`;
+		const existing =
+			(await documents.getDocument(path).catch(() => null))?.data || null;
+		if (!shouldUpdateDiarioFromMetas(existing)) continue;
+		await documents.upsertDocument({
+			path,
+			collectionPath: "acompanhamento_diario",
+			documentId: dateKey,
+			parentPath: null,
+			data: buildDiarioEntryFromSaldoDay({ dateKey, row, nowIso, user }),
+		}, options);
+	}
+}
+
+async function persistHubsoftFineRecords({
+	profile = "MULTAS",
+	date,
+	records = [],
+	user = {},
+	quiet = false,
+} = {}) {
+	const dateKey = String(date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+		const error = new Error("Data invalida para sincronizacao de multas.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const nowIso = new Date().toISOString();
+	const unique = new Set(
+		(Array.isArray(records) ? records : [])
+			.map((record) => String(record.hubsoft_id || record.hubsoft_number || "").trim())
+			.filter(Boolean),
+	);
+	const total = unique.size || (Array.isArray(records) ? records.length : 0);
+	const path = `acompanhamento_diario/${dateKey}`;
+	const existing =
+		(await documents.getDocument(path).catch(() => null))?.data || {};
+	const horarios = existing.horarios || DIARIO_CADASTRO_HORARIOS.reduce((result, horario) => {
+		result[horario] = 0;
+		return result;
+	}, {});
+	const data = {
+		...existing,
+		date: existing.date || dateKey,
+		monthKey: existing.monthKey || String(dateKey).slice(0, 7),
+		horarios,
+		deliveredTotal: Number(existing.deliveredTotal || existing.hourlyTotal || 0),
+		hourlyTotal: Number(existing.hourlyTotal || existing.deliveredTotal || 0),
+		afterHoursTotal: Number(existing.afterHoursTotal || horarios[DIARIO_AFTER_HOURS_HORARIO] || 0),
+		fines: total,
+		fineSource: "hubsoft-multas",
+		fineProfile: profile,
+		fineUpdatedAt: nowIso,
+		fineRecordIds: [...unique].slice(0, 200),
+		updatedBy: user.uid || existing.updatedBy || null,
+		updatedByName:
+			user.nome ||
+			user.name ||
+			user.displayName ||
+			existing.updatedByName ||
+			"HubSoft",
+		updatedAt: nowIso,
+	};
+	const writeOptions = quiet
+		? { audit: false, broadcast: false, normalized: false }
+		: undefined;
+	await documents.upsertDocument({
+		path,
+		collectionPath: "acompanhamento_diario",
+		documentId: dateKey,
+		parentPath: null,
+		data,
+	}, writeOptions);
+	if (!quiet) {
+		await publishAcompanhamentoUpdate("diario", {
+			generatedAt: nowIso,
+			updatedBy: user.uid || null,
+			message: `Multas lancadas atualizadas pelo HubSoft para ${dateKey}.`,
+			summary: {
+				profile,
+				date: dateKey,
+				fines: total,
+			},
+		});
+	}
+	return {
+		source: "hubsoft-multas",
+		profile,
+		date: dateKey,
+		total,
+		updatedAt: nowIso,
+	};
+}
+
+function getDaysInMetaMonth(month, year = new Date().getFullYear()) {
+	const index = MONTHORDER.indexOf(month);
+	if (index < 0) return 31;
+	return new Date(Date.UTC(year, index + 1, 0)).getUTCDate();
+}
+
+function createDailyArray(dayCount) {
+	return Array.from({ length: dayCount }, () => 0);
+}
+
+function normalizeDailyForMonth(daily, dayCount) {
+	return Array.from({ length: dayCount }, (_, index) => Number(daily?.[index] || 0));
+}
+
+function setDailyTotal(items = [], name, dayIndex, value, dayCount) {
+	const normalizedName = String(name || "Sem classificacao HubSoft").trim();
+	const key = normalizeText(normalizedName);
+	const current = Array.isArray(items) ? [...items] : [];
+	let item = current.find((row) => normalizeText(row?.name) === key);
+	if (!item) {
+		item = {
+			name: normalizedName,
+			meta: 110,
+			daily: createDailyArray(dayCount),
+			total: 0,
+			percent: 0,
+		};
+		current.push(item);
+	}
+	item.daily = normalizeDailyForMonth(item.daily, dayCount);
+	item.daily[dayIndex] = Number(value || 0);
+	item.total = item.daily.reduce((sum, dailyValue) => sum + Number(dailyValue || 0), 0);
+	item.meta = Number(item.meta || 110);
+	item.percent = item.meta > 0 ? Number(((item.total / item.meta) * 100).toFixed(1)) : 0;
+	return current.sort((left, right) => Number(right.total || 0) - Number(left.total || 0));
+}
+
+function clearDailyTotal(items = [], dayIndex, dayCount) {
+	return (Array.isArray(items) ? items : []).map((item) => {
+		const daily = normalizeDailyForMonth(item.daily, dayCount);
+		daily[dayIndex] = 0;
+		const total = daily.reduce((sum, dailyValue) => sum + Number(dailyValue || 0), 0);
+		const meta = Number(item.meta || 110);
+		return {
+			...item,
+			daily,
+			total,
+			percent: meta > 0 ? Number(((total / meta) * 100).toFixed(1)) : 0,
+		};
+	});
+}
+
+function getRawDaysByDay(record = {}) {
+	const map = new Map();
+	for (const row of record.rawDays || record.saldoDiario || []) {
+		const dia = Number(row?.dia || 0);
+		if (!dia) continue;
+		map.set(dia, {
+			dia,
+			equipe: Number(row.equipe || 0),
+			agente: Number(row.agente || 0),
+			loja: Number(row.loja || 0),
+			regionais: Number(row.regionais || 0),
+			totalDia: Number(row.totalDia || 0),
+		});
+	}
+	return map;
+}
+
+function setRawDayField(record = {}, day, field, value) {
+	const rawByDay = getRawDaysByDay(record);
+	const current = rawByDay.get(day) || {
+		dia: day,
+		equipe: 0,
+		agente: 0,
+		loja: 0,
+		regionais: 0,
+		totalDia: 0,
+	};
+	current[field] = Number(value || 0);
+	current.totalDia =
+		Number(current.equipe || 0) +
+		Number(current.agente || 0) +
+		Number(current.loja || 0) +
+		Number(current.regionais || 0);
+	rawByDay.set(day, current);
+	return [...rawByDay.values()]
+		.filter((row) => Number(row.totalDia || 0) > 0)
+		.sort((left, right) => Number(left.dia || 0) - Number(right.dia || 0));
+}
+
+function recalculateSimpleSaldoDiario(record = {}, month, year) {
+	const dayCount = getDaysInMetaMonth(month, year);
+	const meta = Number(record.meta || 0);
+	const rawDays = record.rawDays || record.saldoDiario || [];
+	const activeDays = Math.max(1, dayCount);
+	const metaDiaria = meta > 0 ? Math.ceil(meta / activeDays) : 0;
+	let saldoMes = 0;
+	const saldoDiario = rawDays.map((row) => {
+		const dia = Number(row.dia || 0);
+		const totalDia = Number(row.totalDia || 0);
+		const metaDia = metaDiaria;
+		const saldoDia = totalDia - metaDia;
+		saldoMes += saldoDia;
+		return {
+			...row,
+			dia,
+			totalDia,
+			util: true,
+			metaDia,
+			metaAcumulada: metaDiaria * dia,
+			saldoDia,
+			saldoMes,
+		};
+	});
+	return { metaDiaria, saldoDiario };
+}
+
+function recalculateMetaRecord(record = {}, month, year) {
+	const rawDays = (record.rawDays || record.saldoDiario || []).filter(
+		(row) => Number(row?.totalDia || 0) > 0,
+	);
+	const totalOS = rawDays.reduce((sum, row) => sum + Number(row.totalDia || 0), 0);
+	const meta = Number(record.meta || 0);
+	const percentAchieved = meta > 0 ? Number(((totalOS / meta) * 100).toFixed(1)) : 0;
+	const saldo = recalculateSimpleSaldoDiario({ ...record, rawDays }, month, year);
+	return {
+		...record,
+		mes: record.mes || month,
+		month: record.month || month,
+		ano: Number(record.ano || year),
+		year: Number(record.year || year),
+		totalOS,
+		planilhaCarregada: true,
+		temLancamentos: totalOS > 0,
+		percentAchieved,
+		rawDays,
+		saldoDiario: saldo.saldoDiario,
+		metaDiaria: saldo.metaDiaria,
+		status:
+			percentAchieved >= 100
+				? "Meta atingida!"
+				: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
+	};
+}
+
+function combineMetaRecords(sempre = {}, onnet = {}, month, year) {
+	const rawByDay = new Map();
+	for (const record of [sempre, onnet]) {
+		for (const row of record.rawDays || record.saldoDiario || []) {
+			const dia = Number(row?.dia || 0);
+			if (!dia) continue;
+			const current = rawByDay.get(dia) || {
+				dia,
+				equipe: 0,
+				agente: 0,
+				loja: 0,
+				regionais: 0,
+				totalDia: 0,
+			};
+			current.equipe += Number(row.equipe || 0);
+			current.agente += Number(row.agente || 0);
+			current.loja += Number(row.loja || 0);
+			current.regionais += Number(row.regionais || 0);
+			current.totalDia += Number(row.totalDia || 0);
+			rawByDay.set(dia, current);
+		}
+	}
+	return recalculateMetaRecord(
+		{
+			...sempre,
+			mes: month,
+			month,
+			ano: year,
+			year,
+			origem: "ONNET + SEMPRE",
+			cancelamentos:
+				Number(sempre.cancelamentos || 0) + Number(onnet.cancelamentos || 0),
+			meta: Number(sempre.meta || 0) + Number(onnet.meta || 0),
+			technicians: [
+				...(sempre.technicians || []),
+				...(onnet.technicians || []),
+			].sort((left, right) => Number(right.total || 0) - Number(left.total || 0)),
+			regionais: [
+				...(sempre.regionais || []),
+				...(onnet.regionais || []),
+			].sort((left, right) => Number(right.total || 0) - Number(left.total || 0)),
+			agenteTotal: Number(sempre.agenteTotal || 0),
+			lojaTotal: Number(sempre.lojaTotal || 0) + Number(onnet.lojaTotal || 0),
+			rawDays: [...rawByDay.values()].sort((left, right) => left.dia - right.dia),
+		},
+		month,
+		year,
+	);
+}
+
+async function resolveMetaFonteByCity() {
+	const cityMap = await loadCityMap();
+	return (record) => {
+		const cityKey = normalizeCityKey(record?.source_city);
+		const info = cityMap[cityKey];
+		return getFonteMapaPorRegional(info?.regional);
+	};
+}
+
+function updateAgentDashboardCity(cities = [], cityName, dayIndex, value, dayCount) {
+	const name = normalizeCity(cityName) || "Sem cidade";
+	const key = normalizeCityKey(name);
+	const current = Array.isArray(cities) ? [...cities] : [];
+	let city = current.find((item) => normalizeCityKey(item?.nome || item?.cidade) === key);
+	if (!city) {
+		city = {
+			nome: name,
+			cancelamentos: 0,
+			meta80: 0,
+			realizado: 0,
+			falta: 0,
+			pct: 0,
+			daily: createDailyArray(dayCount),
+			lojaAgentesTotal: 0,
+			lojaAgentesDaily: createDailyArray(dayCount),
+		};
+		current.push(city);
+	}
+	city.daily = normalizeDailyForMonth(city.daily, dayCount);
+	city.daily[dayIndex] = Number(value || 0);
+	city.realizado = city.daily.reduce((sum, item) => sum + Number(item || 0), 0);
+	city.meta80 = Number(city.meta80 || city.meta || 0);
+	city.cancelamentos = Number(city.cancelamentos || 0);
+	city.falta = Math.max(0, Number(city.meta80 || 0) - city.realizado);
+	city.pct =
+		Number(city.meta80 || 0) > 0
+			? Number(((city.realizado / Number(city.meta80 || 0)) * 100).toFixed(1))
+			: 0;
+	return current.sort((left, right) => Number(right.realizado || 0) - Number(left.realizado || 0));
+}
+
+function clearAgentDashboardDay(cities = [], dayIndex, dayCount) {
+	return (Array.isArray(cities) ? cities : []).map((city) => {
+		const daily = normalizeDailyForMonth(city.daily, dayCount);
+		daily[dayIndex] = 0;
+		const realizado = daily.reduce((sum, value) => sum + Number(value || 0), 0);
+		const meta80 = Number(city.meta80 || city.meta || 0);
+		return {
+			...city,
+			daily,
+			realizado,
+			falta: Math.max(0, meta80 - realizado),
+			pct: meta80 > 0 ? Number(((realizado / meta80) * 100).toFixed(1)) : 0,
+		};
+	});
+}
+
+function recalculateAgentDashboard(month, data = {}, year) {
+	const cities = Array.isArray(data.cidades) ? data.cidades : [];
+	const dayCount = getDaysInMetaMonth(month, year);
+	const normalizedCities = cities.map((city) => ({
+		...city,
+		daily: normalizeDailyForMonth(city.daily, dayCount),
+		lojaAgentesDaily: normalizeDailyForMonth(city.lojaAgentesDaily, dayCount),
+		realizado: normalizeDailyForMonth(city.daily, dayCount).reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		),
+	}));
+	const totalRealizado = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.realizado || 0),
+		0,
+	);
+	const totalMeta = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.meta80 || city.meta || 0),
+		0,
+	);
+	const totalCancelamentos = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.cancelamentos || 0),
+		0,
+	);
+	return {
+		...data,
+		month,
+		cidades: normalizedCities,
+		cidadesRanking: [...normalizedCities].sort(
+			(left, right) => Number(right.realizado || 0) - Number(left.realizado || 0),
+		),
+		dayCount,
+		totalCancelamentos,
+		totalMeta,
+		totalRealizado,
+		totalFalta: totalMeta - totalRealizado,
+		percentAchieved:
+			totalMeta > 0 ? Number(((totalRealizado / totalMeta) * 100).toFixed(1)) : 0,
+		totalDaily: createDailyArray(dayCount).map((_, index) =>
+			normalizedCities.reduce(
+				(sum, city) => sum + Number(city.daily?.[index] || 0),
+				0,
+			),
+		),
+		status:
+			totalRealizado >= totalMeta && totalMeta > 0
+				? "Meta atingida!"
+				: `Faltam ${Math.max(0, Math.round(totalMeta - totalRealizado))} retiradas`,
+	};
+}
+
+async function persistHubsoftMetaRecords({
+	profile,
+	date,
+	records = [],
+	user = {},
+	quiet = false,
+} = {}) {
+	const isStoreProfile = profile === "LOJA";
+	const day = getMetaDayFromDate(date);
+	const month = getMetaMonthFromDate(date);
+	const year = getMetaYearFromDate(date);
+	const dayCount = getDaysInMetaMonth(month, year);
+	const dayIndex = day - 1;
+	const nowIso = new Date().toISOString();
+	const currentDoc = (await documents.getDocument(`metas/${month}`).catch(() => null))?.data || {
+		mes: month,
+		month,
+		ano: year,
+		year,
+		onnet: { mes: month, month, ano: year, year, origem: "ONNET" },
+	};
+	const currentAgents =
+		(await documents.getDocument(`dashboardagentes/${month}`).catch(() => null))?.data || {
+			month,
+			cidades: [],
+		};
+	const resolveFonte = await resolveMetaFonteByCity(records);
+	const grouped = {
+		sempre: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0 },
+		onnet: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0 },
+	};
+	for (const record of records) {
+		const fonte = resolveFonte(record);
+		const channel = record.production_channel || "UNCLASSIFIED";
+		if (profile === "LOJA") {
+			grouped[fonte].LOJA += 1;
+			continue;
+		}
+		const bucket = channel === "AA" ? "AA" : channel === "RETIRADA" ? "RETIRADA" : "REGIONAL";
+		const name =
+			bucket === "AA"
+				? normalizeCity(record.source_city) || record.production_owner_name
+				: record.production_owner_name || "Sem classificacao HubSoft";
+		const map = grouped[fonte][bucket];
+		map.set(name, Number(map.get(name) || 0) + 1);
+	}
+
+	const updateBase = (baseId, sourceRecord) => {
+		let next = {
+			...sourceRecord,
+			mes: month,
+			month,
+			ano: year,
+			year,
+			origem: baseId === "onnet" ? "ONNET" : "SEMPRE",
+		};
+		if (!isStoreProfile) {
+			next.technicians = clearDailyTotal(next.technicians, dayIndex, dayCount);
+			next.regionais = clearDailyTotal(next.regionais, dayIndex, dayCount);
+			for (const [name, total] of grouped[baseId].RETIRADA.entries()) {
+				next.technicians = setDailyTotal(next.technicians, name, dayIndex, total, dayCount);
+			}
+			for (const [name, total] of grouped[baseId].REGIONAL.entries()) {
+				next.regionais = setDailyTotal(next.regionais, name, dayIndex, total, dayCount);
+			}
+		}
+		const equipe = [...grouped[baseId].RETIRADA.values()].reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		);
+		const regionaisTotal = [...grouped[baseId].REGIONAL.values()].reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		);
+		const agentesTotal = [...grouped[baseId].AA.values()].reduce(
+			(sum, value) => sum + Number(value || 0),
+			0,
+		);
+		if (isStoreProfile) {
+			next.rawDays = setRawDayField(next, day, "loja", grouped[baseId].LOJA);
+		} else {
+			next.rawDays = setRawDayField(next, day, "equipe", equipe);
+			next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "regionais", regionaisTotal);
+			next.rawDays = setRawDayField({ ...next, rawDays: next.rawDays }, day, "agente", agentesTotal);
+		}
+		next.agenteTotal =
+			(next.rawDays || []).reduce((sum, row) => sum + Number(row.agente || 0), 0);
+		next.lojaTotal =
+			(next.rawDays || []).reduce((sum, row) => sum + Number(row.loja || 0), 0);
+		return recalculateMetaRecord(next, month, year);
+	};
+
+	const sempre = updateBase("sempre", currentDoc);
+	const onnet = updateBase("onnet", currentDoc.onnet || {});
+	let nextAgents = currentAgents;
+	if (!isStoreProfile) {
+		nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
+		for (const [city, total] of grouped.sempre.AA.entries()) {
+			nextAgents.cidades = updateAgentDashboardCity(
+				nextAgents.cidades,
+				city,
+				dayIndex,
+				total,
+				dayCount,
+			);
+		}
+	}
+	nextAgents = recalculateAgentDashboard(month, nextAgents, year);
+	const combined = combineMetaRecords(sempre, onnet, month, year);
+	const nextMonth = {
+		...sempre,
+		onnet,
+		onnetSempre: combined,
+		hubsoftUpdatedAt: nowIso,
+		hubsoftLastProfile: profile,
+	};
+	const writeOptions = quiet
+		? { audit: false, broadcast: false, normalized: false }
+		: undefined;
+
+	await documents.upsertDocument({
+		path: `metas/${month}`,
+		collectionPath: "metas",
+		documentId: month,
+		parentPath: null,
+		data: { ...nextMonth, updatedAt: nowIso },
+	}, writeOptions);
+	await documents.upsertDocument({
+		path: `dashboard/${month}`,
+		collectionPath: "dashboard",
+		documentId: month,
+		parentPath: null,
+		data: buildDashboardPayload(month, nextMonth, nowIso),
+	}, writeOptions);
+	await documents.upsertDocument({
+		path: `dashboardagentes/${month}`,
+		collectionPath: "dashboardagentes",
+		documentId: month,
+		parentPath: null,
+		data: { ...nextAgents, updatedAt: nowIso },
+	}, writeOptions);
+	await syncDiarioFromMetaRecord(combined, month, year, user, writeOptions);
+	if (!quiet) {
+		await publishAcompanhamentoUpdate("metas", {
+			generatedAt: nowIso,
+			updatedBy: user.uid || null,
+			message: `Metas atualizadas pelo HubSoft (${profile}) para ${String(day).padStart(2, "0")}/${String(MONTHORDER.indexOf(month) + 1).padStart(2, "0")}/${year}.`,
+			summary: {
+				profile,
+				date,
+				total: records.length,
+				sempre: {
+					equipe: [...grouped.sempre.RETIRADA.values()].reduce((sum, value) => sum + value, 0),
+					regionais: [...grouped.sempre.REGIONAL.values()].reduce((sum, value) => sum + value, 0),
+					agentes: [...grouped.sempre.AA.values()].reduce((sum, value) => sum + value, 0),
+					loja: grouped.sempre.LOJA,
+				},
+				onnet: {
+					equipe: [...grouped.onnet.RETIRADA.values()].reduce((sum, value) => sum + value, 0),
+					regionais: [...grouped.onnet.REGIONAL.values()].reduce((sum, value) => sum + value, 0),
+					agentes: [...grouped.onnet.AA.values()].reduce((sum, value) => sum + value, 0),
+					loja: grouped.onnet.LOJA,
+				},
+			},
+		});
+		await refreshDashboardSnapshot(nowIso);
+	}
+	return {
+		source: "hubsoft-metas",
+		profile,
+		generatedAt: nowIso,
+		month,
+		day,
+		total: records.length,
+		sempreTotal: Number(sempre.totalOS || 0),
+		onnetTotal: Number(onnet.totalOS || 0),
+		combinedTotal: Number(combined.totalOS || 0),
+	};
+}
+
 function dedupeAgentCities(cities = []) {
 	const map = new Map();
 	(Array.isArray(cities) ? cities : []).forEach((city) => {
@@ -1732,6 +2478,12 @@ async function persistMetasImport(payload = {}, user = {}) {
 			parentPath: null,
 			data: buildDashboardPayload(month, data, nowIso),
 		});
+		await syncDiarioFromMetaRecord(
+			data.onnetSempre || data,
+			month,
+			Number(data.ano || data.year || new Date().getFullYear()),
+			user,
+		);
 
 		const cities = dedupeAgentCities(agentesData[month]);
 		if (!cities.length) {
@@ -2205,7 +2957,11 @@ module.exports = {
 	markInterruptedImportJobs,
 	persistMapaImport,
 	persistMatchImport,
+	persistHubsoftFineRecords,
+	persistHubsoftMetaRecords,
 	persistMetasImport,
+	publishAcompanhamentoUpdate,
+	refreshDashboardSnapshot,
 	saveMatchConfig,
 	saveMetasBaseConfig,
 	saveMetasForceTaskConfig,

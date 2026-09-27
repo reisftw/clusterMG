@@ -349,7 +349,7 @@ const FeaturedMetasPanel = () => {
 						{ultimasEntregas.map((item) => (
 							<div
 								key={item.mes}
-								className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+								className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
 							>
 								<div className="min-w-0">
 									<p className="truncate text-sm font-black text-slate-800">
@@ -366,7 +366,7 @@ const FeaturedMetasPanel = () => {
 										% canc.
 									</p>
 								</div>
-								<p className="text-sm font-black text-blue-700">
+								<p className="shrink-0 whitespace-nowrap text-right text-sm font-black tabular-nums text-blue-700">
 									{item.total.toLocaleString("pt-BR")}
 								</p>
 							</div>

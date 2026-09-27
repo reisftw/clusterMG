@@ -78,6 +78,7 @@ const Notificacoes = lazy(
 	() => import("../modules/notificacoes/components/NotificacoesPage"),
 );
 const Metas = lazy(() => import("../modules/metas/components/MetasPage"));
+const Ranking = lazy(() => import("../modules/ranking/components/RankingPage"));
 const RegrasConfig = lazy(
 	() => import("../modules/relatorios/components/RegrasConfig"),
 );
@@ -86,6 +87,9 @@ const Relatorios = lazy(
 );
 const Mapa = lazy(() => import("../pages/Mapa/MapaPage"));
 const MapaHistorico = lazy(() => import("../pages/Mapa/MapaHistoricoPage"));
+const MapasAtualizacoes = lazy(
+	() => import("../modules/mapas/components/MapasAtualizacoesPage"),
+);
 const PainelPublico = lazy(
 	() => import("../pages/PainelPublico/PainelPublico"),
 );
@@ -475,6 +479,16 @@ const AppRouter = () => (
 									requiredPermission={["view_mapa", "destaque.mapa_os.view"]}
 								>
 									<MapaHistorico />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.MAPAS_ATUALIZACOES}
+							element={
+								<ProtectedRoute
+									requiredPermission={["view_mapa", "destaque.mapa_os.view"]}
+								>
+									<MapasAtualizacoes />
 								</ProtectedRoute>
 							}
 						/>
@@ -1217,6 +1231,20 @@ const AppRouter = () => (
 									]}
 								>
 									<Metas />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.RANKING}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"view_metas",
+										"destaque.metas.view",
+										"destaque.metas.manage",
+									]}
+								>
+									<Ranking />
 								</ProtectedRoute>
 							}
 						/>

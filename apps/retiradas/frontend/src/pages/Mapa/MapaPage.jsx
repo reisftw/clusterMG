@@ -1,6 +1,8 @@
-﻿import { Archive, FileDown, Layers3 } from "lucide-react";
+import { Archive, FileDown, Layers3 } from "lucide-react";
 import React, { useMemo, useState } from "react";
 import Spinner from "../../components/ui/Spinner";
+import { ROLES } from "../../constants/roles";
+import { useAuthContext } from "../../context/AuthContext";
 import { resolveVpsDate } from "../../services/vpsDate";
 import MapaAgentes from "./components/MapaAgentes";
 import MapaFiltros from "./components/MapaFiltros";
@@ -76,37 +78,46 @@ function MapaUploadActions({
 	mensagensMatch,
 	ordens,
 	ultimaAtualizacao,
+	isAdmin,
 }) {
+	if (!isAdmin) return null;
+
 	return (
-		<div className="mb-6 flex flex-wrap gap-3">
-			<div className="flex-1 min-w-[320px]">
-				<MapaUpload />
+		<details className="mb-6 space-y-3">
+			<summary className="cursor-pointer py-3 font-semibold">Importações</summary>
+			<div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+				As importações manuais são utilizadas como contingência. O Mapa e Match são atualizados automaticamente pelo HubSoft.
 			</div>
+			<div className="flex flex-wrap gap-3">
+				<div className="flex-1 min-w-[320px]">
+					<MapaUpload />
+				</div>
 
-			<div className="flex-1 min-w-[320px]">
-				<MatchUpload />
+				<div className="flex-1 min-w-[320px]">
+					<MatchUpload />
+				</div>
+
+				<div className="flex-1 min-w-[320px]">
+					<MapaLegadoUpload
+						onConcluido={legado.refetch}
+						mensagensMatch={mensagensMatch}
+					/>
+				</div>
+
+				{!isLegacyView && ordens.length > 0 ? (
+					<button
+						type="button"
+						onClick={() => gerarPDFMapa(ordens, ultimaAtualizacao)}
+						className="self-start rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+					>
+						<span className="flex items-center gap-2">
+							<FileDown size={16} />
+							Exportar Relatório
+						</span>
+					</button>
+				) : null}
 			</div>
-
-			<div className="flex-1 min-w-[320px]">
-				<MapaLegadoUpload
-					onConcluido={legado.refetch}
-					mensagensMatch={mensagensMatch}
-				/>
-			</div>
-
-			{!isLegacyView && ordens.length > 0 ? (
-				<button
-					type="button"
-					onClick={() => gerarPDFMapa(ordens, ultimaAtualizacao)}
-					className="self-start rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-				>
-					<span className="flex items-center gap-2">
-						<FileDown size={16} />
-						Exportar Relatório
-					</span>
-				</button>
-			) : null}
-		</div>
+		</details>
 	);
 }
 
@@ -193,6 +204,7 @@ function CurrentMapaContent({
 }
 
 export default function MapaPage() {
+	const { currentUser } = useAuthContext();
 	const { ordens, ultimaAtualizacao, loading } = useMapaOS();
 	const publicMapa = usePublicMapaOS(true);
 	const { mensagens: mensagensMatch } = useMatchOS();
@@ -217,6 +229,7 @@ export default function MapaPage() {
 	const displayLastUpdate = publicMapa.lastUpdate || ultimaAtualizacao;
 
 	const isLegacyView = activeView === "legado";
+	const isAdmin = String(currentUser?.role || "").toLowerCase() === ROLES.ADMIN;
 
 	return (
 		<div className="mx-auto max-w-[1400px] p-6">
@@ -226,6 +239,7 @@ export default function MapaPage() {
 				mensagensMatch={mensagensMatch}
 				ordens={ordens}
 				ultimaAtualizacao={ultimaAtualizacao}
+				isAdmin={isAdmin}
 			/>
 
 			<div className="mb-6 grid gap-3 md:grid-cols-2">

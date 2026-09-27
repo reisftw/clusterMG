@@ -180,7 +180,10 @@ async function getDocumentSnapshot(documentPath) {
 	return result.rows[0] || null;
 }
 
-async function upsertDocument(record) {
+async function upsertDocument(record, options = {}) {
+	const shouldBroadcast = options.broadcast !== false;
+	const shouldAudit = options.audit !== false;
+	const shouldDualWrite = options.normalized !== false;
 	assertLegacyCollectionAllowed(record.collectionPath);
 	if (imoveisRepository.isImoveisCollection(record.collectionPath)) {
 		const beforeRecord = await imoveisRepository.getDocument(record.path);
@@ -189,12 +192,14 @@ async function upsertDocument(record) {
 			collectionPath: record.collectionPath,
 			documentPath: record.path,
 		});
-		broadcastDocumentChange("upsert", record);
-		auditLog.recordDocumentAuditLog({
-			action: beforeRecord ? "update" : "create",
-			beforeRecord,
-			record,
-		});
+		if (shouldBroadcast) broadcastDocumentChange("upsert", record);
+		if (shouldAudit) {
+			auditLog.recordDocumentAuditLog({
+				action: beforeRecord ? "update" : "create",
+				beforeRecord,
+				record,
+			});
+		}
 		return;
 	}
 	if (ordensRepository.isOrdersCollection(record.collectionPath)) {
@@ -204,12 +209,14 @@ async function upsertDocument(record) {
 			collectionPath: record.collectionPath,
 			documentPath: record.path,
 		});
-		broadcastDocumentChange("upsert", record);
-		auditLog.recordDocumentAuditLog({
-			action: beforeRecord ? "update" : "create",
-			beforeRecord,
-			record,
-		});
+		if (shouldBroadcast) broadcastDocumentChange("upsert", record);
+		if (shouldAudit) {
+			auditLog.recordDocumentAuditLog({
+				action: beforeRecord ? "update" : "create",
+				beforeRecord,
+				record,
+			});
+		}
 		return;
 	}
 	const beforeRecord = await getDocumentSnapshot(record.path);
@@ -233,13 +240,15 @@ async function upsertDocument(record) {
 			JSON.stringify(record.data || {}),
 		],
 	);
-	await normalizedDualWrite.upsert(record);
-	broadcastDocumentChange("upsert", record);
-	auditLog.recordDocumentAuditLog({
-		action: beforeRecord ? "update" : "create",
-		beforeRecord,
-		record,
-	});
+	if (shouldDualWrite) await normalizedDualWrite.upsert(record);
+	if (shouldBroadcast) broadcastDocumentChange("upsert", record);
+	if (shouldAudit) {
+		auditLog.recordDocumentAuditLog({
+			action: beforeRecord ? "update" : "create",
+			beforeRecord,
+			record,
+		});
+	}
 }
 
 async function deleteDocument(path) {

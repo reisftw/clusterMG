@@ -8,6 +8,9 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	clientSecret: "",
 	username: "",
 	password: "",
+	webBaseUrl: "https://sempre.hubsoft.com.br",
+	webUsername: "",
+	webPassword: "",
 	grantType: "password",
 	syncMode: "preview",
 	syncBusca: "numero_ordem_servico",
@@ -16,6 +19,21 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	syncFontes: ["sempre", "onnet"],
 	syncLimit: 50,
 	syncMatchEnabled: true,
+	autoSyncEnabled: true,
+	autoDailyEnabled: true,
+	autoDailyIntervalMinutes: 30,
+	autoDailyCheckpointHours: [11, 14, 16, 18, 23],
+	autoMetaEnabled: true,
+	autoMetaTime: "03:00",
+	autoFinesEnabled: true,
+	autoFinesTime: "18:00",
+	autoMapMatchEnabled: true,
+	autoMapMatchIntervalMinutes: 60,
+	autoDailyLastRunAt: "",
+	autoDailyLastCheckpointAt: "",
+	autoMetaLastRunAt: "",
+	autoFinesLastRunAt: "",
+	autoMapMatchLastRunAt: "",
 };
 
 export async function buscarConfigHubsoft() {
@@ -70,4 +88,58 @@ export async function buscarHistoricoSyncHubsoft(limit = 10) {
 	return requestVpsApi(
 		`/admin/hubsoft/sync/runs?limit=${encodeURIComponent(limit)}`,
 	);
+}
+
+export async function buscarProfilesHubsoft() {
+	return requestVpsApi("/admin/hubsoft/profiles");
+}
+
+export async function buscarRunsProfilesHubsoft(params = {}) {
+	const searchParams = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && String(value).trim() !== "") {
+			searchParams.set(key, String(value));
+		}
+	});
+	return requestVpsApi(
+		`/admin/hubsoft/profiles/runs?${searchParams.toString()}`,
+	);
+}
+
+export async function executarProfileHubsoft(profile, payload = {}) {
+	return requestVpsApi(
+		`/admin/hubsoft/profiles/${encodeURIComponent(profile)}/run`,
+		{
+			method: "POST",
+			body: JSON.stringify(payload || {}),
+		},
+	);
+}
+
+export async function executarAuditoriaMetasHubsoft(payload = {}) {
+	return requestVpsApi("/admin/hubsoft/profiles/meta-audit/run", {
+		method: "POST",
+		body: JSON.stringify(payload || {}),
+	});
+}
+
+export async function buscarRegistrosHubsoft(params = {}) {
+	const searchParams = new URLSearchParams();
+	Object.entries(params).forEach(([key, value]) => {
+		if (value !== undefined && value !== null && String(value).trim() !== "") {
+			searchParams.set(key, String(value));
+		}
+	});
+	return requestVpsApi(`/admin/hubsoft/records?${searchParams.toString()}`);
+}
+
+export async function buscarTecnicosRetiradaHubsoft() {
+	return requestVpsApi("/admin/hubsoft/withdrawal-technicians");
+}
+
+export async function descobrirTecnicosRetiradaHubsoft() {
+	return requestVpsApi("/admin/hubsoft/withdrawal-technicians/discover", {
+		method: "POST",
+		body: JSON.stringify({}),
+	});
 }

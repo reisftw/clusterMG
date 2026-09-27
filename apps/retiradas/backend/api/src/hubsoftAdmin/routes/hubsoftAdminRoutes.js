@@ -6,12 +6,16 @@ const {
 function createHubsoftAdminRouter({
 	adminRoles,
 	hubsoftIntegration,
+	hubsoftSyncProfiles,
 	requireAuthenticated,
 	requireCsrfToken,
 	requireRoles,
 }) {
 	const router = express.Router();
-	const controller = createHubsoftAdminController({ hubsoftIntegration });
+	const controller = createHubsoftAdminController({
+		hubsoftIntegration,
+		hubsoftSyncProfiles,
+	});
 	const requireAdmin = requireRoles(adminRoles);
 
 	router.get(
@@ -65,6 +69,58 @@ function createHubsoftAdminRouter({
 		requireAuthenticated,
 		requireAdmin,
 		controller.listSyncRuns,
+	);
+	router.get(
+		"/profiles",
+		requireAuthenticated,
+		requireAdmin,
+		controller.listProfiles,
+	);
+	router.get(
+		"/profiles/runs",
+		requireAuthenticated,
+		requireAdmin,
+		controller.listProfileRuns,
+	);
+	router.post(
+		"/profiles/meta-audit/run",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAdmin,
+		controller.runMetaAudit,
+	);
+	router.post(
+		"/profiles/:profile/run",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAdmin,
+		controller.runProfile,
+	);
+	router.get(
+		"/records",
+		requireAuthenticated,
+		requireAdmin,
+		controller.listRecords,
+	);
+	router.get(
+		"/withdrawal-technicians",
+		requireAuthenticated,
+		requireAdmin,
+		controller.listWithdrawalTechnicians,
+	);
+	router.put(
+		"/withdrawal-technicians",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAdmin,
+		controller.saveWithdrawalTechnician,
+	);
+	router.post(
+		"/withdrawal-technicians/discover",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAdmin,
+		controller.discoverWithdrawalTechnicians,
 	);
 
 	return router;

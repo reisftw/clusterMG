@@ -336,13 +336,13 @@ async function getDocument(documentPath) {
 	return null;
 }
 
-async function upsertDocument(record = {}) {
-	if (ORDER_COLLECTIONS.has(record.collectionPath)) return upsertOrder(record);
+async function upsertDocument(record = {}, options = {}) {
+	if (ORDER_COLLECTIONS.has(record.collectionPath)) return upsertOrder(record, options);
 	if (META_COLLECTIONS.has(record.collectionPath)) return upsertImportRun(record);
 	return null;
 }
 
-async function upsertOrder(record) {
+async function upsertOrder(record, { returnDocument = true } = {}) {
 	const row = normalizeOrderRecord(record);
 	await db.query(
 		`insert into ordens_servico
@@ -421,6 +421,7 @@ async function upsertOrder(record) {
 			JSON.stringify(row.source_payload),
 		],
 	);
+	if (!returnDocument) return null;
 	return getDocument(row.legacy_path);
 }
 

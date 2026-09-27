@@ -20,6 +20,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { COLLECTIONS } from "../../constants/dataCollections";
+import { buscarResumoOperacionalAcompanhamento } from "../../modules/mapas/services/mapasAtualizacoesService";
+import {
+	AutomaticHourly,
+	AutomaticProduction,
+	DashboardHighlights,
+	MapUpdateNotice,
+} from "../../modules/mapas/components/OperationalPanels";
 import { useAgenda } from "../../modules/agenda/hooks/useAgenda";
 import { buscarAgendamentosDominio } from "../../modules/agendamentos/services/agendamentosService";
 import { useDiarioEntries } from "../../modules/diario/hooks/useDiarioEntries";
@@ -54,7 +61,6 @@ import "./AcompanhamentoPage.css";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const BACKGROUND_REFRESH_INTERVAL_MS = 30 * 1000;
-const SCENE_INTERVAL_MS = 14 * 1000;
 const CURSOR_IDLE_TIMEOUT_MS = 60 * 1000;
 const CONFIG_STORAGE_KEY = "acompanhamento-panel-config";
 const MONTH_ORDER = [
@@ -1660,146 +1666,6 @@ function ConfigPanel({
 		</div>
 	);
 }
-const SPOTLIGHT_COPY = {
-	atendentes: {
-		tone: "orange",
-		dataKey: "topAtendente",
-		default: {
-			eyebrow: "Ranking de agendamentos",
-			titleWithData: (item) => `${item.label} lidera agora`,
-			emptyTitle: "Aguardando agendamentos",
-			helper: "agendamento(s) no período monitorado",
-			image: "/retorninho-prancheta.png",
-		},
-		christmas: {
-			eyebrow: "Ajudantes do Papai Noel",
-			titleWithData: (item) => `${item.label} lidera`,
-			emptyTitle: "Aguardando ajudantes",
-			helper: "agendamento(s) monitorados",
-			image: "/retorninho-xmas-list.webp",
-		},
-		september7: {
-			eyebrow: "Independência em operação",
-			titleWithData: (item) => `${item.label} puxa a tropa`,
-			emptyTitle: "Brasil conectado",
-			helper: "agendamento(s) na rota patriótica",
-			image: "/themes/september7/retorninho-ind-v2.webp",
-		},
-	},
-	cidades: {
-		tone: "blue",
-		dataKey: "topCidadeOS",
-		default: {
-			eyebrow: "Mapa operacional",
-			titleWithData: (item) => `${item.label} pede atenção`,
-			emptyTitle: "Sem cidades no topo",
-			helper: "O.S abertas na cidade",
-			image: "/retorninho-estela.webp",
-		},
-		christmas: {
-			eyebrow: "Mapa da oficina natalina",
-			titleWithData: (item) => `${item.label} em foco`,
-			emptyTitle: "Oficina tranquila",
-			helper: "O.S abertas",
-			image: "/retorninho-xmas-tree.webp",
-		},
-		september7: {
-			eyebrow: "Mapa do Brasil em campo",
-			titleWithData: (item) => `${item.label} no radar`,
-			emptyTitle: "Território em ordem",
-			helper: "O.S abertas no mapa",
-			image: "/themes/september7/brazil-map-flag-v2.webp",
-		},
-	},
-	match: {
-		tone: "green",
-		dataKey: "totalMatches",
-		default: {
-			eyebrow: "Oportunidade de rota",
-			titleWithData: () => "Matches prontos para aproveitar",
-			emptyTitle: "Sem match no momento",
-			helper: "serviços próximos de retiradas",
-			image: "/retorninho-loader.webp",
-		},
-		christmas: {
-			eyebrow: "Presentes de rota",
-			titleWithData: () => "Rotas com presentes",
-			emptyTitle: "Sem presentes na rota",
-			helper: "serviços próximos",
-			image: "/retorninho-xmas-sleigh.webp",
-		},
-		september7: {
-			eyebrow: "Rotas da independência",
-			titleWithData: () => "Rotas prontas para conectar",
-			emptyTitle: "Sem rota em marcha",
-			helper: "serviços próximos para otimizar",
-			image: "/themes/september7/retorninho-ind-v2.webp",
-		},
-	},
-};
-
-function getSpotlightThemeKey(festiveTheme) {
-	if (festiveTheme === "christmas") return "christmas";
-	if (festiveTheme === "september7") return "september7";
-	return "default";
-}
-
-function buildSpotlightContent(scene, data, festiveTheme) {
-	const sceneConfig = SPOTLIGHT_COPY[scene] || SPOTLIGHT_COPY.atendentes;
-	const themeKey = getSpotlightThemeKey(festiveTheme);
-	const copy = sceneConfig[themeKey] || sceneConfig.default;
-	const dataItem = sceneConfig.dataKey === "totalMatches"
-		? Number(data.totalMatches || 0)
-		: data[sceneConfig.dataKey];
-	const hasData = sceneConfig.dataKey === "totalMatches" ? dataItem > 0 : Boolean(dataItem);
-
-	let value = "0";
-	if (sceneConfig.dataKey === "totalMatches") {
-		value = formatNumber(dataItem);
-	} else if (dataItem) {
-		value = formatNumber(dataItem.total);
-	}
-
-	return {
-		...copy,
-		tone: sceneConfig.tone,
-		title: hasData ? copy.titleWithData(dataItem) : copy.emptyTitle,
-		value,
-	};
-}
-
-function Spotlight({ scene, data, festiveTheme = null }) {
-	const isChristmas = festiveTheme === "christmas";
-	const isSeptember7 = festiveTheme === "september7";
-	const content = buildSpotlightContent(scene, data, festiveTheme);
-
-	return (
-		<section
-			className={`acomp-spotlight acomp-spotlight-${content.tone} ${isSeptember7 ? "acomp-spotlight-september" : ""}`}
-		>
-			{isChristmas ? (
-				<>
-					<span className="acomp-xmas-ribbon" aria-hidden="true" />
-					<span className="acomp-xmas-snowbank" aria-hidden="true" />
-				</>
-			) : null}
-			{isSeptember7 ? (
-				<>
-					<span className="acomp-september-ribbon" aria-hidden="true" />
-					<span className="acomp-september-spark" aria-hidden="true" />
-				</>
-			) : null}
-			<div className="acomp-spotlight-copy">
-				<span>{content.eyebrow}</span>
-				<h1>{content.title}</h1>
-				<div className="acomp-spotlight-number">{content.value}</div>
-				<p>{content.helper}</p>
-			</div>
-			<img src={content.image} alt="" aria-hidden="true" />
-		</section>
-	);
-}
-
 function StatusPill({ status, total }) {
 	return (
 		<div className="acomp-status-pill">
@@ -2478,7 +2344,14 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 	);
 }
 
-function AcompanhamentoMatchSection({ dashboard, diarioBoardData }) {
+function AcompanhamentoMatchSection({ dashboard, diarioBoardData, operationalSummary }) {
+	const dailyTarget = dashboard.metaConsolidadaTile?.metaMes?.saldoDiario?.find((row) => Number(row.dia) === Number(operationalSummary?.date?.slice(8)))?.metaDiaria;
+	const configuredSummary = operationalSummary && dailyTarget != null ? {
+		...operationalSummary,
+		dailyProduction: { ...operationalSummary.dailyProduction, meta: Number(dailyTarget),
+			percent: Number(dailyTarget) > 0 ? Math.round(operationalSummary.dailyProduction.total / Number(dailyTarget) * 100) : 0,
+			remaining: Math.max(0, Number(dailyTarget) - operationalSummary.dailyProduction.total) },
+	} : operationalSummary;
 	return (
 		<div className="acomp-match-stack">
 			<section className="acomp-panel acomp-match-panel">
@@ -2501,16 +2374,16 @@ function AcompanhamentoMatchSection({ dashboard, diarioBoardData }) {
 					</div>
 				</div>
 			</section>
-			<WeeklyProductionPanel data={diarioBoardData} />
+			{configuredSummary ? <AutomaticProduction summary={configuredSummary} /> : <WeeklyProductionPanel data={diarioBoardData} />}
 		</div>
 	);
 }
 
 function AcompanhamentoMainGrid({
 	dashboard,
+	operationalSummary,
 	diarioBoardData,
 	festiveTheme,
-	scene,
 	sections,
 }) {
 	const isChristmas = festiveTheme === "christmas";
@@ -2521,7 +2394,11 @@ function AcompanhamentoMainGrid({
 	return (
 		<div className="acomp-main-grid">
 			{sections.spotlight ? (
-				<Spotlight scene={scene} data={dashboard} festiveTheme={festiveTheme} />
+				<DashboardHighlights
+					closedCities={operationalSummary?.topClosedCities}
+					openedCities={operationalSummary?.topOpenedCities}
+					technicians={operationalSummary?.topTechnicians}
+				/>
 			) : null}
 			{sections.kpis ? <AcompanhamentoKpis dashboard={dashboard} /> : null}
 			{sections.status ? (
@@ -2569,7 +2446,7 @@ function AcompanhamentoMainGrid({
 					limit={3}
 				/>
 			) : null}
-			{sections.tecnicos ? <DailyDeliveryPanel data={diarioBoardData} /> : null}
+			{sections.tecnicos ? (operationalSummary ? <AutomaticHourly items={operationalSummary.hourlyProduction} /> : <DailyDeliveryPanel data={diarioBoardData} />) : null}
 			{sections.entregasRegionais ? (
 				<RankingList
 					title="ENTREGAS POR REGIONAL"
@@ -2585,6 +2462,7 @@ function AcompanhamentoMainGrid({
 			) : null}
 			{sections.match ? (
 				<AcompanhamentoMatchSection
+					operationalSummary={operationalSummary}
 					dashboard={dashboard}
 					diarioBoardData={diarioBoardData}
 				/>
@@ -2648,6 +2526,35 @@ function AcompanhamentoModals({
 }
 
 export default function AcompanhamentoPage() {
+	const [operationalSummary, setOperationalSummary] = useState(null);
+	const [mapNotice, setMapNotice] = useState(null);
+	const closeMapNotice = useCallback(() => setMapNotice(null), []);
+	useEffect(() => {
+		let active = true;
+		let pending = false;
+		let lastSeen = "";
+		try { lastSeen = window.localStorage.getItem("acompanhamento:lastSeenMapUpdateId") || ""; } catch { /* Storage may be unavailable. */ }
+		const load = async () => {
+			if (pending) return;
+			pending = true;
+			try {
+				const summary = await buscarResumoOperacionalAcompanhamento();
+				if (!active) return;
+				setOperationalSummary(summary);
+				const update = summary.lastMapUpdate;
+				if (update?.id && String(update.id) !== lastSeen) {
+					lastSeen = String(update.id);
+					try { window.localStorage.setItem("acompanhamento:lastSeenMapUpdateId", lastSeen); } catch { /* Keep the in-memory marker. */ }
+					setMapNotice(update);
+				}
+			} catch (error) { console.error("Falha ao atualizar indicadores operacionais", error); }
+			finally { pending = false; }
+		};
+		load();
+		const timer = window.setInterval(load, 60000);
+		const unsubscribe = subscribeRealtimeTopics(["mapa", "metas", "acompanhamento"], load, { debounceMs: 1500 });
+		return () => { active = false; window.clearInterval(timer); unsubscribe(); };
+	}, []);
 	const now = useClock();
 	const calendarMonth = obterMesAtual() || "Janeiro";
 	const [dashboardRefreshKey, setDashboardRefreshKey] = useState("");
@@ -2666,7 +2573,6 @@ export default function AcompanhamentoPage() {
 	const currentMonth = calendarMonth;
 	const { boardData: diarioBoardData, loading: loadingDiario } =
 		useDiarioEntries(localDateKey(now));
-	const [sceneIndex, setSceneIndex] = useState(0);
 	const [lastRefresh, setLastRefresh] = useState(() => new Date());
 	const [configOpen, setConfigOpen] = useState(false);
 	const [panelConfig, setPanelConfig] = useState(loadPanelConfig);
@@ -2864,14 +2770,6 @@ export default function AcompanhamentoPage() {
 	}, [cloudConfigReady, panelConfig]);
 
 	useEffect(() => {
-		const sceneTimer = window.setInterval(
-			() => setSceneIndex((current) => (current + 1) % 3),
-			SCENE_INTERVAL_MS,
-		);
-		return () => window.clearInterval(sceneTimer);
-	}, []);
-
-	useEffect(() => {
 		const resetCursorIdleTimer = () => {
 			setCursorIdle(false);
 			if (cursorIdleTimerRef.current) {
@@ -2923,7 +2821,7 @@ export default function AcompanhamentoPage() {
 				realtimeUpdateKeyRef.current = updateKey;
 
 				forceDashboardRefresh(data?.generatedAt || updateKey);
-				if (!shouldShowAcompanhamentoNotice(data)) return;
+				if (data?.source === "mapa" || !shouldShowAcompanhamentoNotice(data)) return;
 				if (realtimeNoticeTimerRef.current) {
 					window.clearTimeout(realtimeNoticeTimerRef.current);
 				}
@@ -2970,7 +2868,7 @@ export default function AcompanhamentoPage() {
 						: null);
 				if (
 					source &&
-					["mapa", "match", "metas"].includes(source) &&
+					["match", "metas"].includes(source) &&
 					shouldShowAcompanhamentoNotice(event)
 				) {
 					if (realtimeNoticeTimerRef.current) {
@@ -3232,7 +3130,6 @@ export default function AcompanhamentoPage() {
 		loadingMatchPublico ||
 		loadingDiario ||
 		retiradas.loading;
-	const scenes = ["atendentes", "cidades", "match"];
 	const sections = panelConfig.sections;
 	const adImages = Array.isArray(panelConfig.ads?.images)
 		? panelConfig.ads.images.filter((image) => image?.src)
@@ -3265,14 +3162,15 @@ export default function AcompanhamentoPage() {
 					onOpenConfig={() => setConfigOpen(true)}
 				/>
 				<AcompanhamentoMainGrid
+					operationalSummary={operationalSummary}
 					dashboard={dashboard}
 					diarioBoardData={diarioBoardData}
 					festiveTheme={festiveTheme}
-					scene={scenes[sceneIndex]}
 					sections={sections}
 				/>
 				{sections.insights ? <InsightTicker insights={dashboard.insights} /> : null}
 			</div>
+			<MapUpdateNotice update={mapNotice} onClose={closeMapNotice} />
 			<AcompanhamentoModals
 				activeAd={activeAd}
 				appointmentNoticeItems={appointmentNoticeItems}
@@ -3282,7 +3180,7 @@ export default function AcompanhamentoPage() {
 				metaShowcase={metaShowcase}
 				onCloseConfig={() => setConfigOpen(false)}
 				panelConfig={panelConfig}
-				realtimeNotice={realtimeNotice}
+				realtimeNotice={mapNotice ? null : realtimeNotice}
 				setPanelConfig={setPanelConfig}
 				showAdNow={showAdNow}
 				showFestiveNow={showFestiveNow}

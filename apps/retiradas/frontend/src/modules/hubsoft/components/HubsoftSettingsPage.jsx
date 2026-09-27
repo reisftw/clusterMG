@@ -1,12 +1,16 @@
 import {
+	ChevronDown,
 	CheckCircle2,
+	Clock3,
 	DatabaseZap,
 	Loader2,
 	PlugZap,
+	PlayCircle,
 	RefreshCw,
 	Save,
 	Search,
 	ShieldCheck,
+	Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
@@ -15,6 +19,11 @@ import {
 	buscarConfigHubsoft,
 	buscarHistoricoSyncHubsoft,
 	buscarJobSyncHubsoft,
+	buscarProfilesHubsoft,
+	buscarTecnicosRetiradaHubsoft,
+	descobrirTecnicosRetiradaHubsoft,
+	executarAuditoriaMetasHubsoft,
+	executarProfileHubsoft,
 	consultarOrdensHubsoft,
 	DEFAULT_HUBSOFT_CONFIG,
 	iniciarSyncHubsoft,
@@ -37,6 +46,14 @@ const SYNC_FONTES = [
 	{ value: "sempre", label: "Sempre" },
 	{ value: "onnet", label: "Onnet" },
 ];
+const HUBSOFT_PROFILES = [
+	{ id: "MAPA", label: "Mapa", helper: "O.S. abertas para Mensageria" },
+	{ id: "MATCH", label: "Match", helper: "O.S. abertas para conciliação" },
+	{ id: "LOJA", label: "Loja D-1", helper: "Entregas em loja concluídas" },
+	{ id: "MULTAS", label: "Multas", helper: "Multa de equipamento por indisponibilidade" },
+	{ id: "META_D0", label: "Meta D+0", helper: "Acompanhamento do dia" },
+	{ id: "META_D_MINUS_ONE", label: "Meta D-1", helper: "Fechamento do dia anterior" },
+];
 const JOB_POLL_MS = 1500;
 
 function formatDateTime(value) {
@@ -49,6 +66,39 @@ function formatDateTime(value) {
 		hour: "2-digit",
 		minute: "2-digit",
 	});
+}
+
+function toInputDate(value = new Date()) {
+	const date = value instanceof Date ? value : new Date(value);
+	if (Number.isNaN(date.getTime())) return toInputDate(new Date());
+	return [
+		date.getFullYear(),
+		String(date.getMonth() + 1).padStart(2, "0"),
+		String(date.getDate()).padStart(2, "0"),
+	].join("-");
+}
+
+function buildMetaAuditDates({ mode, endDate }) {
+	const finalDate = endDate || toInputDate();
+	const end = new Date(`${finalDate}T12:00:00`);
+	if (Number.isNaN(end.getTime())) return [toInputDate()];
+	let start = new Date(end);
+	if (mode === "weekly") {
+		start.setDate(end.getDate() - 6);
+	} else if (mode === "monthly") {
+		start = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0);
+	} else if (mode === "yearly") {
+		start = new Date(end.getFullYear(), 0, 1, 12, 0, 0);
+	}
+	const dates = [];
+	for (
+		const cursor = new Date(start);
+		cursor.getTime() <= end.getTime();
+		cursor.setDate(cursor.getDate() + 1)
+	) {
+		dates.push(toInputDate(cursor));
+	}
+	return dates;
 }
 
 function safePreview(payload) {
@@ -181,6 +231,16 @@ function useHubsoftSettingsController() {
 	const [testResult, setTestResult] = useState(null);
 	const [syncJob, setSyncJob] = useState(null);
 	const [syncRuns, setSyncRuns] = useState([]);
+	const [profiles, setProfiles] = useState([]);
+	const [profileRunning, setProfileRunning] = useState("");
+	const [metaAuditRunning, setMetaAuditRunning] = useState(false);
+	const [metaAuditProgress, setMetaAuditProgress] = useState(null);
+	const [metaAuditForm, setMetaAuditForm] = useState({
+		mode: "daily",
+		endDate: toInputDate(),
+	});
+	const [technicians, setTechnicians] = useState([]);
+	const [discoveringTechnicians, setDiscoveringTechnicians] = useState(false);
 	const [query, setQuery] = useState({
 		busca: "codigo_cliente",
 		termo_busca: "",
@@ -201,6 +261,12 @@ function useHubsoftSettingsController() {
 				items: [],
 			}));
 			setSyncRuns(runs?.items || []);
+			const [profileResult, technicianResult] = await Promise.all([
+				buscarProfilesHubsoft().catch(() => ({ items: [] })),
+				buscarTecnicosRetiradaHubsoft().catch(() => ({ items: [] })),
+			]);
+			setProfiles(profileResult?.items || []);
+			setTechnicians(technicianResult?.items || []);
 		} catch (err) {
 			setError(
 				err?.message || "Não foi possível carregar a configuração do Hubsoft.",
@@ -346,6 +412,87 @@ function useHubsoftSettingsController() {
 		}
 	};
 
+	const handleRunProfile = async (profile, payload = {}) => {
+		setProfileRunning(profile);
+		setError("");
+		setFeedback("");
+		try {
+			const result = await executarProfileHubsoft(profile, {
+				...payload,
+				async: true,
+			});
+			setFeedback(
+				`${profile} iniciado no backend. Use Atualizar para acompanhar o status.`,
+			);
+			await loadConfig();
+			return result;
+		} catch (err) {
+			setError(err?.message || `Não foi possível executar ${profile}.`);
+			return null;
+		} finally {
+			setProfileRunning("");
+		}
+	};
+
+	const handleRunMetaAudit = async () => {
+		const dates = buildMetaAuditDates(metaAuditForm);
+		if (
+			dates.length > 31 &&
+			!window.confirm(
+				`A auditoria vai executar ${dates.length} dias de metas. Deseja continuar?`,
+			)
+		) {
+			return null;
+		}
+		setMetaAuditRunning(true);
+		setError("");
+		setFeedback("");
+		setMetaAuditProgress({
+			current: 0,
+			total: dates.length,
+			date: "",
+			status: "Enviando auditoria para o backend",
+		});
+		try {
+			const result = await executarAuditoriaMetasHubsoft({ dates });
+			setFeedback(
+				`Auditoria de metas iniciada no backend: ${dates.length} dia(s), incluindo entrega em loja diária.`,
+			);
+			setMetaAuditProgress({
+				current: 1,
+				total: dates.length,
+				date: dates[dates.length - 1] || "",
+				status: "Auditoria enviada. Use Atualizar para acompanhar.",
+			});
+			await loadConfig();
+			return result;
+		} catch (err) {
+			setError(err?.message || "Não foi possível concluir a auditoria de metas.");
+			return null;
+		} finally {
+			setMetaAuditRunning(false);
+		}
+	};
+
+	const handleDiscoverTechnicians = async () => {
+		setDiscoveringTechnicians(true);
+		setError("");
+		setFeedback("");
+		try {
+			const result = await descobrirTecnicosRetiradaHubsoft();
+			setFeedback(
+				`Técnicos de retirada atualizados: ${result?.saved?.length || 0}.`,
+			);
+			await loadConfig();
+		} catch (err) {
+			setError(
+				err?.message || "Não foi possível descobrir técnicos de retirada.",
+			);
+		} finally {
+			setDiscoveringTechnicians(false);
+		}
+	};
+
 	return {
 		config,
 		loading,
@@ -359,6 +506,14 @@ function useHubsoftSettingsController() {
 		testResult,
 		syncJob,
 		syncRuns,
+		profiles,
+		profileRunning,
+		metaAuditForm,
+		setMetaAuditForm,
+		metaAuditRunning,
+		metaAuditProgress,
+		technicians,
+		discoveringTechnicians,
 		query,
 		setQuery,
 		queryResult,
@@ -368,9 +523,55 @@ function useHubsoftSettingsController() {
 		handleTest,
 		handleAssociate,
 		handleSearch,
+		handleRunProfile,
+		handleRunMetaAudit,
+		handleDiscoverTechnicians,
 		toggleArrayValue,
 		handleSync,
 	};
+}
+
+function CollapsibleSection({
+	title,
+	description,
+	icon,
+	iconClassName = "bg-slate-100 text-slate-700",
+	defaultOpen = false,
+	children,
+}) {
+	const [open, setOpen] = useState(defaultOpen);
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<button
+				type="button"
+				onClick={() => setOpen((current) => !current)}
+				className="flex w-full items-start justify-between gap-4 text-left"
+			>
+				<div className="flex items-start gap-3">
+					<div
+						className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${iconClassName}`}
+					>
+						{icon}
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">{title}</h2>
+						{description ? (
+							<p className="text-sm font-semibold text-slate-500">
+								{description}
+							</p>
+						) : null}
+					</div>
+				</div>
+				<ChevronDown
+					size={22}
+					className={`mt-2 shrink-0 text-slate-500 transition-transform ${
+						open ? "rotate-180" : ""
+					}`}
+				/>
+			</button>
+			{open ? <div className="mt-5">{children}</div> : null}
+		</section>
+	);
 }
 
 // Extraido de HubsoftSettingsPage (achado javascript:S3776,
@@ -387,7 +588,13 @@ function HubsoftSyncSection({
 	syncRuns,
 }) {
 	return (
-		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+		<CollapsibleSection
+			title="Sincronização Mapa e Match"
+			description="Fluxo legado de prévia/produção. Mantenha fechado se for usar a Central de Sincronização."
+			icon={<DatabaseZap size={21} />}
+			iconClassName="bg-orange-50 text-orange-700"
+			defaultOpen={false}
+		>
 			<div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 				<div className="flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-700">
@@ -621,7 +828,587 @@ function HubsoftSyncSection({
 					</table>
 				</div>
 			) : null}
-		</section>
+		</CollapsibleSection>
+	);
+}
+
+function statusTone(status) {
+	if (["COMPLETE", "VALID_EMPTY_RESULT", "completed"].includes(status)) {
+		return "bg-emerald-50 text-emerald-800 border-emerald-200";
+	}
+	if (["RUNNING", "queued", "running"].includes(status)) {
+		return "bg-blue-50 text-blue-800 border-blue-200";
+	}
+	if (["NEVER_RUN"].includes(status)) {
+		return "bg-slate-50 text-slate-700 border-slate-200";
+	}
+	return "bg-red-50 text-red-800 border-red-200";
+}
+
+function HubsoftProfilesSection({ profiles, profileRunning, onRunProfile }) {
+	const byProfile = new Map((profiles || []).map((item) => [item.profile, item]));
+	return (
+		<CollapsibleSection
+			title="Central de Sincronização HubSoft"
+			description="Execute cada profile separadamente em homologação e confira totais, classificação e falhas antes de promover qualquer rotina."
+			icon={<PlayCircle size={21} />}
+			iconClassName="bg-indigo-50 text-indigo-700"
+			defaultOpen
+		>
+			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+						<PlayCircle size={21} />
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Central de Sincronização HubSoft
+						</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Execute cada profile separadamente em homologação e confira totais,
+							classificação e falhas antes de promover qualquer rotina.
+						</p>
+					</div>
+				</div>
+			</div>
+
+			<div className="grid gap-4 xl:grid-cols-5">
+				{HUBSOFT_PROFILES.map((profile) => {
+					const state = byProfile.get(profile.id) || {};
+					const lastRun = state.lastRun || {};
+					const ranking = lastRun.result_summary?.ranking || {};
+					const progress = lastRun.result_summary || {};
+					const running = profileRunning === profile.id || state.locked;
+					return (
+						<div
+							key={profile.id}
+							className="rounded-2xl border border-slate-200 p-4"
+						>
+							<div className="flex items-start justify-between gap-3">
+								<div>
+									<p className="text-sm font-black text-slate-950">
+										{profile.label}
+									</p>
+									<p className="mt-1 text-xs font-semibold text-slate-500">
+										{profile.helper}
+									</p>
+								</div>
+								<span
+									className={`rounded-full border px-2 py-1 text-[10px] font-black ${statusTone(state.status)}`}
+								>
+									{state.status || "NEVER_RUN"}
+								</span>
+							</div>
+							<dl className="mt-4 space-y-2 text-xs font-semibold text-slate-600">
+								{running ? (
+									<div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+										<div className="flex items-center justify-between gap-3 text-blue-900">
+											<dt className="font-black">
+												{progress.stage || "Processando HubSoft"}
+											</dt>
+											<dd className="font-black">
+												{Number(progress.percent || 0)}%
+											</dd>
+										</div>
+										<div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+											<div
+												className="h-full rounded-full bg-blue-600 transition-all"
+												style={{
+													width: `${Math.min(
+														Math.max(Number(progress.percent || 0), 0),
+														100,
+													)}%`,
+												}}
+											/>
+										</div>
+										<p className="mt-2 text-[11px] font-bold text-blue-700">
+											Último sinal: {formatDateTime(progress.heartbeatAt)}
+										</p>
+									</div>
+								) : null}
+								<div className="flex justify-between gap-3">
+									<dt>Última execução</dt>
+									<dd>{formatDateTime(lastRun.started_at)}</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Total</dt>
+									<dd>{lastRun.expected_total ?? "-"}</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Únicos</dt>
+									<dd>{lastRun.unique_rows ?? "-"}</dd>
+								</div>
+								<div className="flex justify-between gap-3">
+									<dt>Não classificados</dt>
+									<dd>{lastRun.unclassified ?? "-"}</dd>
+								</div>
+							</dl>
+							{ranking.cidades?.length ? (
+								<div className="mt-4 rounded-xl bg-slate-50 p-3">
+									<p className="text-[10px] font-black uppercase text-slate-500">
+										Ranking cidades
+									</p>
+									<div className="mt-2 space-y-1">
+										{ranking.cidades.slice(0, 3).map((item) => (
+											<div
+												key={item.label}
+												className="flex justify-between gap-3 text-xs font-bold text-slate-700"
+											>
+												<span className="truncate">{item.label}</span>
+												<span>{item.total}</span>
+											</div>
+										))}
+									</div>
+								</div>
+							) : null}
+							<button
+								type="button"
+								disabled={Boolean(profileRunning) || running}
+								onClick={() => onRunProfile(profile.id)}
+								className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white transition hover:bg-blue-700 disabled:opacity-60"
+							>
+								{running ? (
+									<Loader2 className="animate-spin" size={17} />
+								) : (
+									<PlayCircle size={17} />
+								)}
+								Sincronizar agora
+							</button>
+						</div>
+					);
+				})}
+			</div>
+		</CollapsibleSection>
+	);
+}
+
+function resolveMetaAuditState(profiles = []) {
+	return (profiles || []).find((item) => item.profile === "META_AUDIT") || null;
+}
+
+function HubsoftMetaAuditSection({
+	form,
+	setForm,
+	running,
+	progress,
+	auditState,
+	onRun,
+	profileRunning,
+}) {
+	const dates = buildMetaAuditDates(form);
+	const auditLastRun = auditState?.lastRun || {};
+	const auditProgress = auditLastRun.result_summary || {};
+	const backendRunning = auditState?.locked || auditState?.status === "RUNNING";
+	const displayProgress = backendRunning || auditLastRun.id ? auditProgress : progress;
+	const percent =
+		Number(displayProgress?.percent) ||
+		(displayProgress?.total > 0
+			? Math.round(
+					(Number(displayProgress.current || 0) /
+						Number(displayProgress.total)) *
+						100,
+				)
+			: 0);
+	return (
+		<CollapsibleSection
+			title="Auditoria de metas"
+			description="Releia dias específicos do HubSoft e aplique cada resultado no dia correto do painel de metas."
+			icon={<CheckCircle2 size={21} />}
+			iconClassName="bg-emerald-50 text-emerald-700"
+			defaultOpen
+		>
+			<div className="grid gap-4 lg:grid-cols-4">
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Período
+					</span>
+					<select
+						value={form.mode}
+						onChange={(event) =>
+							setForm((current) => ({ ...current, mode: event.target.value }))
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
+					>
+						<option value="daily">Diário</option>
+						<option value="weekly">Semanal</option>
+						<option value="monthly">Mensal</option>
+						<option value="yearly">Anual</option>
+					</select>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Data final
+					</span>
+					<input
+						type="date"
+						value={form.endDate}
+						onChange={(event) =>
+							setForm((current) => ({
+								...current,
+								endDate: event.target.value,
+							}))
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
+					/>
+				</label>
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 lg:col-span-1">
+					<p className="text-xs font-black uppercase text-slate-500">
+						Dias que serão validados
+					</p>
+					<p className="mt-2 text-lg font-black text-slate-950">
+						{dates.length}
+					</p>
+					<p className="text-xs font-semibold text-slate-500">
+						{dates[0]} até {dates[dates.length - 1]}
+					</p>
+				</div>
+				<div className="flex items-end">
+					<button
+						type="button"
+						disabled={running || backendRunning || Boolean(profileRunning)}
+						onClick={onRun}
+						className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white transition hover:bg-emerald-700 disabled:opacity-60"
+					>
+						{running || backendRunning ? (
+							<Loader2 className="animate-spin" size={17} />
+						) : (
+							<CheckCircle2 size={17} />
+						)}
+						{backendRunning ? "Auditoria em execução" : "Validar metas"}
+					</button>
+				</div>
+			</div>
+			{displayProgress || auditLastRun.id ? (
+				<div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<p className="text-sm font-black text-emerald-950">
+								{displayProgress?.status ||
+									displayProgress?.stage ||
+									auditState?.status ||
+									"Auditoria de metas"}
+							</p>
+							<p className="text-xs font-bold text-emerald-700">
+								Dia {displayProgress?.date || "-"} ·{" "}
+								{displayProgress?.current || 0} de{" "}
+								{displayProgress?.total || dates.length}
+							</p>
+							<p className="mt-1 text-[11px] font-bold text-emerald-700">
+								Último sinal:{" "}
+								{formatDateTime(
+									displayProgress?.heartbeatAt || auditLastRun.started_at,
+								)}
+							</p>
+						</div>
+						<span className="text-lg font-black text-emerald-950">
+							{percent}%
+						</span>
+					</div>
+					<div className="mt-3 h-3 overflow-hidden rounded-full bg-white">
+						<div
+							className="h-full rounded-full bg-emerald-600 transition-all"
+							style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
+						/>
+					</div>
+				</div>
+			) : null}
+		</CollapsibleSection>
+	);
+}
+
+function HubsoftAutomationSection({ config, updateConfig }) {
+	const checkpointText = Array.isArray(config.autoDailyCheckpointHours)
+		? config.autoDailyCheckpointHours.join(", ")
+		: config.autoDailyCheckpointHours || "";
+	return (
+		<CollapsibleSection
+			title="Automação e tempos"
+			description="Configure a frequência das leituras automáticas do HubSoft em homologação."
+			icon={<Clock3 size={21} />}
+			iconClassName="bg-violet-50 text-violet-700"
+			defaultOpen
+		>
+			<div className="grid gap-4 lg:grid-cols-3">
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoSyncEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoSyncEnabled", event.target.checked)
+						}
+					/>
+					Rotina automática ativa
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoDailyEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoDailyEnabled", event.target.checked)
+						}
+					/>
+					Atualizar diário
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoMapMatchEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoMapMatchEnabled", event.target.checked)
+						}
+					/>
+					Atualizar Mapa e Match
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Diário a cada quantos minutos
+					</span>
+					<input
+						type="number"
+						min="5"
+						value={config.autoDailyIntervalMinutes || 30}
+						onChange={(event) =>
+							updateConfig("autoDailyIntervalMinutes", event.target.value)
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Checkpoints do diário
+					</span>
+					<input
+						value={checkpointText}
+						onChange={(event) =>
+							updateConfig(
+								"autoDailyCheckpointHours",
+								event.target.value
+									.split(/[,;\s]+/)
+									.map((item) => Number(item))
+									.filter((item) => Number.isInteger(item)),
+							)
+						}
+						placeholder="11, 14, 16, 18, 23"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Metas D-1 às
+					</span>
+					<input
+						type="time"
+						value={config.autoMetaTime || "03:00"}
+						onChange={(event) => updateConfig("autoMetaTime", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoMetaEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoMetaEnabled", event.target.checked)
+						}
+					/>
+					Atualizar metas automaticamente
+				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoFinesEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoFinesEnabled", event.target.checked)
+						}
+					/>
+					Atualizar multas automaticamente
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Multas às
+					</span>
+					<input
+						type="time"
+						value={config.autoFinesTime || "18:00"}
+						onChange={(event) => updateConfig("autoFinesTime", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Mapa/Match a cada quantos minutos
+					</span>
+					<input
+						type="number"
+						min="15"
+						value={config.autoMapMatchIntervalMinutes || 60}
+						onChange={(event) =>
+							updateConfig("autoMapMatchIntervalMinutes", event.target.value)
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-semibold text-slate-600">
+					<p className="font-black uppercase text-slate-500">Últimas rotinas</p>
+					<p className="mt-2">Diário: {formatDateTime(config.autoDailyLastRunAt)}</p>
+					<p>Checkpoint: {formatDateTime(config.autoDailyLastCheckpointAt)}</p>
+					<p>Metas: {formatDateTime(config.autoMetaLastRunAt)}</p>
+					<p>Multas: {formatDateTime(config.autoFinesLastRunAt)}</p>
+					<p>Mapa/Match: {formatDateTime(config.autoMapMatchLastRunAt)}</p>
+				</div>
+			</div>
+		</CollapsibleSection>
+	);
+}
+
+function HubsoftWithdrawalTechniciansSection({
+	technicians,
+	discovering,
+	onDiscover,
+}) {
+	return (
+		<CollapsibleSection
+			title="Técnicos de Retirada"
+			description="Cadastro usado pela classificação. A descoberta inicial busca nomes HubSoft contendo “TÉCNICO RETIRADA” e grava o ID como chave."
+			icon={<Users size={21} />}
+			iconClassName="bg-emerald-50 text-emerald-700"
+			defaultOpen={false}
+		>
+			<div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-3">
+					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+						<Users size={21} />
+					</div>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">
+							Técnicos de Retirada
+						</h2>
+						<p className="text-sm font-semibold text-slate-500">
+							Cadastro usado pela classificação. A descoberta inicial busca nomes
+							HubSoft contendo “TÉCNICO RETIRADA” e grava o ID como chave.
+						</p>
+					</div>
+				</div>
+				<button
+					type="button"
+					disabled={discovering}
+					onClick={onDiscover}
+					className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60"
+				>
+					{discovering ? (
+						<Loader2 className="animate-spin" size={17} />
+					) : (
+						<RefreshCw size={17} />
+					)}
+					Descobrir técnicos
+				</button>
+			</div>
+			<div className="overflow-x-auto rounded-2xl border border-slate-200">
+				<table className="min-w-[760px] w-full divide-y divide-slate-200 text-sm">
+					<thead className="bg-slate-50 text-left text-xs font-black uppercase text-slate-500">
+						<tr>
+							<th className="px-4 py-3">ID HubSoft</th>
+							<th className="px-4 py-3">Nome HubSoft</th>
+							<th className="px-4 py-3">Nome exibido</th>
+							<th className="px-4 py-3">Status</th>
+							<th className="px-4 py-3">Atualizado</th>
+						</tr>
+					</thead>
+					<tbody className="divide-y divide-slate-100 bg-white">
+						{(technicians || []).length ? (
+							technicians.map((item) => (
+								<tr key={item.id || item.hubsoft_technician_id}>
+									<td className="px-4 py-3 font-black text-slate-900">
+										{item.hubsoft_technician_id}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{item.nome_hubsoft}
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{item.nome_exibicao || item.nome_hubsoft}
+									</td>
+									<td className="px-4 py-3">
+										<span
+											className={`rounded-full px-2 py-1 text-xs font-black ${
+												item.ativo
+													? "bg-emerald-50 text-emerald-700"
+													: "bg-slate-100 text-slate-500"
+											}`}
+										>
+											{item.ativo ? "Ativo" : "Inativo"}
+										</span>
+									</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">
+										{formatDateTime(item.updated_at)}
+									</td>
+								</tr>
+							))
+						) : (
+							<tr>
+								<td
+									colSpan={5}
+									className="px-4 py-8 text-center text-sm font-semibold text-slate-500"
+								>
+									Nenhum técnico cadastrado ainda.
+								</td>
+							</tr>
+						)}
+					</tbody>
+				</table>
+			</div>
+		</CollapsibleSection>
+	);
+}
+
+function HubsoftWebCredentialsSection({ config, updateConfig }) {
+	return (
+		<CollapsibleSection
+			title="Login HubSoft para sincronização"
+			description="Use aqui o login normal do HubSoft. Essas credenciais ficam salvas no banco do Retiradas homolog e serão usadas para buscar os relatórios automaticamente."
+			icon={<ShieldCheck size={21} />}
+			iconClassName="bg-blue-50 text-blue-700"
+			defaultOpen
+		>
+			<div className="grid gap-4 lg:grid-cols-3">
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						URL do HubSoft
+					</span>
+					<input
+						value={config.webBaseUrl || ""}
+						onChange={(event) => updateConfig("webBaseUrl", event.target.value)}
+						placeholder="https://sempre.hubsoft.com.br"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Login HubSoft
+					</span>
+					<input
+						value={config.webUsername || ""}
+						onChange={(event) => updateConfig("webUsername", event.target.value)}
+						placeholder="usuario@empresa.com.br"
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Senha HubSoft{" "}
+						{config.webPasswordConfigured ? "(já configurada)" : ""}
+					</span>
+					<input
+						type="password"
+						value={config.webPassword || ""}
+						onChange={(event) => updateConfig("webPassword", event.target.value)}
+						placeholder={
+							config.webPasswordConfigured ? "Deixe em branco para manter" : ""
+						}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
+			</div>
+		</CollapsibleSection>
 	);
 }
 
@@ -639,6 +1426,14 @@ export default function HubsoftSettingsPage() {
 		testResult,
 		syncJob,
 		syncRuns,
+		profiles,
+		profileRunning,
+		metaAuditForm,
+		setMetaAuditForm,
+		metaAuditRunning,
+		metaAuditProgress,
+		technicians,
+		discoveringTechnicians,
 		query,
 		setQuery,
 		queryResult,
@@ -648,6 +1443,9 @@ export default function HubsoftSettingsPage() {
 		handleTest,
 		handleAssociate,
 		handleSearch,
+		handleRunProfile,
+		handleRunMetaAudit,
+		handleDiscoverTechnicians,
 		toggleArrayValue,
 		handleSync,
 	} = useHubsoftSettingsController();
@@ -665,8 +1463,38 @@ export default function HubsoftSettingsPage() {
 			/>
 			<HubsoftFeedback feedback={feedback} error={error} />
 			<HubsoftStatusCards config={config} />
+			<HubsoftWebCredentialsSection
+				config={config}
+				updateConfig={updateConfig}
+			/>
+			<HubsoftAutomationSection config={config} updateConfig={updateConfig} />
+			<HubsoftProfilesSection
+				profiles={profiles}
+				profileRunning={profileRunning}
+				onRunProfile={handleRunProfile}
+			/>
+			<HubsoftMetaAuditSection
+				form={metaAuditForm}
+				setForm={setMetaAuditForm}
+				running={metaAuditRunning}
+				progress={metaAuditProgress}
+				auditState={resolveMetaAuditState(profiles)}
+				onRun={handleRunMetaAudit}
+				profileRunning={profileRunning}
+			/>
+			<HubsoftWithdrawalTechniciansSection
+				technicians={technicians}
+				discovering={discoveringTechnicians}
+				onDiscover={handleDiscoverTechnicians}
+			/>
 
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<CollapsibleSection
+				title="Credenciais OAuth"
+				description="Opcional. Use somente se o HubSoft liberar client_id/client_secret para autenticação oficial por API."
+				icon={<ShieldCheck size={21} />}
+				iconClassName="bg-blue-50 text-blue-700"
+				defaultOpen={false}
+			>
 				<div className="mb-5 flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
 						<ShieldCheck size={21} />
@@ -808,9 +1636,15 @@ export default function HubsoftSettingsPage() {
 						{formatDateTime(testResult.tokenExpiresAt)}.
 					</div>
 				) : null}
-			</section>
+			</CollapsibleSection>
 
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<CollapsibleSection
+				title="Consulta teste de O.S."
+				description="Uso auxiliar para consultar uma O.S. específica antes de substituir planilhas."
+				icon={<Search size={21} />}
+				iconClassName="bg-slate-100 text-slate-700"
+				defaultOpen={false}
+			>
 				<div className="mb-5 flex items-start gap-3">
 					<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
 						<Search size={21} />
@@ -886,7 +1720,7 @@ export default function HubsoftSettingsPage() {
 						{safePreview(queryResult)}
 					</pre>
 				) : null}
-			</section>
+			</CollapsibleSection>
 
 			<HubsoftSyncSection
 				syncing={syncing}

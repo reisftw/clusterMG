@@ -24,7 +24,9 @@ const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const antiBot = require("./antiBot");
 const atendimentoService = require("./atendimento/atendimentoService");
 const emailService = require("./emailService");
+const mapSyncUpdates = require("./mapSyncUpdatesService");
 const operationalImports = require("./operationalImports");
+const rankingService = require("./rankingService");
 const sempreIntegration = require("./sempreIntegration");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
 const movimentacoesRepository = require("./movimentacoesRepository");
@@ -32,6 +34,7 @@ const movimentacoesEntregas = require("./movimentacoesEntregas");
 const movimentacoesOrdensFechadas = require("./movimentacoesOrdensFechadas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
+const hubsoftSyncProfiles = require("./hubsoftSyncProfiles");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
@@ -1978,6 +1981,9 @@ function canReadDocumentPath(user, documentPath) {
 
 function canWriteCollection(user, collectionPath) {
 	const collection = String(collectionPath || "").trim();
+	if (["ordens_legadas", "mapa_legado_meta"].includes(collection)) {
+		return hasRole(user, ADMIN_ROLES);
+	}
 	if (
 		ADMIN_ONLY_COLLECTION_PREFIXES.some(
 			(prefix) => collection === prefix || collection.startsWith(`${prefix}/`),
@@ -2001,6 +2007,9 @@ function canWriteCollection(user, collectionPath) {
 }
 
 function canWriteDocumentPath(user, documentPath) {
+	if (["public_dashboard/mapa_os_legadas", "public_dashboard/mapa_os", "public_dashboard/match_os"].includes(String(documentPath || ""))) {
+		return hasRole(user, ADMIN_ROLES);
+	}
 	const collectionPath = String(documentPath || "")
 		.split("/")
 		.filter(Boolean)
@@ -2316,7 +2325,7 @@ function createApp() {
 		}),
 	);
 	app.use("/api/public/visits", rejectLargePublicVisit);
-	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
+	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1gb" }));
 	app.use(vpnAccess.createMiddleware());
 
 	app.get(
@@ -4212,6 +4221,7 @@ function createApp() {
 		createHubsoftAdminRouter({
 			adminRoles: ADMIN_ROLES,
 			hubsoftIntegration,
+			hubsoftSyncProfiles,
 			requireAuthenticated,
 			requireCsrfToken,
 			requireRoles,
@@ -4927,7 +4937,7 @@ function createApp() {
 		"/api/imports/mapa",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireRoles(FULL_OPERATION_ROLES),
+		requireRoles(ADMIN_ROLES),
 		async (req, res, next) => {
 			try {
 				res
@@ -4949,7 +4959,7 @@ function createApp() {
 		"/api/imports/match",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireRoles(FULL_OPERATION_ROLES),
+		requireRoles(ADMIN_ROLES),
 		async (req, res, next) => {
 			try {
 				res
@@ -5036,6 +5046,113 @@ function createApp() {
 				}
 
 				res.json({ cliente });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/mapas/atualizacoes",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await mapSyncUpdates.listUpdates(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/mapas/atualizacoes/latest",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json({
+					update: await mapSyncUpdates.getLatestUpdate(req.query?.profile),
+				});
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/mapas/atualizacoes/:id",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				const detail = await mapSyncUpdates.getUpdateDetail(req.params.id);
+				if (!detail) {
+					res.status(404).json({ error: "Atualizacao nao encontrada." });
+					return;
+				}
+				res.json(detail);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/acompanhamento/operational-summary",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await mapSyncUpdates.getOperationalSummary(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/ranking",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await rankingService.getRanking(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/ranking/detail",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await rankingService.getDetail(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/ranking/export.xlsx",
+		requireAuthenticated,
+		requireRoles(FULL_OPERATION_ROLES),
+		async (req, res, next) => {
+			try {
+				const buffer = await rankingService.exportRankingXlsx(req.query || {});
+				res.setHeader(
+					"Content-Type",
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				);
+				res.setHeader(
+					"Content-Disposition",
+					'attachment; filename="ranking-retiradas.xlsx"',
+				);
+				res.send(buffer);
 			} catch (error) {
 				next(error);
 			}
@@ -5317,6 +5434,10 @@ function createApp() {
 		);
 		timer.unref?.();
 		app.locals.movimentacoesScanTimer = timer;
+	}
+
+	if (!app.locals.hubsoftSyncProfilesTimer) {
+		hubsoftSyncProfiles.startScheduler(app);
 	}
 
 	app.use((error, req, res, next) => {

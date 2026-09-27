@@ -17,6 +17,9 @@ const DEFAULT_CONFIG = {
 	clientSecret: "",
 	username: "",
 	password: "",
+	webBaseUrl: "https://sempre.hubsoft.com.br",
+	webUsername: "",
+	webPassword: "",
 	grantType: "password",
 	accessToken: "",
 	tokenType: "Bearer",
@@ -33,6 +36,21 @@ const DEFAULT_CONFIG = {
 	syncFontes: ["sempre", "onnet"],
 	syncLimit: 50,
 	syncMatchEnabled: true,
+	autoSyncEnabled: true,
+	autoDailyEnabled: true,
+	autoDailyIntervalMinutes: 30,
+	autoDailyCheckpointHours: [11, 14, 16, 18, 23],
+	autoMetaEnabled: true,
+	autoMetaTime: "03:00",
+	autoMapMatchEnabled: true,
+	autoMapMatchIntervalMinutes: 60,
+	autoDailyLastRunAt: "",
+	autoDailyLastCheckpointKey: "",
+	autoDailyLastCheckpointAt: "",
+	autoMetaLastRunDate: "",
+	autoMetaLastRunAt: "",
+	autoMapMatchLastRunAt: "",
+	autoSyncLastSchedulerAt: "",
 	lastSyncAt: "",
 	lastSyncStatus: "",
 	lastSyncMessage: "",
@@ -50,6 +68,9 @@ function normalizeBaseUrl(value) {
 }
 
 function normalizeConfig(config = {}) {
+	const checkpointHours = Array.isArray(config.autoDailyCheckpointHours)
+		? config.autoDailyCheckpointHours
+		: String(config.autoDailyCheckpointHours || "11,14,16,18,23").split(/[,;\s]+/);
 	return {
 		...DEFAULT_CONFIG,
 		...config,
@@ -60,6 +81,11 @@ function normalizeConfig(config = {}) {
 		clientSecret: cleanText(config.clientSecret),
 		username: cleanText(config.username),
 		password: cleanText(config.password),
+		webBaseUrl: normalizeBaseUrl(
+			config.webBaseUrl || "https://sempre.hubsoft.com.br",
+		),
+		webUsername: cleanText(config.webUsername),
+		webPassword: cleanText(config.webPassword),
 		grantType: cleanText(config.grantType || "password"),
 		accessToken: cleanText(config.accessToken),
 		tokenType: cleanText(config.tokenType || "Bearer"),
@@ -84,19 +110,42 @@ function normalizeConfig(config = {}) {
 			: ["sempre", "onnet"],
 		syncLimit: Math.min(Math.max(Number(config.syncLimit || 50), 1), 50),
 		syncMatchEnabled: config.syncMatchEnabled !== false,
+		autoSyncEnabled: config.autoSyncEnabled !== false,
+		autoDailyEnabled: config.autoDailyEnabled !== false,
+		autoDailyIntervalMinutes: Math.min(
+			Math.max(Number(config.autoDailyIntervalMinutes || 30), 5),
+			24 * 60,
+		),
+		autoDailyCheckpointHours: [
+			...new Set(
+				checkpointHours
+					.map((item) => Number(item))
+					.filter((item) => Number.isInteger(item) && item >= 0 && item <= 23),
+			),
+		].sort((left, right) => left - right),
+		autoMetaEnabled: config.autoMetaEnabled !== false,
+		autoMetaTime: cleanText(config.autoMetaTime || "03:00"),
+		autoMapMatchEnabled: config.autoMapMatchEnabled !== false,
+		autoMapMatchIntervalMinutes: Math.min(
+			Math.max(Number(config.autoMapMatchIntervalMinutes || 60), 15),
+			24 * 60,
+		),
 	};
 }
 
 function sanitizeConfig(config = {}) {
 	const normalized = normalizeConfig(config);
-	const { clientSecret, password, accessToken, ...safe } = normalized;
+	const { clientSecret, password, webPassword, accessToken, ...safe } =
+		normalized;
 	return {
 		...safe,
 		clientSecret: "",
 		password: "",
+		webPassword: "",
 		accessToken: "",
 		clientSecretConfigured: Boolean(clientSecret),
 		passwordConfigured: Boolean(password),
+		webPasswordConfigured: Boolean(webPassword),
 		accessTokenConfigured: Boolean(accessToken),
 	};
 }
@@ -122,6 +171,7 @@ async function saveConfig(payload = {}, user = {}) {
 		...payload,
 		clientSecret: mergeSecretField(payload, current, "clientSecret"),
 		password: mergeSecretField(payload, current, "password"),
+		webPassword: mergeSecretField(payload, current, "webPassword"),
 		atualizadoEm: new Date().toISOString(),
 		atualizadoPor: user?.nome || user?.email || user?.uid || "",
 	});
