@@ -1862,7 +1862,8 @@ async function getProfilesOverview() {
 	const locks = await db.query(
 		`select *
        from hubsoft_sync_locks
-      where profile = any($1::text[])`,
+      where profile = any($1::text[])
+        and expires_at > now()`,
 		[visibleProfiles],
 	);
 	const lockByProfile = new Map(locks.rows.map((lock) => [lock.profile, lock]));
