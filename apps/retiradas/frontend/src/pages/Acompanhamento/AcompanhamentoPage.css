@@ -148,6 +148,378 @@
 	animation: acompPulse 1.8s infinite;
 }
 
+.acomp-operational-rotation {
+	min-width: 0;
+	min-height: 0;
+	position: relative;
+	display: grid;
+	grid-template-rows: minmax(0, 1fr) 24px;
+}
+
+.acomp-operational-spotlight { grid-area: spotlight; }
+.acomp-operational-rotation > .acomp-spotlight { grid-area: auto; }
+.acomp-operational-dots { display: flex; justify-content: center; align-items: center; gap: 12px; }
+.acomp-operational-list { min-height: 0; overflow: auto; }
+
+.acomp-day-highlights {
+	grid-area: spotlight;
+	position: relative;
+	overflow: hidden;
+	border: 1px solid rgba(96, 165, 250, 0.24);
+	border-radius: 18px;
+	background:
+		linear-gradient(145deg, rgba(15, 23, 42, 0.98), rgba(15, 31, 62, 0.94)),
+		rgba(15, 23, 42, 0.96);
+	box-shadow:
+		0 22px 60px rgba(0, 0, 0, 0.28),
+		inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.acomp-day-highlights::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background:
+		linear-gradient(90deg, rgba(249, 115, 22, 0.14), transparent 34%),
+		radial-gradient(circle at 88% 12%, rgba(59, 130, 246, 0.18), transparent 28%);
+}
+
+.acomp-day-highlights > * {
+	position: relative;
+	z-index: 1;
+}
+
+.acomp-day-highlights-header {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 6px;
+}
+
+.acomp-highlight-metrics {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 5px;
+}
+
+.acomp-highlight-metric {
+	min-width: 0;
+	border: 1px solid rgba(148, 163, 184, 0.16);
+	border-radius: 10px;
+	background: rgba(15, 23, 42, 0.62);
+	padding: 4px 7px;
+}
+
+.acomp-highlight-metric span {
+	display: block;
+	overflow: hidden;
+	color: #93c5fd;
+	font-size: clamp(9px, 0.56vw, 11px);
+	font-weight: 850;
+	text-overflow: ellipsis;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.acomp-highlight-metric strong {
+	display: block;
+	margin-top: 1px;
+	color: #f8fafc;
+	font-size: clamp(14px, 0.95vw, 19px);
+	font-weight: 950;
+	line-height: 1;
+}
+
+.acomp-highlight-tabs {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 5px;
+	margin-top: 4px;
+}
+
+.acomp-highlight-tabs button {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	border: 1px solid rgba(148, 163, 184, 0.18);
+	border-radius: 999px;
+	background: rgba(15, 23, 42, 0.74);
+	color: #cbd5e1;
+	cursor: pointer;
+	font-size: clamp(8px, 0.54vw, 10px);
+	font-weight: 900;
+	padding: 5px 6px;
+	text-transform: uppercase;
+	transition:
+		background 180ms ease,
+		border-color 180ms ease,
+		color 180ms ease,
+		transform 180ms ease;
+}
+
+.acomp-highlight-tabs button:hover,
+.acomp-highlight-tabs button:focus-visible {
+	border-color: rgba(96, 165, 250, 0.62);
+	color: #f8fafc;
+	transform: translateY(-1px);
+	outline: none;
+}
+
+.acomp-highlight-tabs button.is-active {
+	border-color: rgba(249, 115, 22, 0.72);
+	background: linear-gradient(135deg, #f97316, #2563eb);
+	color: #ffffff;
+	box-shadow: 0 10px 24px rgba(37, 99, 235, 0.24);
+}
+
+.acomp-highlight-tabs span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.acomp-highlight-progress {
+	height: 3px;
+	margin: 4px 2px 5px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: rgba(148, 163, 184, 0.2);
+}
+
+.acomp-highlight-progress span {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, #f97316, #60a5fa);
+	transform-origin: left center;
+	animation: acompHighlightProgress 10s linear forwards;
+}
+
+.acomp-highlight-panel {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	animation: acompHighlightIn 220ms ease both;
+}
+
+.acomp-highlight-panel-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+	color: #fed7aa;
+}
+
+.acomp-highlight-panel-title svg {
+	width: 15px;
+	height: 15px;
+	flex: 0 0 auto;
+}
+
+.acomp-highlight-panel-title strong {
+	overflow: hidden;
+	color: #f8fafc;
+	font-size: clamp(10px, 0.68vw, 12px);
+	font-weight: 950;
+	letter-spacing: 0;
+	text-overflow: ellipsis;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.acomp-highlight-body {
+	display: grid;
+	min-height: 0;
+	flex: 1;
+	gap: 6px;
+}
+
+.acomp-highlight-body.is-compact {
+	grid-template-rows: auto 1fr;
+}
+
+.acomp-highlight-ranking {
+	display: flex;
+	min-height: 0;
+	max-height: 100%;
+	flex-direction: column;
+	gap: 4px;
+	overflow: auto;
+	padding-right: 1px;
+}
+
+.acomp-highlight-rank-row {
+	display: grid;
+	grid-template-columns: 22px minmax(0, 1fr);
+	align-items: center;
+	gap: 6px;
+	border: 1px solid rgba(148, 163, 184, 0.13);
+	border-radius: 9px;
+	background: rgba(15, 23, 42, 0.58);
+	padding: 4px 6px;
+}
+
+.acomp-highlight-rank-pos {
+	display: inline-flex;
+	width: 20px;
+	height: 20px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 8px;
+	background: rgba(96, 165, 250, 0.16);
+	color: #dbeafe;
+	font-size: 10px;
+	font-weight: 950;
+}
+
+.acomp-highlight-rank-row.is-medal-1 .acomp-highlight-rank-pos {
+	background: #facc15;
+	color: #422006;
+}
+
+.acomp-highlight-rank-row.is-medal-2 .acomp-highlight-rank-pos {
+	background: #cbd5e1;
+	color: #0f172a;
+}
+
+.acomp-highlight-rank-row.is-medal-3 .acomp-highlight-rank-pos {
+	background: #fb923c;
+	color: #431407;
+}
+
+.acomp-highlight-rank-main {
+	min-width: 0;
+}
+
+.acomp-highlight-rank-line {
+	display: flex;
+	min-width: 0;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.acomp-highlight-rank-line div {
+	min-width: 0;
+}
+
+.acomp-highlight-rank-line strong {
+	display: block;
+	overflow: hidden;
+	color: #f8fafc;
+	font-size: clamp(10px, 0.66vw, 12px);
+	font-weight: 950;
+	line-height: 1.08;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.acomp-highlight-rank-line span {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	gap: 5px;
+	color: #94a3b8;
+	font-size: clamp(9px, 0.56vw, 11px);
+	font-weight: 750;
+	line-height: 1.2;
+}
+
+.acomp-highlight-rank-line em {
+	border-radius: 999px;
+	background: rgba(96, 165, 250, 0.16);
+	color: #bfdbfe;
+	font-style: normal;
+	padding: 1px 6px;
+	text-transform: uppercase;
+}
+
+.acomp-highlight-rank-line b {
+	flex: 0 0 auto;
+	color: #ffffff;
+	font-size: clamp(11px, 0.76vw, 14px);
+	font-weight: 950;
+}
+
+.acomp-highlight-track {
+	height: 4px;
+	margin-top: 3px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: rgba(148, 163, 184, 0.16);
+}
+
+.acomp-highlight-track span {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, #f97316, #38bdf8);
+}
+
+.acomp-highlight-summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+}
+
+.acomp-highlight-summary div {
+	min-width: 0;
+	border: 1px solid rgba(96, 165, 250, 0.18);
+	border-radius: 10px;
+	background: rgba(30, 41, 59, 0.72);
+	padding: 7px;
+}
+
+.acomp-highlight-summary span {
+	display: block;
+	color: #93c5fd;
+	font-size: clamp(9px, 0.56vw, 11px);
+	font-weight: 850;
+	text-transform: uppercase;
+}
+
+.acomp-highlight-summary strong {
+	display: block;
+	overflow: hidden;
+	color: #f8fafc;
+	font-size: clamp(13px, 0.86vw, 17px);
+	font-weight: 950;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.acomp-highlight-empty {
+	display: flex;
+	min-height: 150px;
+	flex: 1;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	border: 1px dashed rgba(148, 163, 184, 0.24);
+	border-radius: 15px;
+	background: rgba(15, 23, 42, 0.54);
+	color: #93c5fd;
+	padding: 18px;
+}
+
+.acomp-highlight-empty strong {
+	margin-top: 8px;
+	color: #f8fafc;
+	font-size: clamp(14px, 0.95vw, 18px);
+	font-weight: 950;
+}
+
+.acomp-highlight-empty span {
+	margin-top: 4px;
+	color: #cbd5e1;
+	font-size: clamp(11px, 0.72vw, 13px);
+	line-height: 1.35;
+}
+
 .acomp-main-grid {
 	display: grid;
 	flex: 1 1 auto;
@@ -4598,6 +4970,26 @@
 	}
 }
 
+@keyframes acompHighlightProgress {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes acompHighlightIn {
+	from {
+		opacity: 0;
+		transform: translateX(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
 @media (max-width: 1280px) {
 	.acomp-main-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4606,6 +4998,7 @@
 	}
 
 	.acomp-spotlight,
+	.acomp-day-highlights,
 	.acomp-kpis,
 	.acomp-status-panel,
 	.acomp-recent-deliveries-panel,
@@ -4667,5 +5060,11 @@
 
 	.acomp-spotlight {
 		min-height: 440px;
+	}
+
+	.acomp-highlight-metrics,
+	.acomp-highlight-summary,
+	.acomp-highlight-tabs {
+		grid-template-columns: 1fr;
 	}
 }

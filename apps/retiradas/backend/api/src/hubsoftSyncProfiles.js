@@ -1,5 +1,6 @@
 const db = require("./db");
 const documents = require("./documents");
+const mapSyncUpdates = require("./mapSyncUpdatesService");
 const operationalImports = require("./operationalImports");
 const regionaisRepository = require("./regionaisRepository");
 
@@ -9,6 +10,10 @@ const LOCK_TTL_MS = 30 * 60 * 1000;
 const PAGE_SIZE = Math.min(
 	Math.max(Number(process.env.HUBSOFT_PAGE_SIZE || 500), 100),
 	1000,
+);
+const HUBSOFT_REQUEST_TIMEOUT_MS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_REQUEST_TIMEOUT_MS || 90_000), 15_000),
+	5 * 60_000,
 );
 const SCHEDULER_CHECK_INTERVAL_MS = 60 * 1000;
 const SCHEDULER_USER = {
@@ -23,6 +28,7 @@ const PROFILE = Object.freeze({
 	MAPA: "MAPA",
 	MATCH: "MATCH",
 	LOJA: "LOJA",
+	MULTAS: "MULTAS",
 	META_D0: "META_D0",
 	META_D_MINUS_ONE: "META_D_MINUS_ONE",
 	META_AUDIT: "META_AUDIT",
@@ -34,6 +40,7 @@ const VISIBLE_PROFILES = [
 	PROFILE.MAPA,
 	PROFILE.MATCH,
 	PROFILE.LOJA,
+	PROFILE.MULTAS,
 	PROFILE.META_D0,
 	PROFILE.META_D_MINUS_ONE,
 	PROFILE.META_AUDIT,
@@ -72,6 +79,8 @@ const MATCH_KNOWN_IGNORED = [
 const META_TYPE_IDS = MAPA_TYPE_IDS;
 const LOJA_ATTENDANCE_TYPE_ID = 826;
 const META_MOTIVO_CONCLUIDA_ID = 135;
+const MULTA_EQUIPAMENTO_TYPE_IDS = new Set([1494]);
+const MULTA_MOTIVO_TEXT = "INDISPONIBILIDADE DO CLIENTE";
 
 function cleanText(value) {
 	return String(value || "").trim();
@@ -116,6 +125,7 @@ function normalizeAutomationConfig(config = {}) {
 			config.autoDailyCheckpointHours,
 		),
 		autoMetaTime: normalizeTime(config.autoMetaTime, "03:00"),
+		autoFinesTime: normalizeTime(config.autoFinesTime, "18:00"),
 		autoMapMatchIntervalMinutes: asPositiveNumber(
 			config.autoMapMatchIntervalMinutes,
 			60,
@@ -123,6 +133,7 @@ function normalizeAutomationConfig(config = {}) {
 		),
 		autoMapMatchEnabled: config.autoMapMatchEnabled !== false,
 		autoMetaEnabled: config.autoMetaEnabled !== false,
+		autoFinesEnabled: config.autoFinesEnabled !== false,
 		autoDailyEnabled: config.autoDailyEnabled !== false,
 	};
 }
@@ -137,6 +148,10 @@ function isMetaProfile(profile) {
 
 function isStoreProfile(profile) {
 	return [PROFILE.LOJA, PROFILE.META_AUDIT_STORE].includes(profile);
+}
+
+function isFinesProfile(profile) {
+	return profile === PROFILE.MULTAS;
 }
 
 function operationalProfileFor(profile) {
@@ -257,6 +272,27 @@ async function parseResponse(response) {
 	}
 }
 
+async function fetchWithTimeout(url, options = {}) {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), HUBSOFT_REQUEST_TIMEOUT_MS);
+	try {
+		return await fetch(url, {
+			...options,
+			signal: controller.signal,
+		});
+	} catch (error) {
+		if (error?.name === "AbortError") {
+			const timeoutError = new Error("Tempo esgotado ao consultar HubSoft.");
+			timeoutError.code = "FAILED";
+			timeoutError.statusCode = 504;
+			throw timeoutError;
+		}
+		throw error;
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
 async function authenticateWithOAuth(config) {
 	const baseUrl = normalizeBaseUrl(config.baseUrl || process.env.HUBSOFT_BASE_URL);
 	const clientId = cleanText(config.clientId || process.env.HUBSOFT_CLIENT_ID);
@@ -268,7 +304,7 @@ async function authenticateWithOAuth(config) {
 	const grantType = cleanText(config.grantType || "password");
 	if (!clientId || !clientSecret || !username || !password) return null;
 
-	const response = await fetch(`${baseUrl}/oauth/token`, {
+	const response = await fetchWithTimeout(`${baseUrl}/oauth/token`, {
 		method: "POST",
 		headers: {
 			Accept: "application/json",
@@ -352,7 +388,12 @@ async function authenticateWithPlaywright(config) {
 			page.waitForLoadState("networkidle", { timeout: 60_000 }).catch(() => {}),
 			page.getByText("ENTRAR", { exact: false }).last().click(),
 		]);
-		await page.waitForTimeout(2500);
+		await page.waitForFunction(() => {
+			try {
+				const value = JSON.parse(localStorage.getItem("auth") || "null");
+				return Boolean(value?.login?.access_token || value?.login?.token || value?.access_token || value?.token);
+			} catch { return false; }
+		}, null, { timeout: 30000 }).catch(() => {});
 		const auth = await page.evaluate(() => {
 			const raw = localStorage.getItem("auth");
 			const parsed = raw ? JSON.parse(raw) : null;
@@ -362,7 +403,9 @@ async function authenticateWithPlaywright(config) {
 			return token ? { token, tokenType } : null;
 		});
 		if (!auth?.token) {
-			const error = new Error("HubSoft web auth nao retornou token.");
+			const notices = await page.locator('[role="alert"], .alert-danger, md-toast, .toast-message').allTextContents().catch(() => []);
+			const detail = notices.join(" ").replaceAll(password, "[redacted]").replaceAll(username, "[usuario]").trim().slice(0, 250);
+			const error = new Error(`HubSoft web auth nao retornou token.${detail ? ` ${detail}` : " Verifique as credenciais e eventuais etapas adicionais de login."}`);
 			error.code = "FAILED_AUTH";
 			throw error;
 		}
@@ -418,7 +461,7 @@ async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 		error.statusCode = 400;
 		throw error;
 	}
-	const response = await fetch(`${session.baseUrl}${path}`, {
+	const response = await fetchWithTimeout(`${session.baseUrl}${path}`, {
 		method,
 		headers: {
 			Accept: "application/json",
@@ -498,6 +541,15 @@ function findMotivoConcluida(createPayload) {
 	);
 }
 
+function findMotivoByText(createPayload, text) {
+	const target = normalizeText(text);
+	const found = (createPayload?.motivo_fechamento || []).find((item) =>
+		normalizeText(item.descricao || item.display || item.nome).includes(target),
+	);
+	if (found) return found;
+	return { descricao: text };
+}
+
 function baseReportPayload({ period, types }) {
 	return {
 		data_inicio: toHubsoftDate(period.inicio),
@@ -525,6 +577,38 @@ function metaPayload({ date, startDate, endDate, createPayload }) {
 		pop: [],
 		periodos: [],
 		tipo_ordem_servicos: findTypes(createPayload, META_TYPE_IDS),
+		usuario_abertura: [],
+		tecnicos: [],
+		participantes: [],
+		agendas: [],
+		fluxo_aprovacao_configuracao: [],
+		cidades: [],
+		servico: [],
+		servico_status: [],
+		grupos_clientes: [],
+		grupos_clientes_servicos: [],
+		bairros: null,
+		condominios: null,
+		data_inicio: toHubsoftDate(initialDate),
+		data_fim: toHubsoftDate(finalDate, true),
+	};
+}
+
+function finesPayload({ date, startDate, endDate, createPayload }) {
+	const initialDate = startDate || date;
+	const finalDate = endDate || date || initialDate;
+	return {
+		tipo_data: "data_termino_executado",
+		order_by: "data_termino_executado",
+		order_by_key: "ASC",
+		status_ordem_servico: ["finalizado"],
+		prioridade: [],
+		reservada: null,
+		assinatura_cliente: null,
+		motivo_fechamento: [findMotivoByText(createPayload, MULTA_MOTIVO_TEXT)],
+		pop: [],
+		periodos: [],
+		tipo_ordem_servicos: findTypes(createPayload, MULTA_EQUIPAMENTO_TYPE_IDS),
 		usuario_abertura: [],
 		tecnicos: [],
 		participantes: [],
@@ -618,6 +702,37 @@ async function collectProfile(profile, options = {}) {
 		const startDate = options.startDate || date;
 		const endDate = options.endDate || date;
 		const payload = metaPayload({ date, startDate, endDate, createPayload });
+		const collected = await collectPaginated(session, {
+			path: `/api/v1/ordem_servico/consultar/paginado/${PAGE_SIZE}`,
+			payload,
+			pageMode: "query",
+			onProgress: options.onProgress,
+		});
+		return {
+			...collected,
+			requestSummary: {
+				date,
+				startDate,
+				endDate,
+				tipo_data: payload.tipo_data,
+				status_ordem_servico: payload.status_ordem_servico,
+				motivo_fechamento: payload.motivo_fechamento.map((item) => ({
+					id_motivo_fechamento: item.id_motivo_fechamento,
+					descricao: item.descricao,
+				})),
+				tipo_ordem_servicos: payload.tipo_ordem_servicos.map((item) => ({
+					id_tipo_ordem_servico: item.id_tipo_ordem_servico,
+					descricao: item.descricao,
+				})),
+			},
+		};
+	}
+
+	if (isFinesProfile(profile)) {
+		const date = options.date || todaySaoPaulo();
+		const startDate = options.startDate || date;
+		const endDate = options.endDate || date;
+		const payload = finesPayload({ date, startDate, endDate, createPayload });
 		const collected = await collectPaginated(session, {
 			path: `/api/v1/ordem_servico/consultar/paginado/${PAGE_SIZE}`,
 			payload,
@@ -863,7 +978,22 @@ function safeTimestamp(value) {
 		const date = new Date(`${text}T12:00:00.000-03:00`);
 		return Number.isNaN(date.getTime()) ? null : date.toISOString();
 	}
-	const iso = text.includes(" ") ? text.replace(" ", "T") : text;
+	const br = text.match(
+		/^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/,
+	);
+	if (br) {
+		const [, day, month, year, hour = "00", minute = "00", second = "00"] = br;
+		const date = new Date(
+			`${year}-${month}-${day}T${hour}:${minute}:${second}.000-03:00`,
+		);
+		return Number.isNaN(date.getTime()) ? null : date.toISOString();
+	}
+	let iso = text.includes(" ") ? text.replace(" ", "T") : text;
+	if (
+		/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/.test(iso)
+	) {
+		iso = `${iso}-03:00`;
+	}
 	const date = new Date(iso);
 	return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
@@ -1404,8 +1534,16 @@ function summarizeRecords(records) {
 
 async function maybeApplyOperationalProfile(profile, rows, records, options, user) {
 	const operationalProfile = operationalProfileFor(profile);
-	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(operationalProfile)) return null;
+	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA, PROFILE.MULTAS].includes(operationalProfile)) return null;
 	if (options.applyOperational === false) return null;
+	if (operationalProfile === PROFILE.MULTAS) {
+		return operationalImports.persistHubsoftFineRecords({
+			profile: operationalProfile,
+			date: options.date || todaySaoPaulo(),
+			records,
+			user,
+		});
+	}
 	if ([PROFILE.META_D0, PROFILE.META_D_MINUS_ONE, PROFILE.LOJA].includes(operationalProfile)) {
 		if (!records.length) {
 			return {
@@ -1424,6 +1562,13 @@ async function maybeApplyOperationalProfile(profile, rows, records, options, use
 			records,
 			user,
 		});
+	}
+	if ([PROFILE.MAPA, PROFILE.MATCH].includes(operationalProfile) && !records.length) {
+		return {
+			skipped: true,
+			reason: "EMPTY_RESULT_NOT_APPLIED",
+			message: "Resultado vazio registrado sem alterar Mapa/Match.",
+		};
 	}
 	const payload = {
 		rows: rows.map(adaptReportRow),
@@ -1462,6 +1607,7 @@ function assertValidInternalProfile(profile) {
 async function executeProfileRun(run, profile, options = {}, user = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	let lockAcquired = false;
+	let previousMapSnapshot = null;
 	try {
 		await acquireLock(profile, run.id, user);
 		lockAcquired = true;
@@ -1509,11 +1655,14 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 		);
 		let persistence = { inserted: 0, updated: 0, deactivated: 0 };
 		let operational = null;
-		if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(status)) {
+		if (status === RUN_STATUS.COMPLETE || (status === RUN_STATUS.VALID_EMPTY_RESULT && ![PROFILE.MAPA, PROFILE.MATCH].includes(profile))) {
 			await updateRunProgress(run.id, {
 				stage: "Salvando historico HubSoft",
 				percent: 72,
 			});
+			if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
+				previousMapSnapshot = await mapSyncUpdates.captureActiveMapSnapshot(profile);
+			}
 			persistence = await persistRecords(run.id, profile, records);
 			await updateRunProgress(run.id, {
 				stage: "Aplicando nos paineis operacionais",
@@ -1557,6 +1706,33 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 			request_summary: collected.requestSummary,
 			result_summary: resultSummary,
 		});
+		if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
+			const mapUpdate = await mapSyncUpdates
+				.processCompletedMapRun({
+					runId: run.id,
+					previousSnapshot: previousMapSnapshot,
+					currentRecords: records,
+					finishedAt,
+				})
+				.catch((error) => {
+					console.error(
+						"[hubsoftSyncProfiles] Falha ao registrar diff do MAPA:",
+						error,
+					);
+					return null;
+				});
+			if (mapUpdate) {
+				await operationalImports.publishAcompanhamentoUpdate?.(profile.toLowerCase(), {
+					generatedAt: finishedAt,
+					updatedBy: user.uid || null,
+					notify: mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
+					notifyAcompanhamento:
+						mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
+					message: `Mapa atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
+					summary: { mapUpdate },
+				});
+			}
+		}
 		return getRun(run.id);
 	} catch (error) {
 		const status = error.code === "FAILED_AUTH" ? RUN_STATUS.FAILED_AUTH : error.code === "SCHEMA_CHANGED" ? RUN_STATUS.SCHEMA_CHANGED : error.code === "SUSPICIOUS" ? RUN_STATUS.SUSPICIOUS : RUN_STATUS.FAILED;
@@ -1765,20 +1941,20 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 			}
 			const metaDayRecords = metaByDate.get(date) || [];
 			const storeDayRecords = storeByDate.get(date) || [];
-			const [metaOperational, storeOperational] = await Promise.all([
-				operationalImports.persistHubsoftMetaRecords({
-					profile: PROFILE.META_D0,
-					date,
-					records: metaDayRecords,
-					user,
-				}),
-				operationalImports.persistHubsoftMetaRecords({
-					profile: PROFILE.LOJA,
-					date,
-					records: storeDayRecords,
-					user,
-				}),
-			]);
+			const metaOperational = await operationalImports.persistHubsoftMetaRecords({
+				profile: PROFILE.META_D0,
+				date,
+				records: metaDayRecords,
+				user,
+				quiet: true,
+			});
+			const storeOperational = await operationalImports.persistHubsoftMetaRecords({
+				profile: PROFILE.LOJA,
+				date,
+				records: storeDayRecords,
+				user,
+				quiet: true,
+			});
 			results.push({
 				date,
 				metaRunId: metaRun?.id,
@@ -1806,6 +1982,19 @@ async function executeMetaAuditRun(run, dates = [], user = {}) {
 			});
 		}
 		const finishedAt = new Date().toISOString();
+		await operationalImports.publishAcompanhamentoUpdate?.("metas", {
+			generatedAt: finishedAt,
+			updatedBy: user.uid || null,
+			message: `Auditoria de metas HubSoft concluida de ${startDate} a ${endDate}.`,
+			summary: {
+				profile: PROFILE.META_AUDIT,
+				startDate,
+				endDate,
+				totalDias: validDates.length,
+				appliedDates: appliedDates.size,
+			},
+		});
+		await operationalImports.refreshDashboardSnapshot?.(finishedAt);
 		await updateRun(run.id, {
 			status: RUN_STATUS.COMPLETE,
 			finished_at: finishedAt,
@@ -1891,6 +2080,16 @@ function isTimeDue(nowTime, targetTime) {
 	return nowTime >= normalizeTime(targetTime);
 }
 
+function lastRunFor(rawConfig, profile) {
+	if (profile === PROFILE.MAPA) {
+		return rawConfig.autoMapLastRunAt || rawConfig.autoMapMatchLastRunAt;
+	}
+	if (profile === PROFILE.MATCH) {
+		return rawConfig.autoMatchLastRunAt || rawConfig.autoMapMatchLastRunAt;
+	}
+	return null;
+}
+
 async function runProfileSafely(profile, options = {}) {
 	try {
 		return await runProfile(
@@ -1917,10 +2116,13 @@ async function runSchedulerTick() {
 
 	const now = localDateParts();
 	const results = [];
+	const succeeded = (run) => [RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(run?.status);
+	const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
+	const checkpointDue = config.autoDailyCheckpointHours.includes(now.hour) && rawConfig.autoDailyLastCheckpointKey !== checkpointKey;
 
 	if (
 		config.autoDailyEnabled &&
-		minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes
+		(minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes || checkpointDue)
 	) {
 		results.push({
 			profile: PROFILE.META_D0,
@@ -1934,7 +2136,7 @@ async function runSchedulerTick() {
 				patch.autoDailyLastCheckpointAt = new Date().toISOString();
 			}
 		}
-		await saveSchedulerState(patch);
+		if (succeeded(results[results.length - 1].result)) await saveSchedulerState(patch);
 	}
 
 	if (
@@ -1948,28 +2150,65 @@ async function runSchedulerTick() {
 				date: addDays(now.date, -1),
 			}),
 		});
-		await saveSchedulerState({
+		if (succeeded(results[results.length - 1].result)) await saveSchedulerState({
 			autoMetaLastRunDate: now.date,
 			autoMetaLastRunAt: new Date().toISOString(),
 		});
 	}
 
+	if (config.autoMetaEnabled && isTimeDue(now.time, config.autoMetaTime) && rawConfig.autoStoreLastRunDate !== now.date) {
+		const result = await runProfileSafely(PROFILE.LOJA, { date: addDays(now.date, -1) });
+		results.push({ profile: PROFILE.LOJA, result });
+		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: new Date().toISOString() });
+	}
+
 	if (
-		config.autoMapMatchEnabled &&
-		minutesSince(rawConfig.autoMapMatchLastRunAt) >=
-			config.autoMapMatchIntervalMinutes
+		config.autoFinesEnabled &&
+		isTimeDue(now.time, config.autoFinesTime) &&
+		rawConfig.autoFinesLastRunDate !== now.date
 	) {
-		results.push({
-			profile: PROFILE.MAPA,
-			result: await runProfileSafely(PROFILE.MAPA),
-		});
-		results.push({
-			profile: PROFILE.MATCH,
-			result: await runProfileSafely(PROFILE.MATCH),
-		});
-		await saveSchedulerState({
-			autoMapMatchLastRunAt: new Date().toISOString(),
-		});
+		const result = await runProfileSafely(PROFILE.MULTAS, { date: now.date });
+		results.push({ profile: PROFILE.MULTAS, result });
+		if (succeeded(result)) {
+			await saveSchedulerState({
+				autoFinesLastRunDate: now.date,
+				autoFinesLastRunAt: new Date().toISOString(),
+			});
+		}
+	}
+
+	if (config.autoMapMatchEnabled) {
+		const mapDue =
+			minutesSince(lastRunFor(rawConfig, PROFILE.MAPA)) >=
+			config.autoMapMatchIntervalMinutes;
+		const matchDue =
+			minutesSince(lastRunFor(rawConfig, PROFILE.MATCH)) >=
+			config.autoMapMatchIntervalMinutes;
+		const mapResult = mapDue
+			? await runProfileSafely(PROFILE.MAPA)
+			: null;
+		if (mapDue) {
+			results.push({ profile: PROFILE.MAPA, result: mapResult });
+			if (succeeded(mapResult)) {
+				await saveSchedulerState({ autoMapLastRunAt: new Date().toISOString() });
+			}
+		}
+		const matchResult = matchDue
+			? await runProfileSafely(PROFILE.MATCH)
+			: null;
+		if (matchDue) {
+			results.push({ profile: PROFILE.MATCH, result: matchResult });
+			if (succeeded(matchResult)) {
+				await saveSchedulerState({ autoMatchLastRunAt: new Date().toISOString() });
+			}
+		}
+		if (
+			(!mapDue || succeeded(mapResult)) &&
+			(!matchDue || succeeded(matchResult)) &&
+			(mapDue || matchDue)
+		) {
+			await saveSchedulerState({ autoMapMatchLastRunAt: new Date().toISOString() });
+		}
 	}
 
 	return { ok: true, results };

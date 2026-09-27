@@ -42,6 +42,7 @@ import {
 	Star,
 	Target,
 	Truck,
+	Trophy,
 	UserCog,
 	UserSquare2,
 	Users,
@@ -128,9 +129,28 @@ const NAV_ITEMS = [
 		featured: true,
 	},
 	{
+		label: "Atualizações",
+		path: ROUTES.MAPAS_ATUALIZACOES,
+		icon: Clock,
+		permission: ["view_mapa", "destaque.mapa_os.view"],
+	},
+	{
+		label: "Histórico do Mapa",
+		path: ROUTES.MAPA_HISTORICO,
+		icon: FileClock,
+		permission: ["view_mapa", "destaque.mapa_os.view"],
+	},
+	{
 		label: "Metas",
 		path: ROUTES.METAS,
 		icon: Target,
+		permission: ["view_metas", "destaque.metas.view", "destaque.metas.manage"],
+		featured: true,
+	},
+	{
+		label: "Ranking",
+		path: ROUTES.RANKING,
+		icon: Trophy,
 		permission: ["view_metas", "destaque.metas.view", "destaque.metas.manage"],
 		featured: true,
 	},
@@ -587,8 +607,12 @@ const MODERN_FEATURED_ORDER = [
 	ROUTES.DIARIO,
 	ROUTES.MAPA,
 	ROUTES.METAS,
+	ROUTES.RANKING,
 ];
 const MODERN_MENU_ORDER = [
+	ROUTES.MAPA,
+	ROUTES.MAPAS_ATUALIZACOES,
+	ROUTES.MAPA_HISTORICO,
 	ROUTES.EMPRESAS_TECNICOS,
 	ROUTES.AGENDAMENTOS,
 	ROUTES.ENTREGAS_TECNICOS,
@@ -723,6 +747,12 @@ const ATENDIMENTO_PATHS = [
 ];
 
 const MENU_GROUPS = [
+	{
+		id: "mapas",
+		label: "Mapas",
+		icon: Map,
+		paths: [ROUTES.MAPA, ROUTES.MAPAS_ATUALIZACOES, ROUTES.MAPA_HISTORICO],
+	},
 	{
 		id: "cliente",
 		label: "Cliente",

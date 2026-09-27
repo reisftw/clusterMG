@@ -25,11 +25,14 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	autoDailyCheckpointHours: [11, 14, 16, 18, 23],
 	autoMetaEnabled: true,
 	autoMetaTime: "03:00",
+	autoFinesEnabled: true,
+	autoFinesTime: "18:00",
 	autoMapMatchEnabled: true,
 	autoMapMatchIntervalMinutes: 60,
 	autoDailyLastRunAt: "",
 	autoDailyLastCheckpointAt: "",
 	autoMetaLastRunAt: "",
+	autoFinesLastRunAt: "",
 	autoMapMatchLastRunAt: "",
 };
 

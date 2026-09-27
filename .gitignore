@@ -12,7 +12,9 @@ dist
 dist-ssr
 *.local
 *.tgz
+/*.tar.gz
 *.zip
+deploy-*.sh
 
 # Generated reports and local tool output
 coverage

@@ -50,6 +50,7 @@ const HUBSOFT_PROFILES = [
 	{ id: "MAPA", label: "Mapa", helper: "O.S. abertas para Mensageria" },
 	{ id: "MATCH", label: "Match", helper: "O.S. abertas para conciliação" },
 	{ id: "LOJA", label: "Loja D-1", helper: "Entregas em loja concluídas" },
+	{ id: "MULTAS", label: "Multas", helper: "Multa de equipamento por indisponibilidade" },
 	{ id: "META_D0", label: "Meta D+0", helper: "Acompanhamento do dia" },
 	{ id: "META_D_MINUS_ONE", label: "Meta D-1", helper: "Fechamento do dia anterior" },
 ];
@@ -1212,6 +1213,27 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 					/>
 					Atualizar metas automaticamente
 				</label>
+				<label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-sm font-black text-slate-800">
+					<input
+						type="checkbox"
+						checked={config.autoFinesEnabled !== false}
+						onChange={(event) =>
+							updateConfig("autoFinesEnabled", event.target.checked)
+						}
+					/>
+					Atualizar multas automaticamente
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase text-slate-500">
+						Multas às
+					</span>
+					<input
+						type="time"
+						value={config.autoFinesTime || "18:00"}
+						onChange={(event) => updateConfig("autoFinesTime", event.target.value)}
+						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
+					/>
+				</label>
 				<label className="block">
 					<span className="text-xs font-black uppercase text-slate-500">
 						Mapa/Match a cada quantos minutos
@@ -1231,6 +1253,7 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 					<p className="mt-2">Diário: {formatDateTime(config.autoDailyLastRunAt)}</p>
 					<p>Checkpoint: {formatDateTime(config.autoDailyLastCheckpointAt)}</p>
 					<p>Metas: {formatDateTime(config.autoMetaLastRunAt)}</p>
+					<p>Multas: {formatDateTime(config.autoFinesLastRunAt)}</p>
 					<p>Mapa/Match: {formatDateTime(config.autoMapMatchLastRunAt)}</p>
 				</div>
 			</div>

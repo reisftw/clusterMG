@@ -24,6 +24,9 @@ export function isVpsBackendEnabled() {
 
 export function getApiBaseUrl() {
 	if (isFinanHost()) return `${window.location.origin}/api`;
+	if (typeof window !== "undefined" && window.location.hostname === "homolog.retiradas.tech") {
+		return `${window.location.origin}/api`;
+	}
 	return String(
 		import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL,
 	).replace(/\/+$/, "");
