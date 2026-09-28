@@ -7,6 +7,7 @@ const MAP_PROFILE = "MAPA";
 const META_PROFILES = ["META_D0", "META_D_MINUS_ONE", "META_AUDIT_DAILY"];
 const VALID_MAP_STATUS = "COMPLETE";
 const CLASSIFIED_CHANNELS = ["RETIRADA", "REGIONAL", "AA"];
+const HIGHLIGHT_CITY_LIMIT = 5;
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -15,6 +16,28 @@ function text(value) {
 function number(value, fallback = 0) {
 	const parsed = Number(value);
 	return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function compactTopCitiesWithOthers(items = [], limit = HIGHLIGHT_CITY_LIMIT) {
+	const normalized = (Array.isArray(items) ? items : [])
+		.map((item) => ({
+			label: item.label || item.city || "Sem cidade",
+			total: number(item.total),
+		}))
+		.filter((item) => item.total > 0)
+		.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "pt-BR"));
+	if (normalized.length <= limit) return normalized;
+
+	const visible = normalized.slice(0, Math.max(1, limit - 1));
+	const visibleTotal = visible.reduce((sum, item) => sum + item.total, 0);
+	const total = normalized.reduce((sum, item) => sum + item.total, 0);
+	return [
+		...visible,
+		{
+			label: "Outras cidades",
+			total: Math.max(0, total - visibleTotal),
+		},
+	];
 }
 
 function toIso(value) {
@@ -519,18 +542,21 @@ async function getOpenedCities(date = todaySaoPaulo()) {
 		    and source_date >= ($2::date::timestamp at time zone $3)
 		    and source_date < (($2::date + interval '1 day')::timestamp at time zone $3)
 		  group by 1
-		  order by total desc, city
-		  limit 5`,
+		  order by total desc, city`,
 		[MAP_PROFILE, date, TIME_ZONE],
 	);
-	return result.rows.map((row) => ({ label: row.city, total: number(row.total) }));
+	return compactTopCitiesWithOthers(
+		result.rows.map((row) => ({ label: row.city, total: number(row.total) })),
+	);
 }
 
 async function getClosedCities(date = todaySaoPaulo()) {
 	const rows = await rankingService.getOperationalProduction({ start_date: date, end_date: date });
 	const cities = new Map();
 	for (const row of rows) cities.set(row.city, (cities.get(row.city) || 0) + number(row.total));
-	return [...cities].map(([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total).slice(0, 5);
+	return compactTopCitiesWithOthers(
+		[...cities].map(([label, total]) => ({ label, total })),
+	);
 }
 
 async function getOperationalSummary(query = {}) {

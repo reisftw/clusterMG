@@ -100,19 +100,37 @@ const getQueueItemLabel = (item = {}) => {
 
 const getQueueSortTime = (item = {}) => {
 	const candidates = [
-		item.prioridadeEm,
-		item.proximaTentativaEm,
 		item.data_abertura_os,
 		item.dataAberturaOs,
+		item.data_cancelamento,
+		item.data_abertura,
+		item.dataAbertura,
+		item.data_cadastro,
 		item.criadoEm,
 		item.createdAt,
+		item.prioridadeEm,
+		item.proximaTentativaEm,
 		item.atualizadoEm,
 	];
 	for (const value of candidates) {
+		const brDate = String(value || "").match(
+			/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,\s*(\d{1,2}):(\d{2}))?/,
+		);
+		if (brDate) {
+			const time = new Date(
+				`${brDate[3]}-${brDate[2].padStart(2, "0")}-${brDate[1].padStart(
+					2,
+					"0",
+				)}T${String(brDate[4] || "00").padStart(2, "0")}:${
+					brDate[5] || "00"
+				}:00-03:00`,
+			).getTime();
+			if (!Number.isNaN(time)) return time;
+		}
 		const time = new Date(value || "").getTime();
 		if (!Number.isNaN(time)) return time;
 	}
-	return Number.MAX_SAFE_INTEGER;
+	return 0;
 };
 
 const getOrderOpenDate = (item = {}) =>
@@ -295,7 +313,7 @@ function useMensageriaFilaController() {
 		() =>
 			fila
 				.filter((item) => isQueueItemSendableNow(item, config))
-				.sort((left, right) => getQueueSortTime(left) - getQueueSortTime(right))
+				.sort((left, right) => getQueueSortTime(right) - getQueueSortTime(left))
 				.slice(0, 25),
 		[fila, config],
 	);

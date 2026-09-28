@@ -1,6 +1,6 @@
 ﻿let serviceWorkerRegistrationPromise = null;
 const APP_SERVICE_WORKER_VERSION =
-	"2026-08-19-terceirizados-mfa-persistente-v1";
+	"2026-09-28-acompanhamento-assets-network-first-v1";
 
 function buildServiceWorkerUrl() {
 	const params = new URLSearchParams({

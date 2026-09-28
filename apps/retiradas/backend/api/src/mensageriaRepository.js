@@ -233,6 +233,28 @@ function mapConversation(row = {}) {
 	);
 }
 
+const QUEUE_ORDER_BY = `coalesce(
+	case
+		when source_payload->>'data_abertura_os' ~ '^\\d{4}-\\d{2}-\\d{2}'
+			then (source_payload->>'data_abertura_os')::timestamptz
+	end,
+	case
+		when source_payload->>'data_abertura' ~ '^\\d{4}-\\d{2}-\\d{2}'
+			then (source_payload->>'data_abertura')::timestamptz
+	end,
+	case
+		when source_payload->>'data_cadastro' ~ '^\\d{4}-\\d{2}-\\d{2}'
+			then (source_payload->>'data_cadastro')::timestamptz
+	end,
+	case
+		when source_payload->>'data_abertura_os' ~ '^\\d{1,2}/\\d{1,2}/\\d{4}'
+			then to_timestamp(source_payload->>'data_abertura_os', 'DD/MM/YYYY HH24:MI:SS')
+	end,
+	prioridade_em,
+	criado_em,
+	created_at
+) desc`;
+
 const TABLES = Object.freeze({
 	[COLLECTIONS.config]: {
 		table: "mensageria_config",
@@ -246,7 +268,7 @@ const TABLES = Object.freeze({
 	},
 	[COLLECTIONS.fila]: {
 		table: "mensageria_fila",
-		orderBy: "coalesce(prioridade_em, criado_em, created_at) desc",
+		orderBy: QUEUE_ORDER_BY,
 		mapper: mapQueue,
 	},
 	[COLLECTIONS.historico]: {
@@ -376,6 +398,18 @@ async function saveMessageTemplate(template = {}) {
 }
 
 async function listQueueMessages({ limit = 1000, offset = 0, status = "" } = {}) {
+	const normalizedStatus = text(status);
+	if (normalizedStatus) {
+		const result = await db.query(
+			`select *
+			   from mensageria_fila
+			  where status = $3
+			  order by ${QUEUE_ORDER_BY}
+			  limit $1 offset $2`,
+			[normalizeLimit(limit), normalizeOffset(offset), normalizedStatus],
+		);
+		return dataListFromDocuments(result.rows.map(mapQueue));
+	}
 	const items = dataListFromDocuments(
 		await listDocuments({
 			collectionPath: COLLECTIONS.fila,
@@ -383,8 +417,7 @@ async function listQueueMessages({ limit = 1000, offset = 0, status = "" } = {})
 			offset,
 		}),
 	);
-	if (!status) return items;
-	return items.filter((item) => String(item.status || "") === String(status));
+	return items;
 }
 
 async function listAllQueueMessages() {

@@ -210,12 +210,19 @@ const MENSAGERIA_EXCLUDED_OS_TYPES = new Set([
 	"retirada outros",
 ]);
 
+const MENSAGERIA_ALLOWED_OS_TYPES = new Set([
+	"cancelamento ftth",
+	"retirada ftth",
+	"retirada cancelamento segunda tentativa",
+	"cancelamento loja",
+]);
+
 function normalizeQueueOrderType(value) {
 	return normalizeText(value).replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function isExcludedQueueOrderType(item = {}) {
-	const candidates = [
+function getQueueOrderTypeCandidates(item = {}) {
+	return [
 		item.tipo,
 		item.tipo_ordem_servico,
 		item.tipoOrdemServico,
@@ -223,9 +230,18 @@ function isExcludedQueueOrderType(item = {}) {
 		item.nomeTipoOrdemServico,
 		item.tipo_os,
 		item.tipoOs,
-	];
-	return candidates.some((value) =>
+	].map(normalizeQueueOrderType).filter(Boolean);
+}
+
+function isExcludedQueueOrderType(item = {}) {
+	return getQueueOrderTypeCandidates(item).some((value) =>
 		MENSAGERIA_EXCLUDED_OS_TYPES.has(normalizeQueueOrderType(value)),
+	);
+}
+
+function isAllowedQueueOrderType(item = {}) {
+	return getQueueOrderTypeCandidates(item).some((value) =>
+		MENSAGERIA_ALLOWED_OS_TYPES.has(value),
 	);
 }
 
@@ -3164,6 +3180,20 @@ async function adjustQueueAgainstOpenOrders() {
 					"Removido pelo ajuste de fila: tipo de O.S. não entra na mensageria.",
 				ultimoErro:
 					"Removido pelo ajuste de fila: tipo de O.S. não entra na mensageria.",
+				atualizadoEm: nowIso(),
+				ajustadoFilaEm: nowIso(),
+			});
+			continue;
+		}
+		if (!isAllowedQueueOrderType(item)) {
+			removed += 1;
+			await upsertQueueItem(item.id, {
+				...item,
+				status: "ignorado",
+				ultimo_erro:
+					"Removido pelo ajuste de fila: tipo de O.S. não é elegível para mensageria.",
+				ultimoErro:
+					"Removido pelo ajuste de fila: tipo de O.S. não é elegível para mensageria.",
 				atualizadoEm: nowIso(),
 				ajustadoFilaEm: nowIso(),
 			});

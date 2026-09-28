@@ -1201,9 +1201,66 @@ function extractPhonesFromText(value) {
 		.split(/\n+/)
 		.filter((line) => /telefone|whats|celular/i.test(line));
 	const source = phoneLines.length ? phoneLines.join(" ") : text;
-	return [...source.matchAll(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\s?\d{4}[-.\s]?\d{4}/g)]
+	const lineCandidates = phoneLines
+		.map((line) => normalizePhone(line))
+		.filter((phone) => phone.length >= 10 && phone.length <= 13);
+	const textCandidates = [
+		...source.matchAll(/(?:\+?55\D*)?\(?\d{2}\)?\D*9?\d{4}\D*\d{4}/g),
+	]
 		.map((match) => normalizePhone(match[0]))
 		.filter((phone) => phone.length >= 10 && phone.length <= 13);
+	return [...lineCandidates, ...textCandidates];
+}
+
+const PHONE_FIELD_PATTERN = /(telefone|telefones|celular|whats|whatsapp|fone|contato|contatos)/i;
+
+function collectPhoneCandidatesFromObject(value, candidates = [], seen = new Set(), depth = 0) {
+	if (value === null || value === undefined || depth > 6) return candidates;
+	if (typeof value === "string" || typeof value === "number") {
+		candidates.push(...extractPhonesFromText(value));
+		return candidates;
+	}
+	if (typeof value !== "object") return candidates;
+	if (seen.has(value)) return candidates;
+	seen.add(value);
+	if (Array.isArray(value)) {
+		value.forEach((item) =>
+			collectPhoneCandidatesFromObject(item, candidates, seen, depth + 1),
+		);
+		return candidates;
+	}
+	for (const [key, nested] of Object.entries(value)) {
+		if (PHONE_FIELD_PATTERN.test(key)) {
+			if (Array.isArray(nested)) {
+				nested.forEach((item) =>
+					collectPhoneCandidatesFromObject(item, candidates, seen, depth + 1),
+				);
+			} else if (nested && typeof nested === "object") {
+				collectPhoneCandidatesFromObject(nested, candidates, seen, depth + 1);
+			} else {
+				candidates.push(...extractPhonesFromText(nested));
+			}
+			continue;
+		}
+		if (nested && typeof nested === "object") {
+			collectPhoneCandidatesFromObject(nested, candidates, seen, depth + 1);
+		}
+	}
+	return candidates;
+}
+
+function uniquePhones(values = []) {
+	const unique = [];
+	const seen = new Set();
+	for (const value of values) {
+		const phone = normalizePhone(value);
+		if (!phone || phone.length < 10 || phone.length > 13 || seen.has(phone)) {
+			continue;
+		}
+		seen.add(phone);
+		unique.push(phone);
+	}
+	return unique;
 }
 
 function extractInstallationAddress(row = {}) {
@@ -1236,13 +1293,30 @@ function adaptReportRow(row = {}) {
 		row.telefone_primario,
 		row.telefone_secundario,
 		row.telefone_terciario,
+		row.telefone_principal,
+		row.telefone_cliente,
 		row.telefone,
+		row.celular,
+		row.whatsapp,
+		row.fone,
+		cliente.telefone_primario,
+		cliente.telefone_secundario,
+		cliente.telefone_terciario,
+		cliente.telefone,
+		cliente.celular,
+		cliente.whatsapp,
+		servico.telefone_primario,
+		servico.telefone_secundario,
+		servico.telefone_terciario,
+		servico.telefone,
 		...(Array.isArray(row.telefones) ? row.telefones : []),
+		...(Array.isArray(cliente.telefones) ? cliente.telefones : []),
+		...(Array.isArray(servico.telefones) ? servico.telefones : []),
 		...extractPhonesFromText(row.descricao_abertura),
 		...extractPhonesFromText(row.descricao_servico),
-	]
-		.map(normalizePhone)
-		.filter(Boolean);
+		...collectPhoneCandidatesFromObject(row),
+	];
+	const telefonesUnicos = uniquePhones(telefones);
 	return {
 		numero_ordem_servico: cleanText(
 			row.numero_ordem_servico || row.num_os || row.numero_os,
@@ -1257,10 +1331,10 @@ function adaptReportRow(row = {}) {
 		endereco: cleanText(address.endereco),
 		numero: cleanText(address.numero),
 		bairro: cleanText(address.bairro),
-		telefone_primario: telefones[0] || "",
-		telefone_secundario: telefones[1] || "",
-		telefone_terciario: telefones[2] || "",
-		telefones,
+		telefone_primario: telefonesUnicos[0] || "",
+		telefone_secundario: telefonesUnicos[1] || "",
+		telefone_terciario: telefonesUnicos[2] || "",
+		telefones: telefonesUnicos,
 		data_cadastro: cleanText(row.data_cadastro || row.data_cadastro_br),
 		servico: cleanText(row.servico || servico.display || servico.descricao),
 		numero_plano: cleanText(row.numero_plano || servico.numero_plano),
@@ -1830,6 +1904,14 @@ function validateCollected(collected, uniqueRows) {
 	return RUN_STATUS.COMPLETE;
 }
 
+function shouldTolerateDuplicateRows(profile, collectedStats = {}) {
+	if (![PROFILE.MAPA, PROFILE.MATCH].includes(profile)) return false;
+	const duplicates = Number(collectedStats.duplicateRows || 0);
+	const receivedRows = Number(collectedStats.receivedRows || 0);
+	if (duplicates <= 0 || receivedRows <= 0) return false;
+	return duplicates <= Math.max(10, Math.ceil(receivedRows * 0.001));
+}
+
 function summarizeRecords(records) {
 	const byChannel = {};
 	const byReason = {};
@@ -1987,10 +2069,16 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 					(progress) => updateRunProgress(run.id, progress),
 				)
 			: records;
-		const status = validateCollected(
+		let status = validateCollected(
 			{ ...collectedStats, receivedRows: collected.rows.length },
 			uniqueRows,
 		);
+		if (
+			status === RUN_STATUS.SUSPICIOUS &&
+			shouldTolerateDuplicateRows(profile, collectedStats)
+		) {
+			status = RUN_STATUS.COMPLETE;
+		}
 		let persistence = { inserted: 0, updated: 0, deactivated: 0 };
 		let operational = null;
 		if (status === RUN_STATUS.COMPLETE || (status === RUN_STATUS.VALID_EMPTY_RESULT && ![PROFILE.MAPA, PROFILE.MATCH].includes(profile))) {
@@ -2063,13 +2151,14 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 					return null;
 				});
 			if (mapUpdate) {
+				const updateLabel = profile === PROFILE.MATCH ? "Match" : "Mapa";
 				await operationalImports.publishAcompanhamentoUpdate?.(profile.toLowerCase(), {
 					generatedAt: finishedAt,
 					updatedBy: user.uid || null,
 					notify: mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
 					notifyAcompanhamento:
 						mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
-					message: `Mapa atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
+					message: `${updateLabel} atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
 					summary: { mapUpdate },
 				});
 			}
@@ -2460,9 +2549,15 @@ async function runSchedulerTick() {
 		config.autoDailyEnabled &&
 		(minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes || checkpointDue)
 	) {
+		const dailyResult = await runProfileSafely(PROFILE.META_D0, { date: now.date });
 		results.push({
 			profile: PROFILE.META_D0,
-			result: await runProfileSafely(PROFILE.META_D0, { date: now.date }),
+			result: dailyResult,
+		});
+		const storeResult = await runProfileSafely(PROFILE.LOJA, { date: now.date });
+		results.push({
+			profile: PROFILE.LOJA,
+			result: storeResult,
 		});
 		const patch = { autoDailyLastRunAt: new Date().toISOString() };
 		if (config.autoDailyCheckpointHours.includes(now.hour)) {
@@ -2472,7 +2567,7 @@ async function runSchedulerTick() {
 				patch.autoDailyLastCheckpointAt = new Date().toISOString();
 			}
 		}
-		if (succeeded(results[results.length - 1].result)) await saveSchedulerState(patch);
+		if (succeeded(dailyResult) && succeeded(storeResult)) await saveSchedulerState(patch);
 	}
 
 	if (
