@@ -2595,6 +2595,18 @@ async function persistHubsoftMetaRecords({
 		parentPath: null,
 		data: { ...nextAgents, updatedAt: nowIso },
 	}, writeOptions);
+	const config =
+		(await documents.getDocument("config/metas").catch(() => null))?.data || {};
+	await documents.upsertDocument(
+		{
+			path: "config/metas",
+			collectionPath: "config",
+			documentId: "metas",
+			parentPath: null,
+			data: { ...config, lastUpdate: nowIso, updatedAt: nowIso },
+		},
+		writeOptions,
+	);
 	await syncDiarioFromMetaRecord(combined, month, year, user, writeOptions);
 	if (!quiet) {
 		await publishAcompanhamentoUpdate("metas", {
