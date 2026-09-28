@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
+	buscarExecucaoAuditoriaMultas,
 	buscarAuditoriaMultas,
 	simularAuditoriaMultas,
 } from "../services/serviceOrderFinesService";
@@ -103,6 +104,7 @@ export default function ServiceOrderFinesPage() {
 	});
 	const [loading, setLoading] = useState(true);
 	const [simulating, setSimulating] = useState(false);
+	const [runStatus, setRunStatus] = useState("");
 	const [error, setError] = useState("");
 	const [search, setSearch] = useState("");
 	const [submittedSearch, setSubmittedSearch] = useState("");
@@ -146,16 +148,33 @@ export default function ServiceOrderFinesPage() {
 	async function handleSimulateRange(range) {
 		setSimulating(true);
 		setError("");
+		setRunStatus("Varredura enviada. Acompanhando processamento...");
 		const nextStartDate = range.startDate || startDate;
 		const nextEndDate = range.endDate || endDate;
 		try {
-			await simularAuditoriaMultas({
+			const run = await simularAuditoriaMultas({
 				startDate: nextStartDate,
 				endDate: nextEndDate,
 			});
 			if (range.startDate || range.endDate) {
 				setStartDate(nextStartDate);
 				setEndDate(nextEndDate);
+			}
+			if (run?.id) {
+				let latest = run;
+				for (let attempt = 0; attempt < 180; attempt += 1) {
+					if (latest.status && latest.status !== "RUNNING") break;
+					await new Promise((resolve) => setTimeout(resolve, 2000));
+					latest = await buscarExecucaoAuditoriaMultas(run.id);
+					const summary = latest?.result_summary || {};
+					setRunStatus(
+						`${summary.stage || "Processando"}${summary.percent ? ` · ${summary.percent}%` : ""}`,
+					);
+				}
+				if (latest?.status && latest.status !== "COMPLETE" && latest.status !== "VALID_EMPTY_RESULT") {
+					throw new Error(latest.error_message || "A varredura não foi concluída.");
+				}
+				setRunStatus("Varredura concluída. Dados atualizados.");
 			}
 			await load(1);
 		} catch (err) {
@@ -244,6 +263,11 @@ export default function ServiceOrderFinesPage() {
 			</section>
 
 			<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				{runStatus ? (
+					<div className="md:col-span-2 xl:col-span-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800">
+						{runStatus}
+					</div>
+				) : null}
 				<KpiCard title="Atendimentos resolvidos" value={summary.total} helper="Registros HubSoft MULTAS" tone="blue" />
 				<KpiCard title="Cobranças localizadas" value={summary.cobrancasLocalizadas} helper="Aguardando fonte financeira" tone="green" />
 				<KpiCard title="Sem cobrança" value={summary.semCobranca} helper="Sem match financeiro confirmado" tone="orange" />

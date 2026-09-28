@@ -29,3 +29,9 @@ export async function simularAuditoriaMultas(payload = {}) {
 		body: JSON.stringify(payload),
 	});
 }
+
+export async function buscarExecucaoAuditoriaMultas(runId) {
+	return requestVpsApi(
+		`/service-orders/fines/runs/${encodeURIComponent(runId)}`,
+	);
+}

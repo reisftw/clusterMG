@@ -1048,9 +1048,33 @@ const MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES = new Set([
 	"ignorado",
 ]);
 
+const MENSAGERIA_EXCLUDED_OS_TYPES = new Set([
+	"CANCELAMENTO OUTROS",
+	"RETIRADA OUTROS",
+]);
+
 function isActiveMensageriaQueueEntry(item = {}) {
 	const status = String(item.status || "").trim().toLowerCase();
 	return !MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES.has(status);
+}
+
+function normalizeMensageriaOrderType(value) {
+	return normalizeText(value).replace(/[^A-Z0-9]+/g, " ").trim();
+}
+
+function isExcludedMensageriaOrderType(item = {}) {
+	const candidates = [
+		item.tipo,
+		item.tipo_ordem_servico,
+		item.tipoOrdemServico,
+		item.nome_tipo_ordem_servico,
+		item.nomeTipoOrdemServico,
+		item.tipo_os,
+		item.tipoOs,
+	];
+	return candidates.some((value) =>
+		MENSAGERIA_EXCLUDED_OS_TYPES.has(normalizeMensageriaOrderType(value)),
+	);
 }
 
 async function getMensageriaQueueItemsByKey() {
@@ -1174,6 +1198,7 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 	const skippedReasons = {
 		semTelefone: 0,
 		cidadeForaFiltro: 0,
+		tipoNaoPermitido: 0,
 	};
 	const skippedSamples = [];
 
@@ -1199,6 +1224,10 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 			config,
 			diffBatchAt,
 		);
+		if (isExcludedMensageriaOrderType(item)) {
+			trackSkipped("tipoNaoPermitido", id, item);
+			continue;
+		}
 		if (!item.telefone_digits) {
 			trackSkipped("semTelefone", id, item);
 			continue;
@@ -1285,6 +1314,21 @@ async function reconcileMensageriaQueueWithOpenMap(finalMap = {}) {
 	for (const item of queue) {
 		if (!activeStatuses.has(String(item.status || "novo"))) continue;
 		checked += 1;
+		if (isExcludedMensageriaOrderType(item)) {
+			removed += 1;
+			await mensageriaRepository.updateQueueMessage(item.id, {
+				...item,
+				status: "ignorado",
+				ultimoErro:
+					"Removido automaticamente: tipo de O.S. não entra na fila de mensageria.",
+				ultimo_erro:
+					"Removido automaticamente: tipo de O.S. não entra na fila de mensageria.",
+				atualizadoEm: new Date().toISOString(),
+				atualizado_em: new Date().toISOString(),
+				ajustadoFilaEm: new Date().toISOString(),
+			});
+			continue;
+		}
 		const os = String(item.os || item.num_os || item.numero_os || "").trim();
 		if (os && openOs.has(os)) continue;
 		removed += 1;

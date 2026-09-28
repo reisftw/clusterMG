@@ -11,6 +11,7 @@ const {
 
 const CONFIG_PATH = "hubsoft_config/global";
 const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
+const TIME_ZONE = "America/Sao_Paulo";
 const LOCK_TTL_MS = 30 * 60 * 1000;
 const PAGE_SIZE = Math.min(
 	Math.max(Number(process.env.HUBSOFT_PAGE_SIZE || 500), 100),
@@ -145,6 +146,10 @@ function isFinesProfile(profile) {
 	return profile === PROFILE.MULTAS;
 }
 
+function isPeriodSnapshotProfile(profile) {
+	return isMetaProfile(profile) || isStoreProfile(profile) || isFinesProfile(profile);
+}
+
 function operationalProfileFor(profile) {
 	if (profile === PROFILE.META_AUDIT_DAILY) return PROFILE.META_D0;
 	if (profile === PROFILE.META_AUDIT_STORE) return PROFILE.LOJA;
@@ -165,7 +170,7 @@ function normalizeCityKey(value) {
 
 function todaySaoPaulo() {
 	const text = new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Sao_Paulo",
+		timeZone: TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -195,7 +200,7 @@ function toSaoPauloDateOnly(value) {
 	const date = value ? new Date(value) : null;
 	if (!date || Number.isNaN(date.getTime())) return null;
 	return new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Sao_Paulo",
+		timeZone: TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -1642,7 +1647,55 @@ async function updateRunProgress(runId, patch = {}) {
 	});
 }
 
+async function releaseStaleLock(profile) {
+	const result = await db.query(
+		`select l.profile,
+		        l.sync_run_id,
+		        l.expires_at,
+		        r.status,
+		        r.started_at,
+		        r.result_summary,
+		        coalesce(
+		          (r.result_summary->>'heartbeatAt')::timestamptz,
+		          r.started_at
+		        ) as heartbeat_at
+		   from hubsoft_sync_locks l
+		   left join hubsoft_sync_runs r on r.id = l.sync_run_id
+		  where l.profile = $1
+		    and (
+		      l.expires_at < now()
+		      or r.id is null
+		      or (
+		        r.status = $2
+		        and coalesce((r.result_summary->>'heartbeatAt')::timestamptz, r.started_at)
+		            < now() - interval '15 minutes'
+		      )
+		    )
+		  limit 1`,
+		[profile, RUN_STATUS.RUNNING],
+	);
+	const stale = result.rows[0];
+	if (!stale) return false;
+	await db.query(`delete from hubsoft_sync_locks where profile = $1`, [profile]);
+	if (stale.sync_run_id && stale.status === RUN_STATUS.RUNNING) {
+		await updateRun(stale.sync_run_id, {
+			status: RUN_STATUS.FAILED,
+			finished_at: new Date().toISOString(),
+			error_code: "STALE_RUN",
+			error_message:
+				"Execução interrompida sem heartbeat recente. Uma nova execução pode retomar pelo checkpoint.",
+			result_summary: {
+				...(stale.result_summary || {}),
+				stage: "Execução interrompida",
+				heartbeatAt: new Date().toISOString(),
+			},
+		}).catch(() => null);
+	}
+	return true;
+}
+
 async function acquireLock(profile, runId, user = {}) {
+	await releaseStaleLock(profile);
 	const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
 	const result = await db.query(
 		`insert into hubsoft_sync_locks (profile, sync_run_id, expires_at, locked_by)
@@ -1671,7 +1724,19 @@ async function releaseLock(profile, runId) {
 	);
 }
 
-async function persistRecords(runId, profile, records) {
+function runDateRangeOptions(profile, options = {}) {
+	if (!isPeriodSnapshotProfile(profile)) return {};
+	const startDate = cleanText(options.startDate || options.date);
+	const endDate = cleanText(options.endDate || options.date || startDate);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+		return {};
+	}
+	return startDate > endDate
+		? { startDate: endDate, endDate: startDate, preserveOutsidePeriod: true }
+		: { startDate, endDate, preserveOutsidePeriod: true };
+}
+
+async function persistRecords(runId, profile, records, options = {}) {
 	let inserted = 0;
 	let updated = 0;
 	const activeIds = [];
@@ -1729,15 +1794,30 @@ async function persistRecords(runId, profile, records) {
 		if (result.rows[0]?.inserted) inserted += 1;
 		else updated += 1;
 	}
-	const deactivated = await db.query(
-		`update hubsoft_sync_records
-        set active = false
-      where profile = $1
-        and sync_run_id <> $2
-        and active = true
-        and not (hubsoft_id = any($3::text[]))`,
-		[profile, runId, activeIds],
-	);
+	const periodOptions = options.preserveOutsidePeriod
+		? runDateRangeOptions(profile, options)
+		: {};
+	const deactivated = periodOptions.preserveOutsidePeriod
+		? await db.query(
+				`update hubsoft_sync_records
+	          set active = false
+	        where profile = $1
+	          and sync_run_id <> $2
+	          and active = true
+	          and not (hubsoft_id = any($3::text[]))
+	          and source_date >= ($4::date::timestamp at time zone '${TIME_ZONE}')
+	          and source_date < (($5::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')`,
+				[profile, runId, activeIds, periodOptions.startDate, periodOptions.endDate],
+			)
+		: await db.query(
+				`update hubsoft_sync_records
+	        set active = false
+	      where profile = $1
+	        and sync_run_id <> $2
+	        and active = true
+	        and not (hubsoft_id = any($3::text[]))`,
+				[profile, runId, activeIds],
+			);
 	return { inserted, updated, deactivated: deactivated.rowCount || 0 };
 }
 
@@ -1921,7 +2001,10 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 			if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
 				previousMapSnapshot = await mapSyncUpdates.captureActiveMapSnapshot(profile);
 			}
-			persistence = await persistRecords(run.id, profile, recordsToPersist);
+			persistence = await persistRecords(run.id, profile, recordsToPersist, {
+				...options,
+				...runDateRangeOptions(profile, options),
+			});
 			await updateRunProgress(run.id, {
 				stage: "Aplicando nos paineis operacionais",
 				percent: 84,
@@ -2302,7 +2385,7 @@ async function startMetaAudit(dates = [], user = {}, options = {}) {
 
 function localDateParts(date = new Date()) {
 	const parts = new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Sao_Paulo",
+		timeZone: TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -2605,6 +2688,7 @@ module.exports = {
 	classifyOrder,
 	discoverWithdrawalTechnicians,
 	getProfilesOverview,
+	getRun,
 	listRecords,
 	listRuns,
 	listWithdrawalTechnicians,

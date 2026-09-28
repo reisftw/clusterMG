@@ -9,6 +9,7 @@ import {
 	Save,
 	Search,
 	Send,
+	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { hasPermission } from "../../../constants/roles";
@@ -96,6 +97,32 @@ const getQueueItemLabel = (item = {}) => {
 	if (codigo && cliente) return `${codigo} - ${cliente}`;
 	return cliente || codigo || item.telefone || item.os || "-";
 };
+
+const getQueueSortTime = (item = {}) => {
+	const candidates = [
+		item.prioridadeEm,
+		item.proximaTentativaEm,
+		item.data_abertura_os,
+		item.dataAberturaOs,
+		item.criadoEm,
+		item.createdAt,
+		item.atualizadoEm,
+	];
+	for (const value of candidates) {
+		const time = new Date(value || "").getTime();
+		if (!Number.isNaN(time)) return time;
+	}
+	return Number.MAX_SAFE_INTEGER;
+};
+
+const getOrderOpenDate = (item = {}) =>
+	item.data_abertura_os ||
+	item.dataAberturaOs ||
+	item.data_abertura ||
+	item.dataAbertura ||
+	item.abertura ||
+	item.data ||
+	"";
 
 const isQueueItemSendableNow = (item = {}, config = {}, now = new Date()) => {
 	const status = String(item.status || "novo");
@@ -208,6 +235,7 @@ function useMensageriaFilaController() {
 	});
 	const [pageSize, setPageSize] = useState(20);
 	const [page, setPage] = useState(1);
+	const [showQueuePreview, setShowQueuePreview] = useState(false);
 
 	const loadData = async () => {
 		setLoading(true);
@@ -261,6 +289,14 @@ function useMensageriaFilaController() {
 	const nextQueueItem = useMemo(
 		() =>
 			fila.find((item) => isQueueItemSendableNow(item, config)) || null,
+		[fila, config],
+	);
+	const queuePreviewItems = useMemo(
+		() =>
+			fila
+				.filter((item) => isQueueItemSendableNow(item, config))
+				.sort((left, right) => getQueueSortTime(left) - getQueueSortTime(right))
+				.slice(0, 25),
 		[fila, config],
 	);
 
@@ -444,6 +480,9 @@ function useMensageriaFilaController() {
 		currentPage,
 		pageItems,
 		nextQueueItem,
+		queuePreviewItems,
+		showQueuePreview,
+		setShowQueuePreview,
 		stats,
 		queueRunning,
 		workerRunning,
@@ -484,6 +523,9 @@ const MensageriaFilaPage = () => {
 		currentPage,
 		pageItems,
 		nextQueueItem,
+		queuePreviewItems,
+		showQueuePreview,
+		setShowQueuePreview,
 		stats,
 		workerRunning,
 		startButtonState,
@@ -606,10 +648,20 @@ const MensageriaFilaPage = () => {
 					},
 				].map((card) => {
 					const Icon = card.icon;
+					const clickable = card.label === "Na fila";
+					const CardElement = clickable ? "button" : "div";
 					return (
-						<div
+						<CardElement
 							key={card.label}
-							className={`rounded-lg border p-5 shadow-sm ${card.tone}`}
+							type={clickable ? "button" : undefined}
+							onClick={
+								clickable ? () => setShowQueuePreview(true) : undefined
+							}
+							className={`rounded-lg border p-5 text-left shadow-sm ${card.tone} ${
+								clickable
+									? "transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-amber-400"
+									: ""
+							}`}
 						>
 							<div className="flex items-center justify-between">
 								<p className="text-xs font-black uppercase tracking-wide">
@@ -620,10 +672,100 @@ const MensageriaFilaPage = () => {
 							<p className="mt-3 text-3xl font-black">
 								{card.value.toLocaleString("pt-BR")}
 							</p>
-						</div>
+							{clickable ? (
+								<p className="mt-2 text-xs font-bold">
+									Clique para ver os próximos envios
+								</p>
+							) : null}
+						</CardElement>
 					);
 				})}
 			</section>
+
+			{showQueuePreview ? (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+					<div className="max-h-[86vh] w-full max-w-5xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+						<div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+							<div>
+								<p className="text-xs font-black uppercase tracking-wide text-amber-600">
+									Fila de mensageria
+								</p>
+								<h2 className="text-xl font-black text-slate-900">
+									Próximos clientes na fila
+								</h2>
+								<p className="text-sm font-semibold text-slate-500">
+									Ordem prevista considerando status, tentativas e prioridade.
+								</p>
+							</div>
+							<button
+								type="button"
+								onClick={() => setShowQueuePreview(false)}
+								className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+								aria-label="Fechar"
+							>
+								<X size={18} />
+							</button>
+						</div>
+						<div className="max-h-[65vh] overflow-auto p-5">
+							{queuePreviewItems.length ? (
+								<div className="overflow-hidden rounded-lg border border-slate-200">
+									<table className="min-w-full divide-y divide-slate-200 text-sm">
+										<thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-500">
+											<tr>
+												<th className="px-4 py-3 text-left">#</th>
+												<th className="px-4 py-3 text-left">Cliente</th>
+												<th className="px-4 py-3 text-left">O.S.</th>
+												<th className="px-4 py-3 text-left">Abertura</th>
+												<th className="px-4 py-3 text-left">Cidade</th>
+												<th className="px-4 py-3 text-left">Tipo</th>
+												<th className="px-4 py-3 text-left">Previsão</th>
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-slate-100 bg-white">
+											{queuePreviewItems.map((item, index) => (
+												<tr key={item.id || `${item.os}-${index}`}>
+													<td className="px-4 py-3 font-black text-slate-500">
+														{index + 1}
+													</td>
+													<td className="px-4 py-3">
+														<p className="font-black text-slate-900">
+															{item.cliente || "Cliente não informado"}
+														</p>
+														<p className="text-xs font-semibold text-slate-500">
+															{item.telefone || "-"}
+														</p>
+													</td>
+													<td className="px-4 py-3 font-bold text-blue-700">
+														{item.os || "-"}
+													</td>
+													<td className="px-4 py-3 font-semibold text-slate-700">
+														{formatDateTime(getOrderOpenDate(item))}
+													</td>
+													<td className="px-4 py-3 font-semibold text-slate-700">
+														{item.cidade || "-"}
+													</td>
+													<td className="px-4 py-3 font-semibold text-slate-700">
+														{item.tipo || item.tipo_ordem_servico || "-"}
+													</td>
+													<td className="px-4 py-3 font-semibold text-slate-700">
+														{getSendForecast(item, config)}
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							) : (
+								<div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center">
+									<p className="text-sm font-bold text-slate-600">
+										Nenhum cliente apto para envio no momento.
+									</p>
+								</div>
+							)}
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
 				<div className="grid gap-4 md:grid-cols-4">

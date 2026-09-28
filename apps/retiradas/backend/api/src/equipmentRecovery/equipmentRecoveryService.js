@@ -11,6 +11,7 @@ const {
 const TIME_ZONE = "America/Sao_Paulo";
 const META_PROFILES = ["META_D0", "META_D_MINUS_ONE", "META_AUDIT_DAILY"];
 const MATCH_WINDOW_DAYS = Number(process.env.EQUIPMENT_MATCH_WINDOW_DAYS || 21);
+const ensureSnapshotJobs = new Map();
 
 function normalizeLimit(value, fallback = 20, max = 500) {
 	const parsed = Number.parseInt(value, 10);
@@ -339,6 +340,43 @@ async function getSourceRecords(query = {}) {
 		params,
 	);
 	return { ...base, records: result.rows };
+}
+
+async function ensureSnapshotsForRange(query = {}) {
+	const { startDate, endDate } = defaultDateRange(query);
+	const key = `${startDate}:${endDate}`;
+	if (ensureSnapshotJobs.has(key)) return ensureSnapshotJobs.get(key);
+	const promise = (async () => {
+		const source = await getSourceRecords({ start_date: startDate, end_date: endDate });
+		if (!source.records.length) return { skipped: true, total: 0 };
+		const sourceIds = [...new Set(source.records.map((record) => String(record.hubsoft_id)).filter(Boolean))];
+		const existing = await db.query(
+			`select count(*)::int as total
+			   from equipment_recovery_snapshots
+			  where closed_at >= ($1::date::timestamp at time zone '${TIME_ZONE}')
+			    and closed_at < (($2::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')
+			    and os_id = any($3::text[])`,
+			[startDate, endDate, sourceIds],
+		);
+		if (Number(existing.rows[0]?.total || 0) >= sourceIds.length) {
+			return { skipped: true, total: sourceIds.length };
+		}
+		const valuesByCategory = await getEquipmentValues();
+		if (!source.records.length) return { skipped: true, total: 0 };
+		const saved = [];
+		for (const record of source.records) {
+			saved.push(await upsertSnapshot(snapshotFromRecord(record, valuesByCategory)));
+		}
+		const matchSummary = await applyMovementMatches(saved, {
+			start_date: startDate,
+			end_date: endDate,
+		});
+		return { total: saved.length, ...matchSummary };
+	})().finally(() => {
+		ensureSnapshotJobs.delete(key);
+	});
+	ensureSnapshotJobs.set(key, promise);
+	return promise;
 }
 
 async function getImpact(query = {}) {
@@ -827,6 +865,7 @@ function mapEquipmentRows(rows = []) {
 }
 
 async function getSummary(query = {}) {
+	await ensureSnapshotsForRange(query);
 	const params = [];
 	const base = snapshotFilters(query, params);
 	const result = await db.query(
@@ -945,6 +984,7 @@ async function getSummary(query = {}) {
 }
 
 async function listTechnicians(query = {}) {
+	await ensureSnapshotsForRange(query);
 	const params = [];
 	const base = snapshotFilters(query, params);
 	const sort = cleanText(query.sort || "pending");
@@ -1003,6 +1043,7 @@ async function listTechnicians(query = {}) {
 }
 
 async function listPending(query = {}) {
+	await ensureSnapshotsForRange(query);
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 20);
 	const offset = (page - 1) * limit;
@@ -1032,6 +1073,7 @@ async function listPending(query = {}) {
 }
 
 async function listRecords(query = {}) {
+	await ensureSnapshotsForRange(query);
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 20);
 	const offset = (page - 1) * limit;
@@ -1060,6 +1102,7 @@ async function listRecords(query = {}) {
 }
 
 async function getOptions(query = {}) {
+	await ensureSnapshotsForRange(query);
 	const params = [];
 	const base = snapshotFilters(
 		{ start_date: query.start_date, end_date: query.end_date },
