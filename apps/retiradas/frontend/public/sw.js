@@ -1,4 +1,4 @@
-const CACHE_NAME = "retiradas-pwa-v18-acompanhamento-assets";
+const CACHE_NAME = "retiradas-pwa-v20-painel-agentes-dashboard";
 const APP_SHELL = [
 	"/index.html",
 	"/painel",

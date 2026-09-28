@@ -13,6 +13,13 @@ function resolveRankingValueColor(over, done) {
 	return done ? "var(--green)" : "var(--text)";
 }
 
+function formatSigned(value) {
+	const number = Math.round(Number(value) || 0);
+	if (number > 0) return `+${number}`;
+	if (number < 0) return `-${Math.abs(number)}`;
+	return "0";
+}
+
 export default function RankingList({
 	items = [],
 	metaRef = 110,
@@ -39,6 +46,7 @@ export default function RankingList({
 				const over = Number.parseFloat(pct) > 100;
 				const done = Number.parseFloat(pct) >= 100;
 				const fillCls = resolveRankingFillClass(over, done);
+				const gap = Number(item.gap ?? item.realizado - item.meta80) || 0;
 
 				return (
 					<div className="rank-item" key={item.name ?? item.nome ?? i}>
@@ -55,7 +63,7 @@ export default function RankingList({
 							</div>
 							<div className="rank-meta">
 								{val} {label} &middot; meta {Math.round(item.meta80 ?? metaRef)}{" "}
-								&middot; {pct}%
+								&middot; {pct}% &middot; gap {formatSigned(gap)}
 							</div>
 						</div>
 						<div
@@ -64,7 +72,7 @@ export default function RankingList({
 								color: resolveRankingValueColor(over, done),
 							}}
 						>
-							{val}
+							{formatSigned(gap)}
 						</div>
 					</div>
 				);

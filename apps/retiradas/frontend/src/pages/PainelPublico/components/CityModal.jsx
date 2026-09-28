@@ -1,5 +1,12 @@
-﻿import { useEffect } from "react";
+import { useEffect } from "react";
 import { gerarPDFCidade, gerarRelatorio3Meses } from "../utils/pdfAgentes";
+
+function formatSigned(value) {
+	const number = Math.round(Number(value) || 0);
+	if (number > 0) return `+${number}`;
+	if (number < 0) return `-${Math.abs(number)}`;
+	return "0";
+}
 
 export default function CityModal({ cidade, month, allData, onClose }) {
 	useEffect(() => {
@@ -12,28 +19,43 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 
 	if (!cidade) return null;
 
-	const pct = cidade.pct ?? 0;
+	const pct = Number(cidade.pct ?? 0);
+	const statusInfo = cidade.statusInfo || {};
 	const over = pct > 100;
-	const done = pct >= 80;
+	const done = pct >= 100;
+	const gap = Number(cidade.gap ?? cidade.realizado - cidade.meta80) || 0;
+	const daily = cidade.daily || [];
+	const totalDaily = daily.reduce((s, v) => s + (Number(v) || 0), 0);
+	const daysWithProduction = daily
+		.map((value, index) => ({ day: index + 1, value: Number(value) || 0 }))
+		.filter((item) => item.value > 0);
+	const bestDay = [...daysWithProduction].sort((a, b) => b.value - a.value)[0];
+	const lastDay = daysWithProduction[daysWithProduction.length - 1];
+	const lastSeven = daily
+		.slice(-7)
+		.reduce((sum, value) => sum + (Number(value) || 0), 0);
+	const average = daily.length ? totalDaily / daily.length : 0;
 
 	function statusCls() {
+		if (statusInfo.tone) return statusInfo.tone;
 		if (over) return "over";
 		if (done) return "atingido";
-		if (pct >= 50) return "andamento";
+		if (pct >= 75) return "andamento";
 		return "abaixo";
 	}
 
 	function statusLabel() {
+		if (statusInfo.label) return `${statusInfo.icon || ""} ${statusInfo.label}`;
 		if (over) return "⚡ Acima da Meta";
 		if (done) return "✅ Meta Atingida";
-		if (pct >= 50) return "⏳ Em Andamento";
+		if (pct >= 75) return "⏳ Em Andamento";
 		return "🚨 Abaixo da Meta";
 	}
 
 	function barColor() {
 		if (over) return "linear-gradient(90deg,#7c3aed,#a855f7)";
 		if (done) return "linear-gradient(90deg,var(--green),#36B37E)";
-		if (pct >= 50) return "linear-gradient(90deg,var(--orange),var(--yellow))";
+		if (pct >= 75) return "linear-gradient(90deg,var(--orange),var(--yellow))";
 		return "linear-gradient(90deg,var(--red),#FF6B6B)";
 	}
 
@@ -48,29 +70,30 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 			tabIndex={-1}
 		>
 			<div className="city-modal">
-				{/* Header */}
 				<div className="city-modal-header">
 					<div>
 						<h2>{cidade.nome}</h2>
-						<p>{month} 2026</p>
+						<p>{month} de 2026</p>
 						<div className={`status-big ${statusCls()}`}>{statusLabel()}</div>
 					</div>
-					<button className="city-modal-close" onClick={onClose}>
+					<button
 						type="button"
+						className="city-modal-close"
+						onClick={onClose}
+						aria-label="Fechar detalhes da cidade"
+					>
 						✕
 					</button>
 				</div>
 
-				{/* Body */}
 				<div className="city-modal-body">
-					{/* KPIs */}
 					<div className="city-modal-kpis">
 						<div className="city-kpi">
 							<div className="city-kpi-label">Cancelamentos</div>
 							<div className="city-kpi-value blue">{cidade.cancelamentos}</div>
 						</div>
 						<div className="city-kpi">
-							<div className="city-kpi-label">Meta 80%</div>
+							<div className="city-kpi-label">Meta</div>
 							<div className="city-kpi-value orange">
 								{Math.round(cidade.meta80)}
 							</div>
@@ -80,18 +103,13 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 							<div className="city-kpi-value green">{cidade.realizado}</div>
 						</div>
 						<div className="city-kpi">
-							<div className="city-kpi-label">Falta / Sobra</div>
-							<div
-								className={`city-kpi-value ${cidade.falta > 0 ? "red" : "green"}`}
-							>
-								{cidade.falta > 0
-									? `-${cidade.falta}`
-									: `+${Math.abs(cidade.falta)}`}
+							<div className="city-kpi-label">Gap</div>
+							<div className={`city-kpi-value ${gap < 0 ? "red" : "green"}`}>
+								{formatSigned(gap)}
 							</div>
 						</div>
 					</div>
 
-					{/* Progresso */}
 					<div className="city-modal-section">
 						<h3>📊 Progresso da Meta</h3>
 						<div
@@ -114,49 +132,70 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 								}}
 							/>
 						</div>
-						<div
-							className="city-modal-progress-meta"
-							style={{
-								display: "flex",
-								justifyContent: "space-between",
-								fontSize: 13,
-								color: "var(--muted)",
-							}}
-						>
-							<span>0</span>
-							<span
-								style={{ fontWeight: 700, color: "var(--text)", fontSize: 15 }}
-							>
-								{pct}%
+						<div className="city-modal-progress-meta">
+							<span>
+								{cidade.realizado} de {Math.round(cidade.meta80)} retiradas
 							</span>
-							<span>Meta: {Math.round(cidade.meta80)}</span>
+							<strong>{pct.toFixed(1)}%</strong>
+							<span>Meta final: {Math.round(cidade.meta80)}</span>
 						</div>
 					</div>
 
-					{/* Grid de dias */}
+					<div className="city-modal-section">
+						<h3>⚙️ Situação atual</h3>
+						<div className="city-situation-grid">
+							<div>
+								<span>Média diária</span>
+								<strong>{average.toFixed(1)}</strong>
+							</div>
+							<div>
+								<span>Melhor dia</span>
+								<strong>
+									{bestDay ? `Dia ${bestDay.day} · ${bestDay.value}` : "—"}
+								</strong>
+							</div>
+							<div>
+								<span>Última retirada</span>
+								<strong>{lastDay ? `Dia ${lastDay.day}` : "Nenhuma"}</strong>
+							</div>
+							<div>
+								<span>Últimos 7 dias</span>
+								<strong>{lastSeven}</strong>
+							</div>
+						</div>
+						<p className="city-situation-text">
+							{cidade.realizado <= 0
+								? `Nenhuma retirada realizada. Faltam ${Math.max(
+										0,
+										Math.round(cidade.meta80 || 0),
+									)} para atingir a meta.`
+								: gap < 0
+									? `Faltam ${Math.abs(gap)} retiradas para atingir a meta.`
+									: `Cidade acima da meta em ${gap} retirada(s).`}
+						</p>
+					</div>
+
 					<div className="city-modal-section">
 						<h3>📅 Retiradas por Dia</h3>
 						<div className="daily-grid">
-							{(cidade.daily || []).map((v, i) => (
+							{daily.map((v, i) => (
 								<div key={i} className={`day-cell ${v > 0 ? "has-data" : ""}`}>
 									<div className="day-num">Dia {i + 1}</div>
 									<div className="day-val">{v > 0 ? v : "-"}</div>
 								</div>
 							))}
 						</div>
-						<div style={{ marginTop: 12, fontSize: 12, color: "var(--muted)" }}>
-							Total acumulado:{" "}
-							<strong style={{ color: "var(--blue)" }}>
-								{(cidade.daily || []).reduce((s, v) => s + v, 0)}
-							</strong>{" "}
-							retiradas
+						<div className="city-modal-total-daily">
+							Total acumulado: <strong>{totalDaily}</strong> retiradas
 						</div>
 					</div>
 
-					{/* Acoes */}
 					<div className="city-modal-actions">
-						<button className="btn-fechar-modal" onClick={onClose}>
+						<button
 							type="button"
+							className="btn-fechar-modal"
+							onClick={onClose}
+						>
 							Fechar
 						</button>
 						<button

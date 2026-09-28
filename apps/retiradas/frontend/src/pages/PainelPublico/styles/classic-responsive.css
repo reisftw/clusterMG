@@ -508,6 +508,9 @@
 	.city-modal-kpis {
 		grid-template-columns: 1fr;
 	}
+	.city-situation-grid {
+		grid-template-columns: 1fr;
+	}
 	.city-modal-progress-meta {
 		flex-direction: column;
 		align-items: flex-start;
