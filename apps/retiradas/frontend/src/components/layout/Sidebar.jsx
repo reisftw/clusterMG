@@ -228,6 +228,17 @@ const NAV_ITEMS = [
 		permission: ["movimentacoes.view", "movimentacoes.manage"],
 	},
 	{
+		label: "Cancelamentos",
+		path: ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
+		icon: ClipboardCheck,
+		permission: [
+			"service_orders.cancellations.view",
+			"service_orders.cancellations.manage",
+			"manage_metas",
+			"view_metas",
+		],
+	},
+	{
 		label: "Multas",
 		path: ROUTES.ORDENS_SERVICO_MULTAS,
 		icon: BadgeDollarSign,
@@ -649,6 +660,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.MAPA_HISTORICO,
 	ROUTES.EMPRESAS_TECNICOS,
 	ROUTES.AGENDAMENTOS,
+	ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 	ROUTES.ORDENS_SERVICO_MULTAS,
 	ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
 	ROUTES.ENTREGAS_TECNICOS,
@@ -814,6 +826,7 @@ const MENU_GROUPS = [
 		label: "Ordem de Serviço",
 		icon: ClipboardCheck,
 		paths: [
+			ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 			ROUTES.ORDENS_SERVICO_MULTAS,
 			ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
 		],

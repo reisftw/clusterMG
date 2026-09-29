@@ -43,6 +43,12 @@ const TecnicosAuditoriaRelatorios = lazy(
 const EquipmentRecovery = lazy(
 	() => import("../modules/equipmentRecovery/components/EquipmentRecoveryPage"),
 );
+const ServiceOrderCancellations = lazy(
+	() =>
+		import(
+			"../modules/serviceOrders/cancellations/components/ServiceOrderCancellationsPage"
+		),
+);
 const ServiceOrderFines = lazy(
 	() => import("../modules/serviceOrders/fines/components/ServiceOrderFinesPage"),
 );
@@ -451,6 +457,20 @@ const AppRouter = () => (
 									to={ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS}
 									replace
 								/>
+							}
+						/>
+						<Route
+							path={ROUTES.ORDENS_SERVICO_CANCELAMENTOS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"service_orders.cancellations.view",
+										"manage_metas",
+										"view_metas",
+									]}
+								>
+									<ServiceOrderCancellations />
+								</ProtectedRoute>
 							}
 						/>
 						<Route
