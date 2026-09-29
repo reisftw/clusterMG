@@ -299,10 +299,40 @@
 	.painel-classico .retiradas-filterbar {
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 	}
+
+	.painel-classico .retiradas-exec-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.painel-classico .retiradas-operational-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
 }
 
 @media (max-width: 760px) {
 	.painel-classico .retiradas-filterbar {
 		grid-template-columns: 1fr;
+	}
+
+	.painel-classico .retiradas-command-header,
+	.painel-classico .retiradas-section-heading {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.painel-classico .retiradas-exec-grid,
+	.painel-classico .retiradas-operational-grid,
+	.painel-classico .retiradas-health-main,
+	.painel-classico .retiradas-health-grid,
+	.painel-classico .retiradas-alert-summary {
+		grid-template-columns: 1fr;
+	}
+
+	.painel-classico .retiradas-retorninho-exec {
+		grid-template-columns: 1fr;
+	}
+
+	.painel-classico .retiradas-retorninho-exec img {
+		justify-self: start;
 	}
 }

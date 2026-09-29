@@ -6,7 +6,6 @@ import { logger } from "../../../utils/logger";
 import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
 import AnomaliaList from "../components/AnomaliaList";
 import EmptyState from "../components/EmptyState";
-import KpiCard from "../components/KpiCard";
 import RankingList from "../components/RankingList";
 import SaldoTable from "../components/SaldoTable";
 import { calcAnomalias } from "../utils/calcAnomalias";
@@ -40,6 +39,191 @@ function formatRitmoDiferencaLabel(ritmo) {
 	const diff = Number(ritmo.ratio || 0) - 100;
 	const sign = diff > 0 ? "+" : "";
 	return `${sign}${diff.toFixed(1)}%`;
+}
+
+function safeNumber(value, fallback = 0) {
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampPercent(value) {
+	return Math.max(0, Math.min(100, safeNumber(value)));
+}
+
+function formatInteger(value) {
+	return Math.round(safeNumber(value)).toLocaleString("pt-BR");
+}
+
+function formatPercent(value, digits = 1) {
+	return `${safeNumber(value).toFixed(digits).replace(".", ",")}%`;
+}
+
+function formatSignedInteger(value) {
+	const numeric = Math.round(safeNumber(value));
+	return `${numeric > 0 ? "+" : ""}${numeric.toLocaleString("pt-BR")}`;
+}
+
+function getLatestSaldoRow(saldoDiario = []) {
+	return [...saldoDiario]
+		.reverse()
+		.find((row) => safeNumber(row?.totalDia) > 0 || safeNumber(row?.metaDia) > 0);
+}
+
+function buildExecutiveSummary({ d, metaBrasilTecpar, projecao, ritmo, saldoDiario }) {
+	const realizado = safeNumber(d?.totalOS);
+	const meta = safeNumber(d?.meta);
+	const faltam = Math.max(0, meta - realizado);
+	const projection = safeNumber(projecao?.projecaoFinal);
+	const projectionPercent = meta > 0 ? (projection / meta) * 100 : 0;
+	const cancelamentos = safeNumber(d?.cancelamentos);
+	const pctCancelamentos =
+		cancelamentos > 0 ? (realizado / cancelamentos) * 100 : safeNumber(d?.percentCancelamentos);
+	const diasUteisRestantes = safeNumber(projecao?.diasUteisRestantes);
+	const plannedDaily = safeNumber(ritmo?.necessario);
+	const currentPace = safeNumber(ritmo?.media);
+	const requiredDaily =
+		diasUteisRestantes > 0 ? Math.ceil(faltam / diasUteisRestantes) : 0;
+	const latestSaldo = getLatestSaldoRow(saldoDiario);
+	const saldoMes = safeNumber(latestSaldo?.saldoMes, realizado - safeNumber(latestSaldo?.metaAcumulada));
+	const projectedGap = projection - meta;
+	const operationalStatus =
+		projection >= metaBrasilTecpar.meta
+			? "ok"
+			: projection >= meta
+				? "warn"
+				: "danger";
+
+	return {
+		realizado,
+		meta,
+		faltam,
+		projection,
+		projectionPercent,
+		cancelamentos,
+		pctMeta: meta > 0 ? (realizado / meta) * 100 : safeNumber(d?.percentAchieved),
+		pctCancelamentos,
+		metaBrasilTecpar,
+		diasUteisRestantes,
+		plannedDaily,
+		currentPace,
+		requiredDaily,
+		saldoMes,
+		projectedGap,
+		operationalStatus,
+		paceGap: currentPace - plannedDaily,
+	};
+}
+
+function buildRetorninhoMessage(summary) {
+	if (!summary) return "Carregando a leitura executiva do mês.";
+	if (summary.operationalStatus === "ok") {
+		return `Boa: a projeção atual fecha em ${formatInteger(summary.projection)} O.S. e supera a meta Brasil Tecpar de ${formatInteger(summary.metaBrasilTecpar.meta)}.`;
+	}
+	if (summary.requiredDaily > summary.plannedDaily && summary.diasUteisRestantes > 0) {
+		return `Para fechar o mês, precisamos de ${formatInteger(summary.requiredDaily)} O.S./dia útil nos próximos ${formatInteger(summary.diasUteisRestantes)} dias úteis.`;
+	}
+	return `O mês está em ${formatPercent(summary.pctMeta)} da meta, com saldo acumulado de ${formatSignedInteger(summary.saldoMes)} O.S.`;
+}
+
+function buildPriorityActions({ summary, anomalias, regionais }) {
+	const actions = [];
+	if (summary?.requiredDaily > summary?.plannedDaily) {
+		actions.push({
+			title: "Reforçar produção dos dias úteis restantes",
+			desc: `Necessário atual: ${formatInteger(summary.requiredDaily)} O.S./dia útil contra meta planejada de ${formatInteger(summary.plannedDaily)}.`,
+			tone: "danger",
+		});
+	}
+
+	const criticalAnomaly = (anomalias || []).find(
+		(item) => String(item?.severity || item?.tipo || "").toLowerCase().includes("crit"),
+	);
+	if (criticalAnomaly) {
+		actions.push({
+			title: "Auditar anomalia crítica",
+			desc: criticalAnomaly.message || criticalAnomaly.descricao || criticalAnomaly.titulo || "Existe desvio crítico no período.",
+			tone: "danger",
+		});
+	}
+
+	const lowestRegional = [...(regionais || [])]
+		.filter((item) => safeNumber(item?.meta80 ?? item?.meta) > 0)
+		.sort((a, b) => safeNumber(a?.percent ?? a?.pct) - safeNumber(b?.percent ?? b?.pct))[0];
+	if (lowestRegional) {
+		actions.push({
+			title: `Acelerar ${lowestRegional.name || lowestRegional.nome}`,
+			desc: `Regional em ${formatPercent(safeNumber(lowestRegional.percent ?? lowestRegional.pct))}, abaixo do ritmo esperado.`,
+			tone: "warn",
+		});
+	}
+
+	if (summary?.saldoMes < 0) {
+		actions.push({
+			title: "Fechar o gap acumulado",
+			desc: `Saldo do mês em ${formatSignedInteger(summary.saldoMes)} O.S.; acompanhar recuperação diária no saldo por dia.`,
+			tone: "warn",
+		});
+	}
+
+	if (!actions.length) {
+		actions.push({
+			title: "Manter cadência operacional",
+			desc: "Indicadores principais estão dentro da leitura esperada para o período.",
+			tone: "ok",
+		});
+	}
+
+	return actions.slice(0, 5);
+}
+
+function buildChannelSummary(saldoDiario = []) {
+	const totals = saldoDiario.reduce(
+		(acc, row) => ({
+			equipe: acc.equipe + safeNumber(row?.equipe),
+			agente: acc.agente + safeNumber(row?.agente),
+			loja: acc.loja + safeNumber(row?.loja),
+			regionais: acc.regionais + safeNumber(row?.regionais),
+		}),
+		{ equipe: 0, agente: 0, loja: 0, regionais: 0 },
+	);
+	const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
+	return [
+		{ key: "equipe", label: "Equipe técnica", value: totals.equipe, color: "#0b5cff" },
+		{ key: "agente", label: "Agente autorizado", value: totals.agente, color: "#009f72" },
+		{ key: "loja", label: "Entrega loja", value: totals.loja, color: "#ff6b00" },
+		{ key: "regionais", label: "Regionais", value: totals.regionais, color: "#7c3aed" },
+	].map((item) => ({
+		...item,
+		percent: total > 0 ? (item.value / total) * 100 : 0,
+	}));
+}
+
+function buildRankingItems(d, agentesData, month, activeTab) {
+	if (activeTab === "regionais") return d?.regionais || [];
+	if (activeTab === "tecnicos") return d?.technicians || [];
+	if (activeTab === "agentes") return agentesData?.[month]?.cidades || [];
+	if (activeTab === "loja") {
+		const cidades = new Map();
+		for (const row of d?.rawDays || []) {
+			for (const item of row?.lojaDetalhes || row?.entregaLojaDetalhes || []) {
+				const name = item.cidade || item.name || item.nome || "Sem cidade";
+				cidades.set(name, (cidades.get(name) || 0) + safeNumber(item.total || item.quantidade || 1));
+			}
+		}
+		if (!cidades.size) {
+			return (d?.rawDays || d?.saldoDiario || [])
+				.map((row) => ({
+					name: `Dia ${safeNumber(row?.dia)}`,
+					total: safeNumber(row?.loja),
+					percent: 100,
+					meta80: 0,
+				}))
+				.filter((item) => item.total > 0)
+				.sort((a, b) => b.total - a.total);
+		}
+		return [...cidades.entries()].map(([name, total]) => ({ name, total }));
+	}
+	return [];
 }
 
 function normalizeMonthName(value) {
@@ -209,20 +393,6 @@ function hasSelectedRegional(data, selectedRegional) {
 	);
 }
 
-function getPerformanceTitle(ritmo) {
-	if (!ritmo) return "Calculando ritmo do mes";
-	if (ritmo.status === "ok") return "Ritmo adequado para a meta";
-	if (ritmo.status === "danger") return "Ritmo critico para o fechamento";
-	return "Ritmo abaixo do esperado";
-}
-
-function getPerformanceCopy(ritmo) {
-	if (!ritmo) {
-		return "Avaliando realizado, meta e dias uteis restantes para calcular o ritmo ideal.";
-	}
-	return `A media diaria esta em ${ritmo.media} O.S./dia util. O necessario e ${ritmo.necessario} O.S./dia util, com ${ritmo.ratio}% do ritmo esperado.`;
-}
-
 function getRegionalStatus(item) {
 	const pct = Number(item?.percent ?? item?.pct ?? 0);
 	if (pct >= 100) return { label: "OK", className: "ok" };
@@ -241,6 +411,7 @@ function RegionalGoalsTable({ items = [] }) {
 						<th>Regional</th>
 						<th>Realizado</th>
 						<th>Meta</th>
+						<th>Gap</th>
 						<th>% Ating.</th>
 						<th>Ritmo/dia</th>
 						<th>Status</th>
@@ -250,6 +421,7 @@ function RegionalGoalsTable({ items = [] }) {
 					{rows.map((item) => {
 						const realizado = Number(item.total ?? item.realizado ?? 0);
 						const meta = Math.round(Number(item.meta80 ?? 110));
+						const gap = realizado - meta;
 						const pct = Number(item.percent ?? item.pct ?? 0);
 						const daily = Array.isArray(item.daily)
 							? item.daily.filter((value) => Number(value || 0) > 0)
@@ -262,6 +434,9 @@ function RegionalGoalsTable({ items = [] }) {
 								<td>{item.name ?? item.nome}</td>
 								<td>{realizado.toLocaleString("pt-BR")}</td>
 								<td>{meta.toLocaleString("pt-BR")}</td>
+								<td className={gap >= 0 ? "positive" : "negative"}>
+									{formatSignedInteger(gap)}
+								</td>
 								<td className={pct >= 80 ? "positive" : "negative"}>
 									{pct.toFixed(1).replace(".", ",")}%
 								</td>
@@ -755,6 +930,241 @@ function ForcaTarefaCard({ resumo }) {
 	);
 }
 
+function ExecutiveKpi({ label, value, sub, tone = "blue", meta }) {
+	return (
+		<div className={`retiradas-exec-kpi ${tone}`}>
+			<span>{label}</span>
+			<strong>{value}</strong>
+			<p>{sub}</p>
+			{meta ? <small>{meta}</small> : null}
+		</div>
+	);
+}
+
+function OperationalMetric({ label, value, sub, tone = "neutral" }) {
+	return (
+		<div className={`retiradas-operational-metric ${tone}`}>
+			<span>{label}</span>
+			<strong>{value}</strong>
+			<p>{sub}</p>
+		</div>
+	);
+}
+
+function SectionHeading({ eyebrow, title, action }) {
+	return (
+		<div className="retiradas-section-heading">
+			<div>
+				<span>{eyebrow}</span>
+				<h2>{title}</h2>
+			</div>
+			{action}
+		</div>
+	);
+}
+
+function OperationalHealth({ summary }) {
+	const progress = clampPercent(summary?.pctMeta);
+	const brasilProgress =
+		summary?.metaBrasilTecpar?.meta > 0
+			? (summary.realizado / summary.metaBrasilTecpar.meta) * 100
+			: 0;
+
+	return (
+		<section className={`retiradas-health-card ${summary?.operationalStatus || "warn"}`}>
+			<SectionHeading eyebrow="Saúde operacional" title="Fechamento do mês" />
+			<div className="retiradas-health-main">
+				<div>
+					<span>Meta oficial</span>
+					<strong>{formatPercent(progress)}</strong>
+					<p>{formatInteger(summary?.realizado)} de {formatInteger(summary?.meta)} O.S.</p>
+				</div>
+				<div>
+					<span>Brasil Tecpar 65%</span>
+					<strong>{formatPercent(brasilProgress)}</strong>
+					<p>Meta fixa: {formatInteger(summary?.metaBrasilTecpar?.meta)}</p>
+				</div>
+			</div>
+			<div className="retiradas-health-track" aria-hidden="true">
+				<span style={{ width: `${clampPercent(progress)}%` }} />
+			</div>
+			<div className="retiradas-health-grid">
+				<OperationalMetric
+					label="Saldo acumulado"
+					value={formatSignedInteger(summary?.saldoMes)}
+					sub="Realizado contra meta acumulada"
+					tone={summary?.saldoMes >= 0 ? "ok" : "danger"}
+				/>
+				<OperationalMetric
+					label="Gap projetado"
+					value={formatSignedInteger(summary?.projectedGap)}
+					sub="Projeção - meta do mês"
+					tone={summary?.projectedGap >= 0 ? "ok" : "danger"}
+				/>
+			</div>
+		</section>
+	);
+}
+
+function RetorninhoInsight({ summary }) {
+	return (
+		<section className="retiradas-retorninho-exec">
+			<div>
+				<span>Leitura do Retorninho</span>
+				<h2>{buildRetorninhoMessage(summary)}</h2>
+				<p>
+					Painel executivo recalculado com meta, cancelamentos, ritmo atual,
+					projeção e saldo diário do período selecionado.
+				</p>
+			</div>
+			<img src="/retorninho-prancheta.png" alt="" loading="lazy" />
+		</section>
+	);
+}
+
+function PriorityActions({ actions }) {
+	return (
+		<section className="card retiradas-priority-card">
+			<SectionHeading eyebrow="Ações prioritárias" title="Próximos movimentos" />
+			<div className="retiradas-priority-list">
+				{actions.map((action, index) => (
+					<div key={`${action.title}-${index}`} className={`retiradas-priority-item ${action.tone}`}>
+						<strong>{index + 1}</strong>
+						<div>
+							<h3>{action.title}</h3>
+							<p>{action.desc}</p>
+						</div>
+					</div>
+				))}
+			</div>
+		</section>
+	);
+}
+
+function ChannelProduction({ channels }) {
+	return (
+		<section className="card retiradas-channel-card">
+			<SectionHeading eyebrow="Produção por canal" title="Origem das retiradas" />
+			<div className="retiradas-channel-stack" aria-hidden="true">
+				{channels.map((channel) => (
+					<span
+						key={channel.key}
+						style={{
+							width: `${Math.max(0, channel.percent)}%`,
+							background: channel.color,
+						}}
+					/>
+				))}
+			</div>
+			<div className="retiradas-channel-grid">
+				{channels.map((channel) => (
+					<div key={channel.key} className="retiradas-channel-row">
+						<span style={{ background: channel.color }} />
+						<div>
+							<strong>{channel.label}</strong>
+							<p>{formatPercent(channel.percent)} do total</p>
+						</div>
+						<b>{formatInteger(channel.value)}</b>
+					</div>
+				))}
+			</div>
+		</section>
+	);
+}
+
+function RankingTabs({ d, agentesData, month }) {
+	const [activeTab, setActiveTab] = useState("regionais");
+	const tabs = [
+		{ key: "regionais", label: "Regionais", metaRef: 110 },
+		{ key: "agentes", label: "Agentes autorizados", metaRef: 25 },
+		{ key: "loja", label: "Entrega loja", metaRef: 10 },
+	];
+	const currentTab = tabs.find((tab) => tab.key === activeTab) || tabs[0];
+	const items = buildRankingItems(d, agentesData, month, activeTab);
+
+	return (
+		<section className="card retiradas-ranking-card">
+			<SectionHeading eyebrow="Ranking operacional" title="Quem está puxando o resultado" />
+			<div className="retiradas-ranking-tabs">
+				{tabs.map((tab) => (
+					<button
+						key={tab.key}
+						type="button"
+						className={tab.key === activeTab ? "active" : ""}
+						onClick={() => setActiveTab(tab.key)}
+					>
+						{tab.label}
+					</button>
+				))}
+			</div>
+			<RankingList items={items || []} metaRef={currentTab.metaRef} label="O.S" />
+		</section>
+	);
+}
+
+function OperationalAlerts({ anomalias, minimized, onToggle }) {
+	const total = anomalias?.length || 0;
+	const critical = (anomalias || []).filter((item) =>
+		String(item?.severity || item?.tipo || "").toLowerCase().includes("crit"),
+	).length;
+	const attention = Math.max(0, total - critical);
+
+	return (
+		<section className="card retiradas-alert-card">
+			<div className="card-title card-title-split">
+				<span>Alertas operacionais</span>
+				<button type="button" onClick={onToggle} className="comparativo-action-btn neutral">
+					{minimized ? "Expandir" : "Minimizar"}
+				</button>
+			</div>
+			<div className="retiradas-alert-summary">
+				<OperationalMetric label="Críticos" value={formatInteger(critical)} sub="Exigem ação" tone={critical ? "danger" : "ok"} />
+				<OperationalMetric label="Atenção" value={formatInteger(attention)} sub="Monitorar" tone={attention ? "warn" : "ok"} />
+				<OperationalMetric label="Total" value={formatInteger(total)} sub="No período" tone="neutral" />
+			</div>
+			{!minimized ? <AnomaliaList anomalias={anomalias || []} /> : null}
+		</section>
+	);
+}
+
+function DailyBalancePreview({ saldoDiario, expanded, onToggle }) {
+	const rows = expanded ? saldoDiario : (saldoDiario || []).slice(-7);
+
+	return (
+		<section className="card grid-full retiradas-daily-card">
+			<SectionHeading
+				eyebrow="Saldo diário"
+				title={expanded ? "Mês completo" : "Últimos 7 dias com dados"}
+				action={
+					<button type="button" className="comparativo-action-btn neutral" onClick={onToggle}>
+						{expanded ? "Ver resumo" : "Ver mês completo"}
+					</button>
+				}
+			/>
+			<div className="saldo-wrap">
+				<table className="saldo-table">
+					<thead>
+						<tr>
+							<th>Dia</th>
+							<th>Equipe Técnica</th>
+							<th>Agente Aut.</th>
+							<th>Entregue Loja</th>
+							<th>Regionais</th>
+							<th>Total Dia</th>
+							<th>Meta Diária</th>
+							<th>Saldo Dia</th>
+							<th>Saldo Mês</th>
+						</tr>
+					</thead>
+					<tbody>
+						<SaldoTable saldoDiario={rows || []} />
+					</tbody>
+				</table>
+			</div>
+		</section>
+	);
+}
+
 export default function TabRetiradas({
 	allData,
 	month,
@@ -790,6 +1200,7 @@ export default function TabRetiradas({
 	const [saldoDiario, setSaldoDiario] = useState([]);
 	const [feriadosSet, setFeriadosSet] = useState(() => new Set());
 	const [anomaliasMinimizadas, setAnomaliasMinimizadas] = useState(false);
+	const [saldoExpandido, setSaldoExpandido] = useState(false);
 	const anomalias = useMemo(() => calcAnomalias(d), [d]);
 	const lastDayWithData = useMemo(
 		() => getLastDayWithRetiradas(d),
@@ -815,17 +1226,6 @@ export default function TabRetiradas({
 		() => formatTrend(d?.meta, previousMonthData?.meta),
 		[d, previousMonthData],
 	);
-	const atingimentoMeta = Number(d?.percentAchieved || 0);
-	const atingimentoCancelamentos = Number(d?.percentCancelamentos || 0);
-	const atingimentoTrend = useMemo(
-		() =>
-			formatTrend(
-				d?.percentAchieved,
-				previousMonthData?.percentAchieved,
-				" p.p.",
-			),
-		[d, previousMonthData],
-	);
 	const projectionTrend = useMemo(
 		() => formatTrend(projecao?.projecaoFinal, previousMonthData?.totalOS),
 		[previousMonthData, projecao],
@@ -841,6 +1241,30 @@ export default function TabRetiradas({
 				totalOS: d?.totalOS,
 			}),
 		[d],
+	);
+	const executiveSummary = useMemo(
+		() =>
+			buildExecutiveSummary({
+				d,
+				metaBrasilTecpar,
+				projecao,
+				ritmo,
+				saldoDiario,
+			}),
+		[d, metaBrasilTecpar, projecao, ritmo, saldoDiario],
+	);
+	const priorityActions = useMemo(
+		() =>
+			buildPriorityActions({
+				summary: executiveSummary,
+				anomalias,
+				regionais: regionaisFiltradas,
+			}),
+		[anomalias, executiveSummary, regionaisFiltradas],
+	);
+	const channelSummary = useMemo(
+		() => buildChannelSummary(saldoDiario),
+		[saldoDiario],
 	);
 
 	useEffect(() => {
@@ -925,6 +1349,16 @@ export default function TabRetiradas({
 		const metaLine = saldoDiario.map((s) =>
 			Number(s.metaAcumulada ?? metaAcumuladaPorDia.get(Number(s.dia)) ?? 0),
 		);
+		const { metaAcumuladaPorDia: metaBrasilAcumuladaPorDia } =
+			buildMetaDiariaSchedule({
+				month,
+				meta: metaBrasilTecpar.meta,
+				feriadosSet,
+				year,
+			});
+		const brasilTecparLine = saldoDiario.map((s) =>
+			Number(metaBrasilAcumuladaPorDia.get(Number(s.dia)) ?? 0),
+		);
 
 		const projecaoLine = new Array(saldoDiario.length).fill(null);
 		if (projecao && projecao.diasUteisRestantes > 0) {
@@ -934,6 +1368,10 @@ export default function TabRetiradas({
 				accumulated.push(null);
 				metaLine.push(
 					metaAcumuladaPorDia.get(Number(ponto.dia)) ?? Number(d.meta || 0),
+				);
+				brasilTecparLine.push(
+					metaBrasilAcumuladaPorDia.get(Number(ponto.dia)) ??
+						Number(metaBrasilTecpar.meta || 0),
 				);
 			}
 			projecaoLine[saldoDiario.length - 1] = Number(d.totalOS) || 0;
@@ -964,6 +1402,15 @@ export default function TabRetiradas({
 						fill: false,
 					},
 					{
+						label: "Brasil Tecpar 65%",
+						data: brasilTecparLine,
+						borderColor: "#009f72",
+						borderDash: [2, 5],
+						borderWidth: 2,
+						pointRadius: 0,
+						fill: false,
+					},
+					{
 						label: "Projecao",
 						data: projecaoLine,
 						borderColor: "#7C3AED",
@@ -984,7 +1431,7 @@ export default function TabRetiradas({
 				},
 			},
 		});
-	}, [d, saldoDiario, projecao, month, feriadosSet]);
+	}, [d, saldoDiario, projecao, month, feriadosSet, metaBrasilTecpar.meta]);
 
 	useEffect(() => {
 		if (!chartMonthlyRef.current) return;
@@ -1079,159 +1526,127 @@ export default function TabRetiradas({
 		<div>
 			{filterBar}
 
-			<div className="kpis">
-				<KpiCard
-					label="O.S. realizadas"
-					value={Number(d.totalOS || 0).toLocaleString("pt-BR")}
-					sub="No mes selecionado"
-					color="orange"
-					trendValue={totalTrend.value}
-					trendTone={totalTrend.tone}
+			<section className="retiradas-command-header">
+				<div>
+					<span>Dashboard Retiradas</span>
+					<h1>Centro de comando operacional</h1>
+					<p>
+						{selectedSourceLabel} · {periodLabel} · atualizado em{" "}
+						{lastUpdateText || "carregando"}
+					</p>
+				</div>
+				<button
+					type="button"
+					className="retiradas-refresh-button"
+					onClick={() => window.location.reload()}
+				>
+					Atualizar
+				</button>
+			</section>
+
+			<section className="retiradas-exec-grid">
+				<ExecutiveKpi
+					label="Realizado"
+					value={formatInteger(executiveSummary.realizado)}
+					sub={`${formatPercent(executiveSummary.pctMeta)} da meta · ${formatPercent(executiveSummary.pctCancelamentos)} dos cancelamentos`}
+					tone="orange"
+					meta={totalTrend.value ? `vs. mês anterior ${totalTrend.value}` : null}
 				/>
-				<KpiCard
+				<ExecutiveKpi
 					label="Meta"
-					value={Math.round(Number(d.meta || 0)).toLocaleString("pt-BR")}
-					sub="Objetivo do mes"
-					color="blue"
-					trendValue={metaTrend.value}
-					trendTone={metaTrend.tone}
+					value={formatInteger(executiveSummary.meta)}
+					sub="Objetivo oficial do mês"
+					tone="blue"
+					meta={metaTrend.value ? `vs. mês anterior ${metaTrend.value}` : null}
 				/>
-				<KpiCard
+				<ExecutiveKpi
+					label="Faltam"
+					value={formatInteger(executiveSummary.faltam)}
+					sub={`Para bater a meta · ${formatInteger(executiveSummary.metaBrasilTecpar.falta)} para Brasil Tecpar 65%`}
+					tone={executiveSummary.faltam > 0 ? "red" : "green"}
+				/>
+				<ExecutiveKpi
+					label="Projeção"
+					value={projecao ? formatInteger(executiveSummary.projection) : "--"}
+					sub={
+						projecao
+							? `${formatPercent(executiveSummary.projectionPercent)} da meta no fechamento`
+							: "Calculando curva do mês"
+					}
+					tone="purple"
+					meta={projectionTrend.value ? `vs. mês anterior ${projectionTrend.value}` : null}
+				/>
+			</section>
+
+			<section className="retiradas-operational-grid">
+				<OperationalMetric
 					label="Brasil Tecpar 65%"
-					value={metaBrasilTecpar.meta.toLocaleString("pt-BR")}
+					value={formatInteger(executiveSummary.metaBrasilTecpar.meta)}
 					sub={
-						metaBrasilTecpar.atingiu
-							? `${metaBrasilTecpar.percentAchieved}% da meta fixa · atingida`
-							: `Faltam ${metaBrasilTecpar.falta.toLocaleString("pt-BR")} O.S`
+						executiveSummary.metaBrasilTecpar.atingiu
+							? "Meta fixa já atingida"
+							: `${formatInteger(executiveSummary.metaBrasilTecpar.falta)} O.S. restantes`
 					}
-					color={metaBrasilTecpar.atingiu ? "green" : "red"}
-					trendLabel="meta fixa"
-					trendValue="65%"
-					trendTone={metaBrasilTecpar.atingiu ? "positive" : "negative"}
+					tone={executiveSummary.metaBrasilTecpar.atingiu ? "ok" : "warn"}
 				/>
-				<KpiCard
-					label="Atingimento"
-					value={`${atingimentoMeta.toFixed(1)}%`}
-					sub={`${atingimentoMeta.toFixed(1)}% da meta · ${atingimentoCancelamentos.toFixed(1)}% dos cancelamentos`}
-					color="green"
-					trendValue={atingimentoTrend.value}
-					trendTone={atingimentoTrend.tone}
+				<OperationalMetric
+					label="Ritmo atual"
+					value={`${formatInteger(executiveSummary.currentPace)} O.S./dia`}
+					sub={`${formatRitmoDiferencaLabel(ritmo)} contra o planejado`}
+					tone={ritmo?.status === "ok" ? "ok" : "warn"}
 				/>
-				<KpiCard
-					label="Projecao"
-					value={
-						projecao
-							? Number(projecao.projecaoFinal || 0).toLocaleString("pt-BR")
-							: "--"
+				<OperationalMetric
+					label="Meta diária planejada"
+					value={`${formatInteger(executiveSummary.plannedDaily)} O.S./dia`}
+					sub="Baseada nos dias úteis do mês"
+					tone="neutral"
+				/>
+				<OperationalMetric
+					label="Dias úteis restantes"
+					value={formatInteger(executiveSummary.diasUteisRestantes)}
+					sub="Janela operacional disponível"
+					tone="neutral"
+				/>
+				<OperationalMetric
+					label="Necessário/dia"
+					value={`${formatInteger(executiveSummary.requiredDaily)} O.S./dia`}
+					sub="Para fechar a meta"
+					tone={
+						executiveSummary.requiredDaily > executiveSummary.plannedDaily
+							? "danger"
+							: "ok"
 					}
-					sub={
-						projecao
-							? `${Number(projecao.pctProjecao || 0).toFixed(1)}% da meta · ${Number(projecao.pctProjecaoCancelamentos || 0).toFixed(1)}% dos cancelamentos`
-							: "Calculando..."
-					}
-					color="purple"
-					trendValue={projectionTrend.value}
-					trendTone={projectionTrend.tone}
 				/>
-			</div>
+			</section>
 
 			<div className="retiradas-focus-grid">
-				<section
-					className={`retiradas-performance-card ${ritmo?.status || "warn"}`}
-				>
-					<div className="retiradas-section-topline">
-						<span>Desempenho do mes</span>
-						<span
-							className={`retiradas-status-chip ${ritmo?.status || "warn"}`}
-						>
-							{ritmo?.badge || "Calculando"}
-						</span>
-					</div>
-
-					<h2>{getPerformanceTitle(ritmo)}</h2>
-
-					<p className="retiradas-performance-copy">
-						{getPerformanceCopy(ritmo)}
-					</p>
-
-					<div className="retiradas-progress-summary">
-						<div>
-							<span>Realizado</span>
-							<strong>{Number(d.totalOS || 0).toLocaleString("pt-BR")}</strong>
-						</div>
-						<div>
-							<span>Ating. da meta</span>
-							<strong>{atingimentoMeta.toFixed(1)}%</strong>
-						</div>
-						<div>
-							<span>Sobre cancelamentos</span>
-							<strong>{atingimentoCancelamentos.toFixed(1)}%</strong>
-						</div>
-						<div>
-							<span>Meta</span>
-							<strong>
-								{Math.round(Number(d.meta || 0)).toLocaleString("pt-BR")}
-							</strong>
-						</div>
-						<div>
-							<span>Brasil Tecpar 65%</span>
-							<strong>{metaBrasilTecpar.meta.toLocaleString("pt-BR")}</strong>
-						</div>
-					</div>
-
-					<div className="retiradas-target-track" aria-hidden="true">
-						<span
-							style={{
-								width: `${Math.min(atingimentoMeta, 100)}%`,
-							}}
-						/>
-					</div>
-					<div className="retiradas-track-labels">
-						<span>0%</span>
-						<span>50%</span>
-						<span>100%</span>
-					</div>
-
-					<div className="retiradas-retorninho-callout">
-						<div>
-							<span>Retorninho entrou em modo torcida</span>
-							<p>
-								Estamos abaixo da meta ideal, mas uma boa sequencia hoje ja
-								comeca a virar esse placar.
-							</p>
-						</div>
-						<img src="/retorninho-triste.webp" alt="" loading="lazy" />
-					</div>
-
-					<button type="button" className="retiradas-action-button">
-						Acoes recomendadas
-					</button>
-				</section>
+				<OperationalHealth summary={executiveSummary} />
 
 				<section className="card retiradas-evolution-card">
-					<div className="card-title card-title-split">
-						<span>Evolucao diaria</span>
-						<span className="retiradas-chart-caption">
-							Projecao:{" "}
-							{projecao
-								? Number(projecao.projecaoFinal || 0).toLocaleString("pt-BR")
-								: "--"}
-						</span>
-					</div>
+					<SectionHeading
+						eyebrow="Evolução do mês"
+						title="Realizado x meta x projeção"
+						action={
+							<span className="retiradas-chart-caption">
+								Projeção:{" "}
+								{projecao ? formatInteger(executiveSummary.projection) : "--"}
+							</span>
+						}
+					/>
 					<div className="chart-container">
 						<canvas ref={chartDailyRef} />
 					</div>
 					<div className="retiradas-chart-metrics">
 						<div>
-							<span>Media realizada/dia</span>
+							<span>Média realizada/dia</span>
 							<strong>{ritmo?.media || "--"} O.S.</strong>
 						</div>
 						<div>
-							<span>Media necessaria/dia</span>
+							<span>Necessário/dia</span>
 							<strong>{ritmo?.necessario || "--"} O.S.</strong>
 						</div>
 						<div>
-							<span>Diferenca</span>
+							<span>Diferença</span>
 							<strong
 								className={ritmo?.status === "ok" ? "positive" : "negative"}
 							>
@@ -1242,75 +1657,34 @@ export default function TabRetiradas({
 				</section>
 			</div>
 
+			<RetorninhoInsight summary={executiveSummary} />
+
 			<ForcaTarefaCard resumo={forcaTarefaResumo} />
 
 			<div className="grid">
+				<PriorityActions actions={priorityActions} />
+				<ChannelProduction channels={channelSummary} />
+
+				<RankingTabs d={d} agentesData={agentesData} month={month} />
 				<div className="card">
-					<div className="card-title">🗺️ Ranking Regionais</div>
-					<RankingList
-						items={regionaisFiltradas || []}
-						metaRef={110}
-						label="O.S"
-					/>
-					<button type="button" className="rank-complete-action">
-						Ver ranking completo
-					</button>
-				</div>
-				<div className="card">
-					<div className="card-title">Metas por regional</div>
+					<SectionHeading eyebrow="Metas por regional" title="Gap e status" />
 					<RegionalGoalsTable items={regionaisFiltradas || []} />
 				</div>
 
-				<div className="card grid-full">
-					<div
-						className="card-title card-title-split"
-						style={{
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "space-between",
-							gap: 12,
-						}}
-					>
-						<span>🚨 Detector de Anomalias</span>
-						<button
-							type="button"
-							onClick={() => setAnomaliasMinimizadas((current) => !current)}
-							className="comparativo-action-btn neutral"
-						>
-							{anomaliasMinimizadas ? "Expandir" : "Minimizar"}
-						</button>
-					</div>
-					{!anomaliasMinimizadas && (
-						<AnomaliaList anomalias={anomalias || []} />
-					)}
-				</div>
+				<OperationalAlerts
+					anomalias={anomalias}
+					minimized={anomaliasMinimizadas}
+					onToggle={() => setAnomaliasMinimizadas((current) => !current)}
+				/>
+
+				<DailyBalancePreview
+					saldoDiario={saldoDiario || []}
+					expanded={saldoExpandido}
+					onToggle={() => setSaldoExpandido((current) => !current)}
+				/>
 
 				<div className="card grid-full">
-					<div className="card-title">⚖️ Saldo Diario — Meta por Dia</div>
-					<div className="saldo-wrap">
-						<table className="saldo-table">
-							<thead>
-								<tr>
-									<th>Dia</th>
-									<th>Equipe Tecnica</th>
-									<th>Agente Aut.</th>
-									<th>Entregue Loja</th>
-									<th>Regionais</th>
-									<th>Total Dia</th>
-									<th>Meta Diaria</th>
-									<th>Saldo Dia</th>
-									<th>Saldo Mes</th>
-								</tr>
-							</thead>
-							<tbody>
-								<SaldoTable saldoDiario={saldoDiario || []} />
-							</tbody>
-						</table>
-					</div>
-				</div>
-
-				<div className="card grid-full">
-					<div className="card-title">📊 Comparativo Mensal — Ano Completo</div>
+					<SectionHeading eyebrow="Comparativo mensal" title="Ano completo" />
 					<div className="chart-container">
 						<canvas ref={chartMonthlyRef} />
 					</div>

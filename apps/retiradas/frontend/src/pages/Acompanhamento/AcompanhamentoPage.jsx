@@ -145,6 +145,10 @@ function shouldShowAcompanhamentoNotice(payload = {}) {
 	return payload.notify === true || payload.notifyAcompanhamento === true;
 }
 
+function shouldShowMetasNotice(source, payload = {}) {
+	return source === "metas" || shouldShowAcompanhamentoNotice(payload);
+}
+
 const SECTION_LABELS = [
 	["spotlight", "Destaque animado"],
 	["kpis", "Cards principais"],
@@ -637,6 +641,13 @@ function formatRealtimeUpdateDate(value) {
 	});
 }
 
+function sumRankingTotals(items = []) {
+	return (Array.isArray(items) ? items : []).reduce(
+		(sum, item) => sum + Number(item?.total || 0),
+		0,
+	);
+}
+
 // Extraido pra achado javascript:S3358 (ternario aninhado) — devolve o
 // primeiro candidato que for array, senao []. Usado nos varios pontos
 // deste arquivo que escolhem entre rawDays/saldoDiario (ou o inverso).
@@ -864,6 +875,17 @@ function RealtimeUpdateModal({ notice }) {
 					{notice.message ||
 						"O acompanhamento recebeu dados novos e ja foi atualizado."}
 				</p>
+				{Array.isArray(notice.items) && notice.items.length ? (
+					<div className="acomp-realtime-summary-grid">
+						{notice.items.map((item) => (
+							<div className="acomp-realtime-summary-item" key={item.label}>
+								<span>{item.label}</span>
+								<strong>{formatNumber(item.value)}</strong>
+								{item.helper ? <small>{item.helper}</small> : null}
+							</div>
+						))}
+					</div>
+				) : null}
 				<div className="acomp-realtime-meta">
 					<strong>{notice.sourceLabel || "Operacional"}</strong>
 					{notice.updatedAt ? (
@@ -2379,6 +2401,13 @@ function AcompanhamentoMatchSection({ dashboard, diarioBoardData, operationalSum
 	);
 }
 
+function getDailyClosedTotal(data) {
+	const monthEntries = Array.isArray(data?.monthEntries) ? data.monthEntries : [];
+	const today =
+		monthEntries.find((day) => day.date === data?.referenceDateKey) || null;
+	return Number(today?.hourlyTotal || today?.deliveredTotal || 0);
+}
+
 function AcompanhamentoMainGrid({
 	dashboard,
 	operationalSummary,
@@ -2390,12 +2419,19 @@ function AcompanhamentoMainGrid({
 	const regionaisItems = dashboard.regionaisOS.length
 		? dashboard.regionaisOS
 		: dashboard.regionaisAgendamento;
+	const operationalClosedTotal = Number(
+		operationalSummary?.dailyProduction?.total,
+	);
+	const dailyClosedTotal = Number.isFinite(operationalClosedTotal)
+		? operationalClosedTotal
+		: getDailyClosedTotal(diarioBoardData);
 
 	return (
 		<div className="acomp-main-grid">
 			{sections.spotlight ? (
 				<DashboardHighlights
 					closedCities={operationalSummary?.topClosedCities}
+					closedTotal={dailyClosedTotal}
 					openedCities={operationalSummary?.topOpenedCities}
 					technicians={operationalSummary?.topTechnicians}
 				/>
@@ -2590,10 +2626,13 @@ export default function AcompanhamentoPage() {
 	const metaHideTimerRef = useRef(null);
 	const festiveFlightTimerRef = useRef(null);
 	const realtimeNoticeTimerRef = useRef(null);
+	const realtimeNoticeDelayRef = useRef(null);
 	const appointmentNoticeTimerRef = useRef(null);
 	const appointmentNoticeIdsRef = useRef(new Set());
 	const knownAppointmentIdsRef = useRef(new Set());
 	const appointmentsSnapshotReadyRef = useRef(false);
+	const operationalSummaryRef = useRef(null);
+	const diarioBoardDataRef = useRef(null);
 	const grinchHideTimerRef = useRef(null);
 	const cursorIdleTimerRef = useRef(null);
 	const realtimeUpdateKeyRef = useRef("");
@@ -2611,6 +2650,89 @@ export default function AcompanhamentoPage() {
 		setDashboardRefreshKey(token);
 		setLastRefresh(new Date());
 	}, []);
+	useEffect(() => {
+		operationalSummaryRef.current = operationalSummary;
+	}, [operationalSummary]);
+	useEffect(() => {
+		diarioBoardDataRef.current = diarioBoardData;
+	}, [diarioBoardData]);
+	const buildMetasRealtimeItems = useCallback(() => {
+		const currentSummary = operationalSummaryRef.current;
+		const currentDiario = diarioBoardDataRef.current;
+		const today =
+			(Array.isArray(currentDiario?.monthEntries)
+				? currentDiario.monthEntries
+				: []
+			).find((day) => day.date === currentDiario?.referenceDateKey) || {};
+		const sourceTotals = today.sourceTotals || {};
+		const lojaTotal = Number(sourceTotals.loja ?? today.loja ?? 0);
+		const operacaoTotal =
+			Number(sourceTotals.equipe || 0) +
+			Number(sourceTotals.agente || 0) +
+			Number(sourceTotals.regionais || 0);
+		const novasOs = sumRankingTotals(currentSummary?.topOpenedCities);
+		return [
+			{
+				label: "Novas O.S.",
+				value: novasOs,
+				helper: "Abertas hoje no mapa",
+			},
+			{
+				label: "Operação",
+				value: operacaoTotal,
+				helper: "Equipe, agentes e regionais",
+			},
+			{
+				label: "Entregue loja",
+				value: lojaTotal,
+				helper: "Sempre + Onnet",
+			},
+		];
+	}, []);
+	const showRealtimeNotice = useCallback(
+		(source, payload = {}) => {
+			if (realtimeNoticeTimerRef.current) {
+				window.clearTimeout(realtimeNoticeTimerRef.current);
+				realtimeNoticeTimerRef.current = null;
+			}
+			if (realtimeNoticeDelayRef.current) {
+				window.clearTimeout(realtimeNoticeDelayRef.current);
+				realtimeNoticeDelayRef.current = null;
+			}
+			const openNotice = () => {
+				setRealtimeNotice({
+					sourceLabel:
+						payload?.sourceLabel ||
+						REALTIME_SOURCE_LABELS[source] ||
+						"Operacional",
+					message:
+						payload?.message ||
+						(source === "metas"
+							? "Metas atualizadas automaticamente no acompanhamento."
+							: "O acompanhamento recebeu dados novos e ja foi atualizado."),
+					items: source === "metas" ? buildMetasRealtimeItems() : null,
+					updatedAt:
+						payload?.updatedAt ||
+						payload?.generatedAt ||
+						payload?.emittedAt ||
+						null,
+				});
+				realtimeNoticeTimerRef.current = window.setTimeout(() => {
+					setRealtimeNotice(null);
+					realtimeNoticeTimerRef.current = null;
+				}, 20000);
+			};
+			if (source === "metas") {
+				realtimeNoticeDelayRef.current = window.setTimeout(() => {
+					realtimeNoticeDelayRef.current = null;
+					openNotice();
+				}, 1500);
+				return;
+			}
+			openNotice();
+		},
+		[buildMetasRealtimeItems],
+	);
 	const showAppointmentNotice = useCallback(
 		(event) => {
 			const appointment = normalizeAppointmentNotice(event);
@@ -2821,22 +2943,12 @@ export default function AcompanhamentoPage() {
 				realtimeUpdateKeyRef.current = updateKey;
 
 				forceDashboardRefresh(data?.generatedAt || updateKey);
-				if (data?.source === "mapa" || !shouldShowAcompanhamentoNotice(data)) return;
-				if (realtimeNoticeTimerRef.current) {
-					window.clearTimeout(realtimeNoticeTimerRef.current);
-				}
-				setRealtimeNotice({
-					sourceLabel:
-						data?.sourceLabel ||
-						REALTIME_SOURCE_LABELS[data?.source] ||
-						"Operacional",
-					message: data?.message || "Novas informacoes atualizadas.",
-					updatedAt: data?.updatedAt || null,
-				});
-				realtimeNoticeTimerRef.current = window.setTimeout(() => {
-					setRealtimeNotice(null);
-					realtimeNoticeTimerRef.current = null;
-				}, 20000);
+				const source = data?.source || null;
+				if (
+					source === "mapa" ||
+					(source !== "metas" && !shouldShowAcompanhamentoNotice(data))
+				) return;
+				showRealtimeNotice(source, data);
 			} catch (error) {
 				console.error(error);
 			}
@@ -2869,29 +2981,9 @@ export default function AcompanhamentoPage() {
 				if (
 					source &&
 					["match", "metas"].includes(source) &&
-					shouldShowAcompanhamentoNotice(event)
+					shouldShowMetasNotice(source, event)
 				) {
-					if (realtimeNoticeTimerRef.current) {
-						window.clearTimeout(realtimeNoticeTimerRef.current);
-					}
-					setRealtimeNotice({
-						sourceLabel:
-							event?.sourceLabel ||
-							REALTIME_SOURCE_LABELS[source] ||
-							"Operacional",
-						message:
-							event?.message ||
-							"O acompanhamento recebeu dados novos e ja foi atualizado.",
-						updatedAt:
-							event?.updatedAt ||
-							event?.generatedAt ||
-							event?.emittedAt ||
-							null,
-					});
-					realtimeNoticeTimerRef.current = window.setTimeout(() => {
-						setRealtimeNotice(null);
-						realtimeNoticeTimerRef.current = null;
-					}, 20000);
+					showRealtimeNotice(source, event);
 				}
 
 				load();
@@ -2906,8 +2998,16 @@ export default function AcompanhamentoPage() {
 				window.clearTimeout(appointmentNoticeTimerRef.current);
 				appointmentNoticeTimerRef.current = null;
 			}
+			if (realtimeNoticeDelayRef.current) {
+				window.clearTimeout(realtimeNoticeDelayRef.current);
+				realtimeNoticeDelayRef.current = null;
+			}
+			if (realtimeNoticeTimerRef.current) {
+				window.clearTimeout(realtimeNoticeTimerRef.current);
+				realtimeNoticeTimerRef.current = null;
+			}
 		};
-	}, [forceDashboardRefresh, showAppointmentNotice]);
+	}, [forceDashboardRefresh, showAppointmentNotice, showRealtimeNotice]);
 
 	const showAdNow = useCallback(() => {
 		const ads = {

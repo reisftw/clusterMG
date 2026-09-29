@@ -122,6 +122,8 @@ function buildWhere(query = {}) {
 
 function mapFineRecord(row = {}) {
 	const raw = row.raw_excerpt || {};
+	const finance = raw.finance || null;
+	const hasFinance = finance && Number(finance.totalCharges || 0) > 0;
 	return {
 		id: row.id,
 		atendimento: row.hubsoft_number || row.hubsoft_id,
@@ -153,14 +155,17 @@ function mapFineRecord(row = {}) {
 		equipmentType: raw?.equipment_type || "UNKNOWN",
 		equipmentReason: raw?.equipment_classification_reason || null,
 		serviceName: raw?.servico || "",
-		lancadoPor: "Não identificado",
-		valorLancado: null,
+		lancadoPor: hasFinance ? finance.lancadoPor || "Não identificado" : "Não identificado",
+		valorLancado: hasFinance ? parseMoney(finance.valorLancado) : null,
 		valorEsperado: null,
 		diferenca: null,
-		matchStatus: "Sem cobrança",
-		matchConfidence: "Não conciliado",
-		auditStatus: "Sem referência",
-		auditReason: "Endpoint financeiro de cobranças ainda não confirmado.",
+		matchStatus: hasFinance ? "Cobrança localizada" : "Sem cobrança",
+		matchConfidence: hasFinance ? "Cliente/serviço conciliado" : "Não conciliado",
+		auditStatus: hasFinance ? "Cobrança localizada" : "Sem referência",
+		auditReason: hasFinance
+			? finance.auditReason || "Cobrança financeira localizada na varredura."
+			: "Varredura financeira ainda não localizada para este atendimento.",
+		finance: hasFinance ? finance : undefined,
 		raw,
 	};
 }
@@ -220,9 +225,10 @@ async function fetchFinanceCharges(hubsoftSyncProfiles, record) {
 }
 
 async function enrichWithFinance(records, { hubsoftSyncProfiles } = {}) {
+	if (!hubsoftSyncProfiles?.liveFinance) return records;
 	const cache = new Map();
-	const enriched = [];
-	for (const record of records) {
+	const enrichRecord = async (record) => {
+		if (record.matchStatus === "Cobrança localizada") return record;
 		let charges = [];
 		if (record.idCliente) {
 			if (!cache.has(record.idCliente)) {
@@ -238,8 +244,7 @@ async function enrichWithFinance(records, { hubsoftSyncProfiles } = {}) {
 		}
 		const fineCharges = pickFineCharges(record, charges);
 		if (!fineCharges.length) {
-			enriched.push(record);
-			continue;
+			return record;
 		}
 		const valorLancado = fineCharges.reduce(
 			(total, charge) => total + (parseMoney(charge.valor) || 0),
@@ -249,7 +254,7 @@ async function enrichWithFinance(records, { hubsoftSyncProfiles } = {}) {
 			(total, charge) => total + (parseMoney(charge.saldo) || 0),
 			0,
 		);
-		enriched.push({
+		return {
 			...record,
 			lancadoPor: [
 				...new Set(
@@ -273,36 +278,21 @@ async function enrichWithFinance(records, { hubsoftSyncProfiles } = {}) {
 				dueDates: [...new Set(fineCharges.map((charge) => charge.data_vencimento_br || charge.data_vencimento).filter(Boolean))],
 				saldo,
 			},
-		});
-	}
-	return enriched;
-}
-
-function summarizeItems(items) {
-	const total = items.length;
-	const cobrancasLocalizadas = items.filter(
-		(item) => item.matchStatus === "Cobrança localizada",
-	).length;
-	const valorLancado = items.reduce(
-		(totalValue, item) => totalValue + (parseMoney(item.valorLancado) || 0),
-		0,
-	);
-	return {
-		total,
-		cobrancasLocalizadas,
-		semCobranca: Math.max(0, total - cobrancasLocalizadas),
-		semReferencia: items.filter((item) => item.valorEsperado === null).length,
-		multas270: items.filter((item) => Number(item.valorLancado) === 270).length,
-		valorLancado,
-		valorEsperado: items.reduce(
-			(totalValue, item) => totalValue + (parseMoney(item.valorEsperado) || 0),
-			0,
-		),
-		diferenca: items.reduce(
-			(totalValue, item) => totalValue + (parseMoney(item.diferenca) || 0),
-			0,
-		),
+		};
 	};
+
+	const concurrency = 6;
+	const enriched = new Array(records.length);
+	let cursor = 0;
+	const workers = Array.from({ length: Math.min(concurrency, records.length) }, async () => {
+		while (cursor < records.length) {
+			const index = cursor;
+			cursor += 1;
+			enriched[index] = await enrichRecord(records[index]);
+		}
+	});
+	await Promise.all(workers);
+	return enriched;
 }
 
 async function listFineAudit(query = {}, dependencies = {}) {
@@ -310,8 +300,20 @@ async function listFineAudit(query = {}, dependencies = {}) {
 	const limit = parsePositiveInteger(query.limit, 20, 100);
 	const offset = (page - 1) * limit;
 	const { where, values, startDate, endDate } = buildWhere(query);
-	const totalResult = await db.query(
-		`select count(*)::int as total
+	const summaryResult = await db.query(
+		`select
+			count(*)::int as total,
+			count(*) filter (
+				where coalesce((raw_excerpt #>> '{finance,totalCharges}')::numeric, 0) > 0
+			)::int as cobrancas_localizadas,
+			count(*) filter (
+				where coalesce((raw_excerpt #>> '{finance,totalCharges}')::numeric, 0) <= 0
+			)::int as sem_cobranca,
+			count(*)::int as sem_referencia,
+			count(*) filter (
+				where coalesce((raw_excerpt #>> '{finance,valorLancado}')::numeric, 0) = 270
+			)::int as multas_270,
+			coalesce(sum(coalesce((raw_excerpt #>> '{finance,valorLancado}')::numeric, 0)), 0)::numeric as valor_lancado
 		   from hubsoft_sync_records
 		  where ${where}`,
 		values,
@@ -325,12 +327,12 @@ async function listFineAudit(query = {}, dependencies = {}) {
 		  offset $${values.length + 2}`,
 		[...values, limit, offset],
 	);
-	const total = Number(totalResult.rows[0]?.total || 0);
+	const summaryRow = summaryResult.rows[0] || {};
+	const total = Number(summaryRow.total || 0);
 	const items = await enrichWithFinance(
 		rowsResult.rows.map(mapFineRecord),
 		dependencies,
 	);
-	const summary = summarizeItems(items);
 	return {
 		items,
 		pagination: {
@@ -341,8 +343,14 @@ async function listFineAudit(query = {}, dependencies = {}) {
 		},
 		period: { startDate, endDate },
 		summary: {
-			...summary,
 			total,
+			cobrancasLocalizadas: Number(summaryRow.cobrancas_localizadas || 0),
+			semCobranca: Number(summaryRow.sem_cobranca || 0),
+			semReferencia: Number(summaryRow.sem_referencia || 0),
+			multas270: Number(summaryRow.multas_270 || 0),
+			valorLancado: Number(summaryRow.valor_lancado || 0),
+			valorEsperado: 0,
+			diferenca: 0,
 		},
 		limitations: [
 			"Conciliação financeira calculada sob demanda para os registros da página atual.",
@@ -360,15 +368,23 @@ async function simulateFineAudit(hubsoftSyncProfiles, body = {}, user = {}) {
 			async: true,
 			startDate,
 			endDate,
-			applyOperational: false,
-		},
+			applyOperational: true,
+			},
 		user,
 	);
+}
+
+async function getFineAuditRun(hubsoftSyncProfiles, runId) {
+	if (!runId || !hubsoftSyncProfiles?.getRun) return null;
+	const run = await hubsoftSyncProfiles.getRun(runId);
+	if (!run || run.profile !== "MULTAS") return null;
+	return run;
 }
 
 module.exports = {
 	SIMULATE_PERMISSIONS,
 	VIEW_PERMISSIONS,
+	getFineAuditRun,
 	listFineAudit,
 	simulateFineAudit,
 };

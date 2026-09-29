@@ -10,6 +10,10 @@ vi.mock("./useDashboardData", () => ({
 }));
 
 describe("useRetiradas", () => {
+	beforeEach(() => {
+		retiradasMocks.useDashboardData.mockReset();
+	});
+
 	it("expoe o calendario publicado junto com os dados do painel", () => {
 		retiradasMocks.useDashboardData.mockReturnValue({
 			data: {
@@ -53,5 +57,30 @@ describe("useRetiradas", () => {
 		const { result } = renderHook(() => useRetiradas());
 
 		expect(result.current.feriadosSet).toBeNull();
+	});
+
+	it("prioriza a ultima atualizacao oficial das metas sobre datas antigas dos meses", () => {
+		retiradasMocks.useDashboardData.mockReturnValue({
+			data: {
+				metas: {
+					lastUpdate: "2026-09-28T14:30:00.000Z",
+				},
+				painel: {
+					retiradas: {
+						result: {
+							Setembro: {
+								updatedAt: "2026-09-27T21:51:00.000Z",
+							},
+						},
+					},
+				},
+			},
+			loading: false,
+			error: null,
+		});
+
+		const { result } = renderHook(() => useRetiradas());
+
+		expect(result.current.lastUpdate).toContain("28/09/2026");
 	});
 });

@@ -488,10 +488,18 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 		mapa,
 		matchOS,
 		agentesMatchOS,
+		metas: {
+			lastUpdate: config?.lastUpdate || null,
+			baseConfig: config?.baseConfig || null,
+			forcaTarefa: config?.forcaTarefa || null,
+		},
 		painel: {
 			retiradas: {
 				result: rowsToDocumentMap(dashboardRows),
-				meta: { generatedAt: new Date().toISOString() },
+				meta: {
+					generatedAt: new Date().toISOString(),
+					lastUpdate: config?.lastUpdate || null,
+				},
 				feriados: feriadosRows.map((row) => normalizeHoliday(row.data)),
 			},
 			agentes: {

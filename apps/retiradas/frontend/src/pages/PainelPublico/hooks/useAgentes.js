@@ -28,10 +28,10 @@ function recalcPcts(data) {
 			cidade.realizado = realizado;
 			cidade.cancelamentos = cancelamentos;
 			cidade.meta80 = meta80;
-			cidade.falta = Math.max(0, meta80 - realizado);
+			cidade.falta = meta80 - realizado;
 			cidade.pct =
-				cancelamentos > 0
-					? Number(((realizado / cancelamentos) * 100).toFixed(1))
+				meta80 > 0
+					? Number(((realizado / meta80) * 100).toFixed(1))
 					: 0;
 		});
 
@@ -41,13 +41,13 @@ function recalcPcts(data) {
 			dailySum > 0 ? dailySum : Math.round(Number(d.totalRealizado) || 0);
 		d.totalMeta = Math.round(Number(d.totalMeta) || 0);
 		d.totalCancelamentos = Math.round(Number(d.totalCancelamentos) || 0);
-		d.totalFalta = Math.max(0, d.totalMeta - d.totalRealizado);
+		d.totalFalta = d.totalMeta - d.totalRealizado;
 		d.percentAchieved =
-			d.totalCancelamentos > 0
-				? Number(((d.totalRealizado / d.totalCancelamentos) * 100).toFixed(1))
+			d.totalMeta > 0
+				? Number(((d.totalRealizado / d.totalMeta) * 100).toFixed(1))
 				: 0;
 		d.status =
-			d.percentAchieved >= 80
+			d.percentAchieved >= 100
 				? "Meta atingida!"
 				: `Faltam ${Math.max(0, d.totalFalta)} retiradas`;
 	}

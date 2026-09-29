@@ -432,7 +432,7 @@ export default function EquipmentRecoveryPage() {
 			setJob(result);
 			setMessage(
 				apply
-					? "Aplicação em homologação iniciada no backend. Pode atualizar a página que o job continua."
+					? "Aplicação iniciada no backend. Pode atualizar a página que o job continua."
 					: "Simulação iniciada no backend. Pode atualizar a página que o job continua.",
 			);
 		} catch (err) {
@@ -482,8 +482,8 @@ export default function EquipmentRecoveryPage() {
 					<div>
 						<div className="flex flex-wrap items-center gap-2">
 							<p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Ordem de Serviço / Recuperação de ativos</p>
-							<span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black uppercase text-orange-700">
-								Ambiente: Homologação
+							<span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase text-emerald-700">
+								Ambiente ativo
 							</span>
 						</div>
 						<h1 className="mt-2 text-3xl font-black text-slate-950">Recuperação de ativos</h1>
@@ -499,7 +499,7 @@ export default function EquipmentRecoveryPage() {
 							Simular conciliação
 						</button>
 						<button type="button" className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-sm" onClick={() => setConfirmApply(true)} disabled={loading}>
-							Aplicar em homolog
+							Aplicar resultados
 						</button>
 					</div>
 				</div>
@@ -792,8 +792,8 @@ export default function EquipmentRecoveryPage() {
 			{confirmApply ? (
 				<div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
 					<div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-						<h2 className="text-2xl font-black text-slate-950">Aplicar resultados em homologação?</h2>
-						<p className="mt-2 text-sm font-bold text-slate-600">Essa ação persistirá os resultados simulados apenas no ambiente de homologação.</p>
+						<h2 className="text-2xl font-black text-slate-950">Aplicar resultados?</h2>
+						<p className="mt-2 text-sm font-bold text-slate-600">Essa ação persistirá os resultados simulados no ambiente atual.</p>
 						<div className="mt-4 grid gap-3 rounded-2xl bg-orange-50 p-4 text-sm font-bold text-orange-800">
 							<p>O.S. afetadas: {number(summary.total)}</p>
 							<p>Classificações: {number(summary.classificados)}</p>
@@ -802,7 +802,7 @@ export default function EquipmentRecoveryPage() {
 						</div>
 						<div className="mt-5 flex justify-end gap-2">
 							<button type="button" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700" onClick={() => setConfirmApply(false)}>Cancelar</button>
-							<button type="button" className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white" onClick={() => handleReprocess(true)}>Aplicar em homologação</button>
+							<button type="button" className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white" onClick={() => handleReprocess(true)}>Aplicar resultados</button>
 						</div>
 					</div>
 				</div>

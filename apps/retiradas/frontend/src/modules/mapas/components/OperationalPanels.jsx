@@ -109,6 +109,7 @@ function HighlightRankingList({
 
 export function DashboardHighlights({
 	closedCities = [],
+	closedTotal,
 	openedCities = [],
 	technicians = [],
 }) {
@@ -160,7 +161,10 @@ export function DashboardHighlights({
 		return () => window.clearTimeout(timer);
 	}, [selected, slides.length]);
 
-	const totalClosed = slides[0].items.reduce((sum, item) => sum + item.total, 0);
+	const totalClosed =
+		closedTotal === undefined || closedTotal === null
+			? slides[0].items.reduce((sum, item) => sum + item.total, 0)
+			: numberValue(closedTotal);
 	const totalOpened = slides[2].items.reduce((sum, item) => sum + item.total, 0);
 	const activeTechnicians = slides[1].items.length;
 	const ActiveIcon = active.icon || Trophy;

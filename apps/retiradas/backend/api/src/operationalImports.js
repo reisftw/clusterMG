@@ -1048,15 +1048,60 @@ const MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES = new Set([
 	"ignorado",
 ]);
 
+const MENSAGERIA_EXCLUDED_OS_TYPES = new Set([
+	"CANCELAMENTO OUTROS",
+	"RETIRADA OUTROS",
+]);
+
+const MENSAGERIA_ALLOWED_OS_TYPES = new Set([
+	"CANCELAMENTO FTTH",
+	"RETIRADA FTTH",
+	"RETIRADA CANCELAMENTO SEGUNDA TENTATIVA",
+	"CANCELAMENTO LOJA",
+]);
+
 function isActiveMensageriaQueueEntry(item = {}) {
 	const status = String(item.status || "").trim().toLowerCase();
 	return !MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES.has(status);
 }
 
-async function getMensageriaQueueItemsByKey() {
+function normalizeMensageriaOrderType(value) {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toUpperCase()
+		.replace(/[^A-Z0-9]+/g, " ")
+		.trim();
+}
+
+function getMensageriaOrderTypeCandidates(item = {}) {
+	return [
+		item.tipo,
+		item.tipo_ordem_servico,
+		item.tipoOrdemServico,
+		item.nome_tipo_ordem_servico,
+		item.nomeTipoOrdemServico,
+		item.tipo_os,
+		item.tipoOs,
+	].map(normalizeMensageriaOrderType).filter(Boolean);
+}
+
+function isExcludedMensageriaOrderType(item = {}) {
+	return getMensageriaOrderTypeCandidates(item).some((value) =>
+		MENSAGERIA_EXCLUDED_OS_TYPES.has(value),
+	);
+}
+
+function isAllowedMensageriaOrderType(item = {}) {
+	return getMensageriaOrderTypeCandidates(item).some((value) =>
+		MENSAGERIA_ALLOWED_OS_TYPES.has(value),
+	);
+}
+
+async function getMensageriaQueueItemsByKey({ includeInactive = false } = {}) {
 	const items = await mensageriaRepository.listAllQueueMessages().catch(() => []);
 	const itemsByKey = new Map();
-	for (const item of items.filter(isActiveMensageriaQueueEntry)) {
+	for (const item of items.filter((entry) => includeInactive || isActiveMensageriaQueueEntry(entry))) {
 		const key = `${String(item.os || "").trim()}|${normalizeMensageriaPhone(item.telefone)}`;
 		if (key === "|") continue;
 		const current = itemsByKey.get(key);
@@ -1069,6 +1114,43 @@ async function getMensageriaQueueItemsByKey() {
 		if (!current || itemTime > currentTime) itemsByKey.set(key, item);
 	}
 	return itemsByKey;
+}
+
+function isFinalMensageriaQueueEntry(item = {}) {
+	const status = String(item.status || "").trim().toLowerCase();
+	return ["agendado", "concluido", "concluído", "enviado"].includes(status);
+}
+
+function dateOnlyFromOrder(value) {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+	const br = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+	if (br) {
+		return `${br[3]}-${String(br[2]).padStart(2, "0")}-${String(br[1]).padStart(2, "0")}`;
+	}
+	const parsed = new Date(text);
+	if (Number.isNaN(parsed.getTime())) return "";
+	return parsed.toISOString().slice(0, 10);
+}
+
+function isRecentMensageriaOrder(order = {}, lookbackDays = 2) {
+	const rawDate = readAnyField(order, [
+		"data_abertura_os",
+		"data_cadastro",
+		"data_abertura",
+		"abertura",
+		"data",
+	]);
+	const dateOnly = dateOnlyFromOrder(rawDate);
+	if (!dateOnly) return false;
+	const orderDate = new Date(`${dateOnly}T12:00:00.000Z`);
+	const today = new Date();
+	today.setUTCHours(12, 0, 0, 0);
+	const minDate = new Date(today);
+	minDate.setUTCDate(minDate.getUTCDate() - Number(lookbackDays || 2));
+	return orderDate >= minDate;
 }
 
 function buildMensageriaQueueItemFromOrder(
@@ -1150,7 +1232,7 @@ function buildMensageriaQueueItemFromOrder(
 
 async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 	const config = await getMensageriaConfig();
-	if (!config.autoEnqueueMapDiff)
+	if (config.autoEnqueueMapDiff === false)
 		return { created: 0, skipped: newEntries.length, disabled: true };
 	const diffBatchAt = new Date().toISOString();
 	if (!newEntries.length) {
@@ -1167,13 +1249,17 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 			.map(normalizeCityKey)
 			.filter(Boolean),
 	);
-	const queueItemsByKey = await getMensageriaQueueItemsByKey();
+	const queueItemsByKey = await getMensageriaQueueItemsByKey({
+		includeInactive: true,
+	});
 	let created = 0;
 	let skipped = 0;
 	let reprioritized = 0;
 	const skippedReasons = {
 		semTelefone: 0,
 		cidadeForaFiltro: 0,
+		tipoNaoPermitido: 0,
+		jaFinalizado: 0,
 	};
 	const skippedSamples = [];
 
@@ -1199,6 +1285,14 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 			config,
 			diffBatchAt,
 		);
+		if (isExcludedMensageriaOrderType(item)) {
+			trackSkipped("tipoNaoPermitido", id, item);
+			continue;
+		}
+		if (!isAllowedMensageriaOrderType(item)) {
+			trackSkipped("tipoNaoPermitido", id, item);
+			continue;
+		}
 		if (!item.telefone_digits) {
 			trackSkipped("semTelefone", id, item);
 			continue;
@@ -1212,6 +1306,10 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 		}
 		const key = `${item.os}|${item.telefone_digits}`;
 		const existingItem = queueItemsByKey.get(key);
+		if (existingItem && isFinalMensageriaQueueEntry(existingItem)) {
+			trackSkipped("jaFinalizado", id, item);
+			continue;
+		}
 		if (config.avoidDuplicates !== false && existingItem) {
 			await mensageriaRepository.updateQueueMessage(existingItem.id, {
 				...existingItem,
@@ -1259,6 +1357,23 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 	};
 }
 
+async function ensureOpenMapOrdersInMensageria(finalMap = {}, user = {}) {
+	const config = await getMensageriaConfig();
+	const lookbackDays = Math.max(
+		0,
+		Math.min(Number(config.autoEnqueueBackfillDays ?? 8), 30),
+	);
+	const entries = Object.entries(finalMap || {}).filter(([, order]) => {
+		const item = buildMensageriaQueueItemFromOrder(order, "", {}, "");
+		return (
+			isRecentMensageriaOrder(order, lookbackDays) &&
+			!isExcludedMensageriaOrderType(item) &&
+			isAllowedMensageriaOrderType(item)
+		);
+	});
+	return enqueueNewMapOrdersForMensageria(entries, user);
+}
+
 async function reconcileMensageriaQueueWithOpenMap(finalMap = {}) {
 	const queue = await mensageriaRepository.listAllQueueMessages().catch(() => []);
 	const activeStatuses = new Set([
@@ -1285,6 +1400,36 @@ async function reconcileMensageriaQueueWithOpenMap(finalMap = {}) {
 	for (const item of queue) {
 		if (!activeStatuses.has(String(item.status || "novo"))) continue;
 		checked += 1;
+		if (isExcludedMensageriaOrderType(item)) {
+			removed += 1;
+			await mensageriaRepository.updateQueueMessage(item.id, {
+				...item,
+				status: "ignorado",
+				ultimoErro:
+					"Removido automaticamente: tipo de O.S. não entra na fila de mensageria.",
+				ultimo_erro:
+					"Removido automaticamente: tipo de O.S. não entra na fila de mensageria.",
+				atualizadoEm: new Date().toISOString(),
+				atualizado_em: new Date().toISOString(),
+				ajustadoFilaEm: new Date().toISOString(),
+			});
+			continue;
+		}
+		if (!isAllowedMensageriaOrderType(item)) {
+			removed += 1;
+			await mensageriaRepository.updateQueueMessage(item.id, {
+				...item,
+				status: "ignorado",
+				ultimoErro:
+					"Removido automaticamente: tipo de O.S. não é elegível para mensageria.",
+				ultimo_erro:
+					"Removido automaticamente: tipo de O.S. não é elegível para mensageria.",
+				atualizadoEm: new Date().toISOString(),
+				atualizado_em: new Date().toISOString(),
+				ajustadoFilaEm: new Date().toISOString(),
+			});
+			continue;
+		}
 		const os = String(item.os || item.num_os || item.numero_os || "").trim();
 		if (os && openOs.has(os)) continue;
 		removed += 1;
@@ -1424,7 +1569,11 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		{ total: Object.keys(incoming).length, totalGeral, fontes },
 		user.uid,
 	);
-	const mensageriaDiff = await enqueueNewMapOrdersForMensageria(
+	const mensageriaDiff = await ensureOpenMapOrdersInMensageria(
+		finalMap,
+		user,
+	);
+	const mensageriaNovas = await enqueueNewMapOrdersForMensageria(
 		newMapEntries,
 		user,
 	);
@@ -1475,6 +1624,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 			totalOnnet,
 			fontes,
 			mensageriaDiff,
+			mensageriaNovas,
 			mensageriaReconciliation,
 			agendamentosMapa,
 		},
@@ -1513,6 +1663,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		notify: meta.novasSalvas > 0,
 		notifyAcompanhamento: meta.novasSalvas > 0,
 		mensageriaDiff,
+		mensageriaNovas,
 		mensageriaReconciliation,
 		agendamentosMapa,
 		atualizadas: Object.keys(incoming).length,
@@ -1564,6 +1715,7 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 			removidas: 0,
 		};
 	}
+	const currentBeforeApply = await getCollectionMap("match_os_abertas");
 	await context.update?.({
 		stage: "Comparando base atual do match",
 		percent: 30,
@@ -1599,6 +1751,43 @@ async function persistMatchImport(payload = {}, user = {}, context = {}) {
 		id,
 		...data,
 	}));
+	if (!finalOrders.length && Object.keys(currentBeforeApply).length) {
+		await context.update?.({
+			stage: "Resultado final vazio do match ignorado",
+			percent: 100,
+			totalDocuments: 0,
+		});
+		await upsertMany("match_os_abertas", currentBeforeApply, {
+			update: context.update,
+			stage: "Restaurando ultima base valida do match",
+			startPercent: 95,
+			endPercent: 100,
+			step: 1000,
+		});
+		await publishAcompanhamentoUpdate("match", {
+			generatedAt: new Date().toISOString(),
+			updatedBy: user.uid || null,
+			message:
+				"Match retornou resultado final vazio e a última base válida foi preservada.",
+			summary: {
+				fontes,
+				fonteLabel,
+				skipped: true,
+				reason: "EMPTY_MATCH_FINAL_NOT_APPLIED",
+				preservedTotal: Object.keys(currentBeforeApply).length,
+			},
+		});
+		return {
+			source: "match",
+			skipped: true,
+			reason: "EMPTY_MATCH_FINAL_NOT_APPLIED",
+			message: "Resultado final vazio do match ignorado; base atual preservada.",
+			total: Object.keys(incoming).length,
+			totalGeral: Object.keys(currentBeforeApply).length,
+			atualizadas: 0,
+			removidas: 0,
+		};
+	}
 	await context.update?.({
 		stage: "Calculando matches por proximidade",
 		percent: 68,
@@ -2406,6 +2595,18 @@ async function persistHubsoftMetaRecords({
 		parentPath: null,
 		data: { ...nextAgents, updatedAt: nowIso },
 	}, writeOptions);
+	const config =
+		(await documents.getDocument("config/metas").catch(() => null))?.data || {};
+	await documents.upsertDocument(
+		{
+			path: "config/metas",
+			collectionPath: "config",
+			documentId: "metas",
+			parentPath: null,
+			data: { ...config, lastUpdate: nowIso, updatedAt: nowIso },
+		},
+		writeOptions,
+	);
 	await syncDiarioFromMetaRecord(combined, month, year, user, writeOptions);
 	if (!quiet) {
 		await publishAcompanhamentoUpdate("metas", {

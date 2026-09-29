@@ -205,6 +205,46 @@ function safeKey(value) {
 	return normalizeText(value).replace(/[^a-z0-9]+/g, "_") || "nao_informado";
 }
 
+const MENSAGERIA_EXCLUDED_OS_TYPES = new Set([
+	"cancelamento outros",
+	"retirada outros",
+]);
+
+const MENSAGERIA_ALLOWED_OS_TYPES = new Set([
+	"cancelamento ftth",
+	"retirada ftth",
+	"retirada cancelamento segunda tentativa",
+	"cancelamento loja",
+]);
+
+function normalizeQueueOrderType(value) {
+	return normalizeText(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function getQueueOrderTypeCandidates(item = {}) {
+	return [
+		item.tipo,
+		item.tipo_ordem_servico,
+		item.tipoOrdemServico,
+		item.nome_tipo_ordem_servico,
+		item.nomeTipoOrdemServico,
+		item.tipo_os,
+		item.tipoOs,
+	].map(normalizeQueueOrderType).filter(Boolean);
+}
+
+function isExcludedQueueOrderType(item = {}) {
+	return getQueueOrderTypeCandidates(item).some((value) =>
+		MENSAGERIA_EXCLUDED_OS_TYPES.has(normalizeQueueOrderType(value)),
+	);
+}
+
+function isAllowedQueueOrderType(item = {}) {
+	return getQueueOrderTypeCandidates(item).some((value) =>
+		MENSAGERIA_ALLOWED_OS_TYPES.has(value),
+	);
+}
+
 function fixMojibakeText(value) {
 	return String(value || "")
 		.replace(/Ã¡/g, "á")
@@ -3131,6 +3171,34 @@ async function adjustQueueAgainstOpenOrders() {
 	for (const item of queue) {
 		if (!activeStatuses.has(String(item.status || "novo"))) continue;
 		checked += 1;
+		if (isExcludedQueueOrderType(item)) {
+			removed += 1;
+			await upsertQueueItem(item.id, {
+				...item,
+				status: "ignorado",
+				ultimo_erro:
+					"Removido pelo ajuste de fila: tipo de O.S. não entra na mensageria.",
+				ultimoErro:
+					"Removido pelo ajuste de fila: tipo de O.S. não entra na mensageria.",
+				atualizadoEm: nowIso(),
+				ajustadoFilaEm: nowIso(),
+			});
+			continue;
+		}
+		if (!isAllowedQueueOrderType(item)) {
+			removed += 1;
+			await upsertQueueItem(item.id, {
+				...item,
+				status: "ignorado",
+				ultimo_erro:
+					"Removido pelo ajuste de fila: tipo de O.S. não é elegível para mensageria.",
+				ultimoErro:
+					"Removido pelo ajuste de fila: tipo de O.S. não é elegível para mensageria.",
+				atualizadoEm: nowIso(),
+				ajustadoFilaEm: nowIso(),
+			});
+			continue;
+		}
 		const hasOpenOrder = getQueueComparisonKeys(item).some((key) =>
 			openOrderKeys.has(key),
 		);

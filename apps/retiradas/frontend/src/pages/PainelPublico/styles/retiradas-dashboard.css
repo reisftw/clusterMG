@@ -408,3 +408,404 @@
 	padding: 3px 9px;
 	font-size: 10px;
 }
+
+.painel-classico .retiradas-command-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 18px;
+	margin-bottom: 16px;
+	padding: 24px 26px;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background:
+		linear-gradient(135deg, rgba(0, 58, 152, 0.08), rgba(255, 107, 0, 0.05)),
+		#fff;
+	box-shadow: 0 12px 28px rgba(0, 48, 135, 0.08);
+}
+
+.painel-classico .retiradas-command-header span,
+.painel-classico .retiradas-section-heading span {
+	display: block;
+	color: var(--panel-blue-2);
+	font-size: 10px;
+	font-weight: 900;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.painel-classico .retiradas-command-header h1,
+.painel-classico .retiradas-section-heading h2 {
+	margin: 4px 0 0;
+	color: var(--panel-navy);
+	font-family: Outfit, sans-serif;
+	font-size: 24px;
+	font-weight: 900;
+	letter-spacing: 0;
+}
+
+.painel-classico .retiradas-command-header p {
+	margin: 7px 0 0;
+	color: var(--panel-muted);
+	font-size: 12px;
+	font-weight: 800;
+}
+
+.painel-classico .retiradas-refresh-button {
+	min-height: 40px;
+	border: 1px solid var(--panel-blue);
+	border-radius: 8px;
+	background: var(--panel-blue);
+	color: #fff;
+	padding: 0 18px;
+	cursor: pointer;
+	font-family: Outfit, sans-serif;
+	font-size: 12px;
+	font-weight: 900;
+}
+
+.painel-classico .retiradas-exec-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 14px;
+	margin-bottom: 14px;
+}
+
+.painel-classico .retiradas-exec-kpi,
+.painel-classico .retiradas-operational-metric {
+	position: relative;
+	overflow: hidden;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: #fff;
+	box-shadow: 0 8px 24px rgba(0, 48, 135, 0.07);
+}
+
+.painel-classico .retiradas-exec-kpi {
+	min-height: 138px;
+	padding: 20px;
+}
+
+.painel-classico .retiradas-exec-kpi::before {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 5px;
+	background: var(--panel-blue);
+}
+
+.painel-classico .retiradas-exec-kpi.orange::before {
+	background: var(--panel-orange);
+}
+
+.painel-classico .retiradas-exec-kpi.green::before {
+	background: var(--panel-green);
+}
+
+.painel-classico .retiradas-exec-kpi.red::before {
+	background: #dc2626;
+}
+
+.painel-classico .retiradas-exec-kpi.purple::before {
+	background: var(--panel-purple);
+}
+
+.painel-classico .retiradas-exec-kpi span,
+.painel-classico .retiradas-operational-metric span {
+	display: block;
+	color: var(--panel-muted);
+	font-size: 10px;
+	font-weight: 900;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.painel-classico .retiradas-exec-kpi strong {
+	display: block;
+	margin-top: 9px;
+	color: var(--panel-navy);
+	font-size: clamp(30px, 3vw, 42px);
+	font-weight: 900;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.painel-classico .retiradas-exec-kpi p,
+.painel-classico .retiradas-exec-kpi small,
+.painel-classico .retiradas-operational-metric p {
+	display: block;
+	margin: 8px 0 0;
+	color: var(--panel-muted);
+	font-size: 11px;
+	font-weight: 800;
+	line-height: 1.35;
+}
+
+.painel-classico .retiradas-exec-kpi small {
+	color: var(--panel-blue);
+}
+
+.painel-classico .retiradas-operational-grid {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 12px;
+	margin-bottom: 18px;
+}
+
+.painel-classico .retiradas-operational-metric {
+	min-height: 105px;
+	padding: 16px;
+}
+
+.painel-classico .retiradas-operational-metric strong {
+	display: block;
+	margin-top: 8px;
+	color: var(--panel-navy);
+	font-size: 22px;
+	font-weight: 900;
+	line-height: 1.1;
+}
+
+.painel-classico .retiradas-operational-metric.ok {
+	background: linear-gradient(135deg, rgba(0, 159, 114, 0.1), #fff);
+}
+
+.painel-classico .retiradas-operational-metric.warn {
+	background: linear-gradient(135deg, rgba(255, 107, 0, 0.11), #fff);
+}
+
+.painel-classico .retiradas-operational-metric.danger {
+	background: linear-gradient(135deg, rgba(220, 38, 38, 0.11), #fff);
+}
+
+.painel-classico .retiradas-section-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 14px;
+	margin-bottom: 16px;
+}
+
+.painel-classico .retiradas-health-card,
+.painel-classico .retiradas-retorninho-exec {
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: #fff;
+	box-shadow: 0 8px 24px rgba(0, 48, 135, 0.07);
+}
+
+.painel-classico .retiradas-health-card {
+	padding: 22px;
+}
+
+.painel-classico .retiradas-health-main {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.painel-classico .retiradas-health-main div {
+	padding: 16px;
+	border-radius: 8px;
+	background: #f7faff;
+}
+
+.painel-classico .retiradas-health-main span,
+.painel-classico .retiradas-health-main p {
+	color: var(--panel-muted);
+	font-size: 11px;
+	font-weight: 800;
+}
+
+.painel-classico .retiradas-health-main strong {
+	display: block;
+	margin: 7px 0 4px;
+	color: var(--panel-navy);
+	font-size: 34px;
+	font-weight: 900;
+}
+
+.painel-classico .retiradas-health-track {
+	height: 11px;
+	margin: 16px 0;
+	border-radius: 999px;
+	background: #e8eef7;
+	overflow: hidden;
+}
+
+.painel-classico .retiradas-health-track span {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, var(--panel-orange), var(--panel-green));
+}
+
+.painel-classico .retiradas-health-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.painel-classico .retiradas-retorninho-exec {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 180px;
+	gap: 18px;
+	align-items: center;
+	margin-bottom: 18px;
+	padding: 22px 26px;
+	background: linear-gradient(135deg, rgba(0, 58, 152, 0.09), rgba(255, 107, 0, 0.08)), #fff;
+}
+
+.painel-classico .retiradas-retorninho-exec span {
+	color: var(--panel-blue-2);
+	font-size: 10px;
+	font-weight: 900;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+
+.painel-classico .retiradas-retorninho-exec h2 {
+	margin: 8px 0;
+	color: var(--panel-navy);
+	font-size: 23px;
+	line-height: 1.12;
+}
+
+.painel-classico .retiradas-retorninho-exec p {
+	margin: 0;
+	color: var(--panel-muted);
+	font-size: 12px;
+	font-weight: 800;
+}
+
+.painel-classico .retiradas-retorninho-exec img {
+	width: 160px;
+	max-width: 100%;
+	justify-self: end;
+	filter: drop-shadow(0 14px 22px rgba(0, 48, 135, 0.18));
+}
+
+.painel-classico .retiradas-priority-list,
+.painel-classico .retiradas-channel-grid {
+	display: grid;
+	gap: 10px;
+}
+
+.painel-classico .retiradas-priority-item,
+.painel-classico .retiradas-channel-row {
+	display: grid;
+	align-items: center;
+	gap: 12px;
+	padding: 13px;
+	border: 1px solid var(--panel-border);
+	border-radius: 8px;
+	background: #f8fbff;
+}
+
+.painel-classico .retiradas-priority-item {
+	grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.painel-classico .retiradas-priority-item > strong {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 999px;
+	background: var(--panel-blue);
+	color: #fff;
+	font-size: 13px;
+}
+
+.painel-classico .retiradas-priority-item.warn > strong {
+	background: var(--panel-orange);
+}
+
+.painel-classico .retiradas-priority-item.danger > strong {
+	background: #dc2626;
+}
+
+.painel-classico .retiradas-priority-item h3,
+.painel-classico .retiradas-channel-row strong {
+	margin: 0;
+	color: var(--panel-navy);
+	font-size: 13px;
+	font-weight: 900;
+}
+
+.painel-classico .retiradas-priority-item p,
+.painel-classico .retiradas-channel-row p {
+	margin: 4px 0 0;
+	color: var(--panel-muted);
+	font-size: 11px;
+	font-weight: 800;
+}
+
+.painel-classico .retiradas-channel-stack {
+	display: flex;
+	height: 12px;
+	margin-bottom: 16px;
+	border-radius: 999px;
+	background: #e8eef7;
+	overflow: hidden;
+}
+
+.painel-classico .retiradas-channel-stack span {
+	min-width: 2px;
+	height: 100%;
+}
+
+.painel-classico .retiradas-channel-row {
+	grid-template-columns: 12px minmax(0, 1fr) auto;
+}
+
+.painel-classico .retiradas-channel-row > span {
+	width: 12px;
+	height: 38px;
+	border-radius: 999px;
+}
+
+.painel-classico .retiradas-channel-row b {
+	color: var(--panel-navy);
+	font-size: 20px;
+	font-weight: 900;
+	white-space: nowrap;
+}
+
+.painel-classico .retiradas-ranking-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 14px;
+}
+
+.painel-classico .retiradas-ranking-tabs button {
+	min-height: 34px;
+	border: 1px solid var(--panel-border);
+	border-radius: 999px;
+	background: #fff;
+	color: var(--panel-blue);
+	padding: 0 13px;
+	cursor: pointer;
+	font-family: Outfit, sans-serif;
+	font-size: 11px;
+	font-weight: 900;
+}
+
+.painel-classico .retiradas-ranking-tabs button.active {
+	border-color: var(--panel-blue);
+	background: var(--panel-blue);
+	color: #fff;
+}
+
+.painel-classico .retiradas-alert-card {
+	grid-column: 1 / -1;
+}
+
+.painel-classico .retiradas-alert-summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 12px;
+	margin-bottom: 14px;
+}

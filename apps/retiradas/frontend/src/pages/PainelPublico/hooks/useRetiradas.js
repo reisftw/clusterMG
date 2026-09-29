@@ -164,6 +164,10 @@ export function useRetiradas(enabled = true, options = {}) {
 
 	const lastUpdate = useMemo(() => {
 		if (!data?.painel?.retiradas) return "";
+		const officialLastUpdate =
+			fmtDate(data?.metas?.lastUpdate) ||
+			fmtDate(data?.painel?.retiradas?.meta?.lastUpdate);
+		if (officialLastUpdate) return officialLastUpdate;
 		const months = Object.values(data.painel.retiradas.result || {})
 			.map(fmtDate)
 			.find(Boolean);

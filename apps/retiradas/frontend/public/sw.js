@@ -1,4 +1,4 @@
-const CACHE_NAME = "retiradas-pwa-v17";
+const CACHE_NAME = "retiradas-pwa-v21-metas-last-update";
 const APP_SHELL = [
 	"/index.html",
 	"/painel",
@@ -101,6 +101,13 @@ function fetchAndCacheAsset(request) {
 }
 
 function fetchSameOriginAsset(request) {
+	const url = new URL(request.url);
+	if (url.pathname.startsWith("/assets/")) {
+		return fetchAndCacheAsset(request).catch(
+			() => caches.match(request).then((cached) => cached || Response.error()),
+		);
+	}
+
 	return caches
 		.match(request)
 		.then(

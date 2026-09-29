@@ -18,6 +18,18 @@ function normalizeStreet(value) {
 		.trim();
 }
 
+function getStreetKey(order = {}) {
+	return normalizeStreet(order.endereco || order.endereco_resumo);
+}
+
+function getNeighborhoodKey(order = {}) {
+	return normalizeText(order.bairro || "");
+}
+
+function hasAddressReference(order = {}) {
+	return Boolean(getStreetKey(order));
+}
+
 function hasCoordinates(order) {
 	const latitude = order?.latitude;
 	const longitude = order?.longitude;
@@ -73,17 +85,38 @@ function compactOrder(order = {}) {
 // podia virar funcao de modulo). Mesma logica de antes, so quebrada em
 // funcoes nomeadas menores pra reduzir o aninhamento.
 function computeRelacionadas(principal, retiradas) {
-	const street = normalizeStreet(principal.endereco);
+	const street = getStreetKey(principal);
+	const neighborhood = getNeighborhoodKey(principal);
+	const principalHasCoords = hasCoordinates(principal);
 	return retiradas
 		.filter((order) => order.id !== principal.id)
 		.map((order) => {
-			const distanceMeters = Math.round(calcDistanceMeters(principal, order));
-			const sameStreet = street && street === normalizeStreet(order.endereco);
-			if (distanceMeters > 120) return null;
+			const orderStreet = getStreetKey(order);
+			const orderNeighborhood = getNeighborhoodKey(order);
+			const sameStreet = Boolean(street && street === orderStreet);
+			const sameNeighborhood =
+				!neighborhood || !orderNeighborhood || neighborhood === orderNeighborhood;
+			const hasCoordinateMatch =
+				principalHasCoords &&
+				hasCoordinates(order) &&
+				calcDistanceMeters(principal, order) <= 120;
+			const hasAddressMatch = sameStreet && sameNeighborhood;
+			if (!hasCoordinateMatch && !hasAddressMatch) return null;
+			const distanceMeters = hasCoordinateMatch
+				? Math.round(calcDistanceMeters(principal, order))
+				: null;
 			return { ...order, sameStreet, distanceMeters };
 		})
 		.filter(Boolean)
-		.sort((a, b) => a.distanceMeters - b.distanceMeters);
+		.sort((a, b) => {
+			const left = Number.isFinite(a.distanceMeters)
+				? a.distanceMeters
+				: Number.POSITIVE_INFINITY;
+			const right = Number.isFinite(b.distanceMeters)
+				? b.distanceMeters
+				: Number.POSITIVE_INFINITY;
+			return left - right;
+		});
 }
 
 function buildCityMatch(principal, city, retiradas) {
@@ -98,9 +131,11 @@ function buildCityMatch(principal, city, retiradas) {
 }
 
 function buildCityEntry(city, list, isAgente) {
-	const withCoords = list.filter(hasCoordinates);
-	const retiradas = withCoords.filter((order) => isRetiradaTipo(order.tipo));
-	const servicos = withCoords.filter((order) => !isRetiradaTipo(order.tipo));
+	const withReference = list.filter(
+		(order) => hasCoordinates(order) || hasAddressReference(order),
+	);
+	const retiradas = withReference.filter((order) => isRetiradaTipo(order.tipo));
+	const servicos = withReference.filter((order) => !isRetiradaTipo(order.tipo));
 	const matches = servicos
 		.map((principal) => buildCityMatch(principal, city, retiradas))
 		.filter(Boolean)

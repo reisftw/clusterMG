@@ -789,11 +789,25 @@
 	background: #e3fcef;
 	color: var(--green);
 }
+.painel-classico .status-pill.done {
+	background: #e3fcef;
+	color: var(--green);
+}
 .painel-classico .status-pill.andamento {
 	background: #fff3cd;
 	color: #7a5700;
 }
+.painel-classico .status-pill.progress,
+.painel-classico .status-pill.attention {
+	background: #fff3cd;
+	color: #7a5700;
+}
 .painel-classico .status-pill.abaixo {
+	background: #ffebe6;
+	color: var(--red);
+}
+.painel-classico .status-pill.below,
+.painel-classico .status-pill.critical {
 	background: #ffebe6;
 	color: var(--red);
 }
@@ -935,6 +949,46 @@
 .city-modal-progress-meta {
 	flex-wrap: wrap;
 	gap: 8px 16px;
+	display: flex;
+	justify-content: space-between;
+	font-size: 13px;
+	color: var(--muted);
+}
+.city-modal-progress-meta strong {
+	color: var(--text);
+	font-size: 15px;
+}
+.city-situation-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 10px;
+}
+.city-situation-grid div {
+	padding: 12px;
+	border: 1px solid var(--b);
+	border-radius: 10px;
+	background: var(--bg);
+}
+.city-situation-grid strong {
+	display: block;
+	margin-top: 6px;
+	color: var(--blue);
+	font:
+		900 18px / 1 Outfit,
+		Inter,
+		sans-serif;
+}
+.city-situation-text,
+.city-modal-total-daily {
+	margin-top: 12px;
+	color: var(--muted);
+	font:
+		700 12px / 1.45 Inter,
+		system-ui,
+		sans-serif;
+}
+.city-modal-total-daily strong {
+	color: var(--blue);
 }
 .daily-grid {
 	display: grid;

@@ -11,6 +11,7 @@ const {
 
 const CONFIG_PATH = "hubsoft_config/global";
 const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
+const TIME_ZONE = "America/Sao_Paulo";
 const LOCK_TTL_MS = 30 * 60 * 1000;
 const PAGE_SIZE = Math.min(
 	Math.max(Number(process.env.HUBSOFT_PAGE_SIZE || 500), 100),
@@ -145,6 +146,10 @@ function isFinesProfile(profile) {
 	return profile === PROFILE.MULTAS;
 }
 
+function isPeriodSnapshotProfile(profile) {
+	return isMetaProfile(profile) || isStoreProfile(profile) || isFinesProfile(profile);
+}
+
 function operationalProfileFor(profile) {
 	if (profile === PROFILE.META_AUDIT_DAILY) return PROFILE.META_D0;
 	if (profile === PROFILE.META_AUDIT_STORE) return PROFILE.LOJA;
@@ -165,7 +170,7 @@ function normalizeCityKey(value) {
 
 function todaySaoPaulo() {
 	const text = new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Sao_Paulo",
+		timeZone: TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -185,11 +190,17 @@ function addDays(dateText, days) {
 	return date.toISOString().slice(0, 10);
 }
 
+function addMonths(dateText, months) {
+	const date = parseDateOnly(dateText) || parseDateOnly(todaySaoPaulo());
+	date.setUTCMonth(date.getUTCMonth() + months);
+	return date.toISOString().slice(0, 10);
+}
+
 function toSaoPauloDateOnly(value) {
 	const date = value ? new Date(value) : null;
 	if (!date || Number.isNaN(date.getTime())) return null;
 	return new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Sao_Paulo",
+		timeZone: TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -474,6 +485,141 @@ async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 	return payload;
 }
 
+function flattenFinanceCharges(payload = {}) {
+	const groups = payload?.cobrancas_agrupadas?.data || [];
+	const charges = [];
+	for (const group of groups) {
+		const rows = group?.cobrancas?.data || [];
+		for (const row of rows) {
+			charges.push({
+				...row,
+				groupVencimento: group.vencimento,
+				groupVencimentoBr: group.vencimento_br,
+			});
+		}
+	}
+	return charges;
+}
+
+function isEquipmentFineCharge(charge = {}) {
+	const description = normalizeText(charge.descricao);
+	return description.includes("MULTA") && description.includes("EQUIPAMENTO");
+}
+
+function pickFineCharges(record, charges) {
+	const serviceId = cleanText(record?.raw_excerpt?.id_cliente_servico);
+	const candidates = charges.filter(isEquipmentFineCharge);
+	if (!serviceId) return candidates;
+	const exact = candidates.filter(
+		(charge) => cleanText(charge.id_cliente_servico) === serviceId,
+	);
+	return exact.length ? exact : candidates;
+}
+
+async function fetchFinanceCharges(session, record) {
+	const clientId = cleanText(record?.raw_excerpt?.id_cliente);
+	if (!clientId) return [];
+	const baseDate = toSaoPauloDateOnly(record.source_date) || todaySaoPaulo();
+	const payload = await hubsoftRequest(
+		session,
+		"/api/v1/cliente/financeiro/cobranca/agrupadas/paginado/50?page=1",
+		{
+			method: "POST",
+			body: {
+				filtros: {
+					id_cliente: clientId,
+					cliente_servico: null,
+					data_inicio: addMonths(baseDate, -6),
+					data_fim: addMonths(baseDate, 12),
+					tipo: "ativo",
+					situacao: "todos",
+				},
+			},
+		},
+	);
+	return flattenFinanceCharges(payload);
+}
+
+async function enrichFineRecordsWithFinance(session, records = [], onProgress) {
+	if (!session?.token || !records.length) return records;
+	const cache = new Map();
+	const enriched = new Array(records.length);
+	let cursor = 0;
+	let processed = 0;
+	const concurrency = Math.min(6, records.length);
+	const enrichRecord = async (record) => {
+		const clientId = cleanText(record?.raw_excerpt?.id_cliente);
+		if (!clientId) return record;
+		if (!cache.has(clientId)) {
+			cache.set(
+				clientId,
+				fetchFinanceCharges(session, record).catch((error) => ({ error })),
+			);
+		}
+		const result = await cache.get(clientId);
+		const charges = Array.isArray(result) ? result : [];
+		const fineCharges = pickFineCharges(record, charges);
+		if (!fineCharges.length) return record;
+		const valorLancado = fineCharges.reduce(
+			(total, charge) => total + (Number(charge.valor) || 0),
+			0,
+		);
+		const saldo = fineCharges.reduce(
+			(total, charge) => total + (Number(charge.saldo) || 0),
+			0,
+		);
+		const finance = {
+			totalCharges: fineCharges.length,
+			ids: fineCharges.map((charge) => charge.id_cobranca),
+			descriptions: fineCharges.map((charge) => charge.descricao),
+			dueDates: [
+				...new Set(
+					fineCharges
+						.map((charge) => charge.data_vencimento_br || charge.data_vencimento)
+						.filter(Boolean),
+				),
+			],
+			lancadoPor:
+				[
+					...new Set(
+						fineCharges
+							.map((charge) => cleanText(charge.id_usuario_cadastro))
+							.filter(Boolean),
+					),
+				].join(", ") || "",
+			valorLancado,
+			saldo,
+			auditReason: fineCharges
+				.map((charge) => `${charge.id_cobranca} - ${charge.descricao}`)
+				.join("; "),
+			reconciledAt: new Date().toISOString(),
+		};
+		return {
+			...record,
+			raw_excerpt: {
+				...(record.raw_excerpt || {}),
+				finance,
+			},
+		};
+	};
+	const workers = Array.from({ length: concurrency }, async () => {
+		while (cursor < records.length) {
+			const index = cursor;
+			cursor += 1;
+			enriched[index] = await enrichRecord(records[index]);
+			processed += 1;
+			if (processed % 10 === 0 || processed === records.length) {
+				await onProgress?.({
+					stage: `Conciliando financeiro ${processed}/${records.length}`,
+					percent: Math.min(70, 62 + Math.round((processed / records.length) * 8)),
+				});
+			}
+		}
+	});
+	await Promise.all(workers);
+	return enriched;
+}
+
 async function requestHubsoft(path, options = {}) {
 	const session = await getSession();
 	return hubsoftRequest(session, path, options);
@@ -743,6 +889,7 @@ async function collectProfile(profile, options = {}) {
 		);
 		return {
 			...collected,
+			hubsoftSession: session,
 			requestSummary: {
 				date,
 				startDate,
@@ -1054,9 +1201,66 @@ function extractPhonesFromText(value) {
 		.split(/\n+/)
 		.filter((line) => /telefone|whats|celular/i.test(line));
 	const source = phoneLines.length ? phoneLines.join(" ") : text;
-	return [...source.matchAll(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?9?\s?\d{4}[-.\s]?\d{4}/g)]
+	const lineCandidates = phoneLines
+		.map((line) => normalizePhone(line))
+		.filter((phone) => phone.length >= 10 && phone.length <= 13);
+	const textCandidates = [
+		...source.matchAll(/(?:\+?55\D*)?\(?\d{2}\)?\D*9?\d{4}\D*\d{4}/g),
+	]
 		.map((match) => normalizePhone(match[0]))
 		.filter((phone) => phone.length >= 10 && phone.length <= 13);
+	return [...lineCandidates, ...textCandidates];
+}
+
+const PHONE_FIELD_PATTERN = /(telefone|telefones|celular|whats|whatsapp|fone|contato|contatos)/i;
+
+function collectPhoneCandidatesFromObject(value, candidates = [], seen = new Set(), depth = 0) {
+	if (value === null || value === undefined || depth > 6) return candidates;
+	if (typeof value === "string" || typeof value === "number") {
+		candidates.push(...extractPhonesFromText(value));
+		return candidates;
+	}
+	if (typeof value !== "object") return candidates;
+	if (seen.has(value)) return candidates;
+	seen.add(value);
+	if (Array.isArray(value)) {
+		value.forEach((item) =>
+			collectPhoneCandidatesFromObject(item, candidates, seen, depth + 1),
+		);
+		return candidates;
+	}
+	for (const [key, nested] of Object.entries(value)) {
+		if (PHONE_FIELD_PATTERN.test(key)) {
+			if (Array.isArray(nested)) {
+				nested.forEach((item) =>
+					collectPhoneCandidatesFromObject(item, candidates, seen, depth + 1),
+				);
+			} else if (nested && typeof nested === "object") {
+				collectPhoneCandidatesFromObject(nested, candidates, seen, depth + 1);
+			} else {
+				candidates.push(...extractPhonesFromText(nested));
+			}
+			continue;
+		}
+		if (nested && typeof nested === "object") {
+			collectPhoneCandidatesFromObject(nested, candidates, seen, depth + 1);
+		}
+	}
+	return candidates;
+}
+
+function uniquePhones(values = []) {
+	const unique = [];
+	const seen = new Set();
+	for (const value of values) {
+		const phone = normalizePhone(value);
+		if (!phone || phone.length < 10 || phone.length > 13 || seen.has(phone)) {
+			continue;
+		}
+		seen.add(phone);
+		unique.push(phone);
+	}
+	return unique;
 }
 
 function extractInstallationAddress(row = {}) {
@@ -1089,13 +1293,30 @@ function adaptReportRow(row = {}) {
 		row.telefone_primario,
 		row.telefone_secundario,
 		row.telefone_terciario,
+		row.telefone_principal,
+		row.telefone_cliente,
 		row.telefone,
+		row.celular,
+		row.whatsapp,
+		row.fone,
+		cliente.telefone_primario,
+		cliente.telefone_secundario,
+		cliente.telefone_terciario,
+		cliente.telefone,
+		cliente.celular,
+		cliente.whatsapp,
+		servico.telefone_primario,
+		servico.telefone_secundario,
+		servico.telefone_terciario,
+		servico.telefone,
 		...(Array.isArray(row.telefones) ? row.telefones : []),
+		...(Array.isArray(cliente.telefones) ? cliente.telefones : []),
+		...(Array.isArray(servico.telefones) ? servico.telefones : []),
 		...extractPhonesFromText(row.descricao_abertura),
 		...extractPhonesFromText(row.descricao_servico),
-	]
-		.map(normalizePhone)
-		.filter(Boolean);
+		...collectPhoneCandidatesFromObject(row),
+	];
+	const telefonesUnicos = uniquePhones(telefones);
 	return {
 		numero_ordem_servico: cleanText(
 			row.numero_ordem_servico || row.num_os || row.numero_os,
@@ -1110,10 +1331,10 @@ function adaptReportRow(row = {}) {
 		endereco: cleanText(address.endereco),
 		numero: cleanText(address.numero),
 		bairro: cleanText(address.bairro),
-		telefone_primario: telefones[0] || "",
-		telefone_secundario: telefones[1] || "",
-		telefone_terciario: telefones[2] || "",
-		telefones,
+		telefone_primario: telefonesUnicos[0] || "",
+		telefone_secundario: telefonesUnicos[1] || "",
+		telefone_terciario: telefonesUnicos[2] || "",
+		telefones: telefonesUnicos,
 		data_cadastro: cleanText(row.data_cadastro || row.data_cadastro_br),
 		servico: cleanText(row.servico || servico.display || servico.descricao),
 		numero_plano: cleanText(row.numero_plano || servico.numero_plano),
@@ -1500,7 +1721,55 @@ async function updateRunProgress(runId, patch = {}) {
 	});
 }
 
+async function releaseStaleLock(profile) {
+	const result = await db.query(
+		`select l.profile,
+		        l.sync_run_id,
+		        l.expires_at,
+		        r.status,
+		        r.started_at,
+		        r.result_summary,
+		        coalesce(
+		          (r.result_summary->>'heartbeatAt')::timestamptz,
+		          r.started_at
+		        ) as heartbeat_at
+		   from hubsoft_sync_locks l
+		   left join hubsoft_sync_runs r on r.id = l.sync_run_id
+		  where l.profile = $1
+		    and (
+		      l.expires_at < now()
+		      or r.id is null
+		      or (
+		        r.status = $2
+		        and coalesce((r.result_summary->>'heartbeatAt')::timestamptz, r.started_at)
+		            < now() - interval '15 minutes'
+		      )
+		    )
+		  limit 1`,
+		[profile, RUN_STATUS.RUNNING],
+	);
+	const stale = result.rows[0];
+	if (!stale) return false;
+	await db.query(`delete from hubsoft_sync_locks where profile = $1`, [profile]);
+	if (stale.sync_run_id && stale.status === RUN_STATUS.RUNNING) {
+		await updateRun(stale.sync_run_id, {
+			status: RUN_STATUS.FAILED,
+			finished_at: new Date().toISOString(),
+			error_code: "STALE_RUN",
+			error_message:
+				"Execução interrompida sem heartbeat recente. Uma nova execução pode retomar pelo checkpoint.",
+			result_summary: {
+				...(stale.result_summary || {}),
+				stage: "Execução interrompida",
+				heartbeatAt: new Date().toISOString(),
+			},
+		}).catch(() => null);
+	}
+	return true;
+}
+
 async function acquireLock(profile, runId, user = {}) {
+	await releaseStaleLock(profile);
 	const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
 	const result = await db.query(
 		`insert into hubsoft_sync_locks (profile, sync_run_id, expires_at, locked_by)
@@ -1529,7 +1798,19 @@ async function releaseLock(profile, runId) {
 	);
 }
 
-async function persistRecords(runId, profile, records) {
+function runDateRangeOptions(profile, options = {}) {
+	if (!isPeriodSnapshotProfile(profile)) return {};
+	const startDate = cleanText(options.startDate || options.date);
+	const endDate = cleanText(options.endDate || options.date || startDate);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+		return {};
+	}
+	return startDate > endDate
+		? { startDate: endDate, endDate: startDate, preserveOutsidePeriod: true }
+		: { startDate, endDate, preserveOutsidePeriod: true };
+}
+
+async function persistRecords(runId, profile, records, options = {}) {
 	let inserted = 0;
 	let updated = 0;
 	const activeIds = [];
@@ -1587,15 +1868,30 @@ async function persistRecords(runId, profile, records) {
 		if (result.rows[0]?.inserted) inserted += 1;
 		else updated += 1;
 	}
-	const deactivated = await db.query(
-		`update hubsoft_sync_records
-        set active = false
-      where profile = $1
-        and sync_run_id <> $2
-        and active = true
-        and not (hubsoft_id = any($3::text[]))`,
-		[profile, runId, activeIds],
-	);
+	const periodOptions = options.preserveOutsidePeriod
+		? runDateRangeOptions(profile, options)
+		: {};
+	const deactivated = periodOptions.preserveOutsidePeriod
+		? await db.query(
+				`update hubsoft_sync_records
+	          set active = false
+	        where profile = $1
+	          and sync_run_id <> $2
+	          and active = true
+	          and not (hubsoft_id = any($3::text[]))
+	          and source_date >= ($4::date::timestamp at time zone '${TIME_ZONE}')
+	          and source_date < (($5::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')`,
+				[profile, runId, activeIds, periodOptions.startDate, periodOptions.endDate],
+			)
+		: await db.query(
+				`update hubsoft_sync_records
+	        set active = false
+	      where profile = $1
+	        and sync_run_id <> $2
+	        and active = true
+	        and not (hubsoft_id = any($3::text[]))`,
+				[profile, runId, activeIds],
+			);
 	return { inserted, updated, deactivated: deactivated.rowCount || 0 };
 }
 
@@ -1606,6 +1902,14 @@ function validateCollected(collected, uniqueRows) {
 	if (collected.expectedTotal !== collected.receivedRows) return RUN_STATUS.INCOMPLETE;
 	if (uniqueRows !== collected.receivedRows) return RUN_STATUS.SUSPICIOUS;
 	return RUN_STATUS.COMPLETE;
+}
+
+function shouldTolerateDuplicateRows(profile, collectedStats = {}) {
+	if (![PROFILE.MAPA, PROFILE.MATCH].includes(profile)) return false;
+	const duplicates = Number(collectedStats.duplicateRows || 0);
+	const receivedRows = Number(collectedStats.receivedRows || 0);
+	if (duplicates <= 0 || receivedRows <= 0) return false;
+	return duplicates <= Math.max(10, Math.ceil(receivedRows * 0.001));
 }
 
 function summarizeRecords(records) {
@@ -1758,10 +2062,23 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 		const records = collected.rows
 			.filter((row) => uniqueKeyFor(profile, row))
 			.map((row) => recordFor(profile, row, maps));
-		const status = validateCollected(
+		const recordsToPersist = isFinesProfile(profile)
+			? await enrichFineRecordsWithFinance(
+					collected.hubsoftSession,
+					records,
+					(progress) => updateRunProgress(run.id, progress),
+				)
+			: records;
+		let status = validateCollected(
 			{ ...collectedStats, receivedRows: collected.rows.length },
 			uniqueRows,
 		);
+		if (
+			status === RUN_STATUS.SUSPICIOUS &&
+			shouldTolerateDuplicateRows(profile, collectedStats)
+		) {
+			status = RUN_STATUS.COMPLETE;
+		}
 		let persistence = { inserted: 0, updated: 0, deactivated: 0 };
 		let operational = null;
 		if (status === RUN_STATUS.COMPLETE || (status === RUN_STATUS.VALID_EMPTY_RESULT && ![PROFILE.MAPA, PROFILE.MATCH].includes(profile))) {
@@ -1772,7 +2089,10 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 			if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
 				previousMapSnapshot = await mapSyncUpdates.captureActiveMapSnapshot(profile);
 			}
-			persistence = await persistRecords(run.id, profile, records);
+			persistence = await persistRecords(run.id, profile, recordsToPersist, {
+				...options,
+				...runDateRangeOptions(profile, options),
+			});
 			await updateRunProgress(run.id, {
 				stage: "Aplicando nos paineis operacionais",
 				percent: 84,
@@ -1780,7 +2100,7 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 			operational = await maybeApplyOperationalProfile(
 				profile,
 				collected.rows,
-				records,
+				recordsToPersist,
 				options,
 				user,
 			);
@@ -1831,13 +2151,14 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 					return null;
 				});
 			if (mapUpdate) {
+				const updateLabel = profile === PROFILE.MATCH ? "Match" : "Mapa";
 				await operationalImports.publishAcompanhamentoUpdate?.(profile.toLowerCase(), {
 					generatedAt: finishedAt,
 					updatedBy: user.uid || null,
 					notify: mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
 					notifyAcompanhamento:
 						mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
-					message: `Mapa atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
+					message: `${updateLabel} atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
 					summary: { mapUpdate },
 				});
 			}
@@ -2153,7 +2474,7 @@ async function startMetaAudit(dates = [], user = {}, options = {}) {
 
 function localDateParts(date = new Date()) {
 	const parts = new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Sao_Paulo",
+		timeZone: TIME_ZONE,
 		year: "numeric",
 		month: "2-digit",
 		day: "2-digit",
@@ -2228,9 +2549,15 @@ async function runSchedulerTick() {
 		config.autoDailyEnabled &&
 		(minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes || checkpointDue)
 	) {
+		const dailyResult = await runProfileSafely(PROFILE.META_D0, { date: now.date });
 		results.push({
 			profile: PROFILE.META_D0,
-			result: await runProfileSafely(PROFILE.META_D0, { date: now.date }),
+			result: dailyResult,
+		});
+		const storeResult = await runProfileSafely(PROFILE.LOJA, { date: now.date });
+		results.push({
+			profile: PROFILE.LOJA,
+			result: storeResult,
 		});
 		const patch = { autoDailyLastRunAt: new Date().toISOString() };
 		if (config.autoDailyCheckpointHours.includes(now.hour)) {
@@ -2240,7 +2567,7 @@ async function runSchedulerTick() {
 				patch.autoDailyLastCheckpointAt = new Date().toISOString();
 			}
 		}
-		if (succeeded(results[results.length - 1].result)) await saveSchedulerState(patch);
+		if (succeeded(dailyResult) && succeeded(storeResult)) await saveSchedulerState(patch);
 	}
 
 	if (
@@ -2456,6 +2783,7 @@ module.exports = {
 	classifyOrder,
 	discoverWithdrawalTechnicians,
 	getProfilesOverview,
+	getRun,
 	listRecords,
 	listRuns,
 	listWithdrawalTechnicians,
