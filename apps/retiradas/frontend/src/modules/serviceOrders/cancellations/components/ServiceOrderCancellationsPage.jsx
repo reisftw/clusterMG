@@ -29,6 +29,11 @@ const PERCENT = new Intl.NumberFormat("pt-BR", {
 	minimumFractionDigits: 1,
 	maximumFractionDigits: 1,
 });
+const EMPTY_SUMMARY = {
+	geral: { ftth: 0, naoFtth: 0, total: 0 },
+	empresas: {},
+	equipamentos: { comEquipamento: 0, semEquipamento: 0 },
+};
 
 function formatNumber(value) {
 	return NUMBER.format(Number(value || 0));
@@ -253,12 +258,19 @@ export default function ServiceOrderCancellationsPage() {
 	});
 
 	const currentSummary = useMemo(
-		() =>
-			summary?.competencia?.summary || {
-				geral: { ftth: 0, naoFtth: 0, total: 0 },
-				empresas: {},
-				equipamentos: { comEquipamento: 0, semEquipamento: 0 },
+		() => ({
+			...EMPTY_SUMMARY,
+			...(summary?.competencia?.summary || {}),
+			geral: {
+				...EMPTY_SUMMARY.geral,
+				...(summary?.competencia?.summary?.geral || {}),
 			},
+			empresas: summary?.competencia?.summary?.empresas || {},
+			equipamentos: {
+				...EMPTY_SUMMARY.equipamentos,
+				...(summary?.competencia?.summary?.equipamentos || {}),
+			},
+		}),
 		[summary],
 	);
 	const empresas = useMemo(

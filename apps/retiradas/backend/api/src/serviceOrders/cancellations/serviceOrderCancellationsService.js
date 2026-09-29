@@ -282,6 +282,13 @@ async function fetchMetabaseJson(competencia) {
 			timeoutError.statusCode = 504;
 			throw timeoutError;
 		}
+		if (error.cause?.code === "UND_ERR_CONNECT_TIMEOUT") {
+			const timeoutError = new Error(
+				"BI do HubSoft indisponivel para a VPS de homologacao.",
+			);
+			timeoutError.statusCode = 504;
+			throw timeoutError;
+		}
 		throw error;
 	} finally {
 		clearTimeout(timeout);
@@ -484,12 +491,19 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 		client.release();
 	}
 
-	const rows = await fetchMetabaseJson(normalizedCompetencia);
-	const regionalMap = await loadRegionalMap();
-	const records = rows
-		.map((row) => mapHubsoftRow(row, normalizedCompetencia, regionalMap))
-		.filter((record) => record.dataCancelamento);
-	const keys = records.map((record) => record.uniqueKey);
+	let records = [];
+	let keys = [];
+	try {
+		const rows = await fetchMetabaseJson(normalizedCompetencia);
+		const regionalMap = await loadRegionalMap();
+		records = rows
+			.map((row) => mapHubsoftRow(row, normalizedCompetencia, regionalMap))
+			.filter((record) => record.dataCancelamento);
+		keys = records.map((record) => record.uniqueKey);
+	} catch (error) {
+		await markSyncFailed(runId, normalizedCompetencia, error);
+		throw error;
+	}
 	let inserted = 0;
 	let updated = 0;
 	let deleted = 0;
