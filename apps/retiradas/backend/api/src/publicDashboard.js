@@ -114,6 +114,14 @@ function compactDashboardResult(result = {}) {
 	);
 }
 
+function compactAcompanhamentoResult(result = {}) {
+	const compact = compactDashboardResult(result);
+	if (compact.Março && compact.Marco) {
+		delete compact.Marco;
+	}
+	return compact;
+}
+
 async function getDocumentData(path) {
 	const collectionPath = String(path || "").split("/").filter(Boolean)[0] || "";
 	if (ordensRepository.isOrdersCollection(collectionPath)) {
@@ -596,16 +604,16 @@ async function buildPublicDashboard({
 async function buildAcompanhamentoResumo() {
 	const [
 		dashboardRows,
-		agentesRows,
 		feriadosRows,
 		config,
+		mapaRaw,
 		matchOSRaw,
 		agentesMatchOSRaw,
 	] = await Promise.all([
 		listCollectionData("dashboard", { limit: 36 }),
-		listCollectionData("dashboardagentes", { limit: 36 }),
 		listCollectionData("feriados", { limit: 300 }),
 		getDocumentData("config/metas"),
+		getDocumentData("public_dashboard/mapa_os"),
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
@@ -616,6 +624,7 @@ async function buildAcompanhamentoResumo() {
 
 	return {
 		generatedAt: new Date().toISOString(),
+		mapa: compactMapaSlice(mapaRaw),
 		matchOS: compactMatchSlice(matchOSFull),
 		agentesMatchOS: compactMatchSlice(agentesMatchOSFull),
 		metas: {
@@ -625,16 +634,12 @@ async function buildAcompanhamentoResumo() {
 		},
 		painel: {
 			retiradas: {
-				result: compactDashboardResult(rowsToDocumentMap(dashboardRows)),
+				result: compactAcompanhamentoResult(rowsToDocumentMap(dashboardRows)),
 				meta: {
 					generatedAt: new Date().toISOString(),
 					lastUpdate: config?.lastUpdate || null,
 				},
 				feriados: feriadosRows.map((row) => normalizeHoliday(row.data)),
-			},
-			agentes: {
-				result: rowsToDocumentMap(agentesRows),
-				meta: { generatedAt: new Date().toISOString() },
 			},
 			forcaTarefa: config?.forcaTarefa || null,
 		},
