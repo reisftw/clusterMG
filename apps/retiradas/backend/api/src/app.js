@@ -52,6 +52,7 @@ const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesR
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createEvidenciasRouter = require("./evidencias/routes/evidenciasRoutes");
+const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const equipmentRecoveryService = require("./equipmentRecovery/equipmentRecoveryService");
 const metrics = require("./metrics");
@@ -4687,6 +4688,15 @@ function createApp() {
 			requireCsrfToken,
 		}),
 	);
+
+	const serviceOrderCancellationsRouter = createServiceOrderCancellationsRouter({
+		fallbackRoles: FULL_OPERATION_ROLES,
+		requireAnyPermission,
+		requireAuthenticated,
+		requireCsrfToken,
+	});
+	app.use("/api/service-orders/cancellations", serviceOrderCancellationsRouter);
+	app.use("/api/cancelamentos", serviceOrderCancellationsRouter);
 
 	app.post(
 		"/api/admin/documents",

@@ -368,27 +368,64 @@ async function authenticateWithPlaywright(config) {
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const page = await browser.newPage();
+		const fillInput = async (locator, value) => {
+			const input = locator.first();
+			await input.waitFor({ state: "visible", timeout: 30_000 });
+			await input.click({ timeout: 10_000 }).catch(() => {});
+			await input.fill("");
+			await input.type(value, { delay: 20 });
+			await input.evaluate((element) => {
+				element.dispatchEvent(new Event("input", { bubbles: true }));
+				element.dispatchEvent(new Event("change", { bubbles: true }));
+				element.dispatchEvent(new Event("blur", { bubbles: true }));
+			});
+		};
+		const submitByText = async (label, fallbackInput) => {
+			const target = page.getByText(label, { exact: false }).last();
+			await page
+				.waitForFunction((text) => {
+					const candidates = [
+						...globalThis.document.querySelectorAll(
+							"button, [role='button'], a, span",
+						),
+					];
+					return candidates.some((element) => {
+						const content = String(element.textContent || "").trim().toUpperCase();
+						const disabled =
+							element.disabled ||
+							element.getAttribute("aria-disabled") === "true" ||
+							String(element.className || "").toLowerCase().includes("disabled");
+						return content.includes(text) && !disabled;
+					});
+				}, String(label).toUpperCase(), { timeout: 10_000 })
+				.catch(() => {});
+			try {
+				await target.click({ timeout: 10_000 });
+			} catch {
+				await fallbackInput.first().press("Enter");
+			}
+		};
 		await page.goto(`${webBase}/login`, {
 			waitUntil: "domcontentloaded",
 			timeout: 60_000,
 		});
 		await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-		await page
-			.locator('input[type="email"], input[name="email"], input[type="text"]')
-			.first()
-			.fill(username);
+		const usernameInput = page.locator(
+			'input[type="email"], input[name="email"], input[type="text"]',
+		);
+		await fillInput(usernameInput, username);
 		await Promise.all([
 			page.waitForLoadState("networkidle", { timeout: 60_000 }).catch(() => {}),
-			page.getByText("VALIDAR", { exact: false }).last().click(),
+			submitByText("VALIDAR", usernameInput),
 		]);
 		await page.waitForTimeout(1000);
-		await page
-			.locator('input[type="password"], input[name*="senha" i], input[name*="password" i]')
-			.first()
-			.fill(password);
+		const passwordInput = page.locator(
+			'input[type="password"], input[name*="senha" i], input[name*="password" i]',
+		);
+		await fillInput(passwordInput, password);
 		await Promise.all([
 			page.waitForLoadState("networkidle", { timeout: 60_000 }).catch(() => {}),
-			page.getByText("ENTRAR", { exact: false }).last().click(),
+			submitByText("ENTRAR", passwordInput),
 		]);
 		await page.waitForFunction(() => {
 			try {
