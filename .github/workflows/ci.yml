@@ -1046,8 +1046,7 @@ jobs:
              }
              echo '--- Migration preflight (Fase B) ---'
              run_api_env npm run migrate:preflight
-             echo '--- Backup pre-migration (Fase B) ---'
-             run_api_env npm run backup:database -- --scheduled
+             echo '--- Backup pre-migration desativado no deploy automatico ---'
              run_api_env npm run migrate:sql
              run_api_env npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"
@@ -1235,8 +1234,7 @@ jobs:
              }
              echo '--- Migration preflight (Fase B) ---'
              run_api_env npm run migrate:preflight
-             echo '--- Backup pre-migration (Fase B) ---'
-             run_api_env npm run backup:database -- --scheduled
+             echo '--- Backup pre-migration desativado no deploy automatico ---'
              run_api_env npm run migrate:sql
              run_api_env npm run migrate:normalized:apply
              \$SUDO systemctl restart \"\$api_service\"

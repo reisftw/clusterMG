@@ -2678,14 +2678,23 @@ async function persistMetasImport(payload = {}, user = {}) {
 	const agentesData = payload.agentesData || {};
 	const lastUpdate = payload.lastUpdate || null;
 	const manualLaunchAudit = payload.manualLaunchAudit || null;
+	const partialMonths = Array.isArray(payload.partialMonths)
+		? new Set(payload.partialMonths.map((month) => String(month || "").trim()).filter(Boolean))
+		: null;
+	const preserveMissingAgentes = payload.preserveMissingAgentes === true;
 	const nowIso = new Date().toISOString();
 
 	for (const month of MONTHORDER) {
+		if (partialMonths && !partialMonths.has(month)) {
+			continue;
+		}
 		const data = parsed[month];
 		if (!shouldKeepMonth(data)) {
 			await documents.deleteDocument(`metas/${month}`);
 			await documents.deleteDocument(`dashboard/${month}`);
-			await documents.deleteDocument(`dashboardagentes/${month}`);
+			if (!preserveMissingAgentes || Object.hasOwn(agentesData, month)) {
+				await documents.deleteDocument(`dashboardagentes/${month}`);
+			}
 			continue;
 		}
 
@@ -2715,6 +2724,9 @@ async function persistMetasImport(payload = {}, user = {}) {
 			user,
 		);
 
+		if (preserveMissingAgentes && !Object.hasOwn(agentesData, month)) {
+			continue;
+		}
 		const cities = dedupeAgentCities(agentesData[month]);
 		if (!cities.length) {
 			await documents.deleteDocument(`dashboardagentes/${month}`);
