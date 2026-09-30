@@ -29,7 +29,7 @@ export async function buscarCancelamentos(params = {}) {
 			servico: params.servico,
 			q: params.q,
 			page: params.page || 1,
-			limit: params.limit || 50,
+			limit: 15,
 		})}`,
 	);
 }

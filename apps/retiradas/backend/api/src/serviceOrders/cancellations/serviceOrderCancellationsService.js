@@ -1,8 +1,12 @@
 const db = require("../../db");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
 
 const TIME_ZONE = "America/Sao_Paulo";
 const METABASE_CARD_UUID = "7c9f15dd-1e51-4c77-bc7c-d19cc74218f1";
 const METABASE_BASE_URL = "https://bi.sempre.hubsoft.com.br:8443";
+const CANCELLATIONS_PAGE_LIMIT = 15;
+const execFileAsync = promisify(execFile);
 const VIEW_PERMISSIONS = [
 	"service_orders.cancellations.view",
 	"service_orders.cancellations.manage",
@@ -76,6 +80,8 @@ function parseDate(value) {
 	if (!text) return null;
 	const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
 	if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+	const brMatch = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+	if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
 	const date = new Date(text);
 	return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
@@ -112,7 +118,10 @@ function listCompetenciasInRange(startCompetencia, endCompetencia) {
 function parseNumber(value) {
 	if (value === null || value === undefined || value === "") return null;
 	if (typeof value === "number") return Number.isFinite(value) ? value : null;
-	const normalized = cleanText(value).replace(/\./g, "").replace(",", ".");
+	const normalized = cleanText(value)
+		.replace(/[^\d,.-]/g, "")
+		.replace(/\.(?=\d{3}(?:\D|$))/g, "")
+		.replace(",", ".");
 	const number = Number(normalized);
 	return Number.isFinite(number) ? number : null;
 }
@@ -129,6 +138,8 @@ function normalizeTechnology(row = {}) {
 		row.servico,
 		row.grupo_servico,
 		row.grupo_padrao,
+		row.grupos_servico,
+		row.grupos_cliente,
 	].join(" "));
 	if (
 		haystack.includes("FIBRA") ||
@@ -145,6 +156,8 @@ function normalizeCompany(row = {}) {
 		row.empresa_cluster,
 		row.grupo_servico,
 		row.grupo_padrao,
+		row.grupos_servico,
+		row.grupos_cliente,
 		row.grupo_permissao,
 		row.setor,
 		row.forma_cobranca,
@@ -178,6 +191,56 @@ function buildUniqueKey(row = {}) {
 	].join("|");
 }
 
+function getRowField(row = {}, fields = []) {
+	for (const field of fields) {
+		const value = row[field];
+		if (cleanText(value)) return value;
+	}
+	return "";
+}
+
+function rowBelongsToCancellationScope(row = {}, competencia) {
+	const date = parseDate(row.data_cancelamento);
+	if (!date || !date.startsWith(`${competencia}-`)) return false;
+
+	const status = normalizeKey(row.servico_status || row.status || row.status_servico);
+	if (status && !status.includes("CANCEL")) return false;
+
+	const churn = normalizeKey(
+		getRowField(row, [
+			"gera_grafico",
+			"GERA_GRAFICO",
+			"churn",
+			"CHURN",
+			"motivo_cancelamento_gera_grafico",
+			"gera_grafico",
+		]),
+	);
+	if (churn && !["S", "SIM", "TRUE", "1"].includes(churn)) return false;
+
+	const type = normalizeKey(getRowField(row, ["tipo", "TIPO", "tipo_cliente_servico"]));
+	if (type && !["V", "VENDA", "VAREJO"].includes(type)) return false;
+
+	return true;
+}
+
+function sanitizePayload(row = {}) {
+	const sensitiveKeys = new Set([
+		"cpf",
+		"cpf_cnpj",
+		"cnpj",
+		"rg",
+		"email",
+		"email_principal",
+		"data_nascimento",
+		"senha",
+		"password",
+	]);
+	return Object.fromEntries(
+		Object.entries(row).filter(([key]) => !sensitiveKeys.has(normalizeKey(key).toLowerCase())),
+	);
+}
+
 async function loadRegionalMap() {
 	const result = await db.query(
 		`select c.nome as cidade, r.id as regional_id, r.nome as regional_nome
@@ -204,15 +267,17 @@ function mapHubsoftRow(row = {}, competencia, regionalMap = new Map()) {
 		codigoCliente: cleanText(row.codigo_cliente),
 		clienteId: cleanText(row.id_cliente),
 		clienteServicoId: cleanText(row.id_cliente_servico),
-		clienteNome: cleanText(row["RAZÃO SOCIAL"] || row.razao_social || row.cliente),
+		clienteNome: cleanText(
+			row["RAZÃO SOCIAL"] || row.nome_razaosocial || row.razao_social || row.cliente,
+		),
 		numeroPlano: cleanText(row.numero_plano),
 		empresaOriginal: company.original,
 		empresaNormalizada: company.normalized,
 		servico: cleanText(row.servico),
 		tecnologiaOriginal: technology.original,
 		classificacaoTecnologia: technology.classification,
-		grupoServico: cleanText(row.grupo_servico),
-		grupoPadrao: cleanText(row.grupo_padrao),
+		grupoServico: cleanText(row.grupo_servico || row.grupos_servico),
+		grupoPadrao: cleanText(row.grupo_padrao || row.grupos_cliente),
 		velocidade: parseNumber(row.velocidade),
 		dataCancelamento,
 		motivoCancelamento: cleanText(row.motivo_cancelamento),
@@ -222,13 +287,18 @@ function mapHubsoftRow(row = {}, competencia, regionalMap = new Map()) {
 		regionalId: regional.regional_id || null,
 		regionalNome: regional.regional_nome || null,
 		bairro: cleanText(row.bairro),
-		endereco: cleanText(row["endereco_instalação"] || row.endereco_instalacao),
-		equipamentoComodato: cleanText(row.equipamento_comodato),
-		valor: parseNumber(row.valor),
+		endereco: cleanText(row["endereco_instalação"] || row.endereco_instalacao || row.endereco),
+		equipamentoComodato: cleanText(
+			row.equipamento_comodato ||
+				row.mac_addr ||
+				row.phy_addr ||
+				row.equipamento_conexao,
+		),
+		valor: parseNumber(row.valor || row.valor_com_pacote || row["valor (R$)"]),
 		faturasGeradas: parseInteger(row.faturas_geradas),
 		faturasQuitadas: parseInteger(row.faturas_quitadas),
 		faturasEmAberto: parseInteger(row.faturas_em_aberto),
-		payloadOriginal: row,
+		payloadOriginal: sanitizePayload(row),
 	};
 }
 
@@ -250,31 +320,86 @@ function buildMetabaseParameters(competencia) {
 	];
 }
 
+function getMetabaseTimeoutMs() {
+	return Number(process.env.HUBSOFT_CANCELLATIONS_TIMEOUT_MS || 180000);
+}
+
+function getMetabaseProxyUrl() {
+	return cleanText(
+		process.env.METABASE_PROXY_URL ||
+			process.env.HTTPS_PROXY ||
+			process.env.HTTP_PROXY,
+	);
+}
+
+async function fetchMetabaseText(url, { signal } = {}) {
+	const proxyUrl = getMetabaseProxyUrl();
+	if (!proxyUrl) {
+		const response = await fetch(url, {
+			headers: { accept: "application/json" },
+			signal,
+		});
+		const text = await response.text();
+		return { ok: response.ok, status: response.status, text };
+	}
+
+	const timeoutMs = getMetabaseTimeoutMs();
+	try {
+		const { stdout } = await execFileAsync(
+			"curl",
+			[
+				"--silent",
+				"--show-error",
+				"--fail-with-body",
+				"--location",
+				"--max-time",
+				String(Math.max(1, Math.ceil(timeoutMs / 1000))),
+				"--proxy",
+				proxyUrl,
+				"-H",
+				"accept: application/json",
+				url,
+			],
+			{
+				encoding: "utf8",
+				maxBuffer: Number(process.env.HUBSOFT_CANCELLATIONS_MAX_BUFFER || 100 * 1024 * 1024),
+				timeout: timeoutMs + 5000,
+			},
+		);
+		return { ok: true, status: 200, text: stdout };
+	} catch (error) {
+		const message = cleanText(error.stderr || error.message);
+		const proxyError = new Error(
+			message
+				? `Falha ao consultar BI via proxy configurado: ${message}`
+				: "Falha ao consultar BI via proxy configurado.",
+		);
+		proxyError.statusCode = 502;
+		throw proxyError;
+	}
+}
+
 async function fetchMetabaseJson(competencia) {
 	const controller = new AbortController();
 	const timeout = setTimeout(
 		() => controller.abort(),
-		Number(process.env.HUBSOFT_CANCELLATIONS_TIMEOUT_MS || 180000),
+		getMetabaseTimeoutMs(),
 	);
 	const parameters = encodeURIComponent(
 		JSON.stringify(buildMetabaseParameters(competencia)),
 	);
 	const url = `${METABASE_BASE_URL}/api/public/card/${METABASE_CARD_UUID}/query/json?parameters=${parameters}`;
 	try {
-		const response = await fetch(url, {
-			headers: { accept: "application/json" },
-			signal: controller.signal,
-		});
-		const text = await response.text();
+		const response = await fetchMetabaseText(url, { signal: controller.signal });
 		if (!response.ok) {
 			const error = new Error(
 				`Fonte HubSoft indisponivel (${response.status}).`,
 			);
 			error.statusCode = 502;
-			error.details = text.slice(0, 500);
+			error.details = response.text.slice(0, 500);
 			throw error;
 		}
-		const payload = JSON.parse(text);
+		const payload = JSON.parse(response.text);
 		return Array.isArray(payload) ? payload : [];
 	} catch (error) {
 		if (error.name === "AbortError") {
@@ -688,8 +813,6 @@ function buildFilters(query = {}) {
 	const exactFilters = [
 		["empresa", "empresa_normalizada"],
 		["classificacao", "classificacao_tecnologia"],
-		["regional", "regional_id"],
-		["cidade", "cidade"],
 		["tecnologia", "tecnologia_original"],
 		["motivo", "motivo_cancelamento"],
 		["servico", "servico"],
@@ -700,6 +823,14 @@ function buildFilters(query = {}) {
 			clauses.push(`${column} = ${params.add(value)}`);
 		}
 	}
+	const citySearch = cleanText(query.cidade);
+	if (citySearch && citySearch !== "TODOS" && citySearch !== "all") {
+		clauses.push(`lower(coalesce(cidade, '')) like ${params.add(`%${citySearch.toLowerCase()}%`)}`);
+	}
+	const regionalSearch = cleanText(query.regional);
+	if (regionalSearch && regionalSearch !== "TODOS" && regionalSearch !== "all") {
+		clauses.push(`lower(coalesce(regional_nome, '')) like ${params.add(`%${regionalSearch.toLowerCase()}%`)}`);
+	}
 	const search = cleanText(query.q || query.search);
 	if (search) {
 		const term = `%${search.toLowerCase()}%`;
@@ -709,6 +840,8 @@ function buildFilters(query = {}) {
 			or lower(coalesce(cliente_id, '')) like ${params.add(term)}
 			or lower(coalesce(cliente_servico_id, '')) like ${params.add(term)}
 			or lower(coalesce(servico, '')) like ${params.add(term)}
+			or lower(coalesce(cidade, '')) like ${params.add(term)}
+			or lower(coalesce(regional_nome, '')) like ${params.add(term)}
 		)`);
 	}
 	return { where: clauses.join("\n and "), values: params.values, competencia };
@@ -787,7 +920,7 @@ function mapSyncRun(row = {}) {
 
 async function listCancellations(query = {}) {
 	const page = parsePositiveInteger(query.page, 1, 100000);
-	const limit = parsePositiveInteger(query.limit, 50, 100);
+	const limit = CANCELLATIONS_PAGE_LIMIT;
 	const offset = (page - 1) * limit;
 	const { where, values } = buildFilters(query);
 	const totalResult = await db.query(
@@ -1079,5 +1212,8 @@ module.exports = {
 	validateCompetency,
 	_normalizeCompany: normalizeCompany,
 	_normalizeTechnology: normalizeTechnology,
+	_parseDate: parseDate,
+	_parseNumber: parseNumber,
 	_parseCompetencia: parseCompetencia,
+	_rowBelongsToCancellationScope: rowBelongsToCancellationScope,
 };

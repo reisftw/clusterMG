@@ -43,4 +43,31 @@ describe("serviceOrderCancellationsService", () => {
 		expect(service._parseCompetencia("2026-09")).toBe("2026-09");
 		expect(service._parseCompetencia("2026-9")).toMatch(/^\d{4}-\d{2}$/);
 	});
+
+	it("interpreta campos do relatorio interno do HubSoft", () => {
+		expect(service._parseDate("01/09/2026")).toBe("2026-09-01");
+		expect(service._parseNumber("R$ 65,50")).toBe(65.5);
+		expect(
+			service._rowBelongsToCancellationScope(
+				{
+					data_cancelamento: "01/09/2026",
+					servico_status: "Cancelado",
+					gera_grafico: "TRUE",
+					tipo: "VAREJO",
+				},
+				"2026-09",
+			),
+		).toBe(true);
+		expect(
+			service._rowBelongsToCancellationScope(
+				{
+					data_cancelamento: "01/09/2026",
+					servico_status: "Cancelado",
+					churn: "N",
+					tipo: "V",
+				},
+				"2026-09",
+			),
+		).toBe(false);
+	});
 });

@@ -235,7 +235,7 @@ export default function ServiceOrderCancellationsPage() {
 	const [competencias, setCompetencias] = useState([]);
 	const [filters, setFilters] = useState({});
 	const [items, setItems] = useState([]);
-	const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
+	const [pagination, setPagination] = useState({ page: 1, limit: 15, total: 0, totalPages: 1 });
 	const [syncHistory, setSyncHistory] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState(false);
@@ -569,7 +569,7 @@ export default function ServiceOrderCancellationsPage() {
 					<div>
 						<h2 className="text-xl font-black text-slate-950">Tabela detalhada</h2>
 						<p className="text-sm font-semibold text-slate-500">
-							Mostrando {formatNumber(items.length)} de {formatNumber(pagination.total)} registros.
+						Mostrando {formatNumber(items.length)} de {formatNumber(pagination.total)} registros, 15 por página.
 						</p>
 					</div>
 					<div className="flex flex-wrap gap-2">
@@ -592,7 +592,7 @@ export default function ServiceOrderCancellationsPage() {
 					</div>
 				</div>
 
-				<div className="mt-4 grid gap-2 md:grid-cols-4 xl:grid-cols-8">
+				<div className="mt-4 grid gap-2 md:grid-cols-4 xl:grid-cols-9">
 					<div className="relative md:col-span-2">
 						<Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
 						<input
@@ -601,15 +601,31 @@ export default function ServiceOrderCancellationsPage() {
 							onKeyDown={(event) => {
 								if (event.key === "Enter") loadCompetencia(1);
 							}}
-							placeholder="cliente, código, serviço"
+							placeholder="cliente, código, serviço, cidade ou regional"
 							className="h-10 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm font-semibold outline-none"
 						/>
 					</div>
+					<input
+						value={tableFilters.cidade}
+						onChange={(event) => setTableFilters((current) => ({ ...current, cidade: event.target.value }))}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") loadCompetencia(1);
+						}}
+						placeholder="Pesquisar cidade"
+						className="h-10 min-w-0 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 outline-none"
+					/>
+					<input
+						value={tableFilters.regional}
+						onChange={(event) => setTableFilters((current) => ({ ...current, regional: event.target.value }))}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") loadCompetencia(1);
+						}}
+						placeholder="Pesquisar regional"
+						className="h-10 min-w-0 rounded-xl border border-slate-200 px-3 text-xs font-black text-slate-700 outline-none"
+					/>
 					{[
 						["empresa", ["", "SEMPRE", "ONNET"]],
 						["classificacao", ["", "FTTH", "NAO_FTTH"]],
-						["regional", ["", ...(filters.regionais || [])]],
-						["cidade", ["", ...(filters.cidades || [])]],
 						["tecnologia", ["", ...(filters.tecnologias || [])]],
 						["motivo", ["", ...(filters.motivos || [])]],
 					].map(([key, options]) => (
@@ -700,22 +716,9 @@ export default function ServiceOrderCancellationsPage() {
 				</div>
 				<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-black text-slate-600">
 					<span>
-						Mostrando página {pagination.page} de {pagination.totalPages} · {formatNumber(pagination.total)} registro(s)
+						Mostrando página {pagination.page} de {pagination.totalPages} · {formatNumber(pagination.total)} registro(s) · 15 por página
 					</span>
 					<div className="flex items-center gap-2">
-						<select
-							value={pagination.limit}
-							onChange={(event) => {
-								const nextLimit = Number(event.target.value);
-								setPagination((current) => ({ ...current, limit: nextLimit, page: 1 }));
-								loadCompetencia(1, tableFilters, nextLimit);
-							}}
-							className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-black"
-						>
-							<option value={25}>25</option>
-							<option value={50}>50</option>
-							<option value={100}>100</option>
-						</select>
 						<button
 							type="button"
 							disabled={loading || pagination.page <= 1}

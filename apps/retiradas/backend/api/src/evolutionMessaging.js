@@ -3015,7 +3015,8 @@ function matchesHistoryItemForManualSchedule(history = {}, filters = {}) {
 	const phone = normalizePhone(filters.telefone);
 	const historyPhone = normalizePhone(history.telefone);
 	if (filters.historicoId && String(history.id || "") === String(filters.historicoId)) return true;
-	if (filters.filaId && String(history.filaId || "") === String(filters.filaId)) return true;
+	const historyQueueId = history.filaId || history.fila_id || history.queueId || "";
+	if (filters.filaId && String(historyQueueId) === String(filters.filaId)) return true;
 	if (filters.os && String(history.os || "") === String(filters.os)) return true;
 	if (phone && historyPhone && phonesMatch(historyPhone, phone)) return true;
 	return false;
@@ -3035,6 +3036,7 @@ function assertManualScheduleDateIsAllowed(schedule = {}) {
 			: "Não é possível gerar agendamento para hoje após o horário limite.",
 	);
 	error.status = 400;
+	error.statusCode = 400;
 	error.code = validation.status;
 	throw error;
 }
@@ -3054,13 +3056,6 @@ async function generateAppointmentFromStoredResponses(payload = {}) {
 	const relatedCallbacks = callbacks.filter((callback) =>
 		matchesStoredCallback(callback, filters),
 	);
-	const schedule = extractScheduleFromStoredCallbacks(relatedCallbacks);
-	if (!schedule) {
-		const error = new Error("Não encontrei data e horário válidos nas respostas registradas.");
-		error.status = 400;
-		throw error;
-	}
-	assertManualScheduleDateIsAllowed(schedule);
 	const queueItem =
 		queue.find((item) => matchesStoredCallback(item, filters)) ||
 		queue.find((item) => hasSharedQueueKey(item, filters));
@@ -3087,7 +3082,7 @@ async function generateAppointmentFromStoredResponses(payload = {}) {
 				historyItem,
 				relatedCallbacks,
 				filters,
-				schedule,
+				schedule: extractScheduleFromStoredCallbacks(relatedCallbacks) || {},
 			});
 			return {
 				ok: true,
@@ -3101,6 +3096,14 @@ async function generateAppointmentFromStoredResponses(payload = {}) {
 			};
 		}
 	}
+	const schedule = extractScheduleFromStoredCallbacks(relatedCallbacks);
+	if (!schedule) {
+		const error = new Error("Não encontrei data e horário válidos nas respostas registradas.");
+		error.status = 400;
+		error.statusCode = 400;
+		throw error;
+	}
+	assertManualScheduleDateIsAllowed(schedule);
 	const callbackId = schedule.sourceCallbackId || relatedCallbacks[0]?.id || randomId("cb");
 	const agendamentoId = await createAppointmentFromCallback(item, schedule, callbackId);
 	if (queueItem?.id) {
