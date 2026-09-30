@@ -47,7 +47,6 @@ import { buildPublicMapaSnapshot } from "../Mapa/utils/mapaUtils";
 import { buildMatchOSData } from "../Mapa/utils/matchOs";
 import {
 	invalidateDashboardDataCache,
-	useDashboardData,
 } from "../PainelPublico/hooks/useDashboardData";
 import { useMatchPublico } from "../PainelPublico/hooks/useMatchPublico";
 import { useRetiradas } from "../PainelPublico/hooks/useRetiradas";
@@ -57,6 +56,10 @@ import {
 	saveAcompanhamentoConfig,
 	uploadAcompanhamentoAd,
 } from "./acompanhamentoConfigService";
+import {
+	invalidateAcompanhamentoResumoCache,
+	useAcompanhamentoResumoData,
+} from "./hooks/useAcompanhamentoResumoData";
 import "./AcompanhamentoPage.css";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
@@ -2582,10 +2585,11 @@ export default function AcompanhamentoPage() {
 		loading: loadingAgenda,
 		carregar: carregarAgenda,
 	} = useAgenda({ preferStatic: false });
-	const { data: publicData, loading: loadingPublicData } = useDashboardData({
-		refreshIntervalMs: BACKGROUND_REFRESH_INTERVAL_MS,
-		refreshKey: dashboardRefreshKey,
-	});
+	const { data: publicData, loading: loadingPublicData } =
+		useAcompanhamentoResumoData({
+			refreshIntervalMs: BACKGROUND_REFRESH_INTERVAL_MS,
+			refreshKey: dashboardRefreshKey,
+		});
 	const { data: matchPublicoData, loading: loadingMatchPublico } =
 		useMatchPublico({ dashboardData: publicData });
 	const retiradas = useRetiradas(true, {
@@ -2635,6 +2639,7 @@ export default function AcompanhamentoPage() {
 		invalidateCache("metas-auditoria");
 		invalidateInternalStaticDataCache(token);
 		invalidateDashboardDataCache(token);
+		invalidateAcompanhamentoResumoCache(token);
 		setDashboardRefreshKey(token);
 		setLastRefresh(new Date());
 	}, []);

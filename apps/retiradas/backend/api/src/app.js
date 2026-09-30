@@ -66,6 +66,7 @@ const documentosService = require("./documentos/services/documentosService");
 const { attachRealtimeClient, broadcastRealtime } = require("./realtime");
 const {
 	buildSnapshotDomain,
+	getCachedAcompanhamentoResumo,
 	getCachedPublicDashboard,
 } = require("./publicDashboard");
 const {
@@ -2656,6 +2657,24 @@ function createApp() {
 			next(error);
 		}
 	});
+
+	app.get(
+		"/api/acompanhamento/resumo",
+		publicReadLimiter,
+		async (req, res, next) => {
+			try {
+				const resumo = await getCachedAcompanhamentoResumo();
+				res.set("X-Retiradas-Cache", resumo.cacheStatus);
+				res.set(
+					"X-Retiradas-Cache-Age-Ms",
+					String(Math.max(0, Math.round(resumo.cacheAgeMs))),
+				);
+				res.json(resumo.data);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 
 	app.get("/api/public/static/:domain", publicReadLimiter, async (req, res, next) => {
 		try {

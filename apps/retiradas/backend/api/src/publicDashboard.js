@@ -14,6 +14,12 @@ const publicDashboardCache = {
 	pending: null,
 };
 
+const acompanhamentoResumoCache = {
+	data: null,
+	cachedAt: 0,
+	pending: null,
+};
+
 const MONTHS = [
 	"Janeiro",
 	"Fevereiro",
@@ -160,6 +166,9 @@ function invalidatePublicDashboardCache() {
 	publicDashboardCache.data = null;
 	publicDashboardCache.cachedAt = 0;
 	publicDashboardCache.pending = null;
+	acompanhamentoResumoCache.data = null;
+	acompanhamentoResumoCache.cachedAt = 0;
+	acompanhamentoResumoCache.pending = null;
 }
 
 function toTime(value) {
@@ -584,6 +593,102 @@ async function buildPublicDashboard({
 	};
 }
 
+async function buildAcompanhamentoResumo() {
+	const [
+		dashboardRows,
+		agentesRows,
+		feriadosRows,
+		config,
+		matchOSRaw,
+		agentesMatchOSRaw,
+	] = await Promise.all([
+		listCollectionData("dashboard", { limit: 36 }),
+		listCollectionData("dashboardagentes", { limit: 36 }),
+		listCollectionData("feriados", { limit: 300 }),
+		getDocumentData("config/metas"),
+		getDocumentData("public_dashboard/match_os"),
+		getDocumentData("public_dashboard/agentes_match_os"),
+	]);
+	const { matchOS: matchOSFull, agentesMatchOS: agentesMatchOSFull } =
+		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw, {
+			allowRebuild: false,
+		});
+
+	return {
+		generatedAt: new Date().toISOString(),
+		matchOS: compactMatchSlice(matchOSFull),
+		agentesMatchOS: compactMatchSlice(agentesMatchOSFull),
+		metas: {
+			lastUpdate: config?.lastUpdate || null,
+			baseConfig: config?.baseConfig || null,
+			forcaTarefa: config?.forcaTarefa || null,
+		},
+		painel: {
+			retiradas: {
+				result: compactDashboardResult(rowsToDocumentMap(dashboardRows)),
+				meta: {
+					generatedAt: new Date().toISOString(),
+					lastUpdate: config?.lastUpdate || null,
+				},
+				feriados: feriadosRows.map((row) => normalizeHoliday(row.data)),
+			},
+			agentes: {
+				result: rowsToDocumentMap(agentesRows),
+				meta: { generatedAt: new Date().toISOString() },
+			},
+			forcaTarefa: config?.forcaTarefa || null,
+		},
+		months: MONTHS,
+	};
+}
+
+async function getCachedAcompanhamentoResumo() {
+	const ttlMs = getPublicDashboardCacheTtlMs();
+	const now = Date.now();
+	const cacheAgeMs = now - acompanhamentoResumoCache.cachedAt;
+
+	if (
+		ttlMs > 0 &&
+		acompanhamentoResumoCache.data &&
+		cacheAgeMs < ttlMs
+	) {
+		return {
+			data: acompanhamentoResumoCache.data,
+			cacheStatus: "HIT",
+			cacheAgeMs,
+		};
+	}
+
+	if (ttlMs > 0 && acompanhamentoResumoCache.pending) {
+		const data = await acompanhamentoResumoCache.pending;
+		return {
+			data,
+			cacheStatus: "JOIN",
+			cacheAgeMs: Date.now() - acompanhamentoResumoCache.cachedAt,
+		};
+	}
+
+	const pending = buildAcompanhamentoResumo();
+	acompanhamentoResumoCache.pending = pending;
+
+	try {
+		const data = await pending;
+		if (ttlMs > 0) {
+			acompanhamentoResumoCache.data = data;
+			acompanhamentoResumoCache.cachedAt = Date.now();
+		}
+		return {
+			data,
+			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
+			cacheAgeMs: 0,
+		};
+	} finally {
+		if (acompanhamentoResumoCache.pending === pending) {
+			acompanhamentoResumoCache.pending = null;
+		}
+	}
+}
+
 async function getCachedPublicDashboard(options = {}) {
 	const matchDetail = Boolean(options.matchDetail);
 	const mapaDetail = Boolean(options.mapaDetail);
@@ -661,8 +766,10 @@ async function buildSnapshotDomain(domain, { compact = false } = {}) {
 }
 
 module.exports = {
+	buildAcompanhamentoResumo,
 	buildPublicDashboard,
 	buildSnapshotDomain,
+	getCachedAcompanhamentoResumo,
 	getCachedPublicDashboard,
 	invalidatePublicDashboardCache,
 };
