@@ -148,8 +148,8 @@ function shouldShowAcompanhamentoNotice(payload = {}) {
 	return payload.notify === true || payload.notifyAcompanhamento === true;
 }
 
-function shouldShowMetasNotice(source, payload = {}) {
-	return source === "metas" && shouldShowAcompanhamentoNotice(payload);
+function shouldShowMetasNotice() {
+	return false;
 }
 
 const SECTION_LABELS = [

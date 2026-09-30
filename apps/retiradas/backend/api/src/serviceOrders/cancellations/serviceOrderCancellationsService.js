@@ -465,6 +465,19 @@ function summariesDiffer(left, right) {
 	return JSON.stringify(left || {}) !== JSON.stringify(right || {});
 }
 
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableWriteConflict(error) {
+	return ["40P01", "40001"].includes(String(error?.code || ""));
+}
+
+function syncLockKey(competencia) {
+	const digits = String(competencia || "").replace(/\D/g, "");
+	return Number(`91${digits}`) || 91000000;
+}
+
 async function upsertCompetencyShell(client, competencia, status, runId = null) {
 	await client.query(
 		`insert into service_order_cancellation_competencies
@@ -632,10 +645,17 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 	let inserted = 0;
 	let updated = 0;
 	let deleted = 0;
+	const maxWriteAttempts = 4;
+	const lockKey = syncLockKey(normalizedCompetencia);
+	for (let attempt = 1; attempt <= maxWriteAttempts; attempt += 1) {
 	const writeClient = await db.connect();
 	try {
 		await writeClient.query("begin");
+		await writeClient.query("select pg_advisory_xact_lock($1)", [lockKey]);
 		await upsertCompetencyShell(writeClient, normalizedCompetencia, "SYNCING", runId);
+		inserted = 0;
+		updated = 0;
+		deleted = 0;
 		for (const record of records) {
 			const action = await upsertCancellationRecord(writeClient, record);
 			if (action === "inserted") inserted += 1;
@@ -690,11 +710,17 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 		};
 	} catch (error) {
 		await writeClient.query("rollback").catch(() => {});
+		if (isRetryableWriteConflict(error) && attempt < maxWriteAttempts) {
+			await sleep(500 * attempt);
+			continue;
+		}
 		await markSyncFailed(runId, normalizedCompetencia, error);
 		throw error;
 	} finally {
 		writeClient.release();
 	}
+	}
+	throw new Error("Sincronizacao nao finalizada apos tentativas de gravacao.");
 }
 
 async function markSyncFailed(runId, competencia, error) {
