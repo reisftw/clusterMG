@@ -46,17 +46,33 @@ async function parseJsonResponse(response) {
 	}
 }
 
+function wait(ms) {
+	return new Promise((resolve) => {
+		globalThis.setTimeout(resolve, ms);
+	});
+}
+
 async function refreshCsrfToken() {
 	if (!csrfRefreshPromise) {
 		csrfRefreshPromise = (async () => {
-			const response = await fetch(`${getApiBaseUrl()}/auth/me`, {
-				cache: "no-store",
-				credentials: "include",
-				headers: {
-					"Content-Type": "application/json",
-				},
-			});
-			const data = await parseJsonResponse(response);
+			let response = null;
+			let data = null;
+			for (let attempt = 0; attempt < 3; attempt += 1) {
+				try {
+					response = await fetch(`${getApiBaseUrl()}/auth/me`, {
+						cache: "no-store",
+						credentials: "include",
+						headers: {
+							"Content-Type": "application/json",
+						},
+					});
+					data = await parseJsonResponse(response);
+					if (response.ok && data?.user) break;
+				} catch (error) {
+					if (attempt >= 2) throw error;
+				}
+				if (attempt < 2) await wait(500 * (attempt + 1));
+			}
 			if (!response.ok || !data?.user) {
 				if (response.status === 401) clearVpsAuthSession();
 				throw new Error(data?.error || `Erro HTTP ${response.status}.`);

@@ -5,7 +5,7 @@ const {
 	buildMatchMessages,
 } = require("./operationalMatchSnapshot");
 
-const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 10_000;
+const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 60_000;
 const DEFAULT_MATCH_REBUILD_IDLE_MS = 120_000;
 
 const publicDashboardCache = {
@@ -82,7 +82,7 @@ function getPublicDashboardCacheTtlMs() {
 	const configuredTtl = Number(process.env.PUBLIC_DASHBOARD_CACHE_TTL_MS);
 	if (!Number.isFinite(configuredTtl))
 		return DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS;
-	return Math.max(0, Math.min(configuredTtl, 60_000));
+	return Math.max(0, Math.min(configuredTtl, 5 * 60_000));
 }
 
 function getMatchRebuildIdleMs() {

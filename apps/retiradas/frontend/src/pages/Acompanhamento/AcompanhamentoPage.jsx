@@ -60,7 +60,7 @@ import {
 import "./AcompanhamentoPage.css";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
-const BACKGROUND_REFRESH_INTERVAL_MS = 30 * 1000;
+const BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
 const CURSOR_IDLE_TIMEOUT_MS = 60 * 1000;
 const CONFIG_STORAGE_KEY = "acompanhamento-panel-config";
 const MONTH_ORDER = [
@@ -449,10 +449,14 @@ function useRealtimeAcompanhamento(now, currentMonth, onLiveUpdate) {
 	useEffect(() => {
 		let active = true;
 		const load = async () => {
+			const endDate =
+				String(monthRange.end || "").localeCompare(String(next7 || "")) >= 0
+					? monthRange.end
+					: next7;
 			const items = await buscarAgendamentosDominio({
 				max: 5000,
 				startDate: monthRange.start,
-				endDate: monthRange.end,
+				endDate,
 			});
 			if (!active) return;
 			setMonthlyAppointments(
@@ -465,33 +469,6 @@ function useRealtimeAcompanhamento(now, currentMonth, onLiveUpdate) {
 						String(a.data || "").localeCompare(String(b.data || "")),
 					),
 			);
-			onLiveUpdate?.();
-		};
-		load().catch(console.error);
-		const timer = window.setInterval(() => load().catch(console.error), 30000);
-		const unsubscribeRealtime = subscribeRealtimeTopics(
-			["acompanhamento"],
-			() => {
-				load().catch(console.error);
-			},
-			{ debounceMs: 250 },
-		);
-		return () => {
-			active = false;
-			window.clearInterval(timer);
-			unsubscribeRealtime();
-		};
-	}, [monthRange.end, monthRange.start, onLiveUpdate]);
-
-	useEffect(() => {
-		let active = true;
-		const load = async () => {
-			const items = await buscarAgendamentosDominio({
-				max: 2000,
-				startDate: today,
-				endDate: next7,
-			});
-			if (!active) return;
 			setUpcomingAppointments(
 				items
 					.filter((item) => item.data >= today && item.data <= next7)
@@ -502,7 +479,10 @@ function useRealtimeAcompanhamento(now, currentMonth, onLiveUpdate) {
 			onLiveUpdate?.();
 		};
 		load().catch(console.error);
-		const timer = window.setInterval(() => load().catch(console.error), 30000);
+		const timer = window.setInterval(
+			() => load().catch(console.error),
+			BACKGROUND_REFRESH_INTERVAL_MS,
+		);
 		const unsubscribeRealtime = subscribeRealtimeTopics(
 			["acompanhamento"],
 			() => {
@@ -515,7 +495,7 @@ function useRealtimeAcompanhamento(now, currentMonth, onLiveUpdate) {
 			window.clearInterval(timer);
 			unsubscribeRealtime();
 		};
-	}, [next7, onLiveUpdate, today]);
+	}, [monthRange.end, monthRange.start, next7, onLiveUpdate, today]);
 
 	return useMemo(() => {
 		const result = {};
@@ -2604,8 +2584,11 @@ export default function AcompanhamentoPage() {
 		refreshKey: dashboardRefreshKey,
 	});
 	const { data: matchPublicoData, loading: loadingMatchPublico } =
-		useMatchPublico();
-	const retiradas = useRetiradas(true, { refreshKey: dashboardRefreshKey });
+		useMatchPublico({ dashboardData: publicData });
+	const retiradas = useRetiradas(true, {
+		dashboardData: publicData,
+		refreshKey: dashboardRefreshKey,
+	});
 	const currentMonth = calendarMonth;
 	const { boardData: diarioBoardData, loading: loadingDiario } =
 		useDiarioEntries(localDateKey(now));

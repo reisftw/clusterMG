@@ -118,9 +118,13 @@ function normalizeMonthData(data) {
 
 export function useRetiradas(enabled = true, options = {}) {
 	const refreshKey = options.refreshKey || "";
-	const { data, loading, error } = useDashboardData({
+	const dashboardResult = useDashboardData({
+		enabled: !options.dashboardData,
 		refreshKey,
 	});
+	const data = options.dashboardData || dashboardResult.data;
+	const loading = options.dashboardData ? false : dashboardResult.loading;
+	const error = options.dashboardData ? null : dashboardResult.error;
 	const [liveBaseConfig, setLiveBaseConfig] = useState(null);
 
 	useEffect(() => {

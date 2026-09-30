@@ -118,10 +118,6 @@ function CompactTable({ title, columns, rows, empty = "Sem dados." }) {
 		safePage * TABLE_PAGE_SIZE,
 	);
 
-	useEffect(() => {
-		setPage(1);
-	}, [rows]);
-
 	return (
 		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 			<div className="flex flex-wrap items-start justify-between gap-3">
