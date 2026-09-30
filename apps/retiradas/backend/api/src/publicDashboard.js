@@ -254,8 +254,8 @@ function compactMatchSection(section = []) {
 
 function compactMatchData(matchData = {}) {
 	return {
-		...matchData,
 		compact: true,
+		resumo: matchData.resumo || null,
 		regionais: compactMatchSection(matchData.regionais),
 		agentes: compactMatchSection(matchData.agentes),
 	};
@@ -265,12 +265,16 @@ function compactMatchSlice(slice) {
 	if (!slice) return slice;
 	if (slice.data && typeof slice.data === "object") {
 		return {
-			...slice,
 			compact: true,
+			meta: slice.meta || slice.data.meta || null,
 			data: compactMatchData(slice.data),
 		};
 	}
-	return compactMatchData(slice);
+	return {
+		compact: true,
+		meta: slice.meta || null,
+		data: compactMatchData(slice),
+	};
 }
 
 function compactMapaOrder(order = {}) {
