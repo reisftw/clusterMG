@@ -43,6 +43,71 @@ function rowsToDocumentMap(rows = []) {
 	return map;
 }
 
+function pickDefined(source = {}, keys = []) {
+	return keys.reduce((acc, key) => {
+		if (source[key] !== undefined) acc[key] = source[key];
+		return acc;
+	}, {});
+}
+
+function compactMetaRecord(record, { includeSources = false } = {}) {
+	if (!record || typeof record !== "object") return record;
+	const compact = pickDefined(record, [
+		"id",
+		"mes",
+		"month",
+		"ano",
+		"year",
+		"origem",
+		"status",
+		"updatedAt",
+		"hubsoftUpdatedAt",
+		"hubsoftLastProfile",
+		"metaMode",
+		"metaModeLabel",
+		"meta",
+		"metaDiaria",
+		"metaSazonal",
+		"totalOS",
+		"cancelamentos",
+		"totalCancelamentos",
+		"percentAchieved",
+		"temLancamentos",
+		"planilhaCarregada",
+		"lojaTotal",
+		"agenteTotal",
+		"propMult",
+		"totalMultas",
+		"multasDiarias",
+		"saldoDiario",
+		"rawDays",
+		"technicians",
+		"regionais",
+	]);
+
+	if (includeSources) {
+		if (record.onnet) {
+			compact.onnet = compactMetaRecord(record.onnet, { includeSources: false });
+		}
+		if (record.onnetSempre) {
+			compact.onnetSempre = compactMetaRecord(record.onnetSempre, {
+				includeSources: false,
+			});
+		}
+	}
+
+	return compact;
+}
+
+function compactDashboardResult(result = {}) {
+	return Object.fromEntries(
+		Object.entries(result).map(([month, record]) => [
+			month,
+			compactMetaRecord(record, { includeSources: true }),
+		]),
+	);
+}
+
 async function getDocumentData(path) {
 	const collectionPath = String(path || "").split("/").filter(Boolean)[0] || "";
 	if (ordensRepository.isOrdersCollection(collectionPath)) {
@@ -502,7 +567,7 @@ async function buildPublicDashboard({
 		},
 		painel: {
 			retiradas: {
-				result: rowsToDocumentMap(dashboardRows),
+				result: compactDashboardResult(rowsToDocumentMap(dashboardRows)),
 				meta: {
 					generatedAt: new Date().toISOString(),
 					lastUpdate: config?.lastUpdate || null,
