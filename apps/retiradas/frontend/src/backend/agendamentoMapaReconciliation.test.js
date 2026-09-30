@@ -108,6 +108,7 @@ describe("agendamentoMapaReconciliation", () => {
 		};
 		const notifications = {
 			createNotification: vi.fn(async () => ({})),
+			notificationExists: vi.fn(async () => false),
 		};
 		const { reconcileAppointmentsWithMapa } = loadReconciliation({
 			documents,
@@ -161,7 +162,10 @@ describe("agendamentoMapaReconciliation", () => {
 			recordAppointmentLog: vi.fn(async () => ({})),
 			saveAppointment: vi.fn(async () => ({})),
 		};
-		const notifications = { createNotification: vi.fn(async () => ({})) };
+		const notifications = {
+			createNotification: vi.fn(async () => ({})),
+			notificationExists: vi.fn(async () => false),
+		};
 		const dbClientQuery = vi.fn(async (text) => {
 			const sql = String(typeof text === "string" ? text : "").toLowerCase();
 			if (["begin", "commit", "rollback"].includes(sql)) return { rows: [] };
@@ -216,7 +220,10 @@ describe("agendamentoMapaReconciliation", () => {
 			}),
 			saveAppointment: vi.fn(async () => ({})),
 		};
-		const notifications = { createNotification: vi.fn(async () => ({})) };
+		const notifications = {
+			createNotification: vi.fn(async () => ({})),
+			notificationExists: vi.fn(async () => false),
+		};
 		const dbClientQuery = vi.fn(async () => ({ rows: [] }));
 		const release = vi.fn();
 		const db = {
