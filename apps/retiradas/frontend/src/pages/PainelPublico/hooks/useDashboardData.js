@@ -189,14 +189,18 @@ async function fetchDataJSON({ force = false } = {}) {
 }
 
 export function useDashboardData(options = {}) {
+	const enabled = options.enabled !== false;
 	const refreshIntervalMs = Math.max(0, Number(options.refreshIntervalMs || 0));
 	const refreshKey = options.refreshKey || "";
 	const [data, setData] = useState(cache);
-	const [loading, setLoading] = useState(!cache);
+	const [loading, setLoading] = useState(enabled && !cache);
 	const [error, setError] = useState(null);
 	const mounted = useRef(true);
 
 	useEffect(() => {
+		if (!enabled) {
+			return undefined;
+		}
 		mounted.current = true;
 		let refreshTimer = null;
 		let refreshInterval = null;
@@ -256,7 +260,7 @@ export function useDashboardData(options = {}) {
 				handleStaticDataUpdated,
 			);
 		};
-	}, [refreshIntervalMs, refreshKey]);
+	}, [enabled, refreshIntervalMs, refreshKey]);
 
-	return { data, loading, error };
+	return { data, loading: enabled ? loading : false, error };
 }

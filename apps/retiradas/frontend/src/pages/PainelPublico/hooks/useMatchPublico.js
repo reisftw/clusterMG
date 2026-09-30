@@ -88,7 +88,11 @@ function resolveMatchPublicoData({ detail, detailData, matchData }) {
 
 export function useMatchPublico(options = {}) {
 	const detail = Boolean(options.detail);
-	const { data, loading } = useDashboardData();
+	const dashboardResult = useDashboardData({
+		enabled: !options.dashboardData,
+	});
+	const data = options.dashboardData || dashboardResult.data;
+	const loading = options.dashboardData ? false : dashboardResult.loading;
 	const [detailState, setDetailState] = useState({
 		version: "",
 		data: null,

@@ -22,6 +22,7 @@ import {
 	exportTecnicosPdf,
 	exportTecnicosXlsx,
 } from "../../modules/relatorios/services/relatoriosExportService";
+import { getApiBaseUrl } from "../../services/vpsApiClient";
 import { resolveVpsDate } from "../../services/vpsDate";
 import { obterMesAtual } from "../../utils/mes";
 import PainelMapaNav from "./components/PainelMapaNav";
@@ -184,6 +185,20 @@ function ReportCard({
 	);
 }
 
+async function buscarMapaCompletoParaExportacao() {
+	const response = await fetch(`${getApiBaseUrl()}/public/dashboard?detail=mapa`, {
+		cache: "no-store",
+		credentials: "include",
+	});
+	if (!response.ok) throw new Error(`HTTP ${response.status}`);
+	const payload = await response.json();
+	const mapa = payload?.mapa?.data || payload?.mapa || {};
+	return {
+		meta: mapa.meta || payload?.mapa?.meta || null,
+		ordens: Array.isArray(mapa.ordens) ? mapa.ordens : [],
+	};
+}
+
 export default function RelatoriosPublicoPage() {
 	const [month, setMonth] = useState(() => obterMesAtual() || "Janeiro");
 	const [activeLoading, setActiveLoading] = useState("");
@@ -196,6 +211,10 @@ export default function RelatoriosPublicoPage() {
 	const dadosMes = retiradas.allData?.[month] || null;
 	const dadosAgentesMes = agentes.allData?.[month] || null;
 	const mapaOrdens = data?.mapa?.ordens || [];
+	const mapaTotal =
+		Number(data?.mapa?.totalOrdens || 0) ||
+		Number(data?.mapa?.summary?.totalOrdens || 0) ||
+		mapaOrdens.length;
 	const mapaMeta = data?.mapa?.meta || null;
 	const matchOrdens = data?.matchOS?.ordens || [];
 	const matchMeta = data?.matchOS?.meta || null;
@@ -222,7 +241,7 @@ export default function RelatoriosPublicoPage() {
 			},
 			{
 				label: "Mapa O.S",
-				value: mapaOrdens.length,
+				value: mapaTotal,
 				icon: Map,
 			},
 			{
@@ -234,7 +253,7 @@ export default function RelatoriosPublicoPage() {
 		[
 			dadosAgentesMes,
 			dadosMes,
-			mapaOrdens.length,
+			mapaTotal,
 			match?.data,
 			matchOrdens.length,
 		],
@@ -258,6 +277,12 @@ export default function RelatoriosPublicoPage() {
 		} finally {
 			setActiveLoading("");
 		}
+	}
+
+	async function exportMapaCompleto(format) {
+		const mapa = await buscarMapaCompletoParaExportacao();
+		if (format === "pdf") return exportMapaPdf(mapa.ordens, mapa.meta);
+		return exportMapaXlsx(mapa.ordens);
 	}
 
 	return (
@@ -414,17 +439,17 @@ export default function RelatoriosPublicoPage() {
 								title="Mapa O.S"
 								description="Ordens abertas do mapa com status, cidade, regional, cliente e endereço resumido."
 								note="Os downloads do mapa dependem das ordens abertas estarem disponíveis no snapshot público atual."
-								disabled={!mapaOrdens.length}
+								disabled={!mapaTotal}
 								loadingPdf={activeLoading === "mapa-publico:pdf"}
 								loadingXlsx={activeLoading === "mapa-publico:xlsx"}
 								onPdf={() =>
 									runExport("mapa-publico:pdf", () =>
-										exportMapaPdf(mapaOrdens, mapaMeta),
+										exportMapaCompleto("pdf"),
 									)
 								}
 								onXlsx={() =>
 									runExport("mapa-publico:xlsx", () =>
-										exportMapaXlsx(mapaOrdens),
+										exportMapaCompleto("xlsx"),
 									)
 								}
 							/>

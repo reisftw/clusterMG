@@ -5,7 +5,7 @@ const {
 	buildMatchMessages,
 } = require("./operationalMatchSnapshot");
 
-const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 10_000;
+const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 60_000;
 const DEFAULT_MATCH_REBUILD_IDLE_MS = 120_000;
 
 const publicDashboardCache = {
@@ -41,6 +41,71 @@ function rowsToDocumentMap(rows = []) {
 		map.Marco = { ...map.Março, mes: "Marco", month: "Marco" };
 	}
 	return map;
+}
+
+function pickDefined(source = {}, keys = []) {
+	return keys.reduce((acc, key) => {
+		if (source[key] !== undefined) acc[key] = source[key];
+		return acc;
+	}, {});
+}
+
+function compactMetaRecord(record, { includeSources = false } = {}) {
+	if (!record || typeof record !== "object") return record;
+	const compact = pickDefined(record, [
+		"id",
+		"mes",
+		"month",
+		"ano",
+		"year",
+		"origem",
+		"status",
+		"updatedAt",
+		"hubsoftUpdatedAt",
+		"hubsoftLastProfile",
+		"metaMode",
+		"metaModeLabel",
+		"meta",
+		"metaDiaria",
+		"metaSazonal",
+		"totalOS",
+		"cancelamentos",
+		"totalCancelamentos",
+		"percentAchieved",
+		"temLancamentos",
+		"planilhaCarregada",
+		"lojaTotal",
+		"agenteTotal",
+		"propMult",
+		"totalMultas",
+		"multasDiarias",
+		"saldoDiario",
+		"rawDays",
+		"technicians",
+		"regionais",
+	]);
+
+	if (includeSources) {
+		if (record.onnet) {
+			compact.onnet = compactMetaRecord(record.onnet, { includeSources: false });
+		}
+		if (record.onnetSempre) {
+			compact.onnetSempre = compactMetaRecord(record.onnetSempre, {
+				includeSources: false,
+			});
+		}
+	}
+
+	return compact;
+}
+
+function compactDashboardResult(result = {}) {
+	return Object.fromEntries(
+		Object.entries(result).map(([month, record]) => [
+			month,
+			compactMetaRecord(record, { includeSources: true }),
+		]),
+	);
 }
 
 async function getDocumentData(path) {
@@ -82,7 +147,7 @@ function getPublicDashboardCacheTtlMs() {
 	const configuredTtl = Number(process.env.PUBLIC_DASHBOARD_CACHE_TTL_MS);
 	if (!Number.isFinite(configuredTtl))
 		return DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS;
-	return Math.max(0, Math.min(configuredTtl, 60_000));
+	return Math.max(0, Math.min(configuredTtl, 5 * 60_000));
 }
 
 function getMatchRebuildIdleMs() {
@@ -254,8 +319,8 @@ function compactMatchSection(section = []) {
 
 function compactMatchData(matchData = {}) {
 	return {
-		...matchData,
 		compact: true,
+		resumo: matchData.resumo || null,
 		regionais: compactMatchSection(matchData.regionais),
 		agentes: compactMatchSection(matchData.agentes),
 	};
@@ -265,12 +330,16 @@ function compactMatchSlice(slice) {
 	if (!slice) return slice;
 	if (slice.data && typeof slice.data === "object") {
 		return {
-			...slice,
 			compact: true,
+			meta: slice.meta || slice.data.meta || null,
 			data: compactMatchData(slice.data),
 		};
 	}
-	return compactMatchData(slice);
+	return {
+		compact: true,
+		meta: slice.meta || null,
+		data: compactMatchData(slice),
+	};
 }
 
 function compactMapaOrder(order = {}) {
@@ -455,7 +524,10 @@ async function buildOperationalDomain({ repairMatch = false } = {}) {
 	};
 }
 
-async function buildPublicDashboard({ matchDetail = false } = {}) {
+async function buildPublicDashboard({
+	mapaDetail = false,
+	matchDetail = false,
+} = {}) {
 	const [
 		dashboardRows,
 		agentesRows,
@@ -473,7 +545,7 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
-	const mapa = mapaRaw;
+	const mapa = mapaDetail ? mapaRaw : compactMapaSlice(mapaRaw);
 	const { matchOS: matchOSFull, agentesMatchOS: agentesMatchOSFull } =
 		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw, {
 			allowRebuild: matchDetail,
@@ -495,7 +567,7 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 		},
 		painel: {
 			retiradas: {
-				result: rowsToDocumentMap(dashboardRows),
+				result: compactDashboardResult(rowsToDocumentMap(dashboardRows)),
 				meta: {
 					generatedAt: new Date().toISOString(),
 					lastUpdate: config?.lastUpdate || null,
@@ -514,10 +586,11 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 
 async function getCachedPublicDashboard(options = {}) {
 	const matchDetail = Boolean(options.matchDetail);
-	if (matchDetail) {
+	const mapaDetail = Boolean(options.mapaDetail);
+	if (matchDetail || mapaDetail) {
 		return {
-			data: await buildPublicDashboard({ matchDetail }),
-			cacheStatus: "BYPASS_DETAIL",
+			data: await buildPublicDashboard({ mapaDetail, matchDetail }),
+			cacheStatus: mapaDetail ? "BYPASS_MAPA_DETAIL" : "BYPASS_DETAIL",
 			cacheAgeMs: 0,
 		};
 	}

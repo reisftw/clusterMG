@@ -754,7 +754,7 @@ jobs:
                . \"\$operacao_env_file\"
                set +a
              fi
-             \$SUDO npm run backup:database -- --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
+             echo 'Backup automatico desativado no deploy da Operacao.'
              \$SUDO npm run migrate
              \$SUDO systemctl restart \"\$operacao_service\"
              \$SUDO nginx -t
