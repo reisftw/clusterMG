@@ -979,6 +979,10 @@ function broadcastImportResult(type, result = {}) {
 
 async function publishAcompanhamentoUpdate(source, payload = {}) {
 	const nowIso = new Date().toISOString();
+	const updateKey =
+		payload.updateKey ||
+		payload.lastUpdateKey ||
+		`${source}-${payload.generatedAt || nowIso}`;
 	const sourceLabels = {
 		mapa: "Mapa",
 		match: "MATCH",
@@ -996,7 +1000,7 @@ async function publishAcompanhamentoUpdate(source, payload = {}) {
 			message: payload.message || "Novas informacoes atualizadas.",
 			notify: payload.notify === true,
 			notifyAcompanhamento: payload.notifyAcompanhamento === true,
-			lastUpdateKey: `${source}-${Date.now()}`,
+			lastUpdateKey: updateKey,
 			generatedAt: payload.generatedAt || nowIso,
 			updatedAt: nowIso,
 			summary: payload.summary || null,
@@ -2608,10 +2612,20 @@ async function persistHubsoftMetaRecords({
 		writeOptions,
 	);
 	await syncDiarioFromMetaRecord(combined, month, year, user, writeOptions);
+	const combinedTotal = Number(combined.totalOS || 0);
 	if (!quiet) {
+		const updateKey = [
+			"metas",
+			profile,
+			date,
+			records.length,
+			combinedTotal,
+		].join("-");
 		await publishAcompanhamentoUpdate("metas", {
 			generatedAt: nowIso,
+			updateKey,
 			updatedBy: user.uid || null,
+			notifyAcompanhamento: true,
 			message: `Metas atualizadas pelo HubSoft (${profile}) para ${String(day).padStart(2, "0")}/${String(MONTHORDER.indexOf(month) + 1).padStart(2, "0")}/${year}.`,
 			summary: {
 				profile,
@@ -2642,7 +2656,7 @@ async function persistHubsoftMetaRecords({
 		total: records.length,
 		sempreTotal: Number(sempre.totalOS || 0),
 		onnetTotal: Number(onnet.totalOS || 0),
-		combinedTotal: Number(combined.totalOS || 0),
+		combinedTotal,
 	};
 }
 

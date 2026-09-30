@@ -118,7 +118,7 @@ const DEFAULT_CONFIG = {
 	},
 	metaShowcase: {
 		enabled: true,
-		intervalMinutes: 1,
+		intervalMinutes: 30,
 		durationSeconds: 12,
 	},
 	appointmentNotice: {
@@ -146,7 +146,7 @@ function shouldShowAcompanhamentoNotice(payload = {}) {
 }
 
 function shouldShowMetasNotice(source, payload = {}) {
-	return source === "metas" || shouldShowAcompanhamentoNotice(payload);
+	return source === "metas" && shouldShowAcompanhamentoNotice(payload);
 }
 
 const SECTION_LABELS = [
@@ -163,6 +163,9 @@ const SECTION_LABELS = [
 	["match", "Match e oportunidades"],
 	["insights", "Barra de avisos"],
 ];
+
+const METAS_NOTICE_STORAGE_KEY = "acompanhamento:metas-notice-throttle";
+const METAS_NOTICE_MIN_INTERVAL_MS = 29 * 60 * 1000;
 
 function loadPanelConfig() {
 	if (typeof window === "undefined") return DEFAULT_CONFIG;
@@ -2627,6 +2630,8 @@ export default function AcompanhamentoPage() {
 	const festiveFlightTimerRef = useRef(null);
 	const realtimeNoticeTimerRef = useRef(null);
 	const realtimeNoticeDelayRef = useRef(null);
+	const metasNoticeKeyRef = useRef("");
+	const metasNoticeAtRef = useRef(0);
 	const appointmentNoticeTimerRef = useRef(null);
 	const appointmentNoticeIdsRef = useRef(new Set());
 	const knownAppointmentIdsRef = useRef(new Set());
@@ -2656,7 +2661,10 @@ export default function AcompanhamentoPage() {
 	useEffect(() => {
 		diarioBoardDataRef.current = diarioBoardData;
 	}, [diarioBoardData]);
-	const buildMetasRealtimeItems = useCallback(() => {
+	const buildMetasRealtimeItems = useCallback((payload = {}) => {
+		if (Array.isArray(payload.items) && payload.items.length) {
+			return payload.items;
+		}
 		const currentSummary = operationalSummaryRef.current;
 		const currentDiario = diarioBoardDataRef.current;
 		const today =
@@ -2670,12 +2678,19 @@ export default function AcompanhamentoPage() {
 			Number(sourceTotals.equipe || 0) +
 			Number(sourceTotals.agente || 0) +
 			Number(sourceTotals.regionais || 0);
-		const novasOs = sumRankingTotals(currentSummary?.topOpenedCities);
+		const totalDia = Number(today.totalDia ?? today.total ?? 0);
+		const novasOs = Number(
+			payload.novasOs ??
+				payload.newOrders ??
+				currentSummary?.newOrdersTotal ??
+				sumRankingTotals(currentSummary?.topOpenedCities) ??
+				0,
+		);
 		return [
 			{
-				label: "Novas O.S.",
-				value: novasOs,
-				helper: "Abertas hoje no mapa",
+				label: "Fechamentos hoje",
+				value: totalDia,
+				helper: "Produção do dia atual",
 			},
 			{
 				label: "Operação",
@@ -2687,10 +2702,61 @@ export default function AcompanhamentoPage() {
 				value: lojaTotal,
 				helper: "Sempre + Onnet",
 			},
+			{
+				label: "Novas O.S.",
+				value: novasOs,
+				helper: "Mapa atualizado",
+			},
 		];
+	}, []);
+	const canShowRealtimeNotice = useCallback((source, payload = {}) => {
+		if (source !== "metas") return true;
+		if (!shouldShowMetasNotice(source, payload)) return false;
+		const key =
+			payload?.runId ||
+			payload?.syncRunId ||
+			payload?.lastUpdateKey ||
+			payload?.generatedAt ||
+			payload?.updatedAt ||
+			payload?.emittedAt ||
+			"";
+		const nowMs = Date.now();
+		if (key && key === metasNoticeKeyRef.current) return false;
+		if (
+			metasNoticeAtRef.current &&
+			nowMs - metasNoticeAtRef.current < METAS_NOTICE_MIN_INTERVAL_MS
+		) {
+			return false;
+		}
+		try {
+			const stored = JSON.parse(
+				window.localStorage.getItem(METAS_NOTICE_STORAGE_KEY) || "null",
+			);
+			if (stored?.key && key && stored.key === key) return false;
+			if (
+				Number(stored?.shownAt || 0) &&
+				nowMs - Number(stored.shownAt) < METAS_NOTICE_MIN_INTERVAL_MS
+			) {
+				return false;
+			}
+		} catch {
+			// localStorage pode estar indisponivel em modo restrito.
+		}
+		metasNoticeKeyRef.current = key || String(nowMs);
+		metasNoticeAtRef.current = nowMs;
+		try {
+			window.localStorage.setItem(
+				METAS_NOTICE_STORAGE_KEY,
+				JSON.stringify({ key: metasNoticeKeyRef.current, shownAt: nowMs }),
+			);
+		} catch {
+			// Ignora falha de persistencia local.
+		}
+		return true;
 	}, []);
 	const showRealtimeNotice = useCallback(
 		(source, payload = {}) => {
+			if (!canShowRealtimeNotice(source, payload)) return;
 			if (realtimeNoticeTimerRef.current) {
 				window.clearTimeout(realtimeNoticeTimerRef.current);
 				realtimeNoticeTimerRef.current = null;
@@ -2708,9 +2774,9 @@ export default function AcompanhamentoPage() {
 					message:
 						payload?.message ||
 						(source === "metas"
-							? "Metas atualizadas automaticamente no acompanhamento."
+							? "Metas atualizadas. Confira os dados atuais aplicados no acompanhamento."
 							: "O acompanhamento recebeu dados novos e ja foi atualizado."),
-					items: source === "metas" ? buildMetasRealtimeItems() : null,
+					items: source === "metas" ? buildMetasRealtimeItems(payload) : null,
 					updatedAt:
 						payload?.updatedAt ||
 						payload?.generatedAt ||
@@ -2731,7 +2797,7 @@ export default function AcompanhamentoPage() {
 			}
 			openNotice();
 		},
-		[buildMetasRealtimeItems],
+		[buildMetasRealtimeItems, canShowRealtimeNotice],
 	);
 	const showAppointmentNotice = useCallback(
 		(event) => {
@@ -2946,6 +3012,7 @@ export default function AcompanhamentoPage() {
 				const source = data?.source || null;
 				if (
 					source === "mapa" ||
+					(source === "metas" && !shouldShowMetasNotice(source, data)) ||
 					(source !== "metas" && !shouldShowAcompanhamentoNotice(data))
 				) return;
 				showRealtimeNotice(source, data);
@@ -3205,7 +3272,7 @@ export default function AcompanhamentoPage() {
 		};
 		if (!config.enabled) return undefined;
 		const intervalMs =
-			clampNumber(config.intervalMinutes, 1, 60, 1) * 60 * 1000;
+			clampNumber(config.intervalMinutes, 30, 240, 30) * 60 * 1000;
 		const timer = window.setInterval(() => showMetaShowcase(), intervalMs);
 		return () => window.clearInterval(timer);
 	}, [panelConfig.metaShowcase, showMetaShowcase]);

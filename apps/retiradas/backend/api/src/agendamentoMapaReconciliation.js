@@ -184,7 +184,9 @@ async function notifyNotCollected({ appointment, documentId, match, user }) {
 	]);
 	const date = firstText(appointment, ["data", "data_agendamento"]);
 	const time = firstText(appointment, ["hora", "horario"]);
-	const dedupeKey = `agendamento-nao-recolhido-${documentId}`;
+	const dedupeDate = date || "sem-data";
+	const dedupeKey = `agendamento-nao-recolhido-${documentId}-${dedupeDate}`;
+	if (await notifications.notificationExists(dedupeKey)) return;
 
 	await notifications.createNotification({
 		type: "agendamento_nao_recolhido_mapa",

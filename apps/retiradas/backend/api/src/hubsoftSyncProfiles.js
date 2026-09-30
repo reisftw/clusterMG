@@ -1388,6 +1388,49 @@ function adaptReportRow(row = {}) {
 	};
 }
 
+async function findOpenOrderByClientCode(clientCode) {
+	const codigo = cleanText(clientCode).replace(/\D/g, "");
+	if (!codigo) return null;
+
+	const session = await getSession();
+	const createPayload = await fetchCreateMetadata(session);
+	const types = findTypes(createPayload, MAPA_TYPE_IDS);
+	const period = currentMapPeriod();
+	const basePayload = baseReportPayload({ period, types });
+	const pageSize = Math.min(PAGE_SIZE, 100);
+	const searchPayload = {
+		...basePayload,
+		codigo_cliente: codigo,
+		cliente: codigo,
+		termo_busca: codigo,
+		busca: "codigo_cliente",
+		pagina: 1,
+		itens_por_pagina: pageSize,
+	};
+	const json = await hubsoftRequest(
+		session,
+		`/api/v1/ordem_servico/consultar/paginado/${pageSize}?page=1`,
+		{
+			method: "POST",
+			body: searchPayload,
+		},
+	);
+	const rows = rowsOf(json);
+	assertEnvelope(json, rows);
+	const matched =
+		rows.find(
+			(row) => cleanText(extractClientCode(row)).replace(/\D/g, "") === codigo,
+		) ||
+		rows.find(
+			(row) => cleanText(extractClientId(row)).replace(/\D/g, "") === codigo,
+		);
+	if (!matched) return null;
+	return {
+		...adaptReportRow(matched),
+		fonte: "HubSoft",
+	};
+}
+
 async function listActiveWithdrawalTechnicians() {
 	const result = await db.query(
 		`select id, hubsoft_technician_id, nome_hubsoft, nome_exibicao, ativo
@@ -2821,6 +2864,7 @@ module.exports = {
 	discoverWithdrawalTechnicians,
 	getProfilesOverview,
 	getRun,
+	findOpenOrderByClientCode,
 	listRecords,
 	listRuns,
 	listWithdrawalTechnicians,

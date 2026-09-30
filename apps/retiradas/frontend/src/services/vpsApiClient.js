@@ -10,6 +10,7 @@ import {
 const DEFAULT_API_BASE_URL = "https://retiradas.tech/api";
 const FINAN_TOKEN_KEY = "finan-auth-token";
 let csrfRefreshPromise = null;
+let authRefreshPromise = null;
 
 function isFinanHost() {
 	if (typeof window === "undefined") return false;
@@ -75,6 +76,15 @@ async function refreshCsrfToken() {
 	return csrfRefreshPromise;
 }
 
+async function refreshAuthSession() {
+	if (!authRefreshPromise) {
+		authRefreshPromise = refreshCsrfToken().finally(() => {
+			authRefreshPromise = null;
+		});
+	}
+	return authRefreshPromise;
+}
+
 async function buildRequestHeaders(options = {}) {
 	const token = isFinanHost()
 		? window.localStorage.getItem(FINAN_TOKEN_KEY) || ""
@@ -121,6 +131,22 @@ export async function requestVpsApi(path, options = {}) {
 	if (isUnsafeMethod(options.method) && isCsrfError(response, data)) {
 		await refreshCsrfToken();
 		({ data, response } = await fetchVpsApi(path, options));
+	}
+
+	if (
+		response.status === 401 &&
+		path !== "/auth/me" &&
+		options.retryAfterAuthRefresh !== false
+	) {
+		try {
+			await refreshAuthSession();
+			({ data, response } = await fetchVpsApi(path, {
+				...options,
+				retryAfterAuthRefresh: false,
+			}));
+		} catch {
+			clearVpsAuthSession();
+		}
 	}
 
 	if (!response.ok) {

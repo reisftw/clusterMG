@@ -2125,24 +2125,129 @@ function normalizeAgendamentoClienteRecord(row = null) {
 		collectionPath: row.collectionPath,
 		documentId: row.documentId,
 		codigo_cliente:
-			pickFirstText(data, ["codigo_cliente", "codigo", "cod_cliente"]) ||
+			pickFirstText(data, [
+				"codigo_cliente",
+				"codigo",
+				"cod_cliente",
+				"id_cliente",
+			]) ||
 			row.documentId ||
 			"",
 		cliente_nome: clienteNome.replace(/^\(\d+\)\s*/, ""),
 		cidade: pickFirstText(data, ["cidade", "municipio"]),
 		regional: pickFirstText(data, ["regional"]),
 		empresa: pickFirstText(data, ["empresa", "fonte"]),
-		num_os: pickFirstText(data, ["num_os", "numero", "os"]),
-		telefone: pickFirstText(data, ["telefone", "whatsapp", "celular", "fone"]),
+		num_os: pickFirstText(data, [
+			"num_os",
+			"numero_ordem_servico",
+			"numero_os",
+			"numero",
+			"os",
+		]),
+		telefone: pickFirstText(data, [
+			"telefone",
+			"telefone_primario",
+			"telefone_secundario",
+			"telefone_terciario",
+			"whatsapp",
+			"celular",
+			"fone",
+		]),
 		endereco: pickFirstText(data, [
 			"endereco",
 			"endereco_instalacao",
 			"logradouro",
 		]),
 		bairro: pickFirstText(data, ["bairro"]),
-		tipo: pickFirstText(data, ["tipo"]),
+		tipo: pickFirstText(data, ["tipo", "tipo_ordem_servico"]),
 		status: pickFirstText(data, ["status"]),
 		fonte: pickFirstText(data, ["fonte"]),
+	};
+}
+
+async function findAgendamentoClienteRecord(codigo) {
+	const docResult = await db.query(
+		`select path,
+              collection_path as "collectionPath",
+              document_id as "documentId",
+              data
+         from app_documents
+        where collection_path = any($2::text[])
+          and (
+            document_id = $1
+            or data->>'codigo_cliente' = $1
+            or data->>'codigo' = $1
+            or data->>'cod_cliente' = $1
+            or data->>'id_cliente' = $1
+            or data->>'contrato' = $1
+            or data->>'numero_ordem_servico' = $1
+            or data->>'num_os' = $1
+            or data->>'numero_os' = $1
+          )
+        order by case collection_path
+          when 'ordens_abertas' then 1
+          when 'match_os_abertas' then 2
+          else 9
+        end,
+        updated_at desc
+        limit 1`,
+		[codigo, ["ordens_abertas", "match_os_abertas"]],
+	);
+	if (docResult.rows[0]) return docResult.rows[0];
+
+	const syncResult = await db.query(
+		`select concat('hubsoft_sync_records/', id) as path,
+              'hubsoft_sync_records' as "collectionPath",
+              coalesce(nullif(raw_excerpt->>'codigo_cliente', ''), hubsoft_id) as "documentId",
+              jsonb_build_object(
+                'codigo_cliente', coalesce(raw_excerpt->>'codigo_cliente', ''),
+                'nome_razaosocial', coalesce(raw_excerpt->>'nome_razaosocial', ''),
+                'cidade', coalesce(source_city, raw_excerpt->>'cidade', ''),
+                'regional', coalesce(raw_excerpt->>'regional', ''),
+                'empresa', coalesce(raw_excerpt->>'empresa', raw_excerpt->>'fonte', ''),
+                'numero_ordem_servico', coalesce(raw_excerpt->>'numero_ordem_servico', hubsoft_number, ''),
+                'telefone_primario', coalesce(raw_excerpt->>'telefone_primario', ''),
+                'telefone_secundario', coalesce(raw_excerpt->>'telefone_secundario', ''),
+                'telefone_terciario', coalesce(raw_excerpt->>'telefone_terciario', ''),
+                'endereco', coalesce(raw_excerpt->>'endereco', ''),
+                'bairro', coalesce(raw_excerpt->>'bairro', ''),
+                'tipo_ordem_servico', coalesce(source_type, raw_excerpt->>'tipo_ordem_servico', ''),
+                'status', coalesce(source_status, raw_excerpt->>'status', ''),
+                'fonte', 'HubSoft'
+              ) as data
+         from hubsoft_sync_records
+        where profile = any($2::text[])
+          and active = true
+          and (
+            raw_excerpt->>'codigo_cliente' = $1
+            or raw_excerpt->>'codigo' = $1
+            or raw_excerpt->>'cod_cliente' = $1
+            or raw_excerpt->>'id_cliente' = $1
+          )
+        order by source_date desc nulls last, updated_at desc
+        limit 1`,
+		[codigo, ["MAPA", "MATCH"]],
+	);
+	if (syncResult.rows[0]) return syncResult.rows[0];
+
+	const repoRecord = await agendamentosRepository.findClienteByCodigo(codigo);
+	if (repoRecord) return repoRecord;
+
+	const hubsoftRecord = await hubsoftSyncProfiles
+		.findOpenOrderByClientCode(codigo)
+		.catch((error) => {
+			console.warn(
+				"[agendamentos] Falha ao buscar cliente no HubSoft:",
+				error?.message || error,
+			);
+			return null;
+		});
+	if (!hubsoftRecord) return null;
+	return {
+		path: `hubsoft/clientes/${codigo}`,
+		collectionPath: "hubsoft_live_lookup",
+		documentId: codigo,
+		data: hubsoftRecord,
 	};
 }
 
@@ -5044,33 +5149,8 @@ function createApp() {
 					return;
 				}
 
-				const result = await db.query(
-					`select path,
-                  collection_path as "collectionPath",
-                  document_id as "documentId",
-                  data
-             from app_documents
-            where collection_path = any($2::text[])
-              and (
-                document_id = $1
-                or data->>'codigo_cliente' = $1
-                or data->>'codigo' = $1
-                or data->>'cod_cliente' = $1
-                or data->>'contrato' = $1
-              )
-            order by case collection_path
-              when 'ordens_abertas' then 1
-              when 'match_os_abertas' then 2
-              else 9
-            end,
-            updated_at desc
-            limit 1`,
-					[codigo, ["ordens_abertas", "match_os_abertas"]],
-				);
-
 				const cliente = normalizeAgendamentoClienteRecord(
-					result.rows[0] ||
-						(await agendamentosRepository.findClienteByCodigo(codigo)),
+					await findAgendamentoClienteRecord(codigo),
 				);
 				if (!cliente) {
 					res

@@ -1,6 +1,5 @@
 import {
 	AlertTriangle,
-	CheckCircle2,
 	Download,
 	Eye,
 	Filter,
@@ -19,8 +18,6 @@ import {
 	buscarHistoricoSyncCancelamentos,
 	buscarResumoCancelamentos,
 	competenciaAtual,
-	sincronizarCompetenciaCancelamentos,
-	sincronizarHistoricoCancelamentos,
 	validarCompetenciaCancelamentos,
 } from "../services/serviceOrderCancellationsService";
 
@@ -296,11 +293,6 @@ export default function ServiceOrderCancellationsPage() {
 	const [actionLoading, setActionLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [detail, setDetail] = useState(null);
-	const [historyModalOpen, setHistoryModalOpen] = useState(false);
-	const [historyRange, setHistoryRange] = useState({
-		startCompetencia: "2026-01",
-		endCompetencia: competenciaAtual(),
-	});
 	const [tableFilters, setTableFilters] = useState({
 		empresa: "",
 		classificacao: "",
@@ -399,33 +391,6 @@ export default function ServiceOrderCancellationsPage() {
 		await Promise.all([loadStaticData(), loadCompetencia(pagination.page)]);
 	}
 
-	async function handleSync() {
-		setActionLoading(true);
-		setError("");
-		try {
-			await sincronizarCompetenciaCancelamentos(competencia);
-			await refreshAll();
-		} catch (err) {
-			setError(err?.message || "Não foi possível iniciar sincronização.");
-		} finally {
-			setActionLoading(false);
-		}
-	}
-
-	async function handleHistorySync() {
-		setActionLoading(true);
-		setError("");
-		try {
-			await sincronizarHistoricoCancelamentos(historyRange);
-			setHistoryModalOpen(false);
-			await refreshAll();
-		} catch (err) {
-			setError(err?.message || "Não foi possível iniciar histórico.");
-		} finally {
-			setActionLoading(false);
-		}
-	}
-
 	async function handleValidate() {
 		setActionLoading(true);
 		setError("");
@@ -498,21 +463,6 @@ export default function ServiceOrderCancellationsPage() {
 						>
 							<RefreshCw size={16} /> Atualizar
 						</button>
-						<button
-							type="button"
-							onClick={handleSync}
-							disabled={actionLoading}
-							className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white"
-						>
-							<RefreshCw size={16} /> Sincronizar
-						</button>
-						<button
-							type="button"
-							onClick={() => setHistoryModalOpen(true)}
-							className="inline-flex h-11 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-black text-blue-700"
-						>
-							<Filter size={16} /> Sincronizar histórico
-						</button>
 					</div>
 				</div>
 
@@ -532,6 +482,12 @@ export default function ServiceOrderCancellationsPage() {
 							<AlertTriangle size={16} /> Os dados mudaram após a validação.
 						</span>
 					) : null}
+				</div>
+				<div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+					A sincronização de cancelamentos agora roda pelo computador local autorizado.
+					Para atualizar o mês, execute o arquivo{" "}
+					<span className="font-black">Sincronizar-Cancelamentos-Mes-Atual.py</span>{" "}
+					neste computador e depois clique em Atualizar nesta tela.
 				</div>
 			</section>
 
@@ -841,54 +797,6 @@ export default function ServiceOrderCancellationsPage() {
 					</div>
 				</div>
 			</section>
-
-			{historyModalOpen ? (
-				<div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/50 p-4">
-					<div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-						<h2 className="text-xl font-black text-slate-950">Sincronizar histórico</h2>
-						<p className="mt-1 text-sm font-semibold text-slate-500">
-							Cada competência será consultada separadamente no HubSoft.
-						</p>
-						<div className="mt-5 grid gap-3">
-							<label className="text-sm font-black text-slate-700">
-								Mês inicial
-								<input
-									type="month"
-									value={historyRange.startCompetencia}
-									onChange={(event) => setHistoryRange((current) => ({ ...current, startCompetencia: event.target.value }))}
-									className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3"
-								/>
-							</label>
-							<label className="text-sm font-black text-slate-700">
-								Mês final
-								<input
-									type="month"
-									value={historyRange.endCompetencia}
-									onChange={(event) => setHistoryRange((current) => ({ ...current, endCompetencia: event.target.value }))}
-									className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3"
-								/>
-							</label>
-						</div>
-						<div className="mt-6 flex justify-end gap-2">
-							<button
-								type="button"
-								onClick={() => setHistoryModalOpen(false)}
-								className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700"
-							>
-								Cancelar
-							</button>
-							<button
-								type="button"
-								onClick={handleHistorySync}
-								disabled={actionLoading}
-								className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white"
-							>
-								<CheckCircle2 size={16} /> Iniciar
-							</button>
-						</div>
-					</div>
-				</div>
-			) : null}
 
 			<DetailModal item={detail} onClose={() => setDetail(null)} />
 		</div>

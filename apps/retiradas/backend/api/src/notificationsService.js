@@ -638,5 +638,6 @@ module.exports = {
 	getPreferences,
 	listNotifications,
 	markNotificationsRead,
+	notificationExists,
 	savePreferences,
 };
