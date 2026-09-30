@@ -35,6 +35,10 @@ const EMPTY_SUMMARY = {
 	equipamentos: { comEquipamento: 0, semEquipamento: 0 },
 };
 const TABLE_PAGE_SIZE = 15;
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+	const month = String(index + 1).padStart(2, "0");
+	return month;
+});
 
 function formatNumber(value) {
 	return NUMBER.format(Number(value || 0));
@@ -66,6 +70,11 @@ function competenciaLabel(value) {
 		month: "long",
 		year: "numeric",
 	}).format(date);
+}
+
+function yearCompetenciaOptions(reference = competenciaAtual()) {
+	const year = String(reference || "").slice(0, 4) || String(new Date().getFullYear());
+	return MONTH_OPTIONS.map((month) => `${year}-${month}`);
 }
 
 function KpiCard({ title, value, helper, tone = "blue" }) {
@@ -329,6 +338,14 @@ export default function ServiceOrderCancellationsPage() {
 	);
 	const status = summary?.competencia?.status || "NOT_SYNCED";
 	const validationStatus = summary?.competencia?.validationStatus || "PENDING";
+	const competenciaOptions = useMemo(() => {
+		const options = new Set(yearCompetenciaOptions(competencia));
+		options.add(competencia);
+		competencias.forEach((item) => {
+			if (item?.competencia) options.add(item.competencia);
+		});
+		return Array.from(options).sort();
+	}, [competencia, competencias]);
 
 	async function loadStaticData() {
 		const [competenciasResponse, historyResponse] = await Promise.all([
@@ -471,10 +488,9 @@ export default function ServiceOrderCancellationsPage() {
 							onChange={(event) => setCompetencia(event.target.value)}
 							className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-black text-slate-700"
 						>
-							<option value={competencia}>{competenciaLabel(competencia)}</option>
-							{competencias.map((item) => (
-								<option key={item.competencia} value={item.competencia}>
-									{competenciaLabel(item.competencia)}
+							{competenciaOptions.map((item) => (
+								<option key={item} value={item}>
+									{competenciaLabel(item)}
 								</option>
 							))}
 						</select>

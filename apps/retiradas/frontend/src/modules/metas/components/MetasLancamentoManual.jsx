@@ -1045,6 +1045,55 @@ export default function MetasLancamentoManual({
 		],
 	);
 
+	const buildTargetsPayload = useCallback(
+		() => ({
+			mes: month,
+			ano: year,
+			lancamentosPorFonte: [
+				{
+					fonte: MANUAL_META_SOURCES.SEMPRE,
+					targetOnly: true,
+					lancamento: {
+						cancelamentos: cancelamentosSempre,
+					},
+				},
+				{
+					fonte: MANUAL_META_SOURCES.ONNET,
+					targetOnly: true,
+					lancamento: {
+						cancelamentos: cancelamentosOnnet,
+					},
+				},
+			],
+		}),
+		[month, year, cancelamentosOnnet, cancelamentosSempre],
+	);
+
+	const saveTargetsOnly = useCallback(async () => {
+		if (!canManage) {
+			setError("Você não tem permissão para salvar lançamentos.");
+			return false;
+		}
+		if (saving || savingCardRef.current) {
+			setError("Já existe um salvamento em andamento. Aguarde concluir.");
+			return false;
+		}
+		savingCardRef.current = true;
+		setSavingCard(true);
+		setError("");
+		try {
+			await onSave(buildTargetsPayload());
+			setMessage("Metas do mês salvas.");
+			return true;
+		} catch (err) {
+			setError(err?.message || "Não foi possível salvar as metas do mês.");
+			throw err;
+		} finally {
+			savingCardRef.current = false;
+			setSavingCard(false);
+		}
+	}, [buildTargetsPayload, canManage, onSave, saving]);
+
 	const saveCurrentCard = useCallback(async () => {
 		if (!canManage) {
 			setError("Você não tem permissão para salvar lançamentos.");
@@ -1263,6 +1312,14 @@ export default function MetasLancamentoManual({
 					>
 						<RefreshCw size={13} />
 						{loadingOptions ? "Atualizando cadastros..." : "Atualizar cadastros"}
+					</button>
+					<button
+						type="button"
+						onClick={saveTargetsOnly}
+						disabled={cardBusy}
+						className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{cardBusy ? "Salvando..." : "Salvar metas do mês"}
 					</button>
 				</div>
 			</section>

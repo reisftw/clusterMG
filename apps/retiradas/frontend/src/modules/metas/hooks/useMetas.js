@@ -12,6 +12,7 @@ import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
 import {
 	applyMetasBaseConfigToAllData,
 	DEFAULT_SAZONALIDADE_SEMPRE,
+	getMetaPercentForBase,
 	normalizeMetasBaseConfig,
 } from "../constants/metasBaseConfig";
 import {
@@ -24,6 +25,7 @@ import {
 	getDaysInMetaMonth,
 	MANUAL_META_SOURCES,
 } from "../utils/manualMetasBuilder";
+import { recalcularSaldoDiario } from "../utils/metasSaldo";
 import {
 	buscarFeriados,
 	buscarForcaTarefaConfig,
@@ -1072,6 +1074,43 @@ function mergeManualEntryWithCurrent({
 	return { ...entry, lancamento };
 }
 
+function statusFromMeta(percentAchieved, meta, totalOS) {
+	if (Number(meta || 0) <= 0) return "Sem meta";
+	if (Number(totalOS || 0) <= 0) return "Sem lançamentos";
+	return Number(percentAchieved || 0) >= 100 ? "Meta atingida!" : "Em andamento";
+}
+
+function updateRecordTargets(record, cancelamentos, baseConfig, baseId, mes, ano, feriadosSet) {
+	const current = record || {};
+	const metaSazonal =
+		Number(current.metaSazonal) ||
+		Number(getMetaPercentForBase(baseConfig, baseId, mes) || 0);
+	const nextCancelamentos = Number(cancelamentos || 0);
+	const nextMeta = Math.round(nextCancelamentos * (metaSazonal / 100));
+	const totalOS = Number(current.totalOS || 0);
+	const percentAchieved =
+		nextMeta > 0 ? Number(((totalOS / nextMeta) * 100).toFixed(1)) : 0;
+	const nextRecord = {
+		...current,
+		mes,
+		month: mes,
+		ano,
+		year: ano,
+		cancelamentos: nextCancelamentos,
+		meta: nextMeta,
+		metaSazonal,
+		percentAchieved,
+		planilhaCarregada: true,
+		status: statusFromMeta(percentAchieved, nextMeta, totalOS),
+	};
+	const saldo = recalcularSaldoDiario(nextRecord, feriadosSet, ano);
+	return {
+		...nextRecord,
+		metaDiaria: saldo.metaDiaria,
+		saldoDiario: saldo.saldoDiario,
+	};
+}
+
 export const useMetas = () => {
 	const [allData, setAllData] = useState({});
 	const [loading, setLoading] = useState(true);
@@ -1249,6 +1288,82 @@ export const useMetas = () => {
 				const baseConfig = await buscarMetasBaseConfig(true, {
 					preferLive: true,
 				});
+				const targetOnlyEntries = Array.isArray(lancamentosPorFonte)
+					? lancamentosPorFonte.filter((entry) => entry?.targetOnly)
+					: [];
+				if (targetOnlyEntries.length) {
+					const currentMonthData = allData[mes] || {};
+					const currentSempre =
+						currentMonthData && typeof currentMonthData === "object"
+							? {
+									...currentMonthData,
+									onnet: undefined,
+									onnetSempre: undefined,
+								}
+							: {};
+					const currentOnnet = currentMonthData.onnet || {};
+					const sempreTarget = targetOnlyEntries.find(
+						(entry) => entry.fonte === MANUAL_META_SOURCES.SEMPRE,
+					);
+					const onnetTarget = targetOnlyEntries.find(
+						(entry) => entry.fonte === MANUAL_META_SOURCES.ONNET,
+					);
+					const sempreRecord = sempreTarget
+						? updateRecordTargets(
+								currentSempre,
+								sempreTarget.lancamento?.cancelamentos,
+								baseConfig,
+								"sempre",
+								mes,
+								ano,
+								feriadosSet,
+							)
+						: currentSempre;
+					const onnetRecord = onnetTarget
+						? updateRecordTargets(
+								currentOnnet,
+								onnetTarget.lancamento?.cancelamentos,
+								baseConfig,
+								"onnet",
+								mes,
+								ano,
+								feriadosSet,
+							)
+						: currentOnnet;
+					const combined = combineMetasRecords(sempreRecord, onnetRecord, mes, {
+						year: ano,
+						feriadosSet,
+					});
+					const nextMonthData = {
+						...(sempreRecord || {}),
+						onnet: onnetRecord,
+						onnetSempre: combined,
+					};
+					const parsed = {
+						...allData,
+						[mes]: nextMonthData,
+					};
+					const now = new Date();
+					const txt = `Ultima atualizacao: ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")} as ${String(now.getHours()).padStart(2, "0")}h${String(now.getMinutes()).padStart(2, "0")}`;
+					const persistResult = await persistMetasImport({
+						parsed,
+						agentesData,
+						lastUpdate: txt,
+						manualLaunchAudit: null,
+					});
+
+					if (uploadVersion !== dataVersionRef.current) return null;
+					invalidateMetasCache();
+					invalidateDashboardAgentesCache();
+					invalidateDashboardDataCache(persistResult?.generatedAt || null);
+					invalidateInternalStaticDataCache(persistResult?.generatedAt || null);
+					setFeriadosExtras(extras);
+					setMetasBaseConfig(normalizeMetasBaseConfig(baseConfig));
+					setAllData(applyMetasBaseConfigToAllData(parsed, baseConfig));
+					setLastUpdate(txt);
+					setMesSelecionado(mes);
+					return persistResult;
+				}
 				const entries = Array.isArray(lancamentosPorFonte)
 					? lancamentosPorFonte
 					: [{ fonte, lancamento }];
