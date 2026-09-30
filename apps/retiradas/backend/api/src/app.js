@@ -2538,6 +2538,7 @@ function createApp() {
 		try {
 			const detail = String(req.query.detail || "").toLowerCase();
 			const dashboard = await getCachedPublicDashboard({
+				mapaDetail: detail === "mapa",
 				matchDetail: detail === "match",
 			});
 			res.set("X-Retiradas-Cache", dashboard.cacheStatus);

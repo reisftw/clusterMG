@@ -455,7 +455,10 @@ async function buildOperationalDomain({ repairMatch = false } = {}) {
 	};
 }
 
-async function buildPublicDashboard({ matchDetail = false } = {}) {
+async function buildPublicDashboard({
+	mapaDetail = false,
+	matchDetail = false,
+} = {}) {
 	const [
 		dashboardRows,
 		agentesRows,
@@ -473,7 +476,7 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
 	]);
-	const mapa = mapaRaw;
+	const mapa = mapaDetail ? mapaRaw : compactMapaSlice(mapaRaw);
 	const { matchOS: matchOSFull, agentesMatchOS: agentesMatchOSFull } =
 		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw, {
 			allowRebuild: matchDetail,
@@ -514,10 +517,11 @@ async function buildPublicDashboard({ matchDetail = false } = {}) {
 
 async function getCachedPublicDashboard(options = {}) {
 	const matchDetail = Boolean(options.matchDetail);
-	if (matchDetail) {
+	const mapaDetail = Boolean(options.mapaDetail);
+	if (matchDetail || mapaDetail) {
 		return {
-			data: await buildPublicDashboard({ matchDetail }),
-			cacheStatus: "BYPASS_DETAIL",
+			data: await buildPublicDashboard({ mapaDetail, matchDetail }),
+			cacheStatus: mapaDetail ? "BYPASS_MAPA_DETAIL" : "BYPASS_DETAIL",
 			cacheAgeMs: 0,
 		};
 	}
