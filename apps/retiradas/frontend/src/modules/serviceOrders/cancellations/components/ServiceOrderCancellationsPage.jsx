@@ -34,6 +34,7 @@ const EMPTY_SUMMARY = {
 	empresas: {},
 	equipamentos: { comEquipamento: 0, semEquipamento: 0 },
 };
+const TABLE_PAGE_SIZE = 15;
 
 function formatNumber(value) {
 	return NUMBER.format(Number(value || 0));
@@ -109,9 +110,33 @@ function StatusBadge({ status }) {
 }
 
 function CompactTable({ title, columns, rows, empty = "Sem dados." }) {
+	const [page, setPage] = useState(1);
+	const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+	const safePage = Math.min(page, totalPages);
+	const visibleRows = rows.slice(
+		(safePage - 1) * TABLE_PAGE_SIZE,
+		safePage * TABLE_PAGE_SIZE,
+	);
+
+	useEffect(() => {
+		setPage(1);
+	}, [rows]);
+
 	return (
 		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-			<h2 className="text-lg font-black text-slate-950">{title}</h2>
+			<div className="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<h2 className="text-lg font-black text-slate-950">{title}</h2>
+					<p className="mt-1 text-xs font-bold text-slate-500">
+						{formatNumber(rows.length)} registro(s) · 15 por página
+					</p>
+				</div>
+				{rows.length > TABLE_PAGE_SIZE ? (
+					<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+						Página {safePage} de {totalPages}
+					</span>
+				) : null}
+			</div>
 			<div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
 				<table className="min-w-full divide-y divide-slate-100 text-left text-sm">
 					<thead className="bg-slate-50 text-xs font-black uppercase tracking-[0.12em] text-slate-500">
@@ -124,8 +149,8 @@ function CompactTable({ title, columns, rows, empty = "Sem dados." }) {
 						</tr>
 					</thead>
 					<tbody className="divide-y divide-slate-100">
-						{rows.length ? (
-							rows.map((row, index) => (
+						{visibleRows.length ? (
+							visibleRows.map((row, index) => (
 								<tr key={`${row.name || row.cidade || row.regional || row.tecnologia}-${index}`}>
 									{columns.map((column) => (
 										<td key={column.key} className={column.cellClassName || "px-4 py-3 font-semibold text-slate-700"}>
@@ -144,6 +169,31 @@ function CompactTable({ title, columns, rows, empty = "Sem dados." }) {
 					</tbody>
 				</table>
 			</div>
+			{rows.length > TABLE_PAGE_SIZE ? (
+				<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-black text-slate-600">
+					<span>
+						Mostrando {formatNumber(visibleRows.length)} de {formatNumber(rows.length)} registro(s)
+					</span>
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							disabled={safePage <= 1}
+							onClick={() => setPage((current) => Math.max(1, current - 1))}
+							className="rounded-xl border border-slate-200 px-4 py-2 disabled:opacity-40"
+						>
+							Anterior
+						</button>
+						<button
+							type="button"
+							disabled={safePage >= totalPages}
+							onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+							className="rounded-xl border border-slate-200 px-4 py-2 disabled:opacity-40"
+						>
+							Próxima
+						</button>
+					</div>
+				</div>
+			) : null}
 		</section>
 	);
 }
@@ -569,7 +619,7 @@ export default function ServiceOrderCancellationsPage() {
 					<div>
 						<h2 className="text-xl font-black text-slate-950">Tabela detalhada</h2>
 						<p className="text-sm font-semibold text-slate-500">
-						Mostrando {formatNumber(items.length)} de {formatNumber(pagination.total)} registros, 15 por página.
+							Mostrando {formatNumber(items.length)} de {formatNumber(pagination.total)} registros, 15 por página.
 						</p>
 					</div>
 					<div className="flex flex-wrap gap-2">
