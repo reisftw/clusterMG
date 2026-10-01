@@ -758,12 +758,18 @@ jobs:
              if [ -f \"\$effective_env_file\" ]; then
                echo \"Usando env da Operação em \$effective_env_file\"
                node_env_file_arg=\"--env-file=\$effective_env_file\"
+               migration_env_file_arg=\"ROT_ENV_FILE=\$effective_env_file\"
                rot_api_port=\"\$(node \"\$node_env_file_arg\" -p \"process.env.ROT_API_PORT || ''\")\"
              else
                node_env_file_arg=''
+               migration_env_file_arg=''
                rot_api_port=''
              fi
-             \$SUDO node \$node_env_file_arg scripts/run-sql-migrations.js
+             if [ -n \"\$migration_env_file_arg\" ]; then
+               \$SUDO env \"\$migration_env_file_arg\" node scripts/run-sql-migrations.js
+             else
+               \$SUDO node scripts/run-sql-migrations.js
+             fi
              \$SUDO systemctl restart \"\$operacao_service\"
              \$SUDO nginx -t
              \$SUDO systemctl reload nginx

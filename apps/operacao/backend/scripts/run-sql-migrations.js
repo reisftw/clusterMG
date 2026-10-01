@@ -2,7 +2,28 @@
 // — roda tudo em sql/*.sql em ordem alfabetica, nao recursivo, registrando
 // cada migration aplicada em rot_migrations (tabela criada na 001).
 const fs = require("node:fs/promises");
+const fsSync = require("node:fs");
 const path = require("node:path");
+
+function loadEnvFile(filePath) {
+	if (!filePath || !fsSync.existsSync(filePath)) return;
+	const content = fsSync.readFileSync(filePath, "utf8");
+	for (const line of content.split(/\r?\n/)) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+		const index = trimmed.indexOf("=");
+		const key = trimmed.slice(0, index).trim();
+		let value = trimmed.slice(index + 1);
+		if (!key || process.env[key] !== undefined) continue;
+		if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+			value = value.slice(1, -1);
+		}
+		process.env[key] = value;
+	}
+}
+
+loadEnvFile(process.env.ROT_ENV_FILE);
+
 const db = require("../src/db");
 
 async function ensureMigrationsTable() {
