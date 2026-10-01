@@ -13,6 +13,10 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+	fetchRotIntegrations as fetchRuntimeIntegrations,
+	saveRotIntegration as saveRuntimeIntegration,
+} from "../../../api/rotApi";
 import Spinner from "../../../components/ui/Spinner";
 import { hasPermission, ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
@@ -448,6 +452,15 @@ const DEFAULT_OKTA_OAUTH = {
 	defaultRole: "visitante",
 };
 
+const DEFAULT_HUBSOFT_CONFIG = {
+	username: "",
+	password: "",
+	bearerToken: "",
+	passwordSaved: false,
+	tokenSaved: false,
+	configured: false,
+};
+
 function OAuthSettingsPanel({
 	googleOAuth,
 	setGoogleOAuth,
@@ -774,6 +787,137 @@ function OAuthSettingsPanel({
 	);
 }
 
+function HubsoftSettingsPanel({
+	hubsoftConfig,
+	setHubsoftConfig,
+	hubsoftSaving,
+	hubsoftMessage,
+	onSaveHubsoft,
+}) {
+	const configured = Boolean(hubsoftConfig.configured);
+	return (
+		<section className="rounded-xl border border-blue-100 bg-white p-5 shadow-sm">
+			<div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+				<div className="flex items-start gap-4">
+					<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+						<Plug size={21} />
+					</div>
+					<div>
+						<h2 className="text-base font-black text-gray-900">
+							Integração HubSoft
+						</h2>
+						<p className="mt-1 max-w-2xl text-sm font-semibold leading-relaxed text-gray-500">
+							Informe o login e senha usados para consultar o HubSoft nas
+							sincronizações da Operação.
+						</p>
+					</div>
+				</div>
+				<span
+					className={[
+						"inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black",
+						configured
+							? "bg-emerald-50 text-emerald-700"
+							: "bg-amber-50 text-amber-700",
+					].join(" ")}
+				>
+					{configured ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+					{configured ? "Configurado" : "Pendente"}
+				</span>
+			</div>
+
+			<div className="mt-5 grid gap-4 lg:grid-cols-2">
+				<label className="block">
+					<span className="text-xs font-black uppercase tracking-wide text-gray-500">
+						Login HubSoft
+					</span>
+					<input
+						value={hubsoftConfig.username || ""}
+						onChange={(event) =>
+							setHubsoftConfig((current) => ({
+								...current,
+								username: event.target.value,
+							}))
+						}
+						placeholder="Ex: usuario@empresa.com.br"
+						className="input-field mt-2"
+					/>
+				</label>
+				<label className="block">
+					<span className="text-xs font-black uppercase tracking-wide text-gray-500">
+						Senha HubSoft
+					</span>
+					<input
+						type="password"
+						value={hubsoftConfig.password || ""}
+						onChange={(event) =>
+							setHubsoftConfig((current) => ({
+								...current,
+								password: event.target.value,
+							}))
+						}
+						placeholder={
+							hubsoftConfig.passwordSaved
+								? "Senha já cadastrada. Preencha apenas para trocar."
+								: "Digite a senha do HubSoft"
+						}
+						className="input-field mt-2"
+					/>
+				</label>
+				<label className="block lg:col-span-2">
+					<span className="text-xs font-black uppercase tracking-wide text-gray-500">
+						Bearer token manual
+					</span>
+					<input
+						type="password"
+						value={hubsoftConfig.bearerToken || ""}
+						onChange={(event) =>
+							setHubsoftConfig((current) => ({
+								...current,
+								bearerToken: event.target.value,
+							}))
+						}
+						placeholder={
+							hubsoftConfig.tokenSaved
+								? "Token salvo. Preencha apenas para trocar."
+								: "Opcional. Use somente se houver token válido."
+						}
+						className="input-field mt-2"
+					/>
+					<p className="mt-2 text-xs font-semibold leading-relaxed text-gray-500">
+						Na rotina normal, basta login e senha. O token manual é opcional
+						para casos pontuais de suporte.
+					</p>
+				</label>
+			</div>
+
+			<div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+				<div>
+					{hubsoftMessage ? (
+						<p className="text-xs font-bold text-blue-700">{hubsoftMessage}</p>
+					) : (
+						<p className="text-xs font-semibold text-gray-500">
+							Após salvar, volte em Ativações e clique em Atualizar para testar.
+						</p>
+					)}
+				</div>
+				<button
+					type="button"
+					disabled={hubsoftSaving}
+					onClick={onSaveHubsoft}
+					className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+				>
+					{hubsoftSaving ? (
+						<Loader2 className="animate-spin" size={17} />
+					) : (
+						<Plug size={17} />
+					)}
+					Salvar HubSoft
+				</button>
+			</div>
+		</section>
+	);
+}
+
 // Extraido do componente (achado javascript:S3776, docs/SONARQUBE-MAP.md)
 // pra reduzir a complexidade cognitiva da funcao de render — mesmo
 // estado e mesmas chamadas, sem mudanca de comportamento.
@@ -791,6 +935,9 @@ function useIntegracoesController() {
 	const [googleMessage, setGoogleMessage] = useState("");
 	const [oktaSaving, setOktaSaving] = useState(false);
 	const [oktaMessage, setOktaMessage] = useState("");
+	const [hubsoftConfig, setHubsoftConfig] = useState(DEFAULT_HUBSOFT_CONFIG);
+	const [hubsoftSaving, setHubsoftSaving] = useState(false);
+	const [hubsoftMessage, setHubsoftMessage] = useState("");
 
 	const podeEditar = hasPermission(currentUser?.role, "manage_integracoes");
 	const isAdmin = String(currentUser?.role || "").toLowerCase() === ROLES.ADMIN;
@@ -805,14 +952,30 @@ function useIntegracoesController() {
 		Promise.allSettled([
 			obterConfigGoogleOAuthAdmin(),
 			obterConfigOktaOAuthAdmin(),
+			fetchRuntimeIntegrations(),
 		])
-			.then(([googleResult, oktaResult]) => {
+			.then(([googleResult, oktaResult, integrationsResult]) => {
 				if (!active) return;
 				if (googleResult.status === "fulfilled") {
 					setGoogleOAuth(googleResult.value || DEFAULT_GOOGLE_OAUTH);
 				}
 				if (oktaResult.status === "fulfilled") {
 					setOktaOAuth(oktaResult.value || DEFAULT_OKTA_OAUTH);
+				}
+				if (integrationsResult.status === "fulfilled") {
+					const hubsoft = (integrationsResult.value || []).find(
+						(item) => item.provider === "hubsoft",
+					);
+					const field = (key) =>
+						(hubsoft?.fields || []).find((item) => item.key === key) || {};
+					setHubsoftConfig({
+						username: field("username").value || "",
+						password: "",
+						bearerToken: "",
+						passwordSaved: Boolean(field("password").hasValue),
+						tokenSaved: Boolean(field("bearerToken").hasValue),
+						configured: Boolean(hubsoft?.configured),
+					});
 				}
 			})
 			.catch(() => {
@@ -889,6 +1052,38 @@ function useIntegracoesController() {
 		}
 	};
 
+	const saveHubsoft = async () => {
+		setHubsoftSaving(true);
+		setHubsoftMessage("");
+		try {
+			await saveRuntimeIntegration("hubsoft", {
+				username: hubsoftConfig.username,
+				password: hubsoftConfig.password,
+				bearerToken: hubsoftConfig.bearerToken,
+			});
+			const configured = Boolean(
+				String(hubsoftConfig.username || "").trim() &&
+					(hubsoftConfig.password || hubsoftConfig.passwordSaved),
+			);
+			setHubsoftConfig((current) => ({
+				...current,
+				password: "",
+				bearerToken: "",
+				passwordSaved: Boolean(current.password || current.passwordSaved),
+				tokenSaved: Boolean(current.bearerToken || current.tokenSaved),
+				configured,
+			}));
+			setHubsoftMessage("Integração HubSoft salva.");
+			window.setTimeout(() => setHubsoftMessage(""), 2600);
+		} catch (saveError) {
+			setHubsoftMessage(
+				saveError?.message || "Não foi possível salvar a integração HubSoft.",
+			);
+		} finally {
+			setHubsoftSaving(false);
+		}
+	};
+
 	return {
 		integracoes,
 		loading,
@@ -909,6 +1104,10 @@ function useIntegracoesController() {
 		googleMessage,
 		oktaSaving,
 		oktaMessage,
+		hubsoftConfig,
+		setHubsoftConfig,
+		hubsoftSaving,
+		hubsoftMessage,
 		podeEditar,
 		isAdmin,
 		activeCount,
@@ -918,6 +1117,7 @@ function useIntegracoesController() {
 		handleDelete,
 		saveGoogleOAuth,
 		saveOktaOAuth,
+		saveHubsoft,
 	};
 }
 
@@ -1097,6 +1297,10 @@ export default function IntegracoesPage() {
 		googleMessage,
 		oktaSaving,
 		oktaMessage,
+		hubsoftConfig,
+		setHubsoftConfig,
+		hubsoftSaving,
+		hubsoftMessage,
 		podeEditar,
 		isAdmin,
 		activeCount,
@@ -1106,6 +1310,7 @@ export default function IntegracoesPage() {
 		handleDelete,
 		saveGoogleOAuth,
 		saveOktaOAuth,
+		saveHubsoft,
 	} = useIntegracoesController();
 
 	if (loading) return <Spinner fullScreen />;
@@ -1170,6 +1375,16 @@ export default function IntegracoesPage() {
 					oktaSaving={oktaSaving}
 					oktaMessage={oktaMessage}
 					onSaveOkta={saveOktaOAuth}
+				/>
+			) : null}
+
+			{isAdmin ? (
+				<HubsoftSettingsPanel
+					hubsoftConfig={hubsoftConfig}
+					setHubsoftConfig={setHubsoftConfig}
+					hubsoftSaving={hubsoftSaving}
+					hubsoftMessage={hubsoftMessage}
+					onSaveHubsoft={saveHubsoft}
 				/>
 			) : null}
 
