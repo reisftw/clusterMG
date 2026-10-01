@@ -183,6 +183,7 @@ const ACTIVATIONS_MENU_TREE = [
 	{ key: "ativacoes-overview", label: "Visão Geral", path: "/ativacoes", icon: LayoutDashboard, permission: "ativacoes.visualizar", end: true },
 	{ key: "ativacoes-kanban", label: "Kanban", path: "/ativacoes?tab=kanban", icon: ListChecks, permission: "ativacoes.kanban.visualizar" },
 	{ key: "ativacoes-saude", label: "Saúde", path: "/ativacoes?tab=saude", icon: Activity, permission: "ativacoes.saude.visualizar" },
+	{ key: "ativacoes-qualidade", label: "Qualidade", path: "/ativacoes?tab=qualidade", icon: BarChart3, permission: "ativacoes.qualidade.visualizar" },
 ];
 
 const MACRO_MENU_TREE = [

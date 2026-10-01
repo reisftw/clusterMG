@@ -44,6 +44,22 @@ export function fetchAtivacoesSaudeFilters() {
 	return requestRotApi("/admin/ativacoes/saude/filtros");
 }
 
+export function fetchAtivacoesQualidadeResumo(filters = {}) {
+	return requestRotApi(`/admin/ativacoes/qualidade/resumo${query(filters)}`);
+}
+
+export function fetchAtivacoesQualidade(dimension = "tecnicos", filters = {}) {
+	return requestRotApi(`/admin/ativacoes/qualidade/${dimension}${query(filters)}`);
+}
+
+export function fetchAtivacoesQualidadeDetail(filters = {}) {
+	return requestRotApi(`/admin/ativacoes/qualidade/detalhe${query(filters)}`);
+}
+
+export function fetchAtivacoesQualidadeFilters() {
+	return requestRotApi("/admin/ativacoes/qualidade/filtros");
+}
+
 export function startAtivacoesSync(payload = {}) {
 	return requestRotApi("/admin/ativacoes/sync", {
 		method: "POST",
@@ -57,4 +73,8 @@ export function ativacoesExportUrl(filters = {}) {
 
 export function ativacoesSaudeExportUrl(filters = {}) {
 	return `/api/admin/ativacoes/saude/export.csv${query(filters)}`;
+}
+
+export function ativacoesQualidadeExportUrl(dimension = "technician", filters = {}) {
+	return `/api/admin/ativacoes/qualidade/export.csv${query({ ...filters, dimension })}`;
 }

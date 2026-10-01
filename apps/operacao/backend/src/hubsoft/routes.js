@@ -5,10 +5,12 @@ const { noStore } = require("../security/noStore");
 const { getHubsoftActivationSyncJob, startHubsoftActivationSyncJob } = require("./jobs/activationSyncJob");
 const service = require("./services/activationApiService");
 const healthService = require("./services/activationHealthApiService");
+const qualityService = require("./services/activationQualityApiService");
 
 const router = express.Router();
 const VIEW = ["ativacoes.visualizar", "ativacoes.kanban.visualizar"];
 const HEALTH_VIEW = ["ativacoes.saude.visualizar", "ativacoes.visualizar"];
+const QUALITY_VIEW = ["ativacoes.qualidade.visualizar", "ativacoes.visualizar"];
 
 router.use(requireRotAuth, noStore);
 
@@ -85,6 +87,56 @@ router.get("/saude/export.csv", requireRotPermission("ativacoes.saude.exportar")
 		res.setHeader("Content-Type", "text/csv; charset=utf-8");
 		res.setHeader("Content-Disposition", 'attachment; filename="ativacoes-saude.csv"');
 		res.send(`\uFEFF${healthService.toCsv(data.items)}`);
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/qualidade/resumo", requireRotPermission(QUALITY_VIEW), async (req, res, next) => {
+	try {
+		res.json({ ok: true, ...(await qualityService.summary(db, req.query)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/qualidade/filtros", requireRotPermission(QUALITY_VIEW), async (_req, res, next) => {
+	try {
+		res.json({ ok: true, filters: await qualityService.filters(db) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/qualidade/detalhe", requireRotPermission(QUALITY_VIEW), async (req, res, next) => {
+	try {
+		res.json({ ok: true, ...(await qualityService.detail(db, req.query)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/qualidade/export.csv", requireRotPermission("ativacoes.qualidade.exportar"), async (req, res, next) => {
+	try {
+		const dimension = req.query.dimension || "technician";
+		const data = await qualityService.grouped(db, { ...req.query, page: 1, limit: 10000 }, dimension);
+		res.setHeader("Content-Type", "text/csv; charset=utf-8");
+		res.setHeader("Content-Disposition", 'attachment; filename="ativacoes-qualidade.csv"');
+		res.send(`\uFEFF${qualityService.toCsv(data.items)}`);
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/qualidade/:dimension", requireRotPermission(QUALITY_VIEW), async (req, res, next) => {
+	try {
+		const map = { tecnicos: "technician", empresas: "company", cidades: "city", tipos: "type" };
+		const dimension = map[req.params.dimension];
+		if (!dimension) {
+			res.status(404).json({ ok: false, error: "Dimensão de qualidade não encontrada." });
+			return;
+		}
+		res.json({ ok: true, ...(await qualityService.grouped(db, req.query, dimension)) });
 	} catch (error) {
 		next(error);
 	}

@@ -21,6 +21,7 @@ const GROUPED_CATALOG = [
 			{ id: "ativacoes", label: "Ativações", permissions: { view: "ativacoes.visualizar", manage: "ativacoes.sincronizar" } },
 			{ id: "ativacoes_kanban", label: "Kanban de Ativações", permissions: { view: "ativacoes.kanban.visualizar", manage: "ativacoes.exportar" } },
 			{ id: "ativacoes_saude", label: "Saúde Pós-Ativação", permissions: { view: "ativacoes.saude.visualizar", manage: "ativacoes.saude.exportar" } },
+			{ id: "ativacoes_qualidade", label: "Qualidade da Instalação", permissions: { view: "ativacoes.qualidade.visualizar", manage: "ativacoes.qualidade.exportar" } },
 			{ id: "activities", label: "Atividades", permissions: { view: "rot.activities.view", manage: "rot.activities.manage" } },
 			{ id: "apr", label: "APR — central da regional (preenchimento próprio disponível a todos)", permissions: { view: "rot.apr.view", manage: "rot.apr.manage" } },
 			{ id: "tickets", label: "Chamados", permissions: { view: "rot.tickets.view", manage: "rot.tickets.manage" } },

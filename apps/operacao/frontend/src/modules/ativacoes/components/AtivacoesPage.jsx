@@ -6,13 +6,10 @@ import {
 	Clock3,
 	Download,
 	Eye,
-	Filter,
 	ListChecks,
 	MapPin,
 	RefreshCw,
 	Rocket,
-	Search,
-	Signal,
 	UserRound,
 	Wifi,
 } from "lucide-react";
@@ -23,11 +20,16 @@ import Spinner from "../../../components/ui/Spinner";
 import { useRotAuth } from "../../../state/useRotAuth";
 import {
 	ativacoesExportUrl,
+	ativacoesQualidadeExportUrl,
 	ativacoesSaudeExportUrl,
 	fetchAtivacaoDetail,
 	fetchAtivacoesDashboard,
 	fetchAtivacoesFilters,
 	fetchAtivacoesKanban,
+	fetchAtivacoesQualidade,
+	fetchAtivacoesQualidadeDetail,
+	fetchAtivacoesQualidadeFilters,
+	fetchAtivacoesQualidadeResumo,
 	fetchAtivacoesSaude,
 	fetchAtivacoesSaudeDetail,
 	fetchAtivacoesSaudeFilters,
@@ -77,6 +79,13 @@ const HEALTH_REASONS = {
 	LIMITED_MONITORING: "Monitoramento parcial",
 };
 
+const QUALITY_DIMENSIONS = [
+	{ id: "tecnicos", label: "Técnicos", api: "technician" },
+	{ id: "empresas", label: "Empresas", api: "company" },
+	{ id: "cidades", label: "Cidades", api: "city" },
+	{ id: "tipos", label: "Tipos de OS", api: "type" },
+];
+
 function todayIso() {
 	return new Date().toISOString().slice(0, 10);
 }
@@ -102,6 +111,10 @@ function percent(value) {
 	return `${Number(value || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
 
+function ratio(count, denominator, rate) {
+	return `${Number(count || 0).toLocaleString("pt-BR")} / ${Number(denominator || 0).toLocaleString("pt-BR")}${rate === null || rate === undefined ? "" : ` (${percent(rate)})`}`;
+}
+
 function reasonLabel(reason) {
 	return HEALTH_REASONS[reason] || reason;
 }
@@ -121,15 +134,20 @@ export default function AtivacoesPage() {
 	const canSync = hasPermission("ativacoes.sincronizar");
 	const canExport = hasPermission("ativacoes.exportar");
 	const canExportHealth = hasPermission("ativacoes.saude.exportar");
+	const canExportQuality = hasPermission("ativacoes.qualidade.exportar");
 	const [tab, setTab] = useState("dashboard");
-	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "" });
+	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" });
+	const [qualityDimension, setQualityDimension] = useState("tecnicos");
 	const [filterOptions, setFilterOptions] = useState(null);
 	const [dashboard, setDashboard] = useState(null);
 	const [kanban, setKanban] = useState(null);
 	const [health, setHealth] = useState(null);
 	const [healthSummary, setHealthSummary] = useState(null);
+	const [quality, setQuality] = useState(null);
+	const [qualitySummary, setQualitySummary] = useState(null);
 	const [detail, setDetail] = useState(null);
 	const [healthDetail, setHealthDetail] = useState(null);
+	const [qualityDetail, setQualityDetail] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [syncJob, setSyncJob] = useState(null);
@@ -140,6 +158,7 @@ export default function AtivacoesPage() {
 		const params = new URLSearchParams(location.search);
 		if (params.get("tab") === "kanban") setTab("kanban");
 		if (params.get("tab") === "saude") setTab("saude");
+		if (params.get("tab") === "qualidade") setTab("qualidade");
 	}, [location.search]);
 
 	async function load() {
@@ -180,11 +199,31 @@ export default function AtivacoesPage() {
 		}
 	}
 
+	async function loadQuality() {
+		setLoading(true);
+		setError("");
+		try {
+			const [filtersData, summaryData, listData] = await Promise.all([
+				filterOptions ? Promise.resolve({ filters: filterOptions }) : fetchAtivacoesQualidadeFilters(),
+				fetchAtivacoesQualidadeResumo(effectiveFilters),
+				fetchAtivacoesQualidade(qualityDimension, { ...effectiveFilters, limit: 50 }),
+			]);
+			setFilterOptions(filtersData.filters);
+			setQualitySummary(summaryData);
+			setQuality(listData);
+		} catch (err) {
+			setError(err?.message || "Não foi possível carregar qualidade da instalação.");
+		} finally {
+			setLoading(false);
+		}
+	}
+
 	useEffect(() => {
 		if (tab === "saude") loadHealth();
+		else if (tab === "qualidade") loadQuality();
 		else load();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [JSON.stringify(effectiveFilters), tab]);
+	}, [JSON.stringify(effectiveFilters), tab, qualityDimension]);
 
 	async function openDetail(id) {
 		setDetail({ loading: true });
@@ -203,6 +242,17 @@ export default function AtivacoesPage() {
 			setHealthDetail({ loading: false, item: data.item });
 		} catch (err) {
 			setHealthDetail({ loading: false, error: err?.message || "Não foi possível abrir a saúde da ativação." });
+		}
+	}
+
+	async function openQualityDetail(group) {
+		setQualityDetail({ loading: true, group });
+		try {
+			const dimension = QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician";
+			const data = await fetchAtivacoesQualidadeDetail({ ...effectiveFilters, dimension, id: group.id });
+			setQualityDetail({ loading: false, item: data });
+		} catch (err) {
+			setQualityDetail({ loading: false, error: err?.message || "Não foi possível abrir o detalhamento." });
 		}
 	}
 
@@ -245,6 +295,11 @@ export default function AtivacoesPage() {
 								<Download size={17} /> Exportar Saúde
 							</a>
 						) : null}
+						{tab === "qualidade" && canExportQuality ? (
+							<a href={ativacoesQualidadeExportUrl(QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician", effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-black text-violet-700 shadow-sm transition hover:bg-violet-100">
+								<Download size={17} /> Exportar Qualidade
+							</a>
+						) : null}
 						{canSync ? (
 							<button type="button" onClick={triggerSync} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700">
 								<RefreshCw size={17} /> Atualizar agora
@@ -275,14 +330,17 @@ export default function AtivacoesPage() {
 				<button type="button" onClick={() => setTab("dashboard")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "dashboard" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Visão Geral</button>
 				<button type="button" onClick={() => setTab("kanban")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "kanban" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Kanban</button>
 				<button type="button" onClick={() => setTab("saude")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "saude" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Saúde</button>
+				<button type="button" onClick={() => setTab("qualidade")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "qualidade" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Qualidade</button>
 			</div>
 
 			{tab === "dashboard" ? <DashboardView data={dashboard} /> : null}
 			{tab === "kanban" ? <KanbanView data={kanban} onOpen={openDetail} /> : null}
 			{tab === "saude" ? <HealthView data={health} summary={healthSummary} onOpen={openHealthDetail} /> : null}
+			{tab === "qualidade" ? <QualityView data={quality} summary={qualitySummary} dimension={qualityDimension} setDimension={setQualityDimension} onOpen={openQualityDetail} /> : null}
 
 			{detail ? <ActivationDetailModal detail={detail} onClose={() => setDetail(null)} /> : null}
 			{healthDetail ? <HealthDetailModal detail={healthDetail} onClose={() => setHealthDetail(null)} /> : null}
+			{qualityDetail ? <QualityDetailModal detail={qualityDetail} onClose={() => setQualityDetail(null)} /> : null}
 		</div>
 	);
 }
@@ -312,6 +370,9 @@ function Filters({ filters, setFilters, options, tab }) {
 					<Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll />
 					<Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }]} allowAll />
 				</>
+			) : null}
+			{tab === "qualidade" ? (
+				<Select label="Qualidade" value={filters.quality} onChange={(v) => setField("quality", v)} options={(options?.quality || []).map((item) => ({ id: item.id, label: item.label }))} allowAll />
 			) : null}
 		</div>
 	);
@@ -419,6 +480,130 @@ function ActivationCard({ item, onOpen }) {
 function HealthBadge({ status }) {
 	const config = HEALTH_STATUS[status] || HEALTH_STATUS.SEM_DADOS;
 	return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${config.className}`}>{config.label}</span>;
+}
+
+function QualityView({ data, summary, dimension, setDimension, onOpen }) {
+	const metrics = summary?.metrics || {};
+	const supportSource = summary?.supportSource;
+	const cards = [
+		["Ativações analisadas", metrics.production?.completed ?? 0, `${metrics.production?.analyzable ?? 0} analisáveis`],
+		["Técnicos analisados", data?.items?.filter((item) => item.dimension === "technician").length || "-", "por filtro aplicado"],
+		["Empresas analisadas", summary ? "-" : "-", "use a visão Empresas"],
+		["Dentro da janela", metrics.schedule?.ON_TIME ?? 0, percent(metrics.schedule?.onTimeRate)],
+		["Rechamado D+7", metrics.rework?.d7?.count ?? 0, ratio(metrics.rework?.d7?.count, metrics.rework?.d7?.denominator, metrics.rework?.d7?.rate)],
+		["Rechamado D+30", metrics.rework?.d30?.count ?? 0, ratio(metrics.rework?.d30?.count, metrics.rework?.d30?.denominator, metrics.rework?.d30?.rate)],
+		["Reincidência", metrics.rework?.repeated ?? 0, `${metrics.rework?.totalEvents ?? 0} evento(s)`],
+		["Saúde crítica", metrics.health?.CRITICO ?? 0, percent(metrics.health?.criticalRate)],
+	];
+	return (
+		<div className="space-y-4">
+			{supportSource?.available === false ? (
+				<div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+					Fonte de rechamados ainda sem eventos comprovados. D+7/D+15/D+30 mostram 0 evento real, não qualidade perfeita.
+				</div>
+			) : null}
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+				{cards.map(([label, value, sub]) => (
+					<div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+						<p className="text-xs font-black uppercase text-slate-500">{label}</p>
+						<p className="mt-3 text-3xl font-black text-slate-950">{value}</p>
+						<p className="mt-1 text-xs font-bold text-slate-500">{sub}</p>
+					</div>
+				))}
+			</div>
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+					<div>
+						<h2 className="text-lg font-black text-slate-950">Qualidade por dimensão</h2>
+						<p className="text-sm font-semibold text-slate-500">Produção e qualidade ficam separadas, com denominadores visíveis.</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						{QUALITY_DIMENSIONS.map((item) => (
+							<button key={item.id} type="button" onClick={() => setDimension(item.id)} className={`rounded-xl px-3 py-2 text-xs font-black ${dimension === item.id ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{item.label}</button>
+						))}
+					</div>
+				</div>
+				<div className="overflow-x-auto">
+					<table className="min-w-[1120px] w-full text-left text-sm">
+						<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+							<tr>
+								<th className="px-4 py-3">Grupo</th>
+								<th className="px-4 py-3">OS</th>
+								<th className="px-4 py-3">Janela OK</th>
+								<th className="px-4 py-3">D+7</th>
+								<th className="px-4 py-3">D+15</th>
+								<th className="px-4 py-3">D+30</th>
+								<th className="px-4 py-3">Reincidência</th>
+								<th className="px-4 py-3">Saúde crítica</th>
+								<th className="px-4 py-3">Amostra</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{(data?.items || []).map((item) => (
+								<tr key={item.id} onClick={() => onOpen(item)} className="cursor-pointer transition hover:bg-blue-50/60">
+									<td className="px-4 py-3"><p className="font-black text-slate-950">{item.label}</p><p className="text-xs font-semibold text-slate-500">{item.subtitle || "-"}</p></td>
+									<td className="px-4 py-3 font-black text-slate-900">{item.metrics.production.completed}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.schedule.ON_TIME, item.metrics.production.completed, item.metrics.schedule.onTimeRate)}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d7.count, item.metrics.rework.d7.denominator, item.metrics.rework.d7.rate)}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d15.count, item.metrics.rework.d15.denominator, item.metrics.rework.d15.rate)}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d30.count, item.metrics.rework.d30.denominator, item.metrics.rework.d30.rate)}</td>
+									<td className="px-4 py-3 font-black text-slate-900">{item.metrics.rework.repeated}</td>
+									<td className="px-4 py-3 font-black text-red-700">{item.metrics.health.CRITICO}</td>
+									<td className="px-4 py-3">{item.metrics.sample.small ? <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">Amostra pequena</span> : <span className="text-xs font-bold text-slate-400">OK</span>}</td>
+								</tr>
+							))}
+							{!data?.items?.length ? <tr><td colSpan="9" className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem dados para os filtros.</td></tr> : null}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		</div>
+	);
+}
+
+function QualityDetailModal({ detail, onClose }) {
+	const payload = detail.item;
+	const group = payload?.group || detail.group;
+	return (
+		<ModalShell open title="Detalhamento de qualidade" description={group ? `${group.label} · ${group.subtitle || "Qualidade da instalação"}` : "Carregando dados"} onClose={onClose} size="6xl">
+			{detail.loading ? <Spinner /> : null}
+			{detail.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{detail.error}</div> : null}
+			{payload ? (
+				<div className="space-y-4">
+					<div className="grid gap-4 lg:grid-cols-2">
+						<InfoGroup title="Produção" rows={[["OS", group?.metrics?.production?.completed], ["Analisáveis", group?.metrics?.production?.analyzable], ["Sem técnico", group?.metrics?.production?.unidentifiedTechnician], ["Amostra", group?.metrics?.sample?.small ? "Pequena" : "Adequada"]]} />
+						<InfoGroup title="Rechamados" rows={[["D+7", ratio(group?.metrics?.rework?.d7?.count, group?.metrics?.rework?.d7?.denominator, group?.metrics?.rework?.d7?.rate)], ["D+15", ratio(group?.metrics?.rework?.d15?.count, group?.metrics?.rework?.d15?.denominator, group?.metrics?.rework?.d15?.rate)], ["D+30", ratio(group?.metrics?.rework?.d30?.count, group?.metrics?.rework?.d30?.denominator, group?.metrics?.rework?.d30?.rate)], ["Reincidência", group?.metrics?.rework?.repeated]]} />
+					</div>
+					<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+						<div className="border-b border-slate-100 px-4 py-3">
+							<h3 className="text-base font-black text-slate-950">OS auditáveis</h3>
+						</div>
+						<div className="max-h-[430px] overflow-auto">
+							<table className="min-w-[980px] w-full text-left text-sm">
+								<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+									<tr><th className="px-4 py-3">OS</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Início</th><th className="px-4 py-3">Fim</th><th className="px-4 py-3">Janela</th><th className="px-4 py-3">Saúde</th><th className="px-4 py-3">Rechamados</th><th className="px-4 py-3">Cidade</th></tr>
+								</thead>
+								<tbody className="divide-y divide-slate-100">
+									{(payload.items || []).map((item) => (
+										<tr key={item.id}>
+											<td className="px-4 py-3 font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</td>
+											<td className="px-4 py-3 font-semibold text-slate-700">{item.orderTypeName}</td>
+											<td className="px-4 py-3 font-semibold text-slate-700">{formatDateTime(item.executedStartAt)}</td>
+											<td className="px-4 py-3 font-semibold text-slate-700">{formatDateTime(item.executedEndAt)}</td>
+											<td className="px-4 py-3 font-black text-slate-800">{item.scheduleStatus}</td>
+											<td className="px-4 py-3"><HealthBadge status={item.healthStatus} /></td>
+											<td className="px-4 py-3 font-black text-slate-900">{item.supportEvents?.length || 0}</td>
+											<td className="px-4 py-3 font-semibold text-slate-700">{item.city?.name || "-"}</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					</section>
+				</div>
+			) : null}
+		</ModalShell>
+	);
 }
 
 function HealthView({ data, summary, onOpen }) {
