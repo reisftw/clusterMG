@@ -66,6 +66,7 @@ const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
 const CURSOR_IDLE_TIMEOUT_MS = 60 * 1000;
 const CONFIG_STORAGE_KEY = "acompanhamento-panel-config";
+const APPOINTMENT_NOTICE_SOUND_SRC = "/audio/appointment-alert.wav";
 const MONTH_ORDER = [
 	"Janeiro",
 	"Fevereiro",
@@ -2621,6 +2622,8 @@ export default function AcompanhamentoPage() {
 	const metasNoticeAtRef = useRef(0);
 	const appointmentNoticeTimerRef = useRef(null);
 	const appointmentNoticeIdsRef = useRef(new Set());
+	const appointmentNoticeAudioRef = useRef(null);
+	const appointmentNoticeAudioAtRef = useRef(0);
 	const knownAppointmentIdsRef = useRef(new Set());
 	const appointmentsSnapshotReadyRef = useRef(false);
 	const operationalSummaryRef = useRef(null);
@@ -2787,6 +2790,28 @@ export default function AcompanhamentoPage() {
 		},
 		[buildMetasRealtimeItems, canShowRealtimeNotice],
 	);
+	const playAppointmentNoticeSound = useCallback(() => {
+		if (typeof window === "undefined" || typeof Audio === "undefined") return;
+		const nowMs = Date.now();
+		if (nowMs - appointmentNoticeAudioAtRef.current < 1200) return;
+		appointmentNoticeAudioAtRef.current = nowMs;
+		try {
+			if (!appointmentNoticeAudioRef.current) {
+				appointmentNoticeAudioRef.current = new Audio(APPOINTMENT_NOTICE_SOUND_SRC);
+				appointmentNoticeAudioRef.current.preload = "auto";
+			}
+			const audio = appointmentNoticeAudioRef.current;
+			audio.currentTime = 0;
+			const playPromise = audio.play();
+			if (playPromise?.catch) {
+				playPromise.catch(() => {
+					// Navegadores podem bloquear áudio sem interação prévia; o modal segue normal.
+				});
+			}
+		} catch {
+			// O alerta visual não depende do áudio.
+		}
+	}, []);
 	const showAppointmentNotice = useCallback(
 		(event) => {
 			const appointment = normalizeAppointmentNotice(event);
@@ -2794,6 +2819,7 @@ export default function AcompanhamentoPage() {
 			if (appointmentNoticeIdsRef.current.has(appointment.id)) return;
 
 			appointmentNoticeIdsRef.current.add(appointment.id);
+			playAppointmentNoticeSound();
 			setAppointmentNoticeItems((current) => {
 				const next = [
 					...current.filter((item) => item.id !== appointment.id),
@@ -2822,7 +2848,7 @@ export default function AcompanhamentoPage() {
 				}
 			}, durationMs);
 		},
-		[panelConfig.appointmentNotice?.durationSeconds],
+		[panelConfig.appointmentNotice?.durationSeconds, playAppointmentNoticeSound],
 	);
 
 	useEffect(() => {
