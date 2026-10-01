@@ -2,6 +2,8 @@ const BASE_URL = "https://sempre.hubsoft.com.br";
 
 let cachedAuth = null;
 
+process.env.PLAYWRIGHT_BROWSERS_PATH ||= "0";
+
 function resetHubsoftAuthCache() {
 	cachedAuth = null;
 }

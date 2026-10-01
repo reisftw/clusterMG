@@ -747,6 +747,8 @@ jobs:
                echo \"\$package_hash\" > /tmp/operacao-package-json.sha256
                \$SUDO mv /tmp/operacao-package-json.sha256 .package-json.sha256
              fi
+             echo 'Ensuring Operação Playwright Chromium is available'
+             \$SUDO env PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium
              \$SUDO mkdir -p \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\"
              \$SUDO chown -R operacao:operacao \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\" || true
              service_env_file=\"\$(systemctl cat \"\$operacao_service\" 2>/dev/null | sed -n 's/^[[:space:]]*EnvironmentFile=//p' | tail -n 1 | sed 's/^-//')\"

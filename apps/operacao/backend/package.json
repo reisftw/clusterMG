@@ -24,6 +24,7 @@
 		"multer": "^2.2.0",
 		"nodemailer": "^9.0.5",
 		"pg": "^8.16.3",
+		"playwright": "^1.63.0",
 		"prom-client": "^15.1.3"
 	}
 }
