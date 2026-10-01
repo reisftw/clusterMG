@@ -5,6 +5,7 @@
 	Pencil,
 	Plus,
 	RefreshCw,
+	Search,
 	Trash2,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -64,6 +65,14 @@ function hasBackoffices(backoffices = []) {
 	return backoffices.some((pessoa) => hasPessoa(pessoa));
 }
 
+function normalizeSearch(value = "") {
+	return String(value)
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.trim();
+}
+
 const RegionaisPage = () => {
 	const { currentUser } = useAuthContext();
 	const { regionais, loading, carregar, criar, atualizar, excluir } =
@@ -72,6 +81,7 @@ const RegionaisPage = () => {
 	const [expandidas, setExpandidas] = useState({});
 	const [modal, setModal] = useState(null);
 	const [confirmarExcluir, setConfirmarExcluir] = useState(null);
+	const [buscaCidade, setBuscaCidade] = useState("");
 
 	const podeEditar = hasPermission(currentUser?.role, "manage_regionais");
 	const toggle = (id) => setExpandidas((p) => ({ ...p, [id]: !p[id] }));
@@ -89,6 +99,22 @@ const RegionaisPage = () => {
 			),
 		[regionais],
 	);
+	const resultadosBuscaCidade = useMemo(() => {
+		const termo = normalizeSearch(buscaCidade);
+		if (!termo) return [];
+		return regionais
+			.flatMap((regional) =>
+				(regional.cidades || [])
+					.filter((cidade) => normalizeSearch(cidade?.nome).includes(termo))
+					.map((cidade) => ({
+						cidade: cidade.nome,
+						tipo: cidade.tipo || "Comum",
+						regional: regional.nome,
+						regionalId: regional.id,
+					})),
+			)
+			.sort((a, b) => a.cidade.localeCompare(b.cidade, "pt-BR"));
+	}, [buscaCidade, regionais]);
 
 	const handleSalvar = async (dados) => {
 		if (modal?.id) await atualizar(modal.id, dados);
@@ -164,6 +190,80 @@ const RegionaisPage = () => {
 						</p>
 					</div>
 				))}
+			</div>
+
+			{/* Busca de cidade */}
+			<div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+					<div>
+						<p className="text-sm font-extrabold text-gray-900">
+							Buscar cidade por regional
+						</p>
+						<p className="text-xs font-medium text-gray-500">
+							Digite o nome da cidade para encontrar a regional e identificar se
+							ela é agente autorizado.
+						</p>
+					</div>
+					<label className="relative w-full lg:max-w-md">
+						<Search
+							size={16}
+							className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"
+						/>
+						<input
+							type="search"
+							value={buscaCidade}
+							onChange={(event) => setBuscaCidade(event.target.value)}
+							placeholder="Buscar cidade..."
+							className="h-11 w-full rounded-xl border border-blue-100 bg-white pl-9 pr-3 text-sm font-semibold text-gray-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+						/>
+					</label>
+				</div>
+				{buscaCidade.trim() ? (
+					<div className="mt-4">
+						{resultadosBuscaCidade.length ? (
+							<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+								{resultadosBuscaCidade.map((item) => {
+									const agente = item.tipo === "Agente Aut.";
+									return (
+										<button
+											type="button"
+											key={`${item.regionalId}-${item.cidade}-${item.tipo}`}
+											onClick={() =>
+												setExpandidas((current) => ({
+													...current,
+													[item.regionalId]: true,
+												}))
+											}
+											className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-left shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+										>
+											<span className="min-w-0">
+												<span className="block truncate text-sm font-extrabold text-gray-900">
+													{item.cidade}
+												</span>
+												<span className="block truncate text-xs font-semibold text-gray-500">
+													Regional: {item.regional}
+												</span>
+											</span>
+											<span
+												className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-extrabold ${
+													agente
+														? "border-amber-100 bg-amber-50 text-amber-700"
+														: "border-emerald-100 bg-emerald-50 text-emerald-700"
+												}`}
+											>
+												{agente ? "Agente Aut." : "Comum"}
+											</span>
+										</button>
+									);
+								})}
+							</div>
+						) : (
+							<div className="rounded-xl border border-dashed border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-gray-500">
+								Nenhuma cidade encontrada para "{buscaCidade}".
+							</div>
+						)}
+					</div>
+				) : null}
 			</div>
 
 			{/* Lista */}
