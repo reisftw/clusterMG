@@ -145,6 +145,8 @@ function publicHealthItem(row, evaluation) {
 		healthWindow: evaluation.healthWindow,
 		healthStatus: evaluation.healthStatus,
 		reasons: evaluation.reasons,
+		technicalReasons: evaluation.reasons,
+		dataQualityIssues: evaluation.dataQualityIssues || [],
 		evidence: evaluation.evidence,
 		evaluatedAt: evaluation.evaluatedAt,
 		technician: {
@@ -237,8 +239,10 @@ function applyDerivedFilters(items, query = {}) {
 	if (query.noConnection === "yes") filtered = filtered.filter((item) => item.connection.connected === false);
 	if (query.noTraffic === "yes") filtered = filtered.filter((item) => item.reasons.includes("NO_TRAFFIC"));
 	if (query.staleData === "yes") filtered = filtered.filter((item) => item.reasons.includes("STALE_CONNECTION_DATA"));
+	if (query.dataQuality === "yes") filtered = filtered.filter((item) => item.dataQualityIssues.length > 0);
 	if (text(query.q)) {
-		const q = text(query.q).toLowerCase();
+		const normalize = (value) => text(value).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+		const q = normalize(query.q);
 		filtered = filtered.filter((item) => [
 			item.orderNumber,
 			item.orderTypeName,
@@ -246,16 +250,27 @@ function applyDerivedFilters(items, query = {}) {
 			item.company.name,
 			item.city.name,
 			item.regional.name,
-		].some((value) => String(value || "").toLowerCase().includes(q)));
+		].some((value) => normalize(value).includes(q)));
 	}
 	return filtered;
 }
 
 function sortHealthItems(items) {
 	const statusWeight = { CRITICO: 0, ATENCAO: 1, SEM_DADOS: 2, SAUDAVEL: 3 };
+	const reasonWeight = {
+		NO_CONNECTION: 0,
+		REPEATED_SUPPORT: 1,
+		RECENT_SUPPORT: 2,
+		SERVICE_INACTIVE: 3,
+		NO_TRAFFIC: 4,
+		STALE_CONNECTION_DATA: 5,
+	};
 	return [...items].sort((a, b) => {
 		const status = (statusWeight[a.healthStatus] ?? 9) - (statusWeight[b.healthStatus] ?? 9);
 		if (status) return status;
+		const aReason = Math.min(...(a.technicalReasons || []).map((reason) => reasonWeight[reason] ?? 9), 9);
+		const bReason = Math.min(...(b.technicalReasons || []).map((reason) => reasonWeight[reason] ?? 9), 9);
+		if (aReason !== bReason) return aReason - bReason;
 		return (b.daysSinceActivation ?? -1) - (a.daysSinceActivation ?? -1);
 	});
 }
@@ -292,6 +307,39 @@ function pct(value, total) {
 	return total ? Math.round((Number(value || 0) / total) * 1000) / 10 : 0;
 }
 
+function countBy(items, keyGetter) {
+	const counts = {};
+	for (const item of items) {
+		const key = keyGetter(item);
+		if (!key) continue;
+		counts[key] = (counts[key] || 0) + 1;
+	}
+	return counts;
+}
+
+function topReasonCounts(items, field, limit = 5) {
+	const counts = {};
+	for (const item of items) {
+		for (const reason of item[field] || []) {
+			counts[reason] = (counts[reason] || 0) + 1;
+		}
+	}
+	return Object.entries(counts)
+		.sort((a, b) => b[1] - a[1])
+		.slice(0, limit)
+		.map(([reason, count]) => ({ reason, count }));
+}
+
+async function supportSourceStatus(db) {
+	const { rows } = await db.query(`select count(*)::int as total from hubsoft_activation_support_events`);
+	const total = Number(rows[0]?.total || 0);
+	return {
+		available: total > 0,
+		total,
+		message: total > 0 ? "Fonte com eventos de suporte materializados." : "Dados de suporte ainda não disponíveis.",
+	};
+}
+
 async function summary(db, query = {}) {
 	const data = await listHealth(db, { ...query, page: 1, limit: 10000 });
 	const items = data.items;
@@ -303,8 +351,11 @@ async function summary(db, query = {}) {
 		CRITICO: count((item) => item.healthStatus === "CRITICO"),
 		SEM_DADOS: count((item) => item.healthStatus === "SEM_DADOS"),
 	};
+	const byWindow = countBy(items, (item) => item.healthWindow);
+	const supportSource = await supportSourceStatus(db);
 	return {
 		period: data.period,
+		supportSource,
 		summary: {
 			monitored: total,
 			healthy: byStatus.SAUDAVEL,
@@ -314,6 +365,18 @@ async function summary(db, query = {}) {
 			withRecall: count((item) => item.support.qualityCount > 0),
 			withRepeatedSupport: count((item) => item.support.repeated),
 			noConnection: count((item) => item.connection.connected === false),
+			dataQuality: count((item) => item.dataQualityIssues.length > 0),
+			staleData: count((item) => item.technicalReasons.includes("STALE_CONNECTION_DATA")),
+			topTechnicalReasons: topReasonCounts(items, "technicalReasons"),
+			topDataQualityIssues: topReasonCounts(items, "dataQualityIssues"),
+			byWindow: ["D+1", "D+7", "D+15", "D+30", "SEM_DATA"].map((window) => ({
+				window,
+				monitored: byWindow[window] || 0,
+				critical: items.filter((item) => item.healthWindow === window && item.healthStatus === "CRITICO").length,
+				attention: items.filter((item) => item.healthWindow === window && item.healthStatus === "ATENCAO").length,
+				healthy: items.filter((item) => item.healthWindow === window && item.healthStatus === "SAUDAVEL").length,
+				noData: items.filter((item) => item.healthWindow === window && item.healthStatus === "SEM_DADOS").length,
+			})).filter((item) => item.monitored > 0 || item.window !== "SEM_DATA"),
 			percentages: {
 				healthy: pct(byStatus.SAUDAVEL, total),
 				attention: pct(byStatus.ATENCAO, total),

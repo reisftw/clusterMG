@@ -3,6 +3,7 @@ import {
 	AlertTriangle,
 	Building2,
 	CheckCircle2,
+	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	Clock3,
@@ -57,7 +58,7 @@ const HEALTH_STATUS = {
 };
 
 const HEALTH_REASONS = {
-	NO_CONNECTION: "Sem PPPoE",
+	NO_CONNECTION: "Sem conexão",
 	NO_TRAFFIC: "Sem tráfego",
 	LOW_TRAFFIC: "Baixo tráfego",
 	RECENT_SUPPORT: "Suporte recente",
@@ -67,6 +68,13 @@ const HEALTH_REASONS = {
 	TECHNICIAN_UNMATCHED: "Técnico sem vínculo",
 	INSUFFICIENT_DATA: "Dados insuficientes",
 	LIMITED_MONITORING: "Monitoramento parcial",
+};
+
+const DATA_QUALITY_REASONS = {
+	TECHNICIAN_UNMATCHED: "Técnico sem vínculo",
+	COMPANY_UNMATCHED: "Empresa não identificada",
+	CITY_MISSING: "Cidade não informada",
+	BRAND_UNKNOWN: "Marca não identificada",
 };
 
 const QUALITY_DIMENSIONS = [
@@ -91,6 +99,13 @@ function formatShortDate(value) {
 	const date = new Date(normalized);
 	if (Number.isNaN(date.getTime())) return "-";
 	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function formatTime(value) {
+	if (!value) return "--:--";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "--:--";
+	return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatNumber(value) {
@@ -144,10 +159,13 @@ function reasonLabel(reason) {
 	return HEALTH_REASONS[reason] || reason;
 }
 
+function qualityIssueLabel(reason) {
+	return DATA_QUALITY_REASONS[reason] || reason;
+}
+
 function filterPayload(filters) {
 	const payload = { ...filters };
 	delete payload.healthEvent;
-	delete payload.q;
 	if (filters.period !== "custom") {
 		delete payload.from;
 		delete payload.to;
@@ -165,7 +183,7 @@ function pageFromPath(pathname) {
 const PAGE_COPY = {
 	dashboard: { breadcrumb: "Operação / Ativações", title: "Visão Geral", description: "Acompanhe volume, andamento e desempenho das ativações." },
 	kanban: { breadcrumb: "Operação / Ativações / Kanban", title: "Kanban", description: "Acompanhe o fluxo das instalações por etapa operacional." },
-	saude: { breadcrumb: "Operação / Ativações / Saúde", title: "Saúde", description: "Priorize ativações recentes com sinais de atenção ou risco." },
+	saude: { breadcrumb: "Operação / Ativações / Saúde", title: "Saúde Pós-Ativação", description: "Acompanhe ativações recentes e priorize clientes com sinais de instabilidade." },
 	qualidade: { breadcrumb: "Operação / Ativações / Qualidade", title: "Qualidade", description: "Compare métricas objetivas por técnico, empresa, cidade e tipo de OS." },
 };
 
@@ -178,8 +196,10 @@ export default function AtivacoesPage() {
 	const canExportQuality = hasPermission("ativacoes.qualidade.exportar");
 	const tab = pageFromPath(location.pathname);
 	const pageCopy = PAGE_COPY[tab] || PAGE_COPY.dashboard;
-	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), q: "", orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" });
+	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), q: "", orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", dataQuality: "", quality: "" });
 	const [qualityDimension, setQualityDimension] = useState("tecnicos");
+	const [qualityPage, setQualityPage] = useState(1);
+	const [qualitySort, setQualitySort] = useState("volume");
 	const [filterOptions, setFilterOptions] = useState(null);
 	const [dashboard, setDashboard] = useState(null);
 	const [kanban, setKanban] = useState(null);
@@ -223,7 +243,7 @@ export default function AtivacoesPage() {
 			const [filtersData, summaryData, listData] = await Promise.all([
 				filterOptions ? Promise.resolve({ filters: filterOptions }) : fetchAtivacoesSaudeFilters(),
 				fetchAtivacoesSaudeResumo(effectiveFilters),
-				fetchAtivacoesSaude({ ...effectiveFilters, limit: 50 }),
+				fetchAtivacoesSaude({ ...effectiveFilters, limit: 10000 }),
 			]);
 			setFilterOptions(filtersData.filters);
 			setHealthSummary(summaryData);
@@ -242,7 +262,7 @@ export default function AtivacoesPage() {
 			const [filtersData, summaryData, listData] = await Promise.all([
 				filterOptions ? Promise.resolve({ filters: filterOptions }) : fetchAtivacoesQualidadeFilters(),
 				fetchAtivacoesQualidadeResumo(effectiveFilters),
-				fetchAtivacoesQualidade(qualityDimension, { ...effectiveFilters, limit: 50 }),
+				fetchAtivacoesQualidade(qualityDimension, { ...effectiveFilters, page: qualityPage, limit: 25, sort: qualitySort }),
 			]);
 			setFilterOptions(filtersData.filters);
 			setQualitySummary(summaryData);
@@ -259,7 +279,7 @@ export default function AtivacoesPage() {
 		else if (tab === "qualidade") loadQuality();
 		else load();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [JSON.stringify(effectiveFilters), tab, qualityDimension]);
+	}, [JSON.stringify(effectiveFilters), tab, qualityDimension, qualityPage, qualitySort]);
 
 	async function openDetail(id) {
 		setDetail({ loading: true });
@@ -285,8 +305,9 @@ export default function AtivacoesPage() {
 		setQualityDetail({ loading: true, group });
 		try {
 			const dimension = QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician";
-			const data = await fetchAtivacoesQualidadeDetail({ ...effectiveFilters, dimension, id: group.id });
-			setQualityDetail({ loading: false, item: data });
+			const baseFilters = { ...effectiveFilters, dimension, id: group.id };
+			const data = await fetchAtivacoesQualidadeDetail({ ...baseFilters, page: 1, limit: 25 });
+			setQualityDetail({ loading: false, item: data, group, baseFilters });
 		} catch (err) {
 			setQualityDetail({ loading: false, error: err?.message || "Não foi possível abrir o detalhamento." });
 		}
@@ -355,7 +376,7 @@ export default function AtivacoesPage() {
 			{tab === "dashboard" ? <DashboardView data={dashboard} period={filters.period} /> : null}
 			{tab === "kanban" ? <KanbanView data={kanban} query={filters.q} onOpen={openDetail} /> : null}
 			{tab === "saude" ? <HealthView data={health} summary={healthSummary} onOpen={openHealthDetail} /> : null}
-			{tab === "qualidade" ? <QualityView data={quality} summary={qualitySummary} dimension={qualityDimension} setDimension={setQualityDimension} onOpen={openQualityDetail} /> : null}
+			{tab === "qualidade" ? <QualityView data={quality} summary={qualitySummary} dimension={qualityDimension} setDimension={setQualityDimension} page={qualityPage} setPage={setQualityPage} sort={qualitySort} setSort={setQualitySort} onOpen={openQualityDetail} /> : null}
 
 			{detail ? <ActivationDetailModal detail={detail} onClose={() => setDetail(null)} /> : null}
 			{healthDetail ? <HealthDetailModal detail={healthDetail} onClose={() => setHealthDetail(null)} /> : null}
@@ -367,7 +388,7 @@ export default function AtivacoesPage() {
 function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedOpen }) {
 	const setField = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
 	const clearField = (key) => setField(key, "");
-	const reset = () => setFilters((current) => ({ ...current, period: "last7", from: todayIso(), to: todayIso(), q: "", orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" }));
+	const reset = () => setFilters((current) => ({ ...current, period: "last7", from: todayIso(), to: todayIso(), q: "", orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", dataQuality: "", quality: "" }));
 	const optionLabel = (items = [], id) => items.find((item) => String(item.id) === String(id))?.label || id;
 	const chips = [
 		filters.orderTypeId && { key: "orderTypeId", label: optionLabel((options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name })), filters.orderTypeId) },
@@ -382,13 +403,20 @@ function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedO
 		filters.quality && { key: "quality", label: optionLabel(options?.quality || [], filters.quality) },
 	].filter(Boolean);
 	const hasCriteria = chips.length > 0 || Boolean(filters.q);
+	const visibleGrid = tab === "saude"
+		? "md:grid-cols-[1fr_1fr_1fr_1.2fr_1.7fr_auto]"
+		: tab === "kanban"
+			? "md:grid-cols-[1fr_1.2fr_1.2fr_1.8fr_auto]"
+			: "md:grid-cols-[1.1fr_1.2fr_1.2fr_auto]";
 	return (
 		<div className="space-y-3">
-			<div className={`grid gap-2 ${tab === "kanban" ? "md:grid-cols-[1fr_1.2fr_1.2fr_1.8fr_auto]" : "md:grid-cols-[1.1fr_1.2fr_1.2fr_auto]"}`}>
+			<div className={`grid gap-2 ${visibleGrid}`}>
 				<Select label="Período" value={filters.period} onChange={(v) => setField("period", v)} options={PERIODS} />
+				{tab === "saude" ? <Select label="Saúde" value={filters.healthStatus} onChange={(v) => setField("healthStatus", v)} options={(options?.healthStatuses || []).map((item) => ({ id: item, label: HEALTH_STATUS[item]?.label || item }))} allowAll /> : null}
+				{tab === "saude" ? <Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll /> : null}
 				<Select label="Tipo OS" value={filters.orderTypeId} onChange={(v) => setField("orderTypeId", v)} options={(options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-				<Select label="Localidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-				{tab === "kanban" ? <Field label="Busca" value={filters.q} onChange={(v) => setField("q", v)} placeholder="Buscar OS, técnico ou cidade" /> : null}
+				{tab !== "saude" ? <Select label="Localidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll /> : null}
+				{tab === "kanban" || tab === "saude" ? <Field label="Busca" value={filters.q} onChange={(v) => setField("q", v)} placeholder="Buscar OS, técnico ou cidade" /> : null}
 				<button type="button" onClick={() => setAdvancedOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 outline-none transition hover:bg-slate-50 focus:border-blue-500">
 					<Filter size={16} /> Filtros
 				</button>
@@ -404,7 +432,7 @@ function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedO
 					<Select label="Cidade específica" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
 					<Select label="Marca" value={filters.brand} onChange={(v) => setField("brand", v)} options={(options?.brands || []).map((item) => ({ id: item, label: item }))} allowAll />
 					<Select label="Técnico identificado" value={filters.technicianIdentified} onChange={(v) => setField("technicianIdentified", v)} options={[{ id: "yes", label: "Com técnico" }, { id: "no", label: "Sem técnico" }]} allowAll />
-					{tab === "saude" ? <><Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll /><Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }]} allowAll /></> : null}
+					{tab === "saude" ? <Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "", dataQuality: v === "dataQuality" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }, { id: "dataQuality", label: "Cadastro incompleto" }]} allowAll /> : null}
 					{tab === "qualidade" ? <Select label="Qualidade" value={filters.quality} onChange={(v) => setField("quality", v)} options={(options?.quality || []).map((item) => ({ id: item.id, label: item.label }))} allowAll /> : null}
 					</div>
 				</div>
@@ -429,7 +457,7 @@ function SyncStatusBadge({ latestSync, syncJob, compact = false }) {
 	const rawStatus = syncJob?.status || latestSync?.status || "idle";
 	const status = String(rawStatus).toLowerCase();
 	const latestDate = latestSync?.finishedAt || latestSync?.finished_at || latestSync?.startedAt || latestSync?.started_at || latestSync?.created_at;
-	const label = status === "running" || status === "starting" ? "Atualizando..." : status === "failed" ? "Sincronização indisponível" : latestDate ? `Atualizado ${relativeTime(latestDate)}` : "Sem execução recente";
+	const label = status === "running" || status === "starting" ? "Atualizando" : status === "failed" ? "Sincronização indisponível" : latestDate ? `Atualizado ${relativeTime(latestDate)}` : "Dados podem estar desatualizados";
 	const detail = syncJob?.error || latestSync?.error_message || latestSync?.error || (latestDate ? formatDateTime(latestDate) : "Dados atualizados conforme filtros.");
 	const className = status === "failed"
 		? "border-red-200 bg-red-50 text-red-700"
@@ -926,24 +954,24 @@ function HealthBadge({ status }) {
 	return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${config.className}`}>{config.label}</span>;
 }
 
-function QualityView({ data, summary, dimension, setDimension, onOpen }) {
+function QualityView({ data, summary, dimension, setDimension, page, setPage, sort, setSort, onOpen }) {
 	const metrics = summary?.metrics || {};
 	const supportSource = summary?.supportSource;
+	const completed = Number(metrics.production?.completed || 0);
+	const late = Number(metrics.schedule?.LATE || 0);
 	const cards = [
-		["Ativações analisadas", metrics.production?.completed ?? 0, `${metrics.production?.analyzable ?? 0} analisáveis`],
-		["Técnicos analisados", data?.items?.filter((item) => item.dimension === "technician").length || "-", "por filtro aplicado"],
-		["Empresas analisadas", summary ? "-" : "-", "use a visão Empresas"],
-		["Dentro da janela", metrics.schedule?.ON_TIME ?? 0, percent(metrics.schedule?.onTimeRate)],
-		["Rechamado D+7", metrics.rework?.d7?.count ?? 0, ratio(metrics.rework?.d7?.count, metrics.rework?.d7?.denominator, metrics.rework?.d7?.rate)],
-		["Rechamado D+30", metrics.rework?.d30?.count ?? 0, ratio(metrics.rework?.d30?.count, metrics.rework?.d30?.denominator, metrics.rework?.d30?.rate)],
-		["Reincidência", metrics.rework?.repeated ?? 0, `${metrics.rework?.totalEvents ?? 0} evento(s)`],
+		["Ativações analisadas", completed, `${formatNumber(metrics.production?.analyzable)} elegíveis para análise`],
+		["No horário", metrics.schedule?.ON_TIME ?? 0, percent(metrics.schedule?.onTimeRate)],
+		["Atrasadas", late, percentOf(late, completed)],
 		["Saúde crítica", metrics.health?.CRITICO ?? 0, percent(metrics.health?.criticalRate)],
 	];
+	const unidentified = Number(metrics.production?.unidentifiedTechnician || 0);
+	const dimensionLabel = QUALITY_DIMENSIONS.find((item) => item.id === dimension)?.label || "Técnicos";
 	return (
 		<div className="space-y-4">
 			{supportSource?.available === false ? (
-				<div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-					Fonte de rechamados ainda sem eventos comprovados. D+7/D+15/D+30 mostram 0 evento real, não qualidade perfeita.
+				<div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800" title="D+7/D+15/D+30 não serão calculados até existir fonte confiável de eventos.">
+					ⓘ Rechamados ainda não disponíveis · aguardando eventos comprovados
 				</div>
 			) : null}
 			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -956,28 +984,53 @@ function QualityView({ data, summary, dimension, setDimension, onOpen }) {
 				))}
 			</div>
 			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="grid gap-3 md:grid-cols-5">
+					<SecondaryMetric label="No horário" value={metrics.schedule?.ON_TIME} />
+					<SecondaryMetric label="Atrasadas" value={metrics.schedule?.LATE} />
+					<SecondaryMetric label="Antecipadas" value={metrics.schedule?.EARLY} />
+					<SecondaryMetric label="Sem dados" value={metrics.schedule?.NO_DATA} />
+					<SecondaryMetric label="Técnico sem vínculo" value={metrics.production?.unidentifiedTechnician} />
+				</div>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h2 className="text-lg font-black text-slate-950">Cumprimento da janela</h2>
+					<ScheduleStackBar schedule={metrics.schedule || {}} total={completed} />
+				</div>
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h2 className="text-lg font-black text-slate-950">Saúde pós-ativação</h2>
+					<HealthMiniDistribution health={metrics.health || {}} total={completed} />
+				</div>
+			</section>
+			{unidentified > 0 ? (
+				<section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900 shadow-sm">
+					⚠ {formatNumber(unidentified)} ativações ainda não possuem técnico vinculado ao cadastro do Operação.
+				</section>
+			) : null}
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
 				<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<h2 className="text-lg font-black text-slate-950">Qualidade por dimensão</h2>
-						<p className="text-sm font-semibold text-slate-500">Produção e qualidade ficam separadas, com denominadores visíveis.</p>
+						<p className="text-sm font-semibold text-slate-500">Métricas objetivas por {dimensionLabel.toLowerCase()}, com dados cadastrais separados.</p>
 					</div>
-					<div className="flex flex-wrap gap-2">
+					<div className="flex flex-wrap items-center gap-2">
 						{QUALITY_DIMENSIONS.map((item) => (
-							<button key={item.id} type="button" onClick={() => setDimension(item.id)} className={`rounded-xl px-3 py-2 text-xs font-black ${dimension === item.id ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{item.label}</button>
+							<button key={item.id} type="button" onClick={() => { setDimension(item.id); setPage(1); }} className={`rounded-xl px-3 py-2 text-xs font-black ${dimension === item.id ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>{item.label}</button>
 						))}
+						<Select label="Ordenar" value={sort} onChange={(value) => { setSort(value); setPage(1); }} options={[{ id: "volume", label: "Volume" }, { id: "onTime", label: "Janela OK" }, { id: "late", label: "Atrasadas" }, { id: "criticalHealth", label: "Saúde crítica" }]} />
 					</div>
 				</div>
 				<div className="overflow-x-auto">
-					<table className="min-w-[1120px] w-full text-left text-sm">
+					<table className="min-w-[980px] w-full text-left text-sm">
 						<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
 							<tr>
 								<th className="px-4 py-3">Grupo</th>
 								<th className="px-4 py-3">OS</th>
 								<th className="px-4 py-3">Janela OK</th>
-								<th className="px-4 py-3">D+7</th>
-								<th className="px-4 py-3">D+15</th>
-								<th className="px-4 py-3">D+30</th>
-								<th className="px-4 py-3">Reincidência</th>
+								<th className="px-4 py-3">Atrasadas</th>
+								{supportSource?.available ? <th className="px-4 py-3">D+7</th> : null}
+								{supportSource?.available ? <th className="px-4 py-3">D+30</th> : null}
+								{supportSource?.available ? <th className="px-4 py-3">Reincidência</th> : null}
 								<th className="px-4 py-3">Saúde crítica</th>
 								<th className="px-4 py-3">Amostra</th>
 							</tr>
@@ -985,63 +1038,175 @@ function QualityView({ data, summary, dimension, setDimension, onOpen }) {
 						<tbody className="divide-y divide-slate-100">
 							{(data?.items || []).map((item) => (
 								<tr key={item.id} onClick={() => onOpen(item)} className="cursor-pointer transition hover:bg-blue-50/60">
-									<td className="px-4 py-3"><p className="font-black text-slate-950">{item.label}</p><p className="text-xs font-semibold text-slate-500">{item.subtitle || "-"}</p></td>
+									<td className="px-4 py-3"><p className="font-black text-slate-950">{item.label}</p><p className="text-xs font-semibold text-slate-500">{item.subtitle || (item.id === "unmatched" ? "Cadastro pendente" : "")}</p>{item.id === "unmatched" || item.id === "none" ? <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">Qualidade dos dados</span> : null}</td>
 									<td className="px-4 py-3 font-black text-slate-900">{item.metrics.production.completed}</td>
 									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.schedule.ON_TIME, item.metrics.production.completed, item.metrics.schedule.onTimeRate)}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d7.count, item.metrics.rework.d7.denominator, item.metrics.rework.d7.rate)}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d15.count, item.metrics.rework.d15.denominator, item.metrics.rework.d15.rate)}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d30.count, item.metrics.rework.d30.denominator, item.metrics.rework.d30.rate)}</td>
-									<td className="px-4 py-3 font-black text-slate-900">{item.metrics.rework.repeated}</td>
+									<td className="px-4 py-3 font-black text-amber-700">{item.metrics.schedule.LATE}</td>
+									{supportSource?.available ? <td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d7.count, item.metrics.rework.d7.denominator, item.metrics.rework.d7.rate)}</td> : null}
+									{supportSource?.available ? <td className="px-4 py-3 font-semibold text-slate-700">{ratio(item.metrics.rework.d30.count, item.metrics.rework.d30.denominator, item.metrics.rework.d30.rate)}</td> : null}
+									{supportSource?.available ? <td className="px-4 py-3 font-black text-slate-900">{item.metrics.rework.repeated}</td> : null}
 									<td className="px-4 py-3 font-black text-red-700">{item.metrics.health.CRITICO}</td>
-									<td className="px-4 py-3">{item.metrics.sample.small ? <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">Amostra pequena</span> : <span className="text-xs font-bold text-slate-400">OK</span>}</td>
+									<td className="px-4 py-3"><SampleBadge metrics={item.metrics} /></td>
 								</tr>
 							))}
-							{!data?.items?.length ? <tr><td colSpan="9" className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem dados para os filtros.</td></tr> : null}
+							{!data?.items?.length ? <tr><td colSpan={supportSource?.available ? 9 : 6} className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem dados para os filtros.</td></tr> : null}
 						</tbody>
 					</table>
+				</div>
+				<Pagination page={page} total={data?.total || 0} pageSize={data?.limit || 25} onPage={setPage} />
+			</section>
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<h2 className="text-lg font-black text-slate-950">Qualidade dos dados</h2>
+				<div className="mt-3 grid gap-3 md:grid-cols-4">
+					<SecondaryMetric label="Técnico não vinculado" value={metrics.production?.unidentifiedTechnician} />
+					<SecondaryMetric label="Sem dados de janela" value={metrics.schedule?.NO_DATA} />
+					<SecondaryMetric label="Sem dados de conexão" value={metrics.operational?.noConnectionData} />
+					<SecondaryMetric label="Sem conexão" value={metrics.operational?.noConnection} />
 				</div>
 			</section>
 		</div>
 	);
 }
 
+const SCHEDULE_STATUS_LABELS = {
+	ON_TIME: { label: "No horário", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+	EARLY: { label: "Antecipada", className: "border-blue-200 bg-blue-50 text-blue-700" },
+	LATE: { label: "Atrasada", className: "border-amber-200 bg-amber-50 text-amber-700" },
+	NO_DATA: { label: "Sem dados", className: "border-slate-200 bg-slate-50 text-slate-600" },
+};
+
+function ScheduleBadge({ status }) {
+	const config = SCHEDULE_STATUS_LABELS[status] || SCHEDULE_STATUS_LABELS.NO_DATA;
+	return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${config.className}`}>{config.label}</span>;
+}
+
+function SampleBadge({ metrics }) {
+	const count = Number(metrics?.production?.completed || 0);
+	if (metrics?.sample?.small) return <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-black text-amber-700">Amostra pequena · {formatNumber(count)} OS</span>;
+	return <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-black text-emerald-700">Amostra adequada · {formatNumber(count)} OS</span>;
+}
+
+function ScheduleStackBar({ schedule = {}, total }) {
+	const segments = [
+		{ key: "ON_TIME", label: "No horário", value: schedule.ON_TIME, className: "bg-emerald-500" },
+		{ key: "EARLY", label: "Antecipada", value: schedule.EARLY, className: "bg-blue-500" },
+		{ key: "LATE", label: "Atrasada", value: schedule.LATE, className: "bg-amber-500" },
+		{ key: "NO_DATA", label: "Sem dados", value: schedule.NO_DATA, className: "bg-slate-300" },
+	];
+	return (
+		<div className="mt-4">
+			<div className="flex h-4 overflow-hidden rounded-full bg-slate-100">
+				{segments.map((segment) => <div key={segment.key} className={segment.className} style={{ width: `${Math.max(0, total ? (Number(segment.value || 0) / total) * 100 : 0)}%` }} title={`${segment.label}: ${percentOf(segment.value, total)}`} />)}
+			</div>
+			<div className="mt-3 grid gap-2 sm:grid-cols-2">
+				{segments.map((segment) => (
+					<div key={segment.key} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-xs font-black text-slate-600">
+						<span>{segment.label}</span>
+						<span>{formatNumber(segment.value)} · {percentOf(segment.value, total)}</span>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function HealthMiniDistribution({ health = {}, total }) {
+	const items = [
+		["CRITICO", "Crítico", "text-red-700"],
+		["ATENCAO", "Atenção", "text-amber-700"],
+		["SAUDAVEL", "Saudável", "text-emerald-700"],
+		["SEM_DADOS", "Sem dados", "text-slate-600"],
+	];
+	return (
+		<div className="mt-3 grid gap-2">
+			{items.map(([key, label, className]) => (
+				<div key={key} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+					<span className="font-black text-slate-600">{label}</span>
+					<span className={`font-black ${className}`}>{formatNumber(health[key])} · {percentOf(health[key], total)}</span>
+				</div>
+			))}
+		</div>
+	);
+}
+
 function QualityDetailModal({ detail, onClose }) {
-	const payload = detail.item;
+	const [payload, setPayload] = useState(detail.item);
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState(detail.error || "");
+	const [search, setSearch] = useState("");
+	const [scheduleStatus, setScheduleStatus] = useState("");
+	const [healthStatus, setHealthStatus] = useState("");
 	const group = payload?.group || detail.group;
+	const pagination = payload?.pagination || { page: 1, limit: 25, total: payload?.items?.length || 0, totalPages: 1 };
+	async function reload(overrides = {}) {
+		setLoading(true);
+		setError("");
+		try {
+			const next = {
+				...(detail.baseFilters || {}),
+				page: overrides.page ?? pagination.page,
+				limit: overrides.limit ?? pagination.limit,
+				search: overrides.search ?? search,
+				scheduleStatus: overrides.scheduleStatus ?? scheduleStatus,
+				healthStatus: overrides.healthStatus ?? healthStatus,
+			};
+			const data = await fetchAtivacoesQualidadeDetail(next);
+			setPayload(data);
+		} catch (err) {
+			setError(err?.message || "Não foi possível carregar o detalhamento.");
+		} finally {
+			setLoading(false);
+		}
+	}
 	return (
 		<ModalShell open title="Detalhamento de qualidade" description={group ? `${group.label} · ${group.subtitle || "Qualidade da instalação"}` : "Carregando dados"} onClose={onClose} size="6xl">
-			{detail.loading ? <Spinner /> : null}
-			{detail.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{detail.error}</div> : null}
+			{detail.loading || loading ? <Spinner /> : null}
+			{error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</div> : null}
 			{payload ? (
 				<div className="space-y-4">
-					<div className="grid gap-4 lg:grid-cols-2">
-						<InfoGroup title="Produção" rows={[["OS", group?.metrics?.production?.completed], ["Analisáveis", group?.metrics?.production?.analyzable], ["Sem técnico", group?.metrics?.production?.unidentifiedTechnician], ["Amostra", group?.metrics?.sample?.small ? "Pequena" : "Adequada"]]} />
-						<InfoGroup title="Rechamados" rows={[["D+7", ratio(group?.metrics?.rework?.d7?.count, group?.metrics?.rework?.d7?.denominator, group?.metrics?.rework?.d7?.rate)], ["D+15", ratio(group?.metrics?.rework?.d15?.count, group?.metrics?.rework?.d15?.denominator, group?.metrics?.rework?.d15?.rate)], ["D+30", ratio(group?.metrics?.rework?.d30?.count, group?.metrics?.rework?.d30?.denominator, group?.metrics?.rework?.d30?.rate)], ["Reincidência", group?.metrics?.rework?.repeated]]} />
+					<div className="grid gap-3 md:grid-cols-5">
+						<SecondaryMetric label="OS" value={group?.metrics?.production?.completed} />
+						<SecondaryMetric label="Janela OK" value={group?.metrics?.schedule?.ON_TIME} />
+						<SecondaryMetric label="Atrasadas" value={group?.metrics?.schedule?.LATE} />
+						<SecondaryMetric label="Antecipadas" value={group?.metrics?.schedule?.EARLY} />
+						<SecondaryMetric label="Saúde crítica" value={group?.metrics?.health?.CRITICO} />
+					</div>
+					<div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+						<div className="grid gap-2 md:grid-cols-[1.5fr_1fr_1fr_auto]">
+							<Field label="Buscar OS ou tipo" value={search} onChange={setSearch} placeholder="OS, tipo, cidade..." />
+							<Select label="Janela" value={scheduleStatus} onChange={(value) => { setScheduleStatus(value); reload({ page: 1, scheduleStatus: value }); }} options={Object.entries(SCHEDULE_STATUS_LABELS).map(([id, item]) => ({ id, label: item.label }))} allowAll />
+							<Select label="Saúde" value={healthStatus} onChange={(value) => { setHealthStatus(value); reload({ page: 1, healthStatus: value }); }} options={Object.entries(HEALTH_STATUS).map(([id, item]) => ({ id, label: item.label }))} allowAll />
+							<button type="button" onClick={() => reload({ page: 1, search })} className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white">Buscar</button>
+						</div>
 					</div>
 					<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-						<div className="border-b border-slate-100 px-4 py-3">
+						<div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
 							<h3 className="text-base font-black text-slate-950">OS auditáveis</h3>
+							<div className="w-36">
+								<Select label="Por página" value={pagination.limit} onChange={(value) => reload({ page: 1, limit: value })} options={[25, 50, 100].map((value) => ({ id: value, label: `${value}` }))} />
+							</div>
 						</div>
-						<div className="max-h-[430px] overflow-auto">
-							<table className="min-w-[980px] w-full text-left text-sm">
+						<div className="overflow-x-auto">
+							<table className="min-w-[860px] w-full text-left text-sm">
 								<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
-									<tr><th className="px-4 py-3">OS</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Início</th><th className="px-4 py-3">Fim</th><th className="px-4 py-3">Janela</th><th className="px-4 py-3">Saúde</th><th className="px-4 py-3">Rechamados</th><th className="px-4 py-3">Cidade</th></tr>
+									<tr><th className="px-4 py-3">OS</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Execução</th><th className="px-4 py-3">Janela</th><th className="px-4 py-3">Saúde</th><th className="px-4 py-3">Localidade</th></tr>
 								</thead>
 								<tbody className="divide-y divide-slate-100">
 									{(payload.items || []).map((item) => (
 										<tr key={item.id}>
 											<td className="px-4 py-3 font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</td>
 											<td className="px-4 py-3 font-semibold text-slate-700">{item.orderTypeName}</td>
-											<td className="px-4 py-3 font-semibold text-slate-700">{formatDateTime(item.executedStartAt)}</td>
-											<td className="px-4 py-3 font-semibold text-slate-700">{formatDateTime(item.executedEndAt)}</td>
-											<td className="px-4 py-3 font-black text-slate-800">{item.scheduleStatus}</td>
+											<td className="px-4 py-3 font-semibold text-slate-700"><p>{formatShortDate(item.executedEndAt || item.executedStartAt)}</p><p className="text-xs text-slate-500">{formatTime(item.executedStartAt)} → {formatTime(item.executedEndAt)}</p></td>
+											<td className="px-4 py-3"><ScheduleBadge status={item.scheduleStatus} /></td>
 											<td className="px-4 py-3"><HealthBadge status={item.healthStatus} /></td>
-											<td className="px-4 py-3 font-black text-slate-900">{item.supportEvents?.length || 0}</td>
-											<td className="px-4 py-3 font-semibold text-slate-700">{item.city?.name || "-"}</td>
+											<td className="px-4 py-3 font-semibold text-slate-700">{item.city?.name || "Não informada"}</td>
 										</tr>
 									))}
 								</tbody>
 							</table>
+						</div>
+						<div className="px-4 pb-4">
+							<Pagination page={pagination.page} total={pagination.total} pageSize={pagination.limit} onPage={(nextPage) => reload({ page: nextPage })} />
 						</div>
 					</section>
 				</div>
@@ -1053,84 +1218,147 @@ function QualityDetailModal({ detail, onClose }) {
 function HealthView({ data, summary, onOpen }) {
 	const [query, setQuery] = useState("");
 	const [page, setPage] = useState(1);
-	const pageSize = 10;
-	const cards = [
-		["monitored", "Monitorados", summary?.summary?.monitored ?? 0, ""],
-		["healthy", "Saudáveis", summary?.summary?.healthy ?? 0, percent(summary?.summary?.percentages?.healthy)],
-		["attention", "Atenção", summary?.summary?.attention ?? 0, percent(summary?.summary?.percentages?.attention)],
-		["critical", "Críticos", summary?.summary?.critical ?? 0, percent(summary?.summary?.percentages?.critical)],
-		["noData", "Sem dados", summary?.summary?.noData ?? 0, percent(summary?.summary?.percentages?.noData)],
-		["withRecall", "Com rechamado", summary?.summary?.withRecall ?? 0, ""],
-		["withRepeatedSupport", "Reincidência", summary?.summary?.withRepeatedSupport ?? 0, ""],
-		["noConnection", "Sem conexão", summary?.summary?.noConnection ?? 0, ""],
+	const [riskFilter, setRiskFilter] = useState("action");
+	const pageSize = 50;
+	const metrics = summary?.summary || {};
+	const supportSource = summary?.supportSource || {};
+	const monitored = Number(metrics.monitored || 0);
+	const kpis = [
+		{ id: "monitored", label: "Monitorados", value: metrics.monitored, sub: "ativações na janela de acompanhamento", tone: "blue" },
+		{ id: "critical", label: "Críticos", value: metrics.critical, sub: `${percentOf(metrics.critical, monitored)} dos monitorados`, tone: "red" },
+		{ id: "attention", label: "Atenção", value: metrics.attention, sub: `${percentOf(metrics.attention, monitored)} dos monitorados`, tone: "amber" },
+		{ id: "healthy", label: "Saudáveis", value: metrics.healthy, sub: `${percentOf(metrics.healthy, monitored)} dos monitorados`, tone: "emerald" },
 	];
-	const filteredItems = (data?.items || []).filter((item) => activationMatchesQuery(item, query));
+	const filteredItems = (data?.items || [])
+		.filter((item) => activationMatchesQuery(item, query))
+		.filter((item) => {
+			if (riskFilter === "action") return ["CRITICO", "ATENCAO"].includes(item.healthStatus);
+			if (riskFilter === "all") return true;
+			return item.healthStatus === riskFilter;
+		});
 	const safePage = Math.min(page, Math.max(1, Math.ceil(filteredItems.length / pageSize)));
 	const visibleItems = filteredItems.slice((safePage - 1) * pageSize, safePage * pageSize);
 	return (
 		<div className="space-y-4">
 			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-				{cards.map(([key, label, value, sub]) => (
-					<div key={key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-						<p className="text-xs font-black uppercase text-slate-500">{label}</p>
-						<div className="mt-3 flex items-end justify-between gap-3">
-							<p className="text-3xl font-black text-slate-950">{value}</p>
-							{sub ? <p className="text-sm font-black text-blue-600">{sub}</p> : null}
-						</div>
-					</div>
-				))}
+				{kpis.map((item) => <HealthKpiCard key={item.id} {...item} />)}
 			</div>
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="grid gap-3 md:grid-cols-5">
+					<SecondaryMetric label="Sem conexão" value={metrics.noConnection} />
+					<SecondaryMetric label="Sem dados" value={metrics.noData} />
+					<SecondaryMetric label="Rechamados" value={supportSource.available ? metrics.withRecall : "Fonte indisponível"} muted={!supportSource.available} />
+					<SecondaryMetric label="Reincidência" value={supportSource.available ? metrics.withRepeatedSupport : "Fonte indisponível"} muted={!supportSource.available} />
+					<SecondaryMetric label="Dados vencidos" value={metrics.staleData} />
+				</div>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h2 className="text-lg font-black text-slate-950">Situação da base monitorada</h2>
+					<p className="text-sm font-semibold text-slate-500">Composição da saúde técnica, separada de pendências cadastrais.</p>
+					<HealthStackBar metrics={metrics} total={monitored} />
+				</div>
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h2 className="text-lg font-black text-slate-950">Principais sinais de risco</h2>
+					<ReasonList items={metrics.topTechnicalReasons || []} labelFor={reasonLabel} empty="Nenhum sinal técnico para os filtros." />
+				</div>
+			</section>
+			<section className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<div className="flex items-start justify-between gap-3">
+						<div>
+							<h2 className="text-lg font-black text-slate-950">Qualidade dos dados</h2>
+							<p className="text-sm font-semibold text-slate-500">{formatNumber(metrics.dataQuality)} ativações possuem pendências de cadastro.</p>
+						</div>
+						<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Não afeta saúde</span>
+					</div>
+					<ReasonList items={metrics.topDataQualityIssues || []} labelFor={qualityIssueLabel} empty="Sem pendências cadastrais relevantes." />
+				</div>
+				<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<h2 className="text-lg font-black text-slate-950">Saúde por janela</h2>
+					<div className="mt-3 overflow-x-auto">
+						<table className="min-w-[520px] w-full text-left text-sm">
+							<thead className="text-xs font-black uppercase text-slate-500">
+								<tr><th className="py-2">Janela</th><th className="py-2 text-right">Monitorados</th><th className="py-2 text-right">Críticos</th><th className="py-2 text-right">Atenção</th><th className="py-2 text-right">Saudáveis</th></tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{(metrics.byWindow || []).map((item) => (
+									<tr key={item.window}>
+										<td className="py-2 font-black text-slate-800">{item.window}</td>
+										<td className="py-2 text-right font-bold text-slate-700">{formatNumber(item.monitored)}</td>
+										<td className="py-2 text-right font-bold text-red-700">{formatNumber(item.critical)}</td>
+										<td className="py-2 text-right font-bold text-amber-700">{formatNumber(item.attention)}</td>
+										<td className="py-2 text-right font-bold text-emerald-700">{formatNumber(item.healthy)}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
 			<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 				<div className="border-b border-slate-100 px-4 py-3">
 					<div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
 						<div>
-							<h2 className="text-lg font-black text-slate-950">Fila de Saúde Pós-Ativação</h2>
-							<p className="text-sm font-semibold text-slate-500">Priorizada por crítico, atenção, sem dados e saudável, sempre com motivos rastreáveis.</p>
+							<h2 className="text-lg font-black text-slate-950">Ativações que exigem atenção</h2>
+							<p className="text-sm font-semibold text-slate-500">Priorizadas pelo nível de risco e pelas evidências técnicas disponíveis.</p>
 						</div>
-						<div className="w-full lg:w-96">
-							<SearchBox value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Pesquisar O.S, técnico, cidade..." />
+						<div className="flex w-full flex-col gap-2 lg:w-auto lg:min-w-[620px]">
+							<SearchBox value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Buscar OS, técnico ou cidade" />
+							<div className="flex flex-wrap gap-1.5">
+								{[
+									["action", "Críticos + Atenção"],
+									["CRITICO", "Críticos"],
+									["ATENCAO", "Atenção"],
+									["SEM_DADOS", "Sem dados"],
+									["SAUDAVEL", "Saudáveis"],
+									["all", "Todos"],
+								].map(([id, label]) => (
+									<QuickFilterButton key={id} active={riskFilter === id} onClick={() => { setRiskFilter(id); setPage(1); }}>{label}</QuickFilterButton>
+								))}
+							</div>
 						</div>
 					</div>
 				</div>
 				<div className="overflow-x-auto">
-					<table className="min-w-[1180px] w-full text-left text-sm">
+					<table className="min-w-[1080px] w-full text-left text-sm">
 						<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
 							<tr>
 								<th className="px-4 py-3">Saúde</th>
-								<th className="px-4 py-3">OS</th>
-								<th className="px-4 py-3">D+n</th>
-								<th className="px-4 py-3">Tipo</th>
-								<th className="px-4 py-3">Técnico</th>
-								<th className="px-4 py-3">Empresa</th>
-								<th className="px-4 py-3">Cidade</th>
+								<th className="px-4 py-3">Ativação</th>
+								<th className="px-4 py-3">Responsável</th>
 								<th className="px-4 py-3">Conexão</th>
-								<th className="px-4 py-3">Tráfego</th>
-								<th className="px-4 py-3">Rechamados</th>
-								<th className="px-4 py-3">Motivos</th>
+								<th className="px-4 py-3">Sinais</th>
+								<th className="px-4 py-3">Tempo</th>
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100">
 							{visibleItems.map((item) => (
 								<tr key={item.id} onClick={() => onOpen(item.id)} className="cursor-pointer transition hover:bg-blue-50/60">
 									<td className="px-4 py-3"><HealthBadge status={item.healthStatus} /></td>
-									<td className="px-4 py-3 font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</td>
-									<td className="px-4 py-3 font-bold text-slate-700">{item.healthWindow} <span className="text-slate-400">({item.daysSinceActivation ?? "-"}d)</span></td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{item.orderTypeName}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{item.technician.name}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{item.company.name || "-"}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{item.city.name || "-"}</td>
-									<td className="px-4 py-3 font-bold text-slate-700">{item.connection.connected === true ? "Conectado" : item.connection.connected === false ? "Sem conexão" : "Sem captura"}</td>
-									<td className="px-4 py-3 font-semibold text-slate-700">{Number(item.connection.downloadGigabytes || 0).toLocaleString("pt-BR")} GB down</td>
-									<td className="px-4 py-3 font-black text-slate-900">{item.support.qualityCount}</td>
 									<td className="px-4 py-3">
-										<div className="flex max-w-md flex-wrap gap-1">
-											{item.reasons.slice(0, 3).map((reason) => <span key={reason} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">{reasonLabel(reason)}</span>)}
-										</div>
+										<p className="font-mono text-sm font-black text-blue-700">#{item.orderNumber || item.hubsoftOrderId}</p>
+										<p className="mt-1 max-w-[260px] truncate font-semibold text-slate-700">{friendlyTitle(item.orderTypeName)}</p>
+									</td>
+									<td className="px-4 py-3">
+										<p className="max-w-[240px] truncate font-black text-slate-800">{item.technician.name || "Técnico não identificado"}</p>
+										{item.company.name ? <p className="max-w-[240px] truncate text-xs font-semibold text-slate-500">{item.company.name}</p> : null}
+										{item.city.name ? <p className="max-w-[240px] truncate text-xs font-semibold text-slate-500">{item.city.name}</p> : null}
+										{item.dataQualityIssues?.length ? <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-500">Cadastro incompleto</span> : null}
+									</td>
+									<td className="px-4 py-3">
+										<p className={`font-black ${item.connection.connected === true ? "text-emerald-700" : item.connection.connected === false ? "text-red-700" : "text-slate-500"}`}>{connectionLabel(item.connection)}</p>
+										<p className="text-xs font-semibold text-slate-500">{trafficLabel(item.connection)}</p>
+									</td>
+									<td className="px-4 py-3"><SignalChips reasons={item.technicalReasons || item.reasons || []} labelFor={reasonLabel} tone="risk" /></td>
+									<td className="px-4 py-3">
+										<p className="font-black text-slate-800">{item.daysSinceActivation ?? "-"} dia(s)</p>
+										<p className="text-xs font-bold text-slate-500">Janela: {item.healthWindow}</p>
 									</td>
 								</tr>
 							))}
 							{!visibleItems.length ? (
-								<tr><td colSpan="11" className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem clientes monitorados para os filtros.</td></tr>
+								<tr><td colSpan="6" className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem clientes monitorados para os filtros.</td></tr>
 							) : null}
 						</tbody>
 					</table>
@@ -1143,26 +1371,120 @@ function HealthView({ data, summary, onOpen }) {
 	);
 }
 
+function HealthKpiCard({ label, value, sub, tone }) {
+	const toneClass = {
+		blue: "border-blue-100 bg-blue-50/50 text-blue-700",
+		red: "border-red-100 bg-red-50/50 text-red-700",
+		amber: "border-amber-100 bg-amber-50/50 text-amber-700",
+		emerald: "border-emerald-100 bg-emerald-50/50 text-emerald-700",
+	}[tone] || "border-slate-200 bg-white text-slate-700";
+	return (
+		<div className={`rounded-2xl border bg-white p-4 shadow-sm ${toneClass}`}>
+			<p className="text-xs font-black uppercase tracking-wide opacity-80">{label}</p>
+			<p className="mt-3 text-3xl font-black text-slate-950">{formatNumber(value)}</p>
+			<p className="mt-1 text-sm font-bold text-slate-500">{sub}</p>
+		</div>
+	);
+}
+
+function SecondaryMetric({ label, value, muted = false }) {
+	return (
+		<div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+			<p className="text-xs font-black uppercase text-slate-500">{label}</p>
+			<p className={`mt-1 text-lg font-black ${muted ? "text-slate-500" : "text-slate-950"}`}>{typeof value === "number" ? formatNumber(value) : value ?? 0}</p>
+		</div>
+	);
+}
+
+function HealthStackBar({ metrics, total }) {
+	const segments = [
+		{ key: "critical", label: "Crítico", value: metrics.critical, className: "bg-red-500" },
+		{ key: "attention", label: "Atenção", value: metrics.attention, className: "bg-amber-400" },
+		{ key: "healthy", label: "Saudável", value: metrics.healthy, className: "bg-emerald-500" },
+		{ key: "noData", label: "Sem dados", value: metrics.noData, className: "bg-slate-300" },
+	];
+	return (
+		<div className="mt-4">
+			<div className="flex h-4 overflow-hidden rounded-full bg-slate-100">
+				{segments.map((segment) => (
+					<div key={segment.key} className={segment.className} style={{ width: `${Math.max(0, total ? (Number(segment.value || 0) / total) * 100 : 0)}%` }} title={`${segment.label}: ${percentOf(segment.value, total)}`} />
+				))}
+			</div>
+			<div className="mt-3 flex flex-wrap gap-2">
+				{segments.map((segment) => (
+					<span key={segment.key} className="text-xs font-black text-slate-500">{segment.label}: {percentOf(segment.value, total)}</span>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function ReasonList({ items, labelFor, empty }) {
+	if (!items.length) return <p className="mt-3 text-sm font-bold text-slate-400">{empty}</p>;
+	return (
+		<div className="mt-3 space-y-2">
+			{items.map((item) => (
+				<div key={item.reason} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+					<span className="text-sm font-black text-slate-700">{labelFor(item.reason)}</span>
+					<span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-slate-600">{formatNumber(item.count)}</span>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function QuickFilterButton({ active, onClick, children }) {
+	return (
+		<button type="button" onClick={onClick} className={`rounded-full px-3 py-1.5 text-xs font-black transition ${active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+			{children}
+		</button>
+	);
+}
+
+function trafficLabel(connection = {}) {
+	const down = Number(connection.downloadGigabytes || 0);
+	const up = Number(connection.uploadGigabytes || 0);
+	const total = down + up;
+	if (total <= 0) return "Sem tráfego observado";
+	return `${down.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} GB acumulados`;
+}
+
+function SignalChips({ reasons = [], labelFor, tone = "risk", limit = 2 }) {
+	if (!reasons.length) return <span className="text-xs font-bold text-slate-400">Sem sinais técnicos</span>;
+	const visible = reasons.slice(0, limit);
+	const rest = reasons.length - visible.length;
+	const className = tone === "risk" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600";
+	return (
+		<div className="flex max-w-md flex-wrap gap-1">
+			{visible.map((reason) => <span key={reason} className={`rounded-full px-2 py-1 text-[11px] font-black ${className}`}>{labelFor(reason)}</span>)}
+			{rest > 0 ? <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-500">+{rest}</span> : null}
+		</div>
+	);
+}
+
 function HealthDetailModal({ detail, onClose }) {
 	const item = detail.item;
 	return (
-		<ModalShell open title="Saúde pós-ativação" description={item ? `${item.orderNumber || item.hubsoftOrderId} · ${item.orderTypeName}` : "Carregando evidências"} onClose={onClose} size="6xl">
+		<ModalShell open title={item ? `OS #${item.orderNumber || item.hubsoftOrderId}` : "Saúde pós-ativação"} description={item ? `${HEALTH_STATUS[item.healthStatus]?.label || item.healthStatus} · ${friendlyTitle(item.orderTypeName)} · ativado há ${item.daysSinceActivation ?? "-"} dia(s)` : "Carregando evidências"} onClose={onClose} size="6xl">
 			{detail.loading ? <Spinner /> : null}
 			{detail.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{detail.error}</div> : null}
 			{item ? (
 				<div className="space-y-4">
 					<div className="flex flex-wrap items-center gap-2">
 						<HealthBadge status={item.healthStatus} />
-						{item.reasons.map((reason) => <span key={reason} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{reasonLabel(reason)}</span>)}
+						<SignalChips reasons={item.technicalReasons || item.reasons || []} labelFor={reasonLabel} limit={6} />
+						{item.dataQualityIssues?.length ? <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Cadastro incompleto</span> : null}
 					</div>
 					<div className="grid gap-4 lg:grid-cols-2">
-						<InfoGroup title="Ativação" rows={[["Número", item.orderNumber || item.hubsoftOrderId], ["Tipo", item.orderTypeName], ["Conclusão", formatDateTime(item.activationDate)], ["Janela", `${item.healthWindow} (${item.daysSinceActivation ?? "-"} dia(s))`]]} />
-						<InfoGroup title="Responsável" rows={[["Técnico", item.technician.name], ["Empresa", item.company.name || "-"], ["Regional", item.regional.name || "-"], ["Cidade", item.city.name || "-"]]} />
+						<InfoGroup title="Diagnóstico atual" rows={[["Saúde", HEALTH_STATUS[item.healthStatus]?.label || item.healthStatus], ["Razões técnicas", (item.technicalReasons || item.reasons || []).length ? (item.technicalReasons || item.reasons).map(reasonLabel).join(", ") : "Sem sinais técnicos"], ["Última avaliação", formatDateTime(item.evaluatedAt)], ["Modo", item.evidence?.monitoringMode || "-"]]} />
+						<InfoGroup title="Ativação" rows={[["Número", item.orderNumber || item.hubsoftOrderId], ["Tipo", friendlyTitle(item.orderTypeName)], ["Conclusão", formatDateTime(item.activationDate)], ["Janela", item.healthWindow], ["Idade real", `${item.daysSinceActivation ?? "-"} dia(s)`]]} />
 						<InfoGroup title="Serviço" rows={[["Plano", item.service.description || "-"], ["Velocidade", item.service.speedMbps ? `${item.service.speedMbps} Mbps` : "-"], ["Marca", item.service.brand], ["Status", item.service.status || "-"]]} />
-						<InfoGroup title="Conexão" rows={[["Conectado", item.connection.connected === true ? "Sim" : item.connection.connected === false ? "Não" : "-"], ["PPPoE", item.connection.pppoeUsername || "-"], ["IP", item.connection.ip || "-"], ["NAS", item.connection.nasIpAddress || "-"], ["Sessão", durationLabel(item.connection.sessionTimeSeconds)], ["Download", `${Number(item.connection.downloadGigabytes || 0).toLocaleString("pt-BR")} GB`], ["Upload", `${Number(item.connection.uploadGigabytes || 0).toLocaleString("pt-BR")} GB`], ["Última captura", formatDateTime(item.connection.capturedAt)]]} />
+						<InfoGroup title="Conexão" rows={[["Estado atual", connectionLabel(item.connection)], ["PPPoE", item.connection.pppoeUsername || "-"], ["IP", item.connection.ip || "-"], ["NAS", item.connection.nasIpAddress || "-"], ["Porta", item.connection.nasPortId || "-"], ["Tempo de sessão", durationLabel(item.connection.sessionTimeSeconds)], ["Tráfego", trafficLabel(item.connection)], ["Última captura", formatDateTime(item.connection.capturedAt)]]} />
+						<InfoGroup title="Pós-atendimento" rows={[["Rechamados técnicos", item.support?.events?.length ? item.support.qualityCount : "Dados de suporte ainda não disponíveis"], ["Reincidência", item.support?.events?.length ? (item.support.repeated ? "Sim" : "Não") : "Fonte indisponível"]]} />
+						<InfoGroup title="Responsável" rows={[["Técnico", item.technician.name || "Não identificado"], ["Empresa", item.company.name || "Não identificada"], ["Regional", item.regional.name || "Não informada"], ["Cidade", item.city.name || "Não informada"], ["Pendências cadastrais", item.dataQualityIssues?.length ? item.dataQualityIssues.map(qualityIssueLabel).join(", ") : "Sem pendências"]]} />
 					</div>
 					<section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-						<h3 className="text-base font-black text-slate-950">Histórico observado</h3>
+						<h3 className="text-base font-black text-slate-950">Timeline da ativação</h3>
 						<div className="mt-3 space-y-2">
 							{(item.evidence?.timeline || []).map((event, index) => (
 								<div key={`${event.at}-${index}`} className="grid gap-2 rounded-xl bg-white px-3 py-2 text-sm md:grid-cols-[150px_1fr]">
@@ -1177,7 +1499,7 @@ function HealthDetailModal({ detail, onClose }) {
 						<div className="mt-3 grid gap-2">
 							{(item.healthHistory || []).map((entry) => (
 								<div key={entry.evaluated_at} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
-									<div className="flex flex-wrap items-center gap-2"><HealthBadge status={entry.health_status} />{(entry.reasons || []).map((reason) => <span key={reason} className="text-xs font-bold text-slate-500">{reasonLabel(reason)}</span>)}</div>
+									<div className="flex flex-wrap items-center gap-2"><HealthBadge status={entry.health_status} /><SignalChips reasons={(entry.reasons || []).filter((reason) => !DATA_QUALITY_REASONS[reason])} labelFor={reasonLabel} limit={4} /></div>
 									<span className="text-xs font-black text-slate-400">{formatDateTime(entry.evaluated_at)}</span>
 								</div>
 							))}

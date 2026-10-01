@@ -82,6 +82,31 @@ test("suporte administrativo não conta como rechamado técnico", () => {
 	assert.equal(result.evidence.support.qualityCount, 0);
 });
 
+test("pendência cadastral isolada não altera saúde técnica", () => {
+	const result = evaluateActivationHealth(base({
+		technician_match_status: "unmatched",
+		operacao_empresa_id: null,
+		company_name: "",
+		cidade_id: null,
+		city_name: "",
+		cidade_nome: "",
+		brand: "UNKNOWN",
+	}), { now: NOW });
+	assert.equal(result.healthStatus, "SAUDAVEL");
+	assert.deepEqual(result.reasons, []);
+	assert.deepEqual(result.dataQualityIssues, ["TECHNICIAN_UNMATCHED", "COMPANY_UNMATCHED", "CITY_MISSING", "BRAND_UNKNOWN"]);
+});
+
+test("tráfego zerado com captura recém-criada aguarda observação mínima", () => {
+	const result = evaluateActivationHealth(base({
+		connection_captured_at: "2026-10-01T11:30:00Z",
+		download_gigabytes: 0,
+		upload_gigabytes: 0,
+	}), { now: NOW });
+	assert.equal(result.healthStatus, "SAUDAVEL");
+	assert.ok(!result.reasons.includes("NO_TRAFFIC"));
+});
+
 test("modo limited não exige conexão tradicional e fica em atenção auditável", () => {
 	const result = evaluateActivationHealth(base({
 		order_type_id: 52,

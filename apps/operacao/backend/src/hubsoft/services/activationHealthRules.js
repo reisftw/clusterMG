@@ -2,6 +2,7 @@ const { getActivationOrderTypeConfig } = require("../constants");
 const { buildSourceHash } = require("../utils/hash");
 const {
 	ACTIVATION_HEALTH_CONFIG,
+	ACTIVATION_DATA_QUALITY_ISSUE,
 	ACTIVATION_HEALTH_REASON,
 	ACTIVATION_HEALTH_STATUS,
 } = require("./activationHealthConfig");
@@ -63,6 +64,17 @@ function timelineEvent(at, type, label, metadata = {}) {
 	return at ? { at, type, label, metadata } : null;
 }
 
+function dataQualityIssues(row = {}) {
+	const issues = [];
+	if (row.technician_match_status && row.technician_match_status !== "matched" && row.technician_match_status !== "matched_by_name") {
+		issues.push(ACTIVATION_DATA_QUALITY_ISSUE.TECHNICIAN_UNMATCHED);
+	}
+	if (!row.operacao_empresa_id && !row.company_name) issues.push(ACTIVATION_DATA_QUALITY_ISSUE.COMPANY_UNMATCHED);
+	if (!row.cidade_id && !row.city_name && !row.cidade_nome) issues.push(ACTIVATION_DATA_QUALITY_ISSUE.CITY_MISSING);
+	if (!row.brand || String(row.brand).toUpperCase() === "UNKNOWN") issues.push(ACTIVATION_DATA_QUALITY_ISSUE.BRAND_UNKNOWN);
+	return uniqueReasons(issues);
+}
+
 function evaluateActivationHealth(row = {}, options = {}) {
 	const now = options.now || new Date();
 	const activationDate = resolveActivationDate(row);
@@ -71,11 +83,13 @@ function evaluateActivationHealth(row = {}, options = {}) {
 	const orderTypeConfig = getActivationOrderTypeConfig(row.order_type_id);
 	const monitoringMode = row.health_monitoring_mode || orderTypeConfig?.healthMonitoringMode || "NONE";
 	const reasons = [];
+	const qualityIssues = dataQualityIssues(row);
 	const evidence = {
 		activationDate,
 		daysSinceActivation: days,
 		healthWindow,
 		monitoringMode,
+		dataQualityIssues: qualityIssues,
 		connection: {
 			connected: row.connection_connected,
 			capturedAt: row.connection_captured_at,
@@ -112,19 +126,16 @@ function evaluateActivationHealth(row = {}, options = {}) {
 	evidence.service.active = serviceActive;
 	if (serviceActive === false) reasons.push(ACTIVATION_HEALTH_REASON.SERVICE_INACTIVE);
 
-	if (row.technician_match_status && row.technician_match_status !== "matched" && row.technician_match_status !== "matched_by_name") {
-		reasons.push(ACTIVATION_HEALTH_REASON.TECHNICIAN_UNMATCHED);
-	}
-
 	if (monitoringMode === "LIMITED") {
 		reasons.push(ACTIVATION_HEALTH_REASON.LIMITED_MONITORING);
 	} else if (row.connection_connected === false) {
 		reasons.push(ACTIVATION_HEALTH_REASON.NO_CONNECTION);
 	} else if (row.connection_connected === true) {
 		const traffic = evidence.connection.traffic.total;
-		if (traffic <= ACTIVATION_HEALTH_CONFIG.noTrafficGigabytesThreshold) {
+		const hasEnoughObservation = dataAgeHours === null || dataAgeHours >= ACTIVATION_HEALTH_CONFIG.minObservationHoursForNoTraffic;
+		if (hasEnoughObservation && traffic <= ACTIVATION_HEALTH_CONFIG.noTrafficGigabytesThreshold) {
 			reasons.push(ACTIVATION_HEALTH_REASON.NO_TRAFFIC);
-		} else if (traffic <= ACTIVATION_HEALTH_CONFIG.lowTrafficGigabytesThreshold) {
+		} else if (hasEnoughObservation && traffic <= ACTIVATION_HEALTH_CONFIG.lowTrafficGigabytesThreshold) {
 			reasons.push(ACTIVATION_HEALTH_REASON.LOW_TRAFFIC);
 		}
 	}
@@ -153,7 +164,6 @@ function evaluateActivationHealth(row = {}, options = {}) {
 		ACTIVATION_HEALTH_REASON.LOW_TRAFFIC,
 		ACTIVATION_HEALTH_REASON.RECENT_SUPPORT,
 		ACTIVATION_HEALTH_REASON.STALE_CONNECTION_DATA,
-		ACTIVATION_HEALTH_REASON.TECHNICIAN_UNMATCHED,
 		ACTIVATION_HEALTH_REASON.LIMITED_MONITORING,
 	].includes(reason))) {
 		healthStatus = ACTIVATION_HEALTH_STATUS.ATTENTION;
@@ -172,6 +182,7 @@ function evaluateActivationHealth(row = {}, options = {}) {
 	const result = {
 		healthStatus,
 		reasons: finalReasons.length ? finalReasons : [],
+		dataQualityIssues: qualityIssues,
 		daysSinceActivation: days,
 		healthWindow,
 		evidence: { ...evidence, timeline },

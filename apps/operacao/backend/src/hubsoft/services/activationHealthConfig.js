@@ -19,6 +19,13 @@ const ACTIVATION_HEALTH_REASON = Object.freeze({
 	LIMITED_MONITORING: "LIMITED_MONITORING",
 });
 
+const ACTIVATION_DATA_QUALITY_ISSUE = Object.freeze({
+	TECHNICIAN_UNMATCHED: "TECHNICIAN_UNMATCHED",
+	COMPANY_UNMATCHED: "COMPANY_UNMATCHED",
+	CITY_MISSING: "CITY_MISSING",
+	BRAND_UNKNOWN: "BRAND_UNKNOWN",
+});
+
 const SUPPORT_CATEGORIES = Object.freeze({
 	TECHNICAL_CONNECTION: { affectsActivationQuality: true },
 	WIFI: { affectsActivationQuality: true },
@@ -36,6 +43,7 @@ const ACTIVATION_HEALTH_CONFIG = Object.freeze({
 	staleConnectionHours: 24,
 	noTrafficGigabytesThreshold: 0.0001,
 	lowTrafficGigabytesThreshold: 0.02,
+	minObservationHoursForNoTraffic: 1,
 	repeatedSupportCount: 2,
 	windows: [1, 7, 15, 30],
 });
@@ -46,6 +54,7 @@ function supportCategoryConfig(category) {
 
 module.exports = {
 	ACTIVATION_HEALTH_CONFIG,
+	ACTIVATION_DATA_QUALITY_ISSUE,
 	ACTIVATION_HEALTH_REASON,
 	ACTIVATION_HEALTH_STATUS,
 	SUPPORT_CATEGORIES,

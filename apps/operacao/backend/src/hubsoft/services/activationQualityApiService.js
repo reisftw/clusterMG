@@ -12,6 +12,10 @@ function parsePositiveInt(value, fallback, max = 200) {
 	return Math.min(Math.floor(number), max);
 }
 
+function normalizeSearch(value = "") {
+	return text(value).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
 function iso(date) {
 	const pad = (value) => String(value).padStart(2, "0");
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -211,9 +215,9 @@ function addToMetrics(metrics, row, analysis, durations) {
 function aggregate(items, dimension) {
 	const groups = new Map();
 	const dimensionValue = (item) => {
-		if (dimension === "technician") return { id: item.row.operacao_tecnico_id || "unmatched", label: item.row.technician_name || "Não identificado", subtitle: item.row.company_name || "Sem empresa" };
-		if (dimension === "company") return { id: item.row.operacao_empresa_id || "none", label: item.row.company_name || "Sem empresa", subtitle: "" };
-		if (dimension === "city") return { id: item.row.cidade_id || item.row.city_name || item.row.cidade_nome || "none", label: item.row.city_name || item.row.cidade_nome || "Sem cidade", subtitle: item.row.regional_name || "" };
+		if (dimension === "technician") return { id: item.row.operacao_tecnico_id || "unmatched", label: item.row.technician_name || "Sem técnico vinculado", subtitle: item.row.company_name || "Cadastro pendente" };
+		if (dimension === "company") return { id: item.row.operacao_empresa_id || "none", label: item.row.company_name || "Sem empresa vinculada", subtitle: "" };
+		if (dimension === "city") return { id: item.row.cidade_id || item.row.city_name || item.row.cidade_nome || "none", label: item.row.city_name || item.row.cidade_nome || "Cidade não informada", subtitle: item.row.regional_name || "" };
 		return { id: item.row.order_type_id || "none", label: item.row.order_type_name || "Sem tipo", subtitle: item.row.health_monitoring_mode || "" };
 	};
 	for (const item of items) {
@@ -232,14 +236,17 @@ function aggregate(items, dimension) {
 }
 
 function applyQualityFilters(items, query = {}) {
-	if (query.quality === "withRework") return items.filter((item) => item.analysis.supportEvents.length > 0);
-	if (query.quality === "withoutRework") return items.filter((item) => item.analysis.supportEvents.length === 0);
-	if (query.quality === "repeated") return items.filter((item) => item.analysis.repeatedSupport);
-	if (query.quality === "onTime") return items.filter((item) => item.analysis.scheduleStatus === SCHEDULE_STATUS.ON_TIME);
-	if (query.quality === "late") return items.filter((item) => item.analysis.scheduleStatus === SCHEDULE_STATUS.LATE);
-	if (query.quality === "criticalHealth") return items.filter((item) => item.analysis.health.healthStatus === "CRITICO");
-	if (query.quality === "noData") return items.filter((item) => item.analysis.health.healthStatus === "SEM_DADOS" || item.analysis.scheduleStatus === SCHEDULE_STATUS.NO_DATA);
-	return items;
+	let filtered = items;
+	if (text(query.healthStatus)) filtered = filtered.filter((item) => item.analysis.health.healthStatus === query.healthStatus);
+	if (text(query.scheduleStatus)) filtered = filtered.filter((item) => item.analysis.scheduleStatus === query.scheduleStatus);
+	if (query.quality === "withRework") return filtered.filter((item) => item.analysis.supportEvents.length > 0);
+	if (query.quality === "withoutRework") return filtered.filter((item) => item.analysis.supportEvents.length === 0);
+	if (query.quality === "repeated") return filtered.filter((item) => item.analysis.repeatedSupport);
+	if (query.quality === "onTime") return filtered.filter((item) => item.analysis.scheduleStatus === SCHEDULE_STATUS.ON_TIME);
+	if (query.quality === "late") return filtered.filter((item) => item.analysis.scheduleStatus === SCHEDULE_STATUS.LATE);
+	if (query.quality === "criticalHealth") return filtered.filter((item) => item.analysis.health.healthStatus === "CRITICO");
+	if (query.quality === "noData") return filtered.filter((item) => item.analysis.health.healthStatus === "SEM_DADOS" || item.analysis.scheduleStatus === SCHEDULE_STATUS.NO_DATA);
+	return filtered;
 }
 
 async function supportSourceAvailability(db) {
@@ -269,9 +276,17 @@ async function summary(db, query = {}) {
 
 async function grouped(db, query = {}, dimension = "technician") {
 	const page = parsePositiveInt(query.page, 1, 10000);
-	const limit = parsePositiveInt(query.limit, 30, 10000);
+	const limit = parsePositiveInt(query.limit, 25, 10000);
 	const [{ period, items }, supportSource] = await Promise.all([loadAnalyzed(db, query), supportSourceAvailability(db)]);
-	const groups = aggregate(items, dimension);
+	let groups = aggregate(items, dimension);
+	if (text(query.q)) {
+		const q = normalizeSearch(query.q);
+		groups = groups.filter((item) => [item.label, item.subtitle].some((value) => normalizeSearch(value).includes(q)));
+	}
+	if (query.sort === "onTime") groups = [...groups].sort((a, b) => (b.metrics.schedule.onTimeRate || 0) - (a.metrics.schedule.onTimeRate || 0));
+	else if (query.sort === "late") groups = [...groups].sort((a, b) => (b.metrics.schedule.LATE || 0) - (a.metrics.schedule.LATE || 0));
+	else if (query.sort === "criticalHealth") groups = [...groups].sort((a, b) => (b.metrics.health.CRITICO || 0) - (a.metrics.health.CRITICO || 0));
+	else groups = [...groups].sort((a, b) => (b.metrics.production.completed || 0) - (a.metrics.production.completed || 0));
 	const offset = (page - 1) * limit;
 	return { period, supportSource, items: groups.slice(offset, offset + limit), total: groups.length, page, limit, totalPages: Math.max(1, Math.ceil(groups.length / limit)) };
 }
@@ -279,13 +294,36 @@ async function grouped(db, query = {}, dimension = "technician") {
 async function detail(db, query = {}) {
 	const dimension = query.dimension || "technician";
 	const id = text(query.id);
-	const { period, items } = await loadAnalyzed(db, query);
+	const page = parsePositiveInt(query.page, 1, 10000);
+	const limit = parsePositiveInt(query.limit, 25, 100);
+	const [{ period, items }, supportSource] = await Promise.all([loadAnalyzed(db, query), supportSourceAvailability(db)]);
 	const groups = aggregate(items, dimension);
 	const group = groups.find((item) => item.id === id) || null;
-	const osItems = items
+	let osItems = items
 		.filter((item) => !group || group.osIds.includes(item.row.id))
-		.map((item) => publicRow(item.row, item.analysis));
-	return { period, group, items: osItems };
+		.filter((item) => !text(query.scheduleStatus) || item.analysis.scheduleStatus === query.scheduleStatus)
+		.filter((item) => !text(query.healthStatus) || item.analysis.health.healthStatus === query.healthStatus);
+	if (text(query.search)) {
+		const q = normalizeSearch(query.search);
+		osItems = osItems.filter((item) => [
+			item.row.order_number,
+			item.row.hubsoft_order_id,
+			item.row.order_type_name,
+			item.row.technician_name,
+			item.row.city_name,
+			item.row.cidade_nome,
+		].some((value) => normalizeSearch(value).includes(q)));
+	}
+	osItems = osItems.map((item) => publicRow(item.row, item.analysis));
+	const total = osItems.length;
+	const offset = (page - 1) * limit;
+	return {
+		period,
+		supportSource,
+		group,
+		items: osItems.slice(offset, offset + limit),
+		pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+	};
 }
 
 async function filters(db) {
