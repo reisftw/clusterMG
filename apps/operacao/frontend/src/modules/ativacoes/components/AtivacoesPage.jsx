@@ -23,10 +23,15 @@ import Spinner from "../../../components/ui/Spinner";
 import { useRotAuth } from "../../../state/useRotAuth";
 import {
 	ativacoesExportUrl,
+	ativacoesSaudeExportUrl,
 	fetchAtivacaoDetail,
 	fetchAtivacoesDashboard,
 	fetchAtivacoesFilters,
 	fetchAtivacoesKanban,
+	fetchAtivacoesSaude,
+	fetchAtivacoesSaudeDetail,
+	fetchAtivacoesSaudeFilters,
+	fetchAtivacoesSaudeResumo,
 	startAtivacoesSync,
 } from "../services/ativacoesService";
 
@@ -52,6 +57,26 @@ const SUMMARY_CARDS = [
 	["cities", "Cidades atendidas", MapPin],
 ];
 
+const HEALTH_STATUS = {
+	SAUDAVEL: { label: "Saudável", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+	ATENCAO: { label: "Atenção", className: "border-amber-200 bg-amber-50 text-amber-700" },
+	CRITICO: { label: "Crítico", className: "border-red-200 bg-red-50 text-red-700" },
+	SEM_DADOS: { label: "Sem dados", className: "border-slate-200 bg-slate-50 text-slate-600" },
+};
+
+const HEALTH_REASONS = {
+	NO_CONNECTION: "Sem PPPoE",
+	NO_TRAFFIC: "Sem tráfego",
+	LOW_TRAFFIC: "Baixo tráfego",
+	RECENT_SUPPORT: "Suporte recente",
+	REPEATED_SUPPORT: "Reincidência",
+	STALE_CONNECTION_DATA: "Dado desatualizado",
+	SERVICE_INACTIVE: "Serviço inativo",
+	TECHNICIAN_UNMATCHED: "Técnico sem vínculo",
+	INSUFFICIENT_DATA: "Dados insuficientes",
+	LIMITED_MONITORING: "Monitoramento parcial",
+};
+
 function todayIso() {
 	return new Date().toISOString().slice(0, 10);
 }
@@ -73,6 +98,14 @@ function durationLabel(seconds) {
 	return h ? `${h}h ${m}m` : `${m}m`;
 }
 
+function percent(value) {
+	return `${Number(value || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+function reasonLabel(reason) {
+	return HEALTH_REASONS[reason] || reason;
+}
+
 function filterPayload(filters) {
 	const payload = { ...filters };
 	if (filters.period !== "custom") {
@@ -87,12 +120,16 @@ export default function AtivacoesPage() {
 	const location = useLocation();
 	const canSync = hasPermission("ativacoes.sincronizar");
 	const canExport = hasPermission("ativacoes.exportar");
+	const canExportHealth = hasPermission("ativacoes.saude.exportar");
 	const [tab, setTab] = useState("dashboard");
-	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "" });
+	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "" });
 	const [filterOptions, setFilterOptions] = useState(null);
 	const [dashboard, setDashboard] = useState(null);
 	const [kanban, setKanban] = useState(null);
+	const [health, setHealth] = useState(null);
+	const [healthSummary, setHealthSummary] = useState(null);
 	const [detail, setDetail] = useState(null);
+	const [healthDetail, setHealthDetail] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [syncJob, setSyncJob] = useState(null);
@@ -102,6 +139,7 @@ export default function AtivacoesPage() {
 	useEffect(() => {
 		const params = new URLSearchParams(location.search);
 		if (params.get("tab") === "kanban") setTab("kanban");
+		if (params.get("tab") === "saude") setTab("saude");
 	}, [location.search]);
 
 	async function load() {
@@ -123,10 +161,30 @@ export default function AtivacoesPage() {
 		}
 	}
 
+	async function loadHealth() {
+		setLoading(true);
+		setError("");
+		try {
+			const [filtersData, summaryData, listData] = await Promise.all([
+				filterOptions ? Promise.resolve({ filters: filterOptions }) : fetchAtivacoesSaudeFilters(),
+				fetchAtivacoesSaudeResumo(effectiveFilters),
+				fetchAtivacoesSaude({ ...effectiveFilters, limit: 50 }),
+			]);
+			setFilterOptions(filtersData.filters);
+			setHealthSummary(summaryData);
+			setHealth(listData);
+		} catch (err) {
+			setError(err?.message || "Não foi possível carregar saúde pós-ativação.");
+		} finally {
+			setLoading(false);
+		}
+	}
+
 	useEffect(() => {
-		load();
+		if (tab === "saude") loadHealth();
+		else load();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [JSON.stringify(effectiveFilters)]);
+	}, [JSON.stringify(effectiveFilters), tab]);
 
 	async function openDetail(id) {
 		setDetail({ loading: true });
@@ -135,6 +193,16 @@ export default function AtivacoesPage() {
 			setDetail({ loading: false, item: data.item });
 		} catch (err) {
 			setDetail({ loading: false, error: err?.message || "Não foi possível abrir a O.S." });
+		}
+	}
+
+	async function openHealthDetail(id) {
+		setHealthDetail({ loading: true });
+		try {
+			const data = await fetchAtivacoesSaudeDetail(id);
+			setHealthDetail({ loading: false, item: data.item });
+		} catch (err) {
+			setHealthDetail({ loading: false, error: err?.message || "Não foi possível abrir a saúde da ativação." });
 		}
 	}
 
@@ -172,6 +240,11 @@ export default function AtivacoesPage() {
 								<Download size={17} /> Exportar CSV
 							</a>
 						) : null}
+						{tab === "saude" && canExportHealth ? (
+							<a href={ativacoesSaudeExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100">
+								<Download size={17} /> Exportar Saúde
+							</a>
+						) : null}
 						{canSync ? (
 							<button type="button" onClick={triggerSync} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700">
 								<RefreshCw size={17} /> Atualizar agora
@@ -180,7 +253,7 @@ export default function AtivacoesPage() {
 					</div>
 				</div>
 				<div className="mt-4 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 lg:grid-cols-[1.3fr_0.7fr]">
-					<Filters filters={filters} setFilters={setFilters} options={filterOptions} />
+					<Filters filters={filters} setFilters={setFilters} options={filterOptions} tab={tab} />
 					<div className="rounded-2xl border border-slate-200 bg-white p-4">
 						<p className="text-xs font-black uppercase text-slate-500">Estado da sincronização</p>
 						<p className="mt-2 text-sm font-bold text-slate-900">{latestSync?.status || "Sem execução registrada"}</p>
@@ -201,16 +274,20 @@ export default function AtivacoesPage() {
 			<div className="flex gap-2">
 				<button type="button" onClick={() => setTab("dashboard")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "dashboard" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Visão Geral</button>
 				<button type="button" onClick={() => setTab("kanban")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "kanban" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Kanban</button>
+				<button type="button" onClick={() => setTab("saude")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "saude" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Saúde</button>
 			</div>
 
-			{tab === "dashboard" ? <DashboardView data={dashboard} /> : <KanbanView data={kanban} onOpen={openDetail} />}
+			{tab === "dashboard" ? <DashboardView data={dashboard} /> : null}
+			{tab === "kanban" ? <KanbanView data={kanban} onOpen={openDetail} /> : null}
+			{tab === "saude" ? <HealthView data={health} summary={healthSummary} onOpen={openHealthDetail} /> : null}
 
 			{detail ? <ActivationDetailModal detail={detail} onClose={() => setDetail(null)} /> : null}
+			{healthDetail ? <HealthDetailModal detail={healthDetail} onClose={() => setHealthDetail(null)} /> : null}
 		</div>
 	);
 }
 
-function Filters({ filters, setFilters, options }) {
+function Filters({ filters, setFilters, options, tab }) {
 	const setField = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
 	return (
 		<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -229,6 +306,13 @@ function Filters({ filters, setFilters, options }) {
 			<Select label="Cidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
 			<Select label="Marca" value={filters.brand} onChange={(v) => setField("brand", v)} options={(options?.brands || []).map((item) => ({ id: item, label: item }))} allowAll />
 			<Select label="Técnico identificado" value={filters.technicianIdentified} onChange={(v) => setField("technicianIdentified", v)} options={[{ id: "yes", label: "Com técnico" }, { id: "no", label: "Sem técnico" }]} allowAll />
+			{tab === "saude" ? (
+				<>
+					<Select label="Saúde" value={filters.healthStatus} onChange={(v) => setField("healthStatus", v)} options={[{ id: "CRITICO", label: "Crítico" }, { id: "ATENCAO", label: "Atenção" }, { id: "SEM_DADOS", label: "Sem dados" }, { id: "SAUDAVEL", label: "Saudável" }]} allowAll />
+					<Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll />
+					<Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }]} allowAll />
+				</>
+			) : null}
 		</div>
 	);
 }
@@ -329,6 +413,134 @@ function ActivationCard({ item, onOpen }) {
 				<p><Wifi size={12} className="mr-1 inline" />{item.connection.connected === true ? "Conectado" : item.connection.connected === false ? "Sem conexão" : "Sem captura"}</p>
 			</div>
 		</button>
+	);
+}
+
+function HealthBadge({ status }) {
+	const config = HEALTH_STATUS[status] || HEALTH_STATUS.SEM_DADOS;
+	return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-black ${config.className}`}>{config.label}</span>;
+}
+
+function HealthView({ data, summary, onOpen }) {
+	const cards = [
+		["monitored", "Monitorados", summary?.summary?.monitored ?? 0, ""],
+		["healthy", "Saudáveis", summary?.summary?.healthy ?? 0, percent(summary?.summary?.percentages?.healthy)],
+		["attention", "Atenção", summary?.summary?.attention ?? 0, percent(summary?.summary?.percentages?.attention)],
+		["critical", "Críticos", summary?.summary?.critical ?? 0, percent(summary?.summary?.percentages?.critical)],
+		["noData", "Sem dados", summary?.summary?.noData ?? 0, percent(summary?.summary?.percentages?.noData)],
+		["withRecall", "Com rechamado", summary?.summary?.withRecall ?? 0, ""],
+		["withRepeatedSupport", "Reincidência", summary?.summary?.withRepeatedSupport ?? 0, ""],
+		["noConnection", "Sem conexão", summary?.summary?.noConnection ?? 0, ""],
+	];
+	return (
+		<div className="space-y-4">
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+				{cards.map(([key, label, value, sub]) => (
+					<div key={key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+						<p className="text-xs font-black uppercase text-slate-500">{label}</p>
+						<div className="mt-3 flex items-end justify-between gap-3">
+							<p className="text-3xl font-black text-slate-950">{value}</p>
+							{sub ? <p className="text-sm font-black text-blue-600">{sub}</p> : null}
+						</div>
+					</div>
+				))}
+			</div>
+			<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+				<div className="border-b border-slate-100 px-4 py-3">
+					<h2 className="text-lg font-black text-slate-950">Fila de Saúde Pós-Ativação</h2>
+					<p className="text-sm font-semibold text-slate-500">Priorizada por crítico, atenção, sem dados e saudável, sempre com motivos rastreáveis.</p>
+				</div>
+				<div className="overflow-x-auto">
+					<table className="min-w-[1180px] w-full text-left text-sm">
+						<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+							<tr>
+								<th className="px-4 py-3">Saúde</th>
+								<th className="px-4 py-3">OS</th>
+								<th className="px-4 py-3">D+n</th>
+								<th className="px-4 py-3">Tipo</th>
+								<th className="px-4 py-3">Técnico</th>
+								<th className="px-4 py-3">Empresa</th>
+								<th className="px-4 py-3">Cidade</th>
+								<th className="px-4 py-3">Conexão</th>
+								<th className="px-4 py-3">Tráfego</th>
+								<th className="px-4 py-3">Rechamados</th>
+								<th className="px-4 py-3">Motivos</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100">
+							{(data?.items || []).map((item) => (
+								<tr key={item.id} onClick={() => onOpen(item.id)} className="cursor-pointer transition hover:bg-blue-50/60">
+									<td className="px-4 py-3"><HealthBadge status={item.healthStatus} /></td>
+									<td className="px-4 py-3 font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</td>
+									<td className="px-4 py-3 font-bold text-slate-700">{item.healthWindow} <span className="text-slate-400">({item.daysSinceActivation ?? "-"}d)</span></td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{item.orderTypeName}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{item.technician.name}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{item.company.name || "-"}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{item.city.name || "-"}</td>
+									<td className="px-4 py-3 font-bold text-slate-700">{item.connection.connected === true ? "Conectado" : item.connection.connected === false ? "Sem conexão" : "Sem captura"}</td>
+									<td className="px-4 py-3 font-semibold text-slate-700">{Number(item.connection.downloadGigabytes || 0).toLocaleString("pt-BR")} GB down</td>
+									<td className="px-4 py-3 font-black text-slate-900">{item.support.qualityCount}</td>
+									<td className="px-4 py-3">
+										<div className="flex max-w-md flex-wrap gap-1">
+											{item.reasons.slice(0, 3).map((reason) => <span key={reason} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">{reasonLabel(reason)}</span>)}
+										</div>
+									</td>
+								</tr>
+							))}
+							{!data?.items?.length ? (
+								<tr><td colSpan="11" className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem clientes monitorados para os filtros.</td></tr>
+							) : null}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		</div>
+	);
+}
+
+function HealthDetailModal({ detail, onClose }) {
+	const item = detail.item;
+	return (
+		<ModalShell open title="Saúde pós-ativação" description={item ? `${item.orderNumber || item.hubsoftOrderId} · ${item.orderTypeName}` : "Carregando evidências"} onClose={onClose} size="6xl">
+			{detail.loading ? <Spinner /> : null}
+			{detail.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{detail.error}</div> : null}
+			{item ? (
+				<div className="space-y-4">
+					<div className="flex flex-wrap items-center gap-2">
+						<HealthBadge status={item.healthStatus} />
+						{item.reasons.map((reason) => <span key={reason} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{reasonLabel(reason)}</span>)}
+					</div>
+					<div className="grid gap-4 lg:grid-cols-2">
+						<InfoGroup title="Ativação" rows={[["Número", item.orderNumber || item.hubsoftOrderId], ["Tipo", item.orderTypeName], ["Conclusão", formatDateTime(item.activationDate)], ["Janela", `${item.healthWindow} (${item.daysSinceActivation ?? "-"} dia(s))`]]} />
+						<InfoGroup title="Responsável" rows={[["Técnico", item.technician.name], ["Empresa", item.company.name || "-"], ["Regional", item.regional.name || "-"], ["Cidade", item.city.name || "-"]]} />
+						<InfoGroup title="Serviço" rows={[["Plano", item.service.description || "-"], ["Velocidade", item.service.speedMbps ? `${item.service.speedMbps} Mbps` : "-"], ["Marca", item.service.brand], ["Status", item.service.status || "-"]]} />
+						<InfoGroup title="Conexão" rows={[["Conectado", item.connection.connected === true ? "Sim" : item.connection.connected === false ? "Não" : "-"], ["PPPoE", item.connection.pppoeUsername || "-"], ["IP", item.connection.ip || "-"], ["NAS", item.connection.nasIpAddress || "-"], ["Sessão", durationLabel(item.connection.sessionTimeSeconds)], ["Download", `${Number(item.connection.downloadGigabytes || 0).toLocaleString("pt-BR")} GB`], ["Upload", `${Number(item.connection.uploadGigabytes || 0).toLocaleString("pt-BR")} GB`], ["Última captura", formatDateTime(item.connection.capturedAt)]]} />
+					</div>
+					<section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+						<h3 className="text-base font-black text-slate-950">Histórico observado</h3>
+						<div className="mt-3 space-y-2">
+							{(item.evidence?.timeline || []).map((event, index) => (
+								<div key={`${event.at}-${index}`} className="grid gap-2 rounded-xl bg-white px-3 py-2 text-sm md:grid-cols-[150px_1fr]">
+									<span className="font-black text-slate-500">{formatDateTime(event.at)}</span>
+									<span className="font-semibold text-slate-800">{event.label}</span>
+								</div>
+							))}
+						</div>
+					</section>
+					<section className="rounded-2xl border border-slate-200 bg-white p-4">
+						<h3 className="text-base font-black text-slate-950">Histórico da classificação</h3>
+						<div className="mt-3 grid gap-2">
+							{(item.healthHistory || []).map((entry) => (
+								<div key={entry.evaluated_at} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2">
+									<div className="flex flex-wrap items-center gap-2"><HealthBadge status={entry.health_status} />{(entry.reasons || []).map((reason) => <span key={reason} className="text-xs font-bold text-slate-500">{reasonLabel(reason)}</span>)}</div>
+									<span className="text-xs font-black text-slate-400">{formatDateTime(entry.evaluated_at)}</span>
+								</div>
+							))}
+						</div>
+					</section>
+				</div>
+			) : null}
+		</ModalShell>
 	);
 }
 

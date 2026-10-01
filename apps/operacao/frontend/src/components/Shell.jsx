@@ -1,4 +1,5 @@
 import {
+	Activity,
 	AlertTriangle,
 	BarChart3,
 	Bell,
@@ -181,6 +182,7 @@ const SST_MENU_TREE = Object.entries(SST_MENU_ITEMS).map(([key, item]) => ({ key
 const ACTIVATIONS_MENU_TREE = [
 	{ key: "ativacoes-overview", label: "Visão Geral", path: "/ativacoes", icon: LayoutDashboard, permission: "ativacoes.visualizar", end: true },
 	{ key: "ativacoes-kanban", label: "Kanban", path: "/ativacoes?tab=kanban", icon: ListChecks, permission: "ativacoes.kanban.visualizar" },
+	{ key: "ativacoes-saude", label: "Saúde", path: "/ativacoes?tab=saude", icon: Activity, permission: "ativacoes.saude.visualizar" },
 ];
 
 const MACRO_MENU_TREE = [

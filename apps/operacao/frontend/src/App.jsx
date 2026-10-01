@@ -208,7 +208,7 @@ export default function App() {
 				<Route path="chuva" element={<RainPage />} />
 				<Route path="rompimentos" element={<RompimentosPage />} />
 				<Route path="atividades" element={<PrivateRoute permission={["rot.activities.view","rot.activities.manage"]}><ActivitiesPage /></PrivateRoute>} />
-				<Route path="ativacoes" element={<PrivateRoute permission={["ativacoes.visualizar","ativacoes.kanban.visualizar"]}><AtivacoesPage /></PrivateRoute>} />
+				<Route path="ativacoes" element={<PrivateRoute permission={["ativacoes.visualizar","ativacoes.kanban.visualizar","ativacoes.saude.visualizar"]}><AtivacoesPage /></PrivateRoute>} />
 				<Route path="ranking" element={<PrivateRoute permission={["rot.ranking.view"]}><RankingPage /></PrivateRoute>} />
 				<Route path="relatorios-auditoria" element={<PrivateRoute permission={["rot.audit_reports.view","rot.bag_audit.view","rot.bag_audit.manage"]}><AuditReportsPage /></PrivateRoute>} />
 				<Route

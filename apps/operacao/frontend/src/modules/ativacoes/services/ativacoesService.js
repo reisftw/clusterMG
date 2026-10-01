@@ -28,6 +28,22 @@ export function fetchAtivacoesFilters() {
 	return requestRotApi("/admin/ativacoes/filtros");
 }
 
+export function fetchAtivacoesSaude(filters = {}) {
+	return requestRotApi(`/admin/ativacoes/saude${query(filters)}`);
+}
+
+export function fetchAtivacoesSaudeResumo(filters = {}) {
+	return requestRotApi(`/admin/ativacoes/saude/resumo${query(filters)}`);
+}
+
+export function fetchAtivacoesSaudeDetail(id) {
+	return requestRotApi(`/admin/ativacoes/saude/${encodeURIComponent(id)}`);
+}
+
+export function fetchAtivacoesSaudeFilters() {
+	return requestRotApi("/admin/ativacoes/saude/filtros");
+}
+
 export function startAtivacoesSync(payload = {}) {
 	return requestRotApi("/admin/ativacoes/sync", {
 		method: "POST",
@@ -37,4 +53,8 @@ export function startAtivacoesSync(payload = {}) {
 
 export function ativacoesExportUrl(filters = {}) {
 	return `/api/admin/ativacoes/export.csv${query(filters)}`;
+}
+
+export function ativacoesSaudeExportUrl(filters = {}) {
+	return `/api/admin/ativacoes/saude/export.csv${query(filters)}`;
 }

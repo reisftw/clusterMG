@@ -4,9 +4,11 @@ const { requireRotAuth, requireRotPermission } = require("../auth/middleware");
 const { noStore } = require("../security/noStore");
 const { getHubsoftActivationSyncJob, startHubsoftActivationSyncJob } = require("./jobs/activationSyncJob");
 const service = require("./services/activationApiService");
+const healthService = require("./services/activationHealthApiService");
 
 const router = express.Router();
 const VIEW = ["ativacoes.visualizar", "ativacoes.kanban.visualizar"];
+const HEALTH_VIEW = ["ativacoes.saude.visualizar", "ativacoes.visualizar"];
 
 router.use(requireRotAuth, noStore);
 
@@ -53,6 +55,41 @@ router.get("/export.csv", requireRotPermission("ativacoes.exportar"), async (req
 	}
 });
 
+router.get("/saude/resumo", requireRotPermission(HEALTH_VIEW), async (req, res, next) => {
+	try {
+		res.json({ ok: true, ...(await healthService.summary(db, req.query)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/saude", requireRotPermission(HEALTH_VIEW), async (req, res, next) => {
+	try {
+		res.json({ ok: true, ...(await healthService.listHealth(db, req.query)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/saude/filtros", requireRotPermission(HEALTH_VIEW), async (_req, res, next) => {
+	try {
+		res.json({ ok: true, filters: await healthService.filters(db) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/saude/export.csv", requireRotPermission("ativacoes.saude.exportar"), async (req, res, next) => {
+	try {
+		const data = await healthService.listHealth(db, { ...req.query, page: 1, limit: 10000 });
+		res.setHeader("Content-Type", "text/csv; charset=utf-8");
+		res.setHeader("Content-Disposition", 'attachment; filename="ativacoes-saude.csv"');
+		res.send(`\uFEFF${healthService.toCsv(data.items)}`);
+	} catch (error) {
+		next(error);
+	}
+});
+
 router.post("/sync", requireRotPermission("ativacoes.sincronizar"), async (req, res, next) => {
 	try {
 		const job = startHubsoftActivationSyncJob(req.body || {});
@@ -69,6 +106,19 @@ router.get("/sync/jobs/:id", requireRotPermission("ativacoes.sincronizar"), asyn
 		return;
 	}
 	res.json({ ok: true, job });
+});
+
+router.get("/saude/:id", requireRotPermission(HEALTH_VIEW), async (req, res, next) => {
+	try {
+		const item = await healthService.detail(db, req.params.id);
+		if (!item) {
+			res.status(404).json({ ok: false, error: "Saúde da ativação não encontrada." });
+			return;
+		}
+		res.json({ ok: true, item });
+	} catch (error) {
+		next(error);
+	}
 });
 
 router.get("/:id", requireRotPermission(VIEW), async (req, res, next) => {
