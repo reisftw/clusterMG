@@ -1,15 +1,18 @@
 import {
 	Activity,
+	AlertTriangle,
 	Building2,
-	CalendarDays,
 	CheckCircle2,
+	ChevronLeft,
+	ChevronRight,
 	Clock3,
 	Download,
-	Eye,
-	ListChecks,
+	Filter,
 	MapPin,
+	MoreHorizontal,
 	RefreshCw,
 	Rocket,
+	Search,
 	UserRound,
 	Wifi,
 } from "lucide-react";
@@ -44,22 +47,6 @@ const PERIODS = [
 	{ id: "month", label: "Este mês" },
 	{ id: "previousMonth", label: "Mês anterior" },
 	{ id: "custom", label: "Personalizado" },
-];
-
-const SUMMARY_CARDS = [
-	["createdToday", "OS criadas hoje", CalendarDays],
-	["completedToday", "OS concluídas hoje", CheckCircle2],
-	["pending", "Pendentes", Clock3],
-	["inProgress", "Em atendimento", Activity],
-];
-
-const SECONDARY_CARDS = [
-	["awaitingSchedule", "Aguard. agendamento", CalendarDays],
-	["awaitingApproval", "Aguard. aprovação", Eye],
-	["pendingValidation", "Pend. validação", ListChecks],
-	["technicians", "Técnicos envolvidos", UserRound],
-	["companies", "Empresas envolvidas", Building2],
-	["cities", "Cidades atendidas", MapPin],
 ];
 
 const HEALTH_STATUS = {
@@ -100,7 +87,42 @@ function formatDateTime(value) {
 
 function formatShortDate(value) {
 	if (!value) return "-";
-	return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+	const normalized = String(value).includes("T") ? value : `${value}T00:00:00`;
+	const date = new Date(normalized);
+	if (Number.isNaN(date.getTime())) return "-";
+	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function formatNumber(value) {
+	return Number(value || 0).toLocaleString("pt-BR");
+}
+
+function percentOf(value, total) {
+	return total ? `${((Number(value || 0) / Number(total || 0)) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "0%";
+}
+
+function relativeTime(value) {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	const diffMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+	if (diffMinutes < 1) return "há poucos segundos";
+	if (diffMinutes < 60) return `há ${diffMinutes} min`;
+	const diffHours = Math.round(diffMinutes / 60);
+	if (diffHours < 24) return `há ${diffHours}h`;
+	return formatDateTime(value);
+}
+
+function periodContext(period) {
+	const labels = {
+		today: "hoje",
+		yesterday: "ontem",
+		last7: "nos últimos 7 dias",
+		month: "neste mês",
+		previousMonth: "no mês anterior",
+		custom: "no período selecionado",
+	};
+	return labels[period] || "no período selecionado";
 }
 
 function durationLabel(seconds) {
@@ -170,6 +192,7 @@ export default function AtivacoesPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [syncJob, setSyncJob] = useState(null);
+	const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
 	const effectiveFilters = useMemo(() => filterPayload(filters), [filters]);
 
@@ -280,56 +303,55 @@ export default function AtivacoesPage() {
 
 	const latestSync = dashboard?.latestSync || kanban?.latestSync;
 	const currentData = tab === "kanban" ? kanban : tab === "saude" ? health : tab === "qualidade" ? quality : dashboard;
+	const hasLocalDashboardData = Number(dashboard?.summary?.created || dashboard?.summary?.createdToday || 0) > 0;
 
 	return (
-		<div className="space-y-5">
+		<div className="space-y-6">
 			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-					<div className="flex min-w-0 items-start gap-4">
-						<span className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
-							<Rocket size={26} />
-						</span>
-						<div className="min-w-0">
-							<p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">{pageCopy.breadcrumb}</p>
-							<h1 className="mt-1 text-3xl font-black text-slate-950">{pageCopy.title}</h1>
-							<p className="mt-1 max-w-3xl text-sm font-semibold text-slate-500">
-								{pageCopy.description}
-							</p>
-						</div>
+					<div className="min-w-0">
+						<p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">{pageCopy.breadcrumb}</p>
+						<h1 className="mt-1 text-3xl font-black text-slate-950">{pageCopy.title}</h1>
+						<p className="mt-1 max-w-3xl text-sm font-semibold text-slate-500">
+							{tab === "dashboard" ? "Acompanhe o fluxo e os principais indicadores da operação." : pageCopy.description}
+						</p>
 					</div>
-					<div className="flex flex-wrap gap-2">
+					<div className="flex flex-wrap items-center gap-2">
+						<SyncStatusBadge latestSync={latestSync} syncJob={syncJob} compact />
+						{canSync ? (
+							<button type="button" onClick={triggerSync} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
+								<RefreshCw size={17} className={syncJob?.status === "running" || syncJob?.status === "starting" ? "animate-spin" : ""} /> Atualizar
+							</button>
+						) : null}
 						{canExport && (tab === "dashboard" || tab === "kanban") ? (
-							<a href={ativacoesExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50">
-								<Download size={17} /> Exportar CSV
+							<a href={ativacoesExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+								<Download size={17} /> Exportar
 							</a>
 						) : null}
 						{tab === "saude" && canExportHealth ? (
-							<a href={ativacoesSaudeExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 shadow-sm transition hover:bg-emerald-100">
-								<Download size={17} /> Exportar Saúde
+							<a href={ativacoesSaudeExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100">
+								<Download size={17} /> Exportar
 							</a>
 						) : null}
 						{tab === "qualidade" && canExportQuality ? (
-							<a href={ativacoesQualidadeExportUrl(QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician", effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-black text-violet-700 shadow-sm transition hover:bg-violet-100">
-								<Download size={17} /> Exportar Qualidade
+							<a href={ativacoesQualidadeExportUrl(QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician", effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-black text-violet-700 transition hover:bg-violet-100">
+								<Download size={17} /> Exportar
 							</a>
 						) : null}
-						{canSync ? (
-							<button type="button" onClick={triggerSync} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700">
-								<RefreshCw size={17} /> Atualizar agora
-							</button>
-						) : null}
+						<button type="button" title="Detalhes da sincronização" className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50">
+							<MoreHorizontal size={18} />
+						</button>
 					</div>
 				</div>
-				<div className="mt-4 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 xl:grid-cols-[1fr_auto]">
-					<Filters filters={filters} setFilters={setFilters} options={filterOptions} tab={tab} />
-					<SyncStatusBadge latestSync={latestSync} syncJob={syncJob} />
+				<div className="mt-5">
+					<Filters filters={filters} setFilters={setFilters} options={filterOptions} tab={tab} advancedOpen={advancedFiltersOpen} setAdvancedOpen={setAdvancedFiltersOpen} />
 				</div>
 			</section>
 
-			{error ? <ErrorState message={error} onRetry={tab === "saude" ? loadHealth : tab === "qualidade" ? loadQuality : load} /> : null}
+			{error ? <ErrorState message={error} onRetry={tab === "saude" ? loadHealth : tab === "qualidade" ? loadQuality : load} compact={tab === "dashboard" && hasLocalDashboardData} /> : null}
 			{loading && !currentData ? <Spinner fullScreen /> : null}
 
-			{tab === "dashboard" ? <DashboardView data={dashboard} /> : null}
+			{tab === "dashboard" ? <DashboardView data={dashboard} period={filters.period} /> : null}
 			{tab === "kanban" ? <KanbanView data={kanban} onOpen={openDetail} /> : null}
 			{tab === "saude" ? <HealthView data={health} summary={healthSummary} onOpen={openHealthDetail} /> : null}
 			{tab === "qualidade" ? <QualityView data={quality} summary={qualitySummary} dimension={qualityDimension} setDimension={setQualityDimension} onOpen={openQualityDetail} /> : null}
@@ -341,43 +363,50 @@ export default function AtivacoesPage() {
 	);
 }
 
-function Filters({ filters, setFilters, options, tab }) {
+function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedOpen }) {
 	const setField = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
 	const clearField = (key) => setField(key, "");
 	const reset = () => setFilters((current) => ({ ...current, period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" }));
 	const optionLabel = (items = [], id) => items.find((item) => String(item.id) === String(id))?.label || id;
 	const chips = [
-		filters.period && { key: "period", label: optionLabel(PERIODS, filters.period) },
+		filters.period && filters.period !== "last7" && { key: "period", label: optionLabel(PERIODS, filters.period) },
 		filters.orderTypeId && { key: "orderTypeId", label: optionLabel((options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name })), filters.orderTypeId) },
 		filters.cityId && { key: "cityId", label: optionLabel((options?.cities || []).map((item) => ({ id: item.id, label: item.name })), filters.cityId) },
 		filters.technicianId && { key: "technicianId", label: optionLabel((options?.technicians || []).map((item) => ({ id: item.id, label: item.name })), filters.technicianId) },
 		filters.companyId && { key: "companyId", label: optionLabel((options?.companies || []).map((item) => ({ id: item.id, label: item.name })), filters.companyId) },
+		filters.regionalId && { key: "regionalId", label: optionLabel((options?.regionals || []).map((item) => ({ id: item.id, label: item.name })), filters.regionalId) },
+		filters.status && { key: "status", label: filters.status },
+		filters.brand && { key: "brand", label: filters.brand },
 		filters.healthStatus && { key: "healthStatus", label: filters.healthStatus },
 		filters.window && { key: "window", label: filters.window },
 		filters.quality && { key: "quality", label: optionLabel(options?.quality || [], filters.quality) },
 	].filter(Boolean);
 	return (
 		<div className="space-y-3">
-			<div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+			<div className="grid gap-2 md:grid-cols-[1.1fr_1.2fr_1.2fr_auto]">
 				<Select label="Período" value={filters.period} onChange={(v) => setField("period", v)} options={PERIODS} />
 				<Select label="Tipo OS" value={filters.orderTypeId} onChange={(v) => setField("orderTypeId", v)} options={(options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-				<Select label="Cidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-				<Select label="Técnico" value={filters.technicianId} onChange={(v) => setField("technicianId", v)} options={(options?.technicians || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-				{tab === "saude" ? <Select label="Saúde" value={filters.healthStatus} onChange={(v) => setField("healthStatus", v)} options={[{ id: "CRITICO", label: "Crítico" }, { id: "ATENCAO", label: "Atenção" }, { id: "SEM_DADOS", label: "Sem dados" }, { id: "SAUDAVEL", label: "Saudável" }]} allowAll /> : <Select label="Empresa" value={filters.companyId} onChange={(v) => setField("companyId", v)} options={(options?.companies || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />}
+				<Select label="Localidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+				<button type="button" onClick={() => setAdvancedOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 outline-none transition hover:bg-slate-50 focus:border-blue-500">
+					<Filter size={16} /> Filtros
+				</button>
 			</div>
-			<details className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
-				<summary className="cursor-pointer text-sm font-black text-slate-700">Mais filtros</summary>
-				<div className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+			{advancedOpen ? (
+				<div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+					<div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
 					{filters.period === "custom" ? <><Field label="De" type="date" value={filters.from} onChange={(v) => setField("from", v)} /><Field label="Até" type="date" value={filters.to} onChange={(v) => setField("to", v)} /></> : null}
-					{tab !== "kanban" ? <Select label="Status" value={filters.status} onChange={(v) => setField("status", v)} options={[{ id: "pendente", label: "Pendente" }, { id: "aguardando_agendamento", label: "Aguard. agendamento" }, { id: "aguardando_aprovacao", label: "Aguard. aprovação" }, { id: "finalizado", label: "Finalizado" }]} allowAll /> : null}
+					{tab !== "kanban" ? <Select label="Status" value={filters.status} onChange={(v) => setField("status", v)} options={[{ id: "pendente", label: "Pendente" }, { id: "aguardando_agendamento", label: "Aguardando agendamento" }, { id: "aguardando_aprovacao", label: "Aguardando aprovação" }, { id: "finalizado", label: "Finalizado" }]} allowAll /> : null}
+					<Select label="Técnico" value={filters.technicianId} onChange={(v) => setField("technicianId", v)} options={(options?.technicians || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
 					<Select label="Empresa" value={filters.companyId} onChange={(v) => setField("companyId", v)} options={(options?.companies || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
 					<Select label="Regional" value={filters.regionalId} onChange={(v) => setField("regionalId", v)} options={(options?.regionals || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+					<Select label="Cidade específica" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
 					<Select label="Marca" value={filters.brand} onChange={(v) => setField("brand", v)} options={(options?.brands || []).map((item) => ({ id: item, label: item }))} allowAll />
 					<Select label="Técnico identificado" value={filters.technicianIdentified} onChange={(v) => setField("technicianIdentified", v)} options={[{ id: "yes", label: "Com técnico" }, { id: "no", label: "Sem técnico" }]} allowAll />
 					{tab === "saude" ? <><Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll /><Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }]} allowAll /></> : null}
 					{tab === "qualidade" ? <Select label="Qualidade" value={filters.quality} onChange={(v) => setField("quality", v)} options={(options?.quality || []).map((item) => ({ id: item.id, label: item.label }))} allowAll /> : null}
+					</div>
 				</div>
-			</details>
+			) : null}
 			<div className="flex flex-wrap items-center gap-2">
 				{chips.map((chip) => <button type="button" key={chip.key} onClick={() => clearField(chip.key)} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{chip.label} ×</button>)}
 				{chips.length ? <button type="button" onClick={reset} className="text-xs font-black text-slate-500 hover:text-slate-900">Limpar filtros</button> : null}
@@ -394,17 +423,26 @@ function Select({ label, value, onChange, options, allowAll = false }) {
 	return <label className="grid gap-1 text-xs font-black uppercase text-slate-500">{label}<select value={value || ""} onChange={(event) => onChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500">{allowAll ? <option value="">Todos</option> : null}{(options || []).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>;
 }
 
-function SyncStatusBadge({ latestSync, syncJob }) {
+function SyncStatusBadge({ latestSync, syncJob, compact = false }) {
 	const rawStatus = syncJob?.status || latestSync?.status || "idle";
 	const status = String(rawStatus).toLowerCase();
 	const latestDate = latestSync?.finishedAt || latestSync?.finished_at || latestSync?.startedAt || latestSync?.started_at || latestSync?.created_at;
-	const label = status === "running" || status === "starting" ? "Sincronizando" : status === "failed" ? "Falha na sincronização" : latestDate ? "Última sincronização" : "Sem execução recente";
+	const label = status === "running" || status === "starting" ? "Atualizando..." : status === "failed" ? "Sincronização indisponível" : latestDate ? `Atualizado ${relativeTime(latestDate)}` : "Sem execução recente";
 	const detail = syncJob?.error || latestSync?.error_message || latestSync?.error || (latestDate ? formatDateTime(latestDate) : "Dados atualizados conforme filtros.");
 	const className = status === "failed"
 		? "border-red-200 bg-red-50 text-red-700"
 		: status === "running" || status === "starting"
 			? "border-blue-200 bg-blue-50 text-blue-700"
 			: "border-emerald-200 bg-emerald-50 text-emerald-700";
+	if (compact) {
+		const Dot = status === "failed" ? AlertTriangle : RefreshCw;
+		return (
+			<div className={`inline-flex max-w-[320px] items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-black ${className}`} title={detail}>
+				<Dot size={15} className={status === "running" || status === "starting" ? "animate-spin" : ""} />
+				<span className="truncate">{label}</span>
+			</div>
+		);
+	}
 	return (
 		<div className={`flex min-w-[260px] items-center gap-3 rounded-2xl border px-3 py-2 ${className}`}>
 			<RefreshCw size={18} className={status === "running" || status === "starting" ? "animate-spin" : ""} />
@@ -416,15 +454,19 @@ function SyncStatusBadge({ latestSync, syncJob }) {
 	);
 }
 
-function ErrorState({ message, onRetry }) {
+function ErrorState({ message, onRetry, compact = false }) {
+	const friendly = message?.includes("Credenciais HubSoft") ? "A integração com o HubSoft precisa ser configurada." : message;
 	return (
-		<div className="rounded-3xl border border-red-200 bg-red-50 p-4 shadow-sm">
+		<div className={`${compact ? "rounded-2xl px-4 py-3" : "rounded-3xl p-4"} border border-amber-200 bg-amber-50 shadow-sm`}>
 			<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-				<div>
-					<p className="text-sm font-black text-red-800">Não foi possível carregar esta visão.</p>
-					<p className="mt-1 text-sm font-semibold text-red-700">{message}</p>
+				<div className="flex min-w-0 items-start gap-2">
+					<AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
+					<div className="min-w-0">
+						<p className="text-sm font-black text-amber-900">Sincronização HubSoft indisponível</p>
+						<p className="mt-1 text-sm font-semibold text-amber-800">{friendly}{compact ? " Exibindo os últimos dados disponíveis." : ""}</p>
+					</div>
 				</div>
-				<button type="button" onClick={onRetry} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-2 text-sm font-black text-white transition hover:bg-red-700">
+				<button type="button" onClick={onRetry} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-600 px-4 py-2 text-sm font-black text-white transition hover:bg-amber-700">
 					<RefreshCw size={16} /> Tentar novamente
 				</button>
 			</div>
@@ -432,55 +474,121 @@ function ErrorState({ message, onRetry }) {
 	);
 }
 
-function DashboardView({ data }) {
+function DashboardView({ data, period }) {
 	const summary = data?.summary || {};
+	const distributions = data?.distributions || {};
+	const total = Number(summary.created ?? summary.createdToday ?? 0);
+	const completed = Number(summary.completed ?? summary.completedToday ?? 0);
+	const backlog = Number(summary.backlog ?? Math.max(0, total - completed));
+	const context = periodContext(period || data?.period?.preset || "last7");
+	const kpis = [
+		{ label: "Ativações", value: total, sub: context, icon: Rocket, tone: "blue" },
+		{ label: "Concluídas", value: completed, sub: `${percentOf(completed, total)} das ativações`, icon: CheckCircle2, tone: "emerald" },
+		{ label: "Backlog", value: backlog, sub: `${percentOf(backlog, total)} do volume`, icon: Clock3, tone: "amber" },
+		{ label: "Em atendimento", value: summary.inProgress ?? 0, sub: `${percentOf(summary.inProgress, total)} das ativações`, icon: Activity, tone: "violet" },
+	];
+	const secondary = [
+		["Aguardando agendamento", summary.awaitingSchedule ?? 0],
+		["Aguardando aprovação", summary.awaitingApproval ?? 0],
+		["Pendente de validação", summary.pendingValidation ?? 0],
+		["Técnicos", summary.technicians ?? 0],
+		["Empresas", summary.companies ?? 0],
+		["Cidades", summary.cities ?? 0],
+	];
+	const hasData = total > 0 || completed > 0 || backlog > 0;
 	return (
-		<div className="space-y-4">
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-				{SUMMARY_CARDS.map(([key, label, Icon]) => (
-					<div key={key} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-						<div className="mb-3 flex items-start justify-between gap-3">
-							<p className="text-xs font-black uppercase text-slate-500">{label}</p>
-							<span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Icon size={18} /></span>
-						</div>
-						<p className="text-3xl font-black text-slate-950">{summary[key] ?? 0}</p>
+		<div className="space-y-7">
+			<div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+				{kpis.map((item) => <ExecutiveKpi key={item.label} {...item} />)}
+			</div>
+			<div className="grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3 xl:grid-cols-6">
+				{secondary.map(([label, value]) => (
+					<div key={label} className="min-w-0 border-slate-100 md:border-r md:last:border-r-0">
+						<p className="truncate text-xs font-black uppercase text-slate-500">{label}</p>
+						<p className="mt-1 text-2xl font-black text-slate-950">{formatNumber(value)}</p>
 					</div>
 				))}
 			</div>
-			<div className="grid gap-2 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-3 xl:grid-cols-6">
-				{SECONDARY_CARDS.map(([key, label, Icon]) => (
-					<div key={key} className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3">
-						<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm"><Icon size={16} /></span>
-						<div className="min-w-0">
-							<p className="truncate text-[11px] font-black uppercase text-slate-500">{label}</p>
-							<p className="text-xl font-black text-slate-950">{summary[key] ?? 0}</p>
+			{!hasData ? <DashboardEmptyState /> : (
+				<>
+					<DashboardSection title="Desempenho da operação">
+						<div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+							<DailyEvolutionCard items={distributions.dailyEvolution || []} period={context} />
+							<ChartCard title="Status das ativações" items={distributions.byStatus || []} />
 						</div>
-					</div>
-				))}
-			</div>
-			<div className="grid gap-4 xl:grid-cols-3">
-				<ChartCard title="Distribuição por tipo" items={data?.distributions?.byType || []} />
-				<ChartCard title="Distribuição por status" items={data?.distributions?.byStatus || []} />
-				<ChartCard title="Principais cidades" items={data?.distributions?.topCities || []} />
-				<ChartCard title="Principais empresas" items={data?.distributions?.topCompanies || []} />
-				<ChartCard title="Principais técnicos" items={data?.distributions?.topTechnicians || []} />
-				<ChartCard title="Evolução diária" items={(data?.distributions?.dailyEvolution || []).map((item) => ({ ...item, label: formatShortDate(item.label) }))} />
-			</div>
+					</DashboardSection>
+					<DashboardSection title="Composição das ativações">
+						<div className="grid gap-4 xl:grid-cols-2">
+							<ChartCard title="Tipo de OS" items={distributions.byType || []} showPercent />
+							<ChartCard title="Volume por localidade" items={distributions.topCities || []} limit={10} />
+						</div>
+					</DashboardSection>
+					<DashboardSection title="Execução operacional">
+						<div className="grid gap-4 xl:grid-cols-2">
+							<RankingTable title="Principais empresas" items={distributions.topCompanies || []} columns={["Empresa", "Ativações"]} />
+							<RankingTable title="Principais técnicos" items={distributions.topTechnicians || []} columns={["Técnico", "Ativações"]} />
+						</div>
+					</DashboardSection>
+				</>
+			)}
 		</div>
 	);
 }
 
-function ChartCard({ title, items }) {
-	const max = Math.max(1, ...items.map((item) => Number(item.value) || 0));
+function ExecutiveKpi({ label, value, sub, icon: Icon, tone }) {
+	const tones = {
+		blue: "bg-blue-50 text-blue-700 border-blue-100",
+		emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+		amber: "bg-amber-50 text-amber-700 border-amber-100",
+		violet: "bg-violet-50 text-violet-700 border-violet-100",
+	};
 	return (
-		<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="flex items-start justify-between gap-4">
+				<div>
+					<p className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">{label}</p>
+					<p className="mt-3 text-4xl font-black text-slate-950">{formatNumber(value)}</p>
+					<p className="mt-2 text-sm font-bold text-slate-500">{sub}</p>
+				</div>
+				<span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${tones[tone] || tones.blue}`}>
+					<Icon size={20} />
+				</span>
+			</div>
+		</section>
+	);
+}
+
+function DashboardSection({ title, children }) {
+	return (
+		<section className="space-y-3">
+			<h2 className="text-xl font-black text-slate-950">{title}</h2>
+			{children}
+		</section>
+	);
+}
+
+function DashboardEmptyState() {
+	return (
+		<section className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
+			<Rocket size={34} className="mx-auto text-blue-600" />
+			<h2 className="mt-4 text-xl font-black text-slate-950">Nenhuma ativação encontrada</h2>
+			<p className="mx-auto mt-2 max-w-xl text-sm font-semibold text-slate-500">Não encontramos ativações no período selecionado. Altere o período ou revise os filtros aplicados.</p>
+		</section>
+	);
+}
+
+function ChartCard({ title, items, limit = 8, showPercent = false }) {
+	const max = Math.max(1, ...items.map((item) => Number(item.value) || 0));
+	const total = items.reduce((sum, item) => sum + Number(item.value || 0), 0);
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 			<h2 className="text-base font-black text-slate-950">{title}</h2>
 			<div className="mt-4 space-y-3">
-				{items.length ? items.slice(0, 8).map((item) => (
+				{items.length ? items.slice(0, limit).map((item) => (
 					<div key={item.label}>
 						<div className="mb-1 flex items-center justify-between gap-3 text-sm font-bold">
 							<span className="truncate text-slate-700">{item.label}</span>
-							<span className="text-slate-950">{item.value}</span>
+							<span className="text-slate-950">{formatNumber(item.value)}{showPercent ? <span className="ml-2 text-xs text-slate-400">{percentOf(item.value, total)}</span> : null}</span>
 						</div>
 						<div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${Math.max(6, (Number(item.value) / max) * 100)}%` }} /></div>
 					</div>
@@ -490,24 +598,138 @@ function ChartCard({ title, items }) {
 	);
 }
 
+function DailyEvolutionCard({ items, period }) {
+	const max = Math.max(1, ...items.flatMap((item) => [Number(item.created) || Number(item.value) || 0, Number(item.completed) || 0]));
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<h2 className="text-base font-black text-slate-950">Evolução diária</h2>
+					<p className="text-sm font-semibold text-slate-500">Criadas e concluídas {period}.</p>
+				</div>
+				<div className="flex gap-4 text-xs font-black text-slate-500">
+					<span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> Criadas</span>
+					<span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Concluídas</span>
+				</div>
+			</div>
+			<div className="mt-5 grid min-h-[220px] items-end gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(1, items.length)}, minmax(28px, 1fr))` }}>
+				{items.length ? items.map((item) => {
+					const created = Number(item.created ?? item.value ?? 0);
+					const completed = Number(item.completed ?? 0);
+					return (
+						<div key={item.label} className="flex min-w-0 flex-col items-center gap-2">
+							<div className="flex h-36 w-full items-end justify-center gap-1 rounded-xl bg-slate-50 px-1 py-2">
+								<div title={`${formatNumber(created)} criadas`} className="w-3 rounded-t bg-blue-600" style={{ height: `${Math.max(4, (created / max) * 100)}%` }} />
+								<div title={`${formatNumber(completed)} concluídas`} className="w-3 rounded-t bg-emerald-500" style={{ height: `${Math.max(4, (completed / max) * 100)}%` }} />
+							</div>
+							<span className="text-[11px] font-black text-slate-500">{formatShortDate(item.label)}</span>
+						</div>
+					);
+				}) : <p className="col-span-full self-center text-center text-sm font-semibold text-slate-400">Sem evolução no período.</p>}
+			</div>
+		</section>
+	);
+}
+
+function RankingTable({ title, items, columns }) {
+	return (
+		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="mb-3 flex items-center justify-between gap-3">
+				<h2 className="text-base font-black text-slate-950">{title}</h2>
+				{items.length > 5 ? <span className="text-xs font-black text-blue-600">Top 5</span> : null}
+			</div>
+			<div className="overflow-hidden rounded-2xl border border-slate-100">
+				<table className="w-full text-left text-sm">
+					<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+						<tr><th className="px-4 py-3">{columns[0]}</th><th className="px-4 py-3 text-right">{columns[1]}</th></tr>
+					</thead>
+					<tbody className="divide-y divide-slate-100">
+						{items.slice(0, 5).map((item) => (
+							<tr key={item.label}>
+								<td className="max-w-[360px] truncate px-4 py-3 font-black text-slate-900">{item.label}</td>
+								<td className="px-4 py-3 text-right font-black text-blue-700">{formatNumber(item.value)}</td>
+							</tr>
+						))}
+						{!items.length ? <tr><td colSpan="2" className="px-4 py-8 text-center text-sm font-bold text-slate-400">Sem dados para o filtro.</td></tr> : null}
+					</tbody>
+				</table>
+			</div>
+		</section>
+	);
+}
+
 function KanbanView({ data, onOpen }) {
+	const [queries, setQueries] = useState({});
+	const [pages, setPages] = useState({});
+	const pageSize = 10;
+	const setQuery = (columnId, value) => {
+		setQueries((current) => ({ ...current, [columnId]: value }));
+		setPages((current) => ({ ...current, [columnId]: 1 }));
+	};
 	return (
 		<div className="overflow-x-auto pb-3">
 			<div className="grid min-w-[1180px] grid-cols-5 gap-3">
-				{(data?.columns || []).map((column) => (
-					<section key={column.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-						<div className="mb-3 flex items-start justify-between gap-2">
-							<div>
-								<h2 className="text-sm font-black text-slate-950">{column.label}</h2>
-								<p className="text-xs font-semibold text-slate-400">{column.items.length} O.S</p>
+				{(data?.columns || []).map((column) => {
+					const query = queries[column.id] || "";
+					const filtered = (column.items || []).filter((item) => activationMatchesQuery(item, query));
+					const page = Math.min(pages[column.id] || 1, Math.max(1, Math.ceil(filtered.length / pageSize)));
+					const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+					return (
+						<section key={column.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+							<div className="mb-3 flex items-start justify-between gap-2">
+								<div>
+									<h2 className="text-sm font-black text-slate-950">{column.label}</h2>
+									<p className="text-xs font-semibold text-slate-400">{filtered.length} de {column.items.length} O.S</p>
+								</div>
 							</div>
-						</div>
-						<div className="space-y-2">
-							{column.items.map((item) => <ActivationCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />)}
-							{!column.items.length ? <p className="rounded-xl bg-slate-50 px-3 py-6 text-center text-xs font-bold text-slate-400">Sem itens</p> : null}
-						</div>
-					</section>
-				))}
+							<SearchBox value={query} onChange={(value) => setQuery(column.id, value)} placeholder="Pesquisar O.S, técnico, cidade..." />
+							<div className="mt-3 space-y-2">
+								{visible.map((item) => <ActivationCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />)}
+								{!visible.length ? <p className="rounded-xl bg-slate-50 px-3 py-6 text-center text-xs font-bold text-slate-400">Sem itens</p> : null}
+							</div>
+							<Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={(next) => setPages((current) => ({ ...current, [column.id]: next }))} />
+						</section>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+function activationMatchesQuery(item, query) {
+	const q = String(query || "").trim().toLowerCase();
+	if (!q) return true;
+	return [
+		item.orderNumber,
+		item.hubsoftOrderId,
+		item.orderTypeName,
+		item.rawStatus,
+		item.technician?.name,
+		item.company?.name,
+		item.city?.name,
+		item.regional?.name,
+		item.service?.brand,
+	].some((value) => String(value || "").toLowerCase().includes(q));
+}
+
+function SearchBox({ value, onChange, placeholder }) {
+	return (
+		<label className="relative block">
+			<Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+			<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm font-bold text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white" />
+		</label>
+	);
+}
+
+function Pagination({ page, total, pageSize, onPage }) {
+	const totalPages = Math.max(1, Math.ceil(total / pageSize));
+	if (total <= pageSize) return null;
+	return (
+		<div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs font-black text-slate-500">
+			<span>{(page - 1) * pageSize + 1}-{Math.min(page * pageSize, total)} de {total}</span>
+			<div className="flex gap-1">
+				<button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft size={15} /></button>
+				<button type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"><ChevronRight size={15} /></button>
 			</div>
 		</div>
 	);
@@ -664,6 +886,9 @@ function QualityDetailModal({ detail, onClose }) {
 }
 
 function HealthView({ data, summary, onOpen }) {
+	const [query, setQuery] = useState("");
+	const [page, setPage] = useState(1);
+	const pageSize = 10;
 	const cards = [
 		["monitored", "Monitorados", summary?.summary?.monitored ?? 0, ""],
 		["healthy", "Saudáveis", summary?.summary?.healthy ?? 0, percent(summary?.summary?.percentages?.healthy)],
@@ -674,6 +899,9 @@ function HealthView({ data, summary, onOpen }) {
 		["withRepeatedSupport", "Reincidência", summary?.summary?.withRepeatedSupport ?? 0, ""],
 		["noConnection", "Sem conexão", summary?.summary?.noConnection ?? 0, ""],
 	];
+	const filteredItems = (data?.items || []).filter((item) => activationMatchesQuery(item, query));
+	const safePage = Math.min(page, Math.max(1, Math.ceil(filteredItems.length / pageSize)));
+	const visibleItems = filteredItems.slice((safePage - 1) * pageSize, safePage * pageSize);
 	return (
 		<div className="space-y-4">
 			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -689,8 +917,15 @@ function HealthView({ data, summary, onOpen }) {
 			</div>
 			<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
 				<div className="border-b border-slate-100 px-4 py-3">
-					<h2 className="text-lg font-black text-slate-950">Fila de Saúde Pós-Ativação</h2>
-					<p className="text-sm font-semibold text-slate-500">Priorizada por crítico, atenção, sem dados e saudável, sempre com motivos rastreáveis.</p>
+					<div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+						<div>
+							<h2 className="text-lg font-black text-slate-950">Fila de Saúde Pós-Ativação</h2>
+							<p className="text-sm font-semibold text-slate-500">Priorizada por crítico, atenção, sem dados e saudável, sempre com motivos rastreáveis.</p>
+						</div>
+						<div className="w-full lg:w-96">
+							<SearchBox value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Pesquisar O.S, técnico, cidade..." />
+						</div>
+					</div>
 				</div>
 				<div className="overflow-x-auto">
 					<table className="min-w-[1180px] w-full text-left text-sm">
@@ -710,7 +945,7 @@ function HealthView({ data, summary, onOpen }) {
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100">
-							{(data?.items || []).map((item) => (
+							{visibleItems.map((item) => (
 								<tr key={item.id} onClick={() => onOpen(item.id)} className="cursor-pointer transition hover:bg-blue-50/60">
 									<td className="px-4 py-3"><HealthBadge status={item.healthStatus} /></td>
 									<td className="px-4 py-3 font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</td>
@@ -729,11 +964,14 @@ function HealthView({ data, summary, onOpen }) {
 									</td>
 								</tr>
 							))}
-							{!data?.items?.length ? (
+							{!visibleItems.length ? (
 								<tr><td colSpan="11" className="px-4 py-10 text-center text-sm font-bold text-slate-400">Sem clientes monitorados para os filtros.</td></tr>
 							) : null}
 						</tbody>
 					</table>
+				</div>
+				<div className="px-4 pb-4">
+					<Pagination page={safePage} total={filteredItems.length} pageSize={pageSize} onPage={setPage} />
 				</div>
 			</section>
 		</div>

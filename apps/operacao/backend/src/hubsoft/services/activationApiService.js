@@ -5,6 +5,27 @@ function text(value) {
 	return String(value ?? "").trim();
 }
 
+function firstText(...values) {
+	for (const value of values) {
+		const clean = text(value);
+		if (clean && clean !== "<masked>") return clean;
+	}
+	return "";
+}
+
+function nestedValue(source, path) {
+	return path.split(".").reduce((acc, key) => acc?.[key], source);
+}
+
+function firstPathText(source, paths = []) {
+	for (const path of paths) {
+		const value = nestedValue(source, path);
+		const clean = firstText(value);
+		if (clean) return clean;
+	}
+	return "";
+}
+
 function parsePositiveInt(value, fallback, max = 200) {
 	const number = Number(value);
 	if (!Number.isFinite(number) || number <= 0) return fallback;
@@ -114,6 +135,28 @@ function baseSelect() {
 
 function publicActivation(row) {
 	const derived = resolveActivationOperationalStatus(row);
+	const raw = row.raw_payload_sanitized || {};
+	const rawTechnician = Array.isArray(raw.tecnicos) ? raw.tecnicos[0] : null;
+	const rawRelation = Array.isArray(raw.ordem_servico_tecnico) ? raw.ordem_servico_tecnico[0] : null;
+	const rawCityName = firstPathText(raw, [
+		"cidade.nome",
+		"cidade.display",
+		"cliente_servico.cidade.nome",
+		"cliente_servico.cidade.display",
+		"cliente_servico.endereco_instalacao.cidade",
+		"cliente_servico.endereco_instalacao.cidade_nome",
+		"endereco.cidade",
+		"endereco.cidade_nome",
+	]);
+	const rawTechnicianName = firstText(
+		rawTechnician?.display,
+		rawTechnician?.name,
+		rawTechnician?.nome,
+		rawRelation?.usuario?.display,
+		rawRelation?.usuario?.name,
+		rawRelation?.tecnico?.display,
+		rawRelation?.tecnico?.name,
+	);
 	return {
 		id: row.id,
 		hubsoftOrderId: row.hubsoft_order_id,
@@ -136,13 +179,13 @@ function publicActivation(row) {
 		technician: {
 			id: row.operacao_tecnico_id,
 			hubsoftUserId: row.hubsoft_technician_id,
-			name: row.technician_name || "Não identificado",
+			name: row.technician_name || rawTechnicianName || "Não identificado",
 			matchStatus: row.technician_match_status,
 			matchReason: row.technician_match_reason,
 		},
 		company: { id: row.operacao_empresa_id, name: row.company_name || "" },
 		regional: { id: row.regional_id, name: row.regional_name || "" },
-		city: { id: row.cidade_id, name: row.city_name || row.cidade_nome || "" },
+		city: { id: row.cidade_id, name: row.city_name || row.cidade_nome || rawCityName || "" },
 		service: {
 			description: row.service_description || "",
 			status: row.service_status || "",
@@ -161,6 +204,13 @@ function publicActivation(row) {
 			capturedAt: row.connection_captured_at,
 		},
 	};
+}
+
+function dateKey(value) {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	return date.toISOString().slice(0, 10);
 }
 
 async function listActivations(db, query = {}) {
@@ -186,10 +236,30 @@ async function listActivations(db, query = {}) {
 function countBy(items, picker) {
 	const map = new Map();
 	for (const item of items) {
-		const key = picker(item) || "Não informado";
+		const key = text(picker(item));
+		if (!key) continue;
 		map.set(key, (map.get(key) || 0) + 1);
 	}
 	return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+}
+
+function groupDailyEvolution(items) {
+	const map = new Map();
+	const ensure = (label) => {
+		if (!map.has(label)) map.set(label, { label, created: 0, completed: 0, value: 0 });
+		return map.get(label);
+	};
+	for (const item of items) {
+		const created = dateKey(item.createdAtHubsoft);
+		if (created) {
+			const row = ensure(created);
+			row.created += 1;
+			row.value = row.created;
+		}
+		const completed = item.derivedStatus.id === "completed" ? dateKey(item.executedEndAt) : "";
+		if (completed) ensure(completed).completed += 1;
+	}
+	return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 async function dashboard(db, query = {}) {
@@ -200,12 +270,18 @@ async function dashboard(db, query = {}) {
 	const completedToday = items.filter((item) => String(item.executedEndAt || "").slice(0, 10) === today.from).length;
 	const byDerived = countBy(items, (item) => item.derivedStatus.id);
 	const metricFor = (status) => byDerived.find((item) => item.label === status)?.value || 0;
+	const created = items.length;
+	const completed = metricFor("completed");
+	const backlog = Math.max(0, created - completed);
 	const technicians = new Set(items.map((item) => item.technician.id || item.technician.hubsoftUserId).filter(Boolean));
 	const companies = new Set(items.map((item) => item.company.id || item.company.name).filter(Boolean));
 	const cities = new Set(items.map((item) => item.city.id || item.city.name).filter(Boolean));
 	return {
 		period: data.period,
 		summary: {
+			created,
+			completed,
+			backlog,
 			createdToday,
 			completedToday,
 			pending: metricFor("to_schedule"),
@@ -223,7 +299,7 @@ async function dashboard(db, query = {}) {
 			topCities: countBy(items, (item) => item.city.name).slice(0, 8),
 			topCompanies: countBy(items, (item) => item.company.name).slice(0, 8),
 			topTechnicians: countBy(items, (item) => item.technician.name).slice(0, 8),
-			dailyEvolution: countBy(items, (item) => String(item.executedEndAt || item.scheduledStartAt || item.createdAtHubsoft || "").slice(0, 10)).sort((a, b) => a.label.localeCompare(b.label)),
+			dailyEvolution: groupDailyEvolution(items),
 		},
 	};
 }
