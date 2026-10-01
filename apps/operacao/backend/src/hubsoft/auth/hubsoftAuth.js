@@ -33,6 +33,58 @@ function normalizeBearer(token) {
 	return value.startsWith("Bearer ") ? value : `Bearer ${value}`;
 }
 
+function looksLikeJwt(value) {
+	return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(value || "").trim().replace(/^Bearer\s+/i, ""));
+}
+
+function extractBearerFromValue(value) {
+	if (!value) return "";
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		const bearer = trimmed.match(/Bearer\s+([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)/i);
+		if (bearer?.[1]) return normalizeBearer(bearer[1]);
+		if (looksLikeJwt(trimmed)) return normalizeBearer(trimmed);
+		return "";
+	}
+	if (Array.isArray(value)) {
+		for (const item of value) {
+			const token = extractBearerFromValue(item);
+			if (token) return token;
+		}
+		return "";
+	}
+	if (typeof value === "object") {
+		const preferredKeys = ["authorization", "access_token", "accessToken", "token", "bearer", "jwt"];
+		for (const key of preferredKeys) {
+			const token = extractBearerFromValue(value[key]);
+			if (token) return token;
+		}
+		for (const item of Object.values(value)) {
+			const token = extractBearerFromValue(item);
+			if (token) return token;
+		}
+	}
+	return "";
+}
+
+async function extractBearerFromBrowserStorage(page) {
+	return page
+		.evaluate(() => {
+			const values = [];
+			const collect = (storage) => {
+				for (let index = 0; index < storage.length; index += 1) {
+					const key = storage.key(index);
+					values.push({ key, value: storage.getItem(key) });
+				}
+			};
+			collect(globalThis.localStorage);
+			collect(globalThis.sessionStorage);
+			return values;
+		})
+		.then((entries) => extractBearerFromValue(entries))
+		.catch(() => "");
+}
+
 async function readSavedHubsoftCredentials() {
 	try {
 		const db = require("../../db");
@@ -67,9 +119,29 @@ async function loginWithPlaywright({ username, password, headless = true } = {})
 	try {
 		const page = await browser.newPage();
 		let authHeader = "";
+		let observedApiRequest = false;
 		page.on("request", (request) => {
 			const header = request.headers().authorization;
-			if (header && request.url().includes("api.sempre.hubsoft.com.br")) authHeader = header;
+			if (request.url().includes("api.sempre.hubsoft.com.br")) observedApiRequest = true;
+			const token = extractBearerFromValue(header);
+			if (token) authHeader = token;
+		});
+		page.on("response", async (response) => {
+			try {
+				if (!response.url().includes("hubsoft.com.br")) return;
+				const headerToken = extractBearerFromValue(response.headers());
+				if (headerToken) {
+					authHeader = headerToken;
+					return;
+				}
+				const contentType = response.headers()["content-type"] || "";
+				if (!contentType.includes("application/json")) return;
+				const data = await response.json().catch(() => null);
+				const bodyToken = extractBearerFromValue(data);
+				if (bodyToken) authHeader = bodyToken;
+			} catch {
+				// Ignora respostas que o Playwright nao permite ler.
+			}
 		});
 		await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded", timeout: 30000 });
 		const userInput = page.locator('input[name="email"], input[name="username"], input[type="email"], input[placeholder*="email" i], input[placeholder*="usu" i]').first();
@@ -84,13 +156,22 @@ async function loginWithPlaywright({ username, password, headless = true } = {})
 		const submit = page.locator('button[type="submit"], input[type="submit"], button:has-text("Entrar"), button:has-text("Login"), button:has-text("Acessar")').first();
 		await submit.click();
 		await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+		authHeader ||= await extractBearerFromBrowserStorage(page);
 		await page.goto(`${BASE_URL}/atendimento_os/ordem_servico`, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+		authHeader ||= await extractBearerFromBrowserStorage(page);
+		if (authHeader) return normalizeBearer(authHeader);
 		if (!authHeader) {
-			const error = new Error("Não foi possível capturar Bearer HubSoft após login.");
+			const currentUrl = page.url();
+			const error = new Error(
+				currentUrl.includes("/login")
+					? "Login HubSoft não foi concluído. Confira login/senha ou se há MFA/captcha no portal."
+					: observedApiRequest
+						? "Não foi possível capturar Bearer HubSoft após login."
+						: "Login HubSoft concluído, mas nenhuma chamada da API HubSoft foi observada para capturar o Bearer.",
+			);
 			error.statusCode = 401;
 			throw error;
 		}
-		return normalizeBearer(authHeader);
 	} finally {
 		await browser.close().catch(() => {});
 	}
