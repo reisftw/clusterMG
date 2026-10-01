@@ -2,6 +2,7 @@ const express = require("express");
 const db = require("../db");
 const { requireRotAuth, requireRotPermission } = require("../auth/middleware");
 const { noStore } = require("../security/noStore");
+const { resetHubsoftAuthCache } = require("../hubsoft/auth/hubsoftAuth");
 
 // Central de integracoes da Operação — mesmo padrao visual/funcional da Central
 // de Integracoes do Finan (apps/finan/backend/src/integrations/routes.js),
@@ -32,6 +33,16 @@ const INTEGRATIONS_CATALOG = [
 			{ key: "loginPassword", label: "Senha de login", secret: true },
 			{ key: "sistemaId", label: "Sistema ID" },
 			{ key: "timeoutMs", label: "Timeout em ms" },
+		],
+	},
+	{
+		provider: "hubsoft",
+		label: "HubSoft",
+		description: "Credenciais usadas para sincronizar as ativações e consultar dados operacionais do HubSoft.",
+		fields: [
+			{ key: "username", label: "Login HubSoft", required: true },
+			{ key: "password", label: "Senha HubSoft", secret: true, required: true },
+			{ key: "bearerToken", label: "Bearer token manual", secret: true },
 		],
 	},
 ];
@@ -105,6 +116,7 @@ router.put("/:provider", requireRotPermission("rot.settings.manage"), async (req
 			on conflict (key) do update set value = excluded.value, updated_at = now()`,
 			[JSON.stringify(nextSaved)],
 		);
+		if (entry.provider === "hubsoft") resetHubsoftAuthCache();
 		res.json({ ok: true });
 	} catch (error) {
 		next(error);

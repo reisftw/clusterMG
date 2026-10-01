@@ -2,6 +2,10 @@ const BASE_URL = "https://sempre.hubsoft.com.br";
 
 let cachedAuth = null;
 
+function resetHubsoftAuthCache() {
+	cachedAuth = null;
+}
+
 function decodeJwtPayload(token) {
 	const raw = String(token || "").replace(/^Bearer\s+/i, "");
 	const [, payload] = raw.split(".");
@@ -25,6 +29,21 @@ function normalizeBearer(token) {
 	const value = String(token || "").trim();
 	if (!value) return "";
 	return value.startsWith("Bearer ") ? value : `Bearer ${value}`;
+}
+
+async function readSavedHubsoftCredentials() {
+	try {
+		const db = require("../../db");
+		const { rows } = await db.query("select value from rot_settings where key = 'integrations' limit 1");
+		const hubsoft = rows[0]?.value?.hubsoft || {};
+		return {
+			username: String(hubsoft.username || "").trim(),
+			password: String(hubsoft.password || ""),
+			bearerToken: normalizeBearer(hubsoft.bearerToken),
+		};
+	} catch {
+		return {};
+	}
 }
 
 async function loginWithPlaywright({ username, password, headless = true } = {}) {
@@ -76,16 +95,17 @@ async function loginWithPlaywright({ username, password, headless = true } = {})
 }
 
 async function getHubsoftAuthHeader(options = {}) {
-	const envToken = normalizeBearer(options.bearerToken || process.env.HUBSOFT_BEARER_TOKEN || process.env.HUBSOFT_API_TOKEN);
+	const saved = await readSavedHubsoftCredentials();
+	const envToken = normalizeBearer(options.bearerToken || saved.bearerToken || process.env.HUBSOFT_BEARER_TOKEN || process.env.HUBSOFT_API_TOKEN);
 	if (isTokenValid(envToken)) return envToken;
 	if (cachedAuth && isTokenValid(cachedAuth.authorization)) return cachedAuth.authorization;
 	const authorization = await loginWithPlaywright({
-		username: options.username || process.env.HUBSOFT_USERNAME || process.env.HUBSOFT_LOGIN,
-		password: options.password || process.env.HUBSOFT_PASSWORD,
+		username: options.username || saved.username || process.env.HUBSOFT_USERNAME || process.env.HUBSOFT_LOGIN,
+		password: options.password || saved.password || process.env.HUBSOFT_PASSWORD,
 		headless: options.headless !== false,
 	});
 	cachedAuth = { authorization, capturedAt: Date.now() };
 	return authorization;
 }
 
-module.exports = { getHubsoftAuthHeader, isTokenValid, normalizeBearer };
+module.exports = { getHubsoftAuthHeader, isTokenValid, normalizeBearer, resetHubsoftAuthCache };
