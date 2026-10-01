@@ -4,7 +4,7 @@ const { resolveHubsoftTechnician } = require("./technicianMatcher");
 
 function fakeClient(rowsByQuery) {
 	return {
-		async query(sql, params) {
+		async query(sql, _params) {
 			if (sql.includes("hubsoft_user_id")) return { rows: rowsByQuery.byId || [] };
 			if (sql.includes("lower(coalesce(email")) return { rows: rowsByQuery.byEmail || [] };
 			return { rows: rowsByQuery.byName || [] };
