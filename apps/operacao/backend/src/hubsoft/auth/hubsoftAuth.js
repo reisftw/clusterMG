@@ -33,6 +33,10 @@ function normalizeBearer(token) {
 	return value.startsWith("Bearer ") ? value : `Bearer ${value}`;
 }
 
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function looksLikeJwt(value) {
 	return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(String(value || "").trim().replace(/^Bearer\s+/i, ""));
 }
@@ -85,6 +89,17 @@ async function extractBearerFromBrowserStorage(page) {
 		.catch(() => "");
 }
 
+async function waitForLoginResult(page, getAuthHeader, timeoutMs = 30000) {
+	const startedAt = Date.now();
+	while (Date.now() - startedAt < timeoutMs) {
+		const authHeader = getAuthHeader() || (await extractBearerFromBrowserStorage(page));
+		if (authHeader) return { authenticated: true, authHeader };
+		if (!page.url().includes("/login")) return { authenticated: true, authHeader: "" };
+		await sleep(500);
+	}
+	return { authenticated: false, authHeader: "" };
+}
+
 async function readSavedHubsoftCredentials() {
 	try {
 		const db = require("../../db");
@@ -120,6 +135,7 @@ async function loginWithPlaywright({ username, password, headless = true } = {})
 		const page = await browser.newPage();
 		let authHeader = "";
 		let observedApiRequest = false;
+		const getAuthHeader = () => authHeader;
 		page.on("request", (request) => {
 			const header = request.headers().authorization;
 			if (request.url().includes("api.sempre.hubsoft.com.br")) observedApiRequest = true;
@@ -155,10 +171,16 @@ async function loginWithPlaywright({ username, password, headless = true } = {})
 		await passInput.fill(password);
 		const submit = page.locator('button[type="submit"], input[type="submit"], button:has-text("Entrar"), button:has-text("Login"), button:has-text("Acessar")').first();
 		await submit.click();
-		await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+		const loginResult = await waitForLoginResult(page, getAuthHeader, 30000);
+		authHeader ||= loginResult.authHeader;
 		authHeader ||= await extractBearerFromBrowserStorage(page);
-		await page.goto(`${BASE_URL}/atendimento_os/ordem_servico`, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
-		authHeader ||= await extractBearerFromBrowserStorage(page);
+		if (loginResult.authenticated) {
+			await page.goto(`${BASE_URL}/atendimento_os/ordem_servico`, { waitUntil: "networkidle", timeout: 30000 }).catch(() => {});
+			authHeader ||= await extractBearerFromBrowserStorage(page);
+			await waitForLoginResult(page, getAuthHeader, 10000).then((result) => {
+				authHeader ||= result.authHeader;
+			});
+		}
 		if (authHeader) return normalizeBearer(authHeader);
 		if (!authHeader) {
 			const currentUrl = page.url();
