@@ -82,6 +82,45 @@ const MONTH_ORDER = [
 	"Dezembro",
 ];
 
+function createAudioContext() {
+	if (typeof window === "undefined") return null;
+	const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+	return AudioContextClass ? new AudioContextClass() : null;
+}
+
+function playAppointmentFallbackTone(audioContext) {
+	if (!audioContext) return false;
+	try {
+		if (audioContext.state === "suspended") {
+			audioContext.resume().catch(() => {});
+		}
+		const gain = audioContext.createGain();
+		gain.connect(audioContext.destination);
+		gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+		gain.gain.exponentialRampToValueAtTime(
+			0.28,
+			audioContext.currentTime + 0.03,
+		);
+		gain.gain.exponentialRampToValueAtTime(
+			0.0001,
+			audioContext.currentTime + 0.85,
+		);
+
+		[860, 1080, 1320].forEach((frequency, index) => {
+			const oscillator = audioContext.createOscillator();
+			oscillator.type = "triangle";
+			oscillator.frequency.value = frequency;
+			oscillator.connect(gain);
+			const start = audioContext.currentTime + index * 0.18;
+			oscillator.start(start);
+			oscillator.stop(start + 0.13);
+		});
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function getMonthData(allData, month) {
 	if (!allData || !month) return null;
 	const normalized = String(month)
@@ -2623,6 +2662,8 @@ export default function AcompanhamentoPage() {
 	const appointmentNoticeTimerRef = useRef(null);
 	const appointmentNoticeIdsRef = useRef(new Set());
 	const appointmentNoticeAudioRef = useRef(null);
+	const appointmentNoticeAudioUnlockedRef = useRef(false);
+	const appointmentNoticeAudioContextRef = useRef(null);
 	const appointmentNoticeAudioAtRef = useRef(0);
 	const knownAppointmentIdsRef = useRef(new Set());
 	const appointmentsSnapshotReadyRef = useRef(false);
@@ -2790,28 +2831,87 @@ export default function AcompanhamentoPage() {
 		},
 		[buildMetasRealtimeItems, canShowRealtimeNotice],
 	);
+	const ensureAppointmentNoticeAudio = useCallback(() => {
+		if (typeof window === "undefined" || typeof Audio === "undefined") {
+			return null;
+		}
+		if (!appointmentNoticeAudioRef.current) {
+			appointmentNoticeAudioRef.current = new Audio(APPOINTMENT_NOTICE_SOUND_SRC);
+			appointmentNoticeAudioRef.current.preload = "auto";
+			appointmentNoticeAudioRef.current.volume = 1;
+		}
+		if (!appointmentNoticeAudioContextRef.current) {
+			appointmentNoticeAudioContextRef.current = createAudioContext();
+		}
+		return appointmentNoticeAudioRef.current;
+	}, []);
+	const unlockAppointmentNoticeAudio = useCallback(() => {
+		if (appointmentNoticeAudioUnlockedRef.current) return;
+		const audio = ensureAppointmentNoticeAudio();
+		const audioContext = appointmentNoticeAudioContextRef.current;
+		if (audioContext?.state === "suspended") {
+			audioContext.resume().catch(() => {});
+		}
+		if (!audio) {
+			appointmentNoticeAudioUnlockedRef.current = true;
+			return;
+		}
+		try {
+			audio.muted = true;
+			audio.currentTime = 0;
+			const playPromise = audio.play();
+			if (playPromise?.then) {
+				playPromise
+					.then(() => {
+						audio.pause();
+						audio.currentTime = 0;
+						audio.muted = false;
+						appointmentNoticeAudioUnlockedRef.current = true;
+					})
+					.catch(() => {
+						audio.muted = false;
+					});
+				return;
+			}
+			audio.pause();
+			audio.currentTime = 0;
+			audio.muted = false;
+			appointmentNoticeAudioUnlockedRef.current = true;
+		} catch {
+			audio.muted = false;
+		}
+	}, [ensureAppointmentNoticeAudio]);
 	const playAppointmentNoticeSound = useCallback(() => {
-		if (typeof window === "undefined" || typeof Audio === "undefined") return;
+		if (typeof window === "undefined") return;
 		const nowMs = Date.now();
 		if (nowMs - appointmentNoticeAudioAtRef.current < 1200) return;
 		appointmentNoticeAudioAtRef.current = nowMs;
+		const playFallback = () => {
+			const audioContext =
+				appointmentNoticeAudioContextRef.current || createAudioContext();
+			appointmentNoticeAudioContextRef.current = audioContext;
+			playAppointmentFallbackTone(audioContext);
+		};
 		try {
-			if (!appointmentNoticeAudioRef.current) {
-				appointmentNoticeAudioRef.current = new Audio(APPOINTMENT_NOTICE_SOUND_SRC);
-				appointmentNoticeAudioRef.current.preload = "auto";
+			const audio = ensureAppointmentNoticeAudio();
+			if (!audio) {
+				playFallback();
+				return;
 			}
-			const audio = appointmentNoticeAudioRef.current;
+			audio.muted = false;
+			audio.volume = 1;
 			audio.currentTime = 0;
 			const playPromise = audio.play();
 			if (playPromise?.catch) {
-				playPromise.catch(() => {
-					// Navegadores podem bloquear áudio sem interação prévia; o modal segue normal.
+				playPromise.catch((error) => {
+					console.warn("Som de agendamento bloqueado pelo navegador.", error);
+					playFallback();
 				});
 			}
 		} catch {
-			// O alerta visual não depende do áudio.
+			playFallback();
 		}
-	}, []);
+	}, [ensureAppointmentNoticeAudio]);
 	const showAppointmentNotice = useCallback(
 		(event) => {
 			const appointment = normalizeAppointmentNotice(event);
@@ -2850,6 +2950,22 @@ export default function AcompanhamentoPage() {
 		},
 		[panelConfig.appointmentNotice?.durationSeconds, playAppointmentNoticeSound],
 	);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const events = ["pointerdown", "keydown", "touchstart"];
+		events.forEach((eventName) => {
+			window.addEventListener(eventName, unlockAppointmentNoticeAudio, {
+				once: true,
+				passive: true,
+			});
+		});
+		return () => {
+			events.forEach((eventName) => {
+				window.removeEventListener(eventName, unlockAppointmentNoticeAudio);
+			});
+		};
+	}, [unlockAppointmentNoticeAudio]);
 
 	useEffect(() => {
 		let active = true;
