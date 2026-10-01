@@ -70,7 +70,7 @@ create table if not exists rot_permissions (
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
 	constraint rot_permissions_id_not_empty_chk check (btrim(id) <> ''),
-	constraint rot_permissions_action_chk check (action in ('view', 'manage', 'approve', 'system'))
+	constraint rot_permissions_action_chk check (action in ('view', 'manage', 'approve', 'export', 'system'))
 );
 
 drop trigger if exists rot_permissions_touch_updated_at on rot_permissions;

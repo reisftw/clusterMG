@@ -1,5 +1,12 @@
 -- Permissões do domínio Ativações.
 
+alter table rot_permissions
+	drop constraint if exists rot_permissions_action_chk;
+
+alter table rot_permissions
+	add constraint rot_permissions_action_chk
+	check (action in ('view', 'manage', 'approve', 'export', 'system'));
+
 with catalog(id, section_id, section_label, feature_id, feature_label, action, sort_order, description) as (
 	values
 		('ativacoes.visualizar', 'ativacoes', 'Ativações', 'ativacoes', 'Ativações', 'view', 700, 'Visualizar visão geral de ativações.'),
