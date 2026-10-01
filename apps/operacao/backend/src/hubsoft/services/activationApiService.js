@@ -116,7 +116,12 @@ function baseSelect() {
 			conn.nas_ip_address,
 			conn.nas_port_id,
 			conn.status_text as connection_status_text,
-			conn.captured_at as connection_captured_at
+			conn.captured_at as connection_captured_at,
+			health.health_status,
+			health.health_window,
+			health.days_since_activation,
+			health.reasons as health_reasons,
+			health.evaluated_at as health_evaluated_at
 		  from hubsoft_activation_os_snapshots os
 		  left join hubsoft_cliente_servico_snapshots cs
 		    on cs.hubsoft_cliente_servico_id = os.hubsoft_cliente_servico_id and cs.is_current = true
@@ -130,7 +135,9 @@ function baseSelect() {
 		  	 where hcs.hubsoft_cliente_servico_id = os.hubsoft_cliente_servico_id
 		  	 order by hcs.captured_at desc
 		  	 limit 1
-		  ) conn on true`;
+		  ) conn on true
+		  left join hubsoft_activation_health_snapshots health
+		    on health.activation_snapshot_id = os.id and health.is_current = true`;
 }
 
 function publicActivation(row) {
@@ -203,6 +210,13 @@ function publicActivation(row) {
 			statusText: row.connection_status_text || "",
 			capturedAt: row.connection_captured_at,
 		},
+		health: {
+			status: row.health_status || "",
+			window: row.health_window || "",
+			daysSinceActivation: row.days_since_activation,
+			reasons: row.health_reasons || [],
+			evaluatedAt: row.health_evaluated_at,
+		},
 	};
 }
 
@@ -222,6 +236,7 @@ async function listActivations(db, query = {}) {
 	const all = countRows.map(publicActivation);
 	let filtered = all;
 	if (query.derivedStatus) filtered = all.filter((item) => item.derivedStatus.id === query.derivedStatus);
+	filtered = sortActivations(filtered);
 	const total = filtered.length;
 	return {
 		items: filtered.slice(offset, offset + limit),
@@ -231,6 +246,40 @@ async function listActivations(db, query = {}) {
 		totalPages: Math.max(1, Math.ceil(total / limit)),
 		period: filters.period,
 	};
+}
+
+function timeValue(value, fallback = 0) {
+	if (!value) return fallback;
+	const timestamp = new Date(value).getTime();
+	return Number.isNaN(timestamp) ? fallback : timestamp;
+}
+
+function operationalTimestamp(item) {
+	if (item.derivedStatus.id === "completed") return timeValue(item.executedEndAt || item.scheduledEndAt || item.lastSeenAt);
+	if (item.derivedStatus.id === "in_progress") return timeValue(item.executedStartAt || item.scheduledStartAt || item.createdAtHubsoft);
+	if (item.derivedStatus.id === "to_validate") return timeValue(item.executedEndAt || item.scheduledEndAt || item.createdAtHubsoft);
+	return timeValue(item.scheduledStartAt || item.createdAtHubsoft || item.firstSeenAt);
+}
+
+function healthPriority(item) {
+	if (item.health?.status === "CRITICO") return 0;
+	if (item.health?.status === "ATENCAO") return 1;
+	if (item.connection?.connected === false) return 2;
+	if (!item.city?.name || !item.company?.name) return 3;
+	return 4;
+}
+
+function sortActivations(items = []) {
+	return [...items].sort((a, b) => {
+		if (a.derivedStatus.id === "completed" || b.derivedStatus.id === "completed") {
+			return operationalTimestamp(b) - operationalTimestamp(a);
+		}
+		const priority = healthPriority(a) - healthPriority(b);
+		if (priority !== 0) return priority;
+		const age = timeValue(a.createdAtHubsoft || a.firstSeenAt, Number.MAX_SAFE_INTEGER) - timeValue(b.createdAtHubsoft || b.firstSeenAt, Number.MAX_SAFE_INTEGER);
+		if (age !== 0) return age;
+		return operationalTimestamp(a) - operationalTimestamp(b);
+	});
 }
 
 function countBy(items, picker) {

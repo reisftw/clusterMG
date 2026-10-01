@@ -147,6 +147,7 @@ function reasonLabel(reason) {
 function filterPayload(filters) {
 	const payload = { ...filters };
 	delete payload.healthEvent;
+	delete payload.q;
 	if (filters.period !== "custom") {
 		delete payload.from;
 		delete payload.to;
@@ -177,7 +178,7 @@ export default function AtivacoesPage() {
 	const canExportQuality = hasPermission("ativacoes.qualidade.exportar");
 	const tab = pageFromPath(location.pathname);
 	const pageCopy = PAGE_COPY[tab] || PAGE_COPY.dashboard;
-	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" });
+	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), q: "", orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" });
 	const [qualityDimension, setQualityDimension] = useState("tecnicos");
 	const [filterOptions, setFilterOptions] = useState(null);
 	const [dashboard, setDashboard] = useState(null);
@@ -352,7 +353,7 @@ export default function AtivacoesPage() {
 			{loading && !currentData ? <Spinner fullScreen /> : null}
 
 			{tab === "dashboard" ? <DashboardView data={dashboard} period={filters.period} /> : null}
-			{tab === "kanban" ? <KanbanView data={kanban} onOpen={openDetail} /> : null}
+			{tab === "kanban" ? <KanbanView data={kanban} query={filters.q} onOpen={openDetail} /> : null}
 			{tab === "saude" ? <HealthView data={health} summary={healthSummary} onOpen={openHealthDetail} /> : null}
 			{tab === "qualidade" ? <QualityView data={quality} summary={qualitySummary} dimension={qualityDimension} setDimension={setQualityDimension} onOpen={openQualityDetail} /> : null}
 
@@ -366,10 +367,9 @@ export default function AtivacoesPage() {
 function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedOpen }) {
 	const setField = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
 	const clearField = (key) => setField(key, "");
-	const reset = () => setFilters((current) => ({ ...current, period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" }));
+	const reset = () => setFilters((current) => ({ ...current, period: "last7", from: todayIso(), to: todayIso(), q: "", orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" }));
 	const optionLabel = (items = [], id) => items.find((item) => String(item.id) === String(id))?.label || id;
 	const chips = [
-		filters.period && filters.period !== "last7" && { key: "period", label: optionLabel(PERIODS, filters.period) },
 		filters.orderTypeId && { key: "orderTypeId", label: optionLabel((options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name })), filters.orderTypeId) },
 		filters.cityId && { key: "cityId", label: optionLabel((options?.cities || []).map((item) => ({ id: item.id, label: item.name })), filters.cityId) },
 		filters.technicianId && { key: "technicianId", label: optionLabel((options?.technicians || []).map((item) => ({ id: item.id, label: item.name })), filters.technicianId) },
@@ -381,12 +381,14 @@ function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedO
 		filters.window && { key: "window", label: filters.window },
 		filters.quality && { key: "quality", label: optionLabel(options?.quality || [], filters.quality) },
 	].filter(Boolean);
+	const hasCriteria = chips.length > 0 || Boolean(filters.q);
 	return (
 		<div className="space-y-3">
-			<div className="grid gap-2 md:grid-cols-[1.1fr_1.2fr_1.2fr_auto]">
+			<div className={`grid gap-2 ${tab === "kanban" ? "md:grid-cols-[1fr_1.2fr_1.2fr_1.8fr_auto]" : "md:grid-cols-[1.1fr_1.2fr_1.2fr_auto]"}`}>
 				<Select label="Período" value={filters.period} onChange={(v) => setField("period", v)} options={PERIODS} />
 				<Select label="Tipo OS" value={filters.orderTypeId} onChange={(v) => setField("orderTypeId", v)} options={(options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
 				<Select label="Localidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+				{tab === "kanban" ? <Field label="Busca" value={filters.q} onChange={(v) => setField("q", v)} placeholder="Buscar OS, técnico ou cidade" /> : null}
 				<button type="button" onClick={() => setAdvancedOpen((open) => !open)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 outline-none transition hover:bg-slate-50 focus:border-blue-500">
 					<Filter size={16} /> Filtros
 				</button>
@@ -409,14 +411,14 @@ function Filters({ filters, setFilters, options, tab, advancedOpen, setAdvancedO
 			) : null}
 			<div className="flex flex-wrap items-center gap-2">
 				{chips.map((chip) => <button type="button" key={chip.key} onClick={() => clearField(chip.key)} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{chip.label} ×</button>)}
-				{chips.length ? <button type="button" onClick={reset} className="text-xs font-black text-slate-500 hover:text-slate-900">Limpar filtros</button> : null}
+				{hasCriteria ? <button type="button" onClick={reset} className="text-xs font-black text-slate-500 hover:text-slate-900">Limpar filtros</button> : null}
 			</div>
 		</div>
 	);
 }
 
-function Field({ label, type = "text", value, onChange }) {
-	return <label className="grid gap-1 text-xs font-black uppercase text-slate-500">{label}<input type={type} value={value || ""} onChange={(event) => onChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" /></label>;
+function Field({ label, type = "text", value, onChange, placeholder = "" }) {
+	return <label className="grid gap-1 text-xs font-black uppercase text-slate-500">{label}<input type={type} value={value || ""} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" /></label>;
 }
 
 function Select({ label, value, onChange, options, allowAll = false }) {
@@ -658,46 +660,148 @@ function RankingTable({ title, items, columns }) {
 	);
 }
 
-function KanbanView({ data, onOpen }) {
-	const [queries, setQueries] = useState({});
-	const [pages, setPages] = useState({});
-	const pageSize = 10;
-	const setQuery = (columnId, value) => {
-		setQueries((current) => ({ ...current, [columnId]: value }));
-		setPages((current) => ({ ...current, [columnId]: 1 }));
-	};
+const KANBAN_COLUMN_TONES = {
+	to_schedule: {
+		header: "border-amber-200 bg-amber-50 text-amber-900",
+		count: "bg-amber-100 text-amber-800",
+		accent: "bg-amber-500",
+	},
+	approval_pending: {
+		header: "border-violet-200 bg-violet-50 text-violet-900",
+		count: "bg-violet-100 text-violet-800",
+		accent: "bg-violet-500",
+	},
+	in_progress: {
+		header: "border-blue-200 bg-blue-50 text-blue-900",
+		count: "bg-blue-100 text-blue-800",
+		accent: "bg-blue-500",
+	},
+	to_validate: {
+		header: "border-orange-200 bg-orange-50 text-orange-900",
+		count: "bg-orange-100 text-orange-800",
+		accent: "bg-orange-500",
+	},
+	completed: {
+		header: "border-emerald-200 bg-emerald-50 text-emerald-900",
+		count: "bg-emerald-100 text-emerald-800",
+		accent: "bg-emerald-500",
+	},
+};
+
+const INITIAL_COLUMN_LIMIT = 24;
+
+function KanbanView({ data, query, onOpen }) {
+	const [visibleLimits, setVisibleLimits] = useState({});
+	const [completedCollapsed, setCompletedCollapsed] = useState(false);
+	const normalizedQuery = normalizeQuery(query);
+	const columns = data?.columns || [];
+	const filteredColumns = columns.map((column) => {
+		const items = (column.items || []).filter((item) => activationMatchesQuery(item, normalizedQuery));
+		return { ...column, items };
+	});
+	const totalVisible = filteredColumns.reduce((sum, column) => sum + column.items.length, 0);
 	return (
-		<div className="overflow-x-auto pb-3">
-			<div className="grid min-w-[1180px] grid-cols-5 gap-3">
-				{(data?.columns || []).map((column) => {
-					const query = queries[column.id] || "";
-					const filtered = (column.items || []).filter((item) => activationMatchesQuery(item, query));
-					const page = Math.min(pages[column.id] || 1, Math.max(1, Math.ceil(filtered.length / pageSize)));
-					const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
-					return (
-						<section key={column.id} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-							<div className="mb-3 flex items-start justify-between gap-2">
-								<div>
-									<h2 className="text-sm font-black text-slate-950">{column.label}</h2>
-									<p className="text-xs font-semibold text-slate-400">{filtered.length} de {column.items.length} O.S</p>
-								</div>
-							</div>
-							<SearchBox value={query} onChange={(value) => setQuery(column.id, value)} placeholder="Pesquisar O.S, técnico, cidade..." />
-							<div className="mt-3 space-y-2">
-								{visible.map((item) => <ActivationCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />)}
-								{!visible.length ? <p className="rounded-xl bg-slate-50 px-3 py-6 text-center text-xs font-bold text-slate-400">Sem itens</p> : null}
-							</div>
-							<Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={(next) => setPages((current) => ({ ...current, [column.id]: next }))} />
-						</section>
-					);
-				})}
+		<section className="space-y-3">
+			<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+				<div>
+					<p className="text-sm font-black text-slate-950">Fluxo operacional</p>
+					<p className="text-xs font-bold text-slate-500">
+						{normalizedQuery ? `${formatNumber(totalVisible)} OS encontradas na busca` : `${formatNumber(data?.total || totalVisible)} OS no período filtrado`}
+					</p>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					{filteredColumns.map((column) => (
+						<span key={column.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-600">
+							{column.label}: {formatNumber(column.items.length)}
+						</span>
+					))}
+				</div>
 			</div>
-		</div>
+			<div className="overflow-x-auto pb-3">
+				<div className="grid min-h-[560px] min-w-[1600px] auto-cols-[320px] grid-flow-col gap-3 xl:min-h-[calc(100vh-330px)]">
+					{filteredColumns.map((column) => {
+						const collapsed = column.id === "completed" && completedCollapsed;
+						return (
+							<KanbanColumn
+								key={column.id}
+								column={column}
+								collapsed={collapsed}
+								visibleLimit={visibleLimits[column.id] || INITIAL_COLUMN_LIMIT}
+								onLoadMore={() => setVisibleLimits((current) => ({ ...current, [column.id]: (current[column.id] || INITIAL_COLUMN_LIMIT) + INITIAL_COLUMN_LIMIT }))}
+								onToggleCollapse={column.id === "completed" ? () => setCompletedCollapsed((current) => !current) : null}
+								onOpen={onOpen}
+							/>
+						);
+					})}
+				</div>
+			</div>
+		</section>
 	);
 }
 
+function KanbanColumn({ column, collapsed, visibleLimit, onLoadMore, onToggleCollapse, onOpen }) {
+	const tone = KANBAN_COLUMN_TONES[column.id] || KANBAN_COLUMN_TONES.to_schedule;
+	const items = column.items || [];
+	const visible = collapsed ? [] : items.slice(0, visibleLimit);
+	const hasMore = visible.length < items.length;
+	const attentionCount = items.filter((item) => ["CRITICO", "ATENCAO"].includes(item.health?.status)).length;
+	return (
+		<section className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-slate-100/70 shadow-sm ${column.id === "completed" ? "opacity-90" : ""}`}>
+			<div className={`sticky top-0 z-10 border-b px-3 py-3 ${tone.header}`}>
+				<div className="flex items-start justify-between gap-3">
+					<div className="min-w-0">
+						<div className="flex items-center gap-2">
+							<span className={`h-2 w-2 shrink-0 rounded-full ${tone.accent}`} />
+							<h2 className="truncate text-sm font-black uppercase tracking-[0.04em]">{column.label}</h2>
+						</div>
+						<p className="mt-1 text-xs font-bold opacity-75">{column.description}</p>
+						{attentionCount ? <p className="mt-1 text-xs font-black text-amber-700">{attentionCount} com atenção</p> : null}
+					</div>
+					<div className="flex shrink-0 items-center gap-2">
+						<span className={`rounded-full px-2.5 py-1 text-sm font-black ${tone.count}`}>{formatNumber(items.length)}</span>
+						{onToggleCollapse ? (
+							<button type="button" onClick={onToggleCollapse} className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-slate-700 transition hover:bg-white" aria-label={collapsed ? "Expandir concluídas" : "Recolher concluídas"}>
+								{collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+							</button>
+						) : null}
+					</div>
+				</div>
+			</div>
+			{collapsed ? (
+				<div className="flex flex-1 items-center justify-center p-4">
+					<button type="button" onClick={onToggleCollapse} className="w-full rounded-2xl border border-dashed border-emerald-200 bg-white px-4 py-8 text-center transition hover:border-emerald-300 hover:bg-emerald-50">
+						<p className="text-3xl font-black text-emerald-700">{formatNumber(items.length)}</p>
+						<p className="mt-1 text-sm font-black text-slate-700">OS concluídas</p>
+						<p className="mt-2 text-xs font-bold text-slate-500">Expandir coluna</p>
+					</button>
+				</div>
+			) : (
+				<div className="min-h-0 flex-1 overflow-y-auto p-3">
+					<div className="space-y-2">
+						{visible.map((item) => <ActivationCard key={item.id} item={item} onOpen={() => onOpen(item.id)} />)}
+						{!visible.length ? <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-8 text-center text-xs font-bold text-slate-400">Nenhuma OS nesta etapa</p> : null}
+					</div>
+					{hasMore ? (
+						<button type="button" onClick={onLoadMore} className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-blue-700 transition hover:border-blue-200 hover:bg-blue-50">
+							Carregar mais · {formatNumber(visible.length)} de {formatNumber(items.length)}
+						</button>
+					) : null}
+				</div>
+			)}
+		</section>
+	);
+}
+
+function normalizeQuery(value = "") {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase()
+		.trim();
+}
+
 function activationMatchesQuery(item, query) {
-	const q = String(query || "").trim().toLowerCase();
+	const q = normalizeQuery(query);
 	if (!q) return true;
 	return [
 		item.orderNumber,
@@ -709,7 +813,7 @@ function activationMatchesQuery(item, query) {
 		item.city?.name,
 		item.regional?.name,
 		item.service?.brand,
-	].some((value) => String(value || "").toLowerCase().includes(q));
+	].some((value) => normalizeQuery(value).includes(q));
 }
 
 function SearchBox({ value, onChange, placeholder }) {
@@ -735,22 +839,83 @@ function Pagination({ page, total, pageSize, onPage }) {
 	);
 }
 
+function friendlyTitle(value = "") {
+	return String(value || "")
+		.toLowerCase()
+		.replace(/(^|\s|\/|-)([a-zá-ú])/g, (match) => match.toLocaleUpperCase("pt-BR"));
+}
+
+function compactDateTime(value) {
+	if (!value) return "-";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "-";
+	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " · " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function contextualDate(item) {
+	if (item.derivedStatus?.id === "completed") return { label: "Concluída", value: item.executedEndAt || item.scheduledEndAt || item.lastSeenAt };
+	if (item.derivedStatus?.id === "in_progress") return { label: "Iniciada", value: item.executedStartAt || item.scheduledStartAt };
+	if (item.derivedStatus?.id === "to_validate") return { label: "Finalizada", value: item.executedEndAt || item.scheduledEndAt };
+	return { label: "Agendada", value: item.scheduledStartAt || item.createdAtHubsoft };
+}
+
+function ageFrom(value) {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	const diffMinutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+	if (diffMinutes < 60) return `${diffMinutes}min`;
+	const hours = Math.floor(diffMinutes / 60);
+	if (hours < 24) return `${hours}h`;
+	const days = Math.floor(hours / 24);
+	return `${days}d ${hours % 24}h`;
+}
+
+function brandLabel(brand) {
+	const value = String(brand || "").toUpperCase();
+	if (value === "SEMPRE" || value === "ONNET") return value;
+	return "—";
+}
+
+function connectionLabel(connection = {}) {
+	if (connection.connected === true) return "Conectado";
+	if (connection.connected === false) return "Sem conexão";
+	return "Sem dados";
+}
+
 function ActivationCard({ item, onOpen }) {
+	const date = contextualDate(item);
+	const brand = brandLabel(item.service?.brand);
+	const healthStatus = item.health?.status;
+	const hasAttention = healthStatus === "CRITICO" || healthStatus === "ATENCAO";
+	const age = item.derivedStatus?.id !== "completed" ? ageFrom(item.createdAtHubsoft || item.firstSeenAt) : "";
 	return (
-		<button type="button" onClick={onOpen} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-blue-200 hover:bg-blue-50">
+		<button type="button" onClick={onOpen} className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200" aria-label={`Abrir detalhes da OS ${item.orderNumber || item.hubsoftOrderId}`}>
 			<div className="flex items-start justify-between gap-2">
 				<div className="min-w-0">
-					<p className="truncate text-sm font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</p>
-					<p className="mt-1 line-clamp-2 text-xs font-bold text-slate-700">{item.orderTypeName}</p>
+					<p className="truncate font-mono text-sm font-black text-blue-700">#{item.orderNumber || item.hubsoftOrderId}</p>
+					<p className="mt-1 line-clamp-1 text-xs font-black text-slate-800">{friendlyTitle(item.orderTypeName)}</p>
 				</div>
-				<span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-500">{item.service.brand}</span>
+				<span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${brand === "—" ? "bg-slate-100 text-slate-400" : "bg-blue-50 text-blue-700"}`}>{brand}</span>
 			</div>
-			<div className="mt-3 space-y-1 text-xs font-semibold text-slate-500">
-				<p className="truncate"><MapPin size={12} className="mr-1 inline" />{item.city.name || "Cidade não informada"}</p>
-				<p className="truncate"><UserRound size={12} className="mr-1 inline" />{item.technician.name}</p>
-				<p className="truncate"><Building2 size={12} className="mr-1 inline" />{item.company.name || "Empresa não identificada"}</p>
-				<p><Clock3 size={12} className="mr-1 inline" />{formatDateTime(item.scheduledStartAt)}</p>
-				<p><Wifi size={12} className="mr-1 inline" />{item.connection.connected === true ? "Conectado" : item.connection.connected === false ? "Sem conexão" : "Sem captura"}</p>
+			<div className="mt-2 space-y-1 text-xs font-semibold text-slate-500">
+				<p className="truncate"><UserRound size={12} className="mr-1 inline" />{item.technician?.name || "Não identificado"}</p>
+				{item.city?.name ? <p className="truncate"><MapPin size={12} className="mr-1 inline" />{item.city.name}</p> : null}
+				{item.company?.name ? <p className="truncate"><Building2 size={12} className="mr-1 inline" />{item.company.name}</p> : null}
+			</div>
+			<div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] font-black text-slate-500">
+				<span className="truncate" title={formatDateTime(date.value)}>{date.label} {compactDateTime(date.value)}</span>
+				{age ? <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">há {age}</span> : null}
+			</div>
+			<div className="mt-2 flex flex-wrap items-center gap-1.5">
+				<span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-slate-600">
+					<Wifi size={11} /> {connectionLabel(item.connection)}
+				</span>
+				{hasAttention ? (
+					<span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">
+						<AlertTriangle size={11} /> {healthStatus === "CRITICO" ? "Crítico" : "Atenção"}
+					</span>
+				) : null}
 			</div>
 		</button>
 	);
@@ -1027,15 +1192,18 @@ function HealthDetailModal({ detail, onClose }) {
 function ActivationDetailModal({ detail, onClose }) {
 	const item = detail.item;
 	return (
-		<ModalShell open title="Detalhe da O.S" description={item ? `${item.orderNumber || item.hubsoftOrderId} · ${item.orderTypeName}` : "Carregando informações"} onClose={onClose} size="5xl">
+		<ModalShell open title="Detalhe da O.S" description={item ? `${item.orderNumber || item.hubsoftOrderId} · ${item.orderTypeName}` : "Carregando informações"} onClose={onClose} size="6xl">
 			{detail.loading ? <Spinner /> : null}
 			{detail.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{detail.error}</div> : null}
 			{item ? (
 				<div className="grid gap-4 lg:grid-cols-2">
-					<InfoGroup title="O.S" rows={[["Número", item.orderNumber || item.hubsoftOrderId], ["Tipo", item.orderTypeName], ["Status HubSoft", item.rawStatus], ["Status Operacional", item.derivedStatus.label], ["Motivo", item.closureReasonName || "-"], ["Criada", formatDateTime(item.createdAtHubsoft)], ["Programada", formatDateTime(item.scheduledStartAt)], ["Executada", formatDateTime(item.executedEndAt)]]} />
-					<InfoGroup title="Técnico" rows={[["Técnico", item.technician.name], ["Match", item.technician.matchStatus], ["Empresa", item.company.name || "-"], ["Regional", item.regional.name || "-"], ["Cidade", item.city.name || "-"]]} />
+					<InfoGroup title="O.S" rows={[["Número", item.orderNumber || item.hubsoftOrderId], ["Tipo", item.orderTypeName], ["Status HubSoft", item.rawStatus], ["Status Operacional", item.derivedStatus.label], ["Motivo", item.closureReasonName || "-"], ["Marca", item.service.brand || "-"]]} />
+					<InfoGroup title="Planejamento" rows={[["Criada", formatDateTime(item.createdAtHubsoft)], ["Início programado", formatDateTime(item.scheduledStartAt)], ["Fim programado", formatDateTime(item.scheduledEndAt)], ["Início execução", formatDateTime(item.executedStartAt)], ["Fim execução", formatDateTime(item.executedEndAt)]]} />
+					<InfoGroup title="Responsável" rows={[["Técnico", item.technician.name], ["Match", item.technician.matchStatus || "-"], ["Empresa", item.company.name || "Não identificada"]]} />
+					<InfoGroup title="Localidade" rows={[["Cidade", item.city.name || "Não informada"], ["Regional", item.regional.name || "-"]]} />
 					<InfoGroup title="Serviço" rows={[["Plano", item.service.description || "-"], ["Velocidade", item.service.speedMbps ? `${item.service.speedMbps} Mbps` : "-"], ["Marca", item.service.brand], ["Status serviço", item.service.status || "-"]]} />
 					<InfoGroup title="Conexão" rows={[["Conectado", item.connection.connected === true ? "Sim" : item.connection.connected === false ? "Não" : "-"], ["PPPoE", item.connection.pppoeUsername || "-"], ["Sessão", durationLabel(item.connection.sessionTimeSeconds)], ["Download", item.connection.downloadGigabytes ? `${item.connection.downloadGigabytes} GB` : "-"], ["Upload", item.connection.uploadGigabytes ? `${item.connection.uploadGigabytes} GB` : "-"], ["NAS", item.connection.nasIpAddress || "-"], ["Porta NAS", item.connection.nasPortId || "-"], ["Captura", formatDateTime(item.connection.capturedAt)]]} />
+					<InfoGroup title="Saúde" rows={[["Classificação", item.health?.status ? HEALTH_STATUS[item.health.status]?.label || item.health.status : "-"], ["Janela", item.health?.window || "-"], ["Dias desde ativação", item.health?.daysSinceActivation ?? "-"], ["Motivos", item.health?.reasons?.length ? item.health.reasons.map(reasonLabel).join(", ") : "-"], ["Avaliada em", formatDateTime(item.health?.evaluatedAt)]]} />
 					<InfoGroup title="Auditoria" rows={[["Primeira sincronização", formatDateTime(item.firstSeenAt)], ["Última sincronização", formatDateTime(item.lastSeenAt)], ["Versão snapshot", item.version], ["Motivo status", item.derivedStatus.reason]]} />
 				</div>
 			) : null}
