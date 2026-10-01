@@ -749,14 +749,20 @@ jobs:
              fi
              \$SUDO mkdir -p \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\"
              \$SUDO chown -R operacao:operacao \"\$operacao_app_path/backend/uploads\" \"\$operacao_app_path/backend/logs\" || true
-             if [ -f \"\$operacao_env_file\" ]; then
-               node_env_file_arg=\"--env-file=\$operacao_env_file\"
+             service_env_file=\"\$(systemctl cat \"\$operacao_service\" 2>/dev/null | sed -n 's/^[[:space:]]*EnvironmentFile=//p' | tail -n 1 | sed 's/^-//')\"
+             if [ -n \"\$service_env_file\" ] && [ -f \"\$service_env_file\" ]; then
+               effective_env_file=\"\$service_env_file\"
+             else
+               effective_env_file=\"\$operacao_env_file\"
+             fi
+             if [ -f \"\$effective_env_file\" ]; then
+               echo \"Usando env da Operação em \$effective_env_file\"
+               node_env_file_arg=\"--env-file=\$effective_env_file\"
                rot_api_port=\"\$(node \"\$node_env_file_arg\" -p \"process.env.ROT_API_PORT || ''\")\"
              else
                node_env_file_arg=''
                rot_api_port=''
              fi
-             \$SUDO node \$node_env_file_arg scripts/database-backup.js --scheduled || echo 'Backup da Operação falhou; seguindo com migrations conforme deploy manual historico.'
              \$SUDO node \$node_env_file_arg scripts/run-sql-migrations.js
              \$SUDO systemctl restart \"\$operacao_service\"
              \$SUDO nginx -t
