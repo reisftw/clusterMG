@@ -209,6 +209,9 @@ export default function App() {
 				<Route path="rompimentos" element={<RompimentosPage />} />
 				<Route path="atividades" element={<PrivateRoute permission={["rot.activities.view","rot.activities.manage"]}><ActivitiesPage /></PrivateRoute>} />
 				<Route path="ativacoes" element={<PrivateRoute permission={["ativacoes.visualizar","ativacoes.kanban.visualizar","ativacoes.saude.visualizar","ativacoes.qualidade.visualizar"]}><AtivacoesPage /></PrivateRoute>} />
+				<Route path="ativacoes/kanban" element={<PrivateRoute permission="ativacoes.kanban.visualizar"><AtivacoesPage /></PrivateRoute>} />
+				<Route path="ativacoes/saude" element={<PrivateRoute permission="ativacoes.saude.visualizar"><AtivacoesPage /></PrivateRoute>} />
+				<Route path="ativacoes/qualidade" element={<PrivateRoute permission="ativacoes.qualidade.visualizar"><AtivacoesPage /></PrivateRoute>} />
 				<Route path="ranking" element={<PrivateRoute permission={["rot.ranking.view"]}><RankingPage /></PrivateRoute>} />
 				<Route path="relatorios-auditoria" element={<PrivateRoute permission={["rot.audit_reports.view","rot.bag_audit.view","rot.bag_audit.manage"]}><AuditReportsPage /></PrivateRoute>} />
 				<Route

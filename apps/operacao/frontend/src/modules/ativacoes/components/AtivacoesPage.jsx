@@ -51,6 +51,9 @@ const SUMMARY_CARDS = [
 	["completedToday", "OS concluídas hoje", CheckCircle2],
 	["pending", "Pendentes", Clock3],
 	["inProgress", "Em atendimento", Activity],
+];
+
+const SECONDARY_CARDS = [
 	["awaitingSchedule", "Aguard. agendamento", CalendarDays],
 	["awaitingApproval", "Aguard. aprovação", Eye],
 	["pendingValidation", "Pend. validação", ListChecks],
@@ -121,12 +124,27 @@ function reasonLabel(reason) {
 
 function filterPayload(filters) {
 	const payload = { ...filters };
+	delete payload.healthEvent;
 	if (filters.period !== "custom") {
 		delete payload.from;
 		delete payload.to;
 	}
 	return payload;
 }
+
+function pageFromPath(pathname) {
+	if (pathname.endsWith("/kanban")) return "kanban";
+	if (pathname.endsWith("/saude")) return "saude";
+	if (pathname.endsWith("/qualidade")) return "qualidade";
+	return "dashboard";
+}
+
+const PAGE_COPY = {
+	dashboard: { breadcrumb: "Operação / Ativações", title: "Visão Geral", description: "Acompanhe volume, andamento e desempenho das ativações." },
+	kanban: { breadcrumb: "Operação / Ativações / Kanban", title: "Kanban", description: "Acompanhe o fluxo das instalações por etapa operacional." },
+	saude: { breadcrumb: "Operação / Ativações / Saúde", title: "Saúde", description: "Priorize ativações recentes com sinais de atenção ou risco." },
+	qualidade: { breadcrumb: "Operação / Ativações / Qualidade", title: "Qualidade", description: "Compare métricas objetivas por técnico, empresa, cidade e tipo de OS." },
+};
 
 export default function AtivacoesPage() {
 	const { hasPermission } = useRotAuth();
@@ -135,7 +153,8 @@ export default function AtivacoesPage() {
 	const canExport = hasPermission("ativacoes.exportar");
 	const canExportHealth = hasPermission("ativacoes.saude.exportar");
 	const canExportQuality = hasPermission("ativacoes.qualidade.exportar");
-	const [tab, setTab] = useState("dashboard");
+	const tab = pageFromPath(location.pathname);
+	const pageCopy = PAGE_COPY[tab] || PAGE_COPY.dashboard;
 	const [filters, setFilters] = useState({ period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" });
 	const [qualityDimension, setQualityDimension] = useState("tecnicos");
 	const [filterOptions, setFilterOptions] = useState(null);
@@ -154,25 +173,18 @@ export default function AtivacoesPage() {
 
 	const effectiveFilters = useMemo(() => filterPayload(filters), [filters]);
 
-	useEffect(() => {
-		const params = new URLSearchParams(location.search);
-		if (params.get("tab") === "kanban") setTab("kanban");
-		if (params.get("tab") === "saude") setTab("saude");
-		if (params.get("tab") === "qualidade") setTab("qualidade");
-	}, [location.search]);
-
 	async function load() {
 		setLoading(true);
 		setError("");
 		try {
-			const [filtersData, dashboardData, kanbanData] = await Promise.all([
+			const requests = [
 				filterOptions ? Promise.resolve({ filters: filterOptions }) : fetchAtivacoesFilters(),
-				fetchAtivacoesDashboard(effectiveFilters),
-				fetchAtivacoesKanban({ ...effectiveFilters, limit: 500 }),
-			]);
+				tab === "kanban" ? fetchAtivacoesKanban({ ...effectiveFilters, limit: 500 }) : fetchAtivacoesDashboard(effectiveFilters),
+			];
+			const [filtersData, mainData] = await Promise.all(requests);
 			setFilterOptions(filtersData.filters);
-			setDashboard(dashboardData);
-			setKanban(kanbanData);
+			if (tab === "kanban") setKanban(mainData);
+			else setDashboard(mainData);
 		} catch (err) {
 			setError(err?.message || "Não foi possível carregar ativações.");
 		} finally {
@@ -267,6 +279,7 @@ export default function AtivacoesPage() {
 	}
 
 	const latestSync = dashboard?.latestSync || kanban?.latestSync;
+	const currentData = tab === "kanban" ? kanban : tab === "saude" ? health : tab === "qualidade" ? quality : dashboard;
 
 	return (
 		<div className="space-y-5">
@@ -277,15 +290,15 @@ export default function AtivacoesPage() {
 							<Rocket size={26} />
 						</span>
 						<div className="min-w-0">
-							<p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Operação &gt; Ativações</p>
-							<h1 className="mt-1 text-3xl font-black text-slate-950">Ativações</h1>
+							<p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">{pageCopy.breadcrumb}</p>
+							<h1 className="mt-1 text-3xl font-black text-slate-950">{pageCopy.title}</h1>
 							<p className="mt-1 max-w-3xl text-sm font-semibold text-slate-500">
-								Kanban e indicadores baseados nos snapshots HubSoft já sincronizados no banco da Operação.
+								{pageCopy.description}
 							</p>
 						</div>
 					</div>
 					<div className="flex flex-wrap gap-2">
-						{canExport ? (
+						{canExport && (tab === "dashboard" || tab === "kanban") ? (
 							<a href={ativacoesExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50">
 								<Download size={17} /> Exportar CSV
 							</a>
@@ -307,31 +320,14 @@ export default function AtivacoesPage() {
 						) : null}
 					</div>
 				</div>
-				<div className="mt-4 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 lg:grid-cols-[1.3fr_0.7fr]">
+				<div className="mt-4 grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 xl:grid-cols-[1fr_auto]">
 					<Filters filters={filters} setFilters={setFilters} options={filterOptions} tab={tab} />
-					<div className="rounded-2xl border border-slate-200 bg-white p-4">
-						<p className="text-xs font-black uppercase text-slate-500">Estado da sincronização</p>
-						<p className="mt-2 text-sm font-bold text-slate-900">{latestSync?.status || "Sem execução registrada"}</p>
-						<p className="mt-1 text-xs font-semibold text-slate-500">
-							Última: {formatDateTime(latestSync?.finished_at || latestSync?.started_at || latestSync?.created_at)}
-						</p>
-						<p className="mt-2 text-xs font-semibold text-slate-500">
-							Registros: {latestSync?.records_found ?? "-"} · Novos {latestSync?.records_inserted ?? "-"} · Atualizados {latestSync?.records_updated ?? "-"}
-						</p>
-						{syncJob ? <p className="mt-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">Job: {syncJob.status}{syncJob.error ? ` · ${syncJob.error}` : ""}</p> : null}
-					</div>
+					<SyncStatusBadge latestSync={latestSync} syncJob={syncJob} />
 				</div>
 			</section>
 
-			{error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div> : null}
-			{loading && !dashboard ? <Spinner fullScreen /> : null}
-
-			<div className="flex gap-2">
-				<button type="button" onClick={() => setTab("dashboard")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "dashboard" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Visão Geral</button>
-				<button type="button" onClick={() => setTab("kanban")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "kanban" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Kanban</button>
-				<button type="button" onClick={() => setTab("saude")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "saude" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Saúde</button>
-				<button type="button" onClick={() => setTab("qualidade")} className={`rounded-2xl px-4 py-2 text-sm font-black ${tab === "qualidade" ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-600"}`}>Qualidade</button>
-			</div>
+			{error ? <ErrorState message={error} onRetry={tab === "saude" ? loadHealth : tab === "qualidade" ? loadQuality : load} /> : null}
+			{loading && !currentData ? <Spinner fullScreen /> : null}
 
 			{tab === "dashboard" ? <DashboardView data={dashboard} /> : null}
 			{tab === "kanban" ? <KanbanView data={kanban} onOpen={openDetail} /> : null}
@@ -347,33 +343,45 @@ export default function AtivacoesPage() {
 
 function Filters({ filters, setFilters, options, tab }) {
 	const setField = (key, value) => setFilters((current) => ({ ...current, [key]: value }));
+	const clearField = (key) => setField(key, "");
+	const reset = () => setFilters((current) => ({ ...current, period: "last7", from: todayIso(), to: todayIso(), orderTypeId: "", status: "", technicianId: "", companyId: "", regionalId: "", cityId: "", brand: "", technicianIdentified: "", healthStatus: "", window: "", healthEvent: "", withRecall: "", repeatedSupport: "", noConnection: "", noTraffic: "", staleData: "", quality: "" }));
+	const optionLabel = (items = [], id) => items.find((item) => String(item.id) === String(id))?.label || id;
+	const chips = [
+		filters.period && { key: "period", label: optionLabel(PERIODS, filters.period) },
+		filters.orderTypeId && { key: "orderTypeId", label: optionLabel((options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name })), filters.orderTypeId) },
+		filters.cityId && { key: "cityId", label: optionLabel((options?.cities || []).map((item) => ({ id: item.id, label: item.name })), filters.cityId) },
+		filters.technicianId && { key: "technicianId", label: optionLabel((options?.technicians || []).map((item) => ({ id: item.id, label: item.name })), filters.technicianId) },
+		filters.companyId && { key: "companyId", label: optionLabel((options?.companies || []).map((item) => ({ id: item.id, label: item.name })), filters.companyId) },
+		filters.healthStatus && { key: "healthStatus", label: filters.healthStatus },
+		filters.window && { key: "window", label: filters.window },
+		filters.quality && { key: "quality", label: optionLabel(options?.quality || [], filters.quality) },
+	].filter(Boolean);
 	return (
-		<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-			<Select label="Período" value={filters.period} onChange={(v) => setField("period", v)} options={PERIODS} />
-			{filters.period === "custom" ? (
-				<>
-					<Field label="De" type="date" value={filters.from} onChange={(v) => setField("from", v)} />
-					<Field label="Até" type="date" value={filters.to} onChange={(v) => setField("to", v)} />
-				</>
-			) : null}
-			<Select label="Tipo OS" value={filters.orderTypeId} onChange={(v) => setField("orderTypeId", v)} options={(options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-			<Select label="Status" value={filters.status} onChange={(v) => setField("status", v)} options={[{ id: "pendente", label: "Pendente" }, { id: "aguardando_agendamento", label: "Aguard. agendamento" }, { id: "aguardando_aprovacao", label: "Aguard. aprovação" }, { id: "finalizado", label: "Finalizado" }]} allowAll />
-			<Select label="Técnico" value={filters.technicianId} onChange={(v) => setField("technicianId", v)} options={(options?.technicians || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-			<Select label="Empresa" value={filters.companyId} onChange={(v) => setField("companyId", v)} options={(options?.companies || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-			<Select label="Regional" value={filters.regionalId} onChange={(v) => setField("regionalId", v)} options={(options?.regionals || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-			<Select label="Cidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
-			<Select label="Marca" value={filters.brand} onChange={(v) => setField("brand", v)} options={(options?.brands || []).map((item) => ({ id: item, label: item }))} allowAll />
-			<Select label="Técnico identificado" value={filters.technicianIdentified} onChange={(v) => setField("technicianIdentified", v)} options={[{ id: "yes", label: "Com técnico" }, { id: "no", label: "Sem técnico" }]} allowAll />
-			{tab === "saude" ? (
-				<>
-					<Select label="Saúde" value={filters.healthStatus} onChange={(v) => setField("healthStatus", v)} options={[{ id: "CRITICO", label: "Crítico" }, { id: "ATENCAO", label: "Atenção" }, { id: "SEM_DADOS", label: "Sem dados" }, { id: "SAUDAVEL", label: "Saudável" }]} allowAll />
-					<Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll />
-					<Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }]} allowAll />
-				</>
-			) : null}
-			{tab === "qualidade" ? (
-				<Select label="Qualidade" value={filters.quality} onChange={(v) => setField("quality", v)} options={(options?.quality || []).map((item) => ({ id: item.id, label: item.label }))} allowAll />
-			) : null}
+		<div className="space-y-3">
+			<div className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+				<Select label="Período" value={filters.period} onChange={(v) => setField("period", v)} options={PERIODS} />
+				<Select label="Tipo OS" value={filters.orderTypeId} onChange={(v) => setField("orderTypeId", v)} options={(options?.orderTypes || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+				<Select label="Cidade" value={filters.cityId} onChange={(v) => setField("cityId", v)} options={(options?.cities || []).filter((item) => !filters.regionalId || item.regionalId === filters.regionalId).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+				<Select label="Técnico" value={filters.technicianId} onChange={(v) => setField("technicianId", v)} options={(options?.technicians || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+				{tab === "saude" ? <Select label="Saúde" value={filters.healthStatus} onChange={(v) => setField("healthStatus", v)} options={[{ id: "CRITICO", label: "Crítico" }, { id: "ATENCAO", label: "Atenção" }, { id: "SEM_DADOS", label: "Sem dados" }, { id: "SAUDAVEL", label: "Saudável" }]} allowAll /> : <Select label="Empresa" value={filters.companyId} onChange={(v) => setField("companyId", v)} options={(options?.companies || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />}
+			</div>
+			<details className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+				<summary className="cursor-pointer text-sm font-black text-slate-700">Mais filtros</summary>
+				<div className="mt-3 grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+					{filters.period === "custom" ? <><Field label="De" type="date" value={filters.from} onChange={(v) => setField("from", v)} /><Field label="Até" type="date" value={filters.to} onChange={(v) => setField("to", v)} /></> : null}
+					{tab !== "kanban" ? <Select label="Status" value={filters.status} onChange={(v) => setField("status", v)} options={[{ id: "pendente", label: "Pendente" }, { id: "aguardando_agendamento", label: "Aguard. agendamento" }, { id: "aguardando_aprovacao", label: "Aguard. aprovação" }, { id: "finalizado", label: "Finalizado" }]} allowAll /> : null}
+					<Select label="Empresa" value={filters.companyId} onChange={(v) => setField("companyId", v)} options={(options?.companies || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+					<Select label="Regional" value={filters.regionalId} onChange={(v) => setField("regionalId", v)} options={(options?.regionals || []).map((item) => ({ id: item.id, label: item.name }))} allowAll />
+					<Select label="Marca" value={filters.brand} onChange={(v) => setField("brand", v)} options={(options?.brands || []).map((item) => ({ id: item, label: item }))} allowAll />
+					<Select label="Técnico identificado" value={filters.technicianIdentified} onChange={(v) => setField("technicianIdentified", v)} options={[{ id: "yes", label: "Com técnico" }, { id: "no", label: "Sem técnico" }]} allowAll />
+					{tab === "saude" ? <><Select label="Janela" value={filters.window} onChange={(v) => setField("window", v)} options={[{ id: "D+1", label: "D+1" }, { id: "D+7", label: "D+7" }, { id: "D+15", label: "D+15" }, { id: "D+30", label: "D+30" }]} allowAll /><Select label="Eventos" value={filters.healthEvent} onChange={(v) => setFilters((current) => ({ ...current, healthEvent: v, withRecall: v === "withRecall" ? "yes" : "", repeatedSupport: v === "repeatedSupport" ? "yes" : "", noConnection: v === "noConnection" ? "yes" : "", noTraffic: v === "noTraffic" ? "yes" : "", staleData: v === "staleData" ? "yes" : "" }))} options={[{ id: "withRecall", label: "Com rechamado" }, { id: "repeatedSupport", label: "Com reincidência" }, { id: "noConnection", label: "Sem conexão" }, { id: "noTraffic", label: "Sem tráfego" }, { id: "staleData", label: "Dado desatualizado" }]} allowAll /></> : null}
+					{tab === "qualidade" ? <Select label="Qualidade" value={filters.quality} onChange={(v) => setField("quality", v)} options={(options?.quality || []).map((item) => ({ id: item.id, label: item.label }))} allowAll /> : null}
+				</div>
+			</details>
+			<div className="flex flex-wrap items-center gap-2">
+				{chips.map((chip) => <button type="button" key={chip.key} onClick={() => clearField(chip.key)} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{chip.label} ×</button>)}
+				{chips.length ? <button type="button" onClick={reset} className="text-xs font-black text-slate-500 hover:text-slate-900">Limpar filtros</button> : null}
+			</div>
 		</div>
 	);
 }
@@ -383,21 +391,70 @@ function Field({ label, type = "text", value, onChange }) {
 }
 
 function Select({ label, value, onChange, options, allowAll = false }) {
-	return <label className="grid gap-1 text-xs font-black uppercase text-slate-500">{label}<select value={value || ""} onChange={(event) => onChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500">{allowAll ? <option value="">Todos</option> : null}{options.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>;
+	return <label className="grid gap-1 text-xs font-black uppercase text-slate-500">{label}<select value={value || ""} onChange={(event) => onChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-blue-500">{allowAll ? <option value="">Todos</option> : null}{(options || []).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>;
+}
+
+function SyncStatusBadge({ latestSync, syncJob }) {
+	const rawStatus = syncJob?.status || latestSync?.status || "idle";
+	const status = String(rawStatus).toLowerCase();
+	const latestDate = latestSync?.finishedAt || latestSync?.finished_at || latestSync?.startedAt || latestSync?.started_at || latestSync?.created_at;
+	const label = status === "running" || status === "starting" ? "Sincronizando" : status === "failed" ? "Falha na sincronização" : latestDate ? "Última sincronização" : "Sem execução recente";
+	const detail = syncJob?.error || latestSync?.error_message || latestSync?.error || (latestDate ? formatDateTime(latestDate) : "Dados atualizados conforme filtros.");
+	const className = status === "failed"
+		? "border-red-200 bg-red-50 text-red-700"
+		: status === "running" || status === "starting"
+			? "border-blue-200 bg-blue-50 text-blue-700"
+			: "border-emerald-200 bg-emerald-50 text-emerald-700";
+	return (
+		<div className={`flex min-w-[260px] items-center gap-3 rounded-2xl border px-3 py-2 ${className}`}>
+			<RefreshCw size={18} className={status === "running" || status === "starting" ? "animate-spin" : ""} />
+			<div className="min-w-0">
+				<p className="text-xs font-black uppercase">{label}</p>
+				<p className="truncate text-xs font-bold opacity-80">{detail}</p>
+			</div>
+		</div>
+	);
+}
+
+function ErrorState({ message, onRetry }) {
+	return (
+		<div className="rounded-3xl border border-red-200 bg-red-50 p-4 shadow-sm">
+			<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+				<div>
+					<p className="text-sm font-black text-red-800">Não foi possível carregar esta visão.</p>
+					<p className="mt-1 text-sm font-semibold text-red-700">{message}</p>
+				</div>
+				<button type="button" onClick={onRetry} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-2 text-sm font-black text-white transition hover:bg-red-700">
+					<RefreshCw size={16} /> Tentar novamente
+				</button>
+			</div>
+		</div>
+	);
 }
 
 function DashboardView({ data }) {
 	const summary = data?.summary || {};
 	return (
 		<div className="space-y-4">
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 				{SUMMARY_CARDS.map(([key, label, Icon]) => (
-					<div key={key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+					<div key={key} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 						<div className="mb-3 flex items-start justify-between gap-3">
 							<p className="text-xs font-black uppercase text-slate-500">{label}</p>
 							<span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700"><Icon size={18} /></span>
 						</div>
 						<p className="text-3xl font-black text-slate-950">{summary[key] ?? 0}</p>
+					</div>
+				))}
+			</div>
+			<div className="grid gap-2 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-3 xl:grid-cols-6">
+				{SECONDARY_CARDS.map(([key, label, Icon]) => (
+					<div key={key} className="flex items-center gap-3 rounded-2xl bg-slate-50 px-3 py-3">
+						<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm"><Icon size={16} /></span>
+						<div className="min-w-0">
+							<p className="truncate text-[11px] font-black uppercase text-slate-500">{label}</p>
+							<p className="text-xl font-black text-slate-950">{summary[key] ?? 0}</p>
+						</div>
 					</div>
 				))}
 			</div>

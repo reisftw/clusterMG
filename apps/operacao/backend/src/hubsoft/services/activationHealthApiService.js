@@ -260,7 +260,7 @@ function sortHealthItems(items) {
 	});
 }
 
-async function evaluateRows(db, rows, { persist = true } = {}) {
+async function evaluateRows(db, rows, { persist = false } = {}) {
 	const evaluated = [];
 	for (const row of rows) {
 		const evaluation = evaluateActivationHealth(row);
@@ -273,7 +273,7 @@ async function evaluateRows(db, rows, { persist = true } = {}) {
 async function listHealth(db, query = {}) {
 	const filters = buildFilters(query);
 	const { rows } = await db.query(`${baseSelect()} where ${filters.where}`, filters.values);
-	const evaluated = await evaluateRows(db, rows, { persist: query.persist !== "false" });
+	const evaluated = await evaluateRows(db, rows, { persist: query.persist === "true" });
 	const filtered = sortHealthItems(applyDerivedFilters(evaluated, query));
 	const page = parsePositiveInt(query.page, 1, 10000);
 	const limit = parsePositiveInt(query.limit, 30, 10000);
