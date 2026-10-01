@@ -10,6 +10,7 @@ import PublicQrPage from "./pages/PublicQrPage";
 import AbsencesPage from "./pages/admin/AbsencesPage";
 import ActivitiesPage from "./pages/admin/ActivitiesPage";
 import AgentsPage from "./modules/regionais/components/AgentesPage";
+import AtivacoesPage from "./modules/ativacoes/components/AtivacoesPage";
 import AuditReportsPage from "./modules/tecnicosAuditoria/components/TecnicosAuditoriaRelatoriosPage";
 import AuditLogsPage from "./pages/admin/AuditLogsPage";
 import AssetsSecurityPage from "./pages/admin/AssetsSecurityPage";
@@ -207,6 +208,7 @@ export default function App() {
 				<Route path="chuva" element={<RainPage />} />
 				<Route path="rompimentos" element={<RompimentosPage />} />
 				<Route path="atividades" element={<PrivateRoute permission={["rot.activities.view","rot.activities.manage"]}><ActivitiesPage /></PrivateRoute>} />
+				<Route path="ativacoes" element={<PrivateRoute permission={["ativacoes.visualizar","ativacoes.kanban.visualizar"]}><AtivacoesPage /></PrivateRoute>} />
 				<Route path="ranking" element={<PrivateRoute permission={["rot.ranking.view"]}><RankingPage /></PrivateRoute>} />
 				<Route path="relatorios-auditoria" element={<PrivateRoute permission={["rot.audit_reports.view","rot.bag_audit.view","rot.bag_audit.manage"]}><AuditReportsPage /></PrivateRoute>} />
 				<Route

@@ -24,6 +24,7 @@ const equipmentsRoutes = require("./equipments/routes");
 const fleetRoutes = require("./fleet/routes");
 const healthRoutes = require("./health/routes");
 const holidaysRoutes = require("./holidays/routes");
+const hubsoftActivationRoutes = require("./hubsoft/routes");
 const integrationsRoutes = require("./integrations/routes");
 const keysRoutes = require("./keys/routes");
 const legacySyncRoutes = require("./legacySync/routes");
@@ -110,6 +111,7 @@ function createApp() {
 	app.use("/api/public/qr", publicQrRoutes);
 	app.use("/api/admin/audit-logs", auditRoutes);
 	app.use("/api/admin/holidays", holidaysRoutes);
+	app.use("/api/admin/ativacoes", hubsoftActivationRoutes);
 	app.use("/api/admin/notices", noticesRoutes);
 	app.use("/api/admin/keys", keysRoutes);
 	app.use("/api/admin/materials", materialsRoutes);

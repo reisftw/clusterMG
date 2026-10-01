@@ -28,6 +28,7 @@ import {
 	Plug,
 	QrCode,
 	RefreshCw,
+	Rocket,
 	Settings,
 	Shield,
 	ShieldCheck,
@@ -177,8 +178,14 @@ const SETTINGS_MENU_TREE = Object.entries(SETTINGS_MENU_ITEMS).map(([key, item])
 const ASSETS_SECURITY_MENU_TREE = Object.entries(ASSETS_SECURITY_MENU_ITEMS).map(([key, item]) => ({ key, ...item }));
 const SST_MENU_TREE = Object.entries(SST_MENU_ITEMS).map(([key, item]) => ({ key, ...item }));
 
+const ACTIVATIONS_MENU_TREE = [
+	{ key: "ativacoes-overview", label: "Visão Geral", path: "/ativacoes", icon: LayoutDashboard, permission: "ativacoes.visualizar", end: true },
+	{ key: "ativacoes-kanban", label: "Kanban", path: "/ativacoes?tab=kanban", icon: ListChecks, permission: "ativacoes.kanban.visualizar" },
+];
+
 const MACRO_MENU_TREE = [
 	{ key: "operacao", label: "Operação", icon: ListChecks, children: OPERATION_MENU_TREE },
+	{ key: "ativacoes", label: "Ativações", icon: Rocket, children: ACTIVATIONS_MENU_TREE },
 	{ key: "ativos_seguranca", label: "Ativos & Segurança", icon: ShieldCheck, children: ASSETS_SECURITY_MENU_TREE },
 	{ key: "seguranca_trabalho", label: "Segurança do Trabalho", icon: HardHat, children: SST_MENU_TREE },
 	{ key: "gestao", label: "Gestão", icon: UsersRound, children: MANAGEMENT_MENU_TREE },
@@ -640,6 +647,7 @@ function buildVisibleMenuTree(user, operationItemKeys) {
 	const itemSources = {
 		operacao: OPERATION_MENU_ITEMS,
 		ativos_seguranca: ASSETS_SECURITY_MENU_ITEMS,
+		ativacoes: Object.fromEntries(ACTIVATIONS_MENU_TREE.map((item) => [item.key, item])),
 		seguranca_trabalho: SST_MENU_ITEMS,
 		gestao: MANAGEMENT_MENU_ITEMS,
 		configuracoes: SETTINGS_MENU_ITEMS,
