@@ -541,7 +541,7 @@ function DashboardView({ data, period, onOpenClosedReasons }) {
 	const familyItems = distributions.byFamily || [];
 	const kpis = [
 		{ label: "Ativações abertas", value: total, sub: context, icon: Rocket, tone: "blue" },
-		{ label: "Concluídas", value: completed, sub: `${percentOf(completed, operationalBase)} de concluídas + backlog`, icon: CheckCircle2, tone: "emerald" },
+		{ label: "Concluídas no período", value: completed, sub: `${percentOf(completed, operationalBase)} de concluídas + backlog`, icon: CheckCircle2, tone: "emerald" },
 		{ label: "Backlog", value: backlog, sub: "Pendente ou aguardando agendamento", icon: Clock3, tone: "amber" },
 		{ label: "Em atendimento", value: summary.inProgress ?? 0, sub: `${percentOf(summary.inProgress, operationalBase)} de concluídas + backlog`, icon: Activity, tone: "violet" },
 	];

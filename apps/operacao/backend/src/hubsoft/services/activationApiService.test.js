@@ -100,6 +100,27 @@ test("dashboard contabiliza ativacoes apenas com a familia permitida", async () 
 	assert.equal(data.distributions.byType.some((item) => item.label === "SUPORTE"), false);
 });
 
+test("dashboard conta concluidas pela data de termino, mesmo abertas em outro mes", async () => {
+	const crossMonth = {
+		...rows[1],
+		id: "snap-cross-month",
+		hubsoft_order_id: 99,
+		order_number: "OS-CROSS",
+		created_at_hubsoft: "2026-09-29T12:00:00Z",
+		executed_end_at: "2026-10-01T13:00:00Z",
+	};
+	const data = await dashboard({
+		async query(sql) {
+			if (sql.includes("os.created_at_hubsoft at time zone")) return { rows: [] };
+			if (sql.includes("os.activation_closure_status = 'CONCLUIDA'")) return { rows: [crossMonth] };
+			return { rows: [] };
+		},
+	}, { period: "custom", from: "2026-10-01", to: "2026-10-31" });
+	assert.equal(data.summary.created, 0);
+	assert.equal(data.summary.completed, 1);
+	assert.equal(data.distributions.byFamily.find((item) => item.id === "installation").completed, 1);
+});
+
 test("kanban separa abertas atuais de encerradas sem conclusao", async () => {
 	const kanbanRows = [
 		...rows,
