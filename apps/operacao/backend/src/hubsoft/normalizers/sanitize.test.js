@@ -27,3 +27,8 @@ test("sanitizeHubsoftPayload remove caracteres de controle rejeitados pelo jsonb
 	const sanitized = sanitizeHubsoftPayload({ status: "OK\u0000TESTE\u0007" });
 	assert.equal(sanitized.status, "OKTESTE");
 });
+
+test("sanitizeHubsoftPayload remove surrogate unicode quebrado", () => {
+	const sanitized = sanitizeHubsoftPayload({ status: "Caminhada \uD83D quebrada" });
+	assert.equal(sanitized.status, "Caminhada  quebrada");
+});
