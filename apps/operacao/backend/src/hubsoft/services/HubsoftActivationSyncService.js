@@ -1,5 +1,5 @@
 const { HubsoftReadonlyClient } = require("../clients/HubsoftReadonlyClient");
-const { HUBSOFT_ACTIVATION_ORDER_TYPE_IDS } = require("../constants");
+const { HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS, HUBSOFT_ACTIVATION_ORDER_TYPE_IDS } = require("../constants");
 const { normalizeActivationOrder } = require("../normalizers/activationOrder");
 const { normalizeConnectionSnapshot } = require("../normalizers/connection");
 const { localDateKey } = require("../normalizers/dates");
@@ -117,7 +117,8 @@ class HubsoftActivationSyncService {
 		let hasLock = false;
 		const dateFrom = options.dateFrom || defaultDateFrom();
 		const dateTo = options.dateTo || defaultDateTo();
-		const orderTypeIds = (options.orderTypeIds?.length ? options.orderTypeIds : HUBSOFT_ACTIVATION_ORDER_TYPE_IDS)
+		const defaultOrderTypeIds = options.includeNonKpiTypes ? HUBSOFT_ACTIVATION_ORDER_TYPE_IDS : HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS;
+		const orderTypeIds = (options.orderTypeIds?.length ? options.orderTypeIds : defaultOrderTypeIds)
 			.map(Number)
 			.filter((id) => HUBSOFT_ACTIVATION_ORDER_TYPE_IDS.includes(id));
 		const perPage = Number(options.limit || this.hubsoftClient.perPage || 50);
