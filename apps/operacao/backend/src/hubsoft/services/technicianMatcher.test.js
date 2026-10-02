@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { resolveHubsoftTechnician } = require("./technicianMatcher");
+const { parseCompanyNameFromTechnicianName, resolveHubsoftTechnician } = require("./technicianMatcher");
 
 function fakeClient(rowsByQuery) {
 	return {
@@ -41,4 +41,32 @@ test("resolveHubsoftTechnician nao consulta cadastro quando HubSoft envia FILA",
 	}), { nome: "FILA" });
 	assert.equal(result.status, "not_found");
 	assert.equal(result.reason, "unassigned");
+});
+
+test("parseCompanyNameFromTechnicianName extrai empresa mantendo nome do tecnico completo", () => {
+	assert.equal(parseCompanyNameFromTechnicianName("GUSTAVO LEANDRO | JMD SERVIÇOS"), "JMD SERVIÇOS");
+	assert.equal(parseCompanyNameFromTechnicianName("GUSTAVO LEANDRO"), "");
+});
+
+test("resolveHubsoftTechnician cria empresa e tecnico quando nome HubSoft contem empresa", async () => {
+	const calls = [];
+	const client = {
+		async query(sql, params = []) {
+			calls.push({ sql, params });
+			if (sql.includes("from operacao_empresas")) return { rows: [] };
+			if (sql.includes("insert into operacao_empresas")) return { rows: [{ id: "emp-1", nome: "JMD SERVIÇOS" }] };
+			if (sql.includes("insert into operacao_tecnicos")) return { rows: [{ id: "tech-1", empresa_id: "emp-1", nome: "GUSTAVO LEANDRO | JMD SERVIÇOS" }] };
+			if (sql.includes("hubsoft_user_id")) return { rows: [] };
+			if (sql.includes("lower(coalesce(email")) return { rows: [] };
+			if (sql.includes("from operacao_tecnicos") && !sql.includes("insert")) return { rows: [] };
+			return { rows: [] };
+		},
+	};
+	const result = await resolveHubsoftTechnician(client, { id: 99, nome: "GUSTAVO LEANDRO | JMD SERVIÇOS" });
+	assert.equal(result.status, "matched");
+	assert.equal(result.reason, "auto_created_from_hubsoft_name");
+	assert.equal(result.nome, "GUSTAVO LEANDRO | JMD SERVIÇOS");
+	assert.equal(result.empresa_id, "emp-1");
+	assert.equal(calls.filter((call) => call.sql.includes("insert into operacao_empresas")).length, 1);
+	assert.equal(calls.filter((call) => call.sql.includes("insert into operacao_tecnicos")).length, 1);
 });

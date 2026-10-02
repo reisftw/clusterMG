@@ -84,28 +84,39 @@ const QUALITY_DIMENSIONS = [
 	{ id: "tipos", label: "Tipos de OS", api: "type" },
 ];
 
+const HUBSOFT_TIME_ZONE = "America/Sao_Paulo";
+
 function todayIso() {
-	return new Date().toISOString().slice(0, 10);
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone: HUBSOFT_TIME_ZONE,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).formatToParts(new Date());
+	const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	return `${map.year}-${map.month}-${map.day}`;
 }
 
 function formatDateTime(value) {
 	if (!value) return "-";
-	return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "-";
+	return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: HUBSOFT_TIME_ZONE });
 }
 
 function formatShortDate(value) {
 	if (!value) return "-";
-	const normalized = String(value).includes("T") ? value : `${value}T00:00:00`;
+	const normalized = String(value).includes("T") ? value : `${value}T12:00:00-03:00`;
 	const date = new Date(normalized);
 	if (Number.isNaN(date.getTime())) return "-";
-	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: HUBSOFT_TIME_ZONE });
 }
 
 function formatTime(value) {
 	if (!value) return "--:--";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "--:--";
-	return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+	return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: HUBSOFT_TIME_ZONE });
 }
 
 function formatNumber(value) {
@@ -878,7 +889,7 @@ function compactDateTime(value) {
 	if (!value) return "-";
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
-	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " · " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: HUBSOFT_TIME_ZONE }) + " · " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: HUBSOFT_TIME_ZONE });
 }
 
 function contextualDate(item) {
