@@ -1148,6 +1148,10 @@ function QualityDetailModal({ detail, onClose }) {
 	const [search, setSearch] = useState("");
 	const [scheduleStatus, setScheduleStatus] = useState("");
 	const [healthStatus, setHealthStatus] = useState("");
+	useEffect(() => {
+		if (detail.item) setPayload(detail.item);
+		setError(detail.error || "");
+	}, [detail.item, detail.error]);
 	const group = payload?.group || detail.group;
 	const pagination = payload?.pagination || { page: 1, limit: 25, total: payload?.items?.length || 0, totalPages: 1 };
 	async function reload(overrides = {}) {
@@ -1214,6 +1218,13 @@ function QualityDetailModal({ detail, onClose }) {
 											<td className="px-4 py-3 font-semibold text-slate-700">{item.city?.name || "Não informada"}</td>
 										</tr>
 									))}
+									{!payload.items?.length ? (
+										<tr>
+											<td colSpan={6} className="px-4 py-10 text-center text-sm font-bold text-slate-400">
+												Nenhuma O.S. encontrada para este grupo nos filtros atuais.
+											</td>
+										</tr>
+									) : null}
 								</tbody>
 							</table>
 						</div>

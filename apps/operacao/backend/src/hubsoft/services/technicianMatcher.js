@@ -1,8 +1,19 @@
 const { normalizeText, text, toNumberOrNull } = require("../utils/text");
 
+function withoutTrailingTechnicianNumber(value = "") {
+	return text(value).replace(/\s+\d+$/u, "").trim();
+}
+
+function looksLikeCompanyWithTechnicianNumber(value = "") {
+	const normalized = normalizeText(value);
+	return /\s+\d+$/.test(text(value)) && /\b(engenharia|servico|servicos|telecom|fibra|instalacao|instalacoes|construtora|tecnologia|manutencao)\b/.test(normalized);
+}
+
 function parseCompanyNameFromTechnicianName(name = "") {
 	const parts = text(name).split("|").map((part) => text(part)).filter(Boolean);
-	return parts.length >= 2 ? parts.at(-1) : "";
+	if (parts.length >= 2) return withoutTrailingTechnicianNumber(parts.at(-1));
+	if (looksLikeCompanyWithTechnicianNumber(name)) return withoutTrailingTechnicianNumber(name);
+	return "";
 }
 
 async function findCompanyByName(client, companyName) {

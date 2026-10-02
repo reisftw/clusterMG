@@ -45,6 +45,8 @@ test("resolveHubsoftTechnician nao consulta cadastro quando HubSoft envia FILA",
 
 test("parseCompanyNameFromTechnicianName extrai empresa mantendo nome do tecnico completo", () => {
 	assert.equal(parseCompanyNameFromTechnicianName("GUSTAVO LEANDRO | JMD SERVIÇOS"), "JMD SERVIÇOS");
+	assert.equal(parseCompanyNameFromTechnicianName("AK ENGENHARIA 1"), "AK ENGENHARIA");
+	assert.equal(parseCompanyNameFromTechnicianName("AK ENGENHARIA 2"), "AK ENGENHARIA");
 	assert.equal(parseCompanyNameFromTechnicianName("GUSTAVO LEANDRO"), "");
 });
 
