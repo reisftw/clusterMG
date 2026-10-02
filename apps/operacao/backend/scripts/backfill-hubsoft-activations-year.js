@@ -8,17 +8,21 @@ function argValue(name, fallback = "") {
 	return found ? found.slice(prefix.length) : fallback;
 }
 
-function iso(date) {
-	return localDateKey(date);
+function pad(value) {
+	return String(value).padStart(2, "0");
 }
 
-function monthRanges(year, until = new Date()) {
+function daysInMonth(year, month) {
+	return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function monthRanges(year, untilIso = localDateKey(new Date())) {
 	const ranges = [];
-	for (let month = 0; month < 12; month += 1) {
-		const from = new Date(Date.UTC(year, month, 1));
-		const to = new Date(Date.UTC(year, month + 1, 0));
-		if (from > until) break;
-		ranges.push({ from: iso(from), to: iso(to > until ? until : to) });
+	for (let month = 1; month <= 12; month += 1) {
+		const from = `${year}-${pad(month)}-01`;
+		const monthEnd = `${year}-${pad(month)}-${pad(daysInMonth(year, month))}`;
+		if (from > untilIso) break;
+		ranges.push({ from, to: monthEnd > untilIso ? untilIso : monthEnd });
 	}
 	return ranges;
 }
