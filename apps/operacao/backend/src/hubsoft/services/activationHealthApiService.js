@@ -1,4 +1,5 @@
 const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
+const { addLocalDays, localDateKey, localMonthEnd, localMonthStart } = require("../normalizers/dates");
 const { evaluateActivationHealth, resolveActivationDate } = require("./activationHealthRules");
 
 function text(value) {
@@ -12,27 +13,22 @@ function parsePositiveInt(value, fallback, max = 200) {
 }
 
 function todayRange() {
-	const now = new Date();
-	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-	return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+	const today = localDateKey(new Date());
+	return { from: today, to: today };
 }
 
 function dateRangeFromPreset(preset = "last30", query = {}) {
-	const now = new Date();
-	const pad = (value) => String(value).padStart(2, "0");
-	const iso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+	const today = localDateKey(new Date());
 	if (preset === "custom" && query.from && query.to) return { from: query.from, to: query.to };
 	if (preset === "today") return todayRange();
 	if (preset === "yesterday") {
-		const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-		return { from: iso(y), to: iso(y) };
+		const y = addLocalDays(today, -1);
+		return { from: y, to: y };
 	}
 	if (preset === "month") {
-		return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+		return { from: localMonthStart(today), to: localMonthEnd(today) };
 	}
-	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
-	return { from: iso(from), to: iso(now) };
+	return { from: addLocalDays(today, -29), to: today };
 }
 
 function baseSelect() {
@@ -134,9 +130,9 @@ function buildFilters(query = {}) {
 	];
 	const dateExpression = "coalesce(os.executed_end_at, os.executed_start_at, os.scheduled_end_at, os.created_at_hubsoft)";
 	values.push(period.from);
-	clauses.push(`${dateExpression} >= $${values.length}::date`);
+	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date >= $${values.length}::date`);
 	values.push(period.to);
-	clauses.push(`${dateExpression} < ($${values.length}::date + interval '1 day')`);
+	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date <= $${values.length}::date`);
 	const addEquals = (column, value, cast = "") => {
 		if (!text(value)) return;
 		values.push(value);

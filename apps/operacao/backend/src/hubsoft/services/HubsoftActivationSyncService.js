@@ -2,6 +2,7 @@ const { HubsoftReadonlyClient } = require("../clients/HubsoftReadonlyClient");
 const { HUBSOFT_ACTIVATION_ORDER_TYPE_IDS } = require("../constants");
 const { normalizeActivationOrder } = require("../normalizers/activationOrder");
 const { normalizeConnectionSnapshot } = require("../normalizers/connection");
+const { localDateKey } = require("../normalizers/dates");
 const {
 	insertConnectionSnapshotIfNeeded,
 	upsertClienteServicoSnapshot,
@@ -24,7 +25,7 @@ function pickHubsoftTechnician(order = {}) {
 function isoDateOnly(value) {
 	const date = value ? new Date(value) : null;
 	if (!date || Number.isNaN(date.getTime())) return null;
-	return date.toISOString().slice(0, 10);
+	return localDateKey(date);
 }
 
 function defaultDateFrom() {

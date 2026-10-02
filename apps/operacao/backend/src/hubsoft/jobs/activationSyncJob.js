@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const { localDateKey } = require("../normalizers/dates");
 const { HubsoftActivationSyncService } = require("../services/HubsoftActivationSyncService");
 
 const jobs = new Map();
@@ -62,7 +63,7 @@ function getHubsoftActivationSyncJob(id) {
 function isoDateOnly(value) {
 	const date = value ? new Date(value) : new Date();
 	if (Number.isNaN(date.getTime())) return null;
-	return date.toISOString().slice(0, 10);
+	return localDateKey(date);
 }
 
 function daysAgo(days) {

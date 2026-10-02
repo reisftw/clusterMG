@@ -1,5 +1,6 @@
 const { getHubsoftAuthHeader, resetHubsoftAuthCache } = require("../auth/hubsoftAuth");
 const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
+const { localDateTimeForHubsoft } = require("../normalizers/dates");
 
 const API_URL = "https://api.sempre.hubsoft.com.br/api/v1";
 const TRANSIENT_STATUS = new Set([408, 429, 502, 503, 504]);
@@ -100,8 +101,8 @@ class HubsoftReadonlyClient {
 
 	buildOrderSearchPayload({ orderType, dateFrom, dateTo, status = "" }) {
 		return {
-			data_inicio: new Date(dateFrom).toISOString(),
-			data_fim: new Date(dateTo).toISOString(),
+			data_inicio: localDateTimeForHubsoft(dateFrom, false),
+			data_fim: localDateTimeForHubsoft(dateTo, true),
 			tipo_data: status === "finalizado" ? "data_termino_executado" : "data_cadastro",
 			order_by: status === "finalizado" ? "data_termino_executado" : "data_cadastro",
 			order_by_key: "DESC",

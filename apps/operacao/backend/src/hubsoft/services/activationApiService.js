@@ -1,4 +1,5 @@
 const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
+const { addLocalDays, localDateKey, localMonthEnd, localMonthStart } = require("../normalizers/dates");
 const { ACTIVATION_KANBAN_COLUMNS, resolveActivationOperationalStatus } = require("./activationOperationalStatus");
 
 function text(value) {
@@ -20,30 +21,25 @@ function parsePositiveInt(value, fallback, max = 200) {
 }
 
 function todayRange() {
-	const now = new Date();
-	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-	const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-	return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+	const today = localDateKey(new Date());
+	return { from: today, to: today };
 }
 
 function dateRangeFromPreset(preset = "last7", query = {}) {
-	const now = new Date();
-	const pad = (value) => String(value).padStart(2, "0");
-	const iso = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+	const today = localDateKey(new Date());
 	if (preset === "custom" && query.from && query.to) return { from: query.from, to: query.to };
 	if (preset === "today") return todayRange();
 	if (preset === "yesterday") {
-		const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-		return { from: iso(y), to: iso(y) };
+		const y = addLocalDays(today, -1);
+		return { from: y, to: y };
 	}
 	if (preset === "month") {
-		return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+		return { from: localMonthStart(today), to: localMonthEnd(today) };
 	}
 	if (preset === "previousMonth") {
-		return { from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: iso(new Date(now.getFullYear(), now.getMonth(), 0)) };
+		return { from: localMonthStart(today, -1), to: localMonthEnd(today, -1) };
 	}
-	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-	return { from: iso(from), to: iso(now) };
+	return { from: addLocalDays(today, -6), to: today };
 }
 
 function buildFilters(query = {}) {
@@ -52,9 +48,9 @@ function buildFilters(query = {}) {
 	const clauses = ["os.is_current = true"];
 	const dateExpression = "coalesce(os.executed_end_at, os.scheduled_start_at, os.created_at_hubsoft, os.created_at)";
 	values.push(period.from);
-	clauses.push(`${dateExpression} >= $${values.length}::date`);
+	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date >= $${values.length}::date`);
 	values.push(period.to);
-	clauses.push(`${dateExpression} < ($${values.length}::date + interval '1 day')`);
+	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date <= $${values.length}::date`);
 
 	const addEquals = (column, value, cast = "") => {
 		if (!text(value)) return;
@@ -222,10 +218,7 @@ function publicActivation(row) {
 }
 
 function dateKey(value) {
-	if (!value) return "";
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return "";
-	return date.toISOString().slice(0, 10);
+	return localDateKey(value);
 }
 
 async function listActivations(db, query = {}) {
@@ -316,8 +309,8 @@ async function dashboard(db, query = {}) {
 	const data = await listActivations(db, { ...query, page: 1, limit: 10000 });
 	const items = data.items;
 	const today = todayRange();
-	const createdToday = items.filter((item) => String(item.createdAtHubsoft || "").slice(0, 10) === today.from).length;
-	const completedToday = items.filter((item) => String(item.executedEndAt || "").slice(0, 10) === today.from).length;
+	const createdToday = items.filter((item) => localDateKey(item.createdAtHubsoft) === today.from).length;
+	const completedToday = items.filter((item) => localDateKey(item.executedEndAt) === today.from).length;
 	const byDerived = countBy(items, (item) => item.derivedStatus.id);
 	const metricFor = (status) => byDerived.find((item) => item.label === status)?.value || 0;
 	const created = items.length;

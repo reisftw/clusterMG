@@ -1,4 +1,5 @@
 const { HubsoftActivationSyncService } = require("../src/hubsoft/services/HubsoftActivationSyncService");
+const { localDateKey } = require("../src/hubsoft/normalizers/dates");
 const db = require("../src/db");
 
 function argValue(name, fallback = "") {
@@ -8,7 +9,7 @@ function argValue(name, fallback = "") {
 }
 
 function iso(date) {
-	return date.toISOString().slice(0, 10);
+	return localDateKey(date);
 }
 
 function monthRanges(year, until = new Date()) {

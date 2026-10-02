@@ -1,4 +1,5 @@
 const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
+const { addLocalDays, localDateKey, localMonthEnd, localMonthStart } = require("../normalizers/dates");
 const { ACTIVATION_QUALITY_CONFIG, SCHEDULE_STATUS } = require("./activationQualityConfig");
 const { analyzeActivationQuality } = require("./activationQualityRules");
 
@@ -16,28 +17,22 @@ function normalizeSearch(value = "") {
 	return text(value).normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 }
 
-function iso(date) {
-	const pad = (value) => String(value).padStart(2, "0");
-	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
 function todayRange() {
-	const now = new Date();
-	return { from: iso(new Date(now.getFullYear(), now.getMonth(), now.getDate())), to: iso(now) };
+	const today = localDateKey(new Date());
+	return { from: today, to: today };
 }
 
 function dateRangeFromPreset(preset = "last7", query = {}) {
-	const now = new Date();
+	const today = localDateKey(new Date());
 	if (preset === "custom" && query.from && query.to) return { from: query.from, to: query.to };
 	if (preset === "today") return todayRange();
 	if (preset === "yesterday") {
-		const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-		return { from: iso(y), to: iso(y) };
+		const y = addLocalDays(today, -1);
+		return { from: y, to: y };
 	}
-	if (preset === "month") return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
-	if (preset === "previousMonth") return { from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: iso(new Date(now.getFullYear(), now.getMonth(), 0)) };
-	const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-	return { from: iso(from), to: iso(now) };
+	if (preset === "month") return { from: localMonthStart(today), to: localMonthEnd(today) };
+	if (preset === "previousMonth") return { from: localMonthStart(today, -1), to: localMonthEnd(today, -1) };
+	return { from: addLocalDays(today, -6), to: today };
 }
 
 function baseSelect() {
@@ -122,9 +117,9 @@ function buildFilters(query = {}) {
 	const clauses = ["os.is_current = true", "os.health_monitoring_mode in ('FULL', 'LIMITED')", "os.activation_closure_status = 'CONCLUIDA'"];
 	const dateExpression = "coalesce(os.executed_end_at, os.executed_start_at, os.scheduled_end_at, os.created_at_hubsoft)";
 	values.push(period.from);
-	clauses.push(`${dateExpression} >= $${values.length}::date`);
+	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date >= $${values.length}::date`);
 	values.push(period.to);
-	clauses.push(`${dateExpression} < ($${values.length}::date + interval '1 day')`);
+	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date <= $${values.length}::date`);
 	const addEquals = (column, value, cast = "") => {
 		if (!text(value)) return;
 		values.push(value);
