@@ -1,4 +1,4 @@
-const { getHubsoftAuthHeader } = require("../auth/hubsoftAuth");
+const { getHubsoftAuthHeader, resetHubsoftAuthCache } = require("../auth/hubsoftAuth");
 const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
 
 const API_URL = "https://api.sempre.hubsoft.com.br/api/v1";
@@ -19,10 +19,11 @@ class HubsoftReadonlyClient {
 	}
 
 	async request(path, { method = "GET", body = null, retry = 2 } = {}) {
-		const authorization = await getHubsoftAuthHeader(this.authOptions);
 		let attempt = 0;
 		let lastError = null;
+		let refreshedAuthAfterUnauthorized = false;
 		while (attempt <= retry) {
+			const authorization = await getHubsoftAuthHeader(this.authOptions);
 			const controller = new AbortController();
 			const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 			try {
@@ -41,6 +42,13 @@ class HubsoftReadonlyClient {
 				if (!response.ok) {
 					const error = new Error(data?.message || data?.error || `HubSoft HTTP ${response.status}`);
 					error.statusCode = response.status;
+					if (response.status === 401 && !refreshedAuthAfterUnauthorized) {
+						refreshedAuthAfterUnauthorized = true;
+						resetHubsoftAuthCache();
+						lastError = error;
+						attempt += 1;
+						continue;
+					}
 					if (TRANSIENT_STATUS.has(response.status) && attempt < retry) {
 						lastError = error;
 						await sleep(500 * (attempt + 1));
