@@ -24,8 +24,16 @@ function resolveActivationLocation(order = {}) {
 		"cidade_instalacao.display",
 		"cliente_servico.cidade.nome",
 		"cliente_servico.cidade.display",
+		"cliente_servico.endereco_instalacao.endereco_numero.cidade.nome",
+		"cliente_servico.endereco_instalacao.endereco_numero.cidade.display",
+		"cliente_servico.endereco_instalacao.endereco_numero.cidade.descricao",
+		"cliente_servico.endereco_instalacao.endereco_numero.cidade",
 		"cliente_servico.endereco_instalacao.cidade",
 		"cliente_servico.endereco_instalacao.cidade_nome",
+		"cliente_servico.cliente_servico_endereco.0.endereco_numero.cidade.nome",
+		"cliente_servico.cliente_servico_endereco.0.endereco_numero.cidade.display",
+		"cliente_servico.cliente_servico_endereco.0.endereco_numero.cidade.descricao",
+		"cliente_servico.cliente_servico_endereco.0.endereco_numero.cidade",
 		"cliente_servico.endereco.cidade",
 		"cliente_servico.endereco.cidade_nome",
 		"endereco.cidade",
@@ -39,7 +47,13 @@ function resolveActivationLocation(order = {}) {
 		order.id_cidade ||
 		order.cliente_servico?.id_cidade ||
 		order.cliente_servico?.cidade?.id_cidade ||
-		order.cliente_servico?.cidade?.id,
+		order.cliente_servico?.cidade?.id ||
+		order.cliente_servico?.endereco_instalacao?.endereco_numero?.id_cidade ||
+		order.cliente_servico?.endereco_instalacao?.endereco_numero?.cidade?.id_cidade ||
+		order.cliente_servico?.endereco_instalacao?.endereco_numero?.cidade?.id ||
+		order.cliente_servico?.cliente_servico_endereco?.[0]?.endereco_numero?.id_cidade ||
+		order.cliente_servico?.cliente_servico_endereco?.[0]?.endereco_numero?.cidade?.id_cidade ||
+		order.cliente_servico?.cliente_servico_endereco?.[0]?.endereco_numero?.cidade?.id,
 	);
 	return {
 		cityId,

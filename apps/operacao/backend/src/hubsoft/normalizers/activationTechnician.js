@@ -9,6 +9,7 @@ function firstTechnician(order = {}) {
 }
 
 function technicianName(technician = {}) {
+	if (!technician) return "";
 	return text(
 		technician.nome ||
 		technician.name ||
@@ -24,10 +25,12 @@ function technicianName(technician = {}) {
 }
 
 function technicianEmail(technician = {}) {
+	if (!technician) return "";
 	return text(technician.email || technician.usuario?.email || technician.tecnico?.email).toLowerCase();
 }
 
 function technicianId(technician = {}) {
+	if (!technician) return null;
 	return toNumberOrNull(
 		technician.id ||
 		technician.id_usuario ||

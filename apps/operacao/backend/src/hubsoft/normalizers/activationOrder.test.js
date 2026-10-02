@@ -50,3 +50,24 @@ test("normalizeActivationOrder trata FILA como sem tecnico definido", () => {
 	assert.equal(normalized.hubsoft_technician_name, "");
 	assert.equal(normalized.technician_assignment_status, "UNASSIGNED");
 });
+
+test("normalizeActivationOrder extrai cidade do endereco de instalacao do HubSoft", () => {
+	const normalized = normalizeActivationOrder({
+		id_ordem_servico: 125,
+		numero_ordem_servico: "OS-125",
+		id_tipo_ordem_servico: 4,
+		status: "pendente",
+		cliente_servico: {
+			endereco_instalacao: {
+				endereco_numero: {
+					id_cidade: 1926,
+					cidade: { id_cidade: 1926, nome: "Perdigão" },
+				},
+			},
+		},
+	});
+	assert.equal(normalized.activation_city_id, 1926);
+	assert.equal(normalized.activation_city_name, "Perdigão");
+	assert.equal(normalized.activation_city_source, "cliente_servico.endereco_instalacao.endereco_numero.cidade.nome");
+	assert.equal(normalized.activation_city_confidence, "HIGH");
+});
