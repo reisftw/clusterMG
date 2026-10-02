@@ -86,7 +86,7 @@ function startHubsoftActivationHourlyScheduler(options = {}) {
 				dateTo: isoDateOnly(new Date()),
 				triggerType: "scheduled-hourly",
 				limit: Number(process.env.HUBSOFT_SYNC_PAGE_SIZE || 50),
-				maxPages: Number(process.env.HUBSOFT_SYNC_MAX_PAGES || 20),
+				maxPages: Number(process.env.HUBSOFT_SYNC_MAX_PAGES || 300),
 			});
 		} catch (error) {
 			console.error("[hubsoft_activation_scheduler] Falha:", error?.message || error);

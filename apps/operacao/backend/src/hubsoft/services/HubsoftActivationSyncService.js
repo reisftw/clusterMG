@@ -95,6 +95,16 @@ function applySnapshotMetrics(metrics, snapshot) {
 	else metrics.openOrders += 1;
 }
 
+function resolveStatusModes(options = {}) {
+	if (Array.isArray(options.statusModes) && options.statusModes.length) {
+		return [...new Set(options.statusModes.map((status) => String(status || "").trim()))];
+	}
+	if (Object.prototype.hasOwnProperty.call(options, "status")) {
+		return [String(options.status || "").trim()];
+	}
+	return ["", "finalizado"];
+}
+
 class HubsoftActivationSyncService {
 	constructor({ hubsoftClient = new HubsoftReadonlyClient(), database = null, logger = console } = {}) {
 		this.hubsoftClient = hubsoftClient;
@@ -111,7 +121,8 @@ class HubsoftActivationSyncService {
 			.map(Number)
 			.filter((id) => HUBSOFT_ACTIVATION_ORDER_TYPE_IDS.includes(id));
 		const perPage = Number(options.limit || this.hubsoftClient.perPage || 50);
-		const maxPages = Number(options.maxPages || this.hubsoftClient.maxPages || 20);
+		const maxPages = Number(options.maxPages || this.hubsoftClient.maxPages || 300);
+		const statusModes = resolveStatusModes(options);
 		const triggerType = options.triggerType || "manual";
 		const runClient = await this.db.connect();
 		let syncRun = null;
@@ -126,7 +137,7 @@ class HubsoftActivationSyncService {
 				triggerType,
 				dateFrom,
 				dateTo,
-				metadata: { orderTypeIds, perPage, maxPages },
+				metadata: { orderTypeIds, perPage, maxPages, statusModes },
 			});
 			await markSyncRunRunning(runClient, syncRun.id, { stage: "authenticating" });
 		} finally {
@@ -137,30 +148,33 @@ class HubsoftActivationSyncService {
 			await this.hubsoftClient.loadOrderTypeCatalog();
 			for (const orderTypeId of orderTypeIds) {
 				metrics.byType[orderTypeId] = { found: 0, inserted: 0, updated: 0, unchanged: 0 };
-				for (let page = 1; page <= maxPages; page += 1) {
-					this.logger.log(`[hubsoft_activation_sync] buscando tipo=${orderTypeId} pagina=${page}`);
-					const pageResult = await this.hubsoftClient.listOrdersPage({
-						orderTypeId,
-						dateFrom,
-						dateTo,
-						page,
-						limit: perPage,
-						status: options.status || "",
-					});
-					metrics.pagesProcessed += 1;
-					metrics.recordsFound += pageResult.rows.length;
-					metrics.byType[orderTypeId].found += pageResult.rows.length;
-					await this.persistPage({ syncRunId: syncRun.id, rows: pageResult.rows, metrics });
-					const statusClient = await this.db.connect();
-					try {
-						await updateSyncRunMetrics(statusClient, syncRun.id, {
-							...metrics,
-							metadata: { stage: "page_persisted", orderTypeId, page },
+				for (const statusMode of statusModes) {
+					for (let page = 1; page <= maxPages; page += 1) {
+						const modeLabel = statusMode || "cadastro";
+						this.logger.log(`[hubsoft_activation_sync] buscando modo=${modeLabel} tipo=${orderTypeId} pagina=${page}`);
+						const pageResult = await this.hubsoftClient.listOrdersPage({
+							orderTypeId,
+							dateFrom,
+							dateTo,
+							page,
+							limit: perPage,
+							status: statusMode,
 						});
-					} finally {
-						statusClient.release();
+						metrics.pagesProcessed += 1;
+						metrics.recordsFound += pageResult.rows.length;
+						metrics.byType[orderTypeId].found += pageResult.rows.length;
+						await this.persistPage({ syncRunId: syncRun.id, rows: pageResult.rows, metrics });
+						const statusClient = await this.db.connect();
+						try {
+							await updateSyncRunMetrics(statusClient, syncRun.id, {
+								...metrics,
+								metadata: { stage: "page_persisted", orderTypeId, statusMode: modeLabel, page },
+							});
+						} finally {
+							statusClient.release();
+						}
+						if (!pageResult.rows.length || page >= pageResult.lastPage) break;
 					}
-					if (!pageResult.rows.length || page >= pageResult.lastPage) break;
 				}
 			}
 			const finishClient = await this.db.connect();

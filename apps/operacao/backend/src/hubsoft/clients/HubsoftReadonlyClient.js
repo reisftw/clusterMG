@@ -14,7 +14,7 @@ class HubsoftReadonlyClient {
 		this.baseUrl = String(options.baseUrl || process.env.HUBSOFT_API_BASE_URL || API_URL).replace(/\/+$/, "");
 		this.timeoutMs = Number(options.timeoutMs || process.env.HUBSOFT_TIMEOUT_MS || 30000);
 		this.perPage = Number(options.perPage || process.env.HUBSOFT_SYNC_PAGE_SIZE || 50);
-		this.maxPages = Number(options.maxPages || process.env.HUBSOFT_SYNC_MAX_PAGES || 20);
+		this.maxPages = Number(options.maxPages || process.env.HUBSOFT_SYNC_MAX_PAGES || 300);
 		this.authOptions = options.auth || {};
 		this.orderTypeCatalog = null;
 	}
