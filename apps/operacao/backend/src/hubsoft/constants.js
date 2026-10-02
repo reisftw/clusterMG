@@ -5,6 +5,9 @@ const HUBSOFT_ACTIVATION_ORDER_TYPES = Object.freeze([
 	{ id: 760, name: "INSTALAÇÃO PME", healthMonitoringMode: "FULL" },
 	{ id: 6, name: "MUDANÇA DE ENDEREÇO", healthMonitoringMode: "FULL" },
 	{ id: 45, name: "PONTO DE REDE ADICIONAL", healthMonitoringMode: "LIMITED" },
+	{ id: 7, name: "SUPORTE", healthMonitoringMode: "NONE" },
+	{ id: 771, name: "SUPORTE CORREÇÃO DE SINAL", healthMonitoringMode: "NONE" },
+	{ id: 64, name: "TROCA DE TECNOLOGIA - LANÇAMENTO FIBRA", healthMonitoringMode: "FULL" },
 	{ id: 65, name: "UPGRADE COM VISITA TÉCNICA", healthMonitoringMode: "FULL" },
 ]);
 

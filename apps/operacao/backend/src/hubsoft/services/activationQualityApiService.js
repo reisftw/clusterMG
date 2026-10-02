@@ -382,7 +382,7 @@ async function filters(db) {
 			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome, 'regionalId', regional_id) order by nome) from regional_cidades) as cities
 	`);
 	return {
-		orderTypes: HUBSOFT_ACTIVATION_ORDER_TYPES,
+		orderTypes: HUBSOFT_ACTIVATION_ORDER_TYPES.filter((item) => item.healthMonitoringMode !== "NONE"),
 		brands: ["SEMPRE", "ONNET", "UNKNOWN"],
 		quality: [
 			{ id: "withRework", label: "Com rechamado" },
