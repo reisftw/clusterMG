@@ -22,3 +22,8 @@ test("sanitizeHubsoftPayload remove dados pessoais e preserva chaves tecnicas", 
 	assert.equal(sanitized.mac_addr, "AABBCCDDEEFF");
 	assert.equal(sanitized.servico.descricao, "SEMPRE 600MB");
 });
+
+test("sanitizeHubsoftPayload remove caracteres de controle rejeitados pelo jsonb", () => {
+	const sanitized = sanitizeHubsoftPayload({ status: "OK\u0000TESTE\u0007" });
+	assert.equal(sanitized.status, "OKTESTE");
+});

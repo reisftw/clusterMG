@@ -1,12 +1,23 @@
 const SENSITIVE_KEY_PATTERN = /cpf|cnpj|documento|telefone|celular|email|endereco|logradouro|numero|bairro|complemento|cep|nome|name|razao|cliente|senha|password|token|cookie|authorization|secret/i;
 const ALLOWED_TECHNICAL_KEY_PATTERN = /id_|_id$|status|tipo|servico|plano|tecnologia|velocidade|mac|serial|modelo|fabricante|nas|porta|slot|olt|ct[opw]?|rx|tx|dbm|pon|radius|acct|pppoe|session|download|upload|trafego/i;
 
+function removeJsonbUnsafeControlChars(value) {
+	return [...value].filter((char) => {
+		const code = char.charCodeAt(0);
+		return code === 9 || code === 10 || code === 13 || code >= 32;
+	}).join("");
+}
+
 function sanitizeHubsoftPayload(value, depth = 0, key = "") {
 	if (depth > 8) return "<max-depth>";
 	if (SENSITIVE_KEY_PATTERN.test(key) && !ALLOWED_TECHNICAL_KEY_PATTERN.test(key)) return "<masked>";
 	if (Array.isArray(value)) return value.slice(0, 100).map((item) => sanitizeHubsoftPayload(item, depth + 1, key));
 	if (!value || typeof value !== "object") {
-		if (typeof value === "string" && value.length > 1000) return `${value.slice(0, 1000)}...<truncated>`;
+		if (typeof value === "string") {
+			const clean = removeJsonbUnsafeControlChars(value);
+			if (clean.length > 1000) return `${clean.slice(0, 1000)}...<truncated>`;
+			return clean;
+		}
 		return value;
 	}
 	return Object.fromEntries(
