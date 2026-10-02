@@ -27,7 +27,7 @@ function sanitizeHubsoftPayload(value, depth = 0, key = "") {
 	if (!value || typeof value !== "object") {
 		if (typeof value === "string") {
 			const clean = removeJsonbUnsafeControlChars(value);
-			if (clean.length > 1000) return `${clean.slice(0, 1000)}...<truncated>`;
+			if (clean.length > 1000) return `${Array.from(clean).slice(0, 1000).join("")}...<truncated>`;
 			return clean;
 		}
 		return value;

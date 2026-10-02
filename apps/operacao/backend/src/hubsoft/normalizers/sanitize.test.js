@@ -32,3 +32,11 @@ test("sanitizeHubsoftPayload remove surrogate unicode quebrado", () => {
 	const sanitized = sanitizeHubsoftPayload({ status: "Caminhada \uD83D quebrada" });
 	assert.equal(sanitized.status, "Caminhada  quebrada");
 });
+
+test("sanitizeHubsoftPayload nao quebra emoji ao truncar strings longas", () => {
+	const sanitized = sanitizeHubsoftPayload({ status: `${"a".repeat(999)}😀fim` });
+	const serialized = JSON.stringify(sanitized);
+	assert.doesNotThrow(() => JSON.parse(serialized));
+	assert.equal(/\\ud[89ab][0-9a-f]{2}/i.test(serialized), false);
+	assert.equal(sanitized.status.endsWith("...<truncated>"), true);
+});
