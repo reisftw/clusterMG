@@ -21,6 +21,7 @@ function base(overrides = {}) {
 		scheduled_end_at: "2026-09-01T10:00:00Z",
 		executed_start_at: "2026-09-01T09:23:00Z",
 		executed_end_at: "2026-09-01T11:00:00Z",
+		activation_closure_status: "CONCLUIDA",
 		connection_connected: true,
 		connection_captured_at: "2026-10-01T10:00:00Z",
 		download_gigabytes: 1,

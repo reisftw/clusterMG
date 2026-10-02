@@ -49,6 +49,13 @@ function createMetrics() {
 		techniciansMatchedByName: 0,
 		techniciansUnmatched: 0,
 		techniciansAmbiguous: 0,
+		techniciansUnassigned: 0,
+		citiesResolved: 0,
+		citiesMissing: 0,
+		openOrders: 0,
+		inProgressOrders: 0,
+		completedOrders: 0,
+		closedWithoutConclusion: 0,
 		connectionsRequested: 0,
 		connectionsCaptured: 0,
 		connectionsConnected: 0,
@@ -77,6 +84,16 @@ function applyTechnicianMetric(metrics, status) {
 	else metrics.techniciansUnmatched += 1;
 }
 
+function applySnapshotMetrics(metrics, snapshot) {
+	if (snapshot.technician_assignment_status !== "ASSIGNED") metrics.techniciansUnassigned += 1;
+	if (snapshot.activation_city_name) metrics.citiesResolved += 1;
+	else metrics.citiesMissing += 1;
+	if (snapshot.activation_closure_status === "CONCLUIDA") metrics.completedOrders += 1;
+	else if (snapshot.activation_closure_status === "ENCERRADA_SEM_CONCLUSAO") metrics.closedWithoutConclusion += 1;
+	else if (snapshot.activation_closure_status === "EM_ATENDIMENTO") metrics.inProgressOrders += 1;
+	else metrics.openOrders += 1;
+}
+
 class HubsoftActivationSyncService {
 	constructor({ hubsoftClient = new HubsoftReadonlyClient(), database = null, logger = console } = {}) {
 		this.hubsoftClient = hubsoftClient;
@@ -85,6 +102,8 @@ class HubsoftActivationSyncService {
 	}
 
 	async syncActivations(options = {}) {
+		const lockClient = await this.db.connect();
+		let hasLock = false;
 		const dateFrom = options.dateFrom || defaultDateFrom();
 		const dateTo = options.dateTo || defaultDateTo();
 		const orderTypeIds = (options.orderTypeIds?.length ? options.orderTypeIds : HUBSOFT_ACTIVATION_ORDER_TYPE_IDS)
@@ -97,6 +116,11 @@ class HubsoftActivationSyncService {
 		let syncRun = null;
 		const metrics = createMetrics();
 		try {
+			const lock = await lockClient.query("select pg_try_advisory_lock(671992641) as locked");
+			hasLock = lock.rows[0]?.locked === true;
+			if (!hasLock) {
+				throw new Error("Já existe uma sincronização de ativações em execução.");
+			}
 			syncRun = await createSyncRun(runClient, {
 				triggerType,
 				dateFrom,
@@ -150,18 +174,23 @@ class HubsoftActivationSyncService {
 			}
 			return { ok: true, syncRunId: syncRun.id, metrics };
 		} catch (error) {
-			const finishClient = await this.db.connect();
-			try {
-				await finishSyncRun(finishClient, syncRun.id, {
-					status: "failed",
-					errorMessage: error?.message || "Falha na sincronização HubSoft.",
-					metrics,
-					metadata: { stage: "failed" },
-				});
-			} finally {
-				finishClient.release();
+			if (syncRun?.id) {
+				const finishClient = await this.db.connect();
+				try {
+					await finishSyncRun(finishClient, syncRun.id, {
+						status: "failed",
+						errorMessage: error?.message || "Falha na sincronização HubSoft.",
+						metrics,
+						metadata: { stage: "failed" },
+					});
+				} finally {
+					finishClient.release();
+				}
 			}
 			throw error;
+		} finally {
+			if (hasLock) await lockClient.query("select pg_advisory_unlock(671992641)").catch(() => {});
+			lockClient.release();
 		}
 	}
 
@@ -189,6 +218,7 @@ class HubsoftActivationSyncService {
 				applyPersistAction(metrics, persisted.action);
 				applyPersistAction(metrics.byType[orderSnapshot.order_type_id], persisted.action);
 				applyTechnicianMetric(metrics, persisted.technicianMatch);
+				applySnapshotMetrics(metrics, orderSnapshot);
 				const statusPayload = connectionStatus[String(orderSnapshot.hubsoft_cliente_servico_id)];
 				if (statusPayload) {
 					const connectionSnapshot = normalizeConnectionSnapshot(statusPayload, {

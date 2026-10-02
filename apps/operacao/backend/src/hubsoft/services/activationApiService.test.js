@@ -32,6 +32,7 @@ const rows = [
 		created_at_hubsoft: "2026-09-30T09:00:00Z",
 		executed_end_at: "2026-09-30T13:00:00Z",
 		closure_reason_name: "CONCLUÍDA",
+		activation_closure_status: "CONCLUIDA",
 		first_seen_at: "2026-09-30T13:01:00Z",
 		last_seen_at: "2026-09-30T13:01:00Z",
 		synced_at: "2026-09-30T13:01:00Z",
@@ -60,9 +61,11 @@ test("listActivations pagina e preserva dados sem tecnico/conexao", async () => 
 	const data = await listActivations(fakeDb(), { period: "custom", from: "2026-09-30", to: "2026-09-30", page: 1, limit: 1 });
 	assert.equal(data.total, 2);
 	assert.equal(data.items.length, 1);
-	assert.equal(data.items[0].technician.name, "Não identificado");
-	assert.equal(data.items[0].service.brand, "UNKNOWN");
-	assert.equal(data.items[0].connection.connected, undefined);
+	const full = await listActivations(fakeDb(), { period: "custom", from: "2026-09-30", to: "2026-09-30", page: 1, limit: 10 });
+	const pending = full.items.find((item) => item.id === "snap-1");
+	assert.equal(pending.technician.name, "Não identificado");
+	assert.equal(pending.service.brand, "UNKNOWN");
+	assert.equal(pending.connection.connected, undefined);
 });
 
 test("dashboard consolida status e dimensoes", async () => {

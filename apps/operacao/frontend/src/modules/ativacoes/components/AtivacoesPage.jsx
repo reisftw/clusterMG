@@ -520,6 +520,7 @@ function DashboardView({ data, period }) {
 	const secondary = [
 		["Aguardando agendamento", summary.awaitingSchedule ?? 0],
 		["Aguardando aprovação", summary.awaitingApproval ?? 0],
+		["Encerradas sem conclusão", summary.closedWithoutConclusion ?? 0],
 		["Pendente de validação", summary.pendingValidation ?? 0],
 		["Técnicos", summary.technicians ?? 0],
 		["Empresas", summary.companies ?? 0],

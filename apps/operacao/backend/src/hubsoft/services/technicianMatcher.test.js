@@ -34,3 +34,11 @@ test("resolveHubsoftTechnician resolve por nome unico e detecta ambiguo", async 
 	}), { nome: "Jose Silva" });
 	assert.equal(ambiguous.status, "ambiguous");
 });
+
+test("resolveHubsoftTechnician nao consulta cadastro quando HubSoft envia FILA", async () => {
+	const result = await resolveHubsoftTechnician(fakeClient({
+		byName: [{ id: "tech-1", empresa_id: null, nome: "FILA" }],
+	}), { nome: "FILA" });
+	assert.equal(result.status, "not_found");
+	assert.equal(result.reason, "unassigned");
+});

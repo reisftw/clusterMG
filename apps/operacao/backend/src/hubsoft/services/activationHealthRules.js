@@ -1,5 +1,6 @@
 const { getActivationOrderTypeConfig } = require("../constants");
 const { buildSourceHash } = require("../utils/hash");
+const { ACTIVATION_CLOSURE_STATUS, resolveActivationClosureStatus } = require("./activationClosureStatus");
 const {
 	ACTIVATION_HEALTH_CONFIG,
 	ACTIVATION_DATA_QUALITY_ISSUE,
@@ -9,7 +10,10 @@ const {
 const { daysSinceActivation } = require("./healthWindow");
 
 function resolveActivationDate(row = {}) {
-	return row.executed_end_at || row.closed_at || null;
+	const closure = row.activation_closure_status
+		? { status: row.activation_closure_status }
+		: resolveActivationClosureStatus(row);
+	return closure.status === ACTIVATION_CLOSURE_STATUS.CONCLUDED ? row.executed_end_at || row.closed_at || null : null;
 }
 
 function resolveHealthWindow(days) {
@@ -66,11 +70,11 @@ function timelineEvent(at, type, label, metadata = {}) {
 
 function dataQualityIssues(row = {}) {
 	const issues = [];
-	if (row.technician_match_status && row.technician_match_status !== "matched" && row.technician_match_status !== "matched_by_name") {
+	if (row.technician_assignment_status === "ASSIGNED" && row.technician_match_status && row.technician_match_status !== "matched" && row.technician_match_status !== "matched_by_name") {
 		issues.push(ACTIVATION_DATA_QUALITY_ISSUE.TECHNICIAN_UNMATCHED);
 	}
 	if (!row.operacao_empresa_id && !row.company_name) issues.push(ACTIVATION_DATA_QUALITY_ISSUE.COMPANY_UNMATCHED);
-	if (!row.cidade_id && !row.city_name && !row.cidade_nome) issues.push(ACTIVATION_DATA_QUALITY_ISSUE.CITY_MISSING);
+	if (!row.activation_city_name && !row.cidade_id && !row.city_name && !row.cidade_nome) issues.push(ACTIVATION_DATA_QUALITY_ISSUE.CITY_MISSING);
 	if (!row.brand || String(row.brand).toUpperCase() === "UNKNOWN") issues.push(ACTIVATION_DATA_QUALITY_ISSUE.BRAND_UNKNOWN);
 	return uniqueReasons(issues);
 }

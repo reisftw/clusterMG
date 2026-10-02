@@ -4,6 +4,9 @@ async function resolveHubsoftTechnician(client, hubsoftTechnician = {}) {
 	const hubsoftUserId = toNumberOrNull(hubsoftTechnician.id || hubsoftTechnician.id_usuario || hubsoftTechnician.id_tecnico);
 	const email = text(hubsoftTechnician.email).toLowerCase();
 	const name = text(hubsoftTechnician.nome || hubsoftTechnician.name || hubsoftTechnician.display || hubsoftTechnician.descricao);
+	if (!hubsoftUserId && !email && (!name || normalizeText(name) === "fila")) {
+		return { status: "not_found", reason: "unassigned", id: null, empresa_id: null };
+	}
 	if (hubsoftUserId) {
 		const { rows } = await client.query(
 			`select id, empresa_id, nome, 'matched' as status, 'hubsoft_user_id' as reason

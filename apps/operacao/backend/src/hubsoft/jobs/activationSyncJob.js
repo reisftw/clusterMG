@@ -2,6 +2,8 @@ const crypto = require("node:crypto");
 const { HubsoftActivationSyncService } = require("../services/HubsoftActivationSyncService");
 
 const jobs = new Map();
+let schedulerTimer = null;
+let schedulerRunning = false;
 
 function publicJob(job) {
 	return {
@@ -57,4 +59,54 @@ function getHubsoftActivationSyncJob(id) {
 	return job ? publicJob(job) : null;
 }
 
-module.exports = { getHubsoftActivationSyncJob, startHubsoftActivationSyncJob };
+function isoDateOnly(value) {
+	const date = value ? new Date(value) : new Date();
+	if (Number.isNaN(date.getTime())) return null;
+	return date.toISOString().slice(0, 10);
+}
+
+function daysAgo(days) {
+	const date = new Date();
+	date.setDate(date.getDate() - days);
+	return isoDateOnly(date);
+}
+
+function startHubsoftActivationHourlyScheduler(options = {}) {
+	if (schedulerTimer || process.env.NODE_ENV === "test" || process.env.HUBSOFT_ACTIVATIONS_SCHEDULER === "disabled") return;
+	const intervalMs = Number(options.intervalMs || process.env.HUBSOFT_ACTIVATIONS_SYNC_INTERVAL_MS || 60 * 60 * 1000);
+	const windowDays = Number(options.windowDays || process.env.HUBSOFT_ACTIVATIONS_INCREMENTAL_DAYS || 7);
+	const run = async () => {
+		if (schedulerRunning) return;
+		schedulerRunning = true;
+		try {
+			const service = new HubsoftActivationSyncService();
+			await service.syncActivations({
+				dateFrom: daysAgo(windowDays),
+				dateTo: isoDateOnly(new Date()),
+				triggerType: "scheduled-hourly",
+				limit: Number(process.env.HUBSOFT_SYNC_PAGE_SIZE || 50),
+				maxPages: Number(process.env.HUBSOFT_SYNC_MAX_PAGES || 20),
+			});
+		} catch (error) {
+			console.error("[hubsoft_activation_scheduler] Falha:", error?.message || error);
+		} finally {
+			schedulerRunning = false;
+		}
+	};
+	schedulerTimer = setInterval(run, intervalMs);
+	schedulerTimer.unref?.();
+	setTimeout(run, Number(process.env.HUBSOFT_ACTIVATIONS_SYNC_BOOT_DELAY_MS || 60_000)).unref?.();
+	console.log(`[hubsoft_activation_scheduler] ativo a cada ${Math.round(intervalMs / 60000)} min`);
+}
+
+function stopHubsoftActivationHourlyScheduler() {
+	if (schedulerTimer) clearInterval(schedulerTimer);
+	schedulerTimer = null;
+}
+
+module.exports = {
+	getHubsoftActivationSyncJob,
+	startHubsoftActivationHourlyScheduler,
+	startHubsoftActivationSyncJob,
+	stopHubsoftActivationHourlyScheduler,
+};

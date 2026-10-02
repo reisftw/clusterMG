@@ -71,9 +71,32 @@ async function upsertOrderSnapshot(client, snapshot, hubsoftTechnician = {}) {
 			        operacao_empresa_id = $4::uuid,
 			        technician_match_status = $5,
 			        technician_match_reason = $6,
+			        hubsoft_technician_name = $7,
+			        hubsoft_technician_email = $8,
+			        technician_assignment_status = $9,
+			        activation_closure_status = $10,
+			        activation_city_id = $11,
+			        activation_city_name = $12,
+			        activation_city_source = $13,
+			        activation_city_confidence = $14,
 			        updated_at = now()
 			  where id = $1`,
-			[current.id, snapshot.sync_run_id, match.id || null, match.empresa_id || null, match.status, match.reason],
+			[
+				current.id,
+				snapshot.sync_run_id,
+				match.id || null,
+				match.empresa_id || null,
+				match.status,
+				match.reason,
+				snapshot.hubsoft_technician_name || null,
+				snapshot.hubsoft_technician_email || null,
+				snapshot.technician_assignment_status || "UNKNOWN",
+				snapshot.activation_closure_status || "ABERTA",
+				snapshot.activation_city_id,
+				snapshot.activation_city_name || null,
+				snapshot.activation_city_source || null,
+				snapshot.activation_city_confidence || "MISSING",
+			],
 		);
 		return { action: "unchanged", id: current.id, technicianMatch: match.status };
 	}
@@ -84,15 +107,19 @@ async function upsertOrderSnapshot(client, snapshot, hubsoftTechnician = {}) {
 		`insert into hubsoft_activation_os_snapshots (
 			sync_run_id, hubsoft_order_id, order_number, order_type_id, order_type_name,
 			health_monitoring_mode, hubsoft_cliente_servico_id, hubsoft_technician_id,
+			hubsoft_technician_name, hubsoft_technician_email, technician_assignment_status,
 			operacao_tecnico_id, operacao_empresa_id, technician_match_status, technician_match_reason,
-			status, executando, closure_reason_id, closure_reason_name, created_at_hubsoft,
+			status, executando, closure_reason_id, closure_reason_name, activation_closure_status,
+			activation_city_id, activation_city_name, activation_city_source, activation_city_confidence,
+			created_at_hubsoft,
 			scheduled_start_at, scheduled_end_at, executed_start_at, executed_end_at,
 			source_hash, raw_payload_sanitized, version
 		)
 		values (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10::uuid, $11, $12,
-			$13, $14, $15, $16, $17::timestamptz, $18::timestamptz, $19::timestamptz,
-			$20::timestamptz, $21::timestamptz, $22, $23::jsonb, $24
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::uuid, $13::uuid, $14, $15,
+			$16, $17, $18, $19, $20, $21, $22, $23, $24,
+			$25::timestamptz, $26::timestamptz, $27::timestamptz, $28::timestamptz, $29::timestamptz,
+			$30, $31::jsonb, $32
 		)
 		returning id`,
 		[
@@ -104,6 +131,9 @@ async function upsertOrderSnapshot(client, snapshot, hubsoftTechnician = {}) {
 			snapshot.health_monitoring_mode,
 			snapshot.hubsoft_cliente_servico_id,
 			snapshot.hubsoft_technician_id,
+			snapshot.hubsoft_technician_name || null,
+			snapshot.hubsoft_technician_email || null,
+			snapshot.technician_assignment_status || "UNKNOWN",
 			match.id || null,
 			match.empresa_id || null,
 			match.status,
@@ -112,6 +142,11 @@ async function upsertOrderSnapshot(client, snapshot, hubsoftTechnician = {}) {
 			snapshot.executando,
 			snapshot.closure_reason_id,
 			snapshot.closure_reason_name || null,
+			snapshot.activation_closure_status || "ABERTA",
+			snapshot.activation_city_id,
+			snapshot.activation_city_name || null,
+			snapshot.activation_city_source || null,
+			snapshot.activation_city_confidence || "MISSING",
 			snapshot.created_at_hubsoft,
 			snapshot.scheduled_start_at,
 			snapshot.scheduled_end_at,

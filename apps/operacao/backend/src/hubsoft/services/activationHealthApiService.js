@@ -48,9 +48,19 @@ function baseSelect() {
 			t.regional_id,
 			t.cidade_id,
 			t.cidade_nome,
+			os.hubsoft_technician_name,
+			os.hubsoft_technician_email,
+			os.technician_assignment_status,
+			os.activation_closure_status,
+			os.activation_city_id,
+			os.activation_city_name,
+			os.activation_city_source,
+			os.activation_city_confidence,
 			e.nome as company_name,
-			r.nome as regional_name,
-			c.nome as city_name,
+			coalesce(ar.nome, r.nome) as regional_name,
+			coalesce(ac.nome, c.nome) as city_name,
+			ac.id as activation_city_local_id,
+			ac.regional_id as activation_city_regional_id,
 			conn.connected as connection_connected,
 			conn.pppoe_username,
 			conn.session_time_seconds,
@@ -72,6 +82,14 @@ function baseSelect() {
 		  left join operacao_empresas e on e.id = os.operacao_empresa_id
 		  left join regionais r on r.id = t.regional_id
 		  left join regional_cidades c on c.id = t.cidade_id
+		  left join lateral (
+		  	select rc.id, rc.nome, rc.regional_id
+		  	  from regional_cidades rc
+		  	 where lower(rc.nome) = lower(os.activation_city_name)
+		  	 order by rc.nome
+		  	 limit 1
+		  ) ac on true
+		  left join regionais ar on ar.id = ac.regional_id
 		  left join lateral (
 		  	select *
 		  	  from hubsoft_connection_snapshots hcs
@@ -125,15 +143,20 @@ function buildFilters(query = {}) {
 		clauses.push(`${column} = $${values.length}${cast}`);
 	};
 	addEquals("os.order_type_id", query.orderTypeId, "::int");
-	addEquals("os.operacao_tecnico_id::text", query.technicianId);
+	if (text(query.technicianId).startsWith("hubsoft:")) addEquals("os.hubsoft_technician_id", text(query.technicianId).slice(8), "::bigint");
+	else addEquals("os.operacao_tecnico_id::text", query.technicianId);
 	addEquals("os.operacao_empresa_id::text", query.companyId);
-	addEquals("t.regional_id", query.regionalId);
-	addEquals("t.cidade_id::text", query.cityId);
+	addEquals("coalesce(ac.regional_id, t.regional_id)", query.regionalId);
+	addEquals("coalesce(ac.id, t.cidade_id)::text", query.cityId);
 	addEquals("cs.brand", query.brand);
 	return { where: clauses.join(" and "), values, period };
 }
 
 function publicHealthItem(row, evaluation) {
+	const technicianName = row.technician_assignment_status === "UNASSIGNED"
+		? "Sem técnico definido"
+		: text(row.technician_name || row.hubsoft_technician_name || "Não identificado");
+	const cityName = text(row.activation_city_name || row.city_name || row.cidade_nome);
 	return {
 		id: row.id,
 		hubsoftOrderId: row.hubsoft_order_id,
@@ -150,14 +173,16 @@ function publicHealthItem(row, evaluation) {
 		evidence: evaluation.evidence,
 		evaluatedAt: evaluation.evaluatedAt,
 		technician: {
-			id: row.operacao_tecnico_id,
+			id: row.operacao_tecnico_id || (row.hubsoft_technician_id ? `hubsoft:${row.hubsoft_technician_id}` : null),
+			localId: row.operacao_tecnico_id,
 			hubsoftUserId: row.hubsoft_technician_id,
-			name: row.technician_name || "Não identificado",
+			name: technicianName,
+			assignmentStatus: row.technician_assignment_status || "UNKNOWN",
 			matchStatus: row.technician_match_status,
 		},
 		company: { id: row.operacao_empresa_id, name: row.company_name || "" },
-		regional: { id: row.regional_id, name: row.regional_name || "" },
-		city: { id: row.cidade_id, name: row.city_name || row.cidade_nome || "" },
+		regional: { id: row.activation_city_regional_id || row.regional_id, name: row.regional_name || "" },
+		city: { id: row.activation_city_local_id || row.cidade_id || row.activation_city_id, name: cityName },
 		service: {
 			description: row.service_description || "",
 			status: row.service_status || "",
@@ -405,7 +430,21 @@ async function detail(db, id) {
 async function filters(db) {
 	const { rows } = await db.query(`
 		select
-			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome) order by nome) from operacao_tecnicos where status = 'Ativo') as technicians,
+			(
+				select jsonb_agg(item order by item->>'name')
+				  from (
+				  	select jsonb_build_object('id', id, 'name', nome, 'source', 'local') as item
+				  	  from operacao_tecnicos
+				  	 where status = 'Ativo'
+				  	union
+				  	select distinct jsonb_build_object('id', concat('hubsoft:', hubsoft_technician_id), 'name', hubsoft_technician_name, 'source', 'hubsoft')
+				  	  from hubsoft_activation_os_snapshots
+				  	 where is_current = true
+				  	   and health_monitoring_mode in ('FULL', 'LIMITED')
+				  	   and hubsoft_technician_id is not null
+				  	   and nullif(hubsoft_technician_name, '') is not null
+				  ) x
+			) as technicians,
 			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome) order by nome) from operacao_empresas where status = 'Ativa') as companies,
 			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome) order by nome) from regionais where ativo = true) as regionals,
 			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome, 'regionalId', regional_id) order by nome) from regional_cidades) as cities

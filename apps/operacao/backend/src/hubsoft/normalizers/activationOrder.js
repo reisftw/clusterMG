@@ -5,12 +5,9 @@ const { parseHubsoftDate } = require("./dates");
 const { resolveHubsoftBrand } = require("./brand");
 const { parsePlanSpeedMbps } = require("./speed");
 const { sanitizeHubsoftPayload } = require("./sanitize");
-
-function firstTechnician(order = {}) {
-	const direct = Array.isArray(order.tecnicos) ? order.tecnicos[0] : null;
-	const relation = Array.isArray(order.ordem_servico_tecnico) ? order.ordem_servico_tecnico[0] : null;
-	return direct || relation?.usuario || relation?.tecnico || relation || null;
-}
+const { resolveActivationClosureStatus } = require("../services/activationClosureStatus");
+const { resolveActivationLocation } = require("./activationLocation");
+const { resolveActivationTechnician } = require("./activationTechnician");
 
 function normalizeClienteServico(clienteServico = {}, syncRunId = null) {
 	const service = clienteServico?.servico || {};
@@ -43,9 +40,10 @@ function normalizeActivationOrder(order = {}, syncRunId = null) {
 	const orderTypeId = toNumberOrNull(order.id_tipo_ordem_servico || order.tipo_ordem_servico?.id_tipo_ordem_servico || order.tipo_ordem_servico?.id);
 	const typeConfig = getActivationOrderTypeConfig(orderTypeId);
 	if (!typeConfig) return null;
-	const technician = firstTechnician(order);
+	const technician = resolveActivationTechnician(order);
 	const closureReason = order.motivo_fechamento || {};
 	const clienteServico = order.cliente_servico || {};
+	const location = resolveActivationLocation(order);
 	const relevant = {
 		hubsoft_order_id: toNumberOrNull(order.id_ordem_servico),
 		order_number: text(order.numero_ordem_servico),
@@ -53,17 +51,25 @@ function normalizeActivationOrder(order = {}, syncRunId = null) {
 		order_type_name: text(order.tipo_ordem_servico?.descricao || order.tipo_ordem_servico?.display || typeConfig.name),
 		health_monitoring_mode: typeConfig.healthMonitoringMode,
 		hubsoft_cliente_servico_id: toNumberOrNull(order.id_cliente_servico || clienteServico.id_cliente_servico),
-		hubsoft_technician_id: toNumberOrNull(technician?.id || technician?.id_usuario || technician?.id_tecnico || technician?.usuario?.id),
+		hubsoft_technician_id: technician.hubsoftTechnicianId,
+		hubsoft_technician_name: technician.name,
+		hubsoft_technician_email: technician.email,
+		technician_assignment_status: technician.assignmentStatus,
 		status: text(order.status),
 		executando: toBooleanOrNull(order.executando),
 		closure_reason_id: toNumberOrNull(closureReason.id_motivo_fechamento || closureReason.id),
 		closure_reason_name: text(closureReason.descricao || closureReason.display || closureReason.nome),
+		activation_city_id: location.cityId,
+		activation_city_name: location.cityName,
+		activation_city_source: location.source,
+		activation_city_confidence: location.confidence,
 		created_at_hubsoft: parseHubsoftDate(order.data_cadastro || order.data_cadastro_br),
 		scheduled_start_at: parseHubsoftDate(order.data_inicio_programado),
 		scheduled_end_at: parseHubsoftDate(order.data_termino_programado),
 		executed_start_at: parseHubsoftDate(order.data_inicio_executado || order.data_inicio_executado_br),
 		executed_end_at: parseHubsoftDate(order.data_termino_executado || order.data_termino_executado_br),
 	};
+	relevant.activation_closure_status = resolveActivationClosureStatus(relevant).status;
 	return {
 		...relevant,
 		sync_run_id: syncRunId,

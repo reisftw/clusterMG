@@ -13,6 +13,7 @@ function base(overrides = {}) {
 		order_type_name: "INSTALAÇÃO",
 		health_monitoring_mode: "FULL",
 		executed_end_at: "2026-09-30T12:00:00Z",
+		activation_closure_status: "CONCLUIDA",
 		connection_connected: true,
 		connection_captured_at: "2026-10-01T10:00:00Z",
 		download_gigabytes: 0.5,
@@ -94,7 +95,7 @@ test("pendência cadastral isolada não altera saúde técnica", () => {
 	}), { now: NOW });
 	assert.equal(result.healthStatus, "SAUDAVEL");
 	assert.deepEqual(result.reasons, []);
-	assert.deepEqual(result.dataQualityIssues, ["TECHNICIAN_UNMATCHED", "COMPANY_UNMATCHED", "CITY_MISSING", "BRAND_UNKNOWN"]);
+	assert.deepEqual(result.dataQualityIssues, ["COMPANY_UNMATCHED", "CITY_MISSING", "BRAND_UNKNOWN"]);
 });
 
 test("tráfego zerado com captura recém-criada aguarda observação mínima", () => {
