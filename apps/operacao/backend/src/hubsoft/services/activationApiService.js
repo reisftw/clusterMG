@@ -61,6 +61,13 @@ function dateRangeFromPreset(preset = "last7", query = {}) {
 	return { from: addLocalDays(today, -6), to: today };
 }
 
+function rangeDays(period) {
+	const from = new Date(`${period.from}T00:00:00-03:00`).getTime();
+	const to = new Date(`${period.to}T00:00:00-03:00`).getTime();
+	if (!Number.isFinite(from) || !Number.isFinite(to)) return 0;
+	return Math.max(0, Math.ceil((to - from) / 86_400_000) + 1);
+}
+
 function buildFilters(query = {}) {
 	const period = dateRangeFromPreset(query.period || "last7", query);
 	const values = [];
@@ -357,8 +364,227 @@ function groupDailyEvolution(items) {
 	return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
+function activationFamilySql(alias = "os") {
+	return `case
+		when ${alias}.order_type_id in (4, 50, 51, 52, 453, 760, 767) then 'installation'
+		when ${alias}.order_type_id in (6, 508) then 'move'
+		when ${alias}.order_type_id = 65 then 'upgrade'
+		else 'other'
+	end`;
+}
+
+function familyLabel(id) {
+	if (id === "installation") return "Instalação";
+	if (id === "move") return "Mudança de Endereço";
+	if (id === "upgrade") return "Upgrade";
+	return "Outros";
+}
+
+function sortedFamilyRows(rows = []) {
+	const order = ["installation", "move", "upgrade"];
+	const byId = new Map(rows.map((row) => [row.id, {
+		id: row.id,
+		label: familyLabel(row.id),
+		opened: Number(row.opened || 0),
+		completed: Number(row.completed || 0),
+		closedWithoutConclusion: Number(row.closed_without_conclusion || 0),
+		backlog: Number(row.backlog || 0),
+		inProgress: Number(row.in_progress || 0),
+	}]));
+	for (const id of order) {
+		if (!byId.has(id)) byId.set(id, { id, label: familyLabel(id), opened: 0, completed: 0, closedWithoutConclusion: 0, backlog: 0, inProgress: 0 });
+	}
+	return [...byId.values()].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+}
+
+async function dashboardAggregated(db, period) {
+	const metricTypeIds = HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS;
+	const commonValues = [period.from, period.to, metricTypeIds];
+	const familyRows = await db.query(
+		`select
+			family as id,
+			count(*) filter (
+				where (created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+				  and (created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date
+			)::int as opened,
+			count(*) filter (
+				where activation_closure_status = 'CONCLUIDA'
+				  and executed_end_at is not null
+				  and (executed_end_at at time zone 'America/Sao_Paulo')::date >= $1::date
+				  and (executed_end_at at time zone 'America/Sao_Paulo')::date <= $2::date
+			)::int as completed,
+			count(*) filter (
+				where activation_closure_status = 'ENCERRADA_SEM_CONCLUSAO'
+				  and executed_end_at is not null
+				  and (executed_end_at at time zone 'America/Sao_Paulo')::date >= $1::date
+				  and (executed_end_at at time zone 'America/Sao_Paulo')::date <= $2::date
+			)::int as closed_without_conclusion,
+			count(*) filter (where status in ('pendente', 'aguardando_agendamento'))::int as backlog,
+			count(*) filter (where executando = true or activation_closure_status = 'EM_ATENDIMENTO')::int as in_progress
+		   from (
+		   	select os.*, ${activationFamilySql("os")} as family
+		   	  from hubsoft_activation_os_snapshots os
+		   	 where os.is_current = true
+		   	   and os.order_type_id = any($3::int[])
+		   ) source
+		  group by family`,
+		commonValues,
+	);
+	const byFamily = sortedFamilyRows(familyRows.rows);
+	const created = byFamily.reduce((sum, item) => sum + item.opened, 0);
+	const completed = byFamily.reduce((sum, item) => sum + item.completed, 0);
+	const closedWithoutConclusion = byFamily.reduce((sum, item) => sum + item.closedWithoutConclusion, 0);
+	const backlog = byFamily.reduce((sum, item) => sum + item.backlog, 0);
+	const inProgress = byFamily.reduce((sum, item) => sum + item.inProgress, 0);
+
+	const [statusRows, dimensionsRows, byTypeRows, topCitiesRows, topCompaniesRows, topTechniciansRows, dailyRows] = await Promise.all([
+		db.query(
+			`select
+				count(*) filter (where status = 'pendente')::int as pending,
+				count(*) filter (where status = 'aguardando_agendamento')::int as awaiting_schedule,
+				count(*) filter (where status = 'aguardando_aprovacao')::int as awaiting_approval
+			   from hubsoft_activation_os_snapshots os
+			  where os.is_current = true
+			    and os.order_type_id = any($1::int[])`,
+			[metricTypeIds],
+		),
+		db.query(
+			`select
+				count(distinct coalesce(os.operacao_tecnico_id::text, os.hubsoft_technician_id::text)) filter (where coalesce(os.operacao_tecnico_id::text, os.hubsoft_technician_id::text) is not null)::int as technicians,
+				count(distinct coalesce(os.operacao_empresa_id::text, os.hubsoft_technician_name)) filter (where coalesce(os.operacao_empresa_id::text, os.hubsoft_technician_name) is not null)::int as companies,
+				count(distinct coalesce(os.activation_city_id::text, os.activation_city_name)) filter (where coalesce(os.activation_city_id::text, os.activation_city_name) is not null)::int as cities
+			   from hubsoft_activation_os_snapshots os
+			  where os.is_current = true
+			    and os.order_type_id = any($3::int[])
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date`,
+			commonValues,
+		),
+		db.query(
+			`select coalesce(nullif(os.order_type_name, ''), 'Não informado') as label, count(*)::int as value
+			   from hubsoft_activation_os_snapshots os
+			  where os.is_current = true
+			    and os.order_type_id = any($3::int[])
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date
+			  group by 1 order by value desc, label asc`,
+			commonValues,
+		),
+		db.query(
+			`select coalesce(nullif(os.activation_city_name, ''), 'Não informado') as label, count(*)::int as value
+			   from hubsoft_activation_os_snapshots os
+			  where os.is_current = true
+			    and os.order_type_id = any($3::int[])
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date
+			  group by 1 order by value desc, label asc limit 8`,
+			commonValues,
+		),
+		db.query(
+			`select coalesce(nullif(e.nome, ''), nullif(os.hubsoft_technician_name, ''), 'Não informado') as label, count(*)::int as value
+			   from hubsoft_activation_os_snapshots os
+			   left join operacao_empresas e on e.id = os.operacao_empresa_id
+			  where os.is_current = true
+			    and os.order_type_id = any($3::int[])
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date
+			  group by 1 order by value desc, label asc limit 8`,
+			commonValues,
+		),
+		db.query(
+			`select coalesce(nullif(t.nome, ''), nullif(os.hubsoft_technician_name, ''), 'Não informado') as label, count(*)::int as value
+			   from hubsoft_activation_os_snapshots os
+			   left join operacao_tecnicos t on t.id = os.operacao_tecnico_id
+			  where os.is_current = true
+			    and os.order_type_id = any($3::int[])
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+			    and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date
+			  group by 1 order by value desc, label asc limit 8`,
+			commonValues,
+		),
+		db.query(
+			`with created as (
+				select (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date as day, count(*)::int as created, 0::int as completed
+				  from hubsoft_activation_os_snapshots os
+				 where os.is_current = true
+				   and os.order_type_id = any($3::int[])
+				   and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+				   and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date
+				 group by 1
+			), completed as (
+				select (os.executed_end_at at time zone 'America/Sao_Paulo')::date as day, 0::int as created, count(*)::int as completed
+				  from hubsoft_activation_os_snapshots os
+				 where os.is_current = true
+				   and os.order_type_id = any($3::int[])
+				   and os.activation_closure_status = 'CONCLUIDA'
+				   and os.executed_end_at is not null
+				   and (os.executed_end_at at time zone 'America/Sao_Paulo')::date >= $1::date
+				   and (os.executed_end_at at time zone 'America/Sao_Paulo')::date <= $2::date
+				 group by 1
+			)
+			select day::text as label, sum(created)::int as created, sum(completed)::int as completed, sum(created)::int as value
+			  from (select * from created union all select * from completed) x
+			 group by day order by day`,
+			commonValues,
+		),
+	]);
+	const today = todayRange();
+	const [todayRows] = await Promise.all([
+		db.query(
+			`select
+				count(*) filter (where (created_at_hubsoft at time zone 'America/Sao_Paulo')::date = $1::date)::int as created_today,
+				count(*) filter (
+					where activation_closure_status = 'CONCLUIDA'
+					  and executed_end_at is not null
+					  and (executed_end_at at time zone 'America/Sao_Paulo')::date = $1::date
+				)::int as completed_today
+			   from hubsoft_activation_os_snapshots os
+			  where os.is_current = true
+			    and os.order_type_id = any($2::int[])`,
+			[today.from, metricTypeIds],
+		),
+	]);
+	const status = statusRows.rows[0] || {};
+	const dimensions = dimensionsRows.rows[0] || {};
+	const todaySummary = todayRows.rows[0] || {};
+	return {
+		period,
+		summary: {
+			created,
+			completed,
+			closedWithoutConclusion,
+			backlog,
+			createdToday: Number(todaySummary.created_today || 0),
+			completedToday: Number(todaySummary.completed_today || 0),
+			pending: Number(status.pending || 0),
+			inProgress,
+			awaitingSchedule: Number(status.awaiting_schedule || 0),
+			awaitingApproval: Number(status.awaiting_approval || 0),
+			pendingValidation: closedWithoutConclusion,
+			technicians: Number(dimensions.technicians || 0),
+			companies: Number(dimensions.companies || 0),
+			cities: Number(dimensions.cities || 0),
+		},
+		distributions: {
+			byFamily,
+			byType: byTypeRows.rows,
+			byStatus: [
+				{ label: "A Agendar / Pendente", value: Number(status.pending || 0) + Number(status.awaiting_schedule || 0) },
+				{ label: "Em Atendimento", value: inProgress },
+				{ label: "A Validar / Finalização", value: closedWithoutConclusion },
+				{ label: "Concluída", value: completed },
+			],
+			topCities: topCitiesRows.rows,
+			topCompanies: topCompaniesRows.rows,
+			topTechnicians: topTechniciansRows.rows,
+			dailyEvolution: dailyRows.rows,
+		},
+	};
+}
+
 async function dashboard(db, query = {}) {
 	const period = dateRangeFromPreset(query.period || "last7", query);
+	if (period.all || rangeDays(period) > 62) return dashboardAggregated(db, period);
 	const metricTypeIds = HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS;
 	const commonValues = [period.from, period.to, metricTypeIds];
 	const openedSql = `${baseSelect()}
