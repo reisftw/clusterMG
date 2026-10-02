@@ -46,12 +46,31 @@ const rows = [
 		pppoe_username: "pppoe-test",
 		technician_match_status: "matched",
 	},
+	{
+		id: "snap-3",
+		hubsoft_order_id: 3,
+		order_number: "OS-3",
+		order_type_id: 7,
+		order_type_name: "SUPORTE",
+		status: "pendente",
+		executando: false,
+		created_at_hubsoft: "2026-09-30T08:00:00Z",
+		first_seen_at: "2026-09-30T08:01:00Z",
+		last_seen_at: "2026-09-30T08:01:00Z",
+		synced_at: "2026-09-30T08:01:00Z",
+		version: 1,
+		service_description: "SEMPRE 600MB",
+		brand: "SEMPRE",
+		technician_match_status: "not_found",
+	},
 ];
 
 function fakeDb(resultRows = rows) {
 	return {
 		async query(sql, params) {
 			if (sql.includes("where os.id =")) return { rows: resultRows.filter((row) => row.id === params[0]) };
+			if (Array.isArray(params?.[0])) return { rows: resultRows.filter((row) => params[0].includes(row.order_type_id)) };
+			if (Array.isArray(params?.[2])) return { rows: resultRows.filter((row) => params[2].includes(row.order_type_id)) };
 			return { rows: resultRows };
 		},
 	};
@@ -73,6 +92,12 @@ test("dashboard consolida status e dimensoes", async () => {
 	assert.equal(data.summary.pending, 1);
 	assert.equal(data.distributions.byType.length, 2);
 	assert.ok(data.distributions.topTechnicians.some((item) => item.label === "Tecnico Teste"));
+});
+
+test("dashboard contabiliza ativacoes apenas com a familia permitida", async () => {
+	const data = await dashboard(fakeDb(), { period: "custom", from: "2026-09-30", to: "2026-09-30" });
+	assert.equal(data.summary.created, 2);
+	assert.equal(data.distributions.byType.some((item) => item.label === "SUPORTE"), false);
 });
 
 test("detail retorna item publico", async () => {

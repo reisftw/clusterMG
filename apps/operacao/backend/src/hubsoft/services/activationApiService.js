@@ -1,4 +1,4 @@
-const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
+const { HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS, HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
 const { addLocalDays, localDateKey, localMonthEnd, localMonthStart } = require("../normalizers/dates");
 const { ACTIVATION_KANBAN_COLUMNS, resolveActivationOperationalStatus } = require("./activationOperationalStatus");
 
@@ -45,7 +45,8 @@ function dateRangeFromPreset(preset = "last7", query = {}) {
 function buildFilters(query = {}) {
 	const period = dateRangeFromPreset(query.period || "last7", query);
 	const values = [];
-	const clauses = ["os.is_current = true"];
+	const clauses = ["os.is_current = true", `os.order_type_id = any($1::int[])`];
+	values.push(HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS);
 	const dateExpression = "coalesce(os.executed_end_at, os.scheduled_start_at, os.created_at_hubsoft, os.created_at)";
 	values.push(period.from);
 	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date >= $${values.length}::date`);
@@ -306,22 +307,54 @@ function groupDailyEvolution(items) {
 }
 
 async function dashboard(db, query = {}) {
-	const data = await listActivations(db, { ...query, page: 1, limit: 10000 });
-	const items = data.items;
+	const period = dateRangeFromPreset(query.period || "last7", query);
+	const metricTypeIds = HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS;
+	const commonValues = [period.from, period.to, metricTypeIds];
+	const openedSql = `${baseSelect()}
+		where os.is_current = true
+		  and os.order_type_id = any($3::int[])
+		  and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date >= $1::date
+		  and (os.created_at_hubsoft at time zone 'America/Sao_Paulo')::date <= $2::date`;
+	const completedSql = `${baseSelect()}
+		where os.is_current = true
+		  and os.order_type_id = any($3::int[])
+		  and os.activation_closure_status = 'CONCLUIDA'
+		  and os.executed_end_at is not null
+		  and (os.executed_end_at at time zone 'America/Sao_Paulo')::date >= $1::date
+		  and (os.executed_end_at at time zone 'America/Sao_Paulo')::date <= $2::date`;
+	const backlogSql = `${baseSelect()}
+		where os.is_current = true
+		  and os.order_type_id = any($1::int[])
+		  and os.status in ('pendente', 'aguardando_agendamento')`;
+	const inProgressSql = `${baseSelect()}
+		where os.is_current = true
+		  and os.order_type_id = any($1::int[])
+		  and (os.executando = true or os.activation_closure_status = 'EM_ATENDIMENTO')`;
+	const [openedRows, completedRows, backlogRows, inProgressRows] = await Promise.all([
+		db.query(openedSql, commonValues),
+		db.query(completedSql, commonValues),
+		db.query(backlogSql, [metricTypeIds]),
+		db.query(inProgressSql, [metricTypeIds]),
+	]);
+	const openedItems = openedRows.rows.map(publicActivation);
+	const completedItems = completedRows.rows.map(publicActivation);
+	const backlogItems = backlogRows.rows.map(publicActivation);
+	const inProgressItems = inProgressRows.rows.map(publicActivation);
+	const items = openedItems;
 	const today = todayRange();
-	const createdToday = items.filter((item) => localDateKey(item.createdAtHubsoft) === today.from).length;
-	const completedToday = items.filter((item) => localDateKey(item.executedEndAt) === today.from).length;
+	const createdToday = openedItems.filter((item) => localDateKey(item.createdAtHubsoft) === today.from).length;
+	const completedToday = completedItems.filter((item) => localDateKey(item.executedEndAt) === today.from).length;
 	const byDerived = countBy(items, (item) => item.derivedStatus.id);
 	const metricFor = (status) => byDerived.find((item) => item.label === status)?.value || 0;
-	const created = items.length;
-	const completed = metricFor("completed");
-	const closedWithoutConclusion = metricFor("to_validate");
-	const backlog = Math.max(0, created - completed);
-	const technicians = new Set(items.map((item) => item.technician.id || item.technician.hubsoftUserId).filter(Boolean));
-	const companies = new Set(items.map((item) => item.company.id || item.company.name).filter(Boolean));
-	const cities = new Set(items.map((item) => item.city.id || item.city.name).filter(Boolean));
+	const created = openedItems.length;
+	const completed = completedItems.length;
+	const closedWithoutConclusion = openedItems.filter((item) => item.derivedStatus.id === "to_validate").length;
+	const backlog = backlogItems.length;
+	const technicians = new Set(openedItems.map((item) => item.technician.id || item.technician.hubsoftUserId).filter(Boolean));
+	const companies = new Set(openedItems.map((item) => item.company.id || item.company.name).filter(Boolean));
+	const cities = new Set(openedItems.map((item) => item.city.id || item.city.name).filter(Boolean));
 	return {
-		period: data.period,
+		period,
 		summary: {
 			created,
 			completed,
@@ -330,8 +363,8 @@ async function dashboard(db, query = {}) {
 			createdToday,
 			completedToday,
 			pending: metricFor("to_schedule"),
-			inProgress: metricFor("in_progress"),
-			awaitingSchedule: items.filter((item) => item.rawStatus === "aguardando_agendamento").length,
+			inProgress: inProgressItems.length,
+			awaitingSchedule: backlogItems.filter((item) => item.rawStatus === "aguardando_agendamento").length,
 			awaitingApproval: metricFor("approval_pending"),
 			pendingValidation: metricFor("to_validate"),
 			technicians: technicians.size,
@@ -339,12 +372,12 @@ async function dashboard(db, query = {}) {
 			cities: cities.size,
 		},
 		distributions: {
-			byType: countBy(items, (item) => item.orderTypeName),
-			byStatus: countBy(items, (item) => item.derivedStatus.label),
-			topCities: countBy(items, (item) => item.city.name).slice(0, 8),
-			topCompanies: countBy(items, (item) => item.company.name).slice(0, 8),
-			topTechnicians: countBy(items, (item) => item.technician.name).slice(0, 8),
-			dailyEvolution: groupDailyEvolution(items),
+			byType: countBy(openedItems, (item) => item.orderTypeName),
+			byStatus: countBy([...openedItems, ...completedItems], (item) => item.derivedStatus.label),
+			topCities: countBy(openedItems, (item) => item.city.name).slice(0, 8),
+			topCompanies: countBy(openedItems, (item) => item.company.name).slice(0, 8),
+			topTechnicians: countBy(openedItems, (item) => item.technician.name).slice(0, 8),
+			dailyEvolution: groupDailyEvolution([...openedItems, ...completedItems]),
 		},
 	};
 }
@@ -385,7 +418,7 @@ async function filters(db) {
 			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome, 'regionalId', regional_id) order by nome) from regional_cidades) as cities
 	`);
 	return {
-		orderTypes: HUBSOFT_ACTIVATION_ORDER_TYPES,
+		orderTypes: HUBSOFT_ACTIVATION_ORDER_TYPES.filter((item) => HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS.includes(item.id)),
 		statuses: ACTIVATION_KANBAN_COLUMNS,
 		brands: ["SEMPRE", "ONNET", "UNKNOWN"],
 		technicians: rows[0]?.technicians || [],

@@ -520,13 +520,14 @@ function DashboardView({ data, period }) {
 	const distributions = data?.distributions || {};
 	const total = Number(summary.created ?? summary.createdToday ?? 0);
 	const completed = Number(summary.completed ?? summary.completedToday ?? 0);
-	const backlog = Number(summary.backlog ?? Math.max(0, total - completed));
+	const backlog = Number(summary.backlog ?? 0);
+	const operationalBase = Math.max(1, completed + backlog);
 	const context = periodContext(period || data?.period?.preset || "last7");
 	const kpis = [
-		{ label: "Ativações", value: total, sub: context, icon: Rocket, tone: "blue" },
-		{ label: "Concluídas", value: completed, sub: `${percentOf(completed, total)} das ativações`, icon: CheckCircle2, tone: "emerald" },
-		{ label: "Backlog", value: backlog, sub: `${percentOf(backlog, total)} do volume`, icon: Clock3, tone: "amber" },
-		{ label: "Em atendimento", value: summary.inProgress ?? 0, sub: `${percentOf(summary.inProgress, total)} das ativações`, icon: Activity, tone: "violet" },
+		{ label: "Ativações abertas", value: total, sub: context, icon: Rocket, tone: "blue" },
+		{ label: "Concluídas", value: completed, sub: `${percentOf(completed, operationalBase)} de concluídas + backlog`, icon: CheckCircle2, tone: "emerald" },
+		{ label: "Backlog", value: backlog, sub: "Pendente ou aguardando agendamento", icon: Clock3, tone: "amber" },
+		{ label: "Em atendimento", value: summary.inProgress ?? 0, sub: `${percentOf(summary.inProgress, operationalBase)} de concluídas + backlog`, icon: Activity, tone: "violet" },
 	];
 	const secondary = [
 		["Aguardando agendamento", summary.awaitingSchedule ?? 0],

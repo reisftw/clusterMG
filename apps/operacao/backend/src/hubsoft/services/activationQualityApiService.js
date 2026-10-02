@@ -1,4 +1,4 @@
-const { HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
+const { HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS, HUBSOFT_ACTIVATION_ORDER_TYPES } = require("../constants");
 const { addLocalDays, localDateKey, localMonthEnd, localMonthStart } = require("../normalizers/dates");
 const { ACTIVATION_QUALITY_CONFIG, SCHEDULE_STATUS } = require("./activationQualityConfig");
 const { analyzeActivationQuality } = require("./activationQualityRules");
@@ -114,8 +114,9 @@ function baseSelect() {
 function buildFilters(query = {}) {
 	const period = dateRangeFromPreset(query.period || "last7", query);
 	const values = [];
-	const clauses = ["os.is_current = true", "os.health_monitoring_mode in ('FULL', 'LIMITED')", "os.activation_closure_status = 'CONCLUIDA'"];
+	const clauses = ["os.is_current = true", `os.order_type_id = any($1::int[])`, "os.health_monitoring_mode in ('FULL', 'LIMITED')", "os.activation_closure_status = 'CONCLUIDA'"];
 	const dateExpression = "coalesce(os.executed_end_at, os.executed_start_at, os.scheduled_end_at, os.created_at_hubsoft)";
+	values.push(HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS);
 	values.push(period.from);
 	clauses.push(`(${dateExpression} at time zone 'America/Sao_Paulo')::date >= $${values.length}::date`);
 	values.push(period.to);
@@ -382,7 +383,7 @@ async function filters(db) {
 			(select jsonb_agg(jsonb_build_object('id', id, 'name', nome, 'regionalId', regional_id) order by nome) from regional_cidades) as cities
 	`);
 	return {
-		orderTypes: HUBSOFT_ACTIVATION_ORDER_TYPES.filter((item) => item.healthMonitoringMode !== "NONE"),
+		orderTypes: HUBSOFT_ACTIVATION_ORDER_TYPES.filter((item) => HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS.includes(item.id)),
 		brands: ["SEMPRE", "ONNET", "UNKNOWN"],
 		quality: [
 			{ id: "withRework", label: "Com rechamado" },
