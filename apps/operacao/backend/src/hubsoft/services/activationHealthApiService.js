@@ -19,6 +19,7 @@ function todayRange() {
 
 function dateRangeFromPreset(preset = "last30", query = {}) {
 	const today = localDateKey(new Date());
+	if (preset === "all") return { from: "1900-01-01", to: "2999-12-31", all: true };
 	if (preset === "custom" && query.from && query.to) return { from: query.from, to: query.to };
 	if (preset === "today") return todayRange();
 	if (preset === "yesterday") {

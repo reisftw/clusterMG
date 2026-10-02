@@ -46,6 +46,14 @@ router.get("/filtros", requireRotPermission(VIEW), async (_req, res, next) => {
 	}
 });
 
+router.get("/fechamentos-outros", requireRotPermission("ativacoes.visualizar"), async (req, res, next) => {
+	try {
+		res.json({ ok: true, ...(await service.closedReasons(db, req.query)) });
+	} catch (error) {
+		next(error);
+	}
+});
+
 router.get("/export.csv", requireRotPermission("ativacoes.exportar"), async (req, res, next) => {
 	try {
 		const data = await service.listActivations(db, { ...req.query, page: 1, limit: 10000 });

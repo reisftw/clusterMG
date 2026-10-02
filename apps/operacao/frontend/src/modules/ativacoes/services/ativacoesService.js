@@ -28,6 +28,10 @@ export function fetchAtivacoesFilters() {
 	return requestRotApi("/admin/ativacoes/filtros");
 }
 
+export function fetchAtivacoesClosedReasons(filters = {}) {
+	return requestRotApi(`/admin/ativacoes/fechamentos-outros${query(filters)}`);
+}
+
 export function fetchAtivacoesSaude(filters = {}) {
 	return requestRotApi(`/admin/ativacoes/saude${query(filters)}`);
 }

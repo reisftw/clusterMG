@@ -26,6 +26,7 @@ import {
 	ativacoesExportUrl,
 	ativacoesQualidadeExportUrl,
 	ativacoesSaudeExportUrl,
+	fetchAtivacoesClosedReasons,
 	fetchAtivacaoDetail,
 	fetchAtivacoesDashboard,
 	fetchAtivacoesFilters,
@@ -47,6 +48,7 @@ const PERIODS = [
 	{ id: "last7", label: "Últimos 7 dias" },
 	{ id: "month", label: "Este mês" },
 	{ id: "previousMonth", label: "Mês anterior" },
+	{ id: "all", label: "Todo período" },
 	{ id: "custom", label: "Personalizado" },
 ];
 
@@ -146,6 +148,7 @@ function periodContext(period) {
 		last7: "nos últimos 7 dias",
 		month: "neste mês",
 		previousMonth: "no mês anterior",
+		all: "em todo o período",
 		custom: "no período selecionado",
 	};
 	return labels[period] || "no período selecionado";
@@ -219,6 +222,7 @@ export default function AtivacoesPage() {
 	const [quality, setQuality] = useState(null);
 	const [qualitySummary, setQualitySummary] = useState(null);
 	const [detail, setDetail] = useState(null);
+	const [closedReasonsDetail, setClosedReasonsDetail] = useState(null);
 	const [healthDetail, setHealthDetail] = useState(null);
 	const [qualityDetail, setQualityDetail] = useState(null);
 	const [loading, setLoading] = useState(true);
@@ -324,6 +328,16 @@ export default function AtivacoesPage() {
 		}
 	}
 
+	async function openClosedReasons(family) {
+		setClosedReasonsDetail({ loading: true, family });
+		try {
+			const data = await fetchAtivacoesClosedReasons({ ...effectiveFilters, family: family.id });
+			setClosedReasonsDetail({ loading: false, family, item: data });
+		} catch (err) {
+			setClosedReasonsDetail({ loading: false, family, error: err?.message || "Não foi possível abrir os outros fechamentos." });
+		}
+	}
+
 	async function triggerSync() {
 		setSyncJob({ status: "starting" });
 		try {
@@ -384,12 +398,13 @@ export default function AtivacoesPage() {
 			{error ? <ErrorState message={error} onRetry={tab === "saude" ? loadHealth : tab === "qualidade" ? loadQuality : load} compact={tab === "dashboard" && hasLocalDashboardData} /> : null}
 			{loading && !currentData ? <Spinner fullScreen /> : null}
 
-			{tab === "dashboard" ? <DashboardView data={dashboard} period={filters.period} /> : null}
+			{tab === "dashboard" ? <DashboardView data={dashboard} period={filters.period} onOpenClosedReasons={openClosedReasons} /> : null}
 			{tab === "kanban" ? <KanbanView data={kanban} query={filters.q} onOpen={openDetail} /> : null}
 			{tab === "saude" ? <HealthView data={health} summary={healthSummary} onOpen={openHealthDetail} /> : null}
 			{tab === "qualidade" ? <QualityView data={quality} summary={qualitySummary} dimension={qualityDimension} setDimension={setQualityDimension} page={qualityPage} setPage={setQualityPage} sort={qualitySort} setSort={setQualitySort} onOpen={openQualityDetail} /> : null}
 
 			{detail ? <ActivationDetailModal detail={detail} onClose={() => setDetail(null)} /> : null}
+			{closedReasonsDetail ? <ClosedReasonsModal detail={closedReasonsDetail} onClose={() => setClosedReasonsDetail(null)} /> : null}
 			{healthDetail ? <HealthDetailModal detail={healthDetail} onClose={() => setHealthDetail(null)} /> : null}
 			{qualityDetail ? <QualityDetailModal detail={qualityDetail} onClose={() => setQualityDetail(null)} onOpenActivation={openDetail} /> : null}
 		</div>
@@ -515,7 +530,7 @@ function ErrorState({ message, onRetry, compact = false }) {
 	);
 }
 
-function DashboardView({ data, period }) {
+function DashboardView({ data, period, onOpenClosedReasons }) {
 	const summary = data?.summary || {};
 	const distributions = data?.distributions || {};
 	const total = Number(summary.created ?? summary.createdToday ?? 0);
@@ -553,7 +568,7 @@ function DashboardView({ data, period }) {
 					</div>
 				))}
 			</div>
-			<ActivationFamilySummary items={familyItems} />
+			<ActivationFamilySummary items={familyItems} onOpenClosedReasons={onOpenClosedReasons} />
 			{!hasData ? <DashboardEmptyState /> : (
 				<>
 					<DashboardSection title="Desempenho da operação">
@@ -580,11 +595,11 @@ function DashboardView({ data, period }) {
 	);
 }
 
-function ActivationFamilySummary({ items = [] }) {
+function ActivationFamilySummary({ items = [], onOpenClosedReasons }) {
 	const visible = items.length ? items : [
-		{ id: "installation", label: "Instalação", opened: 0, completed: 0, backlog: 0, inProgress: 0 },
-		{ id: "move", label: "Mudança de Endereço", opened: 0, completed: 0, backlog: 0, inProgress: 0 },
-		{ id: "upgrade", label: "Upgrade", opened: 0, completed: 0, backlog: 0, inProgress: 0 },
+		{ id: "installation", label: "Instalação", opened: 0, completed: 0, closedWithoutConclusion: 0, backlog: 0, inProgress: 0 },
+		{ id: "move", label: "Mudança de Endereço", opened: 0, completed: 0, closedWithoutConclusion: 0, backlog: 0, inProgress: 0 },
+		{ id: "upgrade", label: "Upgrade", opened: 0, completed: 0, closedWithoutConclusion: 0, backlog: 0, inProgress: 0 },
 	];
 	return (
 		<section className="grid gap-4 xl:grid-cols-3">
@@ -604,6 +619,7 @@ function ActivationFamilySummary({ items = [] }) {
 							<FamilyMetric label="Concluídas" value={item.completed} />
 							<FamilyMetric label="Backlog" value={item.backlog} />
 							<FamilyMetric label="Em atendimento" value={item.inProgress} />
+							<FamilyMetric label="Outros fechamentos" value={item.closedWithoutConclusion} className="col-span-2" onClick={Number(item.closedWithoutConclusion || 0) ? () => onOpenClosedReasons?.(item) : null} />
 						</div>
 					</div>
 				);
@@ -612,11 +628,24 @@ function ActivationFamilySummary({ items = [] }) {
 	);
 }
 
-function FamilyMetric({ label, value }) {
-	return (
-		<div className="rounded-2xl bg-slate-50 px-3 py-3">
+function FamilyMetric({ label, value, className = "", onClick = null }) {
+	const content = (
+		<>
 			<p className="text-[11px] font-black uppercase text-slate-500">{label}</p>
 			<p className="mt-1 text-2xl font-black text-slate-950">{formatNumber(value)}</p>
+		</>
+	);
+	if (onClick) {
+		return (
+			<button type="button" onClick={onClick} className={`rounded-2xl bg-slate-50 px-3 py-3 text-left transition hover:bg-blue-50 hover:ring-2 hover:ring-blue-100 ${className}`}>
+				{content}
+				<p className="mt-1 text-xs font-black text-blue-600">Ver motivos</p>
+			</button>
+		);
+	}
+	return (
+		<div className={`rounded-2xl bg-slate-50 px-3 py-3 ${className}`}>
+			{content}
 		</div>
 	);
 }
@@ -1182,6 +1211,54 @@ function HealthMiniDistribution({ health = {}, total }) {
 				</div>
 			))}
 		</div>
+	);
+}
+
+function ClosedReasonsModal({ detail, onClose }) {
+	const payload = detail.item;
+	const family = detail.family;
+	const total = Number(payload?.total || 0);
+	return (
+		<ModalShell open title="Outros fechamentos" description={`${family?.label || "Ativações"} · ${formatNumber(total)} registro(s)`} onClose={onClose} size="3xl">
+			{detail.loading ? <Spinner /> : null}
+			{detail.error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{detail.error}</div> : null}
+			{payload ? (
+				<div className="space-y-4">
+					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+						<p className="text-xs font-black uppercase text-blue-700">Fechamentos sem conclusão</p>
+						<p className="mt-2 text-3xl font-black text-slate-950">{formatNumber(total)}</p>
+						<p className="mt-1 text-sm font-semibold text-slate-600">Motivos agrupados no período selecionado.</p>
+					</div>
+					<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+						<table className="w-full text-left text-sm">
+							<thead className="bg-slate-50 text-xs font-black uppercase text-slate-500">
+								<tr>
+									<th className="px-4 py-3">Motivo</th>
+									<th className="px-4 py-3 text-right">Quantidade</th>
+									<th className="px-4 py-3 text-right">Participação</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-100">
+								{(payload.items || []).map((item) => (
+									<tr key={item.reason}>
+										<td className="px-4 py-3 font-bold text-slate-800">{item.reason}</td>
+										<td className="px-4 py-3 text-right font-black text-slate-950">{formatNumber(item.total)}</td>
+										<td className="px-4 py-3 text-right font-bold text-slate-500">{percentOf(item.total, total)}</td>
+									</tr>
+								))}
+								{!payload.items?.length ? (
+									<tr>
+										<td colSpan={3} className="px-4 py-10 text-center text-sm font-bold text-slate-400">
+											Nenhum fechamento sem conclusão encontrado para este filtro.
+										</td>
+									</tr>
+								) : null}
+							</tbody>
+						</table>
+					</section>
+				</div>
+			) : null}
+		</ModalShell>
 	);
 }
 
