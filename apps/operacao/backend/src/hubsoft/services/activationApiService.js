@@ -14,6 +14,17 @@ function firstText(...values) {
 	return "";
 }
 
+function activationFamilyFor(orderTypeId, orderTypeName = "") {
+	const id = Number(orderTypeId);
+	if ([4, 50, 51, 52, 453, 760, 767].includes(id)) return { id: "installation", label: "Instalação" };
+	if ([6, 508].includes(id)) return { id: "move", label: "Mudança de Endereço" };
+	if (id === 65) return { id: "upgrade", label: "Upgrade" };
+	const normalized = text(orderTypeName).toLowerCase();
+	if (normalized.includes("mudan")) return { id: "move", label: "Mudança de Endereço" };
+	if (normalized.includes("upgrade")) return { id: "upgrade", label: "Upgrade" };
+	return { id: "installation", label: "Instalação" };
+}
+
 function parsePositiveInt(value, fallback, max = 200) {
 	const number = Number(value);
 	if (!Number.isFinite(number) || number <= 0) return fallback;
@@ -160,6 +171,7 @@ function publicActivation(row) {
 		orderNumber: row.order_number,
 		orderTypeId: row.order_type_id,
 		orderTypeName: row.order_type_name,
+		orderFamily: activationFamilyFor(row.order_type_id, row.order_type_name),
 		rawStatus: row.status,
 		derivedStatus: derived,
 		executing: row.executando === true,
@@ -287,6 +299,35 @@ function countBy(items, picker) {
 	return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
+function groupByActivationFamily({ openedItems = [], completedItems = [], backlogItems = [], inProgressItems = [] }) {
+	const order = ["installation", "move", "upgrade"];
+	const labels = new Map([
+		["installation", "Instalação"],
+		["move", "Mudança de Endereço"],
+		["upgrade", "Upgrade"],
+	]);
+	const base = new Map(order.map((id) => [id, {
+		id,
+		label: labels.get(id),
+		opened: 0,
+		completed: 0,
+		backlog: 0,
+		inProgress: 0,
+	}]));
+	const bump = (items, key) => {
+		for (const item of items) {
+			const id = item.orderFamily?.id || activationFamilyFor(item.orderTypeId, item.orderTypeName).id;
+			if (!base.has(id)) base.set(id, { id, label: item.orderFamily?.label || labels.get(id) || "Outros", opened: 0, completed: 0, backlog: 0, inProgress: 0 });
+			base.get(id)[key] += 1;
+		}
+	};
+	bump(openedItems, "opened");
+	bump(completedItems, "completed");
+	bump(backlogItems, "backlog");
+	bump(inProgressItems, "inProgress");
+	return [...base.values()].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+}
+
 function groupDailyEvolution(items) {
 	const map = new Map();
 	const ensure = (label) => {
@@ -372,6 +413,7 @@ async function dashboard(db, query = {}) {
 			cities: cities.size,
 		},
 		distributions: {
+			byFamily: groupByActivationFamily({ openedItems, completedItems, backlogItems, inProgressItems }),
 			byType: countBy(openedItems, (item) => item.orderTypeName),
 			byStatus: countBy([...openedItems, ...completedItems], (item) => item.derivedStatus.label),
 			topCities: countBy(openedItems, (item) => item.city.name).slice(0, 8),
@@ -383,12 +425,40 @@ async function dashboard(db, query = {}) {
 }
 
 async function kanban(db, query = {}) {
-	const data = await listActivations(db, { ...query, page: 1, limit: parsePositiveInt(query.limit, 250, 500) });
+	const period = dateRangeFromPreset(query.period || "last7", query);
+	const metricTypeIds = HUBSOFT_ACTIVATION_KPI_ORDER_TYPE_IDS;
+	const limit = parsePositiveInt(query.limit, 500, 1000);
+	const currentOpenSql = `${baseSelect()}
+		where os.is_current = true
+		  and os.order_type_id = any($1::int[])
+		  and (
+		  	os.status in ('pendente', 'aguardando_agendamento', 'aguardando_aprovacao')
+		  	or os.executando = true
+		  	or os.activation_closure_status in ('EM_ATENDIMENTO', 'ENCERRADA_SEM_CONCLUSAO')
+		  )`;
+	const completedSql = `${baseSelect()}
+		where os.is_current = true
+		  and os.order_type_id = any($3::int[])
+		  and os.activation_closure_status = 'CONCLUIDA'
+		  and os.executed_end_at is not null
+		  and (os.executed_end_at at time zone 'America/Sao_Paulo')::date >= $1::date
+		  and (os.executed_end_at at time zone 'America/Sao_Paulo')::date <= $2::date`;
+	const [currentOpenRows, completedRows] = await Promise.all([
+		db.query(currentOpenSql, [metricTypeIds]),
+		db.query(completedSql, [period.from, period.to, metricTypeIds]),
+	]);
+	const data = {
+		period,
+		items: sortActivations([
+			...currentOpenRows.rows.map(publicActivation),
+			...completedRows.rows.map(publicActivation),
+		]).slice(0, limit),
+	};
 	const columns = ACTIVATION_KANBAN_COLUMNS.map((column) => ({
 		...column,
 		items: data.items.filter((item) => item.derivedStatus.id === column.id),
 	}));
-	return { period: data.period, columns, total: data.total };
+	return { period: data.period, columns, total: columns.reduce((sum, column) => sum + column.items.length, 0) };
 }
 
 async function detail(db, id) {

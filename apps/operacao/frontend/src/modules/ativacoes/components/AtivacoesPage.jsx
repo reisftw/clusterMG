@@ -391,7 +391,7 @@ export default function AtivacoesPage() {
 
 			{detail ? <ActivationDetailModal detail={detail} onClose={() => setDetail(null)} /> : null}
 			{healthDetail ? <HealthDetailModal detail={healthDetail} onClose={() => setHealthDetail(null)} /> : null}
-			{qualityDetail ? <QualityDetailModal detail={qualityDetail} onClose={() => setQualityDetail(null)} /> : null}
+			{qualityDetail ? <QualityDetailModal detail={qualityDetail} onClose={() => setQualityDetail(null)} onOpenActivation={openDetail} /> : null}
 		</div>
 	);
 }
@@ -523,6 +523,7 @@ function DashboardView({ data, period }) {
 	const backlog = Number(summary.backlog ?? 0);
 	const operationalBase = Math.max(1, completed + backlog);
 	const context = periodContext(period || data?.period?.preset || "last7");
+	const familyItems = distributions.byFamily || [];
 	const kpis = [
 		{ label: "Ativações abertas", value: total, sub: context, icon: Rocket, tone: "blue" },
 		{ label: "Concluídas", value: completed, sub: `${percentOf(completed, operationalBase)} de concluídas + backlog`, icon: CheckCircle2, tone: "emerald" },
@@ -552,6 +553,7 @@ function DashboardView({ data, period }) {
 					</div>
 				))}
 			</div>
+			<ActivationFamilySummary items={familyItems} />
 			{!hasData ? <DashboardEmptyState /> : (
 				<>
 					<DashboardSection title="Desempenho da operação">
@@ -574,6 +576,47 @@ function DashboardView({ data, period }) {
 					</DashboardSection>
 				</>
 			)}
+		</div>
+	);
+}
+
+function ActivationFamilySummary({ items = [] }) {
+	const visible = items.length ? items : [
+		{ id: "installation", label: "Instalação", opened: 0, completed: 0, backlog: 0, inProgress: 0 },
+		{ id: "move", label: "Mudança de Endereço", opened: 0, completed: 0, backlog: 0, inProgress: 0 },
+		{ id: "upgrade", label: "Upgrade", opened: 0, completed: 0, backlog: 0, inProgress: 0 },
+	];
+	return (
+		<section className="grid gap-4 xl:grid-cols-3">
+			{visible.map((item) => {
+				const base = Math.max(1, Number(item.completed || 0) + Number(item.backlog || 0));
+				return (
+					<div key={item.id || item.label} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+						<div className="flex items-start justify-between gap-3">
+							<div>
+								<p className="text-xs font-black uppercase tracking-[0.08em] text-blue-600">Visão BI</p>
+								<h3 className="mt-1 text-xl font-black text-slate-950">{item.label}</h3>
+							</div>
+							<span className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-black text-blue-700">{percentOf(item.completed, base)}</span>
+						</div>
+						<div className="mt-5 grid grid-cols-2 gap-3">
+							<FamilyMetric label="Abertas" value={item.opened} />
+							<FamilyMetric label="Concluídas" value={item.completed} />
+							<FamilyMetric label="Backlog" value={item.backlog} />
+							<FamilyMetric label="Em atendimento" value={item.inProgress} />
+						</div>
+					</div>
+				);
+			})}
+		</section>
+	);
+}
+
+function FamilyMetric({ label, value }) {
+	return (
+		<div className="rounded-2xl bg-slate-50 px-3 py-3">
+			<p className="text-[11px] font-black uppercase text-slate-500">{label}</p>
+			<p className="mt-1 text-2xl font-black text-slate-950">{formatNumber(value)}</p>
 		</div>
 	);
 }
@@ -1142,7 +1185,7 @@ function HealthMiniDistribution({ health = {}, total }) {
 	);
 }
 
-function QualityDetailModal({ detail, onClose }) {
+function QualityDetailModal({ detail, onClose, onOpenActivation }) {
 	const [payload, setPayload] = useState(detail.item);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState(detail.error || "");
@@ -1210,8 +1253,12 @@ function QualityDetailModal({ detail, onClose }) {
 								</thead>
 								<tbody className="divide-y divide-slate-100">
 									{(payload.items || []).map((item) => (
-										<tr key={item.id}>
-											<td className="px-4 py-3 font-black text-blue-700">{item.orderNumber || item.hubsoftOrderId}</td>
+										<tr key={item.id} className="transition hover:bg-blue-50/60">
+											<td className="px-4 py-3">
+												<button type="button" onClick={() => onOpenActivation?.(item.id)} className="text-left font-black text-blue-700 underline-offset-4 transition hover:text-blue-900 hover:underline">
+													{item.orderNumber || item.hubsoftOrderId}
+												</button>
+											</td>
 											<td className="px-4 py-3 font-semibold text-slate-700">{item.orderTypeName}</td>
 											<td className="px-4 py-3 font-semibold text-slate-700"><p>{formatShortDate(item.executedEndAt || item.executedStartAt)}</p><p className="text-xs text-slate-500">{formatTime(item.executedStartAt)} → {formatTime(item.executedEndAt)}</p></td>
 											<td className="px-4 py-3"><ScheduleBadge status={item.scheduleStatus} /></td>
