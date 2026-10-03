@@ -10,6 +10,7 @@ import {
 	PanelLeftClose,
 	PanelLeftOpen,
 	Search,
+	ShieldCheck,
 	Star,
 	X,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import {
 	saveFinanFavoritos,
 } from "../api/finanApi";
 import FinanceirinhoLauncher from "./FinanceirinhoLauncher";
+import FinanAuthenticatorModal from "./FinanAuthenticatorModal";
 import FinanCommandPalette from "./FinanCommandPalette";
 import FinanWelcomeModal from "./FinanWelcomeModal";
 import UserAvatar from "./UserAvatar";
@@ -50,10 +52,11 @@ function resolvePushToggleLabel(pushBusy, pushSubscribed) {
 }
 
 export default function FinanLayout() {
-	const { user, logout } = useFinanAuth();
+	const { user, logout, refresh } = useFinanAuth();
 	const navigate = useNavigate();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 	const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+	const [authenticatorOpen, setAuthenticatorOpen] = useState(false);
 	const accountMenuRef = useRef(null);
 	const [pushSubscribed, setPushSubscribed] = useState(null); // null = ainda nao verificado
 	const [pushBusy, setPushBusy] = useState(false);
@@ -287,6 +290,17 @@ export default function FinanLayout() {
 											<KeyRound size={16} />
 											PIN
 										</button>
+										<button
+											type="button"
+											onClick={() => {
+												setAccountMenuOpen(false);
+												setAuthenticatorOpen(true);
+											}}
+											className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+										>
+											<ShieldCheck size={16} />
+											Autenticador
+										</button>
 										{isPushSupported() ? (
 											<button
 												type="button"
@@ -328,6 +342,11 @@ export default function FinanLayout() {
 					setForcedWelcomeOpen(false);
 					setWelcomeClosedForUser(currentWelcomeUserKey);
 				}}
+			/>
+			<FinanAuthenticatorModal
+				open={authenticatorOpen}
+				onClose={() => setAuthenticatorOpen(false)}
+				onChanged={refresh}
 			/>
 			<FinanceirinhoLauncher />
 			<FinanCommandPalette />
