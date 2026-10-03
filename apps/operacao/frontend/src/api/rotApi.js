@@ -75,6 +75,28 @@ export async function verifyRotMfa(challengeId, code) {
 	return data.user;
 }
 
+export async function fetchRotTotpStatus() {
+	return requestRotApi("/auth/mfa/totp/status");
+}
+
+export async function startRotTotpSetup() {
+	return requestRotApi("/auth/mfa/totp/setup", { method: "POST" });
+}
+
+export async function confirmRotTotpSetup(setupToken, code) {
+	return requestRotApi("/auth/mfa/totp/confirm", {
+		method: "POST",
+		body: JSON.stringify({ setupToken, code }),
+	});
+}
+
+export async function disableRotTotp(code) {
+	return requestRotApi("/auth/mfa/totp/disable", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
 export async function fetchRotMe() {
 	const data = await requestRotApi("/auth/me");
 	return data.user;

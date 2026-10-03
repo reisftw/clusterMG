@@ -35,11 +35,14 @@ function MfaCodePanel({ challenge, code, onCodeChange, onReset }) {
 				</span>
 				<div>
 					<h3 className="text-base font-black text-slate-950">
-						Confirme o código enviado
+						{challenge.method === "totp"
+							? "Confirme no autenticador"
+							: "Confirme o código enviado"}
 					</h3>
 					<p className="mt-1 text-sm font-semibold leading-relaxed text-blue-800">
-						Enviamos um código de 6 dígitos para{" "}
-						{challenge.maskedEmail || "seu e-mail"}.
+						{challenge.method === "totp"
+							? "Use o código de 6 dígitos que aparece no app autenticador."
+							: `Enviamos um código de 6 dígitos para ${challenge.maskedEmail || "seu e-mail"}.`}
 					</p>
 				</div>
 			</div>

@@ -26,6 +26,14 @@ const {
 	pinRecoveryRequestRateLimit,
 } = require("../security/authRateLimit");
 const { noStore } = require("../security/noStore");
+const {
+	buildOtpAuthUrl,
+	buildQrDataUrl,
+	generateTotpSecret,
+	signSetupToken,
+	verifySetupToken,
+	verifyTotpCode,
+} = require("./totp");
 
 const router = express.Router();
 const SESSION_TTL_DAYS = Number(process.env.FINAN_SESSION_TTL_DAYS || 7);
@@ -100,6 +108,17 @@ async function createMfaChallenge(user) {
 	};
 }
 
+async function createTotpMfaChallenge(user) {
+	const id = crypto.randomUUID();
+	const ttlMinutes = Math.max(3, Math.min(30, Number(MFA_TTL_MINUTES || 10)));
+	await db.query(
+		`insert into finan_mfa_challenges (id, user_id, code_hash, channel, expires_at)
+		values ($1, $2, $3, 'totp', now() + ($4 || ' minutes')::interval)`,
+		[id, user.id, tokenHash(randomToken()), ttlMinutes],
+	);
+	return { challengeId: id, ttlMinutes };
+}
+
 async function createPasswordReset(userId) {
 	const token = randomToken();
 	const id = crypto.randomUUID();
@@ -153,6 +172,18 @@ router.post("/login", loginRateLimit, async (req, res, next) => {
 				error:
 					"Conta bloqueada por tentativas de PIN inválidas. Verifique seu e-mail para recuperação.",
 				pinLocked: true,
+			});
+			return;
+		}
+
+		if (isMfaRequiredFor(user) && user.mfa_method === "totp" && user.totp_secret) {
+			const challenge = await createTotpMfaChallenge(user);
+			res.json({
+				ok: true,
+				mfaRequired: true,
+				method: "totp",
+				challengeId: challenge.challengeId,
+				ttlMinutes: challenge.ttlMinutes,
 			});
 			return;
 		}
@@ -237,7 +268,11 @@ router.post("/mfa/email/verify", mfaVerifyRateLimit, async (req, res, next) => {
 			res.status(429).json({ ok: false, error: "Limite de tentativas do MFA excedido." });
 			return;
 		}
-		if (challenge.code_hash !== tokenHash(code)) {
+		const validCode =
+			challenge.channel === "totp"
+				? verifyTotpCode(challenge.totp_secret, code)
+				: challenge.code_hash === tokenHash(code);
+		if (!validCode) {
 			await db.query(
 				"update finan_mfa_challenges set attempts = attempts + 1 where id = $1",
 				[challengeId],
@@ -257,6 +292,84 @@ router.post("/mfa/email/verify", mfaVerifyRateLimit, async (req, res, next) => {
 		// no corpo pro frontend gravar em localStorage.
 		setFinanSessionCookie(res, session.token);
 		res.json({ ok: true, user: publicUser(challenge) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/mfa/totp/status", requireFinanAuth, async (req, res, next) => {
+	try {
+		const user = await findUserByEmail(req.user.email);
+		res.json({
+			ok: true,
+			method: user?.mfa_method || "email",
+			totpEnabled: user?.mfa_method === "totp" && Boolean(user?.totp_secret),
+			emailEnabled: (user?.mfa_method || "email") !== "totp",
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/setup", requireFinanAuth, async (req, res, next) => {
+	try {
+		const user = await findUserByEmail(req.user.email);
+		if (!user) {
+			res.status(404).json({ ok: false, error: "Usuário não encontrado." });
+			return;
+		}
+		const secret = generateTotpSecret();
+		const issuer = process.env.FINAN_TOTP_ISSUER || "Finan Retiradas";
+		const account = user.email || user.name || user.id;
+		const otpauthUrl = buildOtpAuthUrl({ issuer, account, secret });
+		res.json({
+			ok: true,
+			secret,
+			otpauthUrl,
+			qrDataUrl: await buildQrDataUrl(otpauthUrl),
+			setupToken: signSetupToken({ userId: user.id, secret }),
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/confirm", requireFinanAuth, async (req, res, next) => {
+	try {
+		const user = await findUserByEmail(req.user.email);
+		const payload = verifySetupToken(req.body?.setupToken, user?.id);
+		if (!verifyTotpCode(payload.secret, req.body?.code, { window: 1 })) {
+			res.status(400).json({ ok: false, error: "Código do autenticador inválido." });
+			return;
+		}
+		await db.query(
+			`update finan_users
+			set mfa_enabled = true, mfa_method = 'totp', totp_secret = $2, totp_enabled_at = now(), updated_at = now()
+			where id = $1`,
+			[user.id, payload.secret],
+		);
+		const updated = await findUserByEmail(req.user.email);
+		res.json({ ok: true, user: publicUser(updated) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/disable", requireFinanAuth, async (req, res, next) => {
+	try {
+		const user = await findUserByEmail(req.user.email);
+		if (!user?.totp_secret || !verifyTotpCode(user.totp_secret, req.body?.code, { window: 1 })) {
+			res.status(400).json({ ok: false, error: "Código do autenticador inválido." });
+			return;
+		}
+		await db.query(
+			`update finan_users
+			set mfa_enabled = true, mfa_method = 'email', totp_secret = null, totp_enabled_at = null, updated_at = now()
+			where id = $1`,
+			[user.id],
+		);
+		const updated = await findUserByEmail(req.user.email);
+		res.json({ ok: true, user: publicUser(updated) });
 	} catch (error) {
 		next(error);
 	}

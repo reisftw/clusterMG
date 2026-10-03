@@ -314,9 +314,13 @@ export default function LoginScreen() {
 												<ShieldCheck size={22} />
 											</span>
 											<div>
-												<h3 className="text-base font-black text-slate-950">Confirme o código enviado</h3>
+												<h3 className="text-base font-black text-slate-950">
+													{mfaChallenge.method === "totp" ? "Confirme no autenticador" : "Confirme o código enviado"}
+												</h3>
 												<p className="mt-1 text-sm font-semibold leading-relaxed text-blue-800">
-													O código expira em {mfaChallenge.ttlMinutes || 10} minutos.
+													{mfaChallenge.method === "totp"
+														? "Use o código de 6 dígitos que aparece no app autenticador."
+														: `O código expira em ${mfaChallenge.ttlMinutes || 10} minutos.`}
 												</p>
 											</div>
 										</div>

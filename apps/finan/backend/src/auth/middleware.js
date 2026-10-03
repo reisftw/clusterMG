@@ -72,6 +72,9 @@ function publicUser(user) {
 		role: user.role_id,
 		permissions,
 		isAdmin: Boolean(user.is_admin),
+		mfaEnabled: user.mfa_enabled !== false,
+		mfaMethod: user.mfa_method || "email",
+		totpEnabled: user.mfa_method === "totp" && Boolean(user.totp_secret),
 	};
 }
 

@@ -75,6 +75,7 @@ const {
 	deleteLocalUser,
 	getGoogleOAuthConfig,
 	getOktaOAuthConfig,
+	getOwnMfaStatus,
 	getImportedUserProfile,
 	getLocalUserByEmail,
 	loginWithGoogleIdToken,
@@ -87,6 +88,9 @@ const {
 	revokeSession,
 	resetLocalUserPassword,
 	resetPasswordWithToken,
+	startTotpSetup,
+	confirmTotpSetup,
+	disableTotp,
 	startEmailMfaLogin,
 	REFRESH_TOKEN_TTL_SECONDS,
 	TOKEN_TTL_SECONDS,
@@ -3181,15 +3185,17 @@ function createApp() {
 					ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
 					req,
 				});
-				await emailService.sendMfaLoginCodeEmail({
-					user: challenge.user,
-					code: challenge.code,
-					ttlMinutes: challenge.ttlMinutes,
-				});
+				if (challenge.method !== "totp") {
+					await emailService.sendMfaLoginCodeEmail({
+						user: challenge.user,
+						code: challenge.code,
+						ttlMinutes: challenge.ttlMinutes,
+					});
+				}
 				res.json({
 					ok: true,
 					mfaRequired: true,
-					method: "email",
+					method: challenge.method || "email",
 					challengeId: challenge.challengeId,
 					maskedEmail: challenge.maskedEmail,
 					expiresAt: challenge.expiresAt,
@@ -3232,6 +3238,62 @@ function createApp() {
 				res.json({
 					ok: false,
 					error: error?.message || "Código MFA inválido.",
+				});
+			}
+		},
+	);
+
+	app.get("/api/auth/mfa/totp/status", requireAuthenticated, async (req, res) => {
+		res.json({ ok: true, ...(await getOwnMfaStatus(req.user.uid)) });
+	});
+
+	app.post(
+		"/api/auth/mfa/totp/setup",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res, next) => {
+			try {
+				res.json({ ok: true, ...(await startTotpSetup(req.user.uid)) });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.post(
+		"/api/auth/mfa/totp/confirm",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res) => {
+			try {
+				res.json({
+					ok: true,
+					...(await confirmTotpSetup(
+						req.user.uid,
+						req.body?.setupToken,
+						req.body?.code,
+					)),
+				});
+			} catch (error) {
+				res.status(400).json({
+					ok: false,
+					error: error?.message || "Não foi possível habilitar o autenticador.",
+				});
+			}
+		},
+	);
+
+	app.post(
+		"/api/auth/mfa/totp/disable",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res) => {
+			try {
+				res.json({ ok: true, ...(await disableTotp(req.user.uid, req.body?.code)) });
+			} catch (error) {
+				res.status(400).json({
+					ok: false,
+					error: error?.message || "Não foi possível desabilitar o autenticador.",
 				});
 			}
 		},

@@ -99,6 +99,28 @@ export async function verifyFinanEmailMfa(challengeId, code) {
 	return { user: data.user };
 }
 
+export async function fetchFinanTotpStatus() {
+	return requestFinanApi("/auth/mfa/totp/status");
+}
+
+export async function startFinanTotpSetup() {
+	return requestFinanApi("/auth/mfa/totp/setup", { method: "POST" });
+}
+
+export async function confirmFinanTotpSetup(setupToken, code) {
+	return requestFinanApi("/auth/mfa/totp/confirm", {
+		method: "POST",
+		body: JSON.stringify({ setupToken, code }),
+	});
+}
+
+export async function disableFinanTotp(code) {
+	return requestFinanApi("/auth/mfa/totp/disable", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
 export async function requestFinanPasswordReset(email) {
 	return requestFinanApi("/auth/password/forgot", {
 		method: "POST",

@@ -104,6 +104,24 @@ export const verificarMfaEmail = async ({
 	};
 };
 
+export const obterStatusAutenticador = async () =>
+	requestVpsApi("/auth/mfa/totp/status");
+
+export const iniciarConfiguracaoAutenticador = async () =>
+	requestVpsApi("/auth/mfa/totp/setup", { method: "POST" });
+
+export const confirmarConfiguracaoAutenticador = async ({ setupToken, code }) =>
+	requestVpsApi("/auth/mfa/totp/confirm", {
+		method: "POST",
+		body: JSON.stringify({ setupToken, code }),
+	});
+
+export const desabilitarAutenticador = async (code) =>
+	requestVpsApi("/auth/mfa/totp/disable", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+
 export const obterConfigGoogleLogin = async () => {
 	const response = await fetch(`${getApiBaseUrl()}/auth/google/config`, {
 		cache: "no-store",

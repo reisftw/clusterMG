@@ -4,6 +4,14 @@ const { OAuth2Client } = require("google-auth-library");
 const db = require("./db");
 const rolePermissions = require("./rolePermissions");
 const usersRepository = require("./usersRepository");
+const {
+	buildOtpAuthUrl,
+	buildQrDataUrl,
+	generateTotpSecret,
+	signSetupToken,
+	verifySetupToken,
+	verifyTotpCode,
+} = require("./authTotp");
 
 const DEFAULT_TOKEN_TTL_SECONDS = 60 * 60 * 24;
 const TOKEN_TTL_SECONDS = Number(
@@ -307,6 +315,7 @@ async function getLocalUserByEmail(email) {
 		`select uid, email, display_name, role, regional, password_hash, password_salt,
             password_algorithm, session_version, disabled, must_change_password,
             last_login_at, last_login_ip, last_login_user_agent,
+            mfa_method, totp_secret, totp_enabled_at,
             empresa_id, empresa_nome, insumos_base_id, insumos_base_nome,
             imported_profile
        from app_users
@@ -400,6 +409,7 @@ async function getLocalUserByUid(uid) {
 	const result = await db.query(
 		`select uid, email, display_name, role, regional, session_version, disabled, must_change_password,
             last_login_at, last_login_ip, last_login_user_agent,
+            mfa_method, totp_secret, totp_enabled_at,
             empresa_id, empresa_nome, insumos_base_id, insumos_base_nome,
             imported_profile
        from app_users
@@ -1049,6 +1059,36 @@ async function startEmailMfaLogin(
 	{ ttlMinutes = 10, req = null } = {},
 ) {
 	const user = await verifyPasswordCredentials(email, password);
+	if (user.mfa_method === "totp" && user.totp_secret) {
+		const challengeId = crypto.randomUUID();
+		const expiresAt = new Date(
+			Date.now() +
+				Math.max(3, Math.min(30, Number(ttlMinutes || 10))) * 60 * 1000,
+		).toISOString();
+		await db.query(
+			`insert into email_mfa_challenges (
+       id, uid, code_hash, expires_at, requested_ip, user_agent
+     )
+     values ($1, $2, $3, $4, $5, $6)`,
+			[
+				challengeId,
+				user.uid,
+				hashOpaqueToken(crypto.randomUUID()),
+				expiresAt,
+				String(req?.ip || ""),
+				String(req?.get?.("user-agent") || "").slice(0, 500),
+			],
+		);
+		return {
+			challengeId,
+			code: "",
+			expiresAt,
+			ttlMinutes: Math.max(3, Math.min(30, Number(ttlMinutes || 10))),
+			user,
+			method: "totp",
+			maskedEmail: "",
+		};
+	}
 	const code = createEmailMfaCode();
 	const challengeId = crypto.randomUUID();
 	const expiresAt = new Date(
@@ -1092,7 +1132,8 @@ async function startEmailMfaLogin(
 async function verifyEmailMfaLogin(challengeId, code, { req = null } = {}) {
 	const result = await db.query(
 		`select c.id, c.uid, c.code_hash, c.expires_at, c.used_at, c.attempts,
-            au.email, au.display_name, au.role, au.regional, au.session_version, au.disabled
+            au.email, au.display_name, au.role, au.regional, au.session_version, au.disabled,
+            au.mfa_method, au.totp_secret
        from email_mfa_challenges c
        join app_users au on au.uid = c.uid
       where c.id = $1
@@ -1110,10 +1151,13 @@ async function verifyEmailMfaLogin(challengeId, code, { req = null } = {}) {
 		throw new Error("Limite de tentativas do MFA excedido.");
 	}
 
-	const validCode = timingSafeEqualText(
-		challenge.code_hash,
-		hashOpaqueToken(String(code || "").replace(/\D/g, "")),
-	);
+	const validCode =
+		challenge.mfa_method === "totp" && challenge.totp_secret
+			? verifyTotpCode(challenge.totp_secret, code, { window: 1 })
+			: timingSafeEqualText(
+					challenge.code_hash,
+					hashOpaqueToken(String(code || "").replace(/\D/g, "")),
+				);
 	if (!validCode) {
 		await db.query(
 			`update email_mfa_challenges
@@ -1152,6 +1196,58 @@ async function verifyEmailMfaLogin(challengeId, code, { req = null } = {}) {
 		...token,
 		user: profile,
 	};
+}
+
+async function getOwnMfaStatus(uid) {
+	const user = await getLocalUserByUid(uid);
+	return {
+		method: user?.mfa_method || "email",
+		totpEnabled: user?.mfa_method === "totp" && Boolean(user?.totp_secret),
+		emailEnabled: (user?.mfa_method || "email") !== "totp",
+	};
+}
+
+async function startTotpSetup(uid) {
+	const user = await getLocalUserByUid(uid);
+	if (!user) throw new Error("Usuário não encontrado.");
+	const secret = generateTotpSecret();
+	const issuer = process.env.TOTP_ISSUER || "ADM Retiradas";
+	const account = user.email || user.display_name || user.uid;
+	const otpauthUrl = buildOtpAuthUrl({ issuer, account, secret });
+	return {
+		secret,
+		otpauthUrl,
+		qrDataUrl: await buildQrDataUrl(otpauthUrl),
+		setupToken: signSetupToken({ userId: user.uid, secret }),
+	};
+}
+
+async function confirmTotpSetup(uid, setupToken, code) {
+	const payload = verifySetupToken(setupToken, uid);
+	if (!verifyTotpCode(payload.secret, code, { window: 1 })) {
+		throw new Error("Código do autenticador inválido.");
+	}
+	await db.query(
+		`update app_users
+      set mfa_method = 'totp', totp_secret = $2, totp_enabled_at = now()
+    where uid = $1`,
+		[uid, payload.secret],
+	);
+	return getOwnMfaStatus(uid);
+}
+
+async function disableTotp(uid, code) {
+	const user = await getLocalUserByUid(uid);
+	if (!user?.totp_secret || !verifyTotpCode(user.totp_secret, code, { window: 1 })) {
+		throw new Error("Código do autenticador inválido.");
+	}
+	await db.query(
+		`update app_users
+      set mfa_method = 'email', totp_secret = null, totp_enabled_at = null
+    where uid = $1`,
+		[uid],
+	);
+	return getOwnMfaStatus(uid);
 }
 
 async function fetchOktaJwks(issuer) {
@@ -1485,6 +1581,7 @@ module.exports = {
 	getLocalUserByEmail,
 	getLocalUserByUid,
 	getRequestAuthToken,
+	getOwnMfaStatus,
 	hashPassword,
 	loginWithGoogleIdToken,
 	loginWithOktaIdToken,
@@ -1497,6 +1594,9 @@ module.exports = {
 	revokeSession,
 	resetLocalUserPassword,
 	resetPasswordWithToken,
+	startTotpSetup,
+	confirmTotpSetup,
+	disableTotp,
 	startEmailMfaLogin,
 	REFRESH_TOKEN_TTL_SECONDS,
 	TOKEN_TTL_SECONDS,

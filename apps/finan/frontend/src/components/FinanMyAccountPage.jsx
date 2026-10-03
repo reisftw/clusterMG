@@ -1,7 +1,13 @@
-import { KeyRound, Lock, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { KeyRound, Lock, ShieldCheck, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { uploadFinanOwnAvatar } from "../api/finanApi";
+import {
+	confirmFinanTotpSetup,
+	disableFinanTotp,
+	fetchFinanTotpStatus,
+	startFinanTotpSetup,
+	uploadFinanOwnAvatar,
+} from "../api/finanApi";
 import { FINAN_ROUTES } from "../routes";
 import { useFinanAuth } from "../state/useFinanAuth";
 import UserAvatar from "./UserAvatar";
@@ -23,6 +29,24 @@ export default function FinanMyAccountPage() {
 	const fileInputRef = useRef(null);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState("");
+	const [totpStatus, setTotpStatus] = useState(null);
+	const [totpSetup, setTotpSetup] = useState(null);
+	const [totpCode, setTotpCode] = useState("");
+	const [totpBusy, setTotpBusy] = useState(false);
+	const [totpMessage, setTotpMessage] = useState("");
+	const [totpError, setTotpError] = useState("");
+
+	useEffect(() => {
+		let active = true;
+		fetchFinanTotpStatus()
+			.then((status) => {
+				if (active) setTotpStatus(status);
+			})
+			.catch(() => null);
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	const pickAvatar = () => fileInputRef.current?.click();
 
@@ -39,6 +63,55 @@ export default function FinanMyAccountPage() {
 			setError(err?.message || "Não foi possível enviar o avatar.");
 		} finally {
 			setUploading(false);
+		}
+	};
+
+	const startAuthenticator = async () => {
+		setTotpBusy(true);
+		setTotpError("");
+		setTotpMessage("");
+		try {
+			setTotpSetup(await startFinanTotpSetup());
+			setTotpCode("");
+		} catch (err) {
+			setTotpError(err?.message || "Não foi possível gerar o QR Code.");
+		} finally {
+			setTotpBusy(false);
+		}
+	};
+
+	const confirmAuthenticator = async () => {
+		if (!totpSetup?.setupToken || totpCode.length !== 6) return;
+		setTotpBusy(true);
+		setTotpError("");
+		try {
+			await confirmFinanTotpSetup(totpSetup.setupToken, totpCode);
+			setTotpStatus({ totpEnabled: true, method: "totp" });
+			setTotpSetup(null);
+			setTotpCode("");
+			setTotpMessage("Autenticador habilitado. O MFA por e-mail foi desabilitado para sua conta.");
+			await refresh?.();
+		} catch (err) {
+			setTotpError(err?.message || "Código inválido.");
+		} finally {
+			setTotpBusy(false);
+		}
+	};
+
+	const disableAuthenticator = async () => {
+		if (totpCode.length !== 6) return;
+		setTotpBusy(true);
+		setTotpError("");
+		try {
+			await disableFinanTotp(totpCode);
+			setTotpStatus({ totpEnabled: false, method: "email" });
+			setTotpCode("");
+			setTotpMessage("Autenticador desabilitado. O MFA por e-mail voltou a ser usado.");
+			await refresh?.();
+		} catch (err) {
+			setTotpError(err?.message || "Código inválido.");
+		} finally {
+			setTotpBusy(false);
 		}
 	};
 
@@ -106,6 +179,42 @@ export default function FinanMyAccountPage() {
 						Configurar / trocar PIN
 					</button>
 				</div>
+			</div>
+
+			<div className={cardClass}>
+				<div className="flex items-start gap-3">
+					<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+						<ShieldCheck size={20} />
+					</span>
+					<div>
+						<h2 className="font-black text-slate-950">Autenticador</h2>
+						<p className="mt-1 text-sm text-slate-500">
+							Use Google Authenticator, Microsoft Authenticator, 1Password ou similar. Ao habilitar, o MFA por e-mail é desligado automaticamente.
+						</p>
+					</div>
+				</div>
+				<div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-700">
+					Método atual: {totpStatus?.totpEnabled ? "App autenticador" : "E-mail"}
+				</div>
+				{totpSetup ? (
+					<div className="mt-4 grid gap-4">
+						<img src={totpSetup.qrDataUrl} alt="QR Code do autenticador" className="h-48 w-48 rounded-xl border border-slate-200 bg-white p-2" />
+						<p className="break-all rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">{totpSetup.secret}</p>
+						<input value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} placeholder="000000" className="h-12 rounded-xl border border-slate-200 px-4 text-center text-xl font-black tracking-[0.25em]" />
+						<button type="button" disabled={totpBusy || totpCode.length !== 6} onClick={confirmAuthenticator} className={actionButtonClass}>Habilitar autenticador</button>
+					</div>
+				) : totpStatus?.totpEnabled ? (
+					<div className="mt-4 grid gap-3">
+						<input value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} placeholder="Código atual" className="h-12 rounded-xl border border-slate-200 px-4 text-center text-xl font-black tracking-[0.25em]" />
+						<button type="button" disabled={totpBusy || totpCode.length !== 6} onClick={disableAuthenticator} className={actionButtonClass}>Desabilitar e voltar para e-mail</button>
+					</div>
+				) : (
+					<button type="button" disabled={totpBusy} onClick={startAuthenticator} className={`${actionButtonClass} mt-4`}>
+						Adicionar autenticador
+					</button>
+				)}
+				{totpMessage ? <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">{totpMessage}</p> : null}
+				{totpError ? <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{totpError}</p> : null}
 			</div>
 		</section>
 	);

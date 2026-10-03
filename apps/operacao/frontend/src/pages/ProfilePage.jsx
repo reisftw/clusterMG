@@ -1,6 +1,13 @@
-import { useState } from "react";
-import { Camera, Loader } from "lucide-react";
-import { changeRotPassword, uploadRotAvatar } from "../api/rotApi";
+import { useEffect, useState } from "react";
+import { Camera, Loader, ShieldCheck } from "lucide-react";
+import {
+	changeRotPassword,
+	confirmRotTotpSetup,
+	disableRotTotp,
+	fetchRotTotpStatus,
+	startRotTotpSetup,
+	uploadRotAvatar,
+} from "../api/rotApi";
 import { useRotAuth } from "../state/useRotAuth";
 
 export default function ProfilePage() {
@@ -10,6 +17,24 @@ export default function ProfilePage() {
 	const [saving, setSaving] = useState(false);
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
+	const [totpStatus, setTotpStatus] = useState(null);
+	const [totpSetup, setTotpSetup] = useState(null);
+	const [totpCode, setTotpCode] = useState("");
+	const [totpBusy, setTotpBusy] = useState(false);
+	const [totpMessage, setTotpMessage] = useState("");
+	const [totpError, setTotpError] = useState("");
+
+	useEffect(() => {
+		let active = true;
+		fetchRotTotpStatus()
+			.then((status) => {
+				if (active) setTotpStatus(status);
+			})
+			.catch(() => null);
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	const handleAvatarChange = async (event) => {
 		const file = event.target.files?.[0];
@@ -44,6 +69,55 @@ export default function ProfilePage() {
 			setError(err?.message || "Não foi possível alterar a senha.");
 		} finally {
 			setSaving(false);
+		}
+	};
+
+	const startAuthenticator = async () => {
+		setTotpBusy(true);
+		setTotpError("");
+		setTotpMessage("");
+		try {
+			setTotpSetup(await startRotTotpSetup());
+			setTotpCode("");
+		} catch (err) {
+			setTotpError(err?.message || "Não foi possível gerar o QR Code.");
+		} finally {
+			setTotpBusy(false);
+		}
+	};
+
+	const confirmAuthenticator = async () => {
+		if (!totpSetup?.setupToken || totpCode.length !== 6) return;
+		setTotpBusy(true);
+		setTotpError("");
+		try {
+			const result = await confirmRotTotpSetup(totpSetup.setupToken, totpCode);
+			setTotpStatus({ totpEnabled: true, method: "totp" });
+			setTotpSetup(null);
+			setTotpCode("");
+			setTotpMessage("Autenticador habilitado. O MFA por e-mail foi desabilitado.");
+			await refreshUser?.(result.user);
+		} catch (err) {
+			setTotpError(err?.message || "Código inválido.");
+		} finally {
+			setTotpBusy(false);
+		}
+	};
+
+	const disableAuthenticator = async () => {
+		if (totpCode.length !== 6) return;
+		setTotpBusy(true);
+		setTotpError("");
+		try {
+			await disableRotTotp(totpCode);
+			setTotpStatus({ totpEnabled: false, method: "email" });
+			setTotpCode("");
+			setTotpMessage("Autenticador desabilitado. O MFA por e-mail voltou a ser usado.");
+			await refreshUser?.();
+		} catch (err) {
+			setTotpError(err?.message || "Código inválido.");
+		} finally {
+			setTotpBusy(false);
 		}
 	};
 
@@ -114,6 +188,42 @@ export default function ProfilePage() {
 						{saving ? "Salvando..." : "Alterar senha"}
 					</button>
 				</form>
+			</div>
+
+			<div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+				<div className="flex items-start gap-3">
+					<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+						<ShieldCheck size={20} />
+					</span>
+					<div>
+						<h2 className="text-lg font-black text-slate-950">Autenticador</h2>
+						<p className="mt-1 text-sm font-semibold text-slate-500">
+							Leia o QR Code no app autenticador. Ao habilitar, o MFA por e-mail é desligado automaticamente.
+						</p>
+					</div>
+				</div>
+				<div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-700">
+					Método atual: {totpStatus?.totpEnabled ? "App autenticador" : "E-mail"}
+				</div>
+				{totpSetup ? (
+					<div className="mt-4 grid gap-4">
+						<img src={totpSetup.qrDataUrl} alt="QR Code do autenticador" className="h-48 w-48 rounded-xl border border-slate-200 bg-white p-2" />
+						<p className="break-all rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">{totpSetup.secret}</p>
+						<input value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} placeholder="000000" className="h-12 rounded-xl border border-slate-200 px-4 text-center text-xl font-black tracking-[0.25em]" />
+						<button type="button" disabled={totpBusy || totpCode.length !== 6} onClick={confirmAuthenticator} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60">Habilitar autenticador</button>
+					</div>
+				) : totpStatus?.totpEnabled ? (
+					<div className="mt-4 grid gap-3">
+						<input value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} placeholder="Código atual" className="h-12 rounded-xl border border-slate-200 px-4 text-center text-xl font-black tracking-[0.25em]" />
+						<button type="button" disabled={totpBusy || totpCode.length !== 6} onClick={disableAuthenticator} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:opacity-60">Desabilitar e voltar para e-mail</button>
+					</div>
+				) : (
+					<button type="button" disabled={totpBusy} onClick={startAuthenticator} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white hover:bg-blue-700 disabled:opacity-60">
+						Adicionar autenticador
+					</button>
+				)}
+				{totpMessage ? <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">{totpMessage}</p> : null}
+				{totpError ? <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{totpError}</p> : null}
 			</div>
 		</div>
 	);

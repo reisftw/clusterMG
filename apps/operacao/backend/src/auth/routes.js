@@ -24,6 +24,14 @@ const { noStore } = require("../security/noStore");
 const { AVATAR_UPLOAD_LIMITS, assertUploadedImage, imageFileFilter } = require("../security/uploadFilters");
 const { validateBody } = require("../security/bodyValidation");
 const { readOauthConfig } = require("../oauth/config");
+const {
+	buildOtpAuthUrl,
+	buildQrDataUrl,
+	generateTotpSecret,
+	signSetupToken,
+	verifySetupToken,
+	verifyTotpCode,
+} = require("./totp");
 
 const router = express.Router();
 const RESET_TTL_MINUTES = Number(process.env.ROT_PASSWORD_RESET_TTL_MINUTES || 30);
@@ -181,7 +189,22 @@ async function createMfaChallenge(user) {
 	return { challengeId: id, ttlMinutes, maskedEmail: maskEmail(user.email) };
 }
 
+async function createTotpMfaChallenge(user) {
+	const id = randomId("rottotp");
+	const ttlMinutes = Math.max(3, Math.min(30, MFA_TTL_MINUTES));
+	await db.query(
+		`insert into rot_mfa_challenges (id, user_id, code_hash, channel, expires_at)
+		values ($1, $2, $3, 'totp', now() + ($4 || ' minutes')::interval)`,
+		[id, user.id, tokenHash(randomToken()), ttlMinutes],
+	);
+	return { challengeId: id, ttlMinutes };
+}
+
 async function issueSessionResponse(user, req, provider) {
+	if (user.mfa_enabled && user.mfa_method === "totp" && user.totp_secret) {
+		const challenge = await createTotpMfaChallenge(user);
+		return { mfaRequired: true, method: "totp", ...challenge };
+	}
 	if (user.mfa_enabled && !user.email) {
 		return {
 			mfaConfigurationRequired: true,
@@ -191,7 +214,7 @@ async function issueSessionResponse(user, req, provider) {
 	}
 	if (user.mfa_enabled && user.email) {
 		const challenge = await createMfaChallenge(user);
-		return { mfaRequired: true, ...challenge };
+		return { mfaRequired: true, method: "email", ...challenge };
 	}
 	await touchLastLogin(user.id, req, provider);
 	return { token: await signSession(user), user: publicUser(user) };
@@ -264,19 +287,101 @@ router.post("/verify-mfa", mfaVerifyRateLimit, validateBody(["challengeId", "cod
 			res.status(429).json({ ok: false, error: "Muitas tentativas. Faça login novamente." });
 			return;
 		}
-		if (tokenHash(code) !== challenge.code_hash) {
-			await db.query(`update rot_mfa_challenges set attempts = attempts + 1 where id = $1`, [challengeId]);
-			res.status(401).json({ ok: false, error: "Código incorreto." });
-			return;
-		}
-		await db.query(`update rot_mfa_challenges set consumed_at = now() where id = $1`, [challengeId]);
 		const user = await loadUserById(challenge.user_id);
 		if (!user || user.status !== "ativo") {
 			res.status(401).json({ ok: false, error: "Usuário inválido ou inativo." });
 			return;
 		}
+		const validCode =
+			challenge.channel === "totp"
+				? verifyTotpCode(user.totp_secret, code)
+				: tokenHash(code) === challenge.code_hash;
+		if (!validCode) {
+			await db.query(`update rot_mfa_challenges set attempts = attempts + 1 where id = $1`, [challengeId]);
+			res.status(401).json({ ok: false, error: "Código incorreto." });
+			return;
+		}
+		await db.query(`update rot_mfa_challenges set consumed_at = now() where id = $1`, [challengeId]);
 		await touchLastLogin(user.id, req, "local");
 		sendSession(res, { token: await signSession(user), user: publicUser(user) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.get("/mfa/totp/status", requireRotAuth, async (req, res, next) => {
+	try {
+		const user = await loadUserById(req.user.id);
+		res.json({
+			ok: true,
+			method: user?.mfa_method || "email",
+			totpEnabled: user?.mfa_method === "totp" && Boolean(user?.totp_secret),
+			emailEnabled: (user?.mfa_method || "email") !== "totp",
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/setup", requireRotAuth, async (req, res, next) => {
+	try {
+		const user = await loadUserById(req.user.id);
+		if (!user) {
+			res.status(404).json({ ok: false, error: "Usuário não encontrado." });
+			return;
+		}
+		const secret = generateTotpSecret();
+		const issuer = process.env.ROT_TOTP_ISSUER || "Operacao Retiradas";
+		const account = user.email || user.username || user.name || user.id;
+		const otpauthUrl = buildOtpAuthUrl({ issuer, account, secret });
+		const qrDataUrl = await buildQrDataUrl(otpauthUrl);
+		res.json({
+			ok: true,
+			secret,
+			otpauthUrl,
+			qrDataUrl,
+			setupToken: signSetupToken({ userId: user.id, secret }),
+		});
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/confirm", requireRotAuth, validateBody(["setupToken", "code"], { allowEmpty: false }), async (req, res, next) => {
+	try {
+		const payload = verifySetupToken(req.body.setupToken, req.user.id);
+		if (!verifyTotpCode(payload.secret, req.body.code, { window: 1 })) {
+			res.status(400).json({ ok: false, error: "Código do autenticador inválido." });
+			return;
+		}
+		await db.query(
+			`update rot_users
+			set mfa_enabled = true, mfa_method = 'totp', totp_secret = $2, totp_enabled_at = now(), updated_at = now()
+			where id = $1`,
+			[req.user.id, payload.secret],
+		);
+		const user = await loadUserById(req.user.id);
+		res.json({ ok: true, user: publicUser(user) });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/disable", requireRotAuth, validateBody(["code"], { allowEmpty: false }), async (req, res, next) => {
+	try {
+		const user = await loadUserById(req.user.id);
+		if (!user?.totp_secret || !verifyTotpCode(user.totp_secret, req.body.code, { window: 1 })) {
+			res.status(400).json({ ok: false, error: "Código do autenticador inválido." });
+			return;
+		}
+		await db.query(
+			`update rot_users
+			set mfa_enabled = true, mfa_method = 'email', totp_secret = null, totp_enabled_at = null, updated_at = now()
+			where id = $1`,
+			[req.user.id],
+		);
+		const updated = await loadUserById(req.user.id);
+		res.json({ ok: true, user: publicUser(updated) });
 	} catch (error) {
 		next(error);
 	}
