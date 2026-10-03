@@ -24,9 +24,7 @@ const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const antiBot = require("./antiBot");
 const atendimentoService = require("./atendimento/atendimentoService");
 const emailService = require("./emailService");
-const mapSyncUpdates = require("./mapSyncUpdatesService");
 const operationalImports = require("./operationalImports");
-const rankingService = require("./rankingService");
 const sempreIntegration = require("./sempreIntegration");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
 const movimentacoesRepository = require("./movimentacoesRepository");
@@ -34,7 +32,6 @@ const movimentacoesEntregas = require("./movimentacoesEntregas");
 const movimentacoesOrdensFechadas = require("./movimentacoesOrdensFechadas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
-const hubsoftSyncProfiles = require("./hubsoftSyncProfiles");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
@@ -44,17 +41,12 @@ const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes"
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
-const createEquipmentRecoveryRouter = require("./equipmentRecovery/routes/equipmentRecoveryRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
 const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesRoutes");
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
-const createEvidenciasRouter = require("./evidencias/routes/evidenciasRoutes");
-const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
-const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
-const equipmentRecoveryService = require("./equipmentRecovery/equipmentRecoveryService");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
@@ -66,7 +58,6 @@ const documentosService = require("./documentos/services/documentosService");
 const { attachRealtimeClient, broadcastRealtime } = require("./realtime");
 const {
 	buildSnapshotDomain,
-	getCachedAcompanhamentoResumo,
 	getCachedPublicDashboard,
 } = require("./publicDashboard");
 const {
@@ -79,6 +70,7 @@ const {
 	deleteLocalUser,
 	getGoogleOAuthConfig,
 	getOktaOAuthConfig,
+	getOwnMfaStatus,
 	getImportedUserProfile,
 	getLocalUserByEmail,
 	loginWithGoogleIdToken,
@@ -91,6 +83,9 @@ const {
 	revokeSession,
 	resetLocalUserPassword,
 	resetPasswordWithToken,
+	startTotpSetup,
+	confirmTotpSetup,
+	disableTotp,
 	startEmailMfaLogin,
 	TOKEN_TTL_SECONDS,
 	updateLocalUser,
@@ -258,16 +253,6 @@ const DASHBOARD_ROLES = [
 const ACERTO_ROLES = ["admin", "supervisor", "backoffice"];
 const ESTOQUE_INTEGRADO_ROLES = [
 	...new Set([...FULL_OPERATION_ROLES, ...ACERTO_ROLES]),
-];
-const ESTOQUE_INTEGRADO_VIEW_PERMISSIONS = [
-	"view_estoque_integrado",
-	"estoque.consulta.view",
-	"estoque.equipamentos.view",
-	"estoque.equipamentos.manage",
-];
-const ESTOQUE_INTEGRADO_MANAGE_PERMISSIONS = [
-	"estoque.equipamentos.manage",
-	"manage_equipamentos",
 ];
 const TECNICOS_BOLSA_AUDITORIA_ROLES = [
 	"admin",
@@ -1987,9 +1972,6 @@ function canReadDocumentPath(user, documentPath) {
 
 function canWriteCollection(user, collectionPath) {
 	const collection = String(collectionPath || "").trim();
-	if (["ordens_legadas", "mapa_legado_meta"].includes(collection)) {
-		return hasRole(user, ADMIN_ROLES);
-	}
 	if (
 		ADMIN_ONLY_COLLECTION_PREFIXES.some(
 			(prefix) => collection === prefix || collection.startsWith(`${prefix}/`),
@@ -2013,9 +1995,6 @@ function canWriteCollection(user, collectionPath) {
 }
 
 function canWriteDocumentPath(user, documentPath) {
-	if (["public_dashboard/mapa_os_legadas", "public_dashboard/mapa_os", "public_dashboard/match_os"].includes(String(documentPath || ""))) {
-		return hasRole(user, ADMIN_ROLES);
-	}
 	const collectionPath = String(documentPath || "")
 		.split("/")
 		.filter(Boolean)
@@ -2126,129 +2105,24 @@ function normalizeAgendamentoClienteRecord(row = null) {
 		collectionPath: row.collectionPath,
 		documentId: row.documentId,
 		codigo_cliente:
-			pickFirstText(data, [
-				"codigo_cliente",
-				"codigo",
-				"cod_cliente",
-				"id_cliente",
-			]) ||
+			pickFirstText(data, ["codigo_cliente", "codigo", "cod_cliente"]) ||
 			row.documentId ||
 			"",
 		cliente_nome: clienteNome.replace(/^\(\d+\)\s*/, ""),
 		cidade: pickFirstText(data, ["cidade", "municipio"]),
 		regional: pickFirstText(data, ["regional"]),
 		empresa: pickFirstText(data, ["empresa", "fonte"]),
-		num_os: pickFirstText(data, [
-			"num_os",
-			"numero_ordem_servico",
-			"numero_os",
-			"numero",
-			"os",
-		]),
-		telefone: pickFirstText(data, [
-			"telefone",
-			"telefone_primario",
-			"telefone_secundario",
-			"telefone_terciario",
-			"whatsapp",
-			"celular",
-			"fone",
-		]),
+		num_os: pickFirstText(data, ["num_os", "numero", "os"]),
+		telefone: pickFirstText(data, ["telefone", "whatsapp", "celular", "fone"]),
 		endereco: pickFirstText(data, [
 			"endereco",
 			"endereco_instalacao",
 			"logradouro",
 		]),
 		bairro: pickFirstText(data, ["bairro"]),
-		tipo: pickFirstText(data, ["tipo", "tipo_ordem_servico"]),
+		tipo: pickFirstText(data, ["tipo"]),
 		status: pickFirstText(data, ["status"]),
 		fonte: pickFirstText(data, ["fonte"]),
-	};
-}
-
-async function findAgendamentoClienteRecord(codigo) {
-	const docResult = await db.query(
-		`select path,
-              collection_path as "collectionPath",
-              document_id as "documentId",
-              data
-         from app_documents
-        where collection_path = any($2::text[])
-          and (
-            document_id = $1
-            or data->>'codigo_cliente' = $1
-            or data->>'codigo' = $1
-            or data->>'cod_cliente' = $1
-            or data->>'id_cliente' = $1
-            or data->>'contrato' = $1
-            or data->>'numero_ordem_servico' = $1
-            or data->>'num_os' = $1
-            or data->>'numero_os' = $1
-          )
-        order by case collection_path
-          when 'ordens_abertas' then 1
-          when 'match_os_abertas' then 2
-          else 9
-        end,
-        updated_at desc
-        limit 1`,
-		[codigo, ["ordens_abertas", "match_os_abertas"]],
-	);
-	if (docResult.rows[0]) return docResult.rows[0];
-
-	const syncResult = await db.query(
-		`select concat('hubsoft_sync_records/', id) as path,
-              'hubsoft_sync_records' as "collectionPath",
-              coalesce(nullif(raw_excerpt->>'codigo_cliente', ''), hubsoft_id) as "documentId",
-              jsonb_build_object(
-                'codigo_cliente', coalesce(raw_excerpt->>'codigo_cliente', ''),
-                'nome_razaosocial', coalesce(raw_excerpt->>'nome_razaosocial', ''),
-                'cidade', coalesce(source_city, raw_excerpt->>'cidade', ''),
-                'regional', coalesce(raw_excerpt->>'regional', ''),
-                'empresa', coalesce(raw_excerpt->>'empresa', raw_excerpt->>'fonte', ''),
-                'numero_ordem_servico', coalesce(raw_excerpt->>'numero_ordem_servico', hubsoft_number, ''),
-                'telefone_primario', coalesce(raw_excerpt->>'telefone_primario', ''),
-                'telefone_secundario', coalesce(raw_excerpt->>'telefone_secundario', ''),
-                'telefone_terciario', coalesce(raw_excerpt->>'telefone_terciario', ''),
-                'endereco', coalesce(raw_excerpt->>'endereco', ''),
-                'bairro', coalesce(raw_excerpt->>'bairro', ''),
-                'tipo_ordem_servico', coalesce(source_type, raw_excerpt->>'tipo_ordem_servico', ''),
-                'status', coalesce(source_status, raw_excerpt->>'status', ''),
-                'fonte', 'HubSoft'
-              ) as data
-         from hubsoft_sync_records
-        where profile = any($2::text[])
-          and active = true
-          and (
-            raw_excerpt->>'codigo_cliente' = $1
-            or raw_excerpt->>'codigo' = $1
-            or raw_excerpt->>'cod_cliente' = $1
-            or raw_excerpt->>'id_cliente' = $1
-          )
-        order by source_date desc nulls last, updated_at desc
-        limit 1`,
-		[codigo, ["MAPA", "MATCH"]],
-	);
-	if (syncResult.rows[0]) return syncResult.rows[0];
-
-	const repoRecord = await agendamentosRepository.findClienteByCodigo(codigo);
-	if (repoRecord) return repoRecord;
-
-	const hubsoftRecord = await hubsoftSyncProfiles
-		.findOpenOrderByClientCode(codigo)
-		.catch((error) => {
-			console.warn(
-				"[agendamentos] Falha ao buscar cliente no HubSoft:",
-				error?.message || error,
-			);
-			return null;
-		});
-	if (!hubsoftRecord) return null;
-	return {
-		path: `hubsoft/clientes/${codigo}`,
-		collectionPath: "hubsoft_live_lookup",
-		documentId: codigo,
-		data: hubsoftRecord,
 	};
 }
 
@@ -2436,7 +2310,7 @@ function createApp() {
 		}),
 	);
 	app.use("/api/public/visits", rejectLargePublicVisit);
-	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1gb" }));
+	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
 	app.use(vpnAccess.createMiddleware());
 
 	app.get(
@@ -2595,16 +2469,6 @@ function createApp() {
 		createMensageriaRouter({
 			adminRoles: ADMIN_ROLES,
 			documents,
-			evolutionMessaging,
-			requireAnyPermission,
-			requireAuthenticated,
-			requireCsrfToken,
-		}),
-	);
-
-	app.use(
-		"/api/evidencias",
-		createEvidenciasRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
@@ -2644,7 +2508,6 @@ function createApp() {
 		try {
 			const detail = String(req.query.detail || "").toLowerCase();
 			const dashboard = await getCachedPublicDashboard({
-				mapaDetail: detail === "mapa",
 				matchDetail: detail === "match",
 			});
 			res.set("X-Retiradas-Cache", dashboard.cacheStatus);
@@ -2657,24 +2520,6 @@ function createApp() {
 			next(error);
 		}
 	});
-
-	app.get(
-		"/api/acompanhamento/resumo",
-		publicReadLimiter,
-		async (req, res, next) => {
-			try {
-				const resumo = await getCachedAcompanhamentoResumo();
-				res.set("X-Retiradas-Cache", resumo.cacheStatus);
-				res.set(
-					"X-Retiradas-Cache-Age-Ms",
-					String(Math.max(0, Math.round(resumo.cacheAgeMs))),
-				);
-				res.json(resumo.data);
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
 
 	app.get("/api/public/static/:domain", publicReadLimiter, async (req, res, next) => {
 		try {
@@ -2906,15 +2751,17 @@ function createApp() {
 					ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
 					req,
 				});
-				await emailService.sendMfaLoginCodeEmail({
-					user: challenge.user,
-					code: challenge.code,
-					ttlMinutes: challenge.ttlMinutes,
-				});
+				if (challenge.method !== "totp") {
+					await emailService.sendMfaLoginCodeEmail({
+						user: challenge.user,
+						code: challenge.code,
+						ttlMinutes: challenge.ttlMinutes,
+					});
+				}
 				res.json({
 					ok: true,
 					mfaRequired: true,
-					method: "email",
+					method: challenge.method || "email",
 					challengeId: challenge.challengeId,
 					maskedEmail: challenge.maskedEmail,
 					expiresAt: challenge.expiresAt,
@@ -2971,6 +2818,62 @@ function createApp() {
 				res.json({
 					ok: false,
 					error: error?.message || "Código MFA inválido.",
+				});
+			}
+		},
+	);
+
+	app.get("/api/auth/mfa/totp/status", requireAuthenticated, async (req, res) => {
+		res.json({ ok: true, ...(await getOwnMfaStatus(req.user.uid)) });
+	});
+
+	app.post(
+		"/api/auth/mfa/totp/setup",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res, next) => {
+			try {
+				res.json({ ok: true, ...(await startTotpSetup(req.user.uid)) });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.post(
+		"/api/auth/mfa/totp/confirm",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res) => {
+			try {
+				res.json({
+					ok: true,
+					...(await confirmTotpSetup(
+						req.user.uid,
+						req.body?.setupToken,
+						req.body?.code,
+					)),
+				});
+			} catch (error) {
+				res.status(400).json({
+					ok: false,
+					error: error?.message || "Não foi possível habilitar o autenticador.",
+				});
+			}
+		},
+	);
+
+	app.post(
+		"/api/auth/mfa/totp/disable",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res) => {
+			try {
+				res.json({ ok: true, ...(await disableTotp(req.user.uid, req.body?.code)) });
+			} catch (error) {
+				res.status(400).json({
+					ok: false,
+					error: error?.message || "Não foi possível desabilitar o autenticador.",
 				});
 			}
 		},
@@ -4360,7 +4263,6 @@ function createApp() {
 		createHubsoftAdminRouter({
 			adminRoles: ADMIN_ROLES,
 			hubsoftIntegration,
-			hubsoftSyncProfiles,
 			requireAuthenticated,
 			requireCsrfToken,
 			requireRoles,
@@ -4443,10 +4345,7 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment",
 		requireAuthenticated,
-		requireAnyPermission(
-			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
-			ESTOQUE_INTEGRADO_ROLES,
-		),
+		requireRoles(ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				res.json(await sempreIntegration.consultEquipment(req.query.mac));
@@ -4459,10 +4358,7 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/mapa",
 		requireAuthenticated,
-		requireAnyPermission(
-			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
-			ESTOQUE_INTEGRADO_ROLES,
-		),
+		requireRoles(ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				res.json(
@@ -4490,10 +4386,7 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/treatments",
 		requireAuthenticated,
-		requireAnyPermission(
-			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
-			ESTOQUE_INTEGRADO_ROLES,
-		),
+		requireRoles(ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				res.json(await sempreIntegration.listEquipmentTreatments());
@@ -4507,10 +4400,7 @@ function createApp() {
 		"/api/integrations/sempre/equipment/treatments",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireAnyPermission(
-			ESTOQUE_INTEGRADO_MANAGE_PERMISSIONS,
-			ESTOQUE_INTEGRADO_ROLES,
-		),
+		requireRoles(ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				const result = await sempreIntegration.saveEquipmentTreatment(
@@ -4529,10 +4419,7 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/history",
 		requireAuthenticated,
-		requireAnyPermission(
-			ESTOQUE_INTEGRADO_VIEW_PERMISSIONS,
-			ESTOQUE_INTEGRADO_ROLES,
-		),
+		requireRoles(ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				res.json(
@@ -4802,26 +4689,6 @@ function createApp() {
 			fallbackRoles: MOVIMENTACOES_ROLES,
 		}),
 	);
-
-	app.use(
-		"/api/service-orders/fines",
-		createServiceOrderFinesRouter({
-			fallbackRoles: FULL_OPERATION_ROLES,
-			hubsoftSyncProfiles,
-			requireAnyPermission,
-			requireAuthenticated,
-			requireCsrfToken,
-		}),
-	);
-
-	const serviceOrderCancellationsRouter = createServiceOrderCancellationsRouter({
-		fallbackRoles: FULL_OPERATION_ROLES,
-		requireAnyPermission,
-		requireAuthenticated,
-		requireCsrfToken,
-	});
-	app.use("/api/service-orders/cancellations", serviceOrderCancellationsRouter);
-	app.use("/api/cancelamentos", serviceOrderCancellationsRouter);
 
 	app.post(
 		"/api/admin/documents",
@@ -5096,7 +4963,7 @@ function createApp() {
 		"/api/imports/mapa",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireRoles(ADMIN_ROLES),
+		requireRoles(FULL_OPERATION_ROLES),
 		async (req, res, next) => {
 			try {
 				res
@@ -5118,7 +4985,7 @@ function createApp() {
 		"/api/imports/match",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireRoles(ADMIN_ROLES),
+		requireRoles(FULL_OPERATION_ROLES),
 		async (req, res, next) => {
 			try {
 				res
@@ -5169,8 +5036,33 @@ function createApp() {
 					return;
 				}
 
+				const result = await db.query(
+					`select path,
+                  collection_path as "collectionPath",
+                  document_id as "documentId",
+                  data
+             from app_documents
+            where collection_path = any($2::text[])
+              and (
+                document_id = $1
+                or data->>'codigo_cliente' = $1
+                or data->>'codigo' = $1
+                or data->>'cod_cliente' = $1
+                or data->>'contrato' = $1
+              )
+            order by case collection_path
+              when 'ordens_abertas' then 1
+              when 'match_os_abertas' then 2
+              else 9
+            end,
+            updated_at desc
+            limit 1`,
+					[codigo, ["ordens_abertas", "match_os_abertas"]],
+				);
+
 				const cliente = normalizeAgendamentoClienteRecord(
-					await findAgendamentoClienteRecord(codigo),
+					result.rows[0] ||
+						(await agendamentosRepository.findClienteByCodigo(codigo)),
 				);
 				if (!cliente) {
 					res
@@ -5184,123 +5076,6 @@ function createApp() {
 				next(error);
 			}
 		},
-	);
-
-	app.get(
-		"/api/mapas/atualizacoes",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				res.json(await mapSyncUpdates.listUpdates(req.query || {}));
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.get(
-		"/api/mapas/atualizacoes/latest",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				res.json({
-					update: await mapSyncUpdates.getLatestUpdate(req.query?.profile),
-				});
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.get(
-		"/api/mapas/atualizacoes/:id",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				const detail = await mapSyncUpdates.getUpdateDetail(req.params.id);
-				if (!detail) {
-					res.status(404).json({ error: "Atualizacao nao encontrada." });
-					return;
-				}
-				res.json(detail);
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.get(
-		"/api/acompanhamento/operational-summary",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				res.json(await mapSyncUpdates.getOperationalSummary(req.query || {}));
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.get(
-		"/api/ranking",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				res.json(await rankingService.getRanking(req.query || {}));
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.get(
-		"/api/ranking/detail",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				res.json(await rankingService.getDetail(req.query || {}));
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.get(
-		"/api/ranking/export.xlsx",
-		requireAuthenticated,
-		requireRoles(FULL_OPERATION_ROLES),
-		async (req, res, next) => {
-			try {
-				const buffer = await rankingService.exportRankingXlsx(req.query || {});
-				res.setHeader(
-					"Content-Type",
-					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-				);
-				res.setHeader(
-					"Content-Disposition",
-					'attachment; filename="ranking-retiradas.xlsx"',
-				);
-				res.send(buffer);
-			} catch (error) {
-				next(error);
-			}
-		},
-	);
-
-	app.use(
-		"/api/equipment-recovery",
-		createEquipmentRecoveryRouter({
-			equipmentRecoveryService,
-			requireAuthenticated,
-			requireRoles,
-			fullOperationRoles: FULL_OPERATION_ROLES,
-		}),
 	);
 
 	app.post(
@@ -5578,10 +5353,6 @@ function createApp() {
 		);
 		timer.unref?.();
 		app.locals.movimentacoesScanTimer = timer;
-	}
-
-	if (!app.locals.hubsoftSyncProfilesTimer) {
-		hubsoftSyncProfiles.startScheduler(app);
 	}
 
 	app.use((error, req, res, next) => {
