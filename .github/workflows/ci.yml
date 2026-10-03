@@ -1027,7 +1027,9 @@ jobs:
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
              echo 'Ensuring Playwright Chromium is available for HubSoft sync'
              \$SUDO mkdir -p /var/www/.cache
+             \$SUDO mkdir -p /var/www/.npm
              \$SUDO chown -R www-data:www-data /var/www/.cache
+             \$SUDO chown -R www-data:www-data /var/www/.npm
              if [ \"\$(id -u)\" -eq 0 ]; then
                runuser -u www-data -- env HOME=/var/www npx playwright install chromium
              else
@@ -1215,7 +1217,9 @@ jobs:
              \$SUDO chmod -R u+rwX,g+rwX \"\$api_path/uploads\"
              echo 'Ensuring Playwright Chromium is available for HubSoft sync'
              \$SUDO mkdir -p /var/www/.cache
+             \$SUDO mkdir -p /var/www/.npm
              \$SUDO chown -R www-data:www-data /var/www/.cache
+             \$SUDO chown -R www-data:www-data /var/www/.npm
              if [ \"\$(id -u)\" -eq 0 ]; then
                runuser -u www-data -- env HOME=/var/www npx playwright install chromium
              else
