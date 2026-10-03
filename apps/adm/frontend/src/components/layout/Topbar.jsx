@@ -1,9 +1,9 @@
-import { Bell, Camera, CheckCheck, LogOut, Menu, Search } from "lucide-react";
+import { Bell, Camera, CheckCheck, LogOut, Menu, Search, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import UserAvatar from "../ui/UserAvatar";
 import { getRoleLabel } from "../../constants/roles";
-import { useAuthContext } from "../../context/AuthContext";
+import { useAuthContext } from "../../context/useAuthContext";
 import { atualizarAvatarPerfil } from "../../modules/auth/services/authService";
 import {
 	listarNotificacoesInternas,
@@ -13,6 +13,7 @@ import {
 } from "../../services/internalNotificationsService";
 import { playSelectedNotificationSound } from "../../services/notificationSoundSettings";
 import { AVATAR_ACCEPT, validateImageFile } from "../../utils/imageUpload";
+import AuthenticatorModal from "./AuthenticatorModal";
 
 function formatNotificationDate(value) {
 	if (!value) return "-";
@@ -44,6 +45,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 	const avatarInputRef = useRef(null);
 	const [notificationsOpen, setNotificationsOpen] = useState(false);
 	const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
+	const [authenticatorOpen, setAuthenticatorOpen] = useState(false);
 	const [notifications, setNotifications] = useState([]);
 	const [unreadCount, setUnreadCount] = useState(0);
 	const [defaultAvatarUrl, setDefaultAvatarUrl] = useState("");
@@ -180,6 +182,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 
 	return (
 		<header className="relative z-layout-topbar flex items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
+			<AuthenticatorModal open={authenticatorOpen} onClose={() => setAuthenticatorOpen(false)} />
 			<button
 				type="button"
 				onClick={() => {
@@ -340,6 +343,16 @@ const Topbar = ({ onOpenMobileMenu }) => {
 								</button>
 								<button
 									type="button"
+									onClick={() => {
+										setMobileAccountOpen(false);
+										setAuthenticatorOpen(true);
+									}}
+									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+								>
+									<ShieldCheck size={16} /> Autenticador
+								</button>
+								<button
+									type="button"
 									onClick={signOut}
 									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50"
 								>
@@ -396,6 +409,15 @@ const Topbar = ({ onOpenMobileMenu }) => {
 						aria-label="Sair"
 					>
 						<LogOut size={16} />
+					</button>
+					<button
+						type="button"
+						onClick={() => setAuthenticatorOpen(true)}
+						className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+						title="Autenticador"
+						aria-label="Autenticador"
+					>
+						<ShieldCheck size={16} />
 					</button>
 				</div>
 			</div>
