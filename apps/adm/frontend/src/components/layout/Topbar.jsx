@@ -363,7 +363,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 					) : null}
 				</div>
 
-				<div className="ml-1 hidden items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm lg:flex">
+				<div className="relative ml-1 hidden items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm lg:flex">
 					<input
 						ref={avatarInputRef}
 						type="file"
@@ -373,11 +373,15 @@ const Topbar = ({ onOpenMobileMenu }) => {
 					/>
 					<button
 						type="button"
-						onClick={() => avatarInputRef.current?.click()}
+						onClick={() => {
+							setNotificationsOpen(false);
+							setMobileAccountOpen((current) => !current);
+						}}
 						disabled={avatarSaving}
 						className="group relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-600 text-xs font-black text-white disabled:opacity-70"
-						title="Alterar avatar"
-						aria-label="Alterar avatar"
+						title="Conta"
+						aria-label="Conta"
+						aria-expanded={mobileAccountOpen}
 					>
 						<UserAvatar
 							src={avatarSrc}
@@ -386,9 +390,6 @@ const Topbar = ({ onOpenMobileMenu }) => {
 							alt="Avatar"
 							className="flex h-full w-full items-center justify-center"
 						/>
-						<span className="absolute inset-0 hidden items-center justify-center bg-slate-950/55 text-white group-hover:flex">
-							<Camera size={13} />
-						</span>
 					</button>
 					<div className="min-w-0">
 						<p className="max-w-36 truncate text-xs font-black uppercase text-slate-900">
@@ -401,24 +402,48 @@ const Topbar = ({ onOpenMobileMenu }) => {
 									: getRoleLabel(currentUser?.role || "user"))}
 						</p>
 					</div>
-					<button
-						type="button"
-						onClick={signOut}
-						className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-						title="Sair"
-						aria-label="Sair"
-					>
-						<LogOut size={16} />
-					</button>
-					<button
-						type="button"
-						onClick={() => setAuthenticatorOpen(true)}
-						className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-						title="Autenticador"
-						aria-label="Autenticador"
-					>
-						<ShieldCheck size={16} />
-					</button>
+					{mobileAccountOpen ? (
+						<div className="absolute right-0 top-16 z-layout-dropdown w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+							<div className="border-b border-slate-100 p-4">
+								<p className="break-anywhere text-sm font-black text-slate-950">
+									{displayUser?.nome || "Usuário"}
+								</p>
+								<p className="mt-1 break-anywhere text-xs font-semibold text-slate-500">
+									{displayUser?.email}
+								</p>
+							</div>
+							<div className="grid gap-2 p-2">
+								<button
+									type="button"
+									onClick={() => {
+										setMobileAccountOpen(false);
+										avatarInputRef.current?.click();
+									}}
+									disabled={avatarSaving}
+									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+								>
+									<Camera size={16} /> Alterar avatar
+								</button>
+								<button
+									type="button"
+									onClick={() => {
+										setMobileAccountOpen(false);
+										setAuthenticatorOpen(true);
+									}}
+									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+								>
+									<ShieldCheck size={16} /> Autenticador
+								</button>
+								<button
+									type="button"
+									onClick={signOut}
+									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50"
+								>
+									<LogOut size={16} /> Sair
+								</button>
+							</div>
+						</div>
+					) : null}
 				</div>
 			</div>
 		</header>
