@@ -254,6 +254,11 @@ const ACERTO_ROLES = ["admin", "supervisor", "backoffice"];
 const ESTOQUE_INTEGRADO_ROLES = [
 	...new Set([...FULL_OPERATION_ROLES, ...ACERTO_ROLES]),
 ];
+const ESTOQUE_CONSULTA_PERMISSIONS = [
+	"estoque.consulta.view",
+	"estoque.equipamentos.view",
+	"estoque.equipamentos.manage",
+];
 const TECNICOS_BOLSA_AUDITORIA_ROLES = [
 	"admin",
 	"supervisor",
@@ -4345,7 +4350,7 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment",
 		requireAuthenticated,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(ESTOQUE_CONSULTA_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				res.json(await sempreIntegration.consultEquipment(req.query.mac));
@@ -4419,7 +4424,7 @@ function createApp() {
 	app.get(
 		"/api/integrations/sempre/equipment/history",
 		requireAuthenticated,
-		requireRoles(ESTOQUE_INTEGRADO_ROLES),
+		requireAnyPermission(ESTOQUE_CONSULTA_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
 		async (req, res, next) => {
 			try {
 				res.json(

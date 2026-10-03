@@ -67,7 +67,9 @@ function loadService({
 		recordBillingLog: vi.fn(async () => ({})),
 		...repositoryOverrides,
 	});
-	setMock(drivePath, { getFileMetadata: getFileMetadata || vi.fn() });
+	setMock(drivePath, {
+		getFileMetadata: getFileMetadata || vi.fn(async () => ({ parents: [] })),
+	});
 	return require(modulePath);
 }
 
