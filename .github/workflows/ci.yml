@@ -592,12 +592,13 @@ jobs:
              \$SUDO systemctl reload nginx
              health_url=\"http://127.0.0.1:\${ADM_API_PORT:-3301}/api/health\"
              health_ok=0
-             for attempt in 1 2 3 4 5 6 7 8 9 10; do
+             for attempt in $(seq 1 30); do
                if curl -fsS \"\$health_url\" >/dev/null 2>&1; then
                  health_ok=1
                  break
                fi
-               sleep 3
+               echo \"Aguardando health check (\$attempt/30): \$health_url\"
+               sleep 5
              done
              if [ \"\$health_ok\" -ne 1 ]; then
                echo \"ADM health check falhou apos deploy (\$health_url).\" >&2
