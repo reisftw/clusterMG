@@ -1435,8 +1435,8 @@ export const useMetas = () => {
 				const now = new Date();
 				const txt = `Ultima atualizacao: ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")} as ${String(now.getHours()).padStart(2, "0")}h${String(now.getMinutes()).padStart(2, "0")}`;
 				const persistResult = await persistMetasImport({
-					parsed,
-					agentesData: nextAgentesData,
+					parsed: { [mes]: nextMonthData },
+					agentesData: { [mes]: manualAgentCities || [] },
 					lastUpdate: txt,
 					manualLaunchAudit: hasManualChangeMetadata
 						? {
@@ -1445,6 +1445,8 @@ export const useMetas = () => {
 								entries: manualAuditEntries,
 							}
 						: null,
+					partialMonths: [mes],
+					preserveMissingAgentes: true,
 				});
 
 				if (uploadVersion !== dataVersionRef.current) return null;

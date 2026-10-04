@@ -836,6 +836,16 @@ describe("useMetas", () => {
 					{ dia: 3, equipe: 30, agente: 0, loja: 0, regionais: 0, totalDia: 30 },
 				],
 			},
+			Outubro: {
+				mes: "Outubro",
+				ano: 2026,
+				cancelamentos: 200,
+				meta: 120,
+				totalOS: 80,
+				planilhaCarregada: true,
+				technicians: [],
+				regionais: [],
+			},
 		});
 
 		const { result } = renderHook(() => useMetas());
@@ -882,6 +892,10 @@ describe("useMetas", () => {
 		});
 
 		const payload = metasMocks.persistMetasImport.mock.calls.at(-1)[0];
+		expect(Object.keys(payload.parsed)).toEqual(["Setembro"]);
+		expect(Object.keys(payload.agentesData)).toEqual(["Setembro"]);
+		expect(payload.partialMonths).toEqual(["Setembro"]);
+		expect(payload.preserveMissingAgentes).toBe(true);
 		expect(payload.parsed.Setembro.technicians[0].daily.slice(0, 3)).toEqual([
 			10,
 			20,
