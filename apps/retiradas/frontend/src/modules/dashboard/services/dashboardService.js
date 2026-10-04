@@ -2,6 +2,7 @@
 	getInternalStaticData,
 	SNAPSHOT_DOMAINS,
 } from "../../../services/internalStaticDataService";
+import { requestVpsApi } from "../../../services/vpsApiClient";
 import { buscarColaboradores } from "../../colaboradores/services/colaboradoresService";
 import { buscarFeriados } from "../../feriados/services/feriadosService";
 import { buscarTodasFerias } from "../../ferias/services/feriasService";
@@ -24,6 +25,7 @@ function normalizeHoliday(item = {}) {
 }
 
 export const carregarDadosDashboard = async (force = false) => {
+	const resumo = await requestVpsApi("/dashboard/resumo").catch(() => null);
 	const [
 		dashboardSnapshot,
 		visitas,
@@ -31,21 +33,23 @@ export const carregarDadosDashboard = async (force = false) => {
 		colaboradoresFallback,
 		feriadosFallback,
 	] = await Promise.all([
-		getInternalStaticData({
-			force,
-			domains: [
-				SNAPSHOT_DOMAINS.DASHBOARD,
-				SNAPSHOT_DOMAINS.RH,
-				SNAPSHOT_DOMAINS.OPERACIONAL,
-			],
-		}).catch(() => null),
+		resumo
+			? Promise.resolve(null)
+			: getInternalStaticData({
+					force,
+					domains: [
+						SNAPSHOT_DOMAINS.DASHBOARD,
+						SNAPSHOT_DOMAINS.RH,
+						SNAPSHOT_DOMAINS.OPERACIONAL,
+					],
+				}).catch(() => null),
 		buscarVisitas().catch(() => []),
-		buscarTodasFerias().catch(() => []),
-		buscarColaboradores(force).catch(() => []),
-		buscarFeriados().catch(() => []),
+		resumo ? Promise.resolve([]) : buscarTodasFerias().catch(() => []),
+		resumo ? Promise.resolve([]) : buscarColaboradores(force).catch(() => []),
+		resumo ? Promise.resolve([]) : buscarFeriados().catch(() => []),
 	]);
 
-	const dashboardDataSnapshot = dashboardSnapshot?.dashboard?.data ?? null;
+	const dashboardDataSnapshot = resumo || dashboardSnapshot?.dashboard?.data || null;
 	const feriados = dashboardDataSnapshot?.feriados ?? feriadosFallback;
 	const ferias =
 		dashboardSnapshot?.ferias ??

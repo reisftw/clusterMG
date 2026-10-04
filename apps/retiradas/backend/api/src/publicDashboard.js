@@ -20,6 +20,12 @@ const acompanhamentoResumoCache = {
 	pending: null,
 };
 
+const dashboardResumoCache = {
+	data: null,
+	cachedAt: 0,
+	pending: null,
+};
+
 const MONTHS = [
 	"Janeiro",
 	"Fevereiro",
@@ -177,6 +183,9 @@ function invalidatePublicDashboardCache() {
 	acompanhamentoResumoCache.data = null;
 	acompanhamentoResumoCache.cachedAt = 0;
 	acompanhamentoResumoCache.pending = null;
+	dashboardResumoCache.data = null;
+	dashboardResumoCache.cachedAt = 0;
+	dashboardResumoCache.pending = null;
 }
 
 function toTime(value) {
@@ -501,6 +510,24 @@ async function buildDashboardDomain() {
 	};
 }
 
+async function buildDashboardResumo() {
+	const [feriadosRows, feriasRows, colaboradoresRows] = await Promise.all([
+		listCollectionData("feriados", { limit: 300 }),
+		listCollectionData("ferias", { limit: 2000 }),
+		listCollectionData("colaboradores", { limit: 2000 }),
+	]);
+
+	return {
+		generatedAt: new Date().toISOString(),
+		feriados: feriadosRows.map((row) => normalizeHoliday(row.data)),
+		ferias: feriasRows.map((row) => ({ id: row.documentId, ...row.data })),
+		colaboradores: colaboradoresRows.map((row) => ({
+			id: row.documentId,
+			...row.data,
+		})),
+	};
+}
+
 async function buildRhDomain() {
 	const [colaboradoresRows, feriasRows] = await Promise.all([
 		listCollectionData("colaboradores", { limit: 2000 }),
@@ -747,6 +774,49 @@ async function getCachedPublicDashboard(options = {}) {
 	}
 }
 
+async function getCachedDashboardResumo() {
+	const ttlMs = getPublicDashboardCacheTtlMs();
+	const now = Date.now();
+	const cacheAgeMs = now - dashboardResumoCache.cachedAt;
+
+	if (ttlMs > 0 && dashboardResumoCache.data && cacheAgeMs < ttlMs) {
+		return {
+			data: dashboardResumoCache.data,
+			cacheStatus: "HIT",
+			cacheAgeMs,
+		};
+	}
+
+	if (ttlMs > 0 && dashboardResumoCache.pending) {
+		const data = await dashboardResumoCache.pending;
+		return {
+			data,
+			cacheStatus: "JOIN",
+			cacheAgeMs: Date.now() - dashboardResumoCache.cachedAt,
+		};
+	}
+
+	const pending = buildDashboardResumo();
+	dashboardResumoCache.pending = pending;
+
+	try {
+		const data = await pending;
+		if (ttlMs > 0) {
+			dashboardResumoCache.data = data;
+			dashboardResumoCache.cachedAt = Date.now();
+		}
+		return {
+			data,
+			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
+			cacheAgeMs: 0,
+		};
+	} finally {
+		if (dashboardResumoCache.pending === pending) {
+			dashboardResumoCache.pending = null;
+		}
+	}
+}
+
 async function buildSnapshotDomain(domain, { compact = false } = {}) {
 	if (domain === "dashboard") {
 		const snapshot = await buildDashboardDomain();
@@ -772,9 +842,11 @@ async function buildSnapshotDomain(domain, { compact = false } = {}) {
 
 module.exports = {
 	buildAcompanhamentoResumo,
+	buildDashboardResumo,
 	buildPublicDashboard,
 	buildSnapshotDomain,
 	getCachedAcompanhamentoResumo,
+	getCachedDashboardResumo,
 	getCachedPublicDashboard,
 	invalidatePublicDashboardCache,
 };

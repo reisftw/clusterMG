@@ -380,9 +380,12 @@ export async function listAllPublicVpsDocuments(
 	return items;
 }
 
-export async function getVpsStaticSnapshot(domain) {
+export async function getVpsStaticSnapshot(domain, { compact = false } = {}) {
+	const params = new URLSearchParams();
+	if (compact) params.set("compact", "1");
+	const suffix = params.size ? `?${params.toString()}` : "";
 	const response = await fetch(
-		`${getApiBaseUrl()}/public/static/${encodeURIComponent(domain)}`,
+		`${getApiBaseUrl()}/public/static/${encodeURIComponent(domain)}${suffix}`,
 		{
 			cache: "no-store",
 			credentials: "include",

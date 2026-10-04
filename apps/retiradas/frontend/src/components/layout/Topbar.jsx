@@ -6,10 +6,8 @@ import { getRoleLabel } from "../../constants/roles";
 import { useAuthContext } from "../../context/AuthContext";
 import { atualizarAvatarPerfil } from "../../modules/auth/services/authService";
 import {
-	listarNotificacoesInternas,
 	marcarNotificacoesLidas,
-	obterContadoresNotificacoes,
-	obterPreferenciasNotificacoes,
+	obterResumoNotificacoes,
 } from "../../services/internalNotificationsService";
 import { playSelectedNotificationSound } from "../../services/notificationSoundSettings";
 import { AVATAR_ACCEPT, validateImageFile } from "../../utils/imageUpload";
@@ -70,10 +68,17 @@ const Topbar = ({ onOpenMobileMenu }) => {
 			const { silent = false } = options ?? {};
 			if (!currentUser) return;
 			try {
-				const [notificationsResponse, counters] = await Promise.all([
-					listarNotificacoesInternas({ limit: 20 }),
-					obterContadoresNotificacoes(),
-				]);
+				const summary = await obterResumoNotificacoes();
+				const notificationsResponse = summary?.notifications || {};
+				const counters = summary?.counters || {};
+				if (summary?.preferences) {
+					notificationPreferencesRef.current = summary.preferences;
+					setDefaultAvatarUrl(
+						summary.preferences.defaultAvatarUrl ||
+							summary.preferences.defaultAvatarDataUrl ||
+							"",
+					);
+				}
 				const nextItems = notificationsResponse?.items || [];
 				const preferences = notificationPreferencesRef.current;
 				const enabledTypes = preferences?.enabledTypes ?? {};
@@ -107,19 +112,6 @@ const Topbar = ({ onOpenMobileMenu }) => {
 		[currentUser, publishCounters],
 	);
 
-	useEffect(() => {
-		obterPreferenciasNotificacoes()
-			.then((preferences) => {
-				notificationPreferencesRef.current = preferences;
-				setDefaultAvatarUrl(
-					preferences?.defaultAvatarUrl ||
-						preferences?.defaultAvatarDataUrl ||
-						"",
-				);
-			})
-			.catch(() => {});
-	}, []);
-
 	const handleAvatarFile = async (event) => {
 		const file = event.target.files?.[0];
 		event.target.value = "";
@@ -139,10 +131,20 @@ const Topbar = ({ onOpenMobileMenu }) => {
 	};
 
 	useEffect(() => {
-		const initialTimer = window.setTimeout(() => {
+		const scheduleInitial = (callback) => {
+			if (typeof window.requestIdleCallback === "function") {
+				const idleId = window.requestIdleCallback(callback, { timeout: 2000 });
+				return () => window.cancelIdleCallback?.(idleId);
+			}
+			const timer = window.setTimeout(callback, 1200);
+			return () => window.clearTimeout(timer);
+		};
+		const cancelInitial = scheduleInitial(() => {
 			loadNotifications({ silent: true });
-		}, 0);
-		const interval = window.setInterval(() => loadNotifications(), 30000);
+		});
+		const interval = window.setInterval(() => {
+			if (document.visibilityState === "visible") loadNotifications();
+		}, 30000);
 		const handlePreferenceUpdate = (event) => {
 			const nextPreferences = {
 				...(notificationPreferencesRef.current ?? {}),
@@ -160,7 +162,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 			handlePreferenceUpdate,
 		);
 		return () => {
-			window.clearTimeout(initialTimer);
+			cancelInitial();
 			window.clearInterval(interval);
 			window.removeEventListener(
 				"retiradas:notification-preferences-updated",

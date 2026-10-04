@@ -65,6 +65,7 @@ const documentosService = require("./documentos/services/documentosService");
 const { attachRealtimeClient, broadcastRealtime } = require("./realtime");
 const {
 	buildSnapshotDomain,
+	getCachedDashboardResumo,
 	getCachedPublicDashboard,
 } = require("./publicDashboard");
 const {
@@ -2660,6 +2661,20 @@ function createApp() {
 			requireCsrfToken,
 		}),
 	);
+
+	app.get("/api/dashboard/resumo", requireAuthenticated, async (req, res, next) => {
+		try {
+			const dashboard = await getCachedDashboardResumo();
+			res.set("X-Retiradas-Cache", dashboard.cacheStatus);
+			res.set(
+				"X-Retiradas-Cache-Age-Ms",
+				String(Math.max(0, Math.round(dashboard.cacheAgeMs))),
+			);
+			res.json(dashboard.data);
+		} catch (error) {
+			next(error);
+		}
+	});
 
 	app.get("/api/public/dashboard", publicReadLimiter, async (req, res, next) => {
 		try {

@@ -19,7 +19,10 @@ import { useLayoutMode } from "../../../context/LayoutModeContext";
 import { useMapaOS as usePublicMapaOS } from "../../../pages/PainelPublico/hooks/useMapaOS";
 import ProximasAgendas from "../../agenda/components/ProximasAgendas";
 import AgendamentosHojeCard from "../../agendamentos/components/AgendamentosHojeCard";
-import { listarEnviosDocumentos } from "../../documentos/services/documentosService";
+import {
+	listarEnviosDocumentos,
+	obterResumoEnviosDocumentos,
+} from "../../documentos/services/documentosService";
 import MetasCidadesCriticasWidget from "../../metas/components/MetasCidadesCriticasWidget";
 import MetasDashboardWidget from "../../metas/components/MetasDashboardWidget";
 import MetasPrevisaoWidget from "../../metas/components/MetasPrevisaoWidget";
@@ -95,121 +98,6 @@ const ADMINISTRATIVE_DASHBOARD_ROLES = [
 	ROLES.SUPERVISOR_ADMINISTRATIVO,
 	ROLES.ANALISTA_ADMINISTRATIVO,
 ];
-
-async function loadAllDocumentSubmissions() {
-	const items = [];
-	let offset = 0;
-	const limit = 100;
-	for (let page = 0; page < 60; page += 1) {
-		const batch = await listarEnviosDocumentos({ limit, offset });
-		items.push(...batch);
-		if (batch.length < limit) break;
-		offset += limit;
-	}
-	return items;
-}
-
-function isRejectedFile(file) {
-	return (
-		String(file?.status || "").toLowerCase() === "reprovado" ||
-		String(file?.adminStatus || "").toLowerCase() === "reprovado" ||
-		Boolean(file?.motivoReprovacao || file?.adminMotivoReprovacao)
-	);
-}
-
-function isApprovedFile(file) {
-	return (
-		String(file?.status || "").toLowerCase() === "aprovado" ||
-		String(file?.adminStatus || "").toLowerCase() === "aprovado"
-	);
-}
-
-function metricPercent(value, total) {
-	if (!total) return "0,0%";
-	return `${((Number(value || 0) / total) * 100).toLocaleString("pt-BR", {
-		minimumFractionDigits: 1,
-		maximumFractionDigits: 1,
-	})}%`;
-}
-
-function pushCount(map, key, amount = 1) {
-	const label = key || "Sem responsável";
-	map.set(label, (map.get(label) || 0) + amount);
-}
-
-function topEntries(map, limit = 5) {
-	return [...map.entries()]
-		.map(([label, value]) => ({ label, value }))
-		.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label))
-		.slice(0, limit);
-}
-
-function buildAdministrativeDashboard(submissions) {
-	const aprovadores = new Map();
-	const recusadores = new Map();
-	const empresasEnvios = new Map();
-	const empresasReprovadas = new Map();
-	let pendentes = 0;
-	let arquivosPendentes = 0;
-	let analisados = 0;
-	let reprovados = 0;
-
-	submissions.forEach((submission) => {
-		const files = submission.files || [];
-		if (
-			["pendente", "aguardando_administrativo"].includes(
-				String(submission.status || "").toLowerCase(),
-			)
-		) {
-			pendentes += 1;
-		}
-		pushCount(empresasEnvios, submission.empresaNome || "Empresa sem nome", 1);
-
-		files.forEach((file) => {
-			const status = String(file.status || "").toLowerCase();
-			const adminStatus = String(file.adminStatus || "").toLowerCase();
-			const pendingFile = status === "pendente" || adminStatus === "pendente";
-			if (pendingFile) arquivosPendentes += 1;
-			if (isApprovedFile(file) || isRejectedFile(file)) analisados += 1;
-			if (isApprovedFile(file)) {
-				pushCount(
-					aprovadores,
-					file.adminReviewedByName ||
-						file.approvedByName ||
-						submission.adminReviewedByName ||
-						submission.reviewedByName,
-				);
-			}
-			if (isRejectedFile(file)) {
-				reprovados += 1;
-				pushCount(
-					recusadores,
-					file.adminReviewedByName ||
-						file.approvedByName ||
-						submission.adminReviewedByName ||
-						submission.reviewedByName,
-				);
-				pushCount(
-					empresasReprovadas,
-					submission.empresaNome || file.empresaNome || "Empresa sem nome",
-				);
-			}
-		});
-	});
-
-	return {
-		pendentes,
-		arquivosPendentes,
-		analisados,
-		reprovados,
-		taxaRetrabalho: metricPercent(reprovados, analisados),
-		empresasComEnvio: empresasEnvios.size,
-		aprovadores: topEntries(aprovadores),
-		recusadores: topEntries(recusadores),
-		empresasEnvios: topEntries(empresasEnvios),
-		empresasReprovadas: topEntries(empresasReprovadas),
-	};
-}
 
 const ADMIN_METRIC_TONES = {
 	amber: {
@@ -455,20 +343,20 @@ function AdminRankingCard({
 }
 
 function AdministrativeDashboard() {
-	const [state, setState] = useState({ loading: true, items: [], error: "" });
+	const [state, setState] = useState({ loading: true, metrics: null, error: "" });
 
 	const load = useCallback(async () => {
 		setState((current) => ({ ...current, loading: true, error: "" }));
 		try {
 			setState({
 				loading: false,
-				items: await loadAllDocumentSubmissions(),
+				metrics: await obterResumoEnviosDocumentos(),
 				error: "",
 			});
 		} catch (error) {
 			setState({
 				loading: false,
-				items: [],
+				metrics: null,
 				error:
 					error?.message ||
 					"Não foi possível carregar o dashboard administrativo.",
@@ -483,10 +371,18 @@ function AdministrativeDashboard() {
 		return () => window.clearTimeout(timer);
 	}, [load]);
 
-	const metrics = useMemo(
-		() => buildAdministrativeDashboard(state.items),
-		[state.items],
-	);
+	const metrics = state.metrics || {
+		pendentes: 0,
+		arquivosPendentes: 0,
+		analisados: 0,
+		reprovados: 0,
+		taxaRetrabalho: "0,0%",
+		empresasComEnvio: 0,
+		aprovadores: [],
+		recusadores: [],
+		empresasEnvios: [],
+		empresasReprovadas: [],
+	};
 
 	if (state.loading) return <Spinner fullScreen />;
 

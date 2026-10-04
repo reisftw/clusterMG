@@ -69,6 +69,18 @@ function createNotificationsController({ notificationsService }) {
 		}
 	}
 
+	async function getSummary(req, res, next) {
+		try {
+			res.json(
+				await notificationsService.getSummary({
+					user: getProfile(req),
+				}),
+			);
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function markNotificationsRead(req, res, next) {
 		try {
 			res.json(
@@ -100,6 +112,7 @@ function createNotificationsController({ notificationsService }) {
 		getCounters,
 		getNotificationStats,
 		getPreferences,
+		getSummary,
 		listNotifications,
 		markNotificationsRead,
 		savePreferences,

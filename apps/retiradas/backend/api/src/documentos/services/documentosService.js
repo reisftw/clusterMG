@@ -1587,6 +1587,30 @@ async function listSubmissions({
 	});
 }
 
+async function getSubmissionsDashboardSummary({ user } = {}) {
+	const role = normalize(user?.role);
+	const filters = {};
+	if (role === "supervisor") {
+		filters.regional = text(user?.regional || user?.profile?.regional);
+	}
+	if (["lider_empresa", "agente_autorizado"].includes(role)) {
+		filters.empresaId = text(
+			user?.empresaId ||
+				user?.empresa_id ||
+				user?.profile?.empresaId ||
+				user?.profile?.empresa_id,
+		);
+	}
+	const cacheKey = getCacheKey("submissionsDashboardSummary", {
+		filters,
+		role,
+		uid: userId(user),
+	});
+	return getOrSetListCache(cacheKey, () =>
+		repository.getSubmissionsDashboardSummary(filters),
+	);
+}
+
 async function listSupervisorTreatments({ limit, offset, user }) {
 	if (!canViewSupervisorTreatments(user)) {
 		const error = new Error(
@@ -2058,6 +2082,7 @@ module.exports = {
 	downloadDocument,
 	downloadSubmissionZip,
 	getSubmissionWithFiles,
+	getSubmissionsDashboardSummary,
 	getBillingConfig,
 	listInvoiceFields,
 	listCompanyDriveFolder,

@@ -21,6 +21,10 @@ export async function obterEstatisticasNotificacoes() {
 	return requestVpsApi("/notifications/stats");
 }
 
+export async function obterResumoNotificacoes() {
+	return requestVpsApi("/notifications/summary");
+}
+
 export async function obterContadoresNotificacoes() {
 	return requestVpsApi("/notifications/counters");
 }

@@ -95,6 +95,11 @@ export async function listarEnviosDocumentos({
 	return response?.items || [];
 }
 
+export async function obterResumoEnviosDocumentos() {
+	const response = await requestVpsApi("/documentos/submissions/resumo");
+	return response?.metrics || {};
+}
+
 export async function listarTratativasDocumentos({
 	limit = 20,
 	offset = 0,

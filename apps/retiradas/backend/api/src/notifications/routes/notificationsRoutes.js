@@ -23,6 +23,7 @@ function createNotificationsRouter({
 
 	router.get("/", requireAuthenticated, controller.listNotifications);
 	router.get("/stats", requireAuthenticated, controller.getNotificationStats);
+	router.get("/summary", requireAuthenticated, controller.getSummary);
 	router.get("/preferences", requireAuthenticated, controller.getPreferences);
 	router.put(
 		"/preferences",

@@ -153,6 +153,18 @@ async function listSubmissions(req, res, next) {
 	}
 }
 
+async function getSubmissionsDashboardSummary(req, res, next) {
+	try {
+		res.json({
+			metrics: await service.getSubmissionsDashboardSummary({
+				user: req.user,
+			}),
+		});
+	} catch (error) {
+		next(error);
+	}
+}
+
 async function listSupervisorTreatments(req, res, next) {
 	try {
 		const paging = parsePaging(req.query);
@@ -431,6 +443,7 @@ module.exports = {
 	downloadCompanyDriveFile,
 	downloadSubmissionZip,
 	ensureFolder,
+	getSubmissionsDashboardSummary,
 	getSubmission,
 	googleAuthUrl,
 	googleCallback,

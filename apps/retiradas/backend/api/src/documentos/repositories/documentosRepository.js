@@ -529,6 +529,136 @@ async function listSubmissions({
 	return result.rows.map(mapSubmission);
 }
 
+function buildSubmissionScopeWhere({ empresaId, regional, submittedBy } = {}) {
+	const filters = [];
+	const params = [];
+	const push = (sql, value) => {
+		params.push(value);
+		filters.push(sql.replace("?", `$${params.length}`));
+	};
+	if (empresaId) push("s.empresa_id = ?", empresaId);
+	if (regional) push("lower(s.regional) = lower(?)", regional);
+	if (submittedBy) push("s.submitted_by = ?", submittedBy);
+	return {
+		where: filters.length ? `where ${filters.join(" and ")}` : "",
+		params,
+	};
+}
+
+async function getSubmissionsDashboardSummary(filters = {}) {
+	const scoped = buildSubmissionScopeWhere(filters);
+	const scopedWhere = scoped.where;
+	const scopedParams = scoped.params;
+	const withScoped = `
+		with scoped_submissions as (
+			select *
+			  from document_submissions s
+			  ${scopedWhere}
+		)
+	`;
+	const [overview, reviewers, rejecters, companySubmissions, companyRejected] =
+		await Promise.all([
+			db.query(
+				`${withScoped}
+				select
+					count(distinct s.id)::int as total_envios,
+					count(distinct s.empresa_id)::int as empresas_com_envio,
+					count(distinct s.id) filter (
+						where lower(coalesce(s.status, '')) in ('pendente', 'aguardando_administrativo')
+					)::int as pendentes,
+					count(f.id) filter (
+						where lower(coalesce(f.status, '')) = 'pendente'
+						   or lower(coalesce(f.admin_status, 'pendente')) = 'pendente'
+					)::int as arquivos_pendentes,
+					count(f.id) filter (
+						where lower(coalesce(f.status, '')) in ('aprovado', 'reprovado')
+						   or lower(coalesce(f.admin_status, '')) in ('aprovado', 'reprovado')
+						   or coalesce(f.motivo_reprovacao, f.admin_motivo_reprovacao, '') <> ''
+					)::int as analisados,
+					count(f.id) filter (
+						where lower(coalesce(f.status, '')) = 'reprovado'
+						   or lower(coalesce(f.admin_status, '')) = 'reprovado'
+						   or coalesce(f.motivo_reprovacao, f.admin_motivo_reprovacao, '') <> ''
+					)::int as reprovados
+				  from scoped_submissions s
+				  left join document_files f on f.submission_id = s.id`,
+				scopedParams,
+			),
+			db.query(
+				`${withScoped}
+				select coalesce(nullif(f.admin_reviewed_by_name, ''), nullif(f.approved_by_name, ''), nullif(s.admin_reviewed_by_name, ''), nullif(s.reviewed_by_name, ''), 'Sem responsável') as label,
+				       count(*)::int as value
+				  from scoped_submissions s
+				  join document_files f on f.submission_id = s.id
+				 where lower(coalesce(f.status, '')) = 'aprovado'
+				    or lower(coalesce(f.admin_status, '')) = 'aprovado'
+				 group by label
+				 order by value desc, label asc
+				 limit 5`,
+				scopedParams,
+			),
+			db.query(
+				`${withScoped}
+				select coalesce(nullif(f.admin_reviewed_by_name, ''), nullif(f.approved_by_name, ''), nullif(s.admin_reviewed_by_name, ''), nullif(s.reviewed_by_name, ''), 'Sem responsável') as label,
+				       count(*)::int as value
+				  from scoped_submissions s
+				  join document_files f on f.submission_id = s.id
+				 where lower(coalesce(f.status, '')) = 'reprovado'
+				    or lower(coalesce(f.admin_status, '')) = 'reprovado'
+				    or coalesce(f.motivo_reprovacao, f.admin_motivo_reprovacao, '') <> ''
+				 group by label
+				 order by value desc, label asc
+				 limit 5`,
+				scopedParams,
+			),
+			db.query(
+				`${withScoped}
+				select coalesce(nullif(s.empresa_nome, ''), 'Empresa sem nome') as label,
+				       count(*)::int as value
+				  from scoped_submissions s
+				 group by label
+				 order by value desc, label asc
+				 limit 5`,
+				scopedParams,
+			),
+			db.query(
+				`${withScoped}
+				select coalesce(nullif(s.empresa_nome, ''), nullif(f.empresa_nome, ''), 'Empresa sem nome') as label,
+				       count(*)::int as value
+				  from scoped_submissions s
+				  join document_files f on f.submission_id = s.id
+				 where lower(coalesce(f.status, '')) = 'reprovado'
+				    or lower(coalesce(f.admin_status, '')) = 'reprovado'
+				    or coalesce(f.motivo_reprovacao, f.admin_motivo_reprovacao, '') <> ''
+				 group by label
+				 order by value desc, label asc
+				 limit 5`,
+				scopedParams,
+			),
+		]);
+	const row = overview.rows[0] || {};
+	const analisados = Number(row.analisados || 0);
+	const reprovados = Number(row.reprovados || 0);
+	return {
+		pendentes: Number(row.pendentes || 0),
+		arquivosPendentes: Number(row.arquivos_pendentes || 0),
+		analisados,
+		reprovados,
+		taxaRetrabalho: analisados
+			? `${((reprovados / analisados) * 100).toLocaleString("pt-BR", {
+					minimumFractionDigits: 1,
+					maximumFractionDigits: 1,
+				})}%`
+			: "0,0%",
+		empresasComEnvio: Number(row.empresas_com_envio || 0),
+		totalEnvios: Number(row.total_envios || 0),
+		aprovadores: reviewers.rows,
+		recusadores: rejecters.rows,
+		empresasEnvios: companySubmissions.rows,
+		empresasReprovadas: companyRejected.rows,
+	};
+}
+
 async function getSubmission(id) {
 	const result = await db.query(
 		`select * from document_submissions where id = $1`,
@@ -865,6 +995,7 @@ module.exports = {
 	getInvoiceField,
 	getLatestSubmissionByEmpresaMes,
 	getSubmission,
+	getSubmissionsDashboardSummary,
 	listAllFilesForPurge,
 	listFiles,
 	listInvoiceFields,

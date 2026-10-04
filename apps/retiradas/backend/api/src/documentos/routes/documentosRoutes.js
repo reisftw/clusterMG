@@ -142,6 +142,11 @@ function createDocumentosRouter({
 		controller.purgeHistory,
 	);
 	router.get("/submissions", controller.listSubmissions);
+	router.get(
+		"/submissions/resumo",
+		requireAuthenticated,
+		controller.getSubmissionsDashboardSummary,
+	);
 	router.get("/submissions/tratativas", controller.listSupervisorTreatments);
 	router.get("/submissions/:id/zip", controller.downloadSubmissionZip);
 	router.get("/submissions/:id", controller.getSubmission);

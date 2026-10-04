@@ -590,6 +590,24 @@ async function getCounters({ user } = {}) {
 	return counters;
 }
 
+async function getSummary({ user } = {}) {
+	const [preferences, notifications, documentosPendentes] = await Promise.all([
+		getPreferences({ user }),
+		listNotifications({ user, limit: 20 }),
+		countPendingDocuments(user || {}),
+	]);
+	const counters = {
+		documentosPendentes,
+		notificacoesNaoLidas: notifications.unreadCount,
+	};
+	setCachedCounters(countersCacheKey(user || {}), counters);
+	return {
+		preferences,
+		notifications,
+		counters,
+	};
+}
+
 async function createCriticalServiceAlerts({ user } = {}) {
 	const apiStatus = require("./apiStatus");
 	const status = await apiStatus.getApiStatus();
@@ -636,6 +654,7 @@ module.exports = {
 	getCounters,
 	getNotificationStats,
 	getPreferences,
+	getSummary,
 	listNotifications,
 	markNotificationsRead,
 	notificationExists,
