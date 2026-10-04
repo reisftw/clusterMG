@@ -1848,6 +1848,19 @@ async function releaseStaleLock(profile) {
 	return true;
 }
 
+async function getActiveLock(profile) {
+	await releaseStaleLock(profile);
+	const result = await db.query(
+		`select *
+		   from hubsoft_sync_locks
+		  where profile = $1
+		    and expires_at > now()
+		  limit 1`,
+		[profile],
+	);
+	return result.rows[0] || null;
+}
+
 async function acquireLock(profile, runId, user = {}) {
 	await releaseStaleLock(profile);
 	const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
@@ -2261,18 +2274,24 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 
 async function runProfile(profile, options = {}, user = {}) {
 	assertValidProfile(profile);
+	const activeLock = await getActiveLock(profile);
+	if (activeLock?.sync_run_id) return getRun(activeLock.sync_run_id);
 	const run = await createRun(profile, user);
 	return executeProfileRun(run, profile, options, user);
 }
 
 async function runInternalProfile(profile, options = {}, user = {}) {
 	assertValidInternalProfile(profile);
+	const activeLock = await getActiveLock(profile);
+	if (activeLock?.sync_run_id) return getRun(activeLock.sync_run_id);
 	const run = await createRun(profile, user);
 	return executeProfileRun(run, profile, options, user);
 }
 
 async function startProfileRun(profile, options = {}, user = {}) {
 	assertValidProfile(profile);
+	const activeLock = await getActiveLock(profile);
+	if (activeLock?.sync_run_id) return getRun(activeLock.sync_run_id);
 	const run = await createRun(profile, user);
 	setImmediate(() => {
 		executeProfileRun(run, profile, options, user).catch((error) => {

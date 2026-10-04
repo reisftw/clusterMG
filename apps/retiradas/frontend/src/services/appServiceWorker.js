@@ -1,6 +1,6 @@
 let serviceWorkerRegistrationPromise = null;
 const APP_SERVICE_WORKER_VERSION =
-	"2026-09-28-painel-agentes-dashboard-network-first-v1";
+	"2026-10-03-hubsoft-cachefix-v2";
 
 function buildServiceWorkerUrl() {
 	const params = new URLSearchParams({

@@ -31,7 +31,6 @@ import { useAgenda } from "../../modules/agenda/hooks/useAgenda";
 import { buscarAgendamentosDominio } from "../../modules/agendamentos/services/agendamentosService";
 import { useDiarioEntries } from "../../modules/diario/hooks/useDiarioEntries";
 import {
-	DIARIO_HORARIOS,
 	formatDateLabel as formatDiarioDateLabel,
 } from "../../modules/diario/services/diarioService";
 import { invalidateCache } from "../../services/dataCache";
@@ -596,6 +595,32 @@ function formatTime(date = new Date()) {
 
 function formatNumber(value) {
 	return Number(value || 0).toLocaleString("pt-BR");
+}
+
+function getHorarioSortValue(horario) {
+	const text = String(horario || "").trim().toLowerCase();
+	const match = text.match(/^(\d{1,2})(?:h|:)?(\d{2})?/);
+	if (!match) return Number.MAX_SAFE_INTEGER;
+	const hour = Number(match[1]);
+	const minute = Number(match[2] || 0);
+	if (!Number.isFinite(hour) || hour < 0 || hour > 23) {
+		return Number.MAX_SAFE_INTEGER;
+	}
+	return hour * 60 + minute;
+}
+
+function getDailyHorarioEntries(horarios = {}) {
+	return Object.entries(horarios)
+		.map(([horario, value]) => ({
+			horario,
+			value: Number(value || 0),
+		}))
+		.filter((item) => item.value > 0)
+		.sort(
+			(a, b) =>
+				getHorarioSortValue(a.horario) - getHorarioSortValue(b.horario) ||
+				a.horario.localeCompare(b.horario, "pt-BR"),
+		);
 }
 
 function getDeliveredCancellationPercent(metaMes) {
@@ -1887,6 +1912,7 @@ function DailyDeliveryPanel({ data }) {
 		date: data.referenceDateKey,
 		horarios: {},
 	};
+	const horarios = getDailyHorarioEntries(today.horarios);
 	const dailyTotal = Number(today.hourlyTotal || today.deliveredTotal || 0);
 
 	return (
@@ -1901,12 +1927,16 @@ function DailyDeliveryPanel({ data }) {
 					: "Dia atual"}
 			</div>
 			<div className="acomp-delivery-hours-grid">
-				{DIARIO_HORARIOS.map((horario) => (
-					<div className="acomp-delivery-hour" key={horario}>
-						<span>{horario}</span>
-						<strong>{formatNumber(today.horarios?.[horario] || 0)}</strong>
-					</div>
-				))}
+				{horarios.length ? (
+					horarios.map((item) => (
+						<div className="acomp-delivery-hour" key={item.horario}>
+							<span>{item.horario}</span>
+							<strong>{formatNumber(item.value)}</strong>
+						</div>
+					))
+				) : (
+					<div className="acomp-empty">Sem entregas por horário</div>
+				)}
 			</div>
 			<div className="acomp-delivery-hours-total">
 				<span>Total dos horários</span>
@@ -2394,6 +2424,11 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 
 function AcompanhamentoMatchSection({ dashboard, diarioBoardData, operationalSummary }) {
 	const dailyTarget = dashboard.metaConsolidadaTile?.metaMes?.saldoDiario?.find((row) => Number(row.dia) === Number(operationalSummary?.date?.slice(8)))?.metaDiaria;
+	const pendingOpenTotal = Number.isFinite(
+		Number(operationalSummary?.activeOpenPendingTotal),
+	)
+		? Number(operationalSummary.activeOpenPendingTotal)
+		: Number(dashboard.mapaSnapshot.kpis.pendente || 0);
 	const configuredSummary = operationalSummary && dailyTarget != null ? {
 		...operationalSummary,
 		dailyProduction: { ...operationalSummary.dailyProduction, meta: Number(dailyTarget),
@@ -2417,7 +2452,7 @@ function AcompanhamentoMatchSection({ dashboard, diarioBoardData, operationalSum
 						<span>AGENTES</span>
 					</div>
 					<div>
-						<strong>{formatNumber(dashboard.mapaSnapshot.kpis.pendente)}</strong>
+						<strong>{formatNumber(pendingOpenTotal)}</strong>
 						<span>PENDENTES</span>
 					</div>
 				</div>
@@ -2442,9 +2477,22 @@ function AcompanhamentoMainGrid({
 	sections,
 }) {
 	const isChristmas = festiveTheme === "christmas";
-	const regionaisItems = dashboard.regionaisOS.length
-		? dashboard.regionaisOS
-		: dashboard.regionaisAgendamento;
+	const activeOpenCities = Array.isArray(operationalSummary?.topActiveOpenCities)
+		? operationalSummary.topActiveOpenCities
+		: [];
+	const activeOpenRegionals = Array.isArray(
+		operationalSummary?.topActiveOpenRegionals,
+	)
+		? operationalSummary.topActiveOpenRegionals
+		: [];
+	const cityOpenItems = activeOpenCities.length
+		? activeOpenCities
+		: dashboard.cidadesOS;
+	const regionaisItems = activeOpenRegionals.length
+		? activeOpenRegionals
+		: dashboard.regionaisOS.length
+			? dashboard.regionaisOS
+			: dashboard.regionaisAgendamento;
 	const operationalClosedTotal = Number(
 		operationalSummary?.dailyProduction?.total,
 	);
@@ -2482,7 +2530,7 @@ function AcompanhamentoMainGrid({
 				<RankingList
 					title="CIDADES COM MAIS O.S ABERTA"
 					icon={MapPin}
-					items={dashboard.cidadesOS}
+					items={cityOpenItems}
 					empty="Sem O.S abertas"
 					className="acomp-atendentes-panel"
 					limit={isChristmas ? 12 : 16}

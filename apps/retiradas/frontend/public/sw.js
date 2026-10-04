@@ -1,17 +1,5 @@
-const CACHE_NAME = "retiradas-pwa-v22-cancelamentos-meses";
+const CACHE_NAME = "retiradas-pwa-v24-network-only-navigation";
 const APP_SHELL = [
-	"/index.html",
-	"/painel",
-	"/painel/relatorios",
-	"/painel/mapa",
-	"/painel/match",
-	"/terceiros",
-	"/terceirizados",
-	"/terceirizados/login",
-	"/terceiros/consulta-mac",
-	"/terceirizados/consulta-mac",
-	"/aa-sempre",
-	"/duvidas",
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
 	"/pwa-192.png",
@@ -68,21 +56,14 @@ self.addEventListener("activate", (event) => {
 	self.clients.claim();
 });
 
-function cacheIndexResponse(response) {
-	if (response && response.ok && response.type === "basic") {
-		const copy = response.clone();
-		caches
-			.open(CACHE_NAME)
-			.then((cache) => cache.put("/index.html", copy))
-			.catch(() => {});
-	}
-	return response;
-}
-
 function fetchNavigation(request) {
-	return fetch(request)
-		.then(cacheIndexResponse)
-		.catch(() => caches.match("/index.html"));
+	return fetch(request, { cache: "no-store" }).catch(
+		() =>
+			new Response("Aplicacao offline. Recarregue quando a conexao voltar.", {
+				status: 503,
+				headers: { "content-type": "text/plain; charset=utf-8" },
+			}),
+	);
 }
 
 function fetchAndCacheAsset(request) {

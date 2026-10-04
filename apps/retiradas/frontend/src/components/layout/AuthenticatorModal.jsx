@@ -1,5 +1,6 @@
 import { ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
 	confirmarConfiguracaoAutenticador,
 	desabilitarAutenticador,
@@ -81,9 +82,9 @@ export default function AuthenticatorModal({ open, onClose }) {
 		}
 	};
 
-	return (
+	return createPortal(
 		<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/50 p-4">
-			<div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+			<div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
 				<div className="flex items-start justify-between gap-4">
 					<div className="flex items-start gap-3">
 						<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
@@ -123,6 +124,7 @@ export default function AuthenticatorModal({ open, onClose }) {
 				{message ? <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">{message}</p> : null}
 				{error ? <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p> : null}
 			</div>
-		</div>
+		</div>,
+		document.body,
 	);
 }

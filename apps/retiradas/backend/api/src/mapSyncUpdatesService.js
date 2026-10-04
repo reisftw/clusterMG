@@ -1,5 +1,6 @@
 const db = require("./db");
 const rankingService = require("./rankingService");
+const regionaisRepository = require("./regionaisRepository");
 const { buildSnapshotDiff } = require("./mapSnapshotDiff");
 
 const TIME_ZONE = "America/Sao_Paulo";
@@ -40,6 +41,17 @@ function compactTopCitiesWithOthers(items = [], limit = HIGHLIGHT_CITY_LIMIT) {
 	];
 }
 
+function topItems(items = [], limit = 16) {
+	return (Array.isArray(items) ? items : [])
+		.map((item) => ({
+			label: item.label || item.city || "Sem cidade",
+			total: number(item.total),
+		}))
+		.filter((item) => item.total > 0)
+		.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "pt-BR"))
+		.slice(0, limit);
+}
+
 function toIso(value) {
 	if (!value) return "";
 	const date = new Date(value);
@@ -65,6 +77,13 @@ function addDays(dateText, days) {
 function normalizeDate(value, fallback = todaySaoPaulo()) {
 	const raw = text(value);
 	return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : fallback;
+}
+
+function normalizeLookupKey(value) {
+	return text(value)
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
 }
 
 function parseLimit(value, fallback = 20, max = 100) {
@@ -550,6 +569,81 @@ async function getOpenedCities(date = todaySaoPaulo()) {
 	);
 }
 
+async function getActiveOpenCities() {
+	const result = await db.query(
+		`select coalesce(source_city, 'Sem cidade') as city,
+		        count(*)::int as total
+		   from hubsoft_sync_records
+		  where profile = $1
+		    and active = true
+		  group by 1
+		  order by total desc, city`,
+		[MAP_PROFILE],
+	);
+	return topItems(
+		result.rows.map((row) => ({ label: row.city, total: number(row.total) })),
+		16,
+	);
+}
+
+async function getActiveOpenCounts() {
+	const result = await db.query(
+		`select count(*)::int as total,
+		        count(*) filter (where lower(coalesce(source_status, '')) = 'pendente')::int as pending
+		   from hubsoft_sync_records
+		  where profile = $1
+		    and active = true`,
+		[MAP_PROFILE],
+	);
+	return {
+		total: number(result.rows[0]?.total),
+		pending: number(result.rows[0]?.pending),
+	};
+}
+
+async function buildCityRegionalLookup() {
+	const documents = await regionaisRepository.listAllRegionalDocuments();
+	const lookup = new Map();
+	for (const row of documents) {
+		const regional = text(row.data?.nome || row.documentId || "Sem regional");
+		for (const cidade of row.data?.cidades || []) {
+			const name = text(
+				typeof cidade === "string"
+					? cidade
+					: cidade?.nome || cidade?.cidade || cidade?.name,
+			);
+			const key = normalizeLookupKey(name);
+			if (key && !lookup.has(key)) lookup.set(key, regional);
+		}
+	}
+	return lookup;
+}
+
+async function getActiveOpenRegionals() {
+	const [cityLookup, result] = await Promise.all([
+		buildCityRegionalLookup(),
+		db.query(
+			`select coalesce(source_city, 'Sem cidade') as city,
+			        count(*)::int as total
+			   from hubsoft_sync_records
+			  where profile = $1
+			    and active = true
+			  group by 1`,
+			[MAP_PROFILE],
+		),
+	]);
+	const grouped = new Map();
+	for (const row of result.rows) {
+		const regional =
+			cityLookup.get(normalizeLookupKey(row.city)) || "Sem regional";
+		grouped.set(regional, (grouped.get(regional) || 0) + number(row.total));
+	}
+	return topItems(
+		[...grouped].map(([label, total]) => ({ label, total })),
+		14,
+	);
+}
+
 async function getClosedCities(date = todaySaoPaulo()) {
 	const rows = await rankingService.getOperationalProduction({ start_date: date, end_date: date });
 	const cities = new Map();
@@ -562,7 +656,7 @@ async function getClosedCities(date = todaySaoPaulo()) {
 async function getOperationalSummary(query = {}) {
 	const date = normalizeDate(query.date);
 	const weekDate = date;
-	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, topRanking, openedCities, closedCities] =
+	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, topRanking, openedCities, closedCities, activeOpenCities, activeOpenRegionals, activeOpenCounts] =
 		await Promise.all([
 			getLatestUpdate(),
 			getDailyProduction(date),
@@ -578,6 +672,9 @@ async function getOperationalSummary(query = {}) {
 			}).catch(() => ({ ranking: [] })),
 			getOpenedCities(date),
 			getClosedCities(date),
+			getActiveOpenCities(),
+			getActiveOpenRegionals(),
+			getActiveOpenCounts(),
 		]);
 	return {
 		date,
@@ -593,6 +690,10 @@ async function getOperationalSummary(query = {}) {
 		})),
 		topOpenedCities: openedCities,
 		topClosedCities: closedCities,
+		topActiveOpenCities: activeOpenCities,
+		topActiveOpenRegionals: activeOpenRegionals,
+		activeOpenTotal: activeOpenCounts.total,
+		activeOpenPendingTotal: activeOpenCounts.pending,
 		carousel: {
 			intervalSeconds: 60,
 			items: ["dailyProduction", "weeklyProduction"],

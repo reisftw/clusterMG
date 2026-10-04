@@ -9,8 +9,6 @@ const UPDATED_EVENT = "acompanhamento-resumo-updated";
 const VERSION_KEY = "acompanhamento-resumo-version";
 const CACHE_KEY = "acompanhamento-resumo-cache";
 const CACHE_DAY_KEY = "acompanhamento-resumo-cache-day";
-const CACHE_NAME = "acompanhamento-resumo-v1";
-const CACHE_REQUEST = `${DATA_URL}?cache=acompanhamento-resumo`;
 const TIMEZONE = "America/Sao_Paulo";
 
 let cache = null;
@@ -79,35 +77,6 @@ function writeLocalStorageCache(json) {
 	}
 }
 
-async function readCacheStorageData() {
-	if (typeof caches === "undefined") return null;
-	try {
-		const store = await caches.open(CACHE_NAME);
-		const response = await store.match(CACHE_REQUEST);
-		if (!response) return null;
-		if (response.headers.get("x-static-cache-day") !== getTodayKey()) return null;
-		return await response.json();
-	} catch {
-		return null;
-	}
-}
-
-async function writeCacheStorageData(json) {
-	if (typeof caches === "undefined") return;
-	try {
-		const store = await caches.open(CACHE_NAME);
-		const response = new Response(JSON.stringify(json), {
-			headers: {
-				"content-type": "application/json",
-				"x-static-cache-day": getTodayKey(),
-			},
-		});
-		await store.put(CACHE_REQUEST, response);
-	} catch {
-		// Optional browser cache only.
-	}
-}
-
 export function invalidateAcompanhamentoResumoCache(versionToken = null) {
 	cache = null;
 	pendingRequest = null;
@@ -118,7 +87,7 @@ export function invalidateAcompanhamentoResumoCache(versionToken = null) {
 	window.localStorage.removeItem(CACHE_KEY);
 	window.localStorage.removeItem(CACHE_DAY_KEY);
 	if (typeof caches !== "undefined") {
-		caches.delete(CACHE_NAME).catch(() => {});
+		caches.delete("acompanhamento-resumo-v1").catch(() => {});
 	}
 	window.dispatchEvent(
 		new CustomEvent(UPDATED_EVENT, {
@@ -134,17 +103,18 @@ async function fetchResumo({ force = false } = {}) {
 
 	pendingRequest = Promise.resolve()
 		.then(async () => {
-			if (force) return null;
-			return readLocalStorageCache() || (await readCacheStorageData());
-		})
-		.then((cachedJson) => {
-			if (cachedJson) return cachedJson;
 			return fetch(buildUrl(), {
 				cache: force ? "reload" : "no-store",
-			}).then((response) => {
-				if (!response.ok) throw new Error(`HTTP ${response.status}`);
-				return response.json();
-			});
+			})
+				.then((response) => {
+					if (!response.ok) throw new Error(`HTTP ${response.status}`);
+					return response.json();
+				})
+				.catch((error) => {
+					const cached = force ? null : readLocalStorageCache();
+					if (cached) return cached;
+					throw error;
+				});
 		})
 		.then((json) => {
 			if (generationAtStart !== cacheGeneration) {
@@ -153,7 +123,6 @@ async function fetchResumo({ force = false } = {}) {
 			}
 			cache = json;
 			writeLocalStorageCache(json);
-			writeCacheStorageData(json);
 			pendingRequest = null;
 			return json;
 		})

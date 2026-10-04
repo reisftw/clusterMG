@@ -32,6 +32,7 @@ const movimentacoesEntregas = require("./movimentacoesEntregas");
 const movimentacoesOrdensFechadas = require("./movimentacoesOrdensFechadas");
 const logisticaIntegration = require("./logisticaIntegration");
 const hubsoftIntegration = require("./hubsoftIntegration");
+const hubsoftSyncProfiles = require("./hubsoftSyncProfiles");
 const cvortexIntegration = require("./cvortexIntegration");
 const seniorIntegration = require("./seniorIntegration");
 const rolePermissions = require("./rolePermissions");
@@ -41,6 +42,8 @@ const createAtendimentoRouter = require("./atendimento/routes/atendimentoRoutes"
 const createCvortexAdminRouter = require("./cvortexAdmin/routes/cvortexAdminRoutes");
 const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/databaseBackupsAdminRoutes");
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
+const createEquipmentRecoveryRouter = require("./equipmentRecovery/routes/equipmentRecoveryRoutes");
+const equipmentRecoveryService = require("./equipmentRecovery/equipmentRecoveryService");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
@@ -51,7 +54,11 @@ const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
+const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
+const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
+const mapSyncUpdates = require("./mapSyncUpdatesService");
+const rankingService = require("./rankingService");
 const { createImoveisRouter } = require("./imoveis");
 const createDocumentosRouter = require("./documentos/routes/documentosRoutes");
 const documentosService = require("./documentos/services/documentosService");
@@ -2509,6 +2516,151 @@ function createApp() {
 		}),
 	);
 
+	app.get(
+		"/api/ranking",
+		requireAuthenticated,
+		requireAnyPermission(
+			["destaque.metas.view", "destaque.metas.manage", "view_metas"],
+			ADMIN_ROLES,
+		),
+		async (req, res, next) => {
+			try {
+				res.json(await rankingService.getRanking(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/ranking/detail",
+		requireAuthenticated,
+		requireAnyPermission(
+			["destaque.metas.view", "destaque.metas.manage", "view_metas"],
+			ADMIN_ROLES,
+		),
+		async (req, res, next) => {
+			try {
+				res.json(await rankingService.getDetail(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/ranking/export.xlsx",
+		requireAuthenticated,
+		requireAnyPermission(
+			["destaque.metas.view", "destaque.metas.manage", "view_metas"],
+			ADMIN_ROLES,
+		),
+		async (req, res, next) => {
+			try {
+				const buffer = await rankingService.exportRankingXlsx(req.query || {});
+				res.setHeader(
+					"Content-Type",
+					"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				);
+				res.setHeader(
+					"Content-Disposition",
+					'attachment; filename="ranking-retiradas.xlsx"',
+				);
+				res.send(buffer);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/mapas/atualizacoes",
+		requireAuthenticated,
+		requireAnyPermission(["view_mapa", "destaque.mapa_os.view"], ADMIN_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await mapSyncUpdates.listUpdates(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/mapas/atualizacoes/latest",
+		requireAuthenticated,
+		requireAnyPermission(["view_mapa", "destaque.mapa_os.view"], ADMIN_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await mapSyncUpdates.getLatestUpdate(req.query?.profile));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/mapas/atualizacoes/:id",
+		requireAuthenticated,
+		requireAnyPermission(["view_mapa", "destaque.mapa_os.view"], ADMIN_ROLES),
+		async (req, res, next) => {
+			try {
+				const detail = await mapSyncUpdates.getUpdateDetail(req.params.id);
+				if (!detail) {
+					res.status(404).json({ error: "Atualizacao nao encontrada." });
+					return;
+				}
+				res.json(detail);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/acompanhamento/operational-summary",
+		requireAuthenticated,
+		requireAnyPermission(["view_mapa", "destaque.mapa_os.view"], ADMIN_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await mapSyncUpdates.getOperationalSummary(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.use(
+		"/api/equipment-recovery",
+		createEquipmentRecoveryRouter({
+			equipmentRecoveryService,
+			fullOperationRoles: FULL_OPERATION_ROLES,
+			requireAuthenticated,
+			requireRoles,
+		}),
+	);
+
+	app.use(
+		"/api/service-orders/cancellations",
+		createServiceOrderCancellationsRouter({
+			fallbackRoles: ADMIN_ROLES,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/service-orders/fines",
+		createServiceOrderFinesRouter({
+			fallbackRoles: ADMIN_ROLES,
+			hubsoftSyncProfiles,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
 	app.get("/api/public/dashboard", publicReadLimiter, async (req, res, next) => {
 		try {
 			const detail = String(req.query.detail || "").toLowerCase();
@@ -4268,6 +4420,7 @@ function createApp() {
 		createHubsoftAdminRouter({
 			adminRoles: ADMIN_ROLES,
 			hubsoftIntegration,
+			hubsoftSyncProfiles,
 			requireAuthenticated,
 			requireCsrfToken,
 			requireRoles,
@@ -5359,6 +5512,8 @@ function createApp() {
 		timer.unref?.();
 		app.locals.movimentacoesScanTimer = timer;
 	}
+
+	hubsoftSyncProfiles.startScheduler(app);
 
 	app.use((error, req, res, next) => {
 		if (res.headersSent) {
