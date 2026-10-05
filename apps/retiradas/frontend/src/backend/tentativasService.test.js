@@ -1,0 +1,51 @@
+import { createRequire } from "node:module";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const require = createRequire(
+	path.join(process.cwd(), "apps/retiradas/backend/package.json"),
+);
+
+process.env.PGHOST ||= "127.0.0.1";
+process.env.PGUSER ||= "test";
+process.env.PGPASSWORD ||= "test";
+process.env.PGDATABASE ||= "test";
+
+const { __testables } = require(
+	path.join(
+		process.cwd(),
+		"apps/retiradas/backend/api/src/tentativas/tentativasService.js",
+	),
+);
+
+describe("tentativasService helpers", () => {
+	it("normaliza telefones brasileiros para link do WhatsApp", () => {
+		expect(__testables.normalizePhone("(37) 99826-7983")).toMatchObject({
+			digits: "5537998267983",
+			display: "5537998267983",
+			valid: true,
+		});
+	});
+
+	it("mantem telefone invalido identificado antes de abrir WhatsApp", () => {
+		expect(__testables.normalizePhone("123").valid).toBe(false);
+	});
+
+	it("renderiza template sem acoplar com mensageria", () => {
+		const message = __testables.renderTemplate(
+			"Olá, {{primeiro_nome}}. OS {{os}} em {{cidade}} com {{tecnico}}.",
+			{
+				primeiro_nome: "ALINE",
+				os: "014326236000742341",
+				cidade: "Martinho Campos",
+				tecnico: "Rodrigo Reis",
+			},
+		);
+
+		expect(message).toContain("Olá, ALINE.");
+		expect(message).toContain("014326236000742341");
+		expect(message).toContain("Martinho Campos");
+		expect(message).toContain("Rodrigo Reis");
+	});
+});
+

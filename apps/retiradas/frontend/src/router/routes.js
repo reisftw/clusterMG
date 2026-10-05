@@ -54,6 +54,7 @@ export const ROUTES = {
 	MENSAGERIA_CONFIRMACAO_AGENDAMENTOS: "/mensageria/confirmacao-agendamentos",
 	MENSAGERIA_BACKLOG: "/mensageria/backlog",
 	MENSAGERIA_CALLBACK: "/mensageria/callback",
+	TENTATIVAS: "/tentativas",
 	EVIDENCIAS: "/evidencias",
 	CONFIGURACOES_GERAIS: "/configuracoes/geral",
 	API_STATUS: "/configuracoes/apis",

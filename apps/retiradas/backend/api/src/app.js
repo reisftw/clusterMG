@@ -56,6 +56,7 @@ const createNotificationsRouter = require("./notifications/routes/notificationsR
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
+const createTentativasRouter = require("./tentativas/routes/tentativasRoutes");
 const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
 const mapSyncUpdates = require("./mapSyncUpdatesService");
 const rankingService = require("./rankingService");
@@ -2672,6 +2673,16 @@ function createApp() {
 		createServiceOrderFinesRouter({
 			fallbackRoles: ADMIN_ROLES,
 			hubsoftSyncProfiles,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/tentativas",
+		createTentativasRouter({
+			fallbackRoles: ADMIN_ROLES,
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,

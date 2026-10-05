@@ -32,6 +32,7 @@ import {
 	PackageSearch,
 	PanelLeftClose,
 	PanelLeftOpen,
+	Phone,
 	Plug,
 	Search,
 	Send,
@@ -440,6 +441,17 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Tentativas",
+		path: ROUTES.TENTATIVAS,
+		icon: Phone,
+		permission: [
+			"tentativas.visualizar",
+			"tentativas.executar",
+			"tentativas.distribuir",
+		],
+		featured: true,
+	},
+	{
 		label: "Notificações",
 		path: ROUTES.NOTIFICACOES,
 		icon: BellRing,
@@ -820,6 +832,12 @@ const MENU_GROUPS = [
 		label: "Mensageria",
 		icon: MessageCircle,
 		paths: CLIENTE_MENSAGERIA_PATHS,
+	},
+	{
+		id: "tentativas",
+		label: "Tentativas",
+		icon: Phone,
+		paths: [ROUTES.TENTATIVAS],
 	},
 	{
 		id: "ordens_servico",

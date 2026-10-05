@@ -172,6 +172,9 @@ const MensageriaBacklog = lazy(
 const MensageriaCallback = lazy(
 	() => import("../modules/mensageria/components/MensageriaCallbackPage"),
 );
+const Tentativas = lazy(
+	() => import("../modules/tentativas/components/TentativasPage"),
+);
 const Evidencias = lazy(
 	() => import("../modules/evidencias/components/EvidenciasPage"),
 );
@@ -806,6 +809,19 @@ const AppRouter = () => (
 									]}
 								>
 									<MensageriaCallback />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.TENTATIVAS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"tentativas.visualizar",
+										"tentativas.executar",
+									]}
+								>
+									<Tentativas />
 								</ProtectedRoute>
 							}
 						/>
