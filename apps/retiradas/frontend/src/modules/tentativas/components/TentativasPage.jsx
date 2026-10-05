@@ -707,16 +707,21 @@ function DistributionTab() {
 	useEffect(() => {
 		let cancelled = false;
 		async function loadInitial() {
-			const [distribution, cityLinks, cityOptions] = await Promise.all([
+			const [distribution, cityLinks] = await Promise.all([
 				buscarDistribuicaoTentativas(),
 				listarCidadesTecnicosTentativas(),
-				listarCidadesTentativas(),
 			]);
 			if (cancelled) return;
 			setItems(distribution.items || []);
 			setCities(cityLinks.items || []);
-			setAvailableCities(cityOptions.items || []);
 			setLoading(false);
+			listarCidadesTentativas()
+				.then((cityOptions) => {
+					if (!cancelled) setAvailableCities(cityOptions.items || []);
+				})
+				.catch(() => {
+					if (!cancelled) setAvailableCities([]);
+				});
 		}
 		void loadInitial();
 		return () => {

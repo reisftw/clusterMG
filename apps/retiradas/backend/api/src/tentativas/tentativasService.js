@@ -13,6 +13,10 @@ const EXPORT_PERMISSIONS = ["tentativas.relatorio.exportar"];
 const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
+const OPPORTUNITIES_SYNC_TTL_MS = 5 * 60 * 1000;
+
+let opportunitiesSyncPromise = null;
+let opportunitiesLastSyncAt = 0;
 
 const CONTACT_RESULTS = new Set([
 	"NO_RESPONSE",
@@ -133,7 +137,7 @@ async function recordAudit(action, recordId, user, afterData = {}, beforeData = 
 	});
 }
 
-async function syncOpportunitiesFromMatch() {
+async function performOpportunitiesSyncFromMatch() {
 	await db.query(
 		`with eligible_orders as (
 			select os.*,
@@ -192,7 +196,7 @@ async function syncOpportunitiesFromMatch() {
 		)
 		select
 			'tent_' || encode(digest(coalesce(os.num_os, os.id), 'sha256'), 'hex'),
-			os.id,
+			null::text,
 			os.num_os,
 			os.codigo_cliente,
 			os.nome_cliente,
@@ -219,7 +223,7 @@ async function syncOpportunitiesFromMatch() {
 			now()
 		from eligible_orders os
 		on conflict (os) do update set
-			ordem_id = excluded.ordem_id,
+			ordem_id = coalesce(tentativas_opportunities.ordem_id, excluded.ordem_id),
 			codigo_cliente = excluded.codigo_cliente,
 			cliente = excluded.cliente,
 			telefone = excluded.telefone,
@@ -258,6 +262,34 @@ async function syncOpportunitiesFromMatch() {
 	);
 }
 
+function shouldSkipOpportunitiesSync(force = false) {
+	return !force && Date.now() - opportunitiesLastSyncAt < OPPORTUNITIES_SYNC_TTL_MS;
+}
+
+async function syncOpportunitiesFromMatch({ force = false } = {}) {
+	if (shouldSkipOpportunitiesSync(force)) {
+		return { skipped: true, reason: "fresh" };
+	}
+	if (!opportunitiesSyncPromise) {
+		opportunitiesSyncPromise = performOpportunitiesSyncFromMatch()
+			.then(() => ({ ok: true }))
+			.catch((error) => {
+				console.error("[tentativas] Falha ao sincronizar oportunidades:", error);
+				throw error;
+			})
+			.finally(() => {
+				opportunitiesLastSyncAt = Date.now();
+				opportunitiesSyncPromise = null;
+			});
+	}
+	return opportunitiesSyncPromise;
+}
+
+function scheduleOpportunitiesSyncFromMatch() {
+	if (shouldSkipOpportunitiesSync(false) || opportunitiesSyncPromise) return;
+	syncOpportunitiesFromMatch().catch(() => {});
+}
+
 async function getSettings() {
 	const result = await db.query("select * from tentativas_settings where id = 'global'");
 	return result.rows[0] || {};
@@ -289,7 +321,7 @@ async function saveSettings(payload = {}, user = {}) {
 }
 
 async function listCities(_query = {}, user = {}) {
-	await syncOpportunitiesFromMatch();
+	scheduleOpportunitiesSyncFromMatch();
 	const admin = hasAdminAccess(user);
 	const params = [userId(user), userEmail(user), admin];
 	const result = await db.query(
@@ -392,7 +424,7 @@ function mapOpportunity(row = {}) {
 }
 
 async function getMyRoute(query = {}, user = {}) {
-	await syncOpportunitiesFromMatch();
+	scheduleOpportunitiesSyncFromMatch();
 	const cidade = text(query.cidade);
 	if (!cidade) return { city: "", summary: {}, items: [] };
 	if (!(await ensureTechnicianCanUseCity(cidade, user))) {
@@ -701,7 +733,7 @@ function percent(part, total) {
 }
 
 async function getOverview(query = {}) {
-	await syncOpportunitiesFromMatch();
+	scheduleOpportunitiesSyncFromMatch();
 	const result = await db.query(
 		`select
 			count(*) filter (where active = true) as opportunities,
@@ -758,7 +790,8 @@ async function getRanking() {
 		   join tentativas_opportunities o on o.id = a.opportunity_id
 		  where a.released_at is null
 		  group by 1,2
-		  order by worked desc, attempts desc`,
+		  order by worked desc, attempts desc
+		  limit 100`,
 	);
 	return {
 		items: result.rows.map((row) => ({
@@ -783,8 +816,10 @@ async function listDistribution() {
 		   from tentativas_assignments a
 		   join tentativas_opportunities o on o.id = a.opportunity_id
 		  where a.released_at is null
+		    and o.active = true
 		  group by a.technician_user_id, a.technician_name, o.cidade
-		  order by a.technician_name, o.cidade`,
+		  order by a.technician_name, o.cidade
+		  limit 500`,
 	);
 	return {
 		items: result.rows.map((row) => ({
