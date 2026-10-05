@@ -411,7 +411,6 @@ function compactDashboardDomain(snapshot = {}) {
 			},
 		},
 		metas: {
-			all: compactDashboardResult(snapshot.metas?.all || {}),
 			lastUpdate: snapshot.metas?.lastUpdate || null,
 			baseConfig: snapshot.metas?.baseConfig || null,
 			forcaTarefa: snapshot.metas?.forcaTarefa || null,
