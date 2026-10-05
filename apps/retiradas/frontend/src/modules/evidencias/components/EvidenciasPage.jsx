@@ -238,6 +238,7 @@ export default function EvidenciasPage() {
 	const [items, setItems] = useState([]);
 	const [total, setTotal] = useState(0);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
 	const [detailLoading, setDetailLoading] = useState(false);
 	const [selected, setSelected] = useState(null);
 	const [filters, setFilters] = useState({
@@ -256,6 +257,7 @@ export default function EvidenciasPage() {
 
 	async function load() {
 		setLoading(true);
+		setError("");
 		try {
 			const [summary, list] = await Promise.all([
 				buscarDashboardEvidencias(),
@@ -264,6 +266,10 @@ export default function EvidenciasPage() {
 			setDashboard(summary);
 			setItems(list.items || []);
 			setTotal(Number(list.total || 0));
+		} catch (loadError) {
+			setError(loadError?.message || "Não foi possível carregar as evidências.");
+			setItems([]);
+			setTotal(0);
 		} finally {
 			setLoading(false);
 		}
@@ -279,6 +285,14 @@ export default function EvidenciasPage() {
 		setSelected({});
 		try {
 			setSelected(await buscarEvidencia(id));
+		} catch (detailError) {
+			setSelected({
+				osNumber: "Falha ao carregar",
+				customerName:
+					detailError?.message || "Não foi possível carregar esta evidência.",
+				steps: [],
+				events: [],
+			});
 		} finally {
 			setDetailLoading(false);
 		}
@@ -316,6 +330,19 @@ export default function EvidenciasPage() {
 					</button>
 				</div>
 			</div>
+
+			{error ? (
+				<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+					<span>{error}</span>
+					<button
+						type="button"
+						onClick={load}
+						className="rounded-xl bg-red-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white hover:bg-red-700"
+					>
+						Tentar novamente
+					</button>
+				</div>
+			) : null}
 
 			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 				<StatCard title="Total" value={summary.total || 0} helper="evidências" icon={FileSearch} />

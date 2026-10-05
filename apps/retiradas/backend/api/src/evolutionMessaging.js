@@ -1840,8 +1840,11 @@ async function processQueueOnce({ manual = false } = {}) {
 		...sent,
 		...failed.map((item) => item.id).filter(Boolean),
 	]);
+	const refreshedItems = await listQueue(2000);
 	nextQueueExecutionItem = summarizeQueueExecutionItem(
-		items.find((item) => !handledIds.has(item.id) && canSendItem(item, config)),
+		refreshedItems.find(
+			(item) => !handledIds.has(item.id) && canSendItem(item, config),
+		),
 	);
 
 	return {

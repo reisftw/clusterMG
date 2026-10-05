@@ -98,6 +98,9 @@ const getQueueItemLabel = (item = {}) => {
 	return cliente || codigo || item.telefone || item.os || "-";
 };
 
+const getQueueItemIdentity = (item = {}) =>
+	String(item.id || item.filaId || item.queueId || item.os || item.telefone || "");
+
 const getQueueSortTime = (item = {}) => {
 	const candidates = [
 		item.data_abertura_os,
@@ -304,10 +307,20 @@ function useMensageriaFilaController() {
 		(currentPage - 1) * pageSize,
 		currentPage * pageSize,
 	);
+	const lastExecutionItemId = getQueueItemIdentity(status?.worker?.lastItem);
 	const nextQueueItem = useMemo(
-		() =>
-			fila.find((item) => isQueueItemSendableNow(item, config)) || null,
-		[fila, config],
+		() => {
+			const candidates = fila
+				.filter((item) => isQueueItemSendableNow(item, config))
+				.filter(
+					(item) =>
+						!lastExecutionItemId ||
+						getQueueItemIdentity(item) !== lastExecutionItemId,
+				)
+				.sort((left, right) => getQueueSortTime(right) - getQueueSortTime(left));
+			return candidates[0] || null;
+		},
+		[fila, config, lastExecutionItemId],
 	);
 	const queuePreviewItems = useMemo(
 		() =>
