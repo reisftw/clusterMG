@@ -44,6 +44,7 @@ const createDatabaseBackupsAdminRouter = require("./databaseBackupsAdmin/routes/
 const createEmailAdminRouter = require("./emailAdmin/routes/emailAdminRoutes");
 const createEquipmentRecoveryRouter = require("./equipmentRecovery/routes/equipmentRecoveryRoutes");
 const equipmentRecoveryService = require("./equipmentRecovery/equipmentRecoveryService");
+const createEvidenciasRouter = require("./evidencias/routes/evidenciasRoutes");
 const createHealthRealtimeRouter = require("./healthRealtime/routes/healthRealtimeRoutes");
 const createHubsoftAdminRouter = require("./hubsoftAdmin/routes/hubsoftAdminRoutes");
 const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
@@ -2555,6 +2556,15 @@ function createApp() {
 		createMensageriaRouter({
 			adminRoles: ADMIN_ROLES,
 			documents,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/evidencias",
+		createEvidenciasRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
