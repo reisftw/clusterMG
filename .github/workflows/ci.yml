@@ -172,6 +172,7 @@ jobs:
   validate-finan:
     name: Validar Finan (verify:finan)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/finan'
     permissions:
       contents: read
     # Etapa 5 (docs/REORGANIZACAO-MONOREPO-ETAPA5-RELATORIO.md) pagou o
@@ -205,6 +206,7 @@ jobs:
   validate-adm:
     name: Validar ADM (verify:adm)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/adm'
     permissions:
       contents: read
     # Etapa 5 pagou o debito de lint:adm (100% verde) e isolou o ambiente
@@ -238,6 +240,7 @@ jobs:
   validate-operacao:
     name: Validar Operação (verify:operacao)
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/operacao'
     permissions:
       contents: read
     # Etapa 5 pagou o debito de lint:operacao; Etapa 6 corrigiu o ultimo
