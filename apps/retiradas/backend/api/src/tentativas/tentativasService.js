@@ -431,7 +431,14 @@ async function getMyRoute(query = {}, user = {}) {
 
 async function findAssignmentForUser(opportunityId, user = {}, client = db) {
 	const result = await client.query(
-		`select a.*, o.*
+		`select o.*,
+		        o.id as opportunity_id,
+		        a.id as assignment_id,
+		        a.technician_user_id,
+		        a.technician_email,
+		        a.technician_name,
+		        a.assigned_at,
+		        a.released_at
 		   from tentativas_assignments a
 		   join tentativas_opportunities o on o.id = a.opportunity_id
 		  where a.opportunity_id = $1
@@ -511,7 +518,7 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			[
 				contactId,
 				row.opportunity_id,
-				row.id,
+				row.assignment_id,
 				userId(user),
 				userName(user),
 				phone.display,
