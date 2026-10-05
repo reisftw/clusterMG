@@ -11,6 +11,8 @@ const TEMPLATE_PERMISSIONS = ["tentativas.templates.gerenciar"];
 const SETTINGS_PERMISSIONS = ["tentativas.configuracoes.gerenciar"];
 const EXPORT_PERMISSIONS = ["tentativas.relatorio.exportar"];
 const OVERRIDE_PERMISSIONS = ["tentativas.override"];
+const WITHDRAWAL_ORDER_TYPE_REGEX =
+	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
 
 const CONTACT_RESULTS = new Set([
 	"NO_RESPONSE",
@@ -133,7 +135,56 @@ async function recordAudit(action, recordId, user, afterData = {}, beforeData = 
 
 async function syncOpportunitiesFromMatch() {
 	await db.query(
-		`insert into tentativas_opportunities (
+		`with eligible_orders as (
+			select os.*,
+			       coalesce(
+			         nullif(os.telefone, ''),
+			         os.telefones[1],
+			         nullif(os.source_payload->>'telefone', ''),
+			         nullif(os.source_payload->>'telefone_primario', ''),
+			         nullif(os.source_payload->>'telefone_principal', ''),
+			         nullif(os.source_payload->>'celular', ''),
+			         nullif(os.source_payload->>'whatsapp', ''),
+			         nullif(os.source_payload->>'fone', ''),
+			         nullif(os.source_payload#>>'{cliente,telefone_primario}', ''),
+			         nullif(os.source_payload#>>'{cliente,telefone}', ''),
+			         nullif(os.source_payload#>>'{cliente,celular}', ''),
+			         nullif(os.source_payload#>>'{servico,telefone_primario}', ''),
+			         nullif(os.source_payload#>>'{servico,telefone}', ''),
+			         phone_history.telefone
+			       ) as resolved_phone
+			  from ordens_servico os
+			  left join lateral (
+			    select telefone
+			      from (
+			        select mf.telefone, mf.created_at
+			          from mensageria_fila mf
+			         where mf.telefone is not null
+			           and mf.telefone <> ''
+			           and (mf.os = os.num_os or mf.codigo_cliente = os.codigo_cliente)
+			        union all
+			        select mh.telefone, mh.created_at
+			          from mensageria_historico mh
+			         where mh.telefone is not null
+			           and mh.telefone <> ''
+			           and (mh.os = os.num_os or mh.codigo_cliente = os.codigo_cliente)
+			        union all
+			        select mc.telefone, mc.created_at
+			          from mensageria_callbacks mc
+			         where mc.telefone is not null
+			           and mc.telefone <> ''
+			           and (mc.os = os.num_os or mc.codigo_cliente = os.codigo_cliente)
+			      ) phones
+			     order by created_at desc nulls last
+			     limit 1
+			  ) phone_history on true
+			 where os.source_collection = 'match_os_abertas'
+			   and coalesce(os.num_os, '') <> ''
+			   and coalesce(os.cidade, '') <> ''
+			   and coalesce(os.tipo, '') ~* $1
+			   and coalesce(os.tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)'
+		)
+		insert into tentativas_opportunities (
 			id, ordem_id, os, codigo_cliente, cliente, telefone, telefone_digits,
 			cidade, cidade_normalizada, regional, empresa, tipo_os, origem,
 			match_entered_at, os_opened_at, os_age_days, status, priority,
@@ -145,8 +196,8 @@ async function syncOpportunitiesFromMatch() {
 			os.num_os,
 			os.codigo_cliente,
 			os.nome_cliente,
-			coalesce(os.telefone, os.telefones[1]),
-			regexp_replace(coalesce(os.telefone, os.telefones[1], ''), '\\D', '', 'g'),
+			os.resolved_phone,
+			regexp_replace(coalesce(os.resolved_phone, ''), '\\D', '', 'g'),
 			os.cidade,
 			lower(translate(coalesce(os.cidade, ''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')),
 			os.regional,
@@ -166,11 +217,7 @@ async function syncOpportunitiesFromMatch() {
 			coalesce(os.source_payload, '{}'::jsonb),
 			now(),
 			now()
-		from ordens_servico os
-		where os.source_collection = 'match_os_abertas'
-		  and coalesce(os.num_os, '') <> ''
-		  and coalesce(os.cidade, '') <> ''
-		  and coalesce(os.tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)'
+		from eligible_orders os
 		on conflict (os) do update set
 			ordem_id = excluded.ordem_id,
 			codigo_cliente = excluded.codigo_cliente,
@@ -190,6 +237,7 @@ async function syncOpportunitiesFromMatch() {
 			removed_from_match_at = null,
 			source_payload = excluded.source_payload,
 			updated_at = now()`,
+		[WITHDRAWAL_ORDER_TYPE_REGEX],
 	);
 
 	await db.query(
@@ -203,7 +251,10 @@ async function syncOpportunitiesFromMatch() {
 		        from ordens_servico os
 		       where os.source_collection = 'match_os_abertas'
 		         and os.num_os = o.os
+		         and coalesce(os.tipo, '') ~* $1
+		         and coalesce(os.tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)'
 		    )`,
+		[WITHDRAWAL_ORDER_TYPE_REGEX],
 	);
 }
 
@@ -789,6 +840,37 @@ async function listTechnicianCities() {
 	return { items: result.rows };
 }
 
+async function searchUsers(query = {}) {
+	const q = text(query.q || query.search);
+	if (q.length < 2) return { items: [] };
+	const result = await db.query(
+		`select uid, email, display_name, role, regional
+		   from app_users
+		  where disabled = false
+		    and (
+		      uid ilike $1
+		      or email ilike $1
+		      or display_name ilike $1
+		      or coalesce(imported_profile->>'nome', '') ilike $1
+		    )
+		  order by
+		    case when display_name ilike $2 or email ilike $2 then 0 else 1 end,
+		    coalesce(display_name, email) asc
+		  limit 12`,
+		[`%${q}%`, `${q}%`],
+	);
+	return {
+		items: result.rows.map((row) => ({
+			id: row.uid,
+			uid: row.uid,
+			email: row.email,
+			nome: row.display_name || row.email,
+			role: row.role,
+			regional: row.regional,
+		})),
+	};
+}
+
 async function listTemplates() {
 	const result = await db.query(
 		"select * from tentativas_templates order by attempt_number asc, name asc",
@@ -955,6 +1037,7 @@ module.exports = {
 	listDistribution,
 	listHistory,
 	listTechnicianCities,
+	searchUsers,
 	listTemplates,
 	removeTechnicianCity,
 	saveResult,

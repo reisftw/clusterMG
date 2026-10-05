@@ -147,6 +147,19 @@ function createTentativasRouter({
 		},
 	);
 
+	router.get(
+		"/admin/usuarios",
+		requireAuthenticated,
+		requireDistribution,
+		async (req, res, next) => {
+			try {
+				res.json(await service.searchUsers(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.post(
 		"/admin/cidades-tecnicos",
 		requireAuthenticated,

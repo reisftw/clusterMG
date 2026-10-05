@@ -2107,6 +2107,7 @@ function pickFirstText(data = {}, keys = []) {
 function normalizeAgendamentoClienteRecord(row = null) {
 	if (!row) return null;
 	const data = row.data || {};
+	const telefones = Array.isArray(data.telefones) ? data.telefones : [];
 	const clienteNome = pickFirstText(data, [
 		"nome_cliente",
 		"cliente_nome",
@@ -2128,7 +2129,10 @@ function normalizeAgendamentoClienteRecord(row = null) {
 		regional: pickFirstText(data, ["regional"]),
 		empresa: pickFirstText(data, ["empresa", "fonte"]),
 		num_os: pickFirstText(data, ["num_os", "numero", "os"]),
-		telefone: pickFirstText(data, ["telefone", "whatsapp", "celular", "fone"]),
+		telefone:
+			pickFirstText(data, ["telefone", "whatsapp", "celular", "fone"]) ||
+			String(telefones[0] || ""),
+		telefones,
 		endereco: pickFirstText(data, [
 			"endereco",
 			"endereco_instalacao",
@@ -2138,6 +2142,73 @@ function normalizeAgendamentoClienteRecord(row = null) {
 		tipo: pickFirstText(data, ["tipo"]),
 		status: pickFirstText(data, ["status"]),
 		fonte: pickFirstText(data, ["fonte"]),
+	};
+}
+
+async function findAgendamentoClienteByNormalizedOrders(codigo) {
+	const normalized = String(codigo || "").replace(/\D/g, "");
+	if (!normalized) return null;
+	const result = await db.query(
+		`select id,
+		        source_collection,
+		        num_os,
+		        codigo_cliente,
+		        nome_cliente,
+		        telefone,
+		        telefones,
+		        empresa,
+		        tipo,
+		        status,
+		        cidade,
+		        regional,
+		        endereco,
+		        bairro,
+		        numero,
+		        source,
+		        source_payload,
+		        updated_at
+		   from ordens_servico
+		  where source_collection = any($2::text[])
+		    and (
+		      codigo_cliente = $1
+		      or num_os = $1
+		      or source_payload->>'codigo_cliente' = $1
+		      or source_payload->>'codigo' = $1
+		      or source_payload->>'cod_cliente' = $1
+		      or source_payload->>'contrato' = $1
+		    )
+		  order by case source_collection
+		      when 'ordens_abertas' then 1
+		      when 'match_os_abertas' then 2
+		      else 9
+		    end,
+		    updated_at desc
+		  limit 1`,
+		[normalized, ["ordens_abertas", "match_os_abertas"]],
+	);
+	const row = result.rows[0];
+	if (!row) return null;
+	return {
+		path: `${row.source_collection}/${row.id}`,
+		collectionPath: row.source_collection,
+		documentId: row.num_os || row.codigo_cliente || row.id,
+		data: {
+			...(row.source_payload || {}),
+			codigo_cliente: row.codigo_cliente,
+			nome_cliente: row.nome_cliente,
+			telefone: row.telefone,
+			telefones: row.telefones || [],
+			cidade: row.cidade,
+			regional: row.regional,
+			empresa: row.empresa || row.source,
+			num_os: row.num_os,
+			endereco: row.endereco,
+			bairro: row.bairro,
+			numero: row.numero,
+			tipo: row.tipo,
+			status: row.status,
+			fonte: row.source,
+		},
 	};
 }
 
@@ -5262,6 +5333,7 @@ function createApp() {
 
 				const cliente = normalizeAgendamentoClienteRecord(
 					result.rows[0] ||
+						(await findAgendamentoClienteByNormalizedOrders(codigo)) ||
 						(await agendamentosRepository.findClienteByCodigo(codigo)),
 				);
 				if (!cliente) {

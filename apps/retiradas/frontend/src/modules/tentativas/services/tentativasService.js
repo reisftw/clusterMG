@@ -60,6 +60,10 @@ export function listarCidadesTecnicosTentativas() {
 	return requestVpsApi("/tentativas/admin/cidades-tecnicos");
 }
 
+export function buscarUsuariosTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/usuarios${qs(params)}`);
+}
+
 export function salvarCidadeTecnicoTentativas(payload = {}) {
 	return requestVpsApi("/tentativas/admin/cidades-tecnicos", {
 		method: "POST",
