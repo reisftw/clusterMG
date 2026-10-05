@@ -217,7 +217,7 @@ with permissions(id, section_id, section_label, feature_id, feature_label, actio
     ('tentativas.campanhas.gerenciar', 'tentativas', 'Tentativas', 'campanhas', 'Campanhas', 'manage', 764, null, 'Criar e encerrar campanhas de tentativas.'),
     ('tentativas.templates.gerenciar', 'tentativas', 'Tentativas', 'templates', 'Templates', 'manage', 765, null, 'Criar e editar templates de contato.'),
     ('tentativas.configuracoes.gerenciar', 'tentativas', 'Tentativas', 'configuracoes', 'Configurações', 'manage', 766, null, 'Gerenciar metas e políticas de tentativas.'),
-    ('tentativas.relatorio.exportar', 'tentativas', 'Tentativas', 'relatorios', 'Exportação', 'export', 767, null, 'Exportar relatórios CSV de tentativas.'),
+    ('tentativas.relatorio.exportar', 'tentativas', 'Tentativas', 'relatorios', 'Exportação', 'view', 767, null, 'Exportar relatórios CSV de tentativas.'),
     ('tentativas.override', 'tentativas', 'Tentativas', 'override', 'Override', 'manage', 768, null, 'Ignorar intervalo mínimo com auditoria.')
 )
 insert into app_permissions (
