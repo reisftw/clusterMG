@@ -378,6 +378,36 @@ function compactMapaOrder(order = {}) {
 	};
 }
 
+function compactDiarioEntry(entry = {}) {
+	const horarios =
+		entry.horarios && typeof entry.horarios === "object" ? entry.horarios : {};
+	return {
+		date: entry.date || entry.data || null,
+		monthKey: entry.monthKey || entry.month_key || null,
+		horarios: {
+			"11h": Number(horarios["11h"] || entry["11h"] || 0),
+			"14h": Number(horarios["14h"] || entry["14h"] || 0),
+			"16h": Number(horarios["16h"] || entry["16h"] || 0),
+			"18h": Number(horarios["18h"] || entry["18h"] || 0),
+			"23:59": Number(horarios["23:59"] || entry["23:59"] || 0),
+		},
+		hourlyTotal: Number(entry.hourlyTotal || entry.deliveredTotal || 0),
+		deliveredTotal: Number(entry.deliveredTotal || entry.hourlyTotal || 0),
+		fines: Number(entry.fines || 0),
+		updatedAt: entry.updatedAt || null,
+	};
+}
+
+function compactDiarioSlice(rows = []) {
+	return {
+		compact: true,
+		entries: rows
+			.map((row) => compactDiarioEntry(row.data || row))
+			.filter((entry) => entry.date)
+			.sort((a, b) => String(a.date).localeCompare(String(b.date))),
+	};
+}
+
 function compactMapaSlice(slice) {
 	if (!slice) return slice;
 	const data =
@@ -645,6 +675,7 @@ async function buildAcompanhamentoResumo() {
 		mapaRaw,
 		matchOSRaw,
 		agentesMatchOSRaw,
+		diarioRows,
 	] = await Promise.all([
 		listCollectionData("dashboard", { limit: 36 }),
 		listCollectionData("feriados", { limit: 300 }),
@@ -652,6 +683,7 @@ async function buildAcompanhamentoResumo() {
 		getDocumentData("public_dashboard/mapa_os"),
 		getDocumentData("public_dashboard/match_os"),
 		getDocumentData("public_dashboard/agentes_match_os"),
+		listCollectionData("acompanhamento_diario", { limit: 1000 }),
 	]);
 	const { matchOS: matchOSFull, agentesMatchOS: agentesMatchOSFull } =
 		await resolveMatchSnapshots(matchOSRaw, agentesMatchOSRaw, {
@@ -663,6 +695,7 @@ async function buildAcompanhamentoResumo() {
 		mapa: compactMapaSlice(mapaRaw),
 		matchOS: compactMatchSlice(matchOSFull),
 		agentesMatchOS: compactMatchSlice(agentesMatchOSFull),
+		acompanhamentoDiario: compactDiarioSlice(diarioRows),
 		metas: {
 			lastUpdate: config?.lastUpdate || null,
 			baseConfig: config?.baseConfig || null,

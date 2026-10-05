@@ -31,7 +31,9 @@ import { useAgenda } from "../../modules/agenda/hooks/useAgenda";
 import { buscarAgendamentosDominio } from "../../modules/agendamentos/services/agendamentosService";
 import { useDiarioEntries } from "../../modules/diario/hooks/useDiarioEntries";
 import {
+	buildDiarioBoardData,
 	formatDateLabel as formatDiarioDateLabel,
+	normalizeDiarioEntry,
 } from "../../modules/diario/services/diarioService";
 import { invalidateCache } from "../../services/dataCache";
 import { invalidateInternalStaticDataCache } from "../../services/internalStaticDataService";
@@ -2685,8 +2687,30 @@ export default function AcompanhamentoPage() {
 		refreshKey: dashboardRefreshKey,
 	});
 	const currentMonth = calendarMonth;
-	const { boardData: diarioBoardData, loading: loadingDiario } =
-		useDiarioEntries(localDateKey(now));
+	const referenceDateKey = localDateKey(now);
+	const {
+		entries: diarioEntries,
+		boardData: authenticatedDiarioBoardData,
+		loading: loadingDiario,
+	} = useDiarioEntries(referenceDateKey);
+	const publicDiarioEntries = useMemo(
+		() =>
+			(Array.isArray(publicData?.acompanhamentoDiario?.entries)
+				? publicData.acompanhamentoDiario.entries
+				: []
+			).map((entry) => normalizeDiarioEntry(entry)),
+		[publicData?.acompanhamentoDiario?.entries],
+	);
+	const hasPublicDiarioEntries = publicDiarioEntries.length > 0;
+	const diarioBoardData = useMemo(() => {
+		if (diarioEntries.length > 0) return authenticatedDiarioBoardData;
+		return buildDiarioBoardData(publicDiarioEntries, referenceDateKey);
+	}, [
+		authenticatedDiarioBoardData,
+		diarioEntries.length,
+		publicDiarioEntries,
+		referenceDateKey,
+	]);
 	const [lastRefresh, setLastRefresh] = useState(() => new Date());
 	const [configOpen, setConfigOpen] = useState(false);
 	const [panelConfig, setPanelConfig] = useState(loadPanelConfig);
@@ -3473,7 +3497,7 @@ export default function AcompanhamentoPage() {
 		loadingAgenda ||
 		loadingPublicData ||
 		loadingMatchPublico ||
-		loadingDiario ||
+		(loadingDiario && !hasPublicDiarioEntries) ||
 		retiradas.loading;
 	const sections = panelConfig.sections;
 	const adImages = Array.isArray(panelConfig.ads?.images)

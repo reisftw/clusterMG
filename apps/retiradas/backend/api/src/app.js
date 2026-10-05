@@ -65,6 +65,7 @@ const documentosService = require("./documentos/services/documentosService");
 const { attachRealtimeClient, broadcastRealtime } = require("./realtime");
 const {
 	buildSnapshotDomain,
+	getCachedAcompanhamentoResumo,
 	getCachedDashboardResumo,
 	getCachedPublicDashboard,
 } = require("./publicDashboard");
@@ -2625,6 +2626,21 @@ function createApp() {
 		async (req, res, next) => {
 			try {
 				res.json(await mapSyncUpdates.getOperationalSummary(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/acompanhamento/resumo",
+		publicReadLimiter,
+		async (req, res, next) => {
+			try {
+				const dashboard = await getCachedAcompanhamentoResumo();
+				res.setHeader("X-Cache-Status", dashboard.cacheStatus);
+				res.setHeader("X-Cache-Age-Ms", String(dashboard.cacheAgeMs || 0));
+				res.json(dashboard.data);
 			} catch (error) {
 				next(error);
 			}
