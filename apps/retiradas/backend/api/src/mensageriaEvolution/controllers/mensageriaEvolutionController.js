@@ -158,13 +158,21 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 						? true
 						: Boolean(config.officialWhatsappEnabled),
 			});
+			const nextConfig = await evolutionMessaging.getConfig();
 			evolutionMessaging.wakeQueueWorker();
+			const missedMessages = await evolutionMessaging
+				.syncMissedInboundMessages?.({ config: nextConfig, hoursBack: 72, limit: 150 })
+				.catch((error) => ({
+					ok: false,
+					error: String(error?.message || error),
+				}));
 			clearStatusCache();
 			res.json({
 				ok: true,
 				paused: false,
 				autoSend: true,
 				worker: evolutionMessaging.getStatus(),
+				missedMessages,
 			});
 		} catch (error) {
 			next(error);

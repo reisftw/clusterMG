@@ -1035,12 +1035,18 @@ async function collectProfile(profile, options = {}) {
 		pageMode: "query",
 		onProgress: options.onProgress,
 	});
+	const mapPhoneEnrichment =
+		profile === PROFILE.MAPA
+			? await enrichMapRowsWithMissingPhones(session, collected.rows, options)
+			: { rows: collected.rows, summary: null };
 	return {
 		...collected,
+		rows: mapPhoneEnrichment.rows,
 		requestSummary: {
 			period,
 			tipo_data: payload.tipo_data,
 			status_ordem_servico: payload.status_ordem_servico,
+			phoneEnrichment: mapPhoneEnrichment.summary,
 			tipo_ordem_servicos: types.map((item) => ({
 				id_tipo_ordem_servico: item.id_tipo_ordem_servico,
 				descricao: item.descricao,
@@ -1385,6 +1391,144 @@ function adaptReportRow(row = {}) {
 			.map((item) => item.name)
 			.filter(Boolean)
 			.join(", "),
+	};
+}
+
+function phonesFromHubsoftRecord(row = {}) {
+	const cliente = row.cliente || row.cliente_servico?.cliente || {};
+	const servico = row.cliente_servico || row.servico || {};
+	return uniquePhones([
+		row.telefone_primario,
+		row.telefone_secundario,
+		row.telefone_terciario,
+		row.telefone_principal,
+		row.telefone_cliente,
+		row.telefone,
+		row.celular,
+		row.whatsapp,
+		row.fone,
+		cliente.telefone_primario,
+		cliente.telefone_secundario,
+		cliente.telefone_terciario,
+		cliente.telefone,
+		cliente.celular,
+		cliente.whatsapp,
+		servico.telefone_primario,
+		servico.telefone_secundario,
+		servico.telefone_terciario,
+		servico.telefone,
+		...(Array.isArray(row.telefones) ? row.telefones : []),
+		...(Array.isArray(cliente.telefones) ? cliente.telefones : []),
+		...(Array.isArray(servico.telefones) ? servico.telefones : []),
+		...extractPhonesFromText(row.descricao_abertura),
+		...extractPhonesFromText(row.descricao_servico),
+		...collectPhoneCandidatesFromObject(row),
+	]);
+}
+
+function withPhones(row = {}, phones = []) {
+	const telefones = uniquePhones([...phonesFromHubsoftRecord(row), ...phones]);
+	if (!telefones.length) return row;
+	return {
+		...row,
+		telefone_primario: row.telefone_primario || telefones[0] || "",
+		telefone_secundario: row.telefone_secundario || telefones[1] || "",
+		telefone_terciario: row.telefone_terciario || telefones[2] || "",
+		telefones,
+	};
+}
+
+function phoneSearchIds(row = {}) {
+	return {
+		orderId: cleanText(
+			row.id_ordem_servico ||
+				row.ordem_servico?.id_ordem_servico ||
+				row.id ||
+				"",
+		),
+		clientId: cleanText(
+			row.id_cliente ||
+				row.cliente?.id_cliente ||
+				row.cliente_servico?.cliente?.id_cliente ||
+				"",
+		),
+		clientCode: cleanText(extractClientCode(row)).replace(/\D/g, ""),
+	};
+}
+
+async function tryHubsoftPhonePath(session, path) {
+	try {
+		const payload = await hubsoftRequest(session, path);
+		return phonesFromHubsoftRecord(payload);
+	} catch {
+		return [];
+	}
+}
+
+async function fetchPhonesForMapRow(session, row = {}) {
+	const ids = phoneSearchIds(row);
+	const paths = [];
+	if (ids.orderId) {
+		paths.push(
+			`/api/v1/ordem_servico/${encodeURIComponent(ids.orderId)}`,
+			`/api/v1/integracao/ordem_servico/${encodeURIComponent(ids.orderId)}`,
+		);
+	}
+	if (ids.clientId) {
+		paths.push(
+			`/api/v1/cliente/${encodeURIComponent(ids.clientId)}`,
+			`/api/v1/integracao/cliente/${encodeURIComponent(ids.clientId)}`,
+		);
+	}
+	for (const path of paths) {
+		const phones = await tryHubsoftPhonePath(session, path);
+		if (phones.length) return phones;
+	}
+	return [];
+}
+
+async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) {
+	const today = parseDateOnly(todaySaoPaulo());
+	const lookbackDays = Math.min(
+		Math.max(Number(options.phoneEnrichmentDays || process.env.HUBSOFT_MAP_PHONE_ENRICH_DAYS || 8), 1),
+		30,
+	);
+	const minDate = new Date(today || new Date());
+	minDate.setUTCDate(minDate.getUTCDate() - lookbackDays);
+	const limit = Math.min(
+		Math.max(Number(options.phoneEnrichmentLimit || process.env.HUBSOFT_MAP_PHONE_ENRICH_LIMIT || 1000), 0),
+		1000,
+	);
+	if (!limit) return { rows, summary: { attempted: 0, enriched: 0 } };
+	const indexes = [];
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index];
+		if (phonesFromHubsoftRecord(row).length) continue;
+		const sourceDate = safeTimestamp(extractSourceDate(row));
+		if (!sourceDate || new Date(sourceDate) < minDate) continue;
+		indexes.push(index);
+		if (indexes.length >= limit) break;
+	}
+	if (!indexes.length) return { rows, summary: { attempted: 0, enriched: 0 } };
+	const nextRows = [...rows];
+	let cursor = 0;
+	let enriched = 0;
+	const concurrency = Math.min(3, indexes.length);
+	const workers = Array.from({ length: concurrency }, async () => {
+		while (cursor < indexes.length) {
+			const current = cursor;
+			cursor += 1;
+			const index = indexes[current];
+			const phones = await fetchPhonesForMapRow(session, rows[index]);
+			if (!phones.length) continue;
+			nextRows[index] = withPhones(rows[index], phones);
+			enriched += 1;
+		}
+	});
+	await Promise.all(workers);
+	return {
+		rows: nextRows,
+		summary: { attempted: indexes.length, enriched },
 	};
 }
 

@@ -4049,6 +4049,149 @@ async function registerCallback(payload = {}) {
 	};
 }
 
+function extractEvolutionMessageRecords(payload = {}) {
+	const candidates = [
+		payload?.messages?.records,
+		payload?.messages,
+		payload?.records,
+		payload?.data?.messages?.records,
+		payload?.data?.messages,
+		payload?.data?.records,
+		payload?.data?.data,
+		payload?.data,
+		payload?.response?.messages?.records,
+		payload?.response?.messages,
+		payload,
+	];
+	for (const candidate of candidates) {
+		if (Array.isArray(candidate)) return candidate;
+	}
+	return [];
+}
+
+function normalizeStoredEvolutionMessage(record = {}) {
+	const data = record?.data && typeof record.data === "object" ? record.data : record;
+	const payload = {
+		event: "MESSAGES_UPSERT",
+		webhookEvent: "MESSAGES_UPSERT",
+		data,
+		key: data?.key || record?.key,
+		message: data?.message || record?.message,
+		messageTimestamp:
+			data?.messageTimestamp ||
+			data?.timestamp ||
+			record?.messageTimestamp ||
+			record?.timestamp,
+		pushName: data?.pushName || record?.pushName || "",
+	};
+	return payload;
+}
+
+async function syncMissedInboundMessages(options = {}) {
+	const config = options.config || (await getConfig());
+	const instanceName = String(config.evolutionInstance || "").trim();
+	if (
+		String(config.whatsappProvider || "evolution") !== "evolution" ||
+		!config.evolutionEnabled ||
+		!config.evolutionBaseUrl ||
+		!config.evolutionApiKey ||
+		!instanceName
+	) {
+		return { ok: true, skipped: true, reason: "Evolution nao configurada." };
+	}
+
+	const limit = Math.min(Math.max(Number(options.limit || 150), 1), 500);
+	const hoursBack = Math.min(Math.max(Number(options.hoursBack || 72), 1), 168);
+	const sinceSeconds = Math.floor((Date.now() - hoursBack * 60 * 60 * 1000) / 1000);
+	const endpoint = `/chat/findMessages/${encodeURIComponent(instanceName)}`;
+	const bodies = [
+		{
+			where: {
+				key: { fromMe: false },
+				messageTimestamp: { gte: sinceSeconds },
+			},
+			limit,
+		},
+		{
+			page: 1,
+			offset: limit,
+			where: {
+				key: { fromMe: false },
+				messageTimestamp: { gte: sinceSeconds },
+			},
+		},
+		{ limit, where: { messageTimestamp: { gte: sinceSeconds } } },
+	];
+
+	let response = null;
+	let lastError = "";
+	for (const body of bodies) {
+		try {
+			response = await requestEvolution(config, endpoint, {
+				method: "POST",
+				body,
+			});
+			break;
+		} catch (error) {
+			lastError = String(error?.message || error);
+		}
+	}
+	if (!response) {
+		return {
+			ok: false,
+			skipped: true,
+			reason: `Nao foi possivel ler historico Evolution: ${lastError}`,
+		};
+	}
+
+	const records = extractEvolutionMessageRecords(response)
+		.map(normalizeStoredEvolutionMessage)
+		.filter((payload) => {
+			if (isOutboundWebhook(payload) || isGroupWebhook(payload)) return false;
+			const text = String(extractTextFromWebhook(payload) || "").trim();
+			const phone = extractPhoneFromWebhook(payload);
+			const timestamp = Math.floor(
+				new Date(extractTimestampFromWebhook(payload)).getTime() / 1000,
+			);
+			return Boolean(text && phone && (!timestamp || timestamp >= sinceSeconds));
+		})
+		.sort(
+			(left, right) =>
+				new Date(extractTimestampFromWebhook(left)).getTime() -
+				new Date(extractTimestampFromWebhook(right)).getTime(),
+		)
+		.slice(-limit);
+
+	let processed = 0;
+	let ignored = 0;
+	let scheduled = 0;
+	const errors = [];
+	for (const payload of records) {
+		try {
+			const result = await registerCallback({
+				...payload,
+				source: "evolution_history_sync",
+			});
+			if (result?.ignored) {
+				ignored += 1;
+			} else {
+				processed += 1;
+				if (result?.agendado) scheduled += 1;
+			}
+		} catch (error) {
+			if (errors.length < 5) errors.push(String(error?.message || error));
+		}
+	}
+	return {
+		ok: errors.length === 0,
+		checked: records.length,
+		processed,
+		ignored,
+		scheduled,
+		errors,
+	};
+}
+
 async function listDisconnectLogs(limit = 50) {
 	const safeLimit = Math.min(Math.max(Number(limit || 50), 1), 200);
 	const rows = await documents.listDocuments({
@@ -4081,6 +4224,7 @@ module.exports = {
 	processQueueOnce,
 	pauseQueueForDisconnectedEvolution,
 	registerCallback,
+	syncMissedInboundMessages,
 	generateAppointmentFromStoredResponses,
 	adjustQueueAgainstOpenOrders,
 	sendTestMessage,

@@ -81,12 +81,18 @@ const ORDER_DATE_ALIASES = [
 const ORDER_PRIMARY_PHONE_ALIASES = [
 	"telefone_primario",
 	"telefone_principal",
+	"telefone principal",
+	"telefone principal para whatsapp",
 	"telefone_cliente",
 	"telefone_contato",
+	"telefone contato",
 	"telefone",
 	"celular",
 	"celular_cliente",
 	"whatsapp",
+	"telefone whatsapp",
+	"numero whatsapp",
+	"número whatsapp",
 	"fone",
 	"fone_cliente",
 	"contato",
@@ -115,6 +121,7 @@ const ORDER_PHONE_LIST_ALIASES = [
 	"telefones",
 	"lista_telefones",
 	"telefones_cliente",
+	"lista de telefones",
 	"contatos",
 ];
 
@@ -203,6 +210,37 @@ function parsePhoneList(value) {
 		.split(/[;,|/\n]+/g)
 		.map(normalizePhone)
 		.filter(Boolean);
+}
+
+function extractPhoneCandidatesFromText(value) {
+	const text = String(value || "");
+	if (!text) return [];
+	return [
+		...text.matchAll(/(?:\+?55\D*)?\(?\d{2}\)?\D*9?\d{4}\D*\d{4}/g),
+	]
+		.map((match) => normalizePhone(match[0]))
+		.filter((phone) => phone.length >= 10 && phone.length <= 13);
+}
+
+function collectPhoneCandidatesFromRow(row = {}) {
+	const candidates = [];
+	for (const [key, value] of Object.entries(row || {})) {
+		if (
+			!/(telefone|telefones|celular|whats|whatsapp|fone|contato|phone)/i.test(
+				String(key || ""),
+			)
+		) {
+			continue;
+		}
+		if (Array.isArray(value)) {
+			value.forEach((item) =>
+				candidates.push(...extractPhoneCandidatesFromText(item)),
+			);
+		} else {
+			candidates.push(...extractPhoneCandidatesFromText(value));
+		}
+	}
+	return candidates;
 }
 
 function uniqueValues(values) {
@@ -457,6 +495,7 @@ function extractOrderContactInfo(row) {
 		normalizePhone(telefoneSecundario),
 		normalizePhone(telefoneTerciario),
 		...parsePhoneList(getFirstRowValue(row, ORDER_PHONE_LIST_ALIASES)),
+		...collectPhoneCandidatesFromRow(row),
 	]);
 	return {
 		numero,
@@ -1169,14 +1208,53 @@ function dateOnlyFromOrder(value) {
 	return parsed.toISOString().slice(0, 10);
 }
 
+function orderDateTimeIsoFromValue(value, fallback = "") {
+	const text = String(value || "").trim();
+	if (!text) return fallback;
+	const iso = text.match(
+		/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?/,
+	);
+	if (iso) {
+		const hour = String(iso[4] || "12").padStart(2, "0");
+		const minute = String(iso[5] || "00").padStart(2, "0");
+		const second = String(iso[6] || "00").padStart(2, "0");
+		const parsed = new Date(
+			`${iso[1]}-${iso[2]}-${iso[3]}T${hour}:${minute}:${second}-03:00`,
+		);
+		return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+	}
+	const br = text.match(
+		/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/,
+	);
+	if (br) {
+		const day = String(br[1]).padStart(2, "0");
+		const month = String(br[2]).padStart(2, "0");
+		const hour = String(br[4] || "12").padStart(2, "0");
+		const minute = String(br[5] || "00").padStart(2, "0");
+		const second = String(br[6] || "00").padStart(2, "0");
+		const parsed = new Date(
+			`${br[3]}-${month}-${day}T${hour}:${minute}:${second}-03:00`,
+		);
+		return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+	}
+	const parsed = new Date(text);
+	return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+}
+
+function readMensageriaOrderOpenDate(order = {}) {
+	return String(
+		readAnyField(order, [
+			"data_abertura_os",
+			"data_cadastro",
+			"data_abertura",
+			"abertura",
+			"data",
+		]),
+	);
+}
+
 function isRecentMensageriaOrder(order = {}, lookbackDays = 2) {
-	const rawDate = readAnyField(order, [
-		"data_abertura_os",
-		"data_cadastro",
-		"data_abertura",
-		"abertura",
-		"data",
-	]);
+	const rawDate = readMensageriaOrderOpenDate(order);
 	const dateOnly = dateOnlyFromOrder(rawDate);
 	if (!dateOnly) return false;
 	const orderDate = new Date(`${dateOnly}T12:00:00.000Z`);
@@ -1215,6 +1293,8 @@ function buildMensageriaQueueItemFromOrder(
 		String(readAnyField(order, ["codigo_cliente", "codigo"])) ||
 		clienteRaw.match(/^\s*\((\d+)\)/)?.[1] ||
 		"";
+	const dataAberturaOs = readMensageriaOrderOpenDate(order);
+	const prioridadeEm = orderDateTimeIsoFromValue(dataAberturaOs, createdAt);
 	return {
 		cliente: cliente || "Cliente nao informado",
 		codigo_cliente: codigoCliente,
@@ -1236,21 +1316,14 @@ function buildMensageriaQueueItemFromOrder(
 		endereco,
 		telefone,
 		telefone_digits: normalizeMensageriaPhone(telefone),
-		data_abertura_os: String(
-			readAnyField(order, [
-				"data_abertura",
-				"data_abertura_os",
-				"abertura",
-				"data",
-			]),
-		),
+		data_abertura_os: dataAberturaOs,
 		status_os: String(readAnyField(order, ["status"])) || "Aberta",
 		tipo:
 			String(readAnyField(order, ["tipo", "tipo_ordem_servico"])) ||
 			"Tipo nao informado",
 		origem: "Mapa - diferenca automatica",
 		origemTipo: "mapa_diff",
-		prioridadeEm: createdAt,
+		prioridadeEm,
 		diffMapaEm: createdAt,
 		templateId: config.activeTemplateId || "cancelamento",
 		status: config.autoSend && config.approvedTemplate ? "aprovado" : "novo",
@@ -1406,6 +1479,11 @@ async function ensureOpenMapOrdersInMensageria(finalMap = {}, user = {}) {
 		);
 	});
 	return enqueueNewMapOrdersForMensageria(entries, user);
+}
+
+async function repairMensageriaQueueFromOpenMap(user = {}) {
+	const finalMap = await getCollectionMap("ordens_abertas");
+	return ensureOpenMapOrdersInMensageria(finalMap, user);
 }
 
 async function reconcileMensageriaQueueWithOpenMap(finalMap = {}) {
@@ -3224,6 +3302,7 @@ module.exports = {
 	persistHubsoftMetaRecords,
 	persistMetasImport,
 	publishAcompanhamentoUpdate,
+	repairMensageriaQueueFromOpenMap,
 	refreshDashboardSnapshot,
 	saveMatchConfig,
 	saveMetasBaseConfig,
