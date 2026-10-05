@@ -397,6 +397,7 @@ function compactMapaSlice(slice) {
 }
 
 function compactDashboardDomain(snapshot = {}) {
+	const painelRetiradas = snapshot.painel?.retiradas || {};
 	return {
 		domain: snapshot.domain,
 		generatedAt: snapshot.generatedAt,
@@ -410,11 +411,20 @@ function compactDashboardDomain(snapshot = {}) {
 			},
 		},
 		metas: {
+			all: compactDashboardResult(snapshot.metas?.all || {}),
 			lastUpdate: snapshot.metas?.lastUpdate || null,
 			baseConfig: snapshot.metas?.baseConfig || null,
 			forcaTarefa: snapshot.metas?.forcaTarefa || null,
 		},
-		painel: snapshot.painel,
+		painel: {
+			retiradas: {
+				result: compactDashboardResult(painelRetiradas.result || {}),
+				meta: painelRetiradas.meta || null,
+				baseConfig: painelRetiradas.baseConfig || snapshot.metas?.baseConfig || null,
+				feriadosTotal: painelRetiradas.feriados?.length || 0,
+			},
+			forcaTarefa: snapshot.painel?.forcaTarefa || snapshot.metas?.forcaTarefa || null,
+		},
 	};
 }
 

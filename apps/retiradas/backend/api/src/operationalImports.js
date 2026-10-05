@@ -1031,6 +1031,36 @@ async function refreshDashboardSnapshot(generatedAt = new Date().toISOString()) 
 	await refreshStaticSnapshot("dashboard", generatedAt, { compact: true });
 }
 
+let dashboardSnapshotRefreshJob = null;
+let dashboardSnapshotRefreshQueuedAt = null;
+
+function scheduleDashboardSnapshotRefresh(generatedAt = new Date().toISOString()) {
+	dashboardSnapshotRefreshQueuedAt = generatedAt;
+	if (dashboardSnapshotRefreshJob) return dashboardSnapshotRefreshJob;
+
+	dashboardSnapshotRefreshJob = (async () => {
+		while (dashboardSnapshotRefreshQueuedAt) {
+			const nextGeneratedAt = dashboardSnapshotRefreshQueuedAt;
+			dashboardSnapshotRefreshQueuedAt = null;
+			await refreshDashboardSnapshot(nextGeneratedAt);
+		}
+	})()
+		.catch((error) => {
+			console.error(
+				"[operationalImports] Falha ao atualizar snapshot dashboard em background:",
+				error,
+			);
+		})
+		.finally(() => {
+			dashboardSnapshotRefreshJob = null;
+			if (dashboardSnapshotRefreshQueuedAt) {
+				scheduleDashboardSnapshotRefresh(dashboardSnapshotRefreshQueuedAt);
+			}
+		});
+
+	return dashboardSnapshotRefreshJob;
+}
+
 async function refreshOperationalSnapshot(
 	generatedAt = new Date().toISOString(),
 ) {
@@ -2861,15 +2891,9 @@ async function persistMetasImport(payload = {}, user = {}) {
 			lastUpdate,
 		},
 	});
-	// Sem isso, o snapshot estatico do dashboard (static_snapshots,
-	// dominio "dashboard") ficava desatualizado ate algo mais o
-	// regenerar (ex.: salvar a config de bases). O frontend le esse
-	// snapshot primeiro em toda releitura (inclusive na propria
-	// releitura pos-save disparada pelo evento realtime local) — sem
-	// regenerar aqui, um "Salvar card"/"Lançar nos paineis" bem
-	// sucedido podia aparecer revertido pro valor antigo poucos
-	// instantes depois de salvar.
-	await refreshDashboardSnapshot(nowIso);
+	// O snapshot do dashboard pode ser grande; reconstruir em background
+	// evita prender o clique de salvar metas por muitos segundos.
+	scheduleDashboardSnapshotRefresh(nowIso);
 
 	return {
 		source: "metas",
@@ -2919,10 +2943,7 @@ async function saveMetasForceTaskConfig(rawConfig = {}, user = {}) {
 		message: "Configuração de força-tarefa atualizada.",
 		summary: { forcaTarefa: config },
 	});
-	// Mesma omissao de persistMetasImport (ver comentario la): sem
-	// regenerar aqui, o snapshot do dashboard fica desatualizado ate
-	// algo mais o regenerar.
-	await refreshDashboardSnapshot(nowIso);
+	scheduleDashboardSnapshotRefresh(nowIso);
 
 	return { source: "metas", generatedAt: nowIso, config };
 }
@@ -3143,7 +3164,7 @@ async function saveMetasBaseConfig(rawConfig = {}, user = {}) {
 		message: "Configuração de metas por base atualizada.",
 		summary: { baseConfig: config },
 	});
-	await refreshDashboardSnapshot(nowIso);
+	scheduleDashboardSnapshotRefresh(nowIso);
 
 	return { source: "metas", generatedAt: nowIso, config };
 }

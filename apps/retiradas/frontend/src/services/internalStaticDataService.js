@@ -62,7 +62,7 @@ async function requestInternalSnapshot(domain) {
 	}
 
 	try {
-		const snapshot = await getVpsStaticSnapshot(domain);
+		const snapshot = await getVpsStaticSnapshot(domain, { compact: true });
 		clearSnapshotEndpointUnavailable();
 		return snapshot;
 	} catch (error) {

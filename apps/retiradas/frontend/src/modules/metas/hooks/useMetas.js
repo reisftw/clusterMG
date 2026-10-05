@@ -1142,14 +1142,17 @@ export const useMetas = () => {
 	const carregar = useCallback(async () => {
 		const requestVersion = dataVersionRef.current;
 		setLoading(true);
+		const agentesPromise = buscarTodosDashboardAgentes().catch((error) => {
+			logger.warn("[useMetas] Erro ao carregar agentes:", error);
+			return null;
+		});
 		try {
-			const [dados, lu, extras, forcaConfig, baseConfig, agentes] = await Promise.all([
+			const [dados, lu, extras, forcaConfig, baseConfig] = await Promise.all([
 				buscarTodasMetas(false, { preferLive: true }),
 				buscarUltimaAtualizacao(),
 				buscarFeriadosVps(),
 				buscarForcaTarefaConfig(),
 				buscarMetasBaseConfig(false, { preferLive: true }),
-				buscarTodosDashboardAgentes(),
 			]);
 			if (requestVersion !== dataVersionRef.current) return;
 			const normalizedBaseConfig = normalizeMetasBaseConfig(baseConfig);
@@ -1160,12 +1163,15 @@ export const useMetas = () => {
 			setFeriadosExtras(extras);
 			setForcaTarefaConfig(forcaConfig);
 			setMetasBaseConfig(normalizedBaseConfig);
-			setAgentesData(agentes || {});
 		} catch (e) {
 			logger.error("Erro ao carregar metas", e);
 		} finally {
 			setLoading(false);
 		}
+
+		const agentes = await agentesPromise;
+		if (requestVersion !== dataVersionRef.current || !agentes) return;
+		setAgentesData(agentes);
 	}, [buscarFeriadosVps]);
 
 	useEffect(() => {
