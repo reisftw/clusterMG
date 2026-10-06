@@ -1,4 +1,4 @@
-const CACHE_NAME = "retiradas-pwa-v24-network-only-navigation";
+const CACHE_NAME = "retiradas-pwa-v25-asset-recovery";
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
@@ -68,7 +68,13 @@ function fetchNavigation(request) {
 
 function fetchAndCacheAsset(request) {
 	return fetch(request).then((response) => {
-		if (!response || response.status !== 200 || response.type !== "basic") {
+		const contentType = response?.headers?.get("content-type") || "";
+		if (
+			!response ||
+			response.status !== 200 ||
+			response.type !== "basic" ||
+			contentType.includes("text/html")
+		) {
 			return response;
 		}
 
@@ -84,9 +90,7 @@ function fetchAndCacheAsset(request) {
 function fetchSameOriginAsset(request) {
 	const url = new URL(request.url);
 	if (url.pathname.startsWith("/assets/")) {
-		return fetchAndCacheAsset(request).catch(
-			() => caches.match(request).then((cached) => cached || Response.error()),
-		);
+		return fetchAndCacheAsset(request).catch(() => Response.error());
 	}
 
 	return caches

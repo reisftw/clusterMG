@@ -11,6 +11,7 @@ const DEFAULT_API_BASE_URL = "https://retiradas.tech/api";
 const FINAN_TOKEN_KEY = "finan-auth-token";
 let csrfRefreshPromise = null;
 let authRefreshPromise = null;
+const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 function isFinanHost() {
 	if (typeof window === "undefined") return false;
@@ -53,6 +54,37 @@ function wait(ms) {
 	});
 }
 
+function isRetryableRequest(options = {}, response = null, error = null) {
+	if (isUnsafeMethod(options.method)) return false;
+	if (error) return true;
+	return response ? RETRYABLE_STATUS_CODES.has(response.status) : false;
+}
+
+async function fetchWithRetry(url, options = {}, { retries = 2 } = {}) {
+	let lastError = null;
+	let lastResponse = null;
+
+	for (let attempt = 0; attempt <= retries; attempt += 1) {
+		try {
+			const response = await fetch(url, options);
+			if (!isRetryableRequest(options, response, null) || attempt === retries) {
+				return response;
+			}
+			lastResponse = response;
+		} catch (error) {
+			if (!isRetryableRequest(options, null, error) || attempt === retries) {
+				throw error;
+			}
+			lastError = error;
+		}
+
+		await wait(350 * (attempt + 1));
+	}
+
+	if (lastResponse) return lastResponse;
+	throw lastError || new Error("Falha ao consultar API.");
+}
+
 async function refreshCsrfToken() {
 	if (!csrfRefreshPromise) {
 		csrfRefreshPromise = (async () => {
@@ -60,7 +92,7 @@ async function refreshCsrfToken() {
 			let data = null;
 			for (let attempt = 0; attempt < 3; attempt += 1) {
 				try {
-					response = await fetch(`${getApiBaseUrl()}/auth/me`, {
+					response = await fetchWithRetry(`${getApiBaseUrl()}/auth/me`, {
 						cache: "no-store",
 						credentials: "include",
 						headers: {
@@ -122,7 +154,7 @@ async function buildRequestHeaders(options = {}) {
 }
 
 async function fetchVpsApi(path, options = {}) {
-	const response = await fetch(`${getApiBaseUrl()}${path}`, {
+	const response = await fetchWithRetry(`${getApiBaseUrl()}${path}`, {
 		...options,
 		cache: options.cache || "no-store",
 		credentials: options.credentials || "include",
@@ -299,7 +331,7 @@ export async function listPublicVpsDocuments(
 		limit: String(limit),
 		offset: String(offset),
 	});
-	const response = await fetch(
+	const response = await fetchWithRetry(
 		`${getApiBaseUrl()}/public/documents?${params.toString()}`,
 		{
 			cache: "no-store",
@@ -332,7 +364,7 @@ export async function getPublicVpsDocument(documentPath) {
 		.split("/")
 		.map(encodeURIComponent)
 		.join("/");
-	const response = await fetch(
+	const response = await fetchWithRetry(
 		`${getApiBaseUrl()}/public/documents/${encodedPath}`,
 		{
 			cache: "no-store",
@@ -384,7 +416,7 @@ export async function getVpsStaticSnapshot(domain, { compact = false } = {}) {
 	const params = new URLSearchParams();
 	if (compact) params.set("compact", "1");
 	const suffix = params.size ? `?${params.toString()}` : "";
-	const response = await fetch(
+	const response = await fetchWithRetry(
 		`${getApiBaseUrl()}/public/static/${encodeURIComponent(domain)}${suffix}`,
 		{
 			cache: "no-store",

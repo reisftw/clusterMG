@@ -43,8 +43,48 @@ if (typeof window !== "undefined" && isStandaloneMode()) {
 }
 
 if ("serviceWorker" in navigator) {
+	let refreshingAfterUpdate = false;
+	navigator.serviceWorker.addEventListener("controllerchange", () => {
+		if (refreshingAfterUpdate) return;
+		refreshingAfterUpdate = true;
+		window.location.reload();
+	});
+
 	window.addEventListener("load", () => {
 		registerAppServiceWorker();
+	});
+}
+
+function isStaleChunkError(error) {
+	const message = String(error?.message || error || "");
+	return (
+		message.includes("Failed to fetch dynamically imported module") ||
+		message.includes("Importing a module script failed") ||
+		message.includes("Expected a JavaScript-or-Wasm module script") ||
+		message.includes("error loading dynamically imported module")
+	);
+}
+
+function reloadOnceForFreshAssets() {
+	if (typeof window === "undefined") return;
+	const marker = "retiradas:asset-refresh-at";
+	const lastRefresh = Number(window.sessionStorage.getItem(marker) || 0);
+	const now = Date.now();
+	if (now - lastRefresh < 30000) return;
+	window.sessionStorage.setItem(marker, String(now));
+	window.location.reload();
+}
+
+if (typeof window !== "undefined") {
+	window.addEventListener("error", (event) => {
+		if (isStaleChunkError(event.error || event.message)) {
+			reloadOnceForFreshAssets();
+		}
+	});
+	window.addEventListener("unhandledrejection", (event) => {
+		if (isStaleChunkError(event.reason)) {
+			reloadOnceForFreshAssets();
+		}
 	});
 }
 

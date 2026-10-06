@@ -1,6 +1,5 @@
 let serviceWorkerRegistrationPromise = null;
-const APP_SERVICE_WORKER_VERSION =
-	"2026-10-03-hubsoft-cachefix-v2";
+const APP_SERVICE_WORKER_VERSION = import.meta.env.VITE_APP_VERSION || "local";
 
 function buildServiceWorkerUrl() {
 	const params = new URLSearchParams({
