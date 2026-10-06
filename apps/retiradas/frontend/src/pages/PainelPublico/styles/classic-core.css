@@ -1045,6 +1045,64 @@
 .btn-gerar-pdf:hover {
 	background: #e05a00;
 }
+.btn-insight-juridico {
+	background: #7c3aed;
+}
+.btn-insight-juridico:hover {
+	background: #6d28d9;
+}
+.city-legal-insight {
+	margin-top: 18px;
+	padding: 16px;
+	border: 1.5px solid rgba(124, 58, 237, 0.22);
+	border-radius: 14px;
+	background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), #fff 58%);
+}
+.city-insight-title {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 14px;
+}
+.city-insight-title p {
+	margin: 0;
+	color: var(--muted);
+	font:
+		700 13px / 1.45 Inter,
+		system-ui,
+		sans-serif;
+}
+.city-insight-grid {
+	margin-bottom: 14px;
+}
+.city-insight-table {
+	overflow-x: auto;
+	border: 1px solid var(--b);
+	border-radius: 10px;
+	background: #fff;
+}
+.city-insight-table table {
+	width: 100%;
+	border-collapse: collapse;
+	font:
+		800 12px / 1.3 Inter,
+		system-ui,
+		sans-serif;
+}
+.city-insight-table th,
+.city-insight-table td {
+	padding: 9px 10px;
+	text-align: left;
+	border-bottom: 1px solid var(--b);
+}
+.city-insight-table th {
+	color: var(--blue);
+	background: var(--blue-light);
+	text-transform: uppercase;
+	font-size: 10px;
+	letter-spacing: 0.06em;
+}
 .btn-fechar-modal {
 	background: var(--s2);
 	border: 1.5px solid var(--b);

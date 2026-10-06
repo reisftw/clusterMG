@@ -1,5 +1,32 @@
-import { useEffect } from "react";
-import { gerarPDFCidade, gerarRelatorio3Meses } from "../utils/pdfAgentes";
+import { useEffect, useMemo, useState } from "react";
+import {
+	gerarPDFCidade,
+	gerarPDFInsightAgente,
+	gerarRelatorio3Meses,
+} from "../utils/pdfAgentes";
+
+const MONTHS_2026 = [
+	"Janeiro",
+	"Fevereiro",
+	"Marco",
+	"Abril",
+	"Maio",
+	"Junho",
+	"Julho",
+	"Agosto",
+	"Setembro",
+	"Outubro",
+	"Novembro",
+	"Dezembro",
+];
+
+function normalizeName(value) {
+	return String(value || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.trim()
+		.toLowerCase();
+}
 
 function formatSigned(value) {
 	const number = Math.round(Number(value) || 0);
@@ -9,6 +36,7 @@ function formatSigned(value) {
 }
 
 export default function CityModal({ cidade, month, allData, onClose }) {
+	const [showInsight, setShowInsight] = useState(false);
 	useEffect(() => {
 		function onKey(e) {
 			if (e.key === "Escape") onClose();
@@ -16,6 +44,60 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, [onClose]);
+
+	const insight = useMemo(() => {
+		const cityKey = normalizeName(cidade?.nome);
+		const meses = MONTHS_2026.map((mes) => {
+			const record = allData?.[mes];
+			const row = (record?.cidades || []).find(
+				(item) => normalizeName(item.nome || item.cidade) === cityKey,
+			);
+			const cancelamentos = Math.round(Number(row?.cancelamentos || 0));
+			const meta = Math.round(Number(row?.meta80 || row?.meta || 0));
+			const realizado = Math.round(Number(row?.realizado || row?.total || 0));
+			return {
+				mes,
+				cancelamentos,
+				meta,
+				realizado,
+				atingiu: meta > 0 && realizado >= meta,
+				taxa: cancelamentos > 0 ? (realizado / cancelamentos) * 100 : 0,
+			};
+		}).filter((row) => row.cancelamentos > 0 || row.realizado > 0 || row.meta > 0);
+		const totalCancelamentos = meses.reduce(
+			(sum, row) => sum + row.cancelamentos,
+			0,
+		);
+		const totalRealizado = meses.reduce((sum, row) => sum + row.realizado, 0);
+		const totalMeta = meses.reduce((sum, row) => sum + row.meta, 0);
+		const mesesMeta = meses.filter((row) => row.atingiu).length;
+		const mesesAbaixo = meses.filter(
+			(row) => row.meta > 0 && row.realizado < row.meta,
+		).length;
+		const mesesSemRetirada = meses.filter(
+			(row) => row.cancelamentos > 0 && row.realizado <= 0,
+		).length;
+		const taxaEntrega =
+			totalCancelamentos > 0 ? (totalRealizado / totalCancelamentos) * 100 : 0;
+		const leitura =
+			mesesSemRetirada > 0
+				? `${cidade?.nome || "Cidade"} teve ${mesesSemRetirada} mês(es) com cancelamentos e nenhuma retirada registrada. Prioridade alta para cobrança contratual.`
+				: mesesAbaixo > mesesMeta
+					? `${cidade?.nome || "Cidade"} ficou abaixo da meta na maior parte do histórico analisado. Recomenda-se acionar plano de recuperação e formalização.`
+					: `${cidade?.nome || "Cidade"} possui histórico majoritariamente aderente, com ${mesesMeta} mês(es) de meta batida.`;
+		return {
+			meses,
+			mesesComDados: meses.length,
+			mesesMeta,
+			mesesAbaixo,
+			mesesSemRetirada,
+			totalCancelamentos,
+			totalRealizado,
+			totalMeta,
+			taxaEntrega,
+			leitura,
+		};
+	}, [allData, cidade?.nome]);
 
 	if (!cidade) return null;
 
@@ -213,7 +295,79 @@ export default function CityModal({ cidade, month, allData, onClose }) {
 						>
 							📄 Relatório do Mês
 						</button>
+						<button
+							type="button"
+							className="btn-gerar-pdf btn-insight-juridico"
+							onClick={() => setShowInsight((current) => !current)}
+						>
+							⚖️ Insight jurídico
+						</button>
 					</div>
+					{showInsight ? (
+						<div className="city-modal-section city-legal-insight">
+							<div className="city-insight-title">
+								<div>
+									<h3>⚖️ Histórico para acionamento</h3>
+									<p>{insight.leitura}</p>
+								</div>
+								<button
+									type="button"
+									className="btn-gerar-pdf"
+									onClick={() => gerarPDFInsightAgente(cidade.nome, insight)}
+								>
+									Baixar PDF
+								</button>
+							</div>
+							<div className="city-situation-grid city-insight-grid">
+								<div>
+									<span>Meses com meta</span>
+									<strong>{insight.mesesMeta}</strong>
+								</div>
+								<div>
+									<span>Abaixo da meta</span>
+									<strong>{insight.mesesAbaixo}</strong>
+								</div>
+								<div>
+									<span>Sem retirada</span>
+									<strong>{insight.mesesSemRetirada}</strong>
+								</div>
+								<div>
+									<span>Taxa de retirada</span>
+									<strong>{insight.taxaEntrega.toFixed(1)}%</strong>
+								</div>
+							</div>
+							<div className="city-insight-table">
+								<table>
+									<thead>
+										<tr>
+											<th>Mês</th>
+											<th>Cancel.</th>
+											<th>Meta</th>
+											<th>Realizado</th>
+											<th>Status</th>
+										</tr>
+									</thead>
+									<tbody>
+										{insight.meses.map((row) => (
+											<tr key={row.mes}>
+												<td>{row.mes}</td>
+												<td>{row.cancelamentos}</td>
+												<td>{row.meta}</td>
+												<td>{row.realizado}</td>
+												<td>
+													{row.atingiu
+														? "Meta batida"
+														: row.realizado <= 0
+															? "Sem retirada"
+															: "Abaixo"}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					) : null}
 				</div>
 			</div>
 		</div>

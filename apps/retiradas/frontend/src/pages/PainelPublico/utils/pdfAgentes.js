@@ -2,6 +2,10 @@ import { formatarDataGeracao, imprimirHtml } from "../../../utils/impressao";
 import { obterMesesAnteriores } from "../../../utils/mes";
 
 const intFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+const pctFmt = new Intl.NumberFormat("pt-BR", {
+	minimumFractionDigits: 1,
+	maximumFractionDigits: 1,
+});
 
 function normalizarNumero(value) {
 	return Math.round(Number(value) || 0);
@@ -480,6 +484,82 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
     </div>
   </div>
 
+</div>`;
+
+	imprimirHtml(conteudo, {
+		areaId: "pdf-print-area",
+		styleId: "pdf-print-style",
+	});
+}
+
+export function gerarPDFInsightAgente(cidadeNome, insight) {
+	if (!insight) return;
+	const dataGeracao = formatarDataGeracao(new Date(), {
+		incluirPreposicao: true,
+	});
+	const rowsHtml = (insight.meses || [])
+		.map((row) => {
+			const statusColor = row.atingiu ? "#00875A" : row.realizado <= 0 ? "#DE350B" : "#FF8B00";
+			return `
+        <tr>
+          <td>${row.mes}</td>
+          <td>${intFmt.format(row.cancelamentos)}</td>
+          <td>${intFmt.format(row.meta)}</td>
+          <td>${intFmt.format(row.realizado)}</td>
+          <td style="color:${statusColor};font-weight:800">${row.atingiu ? "Meta" : row.realizado <= 0 ? "Sem retirada" : "Abaixo"}</td>
+          <td>${pctFmt.format(row.taxa)}%</td>
+        </tr>`;
+		})
+		.join("");
+	const conteudo = `
+<div style="font-family:Arial,sans-serif;color:#1A2340;background:#fff;padding:18px;font-size:11px">
+  <div style="background:#003087;color:#fff;border-radius:10px;padding:14px 18px;margin-bottom:12px">
+    <div style="font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;opacity:.75">Agentes Autorizados · Insight Jurídico</div>
+    <div style="font-size:23px;font-weight:900;margin-top:3px">${cidadeNome}</div>
+    <div style="font-size:10px;opacity:.8;margin-top:3px">Histórico desde Janeiro/2026 · Gerado em ${dataGeracao}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin-bottom:12px">
+    ${[
+			["Meses analisados", insight.mesesComDados],
+			["Bateu meta", insight.mesesMeta],
+			["Abaixo meta", insight.mesesAbaixo],
+			["Sem retirada", insight.mesesSemRetirada],
+			["Cancelamentos", insight.totalCancelamentos],
+			["Retiradas", insight.totalRealizado],
+		]
+			.map(
+				([label, value]) => `
+      <div style="border:1px solid #DDE3EE;border-radius:8px;padding:8px;background:#F8FAFC">
+        <div style="font-size:7px;color:#6B7897;text-transform:uppercase;font-weight:800">${label}</div>
+        <div style="font-size:18px;font-weight:900;color:#003087;margin-top:3px">${intFmt.format(value || 0)}</div>
+      </div>`,
+			)
+			.join("")}
+  </div>
+  <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:10px;margin-bottom:12px">
+    <div style="border:1px solid #DDE3EE;border-radius:8px;padding:10px">
+      <div style="font-size:10px;color:#6B7897;text-transform:uppercase;font-weight:800">Leitura executiva</div>
+      <div style="font-size:13px;line-height:1.45;margin-top:5px">${insight.leitura}</div>
+    </div>
+    <div style="border:1px solid #DDE3EE;border-radius:8px;padding:10px;background:#FFF8F2">
+      <div style="font-size:10px;color:#C44700;text-transform:uppercase;font-weight:800">Taxa de retirada</div>
+      <div style="font-size:28px;font-weight:900;color:#FF6B00;margin-top:6px">${pctFmt.format(insight.taxaEntrega)}%</div>
+      <div style="font-size:10px;color:#6B7897">Realizado sobre cancelamentos</div>
+    </div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:9px">
+    <thead>
+      <tr style="background:#003087;color:#fff">
+        <th style="padding:6px;text-align:left">Mês</th>
+        <th style="padding:6px">Cancel.</th>
+        <th style="padding:6px">Meta</th>
+        <th style="padding:6px">Retiradas</th>
+        <th style="padding:6px">Status</th>
+        <th style="padding:6px">% canc.</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
 </div>`;
 
 	imprimirHtml(conteudo, {

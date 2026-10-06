@@ -644,6 +644,99 @@ function StatusMap({ cidades = [], onStatusClick, activeStatus = "todos" }) {
 	);
 }
 
+function buildLegalRiskRanking(allData = {}) {
+	const cities = new Map();
+	MONTH_ORDER.forEach((month) => {
+		const record = getMonthRecord(allData, month);
+		(record?.cidades || []).forEach((city) => {
+			const name = city.nome || city.cidade || "Sem cidade";
+			const key = normalizeMonthName(name);
+			if (!key) return;
+			const current = cities.get(key) || {
+				nome: name,
+				mesesComDados: 0,
+				mesesMeta: 0,
+				mesesAbaixo: 0,
+				mesesSemRetirada: 0,
+				totalCancelamentos: 0,
+				totalMeta: 0,
+				totalRealizado: 0,
+			};
+			const cancelamentos = Math.round(Number(city.cancelamentos || 0));
+			const meta = Math.round(Number(city.meta80 || city.meta || 0));
+			const realizado = Math.round(Number(city.realizado || city.total || 0));
+			if (cancelamentos > 0 || meta > 0 || realizado > 0) {
+				current.mesesComDados += 1;
+				current.totalCancelamentos += cancelamentos;
+				current.totalMeta += meta;
+				current.totalRealizado += realizado;
+				if (meta > 0 && realizado >= meta) current.mesesMeta += 1;
+				if (meta > 0 && realizado < meta) current.mesesAbaixo += 1;
+				if (cancelamentos > 0 && realizado <= 0) current.mesesSemRetirada += 1;
+			}
+			cities.set(key, current);
+		});
+	});
+	return [...cities.values()]
+		.map((city) => ({
+			...city,
+			taxaEntrega:
+				city.totalCancelamentos > 0
+					? (city.totalRealizado / city.totalCancelamentos) * 100
+					: 0,
+			gap: city.totalRealizado - city.totalMeta,
+		}))
+		.filter((city) => city.mesesComDados > 0)
+		.sort((left, right) => {
+			if (right.mesesSemRetirada !== left.mesesSemRetirada) {
+				return right.mesesSemRetirada - left.mesesSemRetirada;
+			}
+			if (right.mesesAbaixo !== left.mesesAbaixo) {
+				return right.mesesAbaixo - left.mesesAbaixo;
+			}
+			return left.taxaEntrega - right.taxaEntrega;
+		});
+}
+
+function AgentsLegalRiskRanking({ items = [], intFmt, pctFmt }) {
+	const top = items.slice(0, 8);
+	return (
+		<section className="card agents-legal-card">
+			<div className="card-title card-title-split">
+				<div>
+					<span>Ranking jurídico de risco</span>
+					<p>Cidades com maior recorrência abaixo da meta e meses sem retirada.</p>
+				</div>
+				<span className="agentes-chart-caption">
+					{intFmt.format(items.length)} cidades analisadas
+				</span>
+			</div>
+			<div className="agents-legal-list">
+				{top.length ? (
+					top.map((item, index) => (
+						<div className="agents-legal-row" key={item.nome}>
+							<span className="agents-legal-rank">{index + 1}</span>
+							<div>
+								<strong>{item.nome}</strong>
+								<small>
+									{intFmt.format(item.mesesAbaixo)} mês(es) abaixo ·{" "}
+									{intFmt.format(item.mesesSemRetirada)} sem retirada ·{" "}
+									{pctFmt.format(item.taxaEntrega)}% dos cancelamentos
+								</small>
+							</div>
+							<b className={item.gap >= 0 ? "positive" : "negative"}>
+								{formatSigned(item.gap, intFmt)}
+							</b>
+						</div>
+					))
+				) : (
+					<p className="agents-empty-note">Sem histórico suficiente para ranking.</p>
+				)}
+			</div>
+		</section>
+	);
+}
+
 export default function TabAgentes({ allData, month, lastUpdate }) {
 	const dataMonthKey = useMemo(
 		() => resolveMonthKey(allData, month),
@@ -818,6 +911,11 @@ export default function TabAgentes({ allData, month, lastUpdate }) {
 				.sort((a, b) => b.gap - a.gap)
 				.slice(0, 4),
 		[filteredCities],
+	);
+
+	const legalRiskRanking = useMemo(
+		() => buildLegalRiskRanking(allData),
+		[allData],
 	);
 
 	const totalDeficit = useMemo(
@@ -1338,6 +1436,12 @@ export default function TabAgentes({ allData, month, lastUpdate }) {
 					</div>
 				</section>
 			</div>
+
+			<AgentsLegalRiskRanking
+				items={legalRiskRanking}
+				intFmt={intFmt}
+				pctFmt={pctFmt}
+			/>
 
 			<AgentsRanking cidades={filteredCities} />
 

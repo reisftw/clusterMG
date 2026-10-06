@@ -1,4 +1,6 @@
 const db = require("../../db");
+const documents = require("../../documents");
+const regionaisRepository = require("../../regionaisRepository");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 
@@ -73,6 +75,228 @@ function currentCompetencia() {
 		year: "numeric",
 		month: "2-digit",
 	}).format(new Date());
+}
+
+function monthNameFromCompetencia(competencia) {
+	const month = Number(String(competencia || "").slice(5, 7));
+	return [
+		"Janeiro",
+		"Fevereiro",
+		"Marco",
+		"Abril",
+		"Maio",
+		"Junho",
+		"Julho",
+		"Agosto",
+		"Setembro",
+		"Outubro",
+		"Novembro",
+		"Dezembro",
+	][month - 1] || null;
+}
+
+function getDaysInCompetencia(competencia) {
+	const [year, month] = String(competencia || "")
+		.split("-")
+		.map((value) => Number(value));
+	if (!year || !month) return 31;
+	return new Date(year, month, 0).getDate();
+}
+
+function normalizeDailyForMonth(values = [], dayCount = 31) {
+	const current = Array.isArray(values) ? values : [];
+	return Array.from({ length: dayCount }, (_, index) =>
+		Math.round(Number(current[index] || 0)),
+	);
+}
+
+function normalizeCityName(value) {
+	const text = cleanText(value);
+	if (!text) return "";
+	return text
+		.toLowerCase()
+		.split(/\s+/)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+}
+
+async function loadAuthorizedAgentCities() {
+	const [regionalRows, toolRows] = await Promise.all([
+		regionaisRepository.listAllRegionalDocuments(),
+		documents.listAllDocuments("ferramentas_regionais"),
+	]);
+	const map = new Map();
+	function addCity(city, regionalName) {
+		const name = normalizeCityName(city?.nome || city);
+		const key = normalizeCityKey(name);
+		if (!key) return;
+		const kind = normalizeKey(city?.tipo || city?.tipoCidade || "");
+		const current = map.get(key) || {};
+		map.set(key, {
+			nome: name,
+			regional: regionalName || current.regional || null,
+			agente:
+				current.agente === true ||
+				city?.agente === true ||
+				kind.includes("AGENTE"),
+		});
+	}
+	for (const row of [...toolRows, ...regionalRows]) {
+		const data = row?.data || {};
+		const regionalName = data.nome || "Sem regional";
+		for (const city of data.cidades || []) addCity(city, regionalName);
+	}
+	return map;
+}
+
+function normalizeAgentCityRecord(city = {}, dayCount) {
+	const daily = normalizeDailyForMonth(city.daily, dayCount);
+	const realizado = daily.reduce((sum, value) => sum + Number(value || 0), 0);
+	const cancelamentos = Math.round(Number(city.cancelamentos || 0));
+	const meta80 = Math.round(Number(city.meta80 || city.meta || 0));
+	return {
+		...city,
+		nome: normalizeCityName(city.nome || city.cidade) || "Sem cidade",
+		cancelamentos,
+		meta80,
+		realizado,
+		falta: meta80 - realizado,
+		pct: meta80 > 0 ? Number(((realizado / meta80) * 100).toFixed(1)) : 0,
+		daily,
+		lojaAgentesTotal: Number(city.lojaAgentesTotal || 0),
+		lojaAgentesDaily: normalizeDailyForMonth(city.lojaAgentesDaily, dayCount),
+	};
+}
+
+async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
+	const normalizedCompetencia = parseCompetencia(competencia);
+	const monthName = monthNameFromCompetencia(normalizedCompetencia);
+	if (!monthName) return null;
+	const dayCount = getDaysInCompetencia(normalizedCompetencia);
+	const agentCities = await loadAuthorizedAgentCities();
+	const result = await db.query(
+		`select coalesce(cidade, 'Sem cidade') as cidade,
+		        coalesce(cidade_normalizada, '') as cidade_normalizada,
+		        count(*)::int as total
+		   from service_order_cancellation_records
+		  where competencia = $1
+		    and empresa_normalizada = 'SEMPRE'
+		  group by coalesce(cidade, 'Sem cidade'), coalesce(cidade_normalizada, '')
+		  order by total desc, cidade`,
+		[normalizedCompetencia],
+	);
+	const cancellationsByCity = new Map();
+	for (const row of result.rows) {
+		const key = normalizeCityKey(row.cidade_normalizada || row.cidade);
+		const agentInfo = agentCities.get(key);
+		if (!agentInfo?.agente) continue;
+		cancellationsByCity.set(key, {
+			nome: agentInfo.nome || normalizeCityName(row.cidade),
+			cancelamentos: Number(row.total || 0),
+		});
+	}
+	const currentDoc =
+		(await documents.getDocument(`dashboardagentes/${monthName}`).catch(() => null))
+			?.data || {};
+	const byCity = new Map();
+	for (const city of currentDoc.cidades || []) {
+		const normalized = normalizeAgentCityRecord(city, dayCount);
+		const key = normalizeCityKey(normalized.nome);
+		if (!key) continue;
+		byCity.set(key, normalized);
+	}
+	for (const [key, item] of cancellationsByCity.entries()) {
+		const current =
+			byCity.get(key) ||
+			normalizeAgentCityRecord(
+				{
+					nome: item.nome,
+					daily: [],
+					lojaAgentesDaily: [],
+				},
+				dayCount,
+			);
+		current.nome = item.nome;
+		current.cancelamentos = item.cancelamentos;
+		current.meta80 = Math.round(item.cancelamentos * 0.8);
+		current.falta = current.meta80 - current.realizado;
+		current.pct =
+			current.meta80 > 0
+				? Number(((current.realizado / current.meta80) * 100).toFixed(1))
+				: 0;
+		byCity.set(key, current);
+	}
+	const normalizedCities = [...byCity.values()]
+		.filter((city) => Number(city.cancelamentos || 0) > 0 || Number(city.realizado || 0) > 0)
+		.sort((left, right) => Number(right.realizado || 0) - Number(left.realizado || 0));
+	const totalRealizado = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.realizado || 0),
+		0,
+	);
+	const totalMeta = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.meta80 || 0),
+		0,
+	);
+	const totalCancelamentos = normalizedCities.reduce(
+		(sum, city) => sum + Number(city.cancelamentos || 0),
+		0,
+	);
+	const totalDaily = Array.from({ length: dayCount }, (_, index) =>
+		normalizedCities.reduce((sum, city) => sum + Number(city.daily?.[index] || 0), 0),
+	);
+	const totalFalta = totalMeta - totalRealizado;
+	const nowIso = new Date().toISOString();
+	const payload = {
+		...currentDoc,
+		month: monthName,
+		cidades: normalizedCities,
+		cidadesRanking: [...normalizedCities].sort(
+			(left, right) => Number(right.realizado || 0) - Number(left.realizado || 0),
+		),
+		dayCount,
+		totalCancelamentos,
+		totalMeta,
+		totalRealizado,
+		totalFalta,
+		percentAchieved:
+			totalMeta > 0 ? Number(((totalRealizado / totalMeta) * 100).toFixed(1)) : 0,
+		totalDaily,
+		status:
+			totalRealizado >= totalMeta && totalMeta > 0
+				? "Meta atingida!"
+				: `Faltam ${Math.max(0, Math.round(totalFalta))} retiradas`,
+		cancelamentosUpdatedAt: nowIso,
+		updatedAt: nowIso,
+	};
+	await documents.upsertDocument(
+		{
+			path: `dashboardagentes/${monthName}`,
+			collectionPath: "dashboardagentes",
+			documentId: monthName,
+			parentPath: null,
+			data: payload,
+		},
+		{ audit: false },
+	);
+	return {
+		competencia: normalizedCompetencia,
+		month: monthName,
+		cidades: normalizedCities.length,
+		totalCancelamentos,
+		totalMeta,
+		totalRealizado,
+	};
+}
+
+async function rebuildAgentCancellationTargetsRange(body = {}) {
+	const start = parseCompetencia(body.startCompetencia || body.start || "2026-01");
+	const end = parseCompetencia(body.endCompetencia || body.end || currentCompetencia());
+	const competencias = listCompetenciasInRange(start, end);
+	const results = [];
+	for (const competencia of competencias) {
+		results.push(await rebuildAgentCancellationTargetsForCompetencia(competencia));
+	}
+	return { startCompetencia: start, endCompetencia: end, results: results.filter(Boolean) };
 }
 
 function parseDate(value) {
@@ -698,6 +922,14 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 			],
 		);
 		await writeClient.query("commit");
+		try {
+			await rebuildAgentCancellationTargetsForCompetencia(normalizedCompetencia);
+		} catch (error) {
+			console.error(
+				"[service-order-cancellations] Falha ao atualizar metas de agentes",
+				error,
+			);
+		}
 		return {
 			id: runId,
 			competencia: normalizedCompetencia,
@@ -1233,6 +1465,7 @@ module.exports = {
 	listCompetencies,
 	listFilterOptions,
 	listSyncHistory,
+	rebuildAgentCancellationTargetsRange,
 	startHistorySync,
 	startSync,
 	validateCompetency,

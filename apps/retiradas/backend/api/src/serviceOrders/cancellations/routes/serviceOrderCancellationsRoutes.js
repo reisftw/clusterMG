@@ -122,6 +122,20 @@ function createServiceOrderCancellationsRouter({
 	);
 
 	router.post(
+		"/agents/targets/rebuild",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireManage,
+		async (req, res, next) => {
+			try {
+				res.json(await service.rebuildAgentCancellationTargetsRange(req.body || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
 		"/:competencia/validate",
 		requireAuthenticated,
 		requireCsrfToken,
