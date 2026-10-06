@@ -372,6 +372,14 @@ const AppRouter = () => (
 							}
 						/>
 						<Route
+							path={ROUTES.APP}
+							element={
+								<ProtectedRoute>
+									<HomeRoute dashboard={Dashboard} />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
 							path={ROUTES.ACERTO_ESTOQUE}
 							element={
 								<ProtectedRoute

@@ -4,6 +4,7 @@ export const ROUTES = {
 	RESET_PASSWORD: "/redefinir-senha",
 	ACCESS_DENIED: "/acesso-negado",
 
+	APP: "/app",
 	DASHBOARD: "/",
 	DIARIO: "/diario",
 	ACERTO_ESTOQUE: "/acerto-estoque",
