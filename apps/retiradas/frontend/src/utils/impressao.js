@@ -31,6 +31,7 @@ export function imprimirHtml(
 ) {
 	const areaId = options.areaId ?? "print-area";
 	const styleId = options.styleId ?? "print-style";
+	const pageCss = options.pageCss ?? "";
 
 	const existingArea = document.getElementById(areaId);
 	if (existingArea) existingArea.remove();
@@ -55,6 +56,7 @@ export function imprimirHtml(
 	style.id = styleId;
 	style.textContent = `
     @media print {
+      ${pageCss}
       body > *:not(#${areaId}) { display: none !important; }
       #${areaId} { display: block !important; position: static !important; }
     }
