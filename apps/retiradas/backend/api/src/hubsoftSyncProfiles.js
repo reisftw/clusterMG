@@ -22,6 +22,18 @@ const HUBSOFT_REQUEST_TIMEOUT_MS = Math.min(
 	5 * 60_000,
 );
 const SCHEDULER_CHECK_INTERVAL_MS = 60 * 1000;
+const MAP_MATCH_RETRY_ATTEMPTS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_RETRY_ATTEMPTS || 2), 0),
+	5,
+);
+const MAP_MATCH_RETRY_DELAY_MS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_RETRY_DELAY_MS || 30_000), 5_000),
+	5 * 60_000,
+);
+const MAP_MATCH_WATCHDOG_MS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_WATCHDOG_MS || 25 * 60_000), 5 * 60_000),
+	2 * 60 * 60_000,
+);
 const SCHEDULER_USER = {
 	uid: "system",
 	email: "system@retiradas.local",
@@ -30,6 +42,7 @@ const SCHEDULER_USER = {
 };
 let schedulerTickRunning = false;
 let mapMatchSchedulerRunning = false;
+let mapMatchSchedulerStartedAt = 0;
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -2001,6 +2014,40 @@ async function releaseStaleLock(profile) {
 	return true;
 }
 
+async function releaseOrphanedSchedulerLocks() {
+	const result = await db.query(
+		`select l.profile, l.sync_run_id, r.status, r.result_summary
+		   from hubsoft_sync_locks l
+		   left join hubsoft_sync_runs r on r.id = l.sync_run_id
+		  where l.locked_by = $1
+		    and (r.id is null or r.status = $2)`,
+		[SCHEDULER_USER.uid, RUN_STATUS.RUNNING],
+	);
+	if (!result.rows.length) return 0;
+	await db.query(
+		`delete from hubsoft_sync_locks
+		  where locked_by = $1
+		    and profile = any($2::text[])`,
+		[SCHEDULER_USER.uid, result.rows.map((row) => row.profile)],
+	);
+	for (const row of result.rows) {
+		if (!row.sync_run_id || row.status !== RUN_STATUS.RUNNING) continue;
+		await updateRun(row.sync_run_id, {
+			status: RUN_STATUS.FAILED,
+			finished_at: new Date().toISOString(),
+			error_code: "STALE_RUN",
+			error_message:
+				"Execução interrompida por reinício da API. A rotina automática pode retomar em seguida.",
+			result_summary: {
+				...(row.result_summary || {}),
+				stage: "Execução interrompida",
+				heartbeatAt: new Date().toISOString(),
+			},
+		}).catch(() => null);
+	}
+	return result.rows.length;
+}
+
 async function getActiveLock(profile) {
 	await releaseStaleLock(profile);
 	const result = await db.query(
@@ -2783,10 +2830,51 @@ async function runProfileSafely(profile, options = {}) {
 	}
 }
 
+function wait(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryMapMatchRun(run) {
+	if (![PROFILE.MAPA, PROFILE.MATCH].includes(run?.profile)) return false;
+	if (!run) return true;
+	return [
+		RUN_STATUS.FAILED,
+		RUN_STATUS.INCOMPLETE,
+		RUN_STATUS.SUSPICIOUS,
+		RUN_STATUS.SCHEMA_CHANGED,
+	].includes(run.status);
+}
+
+async function runMapMatchProfileWithRetry(profile, options = {}) {
+	let lastRun = null;
+	for (let attempt = 0; attempt <= MAP_MATCH_RETRY_ATTEMPTS; attempt += 1) {
+		if (attempt > 0) {
+			console.warn(
+				`[hubsoftSyncProfiles] Retentando ${profile} (${attempt}/${MAP_MATCH_RETRY_ATTEMPTS}).`,
+			);
+			await wait(MAP_MATCH_RETRY_DELAY_MS);
+		}
+		lastRun = await runProfileSafely(profile, {
+			...options,
+			retryAttempt: attempt,
+		});
+		if (!shouldRetryMapMatchRun(lastRun)) return lastRun;
+	}
+	return lastRun;
+}
+
 async function runMapMatchScheduler(rawConfig, config) {
 	if (!config.autoMapMatchEnabled) return [];
 	if (mapMatchSchedulerRunning) {
-		return [{ profile: "MAP_MATCH", skipped: "already_running" }];
+		const elapsedMs = Date.now() - Number(mapMatchSchedulerStartedAt || 0);
+		if (elapsedMs < MAP_MATCH_WATCHDOG_MS) {
+			return [{ profile: "MAP_MATCH", skipped: "already_running" }];
+		}
+		console.warn(
+			"[hubsoftSyncProfiles] Watchdog liberou rotina MAPA/MATCH presa em memoria.",
+		);
+		mapMatchSchedulerRunning = false;
+		mapMatchSchedulerStartedAt = 0;
 	}
 
 	const mapDue =
@@ -2799,11 +2887,12 @@ async function runMapMatchScheduler(rawConfig, config) {
 	if (!mapDue && !matchDue) return [];
 
 	mapMatchSchedulerRunning = true;
+	mapMatchSchedulerStartedAt = Date.now();
 	const results = [];
 	(async () => {
 		try {
 			const mapResult = mapDue
-				? await runProfileSafely(PROFILE.MAPA)
+				? await runMapMatchProfileWithRetry(PROFILE.MAPA)
 				: null;
 			if (mapDue) {
 				results.push({ profile: PROFILE.MAPA, result: mapResult });
@@ -2813,7 +2902,7 @@ async function runMapMatchScheduler(rawConfig, config) {
 			}
 
 			const matchResult = matchDue
-				? await runProfileSafely(PROFILE.MATCH)
+				? await runMapMatchProfileWithRetry(PROFILE.MATCH)
 				: null;
 			if (matchDue) {
 				results.push({ profile: PROFILE.MATCH, result: matchResult });
@@ -2835,6 +2924,7 @@ async function runMapMatchScheduler(rawConfig, config) {
 			);
 		} finally {
 			mapMatchSchedulerRunning = false;
+			mapMatchSchedulerStartedAt = 0;
 		}
 	})();
 
@@ -2935,6 +3025,22 @@ async function runSchedulerTick() {
 
 function startScheduler(app) {
 	if (app?.locals?.hubsoftSyncProfilesTimer) return app.locals.hubsoftSyncProfilesTimer;
+	setImmediate(() => {
+		releaseOrphanedSchedulerLocks()
+			.then((released) => {
+				if (released > 0) {
+					console.warn(
+						`[hubsoftSyncProfiles] ${released} lock(s) orfao(s) do scheduler liberado(s) na inicializacao.`,
+					);
+				}
+			})
+			.catch((error) => {
+				console.error(
+					"[hubsoftSyncProfiles] Falha ao liberar locks orfaos na inicializacao:",
+					error?.message || error,
+				);
+			});
+	});
 	const timer = setInterval(() => {
 		runSchedulerTick().catch((error) => {
 			console.error(
