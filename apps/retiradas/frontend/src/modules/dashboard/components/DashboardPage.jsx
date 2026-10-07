@@ -687,7 +687,7 @@ function ModernDashboardView({
 	topCidadesOverride,
 }) {
 	return (
-		<div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-4">
+		<div className="retiradas-native-page mx-auto w-full min-w-0 max-w-[1500px] space-y-4">
 			<div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 				<div className="min-w-0">
 					<h1 className="text-3xl font-black leading-tight text-slate-950">Visão geral</h1>
@@ -698,7 +698,7 @@ function ModernDashboardView({
 				<InternalStaticDataStatus className="w-full max-w-xl" fallbackIsHealthy />
 			</div>
 
-			<div className="grid min-w-0 items-stretch gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+			<div className="grid min-w-0 items-stretch gap-4 sm:gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
 				{showDocumentsInHero ? (
 					<DocumentosPendentesCard currentUser={currentUser} />
 				) : null}

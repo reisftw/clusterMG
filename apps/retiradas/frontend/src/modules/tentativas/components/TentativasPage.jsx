@@ -1056,14 +1056,14 @@ export default function TentativasPage() {
 	const [tab, setTab] = useState("route");
 	const tabs = [["route", "Minha Rota", Route], ...(admin ? ADMIN_TABS : [["history", "Histórico", History]])];
 	return (
-		<div className="w-full min-w-0 space-y-5">
+		<div className="retiradas-native-page w-full min-w-0 space-y-5">
 			<PageHeader
 				eyebrow="Esteira operacional"
 				title="Tentativas"
 				description="Match → contato manual via WhatsApp → resposta → agendamento → retirada."
 				icon={<div className="rounded-2xl bg-blue-600 p-3 text-white"><MessageCircle className="h-6 w-6" /></div>}
 			/>
-			<div className="-mx-3 flex min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
+			<div className="retiradas-native-tabs -mx-3 flex min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
 				{tabs.map(([key, label, Icon]) => (
 					<TabButton key={key} icon={Icon} active={tab === key} onClick={() => setTab(key)}>{label}</TabButton>
 				))}

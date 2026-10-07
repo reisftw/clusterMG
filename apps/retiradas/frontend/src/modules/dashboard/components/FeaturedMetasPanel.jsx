@@ -158,7 +158,7 @@ const FeaturedMetasPanel = () => {
 
 	if (loading) {
 		return (
-			<section className="w-full min-w-0 rounded-lg border border-orange-100 bg-white p-4 shadow-card sm:p-6">
+			<section className="retiradas-native-panel w-full min-w-0 rounded-lg border border-orange-100 bg-white p-4 shadow-card sm:p-6">
 				<RetorninhoLoader compact size="sm" title="Carregando metas..." />
 			</section>
 		);
@@ -166,7 +166,7 @@ const FeaturedMetasPanel = () => {
 
 	if (!metaStats) {
 		return (
-			<section className="w-full min-w-0 rounded-lg border border-orange-100 bg-white p-4 shadow-card sm:p-6">
+			<section className="retiradas-native-panel w-full min-w-0 rounded-lg border border-orange-100 bg-white p-4 shadow-card sm:p-6">
 				<div className="flex items-center gap-3">
 					<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50">
 						<Target size={20} className="text-orange-500" />
@@ -195,7 +195,7 @@ const FeaturedMetasPanel = () => {
 		});
 
 	return (
-		<section className="flex h-full w-full min-w-0 flex-col overflow-hidden rounded-lg border border-orange-200 bg-white shadow-card">
+		<section className="retiradas-native-panel flex h-full w-full min-w-0 flex-col overflow-hidden rounded-lg border border-orange-200 bg-white shadow-card">
 			<div className="grid min-w-0 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
 				<div className="min-w-0 border-b border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-4 sm:p-6 lg:border-b-0 lg:border-r">
 					<div className="mb-4 flex items-center justify-between gap-3">

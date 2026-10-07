@@ -53,8 +53,8 @@ const AgendamentosHojeCard = ({
 		<div
 			className={
 				featured
-					? "flex h-full min-h-[260px] flex-col rounded-lg border border-blue-200 bg-white p-5 shadow-card"
-					: "flex flex-col rounded-lg border border-gray-100 bg-white p-5 shadow-sm"
+					? "retiradas-native-card flex h-full min-h-[260px] flex-col rounded-lg border border-blue-200 bg-white p-5 shadow-card"
+					: "retiradas-native-card flex flex-col rounded-lg border border-gray-100 bg-white p-5 shadow-sm"
 			}
 		>
 			<div
@@ -100,7 +100,7 @@ const AgendamentosHojeCard = ({
 					<button
 						type="button"
 						onClick={() => navigate(ROUTES.AGENDAMENTOS)}
-						className="flex shrink-0 items-center gap-0.5 text-xs font-bold text-blue-600 hover:underline"
+						className="flex min-h-10 shrink-0 items-center gap-0.5 rounded-xl px-2 text-xs font-bold text-blue-600 hover:bg-blue-50 hover:underline"
 					>
 						Ver todos <ChevronRight size={12} />
 					</button>
@@ -120,7 +120,7 @@ const AgendamentosHojeCard = ({
 									key={item.id}
 									className={
 										featured
-											? "rounded-lg border border-slate-200 bg-slate-50 p-3 transition-colors hover:border-blue-200 hover:bg-blue-50"
+											? "rounded-2xl border border-slate-200 bg-slate-50 p-3.5 transition-colors hover:border-blue-200 hover:bg-blue-50"
 											: "rounded-xl bg-gray-50 p-3 transition-colors hover:bg-blue-50"
 									}
 								>

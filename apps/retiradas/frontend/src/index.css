@@ -218,6 +218,50 @@
     min-width: 0;
   }
 
+  .retiradas-native-page {
+    width: 100%;
+    max-width: 430px;
+    margin-inline: auto;
+    padding-inline: 0.125rem;
+  }
+
+  .retiradas-native-card {
+    border-radius: 1.25rem;
+    padding: 1rem;
+  }
+
+  .retiradas-native-panel {
+    border-radius: 1.35rem;
+    padding: 1rem;
+  }
+
+  .retiradas-native-action-stack {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.625rem;
+    width: 100%;
+  }
+
+  .retiradas-native-segmented {
+    display: grid;
+    grid-template-columns: repeat(var(--segments, 3), minmax(0, 1fr));
+    gap: 0.25rem;
+    width: 100%;
+    border-radius: 1.25rem;
+    padding: 0.25rem;
+  }
+
+  .retiradas-native-tabs {
+    margin-inline: -0.75rem;
+    padding-inline: 0.75rem;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .retiradas-native-tabs > * {
+    scroll-snap-align: start;
+  }
+
   .shadow-card {
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   }
