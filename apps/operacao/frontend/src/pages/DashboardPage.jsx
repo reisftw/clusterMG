@@ -276,21 +276,21 @@ export default function DashboardPage() {
 	if (loading) return <Spinner fullScreen />;
 
 	return (
-		<div className="space-y-6">
+		<div className="w-full min-w-0 space-y-6">
 			<PendingTransfersCard />
 			<MyAssetsCard />
 			{selector}
 			{error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div> : null}
 
-			<section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm">
+			<section className="flex min-w-0 flex-col gap-4 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
 				<div className="min-w-0">
 					<h1 className="text-lg font-black text-slate-950">Ações de campo</h1>
 					<p className="text-sm font-semibold text-slate-500">Registre APR e abra rompimentos direto pela dashboard.</p>
 				</div>
-				<div className="flex flex-wrap gap-2">
+				<div className="grid w-full min-w-0 gap-2 sm:w-auto sm:grid-cols-3 sm:flex sm:flex-wrap">
 					<NavLink
 						to="/apr?novo=1"
-						className="rot-btn-tactile rot-apr-primary-button inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-black"
+						className="rot-btn-tactile rot-apr-primary-button inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black sm:min-h-11 sm:py-2"
 					>
 						<ShieldCheck size={18} />
 						<span>Enviar APR</span>
@@ -298,7 +298,7 @@ export default function DashboardPage() {
 					{canRompimento ? (
 						<NavLink
 							to="/rompimentos?novo=1"
-							className="rot-btn-tactile inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-red-200 hover:bg-red-700"
+							className="rot-btn-tactile inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-red-200 hover:bg-red-700 sm:min-h-11 sm:py-2"
 						>
 							<Zap size={18} />
 							<span>Novo Rompimento</span>
@@ -306,7 +306,7 @@ export default function DashboardPage() {
 					) : null}
 					<NavLink
 						to="/seguranca-trabalho/protocolos?novo=1"
-						className="rot-btn-tactile inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-orange-200 hover:bg-orange-700"
+						className="rot-btn-tactile inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-orange-200 hover:bg-orange-700 sm:min-h-11 sm:py-2"
 					>
 						<HardHat size={18} />
 						<span>Reportar para SST</span>
@@ -388,7 +388,7 @@ export default function DashboardPage() {
 				</DashboardCard>
 			</div>
 
-			<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+			<div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 				<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
 					<h2 className="flex items-center gap-2 text-base font-black text-slate-950">
 						<CalendarRange size={18} className="text-blue-600" />
@@ -428,7 +428,7 @@ export default function DashboardPage() {
 					<Legend color="bg-red-500" label="Feriado" />
 				</div>
 
-				<div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
+				<div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-7">
 					{weekDays.map((date, index) => {
 						const key = dateObjKey(date);
 						const isToday = key === todayKey();
@@ -473,12 +473,12 @@ export default function DashboardPage() {
 function DashboardSwitcher({ options, active, onChange }) {
 	if (!options?.length || options.length === 1) return null;
 	return (
-		<section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
+		<section className="flex min-w-0 flex-col gap-3 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
 			<div className="min-w-0">
 				<p className="text-[10px] font-black uppercase tracking-wider text-blue-600">Dashboard por operação</p>
 				<h1 className="text-lg font-black text-slate-950">{DASHBOARD_LABELS[active] || "Dashboard"}</h1>
 			</div>
-			<div className="flex flex-wrap gap-2 rounded-2xl bg-slate-100 p-1">
+			<div className="grid w-full grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 sm:w-auto sm:flex sm:flex-wrap sm:gap-2">
 				{options.map((option) => (
 					<button
 						key={option}

@@ -256,7 +256,7 @@ export default function Shell() {
 	);
 
 	return (
-		<div className="rot-app-shell flex min-h-dvh overflow-x-hidden bg-slate-100 lg:h-dvh lg:overflow-hidden">
+		<div className="rot-app-shell flex min-h-dvh w-full min-w-0 overflow-x-hidden bg-slate-100 lg:h-dvh lg:overflow-hidden">
 			<AprOfflineSync />
 			<div
 				className={`${collapsed ? "is-collapsed w-16" : "is-expanded w-72"} hidden h-full shrink-0 shadow-sidebar transition-[width] duration-200 lg:block`}
@@ -296,7 +296,7 @@ export default function Shell() {
 			) : null}
 
 			<div className="rot-app-content flex min-h-dvh min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-				<header className="relative z-layout-topbar flex items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
+				<header className="relative z-layout-topbar flex min-w-0 items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
 					<button
 						type="button"
 						onClick={() => setMobileSidebarOpen(true)}
@@ -307,10 +307,10 @@ export default function Shell() {
 						<Menu size={20} />
 					</button>
 					<div className="min-w-0 flex-1 lg:flex-none">
-						<h2 className="truncate text-lg font-black text-slate-950">
+						<h2 className="rot-mobile-greeting truncate text-lg font-black text-slate-950">
 							Olá, {(user?.name || user?.username || "Usuário").split(" ")[0]}
 						</h2>
-						<p className="truncate text-xs font-medium text-slate-500">
+						<p className="rot-mobile-date truncate text-xs font-medium text-slate-500">
 							{new Date().toLocaleDateString("pt-BR", {
 								weekday: "long",
 								day: "2-digit",
@@ -323,6 +323,31 @@ export default function Shell() {
 					<AprAlerts />
 					<NotificationBell />
 					<div className="relative">
+						<div className="flex items-center gap-1 sm:hidden">
+							<button
+								type="button"
+								onClick={() => navigate("/perfil")}
+								className="inline-flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-600 text-xs font-black text-white shadow-sm"
+								title="Meu perfil"
+								aria-label="Meu perfil"
+							>
+								<UserAvatar
+									src={user?.avatarUrl}
+									name={user?.name}
+									email={user?.email}
+									className="flex h-full w-full items-center justify-center"
+								/>
+							</button>
+							<button
+								type="button"
+								onClick={logout}
+								className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+								title="Sair"
+								aria-label="Sair"
+							>
+								<LogOut size={18} />
+							</button>
+						</div>
 						<div className="hidden items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-card sm:flex">
 							<UserAvatar
 								src={user?.avatarUrl}
@@ -377,7 +402,7 @@ export default function Shell() {
 						</div>
 					</div>
 				</header>
-				<main className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 sm:p-4 lg:p-6">
+				<main className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 sm:p-4 lg:p-6">
 					<Outlet />
 				</main>
 			</div>

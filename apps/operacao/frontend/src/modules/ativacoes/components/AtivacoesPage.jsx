@@ -353,35 +353,35 @@ export default function AtivacoesPage() {
 	const hasLocalDashboardData = Number(dashboard?.summary?.created || dashboard?.summary?.createdToday || 0) > 0;
 
 	return (
-		<div className="space-y-6">
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+		<div className="w-full min-w-0 space-y-6">
+			<section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+				<div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 					<div className="min-w-0">
 						<p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">{pageCopy.breadcrumb}</p>
-						<h1 className="mt-1 text-3xl font-black text-slate-950">{pageCopy.title}</h1>
+						<h1 className="mt-1 text-3xl font-black leading-tight text-slate-950">{pageCopy.title}</h1>
 						<p className="mt-1 max-w-3xl text-sm font-semibold text-slate-500">
 							{tab === "dashboard" ? "Acompanhe o fluxo e os principais indicadores da operação." : pageCopy.description}
 						</p>
 					</div>
-					<div className="flex flex-wrap items-center gap-2">
+					<div className="grid w-full min-w-0 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
 						<SyncStatusBadge latestSync={latestSync} syncJob={syncJob} compact />
 						{canSync ? (
-							<button type="button" onClick={triggerSync} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
+							<button type="button" onClick={triggerSync} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 sm:min-h-10 sm:py-2">
 								<RefreshCw size={17} className={syncJob?.status === "running" || syncJob?.status === "starting" ? "animate-spin" : ""} /> Atualizar
 							</button>
 						) : null}
 						{canExport && (tab === "dashboard" || tab === "kanban") ? (
-							<a href={ativacoesExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+							<a href={ativacoesExportUrl(effectiveFilters)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50 sm:min-h-10 sm:py-2">
 								<Download size={17} /> Exportar
 							</a>
 						) : null}
 						{tab === "saude" && canExportHealth ? (
-							<a href={ativacoesSaudeExportUrl(effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 transition hover:bg-emerald-100">
+							<a href={ativacoesSaudeExportUrl(effectiveFilters)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-black text-emerald-700 transition hover:bg-emerald-100 sm:min-h-10 sm:py-2">
 								<Download size={17} /> Exportar
 							</a>
 						) : null}
 						{tab === "qualidade" && canExportQuality ? (
-							<a href={ativacoesQualidadeExportUrl(QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician", effectiveFilters)} className="inline-flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-black text-violet-700 transition hover:bg-violet-100">
+							<a href={ativacoesQualidadeExportUrl(QUALITY_DIMENSIONS.find((item) => item.id === qualityDimension)?.api || "technician", effectiveFilters)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-black text-violet-700 transition hover:bg-violet-100 sm:min-h-10 sm:py-2">
 								<Download size={17} /> Exportar
 							</a>
 						) : null}
@@ -830,8 +830,8 @@ function KanbanView({ data, query, onOpen }) {
 					))}
 				</div>
 			</div>
-			<div className="overflow-x-auto pb-3">
-				<div className="grid min-h-[560px] min-w-[1600px] auto-cols-[320px] grid-flow-col gap-3 xl:min-h-[calc(100vh-330px)]">
+			<div className="min-w-0 overflow-x-auto pb-3">
+				<div className="grid min-h-0 min-w-0 gap-3 md:min-h-[560px] md:min-w-[1600px] md:auto-cols-[320px] md:grid-flow-col xl:min-h-[calc(100vh-330px)]">
 					{filteredColumns.map((column) => {
 						const collapsed = column.id === "completed" && completedCollapsed;
 						return (
