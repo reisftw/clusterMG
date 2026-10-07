@@ -61,7 +61,39 @@ const MONTHORDER = [
 
 const DEFAULT_MATCH_IGNORED_TYPES = [];
 const IMPORT_JOB_COLLECTION = "operational_import_jobs";
+const ESTOQUE_ONNET_COLLECTION = "estoque_onnet";
 const importJobPromises = new Map();
+
+const ONNET_MAC_PREFIX_MANUFACTURERS = {
+	"000C29": "VMware",
+	"001A79": "ZTE",
+	"04BF6D": "ZTE",
+	"081075": "FiberHome",
+	"0C722C": "FiberHome",
+	"18725D": "Huawei",
+	"1C1D67": "Huawei",
+	"2008ED": "Huawei",
+	"286ED4": "Huawei",
+	"2C9D1E": "Huawei",
+	"34B7DA": "ZTE",
+	"485754": "FiberHome",
+	"5C497D": "FiberHome",
+	"68A828": "Huawei",
+	"707BE8": "Huawei",
+	"78D752": "Huawei",
+	"7C6097": "Huawei",
+	"805EC0": "FiberHome",
+	"8C34FD": "Huawei",
+	"A8329A": "FiberHome",
+	"AC4E91": "Huawei",
+	"ACE87B": "Huawei",
+	"C83A35": "Huawei",
+	"D46E0E": "Huawei",
+	"E067B3": "ZTE",
+	"E80945": "ZTE",
+	"F49EEF": "Huawei",
+	"F4E3FB": "FiberHome",
+};
 
 const ORDER_DATE_ALIASES = [
 	"data_cadastro",
@@ -131,6 +163,28 @@ function normalizeText(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.toLowerCase()
 		.trim();
+}
+
+function normalizeMacInput(value) {
+	return String(value || "")
+		.replace(/[^a-fA-F0-9]/g, "")
+		.toUpperCase()
+		.slice(0, 12);
+}
+
+function formatMac(value) {
+	const normalized = normalizeMacInput(value);
+	return normalized.replace(/(.{2})(?=.)/g, "$1:");
+}
+
+function inferMacManufacturer(value) {
+	const normalized = normalizeMacInput(value);
+	if (normalized.length < 6) return "Fabricante não identificado";
+	return (
+		ONNET_MAC_PREFIX_MANUFACTURERS[normalized.slice(0, 6)] ||
+		ONNET_MAC_PREFIX_MANUFACTURERS[normalized.slice(0, 4)] ||
+		"Fabricante não identificado"
+	);
 }
 
 function normalizeCityKey(value) {
@@ -2448,6 +2502,351 @@ function combineMetaRecords(sempre = {}, onnet = {}, month, year) {
 	);
 }
 
+function getLocalDateKey(date = new Date()) {
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		day: "2-digit",
+		month: "2-digit",
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+	}).formatToParts(date);
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	return `${values.year}-${values.month}-${values.day}`;
+}
+
+function getLocalTimeText(date = new Date()) {
+	return new Intl.DateTimeFormat("pt-BR", {
+		hour: "2-digit",
+		hour12: false,
+		minute: "2-digit",
+		timeZone: "America/Sao_Paulo",
+	}).format(date);
+}
+
+function isSameMonthDate(dateText, month, year) {
+	return (
+		getMetaMonthFromDate(dateText) === month &&
+		Number(getMetaYearFromDate(dateText)) === Number(year)
+	);
+}
+
+function addDailyTotal(items = [], name, dayIndex, value, dayCount) {
+	const normalizedName = String(name || "Sem técnico").trim();
+	const current = Array.isArray(items) ? [...items] : [];
+	const key = normalizeText(normalizedName);
+	const existing = current.find((row) => normalizeText(row?.name) === key);
+	const existingDaily = normalizeDailyForMonth(existing?.daily, dayCount);
+	const nextValue = Number(existingDaily[dayIndex] || 0) + Number(value || 0);
+	return setDailyTotal(current, normalizedName, dayIndex, nextValue, dayCount);
+}
+
+function subtractDailyTotal(items = [], name, dayIndex, value, dayCount) {
+	const key = normalizeText(name);
+	return (Array.isArray(items) ? items : [])
+		.map((item) => {
+			if (normalizeText(item?.name) !== key) return item;
+			const daily = normalizeDailyForMonth(item.daily, dayCount);
+			daily[dayIndex] = Math.max(
+				0,
+				Number(daily[dayIndex] || 0) - Number(value || 0),
+			);
+			const total = daily.reduce((sum, dailyValue) => sum + Number(dailyValue || 0), 0);
+			const meta = Number(item.meta || 110);
+			return {
+				...item,
+				daily,
+				total,
+				percent: meta > 0 ? Number(((total / meta) * 100).toFixed(1)) : 0,
+			};
+		})
+		.filter((item) => Number(item.total || 0) > 0);
+}
+
+function removeOnnetStockManualSnapshot(record = {}, month, year) {
+	const snapshot = record.manualStock || {};
+	const dayCount = getDaysInMetaMonth(month, year);
+	let next = {
+		...record,
+		rawDays: Array.isArray(record.rawDays || record.saldoDiario)
+			? [...(record.rawDays || record.saldoDiario)]
+			: [],
+		technicians: Array.isArray(record.technicians) ? [...record.technicians] : [],
+		manualStock: null,
+	};
+	(snapshot.rawDays || []).forEach((row) => {
+		const day = Number(row?.dia || 0);
+		const total = Number(row?.equipe || row?.totalDia || 0);
+		if (!day || total <= 0) return;
+		const rawByDay = getRawDaysByDay(next);
+		const current = rawByDay.get(day);
+		if (!current) return;
+		current.equipe = Math.max(0, Number(current.equipe || 0) - total);
+		current.totalDia = Math.max(0, Number(current.totalDia || 0) - total);
+		rawByDay.set(day, current);
+		next.rawDays = [...rawByDay.values()]
+			.filter((item) => Number(item.totalDia || 0) > 0)
+			.sort((left, right) => Number(left.dia || 0) - Number(right.dia || 0));
+	});
+	(snapshot.technicians || []).forEach((item) => {
+		const daily = normalizeDailyForMonth(item.daily, dayCount);
+		daily.forEach((value, index) => {
+			if (Number(value || 0) <= 0) return;
+			next.technicians = subtractDailyTotal(
+				next.technicians,
+				item.name,
+				index,
+				value,
+				dayCount,
+			);
+		});
+	});
+	return recalculateMetaRecord(next, month, year);
+}
+
+function buildOnnetStockManualSnapshot(records = [], month, year) {
+	const dayCount = getDaysInMetaMonth(month, year);
+	const rawByDay = new Map();
+	const techniciansByName = new Map();
+	let total = 0;
+
+	records.forEach((record) => {
+		const data = record?.data || record || {};
+		const dateKey = String(data.dataEntrega || data.deliveryDate || "").slice(0, 10);
+		if (!dateKey || !isSameMonthDate(dateKey, month, year)) return;
+		const day = getMetaDayFromDate(dateKey);
+		const dayIndex = day - 1;
+		if (dayIndex < 0 || dayIndex >= dayCount) return;
+		const tecnico = String(data.tecnicoNome || data.tecnico || "Sem técnico").trim();
+		const currentDay = rawByDay.get(day) || {
+			dia: day,
+			equipe: 0,
+			agente: 0,
+			loja: 0,
+			regionais: 0,
+			naoClassificado: 0,
+			totalDia: 0,
+		};
+		currentDay.equipe += 1;
+		currentDay.totalDia += 1;
+		rawByDay.set(day, currentDay);
+
+		const currentTech = techniciansByName.get(normalizeText(tecnico)) || {
+			name: tecnico,
+			meta: 110,
+			daily: createDailyArray(dayCount),
+			total: 0,
+			percent: 0,
+		};
+		currentTech.daily[dayIndex] += 1;
+		currentTech.total += 1;
+		currentTech.percent = Number(((currentTech.total / currentTech.meta) * 100).toFixed(1));
+		techniciansByName.set(normalizeText(tecnico), currentTech);
+		total += 1;
+	});
+
+	return {
+		generatedAt: new Date().toISOString(),
+		origin: ESTOQUE_ONNET_COLLECTION,
+		rawDays: [...rawByDay.values()].sort((left, right) => left.dia - right.dia),
+		technicians: [...techniciansByName.values()].sort(
+			(left, right) => Number(right.total || 0) - Number(left.total || 0),
+		),
+		total,
+	};
+}
+
+async function applyOnnetStockManualEntriesToRecord(record = {}, month, year) {
+	const rows = await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION);
+	const snapshot = buildOnnetStockManualSnapshot(rows, month, year);
+	const withoutPrevious = removeOnnetStockManualSnapshot(record, month, year);
+	let next = { ...withoutPrevious, manualStock: snapshot };
+	const dayCount = getDaysInMetaMonth(month, year);
+
+	snapshot.rawDays.forEach((row) => {
+		const rawByDay = getRawDaysByDay(next);
+		const current = rawByDay.get(row.dia) || {
+			dia: row.dia,
+			equipe: 0,
+			agente: 0,
+			loja: 0,
+			regionais: 0,
+			naoClassificado: 0,
+			totalDia: 0,
+		};
+		current.equipe += Number(row.equipe || 0);
+		current.totalDia += Number(row.equipe || 0);
+		rawByDay.set(row.dia, current);
+		next.rawDays = [...rawByDay.values()].sort((left, right) => left.dia - right.dia);
+	});
+	snapshot.technicians.forEach((item) => {
+		normalizeDailyForMonth(item.daily, dayCount).forEach((value, index) => {
+			if (Number(value || 0) <= 0) return;
+			next.technicians = addDailyTotal(next.technicians, item.name, index, value, dayCount);
+		});
+	});
+	next = recalculateMetaRecord(next, month, year);
+	next.manualStock = snapshot;
+	return next;
+}
+
+async function refreshOnnetStockAccountingForMonth({ month, year, user = {} }) {
+	const nowIso = new Date().toISOString();
+	const currentDoc = (await documents.getDocument(`metas/${month}`).catch(() => null))?.data || {
+		mes: month,
+		month,
+		ano: year,
+		year,
+		onnet: { mes: month, month, ano: year, year, origem: "ONNET" },
+	};
+	const onnet = await applyOnnetStockManualEntriesToRecord(
+		currentDoc.onnet || { mes: month, month, ano: year, year, origem: "ONNET" },
+		month,
+		year,
+	);
+	const combined = combineMetaRecords(currentDoc, onnet, month, year);
+	const nextMonth = {
+		...currentDoc,
+		onnet,
+		onnetSempre: combined,
+		onnetStockUpdatedAt: nowIso,
+		updatedAt: nowIso,
+	};
+	await documents.upsertDocument({
+		path: `metas/${month}`,
+		collectionPath: "metas",
+		documentId: month,
+		parentPath: null,
+		data: nextMonth,
+	});
+	await documents.upsertDocument({
+		path: `dashboard/${month}`,
+		collectionPath: "dashboard",
+		documentId: month,
+		parentPath: null,
+		data: buildDashboardPayload(month, nextMonth, nowIso),
+	});
+	const config =
+		(await documents.getDocument("config/metas").catch(() => null))?.data || {};
+	await documents.upsertDocument({
+		path: "config/metas",
+		collectionPath: "config",
+		documentId: "metas",
+		parentPath: null,
+		data: { ...config, lastUpdate: nowIso, updatedAt: nowIso },
+	});
+	await syncDiarioFromMetaRecord(combined, month, year, user);
+	await publishAcompanhamentoUpdate("metas", {
+		generatedAt: nowIso,
+		updateKey: `estoque-onnet-${month}-${year}-${Number(onnet.manualStock?.total || 0)}`,
+		updatedBy: user.uid || null,
+		message: "Estoque Onnet contabilizado nas metas.",
+		summary: {
+			month,
+			year,
+			totalOnnetEstoque: Number(onnet.manualStock?.total || 0),
+		},
+	});
+	scheduleDashboardSnapshotRefresh(nowIso);
+	return { month, year, total: Number(onnet.manualStock?.total || 0), updatedAt: nowIso };
+}
+
+async function listOnnetStockRecords({ limit = 50, page = 1, query = "" } = {}) {
+	const rows = await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION);
+	const search = normalizeText(query);
+	const filtered = rows
+		.map((row) => ({ id: row.documentId, ...(row.data || {}) }))
+		.filter((item) => {
+			if (!search) return true;
+			return [item.mac, item.macFormatado, item.fabricante, item.cidade, item.tecnicoNome]
+				.map(normalizeText)
+				.some((value) => value.includes(search));
+		})
+		.sort((left, right) =>
+			String(right.entregueEm || right.createdAt || "").localeCompare(
+				String(left.entregueEm || left.createdAt || ""),
+			),
+		);
+	const normalizedLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+	const normalizedPage = Math.max(Number(page) || 1, 1);
+	const offset = (normalizedPage - 1) * normalizedLimit;
+	return {
+		items: filtered.slice(offset, offset + normalizedLimit),
+		limit: normalizedLimit,
+		page: normalizedPage,
+		total: filtered.length,
+		totalPages: Math.max(1, Math.ceil(filtered.length / normalizedLimit)),
+	};
+}
+
+async function saveOnnetStockRecord(payload = {}, user = {}) {
+	const mac = normalizeMac(payload.mac);
+	if (!mac) {
+		const error = new Error("Informe um MAC válido com 12 caracteres.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const existing = (await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION)).find(
+		(row) => normalizeMac(row.data?.mac) === mac,
+	);
+	if (existing) {
+		const error = new Error(`MAC ${formatMac(mac)} já foi lançado no estoque Onnet.`);
+		error.statusCode = 409;
+		throw error;
+	}
+	const dataEntrega = String(payload.dataEntrega || payload.deliveryDate || getLocalDateKey()).slice(0, 10);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(dataEntrega)) {
+		const error = new Error("Data de entrega inválida.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const horaEntrega = String(payload.horaEntrega || payload.deliveryTime || getLocalTimeText()).slice(0, 5);
+	if (!/^\d{2}:\d{2}$/.test(horaEntrega)) {
+		const error = new Error("Hora de entrega inválida.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const cidade = normalizeCity(payload.cidade || payload.city);
+	if (!cidade) {
+		const error = new Error("Informe a cidade.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const tecnicoNome = String(payload.tecnicoNome || payload.tecnico || "").trim();
+	if (!tecnicoNome) {
+		const error = new Error("Informe o técnico que entregou.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const nowIso = new Date().toISOString();
+	const documentId = `${dataEntrega}-${mac}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+	const record = {
+		mac,
+		macFormatado: formatMac(mac),
+		fabricante: inferMacManufacturer(mac),
+		cidade,
+		tecnicoNome,
+		dataEntrega,
+		horaEntrega,
+		entregueEm: `${dataEntrega}T${horaEntrega}:00-03:00`,
+		observacao: String(payload.observacao || "").trim(),
+		origem: "estoque_onnet_sem_os",
+		base: "ONNET",
+		createdAt: nowIso,
+		createdBy: user.uid || null,
+		createdByName: user.nome || user.name || user.displayName || user.email || "",
+	};
+	await documents.upsertDocument({
+		path: `${ESTOQUE_ONNET_COLLECTION}/${documentId}`,
+		collectionPath: ESTOQUE_ONNET_COLLECTION,
+		documentId,
+		parentPath: null,
+		data: record,
+	});
+	const month = getMetaMonthFromDate(dataEntrega);
+	const year = getMetaYearFromDate(dataEntrega);
+	const accounting = await refreshOnnetStockAccountingForMonth({ month, year, user });
+	return { item: { id: documentId, ...record }, accounting };
+}
+
 async function resolveMetaFonteByCity() {
 	const cityMap = await loadCityMap();
 	return (record) => {
@@ -2659,7 +3058,8 @@ async function persistHubsoftMetaRecords({
 	};
 
 	const sempre = updateBase("sempre", currentDoc);
-	const onnet = updateBase("onnet", currentDoc.onnet || {});
+	let onnet = updateBase("onnet", currentDoc.onnet || {});
+	onnet = await applyOnnetStockManualEntriesToRecord(onnet, month, year);
 	let nextAgents = currentAgents;
 	if (!isStoreProfile) {
 		nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
@@ -3293,8 +3693,10 @@ async function saveMatchConfig(payload = {}, user = {}) {
 
 module.exports = {
 	createImportJob,
+	inferMacManufacturer,
 	getImportJob,
 	getMatchConfig,
+	listOnnetStockRecords,
 	markInterruptedImportJobs,
 	persistMapaImport,
 	persistMatchImport,
@@ -3304,6 +3706,7 @@ module.exports = {
 	publishAcompanhamentoUpdate,
 	repairMensageriaQueueFromOpenMap,
 	refreshDashboardSnapshot,
+	saveOnnetStockRecord,
 	saveMatchConfig,
 	saveMetasBaseConfig,
 	saveMetasForceTaskConfig,

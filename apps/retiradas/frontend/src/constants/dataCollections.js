@@ -28,6 +28,7 @@ export const COLLECTIONS = {
 	INSUMOS_ADMINISTRATIVOS_REQUISICOES: "insumos_administrativos_requisicoes",
 	INSUMOS_ADMINISTRATIVOS_CONFIG: "insumos_administrativos_config",
 	PLAYGROUND_MOVIMENTACOES: "playground_movimentacoes",
+	ESTOQUE_ONNET: "estoque_onnet",
 	EMPRESAS_TECNICOS: "empresas_tecnicos",
 	ACERTO_ESTOQUE_EMPRESAS: "acerto_estoque_empresas",
 	ACERTO_ESTOQUE_TECNICOS: "acerto_estoque_tecnicos",

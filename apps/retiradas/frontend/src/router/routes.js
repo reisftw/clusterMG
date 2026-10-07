@@ -10,6 +10,7 @@ export const ROUTES = {
 	ACERTO_ESTOQUE: "/acerto-estoque",
 	ESTOQUE_INTEGRADO: "/estoque",
 	ESTOQUE_EQUIPAMENTOS: "/estoque/equipamentos",
+	ESTOQUE_ONNET: "/estoque/onnet",
 	ESTOQUE_BOLSA_TECNICO: "/estoque/bolsa-tecnico",
 	TECNICOS_AUDITORIA_BOLSA: "/tecnicos/auditoria/bolsa-tecnico",
 	TECNICOS_AUDITORIA_RELATORIOS: "/tecnicos/auditoria/relatorios",

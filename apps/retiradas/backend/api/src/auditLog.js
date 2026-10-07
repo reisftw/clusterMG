@@ -105,6 +105,7 @@ const COLLECTION_LABELS = {
 	document_files: "documento",
 	document_required_fields: "campo obrigatório",
 	document_submissions: "envio mensal",
+	estoque_onnet: "estoque Onnet",
 	financeiro_config: "configuração financeira",
 	financeiro_reports: "relatório financeiro",
 	metas_lancamento_manual: "lançamento manual de metas",

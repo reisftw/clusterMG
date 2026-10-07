@@ -19,6 +19,7 @@ const PAGE_TITLES = {
 	[ROUTES.ACERTO_ESTOQUE]: "Acerto de Estoque",
 	[ROUTES.ESTOQUE_INTEGRADO]: "Estoque",
 	[ROUTES.ESTOQUE_EQUIPAMENTOS]: "Equipamentos",
+	[ROUTES.ESTOQUE_ONNET]: "Estoque Onnet",
 	[ROUTES.ESTOQUE_BOLSA_TECNICO]: "Bolsa Técnico",
 	[ROUTES.TECNICOS_AUDITORIA_BOLSA]: "Auditoria de Bolsa Técnico",
 	[ROUTES.TECNICOS_AUDITORIA_RELATORIOS]: "Relatórios de Bolsa Técnico",

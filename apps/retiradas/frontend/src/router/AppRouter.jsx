@@ -25,6 +25,9 @@ const EstoqueIntegrado = lazy(
 const EstoqueConsulta = lazy(
 	() => import("../modules/estoqueIntegrado/components/EstoqueConsultaPage"),
 );
+const EstoqueOnnet = lazy(
+	() => import("../modules/estoqueOnnet/components/EstoqueOnnetPage"),
+);
 const BolsaTecnico = lazy(
 	() => import("../modules/estoqueIntegrado/components/BolsaTecnicoPage"),
 );
@@ -418,6 +421,20 @@ const AppRouter = () => (
 									]}
 								>
 									<EstoqueIntegrado />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.ESTOQUE_ONNET}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"view_estoque_integrado",
+										"estoque.equipamentos.view",
+										"estoque.equipamentos.manage",
+									]}
+								>
+									<EstoqueOnnet />
 								</ProtectedRoute>
 							}
 						/>

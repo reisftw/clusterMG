@@ -270,6 +270,15 @@ const ESTOQUE_CONSULTA_PERMISSIONS = [
 	"estoque.equipamentos.view",
 	"estoque.equipamentos.manage",
 ];
+const ESTOQUE_ONNET_VIEW_PERMISSIONS = [
+	"estoque.equipamentos.view",
+	"estoque.equipamentos.manage",
+	"view_estoque_integrado",
+];
+const ESTOQUE_ONNET_MANAGE_PERMISSIONS = [
+	"estoque.equipamentos.manage",
+	"manage_equipamentos",
+];
 const TECNICOS_BOLSA_AUDITORIA_ROLES = [
 	"admin",
 	"supervisor",
@@ -534,6 +543,7 @@ const COLLECTION_READ_PERMISSIONS = Object.freeze({
 		"view_equipamentos",
 		"manage_equipamentos",
 	],
+	estoque_onnet: ESTOQUE_ONNET_VIEW_PERMISSIONS,
 	entregas_tecnicos: [
 		"tecnicos.entrega_tecnicos.view",
 		"tecnicos.entrega_tecnicos.manage",
@@ -680,6 +690,7 @@ const COLLECTION_WRITE_PERMISSIONS = Object.freeze({
 	vpn_access: ["configuracao.vpn.manage"],
 	vpn_access_logs: ["configuracao.vpn.manage"],
 	equipamentos: ["estoque.equipamentos.manage", "manage_equipamentos"],
+	estoque_onnet: ESTOQUE_ONNET_MANAGE_PERMISSIONS,
 	entregas_tecnicos: [
 		"tecnicos.entrega_tecnicos.manage",
 		"manage_entregas_tecnicos",
@@ -4969,6 +4980,41 @@ function createApp() {
 			managePermissions: MOVIMENTACOES_MANAGE_PERMISSIONS,
 			fallbackRoles: MOVIMENTACOES_ROLES,
 		}),
+	);
+
+	app.get(
+		"/api/estoque/onnet",
+		requireAuthenticated,
+		requireAnyPermission(ESTOQUE_ONNET_VIEW_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(
+					await operationalImports.listOnnetStockRecords({
+						limit: req.query.limit,
+						page: req.query.page,
+						query: req.query.query,
+					}),
+				);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.post(
+		"/api/estoque/onnet",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAnyPermission(ESTOQUE_ONNET_MANAGE_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (req, res, next) => {
+			try {
+				res.status(201).json(
+					await operationalImports.saveOnnetStockRecord(req.body || {}, req.user),
+				);
+			} catch (error) {
+				next(error);
+			}
+		},
 	);
 
 	app.post(

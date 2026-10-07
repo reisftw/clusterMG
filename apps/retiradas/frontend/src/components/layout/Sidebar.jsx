@@ -81,6 +81,16 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Onnet",
+		path: ROUTES.ESTOQUE_ONNET,
+		icon: PackagePlus,
+		permission: [
+			"view_estoque_integrado",
+			"estoque.equipamentos.view",
+			"estoque.equipamentos.manage",
+		],
+	},
+	{
 		label: "Bolsa Técnico",
 		path: ROUTES.TECNICOS_AUDITORIA_BOLSA,
 		icon: PackageSearch,
