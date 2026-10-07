@@ -947,14 +947,21 @@ async function collectProfile(profile, options = {}) {
 		const basePayload = {
 			data_inicio: toHubsoftDateOnly(startDate),
 			data_fim: toHubsoftDateOnly(endDate),
-			tipo_data: "data_cadastro",
-			order_by: "data_cadastro",
+			tipo_data: "data_fechamento",
+			order_by: "data_fechamento",
 			order_by_key: "ASC",
 			tipo_endereco: { valor: "instalacao" },
 			tipo_atendimento: [
 				{
 					id_tipo_atendimento: LOJA_ATTENDANCE_TYPE_ID,
 					descricao: " ENTREGA DE EQUIPAMENTO EM LOJA",
+				},
+			],
+			status_atendimento: [
+				{
+					id_atendimento_status: 3,
+					prefixo: "resolvido",
+					descricao: "RESOLVIDO",
 				},
 			],
 			status_fechamento: [{ descricao: "Concluído", valor: "concluido" }],
@@ -993,6 +1000,7 @@ async function collectProfile(profile, options = {}) {
 				attempt: collected?.attemptLabel || null,
 				tipo_data: basePayload.tipo_data,
 				tipo_atendimento: basePayload.tipo_atendimento,
+				status_atendimento: basePayload.status_atendimento,
 				status_fechamento: basePayload.status_fechamento,
 			},
 		};
@@ -2831,7 +2839,7 @@ async function runSchedulerTick() {
 	}
 
 	if (config.autoMetaEnabled && isTimeDue(now.time, config.autoMetaTime) && rawConfig.autoStoreLastRunDate !== now.date) {
-		const result = await runProfileSafely(PROFILE.LOJA, { date: addDays(now.date, -1) });
+		const result = await runProfileSafely(PROFILE.LOJA, { date: now.date });
 		results.push({ profile: PROFILE.LOJA, result });
 		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: new Date().toISOString() });
 	}
