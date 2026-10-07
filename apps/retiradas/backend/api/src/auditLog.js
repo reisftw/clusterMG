@@ -53,31 +53,86 @@ const SYSTEM_FIELD_NAMES = new Set([
 const FIELD_LABELS = {
 	accounts: "contas financeiras",
 	active: "status",
+	ano: "ano",
+	bairro: "bairro",
 	budgetMatrix: "matriz orçamentária",
+	cidade: "cidade",
+	codigo: "código",
+	codigo_cliente: "código do cliente",
+	codigoCliente: "código do cliente",
 	centers: "centros de custo",
 	costCenters: "centros de custo",
+	data: "data",
+	data_agendamento: "data do agendamento",
+	dataAgendamento: "data do agendamento",
 	description: "descrição",
 	displayName: "nome",
 	display_name: "nome",
 	email: "e-mail",
+	endereco: "endereço",
 	empresaId: "empresa",
 	empresa_id: "empresa",
+	fonte: "base de dados",
+	id_cliente: "cliente HubSoft",
+	lancamentos: "lançamentos",
+	mes: "mês",
 	name: "nome",
 	nome: "nome",
+	observacao: "observação",
+	observacoes: "observações",
 	permissions: "permissões",
+	regional: "regional",
 	role: "cargo",
 	setorId: "setor",
+	status: "status",
+	telefone: "telefone",
+	tecnico: "técnico",
+	tecnico_nome: "técnico",
+	tecnicoNome: "técnico",
+	tipo: "tipo",
+	titulo: "título",
+	turno: "turno",
+	valor: "valor",
 };
 const COLLECTION_LABELS = {
+	agendamentos: "agendamento",
 	app_roles: "cargo",
 	app_users: "usuário",
+	atendimento_casos: "caso de atendimento",
+	atendimento_tecnicos: "técnico de atendimento",
+	database_backups: "backup do banco",
 	document_client_folders: "pasta de documentos",
 	document_files: "documento",
 	document_required_fields: "campo obrigatório",
 	document_submissions: "envio mensal",
-	usuarios: "usuário",
 	financeiro_config: "configuração financeira",
+	financeiro_reports: "relatório financeiro",
+	metas_lancamento_manual: "lançamento manual de metas",
+	tentativas: "tentativa de contato",
+	usuarios: "usuário",
 };
+const MODULE_LABELS = {
+	agendamentos: "Agendamentos",
+	atendimento: "Atendimento",
+	backups: "Backups",
+	configuracoes: "Configurações",
+	documentos: "Documentos",
+	financeiro: "Financeiro",
+	metas: "Metas",
+	mensageria: "Mensageria",
+	tentativas: "Tentativas de contato",
+};
+const ACTION_LABELS = {
+	create: "Criação",
+	delete: "Exclusão",
+	update: "Atualização",
+};
+const PROTECTED_VALUE_LABEL = "informação protegida";
+const INTERNAL_VALUE_LABEL = "identificador interno";
+const TECHNICAL_VALUE_PATTERN =
+	/(^\$2[aby]\$)|(^\$argon2)|(^eyJ[A-Za-z0-9_-]+\.)|(^[a-f0-9]{32,}$)|(^[A-Za-z0-9+/]{64,}={0,2}$)/;
+const UUID_PATTERN =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizeText(value) {
 	return String(value || "").trim();
@@ -184,6 +239,28 @@ function pickFirstText(...values) {
 		if (normalized) return normalized;
 	}
 	return "";
+}
+
+function isSensitiveField(field) {
+	return SENSITIVE_KEY_PATTERN.test(String(field || ""));
+}
+
+function isProtectedValue(value) {
+	return normalizeText(value) === "[REDACTED]";
+}
+
+function isTechnicalValue(value) {
+	const text = normalizeText(value);
+	if (!text) return false;
+	return UUID_PATTERN.test(text) || TECHNICAL_VALUE_PATTERN.test(text);
+}
+
+function normalizeDisplayField(field) {
+	return String(field || "")
+		.replace(/([a-z])([A-Z])/g, "$1 $2")
+		.replace(/[._-]+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 }
 
 function extractSetorId(user = {}, beforeData = {}, afterData = {}) {
@@ -295,24 +372,53 @@ function recordDocumentAuditLog(payload) {
 	return recordAuditLog(entry);
 }
 
-function formatShortValue(value) {
+function formatShortValue(value, field = "") {
+	if (isSensitiveField(field) || isProtectedValue(value)) return PROTECTED_VALUE_LABEL;
 	if (value === null || value === undefined || value === "") return "vazio";
 	if (typeof value === "boolean") return value ? "ativo" : "inativo";
 	if (Array.isArray(value)) return `${value.length} item(ns)`;
 	if (typeof value === "object") {
-		return pickFirstText(value.nome, value.name, value.label, value.id, value.codigo) || "objeto";
+		const label = pickFirstText(
+			value.nome,
+			value.name,
+			value.label,
+			value.titulo,
+			value.title,
+			value.codigo,
+			value.email,
+		);
+		return label || "registro";
 	}
 	const text = String(value);
+	if (isTechnicalValue(text)) return INTERNAL_VALUE_LABEL;
 	return text.length > 80 ? `${text.slice(0, 77)}...` : text;
 }
 
 function getFieldLabel(field) {
-	return FIELD_LABELS[field] || String(field || "").replace(/_/g, " ");
+	return FIELD_LABELS[field] || normalizeDisplayField(field) || "campo";
 }
 
 function getEntityLabel(row = {}) {
 	const entity = normalizeText(row.entity);
 	return COLLECTION_LABELS[entity] || entity || row.module || "registro";
+}
+
+function getModuleLabel(row = {}) {
+	const moduleName = normalizeText(row.module);
+	return MODULE_LABELS[moduleName] || normalizeDisplayField(moduleName) || "Sistema";
+}
+
+function getActionLabel(action) {
+	return ACTION_LABELS[normalizeText(action)] || normalizeDisplayField(action) || "Registro";
+}
+
+function getActor(row = {}) {
+	const name = pickFirstText(row.userName, row.userEmail, row.userId) || "Usuário não identificado";
+	return {
+		email: normalizeText(row.userEmail),
+		id: normalizeText(row.userId),
+		name,
+	};
 }
 
 function getRecordLabel(data = {}) {
@@ -322,9 +428,21 @@ function getRecordLabel(data = {}) {
 		data.label,
 		data.titulo,
 		data.title,
+		data.cliente,
+		data.cliente_nome,
+		data.codigo_cliente,
+		data.codigoCliente,
 		data.codigo && data.nome ? `${data.codigo} ${data.nome}` : "",
 		data.codigo,
-		data.id,
+	);
+}
+
+function getTargetLabel(row = {}) {
+	return (
+		getRecordLabel(row.afterData || {}) ||
+		getRecordLabel(row.beforeData || {}) ||
+		(isTechnicalValue(row.recordId) ? "" : normalizeText(row.recordId)) ||
+		"registro"
 	);
 }
 
@@ -379,7 +497,8 @@ function getUserTargetLabel(row = {}) {
 	return (
 		getRecordLabel(row.afterData || {}) ||
 		getRecordLabel(row.beforeData || {}) ||
-		pickFirstText(row.recordId)
+		(isTechnicalValue(row.recordId) ? "" : pickFirstText(row.recordId)) ||
+		"usuário"
 	);
 }
 
@@ -484,6 +603,96 @@ function buildArrayChangeDescriptions(field, beforeValue, afterValue) {
 	return descriptions;
 }
 
+function buildManualLaunchChangeItems(row = {}) {
+	if (normalizeText(row.entity) !== "metas_lancamento_manual") return [];
+	const beforeItems = Array.isArray(row.beforeData?.lancamentos)
+		? row.beforeData.lancamentos
+		: [];
+	const afterItems = Array.isArray(row.afterData?.lancamentos)
+		? row.afterData.lancamentos
+		: [];
+	const beforeMap = new Map(
+		beforeItems.map((item) => [
+			`${item.fonte || ""}|${item.secao || ""}|${item.nome || ""}|${item.dia || ""}`,
+			item,
+		]),
+	);
+	return afterItems.slice(0, 30).map((afterItem, index) => {
+		const key = `${afterItem.fonte || ""}|${afterItem.secao || ""}|${afterItem.nome || ""}|${afterItem.dia || ""}`;
+		const beforeItem = beforeMap.get(key) || {};
+		const labelParts = [
+			formatShortValue(afterItem.nome || beforeItem.nome),
+			afterItem.dia ? `dia ${afterItem.dia}` : "",
+			afterItem.fonte ? `base ${String(afterItem.fonte).toUpperCase()}` : "",
+		].filter(Boolean);
+		const label = labelParts.join(" · ") || `lançamento ${index + 1}`;
+		const before = formatShortValue(beforeItem.valor, "valor");
+		const after = formatShortValue(afterItem.valor, "valor");
+		return {
+			after,
+			before,
+			description: `alterou ${label} de ${before} para ${after}`,
+			field: `lancamentos.${index}.valor`,
+			label,
+			protected: false,
+		};
+	});
+}
+
+function buildGenericChangeItems(row = {}) {
+	const beforeData = normalizeComparableValue(row.beforeData || {});
+	const afterData = normalizeComparableValue(row.afterData || {});
+	const changedFields = Array.isArray(row.changedFields)
+		? row.changedFields.filter((field) => !isSystemField(field))
+		: calculateChangedFields(beforeData, afterData);
+
+	return changedFields.flatMap((field) => {
+		const beforeValue = beforeData?.[field];
+		const afterValue = afterData?.[field];
+		const arrayDescriptions = buildArrayChangeDescriptions(field, beforeValue, afterValue);
+		if (arrayDescriptions.length) {
+			return arrayDescriptions.map((description, index) => ({
+				after: formatShortValue(afterValue, field),
+				before: formatShortValue(beforeValue, field),
+				description,
+				field: `${field}.${index}`,
+				label: getFieldLabel(field),
+				protected: isSensitiveField(field),
+			}));
+		}
+		const before = formatShortValue(beforeValue, field);
+		const after = formatShortValue(afterValue, field);
+		return [
+			{
+				after,
+				before,
+				description: `alterou ${getFieldLabel(field)} de ${before} para ${after}`,
+				field,
+				label: getFieldLabel(field),
+				protected: isSensitiveField(field),
+			},
+		];
+	});
+}
+
+function buildChangeItems(row = {}) {
+	if (isFinanceiroReportClear(row)) {
+		return [
+			{
+				after: "dados apagados",
+				before: "dados importados",
+				description: `apagou dados do ${getFinanceiroReportLabel(row)}`,
+				field: "importInfo",
+				label: getFinanceiroReportLabel(row),
+				protected: false,
+			},
+		];
+	}
+	const manualLaunchItems = buildManualLaunchChangeItems(row);
+	if (manualLaunchItems.length) return manualLaunchItems;
+	return buildGenericChangeItems(row).slice(0, 30);
+}
+
 function buildChangeDescriptions(row = {}) {
 	if (isFinanceiroReportClear(row)) {
 		return [`apagou dados do ${getFinanceiroReportLabel(row)}`];
@@ -493,34 +702,18 @@ function buildChangeDescriptions(row = {}) {
 	const userChanges = buildUserChangeDescriptions(row);
 	if (userChanges.length) return userChanges.slice(0, 10);
 
-	const beforeData = normalizeComparableValue(row.beforeData || {});
-	const afterData = normalizeComparableValue(row.afterData || {});
-	const changedFields = Array.isArray(row.changedFields)
-		? row.changedFields.filter((field) => !isSystemField(field))
-		: calculateChangedFields(beforeData, afterData);
-
-	const descriptions = changedFields.flatMap((field) => {
-		const beforeValue = beforeData?.[field];
-		const afterValue = afterData?.[field];
-		const arrayDescriptions = buildArrayChangeDescriptions(field, beforeValue, afterValue);
-		if (arrayDescriptions.length) return arrayDescriptions;
-		return [
-			`alterou ${getFieldLabel(field)} de ${formatShortValue(beforeValue)} para ${formatShortValue(afterValue)}`,
-		];
-	});
+	const descriptions = buildChangeItems(row).map((item) => item.description);
 
 	return descriptions.slice(0, 10);
 }
 
 function buildAuditSummary(row = {}) {
-	const actor = pickFirstText(row.userName, row.userEmail, row.userId) || "Usuário";
+	const actor = getActor(row).name;
 	if (isFinanceiroReportClear(row)) {
 		return `${actor} apagou dados do ${getFinanceiroReportLabel(row)}.`;
 	}
 	const entityLabel = getEntityLabel(row);
-	const afterLabel = getRecordLabel(row.afterData || {});
-	const beforeLabel = getRecordLabel(row.beforeData || {});
-	const target = afterLabel || beforeLabel;
+	const target = getTargetLabel(row);
 	if (row.action === "create") return `${actor} criou ${entityLabel}${target ? ` ${target}` : ""}.`;
 	if (row.action === "delete") return `${actor} removeu ${entityLabel}${target ? ` ${target}` : ""}.`;
 	const changes = buildChangeDescriptions(row);
@@ -529,13 +722,21 @@ function buildAuditSummary(row = {}) {
 }
 
 function decorateAuditLog(row = {}) {
+	const changeItems = buildChangeItems(row);
 	const changeDescriptions = buildChangeDescriptions(row);
+	const actor = getActor(row);
 	return {
 		...row,
+		actionLabel: getActionLabel(row.action),
+		actor,
 		changeDescriptions,
+		changeItems,
 		changedFields: Array.isArray(row.changedFields)
 			? row.changedFields.filter((field) => !isSystemField(field))
 			: [],
+		entityLabel: getEntityLabel(row),
+		moduleLabel: getModuleLabel(row),
+		recordLabel: getTargetLabel(row),
 		summary: buildAuditSummary({ ...row, changeDescriptions }),
 	};
 }

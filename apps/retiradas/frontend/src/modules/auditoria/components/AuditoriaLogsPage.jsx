@@ -36,6 +36,7 @@ function formatDateTime(value) {
 
 function stringifyAuditValue(value) {
 	if (value === null || value === undefined || value === "") return "-";
+	if (value === "[REDACTED]") return "informação protegida";
 	if (typeof value === "object") return JSON.stringify(value, null, 2);
 	return String(value);
 }
@@ -46,6 +47,27 @@ function normalizeChangedFields(log = {}) {
 
 function normalizeChangeDescriptions(log = {}) {
 	return Array.isArray(log.changeDescriptions) ? log.changeDescriptions : [];
+}
+
+function normalizeChangeItems(log = {}) {
+	return Array.isArray(log.changeItems) ? log.changeItems : [];
+}
+
+function getActorName(log = {}) {
+	return log.actor?.name || log.userName || log.userEmail || log.userId || "-";
+}
+
+function InfoBlock({ label, value }) {
+	return (
+		<div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4">
+			<p className="text-xs font-black uppercase tracking-wide text-slate-400">
+				{label}
+			</p>
+			<p className="mt-1 break-words text-sm font-black text-slate-900">
+				{value || "-"}
+			</p>
+		</div>
+	);
 }
 
 function DetailValue({ title, value }) {
@@ -61,10 +83,47 @@ function DetailValue({ title, value }) {
 	);
 }
 
+function ChangeItemCard({ item }) {
+	return (
+		<div className="rounded-2xl border border-slate-200 bg-white p-4">
+			<div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<p className="text-xs font-black uppercase tracking-wide text-blue-600">
+						{item.label || "Campo alterado"}
+					</p>
+					<p className="mt-1 text-sm font-black text-slate-950">
+						{item.description || "Alteração registrada."}
+					</p>
+				</div>
+				{item.protected ? (
+					<span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
+						Protegido
+					</span>
+				) : null}
+			</div>
+			<div className="mt-3 grid gap-3 sm:grid-cols-2">
+				<div className="rounded-xl bg-slate-50 p-3">
+					<p className="text-xs font-black uppercase text-slate-400">Antes</p>
+					<p className="mt-1 break-words text-sm font-semibold text-slate-800">
+						{item.before || "-"}
+					</p>
+				</div>
+				<div className="rounded-xl bg-emerald-50 p-3">
+					<p className="text-xs font-black uppercase text-emerald-600">Depois</p>
+					<p className="mt-1 break-words text-sm font-black text-emerald-950">
+						{item.after || "-"}
+					</p>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 function AuditLogDetailModal({ log, loading, onClose }) {
 	if (!log && !loading) return null;
 	const fields = normalizeChangedFields(log);
 	const changeDescriptions = normalizeChangeDescriptions(log);
+	const changeItems = normalizeChangeItems(log);
 
 	return (
 		<ModalShell
@@ -72,7 +131,7 @@ function AuditLogDetailModal({ log, loading, onClose }) {
 			title="Detalhe do log"
 			description={
 				log
-					? `${ACTION_LABELS[log.action] || log.action} em ${log.entity || log.module}`
+					? `${log.actionLabel || ACTION_LABELS[log.action] || log.action} em ${log.moduleLabel || log.module || "Sistema"}`
 					: "Carregando log de auditoria"
 			}
 			size="5xl"
@@ -86,27 +145,11 @@ function AuditLogDetailModal({ log, loading, onClose }) {
 				</div>
 			) : (
 				<>
-					<div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-						<div>
-							<p className="text-xs font-bold uppercase text-slate-400">Data</p>
-							<p className="font-semibold text-slate-900">
-								{formatDateTime(log.createdAt)}
-							</p>
-						</div>
-						<div>
-							<p className="text-xs font-bold uppercase text-slate-400">
-								Usuário
-							</p>
-							<p className="font-semibold text-slate-900">
-								{log.userName || log.userEmail || log.userId || "-"}
-							</p>
-						</div>
-						<div>
-							<p className="text-xs font-bold uppercase text-slate-400">IP</p>
-							<p className="font-semibold text-slate-900">
-								{log.ipAddress || "-"}
-							</p>
-						</div>
+					<div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+						<InfoBlock label="Quem alterou" value={getActorName(log)} />
+						<InfoBlock label="Quando alterou" value={formatDateTime(log.createdAt)} />
+						<InfoBlock label="Onde alterou" value={log.moduleLabel || log.module || "-"} />
+						<InfoBlock label="Registro" value={log.recordLabel || log.entityLabel || "-"} />
 					</div>
 
 					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
@@ -125,7 +168,21 @@ function AuditLogDetailModal({ log, loading, onClose }) {
 						) : null}
 					</div>
 
-					{fields.length ? (
+					{changeItems.length ? (
+						<div className="space-y-3">
+							<div>
+								<p className="text-xs font-black uppercase tracking-wide text-slate-400">
+									Como alterou
+								</p>
+								<h3 className="text-lg font-black text-slate-950">
+									Antes e depois das mudanças
+								</h3>
+							</div>
+							{changeItems.map((item) => (
+								<ChangeItemCard key={`${item.field}-${item.description}`} item={item} />
+							))}
+						</div>
+					) : fields.length ? (
 						<div className="space-y-3">
 							{fields.map((field) => (
 								<div key={field} className="rounded-2xl border border-slate-200 p-3">
@@ -146,14 +203,18 @@ function AuditLogDetailModal({ log, loading, onClose }) {
 						</div>
 					)}
 
-					<div className="rounded-2xl border border-slate-200 bg-white p-3">
-						<p className="text-xs font-bold uppercase text-slate-400">
-							User agent
+					<details className="rounded-2xl border border-slate-200 bg-white p-3">
+						<summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-slate-500">
+							Dados técnicos para suporte
+						</summary>
+						<div className="mt-3 grid gap-3 md:grid-cols-2">
+							<DetailValue title="Antes" value={log.beforeData} />
+							<DetailValue title="Depois" value={log.afterData} />
+						</div>
+						<p className="mt-3 break-words text-xs text-slate-500">
+							IP: {log.ipAddress || "-"} · Navegador: {log.userAgent || "-"}
 						</p>
-						<p className="mt-1 break-words text-sm text-slate-700">
-							{log.userAgent || "-"}
-						</p>
-					</div>
+					</details>
 				</>
 			)}
 		</ModalShell>
@@ -427,7 +488,7 @@ export default function AuditoriaLogsPage() {
 										</td>
 										<td className="px-4 py-3">
 											<p className="font-bold text-slate-900">
-												{log.userName || log.userEmail || log.userId || "-"}
+												{getActorName(log)}
 											</p>
 											{log.userEmail ? (
 												<p className="text-xs text-slate-500">{log.userEmail}</p>
@@ -441,12 +502,12 @@ export default function AuditoriaLogsPage() {
 												{log.summary || `${log.module || "-"} · ${log.entity || "-"}`}
 											</p>
 											<p className="text-xs text-slate-500">
-												{log.module || "-"} · {log.entity || "-"}
+												{log.moduleLabel || log.module || "-"} · {log.entityLabel || log.entity || "-"}
 											</p>
 										</td>
 										<td className="px-4 py-3">
 											<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700">
-												{ACTION_LABELS[log.action] || log.action || "-"}
+												{log.actionLabel || ACTION_LABELS[log.action] || log.action || "-"}
 											</span>
 										</td>
 										<td className="px-4 py-3 text-slate-600">{log.ipAddress || "-"}</td>
