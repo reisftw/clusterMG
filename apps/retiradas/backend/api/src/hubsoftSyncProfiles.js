@@ -29,6 +29,7 @@ const SCHEDULER_USER = {
 	role: "admin",
 };
 let schedulerTickRunning = false;
+let mapMatchSchedulerRunning = false;
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -2782,6 +2783,71 @@ async function runProfileSafely(profile, options = {}) {
 	}
 }
 
+async function runMapMatchScheduler(rawConfig, config) {
+	if (!config.autoMapMatchEnabled) return [];
+	if (mapMatchSchedulerRunning) {
+		return [{ profile: "MAP_MATCH", skipped: "already_running" }];
+	}
+
+	const mapDue =
+		minutesSince(lastRunFor(rawConfig, PROFILE.MAPA)) >=
+		config.autoMapMatchIntervalMinutes;
+	const matchDue =
+		minutesSince(lastRunFor(rawConfig, PROFILE.MATCH)) >=
+		config.autoMapMatchIntervalMinutes;
+
+	if (!mapDue && !matchDue) return [];
+
+	mapMatchSchedulerRunning = true;
+	const results = [];
+	(async () => {
+		try {
+			const mapResult = mapDue
+				? await runProfileSafely(PROFILE.MAPA)
+				: null;
+			if (mapDue) {
+				results.push({ profile: PROFILE.MAPA, result: mapResult });
+				if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(mapResult?.status)) {
+					await saveSchedulerState({ autoMapLastRunAt: new Date().toISOString() });
+				}
+			}
+
+			const matchResult = matchDue
+				? await runProfileSafely(PROFILE.MATCH)
+				: null;
+			if (matchDue) {
+				results.push({ profile: PROFILE.MATCH, result: matchResult });
+				if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(matchResult?.status)) {
+					await saveSchedulerState({ autoMatchLastRunAt: new Date().toISOString() });
+				}
+			}
+
+			if (
+				(!mapDue || [RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(mapResult?.status)) &&
+				(!matchDue || [RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(matchResult?.status))
+			) {
+				await saveSchedulerState({ autoMapMatchLastRunAt: new Date().toISOString() });
+			}
+		} catch (error) {
+			console.error(
+				"[hubsoftSyncProfiles] Falha na rotina MAPA/MATCH:",
+				error?.message || error,
+			);
+		} finally {
+			mapMatchSchedulerRunning = false;
+		}
+	})();
+
+	return [
+		{
+			profile: "MAP_MATCH",
+			background: true,
+			mapDue,
+			matchDue,
+		},
+	];
+}
+
 async function runSchedulerTick() {
 	if (schedulerTickRunning) return { ok: true, skipped: "already_running" };
 	schedulerTickRunning = true;
@@ -2859,39 +2925,7 @@ async function runSchedulerTick() {
 		}
 	}
 
-	if (config.autoMapMatchEnabled) {
-		const mapDue =
-			minutesSince(lastRunFor(rawConfig, PROFILE.MAPA)) >=
-			config.autoMapMatchIntervalMinutes;
-		const matchDue =
-			minutesSince(lastRunFor(rawConfig, PROFILE.MATCH)) >=
-			config.autoMapMatchIntervalMinutes;
-		const mapResult = mapDue
-			? await runProfileSafely(PROFILE.MAPA)
-			: null;
-		if (mapDue) {
-			results.push({ profile: PROFILE.MAPA, result: mapResult });
-			if (succeeded(mapResult)) {
-				await saveSchedulerState({ autoMapLastRunAt: new Date().toISOString() });
-			}
-		}
-		const matchResult = matchDue
-			? await runProfileSafely(PROFILE.MATCH)
-			: null;
-		if (matchDue) {
-			results.push({ profile: PROFILE.MATCH, result: matchResult });
-			if (succeeded(matchResult)) {
-				await saveSchedulerState({ autoMatchLastRunAt: new Date().toISOString() });
-			}
-		}
-		if (
-			(!mapDue || succeeded(mapResult)) &&
-			(!matchDue || succeeded(matchResult)) &&
-			(mapDue || matchDue)
-		) {
-			await saveSchedulerState({ autoMapMatchLastRunAt: new Date().toISOString() });
-		}
-	}
+	results.push(...(await runMapMatchScheduler(rawConfig, config)));
 
 	return { ok: true, results };
 	} finally {
