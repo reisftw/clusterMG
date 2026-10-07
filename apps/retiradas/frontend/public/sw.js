@@ -1,4 +1,4 @@
-const CACHE_NAME = "retiradas-pwa-v25-asset-recovery";
+const CACHE_NAME = "retiradas-pwa-v26-mobile-native";
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
