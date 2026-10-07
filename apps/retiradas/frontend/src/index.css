@@ -147,7 +147,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px), (pointer: coarse) {
   #root {
     width: 100%;
     min-width: 0;
@@ -162,6 +162,10 @@
     overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+  }
+
+  html {
+    font-size: 17px;
   }
 
   body {
@@ -262,7 +266,47 @@
     scroll-snap-align: start;
   }
 
+  .retiradas-native-page [class*="sm:grid-cols"],
+  .retiradas-native-page [class*="md:grid-cols"],
+  .retiradas-native-page [class*="lg:grid-cols"],
+  .retiradas-native-page [class*="xl:grid-cols"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .retiradas-native-page [class*="sm:flex-row"],
+  .retiradas-native-page [class*="md:flex-row"],
+  .retiradas-native-page [class*="lg:flex-row"],
+  .retiradas-native-page [class*="xl:flex-row"] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .retiradas-native-page [class*="sm:w-auto"],
+  .retiradas-native-page [class*="md:w-auto"],
+  .retiradas-native-page [class*="lg:w-auto"],
+  .retiradas-native-page [class*="xl:w-auto"] {
+    width: 100% !important;
+  }
+
+  .retiradas-native-page [class*="text-xs"],
+  .retiradas-native-page [class*="text-[10px]"],
+  .retiradas-native-page [class*="text-[11px]"] {
+    font-size: 0.82rem !important;
+    line-height: 1.3 !important;
+  }
+
+  .retiradas-native-page [class*="text-sm"] {
+    font-size: 0.98rem !important;
+    line-height: 1.42 !important;
+  }
+
   .shadow-card {
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+}
+
+@media (max-width: 390px) {
+  html {
+    font-size: 16px;
   }
 }
