@@ -174,6 +174,24 @@ function buildMonthTrend(current, previous) {
 	};
 }
 
+function formatHolidayDate(dateStr) {
+	if (!dateStr) return "";
+	const [year, month, day] = String(dateStr).split("-").map(Number);
+	if (!year || !month || !day) return "";
+	return new Date(year, month - 1, day).toLocaleDateString("pt-BR", {
+		day: "2-digit",
+		month: "2-digit",
+	});
+}
+
+function buildHolidayDetail(holidays = []) {
+	const [nextHoliday] = Array.isArray(holidays) ? holidays : [];
+	if (!nextHoliday) return "Sem feriados próximos";
+	const name = String(nextHoliday.name || nextHoliday.nome || "Feriado").trim();
+	const date = formatHolidayDate(nextHoliday.date || nextHoliday.data);
+	return date ? `${name} · ${date}` : name;
+}
+
 const ModernKpiGrid = ({
 	resumo,
 	ordens = [],
@@ -238,6 +256,9 @@ const ModernKpiGrid = ({
 		feriados: resumo?.feriadosProximos?.length ?? 0,
 		agendamentosMes: agendamentosMesValue,
 	};
+	const details = {
+		feriados: buildHolidayDetail(resumo?.feriadosProximos),
+	};
 
 	return (
 		<section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -248,6 +269,7 @@ const ModernKpiGrid = ({
 						{...item}
 						trend={dynamicTrends[item.key] || item.trend}
 						value={values[item.key]}
+						detail={details[item.key]}
 					/>
 				),
 			)}
@@ -255,7 +277,15 @@ const ModernKpiGrid = ({
 	);
 };
 
-const KpiCard = ({ label, helper, icon: Icon, iconClass, trend, value }) => {
+const KpiCard = ({
+	label,
+	helper,
+	icon: Icon,
+	iconClass,
+	trend,
+	value,
+	detail,
+}) => {
 	const TrendIcon = trend.icon;
 
 	return (
@@ -276,6 +306,11 @@ const KpiCard = ({ label, helper, icon: Icon, iconClass, trend, value }) => {
 					{Number(value || 0).toLocaleString("pt-BR")}
 				</p>
 				<p className="mt-2 text-xs font-semibold text-slate-500">{helper}</p>
+				{detail ? (
+					<p className="mt-1 truncate text-xs font-extrabold text-slate-700" title={detail}>
+						{detail}
+					</p>
+				) : null}
 			</div>
 
 			<div className="mt-auto border-t border-slate-200 pt-3">
