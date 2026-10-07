@@ -353,8 +353,8 @@ export default function AtivacoesPage() {
 	const hasLocalDashboardData = Number(dashboard?.summary?.created || dashboard?.summary?.createdToday || 0) > 0;
 
 	return (
-		<div className="w-full min-w-0 space-y-6">
-			<section className="min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+		<div className="rot-native-page w-full min-w-0 space-y-6">
+			<section className="rot-native-panel min-w-0 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
 				<div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
 					<div className="min-w-0">
 						<p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">{pageCopy.breadcrumb}</p>
@@ -363,7 +363,7 @@ export default function AtivacoesPage() {
 							{tab === "dashboard" ? "Acompanhe o fluxo e os principais indicadores da operação." : pageCopy.description}
 						</p>
 					</div>
-					<div className="grid w-full min-w-0 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+					<div className="rot-native-action-stack grid w-full min-w-0 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
 						<SyncStatusBadge latestSync={latestSync} syncJob={syncJob} compact />
 						{canSync ? (
 							<button type="button" onClick={triggerSync} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 sm:min-h-10 sm:py-2">
