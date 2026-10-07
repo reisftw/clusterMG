@@ -12,6 +12,7 @@ const MAC_PREFIX_MANUFACTURERS = {
 	"2C9D1E": "Huawei",
 	"34B7DA": "ZTE",
 	"485754": "FiberHome",
+	"48128F": "Huawei",
 	"5C497D": "FiberHome",
 	"68A828": "Huawei",
 	"707BE8": "Huawei",
@@ -51,12 +52,20 @@ export function inferOnnetManufacturer(value) {
 	);
 }
 
-export async function listarEstoqueOnnet({ page = 1, limit = 50, query = "" } = {}) {
+export async function listarEstoqueOnnet({
+	endDate = "",
+	limit = 50,
+	page = 1,
+	query = "",
+	startDate = "",
+} = {}) {
 	const params = new URLSearchParams({
 		limit: String(limit),
 		page: String(page),
 	});
 	if (query) params.set("query", query);
+	if (startDate) params.set("startDate", startDate);
+	if (endDate) params.set("endDate", endDate);
 	return requestVpsApi(`/estoque/onnet?${params.toString()}`);
 }
 
@@ -64,5 +73,18 @@ export async function salvarEstoqueOnnet(payload = {}) {
 	return requestVpsApi("/estoque/onnet", {
 		method: "POST",
 		body: JSON.stringify(payload),
+	});
+}
+
+export async function atualizarEstoqueOnnet(id, payload = {}) {
+	return requestVpsApi(`/estoque/onnet/${encodeURIComponent(id)}`, {
+		method: "PUT",
+		body: JSON.stringify(payload),
+	});
+}
+
+export async function excluirEstoqueOnnet(id) {
+	return requestVpsApi(`/estoque/onnet/${encodeURIComponent(id)}`, {
+		method: "DELETE",
 	});
 }

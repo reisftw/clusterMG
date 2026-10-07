@@ -3,30 +3,39 @@ import {
 	CalendarDays,
 	CheckCircle2,
 	Clock3,
+	Edit3,
+	FileSpreadsheet,
+	FileText,
 	Loader2,
 	MapPin,
 	PackagePlus,
 	RefreshCw,
 	Search,
+	Trash2,
 	UserRound,
+	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRegionais } from "../../regionais/hooks/useRegionais";
 import {
 	formatOnnetMac,
 	inferOnnetManufacturer,
+	atualizarEstoqueOnnet,
+	excluirEstoqueOnnet,
 	listarEstoqueOnnet,
 	normalizeOnnetMac,
 	salvarEstoqueOnnet,
 } from "../services/estoqueOnnetService";
 
 function getTodayInputValue() {
-	return new Intl.DateTimeFormat("en-CA", {
+	const parts = new Intl.DateTimeFormat("en-CA", {
 		day: "2-digit",
 		month: "2-digit",
 		timeZone: "America/Sao_Paulo",
 		year: "numeric",
-	}).format(new Date());
+	}).formatToParts(new Date());
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	return `${values.year}-${values.month}-${values.day}`;
 }
 
 function getCurrentTimeInputValue() {
@@ -47,11 +56,46 @@ function formatDateTime(date, time) {
 const initialForm = () => ({
 	cidade: "",
 	dataEntrega: getTodayInputValue(),
+	fabricante: "",
 	horaEntrega: getCurrentTimeInputValue(),
 	mac: "",
 	observacao: "",
 	tecnicoNome: "",
 });
+
+function getCurrentMonthInputValue() {
+	return getTodayInputValue().slice(0, 7);
+}
+
+function getMonthRange(monthValue) {
+	const [year, month] = String(monthValue || "").split("-").map(Number);
+	if (!year || !month) return { startDate: "", endDate: "" };
+	const endDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+	return {
+		startDate: `${year}-${String(month).padStart(2, "0")}-01`,
+		endDate: `${year}-${String(month).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`,
+	};
+}
+
+function buildFileName(extension, filters) {
+	const range =
+		filters.startDate || filters.endDate
+			? `${filters.startDate || "inicio"}_${filters.endDate || "fim"}`
+			: "todos";
+	return `estoque-onnet-${range}.${extension}`;
+}
+
+function downloadBlob(content, fileName, type) {
+	const blob = content instanceof Blob ? content : new Blob([content], { type });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = fileName;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	URL.revokeObjectURL(url);
+}
 
 function StatCard({ icon: Icon, label, value, helper }) {
 	return (
@@ -82,8 +126,15 @@ export default function EstoqueOnnetPage() {
 	const [totalPages, setTotalPages] = useState(1);
 	const [total, setTotal] = useState(0);
 	const [query, setQuery] = useState("");
+	const [periodType, setPeriodType] = useState("month");
+	const [monthFilter, setMonthFilter] = useState(getCurrentMonthInputValue);
+	const [customStartDate, setCustomStartDate] = useState("");
+	const [customEndDate, setCustomEndDate] = useState("");
+	const [editingId, setEditingId] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [deletingId, setDeletingId] = useState("");
+	const [exporting, setExporting] = useState("");
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
 
@@ -100,14 +151,30 @@ export default function EstoqueOnnetPage() {
 	);
 
 	const normalizedMac = normalizeOnnetMac(form.mac);
-	const fabricante = inferOnnetManufacturer(normalizedMac);
+	const fabricanteSugerido = inferOnnetManufacturer(normalizedMac);
+	const fabricante = form.fabricante || fabricanteSugerido;
 	const macValido = normalizedMac.length === 12;
+	const filters = useMemo(() => {
+		if (periodType === "month") return getMonthRange(monthFilter);
+		if (periodType === "custom") {
+			return {
+				startDate: customStartDate,
+				endDate: customEndDate,
+			};
+		}
+		return { startDate: "", endDate: "" };
+	}, [customEndDate, customStartDate, monthFilter, periodType]);
 
 	const load = useCallback(async () => {
 		setLoading(true);
 		setError("");
 		try {
-			const response = await listarEstoqueOnnet({ page, limit: 50, query });
+			const response = await listarEstoqueOnnet({
+				...filters,
+				page,
+				limit: 50,
+				query,
+			});
 			setRecords(response.items || []);
 			setTotal(Number(response.total || 0));
 			setTotalPages(Number(response.totalPages || 1));
@@ -116,7 +183,7 @@ export default function EstoqueOnnetPage() {
 		} finally {
 			setLoading(false);
 		}
-	}, [page, query]);
+	}, [filters, page, query]);
 
 	useEffect(() => {
 		load();
@@ -126,26 +193,143 @@ export default function EstoqueOnnetPage() {
 		setForm((current) => ({ ...current, [field]: value }));
 	};
 
+	const resetForm = () => {
+		setForm(initialForm());
+		setEditingId("");
+	};
+
+	const startEdit = (item) => {
+		setEditingId(item.id);
+		setForm({
+			cidade: item.cidade || "",
+			dataEntrega: item.dataEntrega || getTodayInputValue(),
+			fabricante: item.fabricante || "",
+			horaEntrega: item.horaEntrega || getCurrentTimeInputValue(),
+			mac: item.macFormatado || item.mac || "",
+			observacao: item.observacao || "",
+			tecnicoNome: item.tecnicoNome || "",
+		});
+		setMessage("");
+		setError("");
+		window.scrollTo({ top: 0, behavior: "smooth" });
+	};
+
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setSaving(true);
 		setError("");
 		setMessage("");
 		try {
-			const response = await salvarEstoqueOnnet({
+			const payload = {
 				...form,
+				fabricante,
 				mac: normalizedMac,
-			});
+			};
+			const response = editingId
+				? await atualizarEstoqueOnnet(editingId, payload)
+				: await salvarEstoqueOnnet(payload);
 			setMessage(
-				`${response.item?.macFormatado || formatOnnetMac(normalizedMac)} salvo e contabilizado nas metas Onnet.`,
+				`${response.item?.macFormatado || formatOnnetMac(normalizedMac)} ${editingId ? "atualizado" : "salvo"} e contabilizado nas metas Onnet.`,
 			);
-			setForm(initialForm());
+			resetForm();
 			setPage(1);
 			await load();
 		} catch (requestError) {
-			setError(requestError?.message || "Não foi possível salvar o MAC Onnet.");
+			setError(requestError?.message || "Não foi possível salvar o registro Onnet.");
 		} finally {
 			setSaving(false);
+		}
+	};
+
+	const handleDelete = async (item) => {
+		if (!window.confirm(`Excluir ${item.macFormatado || formatOnnetMac(item.mac)} do estoque Onnet?`)) return;
+		setDeletingId(item.id);
+		setError("");
+		setMessage("");
+		try {
+			await excluirEstoqueOnnet(item.id);
+			setMessage(`${item.macFormatado || formatOnnetMac(item.mac)} excluído e metas recalculadas.`);
+			if (editingId === item.id) resetForm();
+			await load();
+		} catch (requestError) {
+			setError(requestError?.message || "Não foi possível excluir o registro Onnet.");
+		} finally {
+			setDeletingId("");
+		}
+	};
+
+	const fetchExportRows = async () => {
+		const response = await listarEstoqueOnnet({
+			...filters,
+			page: 1,
+			limit: 5000,
+			query,
+		});
+		return response.items || [];
+	};
+
+	const exportXlsx = async () => {
+		setExporting("xlsx");
+		setError("");
+		try {
+			const rows = await fetchExportRows();
+			const XLSX = await import("xlsx");
+			const worksheet = XLSX.utils.json_to_sheet(
+				rows.map((item) => ({
+					MAC: item.macFormatado || formatOnnetMac(item.mac),
+					Fabricante: item.fabricante || "Fabricante não identificado",
+					Cidade: item.cidade || "",
+					Técnico: item.tecnicoNome || "",
+					Data: formatDateTime(item.dataEntrega, item.horaEntrega),
+					Observação: item.observacao || "",
+				})),
+			);
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(workbook, worksheet, "Estoque Onnet");
+			const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+			downloadBlob(
+				buffer,
+				buildFileName("xlsx", filters),
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			);
+		} catch (requestError) {
+			setError(requestError?.message || "Não foi possível exportar XLSX.");
+		} finally {
+			setExporting("");
+		}
+	};
+
+	const exportPdf = async () => {
+		setExporting("pdf");
+		setError("");
+		try {
+			const rows = await fetchExportRows();
+			const { default: jsPDF } = await import("jspdf");
+			const { default: autoTable } = await import("jspdf-autotable");
+			const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+			pdf.setFontSize(16);
+			pdf.text("Estoque Onnet sem O.S.", 40, 42);
+			pdf.setFontSize(10);
+			pdf.text(`Total: ${rows.length} registro(s)`, 40, 60);
+			autoTable(pdf, {
+				startY: 78,
+				head: [["MAC", "Fabricante", "Cidade", "Técnico", "Data", "Observação"]],
+				body: rows.map((item) => [
+					item.macFormatado || formatOnnetMac(item.mac),
+					item.fabricante || "Fabricante não identificado",
+					item.cidade || "",
+					item.tecnicoNome || "",
+					formatDateTime(item.dataEntrega, item.horaEntrega),
+					item.observacao || "",
+				]),
+				styles: { fontSize: 8, cellPadding: 4 },
+				headStyles: { fillColor: [37, 99, 235] },
+			});
+			pdf.save(buildFileName("pdf", filters));
+		} catch (requestError) {
+			setError(requestError?.message || "Não foi possível exportar PDF.");
+		} finally {
+			setExporting("");
 		}
 	};
 
@@ -199,6 +383,21 @@ export default function EstoqueOnnetPage() {
 						/>
 						<p className="mt-1 text-xs font-semibold text-slate-500">
 							{macValido ? formatOnnetMac(normalizedMac) : "Informe os 12 caracteres do MAC."}
+						</p>
+					</label>
+
+					<label className="lg:col-span-3">
+						<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+							Fabricante
+						</span>
+						<input
+							value={form.fabricante || fabricanteSugerido}
+							onChange={(event) => updateForm("fabricante", event.target.value)}
+							placeholder="Huawei, FiberHome, ZTE..."
+							className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400"
+						/>
+						<p className="mt-1 text-xs font-semibold text-slate-500">
+							Prefixo detectado: {fabricanteSugerido}
 						</p>
 					</label>
 
@@ -261,7 +460,7 @@ export default function EstoqueOnnetPage() {
 						</label>
 					</div>
 
-					<label className="lg:col-span-9">
+					<label className="lg:col-span-6">
 						<span className="text-xs font-black uppercase tracking-wide text-slate-500">
 							Observação
 						</span>
@@ -280,9 +479,21 @@ export default function EstoqueOnnetPage() {
 							className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
 						>
 							{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
-							Salvar e contabilizar
+							{editingId ? "Atualizar registro" : "Salvar e contabilizar"}
 						</button>
 					</div>
+					{editingId ? (
+						<div className="flex items-end lg:col-span-3">
+							<button
+								type="button"
+								onClick={resetForm}
+								className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+							>
+								<X className="h-4 w-4" />
+								Cancelar edição
+							</button>
+						</div>
+					) : null}
 				</form>
 
 				{message ? (
@@ -305,17 +516,110 @@ export default function EstoqueOnnetPage() {
 							Registros sem O.S contabilizados nas metas.
 						</p>
 					</div>
-					<label className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-						<Search className="h-4 w-4 text-slate-400" />
-						<input
-							value={query}
+					<div className="flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={exportPdf}
+							disabled={exporting === "pdf"}
+							className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700 disabled:opacity-60"
+						>
+							{exporting === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+							PDF
+						</button>
+						<button
+							type="button"
+							onClick={exportXlsx}
+							disabled={exporting === "xlsx"}
+							className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700 disabled:opacity-60"
+						>
+							{exporting === "xlsx" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+							XLSX
+						</button>
+					</div>
+				</div>
+
+				<div className="mb-4 grid gap-3 lg:grid-cols-12">
+					<label className="lg:col-span-3">
+						<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+							Período
+						</span>
+						<select
+							value={periodType}
 							onChange={(event) => {
-								setQuery(event.target.value);
+								setPeriodType(event.target.value);
 								setPage(1);
 							}}
-							placeholder="Buscar MAC, cidade ou técnico"
-							className="min-w-0 bg-transparent text-sm font-semibold text-slate-900 outline-none"
-						/>
+							className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400"
+						>
+							<option value="month">Mês</option>
+							<option value="custom">Personalizado</option>
+							<option value="all">Total</option>
+						</select>
+					</label>
+					{periodType === "month" ? (
+						<label className="lg:col-span-3">
+							<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+								Mês
+							</span>
+							<input
+								type="month"
+								value={monthFilter}
+								onChange={(event) => {
+									setMonthFilter(event.target.value);
+									setPage(1);
+								}}
+								className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400"
+							/>
+						</label>
+					) : null}
+					{periodType === "custom" ? (
+						<>
+							<label className="lg:col-span-2">
+								<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+									Início
+								</span>
+								<input
+									type="date"
+									value={customStartDate}
+									onChange={(event) => {
+										setCustomStartDate(event.target.value);
+										setPage(1);
+									}}
+									className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400"
+								/>
+							</label>
+							<label className="lg:col-span-2">
+								<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+									Fim
+								</span>
+								<input
+									type="date"
+									value={customEndDate}
+									onChange={(event) => {
+										setCustomEndDate(event.target.value);
+										setPage(1);
+									}}
+									className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-400"
+								/>
+							</label>
+						</>
+					) : null}
+					<label className="lg:col-span-4">
+						<span className="text-xs font-black uppercase tracking-wide text-slate-500">
+							Busca
+						</span>
+						<div className="mt-1 flex h-11 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
+							<Search className="h-4 w-4 text-slate-400" />
+							<input
+								value={query}
+								onChange={(event) => {
+									setQuery(event.target.value);
+									setPage(1);
+								}}
+								placeholder="MAC, cidade, técnico ou fabricante"
+								className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 outline-none"
+							/>
+						</div>
 					</label>
 				</div>
 
@@ -333,7 +637,7 @@ export default function EstoqueOnnetPage() {
 					{records.map((item) => (
 						<article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
 							<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-								<div>
+								<div className="min-w-0">
 									<p className="text-base font-black text-slate-950">
 										{item.macFormatado || formatOnnetMac(item.mac)}
 									</p>
@@ -354,6 +658,25 @@ export default function EstoqueOnnetPage() {
 										<Clock3 className="h-4 w-4 text-blue-500" />
 										{formatDateTime(item.dataEntrega, item.horaEntrega)}
 									</span>
+								</div>
+								<div className="flex gap-2">
+									<button
+										type="button"
+										onClick={() => startEdit(item)}
+										className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"
+									>
+										<Edit3 className="h-4 w-4" />
+										Editar
+									</button>
+									<button
+										type="button"
+										onClick={() => handleDelete(item)}
+										disabled={deletingId === item.id}
+										className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-black text-red-700 disabled:opacity-60"
+									>
+										{deletingId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+										Excluir
+									</button>
 								</div>
 							</div>
 							{item.observacao ? (

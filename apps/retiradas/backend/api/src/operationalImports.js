@@ -77,6 +77,7 @@ const ONNET_MAC_PREFIX_MANUFACTURERS = {
 	"2C9D1E": "Huawei",
 	"34B7DA": "ZTE",
 	"485754": "FiberHome",
+	"48128F": "Huawei",
 	"5C497D": "FiberHome",
 	"68A828": "Huawei",
 	"707BE8": "Huawei",
@@ -2749,12 +2750,28 @@ async function refreshOnnetStockAccountingForMonth({ month, year, user = {} }) {
 	return { month, year, total: Number(onnet.manualStock?.total || 0), updatedAt: nowIso };
 }
 
-async function listOnnetStockRecords({ limit = 50, page = 1, query = "" } = {}) {
+function normalizeDateFilter(value) {
+	const text = String(value || "").slice(0, 10);
+	return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+async function listOnnetStockRecords({
+	limit = 50,
+	page = 1,
+	query = "",
+	startDate = "",
+	endDate = "",
+} = {}) {
 	const rows = await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION);
 	const search = normalizeText(query);
+	const start = normalizeDateFilter(startDate);
+	const end = normalizeDateFilter(endDate);
 	const filtered = rows
 		.map((row) => ({ id: row.documentId, ...(row.data || {}) }))
 		.filter((item) => {
+			const dateKey = String(item.dataEntrega || "").slice(0, 10);
+			if (start && dateKey < start) return false;
+			if (end && dateKey > end) return false;
 			if (!search) return true;
 			return [item.mac, item.macFormatado, item.fabricante, item.cidade, item.tecnicoNome]
 				.map(normalizeText)
@@ -2765,7 +2782,7 @@ async function listOnnetStockRecords({ limit = 50, page = 1, query = "" } = {}) 
 				String(left.entregueEm || left.createdAt || ""),
 			),
 		);
-	const normalizedLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+	const normalizedLimit = Math.min(Math.max(Number(limit) || 50, 1), 5000);
 	const normalizedPage = Math.max(Number(page) || 1, 1);
 	const offset = (normalizedPage - 1) * normalizedLimit;
 	return {
@@ -2777,19 +2794,30 @@ async function listOnnetStockRecords({ limit = 50, page = 1, query = "" } = {}) 
 	};
 }
 
-async function saveOnnetStockRecord(payload = {}, user = {}) {
-	const mac = normalizeMac(payload.mac);
-	if (!mac) {
-		const error = new Error("Informe um MAC válido com 12 caracteres.");
-		error.statusCode = 400;
-		throw error;
-	}
+async function getOnnetStockDocument(documentId) {
+	const safeId = String(documentId || "").trim();
+	if (!safeId) return null;
+	return documents.getDocument(`${ESTOQUE_ONNET_COLLECTION}/${safeId}`);
+}
+
+async function assertUniqueOnnetStockMac(mac, ignoredDocumentId = "") {
 	const existing = (await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION)).find(
-		(row) => normalizeMac(row.data?.mac) === mac,
+		(row) =>
+			normalizeMac(row.data?.mac) === mac &&
+			String(row.documentId || "") !== String(ignoredDocumentId || ""),
 	);
 	if (existing) {
 		const error = new Error(`MAC ${formatMac(mac)} já foi lançado no estoque Onnet.`);
 		error.statusCode = 409;
+		throw error;
+	}
+}
+
+function buildOnnetStockRecordPayload(payload = {}, user = {}, previous = {}) {
+	const mac = normalizeMac(payload.mac);
+	if (!mac) {
+		const error = new Error("Informe um MAC válido com 12 caracteres.");
+		error.statusCode = 400;
 		throw error;
 	}
 	const dataEntrega = String(payload.dataEntrega || payload.deliveryDate || getLocalDateKey()).slice(0, 10);
@@ -2817,11 +2845,11 @@ async function saveOnnetStockRecord(payload = {}, user = {}) {
 		throw error;
 	}
 	const nowIso = new Date().toISOString();
-	const documentId = `${dataEntrega}-${mac}`.replace(/[^a-zA-Z0-9_-]/g, "_");
-	const record = {
+	return {
+		...previous,
 		mac,
 		macFormatado: formatMac(mac),
-		fabricante: inferMacManufacturer(mac),
+		fabricante: String(payload.fabricante || payload.manufacturer || "").trim() || inferMacManufacturer(mac),
 		cidade,
 		tecnicoNome,
 		dataEntrega,
@@ -2830,10 +2858,27 @@ async function saveOnnetStockRecord(payload = {}, user = {}) {
 		observacao: String(payload.observacao || "").trim(),
 		origem: "estoque_onnet_sem_os",
 		base: "ONNET",
-		createdAt: nowIso,
-		createdBy: user.uid || null,
-		createdByName: user.nome || user.name || user.displayName || user.email || "",
+		createdAt: previous.createdAt || nowIso,
+		createdBy: previous.createdBy || user.uid || null,
+		createdByName:
+			previous.createdByName || user.nome || user.name || user.displayName || user.email || "",
+		updatedAt: nowIso,
+		updatedBy: user.uid || null,
+		updatedByName: user.nome || user.name || user.displayName || user.email || "",
 	};
+}
+
+async function refreshOnnetStockAccountingForDate(dateText, user = {}) {
+	const month = getMetaMonthFromDate(dateText);
+	const year = getMetaYearFromDate(dateText);
+	return refreshOnnetStockAccountingForMonth({ month, year, user });
+}
+
+async function saveOnnetStockRecord(payload = {}, user = {}) {
+	const mac = normalizeMac(payload.mac);
+	await assertUniqueOnnetStockMac(mac);
+	const record = buildOnnetStockRecordPayload(payload, user);
+	const documentId = `${record.dataEntrega}-${record.mac}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 	await documents.upsertDocument({
 		path: `${ESTOQUE_ONNET_COLLECTION}/${documentId}`,
 		collectionPath: ESTOQUE_ONNET_COLLECTION,
@@ -2841,10 +2886,56 @@ async function saveOnnetStockRecord(payload = {}, user = {}) {
 		parentPath: null,
 		data: record,
 	});
-	const month = getMetaMonthFromDate(dataEntrega);
-	const year = getMetaYearFromDate(dataEntrega);
-	const accounting = await refreshOnnetStockAccountingForMonth({ month, year, user });
+	const accounting = await refreshOnnetStockAccountingForDate(record.dataEntrega, user);
 	return { item: { id: documentId, ...record }, accounting };
+}
+
+async function updateOnnetStockRecord(documentId, payload = {}, user = {}) {
+	const currentDocument = await getOnnetStockDocument(documentId);
+	if (!currentDocument) {
+		const error = new Error("Registro Onnet não encontrado.");
+		error.statusCode = 404;
+		throw error;
+	}
+	const mac = normalizeMac(payload.mac);
+	await assertUniqueOnnetStockMac(mac, documentId);
+	const previous = currentDocument.data || {};
+	const record = buildOnnetStockRecordPayload(payload, user, previous);
+	await documents.upsertDocument({
+		path: currentDocument.path,
+		collectionPath: ESTOQUE_ONNET_COLLECTION,
+		documentId: currentDocument.documentId,
+		parentPath: null,
+		data: record,
+	});
+	const accounting = [await refreshOnnetStockAccountingForDate(previous.dataEntrega, user)];
+	if (
+		getMetaMonthFromDate(previous.dataEntrega) !== getMetaMonthFromDate(record.dataEntrega) ||
+		Number(getMetaYearFromDate(previous.dataEntrega)) !== Number(getMetaYearFromDate(record.dataEntrega))
+	) {
+		accounting.push(await refreshOnnetStockAccountingForDate(record.dataEntrega, user));
+	}
+	return {
+		item: { id: currentDocument.documentId, ...record },
+		accounting,
+	};
+}
+
+async function deleteOnnetStockRecord(documentId, user = {}) {
+	const currentDocument = await getOnnetStockDocument(documentId);
+	if (!currentDocument) {
+		const error = new Error("Registro Onnet não encontrado.");
+		error.statusCode = 404;
+		throw error;
+	}
+	const previous = currentDocument.data || {};
+	await documents.deleteDocument(currentDocument.path);
+	const accounting = await refreshOnnetStockAccountingForDate(previous.dataEntrega, user);
+	return {
+		deleted: true,
+		item: { id: currentDocument.documentId, ...previous },
+		accounting,
+	};
 }
 
 async function resolveMetaFonteByCity() {
@@ -3706,10 +3797,12 @@ module.exports = {
 	publishAcompanhamentoUpdate,
 	repairMensageriaQueueFromOpenMap,
 	refreshDashboardSnapshot,
+	deleteOnnetStockRecord,
 	saveOnnetStockRecord,
 	saveMatchConfig,
 	saveMetasBaseConfig,
 	saveMetasForceTaskConfig,
+	updateOnnetStockRecord,
 	// Exportado so pra teste (achado javascript:S3776,
 	// docs/SONARQUBE-MAP.md) — funcao pura extraida de buildOrdersFromRows.
 	buildOrderFromRow,

@@ -4990,9 +4990,11 @@ function createApp() {
 			try {
 				res.json(
 					await operationalImports.listOnnetStockRecords({
+						endDate: req.query.endDate,
 						limit: req.query.limit,
 						page: req.query.page,
 						query: req.query.query,
+						startDate: req.query.startDate,
 					}),
 				);
 			} catch (error) {
@@ -5010,6 +5012,42 @@ function createApp() {
 			try {
 				res.status(201).json(
 					await operationalImports.saveOnnetStockRecord(req.body || {}, req.user),
+				);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.put(
+		"/api/estoque/onnet/:id",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAnyPermission(ESTOQUE_ONNET_MANAGE_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(
+					await operationalImports.updateOnnetStockRecord(
+						req.params.id,
+						req.body || {},
+						req.user,
+					),
+				);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.delete(
+		"/api/estoque/onnet/:id",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAnyPermission(ESTOQUE_ONNET_MANAGE_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(
+					await operationalImports.deleteOnnetStockRecord(req.params.id, req.user),
 				);
 			} catch (error) {
 				next(error);
