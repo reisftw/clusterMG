@@ -127,7 +127,7 @@ const FeaturedMetasPanel = () => {
 					Base dos dados:{" "}
 					<span className="text-orange-600">{fonteSelecionada.label}</span>
 				</p>
-				<div className="flex flex-wrap gap-2">
+				<div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
 					{FONTES_DADOS_DASHBOARD.map((fonte) => {
 						const disponivel = temDadosOperacionais(
 							getMetaMesPorFonte(metaMes, fonte.id),
@@ -140,7 +140,7 @@ const FeaturedMetasPanel = () => {
 								type="button"
 								onClick={() => disponivel && setFonteDados(fonte.id)}
 								disabled={!disponivel}
-								className={`rounded-lg border px-3 py-1.5 text-xs font-black transition ${resolveFonteButtonClass(ativo, disponivel)}`}
+								className={`min-h-11 rounded-lg border px-3 py-2 text-xs font-black transition sm:min-h-0 sm:py-1.5 ${resolveFonteButtonClass(ativo, disponivel)}`}
 								title={
 									disponivel
 										? `Ver dados ${fonte.label}`
@@ -158,7 +158,7 @@ const FeaturedMetasPanel = () => {
 
 	if (loading) {
 		return (
-			<section className="rounded-lg border border-orange-100 bg-white p-6 shadow-card">
+			<section className="w-full min-w-0 rounded-lg border border-orange-100 bg-white p-4 shadow-card sm:p-6">
 				<RetorninhoLoader compact size="sm" title="Carregando metas..." />
 			</section>
 		);
@@ -166,7 +166,7 @@ const FeaturedMetasPanel = () => {
 
 	if (!metaStats) {
 		return (
-			<section className="rounded-lg border border-orange-100 bg-white p-6 shadow-card">
+			<section className="w-full min-w-0 rounded-lg border border-orange-100 bg-white p-4 shadow-card sm:p-6">
 				<div className="flex items-center gap-3">
 					<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50">
 						<Target size={20} className="text-orange-500" />
@@ -195,15 +195,15 @@ const FeaturedMetasPanel = () => {
 		});
 
 	return (
-		<section className="flex h-full flex-col overflow-hidden rounded-lg border border-orange-200 bg-white shadow-card">
+		<section className="flex h-full w-full min-w-0 flex-col overflow-hidden rounded-lg border border-orange-200 bg-white shadow-card">
 			<div className="grid min-w-0 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
-				<div className="min-w-0 border-b border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-6 lg:border-b-0 lg:border-r">
+				<div className="min-w-0 border-b border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-4 sm:p-6 lg:border-b-0 lg:border-r">
 					<div className="mb-4 flex items-center justify-between gap-3">
-						<div>
+						<div className="min-w-0">
 							<p className="text-xs font-bold uppercase tracking-wide text-orange-600">
 								Metas em destaque
 							</p>
-							<h2 className="text-2xl font-black text-slate-950">
+							<h2 className="text-xl font-black leading-tight text-slate-950 sm:text-2xl">
 								META DO MÊS
 							</h2>
 						</div>
@@ -213,15 +213,15 @@ const FeaturedMetasPanel = () => {
 					</div>
 					{renderFonteSelector()}
 
-					<div className="mx-auto flex h-40 w-40 items-center justify-center rounded-full bg-slate-100">
+					<div className="mx-auto mt-5 flex h-36 w-36 items-center justify-center rounded-full bg-slate-100 sm:h-40 sm:w-40">
 						<div
-							className="flex h-36 w-36 items-center justify-center rounded-full"
+							className="flex h-32 w-32 items-center justify-center rounded-full sm:h-36 sm:w-36"
 							style={{
 								background: `conic-gradient(#f97316 ${metaStats.percentVisual * 3.6}deg, #e5e7eb 0deg)`,
 							}}
 						>
-							<div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white">
-								<span className="text-4xl font-black text-slate-950">
+							<div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-white sm:h-28 sm:w-28">
+								<span className="text-3xl font-black text-slate-950 sm:text-4xl">
 									{percentLabel}%
 								</span>
 								<span className="text-sm font-semibold text-slate-500">
@@ -235,15 +235,15 @@ const FeaturedMetasPanel = () => {
 					</div>
 				</div>
 
-				<div className="min-w-0 flex flex-col p-6">
+				<div className="min-w-0 flex flex-col p-4 sm:p-6">
 					<div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div>
 							<p className="text-sm font-semibold text-slate-500">
 								Desempenho até agora
 							</p>
-							<p className="mt-1 text-4xl font-black text-blue-700">
+							<p className="mt-1 text-3xl font-black leading-tight text-blue-700 sm:text-4xl">
 								{metaStats.total.toLocaleString("pt-BR")}
-								<span className="text-2xl font-bold text-slate-500">
+								<span className="text-xl font-bold text-slate-500 sm:text-2xl">
 									{" "}
 									/ {metaStats.meta.toLocaleString("pt-BR")}
 								</span>
@@ -253,7 +253,7 @@ const FeaturedMetasPanel = () => {
 								{metaStats.mes === "Marco" ? "Março" : metaStats.mes}
 							</p>
 						</div>
-						<span className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+						<span className="w-fit rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
 							{metaStats.metaModeLabel} {metaStats.metaSazonal}%
 						</span>
 					</div>
@@ -265,7 +265,7 @@ const FeaturedMetasPanel = () => {
 								style={{ width: `${metaStats.percentVisual}%` }}
 							/>
 						</div>
-						<div className="mt-3 flex flex-col gap-2 text-sm font-semibold text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+						<div className="mt-3 flex min-w-0 flex-col gap-2 text-sm font-semibold text-slate-600 sm:flex-row sm:items-center sm:justify-between">
 							<span>
 								Faltam{" "}
 								<span className="font-extrabold text-slate-950">
@@ -283,7 +283,7 @@ const FeaturedMetasPanel = () => {
 						</div>
 					</div>
 
-					<div className="mt-auto grid gap-3 sm:grid-cols-3">
+					<div className="mt-auto grid min-w-0 gap-3 sm:grid-cols-3">
 						<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
 							<CalendarDays size={18} className="mb-2 text-blue-600" />
 							<p className="text-xs font-bold uppercase text-slate-500">
@@ -345,11 +345,11 @@ const FeaturedMetasPanel = () => {
 					</span>
 				</div>
 				{ultimasEntregas.length ? (
-					<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+					<div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
 						{ultimasEntregas.map((item) => (
 							<div
 								key={item.mes}
-								className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+								className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
 							>
 								<div className="min-w-0">
 									<p className="truncate text-sm font-black text-slate-800">

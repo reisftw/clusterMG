@@ -123,14 +123,14 @@ function TabButton({ active, icon: Icon, children, onClick }) {
 		<button
 			type="button"
 			onClick={onClick}
-			className={`flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-black transition ${
+			className={`flex min-h-12 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm font-black transition sm:min-h-11 sm:py-2 ${
 				active
 					? "bg-blue-600 text-white shadow-lg shadow-blue-200"
 					: "border border-slate-200 bg-white text-slate-600"
 			}`}
 		>
-			<Icon className="h-4 w-4" />
-			{children}
+			<Icon className="h-4 w-4 shrink-0" />
+			<span>{children}</span>
 		</button>
 	);
 }
@@ -1056,14 +1056,14 @@ export default function TentativasPage() {
 	const [tab, setTab] = useState("route");
 	const tabs = [["route", "Minha Rota", Route], ...(admin ? ADMIN_TABS : [["history", "Histórico", History]])];
 	return (
-		<div className="space-y-5">
+		<div className="w-full min-w-0 space-y-5">
 			<PageHeader
 				eyebrow="Esteira operacional"
 				title="Tentativas"
 				description="Match → contato manual via WhatsApp → resposta → agendamento → retirada."
 				icon={<div className="rounded-2xl bg-blue-600 p-3 text-white"><MessageCircle className="h-6 w-6" /></div>}
 			/>
-			<div className="flex gap-2 overflow-x-auto pb-1">
+			<div className="-mx-3 flex min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
 				{tabs.map(([key, label, Icon]) => (
 					<TabButton key={key} icon={Icon} active={tab === key} onClick={() => setTab(key)}>{label}</TabButton>
 				))}

@@ -130,4 +130,95 @@
     overflow-wrap: anywhere;
     word-break: normal;
   }
+
+  .touch-pan-x {
+    touch-action: pan-x;
+  }
+}
+
+@media (max-width: 420px) {
+  .retiradas-mobile-date {
+    display: none;
+  }
+
+  .retiradas-mobile-greeting {
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 640px) {
+  #root {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  html,
+  body {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    font-size: 1rem;
+    line-height: 1.45;
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+
+  main,
+  [role="main"] {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 8vw, 2.35rem);
+    line-height: 1.08;
+  }
+
+  h2 {
+    font-size: clamp(1.45rem, 6vw, 1.8rem);
+    line-height: 1.12;
+  }
+
+  h3 {
+    font-size: clamp(1.18rem, 5vw, 1.45rem);
+    line-height: 1.18;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    min-height: 48px;
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+
+  section,
+  article,
+  table,
+  form,
+  fieldset {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .shadow-card {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
 }

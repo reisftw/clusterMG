@@ -21,19 +21,19 @@ export default function PageHeader({
 }) {
 	return (
 		<header
-			className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 ${className}`}
+			className={`w-full min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 ${className}`}
 		>
-			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-				<div className={`flex min-w-0 gap-3 ${contentClassName}`}>
+			<div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<div className={`flex min-w-0 flex-col gap-3 min-[390px]:flex-row min-[390px]:items-center ${contentClassName}`}>
 					{icon ? <div className="shrink-0">{icon}</div> : null}
 					<div className="min-w-0">
 						{eyebrow ? (
-							<p className="break-anywhere text-xs font-black uppercase tracking-[0.2em] text-blue-700">
+							<p className="break-anywhere text-xs font-black uppercase tracking-[0.16em] text-blue-700 sm:tracking-[0.2em]">
 								{eyebrow}
 							</p>
 						) : null}
 						{title ? (
-							<h1 className="break-anywhere text-2xl font-black text-slate-950">
+							<h1 className="break-anywhere text-2xl font-black leading-tight text-slate-950 sm:text-3xl">
 								{title}
 							</h1>
 						) : null}

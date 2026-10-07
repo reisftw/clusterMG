@@ -183,7 +183,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 	};
 
 	return (
-		<header className="relative z-layout-topbar flex items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
+		<header className="relative z-layout-topbar flex min-w-0 items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
 			<AuthenticatorModal open={authenticatorOpen} onClose={() => setAuthenticatorOpen(false)} />
 			<button
 				type="button"
@@ -200,10 +200,10 @@ const Topbar = ({ onOpenMobileMenu }) => {
 			</button>
 
 			<div className="min-w-0 flex-1 lg:flex-none">
-				<h2 className="truncate text-lg font-black text-slate-950">
+				<h2 className="retiradas-mobile-greeting truncate text-lg font-black text-slate-950">
 					Olá, {displayUser?.nome?.split(" ")?.[0] || "Usuário"}
 				</h2>
-				<p className="truncate text-xs font-medium text-slate-500">
+				<p className="retiradas-mobile-date truncate text-xs font-medium text-slate-500">
 					{new Date().toLocaleDateString("pt-BR", {
 						weekday: "long",
 						day: "2-digit",

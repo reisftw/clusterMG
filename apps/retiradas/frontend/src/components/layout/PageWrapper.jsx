@@ -169,8 +169,8 @@ const PageWrapper = ({ children }) => {
 				<main
 					className={
 						isModernLayout
-							? "min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 sm:p-4 lg:p-6"
-							: "min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6"
+							? "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 sm:p-4 lg:p-6"
+							: "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-4 lg:p-6"
 					}
 				>
 					{content}

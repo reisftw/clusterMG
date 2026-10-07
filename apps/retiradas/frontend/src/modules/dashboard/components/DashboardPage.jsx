@@ -687,15 +687,15 @@ function ModernDashboardView({
 	topCidadesOverride,
 }) {
 	return (
-		<div className="mx-auto max-w-[1500px] space-y-4">
-			<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-				<div>
-					<h1 className="text-3xl font-black text-slate-950">Visão geral</h1>
+		<div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-4">
+			<div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+				<div className="min-w-0">
+					<h1 className="text-3xl font-black leading-tight text-slate-950">Visão geral</h1>
 					<p className="mt-1 text-sm font-medium text-slate-500">
 						Acompanhe os principais indicadores da operação.
 					</p>
 				</div>
-				<InternalStaticDataStatus className="max-w-xl" fallbackIsHealthy />
+				<InternalStaticDataStatus className="w-full max-w-xl" fallbackIsHealthy />
 			</div>
 
 			<div className="grid min-w-0 items-stretch gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
