@@ -1,0 +1,27 @@
+[Unit]
+Description=Operacao API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=operacao
+Group=operacao
+WorkingDirectory=/opt/retiradas/apps/rot/backend
+EnvironmentFile=/opt/retiradas/apps/rot/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+RestrictSUIDSGID=true
+PrivateDevices=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/opt/retiradas/apps/rot/backend/uploads /opt/retiradas/apps/rot/backend/logs /tmp
+
+[Install]
+WantedBy=multi-user.target
+
