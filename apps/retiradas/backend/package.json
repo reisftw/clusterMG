@@ -36,6 +36,6 @@
 		"pg": "^8.16.3",
 		"playwright": "^1.63.0",
 		"qrcode": "^1.5.4",
-		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+		"xlsx": "file:../../../ops/vm-migration/vendor/xlsx-0.20.3.tgz"
 	}
 }

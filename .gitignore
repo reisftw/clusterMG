@@ -9,9 +9,11 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-vm-migration/
 dist-ssr
 *.local
 *.tgz
+!ops/vm-migration/vendor/*.tgz
 /*.tar.gz
 *.zip
 deploy-*.sh
