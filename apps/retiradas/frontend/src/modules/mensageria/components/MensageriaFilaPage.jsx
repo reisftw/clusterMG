@@ -73,6 +73,7 @@ const normalize = (value) =>
 		.toLowerCase();
 
 const getSendForecast = (item, config = {}) => {
+	item = item || {};
 	const status = String(item.status || "novo");
 	if (status === "enviado") return "Já enviado";
 	if (status === "ignorado") return "Ignorado";
@@ -99,9 +100,20 @@ const getQueueItemLabel = (item = {}) => {
 };
 
 const getQueueItemIdentity = (item = {}) =>
-	String(item.id || item.filaId || item.queueId || item.os || item.telefone || "");
+	String(
+		(item || {}).id ||
+			(item || {}).filaId ||
+			(item || {}).queueId ||
+			(item || {}).os ||
+			(item || {}).telefone ||
+			"",
+	);
+
+const isValidQueueItem = (item) =>
+	Boolean(item && typeof item === "object" && getQueueItemIdentity(item));
 
 const getQueueSortTime = (item = {}) => {
+	item = item || {};
 	const candidates = [
 		item.data_abertura_os,
 		item.dataAberturaOs,
@@ -137,15 +149,16 @@ const getQueueSortTime = (item = {}) => {
 };
 
 const getOrderOpenDate = (item = {}) =>
-	item.data_abertura_os ||
-	item.dataAberturaOs ||
-	item.data_abertura ||
-	item.dataAbertura ||
-	item.abertura ||
-	item.data ||
+	(item || {}).data_abertura_os ||
+	(item || {}).dataAberturaOs ||
+	(item || {}).data_abertura ||
+	(item || {}).dataAbertura ||
+	(item || {}).abertura ||
+	(item || {}).data ||
 	"";
 
 const isQueueItemSendableNow = (item = {}, config = {}, now = new Date()) => {
+	item = item || {};
 	const status = String(item.status || "novo");
 	if (!["aprovado", "novo", "aguardando_janela", "enviando"].includes(status)) {
 		return false;
@@ -164,6 +177,7 @@ const isQueueItemSendableNow = (item = {}, config = {}, now = new Date()) => {
 // docs/SONARQUBE-MAP.md) — mesma logica de antes, so tirados do hook
 // pra funcoes puras (nao dependem de estado do React).
 function matchesQueueFilters(item, filters, searchText) {
+	if (!item || typeof item !== "object") return false;
 	const itemStatus = String(item.status || "novo");
 	if (
 		filters.status === "pendentes" &&
@@ -268,7 +282,7 @@ function useMensageriaFilaController() {
 			]);
 			setConfig(nextConfig || {});
 			setStatus(nextStatus || null);
-			setFila(nextFila || []);
+			setFila((nextFila || []).filter(isValidQueueItem));
 		} catch (error) {
 			setFeedback(error?.message || "Não foi possível carregar a fila.");
 		} finally {
@@ -1065,8 +1079,11 @@ const MensageriaFilaPage = () => {
 						</thead>
 						<tbody className="divide-y divide-slate-100 bg-white">
 							{pageItems.length ? (
-								pageItems.map((item) => (
-									<tr key={item.id} className="hover:bg-slate-50">
+								pageItems.map((item, index) => (
+									<tr
+										key={item.id || getQueueItemIdentity(item) || index}
+										className="hover:bg-slate-50"
+									>
 										<td className="px-4 py-3">
 											<p className="font-bold text-slate-900">
 												{item.cliente || "-"}

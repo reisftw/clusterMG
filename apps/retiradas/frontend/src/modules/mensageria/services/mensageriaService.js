@@ -242,28 +242,30 @@ export async function salvarTemplateMensageria(template) {
 
 export async function buscarFilaMensageria() {
 	const response = await requestVpsApi(`/mensageria/fila?limit=${QUEUE_LIMIT}`);
-	return (response.items || []).sort((a, b) => {
-		const statusWeight = {
-			aprovado: 0,
-			novo: 1,
-			aguardando_janela: 2,
-			falhou: 3,
-			enviado: 4,
-			ignorado: 5,
-		};
-		const priorityA = a.prioridadeEm ? -1 : (statusWeight[a.status] ?? 9);
-		const priorityB = b.prioridadeEm ? -1 : (statusWeight[b.status] ?? 9);
-		if (priorityA !== priorityB) return priorityA - priorityB;
-		const dateA =
-			new Date(
-				a.prioridadeEm || a.proximaTentativaEm || a.criadoEm || 0,
-			).getTime() || 0;
-		const dateB =
-			new Date(
-				b.prioridadeEm || b.proximaTentativaEm || b.criadoEm || 0,
-			).getTime() || 0;
-		return dateA - dateB;
-	});
+	return (response.items || [])
+		.filter((item) => item && typeof item === "object")
+		.sort((a, b) => {
+			const statusWeight = {
+				aprovado: 0,
+				novo: 1,
+				aguardando_janela: 2,
+				falhou: 3,
+				enviado: 4,
+				ignorado: 5,
+			};
+			const priorityA = a.prioridadeEm ? -1 : (statusWeight[a.status] ?? 9);
+			const priorityB = b.prioridadeEm ? -1 : (statusWeight[b.status] ?? 9);
+			if (priorityA !== priorityB) return priorityA - priorityB;
+			const dateA =
+				new Date(
+					a.prioridadeEm || a.proximaTentativaEm || a.criadoEm || 0,
+				).getTime() || 0;
+			const dateB =
+				new Date(
+					b.prioridadeEm || b.proximaTentativaEm || b.criadoEm || 0,
+				).getTime() || 0;
+			return dateA - dateB;
+		});
 }
 
 export async function criarItemFilaMensageria(item) {
