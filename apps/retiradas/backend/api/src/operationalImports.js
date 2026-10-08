@@ -63,6 +63,7 @@ const DEFAULT_MATCH_IGNORED_TYPES = [];
 const IMPORT_JOB_COLLECTION = "operational_import_jobs";
 const ESTOQUE_ONNET_COLLECTION = "estoque_onnet";
 const importJobPromises = new Map();
+const AGENT_CITY_EXCLUSION_KEYS = new Set(["POMPEU"]);
 
 const ONNET_MAC_PREFIX_MANUFACTURERS = {
 	"000C29": "VMware",
@@ -197,6 +198,10 @@ function normalizeCityKey(value) {
 		.replace(/\s+/g, " ")
 		.toUpperCase();
 	return key === "AGUIANIL" ? "AGUANIL" : key;
+}
+
+function isExcludedAgentCityKey(value) {
+	return AGENT_CITY_EXCLUSION_KEYS.has(normalizeCityKey(value));
 }
 
 function normalizeCity(value) {
@@ -480,13 +485,13 @@ async function loadCityMap() {
 			if (!key) return;
 			const kind = normalizeText(city?.tipo || city?.tipoCidade || "");
 			const current = cityMap[key] || {};
+			const agente =
+				!isExcludedAgentCityKey(key) &&
+				(current.agente === true || city?.agente === true || kind.includes("agente"));
 			cityMap[key] = {
 				nome: cityName,
 				regional: regionalName,
-				agente:
-					current.agente === true ||
-					city?.agente === true ||
-					kind.includes("agente"),
+				agente,
 			};
 		});
 	}
@@ -3265,6 +3270,7 @@ function dedupeAgentCities(cities = []) {
 		const name = normalizeCity(city?.cidade || city?.nome);
 		const key = normalizeCityKey(name);
 		if (!key) return;
+		if (isExcludedAgentCityKey(key)) return;
 		map.set(key, { ...city, cidade: name });
 	});
 	return [...map.values()].sort((a, b) =>

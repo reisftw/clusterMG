@@ -19,6 +19,7 @@ const MANAGE_PERMISSIONS = [
 	"service_orders.cancellations.manage",
 	"manage_metas",
 ];
+const AGENT_CITY_EXCLUSION_KEYS = new Set(["pompeu"]);
 
 const METABASE_PARAMETERS = {
 	dataCancelamento: {
@@ -56,6 +57,10 @@ function normalizeCityKey(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.replace(/\s+/g, " ")
 		.toLowerCase();
+}
+
+function isExcludedAgentCityKey(value) {
+	return AGENT_CITY_EXCLUSION_KEYS.has(normalizeCityKey(value));
 }
 
 function parsePositiveInteger(value, fallback, max) {
@@ -132,13 +137,13 @@ async function loadAuthorizedAgentCities() {
 		if (!key) return;
 		const kind = normalizeKey(city?.tipo || city?.tipoCidade || "");
 		const current = map.get(key) || {};
+		const agente =
+			!isExcludedAgentCityKey(key) &&
+			(current.agente === true || city?.agente === true || kind.includes("AGENTE"));
 		map.set(key, {
 			nome: name,
 			regional: regionalName || current.regional || null,
-			agente:
-				current.agente === true ||
-				city?.agente === true ||
-				kind.includes("AGENTE"),
+			agente,
 		});
 	}
 	for (const row of [...toolRows, ...regionalRows]) {
@@ -170,6 +175,7 @@ function normalizeAgentCityRecord(city = {}, dayCount) {
 
 async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 	const normalizedCompetencia = parseCompetencia(competencia);
+	const sourceCompetencia = addMonth(normalizedCompetencia, -1);
 	const monthName = monthNameFromCompetencia(normalizedCompetencia);
 	if (!monthName) return null;
 	const dayCount = getDaysInCompetencia(normalizedCompetencia);
@@ -183,7 +189,7 @@ async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 		    and empresa_normalizada = 'SEMPRE'
 		  group by coalesce(cidade, 'Sem cidade'), coalesce(cidade_normalizada, '')
 		  order by total desc, cidade`,
-		[normalizedCompetencia],
+		[sourceCompetencia],
 	);
 	const cancellationsByCity = new Map();
 	for (const row of result.rows) {
@@ -203,6 +209,7 @@ async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 		const normalized = normalizeAgentCityRecord(city, dayCount);
 		const key = normalizeCityKey(normalized.nome);
 		if (!key) continue;
+		if (isExcludedAgentCityKey(key)) continue;
 		byCity.set(key, normalized);
 	}
 	for (const [key, item] of cancellationsByCity.entries()) {
@@ -280,6 +287,7 @@ async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 	);
 	return {
 		competencia: normalizedCompetencia,
+		sourceCompetencia,
 		month: monthName,
 		cidades: normalizedCities.length,
 		totalCancelamentos,
@@ -923,7 +931,7 @@ async function syncCompetencia(competencia, user = {}, parentRunId = null) {
 		);
 		await writeClient.query("commit");
 		try {
-			await rebuildAgentCancellationTargetsForCompetencia(normalizedCompetencia);
+			await rebuildAgentCancellationTargetsForCompetencia(addMonth(normalizedCompetencia, 1));
 		} catch (error) {
 			console.error(
 				"[service-order-cancellations] Falha ao atualizar metas de agentes",
