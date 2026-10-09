@@ -87,6 +87,7 @@ const {
 	confirmTotpSetup,
 	disableTotp,
 	startEmailMfaLogin,
+	startTotpMfaLogin,
 	TOKEN_TTL_SECONDS,
 	updateLocalUser,
 	verifyEmailMfaLogin,
@@ -2746,6 +2747,23 @@ function createApp() {
 			}
 
 			const emailConfig = await emailService.getConfig().catch(() => ({}));
+			const totpChallenge = await startTotpMfaLogin(email, password, {
+				ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
+				req,
+			});
+			if (totpChallenge) {
+				res.json({
+					ok: true,
+					mfaRequired: true,
+					method: "totp",
+					challengeId: totpChallenge.challengeId,
+					maskedEmail: "",
+					expiresAt: totpChallenge.expiresAt,
+					ttlMinutes: totpChallenge.ttlMinutes,
+				});
+				return;
+			}
+
 			if (emailConfig.mfaEmailEnabled) {
 				const challenge = await startEmailMfaLogin(email, password, {
 					ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,

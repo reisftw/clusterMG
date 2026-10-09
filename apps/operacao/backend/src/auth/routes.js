@@ -37,6 +37,7 @@ const router = express.Router();
 const RESET_TTL_MINUTES = Number(process.env.ROT_PASSWORD_RESET_TTL_MINUTES || 30);
 const MFA_TTL_MINUTES = Number(process.env.ROT_MFA_EMAIL_TTL_MINUTES || 10);
 const MFA_MAX_ATTEMPTS = Number(process.env.ROT_MFA_MAX_ATTEMPTS || 5);
+const TOTP_SETUP_SECRET = process.env.ROT_TOTP_SETUP_SECRET || process.env.ROT_JWT_SECRET || "operacao-totp-setup";
 
 function isProduction() {
 	return process.env.NODE_ENV === "production";

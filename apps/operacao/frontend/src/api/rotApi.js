@@ -102,6 +102,31 @@ export async function fetchRotMe() {
 	return data.user;
 }
 
+export async function fetchRotAuthenticatorStatus() {
+	return requestRotApi("/auth/mfa/totp/status");
+}
+
+export async function startRotAuthenticatorSetup() {
+	return requestRotApi("/auth/mfa/totp/setup", {
+		method: "POST",
+		body: JSON.stringify({}),
+	});
+}
+
+export async function confirmRotAuthenticatorSetup({ setupToken, code }) {
+	return requestRotApi("/auth/mfa/totp/confirm", {
+		method: "POST",
+		body: JSON.stringify({ setupToken, code }),
+	});
+}
+
+export async function disableRotAuthenticator(code) {
+	return requestRotApi("/auth/mfa/totp/disable", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
 export async function logoutRot() {
 	await requestRotApi("/auth/logout", { method: "POST" }).catch(() => null);
 	setRotToken("");
