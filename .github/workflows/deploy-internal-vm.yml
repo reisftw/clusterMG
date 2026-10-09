@@ -21,6 +21,9 @@ concurrency:
   group: deploy-internal-vm-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   deploy-retiradas:
     name: Deploy Retiradas na VM interna
@@ -38,17 +41,27 @@ jobs:
           set -euo pipefail
           SOURCE_BRANCH="master"
           SOURCE_DIR="/opt/clusterMG-actions/${SOURCE_BRANCH}"
+          AUTH_HEADER="$(printf 'AUTHORIZATION: basic %s' "$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w 0)")"
           echo "[deploy] Atualizando fonte local: ${SOURCE_BRANCH} em ${SOURCE_DIR}"
           sudo mkdir -p "$(dirname "${SOURCE_DIR}")"
           sudo chown -R "$(id -u):$(id -g)" "$(dirname "${SOURCE_DIR}")"
-          if [ ! -d "${SOURCE_DIR}/.git" ]; then
-            git -c http.extraheader="AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
-              clone "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
+          if [ -e "${SOURCE_DIR}" ] && [ ! -d "${SOURCE_DIR}/.git" ]; then
+            echo "[deploy] Removendo fonte local incompleta"
+            rm -rf "${SOURCE_DIR}"
           fi
-          cd "${SOURCE_DIR}"
-          git -c http.extraheader="AUTHORIZATION: bearer ${GITHUB_TOKEN}" fetch --prune origin "${SOURCE_BRANCH}"
-          git checkout -B "${SOURCE_BRANCH}" "origin/${SOURCE_BRANCH}"
-          git reset --hard "origin/${SOURCE_BRANCH}"
+          if [ ! -d "${SOURCE_DIR}/.git" ]; then
+            mkdir -p "${SOURCE_DIR}"
+            cd "${SOURCE_DIR}"
+            git init
+            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          else
+            cd "${SOURCE_DIR}"
+            git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git config --global --add safe.directory "${SOURCE_DIR}" || true
+          git -c http.extraheader="${AUTH_HEADER}" fetch --depth=1 --prune origin "${SOURCE_BRANCH}"
+          git checkout -B "${SOURCE_BRANCH}" FETCH_HEAD
+          git reset --hard FETCH_HEAD
           git clean -fdx
           echo "[deploy] Fonte pronta em $(git rev-parse --short HEAD)"
 
@@ -142,17 +155,27 @@ jobs:
           set -euo pipefail
           SOURCE_BRANCH="operacao"
           SOURCE_DIR="/opt/clusterMG-actions/${SOURCE_BRANCH}"
+          AUTH_HEADER="$(printf 'AUTHORIZATION: basic %s' "$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w 0)")"
           echo "[deploy] Atualizando fonte local: ${SOURCE_BRANCH} em ${SOURCE_DIR}"
           sudo mkdir -p "$(dirname "${SOURCE_DIR}")"
           sudo chown -R "$(id -u):$(id -g)" "$(dirname "${SOURCE_DIR}")"
-          if [ ! -d "${SOURCE_DIR}/.git" ]; then
-            git -c http.extraheader="AUTHORIZATION: bearer ${GITHUB_TOKEN}" \
-              clone "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"
+          if [ -e "${SOURCE_DIR}" ] && [ ! -d "${SOURCE_DIR}/.git" ]; then
+            echo "[deploy] Removendo fonte local incompleta"
+            rm -rf "${SOURCE_DIR}"
           fi
-          cd "${SOURCE_DIR}"
-          git -c http.extraheader="AUTHORIZATION: bearer ${GITHUB_TOKEN}" fetch --prune origin "${SOURCE_BRANCH}"
-          git checkout -B "${SOURCE_BRANCH}" "origin/${SOURCE_BRANCH}"
-          git reset --hard "origin/${SOURCE_BRANCH}"
+          if [ ! -d "${SOURCE_DIR}/.git" ]; then
+            mkdir -p "${SOURCE_DIR}"
+            cd "${SOURCE_DIR}"
+            git init
+            git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          else
+            cd "${SOURCE_DIR}"
+            git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          git config --global --add safe.directory "${SOURCE_DIR}" || true
+          git -c http.extraheader="${AUTH_HEADER}" fetch --depth=1 --prune origin "${SOURCE_BRANCH}"
+          git checkout -B "${SOURCE_BRANCH}" FETCH_HEAD
+          git reset --hard FETCH_HEAD
           git clean -fdx
           echo "[deploy] Fonte pronta em $(git rev-parse --short HEAD)"
 
