@@ -8,7 +8,16 @@ import {
 	obterStatusAutenticador,
 } from "../../modules/auth/services/authService";
 
-export default function AuthenticatorModal({ open, onClose }) {
+export default function AuthenticatorModal(props) {
+	return <AuthenticatorModalContent {...props} />;
+}
+
+export function AuthenticatorModalContent({
+	open,
+	onClose,
+	required = false,
+	onConfigured,
+}) {
 	const [status, setStatus] = useState(null);
 	const [setup, setSetup] = useState(null);
 	const [code, setCode] = useState("");
@@ -60,6 +69,7 @@ export default function AuthenticatorModal({ open, onClose }) {
 			setSetup(null);
 			setCode("");
 			setMessage("Autenticador habilitado. O MFA por e-mail foi desabilitado.");
+			onConfigured?.();
 		} catch (err) {
 			setError(err?.message || "Código inválido.");
 		} finally {
@@ -93,13 +103,17 @@ export default function AuthenticatorModal({ open, onClose }) {
 						<div>
 							<h2 className="text-lg font-black text-slate-950">Autenticador</h2>
 							<p className="mt-1 text-sm font-semibold text-slate-500">
-								Leia o QR Code no app autenticador. Ao habilitar, o MFA por e-mail é desligado automaticamente.
+								{required && !status?.totpEnabled
+									? "Cadastre o app autenticador para continuar. O MFA por e-mail será desligado automaticamente."
+									: "Leia o QR Code no app autenticador. Ao habilitar, o MFA por e-mail é desligado automaticamente."}
 							</p>
 						</div>
 					</div>
-					<button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100">
-						<X size={18} />
-					</button>
+					{!required || status?.totpEnabled ? (
+						<button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100">
+							<X size={18} />
+						</button>
+					) : null}
 				</div>
 				<div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-700">
 					Método atual: {status?.totpEnabled ? "App autenticador" : "E-mail"}

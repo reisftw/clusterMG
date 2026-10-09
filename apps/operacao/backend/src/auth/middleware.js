@@ -84,6 +84,8 @@ function publicUser(user) {
 		operationScopes: Array.isArray(user.operation_scopes) ? user.operation_scopes : ["ROT"],
 		isAdmin: user.role_id === "site_admin",
 		mfaEnabled: user.mfa_enabled !== false,
+		mfaMethod: user.mfa_method || "email",
+		totpEnabled: user.mfa_method === "totp" && Boolean(user.totp_secret),
 	};
 }
 

@@ -5,11 +5,13 @@ import { useAuthContext } from "../../context/AuthContext";
 import { useLayoutMode } from "../../context/LayoutModeContext";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
 import WelcomeModal from "../../modules/auth/components/WelcomeModal";
+import { obterStatusAutenticador } from "../../modules/auth/services/authService";
 import {
 	hasSeenWelcomeModal,
 	WELCOME_MODAL_EVENT,
 } from "../../modules/auth/utils/welcomeModalStorage";
 import { ROUTES } from "../../router/routes";
+import AuthenticatorModal from "./AuthenticatorModal";
 import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
@@ -74,6 +76,8 @@ const PageWrapper = ({ children }) => {
 	const { currentUser, trocarSenhaObrigatorio } = useAuthContext();
 	const { isModernLayout } = useLayoutMode();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+	const [authenticatorRequiredOpen, setAuthenticatorRequiredOpen] =
+		useState(false);
 	const [forcedWelcomeOpen, setForcedWelcomeOpen] = useState(false);
 	const [welcomeClosedForUser, setWelcomeClosedForUser] = useState("");
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -106,9 +110,29 @@ const PageWrapper = ({ children }) => {
 	const content = children || <Outlet />;
 	const currentWelcomeUserKey =
 		currentUser?.uid || currentUser?.id || currentUser?.email || "";
+
+	useEffect(() => {
+		if (!currentUser || trocarSenhaObrigatorio) {
+			Promise.resolve().then(() => setAuthenticatorRequiredOpen(false));
+			return undefined;
+		}
+		let active = true;
+		obterStatusAutenticador()
+			.then((status) => {
+				if (active) setAuthenticatorRequiredOpen(!status?.totpEnabled);
+			})
+			.catch(() => {
+				if (active) setAuthenticatorRequiredOpen(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, [currentUser, trocarSenhaObrigatorio]);
+
 	const showWelcomeModal =
 		Boolean(currentUser) &&
 		!trocarSenhaObrigatorio &&
+		!authenticatorRequiredOpen &&
 		(forcedWelcomeOpen ||
 			(welcomeClosedForUser !== currentWelcomeUserKey &&
 				!hasSeenWelcomeModal(currentUser)));
@@ -184,6 +208,12 @@ const PageWrapper = ({ children }) => {
 			{trocarSenhaObrigatorio && (
 				<TrocarSenhaModal obrigatorio={true} onClose={() => {}} />
 			)}
+			<AuthenticatorModal
+				open={authenticatorRequiredOpen}
+				required={true}
+				onClose={() => {}}
+				onConfigured={() => setAuthenticatorRequiredOpen(false)}
+			/>
 			<WelcomeModal
 				open={showWelcomeModal}
 				user={currentUser}

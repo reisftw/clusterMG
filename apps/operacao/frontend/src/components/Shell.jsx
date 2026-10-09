@@ -41,9 +41,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { fetchRotMenuSettings } from "../api/rotApi";
+import { fetchRotAuthenticatorStatus, fetchRotMenuSettings } from "../api/rotApi";
 import { useRotAuth } from "../state/useRotAuth";
 import { getAppBuildInfo } from "../utils/appBuildInfo";
+import AuthenticatorModal from "./AuthenticatorModal";
 import UserAvatar from "./UserAvatar";
 import AprOfflineSync from "./AprOfflineSync";
 import WarlinhoLauncher from "./WarlinhoLauncher";
@@ -186,9 +187,10 @@ const MACRO_MENU_TREE = [
 ];
 
 export default function Shell() {
-	const { user, logout } = useRotAuth();
+	const { user, logout, refreshUser } = useRotAuth();
 	const navigate = useNavigate();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+	const [authenticatorRequiredOpen, setAuthenticatorRequiredOpen] = useState(false);
 	const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 	const accountMenuRef = useRef(null);
 	const [collapsed, setCollapsed] = useState(() => {
@@ -224,6 +226,24 @@ export default function Shell() {
 			active = false;
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!user) {
+			Promise.resolve().then(() => setAuthenticatorRequiredOpen(false));
+			return undefined;
+		}
+		let active = true;
+		fetchRotAuthenticatorStatus()
+			.then((status) => {
+				if (active) setAuthenticatorRequiredOpen(!status?.totpEnabled);
+			})
+			.catch(() => {
+				if (active) setAuthenticatorRequiredOpen(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, [user]);
 
 	const setSidebarCollapsed = (value) => {
 		setCollapsed(value);
@@ -371,6 +391,15 @@ export default function Shell() {
 					<Outlet />
 				</main>
 			</div>
+			<AuthenticatorModal
+				open={authenticatorRequiredOpen}
+				required={true}
+				onClose={() => {}}
+				onConfigured={() => {
+					setAuthenticatorRequiredOpen(false);
+					refreshUser?.().catch(() => null);
+				}}
+			/>
 			<WarlinhoLauncher />
 		</div>
 	);

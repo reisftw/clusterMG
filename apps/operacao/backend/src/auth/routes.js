@@ -24,11 +24,20 @@ const { noStore } = require("../security/noStore");
 const { AVATAR_UPLOAD_LIMITS, assertUploadedImage, imageFileFilter } = require("../security/uploadFilters");
 const { validateBody } = require("../security/bodyValidation");
 const { readOauthConfig } = require("../oauth/config");
+const {
+	buildOtpAuthUrl,
+	buildQrDataUrl,
+	generateTotpSecret,
+	signSetupToken,
+	verifySetupToken,
+	verifyTotpCode,
+} = require("./authTotp");
 
 const router = express.Router();
 const RESET_TTL_MINUTES = Number(process.env.ROT_PASSWORD_RESET_TTL_MINUTES || 30);
 const MFA_TTL_MINUTES = Number(process.env.ROT_MFA_EMAIL_TTL_MINUTES || 10);
 const MFA_MAX_ATTEMPTS = Number(process.env.ROT_MFA_MAX_ATTEMPTS || 5);
+const TOTP_SETUP_SECRET = process.env.ROT_TOTP_SETUP_SECRET || process.env.ROT_JWT_SECRET || "operacao-totp-setup";
 
 function isProduction() {
 	return process.env.NODE_ENV === "production";
@@ -181,7 +190,21 @@ async function createMfaChallenge(user) {
 	return { challengeId: id, ttlMinutes, maskedEmail: maskEmail(user.email) };
 }
 
+async function createTotpChallenge(user) {
+	const id = randomId("rottotp");
+	const ttlMinutes = Math.max(3, Math.min(30, MFA_TTL_MINUTES));
+	await db.query(
+		`insert into rot_mfa_challenges (id, user_id, code_hash, channel, expires_at)
+		values ($1, $2, $3, 'totp', now() + ($4 || ' minutes')::interval)`,
+		[id, user.id, tokenHash(randomToken()), ttlMinutes],
+	);
+	return { challengeId: id, ttlMinutes, maskedEmail: "", method: "totp" };
+}
+
 async function issueSessionResponse(user, req, provider) {
+	if (user.mfa_method === "totp" && user.totp_secret) {
+		return { mfaRequired: true, ...(await createTotpChallenge(user)) };
+	}
 	if (user.mfa_enabled && !user.email) {
 		return {
 			mfaConfigurationRequired: true,
@@ -191,7 +214,7 @@ async function issueSessionResponse(user, req, provider) {
 	}
 	if (user.mfa_enabled && user.email) {
 		const challenge = await createMfaChallenge(user);
-		return { mfaRequired: true, ...challenge };
+		return { mfaRequired: true, method: "email", ...challenge };
 	}
 	await touchLastLogin(user.id, req, provider);
 	return { token: await signSession(user), user: publicUser(user) };
@@ -264,17 +287,21 @@ router.post("/verify-mfa", mfaVerifyRateLimit, validateBody(["challengeId", "cod
 			res.status(429).json({ ok: false, error: "Muitas tentativas. Faça login novamente." });
 			return;
 		}
-		if (tokenHash(code) !== challenge.code_hash) {
-			await db.query(`update rot_mfa_challenges set attempts = attempts + 1 where id = $1`, [challengeId]);
-			res.status(401).json({ ok: false, error: "Código incorreto." });
-			return;
-		}
-		await db.query(`update rot_mfa_challenges set consumed_at = now() where id = $1`, [challengeId]);
 		const user = await loadUserById(challenge.user_id);
 		if (!user || user.status !== "ativo") {
 			res.status(401).json({ ok: false, error: "Usuário inválido ou inativo." });
 			return;
 		}
+		const isValid =
+			challenge.channel === "totp"
+				? verifyTotpCode(user.totp_secret, code)
+				: tokenHash(code) === challenge.code_hash;
+		if (!isValid) {
+			await db.query(`update rot_mfa_challenges set attempts = attempts + 1 where id = $1`, [challengeId]);
+			res.status(401).json({ ok: false, error: "Código incorreto." });
+			return;
+		}
+		await db.query(`update rot_mfa_challenges set consumed_at = now() where id = $1`, [challengeId]);
 		await touchLastLogin(user.id, req, "local");
 		sendSession(res, { token: await signSession(user), user: publicUser(user) });
 	} catch (error) {
@@ -364,6 +391,70 @@ router.post("/login/google", loginRateLimit, validateBody(["idToken"], { allowEm
 
 router.get("/me", requireRotAuth, noStore, (req, res) => {
 	res.json({ ok: true, user: req.user });
+});
+
+router.get("/mfa/totp/status", requireRotAuth, noStore, (req, res) => {
+	const method = req.rotUser?.mfa_method === "totp" && req.rotUser?.totp_secret ? "totp" : "email";
+	res.json({
+		ok: true,
+		method,
+		totpEnabled: method === "totp",
+		emailEnabled: method !== "totp",
+	});
+});
+
+router.post("/mfa/totp/setup", requireRotAuth, noStore, validateBody([]), async (req, res, next) => {
+	try {
+		const secret = generateTotpSecret();
+		const accountName = req.rotUser?.email || req.rotUser?.username || req.rotUser?.name || req.rotUser?.id;
+		const otpAuthUrl = buildOtpAuthUrl({ secret, accountName });
+		const qrDataUrl = await buildQrDataUrl(otpAuthUrl);
+		const setupToken = signSetupToken({ userId: req.rotUser.id, secret }, TOTP_SETUP_SECRET);
+		res.json({ ok: true, secret, qrDataUrl, setupToken });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/confirm", requireRotAuth, noStore, validateBody(["setupToken", "code"], { allowEmpty: false }), async (req, res, next) => {
+	try {
+		const setup = verifySetupToken(req.body?.setupToken, TOTP_SETUP_SECRET);
+		if (setup.userId !== req.rotUser.id) {
+			res.status(400).json({ ok: false, error: "Token de configuração inválido." });
+			return;
+		}
+		if (!verifyTotpCode(setup.secret, req.body?.code)) {
+			res.status(400).json({ ok: false, error: "Código inválido." });
+			return;
+		}
+		await db.query(
+			`update rot_users
+			set totp_secret = $2, totp_enabled_at = now(), mfa_method = 'totp', mfa_enabled = true, updated_at = now()
+			where id = $1`,
+			[req.rotUser.id, setup.secret],
+		);
+		res.json({ ok: true, method: "totp", totpEnabled: true, emailEnabled: false });
+	} catch (error) {
+		next(error);
+	}
+});
+
+router.post("/mfa/totp/disable", requireRotAuth, noStore, validateBody(["code"], { allowEmpty: false }), async (req, res, next) => {
+	try {
+		if (!req.rotUser?.totp_secret || !verifyTotpCode(req.rotUser.totp_secret, req.body?.code)) {
+			res.status(400).json({ ok: false, error: "Código inválido." });
+			return;
+		}
+		await db.query(
+			`update rot_users
+			set totp_secret = null, totp_enabled_at = null, mfa_method = 'email', updated_at = now()
+			where id = $1`,
+			[req.rotUser.id],
+		);
+		res.json({ ok: true, method: "email", totpEnabled: false, emailEnabled: true });
+	} catch (error) {
+		next(error);
+	}
 });
 
 router.post("/logout", requireRotAuth, noStore, validateBody([]), async (req, res, next) => {

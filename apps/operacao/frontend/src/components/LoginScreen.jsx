@@ -70,7 +70,11 @@ export default function LoginScreen() {
 			if (result?.mfaRequired) {
 				setMfaChallenge(result);
 				setMfaCode("");
-				setMessage(`Enviamos um código para ${result.maskedEmail || "seu e-mail"}.`);
+				setMessage(
+					result.method === "totp"
+						? "Use o código do seu app autenticador."
+						: `Enviamos um código para ${result.maskedEmail || "seu e-mail"}.`,
+				);
 			}
 		} catch (err) {
 			setError(err?.message || "Não foi possível entrar.");
@@ -144,7 +148,11 @@ export default function LoginScreen() {
 				if (result?.mfaRequired) {
 					setMfaChallenge(result);
 					setMfaCode("");
-					setMessage(`Enviamos um código para ${result.maskedEmail || "seu e-mail"}.`);
+					setMessage(
+						result.method === "totp"
+							? "Use o código do seu app autenticador."
+							: `Enviamos um código para ${result.maskedEmail || "seu e-mail"}.`,
+					);
 				}
 			} catch (err) {
 				setError(err?.message || "Não foi possível entrar com Google.");
@@ -206,6 +214,7 @@ export default function LoginScreen() {
 
 	const visibleError = error || authError;
 	const isResetMode = mode === "reset";
+	const isTotpChallenge = mfaChallenge?.method === "totp";
 	const showGoogleButton = !isResetMode && !mfaChallenge && googleConfig.enabled && googleConfig.clientId;
 
 	return (
@@ -271,7 +280,9 @@ export default function LoginScreen() {
 									{isResetMode
 										? "Crie uma nova senha para acessar a Operação."
 										: mfaChallenge
-											? `Digite o código enviado para ${mfaChallenge.maskedEmail || "seu e-mail"}.`
+											? isTotpChallenge
+												? "Digite o código do seu app autenticador."
+												: `Digite o código enviado para ${mfaChallenge.maskedEmail || "seu e-mail"}.`
 											: "Entre com suas credenciais para acessar o sistema."}
 								</p>
 							</div>
@@ -314,7 +325,9 @@ export default function LoginScreen() {
 												<ShieldCheck size={22} />
 											</span>
 											<div>
-												<h3 className="text-base font-black text-slate-950">Confirme o código enviado</h3>
+												<h3 className="text-base font-black text-slate-950">
+													{isTotpChallenge ? "Confirme no autenticador" : "Confirme o código enviado"}
+												</h3>
 												<p className="mt-1 text-sm font-semibold leading-relaxed text-blue-800">
 													O código expira em {mfaChallenge.ttlMinutes || 10} minutos.
 												</p>

@@ -1097,6 +1097,46 @@ async function startEmailMfaLogin(
 	};
 }
 
+async function startTotpMfaLogin(
+	email,
+	password,
+	{ ttlMinutes = 10, req = null } = {},
+) {
+	const user = await verifyPasswordCredentials(email, password);
+	if (user.mfa_method !== "totp" || !user.totp_secret) return null;
+
+	const challengeId = crypto.randomUUID();
+	const expiresAt = new Date(
+		Date.now() +
+			Math.max(3, Math.min(30, Number(ttlMinutes || 10))) * 60 * 1000,
+	).toISOString();
+
+	await db.query(
+		`insert into email_mfa_challenges (
+       id, uid, code_hash, expires_at, requested_ip, user_agent
+     )
+     values ($1, $2, $3, $4, $5, $6)`,
+		[
+			challengeId,
+			user.uid,
+			hashOpaqueToken(crypto.randomUUID()),
+			expiresAt,
+			String(req?.ip || ""),
+			String(req?.get?.("user-agent") || "").slice(0, 500),
+		],
+	);
+
+	return {
+		challengeId,
+		code: "",
+		expiresAt,
+		ttlMinutes: Math.max(3, Math.min(30, Number(ttlMinutes || 10))),
+		user,
+		method: "totp",
+		maskedEmail: "",
+	};
+}
+
 async function verifyEmailMfaLogin(challengeId, code, { req = null } = {}) {
 	const result = await db.query(
 		`select c.id, c.uid, c.code_hash, c.expires_at, c.used_at, c.attempts,
@@ -1569,6 +1609,7 @@ module.exports = {
 	confirmTotpSetup,
 	disableTotp,
 	startEmailMfaLogin,
+	startTotpMfaLogin,
 	TOKEN_TTL_SECONDS,
 	updateLocalUser,
 	verifyEmailMfaLogin,
