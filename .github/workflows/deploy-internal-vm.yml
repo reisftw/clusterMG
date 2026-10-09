@@ -1,0 +1,165 @@
+name: Deploy VM Interna
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Aplicação para publicar"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - retiradas
+          - operacao
+  push:
+    branches:
+      - master
+      - operacao
+
+concurrency:
+  group: deploy-internal-vm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-retiradas:
+    name: Deploy Retiradas na VM interna
+    runs-on: [self-hosted, linux, retiradas-vm]
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.app == 'all' || inputs.app == 'retiradas'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Instalar dependências e gerar frontend
+        run: |
+          set -euo pipefail
+          bash ops/vm-migration/scripts/prepare-offline-deps.sh
+          npm ci --include=dev
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_API_BASE_URL="https://retiradas.sempre.net.br/api"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:retiradas
+
+      - name: Publicar frontend Retiradas
+        run: |
+          set -euo pipefail
+          sudo rm -rf /var/www/retiradas/dist/*
+          sudo cp -a dist/. /var/www/retiradas/dist/
+          sudo chown -R www-data:www-data /var/www/retiradas
+
+      - name: Publicar backend Retiradas
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /ops/vm-migration/vendor
+          sudo cp ops/vm-migration/vendor/xlsx-0.20.3.tgz /ops/vm-migration/vendor/xlsx-0.20.3.tgz
+
+          sudo rm -rf \
+            /opt/retiradas/vps/api \
+            /opt/retiradas/vps/scripts \
+            /opt/retiradas/vps/sql \
+            /opt/retiradas/vps/sql-tools \
+            /opt/retiradas/vps/package.json \
+            /opt/retiradas/vps/package-lock.json
+
+          sudo cp -a apps/retiradas/backend/. /opt/retiradas/vps/
+
+          cd /opt/retiradas/vps
+          sudo npm install --omit=dev --no-audit --no-fund
+
+          set -a
+          . /etc/retiradas/api.env
+          set +a
+
+          sudo -E npm run migrate:preflight
+          sudo -E npm run migrate:sql
+          sudo -E npm run migrate:normalized:apply
+
+          sudo chown -R www-data:www-data /opt/retiradas/vps /var/www/retiradas
+          sudo systemctl restart retiradas-api.service
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+      - name: Health Retiradas
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
+              curl -I -H "Host: retiradas.sempre.net.br" http://127.0.0.1/
+              exit 0
+            fi
+            sleep 3
+          done
+          journalctl -u retiradas-api.service -n 120 --no-pager || true
+          exit 1
+
+  deploy-operacao:
+    name: Deploy Operação na VM interna
+    runs-on: [self-hosted, linux, retiradas-vm]
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/operacao') ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.app == 'all' || inputs.app == 'operacao'))
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Instalar dependências e gerar frontend
+        run: |
+          set -euo pipefail
+          bash ops/vm-migration/scripts/prepare-offline-deps.sh
+          npm ci --include=dev --prefix apps/operacao/frontend
+          npm ci --prefix apps/operacao/backend
+          export VITE_APP_ENV_LABEL="Produção"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          export VITE_API_BASE_URL="https://operacao.sempre.net.br/api"
+          export VITE_ROT_API_BASE_URL="https://operacao.sempre.net.br/api"
+          npm run build --prefix apps/operacao/frontend
+
+      - name: Publicar Operação
+        run: |
+          set -euo pipefail
+          sudo rm -rf /opt/retiradas/apps/rot/frontend
+          sudo mkdir -p /opt/retiradas/apps/rot/frontend
+          sudo cp -a apps/operacao/frontend/dist /opt/retiradas/apps/rot/frontend/dist
+
+          sudo rm -rf \
+            /opt/retiradas/apps/rot/backend/src \
+            /opt/retiradas/apps/rot/backend/scripts \
+            /opt/retiradas/apps/rot/backend/sql \
+            /opt/retiradas/apps/rot/backend/package.json \
+            /opt/retiradas/apps/rot/backend/package-lock.json \
+            /opt/retiradas/apps/rot/shared
+
+          sudo cp -a apps/operacao/backend/. /opt/retiradas/apps/rot/backend/
+          sudo cp -a apps/operacao/shared /opt/retiradas/apps/rot/shared
+
+          cd /opt/retiradas/apps/rot/backend
+          sudo npm install --omit=dev --no-audit --no-fund
+
+          set -a
+          . /opt/retiradas/apps/rot/.env
+          set +a
+
+          sudo -E npm run migrate
+          sudo chown -R operacao:operacao /opt/retiradas/apps/rot
+          sudo systemctl restart rot-api.service
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+      - name: Health Operação
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:3201/api/health >/dev/null; then
+              curl -I -H "Host: operacao.sempre.net.br" http://127.0.0.1/
+              exit 0
+            fi
+            sleep 3
+          done
+          journalctl -u rot-api.service -n 120 --no-pager || true
+          exit 1
