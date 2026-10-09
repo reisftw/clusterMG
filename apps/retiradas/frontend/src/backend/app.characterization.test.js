@@ -84,6 +84,7 @@ function makeAuthMock(overrides = {}) {
 		renewSessionFromPayload: vi.fn(async () => "renewed-token"),
 		revokeSession: vi.fn(async () => undefined),
 		changeOwnPassword: vi.fn(async () => undefined),
+		startTotpMfaLogin: vi.fn(async () => null),
 		getImportedUserProfile: vi.fn(async () => ({
 			uid: "admin-1",
 			email: "admin@example.com",
