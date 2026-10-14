@@ -1,13 +1,13 @@
 import { Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { obterIndiceMes } from "../../../utils/mes";
 
-const MetasResumoMensalStatusBadge = ({ pct, metaSazonal = 80, mes }) => {
+const MetasResumoMensalStatusBadge = ({ pct, mes }) => {
 	const percentual = Number.parseFloat(pct);
 	const mesAtualIdx = new Date().getMonth();
 	const mesIdx = obterIndiceMes(mes);
 	const mesEncerrado = mesIdx >= 0 && mesIdx < mesAtualIdx;
 
-	if (percentual >= metaSazonal) {
+	if (percentual >= 100) {
 		return (
 			<span className="flex w-fit items-center gap-1 rounded-lg border border-green-100 bg-green-50 px-2 py-0.5 text-xs font-bold text-green-700">
 				<TrendingUp size={11} /> Atingido

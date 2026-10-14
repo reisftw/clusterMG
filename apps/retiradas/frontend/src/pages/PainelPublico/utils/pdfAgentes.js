@@ -79,7 +79,7 @@ function getPerformanceStatus(pct) {
 			text: "Acima da Meta",
 		};
 	}
-	if (pct >= 80) {
+	if (pct >= 100) {
 		return {
 			key: "atingido",
 			color: "#00875A",
@@ -240,7 +240,7 @@ export async function gerarPDFMetaMensal(month, cidades = []) {
 	const cards = [
 		["Cidades", intFmt.format(linhas.length), [0, 48, 135]],
 		["Cancelamentos", intFmt.format(totalCancelamentos), [255, 107, 0]],
-		["Meta 80%", `${intFmt.format(totalMeta)} retiradas`, [0, 135, 90]],
+		["Meta", `${intFmt.format(totalMeta)} retiradas`, [0, 135, 90]],
 	];
 
 	cards.forEach(([label, value, color], index) => {
@@ -269,7 +269,7 @@ export async function gerarPDFMetaMensal(month, cidades = []) {
 
 	autoTable(pdf, {
 		startY: 75,
-		head: [["Cidade", "Cancelamento mês anterior", "Meta 80%"]],
+		head: [["Cidade", "Cancelamento mês anterior", "Meta"]],
 		body: linhas.map((cidade) => [
 			cidade.nome,
 			`${intFmt.format(cidade.cancelamentos)} ${cidade.cancelamentos === 1 ? "cancelamento" : "cancelamentos"}`,
@@ -367,7 +367,7 @@ export function gerarPDFCidade(cidadeNome, month, allData) {
 
   <div class="avoid-break" style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:8px">
     ${compactMetricCardHtml({ label: "Cancelamentos", value: c.cancelamentos, color: "#003087" })}
-    ${compactMetricCardHtml({ label: "Meta 80%", value: Math.round(c.meta80), color: "#FF6B00" })}
+    ${compactMetricCardHtml({ label: "Meta", value: Math.round(c.meta80), color: "#FF6B00" })}
     ${compactMetricCardHtml({ label: "Realizado", value: c.realizado, color: "#00875A" })}
     ${compactMetricCardHtml({ label: "Falta / Sobra", value: faltaInfo.display, color: status.color })}
   </div>
@@ -447,7 +447,7 @@ export function gerarRelatorio3Meses(cidadeNome, mesAtual, allData) {
 
 		mesesComDados += 1;
 		const pct = cidadeM.pct;
-		const atingiu = pct >= 80;
+		const atingiu = pct >= 100;
 		if (!atingiu) mesesAbaixoCount += 1;
 
 		const status = getPerformanceStatus(pct);
@@ -568,7 +568,7 @@ export function gerarPDFInsightAgente(cidadeNome, insight) {
     <div style="border:1px solid #DDE3EE;border-radius:8px;padding:8px 9px;background:#FFF8F2">
       <div style="font-size:8px;color:#C44700;text-transform:uppercase;font-weight:900;letter-spacing:.6px">Taxa de retirada</div>
       <div style="font-size:25px;font-weight:900;color:#FF6B00;margin-top:4px;line-height:1">${pctFmt.format(insight.taxaEntrega)}%</div>
-      <div style="font-size:8.5px;color:#6B7897;font-weight:800;margin-top:3px">Realizado sobre cancelamentos</div>
+      <div style="font-size:8.5px;color:#6B7897;font-weight:800;margin-top:3px">Retirada sobre base total</div>
     </div>
   </div>
   <table class="avoid-break" style="width:100%;border-collapse:collapse;font-size:8.5px;border:1px solid #DDE3EE;border-radius:8px;overflow:hidden">
@@ -579,7 +579,7 @@ export function gerarPDFInsightAgente(cidadeNome, insight) {
         <th style="padding:5px 6px">Meta</th>
         <th style="padding:5px 6px">Retiradas</th>
         <th style="padding:5px 6px">Status</th>
-        <th style="padding:5px 6px">% canc.</th>
+        <th style="padding:5px 6px">Taxa retirada</th>
       </tr>
     </thead>
     <tbody>${rowsHtml}</tbody>

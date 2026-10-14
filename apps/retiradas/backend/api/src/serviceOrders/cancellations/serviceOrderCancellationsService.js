@@ -173,11 +173,31 @@ function normalizeAgentCityRecord(city = {}, dayCount) {
 	};
 }
 
+const DEFAULT_AGENT_META_PERCENT_BY_MONTH = {
+	Janeiro: 65,
+	Fevereiro: 65,
+	Marco: 75,
+	Abril: 80,
+	Maio: 90,
+	Junho: 90,
+	Julho: 90,
+	Agosto: 90,
+	Setembro: 80,
+	Outubro: 75,
+	Novembro: 70,
+	Dezembro: 65,
+};
+
+function getAgentMetaPercent(monthName) {
+	return DEFAULT_AGENT_META_PERCENT_BY_MONTH[monthName] || 80;
+}
+
 async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 	const normalizedCompetencia = parseCompetencia(competencia);
 	const sourceCompetencia = addMonth(normalizedCompetencia, -1);
 	const monthName = monthNameFromCompetencia(normalizedCompetencia);
 	if (!monthName) return null;
+	const metaPercent = getAgentMetaPercent(monthName);
 	const dayCount = getDaysInCompetencia(normalizedCompetencia);
 	const agentCities = await loadAuthorizedAgentCities();
 	const result = await db.query(
@@ -225,7 +245,7 @@ async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 			);
 		current.nome = item.nome;
 		current.cancelamentos = item.cancelamentos;
-		current.meta80 = Math.round(item.cancelamentos * 0.8);
+		current.meta80 = Math.round(item.cancelamentos * (metaPercent / 100));
 		current.falta = current.meta80 - current.realizado;
 		current.pct =
 			current.meta80 > 0
@@ -256,6 +276,8 @@ async function rebuildAgentCancellationTargetsForCompetencia(competencia) {
 	const payload = {
 		...currentDoc,
 		month: monthName,
+		metaSazonal: metaPercent,
+		metaModeLabel: "Meta sazonal",
 		cidades: normalizedCities,
 		cidadesRanking: [...normalizedCities].sort(
 			(left, right) => Number(right.realizado || 0) - Number(left.realizado || 0),

@@ -7,10 +7,25 @@ export function normalizeMacInput(value) {
 		.slice(0, 12);
 }
 
+export function normalizeSerialInput(value) {
+	return String(value || "")
+		.replace(/[^a-zA-Z0-9]/g, "")
+		.toLowerCase()
+		.slice(0, 32);
+}
+
 export async function consultarEquipamentoSempre(mac) {
 	const normalized = normalizeMacInput(mac);
 	const params = new URLSearchParams({ mac: normalized });
 	return requestVpsApi(`/integrations/sempre/equipment?${params.toString()}`);
+}
+
+export async function consultarEquipamentoPorSerialSempre(serial) {
+	const normalized = normalizeSerialInput(serial);
+	const params = new URLSearchParams({ serial: normalized });
+	return requestVpsApi(
+		`/integrations/sempre/equipment/serial?${params.toString()}`,
+	);
 }
 
 export async function consultarHistoricoSempre(

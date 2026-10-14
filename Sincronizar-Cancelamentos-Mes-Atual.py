@@ -18,6 +18,124 @@ REMOTE_ENV_FILE = "/etc/retiradas/api.env"
 LOCAL_PORT = 15432
 
 
+class SshPostgresProxy:
+	def __init__(self, ssh_key, ssh_target, local_port, on_log):
+		self.ssh_key = ssh_key
+		self.ssh_target = ssh_target
+		self.local_port = local_port
+		self.on_log = on_log
+		self.server = None
+		self.thread = None
+		self.stop_event = threading.Event()
+		self.children = []
+
+	def start(self):
+		self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		self.server.bind(("127.0.0.1", self.local_port))
+		self.server.listen(20)
+		self.server.settimeout(0.5)
+		self.thread = threading.Thread(target=self._serve, daemon=True)
+		self.thread.start()
+
+	def stop(self):
+		self.stop_event.set()
+		if self.server:
+			try:
+				self.server.close()
+			except OSError:
+				pass
+		for process in list(self.children):
+			if process.poll() is None:
+				process.terminate()
+				try:
+					process.wait(timeout=3)
+				except subprocess.TimeoutExpired:
+					process.kill()
+		self.children.clear()
+
+	def _serve(self):
+		while not self.stop_event.is_set():
+			try:
+				client, _ = self.server.accept()
+			except socket.timeout:
+				continue
+			except OSError:
+				break
+			threading.Thread(target=self._handle_client, args=(client,), daemon=True).start()
+
+	def _handle_client(self, client):
+		process = subprocess.Popen(
+			[
+				"ssh.exe",
+				"-i",
+				str(self.ssh_key),
+				"-o",
+				"BatchMode=yes",
+				"-o",
+				"ServerAliveInterval=30",
+				"-o",
+				"ServerAliveCountMax=10",
+				self.ssh_target,
+				"nc 127.0.0.1 5432",
+			],
+			stdin=subprocess.PIPE,
+			stdout=subprocess.PIPE,
+			stderr=subprocess.PIPE,
+		)
+		self.children.append(process)
+
+		def copy_socket_to_stdin():
+			try:
+				while True:
+					chunk = client.recv(65536)
+					if not chunk:
+						break
+					process.stdin.write(chunk)
+					process.stdin.flush()
+			except (BrokenPipeError, OSError):
+				pass
+			finally:
+				try:
+					process.stdin.close()
+				except OSError:
+					pass
+
+		def copy_stdout_to_socket():
+			try:
+				while True:
+					chunk = os.read(process.stdout.fileno(), 65536)
+					if not chunk:
+						break
+					client.sendall(chunk)
+			except OSError:
+				pass
+			finally:
+				try:
+					client.shutdown(socket.SHUT_WR)
+				except OSError:
+					pass
+
+		t1 = threading.Thread(target=copy_socket_to_stdin, daemon=True)
+		t2 = threading.Thread(target=copy_stdout_to_socket, daemon=True)
+		t1.start()
+		t2.start()
+		t1.join()
+		t2.join()
+		try:
+			client.close()
+		except OSError:
+			pass
+		if process.poll() is None:
+			process.terminate()
+		try:
+			stderr = process.stderr.read().decode("utf-8", errors="replace").strip()
+		except Exception:
+			stderr = ""
+		if stderr:
+			self.on_log(f"SSH/Postgres: {stderr}\n")
+
+
 class SyncApp:
 	def __init__(self, root):
 		self.root = root
@@ -26,6 +144,7 @@ class SyncApp:
 		self.root.minsize(760, 480)
 		self.log_queue = queue.Queue()
 		self.tunnel_process = None
+		self.tunnel_proxy = None
 
 		self.status_var = tk.StringVar(value="Pronto para sincronizar o mês atual.")
 		self.month_var = tk.StringVar(value="current")
@@ -116,7 +235,7 @@ class SyncApp:
 			self.append_log(f"Competência selecionada: {competencia}\n")
 			self.append_log("Lendo credenciais do banco na VPS...\n")
 			env = self.read_database_env()
-			self.open_tunnel_if_needed()
+			self.open_tunnel_if_needed(env)
 			self.run_node_sync(competencia, env)
 			self.status_var.set("Sincronização concluída. Pode fechar esta janela.")
 			self.append_log("\nSincronização concluída com sucesso.\n")
@@ -200,40 +319,60 @@ class SyncApp:
 		except OSError:
 			return False
 
-	def open_tunnel_if_needed(self):
-		if self.is_port_open():
-			self.append_log(f"Túnel local já ativo em 127.0.0.1:{LOCAL_PORT}.\n")
-			return
-
-		self.append_log(f"Abrindo túnel SSH 127.0.0.1:{LOCAL_PORT} -> VPS PostgreSQL...\n")
-		self.tunnel_process = subprocess.Popen(
+	def validate_database_connection(self, db_env):
+		env = os.environ.copy()
+		env.update(db_env)
+		result = self.run_command(
 			[
-				"ssh.exe",
-				"-i",
-				str(SSH_KEY),
-				"-N",
-				"-L",
-				f"{LOCAL_PORT}:127.0.0.1:5432",
-				"-o",
-				"ServerAliveInterval=30",
-				"-o",
-				"ServerAliveCountMax=10",
-				SSH_TARGET,
+				"node.exe",
+				"-e",
+				(
+					"const path=require('node:path');"
+					"const {Pool}=require(path.join(process.cwd(),'apps','retiradas','backend','node_modules','pg'));"
+					"const pool=new Pool({"
+					"host:process.env.PGHOST,"
+					"port:Number(process.env.PGPORT),"
+					"user:process.env.PGUSER,"
+					"password:process.env.PGPASSWORD,"
+					"database:process.env.PGDATABASE,"
+					"connectionTimeoutMillis:8000"
+					"});"
+					"pool.query('select 1').then(()=>pool.end()).catch(e=>{console.error(e.message);process.exit(1);});"
+				),
 			],
-			stdout=subprocess.DEVNULL,
-			stderr=subprocess.DEVNULL,
-			cwd=str(REPO_ROOT),
+			capture=True,
+			check=False,
+			env=env,
 		)
+		if result.returncode != 0:
+			output = (result.stderr or result.stdout or "").strip()
+			raise RuntimeError(output or "Não foi possível validar a conexão com o PostgreSQL.")
 
-		for _ in range(15):
-			time.sleep(1)
-			if self.is_port_open():
-				self.append_log("Túnel SSH aberto.\n")
+	def open_tunnel_if_needed(self, db_env):
+		if self.is_port_open():
+			self.append_log(f"Porta local 127.0.0.1:{LOCAL_PORT} já está em uso. Validando PostgreSQL...\n")
+			try:
+				self.validate_database_connection(db_env)
+				self.append_log("Conexão PostgreSQL validada na porta local existente.\n")
 				return
-			if self.tunnel_process.poll() is not None:
-				break
+			except Exception as exc:
+				raise RuntimeError(
+					f"A porta 127.0.0.1:{LOCAL_PORT} está ocupada, mas não responde como PostgreSQL. "
+					"Feche outro sincronizador/túnel aberto ou reinicie o computador e tente novamente. "
+					f"Detalhe: {exc}"
+				)
 
-		raise RuntimeError("Não foi possível abrir o túnel SSH para o banco.")
+		self.append_log(
+			f"Abrindo proxy SSH local 127.0.0.1:{LOCAL_PORT} -> VPS PostgreSQL via nc...\n",
+		)
+		self.tunnel_proxy = SshPostgresProxy(SSH_KEY, SSH_TARGET, LOCAL_PORT, self.append_log)
+		self.tunnel_proxy.start()
+		for _ in range(10):
+			time.sleep(0.3)
+			if self.is_port_open():
+				break
+		self.validate_database_connection(db_env)
+		self.append_log("Proxy SSH/PostgreSQL aberto e validado.\n")
 
 	def run_node_sync(self, competencia, db_env):
 		self.append_log("Consultando BI HubSoft e aplicando dados no Retiradas...\n\n")
@@ -257,6 +396,10 @@ class SyncApp:
 			raise RuntimeError(f"Sincronização terminou com erro. Código: {code}")
 
 	def close_tunnel(self):
+		if self.tunnel_proxy:
+			self.append_log("Fechando proxy SSH/PostgreSQL...\n")
+			self.tunnel_proxy.stop()
+			self.tunnel_proxy = None
 		if self.tunnel_process and self.tunnel_process.poll() is None:
 			self.append_log("Fechando túnel SSH...\n")
 			self.tunnel_process.terminate()

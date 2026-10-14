@@ -1,4 +1,4 @@
-﻿import jsPDF from "jspdf";
+import jsPDF from "jspdf";
 import "jspdf-autotable";
 
 export const exportMetasPDF = (dados) => {
@@ -17,7 +17,7 @@ export const exportMetasPDF = (dados) => {
 		45,
 	);
 	doc.text(
-		`Meta 80%: ${Math.round(dados.meta).toLocaleString("pt-BR")}`,
+		`Meta: ${Math.round(dados.meta).toLocaleString("pt-BR")}`,
 		14,
 		55,
 	);

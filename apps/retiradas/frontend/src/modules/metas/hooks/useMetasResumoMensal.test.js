@@ -130,12 +130,12 @@ describe("useMetasResumoMensal business helpers", () => {
 		expect(result.current.dadosMesSelecionado?.mes).toBe(mesAtual);
 		expect(result.current.temMetaMesSelecionado).toBe(true);
 		expect(result.current.isMesAtual).toBe(true);
-		expect(result.current.kpis).toHaveLength(7);
+		expect(result.current.kpis).toHaveLength(6);
 		expect(result.current.kpis).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					label: "% dos cancelamentos",
-					value: "60.0%",
+					label: "% Atingido",
+					value: "75.0%",
 				}),
 			]),
 		);

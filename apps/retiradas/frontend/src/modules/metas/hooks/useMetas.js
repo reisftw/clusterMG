@@ -447,7 +447,7 @@ function parseOnnetMonth(wb, mes, feriadosExtras = []) {
 		})),
 		multasDiarias: [],
 		status:
-			Number.parseFloat(percentAchieved) >= metaSazonal
+			Number.parseFloat(percentAchieved) >= 100
 				? "Meta atingida!"
 				: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
 	};
@@ -596,7 +596,7 @@ function combineMonthlyData(sempreData, onnetData, mes, feriadosExtras = []) {
 			totalDia: item.totalDia,
 		})),
 		status:
-			Number.parseFloat(percentAchieved) >= metaSazonal
+			Number.parseFloat(percentAchieved) >= 100
 				? "Meta atingida!"
 				: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
 	};
@@ -811,7 +811,7 @@ function buildMetasMonthResult(wb, wsDash, wsMult, mes, feriadosExtras) {
 		})),
 		multasDiarias,
 		status:
-			Number.parseFloat(percentAchieved) >= metaSazonal
+			Number.parseFloat(percentAchieved) >= 100
 				? "Meta atingida!"
 				: `Faltam ${Math.max(0, meta - totalOS).toFixed(0)} O.S`,
 	};

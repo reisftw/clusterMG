@@ -10,7 +10,7 @@ describe("metasMetrics", () => {
 		expect(getGoalPercent({ totalOS: 1150, meta: 1495 })).toBeCloseTo(76.92);
 	});
 
-	it("calcula entregas sobre cancelamentos em campo separado", () => {
+	it("mantem percentual da base apenas como metrica auxiliar", () => {
 		expect(getCancellationPercent({ totalOS: 54, cancelamentos: 100 })).toBe(
 			54,
 		);

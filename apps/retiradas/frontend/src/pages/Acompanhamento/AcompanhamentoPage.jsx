@@ -44,6 +44,7 @@ import {
 	buildMetaDiariaSchedule,
 	buildMonthProjection,
 } from "../../utils/metasProjection";
+import { recalcularSaldoDiario } from "../../modules/metas/utils/metasSaldo";
 import { buildPublicMapaSnapshot } from "../Mapa/utils/mapaUtils";
 import { buildMatchOSData } from "../Mapa/utils/matchOs";
 import {
@@ -68,6 +69,7 @@ const BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
 const CURSOR_IDLE_TIMEOUT_MS = 60 * 1000;
 const CONFIG_STORAGE_KEY = "acompanhamento-panel-config";
 const APPOINTMENT_NOTICE_SOUND_SRC = "/audio/appointment-alert.wav";
+const METAS_NATIONAL_ONLY_FERIADOS = new Set();
 const MONTH_ORDER = [
 	"Janeiro",
 	"Fevereiro",
@@ -629,10 +631,8 @@ function getDeliveredCancellationPercent(metaMes) {
 	if (!metaMes) return 0;
 
 	const total = Number(metaMes.totalOS || 0);
-	const cancelamentos =
-		Number(metaMes.cancelamentos || 0) ||
-		Number(metaMes.totalCancelamentos || 0);
-	if (cancelamentos > 0) return (total / cancelamentos) * 100;
+	const meta = Number(metaMes.meta || 0);
+	if (meta > 0) return (total / meta) * 100;
 
 	const fallback = Number(
 		String(metaMes.percentAchieved ?? 0)
@@ -674,7 +674,7 @@ function getMetaPace(metaMes, month, feriadosSet = null) {
 		percent,
 		helper: `${formatNumber(metaMes.totalOS)} de ${formatNumber(
 			metaMes.meta,
-		)} O.S - ${percent.toFixed(1)}% dos cancelamentos - Projecao ${projectionPercent.toFixed(1)}%`,
+		)} O.S - ${percent.toFixed(1)}% da meta - Projecao ${projectionPercent.toFixed(1)}%`,
 	};
 }
 
@@ -1020,6 +1020,27 @@ function getMetaSourceData(monthData, source) {
 	if (source === "onnet") return monthData.onnet || null;
 	if (source === "consolidado") return monthData.onnetSempre || monthData;
 	return monthData;
+}
+
+function normalizeMetaSourceForBalance(metaMes, month, feriadosSet) {
+	if (!metaMes) return null;
+	const source = {
+		...metaMes,
+		mes: metaMes.mes || month,
+		saldoDiario: firstArray(metaMes.rawDays, metaMes.saldoDiario),
+	};
+	const recalculated = recalcularSaldoDiario(
+		source,
+		feriadosSet,
+		Number(source.ano || source.year) || new Date().getFullYear(),
+	);
+
+	return {
+		...source,
+		saldoDiario: recalculated.saldoDiario,
+		metaDiaria: recalculated.metaDiaria,
+		saldoFinal: recalculated.saldoFinal,
+	};
 }
 
 // Extraido pra achado javascript:S3358 (ternario aninhado).
@@ -2185,9 +2206,21 @@ function buildDashboardSnapshot({
 	const mapaSnapshot = getMapaSnapshot(publicData);
 	const match = getPublicMatchData(publicData, matchPublicoData);
 	const metaMonthData = getMonthData(allData, currentMonth);
-	const metaSempre = getMetaSourceData(metaMonthData, "sempre");
-	const metaOnnet = getMetaSourceData(metaMonthData, "onnet");
-	const metaMes = getMetaSourceData(metaMonthData, "consolidado");
+	const metaSempre = normalizeMetaSourceForBalance(
+		getMetaSourceData(metaMonthData, "sempre"),
+		currentMonth,
+		feriadosSet,
+	);
+	const metaOnnet = normalizeMetaSourceForBalance(
+		getMetaSourceData(metaMonthData, "onnet"),
+		currentMonth,
+		feriadosSet,
+	);
+	const metaMes = normalizeMetaSourceForBalance(
+		getMetaSourceData(metaMonthData, "consolidado"),
+		currentMonth,
+		feriadosSet,
+	);
 	const lastDayWithData = getLastDayWithData(metaMes);
 	const cidadesOS = buildCityOsRanking(mapaSnapshot);
 	const atendentes = Array.isArray(acompanhamento.atendentes)
@@ -3421,7 +3454,7 @@ export default function AcompanhamentoPage() {
 			currentMonth,
 			customInsights: panelConfig.customInsights,
 			eventos,
-			feriadosSet: retiradas.feriadosSet,
+			feriadosSet: METAS_NATIONAL_ONLY_FERIADOS,
 			matchPublicoData,
 			now,
 			publicData,
@@ -3436,7 +3469,6 @@ export default function AcompanhamentoPage() {
 		publicData,
 		realtimeAcompanhamento,
 		retiradas.allData,
-		retiradas.feriadosSet,
 	]);
 
 	const showMetaShowcase = useCallback(

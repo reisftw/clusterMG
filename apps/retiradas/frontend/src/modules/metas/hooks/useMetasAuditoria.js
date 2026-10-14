@@ -32,7 +32,7 @@ const MESES = [
 
 export function getCriticidade(pct, total) {
 	if (total === 0) return { label: "Sem retirada", cor: "red", nivel: 0 };
-	if (pct >= 80) return { label: "Na meta", cor: "green", nivel: 3 };
+	if (pct >= 100) return { label: "Na meta", cor: "green", nivel: 3 };
 	if (pct >= 60) return { label: "Em melhora", cor: "yellow", nivel: 2 };
 	if (pct >= 30) return { label: "Critica", cor: "orange", nivel: 1 };
 	return { label: "Extremamente critica", cor: "red", nivel: 0 };

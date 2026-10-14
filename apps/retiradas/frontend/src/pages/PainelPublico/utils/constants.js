@@ -7,14 +7,14 @@ export const META_SAZONAL = {
 	Fevereiro: 65,
 	Março: 75,
 	Marco: 75,
-	Abril: 85,
+	Abril: 80,
 	Maio: 90,
 	Junho: 90,
 	Julho: 90,
 	Agosto: 90,
-	Setembro: 85,
-	Outubro: 85,
-	Novembro: 75,
+	Setembro: 80,
+	Outubro: 75,
+	Novembro: 70,
 	Dezembro: 65,
 };
 

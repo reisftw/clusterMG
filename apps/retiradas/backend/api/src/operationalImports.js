@@ -3393,7 +3393,7 @@ async function persistMetasImport(payload = {}, user = {}) {
 					percentAchieved,
 					totalDaily,
 					status:
-						percentAchieved >= 80
+						percentAchieved >= 100
 							? "Meta atingida!"
 							: `Faltam ${Math.max(0, Math.round(totalFalta))} retiradas`,
 					updatedAt: nowIso,
@@ -3527,22 +3527,22 @@ const DEFAULT_META_SEASONAL = {
 	Janeiro: 65,
 	Fevereiro: 65,
 	Marco: 75,
-	Abril: 85,
+	Abril: 80,
 	Maio: 90,
 	Junho: 90,
 	Julho: 90,
 	Agosto: 90,
-	Setembro: 85,
-	Outubro: 85,
-	Novembro: 75,
+	Setembro: 80,
+	Outubro: 75,
+	Novembro: 70,
 	Dezembro: 65,
 };
 
 const META_BASE_IDS = ["sempre", "onnet", "onnetSempre"];
 const META_BASE_DEFAULTS = {
 	sempre: { mode: "sazonal", fixedPercent: 80 },
-	onnet: { mode: "fixa", fixedPercent: 65 },
-	onnetSempre: { mode: "fixa", fixedPercent: 80 },
+	onnet: { mode: "sazonal", fixedPercent: 65 },
+	onnetSempre: { mode: "sazonal", fixedPercent: 65 },
 };
 
 function sanitizeMetaPercent(value, fallback) {

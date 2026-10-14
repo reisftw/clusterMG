@@ -509,27 +509,34 @@ async function deleteDocumentsByCollectionAndSources(collectionPath, sources = [
 	if (!normalizedSources.length) return 0;
 	const deleteSempre = normalizedSources.includes("sempre");
 	const deleteOnnet = normalizedSources.includes("onnet");
-	const result = await db.query(
+	let deleted = 0;
+	const direct = await db.query(
 		`delete from ordens_servico
 		  where source_collection = $1
-		    and (
-		      source = any($2::text[])
-		      or (
-		        $3 = true
-		        and coalesce(source, '') in ('', $1, 'sempre')
-		        and lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) not like '%onnet%'
-		      )
-		      or (
-		        $4 = true
-		        and (
-		          source = 'onnet'
-		          or lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) like '%onnet%'
-		        )
-		      )
-		    )`,
-		[collectionPath, normalizedSources, deleteSempre, deleteOnnet],
+		    and source = any($2::text[])`,
+		[collectionPath, normalizedSources],
 	);
-	return result.rowCount || 0;
+	deleted += direct.rowCount || 0;
+	if (deleteSempre) {
+		const legacySempre = await db.query(
+			`delete from ordens_servico
+			  where source_collection = $1
+			    and coalesce(source, '') in ('', $1, 'sempre')
+			    and lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) not like '%onnet%'`,
+			[collectionPath],
+		);
+		deleted += legacySempre.rowCount || 0;
+	}
+	if (deleteOnnet) {
+		const legacyOnnet = await db.query(
+			`delete from ordens_servico
+			  where source_collection = $1
+			    and lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) like '%onnet%'`,
+			[collectionPath],
+		);
+		deleted += legacyOnnet.rowCount || 0;
+	}
+	return deleted;
 }
 
 module.exports = {

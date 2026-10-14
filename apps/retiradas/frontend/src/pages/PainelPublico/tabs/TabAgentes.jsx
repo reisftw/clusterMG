@@ -721,7 +721,7 @@ function AgentsLegalRiskRanking({ items = [], intFmt, pctFmt }) {
 								<small>
 									{intFmt.format(item.mesesAbaixo)} mês(es) abaixo ·{" "}
 									{intFmt.format(item.mesesSemRetirada)} sem retirada ·{" "}
-									{pctFmt.format(item.taxaEntrega)}% dos cancelamentos
+									{pctFmt.format(item.taxaEntrega)}% de retirada sobre a base
 								</small>
 							</div>
 							<b className={item.gap >= 0 ? "positive" : "negative"}>
@@ -980,7 +980,7 @@ export default function TabAgentes({ allData, month, lastUpdate }) {
 						barThickness: 12,
 					},
 					{
-						label: "Meta 80%",
+						label: "Meta",
 						data: all.map((c) => Math.round(Number(c.meta80) || 0)),
 						backgroundColor: "rgba(0,48,135,0.55)",
 						borderRadius: 5,
@@ -1163,7 +1163,7 @@ export default function TabAgentes({ allData, month, lastUpdate }) {
 						borderRadius: 8,
 					},
 					{
-						label: "Meta 80%",
+						label: "Meta",
 						data: mesesComDados.map((m) =>
 							Math.round(Number(getMonthRecord(allData, m)?.totalMeta || 0)),
 						),
@@ -1289,15 +1289,11 @@ export default function TabAgentes({ allData, month, lastUpdate }) {
 				<KpiCard
 					label="Total realizado"
 					value={intFmt.format(Number(summary.totalRealizado || 0))}
-					sub={`Retiradas concluídas · ${pctFmt.format(
-						summary.totalCancelamentos > 0
-							? (summary.totalRealizado / summary.totalCancelamentos) * 100
-							: 0,
-					)}% dos cancelamentos`}
+					sub={`Retiradas concluídas · ${pctFmt.format(Number(summary.percentAchieved || 0))}% da meta`}
 					color="orange"
 				/>
 				<KpiCard
-					label="Meta 80%"
+					label="Meta"
 					value={intFmt.format(Math.round(Number(summary.totalMeta || 0)))}
 					sub={`Cancelamentos: ${intFmt.format(Number(summary.totalCancelamentos || 0))}`}
 					color="blue"

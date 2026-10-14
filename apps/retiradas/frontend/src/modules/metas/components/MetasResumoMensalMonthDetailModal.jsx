@@ -177,9 +177,10 @@ const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
 
 						{!detail.atingiu && (
 							<p className="mt-4 text-sm text-gray-700">
-								Para atingir a{" "}
+								Para atingir 100% da{" "}
 								{String(detail.metaModeLabel || "meta sazonal").toLowerCase()}{" "}
-								de {detail.metaSazonal}%, o mes precisaria de{" "}
+								calculada pelo criterio de {detail.metaSazonal}%, o mes
+								precisaria de{" "}
 								<strong>
 									{detail.faltaOS.toLocaleString("pt-BR")} retiradas a mais
 								</strong>

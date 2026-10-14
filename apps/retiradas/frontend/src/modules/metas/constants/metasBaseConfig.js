@@ -28,14 +28,14 @@ export const DEFAULT_SAZONALIDADE_SEMPRE = Object.freeze({
 	Janeiro: 65,
 	Fevereiro: 65,
 	Marco: 75,
-	Abril: 85,
+	Abril: 80,
 	Maio: 90,
 	Junho: 90,
 	Julho: 90,
 	Agosto: 90,
-	Setembro: 85,
-	Outubro: 85,
-	Novembro: 75,
+	Setembro: 80,
+	Outubro: 75,
+	Novembro: 70,
 	Dezembro: 65,
 });
 
@@ -46,13 +46,13 @@ export const DEFAULT_METAS_BASE_CONFIG = Object.freeze({
 		seasonalPercentByMonth: DEFAULT_SAZONALIDADE_SEMPRE,
 	},
 	onnet: {
-		mode: META_MODES.FIXA,
+		mode: META_MODES.SAZONAL,
 		fixedPercent: 65,
 		seasonalPercentByMonth: DEFAULT_SAZONALIDADE_SEMPRE,
 	},
 	onnetSempre: {
-		mode: META_MODES.FIXA,
-		fixedPercent: 80,
+		mode: META_MODES.SAZONAL,
+		fixedPercent: 65,
 		seasonalPercentByMonth: DEFAULT_SAZONALIDADE_SEMPRE,
 	},
 });

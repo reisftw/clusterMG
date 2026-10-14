@@ -18,7 +18,6 @@ import { normalizeMetasBaseConfig } from "../constants/metasBaseConfig";
 
 const COL = "metas";
 const METAS_MAX = 24;
-const FERIADOS_MAX = 100;
 const MONTH_ALIASES = {
 	Marco: "Março",
 	Março: "Marco",
@@ -29,7 +28,8 @@ const CACHE_KEYS = {
 	ultimaAtualizacao: "metas:ultima-atualizacao",
 	forcaTarefa: "metas:forca-tarefa",
 	metasBase: "metas:configuracao-bases",
-	feriados: (ano) => `metas:feriados:${ano}`,
+	feriadosLegacy: (ano) => `metas:feriados:${ano}`,
+	feriados: (ano) => `metas:feriados:nacionais-v2:${ano}`,
 };
 
 export const DEFAULT_FORCA_TAREFA_CONFIG = Object.freeze({
@@ -289,20 +289,12 @@ export const buscarFeriados = async (
 	force = false,
 	{ allowFallback = true } = {},
 ) => {
-	const staticFeriados = await getInternalSnapshotSlice(
-		SNAPSHOT_DOMAINS.DASHBOARD,
-		(payload) => payload?.metas?.feriados ?? null,
-		{ force },
-	);
-	if (Array.isArray(staticFeriados)) {
-		return new Set(staticFeriados);
-	}
-
 	if (!allowFallback) {
 		return new Set();
 	}
 
 	const ano = new Date().getFullYear();
+	invalidateCache(CACHE_KEYS.feriadosLegacy(ano));
 	const { data } = await getOrLoadCachedValue(
 		CACHE_KEYS.feriados(ano),
 		async () => {
@@ -316,19 +308,6 @@ export const buscarFeriados = async (
 				}
 			} catch (e) {
 				console.warn("metasService: erro ao buscar feriados nacionais.", e);
-			}
-
-			try {
-				const feriados = await listVpsDocuments("feriados", {
-					limit: FERIADOS_MAX,
-				});
-				feriados.forEach((item) => {
-					const raw = item.data || "";
-					const parts = raw.split("-");
-					if (parts.length === 3) keys.add(`${parts[1]}-${parts[2]}`);
-				});
-			} catch (e) {
-				console.warn("metasService: erro ao buscar feriados salvos.", e);
 			}
 
 			return Array.from(keys);

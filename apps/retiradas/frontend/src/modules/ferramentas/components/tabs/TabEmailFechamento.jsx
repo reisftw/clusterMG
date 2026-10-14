@@ -250,7 +250,7 @@ const TabEmailFechamento = () => {
         <thead><tr><th>Indicador</th><th style="text-align:center">Valor</th></tr></thead>
         <tbody>
           <tr><td>Total de cancelamentos (base)</td><td style="text-align:center">${inCancelNum}</td></tr>
-          <tr><td><strong>Meta do mes (${inGoalDisplay}% dos cancelamentos)</strong></td><td style="text-align:center;font-weight:bold;color:#1a6f3c;font-size:15px">${inMeta}</td></tr>
+          <tr><td><strong>Meta do mes (criterio ${inGoalDisplay}%)</strong></td><td style="text-align:center;font-weight:bold;color:#1a6f3c;font-size:15px">${inMeta}</td></tr>
           <tr><td>Media diaria necessaria <em>(incluindo sabado e domingo)</em></td><td style="text-align:center;font-weight:bold">${medC} / dia</td></tr>
           <tr><td>Media diaria necessaria <em>(apenas dias uteis, sem sab/dom)</em></td><td style="text-align:center;font-weight:bold">${medU} / dia</td></tr>
         </tbody>

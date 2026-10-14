@@ -437,7 +437,7 @@ function RegionalGoalsTable({ items = [] }) {
 								<td className={gap >= 0 ? "positive" : "negative"}>
 									{formatSignedInteger(gap)}
 								</td>
-								<td className={pct >= 80 ? "positive" : "negative"}>
+								<td className={pct >= 100 ? "positive" : "negative"}>
 									{pct.toFixed(1).replace(".", ",")}%
 								</td>
 								<td>{ritmoDia.toFixed(1).replace(".", ",")}</td>
@@ -1548,7 +1548,7 @@ export default function TabRetiradas({
 				<ExecutiveKpi
 					label="Realizado"
 					value={formatInteger(executiveSummary.realizado)}
-					sub={`${formatPercent(executiveSummary.pctMeta)} da meta · ${formatPercent(executiveSummary.pctCancelamentos)} dos cancelamentos`}
+					sub={`${formatPercent(executiveSummary.pctMeta)} da meta`}
 					tone="orange"
 					meta={totalTrend.value ? `vs. mês anterior ${totalTrend.value}` : null}
 				/>

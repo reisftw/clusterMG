@@ -1,4 +1,4 @@
-﻿import ExcelJS from "exceljs";
+import ExcelJS from "exceljs";
 import { gerarPDFMapa } from "../../../pages/Mapa/utils/mapaPDF";
 import { buildMatchOSData } from "../../../pages/Mapa/utils/matchOs";
 import { formatarDataGeracao, imprimirHtml } from "../../../utils/impressao";
@@ -315,7 +315,7 @@ export function exportAgentesPdf(month, agentesData) {
 			sections: [
 				buildMetaHtmlTable(
 					"Cidades do mês",
-					["Posição", "Cidade", "Cancelamentos", "Meta 80%", "Realizado", "%"],
+					["Posição", "Cidade", "Cancelamentos", "Meta", "Realizado", "%"],
 					rows,
 				),
 			],
@@ -331,7 +331,7 @@ export async function exportAgentesXlsx(month, agentesData) {
 		"Posição",
 		"Cidade",
 		"Cancelamentos",
-		"Meta 80%",
+		"Meta",
 		"Realizado",
 		"%",
 	]);

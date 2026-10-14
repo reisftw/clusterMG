@@ -69,7 +69,7 @@ export default function CityTable({ cidades = [], onCityClick }) {
 					<tr>
 						<th style={{ textAlign: "left" }}>Cidade</th>
 						<th>Cancelamentos</th>
-						<th>Meta 80%</th>
+						<th>Meta</th>
 						<th>Realizado</th>
 						<th>Gap</th>
 						<th>% Atingido</th>
@@ -90,7 +90,7 @@ export default function CityTable({ cidades = [], onCityClick }) {
 							>
 								<td data-label="Cidade">{c.nome}</td>
 								<td data-label="Cancelamentos">{c.cancelamentos}</td>
-								<td data-label="Meta 80%">{Math.round(c.meta80)}</td>
+								<td data-label="Meta">{Math.round(c.meta80)}</td>
 								<td data-label="Realizado">
 									<strong>{c.realizado}</strong>
 								</td>
@@ -140,7 +140,7 @@ export default function CityTable({ cidades = [], onCityClick }) {
 					<tr className="total-row">
 						<td data-label="Cidade">TOTAL GERAL</td>
 						<td data-label="Cancelamentos">{total.cancelamentos}</td>
-						<td data-label="Meta 80%">{Math.round(total.meta80)}</td>
+						<td data-label="Meta">{Math.round(total.meta80)}</td>
 						<td data-label="Realizado">{total.realizado}</td>
 						<td data-label="Gap">
 							<span className={`badge ${resolveFaltaBadgeTone(total.gap)}`}>

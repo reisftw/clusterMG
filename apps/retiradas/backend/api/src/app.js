@@ -26,6 +26,7 @@ const atendimentoService = require("./atendimento/atendimentoService");
 const emailService = require("./emailService");
 const operationalImports = require("./operationalImports");
 const sempreIntegration = require("./sempreIntegration");
+const equipmentSerialLookup = require("./equipmentSerialLookup");
 const tecnicosBolsaAuditoria = require("./tecnicosBolsaAuditoria");
 const movimentacoesRepository = require("./movimentacoesRepository");
 const movimentacoesEntregas = require("./movimentacoesEntregas");
@@ -4659,6 +4660,19 @@ function createApp() {
 		async (req, res, next) => {
 			try {
 				res.json(await sempreIntegration.consultEquipment(req.query.mac));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.get(
+		"/api/integrations/sempre/equipment/serial",
+		requireAuthenticated,
+		requireAnyPermission(ESTOQUE_CONSULTA_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await equipmentSerialLookup.lookupBySerial(req.query.serial));
 			} catch (error) {
 				next(error);
 			}

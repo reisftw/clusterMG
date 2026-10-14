@@ -351,16 +351,16 @@ async function authenticateWithOAuth(config) {
 
 async function authenticateWithPlaywright(config) {
 	const username = cleanText(
-		process.env.HUBSOFT_WEB_USERNAME ||
-			config.webUsername ||
-			process.env.HUBSOFT_USERNAME ||
-			config.username,
+		config.webUsername ||
+			process.env.HUBSOFT_WEB_USERNAME ||
+			config.username ||
+			process.env.HUBSOFT_USERNAME,
 	);
 	const password = cleanText(
-		process.env.HUBSOFT_WEB_PASSWORD ||
-			config.webPassword ||
-			process.env.HUBSOFT_PASSWORD ||
-			config.password,
+		config.webPassword ||
+			process.env.HUBSOFT_WEB_PASSWORD ||
+			config.password ||
+			process.env.HUBSOFT_PASSWORD,
 	);
 	if (!username || !password) return null;
 	let chromium;
@@ -375,15 +375,23 @@ async function authenticateWithPlaywright(config) {
 		throw error;
 	}
 	const webBase = normalizeBaseUrl(
-		process.env.HUBSOFT_WEB_BASE_URL ||
-			config.webBaseUrl ||
+		config.webBaseUrl ||
+			process.env.HUBSOFT_WEB_BASE_URL ||
 			"https://sempre.hubsoft.com.br",
 	);
 	const browser = await chromium.launch({ headless: true });
 	try {
 		const page = await browser.newPage();
+		const firstVisible = async (locator) => {
+			const count = await locator.count().catch(() => 0);
+			for (let index = 0; index < count; index += 1) {
+				const item = locator.nth(index);
+				if (await item.isVisible().catch(() => false)) return item;
+			}
+			return locator.first();
+		};
 		const fillInput = async (locator, value) => {
-			const input = locator.first();
+			const input = await firstVisible(locator);
 			await input.waitFor({ state: "visible", timeout: 30_000 });
 			await input.click({ timeout: 10_000 }).catch(() => {});
 			await input.fill("");
@@ -2198,7 +2206,7 @@ function validateCollected(collected, uniqueRows) {
 }
 
 function shouldTolerateDuplicateRows(profile, collectedStats = {}) {
-	if (![PROFILE.MAPA, PROFILE.MATCH].includes(profile)) return false;
+	if (![PROFILE.MAPA, PROFILE.MATCH, PROFILE.LOJA].includes(profile)) return false;
 	const duplicates = Number(collectedStats.duplicateRows || 0);
 	const receivedRows = Number(collectedStats.receivedRows || 0);
 	if (duplicates <= 0 || receivedRows <= 0) return false;

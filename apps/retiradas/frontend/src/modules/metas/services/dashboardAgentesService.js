@@ -168,7 +168,7 @@ export async function salvarDashboardAgentes(agentesData) {
 					percentAchieved,
 					totalDaily,
 					status:
-						percentAchieved >= 80
+						percentAchieved >= 100
 							? "Meta atingida!"
 							: `Faltam ${Math.max(0, Math.round(totalFalta))} retiradas`,
 					updatedAt: new Date().toISOString(),
