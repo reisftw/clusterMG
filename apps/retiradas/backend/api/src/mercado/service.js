@@ -84,13 +84,20 @@ function text(value) {
 	return String(value ?? "").trim();
 }
 
+function normalizeLookup(value) {
+	return text(value)
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+}
+
 function nullableText(value) {
 	const normalized = text(value);
 	return normalized || null;
 }
 
 function numberValue(value, fallback = 0) {
-	const parsed = Number(value);
+	const parsed = Number(String(value ?? "").replace(",", "."));
 	return Number.isFinite(parsed) ? parsed : fallback;
 }
 
@@ -171,6 +178,19 @@ function canManageMercado(user = {}) {
 	].some((permission) => hasPermission(user, permission));
 }
 
+function resolveAcceptEmpresa(user = {}) {
+	const empresa = userEmpresa(user);
+	if (empresa.id) return empresa;
+	if (canManageMercado(user)) {
+		const fallbackId = text(user.uid || user.email || user.profile?.email || "admin");
+		return {
+			id: `admin:${fallbackId}`,
+			nome: userName(user) || "Administrador Mercado",
+		};
+	}
+	return empresa;
+}
+
 function assertEmpresaScope(user, empresaId) {
 	if (canManageMercado(user)) return;
 	const empresa = userEmpresa(user);
@@ -220,6 +240,9 @@ function mapOs(row = {}) {
 		cidade: row.cidade,
 		equipamentoTipo: row.equipamento_tipo,
 		macAddr: row.mac_addr,
+		dataAbertura: row.ordem_data_abertura || row.source_payload?.data_abertura || row.source_payload?.dataAbertura || null,
+		tecnicoAtual: row.ordem_tecnico || row.source_payload?.tecnico || row.source_payload?.tecnicos || "",
+		statusOrdem: row.ordem_status || row.source_payload?.status || "",
 		status: row.status,
 		desfecho: row.desfecho,
 		valorContratado: Number(row.valor_contratado || 0),
@@ -321,7 +344,7 @@ function simulatePricing(config, lote = {}) {
 	const dificuldade = String(lote.dificuldade || "NORMAL").toUpperCase();
 	const dificuldadeMultiplier =
 		dificuldade === "ALTA" ? 1.18 : dificuldade === "BAIXA" ? 0.94 : 1;
-	const base = numberValue(lote.precoBase || financeiro.precoBasePorEquipamento, 55);
+	const base = numberValue(lote.valorUnitario || lote.precoBase || financeiro.precoBasePorEquipamento, 55);
 	const brutoPorOs = base * dificuldadeMultiplier;
 	const piso = numberValue(financeiro.pisoPorOs, 0);
 	const teto = numberValue(financeiro.tetoPorOs, 999999);
@@ -337,6 +360,82 @@ function simulatePricing(config, lote = {}) {
 		valorPorOs: Math.round(valorPorOs * 100) / 100,
 		total,
 	};
+}
+
+async function updateLotePricing(id, payload = {}, user = {}) {
+	if (!canManageMercado(user)) {
+		const error = new Error("Apenas administradores podem alterar valores do lote.");
+		error.status = 403;
+		throw error;
+	}
+	const valorUnitarioSolicitado = numberValue(
+		payload.valorUnitario ?? payload.valor_unitario ?? payload.valorPorOs,
+		0,
+	);
+	if (valorUnitarioSolicitado <= 0) {
+		const error = new Error("Valor unitario invalido.");
+		error.status = 400;
+		throw error;
+	}
+	const config = await getCurrentConfig();
+	const maxUnitario = numberValue(config.config.financeiro.tetoPorOs, 999999);
+	const valorUnitario = Math.min(valorUnitarioSolicitado, maxUnitario);
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const result = await client.query(`select * from mercado_lotes where id = $1 for update`, [id]);
+		const lote = result.rows[0];
+		if (!lote) {
+			const error = new Error("Lote nao encontrado.");
+			error.status = 404;
+			throw error;
+		}
+		const quantidade = positiveInteger(lote.quantidade_os, 1, 1000);
+		const total = Math.round(valorUnitario * quantidade * 100) / 100;
+		const pricingSnapshot = {
+			...(lote.pricing_snapshot || {}),
+			valorPorOs: valorUnitario,
+			total,
+			manualOverride: true,
+			valorUnitarioSolicitado,
+			tetoPorOs: maxUnitario,
+			updatedBy: userName(user),
+			updatedAt: new Date().toISOString(),
+		};
+		const updated = await client.query(
+			`update mercado_lotes
+			    set valor_potencial = $2,
+			        valor_contratado = case
+			        	when valor_contratado is null then null
+			        	else $2
+			        end,
+			        pricing_snapshot = $3::jsonb
+			  where id = $1
+			  returning *`,
+			[id, total, JSON.stringify(pricingSnapshot)],
+		);
+		await client.query(
+			`update mercado_lote_os
+			    set valor_contratado = $2
+			  where lote_id = $1`,
+			[id, valorUnitario],
+		);
+		await writeEvent(client, {
+			loteId: id,
+			tipo: "VALOR_LOTE_AJUSTADO",
+			descricao: `Valor unitario ajustado para ${valorUnitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`,
+			payload: { valorUnitario, valorUnitarioSolicitado, maxUnitario, total },
+			user,
+		});
+		await client.query("commit");
+		await audit("mercado_lotes", "update", id, lote, updated.rows[0], user);
+		return getLote(id, user);
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function listEmpresas({ q = "", limit = 200 } = {}) {
@@ -444,13 +543,71 @@ async function listLotes(query = {}, user = {}) {
 	};
 }
 
+async function listSugestoes(query = {}) {
+	const q = text(query.q);
+	const params = [];
+	let cityWhere = "where cidade is not null and trim(cidade) <> ''";
+	if (q) {
+		params.push(`%${q}%`);
+		cityWhere += ` and cidade ilike $1`;
+	}
+	const cidadesResult = await db.query(
+		`select cidade as value, count(*)::int as total
+		   from ordens_servico
+		  ${cityWhere}
+		  group by cidade
+		  order by total desc, cidade asc
+		  limit 80`,
+		params,
+	);
+	const equipamentosResult = await db.query(
+		`select equipamento_tipo as value, count(*)::int as total
+		   from mercado_lotes
+		  where equipamento_tipo is not null and trim(equipamento_tipo) <> ''
+		  group by equipamento_tipo
+		  order by total desc, equipamento_tipo asc
+		  limit 40`,
+	);
+	const equipamentosBase = [
+		{ value: "ONU", total: 0 },
+		{ value: "ONT", total: 0 },
+		{ value: "Roteador", total: 0 },
+		{ value: "GPON", total: 0 },
+		{ value: "XPON", total: 0 },
+		{ value: "EPON", total: 0 },
+	];
+	const equipamentos = [...equipamentosResult.rows, ...equipamentosBase]
+		.reduce((items, item) => {
+			const value = text(item.value);
+			const key = normalizeLookup(value);
+			if (!value || items.some((current) => current.key === key)) return items;
+			items.push({ key, value, total: Number(item.total || 0) });
+			return items;
+		}, [])
+		.map(({ value, total }) => ({ value, total }));
+	return {
+		cidades: cidadesResult.rows.map((row) => ({
+			value: row.value,
+			total: Number(row.total || 0),
+		})),
+		equipamentos,
+	};
+}
+
 async function getLote(id, user = {}) {
 	const loteResult = await db.query(`select * from mercado_lotes where id = $1`, [id]);
 	const lote = loteResult.rows[0];
 	if (!lote) return null;
 	if (lote.accepted_by_empresa_id) assertEmpresaScope(user, lote.accepted_by_empresa_id);
 	const osResult = await db.query(
-		`select * from mercado_lote_os where lote_id = $1 order by bairro, num_os`,
+		`select mlo.*,
+		        ordem.data_abertura as ordem_data_abertura,
+		        ordem.tecnico as ordem_tecnico,
+		        ordem.status as ordem_status
+		   from mercado_lote_os mlo
+		   left join ordens_servico ordem on ordem.id = mlo.ordem_servico_id
+		  where mlo.lote_id = $1
+		  order by mlo.bairro, mlo.num_os`,
 		[id],
 	);
 	const eventsResult = await db.query(
@@ -526,7 +683,7 @@ async function generateLots(payload = {}, user = {}) {
 	const orders = await db.query(
 		`select os.*
 		   from ordens_servico os
-		  where os.cidade ilike $1
+		  where lower(trim(os.cidade)) = lower(trim($1))
 		    and coalesce(os.status, '') not ilike '%fech%'
 		    and coalesce(os.tipo, os.servico, '') <> ''
 		    and not exists (
@@ -538,13 +695,14 @@ async function generateLots(payload = {}, user = {}) {
 		    )
 		  order by os.data_abertura nulls last, os.bairro nulls last
 		  limit $2`,
-		[`%${cidade}%`, quantidade],
+		[cidade, quantidade],
 	);
 	if (orders.rows.length < quantidade) {
 		const error = new Error("Nao ha OS elegiveis suficientes para formar o lote.");
 		error.status = 400;
 		throw error;
 	}
+	const cidadeLote = text(orders.rows[0]?.cidade) || cidade;
 	const bairros = [...new Set(orders.rows.map((row) => text(row.bairro)).filter(Boolean))];
 	const pricing = simulatePricing(config.config, {
 		quantidade: orders.rows.length,
@@ -563,7 +721,7 @@ async function generateLots(payload = {}, user = {}) {
 			returning *`,
 			[
 				codigo,
-				cidade,
+				cidadeLote,
 				bairros,
 				equipamentoTipo,
 				orders.rows.length,
@@ -608,7 +766,7 @@ async function generateLots(payload = {}, user = {}) {
 			loteId: lote.id,
 			tipo: "LOTE_GERADO",
 			descricao: `Lote ${codigo} gerado com ${orders.rows.length} OS.`,
-			payload: { quantidade: orders.rows.length, cidade, equipamentoTipo },
+			payload: { quantidade: orders.rows.length, cidade: cidadeLote, equipamentoTipo },
 			user,
 		});
 		await client.query("commit");
@@ -679,7 +837,7 @@ async function assertCanAccept(client, lote, empresa, config) {
 }
 
 async function acceptLote(id, user = {}) {
-	const empresa = userEmpresa(user);
+	const empresa = resolveAcceptEmpresa(user);
 	if (!empresa.id) {
 		const error = new Error("Usuario sem empresa vinculada.");
 		error.status = 403;
@@ -1480,6 +1638,7 @@ module.exports = {
 	listFinanceiro,
 	listHabilitacoes,
 	listLotes,
+	listSugestoes,
 	recalcularSuspensoes,
 	registerPagamento,
 	saveConfig,
@@ -1487,6 +1646,7 @@ module.exports = {
 	simulatePricing,
 	exportFinanceiroCsv,
 	updateEvidenciaApproval,
+	updateLotePricing,
 	updateOsExecution,
 	updateTentativaApproval,
 	withdrawLote,

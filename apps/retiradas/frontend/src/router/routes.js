@@ -90,6 +90,7 @@ export const ROUTES = {
 	MAPA_HISTORICO: "/mapa/historico",
 	MAPAS_ATUALIZACOES: "/mapas/atualizacoes",
 	MERCADO: "/mercado",
+	MERCADO_DASHBOARD: "/mercado/dashboard",
 	MERCADO_DISPONIVEIS: "/mercado/disponiveis",
 	MERCADO_LOTES: "/mercado/lotes",
 	MERCADO_LOTE_DETALHE: "/mercado/lotes/:id",
@@ -99,6 +100,7 @@ export const ROUTES = {
 	MERCADO_FINANCEIRO: "/mercado/financeiro",
 	MERCADO_HISTORICO: "/mercado/historico",
 	MERCADO_RELATORIOS: "/mercado/relatorios",
+	MERCADO_CONFIGURACOES: "/mercado/configuracoes",
 
 	PAINEL_PUBLICO: "/painel",
 	PAINEL_AGENTES: "/painel/agentes",

@@ -1,0 +1,5 @@
+ASSETS HALLOWEEN /ACOMPANHAMENTO
+
+Arquivos WebP e PNG foram recortados de uma prancha ilustrada gerada por IA. As decorações PNG possuem transparência aproximada por remoção de fundo preto; confira bordas antes de usar. SVGs foram criados separadamente e são editáveis.
+
+Use halloween-main.webp como fundo panorâmico. Os demais fundos servem para camadas e cards. Não aplique a prancha original como background do dashboard. O mascote é uma versão extraída da prancha; para máxima fidelidade use também a imagem original do Retorninho Fantasma fornecida no projeto.

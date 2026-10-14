@@ -9,6 +9,7 @@ import {
 	ListChecks,
 	Menu,
 	PackageCheck,
+	Settings2,
 	ShoppingBag,
 	X,
 } from "lucide-react";
@@ -21,7 +22,7 @@ import { ROUTES } from "../../../router/routes";
 const NAV_ITEMS = [
 	{
 		label: "Dashboard",
-		path: ROUTES.MERCADO,
+		path: ROUTES.MERCADO_DASHBOARD,
 		icon: LayoutDashboard,
 		permissions: ["mercado.dashboard.view"],
 		end: true,
@@ -67,6 +68,12 @@ const NAV_ITEMS = [
 		path: ROUTES.MERCADO_RELATORIOS,
 		icon: FileBarChart,
 		permissions: ["mercado.dashboard.view", "mercado.financeiro.view"],
+	},
+	{
+		label: "Configurações",
+		path: ROUTES.MERCADO_CONFIGURACOES,
+		icon: Settings2,
+		permissions: ["mercado.config.view", "mercado.config.manage"],
 	},
 ];
 

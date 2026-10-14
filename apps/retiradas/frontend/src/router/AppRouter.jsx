@@ -213,6 +213,7 @@ const {
 	MercadoExecucaoPage,
 	MercadoFinanceiroPage,
 	MercadoHistoricoPage,
+	MercadoLandingPage,
 	MercadoLoteDetalhePage,
 	MercadoLotesPage,
 	MercadoMeusLotesPage,
@@ -231,6 +232,11 @@ const {
 	MercadoDashboardPage: lazy(() =>
 		import("../modules/mercado/components/MercadoPages").then((module) => ({
 			default: module.MercadoDashboardPage,
+		})),
+	),
+	MercadoLandingPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoLandingPage,
 		})),
 	),
 	MercadoDisponiveisPage: lazy(() =>
@@ -457,6 +463,8 @@ const AppRouter = () => (
 						}
 					/>
 
+					<Route path={ROUTES.MERCADO} element={<MercadoLandingPage />} />
+
 					<Route
 						element={
 							<ProtectedRoute requiredPermission={MERCADO_PERMISSIONS}>
@@ -464,7 +472,10 @@ const AppRouter = () => (
 							</ProtectedRoute>
 						}
 					>
-						<Route path={ROUTES.MERCADO} element={<MercadoDashboardPage />} />
+						<Route
+							path={ROUTES.MERCADO_DASHBOARD}
+							element={<MercadoDashboardPage />}
+						/>
 						<Route
 							path={ROUTES.MERCADO_DISPONIVEIS}
 							element={<MercadoDisponiveisPage />}
@@ -497,6 +508,10 @@ const AppRouter = () => (
 						<Route
 							path={ROUTES.MERCADO_RELATORIOS}
 							element={<MercadoRelatoriosPage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_CONFIGURACOES}
+							element={<MercadoConfiguracoesPage />}
 						/>
 					</Route>
 
@@ -1016,16 +1031,7 @@ const AppRouter = () => (
 						/>
 						<Route
 							path={ROUTES.MERCADO_SETTINGS}
-							element={
-								<ProtectedRoute
-									requiredPermission={[
-										"mercado.config.view",
-										"mercado.config.manage",
-									]}
-								>
-									<MercadoConfiguracoesPage />
-								</ProtectedRoute>
-							}
+							element={<Navigate to={ROUTES.MERCADO_CONFIGURACOES} replace />}
 						/>
 						<Route
 							path={ROUTES.API_STATUS}

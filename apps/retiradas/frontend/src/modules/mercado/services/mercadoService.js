@@ -31,6 +31,7 @@ export const mercadoApi = {
 			method: "PUT",
 			body: JSON.stringify(payload),
 		}),
+	sugestoes: (params) => requestVpsApi(`/mercado/sugestoes${queryString(params)}`),
 	lotes: (params) => requestVpsApi(`/mercado/lotes${queryString(params)}`),
 	lote: (id) => requestVpsApi(`/mercado/lotes/${encodeURIComponent(id)}`),
 	criarLote: (payload) =>
@@ -52,6 +53,11 @@ export const mercadoApi = {
 		requestVpsApi(`/mercado/lotes/${encodeURIComponent(id)}/desistir`, {
 			method: "POST",
 			body: JSON.stringify({}),
+		}),
+	ajustarValorLote: (id, payload) =>
+		requestVpsApi(`/mercado/lotes/${encodeURIComponent(id)}/valores`, {
+			method: "PUT",
+			body: JSON.stringify(payload),
 		}),
 	execucao: (params) => requestVpsApi(`/mercado/execucao${queryString(params)}`),
 	atualizarOs: (id, payload) =>

@@ -109,6 +109,15 @@ function createMercadoRouter({
 		}),
 	);
 
+	router.get(
+		"/sugestoes",
+		requireAuthenticated,
+		requireLotesView,
+		asyncHandler(async (req, res) => {
+			res.json(await service.listSugestoes(req.query || {}));
+		}),
+	);
+
 	router.put(
 		"/empresas/habilitacoes",
 		requireAuthenticated,
@@ -179,6 +188,16 @@ function createMercadoRouter({
 		requireLotesAccept,
 		asyncHandler(async (req, res) => {
 			res.json(await service.withdrawLote(req.params.id, req.user || {}));
+		}),
+	);
+
+	router.put(
+		"/lotes/:id/valores",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireLotesManage,
+		asyncHandler(async (req, res) => {
+			res.json(await service.updateLotePricing(req.params.id, req.body || {}, req.user || {}));
 		}),
 	);
 

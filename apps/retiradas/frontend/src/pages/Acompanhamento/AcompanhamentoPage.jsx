@@ -180,7 +180,7 @@ const DEFAULT_CONFIG = {
 };
 
 const GRINCH_PEEK_SIDES = ["bottom", "right", "top", "left"];
-const FESTIVE_THEMES = new Set(["christmas", "easter", "september7"]);
+const FESTIVE_THEMES = new Set(["christmas", "easter", "september7", "halloween"]);
 const REALTIME_SOURCE_LABELS = {
 	mapa: "Mapa",
 	match: "MATCH",
@@ -1502,6 +1502,7 @@ const FESTIVE_PREVIEW_LABELS = {
 	september7: "7 de Setembro",
 	christmas: "Natal",
 	easter: "Páscoa",
+	halloween: "Halloween",
 };
 
 function FestivePreview({ festive }) {
@@ -1516,11 +1517,15 @@ function FestivePreview({ festive }) {
 				<small>
 					{theme === "september7"
 						? "Painel com Brasil, bandeira, azul, verde e amarelo."
+						: theme === "halloween"
+							? "Sala noturna com lua, cemitério, morcegos e Retorninho Fantasma."
 						: "Selecione um tema para aplicar no acompanhamento."}
 				</small>
 			</div>
 			{theme === "september7" ? (
 				<img src="/themes/september7/retorninho-selecao.webp" alt="" aria-hidden="true" />
+			) : theme === "halloween" ? (
+				<img src="/themes/halloween/mascot/retorninho-fantasma.webp" alt="" aria-hidden="true" />
 			) : null}
 		</div>
 	);
@@ -1564,6 +1569,7 @@ function FestiveConfig({ config, onUpdate, onTestFestive, onTestGrinch }) {
 					>
 						<option value="default">Padrão</option>
 						<option value="september7">7 de Setembro</option>
+						<option value="halloween">Halloween</option>
 						<option value="christmas">Natal</option>
 						<option value="easter">Pascoa</option>
 					</select>
@@ -1632,7 +1638,7 @@ function FestiveConfig({ config, onUpdate, onTestFestive, onTestGrinch }) {
 				</button>
 				<button type="button" className="is-festive" onClick={onTestGrinch}>
 					<Eye size={17} />
-					Testar Grinch
+					Testar aparição
 				</button>
 			</div>
 		</section>
@@ -2028,17 +2034,19 @@ function AdOverlay({ image }) {
 // Extraidos pra achado javascript:S3358 (ternario aninhado). Mesma
 // logica de antes: contagem/duracao/tamanho das particulas variam por
 // tema festivo.
-const FESTIVE_PARTICLE_COUNTS = { christmas: 42, september7: 34 };
+const FESTIVE_PARTICLE_COUNTS = { christmas: 42, september7: 34, halloween: 10 };
 
 function getFestiveParticleDuration(theme, index) {
 	if (theme === "christmas") return 8 + (index % 7);
 	if (theme === "september7") return 9 + (index % 8);
+	if (theme === "halloween") return 11 + (index % 6);
 	return 10 + (index % 6);
 }
 
 function getFestiveParticleSize(theme, index) {
 	if (theme === "christmas") return 5 + (index % 6);
 	if (theme === "september7") return 18 + (index % 8);
+	if (theme === "halloween") return 18 + (index % 4) * 3;
 	return 14 + (index % 5);
 }
 
@@ -2063,10 +2071,20 @@ function renderFestiveFlight(theme, flightKey) {
 			/>
 		);
 	}
+	if (theme === "halloween") {
+		return (
+			<img
+				key={`halloween-${flightKey}`}
+				className="acomp-halloween-flight"
+				src="/themes/halloween/mascot/retorninho-fantasma.webp"
+				alt=""
+			/>
+		);
+	}
 	return <div key={`egg-${flightKey}`} className="acomp-egg-flight" />;
 }
 
-function FestiveOverlay({ config, flightKey, grinchPeek }) {
+function FestiveOverlay({ config, flightKey, grinchPeek, particlesActive = true }) {
 	const festive = {
 		...DEFAULT_CONFIG.festive,
 		...(config || {}),
@@ -2086,26 +2104,39 @@ function FestiveOverlay({ config, flightKey, grinchPeek }) {
 
 	return (
 		<div className={`acomp-festive-overlay is-${theme}`} aria-hidden="true">
-			<div className="acomp-festive-particles">
-				{particles.map((item) => (
-					<span
-						key={`${theme}-${item.id}`}
-						style={{
-							"--particle-left": item.left,
-							"--particle-delay": item.delay,
-							"--particle-duration": item.duration,
-							"--particle-size": item.size,
-							"--particle-drift": item.drift,
-						}}
-					/>
-				))}
-			</div>
+			{particlesActive ? (
+				<div className="acomp-festive-particles">
+					{particles.map((item) => (
+						<span
+							key={`${theme}-${item.id}`}
+							style={{
+								"--particle-left": item.left,
+								"--particle-delay": item.delay,
+								"--particle-duration": item.duration,
+								"--particle-size": item.size,
+								"--particle-drift": item.drift,
+								"--particle-top": `${10 + ((item.id * 17) % 58)}vh`,
+								"--particle-direction": item.id % 2 === 0 ? 1 : -1,
+							}}
+						/>
+					))}
+				</div>
+			) : null}
 			{flightKey ? renderFestiveFlight(theme, flightKey) : null}
 			{theme === "christmas" && grinchPeek ? (
 				<img
 					key={`grinch-${grinchPeek.key}`}
 					className={`acomp-grinch-peeker is-${grinchPeek.side}`}
 					src="/retorninho-grinch.webp"
+					alt=""
+					style={{ "--grinch-duration": `${grinchPeek.durationSeconds}s` }}
+				/>
+			) : null}
+			{theme === "halloween" && grinchPeek ? (
+				<img
+					key={`ghost-${grinchPeek.key}`}
+					className={`acomp-halloween-ghost-peeker is-${grinchPeek.side}`}
+					src="/themes/halloween/mascot/retorninho-fantasma.webp"
 					alt=""
 					style={{ "--grinch-duration": `${grinchPeek.durationSeconds}s` }}
 				/>
@@ -2291,10 +2322,12 @@ function AcompanhamentoThemeStage({
 	festiveTheme,
 	flightKey,
 	grinchPeek,
+	particlesActive,
 	panelConfig,
 }) {
 	const isChristmas = festiveTheme === "christmas";
 	const isSeptember7 = festiveTheme === "september7";
+	const isHalloween = festiveTheme === "halloween";
 
 	return (
 		<>
@@ -2302,6 +2335,7 @@ function AcompanhamentoThemeStage({
 				config={panelConfig.festive}
 				flightKey={flightKey}
 				grinchPeek={grinchPeek}
+				particlesActive={particlesActive}
 			/>
 			<div className="acomp-bg-grid" />
 			{isChristmas ? (
@@ -2320,6 +2354,24 @@ function AcompanhamentoThemeStage({
 					<span className="acomp-september-watermark is-monument" />
 				</div>
 			) : null}
+			{isHalloween ? (
+				<div className="acomp-halloween-stage" aria-hidden="true">
+					<span className="acomp-halloween-sky" />
+					<span className="acomp-halloween-stars" />
+					<span className="acomp-halloween-moon" />
+					<span className="acomp-halloween-castle" />
+					<span className="acomp-halloween-tree is-left" />
+					<span className="acomp-halloween-tree is-right" />
+					<span className="acomp-halloween-graveyard" />
+					<span className="acomp-halloween-pumpkins" />
+					<span className="acomp-halloween-fog" />
+					<img
+						className="acomp-halloween-mascot"
+						src="/themes/halloween/mascot/retorninho-fantasma.webp"
+						alt=""
+					/>
+				</div>
+			) : null}
 		</>
 	);
 }
@@ -2327,6 +2379,7 @@ function AcompanhamentoThemeStage({
 const ACOMPANHAMENTO_HEADER_LABELS = {
 	christmas: "OPERAÇÃO NATAL",
 	september7: "7 DE SETEMBRO",
+	halloween: "OPERAÇÃO HALLOWEEN",
 };
 
 function AcompanhamentoHeader({
@@ -2417,11 +2470,14 @@ function AcompanhamentoKpis({ dashboard }) {
 function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 	const isChristmas = festiveTheme === "christmas";
 	const isSeptember7 = festiveTheme === "september7";
+	const isHalloween = festiveTheme === "halloween";
 	let imageSrc = "/retorninho-esteira.webp";
 	if (isChristmas) {
 		imageSrc = "/retorninho-xmas-sleigh.webp";
 	} else if (isSeptember7) {
 		imageSrc = "/themes/september7/retorninho-selecao.webp";
+	} else if (isHalloween) {
+		imageSrc = "/themes/halloween/mascot/retorninho-fantasma.webp";
 	}
 
 	return (
@@ -2439,16 +2495,32 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 					{dashboard.entregasDiaAnterior.items.map((item) => (
 						<StatusPill key={item.label} status={item.label} total={item.total} />
 					))}
+					{isHalloween ? (
+						<div className="acomp-halloween-status-ghost-slot" aria-hidden="true">
+							<img
+								className="acomp-status-retorninho"
+								src={imageSrc}
+								alt=""
+							/>
+						</div>
+					) : null}
 				</div>
-				<img
-					className="acomp-status-retorninho"
-					src={imageSrc}
-					alt=""
-					aria-hidden="true"
-				/>
+				{isHalloween ? null : (
+					<img
+						className="acomp-status-retorninho"
+						src={imageSrc}
+						alt=""
+						aria-hidden="true"
+					/>
+				)}
 				{isSeptember7 ? (
 					<p className="acomp-september-status-message">
 						Orgulho de quem conecta o Brasil.
+					</p>
+				) : null}
+				{isHalloween ? (
+					<p className="acomp-halloween-status-message">
+						Retorninho Fantasma monitorando a noite.
 					</p>
 				) : null}
 			</section>
@@ -2754,6 +2826,7 @@ export default function AcompanhamentoPage() {
 	const [appointmentNoticeItems, setAppointmentNoticeItems] = useState([]);
 	const [festiveFlightKey, setFestiveFlightKey] = useState(0);
 	const [grinchPeek, setGrinchPeek] = useState(null);
+	const [halloweenBatsActive, setHalloweenBatsActive] = useState(false);
 	const [cursorIdle, setCursorIdle] = useState(false);
 	const nextAdRef = useRef(0);
 	const nextGrinchSideRef = useRef(0);
@@ -2775,6 +2848,8 @@ export default function AcompanhamentoPage() {
 	const operationalSummaryRef = useRef(null);
 	const diarioBoardDataRef = useRef(null);
 	const grinchHideTimerRef = useRef(null);
+	const halloweenBatsHideTimerRef = useRef(null);
+	const halloweenBatsIntervalRef = useRef(null);
 	const cursorIdleTimerRef = useRef(null);
 	const realtimeUpdateKeyRef = useRef("");
 	const hasRealtimeUpdateSnapshotRef = useRef(false);
@@ -3357,7 +3432,7 @@ export default function AcompanhamentoPage() {
 			...DEFAULT_CONFIG.festive,
 			...(panelConfig.festive || {}),
 		};
-		if (festive.theme !== "christmas") return false;
+		if (!["christmas", "halloween"].includes(festive.theme)) return false;
 
 		const side =
 			GRINCH_PEEK_SIDES[nextGrinchSideRef.current % GRINCH_PEEK_SIDES.length];
@@ -3439,7 +3514,55 @@ export default function AcompanhamentoPage() {
 			...DEFAULT_CONFIG.festive,
 			...(panelConfig.festive || {}),
 		};
-		if (!festive.enabled || festive.theme !== "christmas") return undefined;
+		const enabled = festive.enabled && normalizeFestiveTheme(festive.theme) === "halloween";
+
+		const clearHalloweenBatsTimers = () => {
+			if (halloweenBatsHideTimerRef.current) {
+				window.clearTimeout(halloweenBatsHideTimerRef.current);
+				halloweenBatsHideTimerRef.current = null;
+			}
+			if (halloweenBatsIntervalRef.current) {
+				window.clearInterval(halloweenBatsIntervalRef.current);
+				halloweenBatsIntervalRef.current = null;
+			}
+		};
+
+		if (!enabled) {
+			clearHalloweenBatsTimers();
+			setHalloweenBatsActive(false);
+			return undefined;
+		}
+
+		const startBatWindow = () => {
+			setHalloweenBatsActive(true);
+			if (halloweenBatsHideTimerRef.current) {
+				window.clearTimeout(halloweenBatsHideTimerRef.current);
+			}
+			halloweenBatsHideTimerRef.current = window.setTimeout(() => {
+				setHalloweenBatsActive(false);
+				halloweenBatsHideTimerRef.current = null;
+			}, 60 * 1000);
+		};
+
+		startBatWindow();
+		halloweenBatsIntervalRef.current = window.setInterval(
+			startBatWindow,
+			60 * 60 * 1000,
+		);
+
+		return () => {
+			clearHalloweenBatsTimers();
+			setHalloweenBatsActive(false);
+		};
+	}, [panelConfig.festive]);
+
+	useEffect(() => {
+		const festive = {
+			...DEFAULT_CONFIG.festive,
+			...(panelConfig.festive || {}),
+		};
+		if (!festive.enabled || !["christmas", "halloween"].includes(festive.theme))
+			return undefined;
 
 		const timer = window.setInterval(
 			showGrinchNow,
@@ -3517,6 +3640,10 @@ export default function AcompanhamentoPage() {
 				window.clearTimeout(metaHideTimerRef.current);
 			if (grinchHideTimerRef.current)
 				window.clearTimeout(grinchHideTimerRef.current);
+			if (halloweenBatsHideTimerRef.current)
+				window.clearTimeout(halloweenBatsHideTimerRef.current);
+			if (halloweenBatsIntervalRef.current)
+				window.clearInterval(halloweenBatsIntervalRef.current);
 			if (festiveFlightTimerRef.current)
 				window.clearTimeout(festiveFlightTimerRef.current);
 			if (realtimeNoticeTimerRef.current)
@@ -3553,6 +3680,7 @@ export default function AcompanhamentoPage() {
 				flightKey={festiveFlightKey}
 				grinchPeek={grinchPeek}
 				panelConfig={panelConfig}
+				particlesActive={festiveTheme !== "halloween" || halloweenBatsActive}
 			/>
 			<div className="acomp-shell">
 				<AcompanhamentoHeader

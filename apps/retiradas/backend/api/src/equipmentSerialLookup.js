@@ -384,6 +384,7 @@ async function searchAutoIspSerialByUi(page, serial, credentials) {
 	await page.waitForTimeout(3500);
 
 	const rows = await page.evaluate(() =>
+		// eslint-disable-next-line no-undef
 		[...document.querySelectorAll("tr")]
 			.map((row) => row.innerText)
 			.filter(Boolean),
@@ -435,6 +436,7 @@ async function loginHubsoft(page, { username, password, baseUrl }) {
 async function chooseHubsoftSearchType(page) {
 	const selected = await page.evaluate(() => {
 		const wanted = "login radius";
+		// eslint-disable-next-line no-undef
 		const selects = [...document.querySelectorAll("select")];
 		for (const select of selects) {
 			const options = [...select.options];

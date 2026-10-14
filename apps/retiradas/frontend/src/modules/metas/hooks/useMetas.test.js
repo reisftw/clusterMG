@@ -107,6 +107,21 @@ const DASH_ROW = {
 	Dezembro: 15,
 };
 
+const SEASONAL_META_PERCENT = {
+	Janeiro: 65,
+	Fevereiro: 65,
+	Marco: 75,
+	Abril: 80,
+	Maio: 90,
+	Junho: 90,
+	Julho: 90,
+	Agosto: 90,
+	Setembro: 80,
+	Outubro: 75,
+	Novembro: 70,
+	Dezembro: 65,
+};
+
 function createSheet(cells = {}, ref = "A1:AH40") {
 	const sheet = { "!ref": ref };
 	Object.entries(cells).forEach(([address, value]) => {
@@ -633,9 +648,9 @@ describe("useMetas", () => {
 			createWorkbookBuffer({
 				dashboardCells: {
 					B4: 1,
-					C4: 100,
+					C4: 90,
 					D4: 90,
-					F4: 0.9,
+					F4: 1,
 				},
 				multasCells: {
 					I34: 10,
@@ -669,6 +684,9 @@ describe("useMetas", () => {
 	it("processa uma planilha valida e popula o estado com os dados parseados", async () => {
 		const currentMonth = MONTH_ORDER[new Date().getMonth()];
 		const currentRow = DASH_ROW[currentMonth];
+		const expectedMeta = Math.round(
+			3 * ((SEASONAL_META_PERCENT[currentMonth] ?? 80) / 100),
+		);
 		metasMocks.parseAgentesWorkbook.mockReturnValue({
 			[currentMonth]: {
 				"Belo Horizonte": [{ nome: "Agente 1" }],
@@ -701,13 +719,13 @@ describe("useMetas", () => {
 
 		expect(file.arrayBuffer).toHaveBeenCalled();
 		expect(result.current.uploading).toBe(false);
-		expect(result.current.allData[currentMonth].meta).toBe(3);
+		expect(result.current.allData[currentMonth].meta).toBe(expectedMeta);
 		expect(result.current.allData[currentMonth].totalOS).toBe(90);
 		expect(metasMocks.persistMetasImport).toHaveBeenCalledWith(
 			expect.objectContaining({
 				parsed: expect.objectContaining({
 					[currentMonth]: expect.objectContaining({
-						meta: 3,
+						meta: expectedMeta,
 						totalOS: 90,
 					}),
 				}),
