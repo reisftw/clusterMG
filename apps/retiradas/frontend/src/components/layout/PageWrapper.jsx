@@ -57,6 +57,7 @@ const PAGE_TITLES = {
 	[ROUTES.SENIOR_SETTINGS]: "Senior / Sapiens",
 	[ROUTES.DATABASE_BACKUPS]: "Banco de Dados",
 	[ROUTES.EMAIL_SETTINGS]: "E-mail do Sistema",
+	[ROUTES.MERCADO_SETTINGS]: "Mercado",
 	[ROUTES.AUDITORIA_LOGS]: "Logs de Auditoria",
 	[ROUTES.EMPRESAS_TECNICOS]: "Empresas",
 	[ROUTES.METAS]: "Metas",

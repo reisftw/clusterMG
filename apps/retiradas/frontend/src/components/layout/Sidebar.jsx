@@ -39,6 +39,7 @@ import {
 	Server,
 	Settings,
 	ShieldCheck,
+	ShoppingBag,
 	SlidersHorizontal,
 	Star,
 	Target,
@@ -163,6 +164,20 @@ const NAV_ITEMS = [
 		path: ROUTES.RANKING,
 		icon: Trophy,
 		permission: ["view_metas", "destaque.metas.view", "destaque.metas.manage"],
+		featured: true,
+	},
+	{
+		label: "Mercado",
+		path: ROUTES.MERCADO,
+		icon: ShoppingBag,
+		permission: [
+			"mercado.dashboard.view",
+			"mercado.lotes.view",
+			"mercado.lotes.accept",
+			"mercado.execucao.view",
+			"mercado.backoffice.view",
+			"mercado.financeiro.view",
+		],
 		featured: true,
 	},
 	{
@@ -482,6 +497,12 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Mercado",
+		path: ROUTES.MERCADO_SETTINGS,
+		icon: ShoppingBag,
+		permission: ["mercado.config.view", "mercado.config.manage"],
+	},
+	{
 		label: "APIs",
 		path: ROUTES.API_STATUS,
 		icon: Server,
@@ -675,6 +696,7 @@ const MODERN_FEATURED_ORDER = [
 	ROUTES.MAPA,
 	ROUTES.METAS,
 	ROUTES.RANKING,
+	ROUTES.MERCADO,
 ];
 const MODERN_MENU_ORDER = [
 	ROUTES.MAPA,
@@ -728,6 +750,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.MENSAGERIA_API,
 	ROUTES.MENSAGERIA,
 	ROUTES.CONFIGURACOES_GERAIS,
+	ROUTES.MERCADO_SETTINGS,
 	ROUTES.NOTIFICACOES,
 	ROUTES.REGIONAIS,
 	ROUTES.USUARIOS,
@@ -852,6 +875,12 @@ const MENU_GROUPS = [
 		paths: [ROUTES.TENTATIVAS],
 	},
 	{
+		id: "mercado",
+		label: "Mercado",
+		icon: ShoppingBag,
+		paths: [ROUTES.MERCADO],
+	},
+	{
 		id: "ordens_servico",
 		label: "Ordem de Serviço",
 		icon: ClipboardCheck,
@@ -922,6 +951,7 @@ const MENU_GROUPS = [
 		icon: Settings,
 		paths: [
 			ROUTES.CONFIGURACOES_GERAIS,
+			ROUTES.MERCADO_SETTINGS,
 			ROUTES.NOTIFICACOES,
 			ROUTES.REGIONAIS,
 			ROUTES.USUARIOS,

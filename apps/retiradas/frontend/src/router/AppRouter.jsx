@@ -202,6 +202,78 @@ const EmailSettings = lazy(
 const ConfiguracoesGerais = lazy(
 	() => import("../modules/configuracoes/components/ConfiguracoesGeraisPage"),
 );
+const MercadoLayout = lazy(
+	() => import("../modules/mercado/components/MercadoLayout"),
+);
+const {
+	MercadoAprovacoesPage,
+	MercadoConfiguracoesPage,
+	MercadoDashboardPage,
+	MercadoDisponiveisPage,
+	MercadoExecucaoPage,
+	MercadoFinanceiroPage,
+	MercadoHistoricoPage,
+	MercadoLoteDetalhePage,
+	MercadoLotesPage,
+	MercadoMeusLotesPage,
+	MercadoRelatoriosPage,
+} = {
+	MercadoAprovacoesPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoAprovacoesPage,
+		})),
+	),
+	MercadoConfiguracoesPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoConfiguracoesPage,
+		})),
+	),
+	MercadoDashboardPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoDashboardPage,
+		})),
+	),
+	MercadoDisponiveisPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoDisponiveisPage,
+		})),
+	),
+	MercadoExecucaoPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoExecucaoPage,
+		})),
+	),
+	MercadoFinanceiroPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoFinanceiroPage,
+		})),
+	),
+	MercadoHistoricoPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoHistoricoPage,
+		})),
+	),
+	MercadoLoteDetalhePage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoLoteDetalhePage,
+		})),
+	),
+	MercadoLotesPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoLotesPage,
+		})),
+	),
+	MercadoMeusLotesPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoMeusLotesPage,
+		})),
+	),
+	MercadoRelatoriosPage: lazy(() =>
+		import("../modules/mercado/components/MercadoPages").then((module) => ({
+			default: module.MercadoRelatoriosPage,
+		})),
+	),
+};
 const AuditoriaLogs = lazy(
 	() => import("../modules/auditoria/components/AuditoriaLogsPage"),
 );
@@ -298,6 +370,26 @@ function FinanceiroRedirect() {
 	);
 }
 
+const MERCADO_PERMISSIONS = [
+	"mercado.dashboard.view",
+	"mercado.lotes.view",
+	"mercado.lotes.manage",
+	"mercado.lotes.accept",
+	"mercado.lotes.withdraw",
+	"mercado.execucao.view",
+	"mercado.execucao.manage",
+	"mercado.execucao.evidencias",
+	"mercado.backoffice.view",
+	"mercado.backoffice.manage",
+	"mercado.backoffice.approve",
+	"mercado.financeiro.view",
+	"mercado.financeiro.manage",
+	"mercado.financeiro.export",
+	"mercado.auditoria.view",
+	"mercado.config.view",
+	"mercado.config.manage",
+];
+
 const AppRouter = () => (
 	<BrowserRouter>
 		<Suspense fallback={<Spinner fullScreen />}>
@@ -364,6 +456,49 @@ const AppRouter = () => (
 							</ProtectedRoute>
 						}
 					/>
+
+					<Route
+						element={
+							<ProtectedRoute requiredPermission={MERCADO_PERMISSIONS}>
+								<MercadoLayout />
+							</ProtectedRoute>
+						}
+					>
+						<Route path={ROUTES.MERCADO} element={<MercadoDashboardPage />} />
+						<Route
+							path={ROUTES.MERCADO_DISPONIVEIS}
+							element={<MercadoDisponiveisPage />}
+						/>
+						<Route path={ROUTES.MERCADO_LOTES} element={<MercadoLotesPage />} />
+						<Route
+							path={ROUTES.MERCADO_LOTE_DETALHE}
+							element={<MercadoLoteDetalhePage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_MEUS_LOTES}
+							element={<MercadoMeusLotesPage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_EXECUCAO}
+							element={<MercadoExecucaoPage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_APROVACOES}
+							element={<MercadoAprovacoesPage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_FINANCEIRO}
+							element={<MercadoFinanceiroPage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_HISTORICO}
+							element={<MercadoHistoricoPage />}
+						/>
+						<Route
+							path={ROUTES.MERCADO_RELATORIOS}
+							element={<MercadoRelatoriosPage />}
+						/>
+					</Route>
 
 					<Route element={<PageWrapper />}>
 						<Route
@@ -876,6 +1011,19 @@ const AppRouter = () => (
 									]}
 								>
 									<ConfiguracoesGerais />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.MERCADO_SETTINGS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"mercado.config.view",
+										"mercado.config.manage",
+									]}
+								>
+									<MercadoConfiguracoesPage />
 								</ProtectedRoute>
 							}
 						/>

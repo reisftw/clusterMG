@@ -52,6 +52,7 @@ const createLogisticaRouter = require("./logistica/routes/logisticaRoutes");
 const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesRoutes");
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
+const createMercadoRouter = require("./mercado/routes");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
@@ -2569,6 +2570,15 @@ function createApp() {
 		createMensageriaRouter({
 			adminRoles: ADMIN_ROLES,
 			documents,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/mercado",
+		createMercadoRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
