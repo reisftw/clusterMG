@@ -1,4 +1,4 @@
-import { requestVpsApi } from "../../../services/vpsApiClient";
+import { getApiBaseUrl, requestVpsApi } from "../../../services/vpsApiClient";
 
 function queryString(params = {}) {
 	const query = new URLSearchParams();
@@ -81,12 +81,34 @@ export const mercadoApi = {
 			method: "POST",
 			body: JSON.stringify(payload),
 		}),
+	aprovarTentativa: (id, payload) =>
+		requestVpsApi(`/mercado/tentativas/${encodeURIComponent(id)}/aprovar`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+	aprovarEvidencia: (id, payload) =>
+		requestVpsApi(`/mercado/evidencias/${encodeURIComponent(id)}/aprovar`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
 	financeiro: (params) =>
 		requestVpsApi(`/mercado/financeiro${queryString(params)}`),
 	gerarApuracao: (payload) =>
 		requestVpsApi("/mercado/financeiro/apuracoes", {
 			method: "POST",
 			body: JSON.stringify(payload),
+		}),
+	registrarPagamento: (id, payload) =>
+		requestVpsApi(`/mercado/financeiro/apuracoes/${encodeURIComponent(id)}/pagamento`, {
+			method: "POST",
+			body: JSON.stringify(payload),
+		}),
+	financeiroCsvUrl: (params) =>
+		`${getApiBaseUrl()}/mercado/financeiro/export.csv${queryString(params)}`,
+	recalcularSuspensoes: () =>
+		requestVpsApi("/mercado/suspensoes/recalcular", {
+			method: "POST",
+			body: JSON.stringify({}),
 		}),
 	historico: (params) => requestVpsApi(`/mercado/historico${queryString(params)}`),
 };

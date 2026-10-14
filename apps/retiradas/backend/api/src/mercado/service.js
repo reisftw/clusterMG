@@ -31,6 +31,7 @@ const BACKOFFICE_MANAGE_PERMISSIONS = [
 const FINANCEIRO_VIEW_PERMISSIONS = [
 	"mercado.financeiro.view",
 	"mercado.financeiro.manage",
+	"mercado.financeiro.export",
 ];
 const FINANCEIRO_MANAGE_PERMISSIONS = ["mercado.financeiro.manage"];
 const CONFIG_VIEW_PERMISSIONS = ["mercado.config.view", "mercado.config.manage"];
@@ -988,7 +989,7 @@ async function approveOs(osId, payload = {}, user = {}) {
 		}
 		const osStatus = status === "APPROVED" || status === "EXCEPTION_CLOSED" ? "APPROVED" : status === "REJECTED" ? "REJECTED" : "CORRECTION_REQUESTED";
 		const valor = status === "APPROVED" || status === "EXCEPTION_CLOSED"
-			? calculateApprovedValue(row, payload)
+			? await calculateApprovedValue(client, row, payload)
 			: null;
 		const updated = await client.query(
 			`update mercado_lote_os
@@ -1032,11 +1033,54 @@ async function approveOs(osId, payload = {}, user = {}) {
 	}
 }
 
-function calculateApprovedValue(row = {}, payload = {}) {
+async function calculateApprovedValue(client, row = {}, payload = {}) {
 	if (payload.valorAprovado !== undefined || payload.valor_aprovado !== undefined) {
 		return Math.max(0, numberValue(payload.valorAprovado ?? payload.valor_aprovado, 0));
 	}
-	return numberValue(row.valor_contratado, 0);
+	const config = mergeConfig(row.source_payload?.config_snapshot || {});
+	const financeiro = config.financeiro;
+	const attempts = await client.query(
+		`select coalesce(sum(valor_protegido), 0)::numeric as total
+		   from (
+		    select valor_protegido
+		      from mercado_tentativas
+		     where lote_os_id = $1
+		       and approved_status = 'APPROVED'
+		     order by tentativa_at
+		     limit $2
+		   ) tentativa_aprovada`,
+		[Number.isInteger(row.id) ? String(row.id) : row.id, positiveInteger(financeiro.limiteTentativasRemuneradas, 2, 20)],
+	);
+	const attemptProtected = numberValue(attempts.rows[0]?.total, 0);
+	const scheduled = await client.query(
+		`select coalesce(max(valor_desconto), 0)::numeric as desconto
+		   from mercado_agendamentos
+		  where lote_os_id = $1
+		    and confirmado = true
+		    and desconto_aplicado = true`,
+		[row.id],
+	);
+	const descontoAgendamento = numberValue(scheduled.rows[0]?.desconto, 0);
+	const base = numberValue(row.valor_contratado, 0);
+	const recovered = row.desfecho === "RECUPERADA" || payload.desfecho === "RECUPERADA";
+	if (!recovered) {
+		return Math.round(attemptProtected * 100) / 100;
+	}
+	const dueAt = row.sla_due_at ? new Date(row.sla_due_at).getTime() : 0;
+	const suspendedUntil = row.sla_suspended_until ? new Date(row.sla_suspended_until).getTime() : 0;
+	const effectiveDue = Math.max(dueAt, suspendedUntil);
+	const endAt = payload.executadoEm ? new Date(payload.executadoEm).getTime() : Date.now();
+	const overdueHours = effectiveDue && endAt > effectiveDue
+		? Math.ceil((endAt - effectiveDue) / 3600000)
+		: 0;
+	const penalizacao = overdueHours * numberValue(financeiro.penalizacaoPorHora, 0);
+	const piso = Math.max(numberValue(financeiro.pisoPorOs, 0), attemptProtected);
+	const teto = numberValue(financeiro.tetoPorOs, 999999);
+	const adjusted = Math.min(
+		teto,
+		Math.max(piso, base - descontoAgendamento - penalizacao),
+	);
+	return Math.round(adjusted * 100) / 100;
 }
 
 async function maybeApproveLote(loteId, user = {}) {
@@ -1109,6 +1153,66 @@ async function listFinanceiro(query = {}, user = {}) {
 	return { items: result.rows };
 }
 
+async function registerPagamento(apuracaoId, payload = {}, user = {}) {
+	const valorPagoPayload = payload.valorPago ?? payload.valor_pago;
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const current = await client.query(
+			`select * from mercado_financeiro_apuracoes where id = $1 for update`,
+			[apuracaoId],
+		);
+		const row = current.rows[0];
+		if (!row) {
+			const error = new Error("Apuracao financeira nao encontrada.");
+			error.status = 404;
+			throw error;
+		}
+		assertEmpresaScope(user, row.empresa_id);
+		if (row.status === "PAID") {
+			const error = new Error("Apuracao ja registrada como paga.");
+			error.status = 409;
+			throw error;
+		}
+		const valorLiberado = numberValue(row.total_liberado, 0);
+		const valorPago = valorPagoPayload === undefined
+			? valorLiberado
+			: numberValue(valorPagoPayload, 0);
+		if (Math.round(valorPago * 100) !== Math.round(valorLiberado * 100)) {
+			const error = new Error("Pagamento parcial nao permitido no Mercado.");
+			error.status = 400;
+			throw error;
+		}
+		const updated = await client.query(
+			`update mercado_financeiro_apuracoes
+			    set status = 'PAID',
+			        total_pago = total_liberado,
+			        paid_at = coalesce($2::timestamptz, now()),
+			        summary = summary || $3::jsonb
+			  where id = $1
+			  returning *`,
+			[
+				apuracaoId,
+				payload.pagoEm || payload.pago_em || null,
+				JSON.stringify({
+					pagamento: {
+						observacao: nullableText(payload.observacao),
+						registradoPor: userName(user),
+					},
+				}),
+			],
+		);
+		await client.query("commit");
+		await audit("mercado_financeiro_apuracoes", "update", apuracaoId, row, updated.rows[0], user);
+		return { item: updated.rows[0] };
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+}
+
 async function gerarApuracao(payload = {}, user = {}) {
 	const competencia = text(payload.competencia) || new Date().toISOString().slice(0, 7);
 	const empresaId = text(payload.empresaId || payload.empresa_id || userEmpresa(user).id);
@@ -1158,6 +1262,171 @@ async function gerarApuracao(payload = {}, user = {}) {
 		],
 	);
 	return { item: result.rows[0] };
+}
+
+async function exportFinanceiroCsv(query = {}, user = {}) {
+	const data = await listFinanceiro(query, user);
+	const headers = [
+		"competencia",
+		"empresa_id",
+		"empresa_nome",
+		"status",
+		"total_contratado",
+		"total_aprovado",
+		"total_liberado",
+		"total_pago",
+		"paid_at",
+	];
+	const escape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+	const lines = [
+		headers.join(";"),
+		...data.items.map((item) => headers.map((header) => escape(item[header])).join(";")),
+	];
+	return lines.join("\n");
+}
+
+async function updateTentativaApproval(id, payload = {}, user = {}) {
+	const status = payload.status || (payload.approved === false ? "REJECTED" : "APPROVED");
+	if (!["APPROVED", "REJECTED", "PENDING"].includes(status)) {
+		const error = new Error("Status da tentativa invalido.");
+		error.status = 400;
+		throw error;
+	}
+	const current = await db.query(
+		`select t.*, os.lote_id
+		   from mercado_tentativas t
+		   join mercado_lote_os os on os.id = t.lote_os_id
+		  where t.id = $1`,
+		[id],
+	);
+	const row = current.rows[0];
+	if (!row) {
+		const error = new Error("Tentativa nao encontrada.");
+		error.status = 404;
+		throw error;
+	}
+	const updated = await db.query(
+		`update mercado_tentativas
+		    set approved_status = $2
+		  where id = $1
+		  returning *`,
+		[id, status],
+	);
+	await audit("mercado_tentativas", "update", id, row, updated.rows[0], user);
+	return { item: updated.rows[0] };
+}
+
+async function updateEvidenciaApproval(id, payload = {}, user = {}) {
+	const status = payload.status || (payload.approved === false ? "REJECTED" : "APPROVED");
+	if (!["APPROVED", "REJECTED", "PENDING"].includes(status)) {
+		const error = new Error("Status da evidencia invalido.");
+		error.status = 400;
+		throw error;
+	}
+	const current = await db.query(`select * from mercado_evidencias where id = $1`, [id]);
+	const row = current.rows[0];
+	if (!row) {
+		const error = new Error("Evidencia nao encontrada.");
+		error.status = 404;
+		throw error;
+	}
+	const updated = await db.query(
+		`update mercado_evidencias
+		    set approved_status = $2
+		  where id = $1
+		  returning *`,
+		[id, status],
+	);
+	await audit("mercado_evidencias", "update", id, row, updated.rows[0], user);
+	return { item: updated.rows[0] };
+}
+
+async function recalcularSuspensoes(_payload = {}, user = {}) {
+	const config = await getCurrentConfig();
+	const dias = positiveInteger(config.config.prazos.regularizacaoDias, 7, 365);
+	const toleranciaHoras = positiveInteger(config.config.suspensoes.toleranciaHoras, 24, 720);
+	const primeira = positiveInteger(config.config.suspensoes.primeiraOcorrenciaDias, 3, 365);
+	const segunda = positiveInteger(config.config.suspensoes.segundaOcorrenciaDias, 7, 365);
+	const terceira = positiveInteger(config.config.suspensoes.terceiraOcorrenciaDias, 30, 3650);
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		await client.query(
+			`update mercado_suspensoes
+			    set status = 'ENDED'
+			  where status = 'ACTIVE'
+			    and end_at is not null
+			    and end_at <= now()`,
+		);
+		const overdue = await client.query(
+			`select l.*,
+			        count(os.id)::int as pendentes
+			   from mercado_lotes l
+			   join mercado_lote_os os on os.lote_id = l.id
+			  where l.status in ('ACCEPTED','IN_EXECUTION')
+			    and l.accepted_at is not null
+			    and l.accepted_at + ($1 * interval '1 day') + ($2 * interval '1 hour') < now()
+			    and os.status not in ('SUBMITTED','APPROVED','REJECTED')
+			  group by l.id`,
+			[dias, toleranciaHoras],
+		);
+		const created = [];
+		for (const lote of overdue.rows) {
+			const active = await client.query(
+				`select id
+				   from mercado_suspensoes
+				  where empresa_id = $1
+				    and status = 'ACTIVE'
+				  limit 1`,
+				[lote.accepted_by_empresa_id],
+			);
+			if (active.rows[0]) continue;
+			const previous = await client.query(
+				`select count(*)::int as total
+				   from mercado_suspensoes
+				  where empresa_id = $1
+				    and created_at >= now() - make_interval(days => $2)`,
+				[
+					lote.accepted_by_empresa_id,
+					positiveInteger(config.config.suspensoes.janelaApuracaoDias, 90, 3650),
+				],
+			);
+			const reincidencia = Number(previous.rows[0]?.total || 0) + 1;
+			const duration = reincidencia <= 1 ? primeira : reincidencia === 2 ? segunda : terceira;
+			const suspension = await client.query(
+				`insert into mercado_suspensoes (
+					empresa_id, empresa_nome, motivo, origem_lote_id, end_at,
+					reincidencia, created_by_uid, created_by_name
+				) values ($1,$2,$3,$4, now() + ($5 * interval '1 day'), $6, $7, $8)
+				returning *`,
+				[
+					lote.accepted_by_empresa_id,
+					lote.accepted_by_empresa_nome,
+					`Regularizacao vencida no lote ${lote.codigo}.`,
+					lote.id,
+					duration,
+					reincidencia,
+					user.uid || null,
+					userName(user) || "Sistema",
+				],
+			);
+			created.push(suspension.rows[0]);
+			await writeEvent(client, {
+				loteId: lote.id,
+				tipo: "SUSPENSAO_CRIADA",
+				descricao: `Empresa suspensa por regularizacao vencida: ${lote.accepted_by_empresa_nome || lote.accepted_by_empresa_id}.`,
+				payload: { reincidencia, duration },
+				user,
+			});
+		}
+		await client.query("commit");
+		return { created, totalCreated: created.length };
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function historico(query = {}, user = {}) {
@@ -1211,9 +1480,14 @@ module.exports = {
 	listFinanceiro,
 	listHabilitacoes,
 	listLotes,
+	recalcularSuspensoes,
+	registerPagamento,
 	saveConfig,
 	saveHabilitacao,
 	simulatePricing,
+	exportFinanceiroCsv,
+	updateEvidenciaApproval,
 	updateOsExecution,
+	updateTentativaApproval,
 	withdrawLote,
 };

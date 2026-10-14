@@ -241,12 +241,59 @@ function createMercadoRouter({
 		}),
 	);
 
+	router.post(
+		"/tentativas/:id/aprovar",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBackofficeManage,
+		asyncHandler(async (req, res) => {
+			res.json(
+				await service.updateTentativaApproval(
+					req.params.id,
+					req.body || {},
+					req.user || {},
+				),
+			);
+		}),
+	);
+
+	router.post(
+		"/evidencias/:id/aprovar",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBackofficeManage,
+		asyncHandler(async (req, res) => {
+			res.json(
+				await service.updateEvidenciaApproval(
+					req.params.id,
+					req.body || {},
+					req.user || {},
+				),
+			);
+		}),
+	);
+
 	router.get(
 		"/financeiro",
 		requireAuthenticated,
 		requireFinanceiroView,
 		asyncHandler(async (req, res) => {
 			res.json(await service.listFinanceiro(req.query || {}, req.user || {}));
+		}),
+	);
+
+	router.get(
+		"/financeiro/export.csv",
+		requireAuthenticated,
+		requireAnyPermission(["mercado.financeiro.export", "mercado.financeiro.manage"], []),
+		asyncHandler(async (req, res) => {
+			const csv = await service.exportFinanceiroCsv(req.query || {}, req.user || {});
+			res.setHeader("Content-Type", "text/csv; charset=utf-8");
+			res.setHeader(
+				"Content-Disposition",
+				`attachment; filename="mercado-financeiro-${req.query?.competencia || "apuracao"}.csv"`,
+			);
+			res.send(csv);
 		}),
 	);
 
@@ -257,6 +304,32 @@ function createMercadoRouter({
 		requireFinanceiroManage,
 		asyncHandler(async (req, res) => {
 			res.json(await service.gerarApuracao(req.body || {}, req.user || {}));
+		}),
+	);
+
+	router.post(
+		"/financeiro/apuracoes/:id/pagamento",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireFinanceiroManage,
+		asyncHandler(async (req, res) => {
+			res.json(
+				await service.registerPagamento(
+					req.params.id,
+					req.body || {},
+					req.user || {},
+				),
+			);
+		}),
+	);
+
+	router.post(
+		"/suspensoes/recalcular",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireBackofficeManage,
+		asyncHandler(async (req, res) => {
+			res.json(await service.recalcularSuspensoes(req.body || {}, req.user || {}));
 		}),
 	);
 

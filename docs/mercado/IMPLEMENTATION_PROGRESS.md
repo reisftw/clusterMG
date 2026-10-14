@@ -32,9 +32,29 @@ Concluido:
 - Adicionada configuracao do Mercado dentro de Configuracoes.
 - Adicionados rotulos/grupo de permissoes para Cargos e Permissoes.
 
+## Checkpoint 3 - Regras operacionais e financeiro
+
+Concluido:
+
+- Implementado calculo financeiro por OS considerando retirada, tentativas aprovadas, desconto unico de agendamento, penalizacao por hora e piso/teto.
+- Implementada protecao de tentativas aprovadas contra descontos posteriores.
+- Adicionados endpoints de aprovacao de tentativas e evidencias pelo BackOffice.
+- Adicionado recalc manual de suspensoes por prazo de regularizacao vencido, mantendo lotes atuais em execucao e bloqueando apenas novos aceites.
+- Adicionado registro de pagamento integral de apuracao, bloqueando pagamento parcial.
+- Adicionada exportacao CSV das apuracoes financeiras.
+- Tela financeira ganhou acoes de exportar CSV, recalcular suspensoes e registrar pagamento integral.
+
+Testes executados:
+
+- `node --check apps/retiradas/backend/api/src/mercado/service.js`
+- `node --check apps/retiradas/backend/api/src/mercado/routes.js`
+- `npx eslint apps/retiradas/frontend/src/modules/mercado apps/retiradas/backend/api/src/mercado`
+- `npm run build:retiradas`
+
 ## Pendencias Tecnicas Conhecidas
 
 - Executar a migration em banco de homologacao antes de validar fluxo completo.
 - Validar os cenarios com dados reais de O.S. cancelada apos migration.
-- Evoluir relatorios financeiros para PDF/XLSX caso seja exigido na homologacao.
+- Evoluir relatorios financeiros para PDF/XLSX caso seja exigido na homologacao; CSV ja disponivel.
 - Ajustar regras finas de SLA, suspensao e precificacao apos validacao operacional.
+- Criar testes integrados com banco de homologacao apos aplicacao da migration.

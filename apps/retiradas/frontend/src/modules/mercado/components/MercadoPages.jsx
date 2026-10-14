@@ -505,6 +505,30 @@ export function MercadoFinanceiroPage() {
 			setMessage(error?.message || "Falha ao gerar apuração.");
 		}
 	};
+	const pagar = async (item) => {
+		setMessage("Registrando pagamento integral...");
+		try {
+			await mercadoApi.registrarPagamento(item.id, {
+				valorPago: Number(item.total_liberado || 0),
+			});
+			setMessage("Pagamento integral registrado.");
+			reload();
+		} catch (error) {
+			setMessage(error?.message || "Falha ao registrar pagamento.");
+		}
+	};
+	const recalcularSuspensoes = async () => {
+		setMessage("Recalculando suspensões por regularização...");
+		try {
+			const result = await mercadoApi.recalcularSuspensoes();
+			setMessage(`${result.totalCreated || 0} suspensão(ões) criada(s).`);
+		} catch (error) {
+			setMessage(error?.message || "Falha ao recalcular suspensões.");
+		}
+	};
+	const exportar = () => {
+		window.open(mercadoApi.financeiroCsvUrl({ competencia }), "_blank", "noopener,noreferrer");
+	};
 	if (loading) return <Spinner fullScreen />;
 	return (
 		<div className="space-y-5">
@@ -515,6 +539,14 @@ export function MercadoFinanceiroPage() {
 				</div>
 				<div className="flex gap-2">
 					<input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-semibold" />
+					<button type="button" onClick={exportar} className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-700">
+						<Download size={16} />
+						CSV
+					</button>
+					<button type="button" onClick={recalcularSuspensoes} className="inline-flex h-11 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-black text-amber-800">
+						<ShieldAlert size={16} />
+						Suspensões
+					</button>
 					<button type="button" onClick={gerar} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-black text-white">
 						<RefreshCw size={16} />
 						Gerar
@@ -536,6 +568,11 @@ export function MercadoFinanceiroPage() {
 								<div><p className="text-xs font-bold text-slate-500">Liberado</p><p className="font-black">{money(item.total_liberado)}</p></div>
 								<div><p className="text-xs font-bold text-slate-500">Pago</p><p className="font-black">{money(item.total_pago)}</p></div>
 							</div>
+							{item.status !== "PAID" ? (
+								<button type="button" onClick={() => pagar(item)} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white">
+									Registrar pagamento integral
+								</button>
+							) : null}
 						</div>
 					</div>
 				))}
