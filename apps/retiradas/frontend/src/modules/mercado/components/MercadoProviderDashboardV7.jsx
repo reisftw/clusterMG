@@ -24,7 +24,7 @@ import { mercadoProviderApi } from "../services/mercadoProviderApi";
 
 const money = (value) => Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-function ProviderNav({ mobile = false, onNavigate }) {
+function ProviderNav({ mobile = false, collapsed = false, onNavigate }) {
 	const links = [
 		{ label: "Dashboard", icon: Grid2X2, to: "/mercado/dashboard", active: true },
 		{ label: "Disponíveis", icon: PackageCheck, to: "/mercado/dashboard#oportunidades" },
@@ -33,9 +33,9 @@ function ProviderNav({ mobile = false, onNavigate }) {
 		{ label: "Meu perfil", icon: UserRound, to: "/mercado/meu-perfil" },
 	];
 	return (
-		<nav className={`mercado-provider-nav ${mobile ? "mercado-provider-nav--mobile" : ""}`}>
+		<nav className={`mercado-provider-nav ${mobile ? "mercado-provider-nav--mobile" : ""} ${collapsed ? "is-collapsed" : ""}`}>
 			{links.map(({ label, icon: Icon, to, active }) => (
-				<Link key={label} to={to} onClick={onNavigate} className={active ? "is-active" : ""}>
+				<Link key={label} to={to} onClick={onNavigate} className={active ? "is-active" : ""} title={collapsed ? label : undefined}>
 					<Icon size={19} />
 					<span>{label}</span>
 				</Link>
@@ -100,6 +100,7 @@ export default function MercadoProviderDashboardV7() {
 	const [query, setQuery] = useState("");
 	const [error, setError] = useState("");
 	const [mobileOpen, setMobileOpen] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const navigate = useNavigate();
 
 	useEffect(() => {
@@ -123,14 +124,14 @@ export default function MercadoProviderDashboardV7() {
 
 	return (
 		<div className="mercado-reference-shell">
-			<aside className="mercado-reference-sidebar">
+			<aside className={`mercado-reference-sidebar ${sidebarCollapsed ? "is-collapsed" : ""}`}>
 				<Link to="/mercado/dashboard"><MercadoBrand /></Link>
-				<ProviderNav />
+				<ProviderNav collapsed={sidebarCollapsed} />
 				<div className="mercado-reference-help"><HelpCircle size={20} /><strong>Precisa de ajuda?</strong><p>Acesse nosso suporte ou fale com o time.</p><a href="mailto:suporte@retiradas.tech">Central de ajuda</a></div>
 			</aside>
 			{mobileOpen ? <aside className="mercado-reference-mobile-menu"><div className="flex items-center justify-between"><MercadoBrand /><button type="button" onClick={() => setMobileOpen(false)}>Fechar</button></div><ProviderNav mobile onNavigate={() => setMobileOpen(false)} /></aside> : null}
 			<div className="mercado-reference-content">
-				<header className="mercado-reference-header"><button type="button" aria-label="Abrir menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div><p>Mercado de Retiradas</p><strong>Dashboard</strong></div><div className="ml-auto flex items-center gap-4"><button type="button" aria-label="Notificações" className="relative"><Bell size={21} /><i>3</i></button><Link to="/mercado/meu-perfil" className="mercado-reference-user"><span>{(data.user.displayName || "MR").split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{data.user.displayName}</strong><p>Prestador</p></div></Link><button type="button" onClick={logout} className="text-slate-500" aria-label="Sair"><LogOut size={19} /></button></div></header>
+				<header className="mercado-reference-header"><button type="button" className="mercado-reference-header__desktop-menu" aria-label={sidebarCollapsed ? "Abrir menu" : "Recolher menu"} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={21} /></button><button type="button" className="mercado-reference-header__mobile-menu" aria-label="Abrir menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div><p>Mercado de Retiradas</p><strong>Dashboard</strong></div><div className="ml-auto flex items-center gap-4"><button type="button" aria-label="Notificações" className="relative"><Bell size={21} /><i>3</i></button><Link to="/mercado/meu-perfil" className="mercado-reference-user"><span>{(data.user.displayName || "MR").split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><div><strong>{data.user.displayName}</strong><p>Prestador</p></div></Link><button type="button" onClick={logout} className="text-slate-500" aria-label="Sair"><LogOut size={19} /></button></div></header>
 				<main className="mercado-reference-main">
 					<section className="mercado-reference-hero"><div><h1>Olá, {data.user.displayName}</h1><p>Encontre e monte seus lotes de retiradas em Minas Gerais.</p></div><Link to="/mercado/montar-lote"><PackagePlus size={20} />Montar lote <ChevronRight size={20} /></Link></section>
 					{error ? <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p> : null}

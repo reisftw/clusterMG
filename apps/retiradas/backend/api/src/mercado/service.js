@@ -40,6 +40,8 @@ const CONFIG_MANAGE_PERMISSIONS = ["mercado.config.manage"];
 
 const ACTIVE_LOTE_STATUSES = ["ACCEPTED", "IN_EXECUTION"];
 const OCCUPYING_LOTE_STATUSES = ["ACCEPTED", "IN_EXECUTION"];
+const MARKET_SERVICE_TYPES = ["RETIRADA FTTH", "CANCELAMENTO FTTH", "RETIRADA", "CANCELAMENTO", "CANCELAMENTO LOJA"];
+const MARKET_SERVICE_TYPE_SQL = "upper(trim(coalesce(nullif(os.tipo,''), nullif(os.servico,''))))";
 const DEFAULT_CONFIG = {
 	lotes: {
 		quantidadesPermitidas: [15, 25, 35],
@@ -547,10 +549,11 @@ async function listLotes(query = {}, user = {}) {
 async function listSugestoes(query = {}) {
 	const q = text(query.q);
 	const params = [];
-	let cityWhere = "where cidade is not null and trim(cidade) <> ''";
+	let cityWhere = `where cidade is not null and trim(cidade) <> '' and upper(trim(coalesce(nullif(tipo,''), nullif(servico,'')))) = any($1::text[])`;
+	params.push(MARKET_SERVICE_TYPES);
 	if (q) {
 		params.push(`%${q}%`);
-		cityWhere += ` and cidade ilike $1`;
+		cityWhere += ` and cidade ilike $${params.length}`;
 	}
 	const cidadesResult = await db.query(
 		`select cidade as value, count(*)::int as total
@@ -698,7 +701,8 @@ async function generateLots(payload = {}, user = {}) {
 		   from ordens_servico os
 		  where lower(trim(os.cidade)) = lower(trim($1))
 		    and coalesce(os.status, '') not ilike '%fech%'
-		    and coalesce(os.tipo, os.servico, '') <> ''
+		    and ${MARKET_SERVICE_TYPE_SQL} = upper(trim($2))
+		    and ${MARKET_SERVICE_TYPE_SQL} = any($3::text[])
 		    and not exists (
 		    	select 1
 		    	  from mercado_lote_os mlo
@@ -707,8 +711,8 @@ async function generateLots(payload = {}, user = {}) {
 		    	   and ml.status in ('DRAFT','AVAILABLE','ACCEPTED','IN_EXECUTION','SUBMITTED')
 		    )
 		  order by os.data_abertura nulls last, os.bairro nulls last
-		  limit $2`,
-		[cidade, quantidade],
+		  limit $4`,
+		[cidade, equipamentoTipo, MARKET_SERVICE_TYPES, quantidade],
 	);
 	if (orders.rows.length < quantidade) {
 		const error = new Error("Nao ha OS elegiveis suficientes para formar o lote.");
@@ -1362,11 +1366,12 @@ async function dashboard(_query = {}, user = {}) {
 	);
 	const oportunidades = await db.query(
 		`select os.cidade,
-		        coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado') as equipamento_tipo,
+		        ${MARKET_SERVICE_TYPE_SQL} as equipamento_tipo,
 		        count(*)::int as total
 		   from ordens_servico os
 		  where nullif(trim(coalesce(os.cidade,'')),'') is not null
 		    and coalesce(os.status,'') not ilike '%fech%'
+		    and ${MARKET_SERVICE_TYPE_SQL} = any($1::text[])
 		    and not exists (
 		      select 1
 		        from mercado_lote_os lote_os
@@ -1374,9 +1379,11 @@ async function dashboard(_query = {}, user = {}) {
 		       where lote_os.ordem_servico_id = os.id
 		         and lote.status = any(array['DRAFT','AVAILABLE','ACCEPTED','IN_EXECUTION','SUBMITTED'])
 		    )
-		  group by os.cidade, coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado')
+		  group by os.cidade, ${MARKET_SERVICE_TYPE_SQL}
+		 having count(*) >= 15
 		  order by total desc, os.cidade asc
 		  limit 500`,
+		[MARKET_SERVICE_TYPES],
 	);
 	const cidades = new Map();
 	for (const row of oportunidades.rows) {

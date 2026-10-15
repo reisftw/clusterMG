@@ -6,6 +6,9 @@ const { requireMercadoAuth } = require("./auth");
 const { canAccessOs } = require("./progressivePrivacy");
 
 const terminal = ["SUBMITTED", "APPROVED", "REJECTED", "CORRECTION_REQUESTED", "CANCELED"];
+const MARKET_SERVICE_TYPES = ["RETIRADA FTTH", "CANCELAMENTO FTTH", "RETIRADA", "CANCELAMENTO", "CANCELAMENTO LOJA"];
+const OCCUPYING_LOTE_STATUSES = ["DRAFT", "AVAILABLE", "ACCEPTED", "IN_EXECUTION", "SUBMITTED"];
+const marketServiceTypeSql = "upper(trim(coalesce(nullif(os.tipo,''), nullif(os.servico,''))))";
 const safeText = (value) => String(value ?? "").trim();
 const quantityOf = (value) => Number.parseInt(value, 10);
 const providerUser = (user) => ({
@@ -40,17 +43,19 @@ async function assertEligibleAccount(user) {
 async function aggregateCities(query = {}) {
 	const filter = safeText(query.q);
 	const result = await db.query(
-		`select os.cidade, coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado') as equipamento_tipo, count(*)::int as total
+		`select os.cidade, ${marketServiceTypeSql} as equipamento_tipo, count(*)::int as total
 		   from ordens_servico os
 		  where nullif(trim(coalesce(os.cidade,'')),'') is not null
 		    and coalesce(os.status,'') not ilike '%fech%'
 		    and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id
 		                    where mlo.ordem_servico_id=os.id and ml.status = any($1::text[]))
-		    and ($2 = '' or os.cidade ilike '%' || $2 || '%')
-		  group by os.cidade, coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado')
+		    and ${marketServiceTypeSql} = any($2::text[])
+		    and ($3 = '' or os.cidade ilike '%' || $3 || '%')
+		  group by os.cidade, ${marketServiceTypeSql}
+		 having count(*) >= 15
 		  order by total desc, os.cidade asc
 		  limit 500`,
-		[["DRAFT", "AVAILABLE", "ACCEPTED", "IN_EXECUTION", "SUBMITTED"], filter],
+		[OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, filter],
 	);
 	const byCity = new Map();
 	for (const row of result.rows) {
@@ -67,13 +72,14 @@ async function selection(client, { cidade, equipamentoTipo, quantidade }) {
 	const rows = await client.query(
 		`select os.* from ordens_servico os
 		  where lower(trim(os.cidade))=lower(trim($1))
-		    and lower(coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado'))=lower($2)
+		    and ${marketServiceTypeSql} = upper(trim($2))
 		    and coalesce(os.status,'') not ilike '%fech%'
 		    and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id
 		                    where mlo.ordem_servico_id=os.id and ml.status = any($3::text[]))
+		    and ${marketServiceTypeSql} = any($4::text[])
 		  order by os.data_abertura asc nulls last, os.bairro asc nulls last, os.id asc
-		  limit $4 for update skip locked`,
-		[cidade, equipamentoTipo, ["DRAFT", "AVAILABLE", "ACCEPTED", "IN_EXECUTION", "SUBMITTED"], quantidade],
+		  limit $5 for update skip locked`,
+		[cidade, equipamentoTipo, OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, quantidade],
 	);
 	return rows.rows;
 }
@@ -121,7 +127,7 @@ function createProviderRouter() {
 		const cidade = safeText(req.body?.cidade); const equipamentoTipo = safeText(req.body?.equipamentoTipo);
 		if (!cidade || !equipamentoTipo) throw error("Cidade e equipamento são obrigatórios.");
 		const config = await service.getCurrentConfig();
-		const rows = await db.query(`select os.* from ordens_servico os where lower(trim(os.cidade))=lower(trim($1)) and lower(coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado'))=lower($2) and coalesce(os.status,'') not ilike '%fech%' and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id where mlo.ordem_servico_id=os.id and ml.status=any($3::text[])) order by os.data_abertura asc nulls last, os.bairro asc nulls last limit $4`, [cidade, equipamentoTipo, ["DRAFT", "AVAILABLE", "ACCEPTED", "IN_EXECUTION", "SUBMITTED"], quantity]);
+		const rows = await db.query(`select os.* from ordens_servico os where lower(trim(os.cidade))=lower(trim($1)) and ${marketServiceTypeSql}=upper(trim($2)) and coalesce(os.status,'') not ilike '%fech%' and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id where mlo.ordem_servico_id=os.id and ml.status=any($3::text[])) and ${marketServiceTypeSql}=any($4::text[]) order by os.data_abertura asc nulls last, os.bairro asc nulls last limit $5`, [cidade, equipamentoTipo, OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, quantity]);
 		if (rows.rows.length !== quantity) throw error("Não há OS elegíveis suficientes para a quantidade selecionada.", 409);
 		res.json({ preview: safePreview(rows.rows, config, { cidade, equipamentoTipo, dificuldade: req.body?.dificuldade }) });
 	}));
