@@ -43,21 +43,27 @@ async function assertEligibleAccount(user) {
 
 async function aggregateCities(query = {}) {
 	const filter = safeText(query.q);
-	const result = await db.query(
-		`select os.cidade, ${marketServiceTypeSql} as equipamento_tipo, count(*)::int as total
-		   from ordens_servico os
+	const queryParams = [OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, MARKET_OPEN_ORDERS_COLLECTION, filter];
+	const openOrdersWhere = `
 		  where nullif(trim(coalesce(os.cidade,'')),'') is not null
 		    and coalesce(os.status,'') not ilike '%fech%'
 		    and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id
 		                    where mlo.ordem_servico_id=os.id and ml.status = any($1::text[]))
 		    and ${marketServiceTypeSql} = any($2::text[])
 		    and os.source_collection = $3
-		    and ($4 = '' or os.cidade ilike '%' || $4 || '%')
+		    and ($4 = '' or os.cidade ilike '%' || $4 || '%')`;
+	const result = await db.query(
+		`select os.cidade, ${marketServiceTypeSql} as equipamento_tipo, count(*)::int as total
+		   from ordens_servico os
+		  ${openOrdersWhere}
 		  group by os.cidade, ${marketServiceTypeSql}
-		 having count(*) >= 15
 		  order by total desc, os.cidade asc
 		  limit 500`,
-		[OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, MARKET_OPEN_ORDERS_COLLECTION, filter],
+		queryParams,
+	);
+	const summary = await db.query(
+		`select count(*)::int as total from ordens_servico os ${openOrdersWhere}`,
+		queryParams,
 	);
 	const byCity = new Map();
 	for (const row of result.rows) {
@@ -67,21 +73,38 @@ async function aggregateCities(query = {}) {
 		item.equipamentos.push({ tipo: row.equipamento_tipo, total: Number(row.total || 0) });
 		byCity.set(city, item);
 	}
-	return { items: [...byCity.values()].sort((a, b) => b.total - a.total || a.cidade.localeCompare(b.cidade, "pt-BR")) };
+	return {
+		total: Number(summary.rows[0]?.total || 0),
+		items: [...byCity.values()].sort((a, b) => b.total - a.total || a.cidade.localeCompare(b.cidade, "pt-BR")),
+	};
+}
+
+function selectionSql(lockRows = false) {
+	return `with elegiveis as (
+			select os.* from ordens_servico os
+			 where lower(trim(os.cidade))=lower(trim($1))
+			   and ${marketServiceTypeSql} = upper(trim($2))
+			   and coalesce(os.status,'') not ilike '%fech%'
+			   and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id
+			                   where mlo.ordem_servico_id=os.id and ml.status = any($3::text[]))
+			   and ${marketServiceTypeSql} = any($4::text[])
+			   and os.source_collection = $5
+		), referencia as (
+			select latitude, longitude from elegiveis
+			 where latitude between -90 and 90 and longitude between -180 and 180
+			 order by data_abertura asc nulls last, id asc limit 1
+		)
+		select e.* from elegiveis e left join referencia r on true
+		 order by
+			case when e.latitude between -90 and 90 and e.longitude between -180 and 180 and r.latitude is not null then 0 else 1 end,
+			case when e.latitude between -90 and 90 and e.longitude between -180 and 180 and r.latitude is not null then power(e.latitude - r.latitude, 2) + power(e.longitude - r.longitude, 2) end,
+			e.data_abertura asc nulls last, e.bairro asc nulls last, e.id asc
+		 limit $6${lockRows ? " for update skip locked" : ""}`;
 }
 
 async function selection(client, { cidade, equipamentoTipo, quantidade }) {
 	const rows = await client.query(
-		`select os.* from ordens_servico os
-		  where lower(trim(os.cidade))=lower(trim($1))
-		    and ${marketServiceTypeSql} = upper(trim($2))
-		    and coalesce(os.status,'') not ilike '%fech%'
-		    and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id
-		                    where mlo.ordem_servico_id=os.id and ml.status = any($3::text[]))
-		    and ${marketServiceTypeSql} = any($4::text[])
-		    and os.source_collection = $5
-		  order by os.data_abertura asc nulls last, os.bairro asc nulls last, os.id asc
-		  limit $6 for update skip locked`,
+		selectionSql(true),
 		[cidade, equipamentoTipo, OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, MARKET_OPEN_ORDERS_COLLECTION, quantidade],
 	);
 	return rows.rows;
@@ -130,7 +153,7 @@ function createProviderRouter() {
 		const cidade = safeText(req.body?.cidade); const equipamentoTipo = safeText(req.body?.equipamentoTipo);
 		if (!cidade || !equipamentoTipo) throw error("Cidade e equipamento são obrigatórios.");
 		const config = await service.getCurrentConfig();
-		const rows = await db.query(`select os.* from ordens_servico os where lower(trim(os.cidade))=lower(trim($1)) and ${marketServiceTypeSql}=upper(trim($2)) and coalesce(os.status,'') not ilike '%fech%' and not exists (select 1 from mercado_lote_os mlo join mercado_lotes ml on ml.id=mlo.lote_id where mlo.ordem_servico_id=os.id and ml.status=any($3::text[])) and ${marketServiceTypeSql}=any($4::text[]) and os.source_collection=$5 order by os.data_abertura asc nulls last, os.bairro asc nulls last limit $6`, [cidade, equipamentoTipo, OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, MARKET_OPEN_ORDERS_COLLECTION, quantity]);
+		const rows = await db.query(selectionSql(), [cidade, equipamentoTipo, OCCUPYING_LOTE_STATUSES, MARKET_SERVICE_TYPES, MARKET_OPEN_ORDERS_COLLECTION, quantity]);
 		if (rows.rows.length !== quantity) throw error("Não há OS elegíveis suficientes para a quantidade selecionada.", 409);
 		res.json({ preview: safePreview(rows.rows, config, { cidade, equipamentoTipo, dificuldade: req.body?.dificuldade }) });
 	}));

@@ -111,7 +111,7 @@ export default function MercadoProviderDashboardV7() {
 
 	const cities = data?.cidades?.items || [];
 	const lots = data?.lotes || [];
-	const available = useMemo(() => cities.reduce((sum, city) => sum + Number(city.total || 0), 0), [cities]);
+	const available = Number(data?.cidades?.total ?? cities.reduce((sum, city) => sum + Number(city.total || 0), 0));
 	const activeLots = useMemo(() => lots.filter((lot) => ["ACCEPTED", "IN_EXECUTION"].includes(lot.status)).reduce((sum, lot) => sum + Number(lot.total || 0), 0), [lots]);
 	const potential = useMemo(() => lots.reduce((sum, lot) => sum + Number(lot.valor || 0), 0), [lots]);
 
@@ -136,7 +136,7 @@ export default function MercadoProviderDashboardV7() {
 					<section className="mercado-reference-hero"><div><h1>Olá, {data.user.displayName}</h1><p>Encontre e monte seus lotes de retiradas em Minas Gerais.</p></div><Link to="/mercado/montar-lote"><PackagePlus size={20} />Montar lote <ChevronRight size={20} /></Link></section>
 					{error ? <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p> : null}
 					<section className="mercado-reference-metrics">
-						<MetricCard icon={PackageCheck} label="OS disponíveis" value={available.toLocaleString("pt-BR")} detail={`Em ${cities.length} cidades`} />
+		<MetricCard icon={PackageCheck} label="OS disponíveis" value={available.toLocaleString("pt-BR")} detail={`Em ${cities.length} cidades`} />
 						<MetricCard icon={MapPin} label="Cidades com oportunidades" value={cities.length} detail="dos 853 municípios" />
 						<MetricCard icon={ListChecks} label="Meus lotes ativos" value={`${activeLots} / 3`} detail={`${Math.max(3 - activeLots, 0)} vaga(s) disponível(is)`} progress={(activeLots / 3) * 100} />
 						<MetricCard icon={CircleDollarSign} label="Valor potencial" value={money(potential)} detail="Com base nos lotes ativos" />

@@ -38,6 +38,7 @@ import { hasAnyPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
 import { mercadoApi } from "../services/mercadoService";
+import { mercadoProviderApi } from "../services/mercadoProviderApi";
 import MercadoMap from "./MercadoMap";
 import { MercadoBrand } from "./MercadoBrand";
 import "../mercado-design.css";
@@ -254,7 +255,17 @@ const faqItems = [
 
 export function MercadoLandingPage() {
 	const [menuOpen, setMenuOpen] = useState(false);
+	const [sessionChecked, setSessionChecked] = useState(false);
+	const navigate = useNavigate();
 	const loginUrl = ROUTES.MERCADO_LOGIN;
+	useEffect(() => {
+		let active = true;
+		mercadoProviderApi.me()
+			.then(() => active && navigate(ROUTES.MERCADO_DASHBOARD, { replace: true }))
+			.catch(() => active && setSessionChecked(true));
+		return () => { active = false; };
+	}, [navigate]);
+	if (!sessionChecked) return <div className="min-h-dvh bg-[#F3F6FA]" />;
 	return (
 		<div className="min-h-dvh bg-[#F3F6FA] text-[#172B4D]">
 			<header className="sticky top-0 z-40 border-b border-white/60 bg-white/90 backdrop-blur">
