@@ -60,8 +60,16 @@ alter table mercado_lote_os add column if not exists ordem_execucao integer;
 alter table mercado_lote_os add column if not exists grupo_liberacao integer not null default 1;
 alter table mercado_lote_os add column if not exists liberada_em timestamptz;
 alter table mercado_lote_os add column if not exists liberada_por text;
-create unique index if not exists mercado_lote_os_lote_ordem_execucao_idx on mercado_lote_os(lote_id, ordem_execucao) where ordem_execucao is not null;
-create index if not exists mercado_lote_os_liberacao_idx on mercado_lote_os(lote_id, grupo_liberacao, liberada_em);
+do $$
+begin
+  if to_regclass('public.mercado_lote_os_lote_ordem_execucao_idx') is null then
+    execute 'create unique index mercado_lote_os_lote_ordem_execucao_idx on mercado_lote_os(lote_id, ordem_execucao) where ordem_execucao is not null';
+  end if;
+
+  if to_regclass('public.mercado_lote_os_liberacao_idx') is null then
+    execute 'create index mercado_lote_os_liberacao_idx on mercado_lote_os(lote_id, grupo_liberacao, liberada_em)';
+  end if;
+end $$;
 
 with ranked as (
   select id, lote_id,
