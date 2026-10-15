@@ -11,6 +11,12 @@ import { initErrorTracking } from "./services/errorTracking";
 
 initErrorTracking();
 
+if (typeof window !== "undefined" && window.location.hostname === "mercado.retiradas.tech") {
+	document.title = "Mercado de Retiradas | Cluster MG";
+	const favicon = document.querySelector("link[rel='icon']");
+	if (favicon) favicon.setAttribute("href", "/logo-clustermg.png");
+}
+
 const PUBLIC_PWA_PATHS = new Set([
 	"/painel",
 	"/painel/relatorios",
