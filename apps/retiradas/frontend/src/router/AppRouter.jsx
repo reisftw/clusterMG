@@ -211,7 +211,7 @@ const MercadoVerifyEmailPage = lazy(() => import("../modules/mercado/components/
 const MercadoProfilePage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoProfilePage })));
 const MercadoPasswordRecoveryPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoPasswordRecoveryPage })));
 const MercadoPasswordResetPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoPasswordResetPage })));
-const MercadoProviderDashboardPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoProviderDashboardPage })));
+const MercadoProviderDashboardPage = lazy(() => import("../modules/mercado/components/MercadoProviderDashboardV7"));
 const MercadoMontarLotePage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoMontarLotePage })));
 const MercadoMeusLotesProviderPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoMeusLotesProviderPage })));
 const {
