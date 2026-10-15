@@ -1,6 +1,6 @@
 import {
 	BadgeDollarSign,
-	BarChart3,
+	Bell,
 	CheckSquare,
 	Clock,
 	FileBarChart,
@@ -11,6 +11,7 @@ import {
 	PackageCheck,
 	Settings2,
 	ShoppingBag,
+	UserRound,
 	X,
 } from "lucide-react";
 import { useState } from "react";
@@ -18,6 +19,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { hasAnyPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
+import "../mercado-design.css";
 
 const NAV_ITEMS = [
 	{
@@ -95,8 +97,8 @@ function NavItems({ onNavigate }) {
 						className={({ isActive }) =>
 							`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-black transition ${
 								isActive
-									? "bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-950/20"
-									: "text-slate-300 hover:bg-white/10 hover:text-white"
+									? "mercado-nav-active"
+									: "mercado-nav-link"
 							}`
 						}
 					>
@@ -111,22 +113,12 @@ function NavItems({ onNavigate }) {
 
 function SidebarContent({ onNavigate }) {
 	return (
-		<div className="flex h-full flex-col bg-slate-950 px-4 py-5 text-white">
-			<div className="flex items-center gap-3">
-				<div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-950/30">
-					<BarChart3 size={22} />
-				</div>
-				<div>
-					<p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">
-						Mercado
-					</p>
-					<h1 className="text-lg font-black leading-tight text-white">
-						Retiradas
-					</h1>
-				</div>
+		<div className="mercado-sidebar flex h-full flex-col px-4 py-5 text-white">
+			<div className="border-b border-white/10 pb-5">
+				<img src="/mercado/logo-mercado.svg" alt="Mercado de Retiradas" className="h-auto w-[190px]" />
 			</div>
 			<NavItems onNavigate={onNavigate} />
-			<div className="mt-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+			<div className="mercado-support mt-auto rounded-2xl border p-3">
 				<div className="flex items-center gap-2 text-xs font-black uppercase text-cyan-200">
 					<Clock size={14} />
 					SLA padrão
@@ -152,7 +144,7 @@ export default function MercadoLayout() {
 		)?.label || "Mercado";
 
 	return (
-		<div className="flex min-h-dvh bg-slate-100 text-slate-950">
+		<div className="mercado-app flex min-h-dvh text-slate-950">
 			<aside className="hidden w-72 shrink-0 lg:block">
 				<SidebarContent />
 			</aside>
@@ -178,7 +170,7 @@ export default function MercadoLayout() {
 				</div>
 			) : null}
 			<div className="flex min-w-0 flex-1 flex-col">
-				<header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:px-6">
+				<header className="mercado-header sticky top-0 z-30 border-b bg-white/95 px-4 py-3 backdrop-blur lg:px-6">
 					<div className="flex items-center justify-between gap-3">
 						<div className="flex min-w-0 items-center gap-3">
 							<button
@@ -190,31 +182,25 @@ export default function MercadoLayout() {
 								<Menu size={20} />
 							</button>
 							<div className="min-w-0">
-								<p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">
-									Operação terceirizada
+								<p className="text-xs font-bold text-slate-400">
+									Mercado de Retiradas <span className="px-1.5">/</span> Operação
 								</p>
 								<h2 className="truncate text-xl font-black text-slate-950">
 									{title}
 								</h2>
 							</div>
 						</div>
-						<div className="hidden text-right sm:block">
-							<p className="text-sm font-black text-slate-900">
-								{currentUser?.displayName ||
-									currentUser?.nome ||
-									currentUser?.email ||
-									"Usuário"}
-							</p>
-							<p className="text-xs font-semibold text-slate-500">
-								{currentUser?.empresaNome ||
-									currentUser?.empresa_nome ||
-									currentUser?.profile?.empresa_nome ||
-									"Retiradas"}
-							</p>
+						<div className="flex items-center gap-3">
+							<button type="button" className="hidden h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 sm:inline-flex" aria-label="Notificações"><Bell size={19} /></button>
+							<div className="hidden text-right sm:block">
+								<p className="text-sm font-black text-slate-900">{currentUser?.displayName || currentUser?.nome || currentUser?.email || "Usuário"}</p>
+								<p className="text-xs font-semibold text-slate-500">{currentUser?.empresaNome || currentUser?.empresa_nome || currentUser?.profile?.empresa_nome || "Conta Mercado"}</p>
+							</div>
+							<div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-100 text-cyan-800"><UserRound size={19} /></div>
 						</div>
 					</div>
 				</header>
-				<main className="min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
+				<main className="mercado-page min-w-0 flex-1 overflow-x-hidden p-4 lg:p-6">
 					<Outlet />
 				</main>
 			</div>

@@ -1,0 +1,51 @@
+:root {
+	--mercado-navy: #081426;
+	--mercado-navy-2: #101e33;
+	--mercado-cyan: #00cfef;
+	--mercado-blue: #009ff5;
+	--mercado-bg: #f4f8fc;
+	--mercado-card: #ffffff;
+	--mercado-text: #0b1730;
+	--mercado-muted: #64748b;
+	--mercado-border: #e2eaf2;
+	--mercado-success: #10b981;
+	--mercado-warning: #f59e0b;
+	--mercado-danger: #ef4444;
+	--mercado-shadow: 0 12px 30px rgba(17, 54, 89, .08);
+}
+
+.mercado-brand { display: block; width: 178px; height: auto; }
+.mercado-brand--compact { width: 42px; }
+.mercado-app { background: var(--mercado-bg); color: var(--mercado-text); }
+.mercado-app .mercado-sidebar { background: linear-gradient(180deg, var(--mercado-navy), var(--mercado-navy-2)); }
+.mercado-app .mercado-header { border-color: var(--mercado-border); box-shadow: 0 1px 0 rgba(11, 23, 48, .03); }
+.mercado-app .mercado-page { max-width: 1600px; margin: 0 auto; width: 100%; }
+.mercado-app .mercado-support { background: rgba(255,255,255,.065); border-color: rgba(255,255,255,.11); }
+.mercado-app .mercado-nav-active { background: var(--mercado-cyan); color: var(--mercado-navy); box-shadow: 0 10px 20px rgba(0,207,239,.18); }
+.mercado-app .mercado-nav-link { color: #c1d0e2; }
+.mercado-app .mercado-nav-link:hover { background: rgba(255,255,255,.08); color: #fff; }
+.mercado-app .mercado-card { border-color: var(--mercado-border); box-shadow: var(--mercado-shadow); }
+.mercado-app button:focus-visible, .mercado-app a:focus-visible, .mercado-app input:focus-visible, .mercado-app select:focus-visible { outline: 3px solid rgba(0, 207, 239, .35); outline-offset: 2px; }
+
+.mercado-banner { background: linear-gradient(105deg, #081426 0%, #103c63 62%, #087da6 100%); position: relative; overflow: hidden; }
+.mercado-banner::after { background: url('/mercado/hero-mountains.svg') bottom/cover no-repeat; content: ''; inset: 0; opacity: .62; pointer-events: none; position: absolute; }
+.mercado-banner > * { position: relative; z-index: 1; }
+.mercado-stat-card { min-height: 142px; }
+.mercado-map { border: 1px solid var(--mercado-border); border-radius: 16px; overflow: hidden; position: relative; background: #eef7fb; }
+.mercado-map__canvas { height: 540px; width: 100%; background: #eef7fb; }
+.mercado-map .leaflet-control-zoom a { color: #0b1730; border-color: var(--mercado-border); }
+.mercado-map__tooltip { border: 0; border-radius: 8px; box-shadow: 0 10px 22px rgba(11,23,48,.16); color: #0b1730; font-weight: 700; padding: 8px 10px; }
+.mercado-map__legend { bottom: 16px; display: flex; flex-wrap: wrap; gap: 10px; left: 16px; position: absolute; z-index: 600; background: rgba(255,255,255,.94); border: 1px solid var(--mercado-border); border-radius: 10px; box-shadow: 0 4px 16px rgba(11,23,48,.10); padding: 9px 11px; color: var(--mercado-muted); font-size: 11px; font-weight: 700; }
+.mercado-map__legend span { align-items: center; display: inline-flex; gap: 5px; }
+.mercado-map__legend i { border-radius: 999px; display: block; height: 9px; width: 9px; }
+.mercado-map__legend .is-none { background:#dce5ee; }.mercado-map__legend .is-low { background:#beebfa; }.mercado-map__legend .is-medium { background:#009ff5; }.mercado-map__legend .is-high { background:#0b4e8a; }
+.mercado-map__loading, .mercado-map-error { align-items:center; color:var(--mercado-muted); display:flex; font-size:14px; font-weight:700; inset:0; justify-content:center; position:absolute; }
+.mercado-map-error { position:relative; min-height:260px; padding:24px; text-align:center; }
+
+.mercado-opportunity { border: 1px solid var(--mercado-border); border-radius: 12px; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.mercado-opportunity:hover, .mercado-opportunity.is-active { border-color: var(--mercado-cyan); box-shadow: 0 8px 20px rgba(0,159,245,.11); transform: translateY(-1px); }
+.mercado-progress { background: #e9f0f6; border-radius: 999px; height: 8px; overflow: hidden; }.mercado-progress > span { background: linear-gradient(90deg, var(--mercado-cyan), var(--mercado-blue)); border-radius: inherit; display:block; height:100%; }
+
+.mercado-public { background: var(--mercado-bg); color: var(--mercado-text); min-height: 100dvh; }.mercado-public-header { background: rgba(255,255,255,.94); border-bottom: 1px solid var(--mercado-border); }.mercado-auth-panel { box-shadow: var(--mercado-shadow); border-color: var(--mercado-border); }.mercado-public .mercado-brand { width: 190px; }
+@media (max-width: 1023px) { .mercado-map__canvas { height: 440px; } }
+@media (max-width: 640px) { .mercado-brand { width: 154px; }.mercado-map__canvas { height: 380px; }.mercado-map__legend { right: 12px; left: 12px; bottom: 12px; }.mercado-app .mercado-page { max-width: 100%; } }

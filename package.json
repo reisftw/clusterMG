@@ -51,11 +51,13 @@
 		"exceljs": "3.10.0",
 		"jspdf": "^4.2.1",
 		"jspdf-autotable": "^5.0.7",
+		"leaflet": "^1.9.4",
 		"lucide-react": "^0.577.0",
 		"qrcode": "^1.5.4",
 		"react": "^19.2.4",
 		"react-chartjs-2": "^5.3.1",
 		"react-dom": "^19.2.4",
+		"react-leaflet": "^5.0.0",
 		"react-router-dom": "7.18.2",
 		"tesseract.js": "^7.0.0",
 		"xlsx": "file:ops/vm-migration/vendor/xlsx-0.20.3.tgz"

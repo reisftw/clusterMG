@@ -38,6 +38,9 @@ import { hasAnyPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { ROUTES } from "../../../router/routes";
 import { mercadoApi } from "../services/mercadoService";
+import MercadoMap from "./MercadoMap";
+import { MercadoBrand } from "./MercadoBrand";
+import "../mercado-design.css";
 
 const statusLabels = {
 	DRAFT: "Rascunho",
@@ -256,14 +259,8 @@ export function MercadoLandingPage() {
 		<div className="min-h-dvh bg-[#F3F6FA] text-[#172B4D]">
 			<header className="sticky top-0 z-40 border-b border-white/60 bg-white/90 backdrop-blur">
 				<div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 lg:px-6">
-					<a href="#topo" className="flex items-center gap-3">
-						<div className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#0C203B] text-white">
-							<PackageCheck size={23} />
-						</div>
-						<div>
-							<p className="text-sm font-black leading-tight text-[#0C203B]">Mercado de Retiradas</p>
-							<p className="text-[11px] font-bold text-[#64748B]">Oportunidades e execução</p>
-						</div>
+					<a href="#topo" className="flex items-center">
+						<MercadoBrand tone="light" className="max-w-[220px]" />
 					</a>
 					<nav className="hidden items-center gap-6 text-sm font-black text-[#64748B] lg:flex">
 						<a href="#como-funciona" className="hover:text-[#146DAD]">Como funciona</a>
@@ -474,8 +471,11 @@ export function MercadoLandingPage() {
 export function MercadoDashboardPage() {
 	const { currentUser } = useAuthContext();
 	const { data, loading, error, reload } = useLoad(() => mercadoApi.dashboard());
+	const [selectedCity, setSelectedCity] = useState("");
+	const navigate = useNavigate();
 	const lotes = data?.lotes || [];
 	const os = data?.os || [];
+	const cidades = data?.cidades?.items || [];
 	const totalByStatus = Object.fromEntries(lotes.map((item) => [item.status, item.total]));
 	const valorByStatus = Object.fromEntries(lotes.map((item) => [item.status, Number(item.valor || 0)]));
 	const osRecuperadas = os
@@ -496,126 +496,44 @@ export function MercadoDashboardPage() {
 	if (loading) return <Spinner fullScreen />;
 
 	return (
-		<div className="space-y-5">
-			<div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-				<div className="bg-[#0C203B] p-5 text-white">
-					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-						<div>
-							<p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
-								{isAdmin ? "Visão administrativa" : "Operação da terceirizada"}
-							</p>
-							<h1 className="mt-2 text-2xl font-black">
-								Olá! Veja como está sua operação hoje.
-							</h1>
-							<p className="mt-1 text-sm font-semibold text-slate-300">
-								{currentUser?.empresaNome || currentUser?.empresa_nome || currentUser?.profile?.empresa_nome || currentUser?.displayName || currentUser?.email || "Mercado de Retiradas"} · {today}
-							</p>
-						</div>
-						<button
-							type="button"
-							onClick={reload}
-							className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/10 px-4 text-sm font-black text-white"
-						>
-							<RefreshCw size={16} />
-							Atualizar
-						</button>
+		<div className="space-y-6">
+			<section className="mercado-banner rounded-2xl p-6 text-white lg:p-8">
+				<div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+					<div>
+						<p className="text-xs font-black uppercase tracking-[.18em] text-cyan-200">{isAdmin ? "Painel administrativo" : "Painel operacional"}</p>
+						<h1 className="mt-2 text-3xl font-black lg:text-4xl">Olá, {currentUser?.displayName || currentUser?.nome || "equipe"}</h1>
+						<p className="mt-2 max-w-xl text-sm font-semibold text-slate-200">Acompanhe oportunidades, lotes e resultados do Mercado de Retiradas em Minas Gerais.</p>
+					</div>
+					<div className="flex flex-wrap gap-3">
+						<button type="button" onClick={() => navigate(ROUTES.MERCADO_LOTES)} className="rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950">Montar lote</button>
+						<button type="button" onClick={reload} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-black text-white"><RefreshCw size={16} />Atualizar</button>
 					</div>
 				</div>
-				<div className="grid gap-4 p-5 lg:grid-cols-[1.1fr_.9fr]">
-					<div>
-						<p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Minha capacidade de lotes</p>
-						<div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-							<div className="flex items-center justify-between gap-4">
-								<div>
-									<p className="text-3xl font-black text-slate-950">{capacidadeOcupada} de {capacidadeMax}</p>
-									<p className="text-sm font-semibold text-slate-500">vagas ocupadas</p>
-								</div>
-								<div className="flex h-14 w-14 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700">
-									<Layers3 size={26} />
-								</div>
-							</div>
-							<div className="mt-4">
-								<ProgressBar value={capacidadePct} />
-							</div>
-						</div>
-					</div>
-					<div>
-						<p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">O que precisa de atenção</p>
-						<div className="mt-3 grid gap-2">
-							<div className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm font-black text-amber-800">
-								<span>Lotes submetidos</span>
-								<span>{totalByStatus.SUBMITTED || 0}</span>
-							</div>
-							<div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-black text-slate-700">
-								<span>OS pendentes</span>
-								<span>{osPendentes}</span>
-							</div>
-							<div className="flex items-center justify-between rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-black text-cyan-800">
-								<span>Vagas disponíveis</span>
-								<span>{Math.max(capacidadeMax - capacidadeOcupada, 0)}</span>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
+			</section>
 			<ErrorState message={error} />
-			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-				<Kpi icon={ShoppingBag} label="Lotes disponíveis" value={totalByStatus.AVAILABLE || 0} />
-				<Kpi icon={Play} label="Em execução" value={capacidadeOcupada} />
-				<Kpi icon={CheckCircle2} label="OS recuperadas" value={osRecuperadas} detail={`${taxa}% de conclusão`} />
-				<Kpi icon={BadgeDollarSign} label="Valor potencial" value={money((valorByStatus.AVAILABLE || 0) + (valorByStatus.ACCEPTED || 0) + (valorByStatus.IN_EXECUTION || 0))} />
-			</div>
-			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-				<Kpi icon={FileText} label="OS pendentes" value={osPendentes} />
-				<Kpi icon={Upload} label="OS submetidas" value={osSubmetidas} />
-				<Kpi icon={CircleDollarSign} label="Valor aprovado" value={money(valorByStatus.APPROVED)} />
-				<Kpi icon={LockKeyhole} label="SLA padrão" value={`${data?.config?.prazos?.slaHoras || 72}h`} detail={`${data?.config?.prazos?.regularizacaoDias || 7} dias para regularização`} />
-			</div>
-			<section className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
-				<div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="flex items-center justify-between gap-3">
-						<div>
-							<h2 className="text-lg font-black text-slate-950">Distribuição dos lotes</h2>
-							<p className="text-sm font-semibold text-slate-500">Volume por status operacional.</p>
-						</div>
-						<BarChart3 className="text-cyan-700" />
-					</div>
-					<div className="mt-5 space-y-4">
-						{lotes.map((item) => {
-							const total = Number(item.total || 0);
-							const max = Math.max(...lotes.map((row) => Number(row.total || 0)), 1);
-							return (
-								<div key={item.status}>
-									<div className="mb-2 flex items-center justify-between text-sm font-black text-slate-700">
-										<span>{statusLabels[item.status] || item.status}</span>
-										<span>{total}</span>
-									</div>
-									<ProgressBar value={(total / max) * 100} tone={item.status === "APPROVED" ? "emerald" : item.status === "SUBMITTED" ? "amber" : "cyan"} />
-								</div>
-							);
-						})}
-						{!lotes.length ? <EmptyState title="Sem lotes" description="Os indicadores aparecerão quando houver movimentação." /> : null}
-					</div>
+			<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<Kpi icon={ShoppingBag} label="OS disponíveis" value={cidades.reduce((sum, city) => sum + Number(city.total || 0), 0)} detail={`${cidades.length} cidades com oportunidades`} />
+				<Kpi icon={MapPin} label="Cidades com oportunidades" value={cidades.length} detail="Malha oficial de 853 municípios" />
+				<Kpi icon={Layers3} label="Meus lotes ativos" value={`${capacidadeOcupada} / ${capacidadeMax}`} detail={`${Math.max(capacidadeMax - capacidadeOcupada, 0)} vagas disponíveis`} />
+				<Kpi icon={BadgeDollarSign} label="Valor potencial" value={money((valorByStatus.AVAILABLE || 0) + (valorByStatus.ACCEPTED || 0) + (valorByStatus.IN_EXECUTION || 0))} detail="Conforme regras financeiras vigentes" />
+			</section>
+			<section className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+				<div className="mercado-card rounded-2xl border bg-white p-4 lg:p-5">
+					<div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-black uppercase tracking-[.14em] text-cyan-700">Mapa de oportunidades</p><h2 className="text-xl font-black text-slate-950">Minas Gerais por município</h2><p className="text-sm font-semibold text-slate-500">Clique em uma cidade para explorar oportunidades sem expor dados pessoais.</p></div><span className="text-xs font-bold text-slate-400">Atualizado: {today}</span></div>
+					<MercadoMap cities={cidades} selectedCity={selectedCity} onSelectCity={setSelectedCity} />
 				</div>
-				<div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-					<h2 className="text-lg font-black text-slate-950">Ranking de empresas</h2>
-					<div className="mt-4 divide-y divide-slate-100">
-						{(data?.rankingEmpresas || []).map((item) => (
-							<div key={item.accepted_by_empresa_id} className="flex items-center justify-between py-3">
-								<div>
-									<p className="font-black text-slate-900">{item.accepted_by_empresa_nome || item.accepted_by_empresa_id}</p>
-									<p className="text-xs font-semibold text-slate-500">{item.accepted_by_empresa_id}</p>
-								</div>
-								<span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
-									{item.lotes} lote(s)
-								</span>
-							</div>
-						))}
-						{!data?.rankingEmpresas?.length ? (
-							<EmptyState title="Sem empresas em execução" description="Os lotes aceitos aparecerão aqui." />
-						) : null}
+				<aside className="mercado-card rounded-2xl border bg-white p-4 lg:p-5">
+					<div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[.14em] text-cyan-700">Principais oportunidades</p><h2 className="text-lg font-black text-slate-950">Cidades elegíveis</h2></div><span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-black text-cyan-800">{cidades.length}</span></div>
+					<div className="mt-4 max-h-[478px] space-y-2 overflow-y-auto pr-1">
+						{cidades.slice(0, 20).map((city) => <button key={city.cidade} type="button" onClick={() => setSelectedCity(city.cidade)} className={`mercado-opportunity w-full p-3 text-left ${selectedCity === city.cidade ? "is-active" : ""}`}><div className="flex items-start justify-between gap-3"><div><p className="font-black text-slate-950">{city.cidade}</p><p className="mt-1 text-xs font-semibold text-slate-500">{city.equipamentos.slice(0, 2).map((equipment) => equipment.tipo).join(" · ") || "Equipamentos diversos"}</p></div><span className="text-sm font-black text-cyan-700">{city.total}</span></div></button>)}
+						{!cidades.length ? <EmptyState title="Sem oportunidades agora" description="Quando houver OS elegíveis, elas aparecerão aqui." /> : null}
 					</div>
-				</div>
+					{selectedCity ? <button type="button" onClick={() => navigate(`${ROUTES.MERCADO_LOTES}?cidade=${encodeURIComponent(selectedCity)}`)} className="mt-4 w-full rounded-xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950">Explorar {selectedCity}</button> : null}
+				</aside>
+			</section>
+			<section className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+				<div className="mercado-card rounded-2xl border bg-white p-5"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[.14em] text-cyan-700">Meus lotes ativos</p><h2 className="text-xl font-black">Visão operacional</h2></div><Play className="text-cyan-700" /></div><div className="mt-5 space-y-4">{lotes.map((item) => { const total = Number(item.total || 0); const max = Math.max(...lotes.map((row) => Number(row.total || 0)), 1); return <div key={item.status}><div className="mb-2 flex justify-between text-sm font-black text-slate-700"><span>{statusLabels[item.status] || item.status}</span><span>{total} lote(s)</span></div><ProgressBar value={(total / max) * 100} tone={item.status === "APPROVED" ? "emerald" : item.status === "SUBMITTED" ? "amber" : "cyan"} /></div>; })}{!lotes.length ? <EmptyState title="Nenhum lote ativo" description="Os lotes aceitos aparecerão nesta área." /> : null}</div></div>
+				<div className="mercado-card rounded-2xl border bg-white p-5"><p className="text-xs font-black uppercase tracking-[.14em] text-cyan-700">Saúde da operação</p><h2 className="text-xl font-black">Indicadores de acompanhamento</h2><div className="mt-5 grid gap-3 sm:grid-cols-2"><Kpi icon={CheckCircle2} label="OS recuperadas" value={osRecuperadas} detail={`${taxa}% de conclusão`} /><Kpi icon={FileText} label="OS pendentes" value={osPendentes} detail={`${osSubmetidas} submetidas`} /></div></div>
 			</section>
 		</div>
 	);

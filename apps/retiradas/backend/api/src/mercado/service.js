@@ -1360,10 +1360,37 @@ async function dashboard(_query = {}, user = {}) {
 		  order by lotes desc
 		  limit 10`,
 	);
+	const oportunidades = await db.query(
+		`select os.cidade,
+		        coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado') as equipamento_tipo,
+		        count(*)::int as total
+		   from ordens_servico os
+		  where nullif(trim(coalesce(os.cidade,'')),'') is not null
+		    and coalesce(os.status,'') not ilike '%fech%'
+		    and not exists (
+		      select 1
+		        from mercado_lote_os lote_os
+		        join mercado_lotes lote on lote.id = lote_os.lote_id
+		       where lote_os.ordem_servico_id = os.id
+		         and lote.status = any(array['DRAFT','AVAILABLE','ACCEPTED','IN_EXECUTION','SUBMITTED'])
+		    )
+		  group by os.cidade, coalesce(nullif(os.tipo,''), nullif(os.servico,''), 'Equipamento não classificado')
+		  order by total desc, os.cidade asc
+		  limit 500`,
+	);
+	const cidades = new Map();
+	for (const row of oportunidades.rows) {
+		const cidade = text(row.cidade);
+		const item = cidades.get(cidade) || { cidade, total: 0, equipamentos: [] };
+		item.total += Number(row.total || 0);
+		item.equipamentos.push({ tipo: row.equipamento_tipo, total: Number(row.total || 0) });
+		cidades.set(cidade, item);
+	}
 	return {
 		lotes: lots.rows,
 		os: os.rows,
 		rankingEmpresas: empresas.rows,
+		cidades: { items: [...cidades.values()].sort((a, b) => b.total - a.total || a.cidade.localeCompare(b.cidade, "pt-BR")) },
 		config: (await getCurrentConfig()).config,
 	};
 }

@@ -1,0 +1,16 @@
+{
+  "name": "Mercado de Retiradas",
+  "short_name": "Mercado",
+  "start_url": "/mercado",
+  "display": "standalone",
+  "background_color": "#f3f7fb",
+  "theme_color": "#00bde8",
+  "icons": [
+    {
+      "src": "/mercado/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

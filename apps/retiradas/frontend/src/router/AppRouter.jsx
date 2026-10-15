@@ -205,15 +205,15 @@ const ConfiguracoesGerais = lazy(
 const MercadoLayout = lazy(
 	() => import("../modules/mercado/components/MercadoLayout"),
 );
-const MercadoProviderLoginPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoProviderLoginPage })));
-const MercadoRegistrationPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoRegistrationPage })));
-const MercadoVerifyEmailPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoVerifyEmailPage })));
-const MercadoProfilePage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoProfilePage })));
-const MercadoPasswordRecoveryPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoPasswordRecoveryPage })));
-const MercadoPasswordResetPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoPasswordResetPage })));
-const MercadoProviderDashboardPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoProviderDashboardPage })));
-const MercadoMontarLotePage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoMontarLotePage })));
-const MercadoMeusLotesProviderPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoMeusLotesProviderPage })));
+const MercadoProviderLoginPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoProviderLoginPage })));
+const MercadoRegistrationPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoRegistrationPage })));
+const MercadoVerifyEmailPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoVerifyEmailPage })));
+const MercadoProfilePage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoProfilePage })));
+const MercadoPasswordRecoveryPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoPasswordRecoveryPage })));
+const MercadoPasswordResetPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoPasswordResetPage })));
+const MercadoProviderDashboardPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoProviderDashboardPage })));
+const MercadoMontarLotePage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoMontarLotePage })));
+const MercadoMeusLotesProviderPage = lazy(() => import("../modules/mercado/components/MercadoPortalV6").then((module) => ({ default: module.MercadoMeusLotesProviderPage })));
 const {
 	MercadoAprovacoesPage,
 	MercadoConfiguracoesPage,
