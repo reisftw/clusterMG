@@ -250,12 +250,8 @@ const faqItems = [
 ];
 
 export function MercadoLandingPage() {
-	const { currentUser, loading } = useAuthContext();
 	const [menuOpen, setMenuOpen] = useState(false);
-	if (loading) return <Spinner fullScreen />;
-	if (currentUser) return <Navigate to={ROUTES.MERCADO_DASHBOARD} replace />;
-
-	const loginUrl = `${ROUTES.LOGIN}?redirect=${encodeURIComponent(ROUTES.MERCADO_DASHBOARD)}`;
+	const loginUrl = ROUTES.MERCADO_LOGIN;
 	return (
 		<div className="min-h-dvh bg-[#F3F6FA] text-[#172B4D]">
 			<header className="sticky top-0 z-40 border-b border-white/60 bg-white/90 backdrop-blur">

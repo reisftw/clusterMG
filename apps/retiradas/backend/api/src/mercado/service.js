@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const db = require("../db");
 const documents = require("../documents");
 const auditLog = require("../auditLog");
+const { currentGroup, visibleRows } = require("./progressivePrivacy");
 
 const VIEW_PERMISSIONS = [
 	"mercado.dashboard.view",
@@ -614,9 +615,21 @@ async function getLote(id, user = {}) {
 		`select * from mercado_lote_eventos where lote_id = $1 order by created_at desc limit 100`,
 		[id],
 	);
+	const isManager = canManageMercado(user);
+	const visibleGroup = isManager ? null : currentGroup(osResult.rows);
+	const visibleOs = isManager
+		? osResult.rows
+		: visibleRows(osResult.rows);
 	return {
 		item: mapLote(lote),
-		os: osResult.rows.map(mapOs),
+		os: visibleOs.map(mapOs),
+		progressiveRelease: isManager ? null : {
+			currentGroup: visibleGroup,
+			groupSize: 3,
+			total: osResult.rows.length,
+			available: visibleOs.length,
+			blocked: Math.max(0, osResult.rows.length - visibleOs.length),
+		},
 		events: eventsResult.rows,
 	};
 }
@@ -884,8 +897,17 @@ async function acceptLote(id, user = {}) {
 		await client.query(
 			`update mercado_lote_os
 			    set status = 'IN_PROGRESS',
-			        sla_due_at = $2
-			  where lote_id = $1`,
+			        ordem_execucao = ranked.ordem_execucao,
+			        grupo_liberacao = ranked.grupo_liberacao,
+			        liberada_em = case when ranked.grupo_liberacao = 1 then now() else null end,
+			        sla_due_at = case when ranked.grupo_liberacao = 1 then $2 else null end
+			   from (
+			     select id,
+			       row_number() over (order by bairro nulls last, num_os nulls last, id) as ordem_execucao,
+			       ceil(row_number() over (order by bairro nulls last, num_os nulls last, id) / 3.0)::int as grupo_liberacao
+			     from mercado_lote_os where lote_id = $1
+			   ) ranked
+			  where mercado_lote_os.id = ranked.id`,
 			[id, due],
 		);
 		await writeEvent(client, {
@@ -974,6 +996,11 @@ async function updateOsExecution(osId, payload = {}, user = {}) {
 		throw error;
 	}
 	assertEmpresaScope(user, current.accepted_by_empresa_id);
+	if (!canManageMercado(user) && !current.liberada_em) {
+		const error = new Error("Esta retirada ainda nao foi liberada para execucao.");
+		error.status = 403;
+		throw error;
+	}
 	const desfecho = nullableText(payload.desfecho);
 	const allowed = new Set([
 		"RECUPERADA",
@@ -998,6 +1025,7 @@ async function updateOsExecution(osId, payload = {}, user = {}) {
 		[osId, status, desfecho],
 	);
 	await audit("mercado_lote_os", "update", osId, current, result.rows[0], user);
+	if (status === "SUBMITTED") await releaseNextGroup(result.rows[0].lote_id, user);
 	await maybeReleaseLoteSlot(result.rows[0].lote_id, user);
 	return { item: mapOs(result.rows[0]) };
 }
@@ -1073,7 +1101,7 @@ async function addEvidencia(osId, payload = {}, user = {}) {
 
 async function assertOsAccess(osId, user = {}) {
 	const result = await db.query(
-		`select os.id, l.accepted_by_empresa_id
+		`select os.id, os.liberada_em, l.accepted_by_empresa_id
 		   from mercado_lote_os os
 		   join mercado_lotes l on l.id = os.lote_id
 		  where os.id = $1`,
@@ -1086,6 +1114,51 @@ async function assertOsAccess(osId, user = {}) {
 		throw error;
 	}
 	assertEmpresaScope(user, row.accepted_by_empresa_id);
+	if (!canManageMercado(user) && !row.liberada_em) {
+		const error = new Error("Esta retirada ainda nao foi liberada para execucao.");
+		error.status = 403;
+		throw error;
+	}
+}
+
+async function releaseNextGroup(loteId, user = {}) {
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		await client.query("select pg_advisory_xact_lock(hashtext($1))", [`mercado:lote:${loteId}`]);
+		const pending = await client.query(
+			`select min(grupo_liberacao)::int as grupo
+			   from mercado_lote_os
+			  where lote_id = $1
+			    and status not in ('SUBMITTED','APPROVED','REJECTED','CORRECTION_REQUESTED')`,
+			[loteId],
+		);
+		const group = Number(pending.rows[0]?.grupo || 0);
+		if (group > 1) {
+			const unlocked = await client.query(
+				`update mercado_lote_os
+				    set liberada_em = now(),
+				        sla_due_at = now() + (select sla_hours * interval '1 hour' from mercado_lotes where id = $1)
+				  where lote_id = $1 and grupo_liberacao = $2 and liberada_em is null
+				  returning id`,
+				[loteId, group],
+			);
+			if (unlocked.rowCount) {
+				await client.query(
+					`insert into mercado_lote_liberacoes (lote_id, grupo, motivo)
+					 values ($1, $2, 'CONCLUSAO_GRUPO_ANTERIOR') on conflict do nothing`,
+					[loteId, group],
+				);
+				await writeEvent(client, { loteId, tipo: "GRUPO_LIBERADO", descricao: `Grupo ${group} liberado para execucao.`, payload: { grupo: group }, user });
+			}
+		}
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function maybeReleaseLoteSlot(loteId, user = {}) {

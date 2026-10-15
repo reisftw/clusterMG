@@ -205,6 +205,15 @@ const ConfiguracoesGerais = lazy(
 const MercadoLayout = lazy(
 	() => import("../modules/mercado/components/MercadoLayout"),
 );
+const MercadoProviderLoginPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoProviderLoginPage })));
+const MercadoRegistrationPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoRegistrationPage })));
+const MercadoVerifyEmailPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoVerifyEmailPage })));
+const MercadoProfilePage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoProfilePage })));
+const MercadoPasswordRecoveryPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoPasswordRecoveryPage })));
+const MercadoPasswordResetPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoPasswordResetPage })));
+const MercadoProviderDashboardPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoProviderDashboardPage })));
+const MercadoMontarLotePage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoMontarLotePage })));
+const MercadoMeusLotesProviderPage = lazy(() => import("../modules/mercado/components/MercadoPortal").then((module) => ({ default: module.MercadoMeusLotesProviderPage })));
 const {
 	MercadoAprovacoesPage,
 	MercadoConfiguracoesPage,
@@ -439,6 +448,16 @@ const AppRouter = () => (
 						</AuthProvider>
 					}
 				/>
+				<Route path={ROUTES.MERCADO} element={<MercadoLandingPage />} />
+				<Route path={ROUTES.MERCADO_LOGIN} element={<MercadoProviderLoginPage />} />
+				<Route path={ROUTES.MERCADO_CADASTRO} element={<MercadoRegistrationPage />} />
+				<Route path={ROUTES.MERCADO_VERIFICAR_EMAIL} element={<MercadoVerifyEmailPage />} />
+				<Route path={ROUTES.MERCADO_PERFIL} element={<MercadoProfilePage />} />
+				<Route path={ROUTES.MERCADO_RECUPERAR_SENHA} element={<MercadoPasswordRecoveryPage />} />
+				<Route path={ROUTES.MERCADO_REDEFINIR_SENHA} element={<MercadoPasswordResetPage />} />
+				<Route path={ROUTES.MERCADO_DASHBOARD} element={<MercadoProviderDashboardPage />} />
+				<Route path={ROUTES.MERCADO_MONTAR_LOTE} element={<MercadoMontarLotePage />} />
+				<Route path={ROUTES.MERCADO_MEUS_LOTES} element={<MercadoMeusLotesProviderPage />} />
 
 				<Route element={<AuthenticatedRoutes />}>
 					<Route path={ROUTES.LOGIN} element={<LoginForm />} />
@@ -463,8 +482,6 @@ const AppRouter = () => (
 						}
 					/>
 
-					<Route path={ROUTES.MERCADO} element={<MercadoLandingPage />} />
-
 					<Route
 						element={
 							<ProtectedRoute requiredPermission={MERCADO_PERMISSIONS}>
@@ -472,10 +489,7 @@ const AppRouter = () => (
 							</ProtectedRoute>
 						}
 					>
-						<Route
-							path={ROUTES.MERCADO_DASHBOARD}
-							element={<MercadoDashboardPage />}
-						/>
+						<Route path={ROUTES.MERCADO_ADMIN_DASHBOARD} element={<MercadoDashboardPage />} />
 						<Route
 							path={ROUTES.MERCADO_DISPONIVEIS}
 							element={<MercadoDisponiveisPage />}
@@ -485,10 +499,7 @@ const AppRouter = () => (
 							path={ROUTES.MERCADO_LOTE_DETALHE}
 							element={<MercadoLoteDetalhePage />}
 						/>
-						<Route
-							path={ROUTES.MERCADO_MEUS_LOTES}
-							element={<MercadoMeusLotesPage />}
-						/>
+						<Route path={ROUTES.MERCADO_ADMIN_MEUS_LOTES} element={<MercadoMeusLotesPage />} />
 						<Route
 							path={ROUTES.MERCADO_EXECUCAO}
 							element={<MercadoExecucaoPage />}

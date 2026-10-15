@@ -22,7 +22,7 @@ import { ROUTES } from "../../../router/routes";
 const NAV_ITEMS = [
 	{
 		label: "Dashboard",
-		path: ROUTES.MERCADO_DASHBOARD,
+		path: ROUTES.MERCADO_ADMIN_DASHBOARD,
 		icon: LayoutDashboard,
 		permissions: ["mercado.dashboard.view"],
 		end: true,
@@ -41,7 +41,7 @@ const NAV_ITEMS = [
 	},
 	{
 		label: "Meus lotes",
-		path: ROUTES.MERCADO_MEUS_LOTES,
+		path: ROUTES.MERCADO_ADMIN_MEUS_LOTES,
 		icon: ListChecks,
 		permissions: ["mercado.execucao.view", "mercado.execucao.manage"],
 	},

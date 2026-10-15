@@ -53,6 +53,9 @@ const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesR
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createMercadoRouter = require("./mercado/routes");
+const { createMercadoAuthRouter } = require("./mercado/auth");
+const createMercadoProviderRouter = require("./mercado/providerRoutes");
+const createMercadoOnboardingRouter = require("./mercado/onboardingRoutes");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
@@ -1885,7 +1888,9 @@ const TOKEN_RENEW_WINDOW_SECONDS = Number(
 );
 
 function getAllowedOrigins() {
-	return String(process.env.CORS_ORIGIN || "")
+	return [process.env.CORS_ORIGIN, process.env.MERCADO_PUBLIC_APP_URL]
+		.filter(Boolean)
+		.join(",")
 		.split(",")
 		.map((origin) => origin.trim())
 		.filter(Boolean);
@@ -2575,6 +2580,15 @@ function createApp() {
 			requireCsrfToken,
 		}),
 	);
+
+	app.use("/api/mercado/auth", createMercadoAuthRouter());
+	app.use(
+		"/api/mercado/onboarding",
+		createMercadoOnboardingRouter({
+			requireInternalAdmin: [requireAuthenticated, requireRoles(ADMIN_ROLES)],
+		}),
+	);
+	app.use("/api/mercado/provider", createMercadoProviderRouter());
 
 	app.use(
 		"/api/mercado",
@@ -5772,8 +5786,8 @@ function createApp() {
 		}
 
 		console.error("[api]", error);
-		const status = error.statusCode || 500;
-		const body = { error: error.statusCode ? error.message : "Erro interno." };
+		const status = error.statusCode || error.status || 500;
+		const body = { error: error.statusCode || error.status ? error.message : "Erro interno." };
 		// DTOs (Fase C — vps/api/src/dtos/): erro de validacao tem uma forma
 		// propria (`.code`, `.fields`) — `error` continua sendo a mensagem
 		// legivel generica ("Dados invalidos."), como ja era antes, so
