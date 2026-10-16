@@ -311,7 +311,7 @@ async function getLocalUserByEmail(email) {
 		`select uid, email, display_name, role, regional, password_hash, password_salt,
             password_algorithm, session_version, disabled, must_change_password,
             last_login_at, last_login_ip, last_login_user_agent,
-            mfa_method, totp_secret, totp_enabled_at,
+            mfa_enabled, mfa_method, totp_secret, totp_enabled_at,
             empresa_id, empresa_nome, insumos_base_id, insumos_base_nome,
             imported_profile
        from app_users
@@ -405,7 +405,7 @@ async function getLocalUserByUid(uid) {
 	const result = await db.query(
 		`select uid, email, display_name, role, regional, session_version, disabled, must_change_password,
             last_login_at, last_login_ip, last_login_user_agent,
-            mfa_method, totp_secret, totp_enabled_at,
+            mfa_enabled, mfa_method, totp_secret, totp_enabled_at,
             empresa_id, empresa_nome, insumos_base_id, insumos_base_nome,
             imported_profile
        from app_users
@@ -889,6 +889,28 @@ async function resetLocalUserPassword(uid, password = makeTemporaryPassword()) {
 	if (!user) throw new Error("Usuario nao encontrado.");
 	await syncProfileDocument(user, { mustChangePassword: true });
 	return password;
+}
+
+async function resetUserMfaByAdmin(uid, { disableMfa = false } = {}) {
+	const user = await getLocalUserByUid(uid);
+	if (!user) {
+		const error = new Error("Usuario nao encontrado.");
+		error.statusCode = 404;
+		throw error;
+	}
+
+	await db.query(
+		`update app_users
+      set mfa_enabled = $2,
+          mfa_method = 'email',
+          totp_secret = null,
+          totp_enabled_at = null
+    where uid = $1`,
+		[uid, !disableMfa],
+	);
+	await db.query("delete from email_mfa_challenges where uid = $1", [uid]);
+	await revokeUserSessions(uid);
+	return { mfaEnabled: !disableMfa, method: "email", totpEnabled: false };
 }
 
 async function changeOwnPassword(
@@ -1604,6 +1626,7 @@ module.exports = {
 	renewSessionFromPayload,
 	revokeSession,
 	resetLocalUserPassword,
+	resetUserMfaByAdmin,
 	resetPasswordWithToken,
 	startTotpSetup,
 	confirmTotpSetup,

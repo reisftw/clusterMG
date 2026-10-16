@@ -95,6 +95,7 @@ const {
 	renewSessionFromPayload,
 	revokeSession,
 	resetLocalUserPassword,
+	resetUserMfaByAdmin,
 	resetPasswordWithToken,
 	startTotpSetup,
 	confirmTotpSetup,
@@ -3066,7 +3067,8 @@ function createApp() {
 				return;
 			}
 
-			if (emailConfig.mfaEmailEnabled) {
+			const localUser = await getLocalUserByEmail(email);
+			if (emailConfig.mfaEmailEnabled && localUser?.mfa_enabled !== false) {
 				const challenge = await startEmailMfaLogin(email, password, {
 					ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
 					req,
@@ -4559,6 +4561,42 @@ function createApp() {
 					emailStatus,
 					emailError,
 				});
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.post(
+		"/api/admin/users/:uid/mfa/reset",
+		requireAuthenticated,
+		requireCsrfToken,
+		async (req, res, next) => {
+			try {
+				if (!canManageUsers(req.user)) {
+					res.status(403).json({ error: "Permissao insuficiente." });
+					return;
+				}
+				const uid = String(req.params.uid || "").trim();
+				if (!uid) {
+					res.status(400).json({ error: "UID obrigatorio." });
+					return;
+				}
+				await assertCanUpdateManagedUser(req.user, uid, {});
+				const disableMfa = req.body?.disableMfa === true;
+				const beforeUser = await getManagedUserForAudit(uid);
+				const mfa = await resetUserMfaByAdmin(uid, { disableMfa });
+				const afterUser = await getManagedUserForAudit(uid);
+				auditLog.recordAuditLog({
+					action: "update",
+					module: "configuracao",
+					entity: "app_users_mfa",
+					recordId: uid,
+					beforeData: beforeUser,
+					afterData: afterUser,
+					changedFields: ["mfa_method", "mfa_enabled", "totp_secret"],
+				});
+				res.json({ ok: true, mfa });
 			} catch (error) {
 				next(error);
 			}

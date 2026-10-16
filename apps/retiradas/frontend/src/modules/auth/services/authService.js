@@ -320,6 +320,12 @@ export const gerarLinkPrimeiroAcessoAdmin = async (uid) =>
 		method: "POST",
 	});
 
+export const resetarMfaUsuarioAdmin = async (uid, { disableMfa = false } = {}) =>
+	requestVpsApi(`/admin/users/${encodeURIComponent(uid)}/mfa/reset`, {
+		method: "POST",
+		body: JSON.stringify({ disableMfa: Boolean(disableMfa) }),
+	});
+
 export const listarRegionaisAdmin = async () => {
 	const response = await requestVpsApi("/admin/regionais");
 	return (response?.regionais || [])

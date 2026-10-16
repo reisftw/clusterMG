@@ -4,6 +4,7 @@ import {
 	Mail,
 	MapPin,
 	ShieldCheck,
+	ShieldOff,
 	User,
 	UserCheck,
 	X,
@@ -24,6 +25,7 @@ import {
 	gerarLinkPrimeiroAcessoAdmin,
 	listarEmpresasAdmin,
 	listarRegionaisAdmin,
+	resetarMfaUsuarioAdmin,
 } from "../services/authService";
 import UserInsumosScopeFields from "./UserInsumosScopeFields";
 
@@ -106,6 +108,8 @@ const EditarUsuarioModal = ({
 	const [erro, setErro] = useState("");
 	const [loadingLink, setLoadingLink] = useState(false);
 	const [senhaPrimeiroAcesso, setSenhaPrimeiroAcesso] = useState("");
+	const [loadingMfa, setLoadingMfa] = useState(false);
+	const [mfaMessage, setMfaMessage] = useState("");
 	const nomeInputId = useId();
 	const emailInputId = useId();
 	const roleInputId = useId();
@@ -242,6 +246,31 @@ const EditarUsuarioModal = ({
 		}
 	};
 
+	const handleResetMfa = async (disableMfa) => {
+		const action = disableMfa
+			? "desativar o MFA deste usuário"
+			: "resetar o aplicativo autenticador deste usuário";
+		if (!window.confirm(`Confirma ${action}? As sessões ativas serão encerradas.`)) {
+			return;
+		}
+		setLoadingMfa(true);
+		setErro("");
+		setMfaMessage("");
+		try {
+			await resetarMfaUsuarioAdmin(usuario.id, { disableMfa });
+			setMfaMessage(
+				disableMfa
+					? "MFA desativado. O usuário poderá entrar apenas com e-mail e senha."
+					: "Autenticador removido. No próximo acesso, o usuário receberá MFA por e-mail.",
+			);
+			onSalvo();
+		} catch (error) {
+			setErro(`Erro ao atualizar MFA: ${error?.message || "tente novamente."}`);
+		} finally {
+			setLoadingMfa(false);
+		}
+	};
+
 	const handleRoleChange = (value) => {
 		setForm((current) => ({
 			...current,
@@ -329,6 +358,31 @@ const EditarUsuarioModal = ({
 								className="hidden"
 							/>
 						</label>
+					</div>
+
+					<div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/70 p-4">
+						<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+							<div className="flex gap-3">
+								<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+									<ShieldOff size={20} />
+								</div>
+								<div>
+									<p className="font-black text-rose-800">Recuperação de MFA</p>
+									<p className="mt-1 text-sm text-rose-900">Use se o usuário perdeu o acesso ao autenticador.</p>
+								</div>
+							</div>
+							<div className="flex flex-wrap gap-2">
+								<button type="button" onClick={() => handleResetMfa(false)} disabled={loadingMfa} className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 text-sm font-bold text-rose-700 disabled:opacity-60">
+									<ShieldCheck size={15} />
+									{loadingMfa ? "Atualizando..." : "Resetar autenticador"}
+								</button>
+								<button type="button" onClick={() => handleResetMfa(true)} disabled={loadingMfa} className="inline-flex h-10 items-center gap-2 rounded-xl bg-rose-600 px-3 text-sm font-bold text-white disabled:opacity-60">
+									<ShieldOff size={15} />
+									Desativar MFA
+								</button>
+							</div>
+						</div>
+						{mfaMessage ? <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-emerald-700">{mfaMessage}</p> : null}
 					</div>
 
 					<div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
