@@ -99,6 +99,12 @@ const getQueueItemLabel = (item = {}) => {
 	return cliente || codigo || item.telefone || item.os || "-";
 };
 
+const getQueueOutcomeLabel = (outcome) => {
+	if (outcome === "sent") return "Enviada";
+	if (outcome === "failed") return "Falhou";
+	return "Processada";
+};
+
 const getQueueItemIdentity = (item = {}) =>
 	String(
 		(item || {}).id ||
@@ -832,7 +838,7 @@ const MensageriaFilaPage = () => {
 					</div>
 					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
 						<p className="text-xs font-bold uppercase text-slate-500">
-							Próxima execução
+							Próximo envio
 						</p>
 						<p className="mt-1 text-sm font-black text-slate-900">
 							{formatDateTime(status?.worker?.nextRunAt)}
@@ -843,12 +849,15 @@ const MensageriaFilaPage = () => {
 					</div>
 					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
 						<p className="text-xs font-bold uppercase text-slate-500">
-							Última execução
+							Última tentativa
 						</p>
 						<p className="mt-1 text-sm font-black text-slate-900">
-							{formatDateTime(status?.worker?.lastRun)}
+							{formatDateTime(
+								status?.worker?.lastItem?.processedAt || status?.worker?.lastRun,
+							)}
 						</p>
 						<p className="mt-1 truncate text-xs font-semibold text-slate-500">
+							{getQueueOutcomeLabel(status?.worker?.lastItem?.outcome)}: {" "}
 							{getQueueItemLabel(status?.worker?.lastItem)}
 						</p>
 					</div>

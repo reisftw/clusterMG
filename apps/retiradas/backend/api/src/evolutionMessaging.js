@@ -103,6 +103,7 @@ const recentInboundCallbacks = new Map();
 const RECENT_INBOUND_TTL_MS = 10 * 60 * 1000;
 const QUEUE_SEND_LOCK_TTL_MS = 15 * 60 * 1000;
 const DUPLICATE_SEND_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+const QUEUE_IMMEDIATE_FAILOVER_LIMIT = 25;
 
 function nowIso() {
 	return new Date().toISOString();
@@ -273,10 +274,6 @@ function fixMojibakeText(value) {
 		.replace(/Ã‡/g, "Ç");
 }
 
-function sleep(ms) {
-	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function randomDelayMs(config) {
 	const min = Math.max(5, Number(config.evolutionMinDelaySeconds || 45));
 	const max = Math.max(min, Number(config.evolutionMaxDelaySeconds || 120));
@@ -333,7 +330,7 @@ function calculateQueueDelayMs(
 	return Math.max(minMs, Math.min(dynamicMaxMs, delayMs));
 }
 
-function summarizeQueueExecutionItem(item = {}) {
+function summarizeQueueExecutionItem(item = {}, outcome = "") {
 	if (!item) return null;
 	return {
 		id: item.id || "",
@@ -342,6 +339,8 @@ function summarizeQueueExecutionItem(item = {}) {
 		telefone: item.telefone || "",
 		os: item.os || "",
 		cidade: item.cidade || "",
+		outcome,
+		processedAt: nowIso(),
 	};
 }
 
@@ -1602,6 +1601,7 @@ async function processQueueCandidate(item, config) {
 			locked: true,
 			outcome: "failed",
 			id: lockedItem.id,
+			item: lockedItem,
 			error: "Duplicado bloqueado antes do envio.",
 		};
 	}
@@ -1660,17 +1660,17 @@ async function processQueueCandidate(item, config) {
 			result: "enviado",
 			sourcePayload: { providerResponse: response.response, item: lockedItem },
 		});
-		lastQueueExecutionItem = summarizeQueueExecutionItem(lockedItem);
 		broadcastRealtime("mensageria", { action: "sent", id: lockedItem.id });
-		return { locked: true, outcome: "sent", id: lockedItem.id };
+		return {
+			locked: true,
+			outcome: "sent",
+			id: lockedItem.id,
+			item: lockedItem,
+		};
 	} catch (error) {
 		const retryAt = new Date(
 			Date.now() + Number(config.retryAfterMinutes || 30) * 60 * 1000,
 		).toISOString();
-		lastQueueExecutionItem = summarizeQueueExecutionItem({
-			...lockedItem,
-			ultimoErro: error?.message || "Falha no envio.",
-		});
 		await upsertQueueItem(lockedItem.id, {
 			...lockedItem,
 			status:
@@ -1709,7 +1709,13 @@ async function processQueueCandidate(item, config) {
 			error: error?.message || "Falha no envio.",
 			sourcePayload: { item: lockedItem },
 		});
-		return { locked: true, outcome: "failed", id: lockedItem.id, error: error?.message };
+		return {
+			locked: true,
+			outcome: "failed",
+			id: lockedItem.id,
+			item: lockedItem,
+			error: error?.message,
+		};
 	}
 }
 
@@ -1763,8 +1769,10 @@ async function evaluateQueueDispatchGuards(config, manual) {
 	return null;
 }
 
-// Processa o lote de candidatos da fila, mesma logica do for original.
-async function runQueueDispatchBatch(candidates, config, manual, remainingToday) {
+// Falhas individuais nao consomem o intervalo entre mensagens: a proxima O.S.
+// elegivel e tentada na mesma rodada. O delay so e agendado depois de um envio
+// confirmado, preservando a cadencia configurada sem travar a fila por erro.
+async function runQueueDispatchBatch(candidates, config) {
 	const sent = [];
 	const failed = [];
 	for (const item of candidates) {
@@ -1773,14 +1781,15 @@ async function runQueueDispatchBatch(candidates, config, manual, remainingToday)
 			lastSkipped = `Item ${item.id} ignorado: ${result.reason}.`;
 			continue;
 		}
+		lastQueueExecutionItem = summarizeQueueExecutionItem(
+			result.item || item,
+			result.outcome,
+		);
 		if (result.outcome === "sent") {
 			sent.push(result.id);
+			break;
 		} else if (result.outcome === "failed") {
 			failed.push({ id: result.id, error: result.error });
-		}
-		if (!manual && sent.length < candidates.length) {
-			const remainingAfterCurrent = Math.max(1, remainingToday - sent.length);
-			await sleep(calculateQueueDelayMs(config, remainingAfterCurrent));
 		}
 	}
 	return { sent, failed };
@@ -1815,26 +1824,19 @@ async function processQueueOnce({ manual = false } = {}) {
 	}
 
 	const items = await listQueue(2000);
-	const batchSize = 1;
+	const batchSize = QUEUE_IMMEDIATE_FAILOVER_LIMIT;
 	const candidates = items
 		.filter((item) => canSendItem(item, config))
 		.slice(0, batchSize);
 	nextQueueExecutionItem = summarizeQueueExecutionItem(candidates[0]);
 
-	const { sent, failed } = await runQueueDispatchBatch(
-		candidates,
-		config,
-		manual,
-		remainingToday,
-	);
+	const { sent, failed } = await runQueueDispatchBatch(candidates, config);
 
 	if (sent.length) {
 		const remainingAfterBatch = Math.max(1, remainingToday - sent.length);
 		nextRunAt = new Date(
 			Date.now() + calculateQueueDelayMs(config, remainingAfterBatch),
 		).toISOString();
-	} else if (!manual) {
-		nextRunAt = new Date(Date.now() + 30000).toISOString();
 	}
 	const handledIds = new Set([
 		...sent,
@@ -1846,6 +1848,11 @@ async function processQueueOnce({ manual = false } = {}) {
 			(item) => !handledIds.has(item.id) && canSendItem(item, config),
 		),
 	);
+	if (!sent.length && !manual) {
+		nextRunAt = new Date(
+			Date.now() + (nextQueueExecutionItem ? 1000 : 30000),
+		).toISOString();
+	}
 
 	return {
 		ok: true,
