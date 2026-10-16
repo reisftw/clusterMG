@@ -1044,6 +1044,11 @@ export default function RankingPage() {
 
 	const summary = data?.summary || {};
 	const options = data?.filters || {};
+	const selectedTechnicianChannel = TECH_CHANNELS.find(
+		(item) => item.value === technicianChannel,
+	);
+	const technicianScopeLabel = selectedTechnicianChannel?.label || "Todos";
+	const isTechnicianScope = dimension === "technician" && technicianChannel !== "all";
 	const classificationOk = Number(summary.unclassified || 0) === 0;
 	const activeFilterState = { search, city, osType, regionalId, agentId };
 	const setters = {
@@ -1162,8 +1167,8 @@ export default function RankingPage() {
 				) : null}
 
 				<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-					<KpiCard title="Producao OS" value={summary.classified} helper="OS classificadas" icon={BarChart3} tone="blue" />
-					<KpiCard title="Tecnicos com producao" value={summary.activeTechnicians} helper="Tecnicos unicos no periodo" icon={Users} tone="purple" />
+					<KpiCard title="Producao OS" value={summary.classified} helper={isTechnicianScope ? `OS de ${technicianScopeLabel.toLowerCase()}` : "OS classificadas"} icon={BarChart3} tone="blue" />
+					<KpiCard title="Tecnicos com producao" value={summary.activeTechnicians} helper={isTechnicianScope ? `Tecnicos de ${technicianScopeLabel.toLowerCase()}` : "Tecnicos unicos no periodo"} icon={Users} tone="purple" />
 					<KpiCard title="Regionais" value={summary.regional} helper={`${formatNumber(summary.regionals)} responsaveis`} icon={Medal} tone="green" />
 					<KpiCard title="Agentes" value={summary.aa} helper={`${formatNumber(summary.agents)} responsaveis`} icon={Medal} tone="orange" />
 					<KpiCard

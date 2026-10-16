@@ -20,6 +20,15 @@ const TECHNICIAN_CHANNELS = {
 	agent: ["AA"],
 };
 
+function getChannelsForDimension(dimension, technicianChannel) {
+	if (dimension === "technician") {
+		return TECHNICIAN_CHANNELS[technicianChannel];
+	}
+	if (dimension === "regional") return ["REGIONAL"];
+	if (dimension === "agent") return ["AA"];
+	return CLASSIFIED_CHANNELS;
+}
+
 function pad(value) {
 	return String(value).padStart(2, "0");
 }
@@ -232,26 +241,32 @@ async function getLastSync() {
 	};
 }
 
-async function getSummary(query = {}) {
+async function getSummary(query = {}, dimension = "technician", technicianChannel = "all") {
 	const base = buildRecordsWhere(query);
+	const channels = getChannelsForDimension(dimension, technicianChannel);
 	const result = await db.query(
-		`with ${dedupedRecordsCte(base.where)}
+		`with ${dedupedRecordsCte(base.where)},
+		scoped as (
+			select *
+			from enriched
+			where production_channel = any($${base.values.length + 1}::text[])
+		)
 		select
 			count(distinct hubsoft_id) filter (where production_channel = 'RETIRADA') as retirada,
 			count(distinct hubsoft_id) filter (where production_channel = 'REGIONAL') as regional,
 			count(distinct hubsoft_id) filter (where production_channel = 'AA') as aa,
 			count(distinct hubsoft_id) filter (where production_channel = 'UNCLASSIFIED') as unclassified,
-			count(distinct hubsoft_id) filter (where production_channel = any($${base.values.length + 1}::text[])) as classified,
-			count(distinct technician_key) filter (where production_channel = any($${base.values.length + 1}::text[]) and technician_count = 1) as active_technicians,
+			count(distinct hubsoft_id) as classified,
+			count(distinct technician_key) filter (where technician_count = 1) as active_technicians,
 			count(distinct technician_key) filter (where production_channel = 'RETIRADA' and technician_count = 1) as withdrawal_technicians,
 			count(distinct technician_key) filter (where production_channel = 'REGIONAL' and technician_count = 1) as regional_technicians,
 			count(distinct technician_key) filter (where production_channel = 'AA' and technician_count = 1) as agent_technicians,
 			count(distinct coalesce(production_owner_id, production_owner_name)) filter (where production_channel = 'REGIONAL') as regional_entities,
 			count(distinct coalesce(production_owner_id, production_owner_name)) filter (where production_channel = 'AA') as agent_entities,
-			count(distinct hubsoft_id) filter (where production_channel = any($${base.values.length + 1}::text[]) and technician_count = 0) as no_technician,
-			count(distinct hubsoft_id) filter (where production_channel = any($${base.values.length + 1}::text[]) and technician_count > 1) as multiple_technicians
-		from enriched`,
-		[...base.values, CLASSIFIED_CHANNELS],
+			count(distinct hubsoft_id) filter (where technician_count = 0) as no_technician,
+			count(distinct hubsoft_id) filter (where technician_count > 1) as multiple_technicians
+		from scoped`,
+		[...base.values, channels],
 	);
 	const row = result.rows[0] || {};
 	const classified = Number(row.classified || 0);
@@ -281,38 +296,44 @@ async function getSummary(query = {}) {
 	};
 }
 
-async function getFilters(query = {}) {
+async function getFilters(query = {}, dimension = "technician", technicianChannel = "all") {
 	const base = buildRecordsWhere(query);
+	const channels = getChannelsForDimension(dimension, technicianChannel);
 	const result = await db.query(
-		`with ${dedupedRecordsCte(base.where)}
+		`with ${dedupedRecordsCte(base.where)},
+		scoped as (
+			select *
+			from enriched
+			where production_channel = any($${base.values.length + 1}::text[])
+		)
 		select jsonb_build_object(
 			'cities', coalesce((select jsonb_agg(value order by value) from (
-				select distinct source_city as value from enriched where nullif(source_city, '') is not null
+				select distinct source_city as value from scoped where nullif(source_city, '') is not null
 			) x), '[]'::jsonb),
 			'osTypes', coalesce((select jsonb_agg(value order by value) from (
-				select distinct source_type as value from enriched where nullif(source_type, '') is not null
+				select distinct source_type as value from scoped where nullif(source_type, '') is not null
 			) x), '[]'::jsonb),
 			'technicians', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name) from (
 				select distinct technician_key as id, technician_display_name as name
-				from enriched
-				where technician_count = 1 and production_channel = any($${base.values.length + 1}::text[])
+				from scoped
+				where technician_count = 1
 			) x), '[]'::jsonb),
 			'regionals', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name) from (
 				select distinct
 					coalesce(production_owner_id, production_owner_name, '') as id,
 					coalesce(production_owner_name, production_owner_id, '') as name
-				from enriched
+				from scoped
 				where production_channel = 'REGIONAL'
 			) x), '[]'::jsonb),
 			'agents', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name) from (
 				select distinct
 					coalesce(production_owner_id, production_owner_name, '') as id,
 					coalesce(production_owner_name, production_owner_id, '') as name
-				from enriched
+				from scoped
 				where production_channel = 'AA'
 			) x), '[]'::jsonb)
 		) as filters`,
-		[...base.values, CLASSIFIED_CHANNELS],
+		[...base.values, channels],
 	);
 	return result.rows[0]?.filters || {
 		cities: [],
@@ -325,14 +346,7 @@ async function getFilters(query = {}) {
 
 async function getDenominator(query = {}, dimension, technicianChannel) {
 	const base = buildRecordsWhere(query);
-	const channels =
-		dimension === "technician"
-			? TECHNICIAN_CHANNELS[technicianChannel]
-			: dimension === "regional"
-				? ["REGIONAL"]
-				: dimension === "agent"
-					? ["AA"]
-					: CLASSIFIED_CHANNELS;
+	const channels = getChannelsForDimension(dimension, technicianChannel);
 	const result = await db.query(
 		`with ${dedupedRecordsCte(base.where)}
 		select count(distinct hubsoft_id) as total
@@ -392,14 +406,7 @@ async function getRanking(query = {}) {
 	const days = countInclusiveDays(base.startDate, base.endDate);
 	const denominator = await getDenominator(query, dimension, technicianChannel);
 	const params = makeParamBuilder(base.values);
-	const channels =
-		dimension === "technician"
-			? TECHNICIAN_CHANNELS[technicianChannel]
-			: dimension === "regional"
-				? ["REGIONAL"]
-				: dimension === "agent"
-					? ["AA"]
-					: CLASSIFIED_CHANNELS;
+	const channels = getChannelsForDimension(dimension, technicianChannel);
 	const channelsParam = params.add(channels);
 	const searchTerm = String(query.search || "").trim();
 	const searchClause = searchTerm
@@ -499,8 +506,8 @@ async function getRanking(query = {}) {
 		period: { startDate: base.startDate, endDate: base.endDate, days },
 		dimension,
 		technicianChannel,
-		summary: await getSummary(query),
-		filters: await getFilters(query),
+		summary: await getSummary(query, dimension, technicianChannel),
+		filters: await getFilters(query, dimension, technicianChannel),
 		lastSync: await getLastSync(),
 		podium: ranking.filter((item) => item.position <= 3).slice(0, 3),
 		ranking,
