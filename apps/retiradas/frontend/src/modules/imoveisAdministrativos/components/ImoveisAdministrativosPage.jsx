@@ -524,10 +524,7 @@ function useImoveisAdministrativosController(page) {
 		() => imoveis.find((item) => item.id === selectedId) || null,
 		[imoveis, selectedId],
 	);
-	const podeGerenciar = hasPermission(
-		currentUser?.role,
-		"manage_imoveis_administrativos",
-	);
+	const podeGerenciar = hasPermission(currentUser, "manage_imoveis_administrativos");
 
 	const localReport = useMemo(
 		() =>

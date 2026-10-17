@@ -16,8 +16,13 @@ function createHealthRealtimeController({ db, attachRealtimeClient }) {
 		attachRealtimeClient(req, res);
 	}
 
+	function publicEvents(req, res) {
+		attachRealtimeClient(req, res, { publicStream: true });
+	}
+
 	return {
 		events,
+		publicEvents,
 		health,
 	};
 }

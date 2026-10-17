@@ -26,7 +26,7 @@ const AgentesPage = () => {
 	const [modal, setModal] = useState(null);
 	const [confirmarExcluir, setConfirmarExcluir] = useState(null);
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_agentes");
+	const podeEditar = hasPermission(currentUser, "manage_agentes");
 	const toggle = (id) => setExpandidos((p) => ({ ...p, [id]: !p[id] }));
 
 	const porRegional = useMemo(() => {

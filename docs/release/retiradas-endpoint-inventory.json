@@ -1,0 +1,4423 @@
+{
+  "generatedBy": "scripts/audit-retiradas-endpoints.cjs",
+  "entryCount": 366,
+  "entries": [
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/confirmacao/relatorio",
+      "localPath": "/relatorio",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 100,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/confirmacao/config",
+      "localPath": "/config",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 21,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/agendamentos/confirmacao/config",
+      "localPath": "/config",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/confirmacao/run",
+      "localPath": "/run",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/confirmacao/test",
+      "localPath": "/test",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 41,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/confirmacao/evolution/status",
+      "localPath": "/evolution/status",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 48,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/confirmacao/evolution/connect",
+      "localPath": "/evolution/connect",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 54,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/confirmacao/evolution/disconnect",
+      "localPath": "/evolution/disconnect",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 61,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/confirmacao/evolution/webhook",
+      "localPath": "/evolution/webhook",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 68,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/confirmacao/envios/:id/responsavel",
+      "localPath": "/envios/:id/responsavel",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 75,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/confirmacao/envios",
+      "localPath": "/envios",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 82,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/confirmacao/logs",
+      "localPath": "/logs",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 88,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/confirmacao/preview",
+      "localPath": "/preview",
+      "mountPath": "/api/agendamentos/confirmacao",
+      "file": "apps/retiradas/backend/api/src/agendamentoConfirmacaoAdmin/routes/agendamentoConfirmacaoAdminRoutes.js",
+      "line": 94,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos",
+      "localPath": "/",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 109,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/logs",
+      "localPath": "/logs",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 127,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos",
+      "localPath": "/",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 140,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/agendamentos/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 175,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/agendamentos/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 218,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/metrics",
+      "localPath": "/api/admin/metrics",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2397,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/metrics/reset",
+      "localPath": "/api/admin/metrics/reset",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2402,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/audit-logs",
+      "localPath": "/api/admin/audit-logs",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2419,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/audit-logs/options",
+      "localPath": "/api/admin/audit-logs/options",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2432,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/audit-logs/:id",
+      "localPath": "/api/admin/audit-logs/:id",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2445,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/vpn/config",
+      "localPath": "/api/admin/vpn/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2463,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/vpn/config",
+      "localPath": "/api/admin/vpn/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2482,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/vpn/logs",
+      "localPath": "/api/admin/vpn/logs",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2496,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/vpn/access-check",
+      "localPath": "/api/admin/vpn/access-check",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2512,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/vpn/access-check",
+      "localPath": "/api/vpn/access-check",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2534,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking",
+      "localPath": "/api/ranking",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2629,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/detail",
+      "localPath": "/api/ranking/detail",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2645,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/export.xlsx",
+      "localPath": "/api/ranking/export.xlsx",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2661,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mapas/atualizacoes",
+      "localPath": "/api/mapas/atualizacoes",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2686,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mapas/atualizacoes/latest",
+      "localPath": "/api/mapas/atualizacoes/latest",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2699,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mapas/atualizacoes/:id",
+      "localPath": "/api/mapas/atualizacoes/:id",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2712,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/acompanhamento/operational-summary",
+      "localPath": "/api/acompanhamento/operational-summary",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2730,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/acompanhamento/resumo",
+      "localPath": "/api/acompanhamento/resumo",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2743,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard/resumo",
+      "localPath": "/api/dashboard/resumo",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2799,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/dashboard",
+      "localPath": "/api/public/dashboard",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2813,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/static/:domain",
+      "localPath": "/api/public/static/:domain",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2830,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/documents",
+      "localPath": "/api/public/documents",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2865,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/documents/*",
+      "localPath": "/api/public/documents/*",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2884,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/sempre/equipment",
+      "localPath": "/api/public/sempre/equipment",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2904,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/visits",
+      "localPath": "/api/public/visits",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2934,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/google/config",
+      "localPath": "/api/auth/google/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2954,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/okta/config",
+      "localPath": "/api/auth/okta/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2966,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/anti-bot/config",
+      "localPath": "/api/auth/anti-bot/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2980,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/google",
+      "localPath": "/api/auth/google",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 2984,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/okta",
+      "localPath": "/api/auth/okta",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3012,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "localPath": "/api/auth/login",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3043,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/email/verify",
+      "localPath": "/api/auth/mfa/email/verify",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3119,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/mfa/totp/status",
+      "localPath": "/api/auth/mfa/totp/status",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3150,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/totp/setup",
+      "localPath": "/api/auth/mfa/totp/setup",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3154,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/totp/confirm",
+      "localPath": "/api/auth/mfa/totp/confirm",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3167,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/mfa/totp/disable",
+      "localPath": "/api/auth/mfa/totp/disable",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3190,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "localPath": "/api/auth/logout",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3206,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "localPath": "/api/auth/me",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3221,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/auth/avatar",
+      "localPath": "/api/auth/avatar",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3255,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/change-password",
+      "localPath": "/api/auth/change-password",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3295,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/forgot-password",
+      "localPath": "/api/auth/forgot-password",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3333,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/reset-password",
+      "localPath": "/api/auth/reset-password",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3371,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/oauth/google",
+      "localPath": "/api/admin/oauth/google",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3401,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/oauth/google",
+      "localPath": "/api/admin/oauth/google",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3424,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/oauth/okta",
+      "localPath": "/api/admin/oauth/okta",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3459,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/oauth/okta",
+      "localPath": "/api/admin/oauth/okta",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3484,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/insumos/requisicoes",
+      "localPath": "/api/insumos/requisicoes",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3535,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/insumos/requisicoes",
+      "localPath": "/api/insumos/requisicoes",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3585,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/insumos/requisicoes/:id/aprovar",
+      "localPath": "/api/insumos/requisicoes/:id/aprovar",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3676,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/insumos/requisicoes/:id/rejeitar",
+      "localPath": "/api/insumos/requisicoes/:id/rejeitar",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3781,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/insumos/requisicoes/:id/entregar",
+      "localPath": "/api/insumos/requisicoes/:id/entregar",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3839,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/insumos/requisicoes/expirar",
+      "localPath": "/api/insumos/requisicoes/expirar",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3932,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "localPath": "/api/documents",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3950,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/*",
+      "localPath": "/api/documents/*",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3969,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "localPath": "/api/documents",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4015,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/*",
+      "localPath": "/api/documents/*",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4062,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/static/:domain",
+      "localPath": "/api/static/:domain",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4093,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/static/refresh",
+      "localPath": "/api/static/refresh",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4135,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/users",
+      "localPath": "/api/admin/users",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4187,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/users",
+      "localPath": "/api/admin/users",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4214,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/avatars",
+      "localPath": "/api/admin/avatars",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4319,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/roles",
+      "localPath": "/api/admin/roles",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4342,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/roles/:roleId",
+      "localPath": "/api/admin/roles/:roleId",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4367,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/roles/:roleId",
+      "localPath": "/api/admin/roles/:roleId",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4409,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/users/:uid",
+      "localPath": "/api/admin/users/:uid",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4438,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/users/:uid",
+      "localPath": "/api/admin/users/:uid",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4493,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/users/:uid/first-access",
+      "localPath": "/api/admin/users/:uid/first-access",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4524,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/users/:uid/mfa/reset",
+      "localPath": "/api/admin/users/:uid/mfa/reset",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4573,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/api-status",
+      "localPath": "/api/admin/api-status",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4609,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/regionais",
+      "localPath": "/api/admin/regionais",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4668,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/sempre/equipment",
+      "localPath": "/api/integrations/sempre/equipment",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4707,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/sempre/equipment/serial",
+      "localPath": "/api/integrations/sempre/equipment/serial",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4720,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/sempre/equipment/mapa",
+      "localPath": "/api/integrations/sempre/equipment/mapa",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4733,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/sempre/equipment/treatments",
+      "localPath": "/api/integrations/sempre/equipment/treatments",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4761,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/sempre/equipment/treatments",
+      "localPath": "/api/integrations/sempre/equipment/treatments",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4774,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/sempre/equipment/history",
+      "localPath": "/api/integrations/sempre/equipment/history",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4794,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tecnicos/auditoria/bolsa",
+      "localPath": "/api/tecnicos/auditoria/bolsa",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4812,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tecnicos/auditoria/bolsa/config",
+      "localPath": "/api/tecnicos/auditoria/bolsa/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4828,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tecnicos/auditoria/bolsa/config",
+      "localPath": "/api/tecnicos/auditoria/bolsa/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4844,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tecnicos/auditoria/bolsa/logs",
+      "localPath": "/api/tecnicos/auditoria/bolsa/logs",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4863,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tecnicos/auditoria/bolsa/relatorios",
+      "localPath": "/api/tecnicos/auditoria/bolsa/relatorios",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4885,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tecnicos/auditoria/bolsa/relatorios/refresh",
+      "localPath": "/api/tecnicos/auditoria/bolsa/relatorios/refresh",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4906,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tecnicos/auditoria/bolsa/relatorios/email",
+      "localPath": "/api/tecnicos/auditoria/bolsa/relatorios/email",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4937,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tecnicos/auditoria/bolsa/refresh",
+      "localPath": "/api/tecnicos/auditoria/bolsa/refresh",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4959,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tecnicos/auditoria/bolsa/jobs/:jobId",
+      "localPath": "/api/tecnicos/auditoria/bolsa/jobs/:jobId",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 4978,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tecnicos/auditoria/bolsa/refresh/:id",
+      "localPath": "/api/tecnicos/auditoria/bolsa/refresh/:id",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5001,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tecnicos/auditoria/bolsa/run-daily",
+      "localPath": "/api/tecnicos/auditoria/bolsa/run-daily",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5023,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/estoque/onnet",
+      "localPath": "/api/estoque/onnet",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5068,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/estoque/onnet",
+      "localPath": "/api/estoque/onnet",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5089,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/estoque/onnet/:id",
+      "localPath": "/api/estoque/onnet/:id",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5105,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/estoque/onnet/:id",
+      "localPath": "/api/estoque/onnet/:id",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5125,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/documents",
+      "localPath": "/api/admin/documents",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5141,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/documents/*",
+      "localPath": "/api/admin/documents/*",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5285,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/documents/*",
+      "localPath": "/api/admin/documents/*",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5377,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/mapa",
+      "localPath": "/api/imports/mapa",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5410,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/match",
+      "localPath": "/api/imports/match",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5432,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/imports/jobs/:jobId",
+      "localPath": "/api/imports/jobs/:jobId",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5454,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/clientes/:codigo",
+      "localPath": "/api/agendamentos/clientes/:codigo",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5471,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/metas",
+      "localPath": "/api/imports/metas",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5530,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/metas/forca-tarefa",
+      "localPath": "/api/imports/metas/forca-tarefa",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5551,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/metas/base-config",
+      "localPath": "/api/imports/metas/base-config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5572,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/imports/match/config",
+      "localPath": "/api/imports/match/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5593,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/match/config",
+      "localPath": "/api/imports/match/config",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5605,
+      "gates": [
+        "authenticated",
+        "role",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamento-esteira/commands",
+      "localPath": "/api/agendamento-esteira/commands",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5626,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/static/:domain",
+      "localPath": "/api/static/:domain",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5688,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/documents/*",
+      "localPath": "/api/documents/*",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5717,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/instance/reset",
+      "localPath": "/instance/reset",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 102,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/webhook",
+      "localPath": "/webhook",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 109,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/test",
+      "localPath": "/test",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 116,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/cases",
+      "localPath": "/cases",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 124,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/cases/:id",
+      "localPath": "/cases/:id",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 125,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/atendimento/cases/:id",
+      "localPath": "/cases/:id",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 126,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/cases/:id/reply",
+      "localPath": "/cases/:id/reply",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 133,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/technicians",
+      "localPath": "/technicians",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 141,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/atendimento/technicians/:phone",
+      "localPath": "/technicians/:phone",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 147,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/atendimento/technicians/:phone",
+      "localPath": "/technicians/:phone",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 154,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/technicians/validate-email",
+      "localPath": "/technicians/validate-email",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 161,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/ratings",
+      "localPath": "/ratings",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 169,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/logs",
+      "localPath": "/logs",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 175,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/messages",
+      "localPath": "/messages",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 176,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/status",
+      "localPath": "/status",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 58,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/stats",
+      "localPath": "/stats",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 59,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/config",
+      "localPath": "/config",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 60,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/atendimento/config",
+      "localPath": "/config",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 61,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/atendimento/operational-data",
+      "localPath": "/operational-data",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 68,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/atendimento/templates",
+      "localPath": "/templates",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 75,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/atendimento/templates",
+      "localPath": "/templates",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 81,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/connect",
+      "localPath": "/connect",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 88,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/atendimento/disconnect",
+      "localPath": "/disconnect",
+      "mountPath": "/api/atendimento",
+      "file": "apps/retiradas/backend/api/src/atendimento/routes/atendimentoRoutes.js",
+      "line": 95,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/cvortex/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/cvortex",
+      "file": "apps/retiradas/backend/api/src/cvortexAdmin/routes/cvortexAdminRoutes.js",
+      "line": 17,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/cvortex/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/cvortex",
+      "file": "apps/retiradas/backend/api/src/cvortexAdmin/routes/cvortexAdminRoutes.js",
+      "line": 23,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/cvortex/test",
+      "localPath": "/test",
+      "mountPath": "/api/admin/cvortex",
+      "file": "apps/retiradas/backend/api/src/cvortexAdmin/routes/cvortexAdminRoutes.js",
+      "line": 30,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/cvortex/send-test",
+      "localPath": "/send-test",
+      "mountPath": "/api/admin/cvortex",
+      "file": "apps/retiradas/backend/api/src/cvortexAdmin/routes/cvortexAdminRoutes.js",
+      "line": 37,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/cvortex/associate",
+      "localPath": "/associate",
+      "mountPath": "/api/admin/cvortex",
+      "file": "apps/retiradas/backend/api/src/cvortexAdmin/routes/cvortexAdminRoutes.js",
+      "line": 44,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/database/backups",
+      "localPath": "/backups",
+      "mountPath": "/api/admin/database",
+      "file": "apps/retiradas/backend/api/src/databaseBackupsAdmin/routes/databaseBackupsAdminRoutes.js",
+      "line": 21,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/database/backups",
+      "localPath": "/backups",
+      "mountPath": "/api/admin/database",
+      "file": "apps/retiradas/backend/api/src/databaseBackupsAdmin/routes/databaseBackupsAdminRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/database/backups/:fileName/restore",
+      "localPath": "/backups/:fileName/restore",
+      "mountPath": "/api/admin/database",
+      "file": "apps/retiradas/backend/api/src/databaseBackupsAdmin/routes/databaseBackupsAdminRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/google/callback",
+      "localPath": "/google/callback",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 111,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/google/status",
+      "localPath": "/google/status",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 113,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/google/config",
+      "localPath": "/google/config",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 114,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/google/config",
+      "localPath": "/google/config",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 115,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/google/auth-url",
+      "localPath": "/google/auth-url",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 121,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/fields",
+      "localPath": "/fields",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 122,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/fields",
+      "localPath": "/fields",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 123,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/invoice-fields",
+      "localPath": "/invoice-fields",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 124,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/invoice-fields",
+      "localPath": "/invoice-fields",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 125,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/billing-config",
+      "localPath": "/billing-config",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 131,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/billing-config",
+      "localPath": "/billing-config",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 132,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/admin/purge-history",
+      "localPath": "/admin/purge-history",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 138,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/submissions",
+      "localPath": "/submissions",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 144,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/submissions/resumo",
+      "localPath": "/submissions/resumo",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 145,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/submissions/tratativas",
+      "localPath": "/submissions/tratativas",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 150,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/submissions/:id/zip",
+      "localPath": "/submissions/:id/zip",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 151,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/submissions/:id",
+      "localPath": "/submissions/:id",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 152,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/submissions",
+      "localPath": "/submissions",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 153,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/submissions/:id/invoices",
+      "localPath": "/submissions/:id/invoices",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 160,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/documentos/submissions/:id/review",
+      "localPath": "/submissions/:id/review",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 167,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos",
+      "localPath": "/",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 172,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/folders/:empresaId/browser",
+      "localPath": "/folders/:empresaId/browser",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 173,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/folders/:empresaId/browser/:fileId/download",
+      "localPath": "/folders/:empresaId/browser/:fileId/download",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 174,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/documentos/:id/download",
+      "localPath": "/:id/download",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 178,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/folders/:empresaId",
+      "localPath": "/folders/:empresaId",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 179,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/folders/:empresaId/subfolders",
+      "localPath": "/folders/:empresaId/subfolders",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 180,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/documentos/upload",
+      "localPath": "/upload",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 185,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/documentos/:id/rename",
+      "localPath": "/:id/rename",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 192,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/documentos/:id/approval",
+      "localPath": "/:id/approval",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 193,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/documentos/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/documentos",
+      "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
+      "line": 194,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/email/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/email",
+      "file": "apps/retiradas/backend/api/src/emailAdmin/routes/emailAdminRoutes.js",
+      "line": 21,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/email/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/email",
+      "file": "apps/retiradas/backend/api/src/emailAdmin/routes/emailAdminRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/email/test",
+      "localPath": "/test",
+      "mountPath": "/api/admin/email",
+      "file": "apps/retiradas/backend/api/src/emailAdmin/routes/emailAdminRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/email/logs",
+      "localPath": "/logs",
+      "mountPath": "/api/admin/email",
+      "file": "apps/retiradas/backend/api/src/emailAdmin/routes/emailAdminRoutes.js",
+      "line": 41,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/impact",
+      "localPath": "/impact",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 15,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/summary",
+      "localPath": "/summary",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 23,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/technicians",
+      "localPath": "/technicians",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 31,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/records",
+      "localPath": "/records",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 39,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/options",
+      "localPath": "/options",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 47,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/pending",
+      "localPath": "/pending",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 55,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/pending.csv",
+      "localPath": "/pending.csv",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 63,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/jobs/latest",
+      "localPath": "/jobs/latest",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 77,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment-recovery/jobs/:id",
+      "localPath": "/jobs/:id",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 85,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/equipment-recovery/reprocess",
+      "localPath": "/reprocess",
+      "mountPath": "/api/equipment-recovery",
+      "file": "apps/retiradas/backend/api/src/equipmentRecovery/routes/equipmentRecoveryRoutes.js",
+      "line": 98,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/evidencias/dashboard",
+      "localPath": "/dashboard",
+      "mountPath": "/api/evidencias",
+      "file": "apps/retiradas/backend/api/src/evidencias/routes/evidenciasRoutes.js",
+      "line": 24,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/evidencias",
+      "localPath": "/",
+      "mountPath": "/api/evidencias",
+      "file": "apps/retiradas/backend/api/src/evidencias/routes/evidenciasRoutes.js",
+      "line": 25,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/evidencias/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/evidencias",
+      "file": "apps/retiradas/backend/api/src/evidencias/routes/evidenciasRoutes.js",
+      "line": 26,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/evidencias/:id/retry",
+      "localPath": "/:id/retry",
+      "mountPath": "/api/evidencias",
+      "file": "apps/retiradas/backend/api/src/evidencias/routes/evidenciasRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "localPath": "/health",
+      "mountPath": "/api",
+      "file": "apps/retiradas/backend/api/src/healthRealtime/routes/healthRealtimeRoutes.js",
+      "line": 18,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/events",
+      "localPath": "/events",
+      "mountPath": "/api",
+      "file": "apps/retiradas/backend/api/src/healthRealtime/routes/healthRealtimeRoutes.js",
+      "line": 19,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/withdrawal-technicians",
+      "localPath": "/withdrawal-technicians",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 105,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/hubsoft/withdrawal-technicians",
+      "localPath": "/withdrawal-technicians",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 111,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/hubsoft/withdrawal-technicians/discover",
+      "localPath": "/withdrawal-technicians/discover",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 118,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 21,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/hubsoft/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/hubsoft/test",
+      "localPath": "/test",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/hubsoft/associate",
+      "localPath": "/associate",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 41,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/ordens-servico",
+      "localPath": "/ordens-servico",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 48,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/hubsoft/sync",
+      "localPath": "/sync",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 54,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/sync/jobs/:jobId",
+      "localPath": "/sync/jobs/:jobId",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 61,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/sync/runs",
+      "localPath": "/sync/runs",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 67,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/profiles",
+      "localPath": "/profiles",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 73,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/profiles/runs",
+      "localPath": "/profiles/runs",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 79,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/hubsoft/profiles/meta-audit/run",
+      "localPath": "/profiles/meta-audit/run",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 85,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/hubsoft/profiles/:profile/run",
+      "localPath": "/profiles/:profile/run",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 92,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/hubsoft/records",
+      "localPath": "/records",
+      "mountPath": "/api/admin/hubsoft",
+      "file": "apps/retiradas/backend/api/src/hubsoftAdmin/routes/hubsoftAdminRoutes.js",
+      "line": 99,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/contratos/upload",
+      "localPath": "/:id/contratos/upload",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 1025,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/imoveis/:id/contratos/:contratoId",
+      "localPath": "/:id/contratos/:contratoId",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 1070,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/imoveis/:id/contratos/:contratoId",
+      "localPath": "/:id/contratos/:contratoId",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 1107,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/imoveis/relatorios/dados",
+      "localPath": "/relatorios/dados",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 1130,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/imoveis/config",
+      "localPath": "/config",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 636,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/imoveis/config",
+      "localPath": "/config",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 644,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/importar",
+      "localPath": "/importar",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 655,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/excluir-massa",
+      "localPath": "/excluir-massa",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 694,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/imoveis",
+      "localPath": "/",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 719,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis",
+      "localPath": "/",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 731,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/imoveis/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 746,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/imoveis/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 760,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/pasta",
+      "localPath": "/:id/pasta",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 768,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/reajustes",
+      "localPath": "/:id/reajustes",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 778,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/iptu",
+      "localPath": "/:id/iptu",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 836,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/alugueis",
+      "localPath": "/:id/alugueis",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 884,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/imoveis/:id/registros",
+      "localPath": "/:id/registros",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 911,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/anexos/upload",
+      "localPath": "/:id/anexos/upload",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 925,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/aditivos",
+      "localPath": "/:id/aditivos",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 946,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/imoveis/:id/contratos/link",
+      "localPath": "/:id/contratos/link",
+      "mountPath": "/api/imoveis",
+      "file": "apps/retiradas/backend/api/src/imoveis.js",
+      "line": 991,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/logistica/config",
+      "localPath": "/config",
+      "mountPath": "/api/logistica",
+      "file": "apps/retiradas/backend/api/src/logistica/routes/logisticaRoutes.js",
+      "line": 17,
+      "gates": [
+        "authenticated",
+        "role"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/logistica/config",
+      "localPath": "/config",
+      "mountPath": "/api/logistica",
+      "file": "apps/retiradas/backend/api/src/logistica/routes/logisticaRoutes.js",
+      "line": 23,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/logistica/lalamove/quote",
+      "localPath": "/lalamove/quote",
+      "mountPath": "/api/logistica",
+      "file": "apps/retiradas/backend/api/src/logistica/routes/logisticaRoutes.js",
+      "line": 30,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/logistica/geocode",
+      "localPath": "/geocode",
+      "mountPath": "/api/logistica",
+      "file": "apps/retiradas/backend/api/src/logistica/routes/logisticaRoutes.js",
+      "line": 37,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/config",
+      "localPath": "/config",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 105,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/mensageria/config",
+      "localPath": "/config",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 113,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/templates",
+      "localPath": "/templates",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 121,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/mensageria/templates/:id",
+      "localPath": "/templates/:id",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 134,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/fila",
+      "localPath": "/fila",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 151,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/fila",
+      "localPath": "/fila",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 165,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/fila/ajustar",
+      "localPath": "/fila/ajustar",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 174,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/mensageria/fila/:id",
+      "localPath": "/fila/:id",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 191,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/historico",
+      "localPath": "/historico",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 208,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/historico",
+      "localPath": "/historico",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 221,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/callbacks",
+      "localPath": "/callbacks",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 235,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/callbacks",
+      "localPath": "/callbacks",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 249,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/callbacks/gerar-agendamento",
+      "localPath": "/callbacks/gerar-agendamento",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 263,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/enviados",
+      "localPath": "/enviados",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 284,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/relatorios/dados",
+      "localPath": "/relatorios/dados",
+      "mountPath": "/api/mensageria",
+      "file": "apps/retiradas/backend/api/src/mensageria/routes/mensageriaRoutes.js",
+      "line": 313,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/evolution/status",
+      "localPath": "/status",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 30,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/connect",
+      "localPath": "/connect",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 36,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/disconnect",
+      "localPath": "/disconnect",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 43,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/webhook",
+      "localPath": "/webhook",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 50,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/evolution/webhook",
+      "localPath": "/webhook",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 57,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mensageria/evolution/disconnect-logs",
+      "localPath": "/disconnect-logs",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 63,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/run",
+      "localPath": "/run",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 69,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/test",
+      "localPath": "/test",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 76,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/pause",
+      "localPath": "/pause",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 83,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/resume",
+      "localPath": "/resume",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 90,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/empresas/habilitacoes",
+      "localPath": "/empresas/habilitacoes",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 103,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/sugestoes",
+      "localPath": "/sugestoes",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 112,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/mercado/empresas/habilitacoes",
+      "localPath": "/empresas/habilitacoes",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 121,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/lotes",
+      "localPath": "/lotes",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 131,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/lotes/:id",
+      "localPath": "/lotes/:id",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 140,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/lotes",
+      "localPath": "/lotes",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 154,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/lotes/gerar",
+      "localPath": "/lotes/gerar",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 164,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/lotes/:id/aceitar",
+      "localPath": "/lotes/:id/aceitar",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 174,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/lotes/:id/desistir",
+      "localPath": "/lotes/:id/desistir",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 184,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/mercado/lotes/:id/valores",
+      "localPath": "/lotes/:id/valores",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 194,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/backoffice",
+      "localPath": "/backoffice",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 204,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/os/:id/execucao",
+      "localPath": "/os/:id/execucao",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 213,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/os/:id/tentativas",
+      "localPath": "/os/:id/tentativas",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 223,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/os/:id/agendamentos",
+      "localPath": "/os/:id/agendamentos",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 233,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/os/:id/evidencias",
+      "localPath": "/os/:id/evidencias",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 243,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/os/:id/aprovar",
+      "localPath": "/os/:id/aprovar",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 253,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/tentativas/:id/aprovar",
+      "localPath": "/tentativas/:id/aprovar",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 263,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/evidencias/:id/aprovar",
+      "localPath": "/evidencias/:id/aprovar",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 279,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/financeiro",
+      "localPath": "/financeiro",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 295,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/financeiro/export.csv",
+      "localPath": "/financeiro/export.csv",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 304,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/financeiro/apuracoes",
+      "localPath": "/financeiro/apuracoes",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 319,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/financeiro/apuracoes/:id/pagamento",
+      "localPath": "/financeiro/apuracoes/:id/pagamento",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 329,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/suspensoes/recalcular",
+      "localPath": "/suspensoes/recalcular",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 345,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/historico",
+      "localPath": "/historico",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 355,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/execucao",
+      "localPath": "/execucao",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 364,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/dashboard",
+      "localPath": "/dashboard",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 54,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/config",
+      "localPath": "/config",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 63,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/mercado/config",
+      "localPath": "/config",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 72,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/config/simular",
+      "localPath": "/config/simular",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 82,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/empresas",
+      "localPath": "/empresas",
+      "mountPath": "/api/mercado",
+      "file": "apps/retiradas/backend/api/src/mercado/routes.js",
+      "line": 94,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/dashboard",
+      "localPath": "/dashboard",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 26,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/cidades",
+      "localPath": "/cidades",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/equipamentos",
+      "localPath": "/equipamentos",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 28,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/equipamentos/resumo-categoria",
+      "localPath": "/equipamentos/resumo-categoria",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/movimentacoes/equipamentos",
+      "localPath": "/equipamentos",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 40,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/lista",
+      "localPath": "/lista",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 47,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/config",
+      "localPath": "/config",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 48,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/movimentacoes/config",
+      "localPath": "/config",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 49,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/movimentacoes/scan",
+      "localPath": "/scan",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 56,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/scan/:jobId",
+      "localPath": "/scan/:jobId",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 63,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/movimentacoes/ordens-fechadas/conciliar",
+      "localPath": "/ordens-fechadas/conciliar",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 64,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/ordens-fechadas/conciliar/ultimo",
+      "localPath": "/ordens-fechadas/conciliar/ultimo",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 73,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/movimentacoes/ordens-fechadas/conciliar/:jobId",
+      "localPath": "/ordens-fechadas/conciliar/:jobId",
+      "mountPath": "/api/movimentacoes",
+      "file": "apps/retiradas/backend/api/src/movimentacoes/routes/movimentacoesRoutes.js",
+      "line": 79,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "localPath": "/",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 24,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/stats",
+      "localPath": "/stats",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 25,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/summary",
+      "localPath": "/summary",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 26,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/preferences",
+      "localPath": "/preferences",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 27,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/notifications/preferences",
+      "localPath": "/preferences",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 28,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/counters",
+      "localPath": "/counters",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 35,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/read",
+      "localPath": "/read",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 36,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/notifications/check-critical",
+      "localPath": "/check-critical",
+      "mountPath": "/api/notifications",
+      "file": "apps/retiradas/backend/api/src/notifications/routes/notificationsRoutes.js",
+      "line": 42,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/senior/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/senior",
+      "file": "apps/retiradas/backend/api/src/seniorAdmin/routes/seniorAdminRoutes.js",
+      "line": 28,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/senior/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/senior",
+      "file": "apps/retiradas/backend/api/src/seniorAdmin/routes/seniorAdminRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/senior/test",
+      "localPath": "/test",
+      "mountPath": "/api/admin/senior",
+      "file": "apps/retiradas/backend/api/src/seniorAdmin/routes/seniorAdminRoutes.js",
+      "line": 41,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/cancellations/sync/history",
+      "localPath": "/sync/history",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 108,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/cancellations/agents/targets/rebuild",
+      "localPath": "/agents/targets/rebuild",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 124,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/cancellations/:competencia/validate",
+      "localPath": "/:competencia/validate",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 138,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations",
+      "localPath": "/",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 17,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/resumo",
+      "localPath": "/resumo",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 25,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/competencias",
+      "localPath": "/competencias",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 33,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/filters",
+      "localPath": "/filters",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 46,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/sync/history",
+      "localPath": "/sync/history",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 54,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/export.csv",
+      "localPath": "/export.csv",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 67,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 81,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/cancellations/sync",
+      "localPath": "/sync",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 94,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/fines/audit",
+      "localPath": "/audit",
+      "mountPath": "/api/service-orders/fines",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/fines/routes/serviceOrderFinesRoutes.js",
+      "line": 21,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/fines/runs/:runId",
+      "localPath": "/runs/:runId",
+      "mountPath": "/api/service-orders/fines",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/fines/routes/serviceOrderFinesRoutes.js",
+      "line": 29,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/fines/simulate",
+      "localPath": "/simulate",
+      "mountPath": "/api/service-orders/fines",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/fines/routes/serviceOrderFinesRoutes.js",
+      "line": 42,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/ranking",
+      "localPath": "/admin/ranking",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 111,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/distribuicao",
+      "localPath": "/admin/distribuicao",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 124,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/cidades-tecnicos",
+      "localPath": "/admin/cidades-tecnicos",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 137,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/usuarios",
+      "localPath": "/admin/usuarios",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 150,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/cidades-tecnicos",
+      "localPath": "/admin/cidades-tecnicos",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 163,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/tentativas/admin/cidades-tecnicos/:id",
+      "localPath": "/admin/cidades-tecnicos/:id",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 177,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/campanhas",
+      "localPath": "/admin/campanhas",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 191,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/templates",
+      "localPath": "/admin/templates",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 205,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/templates",
+      "localPath": "/admin/templates",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 218,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/configuracoes",
+      "localPath": "/admin/configuracoes",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 232,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tentativas/admin/configuracoes",
+      "localPath": "/admin/configuracoes",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 245,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 259,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/:id/iniciar",
+      "localPath": "/:id/iniciar",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 272,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/cidades",
+      "localPath": "/cidades",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 41,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/minha-rota",
+      "localPath": "/minha-rota",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 49,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/historico",
+      "localPath": "/historico",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 57,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/historico/export.csv",
+      "localPath": "/historico/export.csv",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 65,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/contacts/:id/resultado",
+      "localPath": "/contacts/:id/resultado",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 84,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/resumo",
+      "localPath": "/admin/resumo",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 98,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/evolution",
+      "localPath": "/evolution",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 20,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/evolution/:event",
+      "localPath": "/evolution/:event",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 21,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/evolution-confirmacao",
+      "localPath": "/evolution-confirmacao",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 22,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/evolution-confirmacao/:event",
+      "localPath": "/evolution-confirmacao/:event",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 26,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/evolution-atendimento",
+      "localPath": "/evolution-atendimento",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 30,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/evolution-atendimento/:event",
+      "localPath": "/evolution-atendimento/:event",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 34,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/cvortex",
+      "localPath": "/cvortex",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 38,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks/whatsapp-official",
+      "localPath": "/whatsapp-official",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 39,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/whatsapp-official",
+      "localPath": "/whatsapp-official",
+      "mountPath": "/api/webhooks",
+      "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
+      "line": 40,
+      "gates": [
+        "public-or-custom"
+      ]
+    }
+  ]
+}

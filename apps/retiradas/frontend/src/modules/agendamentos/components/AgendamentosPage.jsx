@@ -476,7 +476,7 @@ const AgendamentosPage = () => {
 	});
 	const [diaOperacao, setDiaOperacao] = useState(todayKey);
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_agendamentos");
+	const podeEditar = hasPermission(currentUser, "manage_agendamentos");
 
 	useEffect(() => {
 		let mounted = true;

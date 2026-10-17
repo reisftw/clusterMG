@@ -85,6 +85,7 @@ const {
 	getOktaOAuthConfig,
 	getOwnMfaStatus,
 	getImportedUserProfile,
+	invalidateAuthenticatedUsersByRole,
 	getLocalUserByEmail,
 	loginWithGoogleIdToken,
 	loginWithOktaIdToken,
@@ -2609,6 +2610,7 @@ function createApp() {
 		createHealthRealtimeRouter({
 			attachRealtimeClient,
 			db,
+			requireAuthenticated,
 			realtimeLimiter,
 		}),
 	);
@@ -4386,6 +4388,7 @@ function createApp() {
 					active: req.body?.active !== false,
 					permissions: req.body?.permissions || [],
 				});
+				invalidateAuthenticatedUsersByRole(roleId);
 				const afterRole = await rolePermissions.getRoleById(roleId);
 				auditLog.recordAuditLog({
 					action: beforeRole ? "update" : "create",

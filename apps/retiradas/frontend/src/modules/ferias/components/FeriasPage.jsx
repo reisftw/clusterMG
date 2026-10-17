@@ -77,8 +77,8 @@ const FeriasPage = () => {
 	const [visualizacao, setVisualizacao] = useState("lista");
 	const [confirmarDel, setConfirmarDel] = useState(null);
 
-	const podeAprovar = hasPermission(currentUser?.role, "approve_ferias");
-	const podeLancar = hasPermission(currentUser?.role, "request_ferias");
+	const podeAprovar = hasPermission(currentUser, "approve_ferias");
+	const podeLancar = hasPermission(currentUser, "request_ferias");
 	const podeCadastrarDireto = podeAprovar;
 
 	const getNomeColaborador = (id) =>

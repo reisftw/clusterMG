@@ -247,7 +247,7 @@ export function useDashboardData(options = {}) {
 					event?.emittedAt || new Date().toISOString(),
 				);
 			},
-			{ debounceMs: 250 },
+			{ debounceMs: 250, public: true },
 		);
 
 		return () => {

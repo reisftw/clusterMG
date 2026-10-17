@@ -520,6 +520,21 @@ function setCachedAuthenticatedUser(payload = {}, user) {
 	}
 }
 
+function invalidateAuthenticatedUsersByRole(role) {
+	const normalizedRole = normalizeRole(role);
+	if (!normalizedRole) return 0;
+	let invalidated = 0;
+	for (const [key, cached] of authRequestCache.entries()) {
+		const cachedRole = normalizeRole(
+			cached?.user?.role || cached?.user?.profile?.role,
+		);
+		if (cachedRole !== normalizedRole) continue;
+		authRequestCache.delete(key);
+		invalidated += 1;
+	}
+	return invalidated;
+}
+
 async function upgradePasswordHashIfNeeded(user, password) {
 	if (user.password_algorithm === PASSWORD_ALGORITHM) return;
 	const passwordData = await hashPassword(password);
@@ -1609,6 +1624,7 @@ module.exports = {
 	createLocalUser,
 	deleteLocalUser,
 	getImportedUserProfile,
+	invalidateAuthenticatedUsersByRole,
 	getGoogleOAuthConfig,
 	getOktaOAuthConfig,
 	getLocalUserByEmail,

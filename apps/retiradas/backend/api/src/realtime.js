@@ -1,18 +1,25 @@
 const clients = new Set();
+const PUBLIC_TOPICS = new Set([
+	"acompanhamento",
+	"dashboard",
+	"mapa",
+	"match",
+	"metas",
+]);
 
 function writeEvent(res, event, payload) {
 	res.write(`event: ${event}\n`);
 	res.write(`data: ${JSON.stringify(payload || {})}\n\n`);
 }
 
-function attachRealtimeClient(req, res) {
+function attachRealtimeClient(req, res, { publicStream = false } = {}) {
 	res.setHeader("Content-Type", "text/event-stream");
 	res.setHeader("Cache-Control", "no-cache, no-transform");
 	res.setHeader("Connection", "keep-alive");
 	res.setHeader("X-Accel-Buffering", "no");
 	res.flushHeaders?.();
 
-	const client = { req, res, heartbeat: null };
+	const client = { req, res, heartbeat: null, publicStream };
 	clients.add(client);
 	writeEvent(res, "connected", {
 		ok: true,
@@ -44,7 +51,14 @@ function broadcastRealtime(topic, payload = {}) {
 
 	for (const client of clients) {
 		try {
-			writeEvent(client.res, "retiradas-update", message);
+			if (client.publicStream && !PUBLIC_TOPICS.has(topic)) continue;
+			writeEvent(
+				client.res,
+				"retiradas-update",
+				client.publicStream
+					? { topic, emittedAt: message.emittedAt }
+					: message,
+			);
 		} catch {
 			clients.delete(client);
 		}

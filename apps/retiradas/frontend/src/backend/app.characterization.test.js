@@ -89,6 +89,7 @@ function makeAuthMock(overrides = {}) {
 			uid: "admin-1",
 			email: "admin@example.com",
 		})),
+		invalidateAuthenticatedUsersByRole: vi.fn(() => 0),
 		createPasswordResetTokenByEmail: vi.fn(async (email) => ({
 			resetUrl: `https://retiradas.tech/reset?email=${encodeURIComponent(email)}`,
 			user: { email },
@@ -137,6 +138,7 @@ function baseMocks(overrides = {}) {
 			officialWebhookVerifyToken: "verify-token",
 		})),
 		getEvolutionStatus: vi.fn(async () => ({ ok: true })),
+		createOrConnectInstance: vi.fn(async () => ({ ok: true, qrcode: "test" })),
 		connectEvolution: vi.fn(async () => ({ ok: true })),
 		disconnectEvolution: vi.fn(async () => ({ ok: true })),
 		configureEvolutionWebhook: vi.fn(async () => ({ ok: true })),
@@ -512,6 +514,21 @@ describe("vps api app characterization - health/realtime", () => {
 			databaseTime: "2026-08-16T00:00:00.000Z",
 		});
 	}, 15000);
+
+	it("GET /api/events exige sessao, mas permite o stream publico sanitizado", async () => {
+		const app = loadApp();
+
+		const rejected = await request(app).get("/api/events");
+		expect(rejected.status).toBe(401);
+
+		const publicStream = await request(app).get("/api/events?public=1");
+		expect(publicStream.status).toBe(200);
+		expect(currentMocks.realtime.attachRealtimeClient).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.anything(),
+			{ publicStream: true },
+		);
+	});
 });
 
 describe("vps api app characterization - audit logs", () => {
@@ -578,6 +595,83 @@ describe("vps api app characterization - audit logs", () => {
 });
 
 describe("vps api app characterization - roles", () => {
+	it("POST /api/mensageria/evolution/connect exige autenticacao e mensageria.api.manage", async () => {
+		const noAuthApp = loadApp();
+		const noAuth = await request(noAuthApp).post(
+			"/api/mensageria/evolution/connect",
+		);
+		expect(noAuth.status).toBe(401);
+
+		const noPermissionApp = loadApp();
+		const noPermission = await request(noPermissionApp)
+			.post("/api/mensageria/evolution/connect")
+			.set("Authorization", "Bearer valid")
+			.set("x-test-role", "backoffice_retirada")
+			.set("x-csrf-token", "valid-csrf");
+		expect(noPermission.status).toBe(403);
+
+		const adminApp = loadApp();
+		const admin = await request(adminApp)
+			.post("/api/mensageria/evolution/connect")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf");
+		expect(admin.status).toBe(200);
+
+		const authorizedUser = {
+			uid: "backoffice-1",
+			email: "backoffice@example.com",
+			role: "backoffice_retirada",
+			profile: {
+				uid: "backoffice-1",
+				email: "backoffice@example.com",
+				role: "backoffice_retirada",
+				permissions: ["mensageria.api.manage"],
+			},
+		};
+		const authorizedApp = loadApp({
+			auth: {
+				...makeAuthMock(),
+				requireAuthenticated: vi.fn((req, _res, next) => {
+					req.user = authorizedUser;
+					next();
+				}),
+			},
+		});
+		const authorized = await request(authorizedApp)
+			.post("/api/mensageria/evolution/connect")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf");
+
+		expect(authorized.status).toBe(200);
+		expect(currentMocks.evolutionMessaging.createOrConnectInstance).toHaveBeenCalledTimes(1);
+
+		const delegatedUser = {
+			...authorizedUser,
+			uid: "custom-role-1",
+			role: "cargo_personalizado",
+			profile: {
+				...authorizedUser.profile,
+				uid: "custom-role-1",
+				role: "cargo_personalizado",
+			},
+		};
+		const delegatedApp = loadApp({
+			auth: {
+				...makeAuthMock(),
+				requireAuthenticated: vi.fn((req, _res, next) => {
+					req.user = delegatedUser;
+					next();
+				}),
+			},
+		});
+		const delegated = await request(delegatedApp)
+			.post("/api/mensageria/evolution/connect")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf");
+
+		expect(delegated.status).toBe(200);
+	});
+
 	it("DELETE /api/admin/roles/:roleId exclui cargo customizado", async () => {
 		const app = loadApp();
 
@@ -597,6 +691,33 @@ describe("vps api app characterization - roles", () => {
 				entity: "app_roles",
 				recordId: "cargo_teste",
 			}),
+		);
+	});
+
+	it("PUT /api/admin/roles/:roleId invalida o cache de sessoes do cargo atualizado", async () => {
+		const app = loadApp({
+			rolePermissions: {
+				...baseMocks().rolePermissions,
+				getRoleById: vi.fn(async () => ({
+					id: "backoffice_retirada",
+					name: "BackOffice Retirada",
+					permissions: ["mensageria.api.view"],
+				})),
+			},
+		});
+
+		const response = await request(app)
+			.put("/api/admin/roles/backoffice_retirada")
+			.set("Authorization", "Bearer valid")
+			.set("x-csrf-token", "valid-csrf")
+			.send({
+				name: "BackOffice Retirada",
+				permissions: ["mensageria.api.manage"],
+			});
+
+		expect(response.status).toBe(200);
+		expect(currentMocks.auth.invalidateAuthenticatedUsersByRole).toHaveBeenCalledWith(
+			"backoffice_retirada",
 		);
 	});
 

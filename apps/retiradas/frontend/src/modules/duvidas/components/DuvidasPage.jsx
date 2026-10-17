@@ -276,7 +276,7 @@ export default function DuvidasPage() {
 	const [duvidaModal, setDuvidaModal] = useState(null);
 	const [contatoModal, setContatoModal] = useState(null);
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_duvidas");
+	const podeEditar = hasPermission(currentUser, "manage_duvidas");
 
 	const duvidasFiltradas = useMemo(() => {
 		const term = search.trim().toLowerCase();

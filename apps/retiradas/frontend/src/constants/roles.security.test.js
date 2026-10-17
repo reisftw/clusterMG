@@ -27,6 +27,21 @@ describe("RBAC security rules", () => {
 		).toBe(true);
 	});
 
+	it("allows the BackOffice QR-code action only with the dynamic manage permission", () => {
+		expect(
+			hasPermission(
+				{ role: ROLES.BACKOFFICE_RETIRADA, permissions: ["mensageria.api.manage"] },
+				"mensageria.api.manage",
+			),
+		).toBe(true);
+		expect(
+			hasPermission(
+				{ role: ROLES.BACKOFFICE_RETIRADA, permissions: ["mensageria.api.view"] },
+				"mensageria.api.manage",
+			),
+		).toBe(false);
+	});
+
 	it("does not allow view permission to satisfy the matching manage permission", () => {
 		expect(
 			hasPermission(

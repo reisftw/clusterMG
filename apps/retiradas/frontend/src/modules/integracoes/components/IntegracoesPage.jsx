@@ -798,7 +798,7 @@ function useIntegracoesController() {
 	const [oktaSaving, setOktaSaving] = useState(false);
 	const [oktaMessage, setOktaMessage] = useState("");
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_integracoes");
+	const podeEditar = hasPermission(currentUser, "manage_integracoes");
 	const isAdmin = String(currentUser?.role || "").toLowerCase() === ROLES.ADMIN;
 	const activeCount = useMemo(
 		() => integracoes.filter((item) => item.active).length,

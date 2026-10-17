@@ -2,8 +2,14 @@
 
 const UPDATE_EVENT_NAME = "retiradas-realtime-update";
 
-let source = null;
-let subscribers = 0;
+const sources = {
+	internal: null,
+	public: null,
+};
+const subscribers = {
+	internal: 0,
+	public: 0,
+};
 
 function emitLocalUpdate(detail) {
 	window.dispatchEvent(new CustomEvent(UPDATE_EVENT_NAME, { detail }));
@@ -19,11 +25,13 @@ export function emitRealtimeUpdate(topic, payload = {}) {
 	});
 }
 
-function ensureSource() {
-	if (typeof window === "undefined" || source) return;
+function ensureSource(stream) {
+	if (typeof window === "undefined" || sources[stream]) return;
 	if (typeof window.EventSource !== "function") return;
 
-	source = new window.EventSource(`${getApiBaseUrl()}/events`);
+	const suffix = stream === "public" ? "?public=1" : "";
+	const source = new window.EventSource(`${getApiBaseUrl()}/events${suffix}`);
+	sources[stream] = source;
 	source.addEventListener("retiradas-update", (event) => {
 		try {
 			emitLocalUpdate(JSON.parse(event.data || "{}"));
@@ -36,21 +44,22 @@ function ensureSource() {
 	};
 }
 
-function closeSourceIfIdle() {
-	if (subscribers > 0 || !source) return;
-	source.close();
-	source = null;
+function closeSourceIfIdle(stream) {
+	if (subscribers[stream] > 0 || !sources[stream]) return;
+	sources[stream].close();
+	sources[stream] = null;
 }
 
 export function subscribeRealtimeTopics(topics, callback, options = {}) {
 	if (typeof window === "undefined") return () => {};
 
 	const topicSet = new Set(Array.isArray(topics) ? topics : [topics]);
+	const stream = options.public ? "public" : "internal";
 	const debounceMs = Math.max(0, Number(options.debounceMs || 0));
 	let debounceTimer = null;
 	let lastDetail = null;
-	subscribers += 1;
-	ensureSource();
+	subscribers[stream] += 1;
+	ensureSource(stream);
 
 	const handler = (event) => {
 		const detail = event.detail || {};
@@ -72,7 +81,7 @@ export function subscribeRealtimeTopics(topics, callback, options = {}) {
 	return () => {
 		if (debounceTimer) window.clearTimeout(debounceTimer);
 		window.removeEventListener(UPDATE_EVENT_NAME, handler);
-		subscribers = Math.max(0, subscribers - 1);
-		closeSourceIfIdle();
+		subscribers[stream] = Math.max(0, subscribers[stream] - 1);
+		closeSourceIfIdle(stream);
 	};
 }

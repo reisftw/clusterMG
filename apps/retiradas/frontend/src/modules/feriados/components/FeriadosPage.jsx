@@ -166,7 +166,7 @@ const FeriadosPage = () => {
 	const [aba, setAba] = useState("nacionais");
 	const [confirmarDel, setConfirmarDel] = useState(null);
 
-	const podeGerenciar = hasPermission(currentUser?.role, "manage_feriados");
+	const podeGerenciar = hasPermission(currentUser, "manage_feriados");
 
 	const formatarData = (data) =>
 		data

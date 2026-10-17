@@ -1,7 +1,8 @@
 param(
 	[ValidateSet("all", "retiradas", "operacao")]
 	[string]$App = "all",
-	[string]$OutDir = "dist-vm-migration"
+	[string]$OutDir = "dist-vm-migration",
+	[string]$RetiradasApiBaseUrl = "https://retiradas.tech/api"
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,7 +21,7 @@ if ($App -eq "all" -or $App -eq "retiradas") {
 	Invoke-Step "Instalando dependencias backend Retiradas" { npm ci --prefix apps/retiradas/backend }
 	Invoke-Step "Build Retiradas" {
 		$env:VITE_APP_ENV_LABEL = "Producao"
-		$env:VITE_API_BASE_URL = "https://retiradas.tech/api"
+		$env:VITE_API_BASE_URL = $RetiradasApiBaseUrl.TrimEnd("/")
 		$env:VITE_APP_VERSION = (git rev-parse --short HEAD)
 		npm run build:retiradas
 	}

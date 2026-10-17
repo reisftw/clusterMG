@@ -25,7 +25,7 @@ const EquipamentosPage = () => {
 	const [filtroStatus, setFiltroStatus] = useState("");
 	const [confirmarExcluir, setConfirmarExcluir] = useState(null);
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_equipamentos");
+	const podeEditar = hasPermission(currentUser, "manage_equipamentos");
 
 	const lista = useMemo(
 		() =>

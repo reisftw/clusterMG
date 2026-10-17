@@ -83,7 +83,7 @@ const RegionaisPage = () => {
 	const [confirmarExcluir, setConfirmarExcluir] = useState(null);
 	const [buscaCidade, setBuscaCidade] = useState("");
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_regionais");
+	const podeEditar = hasPermission(currentUser, "manage_regionais");
 	const toggle = (id) => setExpandidas((p) => ({ ...p, [id]: !p[id] }));
 
 	const totalCidades = useMemo(

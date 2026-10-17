@@ -48,6 +48,13 @@ Se quiser gerar apenas um app:
 .\ops\vm-migration\scripts\prepare-packages.ps1 -App operacao
 ```
 
+Para gerar o frontend destinado a VM corporativa da Sempre, informe a base da
+API correspondente ao dominio da VM:
+
+```powershell
+.\ops\vm-migration\scripts\prepare-packages.ps1 -App retiradas -RetiradasApiBaseUrl https://retiradas.sempre.net.br/api
+```
+
 ## Checklist da VM nova
 
 1. Instalar base:

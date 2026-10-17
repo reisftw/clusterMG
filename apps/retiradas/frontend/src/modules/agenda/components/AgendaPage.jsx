@@ -114,7 +114,7 @@ const AgendaPage = () => {
 	const [filtroTipo, setFiltroTipo] = useState("todos");
 	const [filtroCidade, setFiltroCidade] = useState("todas");
 
-	const podeEditar = hasPermission(currentUser?.role, "manage_agenda");
+	const podeEditar = hasPermission(currentUser, "manage_agenda");
 	const hoje = useMemo(() => {
 		const data = new Date();
 		data.setHours(0, 0, 0, 0);

@@ -297,7 +297,7 @@ function canSeeEmpresa(user, empresa) {
 function canEditEmpresa(user, empresa) {
 	const role = normalizeText(user?.role);
 	if (
-		hasPermission(role, "manage_empresas_tecnicos") &&
+		hasPermission(user, "manage_empresas_tecnicos") &&
 		role !== ROLES.LIDER_EMPRESA
 	)
 		return true;
@@ -2838,7 +2838,7 @@ export default function EmpresasTecnicosPage() {
 	}
 
 	const canCreate =
-		hasPermission(currentUser?.role, "manage_empresas_tecnicos") &&
+		hasPermission(currentUser, "manage_empresas_tecnicos") &&
 		normalizeText(currentUser?.role) !== ROLES.LIDER_EMPRESA;
 
 	return (

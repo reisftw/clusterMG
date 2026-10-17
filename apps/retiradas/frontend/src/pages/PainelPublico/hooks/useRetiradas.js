@@ -145,7 +145,7 @@ export function useRetiradas(enabled = true, options = {}) {
 		const unsubscribeRealtime = subscribeRealtimeTopics(
 			["metas"],
 			loadLiveBaseConfig,
-			{ debounceMs: 250 },
+			{ debounceMs: 250, public: true },
 		);
 
 		return () => {
