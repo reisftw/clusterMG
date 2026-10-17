@@ -93,10 +93,13 @@ release para evitar efeitos colaterais.
 | Build de producao Retiradas | aprovado |
 | `git diff --check` | aprovado |
 | `npm audit --omit=dev --audit-level=high` | sem vulnerabilidades altas ou criticas |
+| `npm audit` do backend de runtime | 0 vulnerabilidades apos atualizacao do lockfile |
 
 O `npm audit` reportou uma vulnerabilidade de severidade baixa em `dompurify`.
-Nenhuma atualizacao de dependencia foi feita nesta estabilizacao para evitar
-alterar o lockfile fora da necessidade do release.
+No backend, a auditoria identificou e o release corrige versoes transitivas
+vulneraveis de `brace-expansion`, `compression`, `ip-address` e `proxy-addr`
+somente dentro das faixas semver ja declaradas. Nenhuma API de dependencia foi
+alterada.
 
 Os avisos de `act(...)` nos testes React e mensagens dos mocks de servicos
 HubSoft/e-mail sao preexistentes nos cenarios isolados; a suite terminou verde.
