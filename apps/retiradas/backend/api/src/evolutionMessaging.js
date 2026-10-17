@@ -59,6 +59,8 @@ const DEFAULT_CONFIG = {
 		"Agendamento registrado com sucesso para {data_agendamento} {hora_agendamento}.\n\nEm caso de d\u00favidas, fale com nossa central de retiradas.",
 	replyPastScheduleDateMessage:
 		"A data informada ({data_agendamento}) \u00e9 anterior ao dia atual.\n\nPor favor, informe uma nova data futura para agendarmos a retirada.",
+	replySameDayScheduleMessage:
+		"N\u00e3o temos vagas para agendamento no dia atual.\n\nPor favor, escolha uma data a partir de amanh\u00e3.",
 	replySameDayAfterCutoffMessage:
 		"N\u00e3o \u00e9 poss\u00edvel realizar o agendamento para hoje devido ao hor\u00e1rio.\n\nPor favor, informe uma nova data a partir de amanh\u00e3.",
 	replyDeliveredMessage:
@@ -2459,21 +2461,6 @@ function getSaoPauloDateKey(value = new Date()) {
 	return dateKeyFromDate(getSaoPauloDate(value));
 }
 
-function getSaoPauloMinutes(value = new Date()) {
-	const parts = new Intl.DateTimeFormat("en-CA", {
-		timeZone: SEND_TIME_ZONE,
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	})
-		.formatToParts(value)
-		.reduce((acc, part) => {
-			if (part.type !== "literal") acc[part.type] = part.value;
-			return acc;
-		}, {});
-	return Number(parts.hour || 0) * 60 + Number(parts.minute || 0);
-}
-
 function dateKeyFromDate(date) {
 	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -2544,9 +2531,7 @@ async function incrementAutomaticScheduleMetrics(schedule = {}, item = {}) {
 function getGuidedDateOptions(baseDate = new Date()) {
 	const localDate = getSaoPauloDate(baseDate);
 	const first = new Date(localDate);
-	if (getSaoPauloMinutes(baseDate) >= 15 * 60) {
-		first.setDate(first.getDate() + 1);
-	}
+	first.setDate(first.getDate() + 1);
 	const second = new Date(first);
 	second.setDate(second.getDate() + 1);
 	const saturday = new Date(localDate);
@@ -3043,7 +3028,7 @@ function assertManualScheduleDateIsAllowed(schedule = {}) {
 	const error = new Error(
 		validation.status === "data_anterior"
 			? "A resposta indica uma data anterior ao dia atual. Peça uma nova data ao cliente antes de gerar o agendamento."
-			: "Não é possível gerar agendamento para hoje após o horário limite.",
+			: "Não temos vagas para agendamento no dia atual. Gere o agendamento a partir de amanhã.",
 	);
 	error.status = 400;
 	error.statusCode = 400;
@@ -3393,12 +3378,12 @@ function validateScheduleDateWindow(schedule, now = new Date()) {
 			templateKey: "replyPastScheduleDateMessage",
 		};
 	}
-	if (dateKey === todayKey && getSaoPauloMinutes(now) >= 15 * 60) {
+	if (dateKey === todayKey) {
 		return {
 			ok: false,
-			status: "mesmo_dia_apos_limite",
-			motivo: "Cliente tentou agendar para o mesmo dia apos 15h.",
-			templateKey: "replySameDayAfterCutoffMessage",
+			status: "mesmo_dia_indisponivel",
+			motivo: "Cliente tentou agendar para o dia atual.",
+			templateKey: "replySameDayScheduleMessage",
 		};
 	}
 	return { ok: true };
@@ -4254,6 +4239,7 @@ module.exports = {
 		parseGuidedTimeChoice,
 		parseScheduleFromText,
 		renderGuidedTimeMessage,
+		validateScheduleDateWindow,
 		isConfirmedDisconnectedConnection,
 	},
 };

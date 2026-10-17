@@ -6,8 +6,16 @@ const notifications = require("./notificationsService");
 const APPOINTMENTS_COLLECTION = "agendamentos";
 const MAP_COLLECTION = "ordens_abertas";
 const STATUS_WAITING = "Aguardando dia";
+const STATUS_SENT_TO_TECHNICIAN = "Enviado ao tecnico";
 const STATUS_COLLECTED = "Concluido";
 const STATUS_NOT_COLLECTED = "Nao recolhido";
+const COMPLETED_APPOINTMENTS_INTERVAL_MS = 60 * 60 * 1000;
+
+let completedAppointmentsWorkerTimer = null;
+let completedAppointmentsInitialRunTimer = null;
+let completedAppointmentsWorkerRunning = false;
+let completedAppointmentsLastRun = null;
+let completedAppointmentsLastError = "";
 
 function nowIso() {
 	return new Date().toISOString();
@@ -26,6 +34,14 @@ function normalizeText(value) {
 function normalizeCode(value) {
 	return String(value || "")
 		.replace(/\D+/g, "")
+		.trim();
+}
+
+function normalizeServiceOrder(value) {
+	return String(value || "")
+		.toUpperCase()
+		.replace(/[^A-Z0-9]+/g, "")
+		.replace(/^OS/, "")
 		.trim();
 }
 
@@ -72,11 +88,19 @@ function isWaitingAppointment(data = {}) {
 	);
 }
 
+function isSentToTechnicianAppointment(data = {}) {
+	return (
+		normalizeText(data.status) === normalizeText(STATUS_SENT_TO_TECHNICIAN)
+	);
+}
+
 function buildOrderIndexes(orders = []) {
 	const codes = new Set();
 	const names = new Set();
+	const serviceOrders = new Set();
 	const byCode = new Map();
 	const byName = new Map();
+	const byServiceOrder = new Map();
 
 	orders.forEach((record) => {
 		const data = record.data || record || {};
@@ -97,6 +121,15 @@ function buildOrderIndexes(orders = []) {
 				"assinante",
 			]),
 		);
+		const serviceOrder = normalizeServiceOrder(
+			firstText(data, [
+				"num_os",
+				"numero_os",
+				"os",
+				"ordem_servico",
+				"ordem_de_servico",
+			]),
+		);
 		if (code) {
 			codes.add(code);
 			if (!byCode.has(code)) byCode.set(code, data);
@@ -105,12 +138,26 @@ function buildOrderIndexes(orders = []) {
 			names.add(name);
 			if (!byName.has(name)) byName.set(name, data);
 		}
+		if (serviceOrder) {
+			serviceOrders.add(serviceOrder);
+			if (!byServiceOrder.has(serviceOrder))
+				byServiceOrder.set(serviceOrder, data);
+		}
 	});
 
-	return { codes, names, byCode, byName };
+	return { codes, names, serviceOrders, byCode, byName, byServiceOrder };
 }
 
 function findMatchingOrder(appointment = {}, indexes) {
+	const serviceOrder = normalizeServiceOrder(
+		firstText(appointment, [
+			"os",
+			"num_os",
+			"numero_os",
+			"ordem_servico",
+			"ordem_de_servico",
+		]),
+	);
 	const code = normalizeCode(
 		firstText(appointment, [
 			"codigo_cliente",
@@ -123,6 +170,13 @@ function findMatchingOrder(appointment = {}, indexes) {
 		firstText(appointment, ["cliente_nome", "nome_cliente", "cliente", "nome"]),
 	);
 
+	if (serviceOrder && indexes.serviceOrders.has(serviceOrder)) {
+		return {
+			matched: true,
+			reason: "os",
+			order: indexes.byServiceOrder.get(serviceOrder) || null,
+		};
+	}
 	if (code && indexes.codes.has(code)) {
 		return {
 			matched: true,
@@ -138,6 +192,17 @@ function findMatchingOrder(appointment = {}, indexes) {
 		};
 	}
 	return { matched: false, reason: "", order: null };
+}
+
+function shouldEvaluateSentToTechnicianAppointment(data = {}, { today }) {
+	const dateKey = toDateKey(
+		data.data || data.data_agendamento || data.agendamento_data,
+	);
+	if (!dateKey) return { ok: false, reason: "sem_data" };
+	if (dateKey > today) return { ok: false, reason: "ainda_no_prazo" };
+	if (!isSentToTechnicianAppointment(data))
+		return { ok: false, reason: "status_nao_elegivel" };
+	return { ok: true, dateKey };
 }
 
 async function listCollection(collectionPath) {
@@ -385,6 +450,206 @@ async function reconcileAppointmentsWithMapa({
 	return summary;
 }
 
+async function saveCompletedAppointmentLog({
+	record,
+	before,
+	after,
+	reason,
+	checkedAt,
+	client,
+}) {
+	const id = `os_finalizada_${checkedAt.replace(/\D/g, "")}_${record.documentId}`;
+	await agendamentosRepository.recordAppointmentLog(
+		{
+			tipo: "conclusao_automatica_os_finalizada",
+			origem: reason,
+			agendamento_id: record.documentId,
+			codigo_cliente: firstText(before, [
+				"codigo_cliente",
+				"codigo",
+				"cod_cliente",
+			]),
+			cliente_nome: firstText(before, [
+				"cliente_nome",
+				"nome_cliente",
+				"cliente",
+				"nome",
+			]),
+			cidade: firstText(before, ["cidade"]),
+			data_agendamento: firstText(before, ["data", "data_agendamento"]),
+			hora: firstText(before, ["hora", "horario"]),
+			status_anterior: before.status || STATUS_SENT_TO_TECHNICIAN,
+			status_novo: after.status,
+			resultado: "concluido",
+			motivo: "O.S. nao localizada no mapa de O.S. em aberto.",
+			criterio: "os_codigo_cliente_nome",
+			os_encontrada: firstText(before, ["os", "num_os", "numero_os"]),
+			criado_em: checkedAt,
+		},
+		{ id, client },
+	);
+}
+
+async function reconcileSentTechnicianAppointmentsWithMapa({
+	reason = "scheduler_horario",
+} = {}) {
+	const [orders, appointments] = await Promise.all([
+		listCollection(MAP_COLLECTION),
+		listCollection(APPOINTMENTS_COLLECTION),
+	]);
+	const checkedAt = nowIso();
+	const today = currentDateKey();
+	const summary = {
+		ok: true,
+		reason,
+		checkedAt,
+		today,
+		mapOrders: orders.length,
+		checked: 0,
+		concluidos: 0,
+		aindaAbertos: 0,
+		skipped: {},
+		updated: [],
+	};
+
+	if (!orders.length) {
+		summary.skipped.mapa_vazio = appointments.length;
+		return summary;
+	}
+
+	const indexes = buildOrderIndexes(orders);
+	for (const record of appointments) {
+		const data = record.data || {};
+		const eligibility = shouldEvaluateSentToTechnicianAppointment(data, {
+			today,
+		});
+		if (!eligibility.ok) {
+			summary.skipped[eligibility.reason] =
+				(summary.skipped[eligibility.reason] || 0) + 1;
+			continue;
+		}
+
+		summary.checked += 1;
+		const match = findMatchingOrder(data, indexes);
+		if (match.matched) {
+			summary.aindaAbertos += 1;
+			continue;
+		}
+
+		const nextData = {
+			...data,
+			status: STATUS_COLLECTED,
+			recolhido_em: checkedAt,
+			motivo_recolhido: "O.S. nao localizada no mapa de O.S. em aberto.",
+			verificacao_mapa: {
+				status: "nao_encontrado_no_mapa",
+				verificado_em: checkedAt,
+				origem: reason,
+				criterio: "os_codigo_cliente_nome",
+			},
+			atualizado_em: checkedAt,
+		};
+
+		const client = await db.connect();
+		try {
+			await client.query("begin");
+			await updateAppointment(record, nextData, { client });
+			await saveCompletedAppointmentLog({
+				record,
+				before: data,
+				after: nextData,
+				reason,
+				checkedAt,
+				client,
+			});
+			await client.query("commit");
+		} catch (error) {
+			await client.query("rollback").catch(() => {});
+			throw error;
+		} finally {
+			client.release();
+		}
+
+		summary.concluidos += 1;
+		summary.updated.push({
+			id: record.documentId,
+			status: STATUS_COLLECTED,
+			os: firstText(data, ["os", "num_os", "numero_os"]),
+		});
+	}
+
+	return summary;
+}
+
+async function runCompletedAppointmentsReconciliation() {
+	if (completedAppointmentsWorkerRunning) {
+		return { ok: true, skipped: "em_execucao" };
+	}
+	completedAppointmentsWorkerRunning = true;
+	completedAppointmentsLastRun = nowIso();
+	completedAppointmentsLastError = "";
+	try {
+		const summary = await reconcileSentTechnicianAppointmentsWithMapa();
+		console.log(
+			`[agendamentoMapaReconciliation] Verificacao horaria concluida: ${summary.concluidos} agendamento(s) concluidos.`,
+		);
+		return summary;
+	} catch (error) {
+		completedAppointmentsLastError =
+			error?.message || "Falha na verificacao horaria de agendamentos.";
+		console.error(
+			"[agendamentoMapaReconciliation] Falha na verificacao horaria:",
+			error,
+		);
+		throw error;
+	} finally {
+		completedAppointmentsWorkerRunning = false;
+	}
+}
+
+function startCompletedAppointmentsWorker() {
+	if (completedAppointmentsWorkerTimer) return;
+	completedAppointmentsWorkerTimer = setInterval(() => {
+		runCompletedAppointmentsReconciliation().catch(() => {});
+	}, COMPLETED_APPOINTMENTS_INTERVAL_MS);
+	completedAppointmentsWorkerTimer.unref?.();
+	completedAppointmentsInitialRunTimer = setTimeout(() => {
+		completedAppointmentsInitialRunTimer = null;
+		runCompletedAppointmentsReconciliation().catch(() => {});
+	}, 60 * 1000);
+	completedAppointmentsInitialRunTimer.unref?.();
+	console.log(
+		"[agendamentoMapaReconciliation] Rotina horaria de conclusao automatica iniciada.",
+	);
+}
+
+function stopCompletedAppointmentsWorker() {
+	if (completedAppointmentsWorkerTimer) {
+		clearInterval(completedAppointmentsWorkerTimer);
+	}
+	if (completedAppointmentsInitialRunTimer) {
+		clearTimeout(completedAppointmentsInitialRunTimer);
+	}
+	completedAppointmentsWorkerTimer = null;
+	completedAppointmentsInitialRunTimer = null;
+	completedAppointmentsWorkerRunning = false;
+}
+
+function getCompletedAppointmentsWorkerStatus() {
+	return {
+		active: Boolean(completedAppointmentsWorkerTimer),
+		running: completedAppointmentsWorkerRunning,
+		lastRun: completedAppointmentsLastRun,
+		lastError: completedAppointmentsLastError,
+		intervalMs: COMPLETED_APPOINTMENTS_INTERVAL_MS,
+	};
+}
+
 module.exports = {
 	reconcileAppointmentsWithMapa,
+	reconcileSentTechnicianAppointmentsWithMapa,
+	runCompletedAppointmentsReconciliation,
+	startCompletedAppointmentsWorker,
+	stopCompletedAppointmentsWorker,
+	getCompletedAppointmentsWorkerStatus,
 };

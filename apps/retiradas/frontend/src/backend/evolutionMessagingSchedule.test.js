@@ -147,8 +147,8 @@ describe("evolutionMessaging guided schedule dates", () => {
 		);
 
 		expect(options.map((option) => option.date)).toEqual([
-			"2026-09-01",
 			"2026-09-02",
+			"2026-09-03",
 			"2026-09-05",
 		]);
 	});
@@ -166,7 +166,33 @@ describe("evolutionMessaging guided schedule dates", () => {
 			],
 		});
 
-		expect(selected).toBe("2026-09-01");
+		expect(selected).toBe("2026-09-02");
+	});
+
+	it("oferece somente datas a partir de amanha, inclusive antes das 15h", () => {
+		const helpers = loadEvolutionMessaging();
+		const options = helpers.getGuidedDateOptions(
+			new Date("2026-09-01T10:00:00-03:00"),
+		);
+
+		expect(options.slice(0, 2).map((option) => option.date)).toEqual([
+			"2026-09-02",
+			"2026-09-03",
+		]);
+	});
+
+	it("recusa agendamento para o dia atual em qualquer horario", () => {
+		const helpers = loadEvolutionMessaging();
+		const validation = helpers.validateScheduleDateWindow(
+			{ date: "2026-09-01" },
+			new Date("2026-09-01T10:00:00-03:00"),
+		);
+
+		expect(validation).toMatchObject({
+			ok: false,
+			status: "mesmo_dia_indisponivel",
+			templateKey: "replySameDayScheduleMessage",
+		});
 	});
 
 	it("normaliza Date usando o dia de Sao Paulo", () => {

@@ -248,4 +248,70 @@ describe("agendamentoMapaReconciliation", () => {
 		]);
 		expect(release).toHaveBeenCalledTimes(1);
 	});
+
+	it("conclui automaticamente agendamento enviado ao tecnico quando a O.S nao esta mais aberta", async () => {
+		const documents = {
+			listAllDocuments: vi.fn(async () => [
+				{
+					documentId: "os-ainda-aberta",
+					data: {
+						num_os: "014326006170948629",
+						codigo_cliente: "456",
+					},
+				},
+			]),
+		};
+		const agendamentosRepository = {
+			listAllAppointmentDocuments: vi.fn(async () => [
+				{
+					documentId: "ag-fechada",
+					data: {
+						os: "014326004000534921",
+						codigo_cliente: "123",
+						data: "2026-08-01",
+						status: "Enviado ao tecnico",
+					},
+				},
+				{
+					documentId: "ag-aberta",
+					data: {
+						os: "014326006170948629",
+						codigo_cliente: "456",
+						data: "2026-08-01",
+						status: "Enviado ao tecnico",
+					},
+				},
+			]),
+			deleteAppointmentLogsByType: vi.fn(async () => 0),
+			recordAppointmentLog: vi.fn(async () => ({})),
+			saveAppointment: vi.fn(async () => ({})),
+		};
+		const notifications = {
+			createNotification: vi.fn(async () => ({})),
+			notificationExists: vi.fn(async () => false),
+		};
+		const { reconcileSentTechnicianAppointmentsWithMapa } = loadReconciliation({
+			documents,
+			agendamentosRepository,
+			notifications,
+		});
+
+		const summary = await reconcileSentTechnicianAppointmentsWithMapa({
+			reason: "teste",
+		});
+
+		expect(agendamentosRepository.saveAppointment).toHaveBeenCalledTimes(1);
+		expect(agendamentosRepository.saveAppointment.mock.calls[0][1]).toMatchObject({
+			status: "Concluido",
+			motivo_recolhido: "O.S. nao localizada no mapa de O.S. em aberto.",
+		});
+		expect(agendamentosRepository.recordAppointmentLog).toHaveBeenCalledTimes(1);
+		expect(agendamentosRepository.deleteAppointmentLogsByType).not.toHaveBeenCalled();
+		expect(summary).toMatchObject({
+			checked: 2,
+			concluidos: 1,
+			aindaAbertos: 1,
+			mapOrders: 1,
+		});
+	});
 });
