@@ -12,10 +12,6 @@ on:
           - all
           - retiradas
           - operacao
-  push:
-    branches:
-      - master
-      - operacao
 
 concurrency:
   group: deploy-internal-vm-${{ github.ref }}
@@ -28,10 +24,7 @@ jobs:
   deploy-retiradas:
     name: Deploy Retiradas na VM interna
     runs-on: [self-hosted, linux, retiradas-vm]
-    if: >
-      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
-      (github.event_name == 'workflow_dispatch' &&
-        (inputs.app == 'all' || inputs.app == 'retiradas'))
+    if: github.event_name == 'workflow_dispatch' && (inputs.app == 'all' || inputs.app == 'retiradas')
 
     steps:
       - name: Atualizar fonte local Retiradas
