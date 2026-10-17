@@ -23,10 +23,14 @@ const repoPath = require.resolve(
 	path.join(process.cwd(), "apps/retiradas/backend/api/src/agendamentosRepository.js"),
 );
 const auditLogPath = require.resolve(path.join(process.cwd(), "apps/retiradas/backend/api/src/auditLog.js"));
+const reconciliationPath = require.resolve(
+	path.join(process.cwd(), "apps/retiradas/backend/api/src/agendamentoMapaReconciliation.js"),
+);
 const routesPath = require.resolve(path.join(routesDir, "agendamentosRoutes.js"));
 
 let repoMock;
 let auditLogMock;
+let reconciliationMock;
 
 function setRepoMock() {
 	repoMock = {
@@ -63,6 +67,23 @@ function setRepoMock() {
 		filename: auditLogPath,
 		loaded: true,
 		exports: auditLogMock,
+	};
+	reconciliationMock = {
+		getCompletedAppointmentsWorkerStatus: vi.fn(async () => ({
+			active: true,
+			lastAutomaticRun: "2026-10-17T12:00:00.000Z",
+		})),
+		runCompletedAppointmentsReconciliation: vi.fn(async () => ({
+			checked: 8,
+			concluidos: 2,
+			aindaAbertos: 6,
+		})),
+	};
+	require.cache[reconciliationPath] = {
+		id: reconciliationPath,
+		filename: reconciliationPath,
+		loaded: true,
+		exports: reconciliationMock,
 	};
 	delete require.cache[routesPath];
 }
@@ -122,6 +143,7 @@ describe("IDOR + DTO: PUT/DELETE/POST /api/agendamentos — escopo regional e va
 	afterEach(() => {
 		delete require.cache[repoPath];
 		delete require.cache[auditLogPath];
+		delete require.cache[reconciliationPath];
 		delete require.cache[routesPath];
 	});
 
@@ -286,6 +308,7 @@ describe("Auditoria (Fase D — docs/TECHNICAL-AUDIT.md, achado #5)", () => {
 	afterEach(() => {
 		delete require.cache[repoPath];
 		delete require.cache[auditLogPath];
+		delete require.cache[reconciliationPath];
 		delete require.cache[routesPath];
 	});
 
@@ -338,6 +361,51 @@ describe("Auditoria (Fase D — docs/TECHNICAL-AUDIT.md, achado #5)", () => {
 	});
 });
 
+describe("Varredura de agendamentos concluídos pelo mapa", () => {
+	beforeEach(() => {
+		setRepoMock();
+	});
+
+	afterEach(() => {
+		delete require.cache[repoPath];
+		delete require.cache[auditLogPath];
+		delete require.cache[reconciliationPath];
+		delete require.cache[routesPath];
+	});
+
+	it("expõe a última verificação automática", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app).get(
+			"/api/agendamentos/reconciliacao/status",
+		);
+		expect(response.status).toBe(200);
+		expect(response.body.status.lastAutomaticRun).toBe(
+			"2026-10-17T12:00:00.000Z",
+		);
+	});
+
+	it("permite executar uma varredura manual e registra a auditoria", async () => {
+		const app = buildApp(fakeUser("admin", "Metropolitana SUB2"));
+		const response = await request(app).post(
+			"/api/agendamentos/reconciliacao/executar",
+		);
+		expect(response.status).toBe(200);
+		expect(response.body.summary).toEqual(
+			expect.objectContaining({ checked: 8, concluidos: 2, aindaAbertos: 6 }),
+		);
+		expect(
+			reconciliationMock.runCompletedAppointmentsReconciliation,
+		).toHaveBeenCalledWith({ reason: "execucao_manual", source: "manual" });
+		expect(auditLogMock.recordAuditLog).toHaveBeenCalledWith(
+			expect.objectContaining({
+				action: "execute",
+				module: "agendamentos",
+				entity: "agendamento_reconciliacao",
+			}),
+		);
+	});
+});
+
 describe("DTO: AgendamentoWriteDTO aplicado em POST/PUT /api/agendamentos", () => {
 	beforeEach(() => {
 		setRepoMock();
@@ -346,6 +414,7 @@ describe("DTO: AgendamentoWriteDTO aplicado em POST/PUT /api/agendamentos", () =
 	afterEach(() => {
 		delete require.cache[repoPath];
 		delete require.cache[auditLogPath];
+		delete require.cache[reconciliationPath];
 		delete require.cache[routesPath];
 	});
 

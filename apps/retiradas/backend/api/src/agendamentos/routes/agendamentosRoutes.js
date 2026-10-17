@@ -87,6 +87,10 @@ function withUpdateActor(data = {}, user) {
 	};
 }
 
+function getReconciliationService() {
+	return require("../../agendamentoMapaReconciliation");
+}
+
 function createAgendamentosRouter({
 	requireAnyPermission,
 	requireAuthenticated,
@@ -136,6 +140,44 @@ function createAgendamentosRouter({
 			next(error);
 		}
 	});
+
+	router.get("/reconciliacao/status", requireView, async (_req, res, next) => {
+		try {
+			const status =
+				await getReconciliationService().getCompletedAppointmentsWorkerStatus();
+			res.json({ ok: true, status });
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post(
+		"/reconciliacao/executar",
+		requireCsrfToken,
+		requireManage,
+		async (req, res, next) => {
+			try {
+				const reconciliation = getReconciliationService();
+				const summary = await reconciliation.runCompletedAppointmentsReconciliation({
+					reason: "execucao_manual",
+					source: "manual",
+				});
+				const status = await reconciliation.getCompletedAppointmentsWorkerStatus();
+				auditLog.recordAuditLog({
+					action: "execute",
+					module: "agendamentos",
+					entity: "agendamento_reconciliacao",
+					recordId: "conclusao_automatica",
+					beforeData: null,
+					afterData: summary,
+					changedFields: ["checked", "concluidos", "aindaAbertos"],
+				});
+				res.json({ ok: true, summary, status });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 
 	router.post(
 		"/",

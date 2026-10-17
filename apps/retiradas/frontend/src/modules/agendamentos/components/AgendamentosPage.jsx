@@ -27,6 +27,8 @@ import { useAgendamentos } from "../hooks/useAgendamentos";
 import {
 	buscarLogsAgendamentos,
 	buscarResumoMatchAtual,
+	buscarStatusVerificacaoAgendamentos,
+	executarVerificacaoAgendamentos,
 } from "../services/agendamentosService";
 import {
 	registrarNaoRecolhido,
@@ -467,6 +469,10 @@ const AgendamentosPage = () => {
 	const [page, setPage] = useState(1);
 	const [logsMapa, setLogsMapa] = useState([]);
 	const [matchResumo, setMatchResumo] = useState(null);
+	const [statusVerificacao, setStatusVerificacao] = useState(null);
+	const [verificandoAgendamentos, setVerificandoAgendamentos] = useState(false);
+	const [resultadoVerificacao, setResultadoVerificacao] = useState(null);
+	const [erroVerificacao, setErroVerificacao] = useState("");
 	const [logsMapaOpen, setLogsMapaOpen] = useState(false);
 	const [mesCalendario, setMesCalendario] = useState(() => {
 		const selected = parseLocal(queryDateKey());
@@ -497,15 +503,18 @@ const AgendamentosPage = () => {
 
 	const carregarLogsMapa = async () => {
 		try {
-			const [logs, resumoMatch] = await Promise.all([
+			const [logs, resumoMatch, status] = await Promise.all([
 				buscarLogsAgendamentos({ max: 3000 }),
 				buscarResumoMatchAtual(),
+				buscarStatusVerificacaoAgendamentos(),
 			]);
 			setLogsMapa(filterLatestMapCheckLogs(logs));
 			setMatchResumo(resumoMatch);
+			setStatusVerificacao(status);
 		} catch {
 			setLogsMapa([]);
 			setMatchResumo(null);
+			setStatusVerificacao(null);
 		}
 	};
 
@@ -589,6 +598,24 @@ const AgendamentosPage = () => {
 			await atualizar(modal.id, dados);
 		} else {
 			await criar(dados);
+		}
+	};
+
+	const handleExecutarVerificacao = async () => {
+		setVerificandoAgendamentos(true);
+		setErroVerificacao("");
+		setResultadoVerificacao(null);
+		try {
+			const response = await executarVerificacaoAgendamentos();
+			setStatusVerificacao(response?.status || null);
+			setResultadoVerificacao(response?.summary || null);
+			await Promise.all([carregar(true), carregarLogsMapa()]);
+		} catch (requestError) {
+			setErroVerificacao(
+				requestError?.message || "Não foi possível verificar os agendamentos.",
+			);
+		} finally {
+			setVerificandoAgendamentos(false);
 		}
 	};
 
@@ -683,6 +710,22 @@ const AgendamentosPage = () => {
 					{podeEditar && (
 						<button
 							type="button"
+							onClick={handleExecutarVerificacao}
+							disabled={verificandoAgendamentos}
+							className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<RefreshCw
+								size={16}
+								className={verificandoAgendamentos ? "animate-spin" : ""}
+							/>
+							{verificandoAgendamentos
+								? "Verificando..."
+								: "Verificar O.S. concluídas"}
+						</button>
+					)}
+					{podeEditar && (
+						<button
+							type="button"
 							onClick={() => setModal({})}
 							className="btn-primary flex items-center gap-2"
 						>
@@ -754,11 +797,29 @@ const AgendamentosPage = () => {
 							Verificação ontem:{" "}
 							{formatNumber(logsMapa.length)} alteração(ões)
 						</span>
+						<span className="rounded-full bg-white px-3 py-1 text-blue-700 shadow-sm">
+							Última automática:{" "}
+							{statusVerificacao?.lastAutomaticRun
+								? formatDateTime(statusVerificacao.lastAutomaticRun)
+								: "ainda não executada"}
+						</span>
 					</div>
 					<p className="mt-2 text-xs text-blue-700">
 						O match atual usa a mesma fonte do painel. As alterações são apenas
 						o resultado da última conferência dos agendamentos de ontem.
 					</p>
+					{resultadoVerificacao ? (
+						<p className="mt-2 text-xs font-semibold text-emerald-700">
+							Varredura manual: {formatNumber(resultadoVerificacao.concluidos)}{" "}
+							concluído(s) e {formatNumber(resultadoVerificacao.aindaAbertos)}{" "}
+							ainda em aberto.
+						</p>
+					) : null}
+					{erroVerificacao ? (
+						<p className="mt-2 text-xs font-semibold text-red-700">
+							{erroVerificacao}
+						</p>
+					) : null}
 				</div>
 				<button
 					type="button"

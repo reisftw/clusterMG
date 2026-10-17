@@ -10,6 +10,7 @@ const STATUS_SENT_TO_TECHNICIAN = "Enviado ao tecnico";
 const STATUS_COLLECTED = "Concluido";
 const STATUS_NOT_COLLECTED = "Nao recolhido";
 const COMPLETED_APPOINTMENTS_INTERVAL_MS = 60 * 60 * 1000;
+const RECONCILIATION_STATUS_PATH = "agendamento_reconciliacao/status";
 
 let completedAppointmentsWorkerTimer = null;
 let completedAppointmentsInitialRunTimer = null;
@@ -581,7 +582,10 @@ async function reconcileSentTechnicianAppointmentsWithMapa({
 	return summary;
 }
 
-async function runCompletedAppointmentsReconciliation() {
+async function runCompletedAppointmentsReconciliation({
+	reason = "scheduler_horario",
+	source = "automatico",
+} = {}) {
 	if (completedAppointmentsWorkerRunning) {
 		return { ok: true, skipped: "em_execucao" };
 	}
@@ -589,7 +593,8 @@ async function runCompletedAppointmentsReconciliation() {
 	completedAppointmentsLastRun = nowIso();
 	completedAppointmentsLastError = "";
 	try {
-		const summary = await reconcileSentTechnicianAppointmentsWithMapa();
+		const summary = await reconcileSentTechnicianAppointmentsWithMapa({ reason });
+		await saveCompletedAppointmentsWorkerStatus({ summary, source });
 		console.log(
 			`[agendamentoMapaReconciliation] Verificacao horaria concluida: ${summary.concluidos} agendamento(s) concluidos.`,
 		);
@@ -597,6 +602,10 @@ async function runCompletedAppointmentsReconciliation() {
 	} catch (error) {
 		completedAppointmentsLastError =
 			error?.message || "Falha na verificacao horaria de agendamentos.";
+		await saveCompletedAppointmentsWorkerStatus({
+			error: completedAppointmentsLastError,
+			source,
+		});
 		console.error(
 			"[agendamentoMapaReconciliation] Falha na verificacao horaria:",
 			error,
@@ -605,6 +614,45 @@ async function runCompletedAppointmentsReconciliation() {
 	} finally {
 		completedAppointmentsWorkerRunning = false;
 	}
+}
+
+async function saveCompletedAppointmentsWorkerStatus({
+	summary = null,
+	error = "",
+	source = "automatico",
+} = {}) {
+	const existing = await documents.getDocument(RECONCILIATION_STATUS_PATH).catch(
+		() => null,
+	);
+	const previousData = existing?.data || {};
+	const lastRun = completedAppointmentsLastRun || nowIso();
+	await documents
+		.upsertDocument(
+			{
+				path: RECONCILIATION_STATUS_PATH,
+				collectionPath: "agendamento_reconciliacao",
+				documentId: "status",
+				parentPath: null,
+				data: {
+					...previousData,
+					lastRun,
+					lastAutomaticRun:
+						source === "automatico"
+							? lastRun
+							: previousData.lastAutomaticRun || null,
+					lastSource: source,
+					lastError: error,
+					summary,
+				},
+			},
+			{ audit: false, broadcast: false, normalized: false },
+		)
+		.catch((saveError) => {
+			console.warn(
+				"[agendamentoMapaReconciliation] Falha ao registrar o status da rotina:",
+				saveError?.message || saveError,
+			);
+		});
 }
 
 function startCompletedAppointmentsWorker() {
@@ -635,12 +683,18 @@ function stopCompletedAppointmentsWorker() {
 	completedAppointmentsWorkerRunning = false;
 }
 
-function getCompletedAppointmentsWorkerStatus() {
+async function getCompletedAppointmentsWorkerStatus() {
+	const persisted = await documents.getDocument(RECONCILIATION_STATUS_PATH).catch(
+		() => null,
+	);
+	const data = persisted?.data || {};
 	return {
 		active: Boolean(completedAppointmentsWorkerTimer),
 		running: completedAppointmentsWorkerRunning,
-		lastRun: completedAppointmentsLastRun,
-		lastError: completedAppointmentsLastError,
+		lastRun: data.lastRun || completedAppointmentsLastRun,
+		lastAutomaticRun: data.lastAutomaticRun || null,
+		lastError: completedAppointmentsLastError || data.lastError || "",
+		summary: data.summary || null,
 		intervalMs: COMPLETED_APPOINTMENTS_INTERVAL_MS,
 	};
 }

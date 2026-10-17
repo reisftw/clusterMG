@@ -57,6 +57,16 @@ export const buscarLogsAgendamentos = async ({ max = 3000 } = {}) => {
 	return response.items || [];
 };
 
+export const buscarStatusVerificacaoAgendamentos = async () => {
+	const response = await requestVpsApi("/agendamentos/reconciliacao/status");
+	return response.status || null;
+};
+
+export const executarVerificacaoAgendamentos = async () =>
+	requestVpsApi("/agendamentos/reconciliacao/executar", {
+		method: "POST",
+	});
+
 function getMatchData(slice) {
 	if (slice?.data?.resumo) return slice.data;
 	if (slice?.resumo) return slice;

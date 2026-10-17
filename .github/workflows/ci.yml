@@ -887,7 +887,18 @@ jobs:
       - validate-finan
       - validate-adm
       - validate-operacao
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    # validate-finan/adm/operacao só executam nas suas próprias branches. Em
+    # master elas ficam "skipped"; `always()` evita que esse estado legítimo
+    # bloqueie o deploy do Retiradas, mantendo falhas reais como bloqueio.
+    if: >
+      always() &&
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') &&
+      needs.security.result == 'success' &&
+      needs.build-and-test.result == 'success' &&
+      (needs.validate-finan.result == 'success' || needs.validate-finan.result == 'skipped') &&
+      (needs.validate-adm.result == 'success' || needs.validate-adm.result == 'skipped') &&
+      (needs.validate-operacao.result == 'success' || needs.validate-operacao.result == 'skipped')
 
     permissions:
       contents: read
