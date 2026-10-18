@@ -18,10 +18,10 @@ production as a side effect.
 The prior monolithic workflows are preserved in \`docs/ci/archive/\`. They are
 not active GitHub Actions workflows.
 
-## Required GitHub setup
+## GitHub environments
 
-Create and protect these GitHub Environments before enabling a publication
-adapter:
+The following GitHub Environments were created on 2026-10-18 and are used by
+the corresponding manual release workflows:
 
 \`\`\`text
 release-retiradas
@@ -35,13 +35,22 @@ homolog-mercado
 homolog-operacao
 \`\`\`
 
-For every production environment:
+When branch-policy and reviewer protection are available for this private
+repository, configure every production environment to:
 
 1. require at least one designated reviewer;
 2. keep deployment secrets scoped to that environment;
 3. restrict access to the release branches;
 4. retain deployment logs and release artifacts;
 5. do not allow self-approval when GitHub plan settings support it.
+
+The repository is currently on a GitHub plan that does not provide branch
+protection, rulesets, or custom deployment-branch policies for private
+repositories. The current safeguards are therefore the manual-only release
+trigger, product-scoped workflows, serialized release concurrency, CI checks,
+checksummed artifacts, and release manifests. See
+`docs/GITHUB_REPOSITORY_SETTINGS.md` for the exact configuration and the
+upgrade checklist.
 
 ## Release behavior
 
