@@ -53,6 +53,9 @@ const createMovimentacoesRouter = require("./movimentacoes/routes/movimentacoesR
 const createMensageriaRouter = require("./mensageria/routes/mensageriaRoutes");
 const createMensageriaEvolutionRouter = require("./mensageriaEvolution/routes/mensageriaEvolutionRoutes");
 const createMercadoRouter = require("./mercado/routes");
+const { createMercadoAuthRouter } = require("./mercado/auth");
+const createMercadoProviderRouter = require("./mercado/providerRoutes");
+const createMercadoOnboardingRouter = require("./mercado/onboardingRoutes");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
@@ -1887,7 +1890,13 @@ const TOKEN_RENEW_WINDOW_SECONDS = Number(
 );
 
 function getAllowedOrigins() {
-	return String(process.env.CORS_ORIGIN || "")
+	return [
+		process.env.CORS_ORIGIN,
+		process.env.MERCADO_PUBLIC_APP_URL,
+		"https://mercado.retiradas.tech",
+	]
+		.filter(Boolean)
+		.join(",")
 		.split(",")
 		.map((origin) => origin.trim())
 		.filter(Boolean);
@@ -2577,6 +2586,15 @@ function createApp() {
 			requireCsrfToken,
 		}),
 	);
+
+	app.use("/api/mercado/auth", createMercadoAuthRouter());
+	app.use(
+		"/api/mercado/onboarding",
+		createMercadoOnboardingRouter({
+			requireInternalAdmin: [requireAuthenticated, requireRoles(ADMIN_ROLES)],
+		}),
+	);
+	app.use("/api/mercado/provider", createMercadoProviderRouter());
 
 	app.use(
 		"/api/mercado",
