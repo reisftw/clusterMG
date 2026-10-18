@@ -38,4 +38,6 @@ Before a product gets a server publishing step, the pull request must include:
 
 Keep the last ten successful release artifacts per product and every artifact
 referenced by an incident or rollback. Never use an untracked local
-\`dist\` folder as a production artifact.
+\`dist\` folder as a production artifact. Retain the accompanying
+\`release-manifest.json\`; it is the traceability record that connects a module
+version, commit, GitHub workflow run, and checksummed artifact.

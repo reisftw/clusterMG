@@ -67,6 +67,22 @@ test("release workflows are manual and do not contain remote deployment commands
 			workflow.includes("actions/upload-artifact@v4"),
 			workflowName + " should preserve a verified release artifact",
 		);
+		assert.ok(
+			workflow.includes("release_version:"),
+			workflowName + " should require a release version",
+		);
+		assert.ok(
+			workflow.includes("ops/release-metadata.mjs"),
+			workflowName + " should generate release metadata",
+		);
+		assert.ok(
+			workflow.includes("release-manifest.json"),
+			workflowName + " should upload the release manifest",
+		);
+		assert.ok(
+			workflow.includes("concurrency:"),
+			workflowName + " should serialize release preparation",
+		);
 	}
 });
 

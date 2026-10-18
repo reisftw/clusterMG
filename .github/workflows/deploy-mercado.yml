@@ -2,6 +2,15 @@ name: Prepare Mercado Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Versao rastreavel da release, por exemplo v1.2.0"
+        required: true
+        type: string
+
+concurrency:
+  group: release-mercado
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -47,6 +56,14 @@ jobs:
           tar -czf mercado-frontend.tar.gz dist
           sha256sum mercado-frontend.tar.gz > SHA256SUMS.txt
 
+      - name: Write release metadata
+        env:
+          RELEASE_PRODUCT: mercado
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: >-
+          node ops/release-metadata.mjs --product "$RELEASE_PRODUCT" --version
+          "$RELEASE_VERSION" --checksums SHA256SUMS.txt --output release-manifest.json
+
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
@@ -56,6 +73,7 @@ jobs:
           path: |
             mercado-frontend.tar.gz
             SHA256SUMS.txt
+            release-manifest.json
 
       - name: Publication adapter status
         run: |

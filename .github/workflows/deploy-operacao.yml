@@ -2,6 +2,15 @@ name: Prepare Operacao Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Versao rastreavel da release, por exemplo v1.2.0"
+        required: true
+        type: string
+
+concurrency:
+  group: release-operacao
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -48,6 +57,14 @@ jobs:
             -czf operacao-backend.tar.gz apps/operacao/backend apps/operacao/shared
           sha256sum operacao-frontend.tar.gz operacao-backend.tar.gz > SHA256SUMS.txt
 
+      - name: Write release metadata
+        env:
+          RELEASE_PRODUCT: operacao
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: >-
+          node ops/release-metadata.mjs --product "$RELEASE_PRODUCT" --version
+          "$RELEASE_VERSION" --checksums SHA256SUMS.txt --output release-manifest.json
+
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,6 +75,7 @@ jobs:
             operacao-frontend.tar.gz
             operacao-backend.tar.gz
             SHA256SUMS.txt
+            release-manifest.json
 
       - name: Publication adapter status
         run: |

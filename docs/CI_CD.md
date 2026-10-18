@@ -50,6 +50,12 @@ They do not contain remote SSH or service-management commands. This is
 intentional while production source paths and release-switch behavior are
 being normalized from the captured baseline.
 
+Each manual release requires a module-local \`release_version\` and uploads a
+\`release-manifest.json\` beside the checksummed artifacts. The manifest records
+the module, requested version, commit SHA, source ref, workflow run, build
+timestamp, and artifact SHA-256 values. Releases for the same module are
+serialized with a workflow concurrency group.
+
 Enabling a publication adapter is a separate reviewed change. It must:
 
 1. receive a green artifact from the matching CI workflow;
