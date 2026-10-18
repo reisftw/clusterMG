@@ -1,4 +1,3 @@
-import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
@@ -13,6 +12,12 @@ import {
 import { ROUTES } from "../../router/routes";
 import AuthenticatorModal from "./AuthenticatorModal";
 import MelzFooter from "./MelzFooter";
+import {
+	MobileBottomNav,
+	MobileHeader,
+	MobileMoreSheet,
+	MobilePageContainer,
+} from "./MobileNavigation";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
@@ -76,7 +81,7 @@ const PageWrapper = ({ children }) => {
 	const title = PAGE_TITLES[pathname] ?? "Gestão Retiradas";
 	const { currentUser, trocarSenhaObrigatorio } = useAuthContext();
 	const { isModernLayout } = useLayoutMode();
-	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+	const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 	const [authenticatorRequiredOpen, setAuthenticatorRequiredOpen] =
 		useState(false);
 	const [forcedWelcomeOpen, setForcedWelcomeOpen] = useState(false);
@@ -142,8 +147,8 @@ const PageWrapper = ({ children }) => {
 		<div
 			className={
 				isModernLayout
-					? "flex min-h-dvh overflow-x-hidden bg-slate-100 lg:h-dvh lg:overflow-hidden"
-					: "flex min-h-dvh overflow-x-hidden bg-gray-50 lg:h-dvh lg:overflow-hidden"
+					? "flex min-h-dvh overflow-x-hidden bg-slate-100 dark:bg-slate-950 lg:h-dvh lg:overflow-hidden"
+					: "flex min-h-dvh overflow-x-hidden bg-gray-50 dark:bg-slate-950 lg:h-dvh lg:overflow-hidden"
 			}
 		>
 			<div
@@ -155,56 +160,28 @@ const PageWrapper = ({ children }) => {
 				/>
 			</div>
 
-			{mobileSidebarOpen ? (
-				<div
-					className="fixed inset-0 z-layout-sidebar lg:hidden"
-					role="dialog"
-					aria-modal="true"
-				>
-					<button
-						type="button"
-						className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
-						aria-label="Fechar menu"
-						onClick={() => setMobileSidebarOpen(false)}
-					/>
-					<aside className="absolute inset-y-0 left-0 w-[min(86vw,320px)] max-w-full shadow-2xl">
-						<Sidebar
-							collapsed={false}
-							onToggleCollapsed={() => setMobileSidebarOpen(false)}
-							onNavigate={() => setMobileSidebarOpen(false)}
-							variant="mobile"
-						/>
-					</aside>
-					<button
-						type="button"
-						onClick={() => setMobileSidebarOpen(false)}
-						className="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/15 text-white shadow-lg backdrop-blur"
-						aria-label="Fechar menu"
-						title="Fechar menu"
-					>
-						<X size={20} />
-					</button>
-				</div>
-			) : null}
-
 			<div className="flex min-h-dvh min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-				<Topbar
-					title={title}
-					onOpenMobileMenu={() => setMobileSidebarOpen(true)}
-				/>
+				<div className="lg:hidden">
+					<MobileHeader title={title} onOpenMore={() => setMobileMoreOpen(true)} />
+				</div>
+				<div className="hidden lg:block">
+					<Topbar title={title} />
+				</div>
 				<main
 					className={
 						isModernLayout
-							? "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 sm:p-4 lg:p-6"
-							: "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-4 lg:p-6"
+							? "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.08),transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] p-3 dark:bg-none dark:bg-slate-950 sm:p-4 lg:p-6"
+							: "min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 dark:bg-slate-950 sm:p-4 lg:p-6"
 					}
 				>
-					{content}
+					<MobilePageContainer>{content}</MobilePageContainer>
 				</main>
 				<MelzFooter
-					className={isModernLayout ? "" : "border-gray-100 bg-white"}
+					className={isModernLayout ? "hidden lg:flex" : "hidden border-gray-100 bg-white lg:flex"}
 				/>
 			</div>
+			<MobileBottomNav onOpenMore={() => setMobileMoreOpen(true)} />
+			<MobileMoreSheet open={mobileMoreOpen} onClose={() => setMobileMoreOpen(false)} />
 
 			{trocarSenhaObrigatorio && (
 				<TrocarSenhaModal obrigatorio={true} onClose={() => {}} />
