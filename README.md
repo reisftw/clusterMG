@@ -48,6 +48,7 @@ Read:
 - \`AGENTS.md\`
 - \`docs/BRANCHES.md\`
 - \`docs/GIT_STRATEGY.md\`
+- \`docs/DATABASE_MIGRATIONS.md\`
 - \`docs/CI_CD.md\`
 - \`docs/DEPLOY.md\`
 - \`docs/ROLLBACK.md\`

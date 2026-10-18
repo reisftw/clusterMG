@@ -1,0 +1,13 @@
+# Ownership is intentionally product-oriented. GitHub branch protection can use
+# these paths to require the release owner before a shared boundary changes.
+
+/.github/ @reisftw
+/ops/ @reisftw
+/docs/ @reisftw
+
+/apps/retiradas/frontend/ @reisftw
+/apps/retiradas/backend/ @reisftw
+/apps/retiradas/frontend/src/modules/mercado/ @reisftw
+/apps/retiradas/backend/api/src/mercado/ @reisftw
+
+/apps/operacao/ @reisftw

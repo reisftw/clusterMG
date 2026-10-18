@@ -70,5 +70,6 @@ npm run build:retiradas
 node --test apps/retiradas/backend/api/src/mercado/progressivePrivacy.test.js
 \`\`\`
 
-Read \`docs/CI_CD.md\`, \`docs/DEPLOY.md\`, and \`docs/ROLLBACK.md\` before
-changing workflows or release automation.
+Read \`docs/DATABASE_MIGRATIONS.md\`, \`docs/CI_CD.md\`, \`docs/DEPLOY.md\`, and
+\`docs/ROLLBACK.md\` before changing migrations, workflows, or release
+automation.
