@@ -1,0 +1,64 @@
+name: Prepare Mercado Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Build verified Mercado release candidate
+    runs-on: ubuntu-latest
+    environment: release-mercado
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/retiradas/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix apps/retiradas/backend --no-audit --no-fund
+
+      - name: Validate Mercado and shared API contract
+        run: |
+          npm run lint:retiradas
+          npm run test:retiradas
+          node --test apps/retiradas/backend/api/src/mercado/progressivePrivacy.test.js
+
+      - name: Build Mercado candidate
+        run: |
+          export VITE_APP_ENV_LABEL="Producao Mercado"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:retiradas
+
+      - name: Package candidate
+        run: |
+          tar -czf mercado-frontend.tar.gz dist
+          sha256sum mercado-frontend.tar.gz > SHA256SUMS.txt
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mercado-release
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            mercado-frontend.tar.gz
+            SHA256SUMS.txt
+
+      - name: Publication adapter status
+        run: |
+          echo "Release candidate prepared."
+          echo "No production host was changed by this workflow."
+          echo "Mercado publication must include its shared Retiradas API compatibility approval."

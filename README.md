@@ -1,80 +1,53 @@
-# Gestao Retiradas
+# Cluster MG
 
-Aplicacao React/Vite para a operacao de retiradas, usando backend proprio em VPS e PostgreSQL.
+Monorepo das aplicacoes Retiradas, Mercado de Retiradas e Operacao.
 
-## Stack atual
+## Starting point
 
-- Frontend: React, Vite, Tailwind e lucide-react.
-- Backend: Node.js/Express em `apps/retiradas/backend/api`.
-- Banco: PostgreSQL na VPS.
-- Hospedagem: Nginx em `https://retiradas.tech`.
-- Autenticacao: usuarios locais na tabela `app_users`.
-- Dados operacionais: documentos JSON em `app_documents` e snapshots em `static_snapshots`.
-- Backups: `pg_dump` diario via systemd timer.
+The current production artifacts were frozen on 2026-10-18 before this
+repository reorganization. Read
+\`docs/PRODUCTION_BASELINE_2026-10-18.md\` before changing release or
+deployment behavior.
 
-## Scripts
+## Applications
 
-```bash
-npm run dev
-npm run build
-npm test
-npm run test:coverage
-```
+| Product | Source | Domain |
+| --- | --- | --- |
+| Retiradas | \`apps/retiradas/frontend\`, \`apps/retiradas/backend\` | \`retiradas.tech\` |
+| Mercado de Retiradas | \`apps/retiradas/frontend/src/modules/mercado\`, \`apps/retiradas/backend/api/src/mercado\` | \`mercado.retiradas.tech\` |
+| Operacao | \`apps/operacao\` | \`operacao.sempre.net.br\` |
 
-## Variaveis do frontend
+Mercado has its own public domain and release artifact, but shares Retiradas
+API/database contracts. See \`docs/MODULE_OWNERSHIP.md\`.
 
-Copie `.env.example` para `.env`:
+## Local verification
 
-```env
-VITE_API_BASE_URL=https://retiradas.tech/api
-VITE_DATA_BACKEND=vps
-```
+\`\`\`bash
+npm run verify:retiradas
+npm run verify:operacao
+npm run test:contracts
+\`\`\`
 
-## VPS
+For Mercado:
 
-Os arquivos da API, SQL, backups e services ficam em `apps/retiradas/backend/` (local). Na VPS, o caminho remoto de deploy continua `vps/` dentro de `/opt/retiradas/`.
+\`\`\`bash
+npm run lint:retiradas
+npm run test:retiradas
+npm run build:retiradas
+node --test apps/retiradas/backend/api/src/mercado/progressivePrivacy.test.js
+\`\`\`
 
-Principais comandos no servidor:
+## Delivery
 
-```bash
-cd /opt/retiradas/vps
-npm install
-systemctl restart retiradas-api
-curl https://retiradas.tech/api/health
-```
+Pushes validate code only. They do not deploy any product. The GitHub Actions
+release workflows generate verified artifacts through manual dispatch and do
+not yet modify servers.
 
-## Deploy do frontend
+Read:
 
-```powershell
-npm.cmd run build
-scp -r .\dist\* root@145.223.27.204:/var/www/retiradas/dist/
-```
-
-No servidor:
-
-```bash
-chown -R www-data:www-data /var/www/retiradas/dist
-```
-
-## Backups
-
-A tela **Configuracao > Banco de Dados** lista backups, tamanho do banco, quota e permite rollback com confirmacao.
-
-O timer roda diariamente as 00:01:
-
-```bash
-systemctl list-timers --all | grep retiradas
-```
-
-## Monitoramento
-
-A tela **Configuracao > APIs** monitora:
-
-- API principal
-- login
-- banco de dados
-- documentos
-- dados publicos
-- importacoes
-- backups
-- tempo real
+- \`AGENTS.md\`
+- \`docs/BRANCHES.md\`
+- \`docs/GIT_STRATEGY.md\`
+- \`docs/CI_CD.md\`
+- \`docs/DEPLOY.md\`
+- \`docs/ROLLBACK.md\`

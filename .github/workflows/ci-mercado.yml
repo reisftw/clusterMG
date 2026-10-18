@@ -1,0 +1,77 @@
+name: CI Mercado
+
+on:
+  pull_request:
+    paths:
+      - "apps/retiradas/frontend/src/modules/mercado/**"
+      - "apps/retiradas/backend/api/src/mercado/**"
+      - "apps/retiradas/frontend/src/router/**"
+      - "apps/retiradas/frontend/src/services/**"
+      - "apps/retiradas/backend/api/src/app.js"
+      - "apps/retiradas/backend/api/src/auth.js"
+      - "apps/retiradas/backend/sql/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci-mercado.yml"
+  push:
+    branches:
+      - master
+      - mercado
+      - homolog-dev
+      - "feature/**"
+      - "fix/**"
+      - "hotfix/**"
+      - "chore/**"
+    paths:
+      - "apps/retiradas/frontend/src/modules/mercado/**"
+      - "apps/retiradas/backend/api/src/mercado/**"
+      - "apps/retiradas/frontend/src/router/**"
+      - "apps/retiradas/frontend/src/services/**"
+      - "apps/retiradas/backend/api/src/app.js"
+      - "apps/retiradas/backend/api/src/auth.js"
+      - "apps/retiradas/backend/sql/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci-mercado.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Mercado and shared Retiradas contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/retiradas/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix apps/retiradas/backend --no-audit --no-fund
+
+      - name: Lint shared Retiradas source
+        run: npm run lint:retiradas
+
+      - name: Test Retiradas compatibility
+        run: npm run test:retiradas
+
+      - name: Test Mercado privacy contract
+        run: node --test apps/retiradas/backend/api/src/mercado/progressivePrivacy.test.js
+
+      - name: Build dedicated Mercado source
+        run: |
+          export VITE_APP_ENV_LABEL="CI Mercado"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:retiradas

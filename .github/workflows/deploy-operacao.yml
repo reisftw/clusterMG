@@ -1,0 +1,66 @@
+name: Prepare Operacao Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Build verified Operacao release candidate
+    runs-on: ubuntu-latest
+    environment: release-operacao
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/operacao/frontend/package-lock.json
+            apps/operacao/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --prefix apps/operacao/frontend --no-audit --no-fund
+          npm ci --prefix apps/operacao/backend --no-audit --no-fund
+
+      - name: Validate Operacao
+        run: npm run verify:operacao
+
+      - name: Build production candidate
+        run: |
+          export VITE_APP_ENV_LABEL="Producao"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build --prefix apps/operacao/frontend
+
+      - name: Package candidate
+        run: |
+          tar -czf operacao-frontend.tar.gz apps/operacao/frontend/dist
+          tar \
+            --exclude="apps/operacao/backend/node_modules" \
+            --exclude="apps/operacao/backend/.env" \
+            -czf operacao-backend.tar.gz apps/operacao/backend apps/operacao/shared
+          sha256sum operacao-frontend.tar.gz operacao-backend.tar.gz > SHA256SUMS.txt
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: operacao-release
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            operacao-frontend.tar.gz
+            operacao-backend.tar.gz
+            SHA256SUMS.txt
+
+      - name: Publication adapter status
+        run: |
+          echo "Release candidate prepared."
+          echo "No production host was changed by this workflow."
+          echo "Enable an Operacao-specific protected publication adapter before deployment."

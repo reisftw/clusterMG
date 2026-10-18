@@ -5,7 +5,6 @@ const service = require("./service");
 const { requireMercadoAuth } = require("./auth");
 const { canAccessOs } = require("./progressivePrivacy");
 
-const terminal = ["SUBMITTED", "APPROVED", "REJECTED", "CORRECTION_REQUESTED", "CANCELED"];
 const MARKET_SERVICE_TYPES = ["RETIRADA FTTH", "CANCELAMENTO FTTH", "RETIRADA", "CANCELAMENTO", "CANCELAMENTO LOJA"];
 const OCCUPYING_LOTE_STATUSES = ["DRAFT", "AVAILABLE", "ACCEPTED", "IN_EXECUTION", "SUBMITTED"];
 const MARKET_OPEN_ORDERS_COLLECTION = "ordens_abertas";
@@ -177,7 +176,7 @@ function createProviderRouter() {
 			const lote = await client.query(`insert into mercado_lotes(codigo,status,cidade,bairros,equipamento_tipo,quantidade_os,dificuldade,valor_potencial,valor_contratado,sla_hours,regularization_days,config_version_id,config_snapshot,pricing_snapshot,accepted_by_prestador_id,accepted_by_empresa_id,accepted_by_empresa_nome,accepted_by_uid,accepted_by_name,accepted_at,withdraw_deadline_at) values($1,'ACCEPTED',$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13,$13,$14,$15,$16,now(),now()+($17 * interval '1 minute')) returning *`, [code,cidade,preview.bairros,equipamentoTipo,quantity,safeText(req.body?.dificuldade || "NORMAL").toUpperCase(),preview.valorEstimado,preview.slaHours,Number(config.config.prazos.regularizacaoDias || 7),config.id,JSON.stringify(config.config),JSON.stringify(preview),user.empresaId,user.empresaNome,user.id,user.displayName,Number(config.config.prazos.desistenciaMinutos || 60)]);
 			for (const [index, order] of rows.entries()) { const group = Math.floor(index / 3) + 1; await client.query(`insert into mercado_lote_os(lote_id,ordem_servico_id,num_os,codigo_cliente,nome_cliente,telefone,endereco,bairro,cidade,equipamento_tipo,mac_addr,status,valor_contratado,ordem_execucao,grupo_liberacao,liberada_em,sla_due_at,source_payload) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'IN_PROGRESS',$12,$13,$14,case when $14=1 then now() else null end,case when $14=1 then now()+($15 * interval '1 hour') else null end,$16::jsonb)`, [lote.rows[0].id,order.id,order.num_os,order.codigo_cliente,order.nome_cliente,order.telefone,order.endereco || order.endereco_resumo,order.bairro,order.cidade,equipamentoTipo,order.mac_addr || order.phy_addr,preview.valorPorOs,index+1,group,preview.slaHours,JSON.stringify(order.source_payload || {})]); }
 			await client.query("insert into mercado_lote_liberacoes(lote_id,grupo,motivo,created_by_id) values($1,1,'ACEITE_LOTE',$2) on conflict do nothing", [lote.rows[0].id,user.id]);
-			await client.query("insert into mercado_lote_eventos(lote_id,tipo,descricao,payload,created_by_uid,created_by_name) values($1,'LOTE_MONTADO','Lote montado e aceito pelo prestador.',$2::jsonb,$3,$4)", [lote.rows[0].id,JSON.stringify({ cidade,equipamentoTipo,quantidade }),user.id,user.displayName]);
+			await client.query("insert into mercado_lote_eventos(lote_id,tipo,descricao,payload,created_by_uid,created_by_name) values($1,'LOTE_MONTADO','Lote montado e aceito pelo prestador.',$2::jsonb,$3,$4)", [lote.rows[0].id,JSON.stringify({ cidade,equipamentoTipo,quantidade: quantity }),user.id,user.displayName]);
 			await client.query("commit"); res.status(201).json({ lote: { id:lote.rows[0].id, codigo:code }, preview });
 		} catch (err) { await client.query("rollback").catch(() => {}); throw err; } finally { client.release(); }
 	}));

@@ -3,141 +3,86 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-// Etapa 8, Fase 4: o primeiro deploy do Retiradas apos a promocao do
-// monorepo de 4 apps nao pode acontecer se Finan, ADM ou Operacao
-// estiverem invalidos — mesmo que so o Retiradas seja publicado por
-// este job (ver docs/runbooks/promocao-monorepo.md). Este teste falha
-// se algum desses "needs" for removido no futuro por engano.
-
-function readWorkflow() {
+function readWorkflow(name) {
 	return fs
-		.readFileSync(path.join(process.cwd(), ".github/workflows/ci.yml"), "utf8")
+		.readFileSync(path.join(process.cwd(), ".github", "workflows", name), "utf8")
 		.replace(/\r\n/g, "\n");
 }
 
-function extractJobBlock(workflowText, jobName) {
-	const lines = workflowText.split("\n");
-	const startIndex = lines.findIndex((line) => line === `  ${jobName}:`);
-	assert.ok(startIndex !== -1, `job "${jobName}" nao encontrado em ci.yml`);
-
-	const blockLines = [lines[startIndex]];
-	for (let i = startIndex + 1; i < lines.length; i += 1) {
-		const line = lines[i];
-		// Proximo job top-level comeca com exatamente 2 espacos + nome + ":".
-		if (/^  [a-zA-Z0-9_-]+:/.test(line)) break;
-		blockLines.push(line);
-	}
-	return blockLines.join("\n");
-}
-
-function extractNeeds(jobBlock) {
-	const needsIndex = jobBlock.indexOf("needs:");
-	assert.ok(needsIndex !== -1, "job nao tem bloco needs:");
-
-	const afterNeeds = jobBlock.slice(needsIndex + "needs:".length);
-	const needsLines = [];
-	for (const rawLine of afterNeeds.split("\n").slice(1)) {
-		const match = rawLine.match(/^\s{6}-\s*([a-zA-Z0-9_-]+)\s*$/);
-		if (!match) break;
-		needsLines.push(match[1]);
-	}
-	return needsLines;
-}
-
-test("deploy-vps depende de security, build-and-test e dos 3 validate-* antes de publicar", () => {
-	const workflow = readWorkflow();
-	const jobBlock = extractJobBlock(workflow, "deploy-vps");
-	const needs = extractNeeds(jobBlock);
-
-	const required = [
-		"security",
-		"build-and-test",
-		"validate-finan",
-		"validate-adm",
-		"validate-operacao",
-	];
-
-	for (const requiredJob of required) {
-		assert.ok(
-			needs.includes(requiredJob),
-			`deploy-vps deveria depender de "${requiredJob}", needs atual: [${needs.join(", ")}]`,
-		);
-	}
-});
-
-test("validate-finan, validate-adm e validate-operacao existem como jobs no workflow", () => {
-	const workflow = readWorkflow();
-	for (const jobName of ["validate-finan", "validate-adm", "validate-operacao"]) {
-		assert.match(workflow, new RegExp(`^  ${jobName}:$`, "m"));
-	}
-});
-
-test("ADM, Operacao e Finan tem deploy/smoke dedicados e isolados por branch", () => {
-	const workflow = readWorkflow();
+test("CI is split by Retiradas, Mercado, and Operacao ownership", () => {
 	const expected = [
-		["deploy-finan-vps", "refs/heads/finan"],
-		["deploy-adm-vps", "refs/heads/adm"],
-		["deploy-operacao-vps", "refs/heads/operacao"],
-		["smoke-finan-prod", "refs/heads/finan"],
-		["smoke-adm-prod", "refs/heads/adm"],
-		["smoke-operacao-prod", "refs/heads/operacao"],
+		["ci-retiradas.yml", "apps/retiradas/**"],
+		["ci-mercado.yml", "apps/retiradas/frontend/src/modules/mercado/**"],
+		["ci-operacao.yml", "apps/operacao/**"],
 	];
 
-	for (const [jobName, branchRef] of expected) {
-		const jobBlock = extractJobBlock(workflow, jobName);
+	for (const [workflowName, expectedPath] of expected) {
+		const workflow = readWorkflow(workflowName);
+		assert.match(workflow, /^on:/m);
 		assert.ok(
-			jobBlock.includes(branchRef),
-			`${jobName} deveria ficar isolado em ${branchRef}`,
+			workflow.includes(expectedPath),
+			workflowName + " should be scoped to " + expectedPath,
+		);
+		assert.ok(
+			workflow.includes("workflow_dispatch:"),
+			workflowName + " should support a manual validation run",
 		);
 	}
 });
 
-test("security audita dependencias de todos os apps do monorepo", () => {
-	const workflow = readWorkflow();
-	const jobBlock = extractJobBlock(workflow, "security");
-	const expectedProjects = [
-		"package-lock.json",
-		"apps/retiradas/backend/package-lock.json",
-		"apps/finan/frontend/package-lock.json",
-		"apps/finan/backend/package-lock.json",
-		"apps/adm/frontend/package-lock.json",
-		"apps/adm/backend/package-lock.json",
-		"apps/operacao/frontend/package-lock.json",
-		"apps/operacao/backend/package-lock.json",
-		"apps/retiradas/backend",
-		"apps/finan/frontend",
-		"apps/finan/backend",
-		"apps/adm/frontend",
-		"apps/adm/backend",
-		"apps/operacao/frontend",
-		"apps/operacao/backend",
-	];
+test("Mercado CI retains Retiradas compatibility and privacy validation", () => {
+	const workflow = readWorkflow("ci-mercado.yml");
 
-	for (const expectedProject of expectedProjects) {
-		assert.ok(
-			jobBlock.includes(expectedProject),
-			`security deveria cobrir "${expectedProject}" no cache/install/audit`,
-		);
-	}
-});
-
-test("build-and-test instala dependencias do Finan antes da validacao legada", () => {
-	const workflow = readWorkflow();
-	const jobBlock = extractJobBlock(workflow, "build-and-test");
-
-	assert.ok(
-		jobBlock.includes("npm run finan:frontend:build"),
-		"build-and-test deveria manter a validacao legada do frontend Finan",
-	);
-	for (const expectedCommand of [
-		"apps/finan/frontend/package-lock.json",
-		"apps/finan/backend/package-lock.json",
-		"npm ci --prefix apps/finan/frontend",
-		"npm ci --prefix apps/finan/backend",
+	for (const required of [
+		"npm run lint:retiradas",
+		"npm run test:retiradas",
+		"progressivePrivacy.test.js",
+		"npm run build:retiradas",
 	]) {
 		assert.ok(
-			jobBlock.includes(expectedCommand),
-			`build-and-test valida Finan, entao precisa conter "${expectedCommand}"`,
+			workflow.includes(required),
+			"Mercado CI should retain " + required,
+		);
+	}
+});
+
+test("release workflows are manual and do not contain remote deployment commands", () => {
+	for (const workflowName of [
+		"deploy-retiradas.yml",
+		"deploy-mercado.yml",
+		"deploy-operacao.yml",
+	]) {
+		const workflow = readWorkflow(workflowName);
+
+		assert.match(workflow, /^  workflow_dispatch:/m);
+		assert.ok(
+			!workflow.includes("\n  push:"),
+			workflowName + " must not deploy on push",
+		);
+		assert.ok(
+			!workflow.includes("ssh "),
+			workflowName + " must not invoke SSH yet",
+		);
+		assert.ok(
+			workflow.includes("actions/upload-artifact@v4"),
+			workflowName + " should preserve a verified release artifact",
+		);
+	}
+});
+
+test("security workflow audits dependency projects and scans for secrets", () => {
+	const workflow = readWorkflow("security.yml");
+
+	for (const required of [
+		"apps/retiradas/backend",
+		"apps/operacao/frontend",
+		"apps/operacao/backend",
+		"npm audit",
+		"gitleaks/gitleaks-action@v2",
+	]) {
+		assert.ok(
+			workflow.includes(required),
+			"security workflow should contain " + required,
 		);
 	}
 });

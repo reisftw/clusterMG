@@ -1,0 +1,55 @@
+name: CI Operacao
+
+on:
+  pull_request:
+    paths:
+      - "apps/operacao/**"
+      - "ops/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci-operacao.yml"
+  push:
+    branches:
+      - master
+      - operacao
+      - homolog-dev
+      - "feature/**"
+      - "fix/**"
+      - "hotfix/**"
+      - "chore/**"
+    paths:
+      - "apps/operacao/**"
+      - "ops/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci-operacao.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Operacao
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/operacao/frontend/package-lock.json
+            apps/operacao/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --prefix apps/operacao/frontend --no-audit --no-fund
+          npm ci --prefix apps/operacao/backend --no-audit --no-fund
+
+      - name: Verify Operacao
+        run: npm run verify:operacao

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-18T20:00:42Z",
+  "authority": "Deployed artifacts and verified backup manifest",
+  "repositoryReference": {
+    "foundationCommit": "974f8abdbf125fc4e3c55f1c197859c5d08a922a",
+    "note": "The commit is a source reference. The deployed archives remain the recovery authority."
+  },
+  "backup": {
+    "hostPath": "/var/backups/cluster-mg-baseline-20261018-170000",
+    "artifacts": {
+      "retiradasFrontend": {
+        "file": "retiradas-frontend-build.tar.gz",
+        "sha256": "0b1ec432f0932191b47788f420f53f773445005b81aa638c11b4ea48cdf9a596"
+      },
+      "retiradasApi": {
+        "file": "retiradas-api-source.tar.gz",
+        "sha256": "ee5f2b01b7759258a1bfd7b1be9b3b554f84964283f6d4f486e49ea833616a2e"
+      },
+      "mercadoFrontend": {
+        "file": "mercado-frontend-build.tar.gz",
+        "sha256": "24b454fe3f4852d2578f1f5b89a62bdeb66405624791ff34f5450c0316e99633"
+      },
+      "operacaoSource": {
+        "file": "operacao-app-source.tar.gz",
+        "sha256": "d3fdc85fa4a096b639ca67604c129007f70b9cac7ce268d7e7785dff1f95cb9c"
+      }
+    }
+  },
+  "modules": {
+    "retiradas": {
+      "releaseVersion": "retiradas-2026.10.18-baseline",
+      "source": [
+        "apps/retiradas/frontend",
+        "apps/retiradas/backend"
+      ],
+      "productionDomain": "retiradas.tech"
+    },
+    "mercado": {
+      "releaseVersion": "mercado-2026.10.18-baseline",
+      "source": [
+        "apps/retiradas/frontend/src/modules/mercado",
+        "apps/retiradas/backend/api/src/mercado"
+      ],
+      "productionDomain": "mercado.retiradas.tech",
+      "sharedBackend": "retiradas"
+    },
+    "operacao": {
+      "releaseVersion": "operacao-2026.10.18-baseline",
+      "source": [
+        "apps/operacao"
+      ],
+      "productionDomain": "operacao.sempre.net.br"
+    }
+  }
+}

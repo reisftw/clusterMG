@@ -1,0 +1,73 @@
+name: CI Retiradas
+
+on:
+  pull_request:
+    paths:
+      - "apps/retiradas/**"
+      - "ops/**"
+      - "scripts/**"
+      - "tests/contracts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.js"
+      - ".github/workflows/ci-retiradas.yml"
+  push:
+    branches:
+      - master
+      - retiradas
+      - homolog-dev
+      - "feature/**"
+      - "fix/**"
+      - "hotfix/**"
+      - "chore/**"
+    paths:
+      - "apps/retiradas/**"
+      - "ops/**"
+      - "scripts/**"
+      - "tests/contracts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "eslint.config.js"
+      - ".github/workflows/ci-retiradas.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Retiradas
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/retiradas/backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix apps/retiradas/backend --no-audit --no-fund
+
+      - name: Lint Retiradas
+        run: npm run lint:retiradas
+
+      - name: Test Retiradas
+        run: npm run test:retiradas
+
+      - name: Validate workflow contracts
+        run: npm run test:contracts
+
+      - name: Build Retiradas
+        run: |
+          export VITE_APP_ENV_LABEL="CI"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:retiradas

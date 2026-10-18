@@ -1,83 +1,75 @@
-# Guia de Contribuição
+# Guia de Contribuicao
 
-Este repositório não possuía um guia formal de contribuição versionado. Este documento estabelece o padrão operacional mínimo para evoluir o projeto com segurança.
+## Convencao de branches
 
-## Convenção de branches
+Branches de produto:
 
-Padrão recomendado:
+- \`master\`: integracao revisada e candidata a release
+- \`retiradas\`: trabalho do Retiradas
+- \`mercado\`: trabalho do Mercado de Retiradas
+- \`operacao\`: trabalho da Operacao
+- \`homolog-dev\`: integracao de homologacao
 
-- `main`: linha principal do código pronto para deploy
-- `develop`: integração contínua, se o time optar por mantê-la
-- `feature/<tema>`: novas funcionalidades
-- `fix/<tema>`: correções sem alteração estrutural ampla
-- `hotfix/<tema>`: correções urgentes em produção
-- `chore/<tema>`: ajustes operacionais, tooling e manutenção
+Branches curtas:
 
-Exemplos:
+- \`feature/<tema>\`: novas funcionalidades
+- \`fix/<tema>\`: correcoes sem alteracao estrutural ampla
+- \`hotfix/<tema>\`: correcoes urgentes em producao
+- \`chore/<tema>\`: tooling e manutencao
 
-```text
-feature/resumo-mensal-metas
-fix/login-timeout
-chore/atualizar-ci
-```
+## Padrao de commits
 
-## Padrão de commits
+Use Conventional Commits.
 
-Padrão recomendado: Conventional Commits.
-
-Exemplos:
-
-```text
+\`\`\`text
 feat(metas): publicar novo resumo mensal
 fix(auth): corrigir refresh do perfil apos troca de senha
 refactor(mapa): separar upload legado do fluxo atual
 test(utils): ampliar cobertura de dia util e projecao
 docs(readme): atualizar instrucoes de deploy
-```
+\`\`\`
 
 ## Checklist antes de abrir PR
 
-Execute localmente:
+\`\`\`bash
+npm run verify:retiradas
+npm run test:contracts
+\`\`\`
 
-```bash
-npm run lint
-npm test
-npm run build
-```
+Valide tambem:
 
-Valide também:
-
-- a alteração não quebrou rotas públicas nem fluxos autenticados
-- qualquer mudança em Firestore, Storage ou Functions foi documentada
-- coleções, campos e regras de negócio novas foram refletidas em `DOCUMENTATION.md`
-- mudanças relevantes foram registradas em `CHANGELOG.md`
-- se houver impacto de segurança, as regras correspondentes foram versionadas junto
+- a alteracao nao quebrou rotas publicas nem fluxos autenticados
+- Mercado passou pela validacao de privacidade e compatibilidade do Retiradas
+- Operacao passou por \`npm run verify:operacao\` quando afetada
+- mudancas de banco possuem plano de migration e rollback
+- mudancas de CI/CD atualizam \`docs/CI_CD.md\` e \`docs/DEPLOY.md\`
+- nenhum build, arquivo de ambiente, segredo, tarball de deploy ou artefato local entrou no PR
 
 ## Checklist de PR
 
 Inclua no PR:
 
-- objetivo da mudança
+- objetivo da mudanca
 - contexto funcional afetado
-- evidência de teste manual e automatizado
-- riscos conhecidos e plano de rollback, quando aplicável
-- prints ou gravações para mudanças visuais relevantes
+- evidencia de teste manual e automatizado
+- riscos conhecidos e plano de rollback, quando aplicavel
+- prints ou gravacoes para mudancas visuais relevantes
 
 ## Como reportar bugs
 
 Ao abrir uma issue interna ou ticket:
 
 1. descreva o contexto funcional afetado
-2. informe ambiente, usuário/perfil e rota
+2. informe ambiente, usuario/perfil e rota
 3. liste passos para reproduzir
 4. registre comportamento esperado e observado
 5. anexe logs, prints ou IDs de documentos quando houver
 
 ## Como sugerir melhorias
 
-Ao propor evolução:
+Ao propor evolucao:
 
 1. explique o problema atual
 2. detalhe o ganho esperado
-3. aponte impacto em dados, autenticação e operação
-4. cite dependências técnicas ou validações necessárias
+3. aponte impacto em dados, autenticacao e operacao
+4. cite dependencias tecnicas ou validacoes necessarias
