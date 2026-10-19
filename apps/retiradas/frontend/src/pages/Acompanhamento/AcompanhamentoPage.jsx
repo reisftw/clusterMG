@@ -2679,7 +2679,7 @@ function AcompanhamentoMainGrid({
 					{festiveTheme === "halloween" ? (
 						<div className="acomp-entregas-regionais-mascot" aria-hidden="true">
 							<img
-								src="/themes/halloween/mascot/retorninho-bruxo.png?v=20261019-1"
+								src="/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png"
 								alt=""
 							/>
 						</div>

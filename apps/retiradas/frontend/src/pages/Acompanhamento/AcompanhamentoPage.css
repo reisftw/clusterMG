@@ -1948,10 +1948,10 @@
 .acomp-festive-page.is-halloween .acomp-entregas-regionais-mascot {
 	position: absolute;
 	left: 50%;
-	bottom: clamp(-76px, -4.4vw, -52px);
+	bottom: clamp(-34px, -2vw, -20px);
 	z-index: 2;
 	display: block;
-	width: clamp(92px, 10vw, 168px);
+	width: clamp(104px, 11vw, 180px);
 	pointer-events: none;
 	transform: translateX(-50%);
 }
