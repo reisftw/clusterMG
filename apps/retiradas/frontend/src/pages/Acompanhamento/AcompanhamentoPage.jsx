@@ -1525,7 +1525,7 @@ function FestivePreview({ festive }) {
 			{theme === "september7" ? (
 				<img src="/themes/september7/retorninho-selecao.webp" alt="" aria-hidden="true" />
 			) : theme === "halloween" ? (
-				<img src="/themes/halloween/mascot/retorninho-fantasma.webp" alt="" aria-hidden="true" />
+				<img src="/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png" alt="" aria-hidden="true" />
 			) : null}
 		</div>
 	);
@@ -2076,7 +2076,7 @@ function renderFestiveFlight(theme, flightKey) {
 			<img
 				key={`halloween-${flightKey}`}
 				className="acomp-halloween-flight"
-				src="/themes/halloween/mascot/retorninho-fantasma.webp"
+				src="/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png"
 				alt=""
 			/>
 		);
@@ -2136,7 +2136,7 @@ function FestiveOverlay({ config, flightKey, grinchPeek, particlesActive = true 
 				<img
 					key={`ghost-${grinchPeek.key}`}
 					className={`acomp-halloween-ghost-peeker is-${grinchPeek.side}`}
-					src="/themes/halloween/mascot/retorninho-fantasma.webp"
+					src="/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png"
 					alt=""
 					style={{ "--grinch-duration": `${grinchPeek.durationSeconds}s` }}
 				/>
@@ -2367,7 +2367,7 @@ function AcompanhamentoThemeStage({
 					<span className="acomp-halloween-fog" />
 					<img
 						className="acomp-halloween-mascot"
-						src="/themes/halloween/mascot/retorninho-fantasma.webp"
+						src="/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png"
 						alt=""
 					/>
 				</div>
@@ -2477,7 +2477,7 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 	} else if (isSeptember7) {
 		imageSrc = "/themes/september7/retorninho-selecao.webp";
 	} else if (isHalloween) {
-		imageSrc = "/themes/halloween/mascot/retorninho-fantasma.webp";
+		imageSrc = "/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png";
 	}
 
 	return (
@@ -2679,7 +2679,7 @@ function AcompanhamentoMainGrid({
 					{festiveTheme === "halloween" ? (
 						<div className="acomp-entregas-regionais-mascot" aria-hidden="true">
 							<img
-								src="/themes/halloween/mascot/retorninho-fantasma-brincalhao-20261019.png"
+								src="/themes/halloween/mascot/retorninho-bruxo.png?v=20261019-2"
 								alt=""
 							/>
 						</div>
