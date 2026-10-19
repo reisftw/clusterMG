@@ -88,7 +88,9 @@ test("Retiradas release has a master-only production adapter with rollback", () 
 	for (const required of [
 		"github.ref == 'refs/heads/master'",
 		"environment: production-retiradas",
-		"actions/download-artifact@v5",
+		"needs: prepare",
+		"Rebuild verified production revision",
+		"ops/release-metadata.mjs",
 		"sha256sum -c SHA256SUMS.txt",
 		"VPS_SSH_KEY",
 		"Publish atomically with rollback",

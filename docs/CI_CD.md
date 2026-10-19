@@ -55,9 +55,11 @@ upgrade checklist.
 ## Release behavior
 
 The Mercado and Operacao release workflows create verified artifacts only.
-The Retiradas workflow additionally publishes its verified frontend artifact
+The Retiradas workflow additionally publishes its verified frontend revision
 when manually dispatched from \`master\` through the
-\`production-retiradas\` environment.
+\`production-retiradas\` environment. The production job rebuilds the exact
+SHA accepted by the validation job and verifies its checksum before upload, so
+publication does not depend on GitHub artifact storage availability.
 
 Each manual release requires a module-local \`release_version\` and uploads a
 \`release-manifest.json\` beside the checksummed artifacts. The manifest records
@@ -67,7 +69,7 @@ serialized with a workflow concurrency group.
 
 The Retiradas publication adapter:
 
-1. publishes only the checksummed artifact produced by the same workflow;
+1. publishes only a checksummed build of the exact SHA validated by the same workflow;
 2. use the relevant protected production environment;
 3. create a named release directory;
 4. validate health before switching traffic;

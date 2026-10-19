@@ -70,6 +70,7 @@ jobs:
           "$RELEASE_VERSION" --checksums SHA256SUMS.txt --output release-manifest.json
 
       - name: Upload release artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: retiradas-release
@@ -105,10 +106,34 @@ jobs:
       REMOTE_RELEASE_MANIFEST: /tmp/retiradas-release-${{ github.sha }}.json
 
     steps:
-      - name: Download verified release artifact
-        uses: actions/download-artifact@v5
+      - name: Checkout verified revision
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
-          name: retiradas-release
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Rebuild verified production revision
+        run: |
+          export VITE_APP_ENV_LABEL="Producao"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:retiradas
+
+      - name: Package and checksum production frontend
+        run: |
+          tar -czf retiradas-frontend.tar.gz dist
+          sha256sum retiradas-frontend.tar.gz > SHA256SUMS.txt
+          node ops/release-metadata.mjs \
+            --product retiradas \
+            --version "${{ inputs.release_version }}" \
+            --checksums SHA256SUMS.txt \
+            --output release-manifest.json
 
       - name: Verify artifact checksums
         run: sha256sum -c SHA256SUMS.txt
