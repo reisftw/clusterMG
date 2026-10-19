@@ -11,7 +11,7 @@ production as a side effect.
 | \`ci-mercado.yml\` | Mercado module plus shared Retiradas compatibility | Pull request, scoped push, manual |
 | \`ci-operacao.yml\` | Operacao frontend/backend validation | Pull request, scoped push, manual |
 | \`security.yml\` | Dependency audit and secret scan | Scoped pull request/push, schedule, manual |
-| \`deploy-retiradas.yml\` | Manual Retiradas release candidate | Manual only |
+| \`deploy-retiradas.yml\` | Manual Retiradas release and production publication | Manual only, production from \`master\` |
 | \`deploy-mercado.yml\` | Manual Mercado release candidate | Manual only |
 | \`deploy-operacao.yml\` | Manual Operacao release candidate | Manual only |
 
@@ -54,10 +54,10 @@ upgrade checklist.
 
 ## Release behavior
 
-The current release workflows intentionally create a verified artifact only.
-They do not contain remote SSH or service-management commands. This is
-intentional while production source paths and release-switch behavior are
-being normalized from the captured baseline.
+The Mercado and Operacao release workflows create verified artifacts only.
+The Retiradas workflow additionally publishes its verified frontend artifact
+when manually dispatched from \`master\` through the
+\`production-retiradas\` environment.
 
 Each manual release requires a module-local \`release_version\` and uploads a
 \`release-manifest.json\` beside the checksummed artifacts. The manifest records
@@ -65,14 +65,18 @@ the module, requested version, commit SHA, source ref, workflow run, build
 timestamp, and artifact SHA-256 values. Releases for the same module are
 serialized with a workflow concurrency group.
 
-Enabling a publication adapter is a separate reviewed change. It must:
+The Retiradas publication adapter:
 
-1. receive a green artifact from the matching CI workflow;
+1. publishes only the checksummed artifact produced by the same workflow;
 2. use the relevant protected production environment;
 3. create a named release directory;
 4. validate health before switching traffic;
 5. record the SHA, release ID, and rollback target;
-6. never deploy another product as a side effect.
+6. never deploys another product as a side effect.
+
+Backend publication remains outside this adapter. Mercado and Operacao remain
+artifact-only until their production paths and rollback procedures receive the
+same treatment.
 
 ## Security
 

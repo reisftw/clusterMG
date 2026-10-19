@@ -46,7 +46,7 @@ test("Mercado CI retains Retiradas compatibility and privacy validation", () => 
 	}
 });
 
-test("release workflows are manual and do not contain remote deployment commands", () => {
+test("release workflows are manual and preserve verified artifacts", () => {
 	for (const workflowName of [
 		"deploy-retiradas.yml",
 		"deploy-mercado.yml",
@@ -58,10 +58,6 @@ test("release workflows are manual and do not contain remote deployment commands
 		assert.ok(
 			!workflow.includes("\n  push:"),
 			workflowName + " must not deploy on push",
-		);
-		assert.ok(
-			!workflow.includes("ssh "),
-			workflowName + " must not invoke SSH yet",
 		);
 		assert.ok(
 			workflow.includes("actions/upload-artifact@v4"),
@@ -82,6 +78,36 @@ test("release workflows are manual and do not contain remote deployment commands
 		assert.ok(
 			workflow.includes("concurrency:"),
 			workflowName + " should serialize release preparation",
+		);
+	}
+});
+
+test("Retiradas release has a master-only production adapter with rollback", () => {
+	const workflow = readWorkflow("deploy-retiradas.yml");
+
+	for (const required of [
+		"github.ref == 'refs/heads/master'",
+		"environment: production-retiradas",
+		"actions/download-artifact@v5",
+		"sha256sum -c SHA256SUMS.txt",
+		"VPS_SSH_KEY",
+		"Publish atomically with rollback",
+		"PREVIOUS_RELEASE",
+		"https://retiradas.tech/api/health",
+	]) {
+		assert.ok(
+			workflow.includes(required),
+			"Retiradas production adapter should contain " + required,
+		);
+	}
+});
+
+test("Mercado and Operacao release workflows remain artifact-only", () => {
+	for (const workflowName of ["deploy-mercado.yml", "deploy-operacao.yml"]) {
+		const workflow = readWorkflow(workflowName);
+		assert.ok(
+			!workflow.includes("ssh "),
+			workflowName + " must remain artifact-only",
 		);
 	}
 });

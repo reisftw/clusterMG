@@ -12,7 +12,9 @@ Verified on 2026-10-18 for `reisftw/clusterMG`:
   Retiradas, Mercado, and Operacao.
 - Release workflows run only through manual dispatch and produce a versioned,
   checksummed artifact with a `release-manifest.json` file.
-- No current workflow connects to a server or changes a running service.
+- The manually dispatched Retiradas release workflow can publish its verified
+  frontend artifact from \`master\` through \`production-retiradas\`.
+- Mercado and Operacao release workflows do not connect to production.
 
 ## Plan limitation
 
@@ -52,16 +54,17 @@ Then configure branch policy by environment:
 Add at least one separate release reviewer before requiring approvals. A
 one-person reviewer rule would make releases impossible or encourage bypasses.
 
-## Future deployment secrets
+## Deployment secrets
 
-Do not create placeholder secrets. When the reviewed publication adapter is
-introduced, scope real values to the relevant production environment:
+Retiradas currently uses the existing repository secrets below. Move them to
+the \`production-retiradas\` environment when environment-secret management is
+available for the repository plan:
 
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_SSH_PRIVATE_KEY`
-- `DEPLOY_KNOWN_HOSTS`
+- `VPS_HOST`
+- `VPS_PORT`
+- `VPS_USER`
+- `VPS_SSH_KEY`
 
-Use non-secret environment variables for destination paths and service names.
-The publication adapter must be reviewed with its rollback behavior before any
-of these values are used.
+Destination paths remain non-secret workflow variables. The adapter records
+the previous release and restores it automatically when Nginx validation or
+the public health checks fail.
