@@ -2675,7 +2675,16 @@ function AcompanhamentoMainGrid({
 					renderSubline={(item) =>
 						getRegionalPaceText(item, dashboard.regionalDaysRemaining)
 					}
-				/>
+				>
+					{festiveTheme === "halloween" ? (
+						<div className="acomp-entregas-regionais-mascot" aria-hidden="true">
+							<img
+								src="/themes/halloween/mascot/retorninho-bruxo.png?v=20261019-1"
+								alt=""
+							/>
+						</div>
+					) : null}
+				</RankingList>
 			) : null}
 			{sections.match ? (
 				<AcompanhamentoMatchSection

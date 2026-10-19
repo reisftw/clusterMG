@@ -1936,6 +1936,34 @@
 	font-size: clamp(7px, 0.5vw, 9px);
 }
 
+.acomp-entregas-regionais-mascot {
+	display: none;
+}
+
+.acomp-festive-page.is-halloween .acomp-entregas-regionais-panel {
+	padding-bottom: clamp(42px, 4.6vw, 76px);
+	overflow: hidden;
+}
+
+.acomp-festive-page.is-halloween .acomp-entregas-regionais-mascot {
+	position: absolute;
+	left: 50%;
+	bottom: clamp(-76px, -4.4vw, -52px);
+	z-index: 2;
+	display: block;
+	width: clamp(92px, 10vw, 168px);
+	pointer-events: none;
+	transform: translateX(-50%);
+}
+
+.acomp-festive-page.is-halloween .acomp-entregas-regionais-mascot img {
+	display: block;
+	width: 100%;
+	height: auto;
+	filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.58))
+		drop-shadow(0 0 12px rgba(255, 121, 0, 0.38));
+}
+
 .acomp-atendentes-panel .acomp-rank-row {
 	min-height: 21px;
 }
