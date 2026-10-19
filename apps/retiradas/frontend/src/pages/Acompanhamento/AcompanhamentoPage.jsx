@@ -3429,10 +3429,11 @@ export default function AcompanhamentoPage() {
 			window.clearTimeout(festiveFlightTimerRef.current);
 		}
 		setFestiveFlightKey((current) => current + 1);
+		const flightDurationMs = festive.theme === "halloween" ? 16500 : 9500;
 		festiveFlightTimerRef.current = window.setTimeout(() => {
 			setFestiveFlightKey(0);
 			festiveFlightTimerRef.current = null;
-		}, 9500);
+		}, flightDurationMs);
 		if (festive.theme === "easter") return;
 	}, [panelConfig.festive]);
 

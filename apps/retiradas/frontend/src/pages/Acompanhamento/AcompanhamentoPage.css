@@ -1948,7 +1948,7 @@
 .acomp-festive-page.is-halloween .acomp-entregas-regionais-mascot {
 	position: absolute;
 	left: 50%;
-	bottom: clamp(-76px, -4.4vw, -52px);
+	bottom: clamp(-60px, -3.5vw, -40px);
 	z-index: 2;
 	display: block;
 	width: clamp(92px, 10vw, 168px);
@@ -4433,7 +4433,7 @@
 
 .acomp-halloween-mascot {
 	position: absolute;
-	right: clamp(34px, 4.4vw, 110px);
+	right: clamp(58px, 6vw, 142px);
 	bottom: clamp(64px, 8vh, 142px);
 	width: clamp(110px, 11vw, 220px);
 	filter:
@@ -4721,15 +4721,15 @@
 .acomp-halloween-flight {
 	position: absolute;
 	z-index: 3;
-	top: clamp(60px, 14vh, 150px);
+	top: 50%;
 	left: 0;
 	width: clamp(140px, 15vw, 280px);
 	max-width: none;
 	filter:
 		drop-shadow(0 24px 34px rgba(0, 0, 0, 0.52))
 		drop-shadow(0 0 18px rgba(255, 121, 0, 0.26));
-	transform: translateX(-120%);
-	animation: acompHalloweenGhostFly 9s cubic-bezier(0.17, 0.85, 0.34, 1) both;
+	transform: translateX(-130%) translateY(-50%);
+	animation: acompHalloweenGhostFly 16s cubic-bezier(0.17, 0.85, 0.34, 1) both;
 }
 
 .acomp-halloween-ghost-peeker {
@@ -5591,18 +5591,27 @@
 @keyframes acompHalloweenGhostFly {
 	0% {
 		opacity: 0;
-		transform: translateX(-130%) translateY(28px) rotate(-8deg);
+		transform: translateX(-130%) translateY(-50%) scale(0.92) rotate(-8deg);
 	}
-	12%,
-	86% {
+	10%,
+	94% {
 		opacity: 1;
 	}
-	45% {
-		transform: translateX(46vw) translateY(-20px) rotate(6deg);
+	35%,
+	42% {
+		transform: translateX(calc(50vw - 50%)) translateY(-50%) scale(1) rotate(0deg);
+	}
+	50%,
+	58% {
+		transform: translateX(calc(50vw - 50%)) translateY(-50%) scale(1.74) rotate(0deg);
+	}
+	68%,
+	74% {
+		transform: translateX(calc(50vw - 50%)) translateY(-50%) scale(1) rotate(0deg);
 	}
 	100% {
 		opacity: 0;
-		transform: translateX(112vw) translateY(18px) rotate(9deg);
+		transform: translateX(calc(100vw + 130%)) translateY(-50%) scale(0.96) rotate(9deg);
 	}
 }
 
