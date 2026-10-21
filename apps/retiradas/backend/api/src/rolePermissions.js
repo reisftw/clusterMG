@@ -180,6 +180,11 @@ const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
 		"tentativas.executar",
 		"tentativas.historico.visualizar",
 	],
+	tecnico: [
+		"view_dashboard",
+		"tentativas.visualizar",
+		"tentativas.executar",
+	],
 	visitante: ["view_dashboard", "view_insumos_requisicoes"],
 });
 

@@ -51,6 +51,11 @@ export const buscarAgendamentos = async () =>
 		String(a.data || "").localeCompare(String(b.data || "")),
 	);
 
+export const buscarAgendamentosTecnicoDashboard = async () => {
+	const response = await requestVpsApi("/dashboard/technician/appointments");
+	return response?.items || [];
+};
+
 export const buscarLogsAgendamentos = async ({ max = 3000 } = {}) => {
 	const params = new URLSearchParams({ max: String(max) });
 	const response = await requestVpsApi(`/agendamentos/logs?${params.toString()}`);

@@ -223,6 +223,7 @@ const USER_MANAGED_ROLES = [
 	"lider_empresa",
 	"agente_autorizado",
 	"backoffice",
+	"tecnico",
 	"visitante",
 ];
 const USER_MANAGER_ROLES = ["admin", "supervisor", "supervisor_administrativo"];
@@ -1365,6 +1366,24 @@ async function mergeUserProfileExtras(uid, body = {}) {
 					.map((item) => String(item || "").trim())
 					.filter(Boolean)
 			: [];
+	}
+	if (
+		body.metasTecnicoNome !== undefined ||
+		body.metas_tecnico_nome !== undefined
+	) {
+		allowed.metasTecnicoNome = String(
+			body.metasTecnicoNome || body.metas_tecnico_nome || "",
+		).trim();
+	}
+	if (
+		body.agendamentosTecnicoNome !== undefined ||
+		body.agendamentos_tecnico_nome !== undefined
+	) {
+		allowed.agendamentosTecnicoNome = String(
+			body.agendamentosTecnicoNome ||
+				body.agendamentos_tecnico_nome ||
+				"",
+		).trim();
 	}
 	if (!Object.keys(allowed).length) return;
 
@@ -3269,6 +3288,60 @@ function createApp() {
 			next(error);
 		}
 	});
+
+	app.get(
+		"/api/dashboard/technician/appointments",
+		requireAuthenticated,
+		requireAnyPermission(["view_dashboard"]),
+		async (req, res, next) => {
+			try {
+				const role = normalizeUserRole(req.user?.profile?.role || req.user?.role);
+				if (role !== "tecnico") {
+					res.status(403).json({ error: "Consulta exclusiva do perfil Técnico." });
+					return;
+				}
+				const technicianName = String(
+					req.user?.profile?.agendamentosTecnicoNome ||
+						req.user?.profile?.agendamentos_tecnico_nome ||
+						"",
+				).trim();
+				if (!technicianName) {
+					res.json({ ok: true, items: [], technicianName: "" });
+					return;
+				}
+				const dateParts = new Intl.DateTimeFormat("en-CA", {
+					timeZone: "America/Sao_Paulo",
+					year: "numeric",
+					month: "2-digit",
+					day: "2-digit",
+				}).formatToParts(new Date());
+				const dateValues = Object.fromEntries(
+					dateParts.map((part) => [part.type, part.value]),
+				);
+				const today = `${dateValues.year}-${dateValues.month}-${dateValues.day}`;
+				const normalizeName = (value) =>
+					String(value || "")
+						.normalize("NFD")
+						.replace(/[\u0300-\u036f]/g, "")
+						.toLowerCase()
+						.replace(/\s+/g, " ")
+						.trim();
+				const expectedName = normalizeName(technicianName);
+				const appointments = await agendamentosRepository.listAppointments({
+					limit: 1000,
+					offset: 0,
+					startDate: today,
+					endDate: today,
+				});
+				const items = appointments.filter(
+					(item) => normalizeName(item?.tecnico_nome) === expectedName,
+				);
+				res.json({ ok: true, items, technicianName });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
 
 	app.put(
 		"/api/auth/avatar",

@@ -31,6 +31,12 @@ describe("tentativasService helpers", () => {
 		expect(__testables.normalizePhone("123").valid).toBe(false);
 	});
 
+	it("seleciona o primeiro telefone válido entre mapa e histórico", () => {
+		expect(
+			__testables.firstValidPhone(["", "123", "(31) 99999-8877"]),
+		).toMatchObject({ digits: "5531999998877", valid: true });
+	});
+
 	it("renderiza template sem acoplar com mensageria", () => {
 		const message = __testables.renderTemplate(
 			"Olá, {{primeiro_nome}}. OS {{os}} em {{cidade}} com {{tecnico}}.",

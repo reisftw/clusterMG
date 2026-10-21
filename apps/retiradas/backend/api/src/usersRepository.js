@@ -70,6 +70,12 @@ function mapAppUserRowToProfile(row = {}) {
 		profile.insumos_base_nome ||
 		profile.baseInsumosNome ||
 		"";
+	const metasTecnicoNome = text(
+		profile.metasTecnicoNome || profile.metas_tecnico_nome,
+	);
+	const agendamentosTecnicoNome = text(
+		profile.agendamentosTecnicoNome || profile.agendamentos_tecnico_nome,
+	);
 
 	return {
 		id: uid,
@@ -105,6 +111,10 @@ function mapAppUserRowToProfile(row = {}) {
 		insumosBaseNome,
 		insumos_base_nome: insumosBaseNome,
 		baseInsumosNome: insumosBaseNome,
+		metasTecnicoNome,
+		metas_tecnico_nome: metasTecnicoNome,
+		agendamentosTecnicoNome,
+		agendamentos_tecnico_nome: agendamentosTecnicoNome,
 		insumosCategoriasVer: Array.isArray(profile.insumosCategoriasVer)
 			? profile.insumosCategoriasVer
 			: [],

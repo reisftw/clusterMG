@@ -58,7 +58,8 @@ jobs:
             --exclude="apps/retiradas/backend/node_modules" \
             --exclude="apps/retiradas/backend/output" \
             --exclude="apps/retiradas/backend/.env" \
-            -czf retiradas-backend.tar.gz apps/retiradas/backend
+            -czf retiradas-backend.tar.gz \
+            apps/retiradas/backend ops/vm-migration/vendor
           sha256sum retiradas-frontend.tar.gz retiradas-backend.tar.gz > SHA256SUMS.txt
 
       - name: Write release metadata
@@ -102,7 +103,9 @@ jobs:
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
       VPS_USER: ${{ secrets.VPS_USER || 'root' }}
       VPS_DEPLOY_ROOT: /var/www/retiradas
+      VPS_BACKEND_ROOT: /opt/retiradas/vps
       REMOTE_FRONTEND_PACKAGE: /tmp/retiradas-frontend-${{ github.sha }}.tar.gz
+      REMOTE_BACKEND_PACKAGE: /tmp/retiradas-backend-${{ github.sha }}.tar.gz
       REMOTE_RELEASE_MANIFEST: /tmp/retiradas-release-${{ github.sha }}.json
 
     steps:
@@ -125,10 +128,16 @@ jobs:
           export VITE_APP_VERSION="${GITHUB_SHA::7}"
           npm run build:retiradas
 
-      - name: Package and checksum production frontend
+      - name: Package and checksum production release
         run: |
           tar -czf retiradas-frontend.tar.gz dist
-          sha256sum retiradas-frontend.tar.gz > SHA256SUMS.txt
+          tar \
+            --exclude="apps/retiradas/backend/node_modules" \
+            --exclude="apps/retiradas/backend/output" \
+            --exclude="apps/retiradas/backend/.env" \
+            -czf retiradas-backend.tar.gz \
+            apps/retiradas/backend ops/vm-migration/vendor
+          sha256sum retiradas-frontend.tar.gz retiradas-backend.tar.gz > SHA256SUMS.txt
           node ops/release-metadata.mjs \
             --product retiradas \
             --version "${{ inputs.release_version }}" \
@@ -150,7 +159,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
 
-      - name: Upload verified frontend package
+      - name: Upload verified release packages
         run: |
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             -o ServerAliveInterval=30 \
@@ -158,8 +167,98 @@ jobs:
             retiradas-frontend.tar.gz \
             "$VPS_USER@$VPS_HOST:$REMOTE_FRONTEND_PACKAGE"
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            retiradas-backend.tar.gz \
+            "$VPS_USER@$VPS_HOST:$REMOTE_BACKEND_PACKAGE"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             release-manifest.json \
             "$VPS_USER@$VPS_HOST:$REMOTE_RELEASE_MANIFEST"
+
+      - name: Publish backend and migrations with rollback
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          safe_version="$(printf '%s' "$RELEASE_VERSION" | tr -cs 'A-Za-z0-9._-' '-')"
+          release_id="${safe_version}-${GITHUB_SHA::7}"
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            "$VPS_USER@$VPS_HOST" \
+            bash -s -- \
+              "$VPS_BACKEND_ROOT" \
+              "$release_id" \
+              "$REMOTE_BACKEND_PACKAGE" <<'REMOTE'
+          set -Eeuo pipefail
+
+          backend_root="$1"
+          release_id="$2"
+          backend_package="$3"
+          backup_root="/opt/retiradas/backend-rollbacks"
+          backup_file="$backup_root/${release_id}.tar.gz"
+          staging="$(mktemp -d /tmp/retiradas-backend-stage.XXXXXX)"
+          deployed=0
+          dependencies_switched=0
+          previous_node_modules="$backup_root/${release_id}-node_modules"
+
+          cleanup() {
+            rm -rf "$staging"
+          }
+          rollback() {
+            if [ "$deployed" -eq 1 ] && [ -s "$backup_file" ]; then
+              tar -xzf "$backup_file" -C "$backend_root"
+              if [ "$dependencies_switched" -eq 1 ] && [ -d "$previous_node_modules" ]; then
+                rm -rf "$backend_root/node_modules"
+                mv "$previous_node_modules" "$backend_root/node_modules"
+              fi
+              systemctl restart retiradas-api.service
+              echo "Rollback do backend concluido: $backup_file" >&2
+            fi
+            cleanup
+          }
+          trap rollback ERR
+          trap cleanup EXIT
+
+          test -s "$backend_package"
+          mkdir -p "$backup_root"
+          tar \
+            --exclude='./node_modules' \
+            --exclude='./output' \
+            --exclude='./uploads' \
+            --exclude='./private' \
+            -czf "$backup_file" -C "$backend_root" .
+
+          tar -xzf "$backend_package" -C "$staging"
+          source_root="$staging/apps/retiradas/backend"
+          test -s "$source_root/package.json"
+          test -s "$source_root/api/src/index.js"
+          test -s "$source_root/sql/078_tecnico_dashboard_tentativas.sql"
+
+          if ! cmp -s "$source_root/package-lock.json" "$backend_root/package-lock.json"; then
+            npm ci --prefix "$source_root" --omit=dev --no-audit --no-fund
+            rm -rf "$previous_node_modules"
+            mv "$backend_root/node_modules" "$previous_node_modules"
+            mv "$source_root/node_modules" "$backend_root/node_modules"
+            dependencies_switched=1
+          fi
+
+          tar -cf - -C "$source_root" . | tar -xf - -C "$backend_root"
+          deployed=1
+
+          set -a
+          . /etc/retiradas/api.env
+          set +a
+          cd "$backend_root"
+          npm run migrate:sql
+          systemctl restart retiradas-api.service
+          curl -fsS --retry 10 --retry-delay 2 \
+            http://127.0.0.1:3001/api/health >/dev/null
+
+          deployed=0
+          rm -f "$backend_package"
+          find "$backup_root" -mindepth 1 -maxdepth 1 -mtime +30 -exec rm -rf {} +
+          echo "Backend ativo: $release_id"
+          REMOTE
 
       - name: Publish atomically with rollback
         env:

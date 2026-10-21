@@ -28,6 +28,7 @@ import {
 	resetarMfaUsuarioAdmin,
 } from "../services/authService";
 import UserInsumosScopeFields from "./UserInsumosScopeFields";
+import TechnicianBindingFields from "./TechnicianBindingFields";
 
 const fieldClass =
 	"w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 placeholder:text-slate-400";
@@ -103,6 +104,12 @@ const EditarUsuarioModal = ({
 			? usuario.insumosCategoriasSolicitar
 			: [],
 		avatarUrl: usuario.avatarUrl || "",
+		metasTecnicoNome:
+			usuario.metasTecnicoNome || usuario.metas_tecnico_nome || "",
+		agendamentosTecnicoNome:
+			usuario.agendamentosTecnicoNome ||
+			usuario.agendamentos_tecnico_nome ||
+			"",
 	});
 	const [saving, setSaving] = useState(false);
 	const [erro, setErro] = useState("");
@@ -222,6 +229,12 @@ const EditarUsuarioModal = ({
 					? { insumosCategoriasSolicitar: form.insumosCategoriasSolicitar }
 					: {}),
 				avatarUrl: form.avatarUrl,
+				...(form.role === ROLES.TECNICO || usuario.role === ROLES.TECNICO
+					? {
+							metasTecnicoNome: form.metasTecnicoNome,
+							agendamentosTecnicoNome: form.agendamentosTecnicoNome,
+						}
+					: {}),
 			});
 			onSalvo();
 			onClose();
@@ -276,6 +289,9 @@ const EditarUsuarioModal = ({
 			...current,
 			role: value,
 			...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
+			...(value === ROLES.TECNICO
+				? {}
+				: { metasTecnicoNome: "", agendamentosTecnicoNome: "" }),
 		}));
 	};
 
@@ -488,6 +504,13 @@ const EditarUsuarioModal = ({
 							fieldClass={fieldClass}
 							labelClass={labelClass}
 							datalistId="insumos-bases-options"
+						/>
+
+						<TechnicianBindingFields
+							form={form}
+							setForm={setForm}
+							fieldClass={fieldClass}
+							labelClass={labelClass}
 						/>
 
 						{requiresEmpresa(form.role) ? (

@@ -6,6 +6,7 @@ import { useMetasDashboard } from "../../metas/hooks/useMetasDashboard";
 import { buildMonthProjection } from "../../metas/hooks/useMetasResumoMensal";
 import { recalcularSaldoDiario } from "../../metas/utils/metasSaldo";
 import { getGoalPercent } from "../utils/metasMetrics";
+import { scopeMonthToTechnician } from "../utils/technicianMetaScope";
 
 const FONTES_DADOS_DASHBOARD = META_BASES;
 
@@ -47,8 +48,23 @@ function temDadosOperacionais(metaMes) {
 	);
 }
 
-const FeaturedMetasPanel = () => {
-	const { metaMes, allData, loading, feriadosSet } = useMetasDashboard();
+const FeaturedMetasPanel = ({ technicianName = "" }) => {
+	const dashboard = useMetasDashboard();
+	const { loading, feriadosSet } = dashboard;
+	const metaMes = useMemo(
+		() => scopeMonthToTechnician(dashboard.metaMes, technicianName),
+		[dashboard.metaMes, technicianName],
+	);
+	const allData = useMemo(
+		() =>
+			Object.fromEntries(
+				Object.entries(dashboard.allData || {}).map(([month, data]) => [
+					month,
+					scopeMonthToTechnician(data, technicianName),
+				]),
+			),
+		[dashboard.allData, technicianName],
+	);
 	const [fonteDados, setFonteDados] = useState("sempre");
 
 	const metaMesFonte = useMemo(
@@ -196,7 +212,7 @@ const FeaturedMetasPanel = () => {
 								Metas em destaque
 							</p>
 							<h2 className="text-xl font-black leading-tight text-slate-950 sm:text-2xl">
-								META DO MÊS
+								{technicianName ? "MINHA META DO MÊS" : "META DO MÊS"}
 							</h2>
 						</div>
 						<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500 text-white shadow-orange">

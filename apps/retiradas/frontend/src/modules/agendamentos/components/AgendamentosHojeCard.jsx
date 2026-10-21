@@ -27,9 +27,10 @@ const AgendamentosHojeCard = ({
 	defaultOpen = false,
 	featured = false,
 	maxVisibleItems = 5,
+	technicianDashboardOnly = false,
 }) => {
 	const navigate = useNavigate();
-	const { agendamentosHoje } = useAgendamentos();
+	const { agendamentosHoje } = useAgendamentos({ technicianDashboardOnly });
 	const [copiadoId, setCopiadoId] = useState(null);
 	const [page, setPage] = useState(1);
 	const [open, setOpen] = useState(defaultOpen);
@@ -85,7 +86,9 @@ const AgendamentosHojeCard = ({
 									: "text-sm font-bold text-gray-900"
 							}
 						>
-							Agendamentos de Hoje
+							{technicianDashboardOnly
+								? "Meus Agendamentos de Hoje"
+								: "Agendamentos de Hoje"}
 						</p>
 						<p className="text-xs font-semibold text-gray-400">
 							{agendamentosHoje.length} item(s) para acompanhar
@@ -96,7 +99,7 @@ const AgendamentosHojeCard = ({
 						className={`ml-auto shrink-0 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
 					/>
 				</button>
-				{open && (
+				{open && !technicianDashboardOnly && (
 					<button
 						type="button"
 						onClick={() => navigate(ROUTES.AGENDAMENTOS)}

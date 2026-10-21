@@ -28,6 +28,7 @@ export const CARGOS_RETIRADAS = [
 	{ value: ROLES.LIDER_EMPRESA, label: "Lider Empresa" },
 	{ value: ROLES.AGENTE_AUTORIZADO, label: "Agente Autorizado" },
 	{ value: ROLES.BACKOFFICE, label: "Backoffice" },
+	{ value: ROLES.TECNICO, label: "Técnico" },
 	{ value: ROLES.VISITANTE, label: "Visitante" },
 ];
 
@@ -57,6 +58,7 @@ const DASHBOARD_ROLES = [
 	ROLES.BACKOFFICE,
 	ROLES.SUPERVISOR_ADMINISTRATIVO,
 	ROLES.ANALISTA_ADMINISTRATIVO,
+	ROLES.TECNICO,
 	ROLES.VISITANTE,
 ];
 
@@ -563,6 +565,7 @@ const LEGACY_ROLE_PERMISSIONS = Object.freeze({
 		ROLES.BACKOFFICE,
 		ROLES.LIDER_EMPRESA,
 		ROLES.AGENTE_AUTORIZADO,
+		ROLES.TECNICO,
 	],
 	"tentativas.executar": [
 		ROLES.ADMIN,
@@ -571,6 +574,7 @@ const LEGACY_ROLE_PERMISSIONS = Object.freeze({
 		ROLES.BACKOFFICE,
 		ROLES.LIDER_EMPRESA,
 		ROLES.AGENTE_AUTORIZADO,
+		ROLES.TECNICO,
 	],
 	"tentativas.historico.visualizar": [
 		ROLES.ADMIN,

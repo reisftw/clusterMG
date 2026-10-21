@@ -629,10 +629,17 @@ const OperationalDashboardContent = ({ currentUser }) => {
 	const publicMapa = usePublicMapaOS(true);
 	const { isModernLayout } = useLayoutMode();
 	const currentRole = normalizeRole(currentUser?.role);
+	const isTechnicianDashboard = currentRole === ROLES.TECNICO;
+	const metasTechnicianName = isTechnicianDashboard
+		? currentUser?.metasTecnicoNome ||
+			currentUser?.metas_tecnico_nome ||
+			"__tecnico_sem_vinculo__"
+		: "";
 	const isLimitedDashboardRole = [
 		ROLES.LIDER_EMPRESA,
 		ROLES.BACKOFFICE,
 		ROLES.SUPERVISOR,
+		ROLES.TECNICO,
 	].includes(currentRole);
 	const showDocumentsInHero = [ROLES.LIDER_EMPRESA, ROLES.SUPERVISOR].includes(
 		currentRole,
@@ -656,6 +663,8 @@ const OperationalDashboardContent = ({ currentUser }) => {
 		resumo,
 		error,
 		currentRole,
+		isTechnicianDashboard,
+		metasTechnicianName,
 		isLimitedDashboardRole,
 		showDocumentsInHero,
 		kpiHiddenKeys,
@@ -680,6 +689,8 @@ function ModernDashboardView({
 	resumo,
 	error,
 	currentRole,
+	isTechnicianDashboard,
+	metasTechnicianName,
 	isLimitedDashboardRole,
 	showDocumentsInHero,
 	kpiHiddenKeys,
@@ -703,9 +714,14 @@ function ModernDashboardView({
 					<DocumentosPendentesCard currentUser={currentUser} />
 				) : null}
 				{!showDocumentsInHero && currentRole !== ROLES.BACKOFFICE ? (
-					<AgendamentosHojeCard defaultOpen featured maxVisibleItems={4} />
+					<AgendamentosHojeCard
+						defaultOpen
+						featured
+						maxVisibleItems={4}
+						technicianDashboardOnly={isTechnicianDashboard}
+					/>
 				) : null}
-				<FeaturedMetasPanel />
+				<FeaturedMetasPanel technicianName={metasTechnicianName} />
 			</div>
 
 			<ModernKpiGrid
@@ -730,9 +746,11 @@ function ModernDashboardView({
 				<div className="mb-5 break-inside-avoid">
 					<ProximosFeriados feriados={resumo?.feriadosProximos} />
 				</div>
-				<div className="mb-5 break-inside-avoid">
-					<MetasCidadesCriticasWidget />
-				</div>
+				{!isTechnicianDashboard ? (
+					<div className="mb-5 break-inside-avoid">
+						<MetasCidadesCriticasWidget />
+					</div>
+				) : null}
 				{!isLimitedDashboardRole ? (
 					<div className="mb-5 break-inside-avoid">
 						<ProximasAgendas />
@@ -754,6 +772,8 @@ function ClassicDashboardView({
 	resumo,
 	error,
 	currentRole,
+	isTechnicianDashboard,
+	metasTechnicianName,
 	isLimitedDashboardRole,
 	showDocumentsInHero,
 	summaryHiddenKeys,
@@ -776,7 +796,9 @@ function ClassicDashboardView({
 				<DocumentosPendentesCard currentUser={currentUser} />
 			) : null}
 			{!showDocumentsInHero && currentRole !== ROLES.BACKOFFICE ? (
-				<AgendamentosHojeCard />
+				<AgendamentosHojeCard
+					technicianDashboardOnly={isTechnicianDashboard}
+				/>
 			) : null}
 
 			<MapaKPICards ordens={[]} kpisOverride={mapaKpisOverride} />
@@ -784,11 +806,17 @@ function ClassicDashboardView({
 
 			<div className="columns-1 gap-6 lg:columns-2 xl:columns-3">
 				<div className="mb-6 break-inside-avoid">
-					<MetasDashboardWidget />
+					{isTechnicianDashboard ? (
+						<FeaturedMetasPanel technicianName={metasTechnicianName} />
+					) : (
+						<MetasDashboardWidget />
+					)}
 				</div>
-				<div className="mb-6 break-inside-avoid">
-					<MetasPrevisaoWidget />
-				</div>
+				{!isTechnicianDashboard ? (
+					<div className="mb-6 break-inside-avoid">
+						<MetasPrevisaoWidget />
+					</div>
+				) : null}
 				<div className="mb-6 break-inside-avoid">
 					<AlertasAutomaticosWidget resumo={resumo} />
 				</div>
@@ -814,9 +842,11 @@ function ClassicDashboardView({
 						rankingOverride={topCidadesOverride}
 					/>
 				</div>
-				<div className="mb-6 break-inside-avoid">
-					<MetasCidadesCriticasWidget />
-				</div>
+				{!isTechnicianDashboard ? (
+					<div className="mb-6 break-inside-avoid">
+						<MetasCidadesCriticasWidget />
+					</div>
+				) : null}
 			</div>
 
 			{error && (

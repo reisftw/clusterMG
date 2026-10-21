@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const auditLog = require("../auditLog");
+const hubsoftSyncProfiles = require("../hubsoftSyncProfiles");
 
 const VIEW_PERMISSIONS = ["tentativas.visualizar"];
 const EXECUTE_PERMISSIONS = ["tentativas.executar"];
@@ -87,6 +88,14 @@ function normalizePhone(value) {
 	};
 }
 
+function firstValidPhone(values = []) {
+	for (const value of values) {
+		const phone = normalizePhone(value);
+		if (phone.valid) return phone;
+	}
+	return normalizePhone("");
+}
+
 function firstName(name) {
 	return text(name).split(/\s+/).filter(Boolean)[0] || text(name);
 }
@@ -155,9 +164,39 @@ async function performOpportunitiesSyncFromMatch() {
 			         nullif(os.source_payload#>>'{cliente,celular}', ''),
 			         nullif(os.source_payload#>>'{servico,telefone_primario}', ''),
 			         nullif(os.source_payload#>>'{servico,telefone}', ''),
+				         map_phone.telefone,
 			         phone_history.telefone
 			       ) as resolved_phone
 			  from ordens_servico os
+			  left join lateral (
+			    select coalesce(
+			      nullif(map_os.telefone, ''),
+			      map_os.telefones[1],
+			      nullif(map_os.source_payload->>'telefone', ''),
+			      nullif(map_os.source_payload->>'telefone_primario', ''),
+			      nullif(map_os.source_payload->>'celular', ''),
+			      nullif(map_os.source_payload->>'whatsapp', '')
+			    ) as telefone
+			      from ordens_servico map_os
+			     where map_os.source_collection = 'ordens_abertas'
+			       and (
+			         map_os.num_os = os.num_os
+			         or (
+			           coalesce(os.codigo_cliente, '') <> ''
+			           and map_os.codigo_cliente = os.codigo_cliente
+			         )
+			       )
+			       and coalesce(
+			         nullif(map_os.telefone, ''),
+			         map_os.telefones[1],
+			         nullif(map_os.source_payload->>'telefone', ''),
+			         nullif(map_os.source_payload->>'telefone_primario', ''),
+			         nullif(map_os.source_payload->>'celular', ''),
+			         nullif(map_os.source_payload->>'whatsapp', '')
+			       ) is not null
+			     order by (map_os.num_os = os.num_os) desc, map_os.updated_at desc
+			     limit 1
+			  ) map_phone on true
 			  left join lateral (
 			    select telefone
 			      from (
@@ -226,8 +265,8 @@ async function performOpportunitiesSyncFromMatch() {
 			ordem_id = coalesce(tentativas_opportunities.ordem_id, excluded.ordem_id),
 			codigo_cliente = excluded.codigo_cliente,
 			cliente = excluded.cliente,
-			telefone = excluded.telefone,
-			telefone_digits = excluded.telefone_digits,
+			telefone = coalesce(nullif(excluded.telefone, ''), tentativas_opportunities.telefone),
+			telefone_digits = coalesce(nullif(excluded.telefone_digits, ''), tentativas_opportunities.telefone_digits),
 			cidade = excluded.cidade,
 			cidade_normalizada = excluded.cidade_normalizada,
 			regional = excluded.regional,
@@ -495,7 +534,64 @@ async function getTemplateForAttempt(attemptNumber) {
 	return result.rows[0] || null;
 }
 
+async function enrichOpportunityPhone(opportunityId, user = {}) {
+	const row = await findAssignmentForUser(opportunityId, user);
+	if (!row) return normalizePhone("");
+	const existing = normalizePhone(row.telefone);
+	if (existing.valid) return existing;
+
+	const localResult = await db.query(
+		`select telefone, telefones, source_payload
+		   from ordens_servico
+		  where source_collection = 'ordens_abertas'
+		    and (num_os = $1 or (coalesce($2, '') <> '' and codigo_cliente = $2))
+		  order by (num_os = $1) desc, updated_at desc
+		  limit 10`,
+		[row.os, row.codigo_cliente],
+	);
+	let phone = firstValidPhone(
+		localResult.rows.flatMap((item) => [
+			item.telefone,
+			...(item.telefones || []),
+			item.source_payload?.telefone,
+			item.source_payload?.telefone_primario,
+			item.source_payload?.celular,
+			item.source_payload?.whatsapp,
+		]),
+	);
+
+	if (!phone.valid && row.codigo_cliente) {
+		try {
+			const order = await hubsoftSyncProfiles.findOpenOrderByClientCode(
+				row.codigo_cliente,
+			);
+			phone = firstValidPhone([
+				order?.telefone_primario,
+				order?.telefone_secundario,
+				order?.telefone_terciario,
+				...(order?.telefones || []),
+			]);
+		} catch (error) {
+			console.warn(
+				`[tentativas] Falha ao enriquecer telefone da OS ${row.os}:`,
+				error?.message || error,
+			);
+		}
+	}
+
+	if (phone.valid) {
+		await db.query(
+			`update tentativas_opportunities
+			    set telefone = $2, telefone_digits = $3, updated_at = now()
+			  where id = $1`,
+			[opportunityId, phone.display, phone.digits],
+		);
+	}
+	return phone;
+}
+
 async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
+	const enrichedPhone = await enrichOpportunityPhone(opportunityId, user);
 	const client = await db.connect();
 	try {
 		await client.query("begin");
@@ -517,7 +613,11 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			error.nextAttemptAt = row.next_attempt_at;
 			throw error;
 		}
-		const phone = normalizePhone(payload.phone || row.telefone);
+		const phone = firstValidPhone([
+			payload.phone,
+			row.telefone,
+			enrichedPhone.display,
+		]);
 		if (!phone.valid) {
 			const error = new Error("Telefone invalido ou ausente para WhatsApp.");
 			error.statusCode = 400;
@@ -1056,6 +1156,7 @@ async function exportCsv(query = {}, user = {}) {
 module.exports = {
 	__testables: {
 		firstName,
+		firstValidPhone,
 		normalizePhone,
 		renderTemplate,
 	},

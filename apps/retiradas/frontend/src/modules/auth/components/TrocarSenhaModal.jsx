@@ -1,10 +1,10 @@
 ﻿import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { useId, useState } from "react";
 import { useAuthContext } from "../../../context/AuthContext";
-import { atualizarPerfilVps, trocarSenha } from "../services/authService";
+import { trocarSenha } from "../services/authService";
 
 const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
-	const { currentUser, refreshUser } = useAuthContext();
+	const { refreshUser } = useAuthContext();
 	const [senhaAtual, setSenhaAtual] = useState("");
 	const [novaSenha, setNovaSenha] = useState("");
 	const [confirmar, setConfirmar] = useState("");
@@ -37,7 +37,6 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 		setSaving(true);
 		try {
 			await trocarSenha(senhaAtual, novaSenha);
-			await atualizarPerfilVps(currentUser.id, { trocar_senha: false });
 			await refreshUser();
 			onClose?.();
 		} catch (error) {

@@ -6,6 +6,7 @@ import {
 import {
 	atualizarAgendamento,
 	buscarAgendamentos,
+	buscarAgendamentosTecnicoDashboard,
 	criarAgendamento,
 	excluirAgendamento,
 } from "../services/agendamentosService";
@@ -33,7 +34,7 @@ const getTodayKey = () => {
 	return `${year}-${month}-${day}`;
 };
 
-export const useAgendamentos = () => {
+export const useAgendamentos = ({ technicianDashboardOnly = false } = {}) => {
 	const [agendamentos, setAgendamentos] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
@@ -45,7 +46,9 @@ export const useAgendamentos = () => {
 			const { data } = await getOrLoadCachedValue(
 				CACHE_KEY,
 				async () => {
-					const items = await buscarAgendamentos();
+					const items = technicianDashboardOnly
+						? await buscarAgendamentosTecnicoDashboard()
+						: await buscarAgendamentos();
 					return sortByData(items);
 				},
 				{ ttlMs: CACHE_TTL, force },
@@ -56,7 +59,7 @@ export const useAgendamentos = () => {
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [technicianDashboardOnly]);
 
 	useEffect(() => {
 		carregar(true);

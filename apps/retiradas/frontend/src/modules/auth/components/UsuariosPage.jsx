@@ -49,6 +49,7 @@ import {
 } from "../services/authService";
 import EditarUsuarioModal from "./EditarUsuarioModal";
 import UserInsumosScopeFields from "./UserInsumosScopeFields";
+import TechnicianBindingFields from "./TechnicianBindingFields";
 
 const ROLE_STYLES = {
 	[ROLES.ADMIN]: "bg-red-100 text-red-700",
@@ -171,6 +172,8 @@ function buildInitialUserForm({
 		insumosCategoriasSolicitar: [],
 		temporaryPassword: "",
 		avatarUrl: "",
+		metasTecnicoNome: "",
+		agendamentosTecnicoNome: "",
 	};
 }
 
@@ -340,6 +343,12 @@ const NovoUsuarioModal = ({
 					? { insumosCategoriasSolicitar: form.insumosCategoriasSolicitar }
 					: {}),
 				avatarUrl: form.avatarUrl,
+				...(form.role === ROLES.TECNICO
+					? {
+							metasTecnicoNome: form.metasTecnicoNome,
+							agendamentosTecnicoNome: form.agendamentosTecnicoNome,
+						}
+					: {}),
 				temporaryPassword: form.temporaryPassword,
 			});
 			const result = response || {};
@@ -387,6 +396,9 @@ const NovoUsuarioModal = ({
 			...current,
 			role: value,
 			...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
+			...(value === ROLES.TECNICO
+				? {}
+				: { metasTecnicoNome: "", agendamentosTecnicoNome: "" }),
 		}));
 	};
 
@@ -706,6 +718,13 @@ const NovoUsuarioModal = ({
 							fieldClass={fieldClass}
 							labelClass={labelClass}
 							datalistId="novo-usuario-insumos-bases"
+						/>
+
+						<TechnicianBindingFields
+							form={form}
+							setForm={setForm}
+							fieldClass={fieldClass}
+							labelClass={labelClass}
 						/>
 
 						{requiresEmpresa(form.role) ? (

@@ -38,6 +38,10 @@ const UserAdminUpdateDTO = object(
 		baseInsumosNome: string({ maxLength: 200, allowEmpty: true }),
 		insumosCategoriasVer: arrayOf(string({ maxLength: 120 }), { maxLength: 200 }),
 		insumosCategoriasSolicitar: arrayOf(string({ maxLength: 120 }), { maxLength: 200 }),
+		metasTecnicoNome: string({ maxLength: 200, allowEmpty: true }),
+		metas_tecnico_nome: string({ maxLength: 200, allowEmpty: true }),
+		agendamentosTecnicoNome: string({ maxLength: 200, allowEmpty: true }),
+		agendamentos_tecnico_nome: string({ maxLength: 200, allowEmpty: true }),
 	},
 	{ unknownKeys: "strip" },
 );
