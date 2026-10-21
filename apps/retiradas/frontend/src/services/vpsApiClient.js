@@ -60,7 +60,7 @@ function isRetryableRequest(options = {}, response = null, error = null) {
 	return response ? RETRYABLE_STATUS_CODES.has(response.status) : false;
 }
 
-async function fetchWithRetry(url, options = {}, { retries = 2 } = {}) {
+async function fetchWithRetry(url, options = {}, { retries = 5 } = {}) {
 	let lastError = null;
 	let lastResponse = null;
 

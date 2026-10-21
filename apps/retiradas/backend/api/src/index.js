@@ -28,6 +28,8 @@ const server = app.listen(port, () => {
 });
 
 let shuttingDown = false;
+const CONNECTION_DRAIN_TIMEOUT_MS = 1500;
+const FORCE_EXIT_TIMEOUT_MS = 5000;
 
 async function shutdown(signal) {
 	if (shuttingDown) return;
@@ -39,9 +41,9 @@ async function shutdown(signal) {
 	closeRealtimeClients();
 
 	const forceExit = setTimeout(() => {
-		console.error("[retiradas-api] Encerramento excedeu 10s. Forcando saida.");
+		console.error("[retiradas-api] Encerramento excedeu 5s. Forcando saida.");
 		process.exit(1);
-	}, 10000);
+	}, FORCE_EXIT_TIMEOUT_MS);
 	forceExit.unref?.();
 
 	try {
@@ -56,7 +58,14 @@ async function shutdown(signal) {
 		);
 	}
 
+	const forceCloseConnections = setTimeout(() => {
+		server.closeIdleConnections?.();
+		server.closeAllConnections?.();
+	}, CONNECTION_DRAIN_TIMEOUT_MS);
+	forceCloseConnections.unref?.();
+
 	server.close(async () => {
+		clearTimeout(forceCloseConnections);
 		await db.closePool().catch(() => {});
 		clearTimeout(forceExit);
 		process.exit(0);
