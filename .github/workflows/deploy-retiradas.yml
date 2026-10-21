@@ -251,7 +251,7 @@ jobs:
           cd "$backend_root"
           npm run migrate:sql
           systemctl restart retiradas-api.service
-          curl -fsS --retry 10 --retry-delay 2 \
+          curl -fsS --retry 15 --retry-delay 2 --retry-connrefused \
             http://127.0.0.1:3001/api/health >/dev/null
 
           deployed=0
