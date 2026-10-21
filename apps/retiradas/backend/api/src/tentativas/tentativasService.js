@@ -16,6 +16,7 @@ const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
 const OPPORTUNITIES_SYNC_TTL_MS = 5 * 60 * 1000;
 const PHONE_ENRICH_FAILURE_TTL_MS = 5 * 60 * 1000;
+const PHONE_ENRICH_WAIT_MS = 12 * 1000;
 
 let opportunitiesSyncPromise = null;
 let opportunitiesLastSyncAt = 0;
@@ -544,6 +545,22 @@ function queueHubsoftPhoneLookup(task) {
 	return queued;
 }
 
+async function waitForPhoneEnrichment(opportunityId, user) {
+	let timer;
+	try {
+		return await Promise.race([
+			enrichOpportunityPhone(opportunityId, user),
+			new Promise((_, reject) => {
+				timer = setTimeout(() => {
+					reject(new Error("Consulta de telefone excedeu o tempo de espera."));
+				}, PHONE_ENRICH_WAIT_MS);
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 async function enrichOpportunityPhoneOnce(opportunityId, user = {}) {
 	const row = await findAssignmentForUser(opportunityId, user);
 	if (!row) return normalizePhone("");
@@ -621,7 +638,15 @@ async function enrichOpportunityPhone(opportunityId, user = {}) {
 }
 
 async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
-	const enrichedPhone = await enrichOpportunityPhone(opportunityId, user);
+	let enrichedPhone = normalizePhone("");
+	try {
+		enrichedPhone = await waitForPhoneEnrichment(opportunityId, user);
+	} catch (error) {
+		console.warn(
+			`[tentativas] Consulta de telefone da oportunidade ${opportunityId} continuara em segundo plano:`,
+			error?.message || error,
+		);
+	}
 	const client = await db.connect();
 	try {
 		await client.query("begin");
