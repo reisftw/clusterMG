@@ -2,7 +2,7 @@ import { Bell, Camera, CheckCheck, LogOut, Menu, Search, ShieldCheck } from "luc
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import UserAvatar from "../ui/UserAvatar";
-import { getRoleLabel } from "../../constants/roles";
+import { getRoleLabel, ROLES } from "../../constants/roles";
 import { useAuthContext } from "../../context/AuthContext";
 import { atualizarAvatarPerfil } from "../../modules/auth/services/authService";
 import {
@@ -40,6 +40,10 @@ const Topbar = ({ onOpenMobileMenu }) => {
 	const { currentUser, realUser, refreshUser, signOut, isViewingAsRole } =
 		useAuthContext();
 	const displayUser = realUser || currentUser;
+	const isTechnician =
+		String(currentUser?.role || "")
+			.trim()
+			.toLowerCase() === ROLES.TECNICO;
 	const avatarInputRef = useRef(null);
 	const [notificationsOpen, setNotificationsOpen] = useState(false);
 	const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
@@ -184,7 +188,12 @@ const Topbar = ({ onOpenMobileMenu }) => {
 
 	return (
 		<header className="relative z-layout-topbar flex min-w-0 items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
-			<AuthenticatorModal open={authenticatorOpen} onClose={() => setAuthenticatorOpen(false)} />
+			{!isTechnician ? (
+				<AuthenticatorModal
+					open={authenticatorOpen}
+					onClose={() => setAuthenticatorOpen(false)}
+				/>
+			) : null}
 			<button
 				type="button"
 				onClick={() => {
@@ -343,16 +352,18 @@ const Topbar = ({ onOpenMobileMenu }) => {
 								>
 									<Camera size={16} /> Alterar avatar
 								</button>
-								<button
-									type="button"
-									onClick={() => {
-										setMobileAccountOpen(false);
-										setAuthenticatorOpen(true);
-									}}
-									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-								>
-									<ShieldCheck size={16} /> Autenticador
-								</button>
+								{!isTechnician ? (
+									<button
+										type="button"
+										onClick={() => {
+											setMobileAccountOpen(false);
+											setAuthenticatorOpen(true);
+										}}
+										className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+									>
+										<ShieldCheck size={16} /> Autenticador
+									</button>
+								) : null}
 								<button
 									type="button"
 									onClick={signOut}
@@ -412,15 +423,17 @@ const Topbar = ({ onOpenMobileMenu }) => {
 					>
 						<LogOut size={16} />
 					</button>
-					<button
-						type="button"
-						onClick={() => setAuthenticatorOpen(true)}
-						className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-						title="Autenticador"
-						aria-label="Autenticador"
-					>
-						<ShieldCheck size={16} />
-					</button>
+					{!isTechnician ? (
+						<button
+							type="button"
+							onClick={() => setAuthenticatorOpen(true)}
+							className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+							title="Autenticador"
+							aria-label="Autenticador"
+						>
+							<ShieldCheck size={16} />
+						</button>
+					) : null}
 				</div>
 			</div>
 		</header>

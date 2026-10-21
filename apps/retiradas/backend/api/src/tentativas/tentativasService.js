@@ -878,18 +878,36 @@ async function getOverview(query = {}) {
 
 async function getRanking() {
 	const result = await db.query(
-		`select coalesce(a.technician_user_id, 'sem_tecnico') as technician_id,
-		        coalesce(a.technician_name, 'Sem tecnico') as technician_name,
+		`with technician_sources as (
+			select user_id as technician_user_id,
+			       nullif(user_name, '') as technician_name
+			  from tentativas_technician_cities
+			 where active = true
+			union all
+			select technician_user_id,
+			       nullif(technician_name, '') as technician_name
+			  from tentativas_assignments
+			 where released_at is null
+		), technicians as (
+			select technician_user_id,
+			       max(technician_name) as technician_name
+			  from technician_sources
+			 group by technician_user_id
+		)
+		select coalesce(t.technician_user_id, 'sem_tecnico') as technician_id,
+		        coalesce(t.technician_name, 'Sem tecnico') as technician_name,
 		        count(distinct o.id) as opportunities,
 		        count(distinct o.id) filter (where o.attempt_count > 0) as worked,
 		        coalesce(sum(o.attempt_count), 0) as attempts,
 		        count(distinct o.id) filter (where o.status in ('RESPONDED','SCHEDULED','COMPLETED')) as responded,
 		        count(distinct o.id) filter (where o.status = 'SCHEDULED') as scheduled,
 		        count(distinct o.id) filter (where o.status = 'COMPLETED') as completed
-		   from tentativas_assignments a
-		   join tentativas_opportunities o on o.id = a.opportunity_id
-		  where a.released_at is null
-		  group by 1,2
+		   from technicians t
+		   left join tentativas_assignments a
+		     on a.technician_user_id = t.technician_user_id
+		    and a.released_at is null
+		   left join tentativas_opportunities o on o.id = a.opportunity_id
+		  group by t.technician_user_id, t.technician_name
 		  order by worked desc, attempts desc
 		  limit 100`,
 	);
@@ -909,16 +927,46 @@ async function getRanking() {
 
 async function listDistribution() {
 	const result = await db.query(
-		`select a.technician_user_id, a.technician_name, o.cidade,
-		        count(*) as opportunities,
-		        count(*) filter (where o.attempt_count > 0) as worked,
-		        count(*) filter (where o.attempt_count = 0) as pending
-		   from tentativas_assignments a
-		   join tentativas_opportunities o on o.id = a.opportunity_id
-		  where a.released_at is null
+		`with distribution_sources as (
+			select user_id as technician_user_id,
+			       user_email as technician_email,
+			       user_name as technician_name,
+			       cidade,
+			       cidade_normalizada
+			  from tentativas_technician_cities
+			 where active = true
+			union all
+			select a.technician_user_id,
+			       a.technician_email,
+			       a.technician_name,
+			       o.cidade,
+			       o.cidade_normalizada
+			  from tentativas_assignments a
+			  join tentativas_opportunities o on o.id = a.opportunity_id
+			 where a.released_at is null
+		), distribution_keys as (
+			select technician_user_id,
+			       max(nullif(technician_email, '')) as technician_email,
+			       max(nullif(technician_name, '')) as technician_name,
+			       max(cidade) as cidade,
+			       cidade_normalizada
+			  from distribution_sources
+			 group by technician_user_id, cidade_normalizada
+		)
+		select k.technician_user_id, k.technician_name, k.cidade,
+		        count(o.id) as opportunities,
+		        count(o.id) filter (where o.attempt_count > 0) as worked,
+		        count(o.id) filter (where o.attempt_count = 0) as pending
+		   from distribution_keys k
+		   left join tentativas_assignments a
+		     on a.technician_user_id = k.technician_user_id
+		    and a.released_at is null
+		   left join tentativas_opportunities o
+		     on o.id = a.opportunity_id
+		    and o.cidade_normalizada = k.cidade_normalizada
 		    and o.active = true
-		  group by a.technician_user_id, a.technician_name, o.cidade
-		  order by a.technician_name, o.cidade
+		  group by k.technician_user_id, k.technician_name, k.cidade
+		  order by k.technician_name, k.cidade
 		  limit 500`,
 	);
 	return {

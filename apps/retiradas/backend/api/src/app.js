@@ -89,6 +89,7 @@ const {
 	getOwnMfaStatus,
 	getImportedUserProfile,
 	invalidateAuthenticatedUsersByRole,
+	isMfaExemptRole,
 	getLocalUserByEmail,
 	loginWithGoogleIdToken,
 	loginWithOktaIdToken,
@@ -3089,10 +3090,14 @@ function createApp() {
 			}
 
 			const emailConfig = await emailService.getConfig().catch(() => ({}));
-			const totpChallenge = await startTotpMfaLogin(email, password, {
-				ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
-				req,
-			});
+			const localUser = await getLocalUserByEmail(email);
+			const mfaExempt = isMfaExemptRole(localUser?.role);
+			const totpChallenge = mfaExempt
+				? null
+				: await startTotpMfaLogin(email, password, {
+						ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
+						req,
+					});
 			if (totpChallenge) {
 				res.json({
 					ok: true,
@@ -3106,12 +3111,18 @@ function createApp() {
 				return;
 			}
 
-			const localUser = await getLocalUserByEmail(email);
-			if (emailConfig.mfaEmailEnabled && localUser?.mfa_enabled !== false) {
+			if (
+				!mfaExempt &&
+				emailConfig.mfaEmailEnabled &&
+				localUser?.mfa_enabled !== false
+			) {
 				const challenge = await startEmailMfaLogin(email, password, {
 					ttlMinutes: emailConfig.mfaEmailTtlMinutes || 10,
 					req,
 				});
+				if (!challenge) {
+					throw new Error("Não foi possível iniciar a verificação MFA.");
+				}
 				if (challenge.method !== "totp") {
 					await emailService.sendMfaLoginCodeEmail({
 						user: challenge.user,
@@ -3216,7 +3227,7 @@ function createApp() {
 					)),
 				});
 			} catch (error) {
-				res.status(400).json({
+				res.status(error?.statusCode || 400).json({
 					ok: false,
 					error: error?.message || "Não foi possível habilitar o autenticador.",
 				});

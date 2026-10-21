@@ -122,6 +122,15 @@ describe("auth/RBAC isolated security tests", () => {
 		vi.restoreAllMocks();
 	});
 
+	it("isenta de MFA somente o cargo tecnico", () => {
+		const auth = loadAuthWithDb(vi.fn(async () => ({ rows: [] })));
+
+		expect(auth.isMfaExemptRole("tecnico")).toBe(true);
+		expect(auth.isMfaExemptRole(" Técnico ")).toBe(false);
+		expect(auth.isMfaExemptRole("admin")).toBe(false);
+		expect(auth.isMfaExemptRole("supervisor")).toBe(false);
+	});
+
 	it("login accepts valid credentials and rejects invalid credentials", async () => {
 		let auth = loadAuthWithDb(vi.fn(async () => ({ rows: [] })));
 		const passwordData = await auth.hashPassword("SenhaForte123!");

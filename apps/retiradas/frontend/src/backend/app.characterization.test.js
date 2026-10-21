@@ -85,6 +85,8 @@ function makeAuthMock(overrides = {}) {
 		revokeSession: vi.fn(async () => undefined),
 		changeOwnPassword: vi.fn(async () => undefined),
 		startTotpMfaLogin: vi.fn(async () => null),
+		startEmailMfaLogin: vi.fn(async () => null),
+		isMfaExemptRole: vi.fn((role) => String(role || "").toLowerCase() === "tecnico"),
 		getImportedUserProfile: vi.fn(async () => ({
 			uid: "admin-1",
 			email: "admin@example.com",
@@ -262,6 +264,7 @@ function baseMocks(overrides = {}) {
 		emailService: {
 			sendPasswordChangedEmail: vi.fn(() => Promise.resolve()),
 			sendPasswordResetEmail: vi.fn(() => Promise.resolve()),
+			sendMfaLoginCodeEmail: vi.fn(() => Promise.resolve()),
 			sanitizeConfig: vi.fn((config) => config || {}),
 			getConfig: vi.fn(async () => ({})),
 			saveConfig: vi.fn(async () => ({})),
@@ -1105,6 +1108,84 @@ describe("vps api app characterization - auth", () => {
 		expect(response.headers["set-cookie"].join(";")).toContain(
 			"retiradas_session=session-token",
 		);
+	});
+
+	it("POST /api/auth/login nao exige MFA somente do cargo tecnico", async () => {
+		const defaults = baseMocks();
+		const app = loadApp({
+			auth: {
+				...defaults.auth,
+				getLocalUserByEmail: vi.fn(async () => ({
+					uid: "tech-1",
+					role: "tecnico",
+					mfa_enabled: true,
+					mfa_method: "totp",
+				})),
+			},
+			emailService: {
+				...defaults.emailService,
+				getConfig: vi.fn(async () => ({ mfaEmailEnabled: true })),
+			},
+		});
+
+		const response = await request(app)
+			.post("/api/auth/login")
+			.send({ email: "admin@example.com", password: "secret" });
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({ ok: true });
+		expect(response.body).not.toHaveProperty("mfaRequired");
+		expect(currentMocks.auth.startTotpMfaLogin).not.toHaveBeenCalled();
+		expect(currentMocks.auth.startEmailMfaLogin).not.toHaveBeenCalled();
+		expect(currentMocks.auth.loginWithPassword).toHaveBeenCalledWith(
+			"admin@example.com",
+			"secret",
+			expect.any(Object),
+		);
+	});
+
+	it("POST /api/auth/login mantem MFA para cargos diferentes de tecnico", async () => {
+		const defaults = baseMocks();
+		const challenge = {
+			challengeId: "challenge-1",
+			code: "123456",
+			expiresAt: "2026-10-21T15:00:00.000Z",
+			ttlMinutes: 10,
+			method: "email",
+			maskedEmail: "ad***@example.com",
+			user: { uid: "admin-1", email: "admin@example.com", role: "admin" },
+		};
+		const app = loadApp({
+			auth: {
+				...defaults.auth,
+				getLocalUserByEmail: vi.fn(async () => ({
+					uid: "admin-1",
+					role: "admin",
+					mfa_enabled: true,
+					mfa_method: "email",
+				})),
+				startEmailMfaLogin: vi.fn(async () => challenge),
+			},
+			emailService: {
+				...defaults.emailService,
+				getConfig: vi.fn(async () => ({ mfaEmailEnabled: true })),
+			},
+		});
+
+		const response = await request(app)
+			.post("/api/auth/login")
+			.send({ email: "admin@example.com", password: "secret" });
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({
+			ok: true,
+			mfaRequired: true,
+			method: "email",
+			challengeId: "challenge-1",
+		});
+		expect(currentMocks.auth.startEmailMfaLogin).toHaveBeenCalledOnce();
+		expect(currentMocks.emailService.sendMfaLoginCodeEmail).toHaveBeenCalledOnce();
+		expect(currentMocks.auth.loginWithPassword).not.toHaveBeenCalled();
 	});
 
 	it("POST /api/auth/login rejeita credenciais invalidas com 401 (Fase G — docs/TECHNICAL-AUDIT.md)", async () => {

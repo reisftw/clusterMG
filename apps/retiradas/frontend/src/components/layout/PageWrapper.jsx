@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 import { useLayoutMode } from "../../context/LayoutModeContext";
+import { ROLES } from "../../constants/roles";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
 import WelcomeModal from "../../modules/auth/components/WelcomeModal";
 import { obterStatusAutenticador } from "../../modules/auth/services/authService";
@@ -75,6 +76,10 @@ const PageWrapper = ({ children }) => {
 	const { pathname } = useLocation();
 	const title = PAGE_TITLES[pathname] ?? "Gestão Retiradas";
 	const { currentUser, trocarSenhaObrigatorio } = useAuthContext();
+	const isTechnician =
+		String(currentUser?.role || "")
+			.trim()
+			.toLowerCase() === ROLES.TECNICO;
 	const { isModernLayout } = useLayoutMode();
 	const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 	const [authenticatorRequiredOpen, setAuthenticatorRequiredOpen] =
@@ -113,7 +118,7 @@ const PageWrapper = ({ children }) => {
 		currentUser?.uid || currentUser?.id || currentUser?.email || "";
 
 	useEffect(() => {
-		if (!currentUser || trocarSenhaObrigatorio) {
+		if (!currentUser || trocarSenhaObrigatorio || isTechnician) {
 			Promise.resolve().then(() => setAuthenticatorRequiredOpen(false));
 			return undefined;
 		}
@@ -128,7 +133,7 @@ const PageWrapper = ({ children }) => {
 		return () => {
 			active = false;
 		};
-	}, [currentUser, trocarSenhaObrigatorio]);
+	}, [currentUser, isTechnician, trocarSenhaObrigatorio]);
 
 	const showWelcomeModal =
 		Boolean(currentUser) &&
@@ -209,12 +214,14 @@ const PageWrapper = ({ children }) => {
 			{trocarSenhaObrigatorio && (
 				<TrocarSenhaModal obrigatorio={true} onClose={() => {}} />
 			)}
-			<AuthenticatorModal
-				open={authenticatorRequiredOpen}
-				required={true}
-				onClose={() => {}}
-				onConfigured={() => setAuthenticatorRequiredOpen(false)}
-			/>
+			{!isTechnician ? (
+				<AuthenticatorModal
+					open={authenticatorRequiredOpen}
+					required={true}
+					onClose={() => {}}
+					onConfigured={() => setAuthenticatorRequiredOpen(false)}
+				/>
+			) : null}
 			<WelcomeModal
 				open={showWelcomeModal}
 				user={currentUser}

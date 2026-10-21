@@ -103,6 +103,10 @@ function normalizeRole(role) {
 		.toLowerCase();
 }
 
+function isMfaExemptRole(role) {
+	return normalizeRole(role) === "tecnico";
+}
+
 function normalizeEmail(email) {
 	return String(email || "")
 		.trim()
@@ -739,9 +743,9 @@ async function createLocalUser({
 	const result = await db.query(
 		`insert into app_users (
        uid, email, display_name, role, regional, password_hash, password_salt,
-       password_algorithm, must_change_password
+       password_algorithm, must_change_password, mfa_enabled
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      returning uid, email, display_name, role, regional, must_change_password`,
 		[
 			uid,
@@ -753,6 +757,7 @@ async function createLocalUser({
 			passwordData.passwordSalt,
 			passwordData.passwordAlgorithm,
 			mustChangePassword,
+			!isMfaExemptRole(role),
 		],
 	);
 	await syncProfileDocument(result.rows[0]);
@@ -861,6 +866,14 @@ async function updateLocalUser(uid, data = {}) {
             regional = $5,
             disabled = $6,
             must_change_password = $7,
+            mfa_enabled = case
+              when $4 = 'tecnico' then false
+              when role = 'tecnico' and $4 <> 'tecnico' then true
+              else mfa_enabled
+            end,
+            mfa_method = case when $4 = 'tecnico' then 'email' else mfa_method end,
+            totp_secret = case when $4 = 'tecnico' then null else totp_secret end,
+            totp_enabled_at = case when $4 = 'tecnico' then null else totp_enabled_at end,
             session_version = session_version + 1
       where uid = $1`,
 		[
@@ -1064,6 +1077,7 @@ async function startEmailMfaLogin(
 	{ ttlMinutes = 10, req = null } = {},
 ) {
 	const user = await verifyPasswordCredentials(email, password);
+	if (isMfaExemptRole(user.role)) return null;
 	if (user.mfa_method === "totp" && user.totp_secret) {
 		const challengeId = crypto.randomUUID();
 		const expiresAt = new Date(
@@ -1140,6 +1154,7 @@ async function startTotpMfaLogin(
 	{ ttlMinutes = 10, req = null } = {},
 ) {
 	const user = await verifyPasswordCredentials(email, password);
+	if (isMfaExemptRole(user.role)) return null;
 	if (user.mfa_method !== "totp" || !user.totp_secret) return null;
 
 	const challengeId = crypto.randomUUID();
@@ -1246,7 +1261,16 @@ async function verifyEmailMfaLogin(challengeId, code, { req = null } = {}) {
 
 async function getOwnMfaStatus(uid) {
 	const user = await getLocalUserByUid(uid);
+	if (isMfaExemptRole(user?.role)) {
+		return {
+			exempt: true,
+			method: "none",
+			totpEnabled: false,
+			emailEnabled: false,
+		};
+	}
 	return {
+		exempt: false,
 		method: user?.mfa_method || "email",
 		totpEnabled: user?.mfa_method === "totp" && Boolean(user?.totp_secret),
 		emailEnabled: (user?.mfa_method || "email") !== "totp",
@@ -1256,6 +1280,11 @@ async function getOwnMfaStatus(uid) {
 async function startTotpSetup(uid) {
 	const user = await getLocalUserByUid(uid);
 	if (!user) throw new Error("Usuário não encontrado.");
+	if (isMfaExemptRole(user.role)) {
+		const error = new Error("O cargo Técnico não utiliza autenticador.");
+		error.statusCode = 403;
+		throw error;
+	}
 	const secret = generateTotpSecret();
 	const issuer = process.env.TOTP_ISSUER || "Retiradas";
 	const account = user.email || user.display_name || user.uid;
@@ -1269,6 +1298,13 @@ async function startTotpSetup(uid) {
 }
 
 async function confirmTotpSetup(uid, setupToken, code) {
+	const user = await getLocalUserByUid(uid);
+	if (!user) throw new Error("Usuário não encontrado.");
+	if (isMfaExemptRole(user.role)) {
+		const error = new Error("O cargo Técnico não utiliza autenticador.");
+		error.statusCode = 403;
+		throw error;
+	}
 	const payload = verifySetupToken(setupToken, uid);
 	if (!verifyTotpCode(payload.secret, code, { window: 1 })) {
 		throw new Error("Código do autenticador inválido.");
@@ -1632,6 +1668,7 @@ module.exports = {
 	getRequestAuthToken,
 	getOwnMfaStatus,
 	hashPassword,
+	isMfaExemptRole,
 	loginWithGoogleIdToken,
 	loginWithOktaIdToken,
 	loginWithPassword,
