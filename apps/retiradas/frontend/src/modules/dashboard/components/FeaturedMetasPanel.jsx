@@ -48,8 +48,8 @@ function temDadosOperacionais(metaMes) {
 	);
 }
 
-const FeaturedMetasPanel = ({ technicianName = "" }) => {
-	const dashboard = useMetasDashboard();
+const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
+	const dashboard = useMetasDashboard({ snapshotOnly });
 	const { loading, feriadosSet } = dashboard;
 	const metaMes = useMemo(
 		() => scopeMonthToTechnician(dashboard.metaMes, technicianName),

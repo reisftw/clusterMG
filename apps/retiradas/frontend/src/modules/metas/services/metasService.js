@@ -75,7 +75,8 @@ export const buscarTodasMetas = async (
 	if (!preferLive) {
 		const staticMetas = await getInternalSnapshotSlice(
 			SNAPSHOT_DOMAINS.DASHBOARD,
-			(payload) => payload?.metas?.all ?? null,
+			(payload) =>
+				payload?.metas?.all ?? payload?.painel?.retiradas?.result ?? null,
 			{ force },
 		);
 		if (staticMetas && typeof staticMetas === "object") {

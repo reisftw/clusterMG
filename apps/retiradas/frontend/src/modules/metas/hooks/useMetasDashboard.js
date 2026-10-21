@@ -41,7 +41,7 @@ function getDashboardMonth(todos, currentMonth) {
 	return { mes: currentMonth, data: todos[currentMonth] ?? null };
 }
 
-export const useMetasDashboard = () => {
+export const useMetasDashboard = ({ snapshotOnly = false } = {}) => {
 	const [metaMes, setMetaMes] = useState(null);
 	const [allData, setAllData] = useState({});
 	const [loading, setLoading] = useState(true);
@@ -51,9 +51,12 @@ export const useMetasDashboard = () => {
 		try {
 			setLoading(true);
 			const [todos, feriados, baseConfig] = await Promise.all([
-				buscarTodasMetas(force),
+				buscarTodasMetas(force, { allowFallback: !snapshotOnly }),
 				buscarFeriados(force),
-				buscarMetasBaseConfig(force, { preferLive: true }).catch(() => null),
+				buscarMetasBaseConfig(force, {
+					allowFallback: !snapshotOnly,
+					preferLive: !snapshotOnly,
+				}).catch(() => null),
 			]);
 			const metasConfiguradas = applyMetasBaseConfigToAllData(
 				todos || {},
@@ -73,7 +76,7 @@ export const useMetasDashboard = () => {
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [snapshotOnly]);
 
 	useEffect(() => {
 		const VERSION_KEY = "internal-static-data-version";

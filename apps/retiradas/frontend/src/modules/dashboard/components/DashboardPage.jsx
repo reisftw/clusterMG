@@ -706,7 +706,10 @@ function TechnicianDashboardContent({ currentUser }) {
 					maxVisibleItems={4}
 					technicianDashboardOnly
 				/>
-				<FeaturedMetasPanel technicianName={metasTechnicianName} />
+				<FeaturedMetasPanel
+					technicianName={metasTechnicianName}
+					snapshotOnly
+				/>
 			</div>
 		</div>
 	);

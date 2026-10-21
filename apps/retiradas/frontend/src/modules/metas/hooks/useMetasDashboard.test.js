@@ -64,4 +64,26 @@ describe("useMetasDashboard", () => {
 			meta: 100,
 		});
 	});
+
+	it("desativa fallbacks administrativos no painel restrito do tecnico", async () => {
+		metasDashboardMocks.buscarTodasMetas.mockResolvedValue({
+			Setembro: { mes: "Setembro", totalOS: 15, meta: 100 },
+		});
+
+		const { result } = renderHook(() =>
+			useMetasDashboard({ snapshotOnly: true }),
+		);
+
+		await waitFor(() => {
+			expect(result.current.loading).toBe(false);
+		});
+
+		expect(metasDashboardMocks.buscarTodasMetas).toHaveBeenCalledWith(false, {
+			allowFallback: false,
+		});
+		expect(metasDashboardMocks.buscarMetasBaseConfig).toHaveBeenCalledWith(
+			false,
+			{ allowFallback: false, preferLive: false },
+		);
+	});
 });
