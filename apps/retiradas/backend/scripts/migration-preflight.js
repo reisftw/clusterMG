@@ -23,6 +23,7 @@ const { Client } = require("pg");
 const {
 	getConnectionConfig,
 	getMigrationVersion,
+	getPendingMigrations,
 	listMigrationFiles,
 	ensureMigrationTable,
 	maybeBaselineExistingDatabase,
@@ -66,7 +67,7 @@ async function main() {
 	try {
 		await ensureMigrationTable(client);
 		const applied = await maybeBaselineExistingDatabase(client, files);
-		const pending = files.filter((fileName) => !applied.has(fileName));
+		const pending = getPendingMigrations(files, applied);
 		report.pending = pending;
 
 		if (!pending.length) {

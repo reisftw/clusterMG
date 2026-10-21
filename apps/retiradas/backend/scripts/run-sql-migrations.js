@@ -49,8 +49,14 @@ async function ensureMigrationTable(client) {
 }
 
 async function getAppliedMigrations(client) {
-	const result = await client.query("select file_name from schema_migrations");
-	return new Set(result.rows.map((row) => row.file_name));
+	const result = await client.query("select version from schema_migrations");
+	return new Set(result.rows.map((row) => String(row.version || "")));
+}
+
+function getPendingMigrations(files, appliedVersions) {
+	return files.filter(
+		(fileName) => !appliedVersions.has(getMigrationVersion(fileName)),
+	);
 }
 
 async function maybeBaselineExistingDatabase(client, files) {
@@ -62,13 +68,14 @@ async function maybeBaselineExistingDatabase(client, files) {
 		(fileName) => getMigrationVersion(fileName) <= BASELINE_VERSION,
 	);
 	for (const fileName of baselineFiles) {
+		const version = getMigrationVersion(fileName);
 		await client.query(
 			`insert into schema_migrations (version, file_name)
        values ($1, $2)
        on conflict (version) do nothing`,
-			[getMigrationVersion(fileName), fileName],
+			[version, fileName],
 		);
-		applied.add(fileName);
+		applied.add(version);
 	}
 	console.log(
 		`[migrations] Baseline aplicado para ${baselineFiles.length} migration(s) existentes.`,
@@ -107,7 +114,7 @@ async function main() {
 	try {
 		await ensureMigrationTable(client);
 		const applied = await maybeBaselineExistingDatabase(client, files);
-		const pending = files.filter((fileName) => !applied.has(fileName));
+		const pending = getPendingMigrations(files, applied);
 		for (const fileName of pending) {
 			await applyMigration(client, fileName);
 		}
@@ -125,6 +132,7 @@ module.exports = {
 	tableExists,
 	ensureMigrationTable,
 	getAppliedMigrations,
+	getPendingMigrations,
 	maybeBaselineExistingDatabase,
 };
 
