@@ -149,7 +149,66 @@ async function recordAudit(action, recordId, user, afterData = {}, beforeData = 
 
 async function performOpportunitiesSyncFromMatch() {
 	await db.query(
-		`with eligible_orders as (
+		`with phone_sources as materialized (
+			select o.num_os as os,
+			       o.codigo_cliente,
+			       coalesce(
+			         nullif(o.telefone, ''),
+			         o.telefones[1],
+			         nullif(o.source_payload->>'telefone', ''),
+			         nullif(o.source_payload->>'telefone_primario', ''),
+			         nullif(o.source_payload->>'telefone_principal', ''),
+			         nullif(o.source_payload->>'celular', ''),
+			         nullif(o.source_payload->>'whatsapp', ''),
+			         nullif(o.source_payload->>'fone', ''),
+			         nullif(o.source_payload#>>'{cliente,telefone_primario}', ''),
+			         nullif(o.source_payload#>>'{cliente,telefone}', ''),
+			         nullif(o.source_payload#>>'{cliente,celular}', ''),
+			         nullif(o.source_payload#>>'{servico,telefone_primario}', ''),
+			         nullif(o.source_payload#>>'{servico,telefone}', '')
+			       ) as telefone,
+			       o.updated_at as source_at,
+			       case o.source_collection
+			         when 'ordens_abertas' then 0
+			         when 'match_os_abertas' then 1
+			         else 2
+			       end as source_rank
+			  from ordens_servico o
+			union all
+			select mf.os, mf.codigo_cliente, nullif(mf.telefone, ''), mf.created_at, 3
+			  from mensageria_fila mf
+			union all
+			select mh.os, mh.codigo_cliente, nullif(mh.telefone, ''), mh.created_at, 3
+			  from mensageria_historico mh
+			union all
+			select mc.os, mc.codigo_cliente, nullif(mc.telefone, ''), mc.created_at, 3
+			  from mensageria_callbacks mc
+			union all
+			select mac.os, mac.codigo_cliente, nullif(mac.telefone, ''), mac.created_at, 3
+			  from mensageria_agendamento_conversas mac
+			union all
+			select a.os,
+			       a.codigo_cliente,
+			       coalesce(nullif(a.telefone, ''), a.telefones->>0),
+			       a.created_at,
+			       4
+			  from agendamentos a
+		),
+		phone_by_os as (
+			select distinct on (os) os, telefone
+			  from phone_sources
+			 where coalesce(os, '') <> ''
+			   and coalesce(telefone, '') <> ''
+			 order by os, source_rank, source_at desc nulls last
+		),
+		phone_by_client as (
+			select distinct on (codigo_cliente) codigo_cliente, telefone
+			  from phone_sources
+			 where coalesce(codigo_cliente, '') <> ''
+			   and coalesce(telefone, '') <> ''
+			 order by codigo_cliente, source_rank, source_at desc nulls last
+		),
+		eligible_orders as (
 			select os.*,
 			       coalesce(
 			         nullif(os.telefone, ''),
@@ -165,94 +224,12 @@ async function performOpportunitiesSyncFromMatch() {
 			         nullif(os.source_payload#>>'{cliente,celular}', ''),
 			         nullif(os.source_payload#>>'{servico,telefone_primario}', ''),
 			         nullif(os.source_payload#>>'{servico,telefone}', ''),
-				         map_phone.telefone,
-			         phone_history.telefone
+			         phone_by_os.telefone,
+			         phone_by_client.telefone
 			       ) as resolved_phone
 			  from ordens_servico os
-			  left join lateral (
-			    select coalesce(
-			      nullif(map_os.telefone, ''),
-			      map_os.telefones[1],
-			      nullif(map_os.source_payload->>'telefone', ''),
-			      nullif(map_os.source_payload->>'telefone_primario', ''),
-			      nullif(map_os.source_payload->>'celular', ''),
-			      nullif(map_os.source_payload->>'whatsapp', '')
-			    ) as telefone
-			      from ordens_servico map_os
-			     where (
-			         map_os.num_os = os.num_os
-			         or (
-			           coalesce(os.codigo_cliente, '') <> ''
-			           and map_os.codigo_cliente = os.codigo_cliente
-			         )
-			       )
-			       and coalesce(
-			         nullif(map_os.telefone, ''),
-			         map_os.telefones[1],
-			         nullif(map_os.source_payload->>'telefone', ''),
-			         nullif(map_os.source_payload->>'telefone_primario', ''),
-			         nullif(map_os.source_payload->>'celular', ''),
-			         nullif(map_os.source_payload->>'whatsapp', '')
-			       ) is not null
-			     order by (map_os.num_os = os.num_os) desc,
-			              case map_os.source_collection
-			                when 'ordens_abertas' then 0
-			                when 'match_os_abertas' then 1
-			                else 2
-			              end,
-			              map_os.updated_at desc
-			     limit 1
-			  ) map_phone on true
-			  left join lateral (
-			    select telefone
-			      from (
-			        select mf.telefone, mf.created_at
-			          from mensageria_fila mf
-			         where mf.telefone is not null
-			           and mf.telefone <> ''
-			           and (
-			             mf.os = os.num_os
-			             or (coalesce(os.codigo_cliente, '') <> '' and mf.codigo_cliente = os.codigo_cliente)
-			           )
-			        union all
-			        select mh.telefone, mh.created_at
-			          from mensageria_historico mh
-			         where mh.telefone is not null
-			           and mh.telefone <> ''
-			           and (
-			             mh.os = os.num_os
-			             or (coalesce(os.codigo_cliente, '') <> '' and mh.codigo_cliente = os.codigo_cliente)
-			           )
-			        union all
-			        select mc.telefone, mc.created_at
-			          from mensageria_callbacks mc
-			         where mc.telefone is not null
-			           and mc.telefone <> ''
-			           and (
-			             mc.os = os.num_os
-			             or (coalesce(os.codigo_cliente, '') <> '' and mc.codigo_cliente = os.codigo_cliente)
-			           )
-			        union all
-			        select mac.telefone, mac.created_at
-			          from mensageria_agendamento_conversas mac
-			         where mac.telefone is not null
-			           and mac.telefone <> ''
-			           and (
-			             mac.os = os.num_os
-			             or (coalesce(os.codigo_cliente, '') <> '' and mac.codigo_cliente = os.codigo_cliente)
-			           )
-			        union all
-			        select coalesce(nullif(a.telefone, ''), a.telefones->>0), a.created_at
-			          from agendamentos a
-			         where coalesce(nullif(a.telefone, ''), a.telefones->>0) is not null
-			           and (
-			             a.os = os.num_os
-			             or (coalesce(os.codigo_cliente, '') <> '' and a.codigo_cliente = os.codigo_cliente)
-			           )
-			      ) phones
-			     order by created_at desc nulls last
-			     limit 1
-			  ) phone_history on true
+			  left join phone_by_os on phone_by_os.os = os.num_os
+			  left join phone_by_client on phone_by_client.codigo_cliente = os.codigo_cliente
 			 where os.source_collection = 'match_os_abertas'
 			   and coalesce(os.num_os, '') <> ''
 			   and coalesce(os.cidade, '') <> ''
