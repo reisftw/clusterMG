@@ -1,7 +1,6 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const auditLog = require("../auditLog");
-const hubsoftSyncProfiles = require("../hubsoftSyncProfiles");
 
 const VIEW_PERMISSIONS = ["tentativas.visualizar"];
 const EXECUTE_PERMISSIONS = ["tentativas.executar"];
@@ -15,14 +14,11 @@ const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
 const OPPORTUNITIES_SYNC_TTL_MS = 5 * 60 * 1000;
-const PHONE_ENRICH_FAILURE_TTL_MS = 5 * 60 * 1000;
-const PHONE_ENRICH_WAIT_MS = 12 * 1000;
+const PHONE_ENRICH_WAIT_MS = 5 * 1000;
 
 let opportunitiesSyncPromise = null;
 let opportunitiesLastSyncAt = 0;
 const phoneEnrichmentPromises = new Map();
-const phoneEnrichmentFailures = new Map();
-let hubsoftPhoneLookupQueue = Promise.resolve();
 
 const CONTACT_RESULTS = new Set([
 	"NO_RESPONSE",
@@ -183,8 +179,7 @@ async function performOpportunitiesSyncFromMatch() {
 			      nullif(map_os.source_payload->>'whatsapp', '')
 			    ) as telefone
 			      from ordens_servico map_os
-			     where map_os.source_collection = 'ordens_abertas'
-			       and (
+			     where (
 			         map_os.num_os = os.num_os
 			         or (
 			           coalesce(os.codigo_cliente, '') <> ''
@@ -199,7 +194,13 @@ async function performOpportunitiesSyncFromMatch() {
 			         nullif(map_os.source_payload->>'celular', ''),
 			         nullif(map_os.source_payload->>'whatsapp', '')
 			       ) is not null
-			     order by (map_os.num_os = os.num_os) desc, map_os.updated_at desc
+			     order by (map_os.num_os = os.num_os) desc,
+			              case map_os.source_collection
+			                when 'ordens_abertas' then 0
+			                when 'match_os_abertas' then 1
+			                else 2
+			              end,
+			              map_os.updated_at desc
 			     limit 1
 			  ) map_phone on true
 			  left join lateral (
@@ -209,19 +210,45 @@ async function performOpportunitiesSyncFromMatch() {
 			          from mensageria_fila mf
 			         where mf.telefone is not null
 			           and mf.telefone <> ''
-			           and (mf.os = os.num_os or mf.codigo_cliente = os.codigo_cliente)
+			           and (
+			             mf.os = os.num_os
+			             or (coalesce(os.codigo_cliente, '') <> '' and mf.codigo_cliente = os.codigo_cliente)
+			           )
 			        union all
 			        select mh.telefone, mh.created_at
 			          from mensageria_historico mh
 			         where mh.telefone is not null
 			           and mh.telefone <> ''
-			           and (mh.os = os.num_os or mh.codigo_cliente = os.codigo_cliente)
+			           and (
+			             mh.os = os.num_os
+			             or (coalesce(os.codigo_cliente, '') <> '' and mh.codigo_cliente = os.codigo_cliente)
+			           )
 			        union all
 			        select mc.telefone, mc.created_at
 			          from mensageria_callbacks mc
 			         where mc.telefone is not null
 			           and mc.telefone <> ''
-			           and (mc.os = os.num_os or mc.codigo_cliente = os.codigo_cliente)
+			           and (
+			             mc.os = os.num_os
+			             or (coalesce(os.codigo_cliente, '') <> '' and mc.codigo_cliente = os.codigo_cliente)
+			           )
+			        union all
+			        select mac.telefone, mac.created_at
+			          from mensageria_agendamento_conversas mac
+			         where mac.telefone is not null
+			           and mac.telefone <> ''
+			           and (
+			             mac.os = os.num_os
+			             or (coalesce(os.codigo_cliente, '') <> '' and mac.codigo_cliente = os.codigo_cliente)
+			           )
+			        union all
+			        select coalesce(nullif(a.telefone, ''), a.telefones->>0), a.created_at
+			          from agendamentos a
+			         where coalesce(nullif(a.telefone, ''), a.telefones->>0) is not null
+			           and (
+			             a.os = os.num_os
+			             or (coalesce(os.codigo_cliente, '') <> '' and a.codigo_cliente = os.codigo_cliente)
+			           )
 			      ) phones
 			     order by created_at desc nulls last
 			     limit 1
@@ -539,12 +566,6 @@ async function getTemplateForAttempt(attemptNumber, client = db) {
 	return result.rows[0] || null;
 }
 
-function queueHubsoftPhoneLookup(task) {
-	const queued = hubsoftPhoneLookupQueue.then(task, task);
-	hubsoftPhoneLookupQueue = queued.catch(() => {});
-	return queued;
-}
-
 async function waitForPhoneEnrichment(opportunityId, user) {
 	let timer;
 	try {
@@ -568,48 +589,66 @@ async function enrichOpportunityPhoneOnce(opportunityId, user = {}) {
 	if (existing.valid) return existing;
 
 	const localResult = await db.query(
-		`select telefone, telefones, source_payload
-		   from ordens_servico
-		  where source_collection = 'ordens_abertas'
-		    and (num_os = $1 or (coalesce($2, '') <> '' and codigo_cliente = $2))
-		  order by (num_os = $1) desc, updated_at desc
-		  limit 10`,
+		`select telefone
+		   from (
+		     select coalesce(
+		              nullif(o.telefone, ''),
+		              o.telefones[1],
+		              nullif(o.source_payload->>'telefone', ''),
+		              nullif(o.source_payload->>'telefone_primario', ''),
+		              nullif(o.source_payload->>'telefone_principal', ''),
+		              nullif(o.source_payload->>'celular', ''),
+		              nullif(o.source_payload->>'whatsapp', ''),
+		              nullif(o.source_payload#>>'{cliente,telefone_primario}', ''),
+		              nullif(o.source_payload#>>'{cliente,telefone}', '')
+		            ) as telefone,
+		            case when o.num_os = $1 then 0 else 1 end as match_rank,
+		            o.updated_at as source_at
+		       from ordens_servico o
+		      where o.num_os = $1
+		         or (coalesce($2, '') <> '' and o.codigo_cliente = $2)
+		     union all
+		     select mf.telefone,
+		            case when mf.os = $1 then 0 else 1 end,
+		            mf.created_at
+		       from mensageria_fila mf
+		      where mf.os = $1
+		         or (coalesce($2, '') <> '' and mf.codigo_cliente = $2)
+		     union all
+		     select mh.telefone,
+		            case when mh.os = $1 then 0 else 1 end,
+		            mh.created_at
+		       from mensageria_historico mh
+		      where mh.os = $1
+		         or (coalesce($2, '') <> '' and mh.codigo_cliente = $2)
+		     union all
+		     select mc.telefone,
+		            case when mc.os = $1 then 0 else 1 end,
+		            mc.created_at
+		       from mensageria_callbacks mc
+		      where mc.os = $1
+		         or (coalesce($2, '') <> '' and mc.codigo_cliente = $2)
+		     union all
+		     select mac.telefone,
+		            case when mac.os = $1 then 0 else 1 end,
+		            mac.created_at
+		       from mensageria_agendamento_conversas mac
+		      where mac.os = $1
+		         or (coalesce($2, '') <> '' and mac.codigo_cliente = $2)
+		     union all
+		     select coalesce(nullif(a.telefone, ''), a.telefones->>0),
+		            case when a.os = $1 then 0 else 1 end,
+		            a.created_at
+		       from agendamentos a
+		      where a.os = $1
+		         or (coalesce($2, '') <> '' and a.codigo_cliente = $2)
+		   ) saved_phones
+		  where nullif(telefone, '') is not null
+		  order by match_rank, source_at desc nulls last
+		  limit 20`,
 		[row.os, row.codigo_cliente],
 	);
-	let phone = firstValidPhone(
-		localResult.rows.flatMap((item) => [
-			item.telefone,
-			...(item.telefones || []),
-			item.source_payload?.telefone,
-			item.source_payload?.telefone_primario,
-			item.source_payload?.celular,
-			item.source_payload?.whatsapp,
-		]),
-	);
-
-	if (!phone.valid && row.codigo_cliente) {
-		try {
-			const order = await queueHubsoftPhoneLookup(() =>
-				hubsoftSyncProfiles.findOpenOrderByClientCode(row.codigo_cliente),
-			);
-			phoneEnrichmentFailures.delete(opportunityId);
-			phone = firstValidPhone([
-				order?.telefone_primario,
-				order?.telefone_secundario,
-				order?.telefone_terciario,
-				...(order?.telefones || []),
-			]);
-		} catch (error) {
-			phoneEnrichmentFailures.set(
-				opportunityId,
-				Date.now() + PHONE_ENRICH_FAILURE_TTL_MS,
-			);
-			console.warn(
-				`[tentativas] Falha ao enriquecer telefone da OS ${row.os}:`,
-				error?.message || error,
-			);
-		}
-	}
+	const phone = firstValidPhone(localResult.rows.map((item) => item.telefone));
 
 	if (phone.valid) {
 		await db.query(
@@ -623,10 +662,6 @@ async function enrichOpportunityPhoneOnce(opportunityId, user = {}) {
 }
 
 async function enrichOpportunityPhone(opportunityId, user = {}) {
-	const failureUntil = phoneEnrichmentFailures.get(opportunityId) || 0;
-	if (failureUntil > Date.now()) return normalizePhone("");
-	if (failureUntil) phoneEnrichmentFailures.delete(opportunityId);
-
 	const running = phoneEnrichmentPromises.get(opportunityId);
 	if (running) return running;
 
