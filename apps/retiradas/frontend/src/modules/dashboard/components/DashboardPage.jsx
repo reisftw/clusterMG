@@ -680,6 +680,38 @@ const OperationalDashboardContent = ({ currentUser }) => {
 	);
 };
 
+function TechnicianDashboardContent({ currentUser }) {
+	const metasTechnicianName =
+		currentUser?.metasTecnicoNome ||
+		currentUser?.metas_tecnico_nome ||
+		"__tecnico_sem_vinculo__";
+
+	return (
+		<div className="retiradas-native-page mx-auto w-full min-w-0 max-w-[1500px] space-y-4">
+			<div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+				<div className="min-w-0">
+					<h1 className="text-3xl font-black leading-tight text-slate-950">
+						Meu painel
+					</h1>
+					<p className="mt-1 text-sm font-medium text-slate-500">
+						Acompanhe seus agendamentos e sua entrega do mês.
+					</p>
+				</div>
+			</div>
+
+			<div className="grid min-w-0 items-stretch gap-4 sm:gap-5 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+				<AgendamentosHojeCard
+					defaultOpen
+					featured
+					maxVisibleItems={4}
+					technicianDashboardOnly
+				/>
+				<FeaturedMetasPanel technicianName={metasTechnicianName} />
+			</div>
+		</div>
+	);
+}
+
 // Extraidos de OperationalDashboardContent (achado javascript:S3776,
 // docs/SONARQUBE-MAP.md) — os dois layouts sao arvores JSX totalmente
 // independentes (so um dos dois renderiza por vez), sem logica
@@ -859,11 +891,15 @@ function ClassicDashboardView({
 }
 
 const DashboardPage = () => {
-	const { currentUser } = useAuthContext();
+	const { currentUser, loading: authLoading } = useAuthContext();
 	const currentRole = normalizeRole(currentUser?.role);
+	if (authLoading || !currentUser) return <Spinner fullScreen />;
 
 	if (ADMINISTRATIVE_DASHBOARD_ROLES.includes(currentRole)) {
 		return <AdministrativeDashboard />;
+	}
+	if (currentRole === ROLES.TECNICO) {
+		return <TechnicianDashboardContent currentUser={currentUser} />;
 	}
 
 	return <OperationalDashboardContent currentUser={currentUser} />;

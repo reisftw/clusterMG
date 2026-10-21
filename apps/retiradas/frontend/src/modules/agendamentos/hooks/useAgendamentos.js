@@ -3,6 +3,7 @@ import {
 	getOrLoadCachedValue,
 	setCachedValue,
 } from "../../../services/dataCache";
+import { useAuthContext } from "../../../context/AuthContext";
 import {
 	atualizarAgendamento,
 	buscarAgendamentos,
@@ -35,16 +36,20 @@ const getTodayKey = () => {
 };
 
 export const useAgendamentos = ({ technicianDashboardOnly = false } = {}) => {
+	const { currentUser } = useAuthContext();
 	const [agendamentos, setAgendamentos] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
+	const cacheKey = technicianDashboardOnly
+		? `${CACHE_KEY}:tecnico:${currentUser?.uid || currentUser?.id || "anonimo"}`
+		: CACHE_KEY;
 
 	const carregar = useCallback(async (force = false) => {
 		setLoading(true);
 		setError("");
 		try {
 			const { data } = await getOrLoadCachedValue(
-				CACHE_KEY,
+				cacheKey,
 				async () => {
 					const items = technicianDashboardOnly
 						? await buscarAgendamentosTecnicoDashboard()
@@ -59,7 +64,7 @@ export const useAgendamentos = ({ technicianDashboardOnly = false } = {}) => {
 		} finally {
 			setLoading(false);
 		}
-	}, [technicianDashboardOnly]);
+	}, [cacheKey, technicianDashboardOnly]);
 
 	useEffect(() => {
 		carregar(true);
@@ -69,11 +74,11 @@ export const useAgendamentos = ({ technicianDashboardOnly = false } = {}) => {
 		const ref = await criarAgendamento(dados);
 		setAgendamentos((prev) => {
 			const next = sortByData([...prev, { id: ref.id, ...dados }]);
-			setCachedValue(CACHE_KEY, next);
+			setCachedValue(cacheKey, next);
 			return next;
 		});
 		return ref;
-	}, []);
+	}, [cacheKey]);
 
 	const atualizar = useCallback(async (id, dados) => {
 		await atualizarAgendamento(id, dados);
@@ -81,19 +86,19 @@ export const useAgendamentos = ({ technicianDashboardOnly = false } = {}) => {
 			const next = sortByData(
 				prev.map((item) => (item.id === id ? { ...item, ...dados } : item)),
 			);
-			setCachedValue(CACHE_KEY, next);
+			setCachedValue(cacheKey, next);
 			return next;
 		});
-	}, []);
+	}, [cacheKey]);
 
 	const excluir = useCallback(async (id) => {
 		await excluirAgendamento(id);
 		setAgendamentos((prev) => {
 			const next = prev.filter((item) => item.id !== id);
-			setCachedValue(CACHE_KEY, next);
+			setCachedValue(cacheKey, next);
 			return next;
 		});
-	}, []);
+	}, [cacheKey]);
 
 	const hoje = useMemo(() => getTodayKey(), []);
 	const agendamentosHoje = useMemo(
@@ -106,10 +111,10 @@ export const useAgendamentos = ({ technicianDashboardOnly = false } = {}) => {
 			const next = sortByData(
 				prev.map((item) => (item.id === id ? { ...item, ...dados } : item)),
 			);
-			setCachedValue(CACHE_KEY, next);
+			setCachedValue(cacheKey, next);
 			return next;
 		});
-	}, []);
+	}, [cacheKey]);
 
 	return {
 		agendamentos,

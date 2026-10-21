@@ -1623,19 +1623,25 @@ function getNavClass({ isActive, tone, isModernLayout }) {
 // Extraido de Sidebar (achado javascript:S3776, docs/SONARQUBE-MAP.md) —
 // so os contadores de badge (documentos pendentes / atendimentos abertos),
 // mesmo efeito/assinaturas realtime de antes.
-function useSidebarBadgeCounters() {
+function useSidebarBadgeCounters(currentUser) {
 	const [documentosPendentes, setDocumentosPendentes] = useState(0);
 	const [atendimentoAbertos, setAtendimentoAbertos] = useState(0);
+	const canViewAtendimento = hasAnyPermission(currentUser, [
+		"atendimento.casos.view",
+		"atendimento.casos.manage",
+	]);
 
 	useEffect(() => {
 		let active = true;
 		const refreshAtendimentoStats = () =>
-			buscarEstatisticasAtendimento()
+			canViewAtendimento
+				? buscarEstatisticasAtendimento()
 				.then((atendimentoStats) => {
 					if (active)
 						setAtendimentoAbertos(Number(atendimentoStats?.openCases || 0));
 				})
-				.catch(() => {});
+				.catch(() => {})
+				: Promise.resolve();
 		obterContadoresNotificacoes()
 			.then((counters) => {
 				if (active)
@@ -1646,11 +1652,11 @@ function useSidebarBadgeCounters() {
 		const handleCounters = (event) => {
 			setDocumentosPendentes(Number(event.detail?.documentosPendentes || 0));
 		};
-		const unsubscribeAtendimento = subscribeRealtimeTopics(
-			"atendimento",
-			refreshAtendimentoStats,
-			{ debounceMs: 300 },
-		);
+		const unsubscribeAtendimento = canViewAtendimento
+			? subscribeRealtimeTopics("atendimento", refreshAtendimentoStats, {
+					debounceMs: 300,
+				})
+			: () => {};
 		window.addEventListener("retiradas:notification-counters", handleCounters);
 		return () => {
 			active = false;
@@ -1660,7 +1666,7 @@ function useSidebarBadgeCounters() {
 				handleCounters,
 			);
 		};
-	}, []);
+	}, [canViewAtendimento]);
 
 	return { documentosPendentes, atendimentoAbertos };
 }
@@ -1850,7 +1856,8 @@ const Sidebar = ({
 	const { isModernLayout } = useLayoutMode();
 	const location = useLocation();
 	const [clickedGroups, setClickedGroups] = useState({});
-	const { documentosPendentes, atendimentoAbertos } = useSidebarBadgeCounters();
+	const { documentosPendentes, atendimentoAbertos } =
+		useSidebarBadgeCounters(currentUser);
 	const currentRole = currentUser?.role;
 	const isEstoqueOnly = ["estoque", "supervisor_estoque"].includes(
 		String(currentRole || "").toLowerCase(),
