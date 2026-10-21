@@ -15,7 +15,7 @@ import {
 	Users,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ModalShell from "../../../components/ui/ModalShell";
 import PageHeader from "../../../components/ui/PageHeader";
 import Spinner from "../../../components/ui/Spinner";
@@ -457,6 +457,8 @@ function MyRoute() {
 	const [routeData, setRouteData] = useState(null);
 	const [detail, setDetail] = useState(null);
 	const [pendingContact, setPendingContact] = useState(null);
+	const [contactingId, setContactingId] = useState("");
+	const contactInFlightRef = useRef(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 
@@ -499,6 +501,9 @@ function MyRoute() {
 	}, [city, loadRoute]);
 
 	const contact = async (item) => {
+		if (contactInFlightRef.current) return;
+		contactInFlightRef.current = true;
+		setContactingId(item.id);
 		setError("");
 		try {
 			const started = await iniciarContatoTentativa(item.id);
@@ -510,6 +515,9 @@ function MyRoute() {
 			window.open(started.whatsappUrl, "_blank", "noopener,noreferrer");
 		} catch (err) {
 			setError(err.message || "Falha ao abrir WhatsApp.");
+		} finally {
+			contactInFlightRef.current = false;
+			setContactingId("");
 		}
 	};
 
@@ -575,9 +583,11 @@ function MyRoute() {
 									<button
 										type="button"
 										onClick={() => contact(item)}
-										className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-black text-white"
+										disabled={Boolean(contactingId)}
+										className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-black text-white disabled:cursor-wait disabled:opacity-60"
 									>
-										<Phone className="h-4 w-4" /> Contatar
+										<Phone className="h-4 w-4" />
+										{contactingId === item.id ? "Buscando contato..." : "Contatar"}
 									</button>
 								</div>
 							</div>

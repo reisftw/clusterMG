@@ -15,9 +15,13 @@ const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
 const OPPORTUNITIES_SYNC_TTL_MS = 5 * 60 * 1000;
+const PHONE_ENRICH_FAILURE_TTL_MS = 5 * 60 * 1000;
 
 let opportunitiesSyncPromise = null;
 let opportunitiesLastSyncAt = 0;
+const phoneEnrichmentPromises = new Map();
+const phoneEnrichmentFailures = new Map();
+let hubsoftPhoneLookupQueue = Promise.resolve();
 
 const CONTACT_RESULTS = new Set([
 	"NO_RESPONSE",
@@ -329,8 +333,8 @@ function scheduleOpportunitiesSyncFromMatch() {
 	syncOpportunitiesFromMatch().catch(() => {});
 }
 
-async function getSettings() {
-	const result = await db.query("select * from tentativas_settings where id = 'global'");
+async function getSettings(client = db) {
+	const result = await client.query("select * from tentativas_settings where id = 'global'");
 	return result.rows[0] || {};
 }
 
@@ -521,8 +525,8 @@ async function findAssignmentForUser(opportunityId, user = {}, client = db) {
 	return result.rows[0] || null;
 }
 
-async function getTemplateForAttempt(attemptNumber) {
-	const result = await db.query(
+async function getTemplateForAttempt(attemptNumber, client = db) {
+	const result = await client.query(
 		`select *
 		   from tentativas_templates
 		  where active = true
@@ -534,7 +538,13 @@ async function getTemplateForAttempt(attemptNumber) {
 	return result.rows[0] || null;
 }
 
-async function enrichOpportunityPhone(opportunityId, user = {}) {
+function queueHubsoftPhoneLookup(task) {
+	const queued = hubsoftPhoneLookupQueue.then(task, task);
+	hubsoftPhoneLookupQueue = queued.catch(() => {});
+	return queued;
+}
+
+async function enrichOpportunityPhoneOnce(opportunityId, user = {}) {
 	const row = await findAssignmentForUser(opportunityId, user);
 	if (!row) return normalizePhone("");
 	const existing = normalizePhone(row.telefone);
@@ -562,9 +572,10 @@ async function enrichOpportunityPhone(opportunityId, user = {}) {
 
 	if (!phone.valid && row.codigo_cliente) {
 		try {
-			const order = await hubsoftSyncProfiles.findOpenOrderByClientCode(
-				row.codigo_cliente,
+			const order = await queueHubsoftPhoneLookup(() =>
+				hubsoftSyncProfiles.findOpenOrderByClientCode(row.codigo_cliente),
 			);
+			phoneEnrichmentFailures.delete(opportunityId);
 			phone = firstValidPhone([
 				order?.telefone_primario,
 				order?.telefone_secundario,
@@ -572,6 +583,10 @@ async function enrichOpportunityPhone(opportunityId, user = {}) {
 				...(order?.telefones || []),
 			]);
 		} catch (error) {
+			phoneEnrichmentFailures.set(
+				opportunityId,
+				Date.now() + PHONE_ENRICH_FAILURE_TTL_MS,
+			);
 			console.warn(
 				`[tentativas] Falha ao enriquecer telefone da OS ${row.os}:`,
 				error?.message || error,
@@ -590,6 +605,21 @@ async function enrichOpportunityPhone(opportunityId, user = {}) {
 	return phone;
 }
 
+async function enrichOpportunityPhone(opportunityId, user = {}) {
+	const failureUntil = phoneEnrichmentFailures.get(opportunityId) || 0;
+	if (failureUntil > Date.now()) return normalizePhone("");
+	if (failureUntil) phoneEnrichmentFailures.delete(opportunityId);
+
+	const running = phoneEnrichmentPromises.get(opportunityId);
+	if (running) return running;
+
+	const promise = enrichOpportunityPhoneOnce(opportunityId, user).finally(() => {
+		phoneEnrichmentPromises.delete(opportunityId);
+	});
+	phoneEnrichmentPromises.set(opportunityId, promise);
+	return promise;
+}
+
 async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 	const enrichedPhone = await enrichOpportunityPhone(opportunityId, user);
 	const client = await db.connect();
@@ -606,7 +636,7 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			error.statusCode = 409;
 			throw error;
 		}
-		const settings = await getSettings();
+		const settings = await getSettings(client);
 		if (row.next_attempt_at && new Date(row.next_attempt_at) > new Date() && !payload.override) {
 			const error = new Error("Intervalo minimo entre tentativas ainda nao foi cumprido.");
 			error.statusCode = 429;
@@ -629,7 +659,7 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			error.statusCode = 429;
 			throw error;
 		}
-		const template = await getTemplateForAttempt(attemptNumber);
+		const template = await getTemplateForAttempt(attemptNumber, client);
 		const message = renderTemplate(template?.body || "", {
 			cliente: row.cliente,
 			primeiro_nome: firstName(row.cliente),
