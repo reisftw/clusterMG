@@ -434,24 +434,42 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 	const client = await db.connect();
 	try {
 		await client.query("begin");
-		await client.query(
-			`insert into tentativas_assignments (
+		const result = await client.query(
+			`with current_load as (
+				select count(*)::int as total
+				  from tentativas_assignments a
+				  join tentativas_opportunities o on o.id = a.opportunity_id
+				 where a.released_at is null
+				   and o.active = true
+				   and coalesce(o.telefone_digits, '') ~ $6
+				   and o.cidade_normalizada = $1
+				   and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
+				   and o.status not in (
+				     'SCHEDULED', 'COMPLETED', 'CANCELLED', 'REFUSED',
+				     'INVALID_PHONE', 'ALREADY_RETURNED', 'EQUIPMENT_UNAVAILABLE'
+				   )
+			), selected as (
+				select o.id, o.cidade
+				  from tentativas_opportunities o
+				 where o.active = true
+				   and coalesce(o.telefone_digits, '') ~ $6
+				   and o.cidade_normalizada = $1
+				   and not exists (
+				     select 1 from tentativas_assignments a
+				      where a.opportunity_id = o.id and a.released_at is null
+				   )
+				 order by o.priority = 'ALTA' desc, o.os_opened_at desc nulls last, o.created_at desc
+				 limit greatest($5 - (select total from current_load), 0)
+			)
+			insert into tentativas_assignments (
 				id, opportunity_id, technician_user_id, technician_email,
 				technician_name, cidade, assigned_by
 			)
 			select 'ta_' || encode(gen_random_bytes(12), 'hex'),
-			       o.id, $2, $3, $4, o.cidade, $2
-			  from tentativas_opportunities o
-			 where o.active = true
-			   and coalesce(o.telefone_digits, '') ~ $6
-			   and o.cidade_normalizada = $1
-			   and not exists (
-			     select 1 from tentativas_assignments a
-			      where a.opportunity_id = o.id and a.released_at is null
-			   )
-			 order by o.priority = 'ALTA' desc, o.os_opened_at desc nulls last, o.created_at desc
-			 limit $5
-			on conflict do nothing`,
+			       selected.id, $2, $3, $4, selected.cidade, $2
+			  from selected
+			on conflict do nothing
+			returning id`,
 			[
 				normalizeText(cidade),
 				userId(user),
@@ -462,6 +480,7 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 			],
 		);
 		await client.query("commit");
+		return result.rowCount;
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
 		throw error;
@@ -504,7 +523,7 @@ async function getMyRoute(query = {}, user = {}) {
 		error.statusCode = 403;
 		throw error;
 	}
-	await autoClaimCity(cidade, user, normalizeLimit(query.claimLimit, 60, 150));
+	await autoClaimCity(cidade, user, normalizeLimit(query.claimLimit, 50, 150));
 	const result = await db.query(
 		`select o.*, a.id as assignment_id, a.technician_name
 		   from tentativas_opportunities o
@@ -1111,8 +1130,18 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 			userId(user),
 		],
 	);
+	const association = result.rows[0] || null;
+	const assigned = await autoClaimCity(
+		city,
+		{
+			uid: text(payload.userId),
+			email: text(payload.userEmail).toLowerCase(),
+			nome: text(payload.userName),
+		},
+		50,
+	);
 	await recordAudit("city.assign", city, user, payload);
-	return result.rows[0] || { ok: true };
+	return { ...(association || { ok: true }), assigned };
 }
 
 async function removeTechnicianCity(idValue, user = {}) {

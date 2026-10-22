@@ -12,12 +12,12 @@ const hubsoftSyncProfilesPath = require.resolve(
 	"./api/src/hubsoftSyncProfiles.js",
 );
 
-function loadService(query) {
+function loadService(query, connect) {
 	require.cache[dbPath] = {
 		id: dbPath,
 		filename: dbPath,
 		loaded: true,
-		exports: { query },
+		exports: { query, ...(connect ? { connect } : {}) },
 	};
 	require.cache[auditLogPath] = {
 		id: auditLogPath,
@@ -44,6 +44,37 @@ afterEach(() => {
 });
 
 describe("tentativas - distribuicao por tecnico", () => {
+	it("entrega o primeiro lote ao associar uma cidade ao tecnico", async () => {
+		const query = vi.fn(async () => ({
+			rows: [{ id: "ttc-1", cidade: "Uberlândia", active: true }],
+		}));
+		const clientQuery = vi.fn(async (sql) => {
+			if (String(sql).includes("returning id")) {
+				return { rowCount: 50, rows: Array.from({ length: 50 }, (_, index) => ({ id: `ta-${index}` })) };
+			}
+			return { rowCount: 0, rows: [] };
+		});
+		const connect = vi.fn(async () => ({
+			query: clientQuery,
+			release: vi.fn(),
+		}));
+		const service = loadService(query, connect);
+
+		const result = await service.saveTechnicianCity(
+			{
+				userId: "rosirene-1",
+				userEmail: "rosirene@example.com",
+				userName: "Rosirene",
+				cidade: "Uberlândia",
+			},
+			{ uid: "admin-1" },
+		);
+
+		expect(result.assigned).toBe(50);
+		expect(String(clientQuery.mock.calls[1][0])).toContain("current_load");
+		expect(String(clientQuery.mock.calls[1][0])).toContain("limit greatest");
+	});
+
 	it("inclui tecnicos vinculados a cidade mesmo antes da primeira atribuicao", async () => {
 		const query = vi.fn(async () => ({
 			rows: [
