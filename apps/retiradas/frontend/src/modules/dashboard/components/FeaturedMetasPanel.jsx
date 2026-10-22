@@ -125,11 +125,15 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 			diasUteis,
 			ritmoAtual: projecao?.ritmoAtual ?? 0,
 			saldoMesAtual,
-			metaSazonal: metaMesFonte.metaSazonal ?? 80,
-			metaModeLabel: metaMesFonte.metaModeLabel || "Meta sazonal",
+			metaSazonal: technicianName
+				? null
+				: (metaMesFonte.metaSazonal ?? 80),
+			metaModeLabel: technicianName
+				? "Meta fixa mensal"
+				: (metaMesFonte.metaModeLabel || "Meta sazonal"),
 			mes: metaMesFonte.mes,
 		};
-	}, [metaMesFonte, feriadosSet]);
+	}, [metaMesFonte, feriadosSet, technicianName]);
 
 	const renderFonteSelector = () => {
 		if (!metaMes) return null;
@@ -262,7 +266,10 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 							</p>
 						</div>
 						<span className="w-fit rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
-							{metaStats.metaModeLabel} {metaStats.metaSazonal}%
+							{metaStats.metaModeLabel}
+							{metaStats.metaSazonal == null
+								? ` ${metaStats.meta.toLocaleString("pt-BR")} O.S`
+								: ` ${metaStats.metaSazonal}%`}
 						</span>
 					</div>
 

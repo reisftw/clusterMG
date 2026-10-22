@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { scopeMetaRecordToTechnician } from "../utils/technicianMetaScope";
 
 describe("scopeMetaRecordToTechnician", () => {
-	it("mantém somente a entrega e a meta do técnico vinculado", () => {
+	it("mantém somente a entrega do técnico e aplica a meta fixa mensal", () => {
 		const scoped = scopeMetaRecordToTechnician(
 			{
 				mes: "Outubro",
@@ -17,8 +17,10 @@ describe("scopeMetaRecordToTechnician", () => {
 		);
 
 		expect(scoped.totalOS).toBe(18);
-		expect(scoped.meta).toBe(24);
-		expect(scoped.percentAchieved).toBe(75);
+		expect(scoped.meta).toBe(110);
+		expect(scoped.percentAchieved).toBe(16.4);
+		expect(scoped.metaModeLabel).toBe("Meta fixa");
+		expect(scoped.metaSazonal).toBeNull();
 		expect(scoped.technicians).toHaveLength(1);
 		expect(scoped.saldoDiario[1]).toMatchObject({ dia: 2, totalDia: 3 });
 	});
@@ -29,6 +31,6 @@ describe("scopeMetaRecordToTechnician", () => {
 			"Nome ausente",
 		);
 		expect(scoped.totalOS).toBe(0);
-		expect(scoped.meta).toBe(0);
+		expect(scoped.meta).toBe(110);
 	});
 });

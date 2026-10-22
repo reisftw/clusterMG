@@ -13,6 +13,7 @@ const EXPORT_PERMISSIONS = ["tentativas.relatorio.exportar"];
 const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
+const VALID_PHONE_DIGITS_REGEX = "^55[0-9]{10,11}$";
 const OPPORTUNITIES_SYNC_TTL_MS = 5 * 60 * 1000;
 const PHONE_ENRICH_WAIT_MS = 5 * 1000;
 
@@ -148,85 +149,97 @@ async function recordAudit(action, recordId, user, afterData = {}, beforeData = 
 }
 
 async function performOpportunitiesSyncFromMatch() {
-	await db.query(
-		`with phone_sources as materialized (
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		await client.query(
+			`update tentativas_opportunities
+			    set active = false,
+			        removed_from_match_at = coalesce(removed_from_match_at, now()),
+			        updated_at = now()
+			  where active = true`,
+		);
+		await client.query(
+		`with phone_sources_raw as materialized (
 			select o.num_os as os,
 			       o.codigo_cliente,
-			       coalesce(
-			         nullif(o.telefone, ''),
-			         o.telefones[1],
-			         nullif(o.source_payload->>'telefone', ''),
-			         nullif(o.source_payload->>'telefone_primario', ''),
-			         nullif(o.source_payload->>'telefone_principal', ''),
-			         nullif(o.source_payload->>'celular', ''),
-			         nullif(o.source_payload->>'whatsapp', ''),
-			         nullif(o.source_payload->>'fone', ''),
-			         nullif(o.source_payload#>>'{cliente,telefone_primario}', ''),
-			         nullif(o.source_payload#>>'{cliente,telefone}', ''),
-			         nullif(o.source_payload#>>'{cliente,celular}', ''),
-			         nullif(o.source_payload#>>'{servico,telefone_primario}', ''),
-			         nullif(o.source_payload#>>'{servico,telefone}', '')
-			       ) as telefone,
+			       phone.value as telefone,
 			       o.updated_at as source_at,
 			       case o.source_collection
 			         when 'ordens_abertas' then 0
 			         when 'match_os_abertas' then 1
 			         else 2
-			       end as source_rank
+			       end as source_rank,
+			       phone.ordinality as phone_rank
 			  from ordens_servico o
+			 cross join lateral unnest(array[
+			   o.telefone,
+			   o.telefones[1],
+			   o.source_payload->>'telefone',
+			   o.source_payload->>'telefone_primario',
+			   o.source_payload->>'telefone_principal',
+			   o.source_payload->>'celular',
+			   o.source_payload->>'whatsapp',
+			   o.source_payload->>'fone',
+			   o.source_payload#>>'{cliente,telefone_primario}',
+			   o.source_payload#>>'{cliente,telefone}',
+			   o.source_payload#>>'{cliente,celular}',
+			   o.source_payload#>>'{servico,telefone_primario}',
+			   o.source_payload#>>'{servico,telefone}'
+			 ]) with ordinality as phone(value, ordinality)
 			union all
-			select mf.os, mf.codigo_cliente, nullif(mf.telefone, ''), mf.created_at, 3
+			select mf.os, mf.codigo_cliente, mf.telefone, mf.created_at, 3, 1
 			  from mensageria_fila mf
 			union all
-			select mh.os, mh.codigo_cliente, nullif(mh.telefone, ''), mh.created_at, 3
+			select mh.os, mh.codigo_cliente, mh.telefone, mh.created_at, 3, 1
 			  from mensageria_historico mh
 			union all
-			select mc.os, mc.codigo_cliente, nullif(mc.telefone, ''), mc.created_at, 3
+			select mc.os, mc.codigo_cliente, mc.telefone, mc.created_at, 3, 1
 			  from mensageria_callbacks mc
 			union all
-			select mac.os, mac.codigo_cliente, nullif(mac.telefone, ''), mac.created_at, 3
+			select mac.os, mac.codigo_cliente, mac.telefone, mac.created_at, 3, 1
 			  from mensageria_agendamento_conversas mac
 			union all
-			select a.os,
-			       a.codigo_cliente,
-			       coalesce(nullif(a.telefone, ''), a.telefones->>0),
-			       a.created_at,
-			       4
+			select a.os, a.codigo_cliente, phone.value, a.created_at, 4, phone.ordinality
 			  from agendamentos a
+			 cross join lateral unnest(array[a.telefone, a.telefones->>0])
+			   with ordinality as phone(value, ordinality)
+		),
+		phone_sources as materialized (
+			select os,
+			       codigo_cliente,
+			       case
+			         when raw_digits ~ '^0055[0-9]{10,11}$' then substring(raw_digits from 3)
+			         when raw_digits ~ $2 then raw_digits
+			         when raw_digits ~ '^[0-9]{10,11}$' then '55' || raw_digits
+			         else null
+			       end as telefone,
+			       source_at,
+			       source_rank,
+			       phone_rank
+			  from (
+			    select phone_sources_raw.*,
+			           regexp_replace(coalesce(telefone, ''), '\\D', '', 'g') as raw_digits
+			      from phone_sources_raw
+			  ) normalized_sources
 		),
 		phone_by_os as (
 			select distinct on (os) os, telefone
 			  from phone_sources
 			 where coalesce(os, '') <> ''
-			   and coalesce(telefone, '') <> ''
-			 order by os, source_rank, source_at desc nulls last
+			   and telefone is not null
+			 order by os, source_rank, phone_rank, source_at desc nulls last
 		),
 		phone_by_client as (
 			select distinct on (codigo_cliente) codigo_cliente, telefone
 			  from phone_sources
 			 where coalesce(codigo_cliente, '') <> ''
-			   and coalesce(telefone, '') <> ''
-			 order by codigo_cliente, source_rank, source_at desc nulls last
+			   and telefone is not null
+			 order by codigo_cliente, source_rank, phone_rank, source_at desc nulls last
 		),
 		eligible_orders as (
 			select os.*,
-			       coalesce(
-			         nullif(os.telefone, ''),
-			         os.telefones[1],
-			         nullif(os.source_payload->>'telefone', ''),
-			         nullif(os.source_payload->>'telefone_primario', ''),
-			         nullif(os.source_payload->>'telefone_principal', ''),
-			         nullif(os.source_payload->>'celular', ''),
-			         nullif(os.source_payload->>'whatsapp', ''),
-			         nullif(os.source_payload->>'fone', ''),
-			         nullif(os.source_payload#>>'{cliente,telefone_primario}', ''),
-			         nullif(os.source_payload#>>'{cliente,telefone}', ''),
-			         nullif(os.source_payload#>>'{cliente,celular}', ''),
-			         nullif(os.source_payload#>>'{servico,telefone_primario}', ''),
-			         nullif(os.source_payload#>>'{servico,telefone}', ''),
-			         phone_by_os.telefone,
-			         phone_by_client.telefone
-			       ) as resolved_phone
+			       coalesce(phone_by_os.telefone, phone_by_client.telefone) as normalized_phone_digits
 			  from ordens_servico os
 			  left join phone_by_os on phone_by_os.os = os.num_os
 			  left join phone_by_client on phone_by_client.codigo_cliente = os.codigo_cliente
@@ -248,8 +261,8 @@ async function performOpportunitiesSyncFromMatch() {
 			os.num_os,
 			os.codigo_cliente,
 			os.nome_cliente,
-			os.resolved_phone,
-			regexp_replace(coalesce(os.resolved_phone, ''), '\\D', '', 'g'),
+			os.normalized_phone_digits,
+			os.normalized_phone_digits,
 			os.cidade,
 			lower(translate(coalesce(os.cidade, ''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')),
 			os.regional,
@@ -270,12 +283,13 @@ async function performOpportunitiesSyncFromMatch() {
 			now(),
 			now()
 		from eligible_orders os
+		where os.normalized_phone_digits is not null
 		on conflict (os) do update set
 			ordem_id = coalesce(tentativas_opportunities.ordem_id, excluded.ordem_id),
 			codigo_cliente = excluded.codigo_cliente,
 			cliente = excluded.cliente,
-			telefone = coalesce(nullif(excluded.telefone, ''), tentativas_opportunities.telefone),
-			telefone_digits = coalesce(nullif(excluded.telefone_digits, ''), tentativas_opportunities.telefone_digits),
+			telefone = excluded.telefone,
+			telefone_digits = excluded.telefone_digits,
 			cidade = excluded.cidade,
 			cidade_normalizada = excluded.cidade_normalizada,
 			regional = excluded.regional,
@@ -289,25 +303,26 @@ async function performOpportunitiesSyncFromMatch() {
 			removed_from_match_at = null,
 			source_payload = excluded.source_payload,
 			updated_at = now()`,
-		[WITHDRAWAL_ORDER_TYPE_REGEX],
-	);
-
-	await db.query(
-		`update tentativas_opportunities o
-		    set active = false,
-		        removed_from_match_at = coalesce(o.removed_from_match_at, now()),
-		        updated_at = now()
-		  where o.active = true
-		    and not exists (
-		      select 1
-		        from ordens_servico os
-		       where os.source_collection = 'match_os_abertas'
-		         and os.num_os = o.os
-		         and coalesce(os.tipo, '') ~* $1
-		         and coalesce(os.tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)'
-		    )`,
-		[WITHDRAWAL_ORDER_TYPE_REGEX],
-	);
+			[WITHDRAWAL_ORDER_TYPE_REGEX, VALID_PHONE_DIGITS_REGEX],
+		);
+		await client.query(
+			`update tentativas_assignments a
+			    set released_at = now(),
+			        release_reason = 'OPORTUNIDADE_FORA_DO_BACKLOG_COM_TELEFONE',
+			        updated_at = now()
+			   from tentativas_opportunities o
+			  where a.opportunity_id = o.id
+			    and a.released_at is null
+			    and (o.active = false or coalesce(o.telefone_digits, '') !~ $1)`,
+			[VALID_PHONE_DIGITS_REGEX],
+		);
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 function shouldSkipOpportunitiesSync(force = false) {
@@ -390,11 +405,12 @@ async function listCities(_query = {}, user = {}) {
 			       count(*) filter (where o.active = true and o.status = 'SCHEDULED') as scheduled
 			  from tentativas_opportunities o
 			 where o.active = true
+			   and coalesce(o.telefone_digits, '') ~ $4
 			   and ($3::boolean = true or exists (select 1 from allowed a where a.cidade_normalizada = o.cidade_normalizada))
 			 group by o.cidade, o.cidade_normalizada
 		)
 		select * from counts order by total desc, cidade asc`,
-		params,
+		[...params, VALID_PHONE_DIGITS_REGEX],
 	);
 	return { items: result.rows };
 }
@@ -427,6 +443,7 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 			       o.id, $2, $3, $4, o.cidade, $2
 			  from tentativas_opportunities o
 			 where o.active = true
+			   and coalesce(o.telefone_digits, '') ~ $6
 			   and o.cidade_normalizada = $1
 			   and not exists (
 			     select 1 from tentativas_assignments a
@@ -435,7 +452,14 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 			 order by o.priority = 'ALTA' desc, o.os_opened_at desc nulls last, o.created_at desc
 			 limit $5
 			on conflict do nothing`,
-			[normalizeText(cidade), userId(user), userEmail(user), userName(user), limit],
+			[
+				normalizeText(cidade),
+				userId(user),
+				userEmail(user),
+				userName(user),
+				limit,
+				VALID_PHONE_DIGITS_REGEX,
+			],
 		);
 		await client.query("commit");
 	} catch (error) {
@@ -486,6 +510,7 @@ async function getMyRoute(query = {}, user = {}) {
 		   from tentativas_opportunities o
 		   join tentativas_assignments a on a.opportunity_id = o.id and a.released_at is null
 		  where o.active = true
+		    and coalesce(o.telefone_digits, '') ~ $5
 		    and o.cidade_normalizada = $1
 		    and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
 		  order by o.status = 'PENDING' desc,
@@ -493,7 +518,13 @@ async function getMyRoute(query = {}, user = {}) {
 		           o.next_attempt_at nulls first,
 		           o.os_opened_at desc nulls last
 		  limit $4`,
-		[normalizeText(cidade), userId(user), userEmail(user), normalizeLimit(query.limit, 50, 100)],
+		[
+			normalizeText(cidade),
+			userId(user),
+			userEmail(user),
+			normalizeLimit(query.limit, 50, 100),
+			VALID_PHONE_DIGITS_REGEX,
+		],
 	);
 	const items = result.rows.map(mapOpportunity);
 	return {
@@ -913,8 +944,14 @@ async function getOverview(query = {}) {
 		   from tentativas_opportunities
 		  where ($1::text = '' or cidade_normalizada = $1)
 		    and ($2::text = '' or regional = $2)
-		    and ($3::text = '' or empresa = $3)`,
-		[normalizeText(query.cidade), text(query.regional), text(query.empresa)],
+		    and ($3::text = '' or empresa = $3)
+		    and (active = false or coalesce(telefone_digits, '') ~ $4)`,
+		[
+			normalizeText(query.cidade),
+			text(query.regional),
+			text(query.empresa),
+			VALID_PHONE_DIGITS_REGEX,
+		],
 	);
 	const row = result.rows[0] || {};
 	const opportunities = Number(row.opportunities || 0);
@@ -1193,6 +1230,7 @@ async function createCampaign(payload = {}, user = {}) {
 				select o.id, o.cidade
 				  from tentativas_opportunities o
 				 where o.active = true
+				   and coalesce(o.telefone_digits, '') ~ $7
 				   and ($1 = '' or o.cidade_normalizada = $1)
 				   and not exists (
 				     select 1 from tentativas_assignments a
@@ -1222,6 +1260,7 @@ async function createCampaign(payload = {}, user = {}) {
 				text(payload.technicianName || payload.tecnicoNome),
 				campaignId,
 				userId(user),
+				VALID_PHONE_DIGITS_REGEX,
 			],
 		);
 		await client.query(

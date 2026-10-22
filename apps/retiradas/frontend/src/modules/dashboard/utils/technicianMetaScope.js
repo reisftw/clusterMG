@@ -7,6 +7,8 @@ function normalizeTechnicianName(value) {
 		.trim();
 }
 
+export const TECHNICIAN_MONTHLY_TARGET = 110;
+
 export function scopeMetaRecordToTechnician(record, technicianName) {
 	if (!record || !technicianName) return record;
 	const expected = normalizeTechnicianName(technicianName);
@@ -17,14 +19,16 @@ export function scopeMetaRecordToTechnician(record, technicianName) {
 		return {
 			...record,
 			totalOS: 0,
-			meta: 0,
+			meta: TECHNICIAN_MONTHLY_TARGET,
 			percentAchieved: 0,
+			metaModeLabel: "Meta fixa",
+			metaSazonal: null,
 			saldoDiario: [],
 			technicians: [],
 		};
 	}
 	const total = Number(technician.total || 0);
-	const meta = Number(technician.meta || 0);
+	const meta = TECHNICIAN_MONTHLY_TARGET;
 	const daily = Array.isArray(technician.daily) ? technician.daily : [];
 	return {
 		...record,
@@ -32,6 +36,8 @@ export function scopeMetaRecordToTechnician(record, technicianName) {
 		meta,
 		percentAchieved:
 			meta > 0 ? Number(((total / meta) * 100).toFixed(1)) : 0,
+		metaModeLabel: "Meta fixa",
+		metaSazonal: null,
 		saldoDiario: daily.map((totalDia, index) => ({
 			dia: index + 1,
 			totalDia: Number(totalDia || 0),
