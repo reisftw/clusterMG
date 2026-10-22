@@ -96,6 +96,28 @@ function resultLabel(value) {
 	return RESULT_OPTIONS.find(([key]) => key === value)?.[1] || value || "-";
 }
 
+function saoPauloDateKey() {
+	const parts = new Intl.DateTimeFormat("en-US", {
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).formatToParts(new Date());
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	return `${values.year}-${values.month}-${values.day}`;
+}
+
+function whatsappPreferenceKey(user) {
+	const identity = user?.uid || user?.id || user?.email || "usuario";
+	return `tentativas:whatsapp:${identity}:${saoPauloDateKey()}`;
+}
+
+function customerIdentification(item) {
+	const name = item?.cliente || item?.customerName || "Cliente sem nome";
+	const code = item?.codigo_cliente || item?.customerCode;
+	return code ? `(${code}) ${name}` : name;
+}
+
 function canManage(user) {
 	return (
 		hasPermission(user, "tentativas.distribuir") ||
@@ -451,12 +473,51 @@ function ResultModal({ contact, onClose, onSaved }) {
 	);
 }
 
+function WhatsappChoiceModal({ contact, onChoose, onClose }) {
+	if (!contact) return null;
+	return (
+		<ModalShell
+			title="Qual WhatsApp você usa?"
+			description="Escolha apenas no primeiro envio do dia. O sistema lembrará sua opção até amanhã."
+			size="md"
+			onClose={onClose}
+		>
+			<div className="grid gap-3 sm:grid-cols-2">
+				<button
+					type="button"
+					onClick={() => onChoose("normal")}
+					className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800 transition hover:border-emerald-400"
+				>
+					<MessageCircle className="h-7 w-7" />
+					<strong className="font-black">WhatsApp comum</strong>
+				</button>
+				<button
+					type="button"
+					onClick={() => onChoose("business")}
+					className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-800 transition hover:border-blue-400"
+				>
+					<Phone className="h-7 w-7" />
+					<strong className="font-black">WhatsApp Business</strong>
+				</button>
+			</div>
+			<p className="mt-3 text-center text-xs font-bold text-slate-500">
+				Você poderá alterar a preferência na tela de rota.
+			</p>
+		</ModalShell>
+	);
+}
+
 function MyRoute() {
+	const { currentUser } = useAuthContext();
 	const [cities, setCities] = useState([]);
 	const [city, setCity] = useState("");
 	const [routeData, setRouteData] = useState(null);
 	const [detail, setDetail] = useState(null);
 	const [pendingContact, setPendingContact] = useState(null);
+	const [whatsappChoiceContact, setWhatsappChoiceContact] = useState(null);
+	const [whatsappPreference, setWhatsappPreference] = useState(() =>
+		window.localStorage.getItem(whatsappPreferenceKey(currentUser)),
+	);
 	const [contactingId, setContactingId] = useState("");
 	const contactInFlightRef = useRef(false);
 	const [loading, setLoading] = useState(true);
@@ -500,6 +561,27 @@ function MyRoute() {
 		if (city) loadRoute(city);
 	}, [city, loadRoute]);
 
+	const openWhatsapp = (started, preference) => {
+		const url =
+			preference === "business"
+				? started.whatsappBusinessUrl || started.whatsappUrl
+				: started.whatsappNormalUrl || started.whatsappUrl;
+		window.open(url, "_blank", "noopener,noreferrer");
+		setPendingContact(started);
+	};
+
+	const chooseWhatsapp = (preference) => {
+		window.localStorage.setItem(whatsappPreferenceKey(currentUser), preference);
+		setWhatsappPreference(preference);
+		openWhatsapp(whatsappChoiceContact, preference);
+		setWhatsappChoiceContact(null);
+	};
+
+	const resetWhatsappPreference = () => {
+		window.localStorage.removeItem(whatsappPreferenceKey(currentUser));
+		setWhatsappPreference(null);
+	};
+
 	const contact = async (item) => {
 		if (contactInFlightRef.current) return;
 		contactInFlightRef.current = true;
@@ -511,8 +593,15 @@ function MyRoute() {
 				"tentativas:lastContact",
 				JSON.stringify({ contactId: started.contactId, opportunityId: item.id }),
 			);
-			setPendingContact(started);
-			window.open(started.whatsappUrl, "_blank", "noopener,noreferrer");
+			const savedPreference = window.localStorage.getItem(
+				whatsappPreferenceKey(currentUser),
+			);
+			if (savedPreference === "normal" || savedPreference === "business") {
+				setWhatsappPreference(savedPreference);
+				openWhatsapp(started, savedPreference);
+			} else {
+				setWhatsappChoiceContact(started);
+			}
 		} catch (err) {
 			setError(err.message || "Falha ao abrir WhatsApp.");
 		} finally {
@@ -530,6 +619,16 @@ function MyRoute() {
 	return (
 		<div className="space-y-4">
 			{error ? <div className="rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
+			{whatsappPreference ? (
+				<div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+					<span>
+						Envios de hoje: {whatsappPreference === "business" ? "WhatsApp Business" : "WhatsApp comum"}
+					</span>
+					<button type="button" onClick={resetWhatsappPreference} className="rounded-xl border border-emerald-300 bg-white px-3 py-2 font-black">
+						Alterar
+					</button>
+				</div>
+			) : null}
 			<CityDropdown
 				cities={cities}
 				value={city}
@@ -605,6 +704,11 @@ function MyRoute() {
 			</section>
 
 			<ResultModal contact={pendingContact} onClose={() => setPendingContact(null)} onSaved={() => loadRoute()} />
+			<WhatsappChoiceModal
+				contact={whatsappChoiceContact}
+				onChoose={chooseWhatsapp}
+				onClose={() => setWhatsappChoiceContact(null)}
+			/>
 			{detail ? (
 				<ModalShell title="Detalhe do cliente" size="3xl" onClose={() => setDetail(null)}>
 					<div className="space-y-4">
@@ -983,7 +1087,12 @@ function HistoryTab() {
 				{data.items.map((item) => (
 					<div key={item.id} className="rounded-2xl border p-4">
 						<strong>{formatDateTime(item.created_at)} · {item.technician_name}</strong>
-						<p className="text-sm font-bold text-slate-500">{item.cliente} · OS {item.os} · {item.cidade}</p>
+						<p className="mt-1 text-sm font-black text-slate-700">
+							Enviado para: {customerIdentification(item)}
+						</p>
+						<p className="text-sm font-bold text-slate-500">
+							{item.phone || "Telefone não informado"} · OS {item.os} · {item.cidade}
+						</p>
 						<p className="text-sm">{resultLabel(item.result || item.event_type)} · tentativa {item.attempt_number}</p>
 					</div>
 				))}
@@ -1019,7 +1128,7 @@ function TemplatesTab() {
 				<div className="mt-3 grid gap-2">
 					<input className="rounded-xl border p-3" placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
 					<input className="rounded-xl border p-3" type="number" min="1" value={form.attemptNumber} onChange={(e) => setForm({ ...form, attemptNumber: e.target.value })} />
-					<textarea className="min-h-48 rounded-xl border p-3" placeholder="Mensagem com {{cliente}}, {{primeiro_nome}}, {{tecnico}}, {{empresa}}, {{cidade}}, {{os}}, {{data}}" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+					<textarea className="min-h-48 rounded-xl border p-3" placeholder="Mensagem com {{cliente}}, {{nome_cliente}}, {{codigo_cliente}}, {{primeiro_nome}}, {{tecnico}}, {{empresa}}, {{cidade}}, {{os}}, {{data}}" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
 					<label className="flex items-center gap-2 font-bold"><input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} /> Padrão da tentativa</label>
 					<button type="button" onClick={save} className="rounded-xl bg-blue-600 p-3 font-black text-white">Salvar template</button>
 				</div>

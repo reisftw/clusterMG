@@ -102,6 +102,25 @@ function firstName(name) {
 	return text(name).split(/\s+/).filter(Boolean)[0] || text(name);
 }
 
+function formatCustomerIdentification(code, name) {
+	const customerCode = text(code);
+	const customerName = text(name) || "Cliente sem nome";
+	return customerCode ? `(${customerCode}) ${customerName}` : customerName;
+}
+
+function buildWhatsappUrls(phoneDigits, message) {
+	const digits = text(phoneDigits);
+	const encodedMessage = encodeURIComponent(text(message));
+	const whatsappUrl = `https://wa.me/${digits}?text=${encodedMessage}`;
+	const fallbackUrl = encodeURIComponent(whatsappUrl);
+	const intentQuery = `phone=${encodeURIComponent(digits)}&text=${encodedMessage}`;
+	return {
+		whatsappUrl,
+		whatsappNormalUrl: `intent://send?${intentQuery}#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url=${fallbackUrl};end`,
+		whatsappBusinessUrl: `intent://send?${intentQuery}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url=${fallbackUrl};end`,
+	};
+}
+
 function normalizeLimit(value, fallback = 20, max = 100) {
 	const parsed = Number(value || fallback);
 	if (!Number.isFinite(parsed)) return fallback;
@@ -747,8 +766,14 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			throw error;
 		}
 		const template = await getTemplateForAttempt(attemptNumber, client);
-		const message = renderTemplate(template?.body || "", {
-			cliente: row.cliente,
+		const customerIdentification = formatCustomerIdentification(
+			row.codigo_cliente,
+			row.cliente,
+		);
+		const renderedMessage = renderTemplate(template?.body || "", {
+			cliente: customerIdentification,
+			nome_cliente: row.cliente,
+			codigo_cliente: row.codigo_cliente,
 			primeiro_nome: firstName(row.cliente),
 			tecnico: userName(user),
 			empresa: row.empresa || "Sempre Internet",
@@ -756,7 +781,11 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			os: row.os,
 			data: new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
 		});
-		const whatsappUrl = `https://wa.me/${phone.digits}?text=${encodeURIComponent(message)}`;
+		const message = renderedMessage.includes(customerIdentification)
+			? renderedMessage
+			: `Cliente: ${customerIdentification}\n\n${renderedMessage}`.trim();
+		const whatsappUrls = buildWhatsappUrls(phone.digits, message);
+		const { whatsappUrl } = whatsappUrls;
 		const contactId = id("tc");
 		await client.query(
 			`insert into tentativas_contacts (
@@ -790,7 +819,15 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			os: row.os,
 			attemptNumber,
 		});
-		return { contactId, whatsappUrl, message, phone: phone.display, attemptNumber };
+		return {
+			contactId,
+			...whatsappUrls,
+			message,
+			phone: phone.display,
+			attemptNumber,
+			customerCode: row.codigo_cliente,
+			customerName: row.cliente,
+		};
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
 		throw error;
@@ -910,7 +947,7 @@ async function listHistory(query = {}, user = {}) {
 	if (query.q) {
 		params.push(`%${text(query.q)}%`);
 		index += 1;
-		filters.push(`(o.cliente ilike $${index} or o.os ilike $${index} or o.telefone ilike $${index} or o.cidade ilike $${index})`);
+		filters.push(`(o.cliente ilike $${index} or o.codigo_cliente ilike $${index} or o.os ilike $${index} or o.telefone ilike $${index} or o.cidade ilike $${index})`);
 	}
 	if (query.status) {
 		params.push(text(query.status));
@@ -925,11 +962,12 @@ async function listHistory(query = {}, user = {}) {
 	const where = filters.length ? `and ${filters.join(" and ")}` : "";
 	const result = await db.query(
 		`select count(*) over() as total_count,
-		        c.*, o.os, o.cliente, o.cidade, o.regional, o.status as opportunity_status
+		        c.*, o.os, o.codigo_cliente, o.cliente, o.cidade, o.regional,
+		        o.status as opportunity_status
 		   from tentativas_contacts c
 		   join tentativas_opportunities o on o.id = c.opportunity_id
-		   left join tentativas_assignments a on a.opportunity_id = o.id and a.released_at is null
-		  where ($1::boolean = true or a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
+		   left join tentativas_assignments a on a.id = c.assignment_id
+		  where ($1::boolean = true or c.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
 		    ${where}
 		  order by c.created_at desc
 		  limit $${index + 1} offset $${index + 2}`,
@@ -1312,6 +1350,7 @@ async function exportCsv(query = {}, user = {}) {
 	const header = [
 		"data",
 		"tecnico",
+		"codigo_cliente",
 		"cliente",
 		"os",
 		"cidade",
@@ -1323,6 +1362,7 @@ async function exportCsv(query = {}, user = {}) {
 		[
 			item.created_at,
 			item.technician_name,
+			item.codigo_cliente,
 			item.cliente,
 			item.os,
 			item.cidade,
@@ -1338,8 +1378,10 @@ async function exportCsv(query = {}, user = {}) {
 
 module.exports = {
 	__testables: {
+		buildWhatsappUrls,
 		firstName,
 		firstValidPhone,
+		formatCustomerIdentification,
 		normalizePhone,
 		renderTemplate,
 	},

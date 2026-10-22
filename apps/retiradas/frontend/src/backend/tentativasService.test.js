@@ -53,5 +53,22 @@ describe("tentativasService helpers", () => {
 		expect(message).toContain("Martinho Campos");
 		expect(message).toContain("Rodrigo Reis");
 	});
+
+	it("identifica o cliente pelo código antes do nome", () => {
+		expect(
+			__testables.formatCustomerIdentification("3333", "Rodrigo Reis Divino"),
+		).toBe("(3333) Rodrigo Reis Divino");
+	});
+
+	it("gera links separados para WhatsApp comum e Business", () => {
+		const links = __testables.buildWhatsappUrls(
+			"5531999998877",
+			"Cliente: (3333) Rodrigo Reis Divino",
+		);
+
+		expect(links.whatsappUrl).toContain("wa.me/5531999998877");
+		expect(links.whatsappNormalUrl).toContain("package=com.whatsapp;");
+		expect(links.whatsappBusinessUrl).toContain("package=com.whatsapp.w4b;");
+	});
 });
 
