@@ -165,6 +165,29 @@ function priorityExpression() {
 	end`;
 }
 
+function buildOpportunityResultUpdate({
+	opportunityId,
+	status,
+	result,
+	nextAttemptAt,
+	attemptDelta,
+}) {
+	return {
+		sql: `update tentativas_opportunities
+		    set status = $2,
+		        attempt_count = greatest(0, attempt_count + $5),
+		        last_attempt_at = case when $5 > 0 then now() else last_attempt_at end,
+		        last_result = $3,
+		        next_attempt_at = $4,
+		        responded_at = case when $2 in ('RESPONDED','SCHEDULED') then coalesce(responded_at, now()) else responded_at end,
+		        scheduled_at = case when $2 = 'SCHEDULED' then coalesce(scheduled_at, now()) else scheduled_at end,
+		        completed_at = case when $2 = 'COMPLETED' then coalesce(completed_at, now()) else completed_at end,
+		        updated_at = now()
+		  where id = $1`,
+		params: [opportunityId, status, result, nextAttemptAt, attemptDelta],
+	};
+}
+
 async function recordAudit(action, recordId, user, afterData = {}, beforeData = {}) {
 	await auditLog.recordAuditLog({
 		module: "tentativas",
@@ -1038,20 +1061,14 @@ async function saveResult(contactId, payload = {}, user = {}) {
 			  where id = $1`,
 			[contactId, sentConfirmed, result, observation, nextAttemptAt],
 		);
-		await client.query(
-			`update tentativas_opportunities
-			    set status = $2,
-			        attempt_count = greatest(0, attempt_count + $6),
-			        last_attempt_at = case when $6 > 0 then now() else last_attempt_at end,
-			        last_result = $3,
-			        next_attempt_at = $4,
-			        responded_at = case when $2 in ('RESPONDED','SCHEDULED') then coalesce(responded_at, now()) else responded_at end,
-			        scheduled_at = case when $2 = 'SCHEDULED' then coalesce(scheduled_at, now()) else scheduled_at end,
-			        completed_at = case when $2 = 'COMPLETED' then coalesce(completed_at, now()) else completed_at end,
-			        updated_at = now()
-			  where id = $1`,
-			[contact.opportunity_id, status, result, nextAttemptAt, sentConfirmed, attemptDelta],
-		);
+		const opportunityUpdate = buildOpportunityResultUpdate({
+			opportunityId: contact.opportunity_id,
+			status,
+			result,
+			nextAttemptAt,
+			attemptDelta,
+		});
+		await client.query(opportunityUpdate.sql, opportunityUpdate.params);
 		await client.query("commit");
 		await recordAudit("contact.result", contactId, user, {
 			opportunityId: contact.opportunity_id,
@@ -1537,6 +1554,7 @@ async function exportCsv(query = {}, user = {}) {
 module.exports = {
 	__testables: {
 		buildWhatsappUrls,
+		buildOpportunityResultUpdate,
 		firstName,
 		firstValidPhone,
 		formatCustomerIdentification,

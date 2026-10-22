@@ -70,5 +70,30 @@ describe("tentativasService helpers", () => {
 		expect(links.whatsappNormalUrl).toContain("package=com.whatsapp;");
 		expect(links.whatsappBusinessUrl).toContain("package=com.whatsapp.w4b;");
 	});
+
+	it("mantem os parametros da classificacao alinhados com a consulta SQL", () => {
+		const update = __testables.buildOpportunityResultUpdate({
+			opportunityId: "tent_123",
+			status: "RESPONDED",
+			result: "RESPONDED",
+			nextAttemptAt: null,
+			attemptDelta: 1,
+		});
+		const references = [...update.sql.matchAll(/\$(\d+)/g)].map((match) =>
+			Number(match[1]),
+		);
+
+		expect([...new Set(references)].sort((left, right) => left - right)).toEqual([
+			1, 2, 3, 4, 5,
+		]);
+		expect(Math.max(...references)).toBe(update.params.length);
+		expect(update.params).toEqual([
+			"tent_123",
+			"RESPONDED",
+			"RESPONDED",
+			null,
+			1,
+		]);
+	});
 });
 
