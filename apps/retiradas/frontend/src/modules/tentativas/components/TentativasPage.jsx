@@ -379,12 +379,19 @@ function UserLookup({ value = {}, onChange }) {
 	);
 }
 
-function ResultModal({ contact, onClose, onSaved }) {
+function ResultModal({ contact, onClose, onSaved, editing = false }) {
 	const [sentConfirmed, setSentConfirmed] = useState(true);
 	const [result, setResult] = useState("NO_RESPONSE");
 	const [observation, setObservation] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState("");
+	useEffect(() => {
+		if (!contact) return;
+		setSentConfirmed(contact.sent_confirmed !== false);
+		setResult(contact.result || "NO_RESPONSE");
+		setObservation(contact.observation || "");
+		setError("");
+	}, [contact]);
 	if (!contact) return null;
 	const save = async () => {
 		setSaving(true);
@@ -405,8 +412,8 @@ function ResultModal({ contact, onClose, onSaved }) {
 	};
 	return (
 		<ModalShell
-			title="Como foi o contato?"
-			description="Confirme o envio manual no WhatsApp e registre o resultado."
+			title={editing ? "Atualizar tratativa" : "Como foi o contato?"}
+			description={editing ? "Revise o resultado registrado sem criar uma nova tentativa." : "Confirme o envio manual no WhatsApp e registre o resultado."}
 			size="lg"
 			onClose={onClose}
 			footer={
@@ -420,7 +427,7 @@ function ResultModal({ contact, onClose, onSaved }) {
 						disabled={saving}
 						className="rounded-xl bg-blue-600 px-5 py-3 font-black text-white disabled:opacity-60"
 					>
-						{saving ? "Salvando..." : "Salvar e próximo"}
+						{saving ? "Salvando..." : editing ? "Salvar tratativa" : "Salvar e próximo"}
 					</button>
 				</div>
 			}
@@ -757,6 +764,13 @@ function OverviewTab() {
 	if (loading) return <Spinner />;
 	return (
 		<div className="space-y-4">
+			<div className="flex flex-col gap-1 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+				<div>
+					<p className="text-xs font-black uppercase tracking-[0.12em] text-blue-700">Reconciliação automática</p>
+					<p className="text-sm font-bold text-slate-700">Última verificação: {formatDateTime(data.lastReconciliationAt)}</p>
+				</div>
+				<span className="text-xs font-bold text-slate-500">Executada de hora em hora</span>
+			</div>
 			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 				<Kpi title="Oportunidades" value={formatNumber(data.opportunities)} />
 				<Kpi title="Clientes trabalhados" value={formatNumber(data.worked)} helper={`${data.coverage}% cobertura`} />
@@ -1061,29 +1075,50 @@ function DistributionTab() {
 
 function HistoryTab() {
 	const [query, setQuery] = useState("");
-	const [data, setData] = useState({ items: [] });
-	const load = async () => setData(await buscarHistoricoTentativas({ q: query, page: 1, limit: 50 }));
+	const [data, setData] = useState({ items: [], total: 0, page: 1, limit: 10 });
+	const [page, setPage] = useState(1);
+	const [loading, setLoading] = useState(true);
+	const [editingContact, setEditingContact] = useState(null);
+	const pageSize = 10;
+	const load = async (targetPage = page) => {
+		setLoading(true);
+		try {
+			const result = await buscarHistoricoTentativas({ q: query, page: targetPage, limit: pageSize });
+			setData(result);
+			setPage(targetPage);
+		} finally {
+			setLoading(false);
+		}
+	};
 	useEffect(() => {
 		let cancelled = false;
 		async function loadInitial() {
-			const result = await buscarHistoricoTentativas({ page: 1, limit: 50 });
-			if (!cancelled) setData(result);
+			const result = await buscarHistoricoTentativas({ page: 1, limit: pageSize });
+			if (!cancelled) {
+				setData(result);
+				setLoading(false);
+			}
 		}
 		void loadInitial();
 		return () => {
 			cancelled = true;
 		};
 	}, []);
+	const totalPages = Math.max(1, Math.ceil(Number(data.total || 0) / pageSize));
+	const changePage = (nextPage) => {
+		void load(nextPage);
+	};
 	return (
 		<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 			<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 				<input className="min-h-12 rounded-2xl border px-4" placeholder="Cliente, OS, telefone ou cidade" value={query} onChange={(e) => setQuery(e.target.value)} />
-				<div className="flex gap-2">
-					<button type="button" onClick={load} className="rounded-xl border px-4 py-3 font-black">Buscar</button>
+				<div className="flex flex-wrap gap-2">
+					<button type="button" onClick={() => void load(1)} className="rounded-xl border px-4 py-3 font-black">Buscar</button>
+					<button type="button" onClick={() => void load(page)} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 font-black disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Atualizar</button>
 					<button type="button" onClick={() => baixarHistoricoTentativasCsv({ q: query })} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white"><Download className="h-4 w-4" /> CSV</button>
 				</div>
 			</div>
-			<div className="mt-4 space-y-2">
+			<div className={`mt-4 space-y-2 ${loading ? "opacity-60" : ""}`}>
 				{data.items.map((item) => (
 					<div key={item.id} className="rounded-2xl border p-4">
 						<strong>{formatDateTime(item.created_at)} · {item.technician_name}</strong>
@@ -1094,9 +1129,31 @@ function HistoryTab() {
 							{item.phone || "Telefone não informado"} · OS {item.os} · {item.cidade}
 						</p>
 						<p className="text-sm">{resultLabel(item.result || item.event_type)} · tentativa {item.attempt_number}</p>
+						{item.opportunity_active && !item.assignment_released_at ? (
+							<button
+								type="button"
+								onClick={() => setEditingContact({ ...item, contactId: item.id })}
+								className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700"
+							>
+								Atualizar tratativa
+							</button>
+						) : null}
 					</div>
 				))}
+				{!loading && !data.items.length ? (
+					<div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center font-bold text-slate-500">Nenhum registro encontrado.</div>
+				) : null}
 			</div>
+			<div className="mt-4 space-y-2">
+				<p className="text-center text-xs font-bold text-slate-500">{formatNumber(data.total)} registro(s) no histórico</p>
+				<PaginationControls page={page} totalPages={totalPages} onPageChange={changePage} />
+			</div>
+			<ResultModal
+				contact={editingContact}
+				editing
+				onClose={() => setEditingContact(null)}
+				onSaved={() => void load(page)}
+			/>
 		</section>
 	);
 }

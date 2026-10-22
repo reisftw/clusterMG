@@ -5,6 +5,7 @@ const evolutionMessaging = require("./evolutionMessaging");
 const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const agendamentoMapaReconciliation = require("./agendamentoMapaReconciliation");
 const operationalImports = require("./operationalImports");
+const tentativasService = require("./tentativas/tentativasService");
 const { closeRealtimeClients } = require("./realtime");
 
 const port = Number(process.env.PORT || 3001);
@@ -15,6 +16,7 @@ const server = app.listen(port, () => {
 	evolutionMessaging.startWorker();
 	agendamentoConfirmacao.startWorker();
 	agendamentoMapaReconciliation.startCompletedAppointmentsWorker();
+	tentativasService.startOpportunitiesReconciliationWorker();
 	operationalImports.markInterruptedImportJobs().catch((error) => {
 		console.error(
 			"[retiradas-api] Falha ao recuperar jobs de importacao:",
@@ -38,6 +40,7 @@ async function shutdown(signal) {
 	evolutionMessaging.stopWorker();
 	agendamentoConfirmacao.stopWorker();
 	agendamentoMapaReconciliation.stopCompletedAppointmentsWorker();
+	tentativasService.stopOpportunitiesReconciliationWorker();
 	closeRealtimeClients();
 
 	const forceExit = setTimeout(() => {

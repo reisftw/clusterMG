@@ -1228,6 +1228,24 @@ describe("vps api app characterization - auth", () => {
 		});
 	});
 
+	it("POST /api/auth/login isola o limite por email na mesma rede", async () => {
+		process.env.LOGIN_RATE_LIMIT_MAX = "1";
+		const app = loadApp();
+
+		await request(app)
+			.post("/api/auth/login")
+			.send({ email: "philipe@example.com", password: "wrong" });
+		const response = await request(app)
+			.post("/api/auth/login")
+			.send({ email: "outro.tecnico@example.com", password: "wrong" });
+
+		expect(response.status).toBe(401);
+		expect(response.body).toMatchObject({
+			ok: false,
+			error: "Credenciais invalidas.",
+		});
+	});
+
 	it("GET /api/auth/me exige autenticacao e retorna perfil quando autenticado", async () => {
 		const app = loadApp();
 

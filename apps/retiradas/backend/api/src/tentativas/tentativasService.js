@@ -14,11 +14,15 @@ const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
 const VALID_PHONE_DIGITS_REGEX = "^55[0-9]{10,11}$";
-const OPPORTUNITIES_SYNC_TTL_MS = 5 * 60 * 1000;
+const OPPORTUNITIES_SYNC_TTL_MS = 60 * 60 * 1000;
+const OPPORTUNITIES_RECONCILIATION_INTERVAL_MS = 60 * 60 * 1000;
+const OPPORTUNITIES_RECONCILIATION_INITIAL_DELAY_MS = 60 * 1000;
 const PHONE_ENRICH_WAIT_MS = 5 * 1000;
 
 let opportunitiesSyncPromise = null;
 let opportunitiesLastSyncAt = 0;
+let opportunitiesReconciliationTimer = null;
+let opportunitiesReconciliationInitialTimer = null;
 const phoneEnrichmentPromises = new Map();
 
 const CONTACT_RESULTS = new Set([
@@ -139,6 +143,12 @@ function hasAdminAccess(user = {}) {
 	return role === "admin" || permissions.has("*") || permissions.has("tentativas.distribuir");
 }
 
+function hasGlobalHistoryAccess(user = {}) {
+	const role = normalizeText(user.role || user.profile?.role);
+	const permissions = new Set(user.permissions || user.profile?.permissions || []);
+	return role === "admin" || permissions.has("*");
+}
+
 function renderTemplate(body, variables = {}) {
 	return text(body).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
 		const normalized = String(key || "").trim();
@@ -169,8 +179,29 @@ async function recordAudit(action, recordId, user, afterData = {}, beforeData = 
 
 async function performOpportunitiesSyncFromMatch() {
 	const client = await db.connect();
+	let releasedAssignments = [];
+	let completedAutomatically = 0;
 	try {
 		await client.query("begin");
+		const inventoryResult = await client.query(
+			`select
+				(select count(*)::int from tentativas_opportunities where active = true) as active_total,
+				(select count(*)::int
+				   from ordens_servico
+				  where source_collection = 'match_os_abertas'
+				    and coalesce(num_os, '') <> ''
+				    and coalesce(cidade, '') <> ''
+				    and coalesce(tipo, '') ~* $1
+				    and coalesce(tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)') as source_total`,
+			[WITHDRAWAL_ORDER_TYPE_REGEX],
+		);
+		const activeTotal = Number(inventoryResult.rows[0]?.active_total || 0);
+		const sourceTotal = Number(inventoryResult.rows[0]?.source_total || 0);
+		if (activeTotal > 0 && sourceTotal === 0) {
+			const error = new Error("Reconciliacao cancelada: o mapa de origem esta vazio.");
+			error.code = "EMPTY_MATCH_SOURCE";
+			throw error;
+		}
 		await client.query(
 			`update tentativas_opportunities
 			    set active = false,
@@ -324,24 +355,93 @@ async function performOpportunitiesSyncFromMatch() {
 			updated_at = now()`,
 			[WITHDRAWAL_ORDER_TYPE_REGEX, VALID_PHONE_DIGITS_REGEX],
 		);
-		await client.query(
+		const completionResult = await client.query(
+			`update tentativas_opportunities
+			    set status = 'COMPLETED',
+			        last_result = 'COMPLETED',
+			        completed_at = coalesce(completed_at, now()),
+			        removed_from_match_at = coalesce(removed_from_match_at, now()),
+			        updated_at = now()
+			  where active = false
+			    and status not in ('COMPLETED', 'CANCELLED')`,
+		);
+		completedAutomatically = completionResult.rowCount;
+		const releaseResult = await client.query(
 			`update tentativas_assignments a
 			    set released_at = now(),
-			        release_reason = 'OPORTUNIDADE_FORA_DO_BACKLOG_COM_TELEFONE',
+			        release_reason = 'OPORTUNIDADE_CONCLUIDA_FORA_DO_MAPA',
 			        updated_at = now()
 			   from tentativas_opportunities o
 			  where a.opportunity_id = o.id
 			    and a.released_at is null
-			    and (o.active = false or coalesce(o.telefone_digits, '') !~ $1)`,
+			    and (o.active = false or coalesce(o.telefone_digits, '') !~ $1)
+			  returning a.technician_user_id,
+			            a.technician_email,
+			            a.technician_name,
+			            coalesce(a.cidade, o.cidade) as cidade`,
 			[VALID_PHONE_DIGITS_REGEX],
 		);
+		releasedAssignments = releaseResult.rows;
 		await client.query("commit");
+		const replenished = await replenishReleasedAssignments(releasedAssignments);
+		return {
+			completedAutomatically,
+			released: releasedAssignments.length,
+			replenished,
+		};
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
 		throw error;
 	} finally {
 		client.release();
 	}
+}
+
+async function replenishReleasedAssignments(releasedAssignments = []) {
+	const groups = new Map();
+	for (const assignment of releasedAssignments) {
+		const cidade = text(assignment.cidade);
+		const technicianId = text(assignment.technician_user_id);
+		const technicianEmail = text(assignment.technician_email).toLowerCase();
+		if (!cidade || (!technicianId && !technicianEmail)) continue;
+		const key = `${technicianId}|${technicianEmail}|${normalizeText(cidade)}`;
+		const current = groups.get(key) || {
+			cidade,
+			count: 0,
+			user: {
+				uid: technicianId,
+				email: technicianEmail,
+				nome: text(assignment.technician_name),
+			},
+		};
+		current.count += 1;
+		groups.set(key, current);
+	}
+
+	let replenished = 0;
+	for (const group of groups.values()) {
+		const loadResult = await db.query(
+			`select count(*)::int as total
+			   from tentativas_assignments a
+			   join tentativas_opportunities o on o.id = a.opportunity_id
+			  where a.released_at is null
+			    and o.active = true
+			    and o.cidade_normalizada = $1
+			    and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
+			    and o.status not in (
+			      'SCHEDULED', 'COMPLETED', 'CANCELLED', 'REFUSED',
+			      'INVALID_PHONE', 'ALREADY_RETURNED', 'EQUIPMENT_UNAVAILABLE'
+			    )`,
+			[normalizeText(group.cidade), userId(group.user), userEmail(group.user)],
+		);
+		const currentLoad = Number(loadResult.rows[0]?.total || 0);
+		replenished += await autoClaimCity(
+			group.cidade,
+			group.user,
+			currentLoad + group.count,
+		);
+	}
+	return replenished;
 }
 
 function shouldSkipOpportunitiesSync(force = false) {
@@ -354,13 +454,15 @@ async function syncOpportunitiesFromMatch({ force = false } = {}) {
 	}
 	if (!opportunitiesSyncPromise) {
 		opportunitiesSyncPromise = performOpportunitiesSyncFromMatch()
-			.then(() => ({ ok: true }))
+			.then((summary) => {
+				opportunitiesLastSyncAt = Date.now();
+				return { ok: true, ...summary };
+			})
 			.catch((error) => {
 				console.error("[tentativas] Falha ao sincronizar oportunidades:", error);
 				throw error;
 			})
 			.finally(() => {
-				opportunitiesLastSyncAt = Date.now();
 				opportunitiesSyncPromise = null;
 			});
 	}
@@ -370,6 +472,50 @@ async function syncOpportunitiesFromMatch({ force = false } = {}) {
 function scheduleOpportunitiesSyncFromMatch() {
 	if (shouldSkipOpportunitiesSync(false) || opportunitiesSyncPromise) return;
 	syncOpportunitiesFromMatch().catch(() => {});
+}
+
+function runScheduledOpportunitiesReconciliation() {
+	syncOpportunitiesFromMatch({ force: true })
+		.then((summary) => {
+			console.log("[tentativas] Reconciliacao horaria concluida:", summary);
+		})
+		.catch((error) => {
+			console.error(
+				"[tentativas] Falha na reconciliacao horaria:",
+				error?.message || error,
+			);
+		});
+}
+
+function startOpportunitiesReconciliationWorker() {
+	if (opportunitiesReconciliationTimer) return;
+	opportunitiesReconciliationInitialTimer = setTimeout(
+		runScheduledOpportunitiesReconciliation,
+		Number(
+			process.env.TENTATIVAS_RECONCILIATION_INITIAL_DELAY_MS ||
+				OPPORTUNITIES_RECONCILIATION_INITIAL_DELAY_MS,
+		),
+	);
+	opportunitiesReconciliationInitialTimer.unref?.();
+	opportunitiesReconciliationTimer = setInterval(
+		runScheduledOpportunitiesReconciliation,
+		Number(
+			process.env.TENTATIVAS_RECONCILIATION_INTERVAL_MS ||
+				OPPORTUNITIES_RECONCILIATION_INTERVAL_MS,
+		),
+	);
+	opportunitiesReconciliationTimer.unref?.();
+}
+
+function stopOpportunitiesReconciliationWorker() {
+	if (opportunitiesReconciliationInitialTimer) {
+		clearTimeout(opportunitiesReconciliationInitialTimer);
+		opportunitiesReconciliationInitialTimer = null;
+	}
+	if (opportunitiesReconciliationTimer) {
+		clearInterval(opportunitiesReconciliationTimer);
+		opportunitiesReconciliationTimer = null;
+	}
 }
 
 async function getSettings(client = db) {
@@ -473,6 +619,10 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 				 where o.active = true
 				   and coalesce(o.telefone_digits, '') ~ $6
 				   and o.cidade_normalizada = $1
+				   and o.status not in (
+				     'SCHEDULED', 'COMPLETED', 'CANCELLED', 'REFUSED',
+				     'INVALID_PHONE', 'ALREADY_RETURNED', 'EQUIPMENT_UNAVAILABLE'
+				   )
 				   and not exists (
 				     select 1 from tentativas_assignments a
 				      where a.opportunity_id = o.id and a.released_at is null
@@ -869,6 +1019,8 @@ async function saveResult(contactId, payload = {}, user = {}) {
 			error.statusCode = 403;
 			throw error;
 		}
+		const wasConfirmed = contact.sent_confirmed === true;
+		const attemptDelta = sentConfirmed === wasConfirmed ? 0 : sentConfirmed ? 1 : -1;
 		const nextAttemptAt =
 			sentConfirmed && (result === "NO_RESPONSE" || result === "CALLBACK_REQUESTED")
 				? new Date(Date.now() + Number(settings.min_interval_hours || 12) * 3600 * 1000).toISOString()
@@ -889,8 +1041,8 @@ async function saveResult(contactId, payload = {}, user = {}) {
 		await client.query(
 			`update tentativas_opportunities
 			    set status = $2,
-			        attempt_count = attempt_count + case when $5 = true then 1 else 0 end,
-			        last_attempt_at = case when $5 = true then now() else last_attempt_at end,
+			        attempt_count = greatest(0, attempt_count + $6),
+			        last_attempt_at = case when $6 > 0 then now() else last_attempt_at end,
 			        last_result = $3,
 			        next_attempt_at = $4,
 			        responded_at = case when $2 in ('RESPONDED','SCHEDULED') then coalesce(responded_at, now()) else responded_at end,
@@ -898,7 +1050,7 @@ async function saveResult(contactId, payload = {}, user = {}) {
 			        completed_at = case when $2 = 'COMPLETED' then coalesce(completed_at, now()) else completed_at end,
 			        updated_at = now()
 			  where id = $1`,
-			[contact.opportunity_id, status, result, nextAttemptAt, sentConfirmed],
+			[contact.opportunity_id, status, result, nextAttemptAt, sentConfirmed, attemptDelta],
 		);
 		await client.query("commit");
 		await recordAudit("contact.result", contactId, user, {
@@ -942,7 +1094,7 @@ async function listHistory(query = {}, user = {}) {
 	const limit = normalizeLimit(query.limit, 20, 100);
 	const offset = (page - 1) * limit;
 	const filters = [];
-	const params = [hasAdminAccess(user), userId(user), userEmail(user)];
+	const params = [hasGlobalHistoryAccess(user), userId(user), userEmail(user)];
 	let index = params.length;
 	if (query.q) {
 		params.push(`%${text(query.q)}%`);
@@ -963,7 +1115,9 @@ async function listHistory(query = {}, user = {}) {
 	const result = await db.query(
 		`select count(*) over() as total_count,
 		        c.*, o.os, o.codigo_cliente, o.cliente, o.cidade, o.regional,
-		        o.status as opportunity_status
+		        o.status as opportunity_status,
+		        o.active as opportunity_active,
+		        a.released_at as assignment_released_at
 		   from tentativas_contacts c
 		   join tentativas_opportunities o on o.id = c.opportunity_id
 		   left join tentativas_assignments a on a.id = c.assignment_id
@@ -997,7 +1151,8 @@ async function getOverview(query = {}) {
 			coalesce(sum(attempt_count), 0) as attempts,
 			count(*) filter (where status in ('RESPONDED','SCHEDULED','COMPLETED')) as responded,
 			count(*) filter (where status = 'SCHEDULED') as scheduled,
-			count(*) filter (where status = 'COMPLETED') as completed
+			count(*) filter (where status = 'COMPLETED') as completed,
+			max(updated_at) as latest_opportunity_update
 		   from tentativas_opportunities
 		  where ($1::text = '' or cidade_normalizada = $1)
 		    and ($2::text = '' or regional = $2)
@@ -1024,6 +1179,9 @@ async function getOverview(query = {}) {
 		responded,
 		scheduled,
 		completed: Number(row.completed || 0),
+		lastReconciliationAt: opportunitiesLastSyncAt
+			? new Date(opportunitiesLastSyncAt).toISOString()
+			: row.latest_opportunity_update,
 		coverage: percent(worked, opportunities),
 		responseConversion: percent(responded, worked),
 		scheduleConversion: percent(scheduled, worked),
@@ -1412,6 +1570,8 @@ module.exports = {
 	saveSettings,
 	saveTechnicianCity,
 	saveTemplate,
+	startOpportunitiesReconciliationWorker,
 	startContact,
+	stopOpportunitiesReconciliationWorker,
 	syncOpportunitiesFromMatch,
 };

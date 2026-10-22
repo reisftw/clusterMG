@@ -2341,6 +2341,12 @@ function createApp() {
 	const loginLimiter = rateLimit({
 		windowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
 		limit: Number(process.env.LOGIN_RATE_LIMIT_MAX || 8),
+		keyGenerator: (req) => {
+			const ip = rateLimit.ipKeyGenerator(req.ip);
+			const email = String(req.body?.email || "").trim().toLowerCase();
+			return `${ip}:${email || "sem-email"}`;
+		},
+		skipSuccessfulRequests: true,
 		standardHeaders: true,
 		legacyHeaders: false,
 		message: { ok: false, error: "Muitas tentativas. Aguarde alguns minutos." },
