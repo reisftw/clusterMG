@@ -5,7 +5,7 @@ const { mapOrderChanged } = require("./mapOrderComparison");
 test("ignora diferencas apenas de formato nas datas do mapa", () => {
 	const current = {
 		num_os: "014326296091701650",
-		data_cadastro: "2026-10-23T09:17:01.000Z",
+		data_cadastro: new Date("2026-10-23T09:17:01.000Z"),
 		data_abertura_os: "2026-10-23T09:17:01.000Z",
 		telefones: ["31999673328", "31911112222"],
 	};

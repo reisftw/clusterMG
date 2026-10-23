@@ -57,6 +57,8 @@ test("sincroniza somente alteracoes e remove ausentes em uma transacao", async (
 	assert.equal(queries[0].sql, "begin");
 	assert.match(queries[1].sql, /insert into ordens_servico/);
 	assert.match(queries[1].sql, /on conflict \(id\) do update/);
+	assert.equal(queries[1].params[19], null);
+	assert.equal(queries[1].params[20], null);
 	assert.match(queries[2].sql, /delete from ordens_servico/);
 	assert.deepEqual(queries[2].params[4], [
 		"ordens_abertas:sempre:1",

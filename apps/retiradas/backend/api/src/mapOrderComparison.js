@@ -35,6 +35,11 @@ const MAP_ORDER_COMPARISON_FIELDS = [
 const DATE_FIELDS = new Set(["data_cadastro", "data_abertura_os"]);
 
 function normalizeDateTime(value) {
+	if (value instanceof Date) {
+		return Number.isNaN(value.getTime())
+			? null
+			: value.toISOString().slice(0, 19).replace("T", " ");
+	}
 	const text = String(value || "").trim();
 	if (!text) return null;
 	const iso = text.match(

@@ -54,7 +54,9 @@ function nullableText(value) {
 
 function numberValue(value) {
 	if (typeof value === "number") return Number.isFinite(value) ? value : null;
-	const parsed = Number(text(value).replace(",", "."));
+	const normalized = text(value);
+	if (!normalized) return null;
+	const parsed = Number(normalized.replace(",", "."));
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
