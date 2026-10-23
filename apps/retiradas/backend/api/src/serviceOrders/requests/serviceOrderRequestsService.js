@@ -6,6 +6,14 @@ const HISTORY_PERMISSIONS = ["service_orders.requests.history"];
 const TARGET_TYPE_ID = 1487;
 const TARGET_TYPE_NAME = "CANCELAMENTO FTTH";
 const OPEN_STATUSES = ["aguardando_agendamento", "pendente"];
+const ALLOWED_SOURCE_ORDER_TYPES = [
+	"RETIRADA FTTH",
+	"RETIRADA - OUTROS",
+	"CANCELAMENTO FTTH",
+	"CANCELAMENTO - OUTROS",
+	"CANCELAMENTO & RETIRADA - SEGUNDA TENTATIVA",
+	"CANCELAMENTO LOJA",
+];
 const PRIVILEGED_REQUEST_ROLES = new Set([
 	"ADMIN",
 	"BACKOFFICE",
@@ -50,6 +58,30 @@ function normalize(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.replace(/\s+/g, " ")
 		.toUpperCase();
+}
+
+function normalizeOrderType(value) {
+	return normalize(value)
+		.replace(/\s*&\s*/g, " & ")
+		.replace(/\s*-\s*/g, " - ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function isAllowedSourceOrderType(value) {
+	const sourceType = normalizeOrderType(value);
+	return ALLOWED_SOURCE_ORDER_TYPES.some(
+		(allowedType) => normalizeOrderType(allowedType) === sourceType,
+	);
+}
+
+function blockedSourceOrderTypeError(value) {
+	const sourceType = text(value) || "nao identificado";
+	const error = new Error(
+		`A O.S encontrada e do tipo "${sourceType}". O Retorninho so pode encaminhar ordens de retirada permitidas.`,
+	);
+	error.statusCode = 422;
+	return error;
 }
 
 function userProfile(user = {}) {
@@ -165,6 +197,18 @@ function orderStatus(order = {}) {
 
 function orderType(order = {}) {
 	return order.tipo_ordem_servico || order.ordem_servico_tipo || {};
+}
+
+function orderTypeName(order = {}) {
+	const type = orderType(order);
+	return text(
+		type?.descricao ||
+			type?.display ||
+			type?.name ||
+			(typeof type === "string" ? type : "") ||
+			order.tipo ||
+			order.tipo_os,
+	);
 }
 
 function orderTechnicians(order = {}) {
@@ -347,7 +391,13 @@ function metadataOrderType(metadata = {}, description = "") {
 
 async function findOpenOrder(session, metadata, code) {
 	const candidates = await localOpenOrderCandidates(code);
-	for (const candidate of candidates) {
+	const eligibleCandidates = candidates.filter((candidate) =>
+		isAllowedSourceOrderType(candidate.tipo),
+	);
+	if (candidates.length && !eligibleCandidates.length) {
+		throw blockedSourceOrderTypeError(candidates[0].tipo);
+	}
+	for (const candidate of eligibleCandidates) {
 		const date = text(candidate.data_cadastro_dia);
 		const type = metadataOrderType(metadata, candidate.tipo);
 		if (!date || !type) continue;
@@ -371,7 +421,17 @@ async function findOpenOrder(session, metadata, code) {
 					orderNumber(row) === digits(candidate.num_os)) &&
 				OPEN_STATUSES.includes(orderStatus(row)),
 		);
-		if (match) return match;
+		if (match) {
+			const sourceType = orderTypeName(match) || candidate.tipo;
+			if (!isAllowedSourceOrderType(sourceType)) {
+				throw blockedSourceOrderTypeError(sourceType);
+			}
+			Object.defineProperty(match, "__retiradasSourceOrderType", {
+				value: sourceType,
+				enumerable: false,
+			});
+			return match;
+		}
 	}
 	return null;
 }
@@ -507,6 +567,13 @@ async function runRequest(id) {
 		if (!order) throw new Error("O HubSoft nao retornou os dados completos da O.S.");
 		if (clientCode(order) !== request.client_code) {
 			throw new Error("O codigo do cliente divergiu na confirmacao da O.S.");
+		}
+		const sourceOrderType =
+			orderTypeName(order) ||
+			orderTypeName(summary) ||
+			text(summary.__retiradasSourceOrderType);
+		if (!isAllowedSourceOrderType(sourceOrderType)) {
+			throw blockedSourceOrderTypeError(sourceOrderType);
 		}
 		const finalHubsoftUrl = clientOrdersUrl(order) || hubsoftUrl;
 		await updateProgress(id, "Dados da O.S confirmados", 55, {
@@ -788,7 +855,9 @@ module.exports = {
 		clientId,
 		clientOrdersUrl,
 		findTargetTechnician,
+		isAllowedSourceOrderType,
 		metadataOrderType,
+		orderTypeName,
 		saoPauloDateParts,
 		verifyFinalState,
 	},

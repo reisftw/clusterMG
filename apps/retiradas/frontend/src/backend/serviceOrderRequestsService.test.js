@@ -10,7 +10,9 @@ const {
 		canChooseTechnician,
 		clientOrdersUrl,
 		findTargetTechnician,
+		isAllowedSourceOrderType,
 		metadataOrderType,
+		orderTypeName,
 		saoPauloDateParts,
 		verifyFinalState,
 	},
@@ -132,5 +134,37 @@ describe("serviceOrderRequestsService", () => {
 		expect(
 			metadataOrderType({ tipos_ordem_servico: [type] }, "cancelamento ftth"),
 		).toBe(type);
+	});
+
+	it.each([
+		"Retirada FTTH",
+		"Retirada - Outros",
+		"Cancelamento FTTH",
+		"Cancelamento - Outros",
+		"Cancelamento & Retirada - Segunda tentativa",
+		"Cancelamento Loja",
+	])("permite somente o tipo de retirada %s", (type) => {
+		expect(isAllowedSourceOrderType(type)).toBe(true);
+	});
+
+	it.each([
+		"Instalacao FTTH",
+		"Suporte FTTH",
+		"Mudanca de endereco",
+		"Liberacao de portas",
+		"Retirada preventiva",
+	])("bloqueia o tipo de O.S nao autorizado %s", (type) => {
+		expect(isAllowedSourceOrderType(type)).toBe(false);
+	});
+
+	it("le o tipo tanto do objeto do HubSoft quanto do snapshot local", () => {
+		expect(
+			orderTypeName({
+				tipo_ordem_servico: { descricao: "RETIRADA FTTH" },
+			}),
+		).toBe("RETIRADA FTTH");
+		expect(orderTypeName({ tipo: "CANCELAMENTO LOJA" })).toBe(
+			"CANCELAMENTO LOJA",
+		);
 	});
 });
