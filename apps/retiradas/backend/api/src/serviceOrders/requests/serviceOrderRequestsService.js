@@ -214,6 +214,12 @@ function applyTargetState(order, targetType, targetTechnician, now = new Date())
 	order.status = "pendente";
 	order.tipo_agendamento = "manual";
 	order.tecnicos = [targetTechnician];
+	order.ordem_servico_tecnico = [
+		{
+			id_usuario: Number(targetTechnician.id ?? targetTechnician.id_usuario),
+			usuario: targetTechnician,
+		},
+	];
 	order.id_agenda_ordem_servico = null;
 	order.agenda = null;
 	order.agendamento_ordem_servico = null;

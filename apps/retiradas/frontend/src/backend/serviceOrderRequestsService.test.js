@@ -46,6 +46,9 @@ describe("serviceOrderRequestsService", () => {
 			expect.objectContaining({ id_periodo_dia: 5, descricao: "Tarde" }),
 		]);
 		expect(order.tecnicos).toEqual([technician]);
+		expect(order.ordem_servico_tecnico).toEqual([
+			expect.objectContaining({ id_usuario: 77, usuario: technician }),
+		]);
 	});
 
 	it("usa o dia civil de Sao Paulo", () => {

@@ -3,6 +3,7 @@ import {
 	ExternalLink,
 	LoaderCircle,
 	MessageCircle,
+	Move,
 	RotateCcw,
 	Send,
 	X,
@@ -18,6 +19,7 @@ import {
 
 const IMAGE_URL = "/retorninho-assistente-mini-20261023.webp";
 const POSITION_KEY = "retiradas-retorninho-assistant-position-v1";
+const FLOATING_BUTTON_SIZE = 88;
 const PRIVILEGED_ROLES = new Set(["admin", "backoffice", "backoffice_retirada"]);
 
 function greeting() {
@@ -44,16 +46,17 @@ function initialMessages() {
 }
 
 function clampPosition(position) {
-	const size = 76;
 	const margin = 12;
+	const viewportWidth = window.visualViewport?.width || window.innerWidth;
+	const viewportHeight = window.visualViewport?.height || window.innerHeight;
 	return {
 		x: Math.min(
-			Math.max(margin, Number(position?.x) || window.innerWidth - size - 20),
-			Math.max(margin, window.innerWidth - size - margin),
+			Math.max(margin, Number(position?.x) || viewportWidth - FLOATING_BUTTON_SIZE - 20),
+			Math.max(margin, viewportWidth - FLOATING_BUTTON_SIZE - margin),
 		),
 		y: Math.min(
-			Math.max(margin, Number(position?.y) || window.innerHeight - size - 110),
-			Math.max(margin, window.innerHeight - size - margin),
+			Math.max(margin, Number(position?.y) || viewportHeight - FLOATING_BUTTON_SIZE - 110),
+			Math.max(margin, viewportHeight - FLOATING_BUTTON_SIZE - margin),
 		),
 	};
 }
@@ -126,6 +129,7 @@ export default function RetorninhoAssistant() {
 	const [activeRequest, setActiveRequest] = useState(null);
 	const [busy, setBusy] = useState(false);
 	const [loadError, setLoadError] = useState("");
+	const [dragging, setDragging] = useState(false);
 	const dragRef = useRef(null);
 	const messagesRef = useRef(null);
 	const mountedRef = useRef(true);
@@ -137,7 +141,11 @@ export default function RetorninhoAssistant() {
 	useEffect(() => {
 		const handleResize = () => setPosition((current) => clampPosition(current));
 		window.addEventListener("resize", handleResize);
-		return () => window.removeEventListener("resize", handleResize);
+		window.visualViewport?.addEventListener("resize", handleResize);
+		return () => {
+			window.removeEventListener("resize", handleResize);
+			window.visualViewport?.removeEventListener("resize", handleResize);
+		};
 	}, []);
 
 	useEffect(() => {
@@ -174,8 +182,8 @@ export default function RetorninhoAssistant() {
 		const width = Math.min(400, window.innerWidth - 24);
 		const height = Math.min(590, window.innerHeight - 24);
 		return {
-			left: Math.min(Math.max(12, position.x - width + 76), window.innerWidth - width - 12),
-			top: Math.min(Math.max(12, position.y - height + 76), window.innerHeight - height - 12),
+			left: Math.min(Math.max(12, position.x - width + FLOATING_BUTTON_SIZE), window.innerWidth - width - 12),
+			top: Math.min(Math.max(12, position.y - height + FLOATING_BUTTON_SIZE), window.innerHeight - height - 12),
 			width,
 			height,
 		};
@@ -250,6 +258,7 @@ export default function RetorninhoAssistant() {
 	}
 
 	function pointerDown(event, openOnClick = true) {
+		event.preventDefault();
 		dragRef.current = {
 			pointerId: event.pointerId,
 			startX: event.clientX,
@@ -258,12 +267,14 @@ export default function RetorninhoAssistant() {
 			moved: false,
 			openOnClick,
 		};
+		setDragging(true);
 		event.currentTarget.setPointerCapture(event.pointerId);
 	}
 
 	function pointerMove(event) {
 		const drag = dragRef.current;
 		if (!drag || drag.pointerId !== event.pointerId) return;
+		event.preventDefault();
 		const deltaX = event.clientX - drag.startX;
 		const deltaY = event.clientY - drag.startY;
 		if (Math.hypot(deltaX, deltaY) > 5) drag.moved = true;
@@ -273,9 +284,19 @@ export default function RetorninhoAssistant() {
 	function pointerUp(event) {
 		const drag = dragRef.current;
 		if (!drag || drag.pointerId !== event.pointerId) return;
-		event.currentTarget.releasePointerCapture(event.pointerId);
+		event.preventDefault();
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
 		dragRef.current = null;
+		setDragging(false);
 		if (!drag.moved && drag.openOnClick) setOpen(true);
+	}
+
+	function pointerCancel(event) {
+		if (dragRef.current?.pointerId !== event.pointerId) return;
+		dragRef.current = null;
+		setDragging(false);
 	}
 
 	if (!canUse) return null;
@@ -288,12 +309,15 @@ export default function RetorninhoAssistant() {
 					onPointerDown={(event) => pointerDown(event, true)}
 					onPointerMove={pointerMove}
 					onPointerUp={pointerUp}
-					className="fixed z-[75] h-[76px] w-[76px] touch-none overflow-hidden rounded-full border-4 border-white bg-white shadow-[0_14px_38px_rgba(15,23,42,0.32)] ring-2 ring-blue-500 transition hover:scale-105"
+					onPointerCancel={pointerCancel}
+					onContextMenu={(event) => event.preventDefault()}
+					className={`fixed z-[75] h-[88px] w-[88px] touch-none overflow-hidden rounded-full border-4 border-white bg-white shadow-[0_14px_38px_rgba(15,23,42,0.32)] ring-2 ring-blue-500 ${dragging ? "scale-105 cursor-grabbing" : "cursor-grab transition hover:scale-105"}`}
 					style={{ left: position.x, top: position.y }}
 					aria-label="Abrir Retorninho"
 					title="Retorninho - Solicitar O.S"
 				>
-					<img src={IMAGE_URL} alt="Retorninho" className="h-full w-full select-none object-cover object-[55%_42%]" draggable="false" />
+					<img src={IMAGE_URL} alt="Retorninho" className="pointer-events-none h-full w-full select-none object-cover object-[55%_42%]" draggable="false" />
+					<span className="pointer-events-none absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950/70 text-white"><Move size={13} /></span>
 					<span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white"><MessageCircle size={13} /></span>
 				</button>
 			) : (
@@ -303,6 +327,7 @@ export default function RetorninhoAssistant() {
 							onPointerDown={(event) => pointerDown(event, false)}
 							onPointerMove={pointerMove}
 							onPointerUp={pointerUp}
+							onPointerCancel={pointerCancel}
 							className="flex touch-none cursor-move select-none items-center gap-3 bg-gradient-to-r from-blue-700 to-cyan-500 p-4 text-white"
 							title="Arraste para mover o assistente"
 						>
