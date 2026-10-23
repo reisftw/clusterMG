@@ -16,6 +16,7 @@ export const ROUTES = {
 	TECNICOS_AUDITORIA_RELATORIOS: "/tecnicos/auditoria/relatorios",
 	TECNICOS_RECUPERACAO_ATIVOS: "/tecnicos/recuperacao-ativos",
 	ORDENS_SERVICO_SOLICITACAO: "/ordens-servico/solicitacao",
+	ORDENS_SERVICO_COMPROVANTE: "/ordens-servico/comprovante",
 	ORDENS_SERVICO_CANCELAMENTOS: "/ordens-servico/cancelamentos",
 	ORDENS_SERVICO_MULTAS: "/ordens-servico/multas",
 	ORDENS_SERVICO_RECUPERACAO_ATIVOS: "/ordens-servico/recuperacao-ativos",

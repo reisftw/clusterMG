@@ -61,6 +61,12 @@ const ServiceOrderRequests = lazy(
 			"../modules/serviceOrders/requests/components/ServiceOrderRequestsPage"
 		),
 );
+const ReturnReceipts = lazy(
+	() =>
+		import(
+			"../modules/serviceOrders/returnReceipts/components/ReturnReceiptsPage"
+		),
+);
 const Colaboradores = lazy(
 	() => import("../modules/colaboradores/components/ColaboradoresPage"),
 );
@@ -648,6 +654,14 @@ const AppRouter = () => (
 							element={
 								<ProtectedRoute requiredPermission="service_orders.requests.create">
 									<ServiceOrderRequests />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.ORDENS_SERVICO_COMPROVANTE}
+							element={
+								<ProtectedRoute requiredPermission="service_orders.return_receipts.create">
+									<ReturnReceipts />
 								</ProtectedRoute>
 							}
 						/>

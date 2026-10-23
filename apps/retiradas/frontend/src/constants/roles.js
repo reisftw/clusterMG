@@ -150,6 +150,8 @@ export const PERMISSION_LABELS = Object.freeze({
 	"tentativas.override": "Tentativas - Override",
 	"service_orders.requests.create": "Solicitar transferência de O.S",
 	"service_orders.requests.history": "Histórico de solicitações de O.S",
+	"service_orders.return_receipts.create": "Gerar comprovante de devolução",
+	"service_orders.return_receipts.history": "Histórico de comprovantes de devolução",
 	"mercado.dashboard.view": "Mercado - Dashboard",
 	"mercado.lotes.view": "Mercado - Lotes",
 	"mercado.lotes.manage": "Gerenciar lotes do Mercado",
@@ -281,6 +283,15 @@ export const PERMISSION_GROUPS = Object.freeze([
 			"tentativas.configuracoes.gerenciar",
 			"tentativas.relatorio.exportar",
 			"tentativas.override",
+		],
+	},
+	{
+		label: "Ordem de Serviço",
+		permissions: [
+			"service_orders.requests.create",
+			"service_orders.requests.history",
+			"service_orders.return_receipts.create",
+			"service_orders.return_receipts.history",
 		],
 	},
 	{
@@ -610,6 +621,8 @@ const LEGACY_ROLE_PERMISSIONS = Object.freeze({
 		ROLES.BACKOFFICE_RETIRADA,
 	],
 	"tentativas.override": [ROLES.ADMIN, ROLES.SUPERVISOR],
+	"service_orders.return_receipts.create": [ROLES.ADMIN, ROLES.TECNICO],
+	"service_orders.return_receipts.history": ADMIN_ONLY,
 	manage_general_settings: DASHBOARD_ROLES,
 	view_integracoes: ADMIN_ONLY,
 	manage_integracoes: ADMIN_ONLY,

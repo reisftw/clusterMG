@@ -70,6 +70,7 @@ const PAGE_TITLES = {
 	[ROUTES.USUARIOS]: "Usuários",
 	[ROUTES.REGRAS]: "Regras",
 	[ROUTES.ORDENS_SERVICO_SOLICITACAO]: "Solicitação de O.S",
+	[ROUTES.ORDENS_SERVICO_COMPROVANTE]: "Comprovante de devolução",
 };
 
 const SIDEBAR_COLLAPSED_KEY = "retiradas-sidebar-collapsed";
