@@ -532,7 +532,7 @@ function findTargetTechnician(metadata = {}, configuredName, configuredId = null
 	const matches = candidates.filter((item) => {
 		const id = text(item.id ?? item.id_usuario);
 		const name = normalize(technicianName(item));
-		const key = `${id}:${name}`;
+		const key = requestedId ? id : `${id}:${name}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
 		return requestedId ? Number(id) === requestedId : name === target;

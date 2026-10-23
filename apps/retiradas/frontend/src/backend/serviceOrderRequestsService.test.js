@@ -85,7 +85,7 @@ describe("serviceOrderRequestsService", () => {
 		};
 		const metadata = {
 			tecnicos: [retirada, instalacao],
-			usuarios: [],
+			usuarios: [{ id: 18, name: "JOSEVAL CAMPOS - INSTALACAO" }],
 		};
 
 		expect(
