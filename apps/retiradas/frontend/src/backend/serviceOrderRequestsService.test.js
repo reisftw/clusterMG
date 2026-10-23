@@ -8,6 +8,7 @@ const {
 	__testables: {
 		applyTargetState,
 		canChooseTechnician,
+		clientOrdersUrl,
 		findTargetTechnician,
 		metadataOrderType,
 		saoPauloDateParts,
@@ -86,6 +87,34 @@ describe("serviceOrderRequestsService", () => {
 				"JOSEVAL CAMPOS - TÉCNICO RETIRADA",
 			),
 		).toThrow("agenda NENHUM");
+	});
+
+	it("aceita resposta sem tipo textual quando o HubSoft omite o campo manual", () => {
+		const order = {
+			codigo_cliente: "336813",
+			id_tipo_ordem_servico: 1487,
+			tipo_ordem_servico: { id_tipo_ordem_servico: 1487 },
+			status: "pendente",
+			duracao: "00:59:00",
+			tecnicos: [{ name: "JOSEVAL CAMPOS - TÉCNICO RETIRADA" }],
+		};
+		expect(() =>
+			verifyFinalState(
+				order,
+				"336813",
+				"JOSEVAL CAMPOS - TÉCNICO RETIRADA",
+			),
+		).not.toThrow();
+	});
+
+	it("monta o link da aba de ordens pelo id interno do cliente", () => {
+		expect(
+			clientOrdersUrl({
+				cliente_servico: { cliente: { id_cliente: 607893 } },
+			}),
+		).toBe(
+			"https://sempre.hubsoft.com.br/cliente/editar/607893/ordem_servico",
+		);
 	});
 
 	it("permite seletor somente para admin e backoffice", () => {

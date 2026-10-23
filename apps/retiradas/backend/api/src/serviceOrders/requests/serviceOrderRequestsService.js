@@ -34,6 +34,7 @@ let initialized = false;
 let metadataCache = null;
 let metadataPromise = null;
 let metadataExpiresAt = 0;
+let keepAliveStarted = false;
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -131,6 +132,23 @@ function clientName(order = {}) {
 			order.cliente_servico?.cliente?.nome_razaosocial ||
 			order.cliente_servico?.cliente?.nome,
 	);
+}
+
+function clientId(order = {}) {
+	return digits(
+		order.id_cliente ||
+			order.cliente?.id_cliente ||
+			order.cliente_servico?.id_cliente ||
+			order.cliente_servico?.cliente?.id_cliente ||
+			order.servico?.id_cliente,
+	);
+}
+
+function clientOrdersUrl(order = {}) {
+	const id = clientId(order);
+	return id
+		? `${HUBSOFT_WEB_BASE_URL}/cliente/editar/${encodeURIComponent(id)}/ordem_servico`
+		: "";
 }
 
 function orderStatus(order = {}) {
@@ -426,7 +444,8 @@ function verifyFinalState(order, code, configuredTechnician) {
 		errors.push("tecnico solicitado");
 	}
 	if (hasScheduledAppointment(order)) errors.push("agenda NENHUM");
-	if (text(order.tipo_agendamento).toLowerCase() !== "manual") errors.push("agendamento manual");
+	const appointmentType = text(order.tipo_agendamento).toLowerCase();
+	if (appointmentType && appointmentType !== "manual") errors.push("agendamento manual");
 	if (text(order.duracao) !== "00:59:00") errors.push("duracao 00:59:00");
 	if (errors.length) {
 		throw new Error(`A verificacao final nao confirmou: ${errors.join(", ")}.`);
@@ -447,7 +466,9 @@ async function runRequest(id) {
 		await updateProgress(id, "Validando vinculo do tecnico", 10);
 		await updateProgress(id, "Validando sessao ativa do HubSoft", 20);
 		const session = await hubsoftSyncProfiles.createAutomationSession();
+		await updateProgress(id, "Carregando configuracao do HubSoft", 25);
 		const metadata = await getAutomationMetadata(session);
+		await updateProgress(id, "Preparando alteracao da O.S", 30);
 		const targetType = findTargetType(metadata);
 		if (!targetType) throw new Error("Tipo CANCELAMENTO FTTH (1487) nao encontrado no HubSoft.");
 		const targetTechnician = findTargetTechnician(
@@ -463,7 +484,8 @@ async function runRequest(id) {
 			throw error;
 		}
 		const serviceOrderId = orderId(summary);
-		const hubsoftUrl = `${HUBSOFT_WEB_BASE_URL}/ordem_servico/${encodeURIComponent(serviceOrderId)}`;
+		const summaryClientUrl = clientOrdersUrl(summary);
+		const hubsoftUrl = summaryClientUrl || `${HUBSOFT_WEB_BASE_URL}/ordem_servico/${encodeURIComponent(serviceOrderId)}`;
 		await updateProgress(id, "Carregando dados completos da O.S", 50, {
 			serviceOrderId,
 			serviceOrderNumber: orderNumber(summary),
@@ -480,6 +502,10 @@ async function runRequest(id) {
 		if (clientCode(order) !== request.client_code) {
 			throw new Error("O codigo do cliente divergiu na confirmacao da O.S.");
 		}
+		const finalHubsoftUrl = clientOrdersUrl(order) || hubsoftUrl;
+		await updateProgress(id, "Dados da O.S confirmados", 55, {
+			hubsoftUrl: finalHubsoftUrl,
+		});
 		await updateProgress(id, "Removendo agenda anterior", 60, {
 			beforeSnapshot: snapshot(order),
 			serviceOrderNumber: orderNumber(order),
@@ -577,6 +603,26 @@ async function initialize() {
 		  order by created_at asc`,
 	);
 	for (const row of pending.rows) enqueue(row.id);
+	void warmAutomationContext();
+	if (!keepAliveStarted) {
+		keepAliveStarted = true;
+		const timer = setInterval(() => {
+			void warmAutomationContext();
+		}, 30 * 60 * 1000);
+		timer.unref?.();
+	}
+}
+
+async function warmAutomationContext() {
+	try {
+		const session = await hubsoftSyncProfiles.createAutomationSession();
+		await getAutomationMetadata(session);
+	} catch (error) {
+		console.warn(
+			"[serviceOrderRequests] Nao foi possivel aquecer a sessao HubSoft:",
+			error?.message || error,
+		);
+	}
 }
 
 async function createRequest(payload = {}, user = {}) {
@@ -733,6 +779,8 @@ module.exports = {
 		applyTargetState,
 		canChooseTechnician,
 		findOpenOrder,
+		clientId,
+		clientOrdersUrl,
 		findTargetTechnician,
 		metadataOrderType,
 		saoPauloDateParts,

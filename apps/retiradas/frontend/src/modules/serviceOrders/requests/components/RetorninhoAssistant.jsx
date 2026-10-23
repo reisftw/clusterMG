@@ -16,7 +16,7 @@ import {
 	criarSolicitacaoOrdemServico,
 } from "../services/serviceOrderRequestsService";
 
-const IMAGE_URL = "/retorninho-solicitacoes-20261022.png";
+const IMAGE_URL = "/retorninho-assistente-mini-20261023.webp";
 const POSITION_KEY = "retiradas-retorninho-assistant-position-v1";
 const PRIVILEGED_ROLES = new Set(["admin", "backoffice", "backoffice_retirada"]);
 
@@ -249,13 +249,14 @@ export default function RetorninhoAssistant() {
 		setLoadError("");
 	}
 
-	function pointerDown(event) {
+	function pointerDown(event, openOnClick = true) {
 		dragRef.current = {
 			pointerId: event.pointerId,
 			startX: event.clientX,
 			startY: event.clientY,
 			origin: position,
 			moved: false,
+			openOnClick,
 		};
 		event.currentTarget.setPointerCapture(event.pointerId);
 	}
@@ -274,7 +275,7 @@ export default function RetorninhoAssistant() {
 		if (!drag || drag.pointerId !== event.pointerId) return;
 		event.currentTarget.releasePointerCapture(event.pointerId);
 		dragRef.current = null;
-		if (!drag.moved) setOpen(true);
+		if (!drag.moved && drag.openOnClick) setOpen(true);
 	}
 
 	if (!canUse) return null;
@@ -284,7 +285,7 @@ export default function RetorninhoAssistant() {
 			{!open ? (
 				<button
 					type="button"
-					onPointerDown={pointerDown}
+					onPointerDown={(event) => pointerDown(event, true)}
 					onPointerMove={pointerMove}
 					onPointerUp={pointerUp}
 					className="fixed z-[75] h-[76px] w-[76px] touch-none overflow-hidden rounded-full border-4 border-white bg-white shadow-[0_14px_38px_rgba(15,23,42,0.32)] ring-2 ring-blue-500 transition hover:scale-105"
@@ -298,13 +299,19 @@ export default function RetorninhoAssistant() {
 			) : (
 				<section className="fixed z-[75] flex overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-[0_24px_70px_rgba(15,23,42,0.35)]" style={panelStyle} aria-label="Conversa com Retorninho">
 					<div className="flex min-w-0 flex-1 flex-col">
-						<header className="flex items-center gap-3 bg-gradient-to-r from-blue-700 to-cyan-500 p-4 text-white">
+						<header
+							onPointerDown={(event) => pointerDown(event, false)}
+							onPointerMove={pointerMove}
+							onPointerUp={pointerUp}
+							className="flex touch-none cursor-move select-none items-center gap-3 bg-gradient-to-r from-blue-700 to-cyan-500 p-4 text-white"
+							title="Arraste para mover o assistente"
+						>
 							<img src={IMAGE_URL} alt="" className="h-12 w-12 rounded-full border-2 border-white/80 object-cover object-[55%_42%]" />
 							<div className="min-w-0 flex-1">
 								<h2 className="font-black">Retorninho</h2>
 								<p className="text-xs font-semibold text-blue-50">Solicitação de O.S</p>
 							</div>
-							<button type="button" onClick={() => setOpen(false)} className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 hover:bg-white/25" aria-label="Fechar conversa" title="Fechar"><X size={20} /></button>
+							<button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setOpen(false)} className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white/15 hover:bg-white/25" aria-label="Fechar conversa" title="Fechar"><X size={20} /></button>
 						</header>
 
 						<div ref={messagesRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">

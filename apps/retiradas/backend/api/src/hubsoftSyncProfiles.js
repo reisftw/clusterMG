@@ -433,30 +433,25 @@ async function authenticateWithPlaywright(config) {
 			waitUntil: "domcontentloaded",
 			timeout: 60_000,
 		});
-		await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
 		const usernameInput = page.locator(
 			'input[type="email"], input[name="email"], input[type="text"]',
 		);
 		await fillInput(usernameInput, username);
-		await Promise.all([
-			page.waitForLoadState("networkidle", { timeout: 60_000 }).catch(() => {}),
-			submitByText("VALIDAR", usernameInput),
-		]);
-		await page.waitForTimeout(1000);
+		await submitByText("VALIDAR", usernameInput);
 		const passwordInput = page.locator(
 			'input[type="password"], input[name*="senha" i], input[name*="password" i]',
 		);
+		await firstVisible(passwordInput).then((input) =>
+			input.waitFor({ state: "visible", timeout: 20_000 }),
+		);
 		await fillInput(passwordInput, password);
-		await Promise.all([
-			page.waitForLoadState("networkidle", { timeout: 60_000 }).catch(() => {}),
-			submitByText("ENTRAR", passwordInput),
-		]);
+		await submitByText("ENTRAR", passwordInput);
 		await page.waitForFunction(() => {
 			try {
 				const value = JSON.parse(localStorage.getItem("auth") || "null");
 				return Boolean(value?.login?.access_token || value?.login?.token || value?.access_token || value?.token);
 			} catch { return false; }
-		}, null, { timeout: 30000 }).catch(() => {});
+		}, null, { timeout: 20_000 }).catch(() => {});
 		const auth = await page.evaluate(() => {
 			const raw = localStorage.getItem("auth");
 			const parsed = raw ? JSON.parse(raw) : null;
