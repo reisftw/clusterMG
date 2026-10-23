@@ -4,6 +4,7 @@ const auditLog = require("./auditLog");
 const mensageriaRepository = require("./mensageriaRepository");
 const ordensRepository = require("./ordensRepository");
 const regionaisRepository = require("./regionaisRepository");
+const { mapOrderChanged } = require("./mapOrderComparison");
 const { broadcastRealtime } = require("./realtime");
 const {
 	reconcileAppointmentsWithMapa,
@@ -64,39 +65,6 @@ const IMPORT_JOB_COLLECTION = "operational_import_jobs";
 const ESTOQUE_ONNET_COLLECTION = "estoque_onnet";
 const importJobPromises = new Map();
 const AGENT_CITY_EXCLUSION_KEYS = new Set(["POMPEU"]);
-const MAP_ORDER_COMPARISON_FIELDS = [
-	"num_os",
-	"empresa",
-	"fonte",
-	"status",
-	"tipo",
-	"cidade",
-	"regional",
-	"agente",
-	"codigo_cliente",
-	"nome_cliente",
-	"id_cliente_servico",
-	"servico",
-	"numero_plano",
-	"data_cadastro",
-	"data_abertura_os",
-	"telefone",
-	"telefone_primario",
-	"telefone_secundario",
-	"telefone_terciario",
-	"telefones",
-	"mac_addr",
-	"phy_addr",
-	"macs_equipamento",
-	"tecnico",
-	"endereco",
-	"numero",
-	"bairro",
-	"endereco_resumo",
-	"coordenadas",
-	"latitude",
-	"longitude",
-];
 
 const ONNET_MAC_PREFIX_MANUFACTURERS = {
 	"000C29": "VMware",
@@ -198,17 +166,6 @@ function normalizeText(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.toLowerCase()
 		.trim();
-}
-
-function comparableMapOrder(order = {}) {
-	return MAP_ORDER_COMPARISON_FIELDS.map((field) => {
-		const value = order[field];
-		return Array.isArray(value) ? [...value].sort() : (value ?? null);
-	});
-}
-
-function mapOrderChanged(current = {}, incoming = {}) {
-	return JSON.stringify(comparableMapOrder(current)) !== JSON.stringify(comparableMapOrder(incoming));
 }
 
 function normalizeMacInput(value) {

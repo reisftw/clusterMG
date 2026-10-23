@@ -3017,7 +3017,9 @@ async function runMapMatchScheduler(rawConfig, config) {
 			if (mapDue) {
 				results.push({ profile: PROFILE.MAPA, result: mapResult });
 				if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(mapResult?.status)) {
-					await saveSchedulerState({ autoMapLastRunAt: new Date().toISOString() });
+					await saveSchedulerState({
+						autoMapLastRunAt: mapResult.started_at || new Date().toISOString(),
+					});
 				}
 			}
 
@@ -3027,7 +3029,9 @@ async function runMapMatchScheduler(rawConfig, config) {
 			if (matchDue) {
 				results.push({ profile: PROFILE.MATCH, result: matchResult });
 				if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(matchResult?.status)) {
-					await saveSchedulerState({ autoMatchLastRunAt: new Date().toISOString() });
+					await saveSchedulerState({
+						autoMatchLastRunAt: matchResult.started_at || new Date().toISOString(),
+					});
 				}
 			}
 
