@@ -106,10 +106,7 @@ function generateReturnReceiptPdf(snapshot = {}) {
 				valign: "center",
 			});
 		} else {
-			doc.save();
-			doc.rect(40, 18, 160, 76).clip();
-			doc.image(logo, 15, -55, { width: 205 });
-			doc.restore();
+			doc.image(logo, 15, -45, { width: 205 });
 		}
 		const headingColor = "#FFFFFF";
 		const subheadingColor = companyOnnet ? "#DDF6E8" : "#FFF0E3";
