@@ -370,7 +370,7 @@ async function localOpenOrderCandidates(code) {
 		`select distinct on (num_os)
 		        num_os,
 		        tipo,
-		        to_char(data_cadastro at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_cadastro_dia,
+		        to_char(data_cadastro at time zone 'UTC', 'YYYY-MM-DD') as data_cadastro_dia,
 		        updated_at
 		   from ordens_servico
 		  where codigo_cliente = $1
