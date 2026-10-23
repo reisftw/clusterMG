@@ -14,7 +14,7 @@ const DEFAULT_INTERNAL_BASE_URL = "https://api.sempre.hubsoft.com.br";
 const TIME_ZONE = "America/Sao_Paulo";
 const LOCK_TTL_MS = 30 * 60 * 1000;
 const PAGE_SIZE = Math.min(
-	Math.max(Number(process.env.HUBSOFT_PAGE_SIZE || 500), 100),
+	Math.max(Number(process.env.HUBSOFT_PAGE_SIZE || 1000), 100),
 	1000,
 );
 const HUBSOFT_REQUEST_TIMEOUT_MS = Math.min(
@@ -1526,6 +1526,46 @@ function withPhones(row = {}, phones = []) {
 	};
 }
 
+function mapOrderNumber(row = {}) {
+	return cleanText(
+		row.numero_ordem_servico ||
+			row.num_os ||
+			row.numero_os ||
+			row.ordem_servico?.numero_ordem_servico ||
+			"",
+	);
+}
+
+async function reuseStoredMapPhones(rows = []) {
+	const orderNumbers = [
+		...new Set(rows.map(mapOrderNumber).filter(Boolean)),
+	];
+	if (!orderNumbers.length) return { rows, reused: 0 };
+	const result = await db.query(
+		`select num_os, telefone, telefones
+		   from ordens_servico
+		  where source_collection = 'ordens_abertas'
+		    and num_os = any($1::text[])
+		    and (coalesce(telefone, '') <> '' or cardinality(telefones) > 0)`,
+		[orderNumbers],
+	);
+	const storedByOrder = new Map(
+		result.rows.map((row) => [
+			cleanText(row.num_os),
+			uniquePhones([row.telefone, ...(row.telefones || [])]),
+		]),
+	);
+	let reused = 0;
+	const nextRows = rows.map((row) => {
+		if (phonesFromHubsoftRecord(row).length) return row;
+		const stored = storedByOrder.get(mapOrderNumber(row)) || [];
+		if (!stored.length) return row;
+		reused += 1;
+		return withPhones(row, stored);
+	});
+	return { rows: nextRows, reused };
+}
+
 function phoneSearchIds(row = {}) {
 	return {
 		orderId: cleanText(
@@ -1576,6 +1616,10 @@ async function fetchPhonesForMapRow(session, row = {}) {
 }
 
 async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) {
+	const cached = await reuseStoredMapPhones(rows).catch(() => ({
+		rows,
+		reused: 0,
+	}));
 	const today = parseDateOnly(todaySaoPaulo());
 	const lookbackDays = Math.min(
 		Math.max(Number(options.phoneEnrichmentDays || process.env.HUBSOFT_MAP_PHONE_ENRICH_DAYS || 8), 1),
@@ -1587,18 +1631,28 @@ async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) 
 		Math.max(Number(options.phoneEnrichmentLimit || process.env.HUBSOFT_MAP_PHONE_ENRICH_LIMIT || 1000), 0),
 		1000,
 	);
-	if (!limit) return { rows, summary: { attempted: 0, enriched: 0 } };
+	if (!limit) {
+		return {
+			rows: cached.rows,
+			summary: { reused: cached.reused, attempted: 0, enriched: 0 },
+		};
+	}
 	const indexes = [];
-	for (let index = 0; index < rows.length; index += 1) {
-		const row = rows[index];
+	for (let index = 0; index < cached.rows.length; index += 1) {
+		const row = cached.rows[index];
 		if (phonesFromHubsoftRecord(row).length) continue;
 		const sourceDate = safeTimestamp(extractSourceDate(row));
 		if (!sourceDate || new Date(sourceDate) < minDate) continue;
 		indexes.push(index);
 		if (indexes.length >= limit) break;
 	}
-	if (!indexes.length) return { rows, summary: { attempted: 0, enriched: 0 } };
-	const nextRows = [...rows];
+	if (!indexes.length) {
+		return {
+			rows: cached.rows,
+			summary: { reused: cached.reused, attempted: 0, enriched: 0 },
+		};
+	}
+	const nextRows = [...cached.rows];
 	let cursor = 0;
 	let enriched = 0;
 	const concurrency = Math.min(3, indexes.length);
@@ -1607,16 +1661,16 @@ async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) 
 			const current = cursor;
 			cursor += 1;
 			const index = indexes[current];
-			const phones = await fetchPhonesForMapRow(session, rows[index]);
+			const phones = await fetchPhonesForMapRow(session, nextRows[index]);
 			if (!phones.length) continue;
-			nextRows[index] = withPhones(rows[index], phones);
+			nextRows[index] = withPhones(nextRows[index], phones);
 			enriched += 1;
 		}
 	});
 	await Promise.all(workers);
 	return {
 		rows: nextRows,
-		summary: { attempted: indexes.length, enriched },
+		summary: { reused: cached.reused, attempted: indexes.length, enriched },
 	};
 }
 

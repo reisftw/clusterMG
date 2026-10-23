@@ -64,6 +64,39 @@ const IMPORT_JOB_COLLECTION = "operational_import_jobs";
 const ESTOQUE_ONNET_COLLECTION = "estoque_onnet";
 const importJobPromises = new Map();
 const AGENT_CITY_EXCLUSION_KEYS = new Set(["POMPEU"]);
+const MAP_ORDER_COMPARISON_FIELDS = [
+	"num_os",
+	"empresa",
+	"fonte",
+	"status",
+	"tipo",
+	"cidade",
+	"regional",
+	"agente",
+	"codigo_cliente",
+	"nome_cliente",
+	"id_cliente_servico",
+	"servico",
+	"numero_plano",
+	"data_cadastro",
+	"data_abertura_os",
+	"telefone",
+	"telefone_primario",
+	"telefone_secundario",
+	"telefone_terciario",
+	"telefones",
+	"mac_addr",
+	"phy_addr",
+	"macs_equipamento",
+	"tecnico",
+	"endereco",
+	"numero",
+	"bairro",
+	"endereco_resumo",
+	"coordenadas",
+	"latitude",
+	"longitude",
+];
 
 const ONNET_MAC_PREFIX_MANUFACTURERS = {
 	"000C29": "VMware",
@@ -165,6 +198,17 @@ function normalizeText(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.toLowerCase()
 		.trim();
+}
+
+function comparableMapOrder(order = {}) {
+	return MAP_ORDER_COMPARISON_FIELDS.map((field) => {
+		const value = order[field];
+		return Array.isArray(value) ? [...value].sort() : (value ?? null);
+	});
+}
+
+function mapOrderChanged(current = {}, incoming = {}) {
+	return JSON.stringify(comparableMapOrder(current)) !== JSON.stringify(comparableMapOrder(incoming));
 }
 
 function normalizeMacInput(value) {
@@ -1652,22 +1696,34 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 	const newMapEntries = Object.entries(incoming).filter(
 		([id]) => !currentBySource[id],
 	);
-	const deleted = await documents.deleteDocumentsByCollectionAndSources(
-		"ordens_abertas",
-		fontes,
+	const changedMap = Object.fromEntries(
+		Object.entries(incoming).filter(
+			([id, order]) => !currentBySource[id] || mapOrderChanged(currentBySource[id], order),
+		),
 	);
 	await context.update?.({
-		stage: "Salvando ordens do mapa no PostgreSQL",
+		stage: "Preparando sincronizacao incremental do mapa no PostgreSQL",
 		percent: 55,
-		totalDocuments: Object.keys(incoming).length,
+		totalDocuments: Object.keys(changedMap).length,
 	});
-	await upsertMany("ordens_abertas", incoming, {
-		update: context.update,
-		stage: "Salvando ordens do mapa no PostgreSQL",
-		startPercent: 55,
-		endPercent: 72,
-		step: 1000,
-	});
+	const replacement = await ordensRepository.replaceOrderDocumentsByCollectionAndSources(
+		"ordens_abertas",
+		changedMap,
+		incoming,
+		fontes,
+		{
+			onProgress: async (processed, total) => {
+				if (!context.update || !shouldReportImportProgress(processed, total, 1000)) return;
+				await context.update({
+					stage: `Salvando mapa sem interromper consultas (${processed}/${total})`,
+					percent: calculateImportProgressPercent(processed, total, 55, 72),
+					processedDocuments: processed,
+					totalDocuments: total,
+				});
+			},
+		},
+	);
+	const deleted = replacement.deleted;
 	await context.update?.({
 		stage: "Montando snapshot atualizado do mapa",
 		percent: 74,
@@ -1704,6 +1760,7 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		fonteAtualizadaLabel: fonteLabel,
 		novasSalvas: Object.keys(incoming).filter((id) => !currentBySource[id])
 			.length,
+		atualizadas: Math.max(Object.keys(changedMap).length - newMapEntries.length, 0),
 		removidas: deleted,
 		periodoInicio: periodo?.inicio || null,
 		periodoFim: periodo?.fim || null,

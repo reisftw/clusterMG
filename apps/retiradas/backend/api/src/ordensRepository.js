@@ -24,6 +24,20 @@ const META_COLLECTIONS = new Set([
 	COLLECTIONS.publicDashboard,
 ]);
 const COLLECTION_SET = new Set([...ORDER_COLLECTIONS, ...META_COLLECTIONS]);
+const ORDER_BATCH_SIZE = 250;
+const ORDER_COLUMNS = [
+	"id", "source_collection", "source", "num_os", "codigo_cliente",
+	"nome_cliente", "telefone", "telefones", "empresa", "tipo", "status",
+	"servico", "tecnico", "cidade", "regional", "endereco", "endereco_resumo",
+	"bairro", "numero", "latitude", "longitude", "coordenadas", "data_abertura",
+	"data_cadastro", "mac_addr", "phy_addr", "macs_equipamento", "agente",
+	"legacy_path", "legacy_document_id", "created_at", "updated_at", "source_payload",
+];
+const ORDER_JSONB_COLUMN_INDEXES = new Set([26, 32]);
+const ORDER_ARRAY_COLUMN_INDEXES = new Set([7]);
+const ORDER_UPDATE_COLUMNS = ORDER_COLUMNS.filter(
+	(column) => !["id", "created_at"].includes(column),
+);
 
 function isOrdersCollection(collectionPath) {
 	return COLLECTION_SET.has(String(collectionPath || "").trim());
@@ -342,87 +356,145 @@ async function upsertDocument(record = {}, options = {}) {
 	return null;
 }
 
-async function upsertOrder(record, { returnDocument = true } = {}) {
+function orderParams(row) {
+	return [
+		row.id,
+		row.source_collection,
+		row.source,
+		row.num_os,
+		row.codigo_cliente,
+		row.nome_cliente,
+		row.telefone,
+		row.telefones,
+		row.empresa,
+		row.tipo,
+		row.status,
+		row.servico,
+		row.tecnico,
+		row.cidade,
+		row.regional,
+		row.endereco,
+		row.endereco_resumo,
+		row.bairro,
+		row.numero,
+		row.latitude,
+		row.longitude,
+		row.coordenadas,
+		row.data_abertura,
+		row.data_cadastro,
+		row.mac_addr,
+		row.phy_addr,
+		JSON.stringify(row.macs_equipamento),
+		row.agente,
+		row.legacy_path,
+		row.legacy_document_id,
+		row.created_at,
+		row.updated_at,
+		JSON.stringify(row.source_payload),
+	];
+}
+
+function orderConflictSql() {
+	return ORDER_UPDATE_COLUMNS.map(
+		(column) => `${column} = excluded.${column}`,
+	).join(", ");
+}
+
+function orderValuePlaceholders(rowIndex) {
+	return `(${ORDER_COLUMNS.map((_, columnIndex) => {
+		const parameter = `$${rowIndex * ORDER_COLUMNS.length + columnIndex + 1}`;
+		if (ORDER_ARRAY_COLUMN_INDEXES.has(columnIndex)) return `${parameter}::text[]`;
+		if (ORDER_JSONB_COLUMN_INDEXES.has(columnIndex)) return `${parameter}::jsonb`;
+		return parameter;
+	}).join(",")})`;
+}
+
+async function upsertOrder(record, { returnDocument = true, executor = db } = {}) {
 	const row = normalizeOrderRecord(record);
-	await db.query(
+	await executor.query(
 		`insert into ordens_servico
-		 (id, source_collection, source, num_os, codigo_cliente, nome_cliente,
-		  telefone, telefones, empresa, tipo, status, servico, tecnico, cidade,
-		  regional, endereco, endereco_resumo, bairro, numero, latitude, longitude,
-		  coordenadas, data_abertura, data_cadastro, mac_addr, phy_addr,
-		  macs_equipamento, agente, legacy_path, legacy_document_id, created_at,
-		  updated_at, source_payload)
+		 (${ORDER_COLUMNS.join(", ")})
 		 values ($1,$2,$3,$4,$5,$6,$7,$8::text[],$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27::jsonb,$28,$29,$30,$31,$32,$33::jsonb)
-		 on conflict (id) do update set
-		   source_collection = excluded.source_collection,
-		   source = excluded.source,
-		   num_os = excluded.num_os,
-		   codigo_cliente = excluded.codigo_cliente,
-		   nome_cliente = excluded.nome_cliente,
-		   telefone = excluded.telefone,
-		   telefones = excluded.telefones,
-		   empresa = excluded.empresa,
-		   tipo = excluded.tipo,
-		   status = excluded.status,
-		   servico = excluded.servico,
-		   tecnico = excluded.tecnico,
-		   cidade = excluded.cidade,
-		   regional = excluded.regional,
-		   endereco = excluded.endereco,
-		   endereco_resumo = excluded.endereco_resumo,
-		   bairro = excluded.bairro,
-		   numero = excluded.numero,
-		   latitude = excluded.latitude,
-		   longitude = excluded.longitude,
-		   coordenadas = excluded.coordenadas,
-		   data_abertura = excluded.data_abertura,
-		   data_cadastro = excluded.data_cadastro,
-		   mac_addr = excluded.mac_addr,
-		   phy_addr = excluded.phy_addr,
-		   macs_equipamento = excluded.macs_equipamento,
-		   agente = excluded.agente,
-		   legacy_path = excluded.legacy_path,
-		   legacy_document_id = excluded.legacy_document_id,
-		   updated_at = excluded.updated_at,
-		   source_payload = excluded.source_payload`,
-		[
-			row.id,
-			row.source_collection,
-			row.source,
-			row.num_os,
-			row.codigo_cliente,
-			row.nome_cliente,
-			row.telefone,
-			row.telefones,
-			row.empresa,
-			row.tipo,
-			row.status,
-			row.servico,
-			row.tecnico,
-			row.cidade,
-			row.regional,
-			row.endereco,
-			row.endereco_resumo,
-			row.bairro,
-			row.numero,
-			row.latitude,
-			row.longitude,
-			row.coordenadas,
-			row.data_abertura,
-			row.data_cadastro,
-			row.mac_addr,
-			row.phy_addr,
-			JSON.stringify(row.macs_equipamento),
-			row.agente,
-			row.legacy_path,
-			row.legacy_document_id,
-			row.created_at,
-			row.updated_at,
-			JSON.stringify(row.source_payload),
-		],
+		 on conflict (id) do update set ${orderConflictSql()}`,
+		orderParams(row),
 	);
 	if (!returnDocument) return null;
 	return getDocument(row.legacy_path);
+}
+
+async function replaceOrderDocumentsByCollectionAndSources(
+	collectionPath,
+	docsMap = {},
+	activeDocsMap = {},
+	sources = [],
+	{ onProgress } = {},
+) {
+	if (!ORDER_COLLECTIONS.has(collectionPath)) {
+		throw new Error(`Colecao de ordens invalida: ${collectionPath}`);
+	}
+	const normalizedSources = sources.map((source) => normalizeSource(source)).filter(Boolean);
+	if (!normalizedSources.length) return { deleted: 0, upserted: 0 };
+	const rows = Object.entries(docsMap).map(([documentId, data]) =>
+		normalizeOrderRecord({
+			path: `${collectionPath}/${documentId}`,
+			collectionPath,
+			documentId,
+			parentPath: null,
+			data,
+		}),
+	);
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		for (let offset = 0; offset < rows.length; offset += ORDER_BATCH_SIZE) {
+			const batch = rows.slice(offset, offset + ORDER_BATCH_SIZE);
+			const params = batch.flatMap(orderParams);
+			const values = batch.map((_, index) => orderValuePlaceholders(index)).join(",");
+			await client.query(
+				`insert into ordens_servico (${ORDER_COLUMNS.join(", ")})
+				 values ${values}
+				 on conflict (id) do update set ${orderConflictSql()}`,
+				params,
+			);
+			await onProgress?.(Math.min(offset + batch.length, rows.length), rows.length);
+		}
+
+		const deleteSempre = normalizedSources.includes("sempre");
+		const deleteOnnet = normalizedSources.includes("onnet");
+		const incomingIds = Object.entries(activeDocsMap).map(([documentId, data]) =>
+			orderIdFromRecord({
+				path: `${collectionPath}/${documentId}`,
+				collectionPath,
+				documentId,
+				data,
+			}),
+		);
+		const deleted = await client.query(
+			`delete from ordens_servico
+			  where source_collection = $1
+			    and not (id = any($5::text[]))
+			    and (
+			      source = any($2::text[])
+			      or (
+			        $3::boolean = true
+			        and coalesce(source, '') in ('', $1, 'sempre')
+			        and lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) not like '%onnet%'
+			      )
+			      or (
+			        $4::boolean = true
+			        and lower(coalesce(source_payload->>'fonte', source_payload->>'empresa', '')) like '%onnet%'
+			      )
+			    )`,
+			[collectionPath, normalizedSources, deleteSempre, deleteOnnet, incomingIds],
+		);
+		await client.query("commit");
+		return { deleted: deleted.rowCount || 0, upserted: rows.length };
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function upsertImportRun(record) {
@@ -539,5 +611,6 @@ module.exports = {
 	isOrdersCollection,
 	listAllDocuments,
 	listDocuments,
+	replaceOrderDocumentsByCollectionAndSources,
 	upsertDocument,
 };
