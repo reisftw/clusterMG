@@ -142,6 +142,7 @@ describe("serviceOrderRequestsService", () => {
 		"Cancelamento FTTH",
 		"Cancelamento - Outros",
 		"Cancelamento & Retirada - Segunda tentativa",
+		"Retirada & Cancelamento - Segunda tentativa",
 		"Cancelamento Loja",
 	])("permite somente o tipo de retirada %s", (type) => {
 		expect(isAllowedSourceOrderType(type)).toBe(true);
