@@ -182,6 +182,7 @@ const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
 	],
 	tecnico: [
 		"view_dashboard",
+		"service_orders.requests.create",
 		"tentativas.visualizar",
 		"tentativas.executar",
 	],

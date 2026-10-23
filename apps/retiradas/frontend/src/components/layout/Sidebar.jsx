@@ -239,6 +239,12 @@ const NAV_ITEMS = [
 		permission: ["movimentacoes.view", "movimentacoes.manage"],
 	},
 	{
+		label: "Solicitação",
+		path: ROUTES.ORDENS_SERVICO_SOLICITACAO,
+		icon: Send,
+		permission: ["service_orders.requests.create"],
+	},
+	{
 		label: "Cancelamentos",
 		path: ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 		icon: ClipboardCheck,
@@ -682,6 +688,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.MAPA_HISTORICO,
 	ROUTES.EMPRESAS_TECNICOS,
 	ROUTES.AGENDAMENTOS,
+	ROUTES.ORDENS_SERVICO_SOLICITACAO,
 	ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 	ROUTES.ORDENS_SERVICO_MULTAS,
 	ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
@@ -856,6 +863,7 @@ const MENU_GROUPS = [
 		label: "Ordem de Serviço",
 		icon: ClipboardCheck,
 		paths: [
+			ROUTES.ORDENS_SERVICO_SOLICITACAO,
 			ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 			ROUTES.ORDENS_SERVICO_MULTAS,
 			ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,

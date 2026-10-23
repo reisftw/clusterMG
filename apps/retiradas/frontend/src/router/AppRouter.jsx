@@ -55,6 +55,12 @@ const ServiceOrderCancellations = lazy(
 const ServiceOrderFines = lazy(
 	() => import("../modules/serviceOrders/fines/components/ServiceOrderFinesPage"),
 );
+const ServiceOrderRequests = lazy(
+	() =>
+		import(
+			"../modules/serviceOrders/requests/components/ServiceOrderRequestsPage"
+		),
+);
 const Colaboradores = lazy(
 	() => import("../modules/colaboradores/components/ColaboradoresPage"),
 );
@@ -635,6 +641,14 @@ const AppRouter = () => (
 									to={ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS}
 									replace
 								/>
+							}
+						/>
+						<Route
+							path={ROUTES.ORDENS_SERVICO_SOLICITACAO}
+							element={
+								<ProtectedRoute requiredPermission="service_orders.requests.create">
+									<ServiceOrderRequests />
+								</ProtectedRoute>
 							}
 						/>
 						<Route

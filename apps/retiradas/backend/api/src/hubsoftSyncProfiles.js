@@ -3179,7 +3179,9 @@ async function getProfilesOverview() {
 module.exports = {
 	PROFILE,
 	RUN_STATUS,
+	automationRequest: hubsoftRequest,
 	classifyOrder,
+	createAutomationSession: getSession,
 	discoverWithdrawalTechnicians,
 	getProfilesOverview,
 	getRun,

@@ -62,6 +62,7 @@ const createNotificationsRouter = require("./notifications/routes/notificationsR
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
+const createServiceOrderRequestsRouter = require("./serviceOrders/requests/routes/serviceOrderRequestsRoutes");
 const createTentativasRouter = require("./tentativas/routes/tentativasRoutes");
 const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
 const mapSyncUpdates = require("./mapSyncUpdatesService");
@@ -2806,6 +2807,15 @@ function createApp() {
 			fullOperationRoles: FULL_OPERATION_ROLES,
 			requireAuthenticated,
 			requireRoles,
+		}),
+	);
+
+	app.use(
+		"/api/service-orders/requests",
+		createServiceOrderRequestsRouter({
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
 		}),
 	);
 

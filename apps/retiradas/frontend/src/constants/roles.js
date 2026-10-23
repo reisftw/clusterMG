@@ -148,6 +148,8 @@ export const PERMISSION_LABELS = Object.freeze({
 	"tentativas.configuracoes.gerenciar": "Gerenciar configurações de tentativas",
 	"tentativas.relatorio.exportar": "Exportar relatório de tentativas",
 	"tentativas.override": "Tentativas - Override",
+	"service_orders.requests.create": "Solicitar transferência de O.S",
+	"service_orders.requests.history": "Histórico de solicitações de O.S",
 	"mercado.dashboard.view": "Mercado - Dashboard",
 	"mercado.lotes.view": "Mercado - Lotes",
 	"mercado.lotes.manage": "Gerenciar lotes do Mercado",
