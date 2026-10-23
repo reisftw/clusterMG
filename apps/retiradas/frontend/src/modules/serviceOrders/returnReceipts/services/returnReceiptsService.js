@@ -15,10 +15,10 @@ export async function consultarComprovante(clientCode) {
 	);
 }
 
-export async function gerarComprovante(clientCode) {
+export async function gerarComprovante(clientCode, equipment = {}) {
 	return requestVpsApi("/service-orders/return-receipts", {
 		method: "POST",
-		body: JSON.stringify({ clientCode }),
+		body: JSON.stringify({ clientCode, ...equipment }),
 	});
 }
 

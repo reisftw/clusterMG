@@ -10,6 +10,7 @@ const {
 		dedupeEquipment,
 		equipmentTypeLabel,
 		mapFallbackEquipment,
+		manualEquipmentFromPayload,
 		normalize,
 		parseTechnician,
 	},
@@ -64,6 +65,27 @@ describe("returnReceiptsService", () => {
 				productName: "Equipamento AC",
 				serial: "",
 				source: "ORDEM_SERVICO",
+			}),
+		);
+	});
+
+	it("exige nome e MAC no equipamento informado manualmente", () => {
+		expect(() =>
+			manualEquipmentFromPayload({ equipmentName: "ONU", equipmentMac: "" }),
+		).toThrow("Informe um MAC ou serial valido.");
+		expect(
+			manualEquipmentFromPayload(
+				{
+					equipmentName: "ONU Huawei EG8145V5",
+					equipmentMac: "54:4b:54:36:61:d8",
+				},
+				"014326000000000001",
+			),
+		).toEqual(
+			expect.objectContaining({
+				productName: "ONU Huawei EG8145V5",
+				serial: "54:4B:54:36:61:D8",
+				source: "MANUAL",
 			}),
 		);
 	});

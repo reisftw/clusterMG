@@ -8,9 +8,11 @@ import {
 	History,
 	LoaderCircle,
 	PackageCheck,
+	Router,
 	Search,
 	ShieldCheck,
 	UserRoundCheck,
+	X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { hasAnyPermission } from "../../../../constants/roles";
@@ -123,6 +125,10 @@ export default function ReturnReceiptsPage() {
 	const [loadingHistory, setLoadingHistory] = useState(false);
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
+	const [manualDialogOpen, setManualDialogOpen] = useState(false);
+	const [manualEquipmentName, setManualEquipmentName] = useState("");
+	const [manualEquipmentMac, setManualEquipmentMac] = useState("");
+	const [manualError, setManualError] = useState("");
 
 	const loadMine = useCallback(async () => {
 		const response = await listarMeusComprovantes();
@@ -157,6 +163,8 @@ export default function ReturnReceiptsPage() {
 		setError("");
 		setMessage("");
 		setCandidate(null);
+		setManualDialogOpen(false);
+		setManualError("");
 		if (!/^\d+$/.test(clientCode)) {
 			setError("Informe somente o codigo numerico do cliente.");
 			return;
@@ -172,21 +180,53 @@ export default function ReturnReceiptsPage() {
 		}
 	}
 
-	async function generate() {
+	async function generate(equipment = {}) {
 		setGenerating(true);
 		setError("");
 		setMessage("");
 		try {
-			const response = await gerarComprovante(candidate.clientCode);
+			const response = await gerarComprovante(candidate.clientCode, equipment);
 			setCandidate((current) => ({ ...current, existingReceipt: response.item }));
 			setMessage(response.reused ? "Este comprovante ja existia e esta pronto para download." : "Comprovante gerado e salvo no historico.");
 			await loadMine();
 			await loadHistory();
+			return true;
 		} catch (generateError) {
-			setError(generateError?.message || "Nao foi possivel gerar o comprovante.");
+			const nextError = generateError?.message || "Nao foi possivel gerar o comprovante.";
+			if (manualDialogOpen) setManualError(nextError);
+			else setError(nextError);
+			return false;
 		} finally {
 			setGenerating(false);
 		}
+	}
+
+	function requestGenerate() {
+		if (!candidate?.requiresManualEquipment) {
+			generate();
+			return;
+		}
+		setManualEquipmentName("");
+		setManualEquipmentMac("");
+		setManualError("");
+		setManualDialogOpen(true);
+	}
+
+	async function confirmManualEquipment(event) {
+		event.preventDefault();
+		const name = manualEquipmentName.trim();
+		const mac = manualEquipmentMac.trim().toUpperCase();
+		if (name.length < 2) {
+			setManualError("Informe o nome ou modelo do equipamento recolhido.");
+			return;
+		}
+		if (mac.replace(/[^A-Z0-9]/g, "").length < 8) {
+			setManualError("Informe um MAC ou serial válido.");
+			return;
+		}
+		setManualError("");
+		const created = await generate({ equipmentName: name, equipmentMac: mac });
+		if (created) setManualDialogOpen(false);
 	}
 
 	return (
@@ -241,7 +281,7 @@ export default function ReturnReceiptsPage() {
 						{candidate.existingReceipt ? (
 							<DownloadButton item={candidate.existingReceipt} onError={setError} />
 						) : (
-							<button type="button" onClick={generate} disabled={generating} className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 disabled:opacity-60 sm:w-auto">
+							<button type="button" onClick={requestGenerate} disabled={generating} className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 disabled:opacity-60 sm:w-auto">
 								{generating ? <LoaderCircle size={17} className="animate-spin" /> : <FileCheck2 size={17} />}
 								Gerar comprovante
 							</button>
@@ -281,6 +321,45 @@ export default function ReturnReceiptsPage() {
 					{loadingHistory ? <div className="flex min-h-32 items-center justify-center"><LoaderCircle className="animate-spin text-blue-700" /></div> : <ReceiptTable items={history} admin onError={setError} />}
 					<div className="mt-4 flex items-center justify-between text-sm font-semibold text-slate-500"><span>{historyPagination.total} registro(s)</span><div className="flex items-center gap-2"><button type="button" disabled={historyPage <= 1} onClick={() => setHistoryPage((page) => page - 1)} className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40">Anterior</button><span>Pagina {historyPage} de {historyPagination.totalPages}</span><button type="button" disabled={historyPage >= historyPagination.totalPages} onClick={() => setHistoryPage((page) => page + 1)} className="rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40">Proxima</button></div></div>
 				</section>
+			) : null}
+
+			{manualDialogOpen ? (
+				<div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="presentation" onMouseDown={() => !generating && setManualDialogOpen(false)}>
+					<section className="w-full max-w-lg overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="manual-equipment-title" onMouseDown={(event) => event.stopPropagation()}>
+						<header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-950 px-5 py-5 text-white sm:px-6">
+							<div className="flex items-start gap-3">
+								<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600"><Router size={22} /></span>
+								<div><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-300">Identificação obrigatória</p><h2 id="manual-equipment-title" className="mt-1 text-xl font-black">Equipamento recolhido</h2></div>
+							</div>
+							<button type="button" onClick={() => setManualDialogOpen(false)} disabled={generating} title="Fechar" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"><X size={20} /></button>
+						</header>
+
+						<form onSubmit={confirmManualEquipment} className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
+							<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold leading-5 text-blue-900">
+								Não encontramos movimentação de estoque para esta O.S. Informe exatamente o equipamento entregue pelo cliente antes de gerar o comprovante.
+								{candidate?.equipment?.[0]?.productName ? <span className="mt-1 block text-xs font-black text-blue-700">Referência da O.S.: {candidate.equipment[0].productName}</span> : null}
+							</div>
+
+							<label className="block">
+								<span className="mb-2 block text-sm font-black text-slate-800">Nome ou modelo do equipamento</span>
+								<input autoFocus value={manualEquipmentName} onChange={(event) => setManualEquipmentName(event.target.value)} maxLength={120} placeholder="Ex.: ONU Huawei EG8145V5" className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base font-semibold text-slate-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+							</label>
+
+							<label className="block">
+								<span className="mb-2 block text-sm font-black text-slate-800">MAC ou número de série</span>
+								<input value={manualEquipmentMac} onChange={(event) => setManualEquipmentMac(event.target.value.toUpperCase().replace(/\s/g, ""))} maxLength={64} autoCapitalize="characters" autoComplete="off" spellCheck="false" placeholder="Ex.: 54:4B:54:36:61:D8" className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 font-mono text-base font-bold uppercase text-slate-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+								<span className="mt-1.5 block text-xs font-semibold text-slate-500">Aceita MAC com separadores ou serial alfanumérico.</span>
+							</label>
+
+							{manualError ? <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-800"><AlertCircle className="mt-0.5 shrink-0" size={17} /><span>{manualError}</span></div> : null}
+
+							<div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+								<button type="button" onClick={() => setManualDialogOpen(false)} disabled={generating} className="h-11 rounded-xl border border-slate-300 px-5 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+								<button type="submit" disabled={generating} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 disabled:opacity-60">{generating ? <LoaderCircle size={17} className="animate-spin" /> : <FileCheck2 size={17} />} Confirmar e gerar PDF</button>
+							</div>
+						</form>
+					</section>
+				</div>
 			) : null}
 		</div>
 	);

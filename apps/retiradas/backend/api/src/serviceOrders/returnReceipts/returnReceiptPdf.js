@@ -99,7 +99,20 @@ function generateReturnReceiptPdf(snapshot = {}) {
 		doc.on("error", reject);
 
 		doc.rect(0, 0, 595.28, 10).fill(accent);
-		doc.image(logo, 40, 30, { fit: [150, 58], align: "left", valign: "center" });
+		if (companyOnnet) {
+			doc.roundedRect(40, 25, 160, 64, 6).fill("#061C38");
+			doc.image(logo, 48, 34, {
+				fit: [144, 46],
+				align: "center",
+				valign: "center",
+			});
+		} else {
+			doc.image(logo, 40, 30, {
+				fit: [150, 58],
+				align: "left",
+				valign: "center",
+			});
+		}
 		doc.font("Helvetica-Bold").fontSize(18).fillColor(COLORS.ink).text("COMPROVANTE DE DEVOLUÇÃO", 220, 34, {
 			width: 335,
 			align: "right",

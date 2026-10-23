@@ -125,6 +125,43 @@ function mapFallbackEquipment({ id, type, source, sourceLabel }) {
 	};
 }
 
+function manualEquipmentFromPayload(payload = {}, serviceOrderNumber = "") {
+	const productName = text(payload.equipmentName || payload.nomeEquipamento).replace(
+		/\s+/g,
+		" ",
+	);
+	const serial = text(payload.equipmentMac || payload.mac || payload.serial)
+		.toUpperCase()
+		.replace(/\s+/g, "");
+	const compactSerial = serial.replace(/[^A-Z0-9]/g, "");
+	if (productName.length < 2 || productName.length > 120) {
+		throw errorWithStatus(
+			"Informe o nome ou modelo do equipamento recolhido.",
+			400,
+		);
+	}
+	if (
+		compactSerial.length < 8 ||
+		compactSerial.length > 64 ||
+		!/^[A-Z0-9:.-]+$/.test(serial)
+	) {
+		throw errorWithStatus("Informe um MAC ou serial valido.", 400);
+	}
+	return {
+		id: `manual-${serviceOrderNumber || crypto.randomUUID()}`,
+		productName,
+		productCode: "",
+		serial,
+		movementNumber: "",
+		movementId: "",
+		returnedAt: null,
+		registeredBy: "",
+		company: "",
+		source: "MANUAL",
+		sourceLabel: "Informado pelo tecnico",
+	};
+}
+
 function dedupeEquipment(rows = []) {
 	const seen = new Set();
 	return rows.reduce((items, row) => {
@@ -327,6 +364,9 @@ async function buildReceiptCandidate(rawCode, user = {}) {
 	const company = isOnnet(companySource) ? "ONNET" : "SEMPRE";
 	const serviceOrderNumber = digits(order.hubsoft_number);
 	const existing = await findExistingReceipt(serviceOrderNumber);
+	const requiresManualEquipment = !equipment.some(
+		(item) => item.source === "MOVIMENTACAO",
+	);
 	return {
 		clientCode: code,
 		clientName: text(raw.cliente_nome) || "Cliente",
@@ -337,6 +377,7 @@ async function buildReceiptCandidate(rawCode, user = {}) {
 		technicianName: technicianName || "Nao identificado",
 		completedAt: order.source_date || order.updated_at,
 		equipment,
+		requiresManualEquipment,
 		existingReceipt: existing ? mapReceipt(existing) : null,
 	};
 }
@@ -353,6 +394,11 @@ async function createReceipt(payload = {}, user = {}) {
 	if (candidate.existingReceipt) {
 		return { item: candidate.existingReceipt, reused: true };
 	}
+	if (candidate.requiresManualEquipment) {
+		candidate.equipment = [
+			manualEquipmentFromPayload(payload, candidate.serviceOrderNumber),
+		];
+	}
 	const uid = userUid(user);
 	const name = userName(user);
 	if (!uid || !name) throw errorWithStatus("Usuario autenticado nao identificado.", 401);
@@ -362,6 +408,7 @@ async function createReceipt(payload = {}, user = {}) {
 	const snapshot = {
 		...candidate,
 		existingReceipt: undefined,
+		requiresManualEquipment: undefined,
 		receiptId: id,
 		generatedAt,
 	};
@@ -492,6 +539,7 @@ module.exports = {
 		dedupeEquipment,
 		equipmentTypeLabel,
 		mapFallbackEquipment,
+		manualEquipmentFromPayload,
 		mapReceipt,
 		normalize,
 		parseTechnician,
