@@ -65,8 +65,11 @@ function renderEquipment(doc, equipment, y) {
 			lineBreak: false,
 			ellipsis: true,
 		});
-		doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.muted).text(`Série/MAC: ${text(item.serial) || "Não informado"}`, 390, rowY, {
-			width: 151,
+		const detail = item.serial
+			? `Série/MAC: ${text(item.serial)}`
+			: `Origem: ${text(item.sourceLabel) || "O.S. finalizada"}`;
+		doc.font("Helvetica").fontSize(8.5).fillColor(COLORS.muted).text(detail, 370, rowY, {
+			width: 171,
 			align: "right",
 			lineBreak: false,
 			ellipsis: true,
@@ -118,7 +121,7 @@ function generateReturnReceiptPdf(snapshot = {}) {
 		const statementY = afterEquipment + 18;
 		doc.font("Helvetica-Bold").fontSize(10).fillColor(accent).text("DECLARAÇÃO", 40, statementY);
 		doc.font("Helvetica").fontSize(10).fillColor(COLORS.ink).text(
-			`Declaramos, para os devidos fins, que os equipamentos relacionados neste documento foram devolvidos pelo cliente ${text(snapshot.clientName)} e registrados no controle de estoque da ${companyOnnet ? "Onnet Telecomunicações" : "Sempre Telecomunicações"}. A devolução está vinculada à O.S. ${text(snapshot.serviceOrderNumber)} e encerra a responsabilidade de guarda dos itens descritos, sem prejuízo de eventuais obrigações contratuais independentes.`,
+			`Declaramos, para os devidos fins, que a retirada vinculada ao cliente ${text(snapshot.clientName)} foi concluída por meio da O.S. ${text(snapshot.serviceOrderNumber)}. Os dados de equipamento apresentados foram obtidos das bases internas disponíveis na data de emissão deste documento, formalizando o encerramento operacional da devolução, sem prejuízo de eventuais obrigações contratuais independentes.`,
 			40,
 			statementY + 20,
 			{ width: 515, align: "justify", lineGap: 3 },

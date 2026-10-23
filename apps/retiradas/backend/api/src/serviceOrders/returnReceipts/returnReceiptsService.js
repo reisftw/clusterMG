@@ -96,6 +96,32 @@ function mapEquipment(row = {}) {
 		returnedAt: row.emitido_em || null,
 		registeredBy: text(row.registrado_por),
 		company: text(row.empresa_nome),
+		source: "MOVIMENTACAO",
+		sourceLabel: "Estoque / Movimentacoes",
+	};
+}
+
+function equipmentTypeLabel(value) {
+	const type = text(value).toUpperCase();
+	if (type === "FAST") return "Equipamento FAST";
+	if (type === "AC") return "Equipamento AC";
+	if (type === "AX") return "Equipamento AX";
+	return type ? `Equipamento ${type}` : "Equipamento do cliente";
+}
+
+function mapFallbackEquipment({ id, type, source, sourceLabel }) {
+	return {
+		id,
+		productName: equipmentTypeLabel(type),
+		productCode: "",
+		serial: "",
+		movementNumber: "",
+		movementId: "",
+		returnedAt: null,
+		registeredBy: "",
+		company: "",
+		source,
+		sourceLabel,
 	};
 }
 
@@ -199,16 +225,49 @@ async function findEquipment(order) {
 		candidates = byName.rows;
 	}
 
-	if (!candidates.length) return [];
-	const primary = candidates[0];
-	const grouped = candidates.filter((row) => {
-		if (primary.movimento_estoque_id) {
-			return text(row.movimento_estoque_id) === text(primary.movimento_estoque_id);
+	if (candidates.length) {
+		const primary = candidates[0];
+		const grouped = candidates.filter((row) => {
+			if (primary.movimento_estoque_id) {
+				return text(row.movimento_estoque_id) === text(primary.movimento_estoque_id);
+			}
+			if (primary.nota_id) return text(row.nota_id) === text(primary.nota_id);
+			return row.id === primary.id;
+		});
+		return dedupeEquipment(grouped.length ? grouped : [primary]);
+	}
+
+	if (orderNumber) {
+		const snapshot = await db.query(
+			`select id, equipment_type, equipment_source
+			   from equipment_recovery_snapshots
+			  where regexp_replace(coalesce(os_number, ''), '\\D', '', 'g') = $1
+			    and coalesce(equipment_type, '') <> ''
+			  order by calculated_at desc nulls last, updated_at desc
+			  limit 1`,
+			[orderNumber],
+		);
+		if (snapshot.rows[0]) {
+			return [
+				mapFallbackEquipment({
+					id: `snapshot-${snapshot.rows[0].id}`,
+					type: snapshot.rows[0].equipment_type,
+					source: "MAPA_OS",
+					sourceLabel: "Mapa de O.S",
+				}),
+			];
 		}
-		if (primary.nota_id) return text(row.nota_id) === text(primary.nota_id);
-		return row.id === primary.id;
-	});
-	return dedupeEquipment(grouped.length ? grouped : [primary]);
+	}
+
+	const rawType = text(order.raw_excerpt?.equipment_type);
+	return [
+		mapFallbackEquipment({
+			id: `service-order-${orderNumber || order.hubsoft_id || "unknown"}`,
+			type: rawType,
+			source: "ORDEM_SERVICO",
+			sourceLabel: rawType ? "Dados da O.S" : "O.S finalizada",
+		}),
+	];
 }
 
 function assertTechnicianAccess(order, user) {
@@ -258,15 +317,13 @@ async function buildReceiptCandidate(rawCode, user = {}) {
 	}
 	assertTechnicianAccess(order, user);
 	const equipment = await findEquipment(order);
-	if (!equipment.length) {
-		throw errorWithStatus(
-			"A O.S esta finalizada, mas a devolucao ainda nao foi confirmada em Estoque/Movimentacoes.",
-			422,
-		);
-	}
 	const raw = order.raw_excerpt || {};
 	const technicianName = parseTechnician(raw) || equipment[0].registeredBy;
-	const companySource = equipment.find((item) => item.company)?.company || "SEMPRE";
+	const companySource =
+		equipment.find((item) => item.company)?.company ||
+		text(raw.empresa) ||
+		text(raw.servico) ||
+		"SEMPRE";
 	const company = isOnnet(companySource) ? "ONNET" : "SEMPRE";
 	const serviceOrderNumber = digits(order.hubsoft_number);
 	const existing = await findExistingReceipt(serviceOrderNumber);
@@ -433,6 +490,8 @@ module.exports = {
 	HISTORY_PERMISSIONS,
 	__testables: {
 		dedupeEquipment,
+		equipmentTypeLabel,
+		mapFallbackEquipment,
 		mapReceipt,
 		normalize,
 		parseTechnician,

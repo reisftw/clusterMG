@@ -6,7 +6,13 @@ process.env.DATABASE_URL ||= "postgres://test:test@localhost:5432/test";
 const require = createRequire(import.meta.url);
 const {
 	ALLOWED_ORDER_TYPES,
-	__testables: { dedupeEquipment, normalize, parseTechnician },
+	__testables: {
+		dedupeEquipment,
+		equipmentTypeLabel,
+		mapFallbackEquipment,
+		normalize,
+		parseTechnician,
+	},
 } = require(
 	"../../../backend/api/src/serviceOrders/returnReceipts/returnReceiptsService",
 );
@@ -42,6 +48,24 @@ describe("returnReceiptsService", () => {
 			expect.objectContaining({ id: "1", productName: "ONT", serial: "AAA" }),
 			expect.objectContaining({ id: "2", productName: "Roteador", serial: "BBB" }),
 		]);
+	});
+
+	it("identifica o equipamento pela O.S quando nao ha movimentacao", () => {
+		expect(equipmentTypeLabel("AX")).toBe("Equipamento AX");
+		expect(
+			mapFallbackEquipment({
+				id: "service-order-1",
+				type: "AC",
+				source: "ORDEM_SERVICO",
+				sourceLabel: "Dados da O.S",
+			}),
+		).toEqual(
+			expect.objectContaining({
+				productName: "Equipamento AC",
+				serial: "",
+				source: "ORDEM_SERVICO",
+			}),
+		);
 	});
 
 	it("gera PDF A4 de uma pagina com identificacao imutavel", async () => {
