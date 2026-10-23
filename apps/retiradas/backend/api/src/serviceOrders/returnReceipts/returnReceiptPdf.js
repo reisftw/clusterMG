@@ -8,7 +8,7 @@ const COLORS = Object.freeze({
 	line: "#D8E2EE",
 	soft: "#F4F7FB",
 	sempre: "#0B4DA2",
-	onnet: "#E65A19",
+	onnet: "#0B8F55",
 });
 
 function text(value) {
@@ -100,9 +100,9 @@ function generateReturnReceiptPdf(snapshot = {}) {
 
 		doc.rect(0, 0, 595.28, 10).fill(accent);
 		if (companyOnnet) {
-			doc.roundedRect(40, 25, 160, 64, 6).fill("#061C38");
-			doc.image(logo, 48, 34, {
-				fit: [144, 46],
+			doc.rect(0, 10, 595.28, 90).fill(accent);
+			doc.image(logo, 40, 25, {
+				fit: [160, 60],
 				align: "center",
 				valign: "center",
 			});
@@ -113,15 +113,17 @@ function generateReturnReceiptPdf(snapshot = {}) {
 				valign: "center",
 			});
 		}
-		doc.font("Helvetica-Bold").fontSize(18).fillColor(COLORS.ink).text("COMPROVANTE DE DEVOLUÇÃO", 220, 34, {
+		const headingColor = companyOnnet ? "#FFFFFF" : COLORS.ink;
+		const subheadingColor = companyOnnet ? "#DDF6E8" : COLORS.muted;
+		doc.font("Helvetica-Bold").fontSize(18).fillColor(headingColor).text("COMPROVANTE DE DEVOLUÇÃO", 220, 34, {
 			width: 335,
 			align: "right",
 		});
-		doc.font("Helvetica").fontSize(9).fillColor(COLORS.muted).text("Equipamento em comodato", 220, 59, {
+		doc.font("Helvetica").fontSize(9).fillColor(subheadingColor).text("Equipamento em comodato", 220, 59, {
 			width: 335,
 			align: "right",
 		});
-		doc.moveTo(40, 96).lineTo(555, 96).strokeColor(accent).lineWidth(1.5).stroke();
+		doc.moveTo(40, 96).lineTo(555, 96).strokeColor(companyOnnet ? "#FFFFFF" : accent).lineWidth(1.5).stroke();
 
 		field(doc, "Cliente", snapshot.clientName, 40, 116, 325);
 		field(doc, "Código do cliente", snapshot.clientCode, 385, 116, 170);

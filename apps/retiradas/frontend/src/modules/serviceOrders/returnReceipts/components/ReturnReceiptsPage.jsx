@@ -186,7 +186,12 @@ export default function ReturnReceiptsPage() {
 		setMessage("");
 		try {
 			const response = await gerarComprovante(candidate.clientCode, equipment);
-			setCandidate((current) => ({ ...current, existingReceipt: response.item }));
+			setCandidate((current) => ({
+				...current,
+				equipment: response.item?.equipment || current?.equipment || [],
+				requiresManualEquipment: false,
+				existingReceipt: response.item,
+			}));
 			setMessage(response.reused ? "Este comprovante ja existia e esta pronto para download." : "Comprovante gerado e salvo no historico.");
 			await loadMine();
 			await loadHistory();
