@@ -44,6 +44,7 @@ let metadataCache = null;
 let metadataPromise = null;
 let metadataExpiresAt = 0;
 let keepAliveStarted = false;
+let orderLookupTail = Promise.resolve();
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -390,7 +391,7 @@ function metadataOrderType(metadata = {}, description = "") {
 	);
 }
 
-async function findOpenOrder(session, metadata, code) {
+async function findOpenOrderUnlocked(session, metadata, code) {
 	const candidates = await localOpenOrderCandidates(code);
 	const eligibleCandidates = candidates.filter((candidate) =>
 		isAllowedSourceOrderType(candidate.tipo),
@@ -440,6 +441,20 @@ async function findOpenOrder(session, metadata, code) {
 		}
 	}
 	return null;
+}
+
+async function findOpenOrder(session, metadata, code) {
+	const previousLookup = orderLookupTail;
+	let releaseLookup;
+	orderLookupTail = new Promise((resolve) => {
+		releaseLookup = resolve;
+	});
+	await previousLookup.catch(() => {});
+	try {
+		return await findOpenOrderUnlocked(session, metadata, code);
+	} finally {
+		releaseLookup();
+	}
 }
 
 function findTargetType(metadata = {}) {
