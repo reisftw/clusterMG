@@ -7,7 +7,7 @@ const COLORS = Object.freeze({
 	muted: "#52647D",
 	line: "#D8E2EE",
 	soft: "#F4F7FB",
-	sempre: "#0B4DA2",
+	sempre: "#F26A00",
 	onnet: "#0B8F55",
 });
 
@@ -98,23 +98,21 @@ function generateReturnReceiptPdf(snapshot = {}) {
 		doc.on("end", () => resolve(Buffer.concat(chunks)));
 		doc.on("error", reject);
 
-		doc.rect(0, 0, 595.28, 10).fill(accent);
+		doc.rect(0, 0, 595.28, 100).fill(accent);
 		if (companyOnnet) {
-			doc.rect(0, 10, 595.28, 90).fill(accent);
 			doc.image(logo, 40, 25, {
 				fit: [160, 60],
 				align: "center",
 				valign: "center",
 			});
 		} else {
-			doc.image(logo, 40, 30, {
-				fit: [150, 58],
-				align: "left",
-				valign: "center",
-			});
+			doc.save();
+			doc.rect(40, 18, 160, 76).clip();
+			doc.image(logo, 15, -55, { width: 205 });
+			doc.restore();
 		}
-		const headingColor = companyOnnet ? "#FFFFFF" : COLORS.ink;
-		const subheadingColor = companyOnnet ? "#DDF6E8" : COLORS.muted;
+		const headingColor = "#FFFFFF";
+		const subheadingColor = companyOnnet ? "#DDF6E8" : "#FFF0E3";
 		doc.font("Helvetica-Bold").fontSize(18).fillColor(headingColor).text("COMPROVANTE DE DEVOLUÇÃO", 220, 34, {
 			width: 335,
 			align: "right",
@@ -123,7 +121,7 @@ function generateReturnReceiptPdf(snapshot = {}) {
 			width: 335,
 			align: "right",
 		});
-		doc.moveTo(40, 96).lineTo(555, 96).strokeColor(companyOnnet ? "#FFFFFF" : accent).lineWidth(1.5).stroke();
+		doc.moveTo(40, 96).lineTo(555, 96).strokeColor("#FFFFFF").lineWidth(1.5).stroke();
 
 		field(doc, "Cliente", snapshot.clientName, 40, 116, 325);
 		field(doc, "Código do cliente", snapshot.clientCode, 385, 116, 170);

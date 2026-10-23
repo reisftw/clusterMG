@@ -12,6 +12,7 @@
 		"migrate:sql": "node scripts/run-sql-migrations.js",
 		"migrate:preflight": "node scripts/migration-preflight.js",
 		"reconcile:agendamentos-mapa": "node scripts/reconcile-agendamentos-mapa.js",
+		"receipts:reissue": "node scripts/reissue-return-receipts.js",
 		"acerto:migrate-empresas": "node scripts/migrate-acerto-empresas-tecnicos.js",
 		"import:documents": "node scripts/import-documents-jsonl.js",
 		"migrate:regionais-usuarios": "node scripts/migrate-regionais-usuarios.js",
