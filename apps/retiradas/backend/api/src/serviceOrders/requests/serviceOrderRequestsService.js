@@ -6,6 +6,15 @@ const HISTORY_PERMISSIONS = ["service_orders.requests.history"];
 const TARGET_TYPE_ID = 1487;
 const TARGET_TYPE_NAME = "CANCELAMENTO FTTH";
 const OPEN_STATUSES = ["aguardando_agendamento", "pendente"];
+const PRIVILEGED_REQUEST_ROLES = new Set([
+	"ADMIN",
+	"BACKOFFICE",
+	"BACKOFFICE_RETIRADA",
+]);
+const REQUEST_CONCURRENCY = Math.min(
+	Math.max(Number(process.env.SERVICE_ORDER_REQUEST_CONCURRENCY || 4), 1),
+	8,
+);
 const HUBSOFT_WEB_BASE_URL = "https://sempre.hubsoft.com.br";
 const AFTERNOON_AVAILABILITY = {
 	id_periodo_dia: 5,
@@ -18,8 +27,13 @@ const AFTERNOON_AVAILABILITY = {
 	inicial: "T",
 };
 
-let queue = Promise.resolve();
+const pendingQueue = [];
+const queuedIds = new Set();
+let activeWorkers = 0;
 let initialized = false;
+let metadataCache = null;
+let metadataPromise = null;
+let metadataExpiresAt = 0;
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -70,6 +84,12 @@ function technicianHubsoftName(user = {}) {
 
 function isAdmin(user = {}) {
 	return normalize(user.role || userProfile(user).role) === "ADMIN";
+}
+
+function canChooseTechnician(user = {}) {
+	return PRIVILEGED_REQUEST_ROLES.has(
+		normalize(user.role || userProfile(user).role),
+	);
 }
 
 function rowsOf(payload) {
@@ -259,40 +279,77 @@ async function updateProgress(id, stage, progress, extras = {}) {
 	await db.query(`update service_order_requests set ${sets.join(", ")} where id = $1`, params);
 }
 
-async function findOpenOrder(session, metadata, code) {
-	const types = (metadata?.tipos_ordem_servico || []).map((item) => ({
-		id_tipo_ordem_servico: Number(item.id_tipo_ordem_servico),
-		descricao: item.descricao,
-		display: item.display || item.descricao,
-	}));
-	const year = saoPauloDateParts().iso.slice(0, 4);
-	const body = {
-		data_inicio: `${year}-01-01T00:00:00.000-03:00`,
-		data_fim: `${year}-12-31T23:59:59.999-03:00`,
-		tipo_data: "data_cadastro",
-		status_ordem_servico: OPEN_STATUSES,
-		tipo_ordem_servicos: types,
-		codigo_cliente: code,
-		cliente: code,
-		termo_busca: code,
-		busca: "codigo_cliente",
-		pagina: 1,
-		itens_por_pagina: 100,
-	};
-	const payload = await hubsoftSyncProfiles.automationRequest(
-		session,
-		"/api/v1/ordem_servico/consultar/paginado/100?page=1",
-		{ method: "POST", body },
-	);
-	const matches = rowsOf(payload)
-		.filter((row) => clientCode(row) === code)
-		.filter((row) => OPEN_STATUSES.includes(orderStatus(row)))
-		.sort((left, right) => {
-			const leftDate = Date.parse(left.data_cadastro || left.created_at || 0) || 0;
-			const rightDate = Date.parse(right.data_cadastro || right.created_at || 0) || 0;
-			return rightDate - leftDate;
+async function getAutomationMetadata(session) {
+	if (metadataCache && Date.now() < metadataExpiresAt) return metadataCache;
+	if (metadataPromise) return metadataPromise;
+	metadataPromise = hubsoftSyncProfiles
+		.automationRequest(session, "/api/v1/ordem_servico/create")
+		.then((payload) => {
+			metadataCache = payload;
+			metadataExpiresAt = Date.now() + 5 * 60 * 1000;
+			return payload;
+		})
+		.finally(() => {
+			metadataPromise = null;
 		});
-	return matches[0] || null;
+	return metadataPromise;
+}
+
+async function localOpenOrderCandidates(code) {
+	const result = await db.query(
+		`select distinct on (num_os)
+		        num_os,
+		        tipo,
+		        to_char(data_cadastro at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as data_cadastro_dia,
+		        updated_at
+		   from ordens_servico
+		  where codigo_cliente = $1
+		    and lower(coalesce(status, '')) in ('pendente', 'aguardando agendamento', 'aguardando_agendamento')
+		    and coalesce(num_os, '') <> ''
+		  order by num_os, updated_at desc`,
+		[code],
+	);
+	return result.rows.sort(
+		(left, right) => new Date(right.updated_at) - new Date(left.updated_at),
+	);
+}
+
+function metadataOrderType(metadata = {}, description = "") {
+	const target = normalize(description);
+	return (metadata.tipos_ordem_servico || []).find(
+		(item) => normalize(item.descricao || item.display) === target,
+	);
+}
+
+async function findOpenOrder(session, metadata, code) {
+	const candidates = await localOpenOrderCandidates(code);
+	for (const candidate of candidates) {
+		const date = text(candidate.data_cadastro_dia);
+		const type = metadataOrderType(metadata, candidate.tipo);
+		if (!date || !type) continue;
+		const body = {
+			data_inicio: `${date}T00:00:00.000-03:00`,
+			data_fim: `${date}T23:59:59.999-03:00`,
+			tipo_data: "data_cadastro",
+			status_ordem_servico: OPEN_STATUSES,
+			tipo_ordem_servicos: [type],
+			pagina: 1,
+			itens_por_pagina: 1000,
+		};
+		const payload = await hubsoftSyncProfiles.automationRequest(
+			session,
+			"/api/v1/ordem_servico/consultar/paginado/1000?page=1",
+			{ method: "POST", body },
+		);
+		const match = rowsOf(payload).find(
+			(row) =>
+				(clientCode(row) === code ||
+					orderNumber(row) === digits(candidate.num_os)) &&
+				OPEN_STATUSES.includes(orderStatus(row)),
+		);
+		if (match) return match;
+	}
+	return null;
 }
 
 function findTargetType(metadata = {}) {
@@ -388,12 +445,9 @@ async function runRequest(id) {
 			[id],
 		);
 		await updateProgress(id, "Validando vinculo do tecnico", 10);
-		await updateProgress(id, "Autenticando no HubSoft", 20);
+		await updateProgress(id, "Validando sessao ativa do HubSoft", 20);
 		const session = await hubsoftSyncProfiles.createAutomationSession();
-		const metadata = await hubsoftSyncProfiles.automationRequest(
-			session,
-			"/api/v1/ordem_servico/create",
-		);
+		const metadata = await getAutomationMetadata(session);
 		const targetType = findTargetType(metadata);
 		if (!targetType) throw new Error("Tipo CANCELAMENTO FTTH (1487) nao encontrado no HubSoft.");
 		const targetTechnician = findTargetTechnician(
@@ -475,21 +529,38 @@ async function runRequest(id) {
 	}
 }
 
+function drainQueue() {
+	while (activeWorkers < REQUEST_CONCURRENCY && pendingQueue.length) {
+		const id = pendingQueue.shift();
+		activeWorkers += 1;
+		db.runWithRequestContext(
+			{
+				uid: "system:service-order-requests",
+				email: "",
+				role: "admin",
+				profile: { nome: "Automacao de solicitacoes", role: "admin" },
+			},
+			() => runRequest(id),
+		)
+			.catch((error) => {
+				console.error(
+					`[serviceOrderRequests] Falha inesperada no worker ${id}:`,
+					error?.message || error,
+				);
+			})
+			.finally(() => {
+				queuedIds.delete(id);
+				activeWorkers -= 1;
+				drainQueue();
+			});
+	}
+}
+
 function enqueue(id) {
-	queue = queue
-		.catch(() => {})
-		.then(() =>
-			db.runWithRequestContext(
-				{
-					uid: "system:service-order-requests",
-					email: "",
-					role: "admin",
-					profile: { nome: "Automacao de solicitacoes", role: "admin" },
-				},
-				() => runRequest(id),
-			),
-		);
-	return queue;
+	if (!id || queuedIds.has(id)) return;
+	queuedIds.add(id);
+	pendingQueue.push(id);
+	drainQueue();
 }
 
 async function initialize() {
@@ -518,7 +589,7 @@ async function createRequest(payload = {}, user = {}) {
 	}
 	const uid = requesterUid(user);
 	const name = requesterName(user);
-	const hubsoftName = technicianHubsoftName(user);
+	const hubsoftName = await resolveTechnicianHubsoftName(payload, user);
 	if (!uid || !name) {
 		const error = new Error("Nao foi possivel identificar o tecnico autenticado.");
 		error.statusCode = 401;
@@ -550,6 +621,53 @@ async function createRequest(payload = {}, user = {}) {
 		}
 		throw error;
 	}
+}
+
+async function resolveTechnicianHubsoftName(payload = {}, user = {}) {
+	if (!canChooseTechnician(user)) return technicianHubsoftName(user);
+	const requested = text(
+		payload.technicianHubsoftName || payload.tecnicoHubsoftNome,
+	);
+	if (!requested) {
+		const error = new Error("Selecione o tecnico de retirada que recebera a O.S.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const technicians = await hubsoftSyncProfiles.listWithdrawalTechnicians();
+	const match = technicians.find(
+		(item) =>
+			item.ativo === true &&
+			normalize(item.nome_hubsoft) === normalize(requested) &&
+			normalize(item.nome_hubsoft).includes("TECNICO RETIRADA"),
+	);
+	if (!match) {
+		const error = new Error("Tecnico de retirada invalido ou inativo.");
+		error.statusCode = 422;
+		throw error;
+	}
+	return text(match.nome_hubsoft);
+}
+
+async function listSelectableTechnicians(user = {}) {
+	if (!canChooseTechnician(user)) {
+		const error = new Error("Permissao insuficiente.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const technicians = await hubsoftSyncProfiles.listWithdrawalTechnicians();
+	return {
+		items: technicians
+			.filter(
+				(item) =>
+					item.ativo === true &&
+					normalize(item.nome_hubsoft).includes("TECNICO RETIRADA"),
+			)
+			.map((item) => ({
+				id: item.id,
+				name: text(item.nome_hubsoft),
+				displayName: text(item.nome_exibicao || item.nome_hubsoft),
+			})),
+	};
 }
 
 async function getRequest(id, user = {}) {
@@ -613,7 +731,10 @@ module.exports = {
 	HISTORY_PERMISSIONS,
 	__testables: {
 		applyTargetState,
+		canChooseTechnician,
+		findOpenOrder,
 		findTargetTechnician,
+		metadataOrderType,
 		saoPauloDateParts,
 		verifyFinalState,
 	},
@@ -622,4 +743,5 @@ module.exports = {
 	initialize,
 	listHistory,
 	listOwnRequests,
+	listSelectableTechnicians,
 };

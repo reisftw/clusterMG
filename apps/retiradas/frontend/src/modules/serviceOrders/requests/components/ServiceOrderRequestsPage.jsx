@@ -18,6 +18,7 @@ import {
 	buscarHistoricoSolicitacoes,
 	buscarMinhasSolicitacoes,
 	buscarSolicitacaoOrdemServico,
+	buscarTecnicosSolicitacao,
 	criarSolicitacaoOrdemServico,
 } from "../services/serviceOrderRequestsService";
 
@@ -30,7 +31,7 @@ const STATUS_LABELS = {
 
 const PROGRESS_STEPS = [
 	{ at: 10, label: "Validar técnico", icon: UserRoundCheck },
-	{ at: 20, label: "Conectar ao HubSoft", icon: LoaderCircle },
+	{ at: 20, label: "Validar sessão HubSoft", icon: LoaderCircle },
 	{ at: 35, label: "Localizar O.S", icon: Search },
 	{ at: 60, label: "Remover agenda", icon: Clock3 },
 	{ at: 75, label: "Transferir O.S", icon: Send },
@@ -172,7 +173,12 @@ function RequestsTable({ items, admin = false }) {
 export default function ServiceOrderRequestsPage() {
 	const { currentUser } = useAuthContext();
 	const canViewHistory = hasAnyPermission(currentUser, ["service_orders.requests.history"]);
+	const canChooseTechnician = ["admin", "backoffice", "backoffice_retirada"].includes(
+		String(currentUser?.role || "").trim().toLowerCase(),
+	);
 	const [clientCode, setClientCode] = useState("");
+	const [technicians, setTechnicians] = useState([]);
+	const [selectedTechnician, setSelectedTechnician] = useState("");
 	const [active, setActive] = useState(null);
 	const [mine, setMine] = useState([]);
 	const [history, setHistory] = useState([]);
@@ -215,6 +221,22 @@ export default function ServiceOrderRequestsPage() {
 	}, [loadMine]);
 
 	useEffect(() => {
+		if (!canChooseTechnician) return undefined;
+		let active = true;
+		buscarTecnicosSolicitacao()
+			.then((response) => {
+				if (!active) return;
+				setTechnicians(Array.isArray(response?.items) ? response.items : []);
+			})
+			.catch((loadError) => {
+				if (active) setError(loadError?.message || "Falha ao carregar técnicos.");
+			});
+		return () => {
+			active = false;
+		};
+	}, [canChooseTechnician]);
+
+	useEffect(() => {
 		loadHistory().catch(() => {});
 	}, [loadHistory]);
 
@@ -245,7 +267,10 @@ export default function ServiceOrderRequestsPage() {
 		}
 		setLoading(true);
 		try {
-			const response = await criarSolicitacaoOrdemServico(clientCode);
+			const response = await criarSolicitacaoOrdemServico(
+				clientCode,
+				canChooseTechnician ? selectedTechnician : "",
+			);
 			setActive(response.item);
 			setClientCode("");
 			await loadMine();
@@ -269,11 +294,11 @@ export default function ServiceOrderRequestsPage() {
 					</div>
 					<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
 						<p className="text-xs font-black uppercase tracking-wide text-blue-600">Técnico HubSoft</p>
-						<p className="mt-1 font-black">{linkedTechnician || "Vínculo não configurado"}</p>
+						<p className="mt-1 font-black">{canChooseTechnician ? "Selecionado na solicitação" : linkedTechnician || "Vínculo não configurado"}</p>
 					</div>
 				</div>
 
-				<form onSubmit={submit} className="mt-6 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+				<form onSubmit={submit} className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)_auto]">
 					<label className="block">
 						<span className="mb-2 block text-sm font-black text-slate-700">Código do cliente</span>
 						<input
@@ -285,9 +310,26 @@ export default function ServiceOrderRequestsPage() {
 							className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-base font-bold text-slate-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
 						/>
 					</label>
+					{canChooseTechnician ? (
+						<label className="block">
+							<span className="mb-2 block text-sm font-black text-slate-700">Técnico de retirada</span>
+							<select
+								value={selectedTechnician}
+								onChange={(event) => setSelectedTechnician(event.target.value)}
+								className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+							>
+								<option value="">Selecione</option>
+								{technicians.map((technician) => (
+									<option key={technician.id || technician.name} value={technician.name}>
+										{technician.displayName || technician.name}
+									</option>
+								))}
+							</select>
+						</label>
+					) : null}
 					<button
 						type="submit"
-						disabled={loading || !linkedTechnician}
+						disabled={loading || (canChooseTechnician ? !selectedTechnician : !linkedTechnician)}
 						className="mt-auto inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
 					>
 						{loading ? <LoaderCircle className="animate-spin" size={18} /> : <Send size={18} />}

@@ -6,6 +6,7 @@ import { useLayoutMode } from "../../context/LayoutModeContext";
 import { ROLES } from "../../constants/roles";
 import TrocarSenhaModal from "../../modules/auth/components/TrocarSenhaModal";
 import WelcomeModal from "../../modules/auth/components/WelcomeModal";
+import RetorninhoAssistant from "../../modules/serviceOrders/requests/components/RetorninhoAssistant";
 import { obterStatusAutenticador } from "../../modules/auth/services/authService";
 import {
 	hasSeenWelcomeModal,
@@ -68,6 +69,7 @@ const PAGE_TITLES = {
 	[ROUTES.FERIADOS]: "Feriados e Calendario",
 	[ROUTES.USUARIOS]: "Usuários",
 	[ROUTES.REGRAS]: "Regras",
+	[ROUTES.ORDENS_SERVICO_SOLICITACAO]: "Solicitação de O.S",
 };
 
 const SIDEBAR_COLLAPSED_KEY = "retiradas-sidebar-collapsed";
@@ -230,6 +232,7 @@ const PageWrapper = ({ children }) => {
 					setWelcomeClosedForUser(currentWelcomeUserKey);
 				}}
 			/>
+			<RetorninhoAssistant />
 		</div>
 	);
 };

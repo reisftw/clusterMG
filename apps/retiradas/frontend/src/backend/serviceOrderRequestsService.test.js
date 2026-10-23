@@ -7,7 +7,9 @@ const require = createRequire(import.meta.url);
 const {
 	__testables: {
 		applyTargetState,
+		canChooseTechnician,
 		findTargetTechnician,
+		metadataOrderType,
 		saoPauloDateParts,
 		verifyFinalState,
 	},
@@ -84,5 +86,19 @@ describe("serviceOrderRequestsService", () => {
 				"JOSEVAL CAMPOS - TÉCNICO RETIRADA",
 			),
 		).toThrow("agenda NENHUM");
+	});
+
+	it("permite seletor somente para admin e backoffice", () => {
+		expect(canChooseTechnician({ role: "admin" })).toBe(true);
+		expect(canChooseTechnician({ role: "backoffice" })).toBe(true);
+		expect(canChooseTechnician({ role: "backoffice_retirada" })).toBe(true);
+		expect(canChooseTechnician({ role: "tecnico" })).toBe(false);
+	});
+
+	it("localiza o tipo da O.S ignorando acentos e caixa", () => {
+		const type = { id_tipo_ordem_servico: 1487, descricao: "CANCELAMENTO FTTH" };
+		expect(
+			metadataOrderType({ tipos_ordem_servico: [type] }, "cancelamento ftth"),
+		).toBe(type);
 	});
 });

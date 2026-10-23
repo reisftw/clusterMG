@@ -58,6 +58,7 @@ const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
 		"view_insumos_requisicoes",
 		"view_insumos_administrativos",
 		"manage_insumos_administrativos",
+		"service_orders.requests.create",
 	],
 	supervisor: [
 		"view_dashboard",
@@ -179,6 +180,7 @@ const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
 		"tentativas.visualizar",
 		"tentativas.executar",
 		"tentativas.historico.visualizar",
+		"service_orders.requests.create",
 	],
 	tecnico: [
 		"view_dashboard",

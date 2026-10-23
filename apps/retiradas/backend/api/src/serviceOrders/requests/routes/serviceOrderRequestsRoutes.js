@@ -26,6 +26,14 @@ function createServiceOrderRequestsRouter({
 		}
 	});
 
+	router.get("/technicians", requireAuthenticated, requireCreate, async (req, res, next) => {
+		try {
+			res.json(await service.listSelectableTechnicians(req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/:id", requireAuthenticated, requireCreate, async (req, res, next) => {
 		try {
 			const item = await service.getRequest(req.params.id, req.user || {});

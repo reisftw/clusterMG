@@ -11,11 +11,18 @@ function queryString(params = {}) {
 	return value ? `?${value}` : "";
 }
 
-export async function criarSolicitacaoOrdemServico(clientCode) {
+export async function criarSolicitacaoOrdemServico(
+	clientCode,
+	technicianHubsoftName = "",
+) {
 	return requestVpsApi("/service-orders/requests", {
 		method: "POST",
-		body: JSON.stringify({ clientCode }),
+		body: JSON.stringify({ clientCode, technicianHubsoftName }),
 	});
+}
+
+export async function buscarTecnicosSolicitacao() {
+	return requestVpsApi("/service-orders/requests/technicians");
 }
 
 export async function buscarSolicitacaoOrdemServico(id) {

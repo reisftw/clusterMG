@@ -43,6 +43,8 @@ const SCHEDULER_USER = {
 let schedulerTickRunning = false;
 let mapMatchSchedulerRunning = false;
 let mapMatchSchedulerStartedAt = 0;
+let automationSessionCache = null;
+let automationSessionPromise = null;
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -484,7 +486,18 @@ async function authenticateWithPlaywright(config) {
 	}
 }
 
-async function getSession() {
+function currentSessionDay() {
+	return todaySaoPaulo();
+}
+
+function isReusableAutomationSession(session) {
+	return Boolean(
+		session?.token &&
+			session.sessionDay === currentSessionDay(),
+	);
+}
+
+async function buildAutomationSession() {
 	const config = await readConfig();
 	const configuredToken = cleanText(
 		config.accessToken || process.env.HUBSOFT_ACCESS_TOKEN,
@@ -499,6 +512,8 @@ async function getSession() {
 			),
 			token: configuredToken,
 			tokenType: cleanText(config.tokenType || "Bearer"),
+			sessionDay: currentSessionDay(),
+			managed: true,
 		};
 	}
 	const session =
@@ -512,10 +527,45 @@ async function getSession() {
 		error.statusCode = 400;
 		throw error;
 	}
-	return session;
+	return {
+		...session,
+		sessionDay: currentSessionDay(),
+		managed: true,
+	};
 }
 
-async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
+async function getSession({ force = false } = {}) {
+	if (!force && isReusableAutomationSession(automationSessionCache)) {
+		return automationSessionCache;
+	}
+	if (automationSessionPromise) return automationSessionPromise;
+	automationSessionPromise = buildAutomationSession()
+		.then((session) => {
+			automationSessionCache = session;
+			return session;
+		})
+		.finally(() => {
+			automationSessionPromise = null;
+		});
+	return automationSessionPromise;
+}
+
+async function refreshAutomationSession(failedSession) {
+	if (
+		isReusableAutomationSession(automationSessionCache) &&
+		automationSessionCache.token !== failedSession?.token
+	) {
+		return automationSessionCache;
+	}
+	automationSessionCache = null;
+	return getSession({ force: true });
+}
+
+async function hubsoftRequest(
+	session,
+	path,
+	{ method = "GET", body, retryAuthentication = true } = {},
+) {
 	if (!session?.token) {
 		const error = new Error("Sessao HubSoft indisponivel.");
 		error.code = "FAILED_AUTH";
@@ -533,6 +583,19 @@ async function hubsoftRequest(session, path, { method = "GET", body } = {}) {
 		...(body ? { body: JSON.stringify(body) } : {}),
 	});
 	const payload = await parseResponse(response);
+	if (
+		response.status === 401 &&
+		retryAuthentication &&
+		session.managed
+	) {
+		const refreshed = await refreshAutomationSession(session);
+		Object.assign(session, refreshed);
+		return hubsoftRequest(session, path, {
+			method,
+			body,
+			retryAuthentication: false,
+		});
+	}
 	if (!response.ok) {
 		const error = new Error(
 			payload?.message || payload?.error || `HubSoft HTTP ${response.status}`,
