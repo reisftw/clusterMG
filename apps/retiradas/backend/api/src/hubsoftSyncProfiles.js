@@ -1792,6 +1792,112 @@ async function listWithdrawalTechnicians() {
 	return result.rows;
 }
 
+async function refreshHubsoftTechnicians(user = {}) {
+	const session = await getSession();
+	const createPayload = await fetchCreateMetadata(session);
+	const unique = new Map();
+	for (const technician of createPayload?.tecnicos || []) {
+		const id = Number(technician.id ?? technician.id_usuario);
+		const name = cleanText(
+			technician.name || technician.nome || technician.display,
+		);
+		if (!Number.isFinite(id) || !id || !name) continue;
+		unique.set(id, {
+			id,
+			name,
+			displayName: name,
+			isWithdrawal: /TECNICO RETIRADA|TÉCNICO RETIRADA/i.test(
+				normalizeText(name),
+			),
+			sourcePayload: {
+				id,
+				name,
+			},
+		});
+	}
+	const items = [...unique.values()];
+	const actor = cleanText(user.uid || user.email || user.nome) || null;
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		await client.query(
+			`update hubsoft_technicians
+			    set active = false, updated_by = $1
+			  where active = true`,
+			[actor],
+		);
+		if (items.length) {
+			await client.query(
+				`insert into hubsoft_technicians
+				  (hubsoft_technician_id, name, display_name, active, is_withdrawal,
+				   last_seen_at, source_payload, updated_by)
+				 select item.id, item.name, item.display_name, true, item.is_withdrawal,
+				        now(), item.source_payload, $2
+				   from jsonb_to_recordset($1::jsonb) as item(
+				        id bigint,
+				        name text,
+				        display_name text,
+				        is_withdrawal boolean,
+				        source_payload jsonb
+				   )
+				 on conflict (hubsoft_technician_id) do update set
+				   name = excluded.name,
+				   display_name = excluded.display_name,
+				   active = true,
+				   is_withdrawal = excluded.is_withdrawal,
+				   last_seen_at = now(),
+				   source_payload = excluded.source_payload,
+				   updated_by = excluded.updated_by`,
+				[
+					JSON.stringify(
+						items.map((item) => ({
+							id: item.id,
+							name: item.name,
+							display_name: item.displayName,
+							is_withdrawal: item.isWithdrawal,
+							source_payload: item.sourcePayload,
+						})),
+					),
+					actor,
+				],
+			);
+		}
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+	return {
+		total: items.length,
+		withdrawal: items.filter((item) => item.isWithdrawal).length,
+		updatedAt: new Date().toISOString(),
+	};
+}
+
+async function listHubsoftTechnicians(options = {}) {
+	const limit = Math.min(Math.max(Number(options.limit || 1000), 1), 2000);
+	const search = cleanText(options.q);
+	const params = [];
+	let where = "where active = true";
+	if (search) {
+		params.push(`%${search}%`);
+		where += ` and (name ilike $${params.length} or display_name ilike $${params.length})`;
+	}
+	params.push(limit);
+	const result = await db.query(
+		`select hubsoft_technician_id, name, display_name, active,
+		        is_withdrawal, last_seen_at
+		   from hubsoft_technicians
+		   ${where}
+		  order by is_withdrawal desc, display_name, name
+		  limit $${params.length}`,
+		params,
+	);
+	return result.rows;
+}
+
 async function buildClassificationMaps() {
 	const [technicians, regionais, agentesDocs] = await Promise.all([
 		listActiveWithdrawalTechnicians(),
@@ -3299,12 +3405,14 @@ module.exports = {
 	classifyOrder,
 	createAutomationSession: getSession,
 	discoverWithdrawalTechnicians,
+	refreshHubsoftTechnicians,
 	getProfilesOverview,
 	getRun,
 	findOpenOrderByClientCode,
 	listRecords,
 	listRuns,
 	listWithdrawalTechnicians,
+	listHubsoftTechnicians,
 	requestHubsoft,
 	runSchedulerTick,
 	runProfile,

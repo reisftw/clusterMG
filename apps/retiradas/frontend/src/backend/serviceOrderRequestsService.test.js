@@ -74,6 +74,25 @@ describe("serviceOrderRequestsService", () => {
 		);
 	});
 
+	it("prioriza o id do tecnico ao encaminhar para qualquer equipe", () => {
+		const retirada = {
+			id: 17,
+			name: "JOSEVAL CAMPOS - TÉCNICO RETIRADA",
+		};
+		const instalacao = {
+			id: 18,
+			name: "JOSEVAL CAMPOS - INSTALAÇÃO",
+		};
+		const metadata = {
+			tecnicos: [retirada, instalacao],
+			usuarios: [],
+		};
+
+		expect(
+			findTargetTechnician(metadata, instalacao.name, instalacao.id),
+		).toBe(instalacao);
+	});
+
 	it("rejeita uma confirmacao que ainda possua agenda", () => {
 		const order = {
 			codigo_cliente: "336813",

@@ -34,6 +34,36 @@ function createServiceOrderRequestsRouter({
 		}
 	});
 
+	router.post(
+		"/technicians/refresh",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireCreate,
+		async (req, res, next) => {
+			try {
+				res.json(await service.refreshSelectableTechnicians(req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/equipment",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireCreate,
+		async (req, res, next) => {
+			try {
+				res
+					.status(202)
+					.json(await service.createEquipmentRequest(req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.get("/:id", requireAuthenticated, requireCreate, async (req, res, next) => {
 		try {
 			const item = await service.getRequest(req.params.id, req.user || {});

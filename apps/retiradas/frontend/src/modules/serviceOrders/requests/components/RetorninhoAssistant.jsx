@@ -126,6 +126,7 @@ export default function RetorninhoAssistant() {
 	const [pendingCode, setPendingCode] = useState("");
 	const [technicians, setTechnicians] = useState([]);
 	const [selectedTechnician, setSelectedTechnician] = useState("");
+	const [technicianSearch, setTechnicianSearch] = useState("");
 	const [activeRequest, setActiveRequest] = useState(null);
 	const [busy, setBusy] = useState(false);
 	const [loadError, setLoadError] = useState("");
@@ -188,6 +189,18 @@ export default function RetorninhoAssistant() {
 			height,
 		};
 	}, [position]);
+	const filteredTechnicians = useMemo(() => {
+		const query = technicianSearch.trim().toLocaleLowerCase("pt-BR");
+		return technicians
+			.filter((technician) =>
+				query
+					? `${technician.displayName || ""} ${technician.name || ""}`
+							.toLocaleLowerCase("pt-BR")
+							.includes(query)
+					: true,
+			)
+			.slice(0, 100);
+	}, [technicianSearch, technicians]);
 
 	const pollRequest = useCallback(async (id) => {
 		for (let attempt = 0; attempt < 900 && mountedRef.current; attempt += 1) {
@@ -209,12 +222,12 @@ export default function RetorninhoAssistant() {
 		}
 	}, []);
 
-	const startRequest = useCallback(async (clientCode, technicianName = "") => {
+	const startRequest = useCallback(async (clientCode, technician = null) => {
 		setBusy(true);
 		setLoadError("");
 		setStep("processing");
 		try {
-			const response = await criarSolicitacaoOrdemServico(clientCode, technicianName);
+			const response = await criarSolicitacaoOrdemServico(clientCode, technician);
 			setActiveRequest(response.item);
 			await pollRequest(response.item.id);
 		} catch (error) {
@@ -233,7 +246,7 @@ export default function RetorninhoAssistant() {
 		setPendingCode(value);
 		if (privileged) {
 			setStep("technician");
-			appendMessage(setMessages, "bot", "Para qual técnico de retirada devo encaminhar esta O.S?");
+			appendMessage(setMessages, "bot", "Para qual técnico devo encaminhar esta O.S?");
 			return;
 		}
 		startRequest(value);
@@ -241,9 +254,12 @@ export default function RetorninhoAssistant() {
 
 	function submitTechnician() {
 		if (!selectedTechnician || !pendingCode) return;
-		const selected = technicians.find((item) => item.name === selectedTechnician);
-		appendMessage(setMessages, "user", selected?.displayName || selectedTechnician);
-		startRequest(pendingCode, selectedTechnician);
+		const selected = technicians.find(
+			(item) => String(item.id) === String(selectedTechnician),
+		);
+		if (!selected) return;
+		appendMessage(setMessages, "user", selected.displayName || selected.name);
+		startRequest(pendingCode, selected);
 	}
 
 	function resetConversation() {
@@ -252,6 +268,7 @@ export default function RetorninhoAssistant() {
 		setCode("");
 		setPendingCode("");
 		setSelectedTechnician("");
+		setTechnicianSearch("");
 		setActiveRequest(null);
 		setBusy(false);
 		setLoadError("");
@@ -359,12 +376,15 @@ export default function RetorninhoAssistant() {
 								</form>
 							) : null}
 							{step === "technician" ? (
-								<div className="flex gap-2">
-									<select value={selectedTechnician} onChange={(event) => setSelectedTechnician(event.target.value)} className="h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-blue-500">
-										<option value="">Selecione o técnico</option>
-										{technicians.map((technician) => <option key={technician.id || technician.name} value={technician.name}>{technician.displayName || technician.name}</option>)}
-									</select>
-									<button type="button" onClick={submitTechnician} disabled={!selectedTechnician || busy} className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white disabled:bg-slate-300" aria-label="Confirmar técnico" title="Confirmar"><Send size={18} /></button>
+								<div className="space-y-2">
+									<input value={technicianSearch} onChange={(event) => setTechnicianSearch(event.target.value)} placeholder={`Pesquisar entre ${technicians.length} técnicos`} className="h-10 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm font-semibold outline-none focus:border-blue-500 focus:bg-white" />
+									<div className="flex gap-2">
+										<select value={selectedTechnician} onChange={(event) => setSelectedTechnician(event.target.value)} className="h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold outline-none focus:border-blue-500">
+											<option value="">Selecione o técnico</option>
+											{filteredTechnicians.map((technician) => <option key={technician.id || technician.name} value={technician.id}>{technician.displayName || technician.name}</option>)}
+										</select>
+										<button type="button" onClick={submitTechnician} disabled={!selectedTechnician || busy} className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white disabled:bg-slate-300" aria-label="Confirmar técnico" title="Confirmar"><Send size={18} /></button>
+									</div>
 								</div>
 							) : null}
 							{step === "processing" ? <p className="py-2 text-center text-xs font-black uppercase tracking-wide text-blue-600">Processando solicitação</p> : null}

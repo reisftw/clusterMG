@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { hasAnyPermission } from "../../../../constants/roles";
 import { useAuthContext } from "../../../../context/AuthContext";
 import {
+	atualizarTecnicosSolicitacao,
 	buscarHistoricoSolicitacoes,
 	buscarMinhasSolicitacoes,
 	buscarSolicitacaoOrdemServico,
@@ -179,6 +180,8 @@ export default function ServiceOrderRequestsPage() {
 	const [clientCode, setClientCode] = useState("");
 	const [technicians, setTechnicians] = useState([]);
 	const [selectedTechnician, setSelectedTechnician] = useState("");
+	const [technicianSearch, setTechnicianSearch] = useState("");
+	const [refreshingTechnicians, setRefreshingTechnicians] = useState(false);
 	const [active, setActive] = useState(null);
 	const [mine, setMine] = useState([]);
 	const [history, setHistory] = useState([]);
@@ -194,6 +197,23 @@ export default function ServiceOrderRequestsPage() {
 		() => currentUser?.metasTecnicoNome || currentUser?.metas_tecnico_nome || "",
 		[currentUser],
 	);
+	const filteredTechnicians = useMemo(() => {
+		const query = technicianSearch.trim().toLocaleLowerCase("pt-BR");
+		return technicians
+			.filter((technician) =>
+				query
+					? `${technician.displayName || ""} ${technician.name || ""}`
+							.toLocaleLowerCase("pt-BR")
+							.includes(query)
+					: true,
+			)
+			.slice(0, 150);
+	}, [technicianSearch, technicians]);
+
+	const loadTechnicians = useCallback(async () => {
+		const response = await buscarTecnicosSolicitacao();
+		setTechnicians(Array.isArray(response?.items) ? response.items : []);
+	}, []);
 
 	const loadMine = useCallback(async () => {
 		const response = await buscarMinhasSolicitacoes();
@@ -223,18 +243,27 @@ export default function ServiceOrderRequestsPage() {
 	useEffect(() => {
 		if (!canChooseTechnician) return undefined;
 		let active = true;
-		buscarTecnicosSolicitacao()
-			.then((response) => {
-				if (!active) return;
-				setTechnicians(Array.isArray(response?.items) ? response.items : []);
-			})
+		loadTechnicians()
 			.catch((loadError) => {
 				if (active) setError(loadError?.message || "Falha ao carregar técnicos.");
 			});
 		return () => {
 			active = false;
 		};
-	}, [canChooseTechnician]);
+	}, [canChooseTechnician, loadTechnicians]);
+
+	async function refreshTechnicians() {
+		setRefreshingTechnicians(true);
+		setError("");
+		try {
+			const response = await atualizarTecnicosSolicitacao();
+			setTechnicians(Array.isArray(response?.items) ? response.items : []);
+		} catch (refreshError) {
+			setError(refreshError?.message || "Falha ao atualizar técnicos no HubSoft.");
+		} finally {
+			setRefreshingTechnicians(false);
+		}
+	}
 
 	useEffect(() => {
 		loadHistory().catch(() => {});
@@ -267,9 +296,12 @@ export default function ServiceOrderRequestsPage() {
 		}
 		setLoading(true);
 		try {
+			const technician = technicians.find(
+				(item) => String(item.id) === String(selectedTechnician),
+			);
 			const response = await criarSolicitacaoOrdemServico(
 				clientCode,
-				canChooseTechnician ? selectedTechnician : "",
+				canChooseTechnician ? technician : null,
 			);
 			setActive(response.item);
 			setClientCode("");
@@ -289,7 +321,7 @@ export default function ServiceOrderRequestsPage() {
 						<p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Ordem de Serviço</p>
 						<h1 className="mt-2 text-2xl font-black text-slate-950 sm:text-3xl">Solicitação</h1>
 						<p className="mt-2 max-w-3xl text-sm font-semibold text-slate-600">
-							Informe o código do cliente para transferir a O.S aberta para o técnico vinculado ao seu usuário.
+							Informe o código do cliente para localizar a O.S aberta e encaminhá-la ao técnico escolhido.
 						</p>
 					</div>
 					<div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
@@ -312,16 +344,35 @@ export default function ServiceOrderRequestsPage() {
 					</label>
 					{canChooseTechnician ? (
 						<label className="block">
-							<span className="mb-2 block text-sm font-black text-slate-700">Técnico de retirada</span>
+							<span className="mb-2 flex items-center justify-between gap-2 text-sm font-black text-slate-700">
+								<span>Técnico no HubSoft</span>
+								<button
+									type="button"
+									onClick={refreshTechnicians}
+									disabled={refreshingTechnicians}
+									className="inline-flex items-center gap-1 text-xs text-blue-700 disabled:opacity-50"
+									title="Carregar técnicos do HubSoft"
+								>
+									<RefreshCw size={13} className={refreshingTechnicians ? "animate-spin" : ""} />
+									Atualizar técnicos
+								</button>
+							</span>
+							<input
+								value={technicianSearch}
+								onChange={(event) => setTechnicianSearch(event.target.value)}
+								placeholder={`Pesquisar entre ${technicians.length || 0} técnicos`}
+								className="mb-2 h-10 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 focus:bg-white"
+							/>
 							<select
 								value={selectedTechnician}
 								onChange={(event) => setSelectedTechnician(event.target.value)}
 								className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-950 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
 							>
 								<option value="">Selecione</option>
-								{technicians.map((technician) => (
-									<option key={technician.id || technician.name} value={technician.name}>
+								{filteredTechnicians.map((technician) => (
+									<option key={technician.id || technician.name} value={technician.id}>
 										{technician.displayName || technician.name}
+										{technician.isWithdrawal ? " · Retirada" : ""}
 									</option>
 								))}
 							</select>

@@ -1,5 +1,6 @@
 const db = require("../../db");
 const hubsoftSyncProfiles = require("../../hubsoftSyncProfiles");
+const sempreIntegration = require("../../sempreIntegration");
 
 const CREATE_PERMISSIONS = ["service_orders.requests.create"];
 const HISTORY_PERMISSIONS = ["service_orders.requests.history"];
@@ -45,6 +46,8 @@ let metadataPromise = null;
 let metadataExpiresAt = 0;
 let keepAliveStarted = false;
 let orderLookupTail = Promise.resolve();
+let liveOpenOrdersCache = null;
+let liveOpenOrdersPromise = null;
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -312,6 +315,7 @@ function publicRow(row = {}) {
 		requesterEmail: row.requester_email || "",
 		requesterName: row.requester_name,
 		technicianHubsoftName: row.technician_hubsoft_name,
+		technicianHubsoftId: row.technician_hubsoft_id || null,
 		serviceOrderId: row.service_order_id || "",
 		serviceOrderNumber: row.service_order_number || "",
 		clientName: row.client_name || "",
@@ -391,14 +395,57 @@ function metadataOrderType(metadata = {}, description = "") {
 	);
 }
 
+async function loadTodayOpenWithdrawalOrders(session, metadata) {
+	const day = saoPauloDateParts().iso;
+	if (
+		liveOpenOrdersCache?.day === day &&
+		liveOpenOrdersCache.expiresAt > Date.now()
+	) {
+		return liveOpenOrdersCache.rows;
+	}
+	if (liveOpenOrdersPromise) return liveOpenOrdersPromise;
+	liveOpenOrdersPromise = (async () => {
+		const types = ALLOWED_SOURCE_ORDER_TYPES.map((name) =>
+			metadataOrderType(metadata, name),
+		).filter(Boolean);
+		const payload = await hubsoftSyncProfiles.automationRequest(
+			session,
+			"/api/v1/ordem_servico/consultar/paginado/1000?page=1",
+			{
+				method: "POST",
+				body: {
+					data_inicio: `${day}T00:00:00.000-03:00`,
+					data_fim: `${day}T23:59:59.999-03:00`,
+					tipo_data: "data_cadastro",
+					status_ordem_servico: OPEN_STATUSES,
+					tipo_ordem_servicos: types,
+					pagina: 1,
+					itens_por_pagina: 1000,
+				},
+			},
+		);
+		const rows = rowsOf(payload).filter(
+			(row) =>
+				OPEN_STATUSES.includes(orderStatus(row)) &&
+				isAllowedSourceOrderType(orderTypeName(row)),
+		);
+		liveOpenOrdersCache = {
+			day,
+			rows,
+			expiresAt: Date.now() + 60_000,
+		};
+		return rows;
+	})().finally(() => {
+		liveOpenOrdersPromise = null;
+	});
+	return liveOpenOrdersPromise;
+}
+
 async function findOpenOrderUnlocked(session, metadata, code) {
 	const candidates = await localOpenOrderCandidates(code);
 	const eligibleCandidates = candidates.filter((candidate) =>
 		isAllowedSourceOrderType(candidate.tipo),
 	);
-	if (candidates.length && !eligibleCandidates.length) {
-		throw blockedSourceOrderTypeError(candidates[0].tipo);
-	}
 	for (const candidate of eligibleCandidates) {
 		const date = text(candidate.data_cadastro_dia);
 		const type = metadataOrderType(metadata, candidate.tipo);
@@ -440,6 +487,18 @@ async function findOpenOrderUnlocked(session, metadata, code) {
 			}
 		}
 	}
+	const liveRows = await loadTodayOpenWithdrawalOrders(session, metadata);
+	const liveMatch = liveRows.find((row) => clientCode(row) === code);
+	if (liveMatch) {
+		Object.defineProperty(liveMatch, "__retiradasSourceOrderType", {
+			value: orderTypeName(liveMatch),
+			enumerable: false,
+		});
+		return liveMatch;
+	}
+	if (candidates.length && !eligibleCandidates.length) {
+		throw blockedSourceOrderTypeError(candidates[0].tipo);
+	}
 	return null;
 }
 
@@ -465,7 +524,8 @@ function findTargetType(metadata = {}) {
 	);
 }
 
-function findTargetTechnician(metadata = {}, configuredName) {
+function findTargetTechnician(metadata = {}, configuredName, configuredId = null) {
+	const requestedId = Number(configuredId || 0);
 	const target = normalize(configuredName);
 	const candidates = [...(metadata.tecnicos || []), ...(metadata.usuarios || [])];
 	const seen = new Set();
@@ -475,13 +535,13 @@ function findTargetTechnician(metadata = {}, configuredName) {
 		const key = `${id}:${name}`;
 		if (seen.has(key)) return false;
 		seen.add(key);
-		return name === target;
+		return requestedId ? Number(id) === requestedId : name === target;
 	});
 	if (matches.length !== 1) {
 		const error = new Error(
 			matches.length
 				? `O nome ${configuredName} corresponde a mais de um tecnico no HubSoft.`
-				: `Tecnico ${configuredName} nao encontrado no HubSoft. Revise o vinculo em Usuarios.`,
+				: `Tecnico ${configuredName || configuredId} nao encontrado no HubSoft. Revise o catalogo de tecnicos.`,
 		);
 		error.statusCode = 422;
 		throw error;
@@ -561,6 +621,7 @@ async function runRequest(id) {
 		const targetTechnician = findTargetTechnician(
 			metadata,
 			request.technician_hubsoft_name,
+			request.technician_hubsoft_id,
 		);
 
 		await updateProgress(id, "Localizando O.S aberta do cliente", 35);
@@ -729,13 +790,13 @@ async function createRequest(payload = {}, user = {}) {
 	}
 	const uid = requesterUid(user);
 	const name = requesterName(user);
-	const hubsoftName = await resolveTechnicianHubsoftName(payload, user);
+	const technician = await resolveTechnicianHubsoft(payload, user);
 	if (!uid || !name) {
 		const error = new Error("Nao foi possivel identificar o tecnico autenticado.");
 		error.statusCode = 401;
 		throw error;
 	}
-	if (!hubsoftName) {
+	if (!technician.name) {
 		const error = new Error(
 			"Seu usuario nao possui tecnico HubSoft vinculado. Solicite ao administrador a configuracao do nome em Metas.",
 		);
@@ -745,10 +806,18 @@ async function createRequest(payload = {}, user = {}) {
 	try {
 		const result = await db.query(
 			`insert into service_order_requests
-			  (client_code, requester_uid, requester_email, requester_name, technician_hubsoft_name)
-			 values ($1, $2, $3, $4, $5)
+			  (client_code, requester_uid, requester_email, requester_name,
+			   technician_hubsoft_name, technician_hubsoft_id)
+			 values ($1, $2, $3, $4, $5, $6)
 			 returning *`,
-			[code, uid, requesterEmail(user) || null, name, hubsoftName],
+			[
+				code,
+				uid,
+				requesterEmail(user) || null,
+				name,
+				technician.name,
+				technician.id || null,
+			],
 		);
 		const item = result.rows[0];
 		enqueue(item.id);
@@ -763,29 +832,62 @@ async function createRequest(payload = {}, user = {}) {
 	}
 }
 
-async function resolveTechnicianHubsoftName(payload = {}, user = {}) {
-	if (!canChooseTechnician(user)) return technicianHubsoftName(user);
-	const requested = text(
+async function ensureTechnicianCatalog(user = {}) {
+	let technicians = await hubsoftSyncProfiles.listHubsoftTechnicians({
+		limit: 2000,
+	});
+	if (!technicians.length) {
+		await hubsoftSyncProfiles.refreshHubsoftTechnicians(user);
+		technicians = await hubsoftSyncProfiles.listHubsoftTechnicians({
+			limit: 2000,
+		});
+	}
+	return technicians;
+}
+
+async function resolveTechnicianHubsoft(payload = {}, user = {}) {
+	const requestedName = text(
 		payload.technicianHubsoftName || payload.tecnicoHubsoftNome,
 	);
-	if (!requested) {
-		const error = new Error("Selecione o tecnico de retirada que recebera a O.S.");
+	const requestedId = Number(
+		payload.technicianHubsoftId || payload.tecnicoHubsoftId || 0,
+	);
+	if (!canChooseTechnician(user)) {
+		const linkedName = technicianHubsoftName(user);
+		if (!linkedName) return { id: null, name: "" };
+		const technicians = await ensureTechnicianCatalog(user);
+		const match = technicians.find(
+			(item) => normalize(item.name) === normalize(linkedName),
+		);
+		return {
+			id: match?.hubsoft_technician_id || null,
+			name: text(match?.name || linkedName),
+		};
+	}
+	if (!requestedId && !requestedName) {
+		const error = new Error("Selecione o tecnico que recebera a O.S.");
 		error.statusCode = 400;
 		throw error;
 	}
-	const technicians = await hubsoftSyncProfiles.listWithdrawalTechnicians();
+	const technicians = await ensureTechnicianCatalog(user);
 	const match = technicians.find(
 		(item) =>
-			item.ativo === true &&
-			normalize(item.nome_hubsoft) === normalize(requested) &&
-			normalize(item.nome_hubsoft).includes("TECNICO RETIRADA"),
+			item.active === true &&
+			(requestedId
+				? Number(item.hubsoft_technician_id) === requestedId
+				: normalize(item.name) === normalize(requestedName)),
 	);
 	if (!match) {
-		const error = new Error("Tecnico de retirada invalido ou inativo.");
+		const error = new Error(
+			"Tecnico invalido ou desatualizado. Atualize o catalogo e tente novamente.",
+		);
 		error.statusCode = 422;
 		throw error;
 	}
-	return text(match.nome_hubsoft);
+	return {
+		id: Number(match.hubsoft_technician_id),
+		name: text(match.name),
+	};
 }
 
 async function listSelectableTechnicians(user = {}) {
@@ -794,19 +896,136 @@ async function listSelectableTechnicians(user = {}) {
 		error.statusCode = 403;
 		throw error;
 	}
-	const technicians = await hubsoftSyncProfiles.listWithdrawalTechnicians();
+	const technicians = await ensureTechnicianCatalog(user);
 	return {
 		items: technicians
-			.filter(
-				(item) =>
-					item.ativo === true &&
-					normalize(item.nome_hubsoft).includes("TECNICO RETIRADA"),
-			)
+			.filter((item) => item.active === true)
 			.map((item) => ({
-				id: item.id,
-				name: text(item.nome_hubsoft),
-				displayName: text(item.nome_exibicao || item.nome_hubsoft),
+				id: Number(item.hubsoft_technician_id),
+				name: text(item.name),
+				displayName: text(item.display_name || item.name),
+				isWithdrawal: item.is_withdrawal === true,
 			})),
+	};
+}
+
+async function refreshSelectableTechnicians(user = {}) {
+	if (!canChooseTechnician(user)) {
+		const error = new Error("Permissao insuficiente.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const summary = await hubsoftSyncProfiles.refreshHubsoftTechnicians(user);
+	return {
+		...summary,
+		...(await listSelectableTechnicians(user)),
+	};
+}
+
+function equipmentClientRows(payload = {}) {
+	return Array.isArray(payload?.acessos_cliente?.data)
+		? payload.acessos_cliente.data
+		: [];
+}
+
+async function resolveEquipmentClient(mac, session) {
+	const equipment = await sempreIntegration.consultEquipment(mac);
+	const primary = equipment?.primary || null;
+	const expectedName = text(primary?.vinculadoEm || primary?.origemStatus);
+	const documentSuffix = digits(primary?.cpfCnpjMascarado).slice(-4);
+	if (!equipment?.found || !primary || !expectedName) {
+		const error = new Error(
+			"O equipamento foi consultado, mas nao possui cliente vinculado.",
+		);
+		error.statusCode = 422;
+		throw error;
+	}
+	const payload = await hubsoftSyncProfiles.automationRequest(
+		session,
+		`/api/v1/cliente/acesso/paginado/10?page=1&busca=cliente&termo_busca=${encodeURIComponent(expectedName)}`,
+	);
+	const candidateIds = [
+		...new Set(
+			equipmentClientRows(payload)
+				.filter(
+					(row) =>
+						normalize(row?.cliente?.nome_razaosocial) ===
+						normalize(expectedName),
+				)
+				.map((row) => Number(row?.cliente?.id_cliente))
+				.filter(Boolean),
+		),
+	].slice(0, 10);
+	const matches = [];
+	for (const id of candidateIds) {
+		const response = await hubsoftSyncProfiles.automationRequest(
+			session,
+			`/api/v1/cliente/${encodeURIComponent(id)}`,
+		);
+		const client = response?.cliente || response?.data || null;
+		if (!client) continue;
+		const cpfCnpj = digits(client.cpf_cnpj);
+		if (documentSuffix && !cpfCnpj.endsWith(documentSuffix)) continue;
+		matches.push(client);
+	}
+	if (matches.length !== 1) {
+		const error = new Error(
+			matches.length
+				? "Mais de um cliente corresponde ao equipamento. Valide o cadastro no HubSoft."
+				: "Nao foi possivel confirmar o cliente do equipamento no HubSoft.",
+		);
+		error.statusCode = 422;
+		throw error;
+	}
+	return {
+		equipment,
+		client: matches[0],
+	};
+}
+
+async function createEquipmentRequest(payload = {}, user = {}) {
+	if (!canChooseTechnician(user)) {
+		const error = new Error("Permissao insuficiente.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const mac = sempreIntegration.normalizeMac(payload.mac);
+	if (!mac || mac.length !== 12) {
+		const error = new Error("Informe um MAC valido.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const session = await hubsoftSyncProfiles.createAutomationSession();
+	const metadata = await getAutomationMetadata(session);
+	const resolved = await resolveEquipmentClient(mac, session);
+	const code = digits(resolved.client?.codigo_cliente);
+	const order = code ? await findOpenOrder(session, metadata, code) : null;
+	if (!order) {
+		const error = new Error(
+			"Cliente localizado, mas nao ha O.S. de retirada aberta. Abra a O.S. antes de encaminhar.",
+		);
+		error.statusCode = 422;
+		throw error;
+	}
+	const created = await createRequest(
+		{
+			...payload,
+			clientCode: code,
+		},
+		user,
+	);
+	return {
+		...created,
+		lookup: {
+			mac,
+			clientCode: code,
+			clientName: text(resolved.client?.nome_razaosocial),
+			serviceOrderNumber: orderNumber(order),
+			serviceOrderType: orderTypeName(order),
+			currentTechnicians: orderTechnicians(order)
+				.map(technicianName)
+				.filter(Boolean),
+		},
 	};
 }
 
@@ -883,9 +1102,11 @@ module.exports = {
 		verifyFinalState,
 	},
 	createRequest,
+	createEquipmentRequest,
 	getRequest,
 	initialize,
 	listHistory,
 	listOwnRequests,
 	listSelectableTechnicians,
+	refreshSelectableTechnicians,
 };
