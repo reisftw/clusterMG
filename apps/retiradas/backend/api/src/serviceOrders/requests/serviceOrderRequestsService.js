@@ -411,27 +411,32 @@ async function findOpenOrder(session, metadata, code) {
 			pagina: 1,
 			itens_por_pagina: 1000,
 		};
-		const payload = await hubsoftSyncProfiles.automationRequest(
-			session,
-			"/api/v1/ordem_servico/consultar/paginado/1000?page=1",
-			{ method: "POST", body },
-		);
-		const match = rowsOf(payload).find(
-			(row) =>
-				(clientCode(row) === code ||
-					orderNumber(row) === digits(candidate.num_os)) &&
-				OPEN_STATUSES.includes(orderStatus(row)),
-		);
-		if (match) {
-			const sourceType = orderTypeName(match) || candidate.tipo;
-			if (!isAllowedSourceOrderType(sourceType)) {
-				throw blockedSourceOrderTypeError(sourceType);
+		for (let attempt = 1; attempt <= 3; attempt += 1) {
+			const payload = await hubsoftSyncProfiles.automationRequest(
+				session,
+				"/api/v1/ordem_servico/consultar/paginado/1000?page=1",
+				{ method: "POST", body },
+			);
+			const match = rowsOf(payload).find(
+				(row) =>
+					(clientCode(row) === code ||
+						orderNumber(row) === digits(candidate.num_os)) &&
+					OPEN_STATUSES.includes(orderStatus(row)),
+			);
+			if (match) {
+				const sourceType = orderTypeName(match) || candidate.tipo;
+				if (!isAllowedSourceOrderType(sourceType)) {
+					throw blockedSourceOrderTypeError(sourceType);
+				}
+				Object.defineProperty(match, "__retiradasSourceOrderType", {
+					value: sourceType,
+					enumerable: false,
+				});
+				return match;
 			}
-			Object.defineProperty(match, "__retiradasSourceOrderType", {
-				value: sourceType,
-				enumerable: false,
-			});
-			return match;
+			if (attempt < 3) {
+				await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+			}
 		}
 	}
 	return null;
