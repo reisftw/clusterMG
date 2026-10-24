@@ -1,5 +1,45 @@
 const express = require("express");
+const multer = require("multer");
 const service = require("../tentativasService");
+const central = require("../tentativasCentralService");
+
+const evidenceUpload = multer({
+	storage: multer.memoryStorage(),
+	limits: { fileSize: Number(process.env.TENTATIVAS_EVIDENCE_LIMIT_BYTES || 8 * 1024 * 1024) },
+	fileFilter: (_req, file, callback) => {
+		const allowed = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+		if (!allowed.has(String(file?.mimetype || "").toLowerCase())) {
+			callback(new Error("Envie uma evidencia em PDF, JPG, PNG ou WEBP."));
+			return;
+		}
+		callback(null, true);
+	},
+});
+
+function isValidEvidenceBuffer(file) {
+	if (!file?.buffer?.length) return false;
+	const buffer = file.buffer;
+	const pdf = buffer.subarray(0, 5).toString("utf8") === "%PDF-";
+	const png = buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+	const jpeg = buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
+	const webp = buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+	return pdf || png || jpeg || webp;
+}
+
+function uploadEvidence(req, res, next) {
+	evidenceUpload.single("file")(req, res, (error) => {
+		if (error) {
+			const statusCode = error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+			res.status(statusCode).json({ error: statusCode === 413 ? "Evidencia maior que 8 MB." : error.message });
+			return;
+		}
+		if (!isValidEvidenceBuffer(req.file)) {
+			res.status(400).json({ error: "Arquivo de evidencia invalido ou corrompido." });
+			return;
+		}
+		next();
+	});
+}
 
 function createTentativasRouter({
 	requireAnyPermission,
@@ -9,10 +49,12 @@ function createTentativasRouter({
 } = {}) {
 	const router = express.Router();
 	const requireView = requireAnyPermission(service.VIEW_PERMISSIONS, fallbackRoles);
-	const requireExecute = requireAnyPermission(
-		service.EXECUTE_PERMISSIONS,
-		fallbackRoles,
-	);
+	const requireContact = requireAnyPermission(service.CONTACT_PERMISSIONS, fallbackRoles);
+	const requireRegister = requireAnyPermission(service.REGISTER_PERMISSIONS, fallbackRoles);
+	const requireSchedule = requireAnyPermission(service.SCHEDULE_PERMISSIONS, fallbackRoles);
+	const requirePortfolio = requireAnyPermission(service.PORTFOLIO_PERMISSIONS, fallbackRoles);
+	const requireManagement = requireAnyPermission(service.MANAGEMENT_PERMISSIONS, fallbackRoles);
+	const requireAudit = requireAnyPermission(service.AUDIT_PERMISSIONS, fallbackRoles);
 	const requireHistory = requireAnyPermission(
 		service.HISTORY_PERMISSIONS,
 		fallbackRoles,
@@ -54,6 +96,95 @@ function createTentativasRouter({
 		}
 	});
 
+	router.get("/localidades", requireAuthenticated, requireView, async (req, res, next) => {
+		try {
+			res.json(await service.listNeighborhoods(req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/retornos", requireAuthenticated, requireView, async (req, res, next) => {
+		try {
+			res.json(await central.listCallbacks(req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.put(
+		"/retornos/:id",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireSchedule,
+		async (req, res, next) => {
+			try {
+				res.json(await central.updateCallback(req.params.id, req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/:id/retornos",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireSchedule,
+		async (req, res, next) => {
+			try {
+				res.status(201).json(await central.createCallback(req.params.id, req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get("/recuperacoes", requireAuthenticated, requireView, async (req, res, next) => {
+		try {
+			res.json(await central.listRecoveries(req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/produtividade", requireAuthenticated, requireView, async (req, res, next) => {
+		try {
+			res.json(await central.getMyProductivity(req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.put(
+		"/recuperacoes/:id/status",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireRegister,
+		async (req, res, next) => {
+			try {
+				res.json(await central.updateRecovery(req.params.id, req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/recuperacoes/:id/evidencias",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireRegister,
+		uploadEvidence,
+		async (req, res, next) => {
+			try {
+				res.status(201).json(await central.saveRecoveryEvidence(req.params.id, req.file, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.get("/historico", requireAuthenticated, requireHistory, async (req, res, next) => {
 		try {
 			res.json(await service.listHistory(req.query || {}, req.user || {}));
@@ -85,10 +216,24 @@ function createTentativasRouter({
 		"/contacts/:id/resultado",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireExecute,
+		requireRegister,
 		async (req, res, next) => {
 			try {
 				res.json(await service.saveResult(req.params.id, req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.put(
+		"/contacts/:id/corrigir",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAnyPermission(service.CORRECTION_PERMISSIONS, fallbackRoles),
+		async (req, res, next) => {
+			try {
+				res.json(await central.correctContact(req.params.id, req.body || {}, req.user || {}));
 			} catch (error) {
 				next(error);
 			}
@@ -102,6 +247,89 @@ function createTentativasRouter({
 		async (req, res, next) => {
 			try {
 				res.json(await service.getOverview(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
+		"/admin/analytics",
+		requireAuthenticated,
+		requireManagement,
+		async (req, res, next) => {
+			try {
+				res.json(await central.getAnalytics(req.query || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
+		"/admin/analytics/export.csv",
+		requireAuthenticated,
+		requireExport,
+		async (req, res, next) => {
+			try {
+				const csv = await central.exportAnalyticsCsv(req.query || {});
+				res.setHeader("Content-Type", "text/csv; charset=utf-8");
+				res.setHeader("Content-Disposition", 'attachment; filename="tentativas-gestao.csv"');
+				res.send(csv);
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
+		"/admin/inteligencia",
+		requireAuthenticated,
+		requireManagement,
+		async (req, res, next) => {
+			try {
+				res.json(await central.getIntelligence(req.query || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
+		"/admin/auditoria",
+		requireAuthenticated,
+		requireAudit,
+		async (req, res, next) => {
+			try {
+				res.json(await central.listAudit(req.query || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/admin/recalcular-prioridades",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireManagement,
+		async (req, res, next) => {
+			try {
+				res.json(await central.refreshPriorityScores(req.body || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/admin/atribuicoes/:id/transferir",
+		requireAuthenticated,
+		requireCsrfToken,
+		requirePortfolio,
+		async (req, res, next) => {
+			try {
+				res.json(await central.transferAssignment(req.params.id, req.body || {}, req.user || {}));
 			} catch (error) {
 				next(error);
 			}
@@ -256,6 +484,14 @@ function createTentativasRouter({
 		},
 	);
 
+	router.get("/:id/timeline", requireAuthenticated, requireHistory, async (req, res, next) => {
+		try {
+			res.json(await central.listTimeline(req.params.id, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/:id", requireAuthenticated, requireView, async (req, res, next) => {
 		try {
 			const item = await service.getOpportunity(req.params.id, req.user || {});
@@ -273,7 +509,7 @@ function createTentativasRouter({
 		"/:id/iniciar",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireExecute,
+		requireContact,
 		async (req, res, next) => {
 			try {
 				res.json(await service.startContact(req.params.id, req.body || {}, req.user || {}, req));

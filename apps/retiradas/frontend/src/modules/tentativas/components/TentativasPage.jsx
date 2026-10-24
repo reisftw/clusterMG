@@ -1,17 +1,22 @@
 import {
 	BarChart3,
+	CalendarClock,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	Download,
 	History,
 	MessageCircle,
+	MapPin,
+	PackageCheck,
 	Phone,
 	RefreshCw,
 	Route,
 	Save,
 	Search,
 	Settings,
+	ShieldCheck,
+	TrendingUp,
 	Users,
 	X,
 } from "lucide-react";
@@ -30,11 +35,15 @@ import {
 	buscarMinhaRotaTentativas,
 	buscarRankingTentativas,
 	buscarResumoTentativas,
+	buscarTimelineTentativa,
 	buscarUsuariosTentativas,
 	criarCampanhaTentativas,
+	criarRetornoTentativa,
+	corrigirContatoTentativa,
 	iniciarContatoTentativa,
 	listarCidadesTecnicosTentativas,
 	listarCidadesTentativas,
+	listarLocalidadesTentativas,
 	listarTemplatesTentativas,
 	removerCidadeTecnicoTentativas,
 	salvarCidadeTecnicoTentativas,
@@ -42,27 +51,46 @@ import {
 	salvarResultadoTentativa,
 	salvarTemplateTentativas,
 } from "../services/tentativasService";
+import {
+	AuditPanel,
+	CallbacksPanel,
+	ManagementPanel,
+	ProductivityPanel,
+	RecoveriesPanel,
+} from "./TentativasCentralPanels";
 
 const RESULT_OPTIONS = [
 	["NO_RESPONSE", "Sem resposta"],
-	["RESPONDED", "Cliente respondeu"],
-	["SCHEDULED", "Retirada agendada"],
-	["REFUSED", "Cliente recusou"],
+	["RESPONDED_SCHEDULE", "Cliente respondeu — deseja agendar"],
+	["STORE_DELIVERY", "Cliente respondeu — devolverá na loja"],
+	["RESPONDED_CALLBACK", "Cliente respondeu — pediu retorno"],
+	["REFUSED", "Cliente respondeu — recusou devolução"],
 	["INVALID_PHONE", "Número inválido"],
-	["ALREADY_RETURNED", "Cliente já devolveu"],
-	["EQUIPMENT_UNAVAILABLE", "Equipamento indisponível"],
-	["CALLBACK_REQUESTED", "Contato posterior"],
-	["COMPLETED", "Retirada concluída"],
-	["OTHER", "Outro"],
+	["UNAVAILABLE_PHONE", "Número indisponível"],
+	["ALREADY_RETURNED", "Equipamento já devolvido — aguardando conferência"],
+	["EQUIPMENT_NOT_FOUND", "Equipamento não localizado"],
+	["OTHER", "Outro motivo"],
 ];
 
 const ADMIN_TABS = [
-	["overview", "Visão Geral", BarChart3],
+	["management", "Gestão", BarChart3],
 	["distribution", "Distribuição", Users],
-	["history", "Histórico", History],
+	["admin-recoveries", "Recuperação", PackageCheck],
+	["audit", "Auditoria", ShieldCheck],
 	["templates", "Templates", MessageCircle],
 	["settings", "Configurações", Settings],
 ];
+const OPERATIONAL_TABS = [
+	["route", "Minha Carteira", Route],
+	["next", "Próximos Contatos", CalendarClock],
+	["callbacks", "Retornos", CalendarClock],
+	["appointments", "Agendamentos", CalendarClock],
+	["recoveries", "Recuperações", PackageCheck],
+	["productivity", "Produtividade", TrendingUp],
+	["history", "Histórico", History],
+];
+const ADMIN_TAB_KEYS = new Set(ADMIN_TABS.map(([key]) => key));
+const ALL_TAB_KEYS = new Set([...OPERATIONAL_TABS, ...ADMIN_TABS].map(([key]) => key));
 const CITY_PAGE_SIZE = 8;
 const ASSOCIATED_CITY_PAGE_SIZE = 10;
 
@@ -120,6 +148,8 @@ function customerIdentification(item) {
 
 function canManage(user) {
 	return (
+		hasPermission(user, "tentativas.gestao.visualizar") ||
+		hasPermission(user, "tentativas.carteiras.gerenciar") ||
 		hasPermission(user, "tentativas.distribuir") ||
 		hasPermission(user, "tentativas.templates.gerenciar") ||
 		hasPermission(user, "tentativas.configuracoes.gerenciar")
@@ -379,10 +409,14 @@ function UserLookup({ value = {}, onChange }) {
 	);
 }
 
-function ResultModal({ contact, onClose, onSaved, editing = false }) {
+function ResultModal({ contact, onClose, onSaved, editing = false, correctionAllowed = false }) {
 	const [sentConfirmed, setSentConfirmed] = useState(true);
 	const [result, setResult] = useState("NO_RESPONSE");
 	const [observation, setObservation] = useState("");
+	const [callbackAt, setCallbackAt] = useState("");
+	const [preferredChannel, setPreferredChannel] = useState("WHATSAPP");
+	const [recoveryModality, setRecoveryModality] = useState("");
+	const [correctionReason, setCorrectionReason] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState("");
 	useEffect(() => {
@@ -390,18 +424,39 @@ function ResultModal({ contact, onClose, onSaved, editing = false }) {
 		setSentConfirmed(contact.sent_confirmed !== false);
 		setResult(contact.result || "NO_RESPONSE");
 		setObservation(contact.observation || "");
+		setCallbackAt(contact.callback_at || "");
+		setPreferredChannel(contact.preferred_channel || "WHATSAPP");
+		setRecoveryModality(contact.recovery_modality || "");
+		setCorrectionReason("");
 		setError("");
 	}, [contact]);
 	if (!contact) return null;
 	const save = async () => {
+		if (result === "RESPONDED_CALLBACK" && !callbackAt && !(editing && correctionAllowed)) {
+			setError("Informe a data e o horário solicitados pelo cliente.");
+			return;
+		}
+		if (editing && correctionAllowed && correctionReason.trim().length < 5) {
+			setError("Informe uma justificativa com pelo menos 5 caracteres.");
+			return;
+		}
 		setSaving(true);
 		setError("");
 		try {
-			await salvarResultadoTentativa(contact.contactId, {
+			const payload = {
 				sentConfirmed,
 				result,
 				observation,
-			});
+				callbackAt: callbackAt ? new Date(callbackAt).toISOString() : null,
+				preferredChannel,
+				recoveryModality,
+				correctionReason,
+			};
+			if (editing && correctionAllowed) {
+				await corrigirContatoTentativa(contact.contactId, payload);
+			} else {
+				await salvarResultadoTentativa(contact.contactId, payload);
+			}
 			onSaved?.();
 			onClose();
 		} catch (err) {
@@ -468,6 +523,38 @@ function ResultModal({ contact, onClose, onSaved, editing = false }) {
 						</button>
 					))}
 				</div>
+				{["RESPONDED_CALLBACK", "RESPONDED_SCHEDULE", "STORE_DELIVERY"].includes(result) && !(editing && correctionAllowed) ? (
+					<div className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:grid-cols-2">
+						<label className="grid gap-1 text-sm font-black text-slate-700">
+							{result === "RESPONDED_CALLBACK" ? "Data e horário do retorno" : "Data combinada"}
+							<input
+								type="datetime-local"
+								value={callbackAt}
+								onChange={(event) => setCallbackAt(event.target.value)}
+								required={result === "RESPONDED_CALLBACK"}
+								className="min-h-12 rounded-xl border border-blue-200 bg-white px-3 font-bold"
+							/>
+						</label>
+						<label className="grid gap-1 text-sm font-black text-slate-700">
+							Canal preferencial
+							<select value={preferredChannel} onChange={(event) => setPreferredChannel(event.target.value)} className="min-h-12 rounded-xl border border-blue-200 bg-white px-3 font-bold">
+								<option value="WHATSAPP">WhatsApp</option>
+								<option value="PHONE">Ligação</option>
+								<option value="SMS">SMS</option>
+								<option value="OTHER">Outro canal autorizado</option>
+							</select>
+						</label>
+						{result !== "RESPONDED_CALLBACK" ? (
+							<label className="grid gap-1 text-sm font-black text-slate-700 sm:col-span-2">
+								Modalidade da devolução
+								<select value={recoveryModality || (result === "STORE_DELIVERY" ? "STORE_DELIVERY" : "TECHNICIAN_COLLECTION")} onChange={(event) => setRecoveryModality(event.target.value)} className="min-h-12 rounded-xl border border-blue-200 bg-white px-3 font-bold">
+									<option value="TECHNICIAN_COLLECTION">Coleta por técnico</option>
+									<option value="STORE_DELIVERY">Entrega em loja</option>
+								</select>
+							</label>
+						) : null}
+					</div>
+				) : null}
 				<textarea
 					value={observation}
 					onChange={(event) => setObservation(event.target.value)}
@@ -475,6 +562,12 @@ function ResultModal({ contact, onClose, onSaved, editing = false }) {
 					placeholder="Observação curta, se necessário"
 					className="min-h-24 w-full rounded-2xl border border-slate-200 p-3 font-semibold outline-none focus:border-blue-400"
 				/>
+				{editing && correctionAllowed ? (
+					<label className="grid gap-1 text-sm font-black text-slate-700">
+						Justificativa da correção
+						<textarea value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} maxLength={500} placeholder="Explique por que o registro precisa ser corrigido" className="min-h-20 w-full rounded-2xl border border-amber-200 bg-amber-50 p-3 font-semibold outline-none focus:border-amber-400" />
+					</label>
+				) : null}
 			</div>
 		</ModalShell>
 	);
@@ -518,8 +611,20 @@ function MyRoute() {
 	const { currentUser } = useAuthContext();
 	const [cities, setCities] = useState([]);
 	const [city, setCity] = useState("");
+	const [localities, setLocalities] = useState([]);
+	const [neighborhood, setNeighborhood] = useState("");
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
+	const [priority, setPriority] = useState("");
+	const [sort, setSort] = useState("priority");
+	const [page, setPage] = useState(1);
+	const [position, setPosition] = useState(null);
 	const [routeData, setRouteData] = useState(null);
 	const [detail, setDetail] = useState(null);
+	const [scheduleItem, setScheduleItem] = useState(null);
+	const [scheduleAt, setScheduleAt] = useState("");
+	const [scheduleObservation, setScheduleObservation] = useState("");
+	const [scheduleError, setScheduleError] = useState("");
 	const [pendingContact, setPendingContact] = useState(null);
 	const [whatsappChoiceContact, setWhatsappChoiceContact] = useState(null);
 	const [whatsappPreference, setWhatsappPreference] = useState(() =>
@@ -547,26 +652,77 @@ function MyRoute() {
 		}
 	}, []);
 
-	const loadRoute = useCallback(async (selectedCity = city) => {
+	const loadRoute = useCallback(async (selectedCity = city, targetPage = 1) => {
 		if (!selectedCity) return;
 		setLoading(true);
 		setError("");
 		try {
-			setRouteData(await buscarMinhaRotaTentativas({ cidade: selectedCity }));
+			setRouteData(await buscarMinhaRotaTentativas({
+				cidade: selectedCity,
+				bairro: neighborhood,
+				q: search,
+				priority,
+				sort,
+				page: targetPage,
+				limit: 30,
+				latitude: position?.latitude,
+				longitude: position?.longitude,
+			}));
+			setPage(targetPage);
 		} catch (err) {
 			setError(err.message || "Falha ao carregar rota.");
 		} finally {
 			setLoading(false);
 		}
-	}, [city]);
+	}, [city, neighborhood, position, priority, search, sort]);
+
+	const loadLocalities = useCallback(async (selectedCity = city) => {
+		if (!selectedCity) return;
+		try {
+			const data = await listarLocalidadesTentativas({
+				cidade: selectedCity,
+				latitude: position?.latitude,
+				longitude: position?.longitude,
+			});
+			setLocalities(data.items || []);
+		} catch {
+			setLocalities([]);
+		}
+	}, [city, position]);
+
+	const requestLocation = () => {
+		if (!navigator.geolocation) {
+			setError("Localização não disponível neste dispositivo.");
+			return;
+		}
+		navigator.geolocation.getCurrentPosition(
+			(location) => {
+				setPosition({ latitude: location.coords.latitude, longitude: location.coords.longitude });
+				setSort("distance");
+			},
+			() => setError("Não foi possível acessar sua localização. Você pode continuar escolhendo pelo bairro."),
+			{ enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+		);
+	};
 
 	useEffect(() => {
 		loadCities();
 	}, [loadCities]);
 
 	useEffect(() => {
-		if (city) loadRoute(city);
-	}, [city, loadRoute]);
+		const timer = window.setTimeout(() => {
+			setSearch(searchInput.trim());
+			setPage(1);
+		}, 350);
+		return () => window.clearTimeout(timer);
+	}, [searchInput]);
+
+	useEffect(() => {
+		if (city) {
+			void loadRoute(city, 1);
+			void loadLocalities(city);
+		}
+	}, [city, neighborhood, priority, sort, position, loadRoute, loadLocalities]);
 
 	const openWhatsapp = (started, preference) => {
 		const url =
@@ -618,7 +774,31 @@ function MyRoute() {
 	};
 
 	const openDetail = async (item) => {
-		setDetail(await buscarDetalheTentativa(item.id));
+		const [record, timeline] = await Promise.all([
+			buscarDetalheTentativa(item.id),
+			buscarTimelineTentativa(item.id),
+		]);
+		setDetail({ ...record, timeline: timeline.items || [] });
+	};
+
+	const scheduleCallback = async () => {
+		if (!scheduleAt) {
+			setScheduleError("Informe a data e o horário do retorno.");
+			return;
+		}
+		try {
+			await criarRetornoTentativa(scheduleItem.id, {
+				callbackAt: new Date(scheduleAt).toISOString(),
+				observation: scheduleObservation,
+				preferredChannel: "WHATSAPP",
+			});
+			setScheduleItem(null);
+			setScheduleAt("");
+			setScheduleObservation("");
+			await loadRoute();
+		} catch (err) {
+			setScheduleError(err.message || "Falha ao agendar retorno.");
+		}
 	};
 
 	if (loading && !routeData) return <Spinner />;
@@ -639,9 +819,35 @@ function MyRoute() {
 			<CityDropdown
 				cities={cities}
 				value={city}
-				onChange={setCity}
+				onChange={(value) => {
+					setCity(value);
+					setNeighborhood("");
+					setPage(1);
+				}}
 				helper="Abra a lista somente quando precisar trocar a cidade. A rota mostra apenas O.S de retirada."
 			/>
+
+			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<p className="text-xs font-black uppercase tracking-[0.14em] text-blue-700">Bairro e proximidade</p>
+						<p className="mt-1 text-sm font-semibold text-slate-500">Escolha uma localidade ou permita sua posição para ordenar pelas oportunidades mais próximas.</p>
+					</div>
+					<button type="button" onClick={requestLocation} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-black text-blue-700">
+						<MapPin className="h-4 w-4" /> {position ? "Localização atualizada" : "Usar minha localização"}
+					</button>
+				</div>
+				<div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+					<button type="button" onClick={() => setNeighborhood("")} className={`min-h-11 shrink-0 rounded-xl px-4 text-sm font-black ${!neighborhood ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600"}`}>Todos os bairros</button>
+					{localities.map((item) => {
+						const neighborhoodValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.bairro;
+						return <button type="button" key={item.bairro} onClick={() => { setNeighborhood(neighborhoodValue); setPage(1); }} className={`min-h-11 shrink-0 rounded-xl px-4 text-left text-sm font-black ${neighborhood === neighborhoodValue ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-700"}`}>
+							{item.bairro} · {formatNumber(item.opportunities)}
+							{item.distanceKm != null ? <span className="ml-2 opacity-75">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
+						</button>;
+					})}
+				</div>
+			</section>
 
 			<section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -660,6 +866,18 @@ function MyRoute() {
 						<RefreshCw className="h-4 w-4" /> Atualizar
 					</button>
 				</div>
+				<div className="mt-4 grid gap-2 sm:grid-cols-[1fr_180px_180px]">
+					<label className="flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 px-3">
+						<Search className="h-4 w-4 text-slate-400" />
+						<input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Cliente, código, OS ou bairro" className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" />
+					</label>
+					<select value={priority} onChange={(event) => { setPriority(event.target.value); setPage(1); }} className="min-h-12 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
+						<option value="">Todas as prioridades</option><option value="CRITICA">Crítica</option><option value="ALTA">Alta</option><option value="MEDIA">Média</option><option value="BAIXA">Baixa</option><option value="RETORNO_AGENDADO">Retorno agendado</option>
+					</select>
+					<select value={sort} onChange={(event) => { setSort(event.target.value); setPage(1); }} className="min-h-12 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold">
+						<option value="priority">Maior prioridade</option><option value="oldest">OS mais antiga</option><option value="distance" disabled={!position}>Mais próximo</option>
+					</select>
+				</div>
 				<div className="mt-4 grid gap-3">
 					{(routeData?.items || []).map((item) => (
 						<article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -667,11 +885,16 @@ function MyRoute() {
 								<div>
 									<h3 className="text-lg font-black text-slate-950">{item.cliente || "Cliente sem nome"}</h3>
 									<p className="mt-1 text-sm font-bold text-slate-500">
-										OS {item.os} · {item.cidade} · {item.tipoOs || "-"}
+										({item.codigoCliente}) · OS {item.os} · {item.bairro || "Bairro não informado"} · {item.cidade}
 									</p>
 									<p className="mt-2 text-sm font-bold text-slate-600">
-										Aberta há {formatNumber(item.osAgeDays)} dias · Tentativas: {formatNumber(item.attemptCount)} · Prioridade {item.priority}
+										{formatNumber(item.equipmentCount)} equipamento(s) · Aberta há {formatNumber(item.osAgeDays)} dias · Tentativas: {formatNumber(item.attemptCount)}
 									</p>
+									<div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-black">
+										<span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{item.priority} · score {item.priorityScore}</span>
+										{item.distanceKm != null ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700"><MapPin className="mr-1 inline h-3 w-3" />{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
+									</div>
+									{item.recommendedAction ? <p className="mt-2 text-xs font-bold text-slate-500">Próxima ação: {item.recommendedAction}</p> : null}
 									{item.nextAttemptAt ? (
 										<p className="mt-1 text-xs font-black text-amber-700">
 											Próxima tentativa permitida: {formatDateTime(item.nextAttemptAt)}
@@ -685,6 +908,14 @@ function MyRoute() {
 										className="min-h-12 rounded-xl border border-slate-200 bg-white px-4 font-black text-slate-700"
 									>
 										Detalhes
+									</button>
+									<button type="button" onClick={() => openDetail(item)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 font-black text-slate-700"><History className="h-4 w-4" /> Histórico</button>
+									<button
+										type="button"
+										onClick={() => { setScheduleItem(item); setScheduleError(""); }}
+										className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 font-black text-blue-700"
+									>
+										<CalendarClock className="h-4 w-4" /> Agendar
 									</button>
 									<button
 										type="button"
@@ -708,6 +939,7 @@ function MyRoute() {
 						</div>
 					) : null}
 				</div>
+				<PaginationControls page={page} totalPages={Math.max(1, Math.ceil(Number(routeData?.total || 0) / Number(routeData?.limit || 30)))} onPageChange={(nextPage) => void loadRoute(city, nextPage)} />
 			</section>
 
 			<ResultModal contact={pendingContact} onClose={() => setPendingContact(null)} onSaved={() => loadRoute()} />
@@ -716,6 +948,15 @@ function MyRoute() {
 				onChoose={chooseWhatsapp}
 				onClose={() => setWhatsappChoiceContact(null)}
 			/>
+			{scheduleItem ? (
+				<ModalShell title="Agendar retorno" description={`Combine o próximo contato com ${scheduleItem.cliente || "o cliente"}.`} size="md" onClose={() => setScheduleItem(null)} footer={<div className="flex justify-end gap-2"><button type="button" onClick={() => setScheduleItem(null)} className="rounded-xl border px-4 py-3 font-black">Cancelar</button><button type="button" onClick={() => void scheduleCallback()} className="rounded-xl bg-blue-600 px-4 py-3 font-black text-white">Salvar retorno</button></div>}>
+					<div className="space-y-3">
+						{scheduleError ? <div className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{scheduleError}</div> : null}
+						<label className="grid gap-1 text-sm font-black text-slate-700">Data e horário<input type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} className="min-h-12 rounded-xl border border-slate-200 px-3 font-bold" /></label>
+						<label className="grid gap-1 text-sm font-black text-slate-700">Observação<textarea value={scheduleObservation} onChange={(event) => setScheduleObservation(event.target.value)} maxLength={500} className="min-h-24 rounded-xl border border-slate-200 p-3 font-semibold" /></label>
+					</div>
+				</ModalShell>
+			) : null}
 			{detail ? (
 				<ModalShell title="Detalhe do cliente" size="3xl" onClose={() => setDetail(null)}>
 					<div className="space-y-4">
@@ -725,6 +966,12 @@ function MyRoute() {
 								OS {detail.item?.os} · {detail.item?.cidade} · {detail.item?.telefone || "Sem telefone"}
 							</p>
 						</div>
+						{detail.item?.priorityFactors?.length ? (
+							<div>
+								<h4 className="text-sm font-black uppercase tracking-[0.1em] text-slate-500">Por que esta prioridade?</h4>
+								<div className="mt-2 grid gap-2 sm:grid-cols-2">{detail.item.priorityFactors.map((factor) => <div key={factor.key} className="rounded-xl border border-slate-200 p-3 text-sm"><strong>{factor.label} · +{factor.contribution}</strong><p className="text-slate-500">{factor.detail}</p></div>)}</div>
+							</div>
+						) : null}
 						<div className="space-y-2">
 							{(detail.contacts || []).map((contact) => (
 								<div key={contact.id} className="rounded-xl border border-slate-200 p-3 text-sm">
@@ -733,6 +980,12 @@ function MyRoute() {
 								</div>
 							))}
 						</div>
+						{detail.timeline?.length ? (
+							<div>
+								<h4 className="text-sm font-black uppercase tracking-[0.1em] text-slate-500">Linha do tempo</h4>
+								<div className="mt-2 space-y-2">{detail.timeline.map((event) => <div key={event.id} className="rounded-xl border-l-4 border-blue-500 bg-slate-50 p-3 text-sm"><strong>{event.event_type}</strong><p className="text-slate-500">{formatDateTime(event.occurred_at)} · {event.actor_name || "Sistema"}</p></div>)}</div>
+							</div>
+						) : null}
 					</div>
 				</ModalShell>
 			) : null}
@@ -1074,6 +1327,8 @@ function DistributionTab() {
 }
 
 function HistoryTab() {
+	const { currentUser } = useAuthContext();
+	const correctionAllowed = hasPermission(currentUser, "tentativas.registros.corrigir");
 	const [query, setQuery] = useState("");
 	const [data, setData] = useState({ items: [], total: 0, page: 1, limit: 10 });
 	const [page, setPage] = useState(1);
@@ -1151,6 +1406,7 @@ function HistoryTab() {
 			<ResultModal
 				contact={editingContact}
 				editing
+				correctionAllowed={correctionAllowed}
 				onClose={() => setEditingContact(null)}
 				onSaved={() => void load(page)}
 			/>
@@ -1160,7 +1416,8 @@ function HistoryTab() {
 
 function TemplatesTab() {
 	const [items, setItems] = useState([]);
-	const [form, setForm] = useState({ name: "", attemptNumber: 1, body: "", active: true, isDefault: false });
+	const emptyForm = { name: "", attemptNumber: 1, body: "", active: true, isDefault: false, changeReason: "" };
+	const [form, setForm] = useState(emptyForm);
 	const load = async () => setItems((await listarTemplatesTentativas()).items || []);
 	useEffect(() => {
 		let cancelled = false;
@@ -1175,7 +1432,7 @@ function TemplatesTab() {
 	}, []);
 	const save = async () => {
 		await salvarTemplateTentativas(form);
-		setForm({ name: "", attemptNumber: 1, body: "", active: true, isDefault: false });
+		setForm(emptyForm);
 		load();
 	};
 	return (
@@ -1186,6 +1443,7 @@ function TemplatesTab() {
 					<input className="rounded-xl border p-3" placeholder="Nome" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
 					<input className="rounded-xl border p-3" type="number" min="1" value={form.attemptNumber} onChange={(e) => setForm({ ...form, attemptNumber: e.target.value })} />
 					<textarea className="min-h-48 rounded-xl border p-3" placeholder="Mensagem com {{cliente}}, {{nome_cliente}}, {{codigo_cliente}}, {{primeiro_nome}}, {{tecnico}}, {{empresa}}, {{cidade}}, {{os}}, {{data}}" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
+					<input className="rounded-xl border p-3" placeholder="Motivo da alteração" value={form.changeReason || ""} onChange={(e) => setForm({ ...form, changeReason: e.target.value })} />
 					<label className="flex items-center gap-2 font-bold"><input type="checkbox" checked={form.isDefault} onChange={(e) => setForm({ ...form, isDefault: e.target.checked })} /> Padrão da tentativa</label>
 					<button type="button" onClick={save} className="rounded-xl bg-blue-600 p-3 font-black text-white">Salvar template</button>
 				</div>
@@ -1194,9 +1452,9 @@ function TemplatesTab() {
 				<h2 className="font-black">Templates ativos</h2>
 				<div className="mt-3 grid gap-3">
 					{items.map((item) => (
-						<button type="button" key={item.id} onClick={() => setForm({ id: item.id, name: item.name, body: item.body, attemptNumber: item.attempt_number, active: item.active, isDefault: item.is_default })} className="rounded-2xl border p-4 text-left">
+						<button type="button" key={item.id} onClick={() => setForm({ id: item.id, name: item.name, body: item.body, attemptNumber: item.attempt_number, active: item.active, isDefault: item.is_default, changeReason: "" })} className="rounded-2xl border p-4 text-left">
 							<strong>{item.name}</strong>
-							<p className="text-sm text-slate-500">Tentativa {item.attempt_number} · {item.is_default ? "padrão" : "alternativo"}</p>
+							<p className="text-sm text-slate-500">Tentativa {item.attempt_number} · {item.is_default ? "padrão" : "alternativo"} · versão {item.version || 1}</p>
 						</button>
 					))}
 				</div>
@@ -1210,9 +1468,13 @@ function SettingsTab() {
 	useEffect(() => { buscarConfiguracoesTentativas().then(setForm); }, []);
 	if (!form) return <Spinner />;
 	const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+	const updateWeight = (key, value) => setForm((current) => ({ ...current, score_weights: { ...(current.score_weights || {}), [key]: Number(value) } }));
+	const updateThreshold = (key, value) => setForm((current) => ({ ...current, alert_thresholds: { ...(current.alert_thresholds || {}), [key]: Number(value) } }));
+	const weights = form.score_weights || {};
+	const thresholds = form.alert_thresholds || {};
 	return (
-		<section className="max-w-3xl rounded-3xl border bg-white p-5 shadow-sm">
-			<h2 className="text-lg font-black">Política de contato</h2>
+		<section className="max-w-5xl rounded-3xl border bg-white p-5 shadow-sm">
+			<div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black">Política de contato</h2><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Versão {form.version || 1}</span></div>
 			<div className="mt-4 grid gap-3 sm:grid-cols-2">
 				<label className="grid gap-1 font-bold">Meta cobertura (%)<input className="rounded-xl border p-3" type="number" value={form.coverage_goal} onChange={(e) => update("coverage_goal", e.target.value)} /></label>
 				<label className="grid gap-1 font-bold">Intervalo mínimo (h)<input className="rounded-xl border p-3" type="number" value={form.min_interval_hours} onChange={(e) => update("min_interval_hours", e.target.value)} /></label>
@@ -1220,7 +1482,24 @@ function SettingsTab() {
 				<label className="grid gap-1 font-bold">Qtd. campanha<input className="rounded-xl border p-3" type="number" value={form.default_campaign_size} onChange={(e) => update("default_campaign_size", e.target.value)} /></label>
 				<label className="grid gap-1 font-bold">Início<input className="rounded-xl border p-3" value={form.allowed_start_time} onChange={(e) => update("allowed_start_time", e.target.value)} /></label>
 				<label className="grid gap-1 font-bold">Fim<input className="rounded-xl border p-3" value={form.allowed_end_time} onChange={(e) => update("allowed_end_time", e.target.value)} /></label>
+				<label className="grid gap-1 font-bold">Bloqueio de duplicidade (h)<input className="rounded-xl border p-3" type="number" min="1" value={form.contact_dedupe_hours || 12} onChange={(e) => update("contact_dedupe_hours", e.target.value)} /></label>
+				<label className="grid gap-1 font-bold">Aviso antecipado de retorno (min)<input className="rounded-xl border p-3" type="number" min="0" value={form.callback_grace_minutes || 30} onChange={(e) => update("callback_grace_minutes", e.target.value)} /></label>
+				<label className="grid gap-1 font-bold">Política de duplicidade<select className="rounded-xl border bg-white p-3" value={form.duplicate_policy || "WARN"} onChange={(e) => update("duplicate_policy", e.target.value)}><option value="WARN">Avisar</option><option value="BLOCK">Bloquear</option></select></label>
 			</div>
+			<div className="mt-6 border-t border-slate-200 pt-5">
+				<h3 className="font-black text-slate-950">Pesos da prioridade</h3>
+				<p className="mt-1 text-sm font-semibold text-slate-500">A pontuação é normalizada e cada fator fica visível no detalhe da oportunidade.</p>
+				<div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+					{[["osAge", "Tempo da OS"], ["equipment", "Equipamentos"], ["attemptHistory", "Histórico de tentativas"], ["responseHistory", "Histórico de respostas"], ["pendingCallback", "Retorno pendente"], ["timeWithoutContact", "Tempo sem contato"]].map(([key, label]) => <label key={key} className="grid gap-1 font-bold">{label}<input className="rounded-xl border p-3" type="number" min="0" max="100" value={weights[key] ?? 0} onChange={(e) => updateWeight(key, e.target.value)} /></label>)}
+				</div>
+			</div>
+			<div className="mt-6 border-t border-slate-200 pt-5">
+				<h3 className="font-black text-slate-950">Limites dos alertas gerenciais</h3>
+				<div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					{[["staleWalletHours", "Carteira parada (h)"], ["overdueCallbacks", "Retornos vencidos"], ["invalidPhonePercent", "Telefones inválidos (%)"], ["highPriorityWithoutContact", "Prioridades sem contato"]].map(([key, label]) => <label key={key} className="grid gap-1 font-bold">{label}<input className="rounded-xl border p-3" type="number" min="0" value={thresholds[key] ?? 0} onChange={(e) => updateThreshold(key, e.target.value)} /></label>)}
+				</div>
+			</div>
+			<label className="mt-5 grid gap-1 font-bold">Motivo da alteração<input className="rounded-xl border p-3" value={form.changeReason || ""} onChange={(e) => update("changeReason", e.target.value)} placeholder="Ex.: ajuste da política operacional de novembro" /></label>
 			<button type="button" onClick={async () => setForm(await salvarConfiguracoesTentativas(form))} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-black text-white"><Save className="h-4 w-4" /> Salvar</button>
 		</section>
 	);
@@ -1229,8 +1508,18 @@ function SettingsTab() {
 export default function TentativasPage() {
 	const { currentUser } = useAuthContext();
 	const admin = useMemo(() => canManage(currentUser), [currentUser]);
-	const [tab, setTab] = useState("route");
-	const tabs = [["route", "Minha Rota", Route], ...(admin ? ADMIN_TABS : [["history", "Histórico", History]])];
+	const requestedTab = useMemo(() => {
+		const value = new URLSearchParams(window.location.search).get("tab") || "route";
+		return ALL_TAB_KEYS.has(value) ? value : "route";
+	}, []);
+	const [tab, setTab] = useState(requestedTab);
+	const [workspace, setWorkspace] = useState(ADMIN_TAB_KEYS.has(requestedTab) ? "management" : "operation");
+	const tabs = admin && workspace === "management" ? ADMIN_TABS : OPERATIONAL_TABS;
+	const activeTab = !admin && ADMIN_TAB_KEYS.has(tab) ? "route" : tab;
+	const changeWorkspace = (nextWorkspace) => {
+		setWorkspace(nextWorkspace);
+		setTab(nextWorkspace === "management" ? "management" : "route");
+	};
 	return (
 		<div className="retiradas-native-page w-full min-w-0 space-y-5">
 			<PageHeader
@@ -1239,17 +1528,30 @@ export default function TentativasPage() {
 				description="Match → contato manual via WhatsApp → resposta → agendamento → retirada."
 				icon={<div className="rounded-2xl bg-blue-600 p-3 text-white"><MessageCircle className="h-6 w-6" /></div>}
 			/>
+			{admin ? (
+				<div className="inline-flex w-fit rounded-2xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Alternar área do módulo">
+					<button type="button" onClick={() => changeWorkspace("operation")} className={`min-h-10 rounded-xl px-4 text-sm font-black ${workspace === "operation" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Operação</button>
+					<button type="button" onClick={() => changeWorkspace("management")} className={`min-h-10 rounded-xl px-4 text-sm font-black ${workspace === "management" ? "bg-slate-950 text-white" : "text-slate-600"}`}>Gestão</button>
+				</div>
+			) : null}
 			<div className="retiradas-native-tabs -mx-3 flex min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
 				{tabs.map(([key, label, Icon]) => (
-					<TabButton key={key} icon={Icon} active={tab === key} onClick={() => setTab(key)}>{label}</TabButton>
+					<TabButton key={key} icon={Icon} active={activeTab === key} onClick={() => setTab(key)}>{label}</TabButton>
 				))}
 			</div>
-			{tab === "route" ? <MyRoute /> : null}
-			{tab === "overview" ? <OverviewTab /> : null}
-			{tab === "distribution" ? <DistributionTab /> : null}
-			{tab === "history" ? <HistoryTab /> : null}
-			{tab === "templates" ? <TemplatesTab /> : null}
-			{tab === "settings" ? <SettingsTab /> : null}
+			{activeTab === "route" ? <MyRoute /> : null}
+			{activeTab === "next" ? <CallbacksPanel period="upcoming" title="Próximos contatos" /> : null}
+			{activeTab === "callbacks" ? <CallbacksPanel period="all" /> : null}
+			{activeTab === "appointments" ? <RecoveriesPanel scheduledOnly /> : null}
+			{activeTab === "recoveries" ? <RecoveriesPanel /> : null}
+			{activeTab === "productivity" ? <ProductivityPanel /> : null}
+			{activeTab === "management" ? <div className="space-y-5"><ManagementPanel /><OverviewTab /></div> : null}
+			{activeTab === "distribution" ? <DistributionTab /> : null}
+			{activeTab === "admin-recoveries" ? <RecoveriesPanel /> : null}
+			{activeTab === "history" ? <HistoryTab /> : null}
+			{activeTab === "audit" ? <AuditPanel /> : null}
+			{activeTab === "templates" ? <TemplatesTab /> : null}
+			{activeTab === "settings" ? <SettingsTab /> : null}
 		</div>
 	);
 }

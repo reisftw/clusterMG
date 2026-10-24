@@ -1,15 +1,26 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const auditLog = require("../auditLog");
+const centralService = require("./tentativasCentralService");
 
 const VIEW_PERMISSIONS = ["tentativas.visualizar"];
 const EXECUTE_PERMISSIONS = ["tentativas.executar"];
+const CONTACT_PERMISSIONS = ["tentativas.contatar", "tentativas.executar"];
+const REGISTER_PERMISSIONS = ["tentativas.registrar", "tentativas.executar"];
+const SCHEDULE_PERMISSIONS = ["tentativas.agendar", "tentativas.executar"];
+const PORTFOLIO_PERMISSIONS = ["tentativas.carteiras.gerenciar", "tentativas.distribuir"];
+const MANAGEMENT_PERMISSIONS = ["tentativas.gestao.visualizar", "tentativas.distribuir"];
+const AUDIT_PERMISSIONS = ["tentativas.auditoria.visualizar", "tentativas.historico.visualizar"];
+const CORRECTION_PERMISSIONS = ["tentativas.registros.corrigir", "tentativas.override"];
 const HISTORY_PERMISSIONS = ["tentativas.historico.visualizar"];
 const DISTRIBUTE_PERMISSIONS = ["tentativas.distribuir"];
 const CAMPAIGN_PERMISSIONS = ["tentativas.campanhas.gerenciar"];
 const TEMPLATE_PERMISSIONS = ["tentativas.templates.gerenciar"];
 const SETTINGS_PERMISSIONS = ["tentativas.configuracoes.gerenciar"];
-const EXPORT_PERMISSIONS = ["tentativas.relatorio.exportar"];
+const EXPORT_PERMISSIONS = [
+	"tentativas.relatorios.exportar",
+	"tentativas.relatorio.exportar",
+];
 const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
 	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
@@ -28,11 +39,16 @@ const phoneEnrichmentPromises = new Map();
 const CONTACT_RESULTS = new Set([
 	"NO_RESPONSE",
 	"RESPONDED",
+	"RESPONDED_SCHEDULE",
+	"STORE_DELIVERY",
+	"RESPONDED_CALLBACK",
 	"SCHEDULED",
 	"REFUSED",
 	"INVALID_PHONE",
+	"UNAVAILABLE_PHONE",
 	"ALREADY_RETURNED",
 	"EQUIPMENT_UNAVAILABLE",
+	"EQUIPMENT_NOT_FOUND",
 	"CALLBACK_REQUESTED",
 	"COMPLETED",
 	"CANCELLED",
@@ -42,11 +58,16 @@ const CONTACT_RESULTS = new Set([
 const RESULT_TO_STATUS = {
 	NO_RESPONSE: "NO_RESPONSE",
 	RESPONDED: "RESPONDED",
+	RESPONDED_SCHEDULE: "SCHEDULED",
+	STORE_DELIVERY: "RESPONDED",
+	RESPONDED_CALLBACK: "CALLBACK_REQUESTED",
 	SCHEDULED: "SCHEDULED",
 	REFUSED: "REFUSED",
 	INVALID_PHONE: "INVALID_PHONE",
+	UNAVAILABLE_PHONE: "INVALID_PHONE",
 	ALREADY_RETURNED: "ALREADY_RETURNED",
 	EQUIPMENT_UNAVAILABLE: "EQUIPMENT_UNAVAILABLE",
+	EQUIPMENT_NOT_FOUND: "EQUIPMENT_UNAVAILABLE",
 	CALLBACK_REQUESTED: "CALLBACK_REQUESTED",
 	COMPLETED: "COMPLETED",
 	CANCELLED: "CANCELLED",
@@ -324,7 +345,8 @@ async function performOpportunitiesSyncFromMatch() {
 		)
 		insert into tentativas_opportunities (
 			id, ordem_id, os, codigo_cliente, cliente, telefone, telefone_digits,
-			cidade, cidade_normalizada, regional, empresa, tipo_os, origem,
+			cidade, cidade_normalizada, regional, empresa, tipo_os, bairro,
+			equipment_count, latitude, longitude, origem,
 			match_entered_at, os_opened_at, os_age_days, status, priority,
 			active, source_payload, created_at, updated_at
 		)
@@ -341,6 +363,22 @@ async function performOpportunitiesSyncFromMatch() {
 			os.regional,
 			coalesce(os.empresa, os.source, 'Sempre'),
 			os.tipo,
+			coalesce(os.source_payload->>'bairro', os.source_payload#>>'{endereco,bairro}'),
+			case
+			  when jsonb_typeof(os.source_payload->'equipamentos') = 'array'
+			    then greatest(jsonb_array_length(os.source_payload->'equipamentos'), 1)
+			  else 1
+			end,
+			case
+			  when coalesce(os.source_payload->>'latitude', os.source_payload#>>'{endereco,latitude}', '') ~ '^-?[0-9]+([.,][0-9]+)?$'
+			    then replace(coalesce(os.source_payload->>'latitude', os.source_payload#>>'{endereco,latitude}'), ',', '.')::numeric
+			  else null
+			end,
+			case
+			  when coalesce(os.source_payload->>'longitude', os.source_payload#>>'{endereco,longitude}', '') ~ '^-?[0-9]+([.,][0-9]+)?$'
+			    then replace(coalesce(os.source_payload->>'longitude', os.source_payload#>>'{endereco,longitude}'), ',', '.')::numeric
+			  else null
+			end,
 			'match',
 			coalesce(os.updated_at, now()),
 			os.data_abertura,
@@ -368,6 +406,10 @@ async function performOpportunitiesSyncFromMatch() {
 			regional = excluded.regional,
 			empresa = excluded.empresa,
 			tipo_os = excluded.tipo_os,
+			bairro = coalesce(excluded.bairro, tentativas_opportunities.bairro),
+			equipment_count = greatest(excluded.equipment_count, 1),
+			latitude = coalesce(excluded.latitude, tentativas_opportunities.latitude),
+			longitude = coalesce(excluded.longitude, tentativas_opportunities.longitude),
 			match_entered_at = least(tentativas_opportunities.match_entered_at, excluded.match_entered_at),
 			os_opened_at = excluded.os_opened_at,
 			os_age_days = excluded.os_age_days,
@@ -477,9 +519,19 @@ async function syncOpportunitiesFromMatch({ force = false } = {}) {
 	}
 	if (!opportunitiesSyncPromise) {
 		opportunitiesSyncPromise = performOpportunitiesSyncFromMatch()
-			.then((summary) => {
+			.then(async (summary) => {
+				const priority = await centralService.refreshPriorityScores({ limit: 2000 });
+				const notifications = await centralService
+					.publishScheduledNotifications()
+					.catch((error) => {
+						console.warn(
+							"[tentativas] Sincronizacao concluida, mas as notificacoes falharam:",
+							error?.message || error,
+						);
+						return { callbacks: 0, alerts: 0, error: error?.message || String(error) };
+					});
 				opportunitiesLastSyncAt = Date.now();
-				return { ok: true, ...summary };
+				return { ok: true, ...summary, priority, notifications };
 			})
 			.catch((error) => {
 				console.error("[tentativas] Falha ao sincronizar oportunidades:", error);
@@ -547,28 +599,61 @@ async function getSettings(client = db) {
 }
 
 async function saveSettings(payload = {}, user = {}) {
-	const result = await db.query(
-		`update tentativas_settings
-		    set coverage_goal = $1,
-		        min_interval_hours = $2,
-		        max_attempts = $3,
-		        default_campaign_size = $4,
-		        allowed_start_time = $5,
-		        allowed_end_time = $6,
-		        updated_at = now()
-		  where id = 'global'
-		  returning *`,
-		[
-			Number(payload.coverageGoal || payload.coverage_goal || 90),
-			Number(payload.minIntervalHours || payload.min_interval_hours || 12),
-			Number(payload.maxAttempts || payload.max_attempts || 3),
-			Number(payload.defaultCampaignSize || payload.default_campaign_size || 30),
-			text(payload.allowedStartTime || payload.allowed_start_time || "08:00"),
-			text(payload.allowedEndTime || payload.allowed_end_time || "18:00"),
-		],
-	);
-	await recordAudit("settings.update", "global", user, result.rows[0]);
-	return result.rows[0];
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const currentResult = await client.query("select * from tentativas_settings where id = 'global' for update");
+		const current = currentResult.rows[0] || {};
+		const result = await client.query(
+			`update tentativas_settings
+			    set coverage_goal = $1,
+			        min_interval_hours = $2,
+			        max_attempts = $3,
+			        default_campaign_size = $4,
+			        allowed_start_time = $5,
+			        allowed_end_time = $6,
+			        contact_dedupe_hours = $7,
+			        callback_grace_minutes = $8,
+			        score_weights = $9::jsonb,
+			        alert_thresholds = $10::jsonb,
+			        result_options = $11::jsonb,
+			        duplicate_policy = $12,
+			        version = version + 1,
+			        updated_by = $13,
+			        updated_at = now()
+			  where id = 'global'
+			  returning *`,
+			[
+				Number(payload.coverageGoal ?? payload.coverage_goal ?? current.coverage_goal ?? 90),
+				Number(payload.minIntervalHours ?? payload.min_interval_hours ?? current.min_interval_hours ?? 12),
+				Number(payload.maxAttempts ?? payload.max_attempts ?? current.max_attempts ?? 3),
+				Number(payload.defaultCampaignSize ?? payload.default_campaign_size ?? current.default_campaign_size ?? 30),
+				text(payload.allowedStartTime || payload.allowed_start_time || current.allowed_start_time || "08:00"),
+				text(payload.allowedEndTime || payload.allowed_end_time || current.allowed_end_time || "18:00"),
+				Number(payload.contactDedupeHours ?? payload.contact_dedupe_hours ?? current.contact_dedupe_hours ?? 12),
+				Number(payload.callbackGraceMinutes ?? payload.callback_grace_minutes ?? current.callback_grace_minutes ?? 30),
+				JSON.stringify(payload.scoreWeights || payload.score_weights || current.score_weights || {}),
+				JSON.stringify(payload.alertThresholds || payload.alert_thresholds || current.alert_thresholds || {}),
+				JSON.stringify(payload.resultOptions || payload.result_options || current.result_options || []),
+				text(payload.duplicatePolicy || payload.duplicate_policy || current.duplicate_policy || "WARN").toUpperCase(),
+				userId(user),
+			],
+		);
+		const saved = result.rows[0];
+		await client.query(
+			`insert into tentativas_settings_versions (id, settings_id, version, snapshot, changed_by, change_reason)
+			 values ($1,'global',$2,$3::jsonb,$4,$5)`,
+			[id("tsv"), saved.version, JSON.stringify(saved), userId(user), text(payload.changeReason || payload.change_reason)],
+		);
+		await client.query("commit");
+		await recordAudit("settings.update", "global", user, saved, current);
+		return saved;
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function listCities(_query = {}, user = {}) {
@@ -650,7 +735,7 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 				     select 1 from tentativas_assignments a
 				      where a.opportunity_id = o.id and a.released_at is null
 				   )
-				 order by o.priority = 'ALTA' desc, o.os_opened_at desc nulls last, o.created_at desc
+				 order by o.priority_score desc, o.os_opened_at asc nulls last, o.created_at asc
 				 limit greatest($5 - (select total from current_load), 0)
 			)
 			insert into tentativas_assignments (
@@ -690,10 +775,20 @@ function mapOpportunity(row = {}) {
 		telefone: row.telefone,
 		cidade: row.cidade,
 		regional: row.regional,
+		bairro: row.bairro,
 		empresa: row.empresa,
 		tipoOs: row.tipo_os,
 		status: row.status,
 		priority: row.priority,
+		priorityScore: Number(row.priority_score || 0),
+		priorityFactors: row.priority_factors || [],
+		recommendedAction: row.recommended_action || "",
+		equipmentCount: Number(row.equipment_count || 0),
+		estimatedValue: row.estimated_value == null ? null : Number(row.estimated_value),
+		latitude: row.latitude == null ? null : Number(row.latitude),
+		longitude: row.longitude == null ? null : Number(row.longitude),
+		contactRestricted: Boolean(row.contact_restricted),
+		contactRestrictionReason: row.contact_restriction_reason || "",
 		attemptCount: Number(row.attempt_count || 0),
 		lastAttemptAt: row.last_attempt_at,
 		lastResult: row.last_result,
@@ -716,38 +811,132 @@ async function getMyRoute(query = {}, user = {}) {
 		throw error;
 	}
 	await autoClaimCity(cidade, user, normalizeLimit(query.claimLimit, 50, 150));
+	const page = normalizePage(query.page);
+	const limit = normalizeLimit(query.limit, 30, 100);
+	const latitude = Number(query.latitude);
+	const longitude = Number(query.longitude);
+	const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+	const search = text(query.q || query.search);
+	const bairro = normalizeText(query.bairro);
+	const priority = text(query.priority).toUpperCase();
+	const statusFilter = text(query.status).toUpperCase();
+	const sort = text(query.sort).toLowerCase();
+	const orderBy = sort === "distance" && hasCoordinates
+		? "distance_km asc nulls last, o.priority_score desc, o.os_opened_at asc nulls last"
+		: sort === "oldest"
+			? "o.os_opened_at asc nulls last, o.priority_score desc"
+			: "o.priority_score desc, o.next_attempt_at nulls first, o.os_opened_at asc nulls last";
 	const result = await db.query(
-		`select o.*, a.id as assignment_id, a.technician_name
+		`select o.*, a.id as assignment_id, a.technician_name,
+		        count(*) over() as total_count,
+		        count(*) filter (where o.status in ('PENDING','CONTACT_STARTED')) over() as pending_count,
+		        count(*) filter (where o.attempt_count > 0) over() as worked_count,
+		        count(*) filter (where o.status in ('RESPONDED','CALLBACK_REQUESTED')) over() as responded_count,
+		        count(*) filter (where o.status = 'SCHEDULED') over() as scheduled_count,
+		        case when $10::boolean and o.latitude is not null and o.longitude is not null then
+		          6371 * 2 * asin(sqrt(
+		            power(sin(radians((o.latitude::double precision - $8::double precision) / 2)), 2) +
+		            cos(radians($8::double precision)) * cos(radians(o.latitude::double precision)) *
+		            power(sin(radians((o.longitude::double precision - $9::double precision) / 2)), 2)
+		          ))
+		        else null end as distance_km
 		   from tentativas_opportunities o
 		   join tentativas_assignments a on a.opportunity_id = o.id and a.released_at is null
 		  where o.active = true
-		    and coalesce(o.telefone_digits, '') ~ $5
+		    and coalesce(o.telefone_digits, '') ~ $7
 		    and o.cidade_normalizada = $1
 		    and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
-		  order by o.status = 'PENDING' desc,
-		           o.priority = 'ALTA' desc,
-		           o.next_attempt_at nulls first,
-		           o.os_opened_at desc nulls last
-		  limit $4`,
+		    and (
+		      $4::text = ''
+		      or ($4 = '__sem_bairro__' and nullif(trim(o.bairro),'') is null)
+		      or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')) = $4
+		    )
+		    and ($5::text = '' or o.priority = $5)
+		    and ($6::text = '' or o.status = $6)
+		    and ($11::text = '' or o.cliente ilike '%' || $11 || '%' or o.codigo_cliente ilike '%' || $11 || '%' or o.os ilike '%' || $11 || '%' or o.bairro ilike '%' || $11 || '%')
+		  order by ${orderBy}
+		  limit $12 offset $13`,
 		[
 			normalizeText(cidade),
 			userId(user),
 			userEmail(user),
-			normalizeLimit(query.limit, 50, 100),
+			bairro,
+			priority,
+			statusFilter,
 			VALID_PHONE_DIGITS_REGEX,
+			hasCoordinates ? latitude : null,
+			hasCoordinates ? longitude : null,
+			hasCoordinates,
+			search,
+			limit,
+			(page - 1) * limit,
 		],
 	);
-	const items = result.rows.map(mapOpportunity);
+	const items = result.rows.map((row) => ({
+		...mapOpportunity(row),
+		distanceKm: row.distance_km == null ? null : Number(Number(row.distance_km).toFixed(2)),
+	}));
+	const counters = result.rows[0] || {};
 	return {
 		city: cidade,
 		summary: {
-			total: items.length,
-			pending: items.filter((item) => ["PENDING", "CONTACT_STARTED"].includes(item.status)).length,
-			worked: items.filter((item) => item.attemptCount > 0).length,
-			responded: items.filter((item) => item.status === "RESPONDED").length,
-			scheduled: items.filter((item) => item.status === "SCHEDULED").length,
+			total: Number(counters.total_count || 0),
+			pending: Number(counters.pending_count || 0),
+			worked: Number(counters.worked_count || 0),
+			responded: Number(counters.responded_count || 0),
+			scheduled: Number(counters.scheduled_count || 0),
 		},
+		page,
+		limit,
+		total: Number(counters.total_count || 0),
+		locationApplied: hasCoordinates,
 		items,
+	};
+}
+
+async function listNeighborhoods(query = {}, user = {}) {
+	const cidade = text(query.cidade);
+	if (!cidade) return { city: "", items: [] };
+	if (!(await ensureTechnicianCanUseCity(cidade, user))) {
+		const error = new Error("Cidade nao autorizada para este tecnico.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const latitude = Number(query.latitude);
+	const longitude = Number(query.longitude);
+	const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+	const result = await db.query(
+		`select coalesce(nullif(trim(o.bairro),''),'Bairro nao informado') as bairro,
+		        count(*)::int as opportunities,
+		        count(*) filter (where o.attempt_count=0)::int as pending,
+		        avg(o.latitude)::double precision as latitude,
+		        avg(o.longitude)::double precision as longitude,
+		        case when $4::boolean and avg(o.latitude) is not null and avg(o.longitude) is not null then
+		          6371 * 2 * asin(sqrt(
+		            power(sin(radians((avg(o.latitude)::double precision - $2::double precision) / 2)), 2) +
+		            cos(radians($2::double precision)) * cos(radians(avg(o.latitude)::double precision)) *
+		            power(sin(radians((avg(o.longitude)::double precision - $3::double precision) / 2)), 2)
+		          ))
+		        else null end as distance_km
+		   from tentativas_opportunities o
+		   join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
+		  where o.active=true and o.cidade_normalizada=$1
+		    and ($5::boolean=true or a.technician_user_id=$6 or lower(coalesce(a.technician_email,''))=$7)
+		  group by coalesce(nullif(trim(o.bairro),''),'Bairro nao informado')
+		  order by distance_km asc nulls last, opportunities desc, bairro asc`,
+		[normalizeText(cidade), hasCoordinates ? latitude : null, hasCoordinates ? longitude : null, hasCoordinates, hasAdminAccess(user), userId(user), userEmail(user)],
+	);
+	return {
+		city: cidade,
+		locationApplied: hasCoordinates,
+		items: result.rows.map((row) => ({
+			bairro: row.bairro,
+			opportunities: Number(row.opportunities || 0),
+			pending: Number(row.pending || 0),
+			latitude: row.latitude == null ? null : Number(row.latitude),
+			longitude: row.longitude == null ? null : Number(row.longitude),
+			distanceKm: row.distance_km == null ? null : Number(Number(row.distance_km).toFixed(2)),
+		})),
 	};
 }
 
@@ -915,6 +1104,12 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			error.statusCode = 409;
 			throw error;
 		}
+		const contactPolicy = await centralService.assertContactAllowed(
+			client,
+			row,
+			user,
+			payload.override === true,
+		);
 		const settings = await getSettings(client);
 		if (row.next_attempt_at && new Date(row.next_attempt_at) > new Date() && !payload.override) {
 			const error = new Error("Intervalo minimo entre tentativas ainda nao foi cumprido.");
@@ -986,6 +1181,18 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			"update tentativas_opportunities set status = 'CONTACT_STARTED', updated_at = now() where id = $1",
 			[row.opportunity_id],
 		);
+		await centralService.recordContactStarted(client, {
+			opportunity: row,
+			assignmentId: row.assignment_id,
+			contactId,
+			user,
+			payload: {
+				channel: "WHATSAPP",
+				attemptNumber,
+				templateId: template?.id || null,
+				warnings: contactPolicy.warnings,
+			},
+		});
 		await client.query("commit");
 		await recordAudit("contact.whatsapp_opened", contactId, user, {
 			opportunityId,
@@ -1000,6 +1207,7 @@ async function startContact(opportunityId, payload = {}, user = {}, req = {}) {
 			attemptNumber,
 			customerCode: row.codigo_cliente,
 			customerName: row.cliente,
+			warnings: contactPolicy.warnings,
 		};
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
@@ -1023,7 +1231,7 @@ async function saveResult(contactId, payload = {}, user = {}) {
 	try {
 		await client.query("begin");
 		const contactResult = await client.query(
-			`select c.*, o.os, o.id as opportunity_id
+			`select c.*, o.os, o.codigo_cliente, o.cliente, o.cidade, o.id as opportunity_id
 			   from tentativas_contacts c
 			   join tentativas_opportunities o on o.id = c.opportunity_id
 			  where c.id = $1
@@ -1044,11 +1252,26 @@ async function saveResult(contactId, payload = {}, user = {}) {
 		}
 		const wasConfirmed = contact.sent_confirmed === true;
 		const attemptDelta = sentConfirmed === wasConfirmed ? 0 : sentConfirmed ? 1 : -1;
-		const nextAttemptAt =
-			sentConfirmed && (result === "NO_RESPONSE" || result === "CALLBACK_REQUESTED")
+		const requestedCallbackAt = payload.callbackAt || payload.callback_at || null;
+		const nextAttemptAt = sentConfirmed && ["CALLBACK_REQUESTED", "RESPONDED_CALLBACK"].includes(result) && requestedCallbackAt
+			? new Date(requestedCallbackAt).toISOString()
+			: sentConfirmed && result === "NO_RESPONSE"
 				? new Date(Date.now() + Number(settings.min_interval_hours || 12) * 3600 * 1000).toISOString()
 				: null;
 		const status = sentConfirmed ? RESULT_TO_STATUS[result] || "CONTACTED" : "PENDING";
+		const effectiveContact = sentConfirmed && [
+			"RESPONDED", "RESPONDED_SCHEDULE", "STORE_DELIVERY", "RESPONDED_CALLBACK",
+			"CALLBACK_REQUESTED", "SCHEDULED", "REFUSED", "ALREADY_RETURNED",
+		].includes(result);
+		const contactState = !sentConfirmed
+			? "STARTED"
+			: ["NO_RESPONSE", "INVALID_PHONE", "UNAVAILABLE_PHONE", "EQUIPMENT_NOT_FOUND", "EQUIPMENT_UNAVAILABLE"].includes(result)
+				? "INCONCLUSIVE"
+				: ["SCHEDULED", "RESPONDED_SCHEDULE"].includes(result)
+					? "SCHEDULED"
+					: ["ALREADY_RETURNED", "COMPLETED", "CANCELLED"].includes(result)
+						? "CLOSED"
+						: effectiveContact ? "EFFECTIVE" : "RESULT_RECORDED";
 		await client.query(
 			`update tentativas_contacts
 			    set sent_confirmed = $2,
@@ -1056,10 +1279,26 @@ async function saveResult(contactId, payload = {}, user = {}) {
 			        status = case when $2 = true then 'CONFIRMED' else 'NOT_SENT' end,
 			        observation = $4,
 			        confirmed_at = now(),
+			        declared_sent_at = case when $2 = true then coalesce(declared_sent_at, now()) else null end,
+			        response_at = case when $6 = true then coalesce(response_at, now()) else response_at end,
+			        contact_state = $7,
+			        effective_contact = $6,
+			        channel = $8,
+			        metadata = coalesce(metadata, '{}'::jsonb) || $9::jsonb,
 			        next_attempt_at = $5,
 			        updated_at = now()
 			  where id = $1`,
-			[contactId, sentConfirmed, result, observation, nextAttemptAt],
+			[
+				contactId,
+				sentConfirmed,
+				result,
+				observation,
+				nextAttemptAt,
+				effectiveContact,
+				contactState,
+				text(payload.channel || contact.channel || "WHATSAPP").toUpperCase(),
+				JSON.stringify({ declaredByTechnician: sentConfirmed, modality: payload.recoveryModality || payload.recovery_modality || null }),
+			],
 		);
 		const opportunityUpdate = buildOpportunityResultUpdate({
 			opportunityId: contact.opportunity_id,
@@ -1069,6 +1308,13 @@ async function saveResult(contactId, payload = {}, user = {}) {
 			attemptDelta,
 		});
 		await client.query(opportunityUpdate.sql, opportunityUpdate.params);
+		const artifacts = await centralService.recordResultArtifacts(client, {
+			contact,
+			assignment,
+			result,
+			payload: { ...payload, sentConfirmed },
+			user,
+		});
 		await client.query("commit");
 		await recordAudit("contact.result", contactId, user, {
 			opportunityId: contact.opportunity_id,
@@ -1076,7 +1322,18 @@ async function saveResult(contactId, payload = {}, user = {}) {
 			status,
 			sentConfirmed,
 		});
-		return { ok: true, status, nextAttemptAt };
+		await centralService.notifyResultArtifacts(artifacts, contact, user).catch((error) => {
+			console.warn("[tentativas] Falha ao criar notificacao de retorno:", error?.message || error);
+		});
+		return {
+			ok: true,
+			status,
+			contactState,
+			effectiveContact,
+			nextAttemptAt,
+			callback: artifacts.callback,
+			recovery: artifacts.recovery,
+		};
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
 		throw error;
@@ -1416,31 +1673,50 @@ async function listTemplates() {
 
 async function saveTemplate(payload = {}, user = {}) {
 	const templateId = text(payload.id) || id("tmpl");
-	const result = await db.query(
-		`insert into tentativas_templates (
-			id, name, body, attempt_number, active, is_default, created_by, updated_by
-		) values ($1,$2,$3,$4,$5,$6,$7,$7)
-		on conflict (id) do update set
-			name = excluded.name,
-			body = excluded.body,
-			attempt_number = excluded.attempt_number,
-			active = excluded.active,
-			is_default = excluded.is_default,
-			updated_by = excluded.updated_by,
-			updated_at = now()
-		returning *`,
-		[
-			templateId,
-			text(payload.name || payload.nome || "Template"),
-			text(payload.body || payload.conteudo),
-			Number(payload.attemptNumber || payload.attempt_number || 1),
-			payload.active !== false,
-			payload.isDefault === true || payload.is_default === true,
-			userId(user),
-		],
-	);
-	await recordAudit("template.save", templateId, user, result.rows[0]);
-	return result.rows[0];
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const previousResult = await client.query("select * from tentativas_templates where id=$1 for update", [templateId]);
+		const previous = previousResult.rows[0] || null;
+		const result = await client.query(
+			`insert into tentativas_templates (
+				id, name, body, attempt_number, active, is_default, created_by, updated_by, version
+			) values ($1,$2,$3,$4,$5,$6,$7,$7,1)
+			on conflict (id) do update set
+				name = excluded.name,
+				body = excluded.body,
+				attempt_number = excluded.attempt_number,
+				active = excluded.active,
+				is_default = excluded.is_default,
+				updated_by = excluded.updated_by,
+				version = tentativas_templates.version + 1,
+				updated_at = now()
+			returning *`,
+			[
+				templateId,
+				text(payload.name || payload.nome || "Template"),
+				text(payload.body || payload.conteudo),
+				Number(payload.attemptNumber || payload.attempt_number || 1),
+				payload.active !== false,
+				payload.isDefault === true || payload.is_default === true,
+				userId(user),
+			],
+		);
+		const saved = result.rows[0];
+		await client.query(
+			`insert into tentativas_template_versions (id,template_id,version,snapshot,changed_by,change_reason)
+			 values ($1,$2,$3,$4::jsonb,$5,$6)`,
+			[id("ttv"), templateId, saved.version, JSON.stringify(saved), userId(user), text(payload.changeReason || payload.change_reason)],
+		);
+		await client.query("commit");
+		await recordAudit("template.save", templateId, user, saved, previous || {});
+		return saved;
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
 }
 
 async function createCampaign(payload = {}, user = {}) {
@@ -1562,11 +1838,18 @@ module.exports = {
 		renderTemplate,
 	},
 	CAMPAIGN_PERMISSIONS,
+	CONTACT_PERMISSIONS,
+	CORRECTION_PERMISSIONS,
 	DISTRIBUTE_PERMISSIONS,
 	EXECUTE_PERMISSIONS,
 	EXPORT_PERMISSIONS,
 	HISTORY_PERMISSIONS,
+	MANAGEMENT_PERMISSIONS,
 	OVERRIDE_PERMISSIONS,
+	PORTFOLIO_PERMISSIONS,
+	REGISTER_PERMISSIONS,
+	SCHEDULE_PERMISSIONS,
+	AUDIT_PERMISSIONS,
 	SETTINGS_PERMISSIONS,
 	TEMPLATE_PERMISSIONS,
 	VIEW_PERMISSIONS,
@@ -1580,6 +1863,7 @@ module.exports = {
 	listCities,
 	listDistribution,
 	listHistory,
+	listNeighborhoods,
 	listTechnicianCities,
 	searchUsers,
 	listTemplates,

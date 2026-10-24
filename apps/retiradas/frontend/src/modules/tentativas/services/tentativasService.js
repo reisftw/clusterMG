@@ -19,6 +19,56 @@ export function buscarMinhaRotaTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/minha-rota${qs(params)}`);
 }
 
+export function listarLocalidadesTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/localidades${qs(params)}`);
+}
+
+export function listarRetornosTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/retornos${qs(params)}`);
+}
+
+export function atualizarRetornoTentativas(id, payload = {}) {
+	return requestVpsApi(`/tentativas/retornos/${encodeURIComponent(id)}`, {
+		method: "PUT",
+		body: JSON.stringify(payload),
+	});
+}
+
+export function criarRetornoTentativa(opportunityId, payload = {}) {
+	return requestVpsApi(`/tentativas/${encodeURIComponent(opportunityId)}/retornos`, {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
+export function listarRecuperacoesTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/recuperacoes${qs(params)}`);
+}
+
+export function buscarMinhaProdutividadeTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/produtividade${qs(params)}`);
+}
+
+export function atualizarRecuperacaoTentativas(id, payload = {}) {
+	return requestVpsApi(`/tentativas/recuperacoes/${encodeURIComponent(id)}/status`, {
+		method: "PUT",
+		body: JSON.stringify(payload),
+	});
+}
+
+export function enviarEvidenciaRecuperacaoTentativas(id, file) {
+	const formData = new FormData();
+	formData.append("file", file);
+	return requestVpsApi(`/tentativas/recuperacoes/${encodeURIComponent(id)}/evidencias`, {
+		method: "POST",
+		body: formData,
+	});
+}
+
+export function buscarTimelineTentativa(id) {
+	return requestVpsApi(`/tentativas/${encodeURIComponent(id)}/timeline`);
+}
+
 export function buscarDetalheTentativa(id) {
 	return requestVpsApi(`/tentativas/${encodeURIComponent(id)}`);
 }
@@ -40,12 +90,51 @@ export function salvarResultadoTentativa(contactId, payload = {}) {
 	);
 }
 
+export function corrigirContatoTentativa(contactId, payload = {}) {
+	return requestVpsApi(`/tentativas/contacts/${encodeURIComponent(contactId)}/corrigir`, {
+		method: "PUT",
+		body: JSON.stringify(payload),
+	});
+}
+
 export function buscarHistoricoTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/historico${qs(params)}`);
 }
 
 export function buscarResumoTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/admin/resumo${qs(params)}`);
+}
+
+export function buscarAnalyticsTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/analytics${qs(params)}`);
+}
+
+export function baixarAnalyticsTentativasCsv(params = {}) {
+	window.location.assign(
+		`${getApiBaseUrl()}/tentativas/admin/analytics/export.csv${qs(params)}`,
+	);
+}
+
+export function buscarInteligenciaTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/inteligencia${qs(params)}`);
+}
+
+export function buscarAuditoriaTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/auditoria${qs(params)}`);
+}
+
+export function recalcularPrioridadesTentativas(payload = {}) {
+	return requestVpsApi("/tentativas/admin/recalcular-prioridades", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
+export function transferirAtribuicaoTentativas(id, payload = {}) {
+	return requestVpsApi(`/tentativas/admin/atribuicoes/${encodeURIComponent(id)}/transferir`, {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
 }
 
 export function buscarRankingTentativas(params = {}) {
