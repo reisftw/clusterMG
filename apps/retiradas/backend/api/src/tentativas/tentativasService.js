@@ -179,11 +179,21 @@ function renderTemplate(body, variables = {}) {
 
 function priorityExpression() {
 	return `case
-		when coalesce(tentativas_opportunities.attempt_count, 0) = 0 and coalesce(excluded.os_age_days, 0) >= 30 then 'ALTA'
-		when coalesce(tentativas_opportunities.attempt_count, 0) = 0 then 'MEDIA'
 		when coalesce(tentativas_opportunities.last_result, '') in ('RESPONDED', 'CALLBACK_REQUESTED') then 'ALTA'
+		when coalesce(tentativas_opportunities.attempt_count, 0) = 0 and coalesce(excluded.os_age_days, 0) <= 7 then 'ALTA'
+		when coalesce(tentativas_opportunities.attempt_count, 0) = 0 and coalesce(excluded.os_age_days, 0) <= 30 then 'MEDIA'
 		else 'BAIXA'
 	end`;
+}
+
+function routeOrderBy(sort, hasCoordinates) {
+	if (sort === "oldest") {
+		return "o.os_opened_at asc nulls last, o.priority_score desc";
+	}
+	if (sort === "distance" && hasCoordinates) {
+		return "o.os_opened_at desc nulls last, distance_km asc nulls last, o.priority_score desc";
+	}
+	return "o.os_opened_at desc nulls last, o.priority_score desc, o.next_attempt_at nulls first";
 }
 
 function buildOpportunityResultUpdate({
@@ -363,30 +373,40 @@ async function performOpportunitiesSyncFromMatch() {
 			os.regional,
 			coalesce(os.empresa, os.source, 'Sempre'),
 			os.tipo,
-			coalesce(os.source_payload->>'bairro', os.source_payload#>>'{endereco,bairro}'),
+			coalesce(
+				nullif(trim(os.bairro), ''),
+				nullif(trim(os.source_payload->>'bairro'), ''),
+				nullif(trim(os.source_payload#>>'{endereco,bairro}'), '')
+			),
 			case
 			  when jsonb_typeof(os.source_payload->'equipamentos') = 'array'
 			    then greatest(jsonb_array_length(os.source_payload->'equipamentos'), 1)
 			  else 1
 			end,
-			case
-			  when coalesce(os.source_payload->>'latitude', os.source_payload#>>'{endereco,latitude}', '') ~ '^-?[0-9]+([.,][0-9]+)?$'
-			    then replace(coalesce(os.source_payload->>'latitude', os.source_payload#>>'{endereco,latitude}'), ',', '.')::numeric
-			  else null
-			end,
-			case
-			  when coalesce(os.source_payload->>'longitude', os.source_payload#>>'{endereco,longitude}', '') ~ '^-?[0-9]+([.,][0-9]+)?$'
-			    then replace(coalesce(os.source_payload->>'longitude', os.source_payload#>>'{endereco,longitude}'), ',', '.')::numeric
-			  else null
-			end,
+			coalesce(
+				os.latitude,
+				case
+				  when coalesce(os.source_payload->>'latitude', os.source_payload#>>'{endereco,latitude}', '') ~ '^-?[0-9]+([.,][0-9]+)?$'
+				    then replace(coalesce(os.source_payload->>'latitude', os.source_payload#>>'{endereco,latitude}'), ',', '.')::numeric
+				  else null
+				end
+			),
+			coalesce(
+				os.longitude,
+				case
+				  when coalesce(os.source_payload->>'longitude', os.source_payload#>>'{endereco,longitude}', '') ~ '^-?[0-9]+([.,][0-9]+)?$'
+				    then replace(coalesce(os.source_payload->>'longitude', os.source_payload#>>'{endereco,longitude}'), ',', '.')::numeric
+				  else null
+				end
+			),
 			'match',
 			coalesce(os.updated_at, now()),
 			os.data_abertura,
 			greatest(0, floor(extract(epoch from (now() - coalesce(os.data_abertura, now()))) / 86400)::int),
 			'PENDING',
 			case
-				when os.data_abertura is not null and os.data_abertura < now() - interval '30 days' then 'ALTA'
-				when os.data_abertura is not null and os.data_abertura < now() - interval '10 days' then 'MEDIA'
+				when os.data_abertura is null or os.data_abertura >= now() - interval '7 days' then 'ALTA'
+				when os.data_abertura >= now() - interval '30 days' then 'MEDIA'
 				else 'BAIXA'
 			end,
 			true,
@@ -406,7 +426,7 @@ async function performOpportunitiesSyncFromMatch() {
 			regional = excluded.regional,
 			empresa = excluded.empresa,
 			tipo_os = excluded.tipo_os,
-			bairro = coalesce(excluded.bairro, tentativas_opportunities.bairro),
+			bairro = coalesce(nullif(trim(excluded.bairro), ''), tentativas_opportunities.bairro),
 			equipment_count = greatest(excluded.equipment_count, 1),
 			latitude = coalesce(excluded.latitude, tentativas_opportunities.latitude),
 			longitude = coalesce(excluded.longitude, tentativas_opportunities.longitude),
@@ -735,7 +755,7 @@ async function autoClaimCity(cidade, user = {}, limit = 60) {
 				     select 1 from tentativas_assignments a
 				      where a.opportunity_id = o.id and a.released_at is null
 				   )
-				 order by o.priority_score desc, o.os_opened_at asc nulls last, o.created_at asc
+				 order by o.os_opened_at desc nulls last, o.priority_score desc, o.created_at desc
 				 limit greatest($5 - (select total from current_load), 0)
 			)
 			insert into tentativas_assignments (
@@ -821,11 +841,7 @@ async function getMyRoute(query = {}, user = {}) {
 	const priority = text(query.priority).toUpperCase();
 	const statusFilter = text(query.status).toUpperCase();
 	const sort = text(query.sort).toLowerCase();
-	const orderBy = sort === "distance" && hasCoordinates
-		? "distance_km asc nulls last, o.priority_score desc, o.os_opened_at asc nulls last"
-		: sort === "oldest"
-			? "o.os_opened_at asc nulls last, o.priority_score desc"
-			: "o.priority_score desc, o.next_attempt_at nulls first, o.os_opened_at asc nulls last";
+	const orderBy = routeOrderBy(sort, hasCoordinates);
 	const result = await db.query(
 		`select o.*, a.id as assignment_id, a.technician_name,
 		        count(*) over() as total_count,
@@ -1831,6 +1847,7 @@ module.exports = {
 	__testables: {
 		buildWhatsappUrls,
 		buildOpportunityResultUpdate,
+		routeOrderBy,
 		firstName,
 		firstValidPhone,
 		formatCustomerIdentification,

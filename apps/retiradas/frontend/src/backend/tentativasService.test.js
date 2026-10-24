@@ -95,5 +95,17 @@ describe("tentativasService helpers", () => {
 			1,
 		]);
 	});
+
+	it("prioriza ordens mais novas na rota e na busca por distancia", () => {
+		expect(__testables.routeOrderBy("", false)).toMatch(
+			/^o\.os_opened_at desc/,
+		);
+		expect(__testables.routeOrderBy("distance", true)).toMatch(
+			/^o\.os_opened_at desc/,
+		);
+		expect(__testables.routeOrderBy("oldest", false)).toMatch(
+			/^o\.os_opened_at asc/,
+		);
+	});
 });
 

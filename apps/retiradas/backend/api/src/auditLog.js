@@ -242,6 +242,12 @@ function pickFirstText(...values) {
 	return "";
 }
 
+function hasIdentifiedAuditActor(entry = {}, user = getCurrentUser()) {
+	return Boolean(
+		pickFirstText(user.uid, user.id, user.email, entry.userId, entry.userEmail),
+	);
+}
+
 function isSensitiveField(field) {
 	return SENSITIVE_KEY_PATTERN.test(String(field || ""));
 }
@@ -358,6 +364,7 @@ async function writeAuditLog(entry = {}) {
 
 function recordAuditLog(entry = {}) {
 	if (shouldIgnoreAuditEntity(entry.entity)) return Promise.resolve();
+	if (!hasIdentifiedAuditActor(entry)) return Promise.resolve();
 	return writeAuditLog(entry).catch((error) => {
 		console.error("[audit-log] Falha ao gravar auditoria:", error?.message || error);
 	});
@@ -890,6 +897,7 @@ module.exports = {
 		buildAuditSummary,
 		buildChangeDescriptions,
 		getClientIpFromRequest,
+		hasIdentifiedAuditActor,
 		sanitizeAuditValue,
 		shouldIgnoreAuditEntity,
 		shouldAuditDocument,

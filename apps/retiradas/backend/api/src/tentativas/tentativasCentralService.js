@@ -143,7 +143,12 @@ function calculatePriorityScore(opportunity = {}, weightsValue = {}) {
 	const callbackDue = Boolean(opportunity.callback_due || opportunity.callbackDue);
 
 	let score = 0;
-	score += add("osAge", "Tempo da OS em aberto", osAgeDays / 60, `${osAgeDays} dia(s) em aberto`);
+	score += add(
+		"osAge",
+		"Recencia da O.S.",
+		Math.max(0, 1 - osAgeDays / 60),
+		`${osAgeDays} dia(s) em aberto`,
+	);
 	score += add("equipment", "Equipamentos pendentes", equipmentCount / 3, `${equipmentCount} equipamento(s)`);
 	score += add("attemptHistory", "Historico de tentativas", attemptCount === 0 ? 1 : Math.max(0, 1 - attemptCount / 5), attemptCount ? `${attemptCount} tentativa(s)` : "Sem tentativa");
 	score += add("responseHistory", "Historico de resposta", ["RESPONDED", "CALLBACK_REQUESTED", "SCHEDULED"].includes(lastResult) ? 1 : 0, lastResult || "Sem resposta registrada");
@@ -921,12 +926,12 @@ async function getIntelligence(query = {}) {
 		   join tentativas_opportunities o on o.id=cb.opportunity_id
 		   left join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
 		  where cb.status='PENDING' and cb.scheduled_at<now()
-		    and ($2::text='' or o.empresa=$2)
-		    and ($3::text='' or o.regional=$3)
-		    and ($4::text='' or o.cidade_normalizada=$4)
-		    and ($5::text='' or a.technician_user_id=$5)
-		    and ($6::text='' or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))=$6)`,
-		filters,
+		    and ($1::text='' or o.empresa=$1)
+		    and ($2::text='' or o.regional=$2)
+		    and ($3::text='' or o.cidade_normalizada=$3)
+		    and ($4::text='' or a.technician_user_id=$4)
+		    and ($5::text='' or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))=$5)`,
+		filters.slice(1),
 	);
 	const row = result.rows[0] || {};
 	const invalidPercent = Number(row.total_active || 0) ? (Number(row.invalid_phones || 0) / Number(row.total_active)) * 100 : 0;

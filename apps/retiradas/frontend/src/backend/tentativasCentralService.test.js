@@ -14,10 +14,10 @@ const { __testables } = require(
 );
 
 describe("Central inteligente de Tentativas", () => {
-	it("calcula prioridade determinística e explica cada contribuição", () => {
-		const result = __testables.calculatePriorityScore(
+	it("prioriza ordens novas e explica cada contribuicao", () => {
+		const recent = __testables.calculatePriorityScore(
 			{
-				os_age_days: 75,
+				os_age_days: 2,
 				equipment_count: 3,
 				attempt_count: 0,
 				last_attempt_at: null,
@@ -25,16 +25,22 @@ describe("Central inteligente de Tentativas", () => {
 			},
 			{ osAge: 25, equipment: 20, attemptHistory: 15, responseHistory: 15, pendingCallback: 15, timeWithoutContact: 10 },
 		);
+		const old = __testables.calculatePriorityScore({
+			os_age_days: 75,
+			equipment_count: 3,
+			attempt_count: 0,
+			last_attempt_at: null,
+			callback_due: false,
+		});
 
-		expect(result.priority).toBe("ALTA");
-		expect(result.score).toBeGreaterThanOrEqual(55);
-		expect(result.factors).toEqual(
+		expect(recent.score).toBeGreaterThan(old.score);
+		expect(recent.factors).toEqual(
 			expect.arrayContaining([
-				expect.objectContaining({ key: "osAge", label: "Tempo da OS em aberto" }),
+				expect.objectContaining({ key: "osAge", label: "Recencia da O.S." }),
 				expect.objectContaining({ key: "equipment" }),
 			]),
 		);
-		expect(result.recommendedAction).toContain("primeiro contato");
+		expect(recent.recommendedAction).toContain("primeiro contato");
 	});
 
 	it("prioriza retorno vencido sem inventar probabilidade", () => {

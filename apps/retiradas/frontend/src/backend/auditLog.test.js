@@ -21,10 +21,17 @@ describe("auditLog helpers", () => {
 		buildChangeDescriptions,
 		calculateChangedFields,
 		getClientIpFromRequest,
+		hasIdentifiedAuditActor,
 		sanitizeAuditValue,
 		shouldIgnoreAuditEntity,
 		shouldAuditDocument,
 	} = auditLog.__testables;
+
+	it("nao grava auditoria sem usuario identificado", () => {
+		expect(hasIdentifiedAuditActor({}, {})).toBe(false);
+		expect(hasIdentifiedAuditActor({ userId: "user-1" }, {})).toBe(true);
+		expect(hasIdentifiedAuditActor({}, { email: "usuario@empresa.com" })).toBe(true);
+	});
 
 	it("mascara campos sensiveis em objetos aninhados", () => {
 		expect(
