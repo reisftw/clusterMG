@@ -558,22 +558,9 @@ async function getTemplate(templateId) {
 
 async function listQueue(limit = 20) {
 	return (await mensageriaRepository.listAllQueueMessages())
-		.sort((left, right) => {
-			const leftIsMapDiff =
-				left.origemTipo === "mapa_diff" ||
-				normalizeText(left.origem).includes("diferenca automatica");
-			const rightIsMapDiff =
-				right.origemTipo === "mapa_diff" ||
-				normalizeText(right.origem).includes("diferenca automatica");
-			const leftPriority = left.prioridadeEm || leftIsMapDiff ? 0 : 1;
-			const rightPriority = right.prioridadeEm || rightIsMapDiff ? 0 : 1;
-			if (leftPriority !== rightPriority) return leftPriority - rightPriority;
-
-			const leftDate = getQueueOrderDate(left);
-			const rightDate = getQueueOrderDate(right);
-
-			return rightDate - leftDate;
-		})
+		.sort(
+			(left, right) => getQueueOrderDate(right) - getQueueOrderDate(left),
+		)
 		.slice(0, Math.max(1, Number(limit || 20)));
 }
 

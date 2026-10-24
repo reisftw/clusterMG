@@ -737,6 +737,7 @@ async function listCities(_query = {}, user = {}) {
 			  from tentativas_opportunities o
 			 where o.active = true
 			   and coalesce(o.telefone_digits, '') ~ $4
+			   and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 			   and ($3::boolean = true or exists (select 1 from allowed a where a.cidade_normalizada = o.cidade_normalizada))
 			 group by o.cidade, o.cidade_normalizada
 		)

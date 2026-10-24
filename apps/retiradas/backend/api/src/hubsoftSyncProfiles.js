@@ -31,9 +31,17 @@ const MAP_MATCH_RETRY_DELAY_MS = Math.min(
 	5 * 60_000,
 );
 const MAP_MATCH_WATCHDOG_MS = Math.min(
-	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_WATCHDOG_MS || 25 * 60_000), 5 * 60_000),
-	2 * 60 * 60_000,
+	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_WATCHDOG_MS || 2 * 60 * 60_000), 5 * 60_000),
+	4 * 60 * 60_000,
 );
+const MAP_PHONE_ENRICH_START_DATE =
+	process.env.HUBSOFT_MAP_PHONE_ENRICH_START_DATE || "2026-01-01";
+const MAP_PHONE_ENRICH_CONCURRENCY = Math.min(
+	Math.max(Number(process.env.HUBSOFT_MAP_PHONE_ENRICH_CONCURRENCY || 4), 1),
+	5,
+);
+const MAP_PHONE_LOOKUP_CACHE_TTL_MS = 24 * 60 * 60_000;
+const MAP_PHONE_LOOKUP_CACHE_MAX_SIZE = 50_000;
 const SCHEDULER_USER = {
 	uid: "system",
 	email: "system@retiradas.local",
@@ -45,6 +53,7 @@ let mapMatchSchedulerRunning = false;
 let mapMatchSchedulerStartedAt = 0;
 let automationSessionCache = null;
 let automationSessionPromise = null;
+const mapPhoneLookupCache = new Map();
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -1537,28 +1546,50 @@ function mapOrderNumber(row = {}) {
 }
 
 async function reuseStoredMapPhones(rows = []) {
-	const orderNumbers = [
-		...new Set(rows.map(mapOrderNumber).filter(Boolean)),
+	const orderNumbers = [...new Set(rows.map(mapOrderNumber).filter(Boolean))];
+	const clientCodes = [
+		...new Set(rows.map((row) => extractClientCode(row)).filter(Boolean)),
 	];
-	if (!orderNumbers.length) return { rows, reused: 0 };
+	if (!orderNumbers.length && !clientCodes.length) return { rows, reused: 0 };
 	const result = await db.query(
-		`select num_os, telefone, telefones
-		   from ordens_servico
-		  where source_collection = 'ordens_abertas'
-		    and num_os = any($1::text[])
-		    and (coalesce(telefone, '') <> '' or cardinality(telefones) > 0)`,
-		[orderNumbers],
+		`select num_os, codigo_cliente, telefone, telefones
+		   from (
+		     select num_os, codigo_cliente, telefone, telefones
+		       from ordens_servico
+		      where num_os = any($1::text[]) or codigo_cliente = any($2::text[])
+		     union all
+		     select os as num_os, codigo_cliente, telefone, array[telefone]::text[] as telefones
+		       from tentativas_opportunities
+		      where os = any($1::text[]) or codigo_cliente = any($2::text[])
+		     union all
+		     select os as num_os, codigo_cliente, telefone, array[telefone]::text[] as telefones
+		       from mensageria_fila
+		      where os = any($1::text[]) or codigo_cliente = any($2::text[])
+		   ) known_phones
+		  where coalesce(telefone, '') <> '' or cardinality(telefones) > 0`,
+		[orderNumbers, clientCodes],
 	);
-	const storedByOrder = new Map(
-		result.rows.map((row) => [
-			cleanText(row.num_os),
-			uniquePhones([row.telefone, ...(row.telefones || [])]),
-		]),
-	);
+	const storedByOrder = new Map();
+	const storedByClient = new Map();
+	for (const row of result.rows) {
+		const phones = uniquePhones([row.telefone, ...(row.telefones || [])]);
+		if (!phones.length) continue;
+		const orderNumber = cleanText(row.num_os);
+		const clientCode = cleanText(row.codigo_cliente);
+		if (orderNumber && !storedByOrder.has(orderNumber)) {
+			storedByOrder.set(orderNumber, phones);
+		}
+		if (clientCode && !storedByClient.has(clientCode)) {
+			storedByClient.set(clientCode, phones);
+		}
+	}
 	let reused = 0;
 	const nextRows = rows.map((row) => {
 		if (phonesFromHubsoftRecord(row).length) return row;
-		const stored = storedByOrder.get(mapOrderNumber(row)) || [];
+		const stored =
+			storedByOrder.get(mapOrderNumber(row)) ||
+			storedByClient.get(extractClientCode(row)) ||
+			[];
 		if (!stored.length) return row;
 		reused += 1;
 		return withPhones(row, stored);
@@ -1595,24 +1626,48 @@ async function tryHubsoftPhonePath(session, path) {
 
 async function fetchPhonesForMapRow(session, row = {}) {
 	const ids = phoneSearchIds(row);
-	const paths = [];
-	if (ids.orderId) {
-		paths.push(
-			`/api/v1/ordem_servico/${encodeURIComponent(ids.orderId)}`,
-			`/api/v1/integracao/ordem_servico/${encodeURIComponent(ids.orderId)}`,
-		);
+	const lookupKey = ids.clientId
+		? `client:${ids.clientId}`
+		: ids.orderId
+			? `order:${ids.orderId}`
+			: ids.clientCode
+				? `code:${ids.clientCode}`
+				: "";
+	const cached = lookupKey ? mapPhoneLookupCache.get(lookupKey) : null;
+	if (cached && cached.expiresAt > Date.now()) return cached.promise;
+	if (cached) mapPhoneLookupCache.delete(lookupKey);
+
+	const lookup = (async () => {
+		const paths = [];
+		if (ids.clientId) {
+			paths.push(
+				`/api/v1/cliente/${encodeURIComponent(ids.clientId)}`,
+				`/api/v1/integracao/cliente/${encodeURIComponent(ids.clientId)}`,
+			);
+		}
+		if (ids.orderId) {
+			paths.push(
+				`/api/v1/ordem_servico/${encodeURIComponent(ids.orderId)}`,
+				`/api/v1/integracao/ordem_servico/${encodeURIComponent(ids.orderId)}`,
+			);
+		}
+		for (const path of paths) {
+			const phones = await tryHubsoftPhonePath(session, path);
+			if (phones.length) return phones;
+		}
+		return [];
+	})();
+
+	if (lookupKey) {
+		mapPhoneLookupCache.set(lookupKey, {
+			expiresAt: Date.now() + MAP_PHONE_LOOKUP_CACHE_TTL_MS,
+			promise: lookup,
+		});
+		while (mapPhoneLookupCache.size > MAP_PHONE_LOOKUP_CACHE_MAX_SIZE) {
+			mapPhoneLookupCache.delete(mapPhoneLookupCache.keys().next().value);
+		}
 	}
-	if (ids.clientId) {
-		paths.push(
-			`/api/v1/cliente/${encodeURIComponent(ids.clientId)}`,
-			`/api/v1/integracao/cliente/${encodeURIComponent(ids.clientId)}`,
-		);
-	}
-	for (const path of paths) {
-		const phones = await tryHubsoftPhonePath(session, path);
-		if (phones.length) return phones;
-	}
-	return [];
+	return lookup;
 }
 
 async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) {
@@ -1620,47 +1675,45 @@ async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) 
 		rows,
 		reused: 0,
 	}));
-	const today = parseDateOnly(todaySaoPaulo());
-	const lookbackDays = Math.min(
-		Math.max(Number(options.phoneEnrichmentDays || process.env.HUBSOFT_MAP_PHONE_ENRICH_DAYS || 8), 1),
-		30,
+	const requestedStartDate = cleanText(
+		options.phoneEnrichmentStartDate || MAP_PHONE_ENRICH_START_DATE,
 	);
-	const minDate = new Date(today || new Date());
-	minDate.setUTCDate(minDate.getUTCDate() - lookbackDays);
-	const limit = Math.min(
-		Math.max(Number(options.phoneEnrichmentLimit || process.env.HUBSOFT_MAP_PHONE_ENRICH_LIMIT || 1000), 0),
-		1000,
-	);
-	if (!limit) {
-		return {
-			rows: cached.rows,
-			summary: { reused: cached.reused, attempted: 0, enriched: 0 },
-		};
-	}
+	const startDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedStartDate)
+		? requestedStartDate
+		: "2026-01-01";
+	const minDate = new Date(`${startDate}T00:00:00.000-03:00`);
 	const indexes = [];
 	for (let index = 0; index < cached.rows.length; index += 1) {
 		const row = cached.rows[index];
 		if (phonesFromHubsoftRecord(row).length) continue;
 		const sourceDate = safeTimestamp(extractSourceDate(row));
-		if (!sourceDate || new Date(sourceDate) < minDate) continue;
-		indexes.push(index);
-		if (indexes.length >= limit) break;
+		if (sourceDate && new Date(sourceDate) < minDate) continue;
+		indexes.push({
+			index,
+			timestamp: sourceDate ? new Date(sourceDate).getTime() : 0,
+		});
 	}
+	indexes.sort((left, right) => right.timestamp - left.timestamp);
 	if (!indexes.length) {
 		return {
 			rows: cached.rows,
-			summary: { reused: cached.reused, attempted: 0, enriched: 0 },
+			summary: {
+				startDate,
+				reused: cached.reused,
+				attempted: 0,
+				enriched: 0,
+			},
 		};
 	}
 	const nextRows = [...cached.rows];
 	let cursor = 0;
 	let enriched = 0;
-	const concurrency = Math.min(3, indexes.length);
+	const concurrency = Math.min(MAP_PHONE_ENRICH_CONCURRENCY, indexes.length);
 	const workers = Array.from({ length: concurrency }, async () => {
 		while (cursor < indexes.length) {
 			const current = cursor;
 			cursor += 1;
-			const index = indexes[current];
+			const { index } = indexes[current];
 			const phones = await fetchPhonesForMapRow(session, nextRows[index]);
 			if (!phones.length) continue;
 			nextRows[index] = withPhones(nextRows[index], phones);
@@ -1670,7 +1723,13 @@ async function enrichMapRowsWithMissingPhones(session, rows = [], options = {}) 
 	await Promise.all(workers);
 	return {
 		rows: nextRows,
-		summary: { reused: cached.reused, attempted: indexes.length, enriched },
+		summary: {
+			startDate,
+			reused: cached.reused,
+			attempted: indexes.length,
+			enriched,
+			concurrency,
+		},
 	};
 }
 
