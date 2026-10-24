@@ -1136,7 +1136,7 @@ async function getMyProductivity(query = {}, user = {}) {
 		params,
 	);
 	const daily = await db.query(
-		`select d::date day, count(c.id) filter (where c.sent_confirmed)::int attempts,
+		`select d::date as day, count(c.id) filter (where c.sent_confirmed)::int attempts,
 		 count(distinct c.opportunity_id) filter (where c.effective_contact)::int effective_contacts
 		 from generate_series($3::date,$4::date,interval '1 day') d
 		 left join tentativas_contacts c on c.created_at::date=d::date and c.technician_user_id=$1
