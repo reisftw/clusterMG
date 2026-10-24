@@ -1139,7 +1139,8 @@ async function getMyProductivity(query = {}, user = {}) {
 		`select d::date as day, count(c.id) filter (where c.sent_confirmed)::int attempts,
 		 count(distinct c.opportunity_id) filter (where c.effective_contact)::int effective_contacts
 		 from generate_series($3::date,$4::date,interval '1 day') d
-		 left join tentativas_contacts c on c.created_at::date=d::date and c.technician_user_id=$1
+		 left join tentativas_contacts c on c.created_at::date=d::date
+		  and (c.technician_user_id=$1::text or lower(coalesce(c.technician_email,''))=$2::text)
 		 group by d order by d`, params,
 	);
 	const row = summary.rows[0] || {};
