@@ -18,6 +18,10 @@ const neighborhoodLockMigrationPath = path.join(
 	process.cwd(),
 	"apps/retiradas/backend/sql/094_tentativas_bairro_locks.sql",
 );
+const orderReferenceIndexMigrationPath = path.join(
+	process.cwd(),
+	"apps/retiradas/backend/sql/093_ordens_servico_fk_indexes.sql",
+);
 
 describe("migration 089 - Central de Tentativas", () => {
 	const sql = fs.readFileSync(migrationPath, "utf8");
@@ -101,5 +105,14 @@ describe("migration 094 - exclusividade por bairro", () => {
 		expect(sql).toContain("technician_user_id text not null");
 		expect(sql).not.toMatch(/\btruncate\b/i);
 		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
+	});
+});
+
+describe("migration 093 - indice da referencia de tentativas", () => {
+	const sql = fs.readFileSync(orderReferenceIndexMigrationPath, "utf8");
+
+	it("indexa somente a tabela pertencente ao schema do Retiradas", () => {
+		expect(sql).toContain("tentativas_opportunities_ordem_id_idx");
+		expect(sql).not.toContain("mercado_entregas");
 	});
 });
