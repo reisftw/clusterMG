@@ -281,6 +281,10 @@ async function performOpportunitiesSyncFromMatch() {
 	let completedAutomatically = 0;
 	try {
 		await client.query("begin");
+		await client.query(
+			"select pg_advisory_xact_lock(hashtext($1))",
+			["tentativas:opportunities-write"],
+		);
 		const inventoryResult = await client.query(
 			`select
 				(select count(*)::int from tentativas_opportunities where active = true) as active_total,

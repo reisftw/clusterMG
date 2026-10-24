@@ -246,6 +246,10 @@ async function refreshPriorityScores({ opportunityId = "", limit = 500 } = {}) {
 	const client = await db.connect();
 	try {
 		await client.query("begin");
+		await client.query(
+			"select pg_advisory_xact_lock(hashtext($1))",
+			["tentativas:opportunities-write"],
+		);
 		for (const row of rows.rows) {
 			const calculated = calculatePriorityScore(row, weights);
 			await client.query(
