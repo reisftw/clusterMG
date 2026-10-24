@@ -208,14 +208,13 @@ function safeKey(value) {
 	return normalizeText(value).replace(/[^a-z0-9]+/g, "_") || "nao_informado";
 }
 
-const MENSAGERIA_EXCLUDED_OS_TYPES = new Set([
-	"cancelamento outros",
-	"retirada outros",
-]);
+const MENSAGERIA_EXCLUDED_OS_TYPES = new Set();
 
 const MENSAGERIA_ALLOWED_OS_TYPES = new Set([
 	"cancelamento ftth",
+	"cancelamento outros",
 	"retirada ftth",
+	"retirada outros",
 	"retirada cancelamento segunda tentativa",
 	"cancelamento loja",
 ]);

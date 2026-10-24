@@ -289,8 +289,7 @@ async function performOpportunitiesSyncFromMatch() {
 				  where source_collection = 'match_os_abertas'
 				    and coalesce(num_os, '') <> ''
 				    and coalesce(cidade, '') <> ''
-				    and coalesce(tipo, '') ~* $1
-				    and coalesce(tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)') as source_total`,
+				    and coalesce(tipo, '') ~* $1) as source_total`,
 			[WITHDRAWAL_ORDER_TYPE_REGEX],
 		);
 		const activeTotal = Number(inventoryResult.rows[0]?.active_total || 0);
@@ -395,7 +394,6 @@ async function performOpportunitiesSyncFromMatch() {
 			   and coalesce(os.num_os, '') <> ''
 			   and coalesce(os.cidade, '') <> ''
 			   and coalesce(os.tipo, '') ~* $1
-			   and coalesce(os.tipo, '') !~* '(CANCELAMENTO\\s*-\\s*OUTROS|RETIRADA\\s*-\\s*OUTROS)'
 		)
 		insert into tentativas_opportunities (
 			id, ordem_id, os, codigo_cliente, cliente, telefone, telefone_digits,

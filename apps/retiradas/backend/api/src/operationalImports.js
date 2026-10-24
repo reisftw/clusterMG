@@ -1182,14 +1182,13 @@ const MENSAGERIA_MAP_DIFF_TERMINAL_STATUSES = new Set([
 	"ignorado",
 ]);
 
-const MENSAGERIA_EXCLUDED_OS_TYPES = new Set([
-	"CANCELAMENTO OUTROS",
-	"RETIRADA OUTROS",
-]);
+const MENSAGERIA_EXCLUDED_OS_TYPES = new Set();
 
 const MENSAGERIA_ALLOWED_OS_TYPES = new Set([
 	"CANCELAMENTO FTTH",
+	"CANCELAMENTO OUTROS",
 	"RETIRADA FTTH",
+	"RETIRADA OUTROS",
 	"RETIRADA CANCELAMENTO SEGUNDA TENTATIVA",
 	"CANCELAMENTO LOJA",
 ]);
@@ -1314,16 +1313,11 @@ function readMensageriaOrderOpenDate(order = {}) {
 	);
 }
 
-function isRecentMensageriaOrder(order = {}, lookbackDays = 2) {
+function isMensageriaOrderOnOrAfter(order = {}, startDate = "2026-01-01") {
 	const rawDate = readMensageriaOrderOpenDate(order);
 	const dateOnly = dateOnlyFromOrder(rawDate);
 	if (!dateOnly) return false;
-	const orderDate = new Date(`${dateOnly}T12:00:00.000Z`);
-	const today = new Date();
-	today.setUTCHours(12, 0, 0, 0);
-	const minDate = new Date(today);
-	minDate.setUTCDate(minDate.getUTCDate() - Number(lookbackDays || 2));
-	return orderDate >= minDate;
+	return dateOnly >= startDate;
 }
 
 function buildMensageriaQueueItemFromOrder(
@@ -1527,14 +1521,16 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 
 async function ensureOpenMapOrdersInMensageria(finalMap = {}, user = {}) {
 	const config = await getMensageriaConfig();
-	const lookbackDays = Math.max(
-		0,
-		Math.min(Number(config.autoEnqueueBackfillDays ?? 8), 30),
-	);
+	const configuredStartDate = String(
+		config.autoEnqueueBackfillStartDate || "2026-01-01",
+	).trim();
+	const startDate = /^\d{4}-\d{2}-\d{2}$/.test(configuredStartDate)
+		? configuredStartDate
+		: "2026-01-01";
 	const entries = Object.entries(finalMap || {}).filter(([, order]) => {
 		const item = buildMensageriaQueueItemFromOrder(order, "", {}, "");
 		return (
-			isRecentMensageriaOrder(order, lookbackDays) &&
+			isMensageriaOrderOnOrAfter(order, startDate) &&
 			!isExcludedMensageriaOrderType(item) &&
 			isAllowedMensageriaOrderType(item)
 		);
