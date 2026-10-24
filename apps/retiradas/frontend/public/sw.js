@@ -1,4 +1,4 @@
-const CACHE_NAME = "retiradas-pwa-v27-tentativas-responsive";
+const CACHE_NAME = "retiradas-pwa-v28-tentativas-management";
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",

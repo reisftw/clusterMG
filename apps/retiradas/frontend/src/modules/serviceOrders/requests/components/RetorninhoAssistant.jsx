@@ -20,6 +20,7 @@ import {
 const IMAGE_URL = "/retorninho-assistente-mini-20261023.webp";
 const POSITION_KEY = "retiradas-retorninho-assistant-position-v1";
 const FLOATING_BUTTON_SIZE = 88;
+const FLOATING_TOUCH_SIZE = 112;
 const PRIVILEGED_ROLES = new Set(["admin", "backoffice", "backoffice_retirada"]);
 
 function greeting() {
@@ -47,16 +48,21 @@ function initialMessages() {
 
 function clampPosition(position) {
 	const margin = 12;
-	const viewportWidth = window.visualViewport?.width || window.innerWidth;
-	const viewportHeight = window.visualViewport?.height || window.innerHeight;
+	const viewport = window.visualViewport;
+	const viewportWidth = viewport?.width || window.innerWidth;
+	const viewportHeight = viewport?.height || window.innerHeight;
+	const viewportLeft = viewport?.offsetLeft || 0;
+	const viewportTop = viewport?.offsetTop || 0;
+	const defaultX = viewportLeft + viewportWidth - FLOATING_TOUCH_SIZE - 12;
+	const defaultY = viewportTop + viewportHeight - FLOATING_TOUCH_SIZE - 96;
 	return {
 		x: Math.min(
-			Math.max(margin, Number(position?.x) || viewportWidth - FLOATING_BUTTON_SIZE - 20),
-			Math.max(margin, viewportWidth - FLOATING_BUTTON_SIZE - margin),
+			Math.max(viewportLeft + margin, Number(position?.x) || defaultX),
+			Math.max(viewportLeft + margin, viewportLeft + viewportWidth - FLOATING_TOUCH_SIZE - margin),
 		),
 		y: Math.min(
-			Math.max(margin, Number(position?.y) || viewportHeight - FLOATING_BUTTON_SIZE - 110),
-			Math.max(margin, viewportHeight - FLOATING_BUTTON_SIZE - margin),
+			Math.max(viewportTop + margin, Number(position?.y) || defaultY),
+			Math.max(viewportTop + margin, viewportTop + viewportHeight - FLOATING_TOUCH_SIZE - margin),
 		),
 	};
 }
@@ -183,8 +189,8 @@ export default function RetorninhoAssistant() {
 		const width = Math.min(400, window.innerWidth - 24);
 		const height = Math.min(590, window.innerHeight - 24);
 		return {
-			left: Math.min(Math.max(12, position.x - width + FLOATING_BUTTON_SIZE), window.innerWidth - width - 12),
-			top: Math.min(Math.max(12, position.y - height + FLOATING_BUTTON_SIZE), window.innerHeight - height - 12),
+			left: Math.min(Math.max(12, position.x - width + FLOATING_TOUCH_SIZE), window.innerWidth - width - 12),
+			top: Math.min(Math.max(12, position.y - height + FLOATING_TOUCH_SIZE), window.innerHeight - height - 12),
 			width,
 			height,
 		};
@@ -285,7 +291,11 @@ export default function RetorninhoAssistant() {
 			openOnClick,
 		};
 		setDragging(true);
-		event.currentTarget.setPointerCapture(event.pointerId);
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// Alguns PWAs no iOS não oferecem captura de ponteiro; o gesto ainda segue pelos eventos do alvo.
+		}
 	}
 
 	function pointerMove(event) {
@@ -328,14 +338,16 @@ export default function RetorninhoAssistant() {
 					onPointerUp={pointerUp}
 					onPointerCancel={pointerCancel}
 					onContextMenu={(event) => event.preventDefault()}
-					className={`fixed z-[75] h-[88px] w-[88px] touch-none overflow-hidden rounded-full border-4 border-white bg-white shadow-[0_14px_38px_rgba(15,23,42,0.32)] ring-2 ring-blue-500 ${dragging ? "scale-105 cursor-grabbing" : "cursor-grab transition hover:scale-105"}`}
-					style={{ left: position.x, top: position.y }}
+					className={`fixed z-[75] flex h-[112px] w-[112px] touch-none select-none items-center justify-center rounded-full bg-transparent p-3 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+					style={{ left: position.x, top: position.y, touchAction: "none", WebkitTouchCallout: "none" }}
 					aria-label="Abrir Retorninho"
 					title="Retorninho - Solicitar O.S"
 				>
-					<img src={IMAGE_URL} alt="Retorninho" className="pointer-events-none h-full w-full select-none object-cover object-[55%_42%]" draggable="false" />
-					<span className="pointer-events-none absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-950/70 text-white"><Move size={13} /></span>
-					<span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white"><MessageCircle size={13} /></span>
+					<span className={`relative block h-[88px] w-[88px] overflow-hidden rounded-full border-4 border-white bg-white shadow-[0_14px_38px_rgba(15,23,42,0.32)] ring-2 ring-blue-500 transition ${dragging ? "scale-110 ring-4" : "hover:scale-105"}`}>
+						<img src={IMAGE_URL} alt="Retorninho" className="pointer-events-none h-full w-full select-none object-cover object-[55%_42%]" draggable="false" />
+						<span className="pointer-events-none absolute left-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/75 text-white"><Move size={15} /></span>
+						<span className="pointer-events-none absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white"><MessageCircle size={14} /></span>
+					</span>
 				</button>
 			) : (
 				<section className="fixed z-[75] flex overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-[0_24px_70px_rgba(15,23,42,0.35)]" style={panelStyle} aria-label="Conversa com Retorninho">

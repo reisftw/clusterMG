@@ -249,8 +249,8 @@ const Topbar = ({ onOpenMobileMenu }) => {
 						) : null}
 					</button>
 					{notificationsOpen ? (
-						<div className="absolute right-0 top-12 z-layout-dropdown w-[min(92vw,390px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-							<div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
+						<div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.5rem)] z-layout-dropdown flex max-h-[calc(100dvh-env(safe-area-inset-top)-5.25rem)] w-auto flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-[min(70dvh,34rem)] sm:w-[min(92vw,390px)]">
+							<div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 p-4 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between">
 								<div>
 									<h3 className="text-sm font-black text-slate-950">
 										Notificações
@@ -267,7 +267,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 									<CheckCheck size={14} /> Lidas
 								</button>
 							</div>
-							<div className="max-h-96 overflow-y-auto p-2">
+							<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
 								{notifications.length ? (
 									notifications.map((item) => (
 										<Link

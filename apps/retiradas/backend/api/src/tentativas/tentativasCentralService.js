@@ -851,7 +851,7 @@ const ANALYTICS_BASE_CTE = `
 	), completed_any_ids as (
 		select id opportunity_id from filtered where completed_at >= $1::date and completed_at < ($2::date + interval '1 day')
 		union select distinct r.opportunity_id from tentativas_recoveries r join filtered f on f.id=r.opportunity_id where r.status='RECOVERY_CONFIRMED' and coalesce(r.validated_at,r.updated_at) >= $1::date and coalesce(r.validated_at,r.updated_at) < ($2::date + interval '1 day')
-	), completed_flow_ids as (select c.opportunity_id from completed_any_ids c join scheduled_ids s using(opportunity_id)),
+	), completed_flow_ids as (select c.opportunity_id from completed_any_ids c join worked_ids w using(opportunity_id)),
 	population_ids as (select id opportunity_id from filtered where active union select opportunity_id from worked_ids union select opportunity_id from completed_any_ids)
 `;
 
@@ -869,7 +869,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		select
 		 (select count(*) from filtered where active) eligible,
 		 (select count(*) from filtered where active and technician_user_id is not null) distributed,
-		 (select count(*) from population_ids) funnel_population,
+		 (select count(*) from filtered where active) funnel_population,
 		 (select count(*) from worked_ids) worked,
 		 (select count(*) from period_contacts where sent_confirmed) attempts,
 		 (select count(*) from effective_ids) effective_contacts,
@@ -887,7 +887,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		 count(distinct c.opportunity_id) filter(where c.sent_confirmed)::int worked,
 		 count(distinct c.opportunity_id) filter(where c.sent_confirmed and c.is_effective)::int effective_contacts,
 		 count(distinct c.opportunity_id) filter(where c.sent_confirmed and upper(coalesce(c.result,'')) in ('SCHEDULED','RESPONDED_SCHEDULE'))::int scheduled,
-		 (select count(*) from completed_any_ids ca join filtered fo on fo.id=ca.opportunity_id where coalesce(fo.completed_at,fo.updated_at)::date=d::date)::int completed
+		 (select count(*) from completed_flow_ids ca join filtered fo on fo.id=ca.opportunity_id where coalesce(fo.completed_at,fo.updated_at)::date=d::date)::int completed
 		from generate_series($1::date,$2::date,interval '1 day') d
 		left join period_contacts c on c.created_at::date=d::date group by d order by d`, values),
 		db.query(`${ANALYTICS_BASE_CTE}, technicians as (
@@ -939,7 +939,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 	const raw = summaryResult.rows[0] || {};
 	const indicators = Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, Number(value || 0)]));
 	indicators.completed_external = Math.max(indicators.completed_total - indicators.completed_flow, 0);
-	indicators.coverageRate = safeRate(indicators.worked, indicators.funnel_population);
+	indicators.coverageRate = safeRate(indicators.worked, indicators.eligible);
 	indicators.effectiveContactRate = safeRate(indicators.effective_contacts, indicators.worked);
 	indicators.scheduleRate = safeRate(indicators.scheduled, indicators.effective_contacts);
 	indicators.recoveryRate = safeRate(indicators.completed_flow, indicators.worked);
@@ -948,7 +948,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 	const stale = Number(health.stale_records || 0);
 	const divergences = Number(health.divergences || 0);
 	const alerts = [];
-	if (indicators.coverageRate < 70 && indicators.funnel_population) alerts.push({ type: "LOW_COVERAGE", severity: "warning", value: indicators.coverageRate, message: "Cobertura operacional abaixo de 70%." });
+	if (indicators.coverageRate < 70 && indicators.eligible) alerts.push({ type: "LOW_COVERAGE", severity: "warning", value: indicators.coverageRate, message: "Cobertura operacional abaixo de 70%." });
 	if (indicators.overdue_callbacks) alerts.push({ type: "OVERDUE_CALLBACKS", severity: "critical", value: indicators.overdue_callbacks, message: "Retornos combinados estão vencidos." });
 	if (indicators.without_attempt) alerts.push({ type: "UNATTEMPTED", severity: "warning", value: indicators.without_attempt, message: "Oportunidades ativas ainda não receberam tentativa." });
 	if (stale) alerts.push({ type: "STALE_SYNC", severity: "critical", value: stale, message: "Existem registros ativos sem atualização há mais de duas horas." });
@@ -958,7 +958,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		period: { start, end },
 		updatedAt: new Date().toISOString(),
 		indicators,
-		funnel: buildSequentialFunnel({ population: indicators.funnel_population, worked: indicators.worked, effective: indicators.effective_contacts, scheduled: indicators.scheduled, completed: indicators.completed_flow }),
+		funnel: buildSequentialFunnel({ population: indicators.eligible, worked: indicators.worked, effective: indicators.effective_contacts, scheduled: indicators.scheduled, completed: indicators.completed_flow }),
 		daily: dailyResult.rows.map((row) => ({ day: row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10), attempts: Number(row.attempts || 0), worked: Number(row.worked || 0), effectiveContacts: Number(row.effective_contacts || 0), scheduled: Number(row.scheduled || 0), completed: Number(row.completed || 0) })),
 		ranking: { items: rankingResult.rows.map((row) => ({ ...row, total_count: undefined, opportunities: Number(row.opportunities || 0), worked: Number(row.worked || 0), attempts: Number(row.attempts || 0), effectiveContacts: Number(row.effective_contacts || 0), scheduled: Number(row.scheduled || 0), recoveries: Number(row.recoveries || 0), coverage: Number(row.coverage || 0), conversion: Number(row.conversion || 0), cities: Number(row.cities || 0), neighborhoods: Number(row.neighborhoods || 0) })), total: Number(rankingResult.rows[0]?.total_count || 0), page, limit },
 		territory: territoryResult.rows.map((row) => ({ ...row, opportunities: Number(row.opportunities || 0), worked: Number(row.worked || 0), coverage: safeRate(row.worked,row.opportunities), effectiveContacts: Number(row.effective_contacts || 0), scheduled: Number(row.scheduled || 0), recoveries: Number(row.recoveries || 0), overdueCallbacks: Number(row.overdue_callbacks || 0) })),
@@ -983,7 +983,7 @@ async function exportAnalyticsCsv(query = {}, user = {}) {
 		overdue_callbacks: "Retornos vencidos",
 		scheduled: "Agendamentos",
 		completed_total: "Retiradas concluídas no período",
-		completed_flow: "Retiradas concluídas no funil",
+		completed_flow: "Retiradas concluídas após tentativa",
 		completed_external: "Retiradas por outros fluxos",
 		recovered_equipment: "Equipamentos recuperados",
 		coverageRate: "Taxa de cobertura (%)",
@@ -1117,12 +1117,12 @@ async function getMyProductivity(query = {}, user = {}) {
 	const params = [userId(user), userEmail(user), start, end];
 	const summary = await db.query(
 		`with assignments as (
-		 select a.*,o.status,o.attempt_count,o.id opportunity_id
+		 select a.id assignment_id,a.opportunity_id,o.status,o.attempt_count
 		 from tentativas_assignments a join tentativas_opportunities o on o.id=a.opportunity_id
 		 where a.released_at is null and (a.technician_user_id=$1 or lower(coalesce(a.technician_email,''))=$2)
 		), contacts as (
 		 select c.* from tentativas_contacts c
-		 where (c.technician_user_id=$1 or exists (select 1 from assignments a where a.id=c.assignment_id))
+		 where (c.technician_user_id=$1 or exists (select 1 from assignments a where a.assignment_id=c.assignment_id))
 		 and c.created_at >= $3::date and c.created_at < ($4::date + interval '1 day')
 		)
 		select (select count(*) from assignments) assigned,

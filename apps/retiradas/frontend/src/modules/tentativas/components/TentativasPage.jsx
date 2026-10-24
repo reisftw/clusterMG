@@ -1419,10 +1419,22 @@ export default function TentativasPage() {
 				icon={<div className="rounded-2xl bg-blue-600 p-3 text-white"><MessageCircle className="h-6 w-6" /></div>}
 			/>
 			{admin ? (
-				<div className="inline-flex w-fit rounded-2xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Alternar área do módulo">
-					<button type="button" onClick={() => changeWorkspace("operation")} className={`min-h-10 rounded-xl px-4 text-sm font-black ${workspace === "operation" ? "bg-blue-600 text-white" : "text-slate-600"}`}>Operação</button>
-					<button type="button" onClick={() => changeWorkspace("management")} className={`min-h-10 rounded-xl px-4 text-sm font-black ${workspace === "management" ? "bg-slate-950 text-white" : "text-slate-600"}`}>Gestão</button>
-				</div>
+				<section className={`flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${workspace === "management" ? "border-slate-800 bg-slate-950 text-white" : "border-blue-200 bg-blue-50 text-slate-950"}`}>
+					<div className="flex min-w-0 items-center gap-3">
+						<span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${workspace === "management" ? "bg-cyan-400 text-slate-950" : "bg-blue-600 text-white"}`}>
+							{workspace === "management" ? <BarChart3 className="h-5 w-5" /> : <Route className="h-5 w-5" />}
+						</span>
+						<div className="min-w-0">
+							<p className={`text-[11px] font-black uppercase tracking-[0.14em] ${workspace === "management" ? "text-cyan-300" : "text-blue-700"}`}>Ambiente atual</p>
+							<strong className="block text-lg font-black">{workspace === "management" ? "Gestão e inteligência operacional" : "Operação de Tentativas"}</strong>
+							<p className={`text-xs font-semibold ${workspace === "management" ? "text-slate-300" : "text-slate-600"}`}>{workspace === "management" ? "Indicadores, equipes, histórico e decisões da supervisão." : "Carteira, contatos, retornos e tratativas do dia."}</p>
+						</div>
+					</div>
+					<div className={`grid shrink-0 grid-cols-2 rounded-lg p-1 ${workspace === "management" ? "bg-white/10" : "border border-blue-200 bg-white"}`} aria-label="Alternar área do módulo">
+						<button type="button" onClick={() => changeWorkspace("operation")} className={`min-h-10 rounded-md px-4 text-sm font-black ${workspace === "operation" ? "bg-blue-600 text-white" : workspace === "management" ? "text-slate-200 hover:bg-white/10" : "text-slate-600"}`}>Operação</button>
+						<button type="button" onClick={() => changeWorkspace("management")} className={`min-h-10 rounded-md px-4 text-sm font-black ${workspace === "management" ? "bg-cyan-400 text-slate-950" : "text-slate-600"}`}>Gestão</button>
+					</div>
+				</section>
 			) : null}
 			<div className={`retiradas-native-tabs -mx-3 min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 ${workspace === "operation" ? "hidden md:flex" : "flex"}`}>
 				{tabs.map(([key, label, Icon]) => (

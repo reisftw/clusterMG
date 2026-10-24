@@ -16,7 +16,9 @@ import {
 	CircleAlert,
 	Download,
 	Filter,
+	History,
 	MapPin,
+	MessageCircle,
 	RefreshCw,
 	Search,
 	ShieldCheck,
@@ -29,7 +31,9 @@ import { Bar, Line } from "react-chartjs-2";
 import Spinner from "../../../components/ui/Spinner";
 import {
 	baixarAnalyticsTentativasCsv,
+	baixarHistoricoTentativasCsv,
 	buscarAnalyticsTentativas,
+	buscarHistoricoTentativas,
 	recalcularPrioridadesTentativas,
 } from "../services/tentativasService";
 
@@ -94,6 +98,97 @@ function FilterSelect({ label, value, options, onChange, children }) {
 function ActionList({ title, icon: Icon, items, empty, tone = "blue" }) {
 	const toneClass = tone === "red" ? "text-red-600 bg-red-50" : tone === "amber" ? "text-amber-700 bg-amber-50" : "text-blue-700 bg-blue-50";
 	return <div className="rounded-lg border border-slate-200 bg-white p-4"><div className="flex items-center gap-2"><span className={`rounded-md p-2 ${toneClass}`}><Icon className="h-4 w-4" /></span><strong className="text-sm text-slate-950">{title}</strong><span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-600">{items.length}</span></div><div className="mt-3 space-y-2">{items.map((item) => <div key={item.id || item.opportunity_id} className="rounded-md bg-slate-50 p-3 text-xs"><strong className="block text-slate-800">({item.codigo_cliente || "-"}) {item.cliente || "Cliente"}</strong><span className="text-slate-500">OS {item.os || "-"} · {item.cidade || "Cidade não informada"}</span>{item.technician_name ? <span className="mt-1 block font-bold text-slate-600">{item.technician_name}</span> : null}</div>)}{!items.length ? <p className="py-4 text-center text-xs font-semibold text-slate-400">{empty}</p> : null}</div></div>;
+}
+
+const historyLabel = (item = {}) => {
+	const value = item.result || item.event_type;
+	return ({
+		WHATSAPP_OPENED: "WhatsApp aberto",
+		NO_RESPONSE: "Sem resposta",
+		RESPONDED: "Cliente respondeu",
+		RESPONDED_SCHEDULE: "Solicitou agendamento",
+		STORE_DELIVERY: "Entrega em loja",
+		CALLBACK_REQUESTED: "Retorno solicitado",
+		REFUSED: "Cliente recusou",
+		INVALID_PHONE: "Número inválido",
+		SCHEDULED: "Agendado",
+		COMPLETED: "Concluído",
+	})[value] || value || "Contato iniciado";
+};
+
+function ManagementHistory({ filters }) {
+	const [draft, setDraft] = useState("");
+	const [search, setSearch] = useState("");
+	const [page, setPage] = useState(1);
+	const [data, setData] = useState({ items: [], total: 0, limit: 12 });
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+	const params = useMemo(() => ({
+		q: search,
+		page,
+		limit: 12,
+		startDate: filters.startDate,
+		endDate: filters.endDate,
+		cidade: filters.cidade,
+		technicianId: filters.tecnicoId,
+		resultado: filters.resultado,
+	}), [filters.cidade, filters.endDate, filters.resultado, filters.startDate, filters.tecnicoId, page, search]);
+	const load = useCallback(async () => {
+		setLoading(true);
+		setError("");
+		try {
+			setData(await buscarHistoricoTentativas(params));
+		} catch (loadError) {
+			setError(loadError.message || "Não foi possível carregar o histórico operacional.");
+		} finally {
+			setLoading(false);
+		}
+	}, [params]);
+	useEffect(() => { void load(); }, [load]);
+	const totalPages = Math.max(1, Math.ceil(Number(data.total || 0) / Number(data.limit || 12)));
+
+	return (
+		<section className="space-y-3">
+			<SectionHeader
+				eyebrow="Rastreabilidade"
+				title="Histórico operacional"
+				description="Veja quem contatou cada cliente, quando a mensagem foi aberta e qual tratativa foi registrada."
+				action={<button type="button" onClick={() => baixarHistoricoTentativasCsv(params)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"><Download className="h-4 w-4" /> Exportar histórico</button>}
+			/>
+			<div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+				<form onSubmit={(event) => { event.preventDefault(); setPage(1); setSearch(draft.trim()); }} className="flex flex-col gap-2 sm:flex-row">
+					<label className="flex min-h-11 flex-1 items-center gap-2 rounded-lg border border-slate-200 px-3">
+						<Search className="h-4 w-4 text-slate-400" />
+						<input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Técnico, cliente, código, OS, telefone ou cidade" className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" />
+					</label>
+					<button type="submit" className="min-h-11 rounded-lg bg-slate-950 px-5 text-sm font-black text-white">Buscar</button>
+					<button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-black text-slate-700"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Atualizar</button>
+				</form>
+				{error ? <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div> : null}
+				<div className={`mt-4 grid gap-3 lg:grid-cols-2 ${loading ? "opacity-55" : ""}`}>
+					{data.items.map((item) => (
+						<article key={item.id} className="rounded-lg border border-slate-200 p-4">
+							<div className="flex items-start gap-3">
+								<span className="rounded-lg bg-blue-50 p-2 text-blue-700"><MessageCircle className="h-4 w-4" /></span>
+								<div className="min-w-0 flex-1">
+									<div className="flex flex-wrap items-center justify-between gap-2"><strong className="truncate text-sm text-slate-950">{item.technician_name || "Técnico não identificado"}</strong><time className="text-xs font-bold text-slate-500">{dateTime(item.created_at)}</time></div>
+									<p className="mt-1 text-sm font-black text-slate-700">({item.codigo_cliente || "-"}) {item.cliente || "Cliente não informado"}</p>
+									<p className="text-xs font-semibold text-slate-500">{item.phone || "Telefone não informado"} · OS {item.os || "-"} · {item.cidade || "Cidade não informada"}</p>
+									<div className="mt-2 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{historyLabel(item)}</span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Tentativa {item.attempt_number || 1}</span></div>
+									{item.message ? <p className="mt-2 line-clamp-2 text-xs font-semibold leading-relaxed text-slate-500">Mensagem: {item.message}</p> : null}
+								</div>
+							</div>
+						</article>
+					))}
+				</div>
+				{!loading && !data.items.length ? <Empty>Nenhuma atividade encontrada para os filtros aplicados.</Empty> : null}
+				<div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+					<span><History className="mr-1 inline h-4 w-4" />{number(data.total)} registro(s) auditáveis</span>
+					<div className="flex gap-2"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))} className="min-h-10 rounded-lg border border-slate-200 px-3 disabled:opacity-40">Anterior</button><span className="grid min-h-10 place-items-center px-2">{page} de {totalPages}</span><button type="button" disabled={page >= totalPages || loading} onClick={() => setPage((current) => current + 1)} className="min-h-10 rounded-lg border border-slate-200 px-3 disabled:opacity-40">Próxima</button></div>
+				</div>
+			</div>
+		</section>
+	);
 }
 
 export default function TentativasManagementDashboard() {
@@ -162,9 +257,9 @@ export default function TentativasManagementDashboard() {
 			{loading && !data ? <Skeleton /> : null}
 
 			{data ? <>
-				<section className="space-y-3"><SectionHeader eyebrow="Visão da operação" title="Indicadores executivos" description="Estoque atual e produção do período aparecem identificados separadamente." /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Kpi label="Oportunidades elegíveis" value={number(indicators.eligible)} detail={`${number(indicators.without_attempt)} sem tentativa no estoque atual`} tone="blue" /><Kpi label="Cobertura operacional" value={percent(indicators.coverageRate)} detail={`${number(indicators.worked)} de ${number(indicators.funnel_population)} OS da população`} progress={indicators.coverageRate} title="OS distintas trabalhadas ÷ população analisada" /><Kpi label="Tentativas realizadas" value={number(indicators.attempts)} detail={`${indicators.attemptsPerWorked || 0} por oportunidade trabalhada`} tone="blue" /><Kpi label="Contatos efetivos" value={number(indicators.effective_contacts)} detail={`${percent(indicators.effectiveContactRate)} das OS trabalhadas`} tone="green" title="OS distintas com resposta confirmada ÷ OS trabalhadas" /><Kpi label="Agendamentos" value={number(indicators.scheduled)} detail={`${percent(indicators.scheduleRate)} dos contatos efetivos`} tone="amber" title="OS distintas agendadas ÷ contatos efetivos" /></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Kpi label="Retiradas concluídas" value={number(indicators.completed_total)} detail={`${number(indicators.completed_external)} por outros fluxos`} tone="green" /><Kpi label="Equipamentos recuperados" value={number(indicators.recovered_equipment)} detail="Unidades confirmadas no período" tone="green" /><Kpi label="Retornos vencidos" value={number(indicators.overdue_callbacks)} detail="Pendências que exigem atuação" tone="red" /><Kpi label="Sem primeira tentativa" value={number(indicators.without_attempt)} detail="Estoque atual distribuído ou disponível" tone="amber" /><Kpi label="Agendamentos futuros" value={number(indicators.future_appointments)} detail="Compromissos já programados" tone="neutral" /></div></section>
+				<section className="space-y-3"><SectionHeader eyebrow="Visão da operação" title="Indicadores executivos" description="Estoque atual e produção do período aparecem identificados separadamente." /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><Kpi label="Oportunidades elegíveis" value={number(indicators.eligible)} detail={`${number(indicators.without_attempt)} sem tentativa no estoque atual`} tone="blue" /><Kpi label="Cobertura operacional" value={percent(indicators.coverageRate)} detail={`${number(indicators.worked)} de ${number(indicators.eligible)} oportunidades elegíveis`} progress={indicators.coverageRate} title="OS distintas trabalhadas ÷ oportunidades elegíveis" /><Kpi label="Tentativas realizadas" value={number(indicators.attempts)} detail={`${indicators.attemptsPerWorked || 0} por oportunidade trabalhada`} tone="blue" /><Kpi label="Contatos efetivos" value={number(indicators.effective_contacts)} detail={`${percent(indicators.effectiveContactRate)} das OS trabalhadas`} tone="green" title="OS distintas com resposta confirmada ÷ OS trabalhadas" /><Kpi label="Agendamentos" value={number(indicators.scheduled)} detail={`${percent(indicators.scheduleRate)} dos contatos efetivos`} tone="amber" title="OS distintas agendadas ÷ contatos efetivos" /></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Kpi label="Retiradas concluídas" value={number(indicators.completed_flow)} detail="Clientes contatados pelo módulo de Tentativas" tone="green" /><Kpi label="Equipamentos recuperados" value={number(indicators.recovered_equipment)} detail="Unidades confirmadas no período" tone="green" /><Kpi label="Retornos vencidos" value={number(indicators.overdue_callbacks)} detail="Pendências que exigem atuação" tone="red" /><Kpi label="Sem primeira tentativa" value={number(indicators.without_attempt)} detail="Estoque atual distribuído ou disponível" tone="amber" /><Kpi label="Agendamentos futuros" value={number(indicators.future_appointments)} detail="Compromissos já programados" tone="neutral" /></div></section>
 
-				<section className="space-y-3"><SectionHeader eyebrow="Conversão" title="Funil operacional" description="Todas as etapas usam OS distintas da mesma população; conclusões externas ficam separadas." /><div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="space-y-4">{data.funnel.map((stage, index) => <div key={stage.key} className="grid gap-2 md:grid-cols-[190px_1fr_170px]"><div><strong className="text-sm text-slate-900">{stage.label}</strong><span className="ml-2 text-lg font-black text-slate-950">{number(stage.value)}</span></div><div className="h-7 overflow-hidden rounded-md bg-slate-100"><div className="flex h-full min-w-8 items-center justify-end rounded-md bg-blue-600 px-2 text-xs font-black text-white" style={{ width: `${Math.max(stage.fromPopulationRate, 2)}%` }}>{percent(stage.fromPopulationRate)}</div></div><span className="text-xs font-bold text-slate-500">{index ? `${percent(stage.fromPreviousRate)} da etapa anterior` : "População analisada"}</span></div>)}</div><div className="mt-5 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-5">{[["Cobertura",indicators.coverageRate],["Contato",indicators.effectiveContactRate],["Contato → agenda",indicators.scheduleRate],["Agenda → retirada",data.funnel[3]?.value ? (data.funnel[4].value/data.funnel[3].value)*100 : 0],["Recuperação",indicators.recoveryRate]].map(([label,value]) => <div key={label} title={`Fórmula: ${label} calculada com OS distintas`}><span className="text-xs font-bold text-slate-500">{label}</span><strong className="block text-lg text-slate-900">{percent(value)}</strong></div>)}</div>{indicators.completed_external ? <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm font-semibold text-slate-600">{number(indicators.completed_external)} retirada(s) foram concluídas por outros fluxos e não foram forçadas nas etapas anteriores.</p> : null}</div></section>
+				<section className="space-y-3"><SectionHeader eyebrow="Conversão" title="Funil operacional" description="Todas as etapas usam OS distintas e começam nas oportunidades elegíveis atuais." /><div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="space-y-4">{data.funnel.map((stage, index) => <div key={stage.key} className="grid gap-2 md:grid-cols-[190px_1fr_170px]"><div><strong className="text-sm text-slate-900">{stage.label}</strong><span className="ml-2 text-lg font-black text-slate-950">{number(stage.value)}</span></div><div className="h-7 overflow-hidden rounded-md bg-slate-100"><div className="flex h-full min-w-8 items-center justify-end rounded-md bg-blue-600 px-2 text-xs font-black text-white" style={{ width: `${Math.max(stage.fromPopulationRate, 2)}%` }}>{percent(stage.fromPopulationRate)}</div></div><span className="text-xs font-bold text-slate-500">{index ? `${percent(stage.fromPreviousRate)} da etapa anterior` : "Oportunidades elegíveis"}</span></div>)}</div><div className="mt-5 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-5">{[["Cobertura",indicators.coverageRate],["Contato",indicators.effectiveContactRate],["Contato → agenda",indicators.scheduleRate],["Agenda → retirada",data.funnel[3]?.value ? (data.funnel[4].value/data.funnel[3].value)*100 : 0],["Recuperação",indicators.recoveryRate]].map(([label,value]) => <div key={label} title={`Fórmula: ${label} calculada com OS distintas`}><span className="text-xs font-bold text-slate-500">{label}</span><strong className="block text-lg text-slate-900">{percent(value)}</strong></div>)}</div></div></section>
 
 				<section className="space-y-3"><SectionHeader eyebrow="Evolução" title="Produção diária" description="Séries reais para o período selecionado." action={<div className="flex rounded-lg border border-slate-200 bg-white p-1">{[["activity","Atividade"],["conversion","Conversão"],["result","Resultado"]].map(([value,label]) => <button key={value} type="button" onClick={() => setChartMode(value)} className={`min-h-9 rounded-md px-3 text-xs font-black ${chartMode === value ? "bg-blue-600 text-white" : "text-slate-600"}`}>{label}</button>)}</div>} /><div className="h-80 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">{daily.some((item) => chartSeries.some((serie) => Number(item[serie.key]))) ? (chartMode === "activity" ? <Bar data={chartData} options={{ responsive: true, maintainAspectRatio: false }} /> : <Line data={chartData} options={{ responsive: true, maintainAspectRatio: false }} />) : <Empty>Não houve movimentação para esta visualização no período.</Empty>}</div></section>
 
@@ -173,6 +268,8 @@ export default function TentativasManagementDashboard() {
 				<section className="space-y-3"><SectionHeader eyebrow="Ação imediata" title="Oportunidades e alertas" description="Registros que merecem atuação da supervisão agora." action={<button type="button" onClick={async () => { await recalcularPrioridadesTentativas(); await load(true); }} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"><RefreshCw className="h-4 w-4" /> Recalcular prioridades</button>} /><div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4"><ActionList title="Sem primeira tentativa" icon={Users} items={data.actions.unattempted || []} empty="Todas as carteiras distribuídas já foram iniciadas." /><ActionList title="Retornos vencidos" icon={CalendarClock} items={data.actions.overdue || []} empty="Nenhum retorno vencido." tone="red" /><ActionList title="Agendamentos próximos" icon={CalendarClock} items={data.actions.upcoming || []} empty="Nenhum agendamento próximo." /><ActionList title="Prioridade elevada" icon={Target} items={data.actions.priority || []} empty="Nenhuma prioridade elevada sem tentativa." tone="amber" /></div><div className="grid gap-2 md:grid-cols-3">{data.alerts.map((alert) => <div key={alert.type} className={`rounded-lg border p-4 text-sm font-bold ${alert.severity === "critical" ? "border-red-200 bg-red-50 text-red-800" : alert.severity === "warning" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-blue-200 bg-blue-50 text-blue-800"}`}><AlertTriangle className="mr-2 inline h-4 w-4" /><strong>{number(alert.value)}</strong> · {alert.message}</div>)}{!data.alerts.length ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-800"><ShieldCheck className="mr-2 inline h-4 w-4" />Operação sem alertas gerenciais no recorte atual.</div> : null}</div></section>
 
 				<section className="space-y-3"><SectionHeader eyebrow="Território" title="Regional, cidade e bairro" description="Expanda uma regional para identificar concentração e cobertura por localidade." /><div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">{territoryGroups.map((group) => <div key={group.regional} className="border-b border-slate-100 last:border-0"><button type="button" onClick={() => setExpandedRegions((current) => ({ ...current, [group.regional]: !current[group.regional] }))} className="grid min-h-14 w-full grid-cols-[1fr_repeat(3,90px)_24px] items-center gap-2 px-4 text-left hover:bg-slate-50"><span className="flex items-center gap-2 font-black text-slate-900"><MapPin className="h-4 w-4 text-blue-600" />{group.regional}</span><span className="text-right text-xs"><strong className="block text-slate-900">{number(group.opportunities)}</strong> oportunidades</span><span className="text-right text-xs"><strong className="block text-slate-900">{percent(group.opportunities ? group.worked*100/group.opportunities : 0)}</strong> cobertura</span><span className="text-right text-xs"><strong className="block text-red-700">{number(group.overdueCallbacks)}</strong> vencidos</span><ChevronRight className={`h-4 w-4 transition ${expandedRegions[group.regional] ? "rotate-90" : ""}`} /></button>{expandedRegions[group.regional] ? <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/60"><table className="min-w-[760px] w-full text-xs"><thead><tr className="text-slate-500">{["Cidade / bairro","Oportunidades","Trabalhadas","Cobertura","Contatos","Agendamentos","Recuperações"].map((label) => <th key={label} className="px-4 py-2 text-left">{label}</th>)}</tr></thead><tbody>{group.cities.map((item) => <tr key={`${item.cidade}-${item.bairro}`} className="border-t border-white"><td className="px-4 py-2 font-bold text-slate-800">{item.cidade} · {item.bairro}</td><td className="px-4">{number(item.opportunities)}</td><td className="px-4">{number(item.worked)}</td><td className="px-4 font-bold">{percent(item.coverage)}</td><td className="px-4">{number(item.effectiveContacts)}</td><td className="px-4">{number(item.scheduled)}</td><td className="px-4">{number(item.recoveries)}</td></tr>)}</tbody></table></div> : null}</div>)}{!territoryGroups.length ? <Empty>Nenhum dado territorial para o período.</Empty> : null}</div></section>
+
+				<ManagementHistory filters={applied} />
 
 				<section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className={`rounded-md p-2 ${data.health.status === "normal" ? "bg-emerald-50 text-emerald-700" : data.health.status === "attention" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}><ShieldCheck className="h-5 w-5" /></span><div><strong className="block text-slate-950">Saúde da integração e reconciliação</strong><span className="text-xs font-semibold text-slate-500">Última sincronização: {dateTime(data.health.lastSyncAt)}</span></div></div><div className="flex flex-wrap gap-4 text-xs"><span><strong className="block text-slate-900">{number(data.health.activeRecords)}</strong> registros ativos</span><span><strong className="block text-amber-700">{number(data.health.divergences)}</strong> divergências</span><span><strong className="block text-red-700">{number(data.health.staleRecords)}</strong> desatualizados</span><span className="rounded-full bg-slate-100 px-3 py-1 font-black uppercase text-slate-600">{data.health.status === "normal" ? "Normal" : data.health.status === "attention" ? "Atenção" : "Falha"}</span></div></div></section>
 			</> : null}
