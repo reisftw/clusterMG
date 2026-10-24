@@ -988,32 +988,30 @@ async function getMyRoute(query = {}, user = {}) {
 		        count(*) filter (where o.attempt_count > 0) over() as worked_count,
 		        count(*) filter (where o.status in ('RESPONDED','CALLBACK_REQUESTED')) over() as responded_count,
 		        count(*) filter (where o.status = 'SCHEDULED') over() as scheduled_count,
-		        case when $10::boolean and o.latitude is not null and o.longitude is not null then
+		        case when $8::boolean and o.latitude is not null and o.longitude is not null then
 		          6371 * 2 * asin(sqrt(
-		            power(sin(radians((o.latitude::double precision - $8::double precision) / 2)), 2) +
-		            cos(radians($8::double precision)) * cos(radians(o.latitude::double precision)) *
-		            power(sin(radians((o.longitude::double precision - $9::double precision) / 2)), 2)
+		            power(sin(radians((o.latitude::double precision - $6::double precision) / 2)), 2) +
+		            cos(radians($6::double precision)) * cos(radians(o.latitude::double precision)) *
+		            power(sin(radians((o.longitude::double precision - $7::double precision) / 2)), 2)
 		          ))
 		        else null end as distance_km
 		   from tentativas_opportunities o
 		  where o.active = true
-		    and coalesce(o.telefone_digits, '') ~ $7
+		    and coalesce(o.telefone_digits, '') ~ $5
 		    and o.cidade_normalizada = $1
 		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 		    and (
-		      $4::text = ''
-		      or ($4 = '__sem_bairro__' and nullif(trim(o.bairro),'') is null)
-		      or ${neighborhoodGroupExpression("o")} = $4
+		      $2::text = ''
+		      or ($2 = '__sem_bairro__' and nullif(trim(o.bairro),'') is null)
+		      or ${neighborhoodGroupExpression("o")} = $2
 		    )
-		    and ($5::text = '' or o.priority = $5)
-		    and ($6::text = '' or o.status = $6)
-		    and ($11::text = '' or o.cliente ilike '%' || $11 || '%' or o.codigo_cliente ilike '%' || $11 || '%' or o.os ilike '%' || $11 || '%' or o.bairro ilike '%' || $11 || '%')
+		    and ($3::text = '' or o.priority = $3)
+		    and ($4::text = '' or o.status = $4)
+		    and ($9::text = '' or o.cliente ilike '%' || $9 || '%' or o.codigo_cliente ilike '%' || $9 || '%' or o.os ilike '%' || $9 || '%' or o.bairro ilike '%' || $9 || '%')
 		  order by ${orderBy}
-		  limit $12 offset $13`,
+		  limit $10 offset $11`,
 		[
 			normalizeText(cidade),
-			userId(user),
-			userEmail(user),
 			bairro,
 			priority,
 			statusFilter,

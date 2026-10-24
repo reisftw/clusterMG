@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -19,6 +20,20 @@ const { __testables } = require(
 );
 
 describe("tentativasService helpers", () => {
+	it("mantém os parâmetros da rota contínuos após remover o rateio", () => {
+		const source = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/tentativas/tentativasService.js"),
+			"utf8",
+		);
+		const routeSource = source.slice(
+			source.indexOf("async function getMyRoute"),
+			source.indexOf("async function listNeighborhoods"),
+		);
+		const references = [...routeSource.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]));
+		const unique = [...new Set(references)].sort((left, right) => left - right);
+		expect(unique).toEqual(Array.from({ length: Math.max(...unique) }, (_, index) => index + 1));
+	});
+
 	it("aceita todos os tipos de retirada e rejeita serviços operacionais", () => {
 		const eligible = new RegExp(__testables.WITHDRAWAL_ORDER_TYPE_REGEX, "i");
 		for (const type of [
