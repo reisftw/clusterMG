@@ -272,7 +272,7 @@ function createTentativasRouter({
 		requireExport,
 		async (req, res, next) => {
 			try {
-				const csv = await central.exportAnalyticsCsv(req.query || {});
+				const csv = await central.exportAnalyticsCsv(req.query || {}, req.user || {});
 				res.setHeader("Content-Type", "text/csv; charset=utf-8");
 				res.setHeader("Content-Disposition", 'attachment; filename="tentativas-gestao.csv"');
 				res.send(csv);

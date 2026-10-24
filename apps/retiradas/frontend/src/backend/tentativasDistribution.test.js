@@ -44,35 +44,40 @@ afterEach(() => {
 });
 
 describe("tentativas - distribuicao por tecnico", () => {
-	it("entrega o primeiro lote ao associar uma cidade ao tecnico", async () => {
-		const query = vi.fn(async () => ({
-			rows: [{ id: "ttc-1", cidade: "Uberlândia", active: true }],
+	it("divide todas as oportunidades da cidade de forma equilibrada", () => {
+		const service = loadService(vi.fn());
+		const technicians = [
+			{ user_id: "tec-1", user_email: "tec1@example.com", user_name: "Tecnico 1" },
+			{ user_id: "tec-2", user_email: "tec2@example.com", user_name: "Tecnico 2" },
+		];
+		const candidates = Array.from({ length: 101 }, (_, index) => ({
+			opportunity_id: `os-${index + 1}`,
+			cidade: "Uberlandia",
 		}));
-		const clientQuery = vi.fn(async (sql) => {
-			if (String(sql).includes("returning id")) {
-				return { rowCount: 50, rows: Array.from({ length: 50 }, (_, index) => ({ id: `ta-${index}` })) };
-			}
-			return { rowCount: 0, rows: [] };
-		});
-		const connect = vi.fn(async () => ({
-			query: clientQuery,
-			release: vi.fn(),
-		}));
-		const service = loadService(query, connect);
+		const plan = service.__testables.buildBalancedAssignmentPlan(candidates, technicians, []);
+		const totals = plan.reduce((counts, item) => ({
+			...counts,
+			[item.userId]: (counts[item.userId] || 0) + 1,
+		}), {});
 
-		const result = await service.saveTechnicianCity(
-			{
-				userId: "rosirene-1",
-				userEmail: "rosirene@example.com",
-				userName: "Rosirene",
-				cidade: "Uberlândia",
-			},
-			{ uid: "admin-1" },
+		expect(plan).toHaveLength(101);
+		expect(Math.abs(totals["tec-1"] - totals["tec-2"])).toBeLessThanOrEqual(1);
+		expect(new Set(plan.map((item) => item.opportunityId)).size).toBe(101);
+	});
+
+	it("considera a carga existente antes de distribuir novas oportunidades", () => {
+		const service = loadService(vi.fn());
+		const technicians = [
+			{ user_id: "tec-1", user_email: "tec1@example.com", user_name: "Tecnico 1" },
+			{ user_id: "tec-2", user_email: "tec2@example.com", user_name: "Tecnico 2" },
+		];
+		const plan = service.__testables.buildBalancedAssignmentPlan(
+			[{ opportunity_id: "os-1", cidade: "Betim" }, { opportunity_id: "os-2", cidade: "Betim" }],
+			technicians,
+			[{ technician_user_id: "tec-1", technician_email: "tec1@example.com", total: 3 }],
 		);
 
-		expect(result.assigned).toBe(50);
-		expect(String(clientQuery.mock.calls[1][0])).toContain("current_load");
-		expect(String(clientQuery.mock.calls[1][0])).toContain("limit greatest");
+		expect(plan.every((item) => item.userId === "tec-2")).toBe(true);
 	});
 
 	it("inclui tecnicos vinculados a cidade mesmo antes da primeira atribuicao", async () => {

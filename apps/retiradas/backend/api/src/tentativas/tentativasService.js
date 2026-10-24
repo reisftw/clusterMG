@@ -89,6 +89,50 @@ function normalizeText(value) {
 		.replace(/[\u0300-\u036f]/g, "");
 }
 
+function normalizeNeighborhoodGroup(value) {
+	const normalized = normalizeText(value);
+	if (normalized === "__sem_bairro__") return normalized;
+	return normalized.replace(/^(bairro|residencial)\s+/, "").replace(/\s+/g, " ").trim();
+}
+
+function neighborhoodGroupExpression(alias = "o") {
+	return `regexp_replace(
+		regexp_replace(
+			lower(translate(trim(coalesce(${alias}.bairro, '')), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')),
+			'^(bairro|residencial)[[:space:]]+', '', 'i'
+		),
+		'[[:space:]]+', ' ', 'g'
+	)`;
+}
+
+function buildBalancedAssignmentPlan(candidates = [], technicians = [], loadRows = []) {
+	if (!technicians.length) return [];
+	const loadByTechnician = new Map(
+		loadRows.map((row) => [
+			text(row.technician_user_id) || text(row.technician_email).toLowerCase(),
+			Number(row.total || 0),
+		]),
+	);
+	return candidates.map((candidate) => {
+		const technician = technicians.reduce((selected, current) => {
+			const selectedKey = text(selected.user_id) || text(selected.user_email).toLowerCase();
+			const currentKey = text(current.user_id) || text(current.user_email).toLowerCase();
+			return (loadByTechnician.get(currentKey) || 0) < (loadByTechnician.get(selectedKey) || 0)
+				? current
+				: selected;
+		}, technicians[0]);
+		const technicianKey = text(technician.user_id) || text(technician.user_email).toLowerCase();
+		loadByTechnician.set(technicianKey, (loadByTechnician.get(technicianKey) || 0) + 1);
+		return {
+			opportunityId: candidate.opportunity_id,
+			cidade: candidate.cidade,
+			userId: technician.user_id,
+			email: technician.user_email,
+			name: technician.user_name,
+		};
+	});
+}
+
 function userId(user = {}) {
 	return text(user.uid || user.id || user.profile?.uid || user.email);
 }
@@ -483,48 +527,42 @@ async function performOpportunitiesSyncFromMatch() {
 }
 
 async function replenishReleasedAssignments(releasedAssignments = []) {
-	const groups = new Map();
+	const cities = new Map();
 	for (const assignment of releasedAssignments) {
 		const cidade = text(assignment.cidade);
-		const technicianId = text(assignment.technician_user_id);
-		const technicianEmail = text(assignment.technician_email).toLowerCase();
-		if (!cidade || (!technicianId && !technicianEmail)) continue;
-		const key = `${technicianId}|${technicianEmail}|${normalizeText(cidade)}`;
-		const current = groups.get(key) || {
-			cidade,
-			count: 0,
-			user: {
-				uid: technicianId,
-				email: technicianEmail,
-				nome: text(assignment.technician_name),
-			},
-		};
-		current.count += 1;
-		groups.set(key, current);
+		if (cidade) cities.set(normalizeText(cidade), cidade);
+	}
+	const unassignedCities = await db.query(
+		`select distinct o.cidade_normalizada, o.cidade
+		   from tentativas_opportunities o
+		  where o.active = true
+		    and coalesce(o.telefone_digits, '') ~ $1
+		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
+		    and exists (
+		      select 1
+		        from tentativas_technician_cities c
+		        join app_users u
+		          on u.uid = c.user_id
+		          or lower(u.email) = lower(coalesce(c.user_email, ''))
+		       where c.active = true
+		         and c.cidade_normalizada = o.cidade_normalizada
+		         and lower(coalesce(u.role, '')) = 'tecnico'
+		         and u.disabled = false
+		    )
+		    and not exists (
+		      select 1 from tentativas_assignments a
+		       where a.opportunity_id = o.id and a.released_at is null
+		    )`,
+		[VALID_PHONE_DIGITS_REGEX],
+	);
+	for (const row of unassignedCities.rows) {
+		cities.set(row.cidade_normalizada, row.cidade);
 	}
 
 	let replenished = 0;
-	for (const group of groups.values()) {
-		const loadResult = await db.query(
-			`select count(*)::int as total
-			   from tentativas_assignments a
-			   join tentativas_opportunities o on o.id = a.opportunity_id
-			  where a.released_at is null
-			    and o.active = true
-			    and o.cidade_normalizada = $1
-			    and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
-			    and o.status not in (
-			      'SCHEDULED', 'COMPLETED', 'CANCELLED', 'REFUSED',
-			      'INVALID_PHONE', 'ALREADY_RETURNED', 'EQUIPMENT_UNAVAILABLE'
-			    )`,
-			[normalizeText(group.cidade), userId(group.user), userEmail(group.user)],
-		);
-		const currentLoad = Number(loadResult.rows[0]?.total || 0);
-		replenished += await autoClaimCity(
-			group.cidade,
-			group.user,
-			currentLoad + group.count,
-		);
+	for (const cidade of cities.values()) {
+		const balance = await rebalanceCityAssignments(cidade, { force: false });
+		replenished += balance.assigned;
 	}
 	return replenished;
 }
@@ -723,67 +761,126 @@ async function ensureTechnicianCanUseCity(cidade, user = {}) {
 	return Boolean(result.rowCount);
 }
 
-async function autoClaimCity(cidade, user = {}, limit = 60) {
+async function rebalanceCityAssignments(cidade, { force = false } = {}) {
+	const normalizedCity = normalizeText(cidade);
+	if (!normalizedCity) return { assigned: 0, released: 0, technicians: 0 };
 	const client = await db.connect();
 	try {
 		await client.query("begin");
-		const result = await client.query(
-			`with current_load as (
-				select count(*)::int as total
-				  from tentativas_assignments a
-				  join tentativas_opportunities o on o.id = a.opportunity_id
-				 where a.released_at is null
-				   and o.active = true
-				   and coalesce(o.telefone_digits, '') ~ $6
-				   and o.cidade_normalizada = $1
-				   and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
-				   and o.status not in (
-				     'SCHEDULED', 'COMPLETED', 'CANCELLED', 'REFUSED',
-				     'INVALID_PHONE', 'ALREADY_RETURNED', 'EQUIPMENT_UNAVAILABLE'
-				   )
-			), selected as (
-				select o.id, o.cidade
-				  from tentativas_opportunities o
-				 where o.active = true
-				   and coalesce(o.telefone_digits, '') ~ $6
-				   and o.cidade_normalizada = $1
-				   and o.status not in (
-				     'SCHEDULED', 'COMPLETED', 'CANCELLED', 'REFUSED',
-				     'INVALID_PHONE', 'ALREADY_RETURNED', 'EQUIPMENT_UNAVAILABLE'
-				   )
-				   and not exists (
-				     select 1 from tentativas_assignments a
-				      where a.opportunity_id = o.id and a.released_at is null
-				   )
-				 order by o.os_opened_at desc nulls last, o.priority_score desc, o.created_at desc
-				 limit greatest($5 - (select total from current_load), 0)
-			)
-			insert into tentativas_assignments (
-				id, opportunity_id, technician_user_id, technician_email,
-				technician_name, cidade, assigned_by
-			)
-			select 'ta_' || encode(gen_random_bytes(12), 'hex'),
-			       selected.id, $2, $3, $4, selected.cidade, $2
-			  from selected
-			on conflict do nothing
-			returning id`,
-			[
-				normalizeText(cidade),
-				userId(user),
-				userEmail(user),
-				userName(user),
-				limit,
-				VALID_PHONE_DIGITS_REGEX,
-			],
+		await client.query("select pg_advisory_xact_lock(hashtext($1))", [
+			`tentativas:${normalizedCity}`,
+		]);
+		const techniciansResult = await client.query(
+			`select distinct on (coalesce(nullif(c.user_id, ''), lower(c.user_email)))
+			        coalesce(nullif(c.user_id, ''), u.uid) as user_id,
+			        lower(coalesce(nullif(c.user_email, ''), u.email)) as user_email,
+			        coalesce(nullif(c.user_name, ''), u.display_name, u.email) as user_name
+			   from tentativas_technician_cities c
+			   join app_users u
+			     on u.uid = c.user_id
+			     or lower(u.email) = lower(coalesce(c.user_email, ''))
+			  where c.active = true
+			    and c.cidade_normalizada = $1
+			    and (c.permanent = true or current_date between coalesce(c.valid_from, current_date) and coalesce(c.valid_until, current_date))
+			    and lower(coalesce(u.role, '')) = 'tecnico'
+			    and u.disabled = false
+			  order by coalesce(nullif(c.user_id, ''), lower(c.user_email)), c.updated_at desc`,
+			[normalizedCity],
 		);
+		const technicians = techniciansResult.rows;
+		const releaseResult = await client.query(
+			`update tentativas_assignments a
+			    set released_at = now(),
+			        release_reason = case
+			          when $3::boolean and o.attempt_count = 0 and o.status in ('PENDING','CONTACT_STARTED') then 'CARTEIRA_REBALANCEADA'
+			          else 'CARTEIRA_INVALIDA_OU_FINALIZADA'
+			        end,
+			        updated_at = now()
+			   from tentativas_opportunities o
+			  where a.opportunity_id = o.id
+			    and a.released_at is null
+			    and o.cidade_normalizada = $1
+			    and (
+			      o.active = false
+			      or coalesce(o.telefone_digits, '') !~ $2
+			      or o.status in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
+			      or not exists (
+			        select 1
+			          from tentativas_technician_cities c
+			          join app_users u
+			            on u.uid = c.user_id
+			            or lower(u.email) = lower(coalesce(c.user_email, ''))
+			         where c.active = true
+			           and c.cidade_normalizada = $1
+			           and lower(coalesce(u.role, '')) = 'tecnico'
+			           and u.disabled = false
+			           and (c.user_id = a.technician_user_id or lower(coalesce(c.user_email, '')) = lower(coalesce(a.technician_email, '')))
+			      )
+			      or ($3::boolean and o.attempt_count = 0 and o.status in ('PENDING','CONTACT_STARTED'))
+			    )`,
+			[normalizedCity, VALID_PHONE_DIGITS_REGEX, force],
+		);
+		if (!technicians.length) {
+			await client.query("commit");
+			return { assigned: 0, released: releaseResult.rowCount, technicians: 0 };
+		}
+		const loadsResult = await client.query(
+			`select a.technician_user_id, lower(coalesce(a.technician_email, '')) as technician_email, count(*)::int as total
+			   from tentativas_assignments a
+			   join tentativas_opportunities o on o.id = a.opportunity_id
+			  where a.released_at is null and o.active = true and o.cidade_normalizada = $1
+			  group by a.technician_user_id, lower(coalesce(a.technician_email, ''))`,
+			[normalizedCity],
+		);
+		const candidatesResult = await client.query(
+			`select o.id as opportunity_id, o.cidade
+			   from tentativas_opportunities o
+			  where o.active = true
+			    and o.cidade_normalizada = $1
+			    and coalesce(o.telefone_digits, '') ~ $2
+			    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
+			    and not exists (
+			      select 1 from tentativas_assignments a
+			       where a.opportunity_id = o.id and a.released_at is null
+			    )
+			  order by o.os_opened_at desc nulls last, o.priority_score desc, o.created_at desc`,
+			[normalizedCity, VALID_PHONE_DIGITS_REGEX],
+		);
+		const assignments = buildBalancedAssignmentPlan(
+			candidatesResult.rows,
+			technicians,
+			loadsResult.rows,
+		);
+		let assigned = 0;
+		if (assignments.length) {
+			const insertResult = await client.query(
+				`insert into tentativas_assignments (
+					id, opportunity_id, technician_user_id, technician_email,
+					technician_name, cidade, assigned_by
+				)
+				select 'ta_' || encode(gen_random_bytes(12), 'hex'),
+				       item.opportunity_id, item.user_id, item.email, item.name, item.cidade, 'DISTRIBUICAO_AUTOMATICA'
+				  from jsonb_to_recordset($1::jsonb) as item(
+				    opportunity_id text, user_id text, email text, name text, cidade text
+				  )
+				on conflict do nothing`,
+				[JSON.stringify(assignments)],
+			);
+			assigned = insertResult.rowCount;
+		}
 		await client.query("commit");
-		return result.rowCount;
+		return { assigned, released: releaseResult.rowCount, technicians: technicians.length };
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
 		throw error;
 	} finally {
 		client.release();
 	}
+}
+
+async function autoClaimCity(cidade) {
+	const result = await rebalanceCityAssignments(cidade, { force: false });
+	return result.assigned;
 }
 
 function mapOpportunity(row = {}) {
@@ -830,14 +927,14 @@ async function getMyRoute(query = {}, user = {}) {
 		error.statusCode = 403;
 		throw error;
 	}
-	await autoClaimCity(cidade, user, normalizeLimit(query.claimLimit, 50, 150));
+	await autoClaimCity(cidade);
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 30, 100);
 	const latitude = Number(query.latitude);
 	const longitude = Number(query.longitude);
 	const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
 	const search = text(query.q || query.search);
-	const bairro = normalizeText(query.bairro);
+	const bairro = normalizeNeighborhoodGroup(query.bairro);
 	const priority = text(query.priority).toUpperCase();
 	const statusFilter = text(query.status).toUpperCase();
 	const sort = text(query.sort).toLowerCase();
@@ -861,11 +958,11 @@ async function getMyRoute(query = {}, user = {}) {
 		  where o.active = true
 		    and coalesce(o.telefone_digits, '') ~ $7
 		    and o.cidade_normalizada = $1
-		    and (a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
+		    and ($14::boolean = true or a.technician_user_id = $2 or lower(coalesce(a.technician_email, '')) = $3)
 		    and (
 		      $4::text = ''
 		      or ($4 = '__sem_bairro__' and nullif(trim(o.bairro),'') is null)
-		      or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')) = $4
+		      or ${neighborhoodGroupExpression("o")} = $4
 		    )
 		    and ($5::text = '' or o.priority = $5)
 		    and ($6::text = '' or o.status = $6)
@@ -886,6 +983,7 @@ async function getMyRoute(query = {}, user = {}) {
 			search,
 			limit,
 			(page - 1) * limit,
+			hasAdminAccess(user),
 		],
 	);
 	const items = result.rows.map((row) => ({
@@ -922,7 +1020,12 @@ async function listNeighborhoods(query = {}, user = {}) {
 	const longitude = Number(query.longitude);
 	const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
 	const result = await db.query(
-		`select coalesce(nullif(trim(o.bairro),''),'Bairro nao informado') as bairro,
+		`select coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__') as group_key,
+		        coalesce(min(nullif(trim(o.bairro),'')), 'Bairro nao informado') as bairro,
+		        coalesce(
+		          array_agg(distinct trim(o.bairro) order by trim(o.bairro)) filter (where nullif(trim(o.bairro), '') is not null),
+		          array[]::text[]
+		        ) as original_values,
 		        count(*)::int as opportunities,
 		        count(*) filter (where o.attempt_count=0)::int as pending,
 		        avg(o.latitude)::double precision as latitude,
@@ -938,7 +1041,7 @@ async function listNeighborhoods(query = {}, user = {}) {
 		   join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
 		  where o.active=true and o.cidade_normalizada=$1
 		    and ($5::boolean=true or a.technician_user_id=$6 or lower(coalesce(a.technician_email,''))=$7)
-		  group by coalesce(nullif(trim(o.bairro),''),'Bairro nao informado')
+		  group by coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
 		  order by distance_km asc nulls last, opportunities desc, bairro asc`,
 		[normalizeText(cidade), hasCoordinates ? latitude : null, hasCoordinates ? longitude : null, hasCoordinates, hasAdminAccess(user), userId(user), userEmail(user)],
 	);
@@ -946,7 +1049,9 @@ async function listNeighborhoods(query = {}, user = {}) {
 		city: cidade,
 		locationApplied: hasCoordinates,
 		items: result.rows.map((row) => ({
+			groupKey: row.group_key,
 			bairro: row.bairro,
+			originalValues: row.original_values || [],
 			opportunities: Number(row.opportunities || 0),
 			pending: Number(row.pending || 0),
 			latitude: row.latitude == null ? null : Number(row.latitude),
@@ -1596,6 +1701,20 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 		error.statusCode = 400;
 		throw error;
 	}
+	const technicianResult = await db.query(
+		`select uid, email, display_name, role
+		   from app_users
+		  where disabled = false
+		    and (uid = $1 or lower(email) = $2)
+		  limit 1`,
+		[text(payload.userId), text(payload.userEmail).toLowerCase()],
+	);
+	const technician = technicianResult.rows[0];
+	if (!technician || normalizeText(technician.role) !== "tecnico") {
+		const error = new Error("Apenas usuarios com o cargo Tecnico podem possuir carteira de cidade.");
+		error.statusCode = 400;
+		throw error;
+	}
 	const result = await db.query(
 		`insert into tentativas_technician_cities (
 			id, user_id, user_email, user_name, cidade, cidade_normalizada,
@@ -1605,9 +1724,9 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 		returning *`,
 		[
 			id("ttc"),
-			text(payload.userId),
-			text(payload.userEmail).toLowerCase(),
-			text(payload.userName),
+			technician.uid,
+			text(technician.email).toLowerCase(),
+			text(technician.display_name || technician.email),
 			city,
 			normalizeText(city),
 			payload.validFrom || null,
@@ -1617,24 +1736,19 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 		],
 	);
 	const association = result.rows[0] || null;
-	const assigned = await autoClaimCity(
-		city,
-		{
-			uid: text(payload.userId),
-			email: text(payload.userEmail).toLowerCase(),
-			nome: text(payload.userName),
-		},
-		50,
-	);
+	const balance = await rebalanceCityAssignments(city, { force: true });
 	await recordAudit("city.assign", city, user, payload);
-	return { ...(association || { ok: true }), assigned };
+	return { ...(association || { ok: true }), assigned: balance.assigned, balance };
 }
 
 async function removeTechnicianCity(idValue, user = {}) {
-	await db.query(
-		"update tentativas_technician_cities set active = false, updated_at = now() where id = $1",
+	const result = await db.query(
+		"update tentativas_technician_cities set active = false, updated_at = now() where id = $1 returning cidade",
 		[idValue],
 	);
+	if (result.rows[0]?.cidade) {
+		await rebalanceCityAssignments(result.rows[0].cidade, { force: true });
+	}
 	await recordAudit("city.remove", idValue, user, { active: false });
 	return { ok: true };
 }
@@ -1656,6 +1770,7 @@ async function searchUsers(query = {}) {
 		`select uid, email, display_name, role, regional
 		   from app_users
 		  where disabled = false
+		    and lower(coalesce(role, '')) = 'tecnico'
 		    and (
 		      uid ilike $1
 		      or email ilike $1
@@ -1845,12 +1960,14 @@ async function exportCsv(query = {}, user = {}) {
 
 module.exports = {
 	__testables: {
+		buildBalancedAssignmentPlan,
 		buildWhatsappUrls,
 		buildOpportunityResultUpdate,
 		routeOrderBy,
 		firstName,
 		firstValidPhone,
 		formatCustomerIdentification,
+		normalizeNeighborhoodGroup,
 		normalizePhone,
 		renderTemplate,
 	},

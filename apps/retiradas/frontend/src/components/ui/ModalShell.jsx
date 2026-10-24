@@ -139,7 +139,7 @@ export default function ModalShell({
 
 	return (
 		<div
-			className={`fixed inset-0 z-layout-modal flex items-center justify-center p-3 sm:p-4 ${className}`}
+			className={`fixed inset-0 z-layout-modal flex items-end justify-center p-0 sm:items-center sm:p-4 ${className}`}
 			role="presentation"
 		>
 			<button
@@ -154,7 +154,7 @@ export default function ModalShell({
 				aria-modal="true"
 				aria-label={title || closeLabel}
 				tabIndex={-1}
-				className={`relative flex max-h-[90dvh] w-full ${SIZE_CLASSES[size] || SIZE_CLASSES["3xl"]} flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-3xl ${contentClassName}`}
+				className={`relative flex max-h-[calc(100dvh-env(safe-area-inset-top)-0.5rem)] w-full ${SIZE_CLASSES[size] || SIZE_CLASSES["3xl"]} flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:max-h-[90dvh] sm:rounded-3xl ${contentClassName}`}
 			>
 				{title || description || icon || showClose ? (
 					<header
@@ -194,7 +194,7 @@ export default function ModalShell({
 
 				{footer ? (
 					<footer
-						className={`shrink-0 border-t border-slate-100 px-4 py-4 sm:px-6 ${footerClassName}`}
+						className={`shrink-0 border-t border-slate-100 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 [&>div]:min-w-0 [&>div]:flex-wrap [&_button]:min-h-11 ${footerClassName}`}
 					>
 						{footer}
 					</footer>

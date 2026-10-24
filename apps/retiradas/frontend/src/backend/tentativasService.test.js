@@ -107,5 +107,11 @@ describe("tentativasService helpers", () => {
 			/^o\.os_opened_at asc/,
 		);
 	});
+
+	it("agrupa variacoes visuais do mesmo bairro sem alterar a origem", () => {
+		expect(__testables.normalizeNeighborhoodGroup("Bairro São Jorge")).toBe("sao jorge");
+		expect(__testables.normalizeNeighborhoodGroup("Residencial Sao   Jorge")).toBe("sao jorge");
+		expect(__testables.normalizeNeighborhoodGroup("São Jorge")).toBe("sao jorge");
+	});
 });
 

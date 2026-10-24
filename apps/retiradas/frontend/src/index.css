@@ -147,7 +147,7 @@
   }
 }
 
-@media (max-width: 900px), (pointer: coarse) {
+@media (max-width: 900px) {
   #root {
     width: 100%;
     min-width: 0;
@@ -224,9 +224,10 @@
 
   .retiradas-native-page {
     width: 100%;
-    max-width: 430px;
-    margin-inline: auto;
-    padding-inline: 0.125rem;
+    max-width: 100%;
+    min-width: 0;
+    margin-inline: 0;
+    padding-inline: 0;
   }
 
   .retiradas-native-card {

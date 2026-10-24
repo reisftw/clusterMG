@@ -1,31 +1,25 @@
 import {
-	AlertTriangle,
 	CalendarClock,
 	CheckCircle2,
 	Clock3,
-	Download,
 	FileUp,
 	PackageCheck,
 	RefreshCw,
 	Search,
 	ShieldCheck,
-	TrendingUp,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Spinner from "../../../components/ui/Spinner";
 import {
 	atualizarRecuperacaoTentativas,
 	atualizarRetornoTentativas,
-	baixarAnalyticsTentativasCsv,
-	buscarAnalyticsTentativas,
 	buscarAuditoriaTentativas,
-	buscarInteligenciaTentativas,
 	buscarMinhaProdutividadeTentativas,
 	enviarEvidenciaRecuperacaoTentativas,
 	listarRecuperacoesTentativas,
 	listarRetornosTentativas,
-	recalcularPrioridadesTentativas,
 } from "../services/tentativasService";
+import TentativasManagementDashboard from "./TentativasManagementDashboard";
 
 const RECOVERY_STATUS = {
 	AWAITING_DEFINITION: "Aguardando definição",
@@ -115,6 +109,40 @@ export function CallbacksPanel({ period = "all", title = "Retornos agendados" })
 			setBusy("");
 		}
 	};
+	const groupedItems = useMemo(() => {
+		const now = new Date();
+		const todayKey = new Intl.DateTimeFormat("en-CA", {
+			timeZone: "America/Sao_Paulo",
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+		}).format(now);
+		const groups = { overdue: [], today: [], upcoming: [], finished: [] };
+		for (const item of data.items || []) {
+			if (item.status !== "PENDING") {
+				groups.finished.push(item);
+				continue;
+			}
+			const scheduled = new Date(item.scheduled_at);
+			const key = Number.isNaN(scheduled.getTime())
+				? ""
+				: new Intl.DateTimeFormat("en-CA", {
+						timeZone: "America/Sao_Paulo",
+						year: "numeric",
+						month: "2-digit",
+						day: "2-digit",
+					}).format(scheduled);
+			if (scheduled < now) groups.overdue.push(item);
+			else if (key === todayKey) groups.today.push(item);
+			else groups.upcoming.push(item);
+		}
+		return [
+			["overdue", "Atrasados", groups.overdue, "text-red-700"],
+			["today", "Hoje", groups.today, "text-amber-700"],
+			["upcoming", "Próximos", groups.upcoming, "text-blue-700"],
+			["finished", "Finalizados", groups.finished, "text-slate-600"],
+		].filter(([, , items]) => items.length);
+	}, [data.items]);
 	return (
 		<section className="space-y-4">
 			<div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -129,11 +157,15 @@ export function CallbacksPanel({ period = "all", title = "Retornos agendados" })
 			</div>
 			<Feedback>{error}</Feedback>
 			{loading && !data.items.length ? <Spinner /> : null}
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-				{data.items.map((item) => {
-					const overdue = item.status === "PENDING" && new Date(item.scheduled_at) < new Date();
-					return (
-						<article key={item.id} className={`rounded-2xl border bg-white p-4 shadow-sm ${overdue ? "border-red-200" : "border-slate-200"}`}>
+			<div className="space-y-5">
+				{groupedItems.map(([groupKey, groupLabel, items, color]) => (
+					<section key={groupKey}>
+						<div className="mb-2 flex items-center gap-2"><h3 className={`font-black ${color}`}>{groupLabel}</h3><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-black text-slate-600">{items.length}</span></div>
+						<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+						{items.map((item) => {
+							const overdue = groupKey === "overdue";
+							return (
+						<article key={item.id} className={`min-w-0 rounded-2xl border bg-white p-4 shadow-sm ${overdue ? "border-red-200" : "border-slate-200"}`}>
 							<div className="flex items-start justify-between gap-3">
 								<div>
 									<strong className="block text-slate-950">{item.cliente || "Cliente"}</strong>
@@ -153,8 +185,11 @@ export function CallbacksPanel({ period = "all", title = "Retornos agendados" })
 								</div>
 							) : null}
 						</article>
-					);
-				})}
+							);
+						})}
+						</div>
+					</section>
+				))}
 			</div>
 			{!loading && !data.items.length ? <Empty>Nenhum retorno neste período.</Empty> : null}
 		</section>
@@ -281,70 +316,8 @@ export function ProductivityPanel() {
 	);
 }
 
-function Metric({ label, value, accent = "blue" }) {
-	const colors = accent === "emerald" ? "bg-emerald-50 text-emerald-700" : accent === "amber" ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700";
-	return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><span className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">{label}</span><strong className={`mt-3 block w-fit rounded-xl px-3 py-1 text-2xl font-black ${colors}`}>{value}</strong></div>;
-}
-
 export function ManagementPanel() {
-	const [filters, setFilters] = useState({ startDate: todayMinus(29), endDate: new Date().toISOString().slice(0, 10), empresa: "", regional: "", cidade: "", bairro: "", tecnicoId: "", statusOs: "", resultado: "", modalidade: "", tipoEquipamento: "" });
-	const [appliedFilters, setAppliedFilters] = useState(filters);
-	const [data, setData] = useState(null);
-	const [intelligence, setIntelligence] = useState({ alerts: [] });
-	const [loading, setLoading] = useState(true);
-	const [message, setMessage] = useState("");
-	const load = useCallback(async () => {
-		setLoading(true);
-		try {
-			const [analytics, rules] = await Promise.all([buscarAnalyticsTentativas(appliedFilters), buscarInteligenciaTentativas(appliedFilters)]);
-			setData(analytics); setIntelligence(rules);
-		} finally { setLoading(false); }
-	}, [appliedFilters]);
-	useEffect(() => { void load(); }, [load]);
-	const indicators = data?.indicators || {};
-	const metrics = [
-		["Clientes elegíveis", indicators.eligible], ["Distribuídos", indicators.distributed], ["Trabalhados", indicators.worked],
-		["Sem tentativa", indicators.withoutAttempt], ["Tentativas", indicators.attempts], ["Contatos efetivos", indicators.effective_contacts],
-		["Retornos vencidos", indicators.overdue_callbacks], ["Agendamentos", indicators.scheduled], ["Equipamentos recuperados", indicators.recovered_equipment],
-	];
-	return (
-		<section className="space-y-4">
-			<div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-				<div><p className="text-xs font-black uppercase tracking-[0.14em] text-blue-700">Gestão de Tentativas</p><h2 className="text-2xl font-black text-slate-950">Central de recuperação</h2><p className="text-sm font-semibold text-slate-500">Atividade, resultado e conversão permanecem separados.</p></div>
-				<div className="flex flex-wrap gap-2">
-					<input type="date" value={filters.startDate} onChange={(e) => setFilters((current) => ({ ...current, startDate: e.target.value }))} className="min-h-11 rounded-xl border border-slate-200 px-3 font-bold" />
-					<input type="date" value={filters.endDate} onChange={(e) => setFilters((current) => ({ ...current, endDate: e.target.value }))} className="min-h-11 rounded-xl border border-slate-200 px-3 font-bold" />
-					<button type="button" onClick={() => setAppliedFilters({ ...filters })} className="min-h-11 rounded-xl bg-blue-600 px-4 font-black text-white">Aplicar</button>
-					<button type="button" onClick={() => baixarAnalyticsTentativasCsv(appliedFilters)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 font-black text-slate-700"><Download className="h-4 w-4" /> CSV</button>
-				</div>
-			</div>
-			<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-				{["empresa", "regional", "cidade", "bairro", "tecnicoId", "tipoEquipamento"].map((key) => <input key={key} value={filters[key]} onChange={(e) => setFilters((current) => ({ ...current, [key]: e.target.value }))} placeholder={key === "tecnicoId" ? "ID do técnico" : key === "tipoEquipamento" ? "Tipo de equipamento" : key[0].toUpperCase() + key.slice(1)} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 font-semibold" />)}
-				<select value={filters.statusOs} onChange={(e) => setFilters((current) => ({ ...current, statusOs: e.target.value }))} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 font-semibold"><option value="">Todos os status da OS</option><option value="PENDING">Pendente</option><option value="CONTACT_STARTED">Contato iniciado</option><option value="SCHEDULED">Agendada</option><option value="COMPLETED">Concluída</option></select>
-				<select value={filters.resultado} onChange={(e) => setFilters((current) => ({ ...current, resultado: e.target.value }))} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 font-semibold"><option value="">Todos os resultados</option><option value="NO_RESPONSE">Sem resposta</option><option value="RESPONDED_SCHEDULE">Deseja agendar</option><option value="STORE_DELIVERY">Devolverá na loja</option><option value="RESPONDED_CALLBACK">Pediu retorno</option><option value="REFUSED">Recusou</option><option value="INVALID_PHONE">Número inválido</option></select>
-				<select value={filters.modalidade} onChange={(e) => setFilters((current) => ({ ...current, modalidade: e.target.value }))} className="min-h-11 rounded-xl border border-slate-200 bg-white px-3 font-semibold"><option value="">Todas as modalidades</option><option value="TECHNICIAN_COLLECTION">Coleta por técnico</option><option value="STORE_DELIVERY">Entrega em loja</option></select>
-			</div>
-			{loading ? <Spinner /> : null}
-			<div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">{metrics.map(([label, value]) => <Metric key={label} label={label} value={formatNumber(value)} />)}</div>
-			<div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-blue-600" /><h3 className="font-black text-slate-950">Evolução diária</h3></div>
-					<div className="mt-5 flex min-h-52 items-end gap-1 overflow-x-auto border-b border-slate-200 pb-2">
-						{(data?.daily || []).map((item) => {
-							const max = Math.max(...(data?.daily || []).map((row) => Number(row.attempts || 0)), 1);
-							return <div key={item.day} className="flex min-w-8 flex-1 flex-col items-center gap-1" title={`${item.day}: ${item.attempts} tentativas`}><span className="text-[10px] font-bold text-slate-500">{item.attempts}</span><div className="w-full max-w-7 rounded-t bg-blue-500" style={{ height: `${Math.max((Number(item.attempts || 0) / max) * 150, 2)}px` }} /><span className="text-[9px] text-slate-400">{String(item.day).slice(8, 10)}</span></div>;
-						})}
-					</div>
-				</div>
-				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-500" /><h3 className="font-black text-slate-950">Alertas operacionais</h3></div><button type="button" title="Recalcular prioridades" onClick={async () => { const result = await recalcularPrioridadesTentativas(); setMessage(`${result.updated} prioridades recalculadas.`); await load(); }} className="rounded-lg border border-slate-200 p-2 text-slate-600"><RefreshCw className="h-4 w-4" /></button></div>
-					<Feedback type="success">{message}</Feedback>
-					<div className="mt-3 space-y-2">{(intelligence.alerts || []).map((alert) => <div key={alert.type} className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800"><strong>{formatNumber(alert.value)}</strong> · {alert.message}</div>)}{!intelligence.alerts?.length ? <p className="text-sm font-semibold text-slate-500">Nenhum limite gerencial excedido.</p> : null}</div>
-				</div>
-			</div>
-			<div className="grid gap-3 sm:grid-cols-3"><Metric label="Contato efetivo" value={`${indicators.effectiveContactRate || 0}%`} accent="emerald" /><Metric label="Agendamento / contato" value={`${indicators.scheduleRate || 0}%`} accent="amber" /><Metric label="Recuperação / trabalhados" value={`${indicators.recoveryRate || 0}%`} accent="emerald" /></div>
-		</section>
-	);
+	return <TentativasManagementDashboard />;
 }
 
 export function AuditPanel() {

@@ -10,6 +10,7 @@ import {
 	MapPin,
 	PackageCheck,
 	Phone,
+	MoreHorizontal,
 	RefreshCw,
 	Route,
 	Save,
@@ -33,11 +34,8 @@ import {
 	buscarDistribuicaoTentativas,
 	buscarHistoricoTentativas,
 	buscarMinhaRotaTentativas,
-	buscarRankingTentativas,
-	buscarResumoTentativas,
 	buscarTimelineTentativa,
 	buscarUsuariosTentativas,
-	criarCampanhaTentativas,
 	criarRetornoTentativa,
 	corrigirContatoTentativa,
 	iniciarContatoTentativa,
@@ -89,6 +87,15 @@ const OPERATIONAL_TABS = [
 	["productivity", "Produtividade", TrendingUp],
 	["history", "Histórico", History],
 ];
+const MOBILE_OPERATION_TABS = [
+	["route", "Carteira", Route],
+	["next", "Contatos", MessageCircle],
+	["appointments", "Agenda", CalendarClock],
+	["callbacks", "Retornos", RefreshCw],
+];
+const MOBILE_MORE_TABS = OPERATIONAL_TABS.filter(([key]) =>
+	["recoveries", "productivity", "history"].includes(key),
+);
 const ADMIN_TAB_KEYS = new Set(ADMIN_TABS.map(([key]) => key));
 const ALL_TAB_KEYS = new Set([...OPERATIONAL_TABS, ...ADMIN_TABS].map(([key]) => key));
 const CITY_PAGE_SIZE = 8;
@@ -153,20 +160,6 @@ function canManage(user) {
 		hasPermission(user, "tentativas.distribuir") ||
 		hasPermission(user, "tentativas.templates.gerenciar") ||
 		hasPermission(user, "tentativas.configuracoes.gerenciar")
-	);
-}
-
-function Kpi({ title, value, helper }) {
-	return (
-		<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-			<p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-				{title}
-			</p>
-			<strong className="mt-2 block text-3xl font-black text-slate-950">
-				{value}
-			</strong>
-			{helper ? <p className="mt-1 text-sm font-semibold text-slate-500">{helper}</p> : null}
-		</div>
 	);
 }
 
@@ -242,32 +235,33 @@ function CityDropdown({
 		setPage(1);
 	};
 	return (
-		<section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-			<div className="flex flex-col gap-1">
-				<p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">
-					{label}
-				</p>
-				<p className="text-sm font-semibold text-slate-500">{helper}</p>
-			</div>
+		<section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+			<p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">{label}</p>
 			<button
 				type="button"
-				onClick={() => setOpen((current) => !current)}
-				className="mt-3 flex min-h-16 w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-left transition hover:border-blue-300"
+				onClick={() => setOpen(true)}
+				className="mt-2 flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 text-left transition hover:border-blue-300 sm:px-4"
 			>
-				<span>
-					<strong className="block text-lg font-black text-slate-950">
+				<span className="min-w-0">
+					<strong className="block truncate text-base font-black text-slate-950 sm:text-lg">
 						{selectedCity?.cidade || value || "Selecionar cidade"}
 					</strong>
-					<span className="text-sm font-bold text-slate-500">
+					<span className="block truncate text-xs font-bold text-slate-500 sm:text-sm">
 						{selectedCity
 							? `${formatNumber(selectedCity.total)} clientes disponíveis`
 							: `${formatNumber(cities.length)} cidades disponíveis`}
 					</span>
 				</span>
-				<ChevronDown className={`h-5 w-5 text-slate-500 transition ${open ? "rotate-180" : ""}`} />
+				<ChevronDown className="h-5 w-5 shrink-0 text-slate-500" />
 			</button>
+			<p className="mt-2 hidden text-sm font-semibold text-slate-500 sm:block">{helper}</p>
 			{open ? (
-				<div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+				<ModalShell
+					title="Selecionar cidade"
+					description={helper}
+					size="md"
+					onClose={() => setOpen(false)}
+				>
 					<label className="flex min-h-12 items-center gap-2 rounded-xl border border-slate-200 px-3">
 						<Search className="h-4 w-4 text-slate-400" />
 						<input
@@ -316,7 +310,47 @@ function CityDropdown({
 							onPageChange={setPage}
 						/>
 					</div>
+				</ModalShell>
+			) : null}
+		</section>
+	);
+}
+
+function NeighborhoodDropdown({ items = [], value = "", onChange, onUseLocation, hasLocation }) {
+	const [open, setOpen] = useState(false);
+	const selected = items.find((item) => {
+		const itemValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.groupKey || item.bairro;
+		return itemValue === value;
+	});
+	const choose = (nextValue) => {
+		onChange?.(nextValue);
+		setOpen(false);
+	};
+	return (
+		<section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+			<div className="flex items-center justify-between gap-3">
+				<div className="min-w-0">
+					<p className="text-xs font-black uppercase tracking-[0.14em] text-blue-700">Bairro e proximidade</p>
+					<p className="mt-1 truncate text-sm font-bold text-slate-600">{selected?.bairro || "Todos os bairros"}</p>
 				</div>
+				<button type="button" onClick={() => setOpen(true)} className="min-h-11 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700">Escolher</button>
+			</div>
+			{open ? (
+				<ModalShell title="Selecionar bairro" description="Bairros equivalentes aparecem agrupados sem alterar os dados originais." size="md" onClose={() => setOpen(false)}>
+					<div className="grid gap-2">
+						<button type="button" onClick={() => choose("")} className={`min-h-12 rounded-xl border px-4 text-left font-black ${!value ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}>Todos os bairros</button>
+						{items.map((item) => {
+							const itemValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.groupKey || item.bairro;
+							return (
+								<button type="button" key={itemValue} onClick={() => choose(itemValue)} className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 text-left ${value === itemValue ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}>
+									<span className="min-w-0"><strong className="block truncate text-slate-950">{item.bairro}</strong><span className="text-xs font-bold text-slate-500">{formatNumber(item.opportunities)} oportunidade(s){item.originalValues?.length > 1 ? ` · ${item.originalValues.length} variações agrupadas` : ""}</span></span>
+									{item.distanceKm != null ? <span className="shrink-0 text-xs font-black text-emerald-700">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
+								</button>
+							);
+						})}
+					</div>
+					<button type="button" onClick={() => { onUseLocation?.(); setOpen(false); }} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-black text-white"><MapPin className="h-4 w-4" />{hasLocation ? "Atualizar minha localização" : "Usar minha localização"}</button>
+				</ModalShell>
 			) : null}
 		</section>
 	);
@@ -827,29 +861,15 @@ function MyRoute() {
 				helper="Abra a lista somente quando precisar trocar a cidade. A rota mostra apenas O.S de retirada."
 			/>
 
-			<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-				<div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-					<div>
-						<p className="text-xs font-black uppercase tracking-[0.14em] text-blue-700">Bairro e proximidade</p>
-						<p className="mt-1 text-sm font-semibold text-slate-500">Escolha uma localidade ou permita sua posição para ordenar pelas oportunidades mais próximas.</p>
-					</div>
-					<button type="button" onClick={requestLocation} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-black text-blue-700">
-						<MapPin className="h-4 w-4" /> {position ? "Localização atualizada" : "Usar minha localização"}
-					</button>
-				</div>
-				<div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-					<button type="button" onClick={() => setNeighborhood("")} className={`min-h-11 shrink-0 rounded-xl px-4 text-sm font-black ${!neighborhood ? "bg-blue-600 text-white" : "border border-slate-200 text-slate-600"}`}>Todos os bairros</button>
-					{localities.map((item) => {
-						const neighborhoodValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.bairro;
-						return <button type="button" key={item.bairro} onClick={() => { setNeighborhood(neighborhoodValue); setPage(1); }} className={`min-h-11 shrink-0 rounded-xl px-4 text-left text-sm font-black ${neighborhood === neighborhoodValue ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-700"}`}>
-							{item.bairro} · {formatNumber(item.opportunities)}
-							{item.distanceKm != null ? <span className="ml-2 opacity-75">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
-						</button>;
-					})}
-				</div>
-			</section>
+			<NeighborhoodDropdown
+				items={localities}
+				value={neighborhood}
+				onChange={(value) => { setNeighborhood(value); setPage(1); }}
+				onUseLocation={requestLocation}
+				hasLocation={Boolean(position)}
+			/>
 
-			<section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+			<section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-3xl sm:p-4">
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Minha Rota</p>
@@ -880,16 +900,12 @@ function MyRoute() {
 				</div>
 				<div className="mt-4 grid gap-3">
 					{(routeData?.items || []).map((item) => (
-						<article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-								<div>
-									<h3 className="text-lg font-black text-slate-950">{item.cliente || "Cliente sem nome"}</h3>
-									<p className="mt-1 text-sm font-bold text-slate-500">
-										({item.codigoCliente}) · OS {item.os} · {item.bairro || "Bairro não informado"} · {item.cidade}
-									</p>
-									<p className="mt-2 text-sm font-bold text-slate-600">
-										{formatNumber(item.equipmentCount)} equipamento(s) · Aberta há {formatNumber(item.osAgeDays)} dias · Tentativas: {formatNumber(item.attemptCount)}
-									</p>
+						<article key={item.id} className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+							<div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+								<div className="min-w-0">
+									<h3 className="truncate text-base font-black text-slate-950 sm:text-lg">{item.cliente || "Cliente sem nome"}</h3>
+									<p className="mt-1 truncate text-sm font-bold text-slate-500">({item.codigoCliente}) · {item.bairro || "Bairro não informado"} · {item.cidade}</p>
+									<p className="mt-2 text-sm font-bold text-slate-600">Aberta há {formatNumber(item.osAgeDays)} dias · {formatNumber(item.attemptCount)} tentativa(s)</p>
 									<div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-black">
 										<span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{item.priority} · score {item.priorityScore}</span>
 										{item.distanceKm != null ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700"><MapPin className="mr-1 inline h-3 w-3" />{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
@@ -901,30 +917,30 @@ function MyRoute() {
 										</p>
 									) : null}
 								</div>
-								<div className="grid grid-cols-2 gap-2 sm:flex">
-									<button
-										type="button"
-										onClick={() => openDetail(item)}
-										className="min-h-12 rounded-xl border border-slate-200 bg-white px-4 font-black text-slate-700"
-									>
-										Detalhes
-									</button>
-									<button type="button" onClick={() => openDetail(item)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 font-black text-slate-700"><History className="h-4 w-4" /> Histórico</button>
-									<button
-										type="button"
-										onClick={() => { setScheduleItem(item); setScheduleError(""); }}
-										className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 font-black text-blue-700"
-									>
-										<CalendarClock className="h-4 w-4" /> Agendar
-									</button>
+								<div className="grid min-w-0 grid-cols-3 gap-2 sm:w-[310px]">
 									<button
 										type="button"
 										onClick={() => contact(item)}
 										disabled={Boolean(contactingId)}
-										className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-black text-white disabled:cursor-wait disabled:opacity-60"
+										className="col-span-3 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 font-black text-white disabled:cursor-wait disabled:opacity-60"
 									>
 										<Phone className="h-4 w-4" />
-										{contactingId === item.id ? "Buscando contato..." : "Contatar"}
+										{contactingId === item.id ? "Buscando contato..." : "Abrir no WhatsApp"}
+									</button>
+									<button
+										type="button"
+										onClick={() => openDetail(item)}
+										className="min-h-11 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-700"
+									>
+										Detalhes
+									</button>
+									<button type="button" onClick={() => openDetail(item)} className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-700"><History className="h-4 w-4" /> Histórico</button>
+									<button
+										type="button"
+										onClick={() => { setScheduleItem(item); setScheduleError(""); }}
+										className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-2 text-xs font-black text-blue-700"
+									>
+										<CalendarClock className="h-4 w-4" /> Agendar
 									</button>
 								</div>
 							</div>
@@ -993,80 +1009,6 @@ function MyRoute() {
 	);
 }
 
-function OverviewTab() {
-	const [data, setData] = useState(null);
-	const [ranking, setRanking] = useState([]);
-	const [loading, setLoading] = useState(true);
-	useEffect(() => {
-		let cancelled = false;
-		async function load() {
-			const [overview, rankingData] = await Promise.all([
-				buscarResumoTentativas(),
-				buscarRankingTentativas(),
-			]);
-			if (cancelled) return;
-			setData(overview);
-			setRanking(rankingData.items || []);
-			setLoading(false);
-		}
-		void load();
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-	if (loading) return <Spinner />;
-	return (
-		<div className="space-y-4">
-			<div className="flex flex-col gap-1 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-				<div>
-					<p className="text-xs font-black uppercase tracking-[0.12em] text-blue-700">Reconciliação automática</p>
-					<p className="text-sm font-bold text-slate-700">Última verificação: {formatDateTime(data.lastReconciliationAt)}</p>
-				</div>
-				<span className="text-xs font-bold text-slate-500">Executada de hora em hora</span>
-			</div>
-			<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				<Kpi title="Oportunidades" value={formatNumber(data.opportunities)} />
-				<Kpi title="Clientes trabalhados" value={formatNumber(data.worked)} helper={`${data.coverage}% cobertura`} />
-				<Kpi title="Tentativas" value={formatNumber(data.attempts)} />
-				<Kpi title="Agendamentos" value={formatNumber(data.scheduled)} helper={`${data.scheduleConversion}% conversão`} />
-			</div>
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-				<h2 className="text-lg font-black text-slate-950">Funil</h2>
-				<div className="mt-4 grid gap-3 sm:grid-cols-5">
-					{(data.funnel || []).map((item) => (
-						<div key={item.label} className="rounded-2xl bg-slate-50 p-4">
-							<p className="text-xs font-black uppercase text-slate-500">{item.label}</p>
-							<strong className="mt-1 block text-2xl font-black text-blue-700">{formatNumber(item.value)}</strong>
-						</div>
-					))}
-				</div>
-			</section>
-			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-				<h2 className="text-lg font-black text-slate-950">Ranking de técnicos</h2>
-				<div className="mt-4 overflow-x-auto">
-					<table className="min-w-full text-left text-sm">
-						<thead className="text-xs uppercase text-slate-500">
-							<tr><th className="p-3">Técnico</th><th>Cobertura</th><th>Tentativas</th><th>Respostas</th><th>Agendamentos</th><th>Retiradas</th></tr>
-						</thead>
-						<tbody>
-							{ranking.map((item) => (
-								<tr key={item.technician_id} className="border-t">
-									<td className="p-3 font-black">{item.technician_name}</td>
-									<td className="font-bold">{item.coverage}%</td>
-									<td>{formatNumber(item.attempts)}</td>
-									<td>{formatNumber(item.responded)}</td>
-									<td>{formatNumber(item.scheduled)}</td>
-									<td>{formatNumber(item.completed)}</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</section>
-		</div>
-	);
-}
-
 function DistributionTab() {
 	const [items, setItems] = useState([]);
 	const [cities, setCities] = useState([]);
@@ -1076,7 +1018,6 @@ function DistributionTab() {
 	const [loading, setLoading] = useState(true);
 	const [message, setMessage] = useState("");
 	const [form, setForm] = useState({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
-	const [campaign, setCampaign] = useState({ name: "", cidade: "", technicianUserId: "", technicianName: "", quantity: 30 });
 	const load = async () => {
 		const [distribution, cityLinks] = await Promise.all([
 			buscarDistribuicaoTentativas(),
@@ -1111,17 +1052,10 @@ function DistributionTab() {
 	}, []);
 	const saveCity = async () => {
 		setMessage("");
-		await salvarCidadeTecnicoTentativas(form);
+		const saved = await salvarCidadeTecnicoTentativas(form);
 		setForm({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
 		await load();
-		setMessage("Cidade associada ao técnico.");
-	};
-	const createCampaign = async () => {
-		setMessage("");
-		const result = await criarCampanhaTentativas(campaign);
-		setCampaign({ name: "", cidade: "", technicianUserId: "", technicianName: "", quantity: 30 });
-		await load();
-		setMessage(`Campanha criada com ${formatNumber(result.quantity)} clientes atribuídos.`);
+		setMessage(`Cidade associada ao técnico. ${formatNumber(saved.balance?.assigned || saved.assigned)} oportunidade(s) distribuída(s) nesta atualização.`);
 	};
 	const associatedSearchTerm = normalizeSearch(associatedSearch);
 	const filteredAssociatedCities = associatedSearchTerm
@@ -1177,7 +1111,7 @@ function DistributionTab() {
 					<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 						<h2 className="text-lg font-black text-slate-950">Associar cidade</h2>
 						<p className="mt-1 text-sm font-semibold text-slate-500">
-							Escolha um usuário cadastrado e uma cidade do mapa.
+							Escolha um usuário com cargo Técnico e uma cidade do mapa. Administradores e BackOffice não recebem carteira.
 						</p>
 						<div className="mt-4 grid gap-3">
 							<UserLookup
@@ -1210,60 +1144,9 @@ function DistributionTab() {
 						</div>
 					</section>
 
-					<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-						<h2 className="text-lg font-black text-slate-950">Criar campanha</h2>
-						<p className="mt-1 text-sm font-semibold text-slate-500">
-							Cria uma lista fechada de contatos para um técnico.
-						</p>
-						<div className="mt-4 grid gap-3">
-							<input
-								className="min-h-12 rounded-2xl border border-slate-200 px-4 font-bold"
-								placeholder="Nome da campanha"
-								value={campaign.name}
-								onChange={(event) => setCampaign((current) => ({ ...current, name: event.target.value }))}
-							/>
-							<UserLookup
-								value={{
-									userId: campaign.technicianUserId,
-									userEmail: "",
-									userName: campaign.technicianName,
-								}}
-								onChange={(user) =>
-									setCampaign((current) => ({
-										...current,
-										technicianUserId: user.userId,
-										technicianName: user.userName,
-									}))
-								}
-							/>
-							<CityDropdown
-								cities={availableCities}
-								value={campaign.cidade}
-								onChange={(cidade) => setCampaign((current) => ({ ...current, cidade }))}
-								label="Cidade da campanha"
-								helper="Deixe em branco somente se quiser usar todas as cidades disponíveis."
-							/>
-							<label className="grid gap-1 text-sm font-black text-slate-600">
-								Quantidade de clientes
-								<input
-									className="min-h-12 rounded-2xl border border-slate-200 px-4 font-bold"
-									type="number"
-									min="1"
-									max="500"
-									value={campaign.quantity}
-									onChange={(event) => setCampaign((current) => ({ ...current, quantity: event.target.value }))}
-								/>
-							</label>
-							<button
-								type="button"
-								onClick={createCampaign}
-								disabled={!campaign.technicianUserId}
-								className="rounded-2xl bg-emerald-600 p-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								Criar campanha
-							</button>
-						</div>
-					</section>
+					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+						Ao associar uma cidade, todas as oportunidades disponíveis são divididas automaticamente entre os técnicos ativos. Contatos já iniciados permanecem com o técnico responsável.
+					</div>
 				</div>
 			</div>
 
@@ -1514,14 +1397,21 @@ export default function TentativasPage() {
 	}, []);
 	const [tab, setTab] = useState(requestedTab);
 	const [workspace, setWorkspace] = useState(ADMIN_TAB_KEYS.has(requestedTab) ? "management" : "operation");
+	const [moreOpen, setMoreOpen] = useState(false);
 	const tabs = admin && workspace === "management" ? ADMIN_TABS : OPERATIONAL_TABS;
 	const activeTab = !admin && ADMIN_TAB_KEYS.has(tab) ? "route" : tab;
+	const selectTab = useCallback((nextTab) => {
+		setTab(nextTab);
+		const url = new URL(window.location.href);
+		url.searchParams.set("tab", nextTab);
+		window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+	}, []);
 	const changeWorkspace = (nextWorkspace) => {
 		setWorkspace(nextWorkspace);
-		setTab(nextWorkspace === "management" ? "management" : "route");
+		selectTab(nextWorkspace === "management" ? "management" : "route");
 	};
 	return (
-		<div className="retiradas-native-page w-full min-w-0 space-y-5">
+		<div className="retiradas-native-page w-full min-w-0 space-y-5 pb-24 md:pb-0">
 			<PageHeader
 				eyebrow="Esteira operacional"
 				title="Tentativas"
@@ -1534,9 +1424,9 @@ export default function TentativasPage() {
 					<button type="button" onClick={() => changeWorkspace("management")} className={`min-h-10 rounded-xl px-4 text-sm font-black ${workspace === "management" ? "bg-slate-950 text-white" : "text-slate-600"}`}>Gestão</button>
 				</div>
 			) : null}
-			<div className="retiradas-native-tabs -mx-3 flex min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0">
+			<div className={`retiradas-native-tabs -mx-3 min-w-0 gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:px-0 ${workspace === "operation" ? "hidden md:flex" : "flex"}`}>
 				{tabs.map(([key, label, Icon]) => (
-					<TabButton key={key} icon={Icon} active={activeTab === key} onClick={() => setTab(key)}>{label}</TabButton>
+					<TabButton key={key} icon={Icon} active={activeTab === key} onClick={() => selectTab(key)}>{label}</TabButton>
 				))}
 			</div>
 			{activeTab === "route" ? <MyRoute /> : null}
@@ -1545,13 +1435,34 @@ export default function TentativasPage() {
 			{activeTab === "appointments" ? <RecoveriesPanel scheduledOnly /> : null}
 			{activeTab === "recoveries" ? <RecoveriesPanel /> : null}
 			{activeTab === "productivity" ? <ProductivityPanel /> : null}
-			{activeTab === "management" ? <div className="space-y-5"><ManagementPanel /><OverviewTab /></div> : null}
+			{activeTab === "management" ? <ManagementPanel /> : null}
 			{activeTab === "distribution" ? <DistributionTab /> : null}
 			{activeTab === "admin-recoveries" ? <RecoveriesPanel /> : null}
 			{activeTab === "history" ? <HistoryTab /> : null}
 			{activeTab === "audit" ? <AuditPanel /> : null}
 			{activeTab === "templates" ? <TemplatesTab /> : null}
 			{activeTab === "settings" ? <SettingsTab /> : null}
+			{workspace === "operation" ? (
+				<nav className="fixed inset-x-0 bottom-0 z-layout-sticky grid grid-cols-5 border-t border-slate-200 bg-white/95 px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur md:hidden" aria-label="Navegação de Tentativas">
+					{MOBILE_OPERATION_TABS.map(([key, label, Icon]) => (
+						<button key={key} type="button" onClick={() => selectTab(key)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-black ${activeTab === key ? "bg-blue-50 text-blue-700" : "text-slate-500"}`} aria-current={activeTab === key ? "page" : undefined}>
+							<Icon className="h-5 w-5" /><span className="truncate">{label}</span>
+						</button>
+					))}
+					<button type="button" onClick={() => setMoreOpen(true)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-black ${MOBILE_MORE_TABS.some(([key]) => key === activeTab) ? "bg-blue-50 text-blue-700" : "text-slate-500"}`}>
+						<MoreHorizontal className="h-5 w-5" /><span>Mais</span>
+					</button>
+				</nav>
+			) : null}
+			{moreOpen ? (
+				<ModalShell title="Mais opções" description="Acesse os demais recursos da operação." size="sm" onClose={() => setMoreOpen(false)}>
+					<div className="grid gap-2">
+						{MOBILE_MORE_TABS.map(([key, label, Icon]) => (
+							<button key={key} type="button" onClick={() => { selectTab(key); setMoreOpen(false); }} className={`flex min-h-14 items-center gap-3 rounded-xl border px-4 text-left font-black ${activeTab === key ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}><Icon className="h-5 w-5" />{label}</button>
+						))}
+					</div>
+				</ModalShell>
+			) : null}
 		</div>
 	);
 }

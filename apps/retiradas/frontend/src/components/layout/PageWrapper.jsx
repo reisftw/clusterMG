@@ -17,6 +17,7 @@ import AuthenticatorModal from "./AuthenticatorModal";
 import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import ViewportDiagnostics from "./ViewportDiagnostics";
 
 const PAGE_TITLES = {
 	[ROUTES.DASHBOARD]: "Dashboard",
@@ -234,6 +235,7 @@ const PageWrapper = ({ children }) => {
 				}}
 			/>
 			<RetorninhoAssistant />
+			<ViewportDiagnostics />
 		</div>
 	);
 };

@@ -18,8 +18,26 @@ import { expect, test } from "@playwright/test";
 const EMAIL = process.env.E2E_LOGIN_EMAIL;
 const PASSWORD = process.env.E2E_LOGIN_PASSWORD;
 const hasCredentials = Boolean(EMAIL && PASSWORD);
+const RESPONSIVE_WIDTHS = [320, 360, 375, 390, 412, 430, 768, 1024, 1440];
 
 test.describe("Login — carregamento e credenciais inválidas (sem necessidade de conta real)", () => {
+	test("layout base respeita a largura real do viewport sem overflow global", async ({ page }) => {
+		for (const width of RESPONSIVE_WIDTHS) {
+			await page.setViewportSize({ width, height: width < 768 ? 780 : 900 });
+			await page.goto("/login");
+			await expect(page.getByRole("button", { name: "Entrar no sistema" })).toBeVisible();
+			const metrics = await page.evaluate(() => ({
+				innerWidth: window.innerWidth,
+				htmlWidth: document.documentElement.scrollWidth,
+				bodyWidth: document.body.scrollWidth,
+				viewportTags: document.querySelectorAll('meta[name="viewport"]').length,
+			}));
+			expect(metrics.viewportTags, `viewport ${width}px`).toBe(1);
+			expect(metrics.htmlWidth, `html em ${width}px`).toBeLessThanOrEqual(metrics.innerWidth + 1);
+			expect(metrics.bodyWidth, `body em ${width}px`).toBeLessThanOrEqual(metrics.innerWidth + 1);
+		}
+	});
+
 	test("tela de login carrega com os campos esperados", async ({ page }) => {
 		await page.goto("/login");
 		await expect(page.getByPlaceholder("seu@email.com")).toBeVisible();

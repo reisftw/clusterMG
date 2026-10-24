@@ -6,6 +6,14 @@ const migrationPath = path.join(
 	process.cwd(),
 	"apps/retiradas/backend/sql/089_tentativas_central_recuperacao.sql",
 );
+const managementMigrationPath = path.join(
+	process.cwd(),
+	"apps/retiradas/backend/sql/091_tentativas_gestao_metricas.sql",
+);
+const cityWalletMigrationPath = path.join(
+	process.cwd(),
+	"apps/retiradas/backend/sql/092_tentativas_carteiras_por_cidade.sql",
+);
 
 describe("migration 089 - Central de Tentativas", () => {
 	const sql = fs.readFileSync(migrationPath, "utf8");
@@ -51,5 +59,32 @@ describe("migration 089 - Central de Tentativas", () => {
 	it("protege equipamentos confirmados contra dupla contabilização", () => {
 		expect(sql).toContain("tentativas_recovery_equipment_confirmed_serial_idx");
 		expect(sql).toContain("where status = 'CONFIRMED'");
+	});
+});
+
+describe("migration 091 - métricas gerenciais de Tentativas", () => {
+	const sql = fs.readFileSync(managementMigrationPath, "utf8");
+
+	it("normaliza contatos históricos sem remover dados", () => {
+		expect(sql).toContain("update tentativas_contacts");
+		expect(sql).toContain("effective_contact = true");
+		expect(sql).toContain("create index if not exists");
+		expect(sql).not.toMatch(/\bdelete\s+from\b/i);
+		expect(sql).not.toMatch(/\btruncate\b/i);
+		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
+	});
+});
+
+describe("migration 092 - carteiras por cidade", () => {
+	const sql = fs.readFileSync(cityWalletMigrationPath, "utf8");
+
+	it("encerra vínculos não técnicos preservando o histórico", () => {
+		expect(sql).toContain("lower(coalesce(u.role, '')) <> 'tecnico'");
+		expect(sql).toContain("set active = false");
+		expect(sql).toContain("released_at = now()");
+		expect(sql).toContain("PROPRIETARIO_NAO_TECNICO");
+		expect(sql).not.toMatch(/\bdelete\s+from\b/i);
+		expect(sql).not.toMatch(/\btruncate\b/i);
+		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
 	});
 });

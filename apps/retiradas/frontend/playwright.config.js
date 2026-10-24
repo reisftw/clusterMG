@@ -13,9 +13,7 @@ export default defineConfig({
 	reporter: process.env.CI ? [["github"], ["list"]] : "list",
 	use: {
 		baseURL,
-		extraHTTPHeaders: {
-			Accept: "application/json",
-		},
+		serviceWorkers: "block",
 		trace: "retain-on-failure",
 	},
 });
