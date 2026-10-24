@@ -14,6 +14,10 @@ const cityWalletMigrationPath = path.join(
 	process.cwd(),
 	"apps/retiradas/backend/sql/092_tentativas_carteiras_por_cidade.sql",
 );
+const neighborhoodLockMigrationPath = path.join(
+	process.cwd(),
+	"apps/retiradas/backend/sql/094_tentativas_bairro_locks.sql",
+);
 
 describe("migration 089 - Central de Tentativas", () => {
 	const sql = fs.readFileSync(migrationPath, "utf8");
@@ -84,6 +88,17 @@ describe("migration 092 - carteiras por cidade", () => {
 		expect(sql).toContain("released_at = now()");
 		expect(sql).toContain("PROPRIETARIO_NAO_TECNICO");
 		expect(sql).not.toMatch(/\bdelete\s+from\b/i);
+		expect(sql).not.toMatch(/\btruncate\b/i);
+		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
+	});
+});
+
+describe("migration 094 - exclusividade por bairro", () => {
+	const sql = fs.readFileSync(neighborhoodLockMigrationPath, "utf8");
+
+	it("impede dois tecnicos de reservar o mesmo bairro sem apagar historico", () => {
+		expect(sql).toContain("primary key (cidade_normalizada, bairro_grupo)");
+		expect(sql).toContain("technician_user_id text not null");
 		expect(sql).not.toMatch(/\btruncate\b/i);
 		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
 	});

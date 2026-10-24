@@ -449,10 +449,19 @@ async function createCallback(opportunityId, payload = {}, user = {}) {
 	try {
 		await client.query("begin");
 		const scope = await client.query(
-			`select o.*,a.id assignment_id,a.technician_user_id,a.technician_email,a.technician_name
-			 from tentativas_opportunities o join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
-			 where o.id=$1 and ($2::boolean=true or a.technician_user_id=$3 or lower(coalesce(a.technician_email,''))=$4) for update of o`,
-			[opportunityId, canManage(user), userId(user), userEmail(user)],
+			`select o.*, null::text assignment_id, $3::text technician_user_id,
+			        $4::text technician_email, $5::text technician_name
+			   from tentativas_opportunities o
+			  where o.id=$1
+			    and ($2::boolean=true or exists (
+			      select 1 from tentativas_technician_cities c
+			       where c.active=true
+			         and c.cidade_normalizada=o.cidade_normalizada
+			         and (c.permanent=true or current_date between coalesce(c.valid_from,current_date) and coalesce(c.valid_until,current_date))
+			         and (c.user_id=$3 or lower(coalesce(c.user_email,''))=$4)
+			    ))
+			  for update of o`,
+			[opportunityId, canManage(user), userId(user), userEmail(user), userName(user)],
 		);
 		const opportunity = scope.rows[0];
 		if (!opportunity) { const error = new Error("Oportunidade nao encontrada ou nao autorizada."); error.statusCode = 404; throw error; }
@@ -538,8 +547,12 @@ async function correctContact(contactId, payload = {}, user = {}) {
 async function listTimeline(opportunityId, user = {}) {
 	const scope = await db.query(
 		`select o.id from tentativas_opportunities o
-		 left join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
-		 where o.id=$1 and ($2::boolean=true or a.technician_user_id=$3 or lower(coalesce(a.technician_email,''))=$4)`,
+		 where o.id=$1 and ($2::boolean=true or exists (
+		   select 1 from tentativas_technician_cities c
+		    where c.active=true and c.cidade_normalizada=o.cidade_normalizada
+		      and (c.permanent=true or current_date between coalesce(c.valid_from,current_date) and coalesce(c.valid_until,current_date))
+		      and (c.user_id=$3 or lower(coalesce(c.user_email,''))=$4)
+		 ))`,
 		[opportunityId, canManage(user), userId(user), userEmail(user)],
 	);
 	if (!scope.rowCount) { const error = new Error("Oportunidade nao encontrada ou nao autorizada."); error.statusCode = 404; throw error; }
@@ -583,14 +596,14 @@ async function listRecoveries(query = {}, user = {}) {
 	params.push(limit, (page - 1) * limit);
 	const result = await db.query(
 		`select count(*) over() total_count, r.*, o.os, o.codigo_cliente, o.cliente, o.cidade, o.bairro,
-		        a.technician_user_id, a.technician_email, a.technician_name,
+		        c.technician_user_id, null::text as technician_email, c.technician_name,
 		        coalesce(sum(e.quantity) filter (where e.status='CONFIRMED'),0) recovered_equipment
 		 from tentativas_recoveries r join tentativas_opportunities o on o.id=r.opportunity_id
-		 left join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
+		 left join tentativas_contacts c on c.id=r.contact_id
 		 left join tentativas_recovery_equipments e on e.recovery_id=r.id
-		 where ($1::boolean=true or a.technician_user_id=$2 or lower(coalesce(a.technician_email,''))=$3)
+		 where ($1::boolean=true or c.technician_user_id=$2)
 		 ${filters.length ? `and ${filters.join(" and ")}` : ""}
-		 group by r.id,o.id,a.id order by r.updated_at desc limit $${index + 1} offset $${index + 2}`,
+		 group by r.id,o.id,c.id order by r.updated_at desc limit $${index + 1} offset $${index + 2}`,
 		params,
 	);
 	return { items: result.rows, page, limit, total: Number(result.rows[0]?.total_count || 0) };
@@ -601,8 +614,8 @@ async function updateRecovery(recoveryId, payload = {}, user = {}) {
 	try {
 		await client.query("begin");
 		const found = await client.query(
-			`select r.*, a.technician_user_id, a.technician_email from tentativas_recoveries r
-			 left join tentativas_assignments a on a.opportunity_id=r.opportunity_id and a.released_at is null
+			`select r.*, c.technician_user_id, null::text as technician_email from tentativas_recoveries r
+			 left join tentativas_contacts c on c.id=r.contact_id
 			 where r.id=$1 for update of r`, [recoveryId],
 		);
 		const recovery = found.rows[0];
@@ -826,13 +839,14 @@ function analyticsParams(query = {}) {
 
 const ANALYTICS_BASE_CTE = `
 	with current_assignment as (
-		select distinct on (opportunity_id) opportunity_id,id assignment_id,technician_user_id,technician_email,technician_name,assigned_at
-		from tentativas_assignments where released_at is null order by opportunity_id,assigned_at desc
+		select distinct on (opportunity_id) opportunity_id,null::text assignment_id,
+		       technician_user_id,null::text technician_email,technician_name,created_at assigned_at
+		from tentativas_contacts order by opportunity_id,created_at desc
 	), filtered as (
 		select o.*,a.assignment_id,a.technician_user_id,a.technician_email,a.technician_name,a.assigned_at
 		from tentativas_opportunities o left join current_assignment a on a.opportunity_id=o.id
 		where ($3::text='' or o.empresa=$3) and ($4::text='' or o.regional=$4)
-		and ($5::text='' or o.cidade_normalizada=$5) and ($6::text='' or a.technician_user_id=$6 or exists (select 1 from tentativas_contacts tc where tc.opportunity_id=o.id and tc.technician_user_id=$6 and tc.created_at >= $1::date and tc.created_at < ($2::date + interval '1 day')))
+		and ($5::text='' or o.cidade_normalizada=$5) and ($6::text='' or exists (select 1 from tentativas_technician_cities t where t.active=true and t.cidade_normalizada=o.cidade_normalizada and t.user_id=$6 and (t.permanent=true or current_date between coalesce(t.valid_from,current_date) and coalesce(t.valid_until,current_date))) or exists (select 1 from tentativas_contacts tc where tc.opportunity_id=o.id and tc.technician_user_id=$6 and tc.created_at >= $1::date and tc.created_at < ($2::date + interval '1 day')))
 		and ($7::text='' or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))=$7)
 		and ($8::text='' or upper(coalesce(o.service_status,o.status,''))=$8)
 		and ($9::text='' or exists (select 1 from tentativas_contacts cr where cr.opportunity_id=o.id and cr.created_at >= $1::date and cr.created_at < ($2::date + interval '1 day') and upper(coalesce(cr.result,''))=$9))
@@ -868,7 +882,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		db.query(`${ANALYTICS_BASE_CTE}
 		select
 		 (select count(*) from filtered where active) eligible,
-		 (select count(*) from filtered where active and technician_user_id is not null) distributed,
+		 (select count(*) from filtered f where active and exists (select 1 from tentativas_technician_cities t where t.active=true and t.cidade_normalizada=f.cidade_normalizada and (t.permanent=true or current_date between coalesce(t.valid_from,current_date) and coalesce(t.valid_until,current_date)))) distributed,
 		 (select count(*) from filtered where active) funnel_population,
 		 (select count(*) from worked_ids) worked,
 		 (select count(*) from period_contacts where sent_confirmed) attempts,
@@ -890,9 +904,13 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		 (select count(*) from completed_flow_ids ca join filtered fo on fo.id=ca.opportunity_id where coalesce(fo.completed_at,fo.updated_at)::date=d::date)::int completed
 		from generate_series($1::date,$2::date,interval '1 day') d
 		left join period_contacts c on c.created_at::date=d::date group by d order by d`, values),
-		db.query(`${ANALYTICS_BASE_CTE}, technicians as (
-		 select coalesce(f.technician_user_id,c.technician_user_id) technician_user_id,
-		 coalesce(max(f.technician_name),max(c.technician_name),'Técnico não identificado') technician_name,
+		db.query(`${ANALYTICS_BASE_CTE}, technician_scope as (
+		 select distinct t.user_id technician_user_id,t.user_name technician_name,t.cidade_normalizada
+		 from tentativas_technician_cities t where t.active=true
+		 and (t.permanent=true or current_date between coalesce(t.valid_from,current_date) and coalesce(t.valid_until,current_date))
+		), technicians as (
+		 select t.technician_user_id,
+		 coalesce(max(t.technician_name),max(c.technician_name),'Técnico não identificado') technician_name,
 		 count(distinct f.id) filter(where f.active) opportunities,
 		 count(distinct c.opportunity_id) filter(where c.sent_confirmed) worked,
 		 count(c.id) filter(where c.sent_confirmed) attempts,
@@ -900,10 +918,10 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		 count(distinct c.opportunity_id) filter(where c.sent_confirmed and upper(coalesce(c.result,'')) in ('SCHEDULED','RESPONDED_SCHEDULE')) scheduled,
 		 count(distinct case when r.status='RECOVERY_CONFIRMED' then r.opportunity_id end) recoveries,
 		 count(distinct f.cidade_normalizada) cities,count(distinct nullif(f.bairro,'')) neighborhoods
-		 from filtered f left join period_contacts c on c.opportunity_id=f.id
+		 from technician_scope t join filtered f on f.cidade_normalizada=t.cidade_normalizada
+		 left join period_contacts c on c.opportunity_id=f.id and c.technician_user_id=t.technician_user_id
 		 left join tentativas_recoveries r on r.opportunity_id=f.id and coalesce(r.validated_at,r.updated_at) >= $1::date and coalesce(r.validated_at,r.updated_at) < ($2::date + interval '1 day')
-		 where coalesce(f.technician_user_id,c.technician_user_id) is not null
-		 group by coalesce(f.technician_user_id,c.technician_user_id)
+		 group by t.technician_user_id
 	), ranked as (select *,round(case when opportunities>0 then worked::numeric*100/opportunities else 0 end,1) coverage,round(case when worked>0 then recoveries::numeric*100/worked else 0 end,1) conversion from technicians)
 		select count(*) over() total_count,* from ranked where ($12::text='' or technician_name ilike '%'||$12||'%') order by ${rankingSort} ${rankingDirection},technician_name asc limit $13 offset $14`, [...values, search, limit, (page - 1) * limit]),
 		db.query(`${ANALYTICS_BASE_CTE}
@@ -930,7 +948,7 @@ async function getAnalytics(rawQuery = {}, user = {}) {
 		 array(select distinct regional from filtered where nullif(regional,'') is not null order by regional) regionals,
 		 array(select distinct cidade from filtered where nullif(cidade,'') is not null order by cidade) cities,
 		 array(select distinct bairro from filtered where nullif(bairro,'') is not null order by bairro) neighborhoods,
-		 coalesce((select jsonb_agg(x order by technician_name) from (select distinct technician_user_id id,technician_name from filtered where technician_user_id is not null)x),'[]'::jsonb) technicians`, values),
+		 coalesce((select jsonb_agg(x order by technician_name) from (select distinct t.user_id id,t.user_name technician_name from tentativas_technician_cities t where t.active=true and (t.permanent=true or current_date between coalesce(t.valid_from,current_date) and coalesce(t.valid_until,current_date)))x),'[]'::jsonb) technicians`, values),
 		db.query(`${ANALYTICS_BASE_CTE} select max(updated_at) last_sync_at,count(*) filter(where active)::int active_records,
 		 count(*) filter(where active and (nullif(trim(coalesce(telefone,'')),'') is null or nullif(trim(coalesce(bairro,'')),'') is null))::int divergences,
 		 count(*) filter(where active and updated_at<now()-interval '2 hours')::int stale_records from filtered`, values),
@@ -1038,11 +1056,10 @@ async function getIntelligence(query = {}) {
 		 count(*) filter (where o.active and o.last_result='INVALID_PHONE') invalid_phones,
 		 count(*) filter (where o.active) total_active
 		 from tentativas_opportunities o
-		 left join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
 		 where ($2::text='' or o.empresa=$2)
 		   and ($3::text='' or o.regional=$3)
 		   and ($4::text='' or o.cidade_normalizada=$4)
-		   and ($5::text='' or a.technician_user_id=$5)
+		   and ($5::text='' or exists (select 1 from tentativas_technician_cities t where t.active=true and t.cidade_normalizada=o.cidade_normalizada and t.user_id=$5))
 		   and ($6::text='' or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))=$6)`,
 		filters,
 	);
@@ -1050,12 +1067,11 @@ async function getIntelligence(query = {}) {
 		`select count(*) overdue
 		   from tentativas_callbacks cb
 		   join tentativas_opportunities o on o.id=cb.opportunity_id
-		   left join tentativas_assignments a on a.opportunity_id=o.id and a.released_at is null
 		  where cb.status='PENDING' and cb.scheduled_at<now()
 		    and ($1::text='' or o.empresa=$1)
 		    and ($2::text='' or o.regional=$2)
 		    and ($3::text='' or o.cidade_normalizada=$3)
-		    and ($4::text='' or a.technician_user_id=$4)
+		    and ($4::text='' or cb.technician_user_id=$4)
 		    and ($5::text='' or lower(translate(coalesce(o.bairro,''), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'))=$5)`,
 		filters.slice(1),
 	);
@@ -1115,13 +1131,21 @@ async function getMyProductivity(query = {}, user = {}) {
 	const { start, end } = dateRange(query);
 	const params = [userId(user), userEmail(user), start, end];
 	const summary = await db.query(
-		`with assignments as (
-		 select a.id assignment_id,a.opportunity_id,o.status,o.attempt_count
-		 from tentativas_assignments a join tentativas_opportunities o on o.id=a.opportunity_id
-		 where a.released_at is null and (a.technician_user_id=$1 or lower(coalesce(a.technician_email,''))=$2)
+		`with allowed_cities as (
+		 select distinct cidade_normalizada
+		 from tentativas_technician_cities
+		 where active=true
+		   and (permanent=true or current_date between coalesce(valid_from,current_date) and coalesce(valid_until,current_date))
+		   and (user_id=$1 or lower(coalesce(user_email,''))=$2)
+		), assignments as (
+		 select null::text assignment_id,o.id opportunity_id,o.status,o.attempt_count
+		 from tentativas_opportunities o
+		 where o.active=true
+		   and o.cidade_normalizada in (select cidade_normalizada from allowed_cities)
+		   and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 		), contacts as (
 		 select c.* from tentativas_contacts c
-		 where (c.technician_user_id=$1 or exists (select 1 from assignments a where a.assignment_id=c.assignment_id))
+		 where c.technician_user_id=$1
 		 and c.created_at >= $3::date and c.created_at < ($4::date + interval '1 day')
 		)
 		select (select count(*) from assignments) assigned,
@@ -1131,7 +1155,7 @@ async function getMyProductivity(query = {}, user = {}) {
 		 (select count(distinct opportunity_id) from contacts where result in ('SCHEDULED','RESPONDED_SCHEDULE')) scheduled,
 		 (select count(*) from tentativas_callbacks where status='PENDING' and (technician_user_id=$1 or lower(coalesce(technician_email,''))=$2)) pending_callbacks,
 		 (select count(*) from tentativas_callbacks where status='PENDING' and scheduled_at<now() and (technician_user_id=$1 or lower(coalesce(technician_email,''))=$2)) overdue_callbacks,
-		 (select count(*) from tentativas_recoveries r join assignments a on a.opportunity_id=r.opportunity_id where r.status='RECOVERY_CONFIRMED') recovered`,
+		 (select count(*) from tentativas_recoveries r join contacts c on c.id=r.contact_id where r.status='RECOVERY_CONFIRMED') recovered`,
 		params,
 	);
 	const daily = await db.query(
@@ -1139,14 +1163,7 @@ async function getMyProductivity(query = {}, user = {}) {
 		 count(distinct c.opportunity_id) filter (where c.effective_contact)::int effective_contacts
 		 from generate_series($3::date,$4::date,interval '1 day') d
 		 left join tentativas_contacts c on c.created_at::date=d::date
-		  and (
-		    c.technician_user_id=$1::text
-		    or exists (
-		      select 1 from tentativas_assignments a
-		       where a.id=c.assignment_id
-		         and (a.technician_user_id=$1::text or lower(coalesce(a.technician_email,''))=$2::text)
-		    )
-		  )
+		  and c.technician_user_id=$1::text
 		 group by d order by d`, params,
 	);
 	const row = summary.rows[0] || {};

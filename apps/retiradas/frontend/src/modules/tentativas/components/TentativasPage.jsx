@@ -342,9 +342,10 @@ function NeighborhoodDropdown({ items = [], value = "", onChange, onUseLocation,
 						<button type="button" onClick={() => choose("")} className={`min-h-12 rounded-xl border px-4 text-left font-black ${!value ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}>Todos os bairros</button>
 						{items.map((item) => {
 							const itemValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.groupKey || item.bairro;
+							const unavailable = item.locked && !item.lockedByMe;
 							return (
-								<button type="button" key={itemValue} onClick={() => choose(itemValue)} className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 text-left ${value === itemValue ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}>
-									<span className="min-w-0"><strong className="block truncate text-slate-950">{item.bairro}</strong><span className="text-xs font-bold text-slate-500">{formatNumber(item.opportunities)} oportunidade(s){item.originalValues?.length > 1 ? ` · ${item.originalValues.length} variações agrupadas` : ""}</span></span>
+								<button type="button" key={itemValue} disabled={unavailable} onClick={() => choose(itemValue)} className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 text-left ${value === itemValue ? "border-blue-400 bg-blue-50" : unavailable ? "cursor-not-allowed border-amber-200 bg-amber-50 opacity-75" : "border-slate-200 bg-white"}`}>
+									<span className="min-w-0"><strong className="block truncate text-slate-950">{item.bairro}</strong><span className="text-xs font-bold text-slate-500">{formatNumber(item.opportunities)} oportunidade(s){item.originalValues?.length > 1 ? ` · ${item.originalValues.length} variações agrupadas` : ""}</span>{unavailable ? <span className="mt-1 block text-xs font-black text-amber-700">Em uso por {item.lockOwnerName || "outro técnico"}</span> : item.lockedByMe ? <span className="mt-1 block text-xs font-black text-emerald-700">Reservado para você</span> : null}</span>
 									{item.distanceKm != null ? <span className="shrink-0 text-xs font-black text-emerald-700">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
 								</button>
 							);
@@ -1052,10 +1053,10 @@ function DistributionTab() {
 	}, []);
 	const saveCity = async () => {
 		setMessage("");
-		const saved = await salvarCidadeTecnicoTentativas(form);
+		await salvarCidadeTecnicoTentativas(form);
 		setForm({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
 		await load();
-		setMessage(`Cidade associada ao técnico. ${formatNumber(saved.balance?.assigned || saved.assigned)} oportunidade(s) distribuída(s) nesta atualização.`);
+		setMessage("Cidade associada. O técnico já pode acessar todas as oportunidades disponíveis nela.");
 	};
 	const associatedSearchTerm = normalizeSearch(associatedSearch);
 	const filteredAssociatedCities = associatedSearchTerm
@@ -1084,7 +1085,7 @@ function DistributionTab() {
 						</p>
 						<h2 className="text-2xl font-black text-slate-950">Técnicos por cidade</h2>
 						<p className="text-sm font-semibold text-slate-500">
-							Apenas oportunidades de retirada entram nessa distribuição.
+							Cada técnico visualiza o backlog completo das cidades associadas.
 						</p>
 					</div>
 					<div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -1123,7 +1124,7 @@ function DistributionTab() {
 								value={form.cidade}
 								onChange={(cidade) => setForm((current) => ({ ...current, cidade }))}
 								label="Cidade atendida"
-								helper="A cidade fica vinculada ao técnico selecionado."
+								helper="A cidade inteira fica disponível para o técnico selecionado."
 							/>
 							<label className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
 								<input
@@ -1145,7 +1146,7 @@ function DistributionTab() {
 					</section>
 
 					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-						Ao associar uma cidade, todas as oportunidades disponíveis são divididas automaticamente entre os técnicos ativos. Contatos já iniciados permanecem com o técnico responsável.
+						Ao associar uma cidade, o técnico passa a visualizar todas as oportunidades dela. Bairros específicos são reservados durante a seleção; a opção Todos os bairros permanece compartilhada.
 					</div>
 				</div>
 			</div>
