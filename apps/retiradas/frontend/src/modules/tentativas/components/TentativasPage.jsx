@@ -338,6 +338,7 @@ function NeighborhoodDropdown({ items = [], value = "", onChange, onUseLocation,
 			{open ? (
 				<ModalShell title="Selecionar bairro" description="Bairros equivalentes aparecem agrupados sem alterar os dados originais." size="md" onClose={() => setOpen(false)}>
 					<div className="grid gap-2">
+						<button type="button" onClick={() => { onUseLocation?.(); setOpen(false); }} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-black text-white"><MapPin className="h-4 w-4" />{hasLocation ? "Atualizar minha localização" : "Usar minha localização"}</button>
 						<button type="button" onClick={() => choose("")} className={`min-h-12 rounded-xl border px-4 text-left font-black ${!value ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}>Todos os bairros</button>
 						{items.map((item) => {
 							const itemValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.groupKey || item.bairro;
@@ -349,7 +350,6 @@ function NeighborhoodDropdown({ items = [], value = "", onChange, onUseLocation,
 							);
 						})}
 					</div>
-					<button type="button" onClick={() => { onUseLocation?.(); setOpen(false); }} className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-black text-white"><MapPin className="h-4 w-4" />{hasLocation ? "Atualizar minha localização" : "Usar minha localização"}</button>
 				</ModalShell>
 			) : null}
 		</section>

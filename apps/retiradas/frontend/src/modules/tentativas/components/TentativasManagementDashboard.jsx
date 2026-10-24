@@ -34,6 +34,7 @@ import {
 	baixarHistoricoTentativasCsv,
 	buscarAnalyticsTentativas,
 	buscarHistoricoTentativas,
+	buscarNovosContatosTentativas,
 	recalcularPrioridadesTentativas,
 } from "../services/tentativasService";
 
@@ -191,6 +192,55 @@ function ManagementHistory({ filters }) {
 	);
 }
 
+function NewContactsPanel() {
+	const [selectedDate, setSelectedDate] = useState(today);
+	const [page, setPage] = useState(1);
+	const [data, setData] = useState({ items: [], total: 0, limit: 12, dayTotal: 0 });
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+	const load = useCallback(async () => {
+		setLoading(true);
+		setError("");
+		try {
+			setData(await buscarNovosContatosTentativas({ date: selectedDate, page, limit: 12 }));
+		} catch (loadError) {
+			setError(loadError.message || "Não foi possível carregar os novos contatos.");
+		} finally {
+			setLoading(false);
+		}
+	}, [page, selectedDate]);
+	useEffect(() => { void load(); }, [load]);
+	const totalPages = Math.max(1, Math.ceil(Number(data.total || 0) / Number(data.limit || 12)));
+	return (
+		<section className="space-y-4">
+			<SectionHeader
+				eyebrow="Entrada automática"
+				title="Novos contatos"
+				description="Acompanhe, por hora, quantas novas O.S chegaram do mapa para distribuição automática."
+				action={<button type="button" onClick={() => void load()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Atualizar</button>}
+			/>
+			<div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[220px_1fr] sm:items-end">
+				<label className="grid gap-1 text-xs font-black text-slate-600"><span>Data de entrada</span><input type="date" value={selectedDate} onChange={(event) => { setSelectedDate(event.target.value); setPage(1); }} className="min-h-11 rounded-lg border border-slate-200 px-3 text-sm" /></label>
+				<div className="rounded-lg bg-blue-50 px-4 py-3"><span className="text-xs font-black uppercase text-blue-700">Total adicionado no dia</span><strong className="mt-1 block text-2xl font-black text-blue-950">{number(data.dayTotal)}</strong></div>
+			</div>
+			{error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</div> : null}
+			<div className={`overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm ${loading ? "opacity-55" : ""}`}>
+				<div className="hidden grid-cols-[1fr_repeat(3,140px)] gap-3 bg-slate-50 px-4 py-3 text-xs font-black uppercase text-slate-500 sm:grid"><span>Horário de entrada</span><span>Adicionados</span><span>Ainda ativos</span><span>Cidades</span></div>
+				{data.items.map((item) => (
+					<article key={item.enteredHour} className="grid gap-3 border-t border-slate-100 px-4 py-4 first:border-t-0 sm:grid-cols-[1fr_repeat(3,140px)] sm:items-center">
+						<div><span className="text-xs font-bold text-slate-500">Faixa de horário</span><strong className="mt-1 flex items-center gap-2 text-base text-slate-950"><CalendarClock className="h-4 w-4 text-blue-600" />{new Date(item.enteredHour).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</strong></div>
+						<div><span className="text-xs font-bold text-slate-500 sm:hidden">Adicionados</span><strong className="block text-lg text-blue-700">{number(item.added)}</strong></div>
+						<div><span className="text-xs font-bold text-slate-500 sm:hidden">Ainda ativos</span><strong className="block text-lg text-emerald-700">{number(item.active)}</strong></div>
+						<div><span className="text-xs font-bold text-slate-500 sm:hidden">Cidades</span><strong className="block text-lg text-slate-800">{number(item.cities)}</strong></div>
+					</article>
+				))}
+				{!loading && !data.items.length ? <Empty>Nenhuma nova O.S entrou pelo mapa nesta data.</Empty> : null}
+			</div>
+			<div className="flex flex-col gap-2 text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between"><span>{number(data.total)} faixa(s) de horário</span><div className="flex items-center gap-2"><button type="button" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))} className="min-h-10 rounded-lg border border-slate-200 px-3 disabled:opacity-40">Anterior</button><span>{page} de {totalPages}</span><button type="button" disabled={page >= totalPages || loading} onClick={() => setPage((current) => current + 1)} className="min-h-10 rounded-lg border border-slate-200 px-3 disabled:opacity-40">Próxima</button></div></div>
+		</section>
+	);
+}
+
 export default function TentativasManagementDashboard() {
 	const [filters, setFilters] = useState(filtersFromStorage);
 	const [applied, setApplied] = useState(filtersFromStorage);
@@ -202,6 +252,7 @@ export default function TentativasManagementDashboard() {
 	const [chartMode, setChartMode] = useState("activity");
 	const [selectedTechnician, setSelectedTechnician] = useState(null);
 	const [expandedRegions, setExpandedRegions] = useState({});
+	const [managementView, setManagementView] = useState("overview");
 
 	const load = useCallback(async (background = false) => {
 		background ? setRefreshing(true) : setLoading(true);
@@ -251,6 +302,12 @@ export default function TentativasManagementDashboard() {
 					<div className="flex items-end gap-2"><button type="button" onClick={apply} className="min-h-11 flex-1 rounded-lg bg-blue-600 px-4 text-sm font-black text-white">Aplicar</button><button type="button" onClick={clear} title="Limpar filtros" className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-slate-200 text-slate-600"><X className="h-4 w-4" /></button></div>
 				</div>
 			</header>
+			<nav className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-sm" aria-label="Seções da gestão de tentativas">
+				<button type="button" onClick={() => setManagementView("overview")} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-black ${managementView === "overview" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Visão geral</button>
+				<button type="button" onClick={() => setManagementView("newContacts")} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-black ${managementView === "newContacts" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Novos contatos</button>
+			</nav>
+
+			{managementView === "newContacts" ? <NewContactsPanel /> : <>
 
 			{error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700"><CircleAlert className="mr-2 inline h-4 w-4" />{error}<button type="button" onClick={() => void load()} className="ml-3 underline">Tentar novamente</button></div> : null}
 			{stale ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">Os dados exibidos podem estar desatualizados. Atualize o painel para obter a leitura mais recente.</div> : null}
@@ -275,6 +332,7 @@ export default function TentativasManagementDashboard() {
 			</> : null}
 
 			{selectedTechnician ? <div className="fixed inset-0 z-[120] flex items-end justify-center bg-slate-950/45 p-0 sm:items-center sm:p-4" onMouseDown={(event) => event.target === event.currentTarget && setSelectedTechnician(null)}><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-lg bg-white p-5 shadow-2xl sm:rounded-lg"><div className="flex items-start justify-between"><div><p className="text-xs font-black uppercase text-blue-700">Detalhamento do técnico</p><h3 className="text-xl font-black text-slate-950">{selectedTechnician.technician_name}</h3><p className="text-sm font-semibold text-slate-500">Identidade: {selectedTechnician.technician_user_id}</p></div><button type="button" onClick={() => setSelectedTechnician(null)} className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-slate-200"><X className="h-4 w-4" /></button></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><Kpi label="Carteira" value={number(selectedTechnician.opportunities)} detail={`${selectedTechnician.cities} cidades · ${selectedTechnician.neighborhoods} bairros`} /><Kpi label="Cobertura" value={percent(selectedTechnician.coverage)} detail={`${number(selectedTechnician.worked)} trabalhadas`} progress={selectedTechnician.coverage} /><Kpi label="Conversão" value={percent(selectedTechnician.conversion)} detail={`${number(selectedTechnician.recoveries)} recuperações`} tone="green" /><Kpi label="Tentativas" value={number(selectedTechnician.attempts)} detail="No período" /><Kpi label="Contatos" value={number(selectedTechnician.effectiveContacts)} detail="Efetivos" tone="green" /><Kpi label="Agendamentos" value={number(selectedTechnician.scheduled)} detail="Gerados" tone="amber" /></div></div></div> : null}
+			</>}
 		</section>
 	);
 }

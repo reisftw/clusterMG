@@ -1065,7 +1065,6 @@ async function getIntelligence(query = {}) {
 	if (Number(row.high_priority_without_contact || 0) >= Number(thresholds.highPriorityWithoutContact || 10)) alerts.push({ type: "HIGH_PRIORITY", severity: "warning", value: Number(row.high_priority_without_contact), message: "Clientes de alta prioridade ainda sem contato." });
 	if (Number(callbacks.rows[0]?.overdue || 0) >= Number(thresholds.overdueCallbacks || 5)) alerts.push({ type: "OVERDUE_CALLBACKS", severity: "critical", value: Number(callbacks.rows[0].overdue), message: "Retornos programados estao vencidos." });
 	if (invalidPercent >= Number(thresholds.invalidPhonePercent || 20)) alerts.push({ type: "INVALID_PHONES", severity: "warning", value: Number(invalidPercent.toFixed(1)), message: "Percentual elevado de numeros invalidos." });
-	if (Number(row.stale_opportunities || 0) > 0) alerts.push({ type: "STALE_WALLET", severity: "info", value: Number(row.stale_opportunities), message: "Carteiras sem movimentacao no periodo configurado." });
 	return { thresholds, alerts };
 }
 
@@ -1140,7 +1139,14 @@ async function getMyProductivity(query = {}, user = {}) {
 		 count(distinct c.opportunity_id) filter (where c.effective_contact)::int effective_contacts
 		 from generate_series($3::date,$4::date,interval '1 day') d
 		 left join tentativas_contacts c on c.created_at::date=d::date
-		  and (c.technician_user_id=$1::text or lower(coalesce(c.technician_email,''))=$2::text)
+		  and (
+		    c.technician_user_id=$1::text
+		    or exists (
+		      select 1 from tentativas_assignments a
+		       where a.id=c.assignment_id
+		         and (a.technician_user_id=$1::text or lower(coalesce(a.technician_email,''))=$2::text)
+		    )
+		  )
 		 group by d order by d`, params,
 	);
 	const row = summary.rows[0] || {};
@@ -1154,6 +1160,66 @@ async function getMyProductivity(query = {}, user = {}) {
 			progress: assigned ? Number(((worked / assigned) * 100).toFixed(1)) : 0,
 		},
 		daily: daily.rows.map((item) => ({ ...item, attempts: Number(item.attempts || 0), effectiveContacts: Number(item.effective_contacts || 0) })),
+	};
+}
+
+async function listNewContacts(query = {}) {
+	const page = normalizePage(query.page);
+	const limit = normalizeLimit(query.limit, 12, 48);
+	const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(text(query.date)) ? text(query.date) : null;
+	const result = await db.query(
+		`with target_day as (
+		  select coalesce($1::date, (now() at time zone 'America/Sao_Paulo')::date) as selected_date
+		), hourly as (
+		  select date_trunc('hour', o.match_entered_at at time zone 'America/Sao_Paulo') as entered_hour,
+		         count(*)::int as added,
+		         count(*) filter (where o.active = true)::int as active,
+		         count(distinct nullif(o.cidade, ''))::int as cities
+		    from tentativas_opportunities o
+		   cross join target_day d
+		   where o.match_entered_at >= (d.selected_date::timestamp at time zone 'America/Sao_Paulo')
+		     and o.match_entered_at < ((d.selected_date + 1)::timestamp at time zone 'America/Sao_Paulo')
+		   group by 1
+		), paged as (
+		  select count(*) over()::int as total_count,
+		         to_char(entered_hour, 'YYYY-MM-DD"T"HH24:MI:SS') as entered_hour,
+		         added, active, cities
+		    from hourly
+		   order by entered_hour desc
+		   limit $2 offset $3
+		)
+		select p.*,
+		       (select selected_date::text from target_day) as selected_date,
+		       (select coalesce(sum(added), 0)::int from hourly) as day_total
+		  from paged p`,
+		[selectedDate, limit, (page - 1) * limit],
+	);
+	let resolvedDate = selectedDate;
+	let dayTotal = 0;
+	let total = 0;
+	if (result.rows.length) {
+		resolvedDate = result.rows[0].selected_date;
+		dayTotal = Number(result.rows[0].day_total || 0);
+		total = Number(result.rows[0].total_count || 0);
+	} else {
+		const fallback = await db.query(
+			`select coalesce($1::date, (now() at time zone 'America/Sao_Paulo')::date)::text as selected_date`,
+			[selectedDate],
+		);
+		resolvedDate = fallback.rows[0]?.selected_date || selectedDate;
+	}
+	return {
+		date: resolvedDate,
+		page,
+		limit,
+		total,
+		dayTotal,
+		items: result.rows.map((row) => ({
+			enteredHour: row.entered_hour,
+			added: Number(row.added || 0),
+			active: Number(row.active || 0),
+			cities: Number(row.cities || 0),
+		})),
 	};
 }
 
@@ -1185,6 +1251,7 @@ module.exports = {
 	getAnalytics,
 	getIntelligence,
 	getMyProductivity,
+	listNewContacts,
 	listAudit,
 	listCallbacks,
 	listRecoveries,

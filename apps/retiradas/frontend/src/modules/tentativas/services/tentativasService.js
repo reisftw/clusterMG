@@ -119,6 +119,10 @@ export function buscarInteligenciaTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/admin/inteligencia${qs(params)}`);
 }
 
+export function buscarNovosContatosTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/novos-contatos${qs(params)}`);
+}
+
 export function buscarAuditoriaTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/admin/auditoria${qs(params)}`);
 }

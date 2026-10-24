@@ -296,6 +296,19 @@ function createTentativasRouter({
 	);
 
 	router.get(
+		"/admin/novos-contatos",
+		requireAuthenticated,
+		requireManagement,
+		async (req, res, next) => {
+			try {
+				res.json(await central.listNewContacts(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
 		"/admin/auditoria",
 		requireAuthenticated,
 		requireAudit,
