@@ -23,7 +23,7 @@ const EXPORT_PERMISSIONS = [
 ];
 const OVERRIDE_PERMISSIONS = ["tentativas.override"];
 const WITHDRAWAL_ORDER_TYPE_REGEX =
-	"(RETIRADA\\s+FTTH|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s+LOJA)";
+	"(RETIRADA\\s+FTTH|RETIRADA\\s*-\\s*OUTROS|RETIRADA\\s*&\\s*CANCELAMENTO\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s*&\\s*RETIRADA\\s*-\\s*SEGUNDA\\s+TENTATIVA|CANCELAMENTO\\s+FTTH|CANCELAMENTO\\s*-\\s*OUTROS|CANCELAMENTO\\s+LOJA)";
 const VALID_PHONE_DIGITS_REGEX = "^55[0-9]{10,11}$";
 const OPPORTUNITIES_SYNC_TTL_MS = 60 * 60 * 1000;
 const OPPORTUNITIES_RECONCILIATION_INTERVAL_MS = 60 * 60 * 1000;
@@ -475,6 +475,27 @@ async function performOpportunitiesSyncFromMatch() {
 			match_entered_at = least(tentativas_opportunities.match_entered_at, excluded.match_entered_at),
 			os_opened_at = excluded.os_opened_at,
 			os_age_days = excluded.os_age_days,
+			status = case
+				when tentativas_opportunities.active = false
+				 and tentativas_opportunities.removed_from_match_at is not null
+				 and tentativas_opportunities.status = 'COMPLETED'
+				then 'PENDING'
+				else tentativas_opportunities.status
+			end,
+			last_result = case
+				when tentativas_opportunities.active = false
+				 and tentativas_opportunities.removed_from_match_at is not null
+				 and tentativas_opportunities.status = 'COMPLETED'
+				then null
+				else tentativas_opportunities.last_result
+			end,
+			completed_at = case
+				when tentativas_opportunities.active = false
+				 and tentativas_opportunities.removed_from_match_at is not null
+				 and tentativas_opportunities.status = 'COMPLETED'
+				then null
+				else tentativas_opportunities.completed_at
+			end,
 			priority = ${priorityExpression()},
 			active = true,
 			removed_from_match_at = null,
@@ -2001,6 +2022,7 @@ async function exportCsv(query = {}, user = {}) {
 
 module.exports = {
 	__testables: {
+		WITHDRAWAL_ORDER_TYPE_REGEX,
 		buildBalancedAssignmentPlan,
 		buildWhatsappUrls,
 		buildOpportunityResultUpdate,

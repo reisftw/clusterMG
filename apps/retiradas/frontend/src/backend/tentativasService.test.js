@@ -19,6 +19,23 @@ const { __testables } = require(
 );
 
 describe("tentativasService helpers", () => {
+	it("aceita todos os tipos de retirada e rejeita serviços operacionais", () => {
+		const eligible = new RegExp(__testables.WITHDRAWAL_ORDER_TYPE_REGEX, "i");
+		for (const type of [
+			"RETIRADA FTTH",
+			"RETIRADA - OUTROS",
+			"RETIRADA & CANCELAMENTO - SEGUNDA TENTATIVA",
+			"CANCELAMENTO & RETIRADA - SEGUNDA TENTATIVA",
+			"CANCELAMENTO FTTH",
+			"CANCELAMENTO - OUTROS",
+			"CANCELAMENTO LOJA",
+		]) {
+			expect(eligible.test(type)).toBe(true);
+		}
+		expect(eligible.test("INSTALAÇÃO FTTH")).toBe(false);
+		expect(eligible.test("SUPORTE TÉCNICO")).toBe(false);
+	});
+
 	it("normaliza telefones brasileiros para link do WhatsApp", () => {
 		expect(__testables.normalizePhone("(37) 99826-7983")).toMatchObject({
 			digits: "5537998267983",
