@@ -124,9 +124,9 @@ function buildBalancedAssignmentPlan(candidates = [], technicians = [], loadRows
 		const technicianKey = text(technician.user_id) || text(technician.user_email).toLowerCase();
 		loadByTechnician.set(technicianKey, (loadByTechnician.get(technicianKey) || 0) + 1);
 		return {
-			opportunityId: candidate.opportunity_id,
+			opportunity_id: candidate.opportunity_id,
 			cidade: candidate.cidade,
-			userId: technician.user_id,
+			user_id: technician.user_id,
 			email: technician.user_email,
 			name: technician.user_name,
 		};
@@ -1494,7 +1494,7 @@ async function listHistory(query = {}, user = {}) {
 	if (query.q) {
 		params.push(`%${text(query.q)}%`);
 		index += 1;
-		filters.push(`(o.cliente ilike $${index} or o.codigo_cliente ilike $${index} or o.os ilike $${index} or o.telefone ilike $${index} or o.cidade ilike $${index})`);
+		filters.push(`(o.cliente ilike $${index} or o.codigo_cliente ilike $${index} or o.os ilike $${index} or o.telefone ilike $${index} or o.cidade ilike $${index} or c.technician_name ilike $${index} or c.phone ilike $${index})`);
 	}
 	if (query.status) {
 		params.push(text(query.status));
@@ -1505,6 +1505,26 @@ async function listHistory(query = {}, user = {}) {
 		params.push(normalizeText(query.cidade));
 		index += 1;
 		filters.push(`o.cidade_normalizada = $${index}`);
+	}
+	if (query.technicianId) {
+		params.push(text(query.technicianId));
+		index += 1;
+		filters.push(`c.technician_user_id = $${index}`);
+	}
+	if (query.resultado) {
+		params.push(text(query.resultado));
+		index += 1;
+		filters.push(`coalesce(c.result, c.event_type) = $${index}`);
+	}
+	if (query.startDate) {
+		params.push(text(query.startDate));
+		index += 1;
+		filters.push(`c.created_at >= $${index}::date`);
+	}
+	if (query.endDate) {
+		params.push(text(query.endDate));
+		index += 1;
+		filters.push(`c.created_at < ($${index}::date + interval '1 day')`);
 	}
 	const where = filters.length ? `and ${filters.join(" and ")}` : "";
 	const result = await db.query(

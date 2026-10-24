@@ -57,12 +57,18 @@ describe("tentativas - distribuicao por tecnico", () => {
 		const plan = service.__testables.buildBalancedAssignmentPlan(candidates, technicians, []);
 		const totals = plan.reduce((counts, item) => ({
 			...counts,
-			[item.userId]: (counts[item.userId] || 0) + 1,
+			[item.user_id]: (counts[item.user_id] || 0) + 1,
 		}), {});
 
 		expect(plan).toHaveLength(101);
 		expect(Math.abs(totals["tec-1"] - totals["tec-2"])).toBeLessThanOrEqual(1);
-		expect(new Set(plan.map((item) => item.opportunityId)).size).toBe(101);
+		expect(new Set(plan.map((item) => item.opportunity_id)).size).toBe(101);
+		expect(plan[0]).toEqual(expect.objectContaining({
+			opportunity_id: "os-1",
+			user_id: expect.any(String),
+		}));
+		expect(plan[0]).not.toHaveProperty("opportunityId");
+		expect(plan[0]).not.toHaveProperty("userId");
 	});
 
 	it("considera a carga existente antes de distribuir novas oportunidades", () => {
@@ -77,7 +83,7 @@ describe("tentativas - distribuicao por tecnico", () => {
 			[{ technician_user_id: "tec-1", technician_email: "tec1@example.com", total: 3 }],
 		);
 
-		expect(plan.every((item) => item.userId === "tec-2")).toBe(true);
+		expect(plan.every((item) => item.user_id === "tec-2")).toBe(true);
 	});
 
 	it("inclui tecnicos vinculados a cidade mesmo antes da primeira atribuicao", async () => {
