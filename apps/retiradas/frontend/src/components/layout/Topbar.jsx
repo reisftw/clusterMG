@@ -10,6 +10,7 @@ import {
 	obterResumoNotificacoes,
 } from "../../services/internalNotificationsService";
 import { playSelectedNotificationSound } from "../../services/notificationSoundSettings";
+import { recordNotificationOpen } from "../../services/pushNotificationsService";
 import { AVATAR_ACCEPT, validateImageFile } from "../../utils/imageUpload";
 import AuthenticatorModal from "./AuthenticatorModal";
 
@@ -275,6 +276,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 											to={item.targetPath || "#"}
 											onClick={() => {
 												markOneRead(item.id);
+												void recordNotificationOpen(item.id, "IN_APP").catch(() => {});
 												setNotificationsOpen(false);
 											}}
 											className={`block rounded-xl border p-3 transition hover:bg-slate-50 ${

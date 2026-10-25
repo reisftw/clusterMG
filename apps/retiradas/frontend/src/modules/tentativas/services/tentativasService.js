@@ -49,6 +49,13 @@ export function buscarMinhaProdutividadeTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/produtividade${qs(params)}`);
 }
 
+export function registrarAcessoTentativas(payload = {}) {
+	return requestVpsApi("/tentativas/acessos", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
 export function atualizarRecuperacaoTentativas(id, payload = {}) {
 	return requestVpsApi(`/tentativas/recuperacoes/${encodeURIComponent(id)}/status`, {
 		method: "PUT",
@@ -121,6 +128,18 @@ export function buscarInteligenciaTentativas(params = {}) {
 
 export function buscarNovosContatosTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/admin/novos-contatos${qs(params)}`);
+}
+
+export function buscarAdocaoTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/adocao${qs(params)}`);
+}
+
+export function buscarHistoricoAlertasTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/alertas${qs(params)}`);
+}
+
+export function executarAlertasTentativas() {
+	return requestVpsApi("/tentativas/admin/alertas/executar", { method: "POST" });
 }
 
 export function buscarAuditoriaTentativas(params = {}) {

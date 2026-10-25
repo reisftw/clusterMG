@@ -1,19 +1,16 @@
-﻿import { requestVpsApi } from "./vpsApiClient";
+import { registerAppServiceWorker } from "./appServiceWorker";
+import { requestVpsApi } from "./vpsApiClient";
 
 export const PUSH_TOPIC_OPTIONS = [
 	{ key: "mapa", label: "Mapa O.S" },
 	{ key: "match", label: "Match" },
 	{ key: "metas", label: "Metas" },
 	{ key: "comunicados", label: "Comunicados" },
+	{ key: "tentativas", label: "Tentativas" },
 ];
 
 const PUSH_STORAGE_KEY = "retiradas_push_preferences_v1";
-const DEFAULT_TOPICS = {
-	mapa: true,
-	match: true,
-	metas: true,
-	comunicados: true,
-};
+const DEFAULT_TOPICS = { mapa: true, match: true, metas: true, comunicados: true, tentativas: true };
 
 function normalizeTopics(topics = {}) {
 	return PUSH_TOPIC_OPTIONS.reduce((acc, item) => {
@@ -27,23 +24,18 @@ function canUseNotificationApi() {
 }
 
 function persistPushPreferences(value) {
-	if (typeof window === "undefined") return;
-	window.localStorage.setItem(PUSH_STORAGE_KEY, JSON.stringify(value));
+	if (typeof window !== "undefined") window.localStorage.setItem(PUSH_STORAGE_KEY, JSON.stringify(value));
 }
 
 export function loadSavedPushPreferences() {
-	if (typeof window === "undefined") {
-		return { enabled: false, topics: { ...DEFAULT_TOPICS }, token: "" };
-	}
-
+	if (typeof window === "undefined") return { enabled: false, topics: { ...DEFAULT_TOPICS }, token: "" };
 	try {
 		const raw = window.localStorage.getItem(PUSH_STORAGE_KEY);
-		if (!raw)
-			return { enabled: false, topics: { ...DEFAULT_TOPICS }, token: "" };
+		if (!raw) return { enabled: false, topics: { ...DEFAULT_TOPICS }, token: "" };
 		const parsed = JSON.parse(raw);
 		return {
 			enabled: parsed?.enabled === true,
-			topics: normalizeTopics(parsed?.topics || DEFAULT_TOPICS),
+			topics: normalizeTopics({ ...DEFAULT_TOPICS, ...(parsed?.topics || {}) }),
 			token: typeof parsed?.token === "string" ? parsed.token : "",
 		};
 	} catch {
@@ -51,60 +43,97 @@ export function loadSavedPushPreferences() {
 	}
 }
 
+function urlBase64ToUint8Array(value) {
+	const padding = "=".repeat((4 - (value.length % 4)) % 4);
+	const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+	const raw = window.atob(base64);
+	return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
+
 export async function getPushSupportState() {
+	const hasServiceWorker = typeof navigator !== "undefined" && "serviceWorker" in navigator;
+	const hasPushManager = typeof window !== "undefined" && "PushManager" in window;
+	let config = { enabled: false, publicKey: "" };
+	let subscribed = false;
+	if (hasServiceWorker && hasPushManager) {
+		config = await requestVpsApi("/push/config").catch(() => config);
+		const registration = await registerAppServiceWorker();
+		subscribed = Boolean(await registration?.pushManager?.getSubscription());
+	}
 	return {
-		supported: false,
+		supported: hasServiceWorker && hasPushManager,
 		hasNotificationApi: canUseNotificationApi(),
 		permission: canUseNotificationApi() ? Notification.permission : "denied",
-		hasVapidKey: false,
-		vapidKeyValid: false,
-		migratedToVps: false,
+		hasVapidKey: Boolean(config.publicKey),
+		vapidKeyValid: Boolean(config.publicKey),
+		migratedToVps: config.enabled === true,
+		subscribed,
 	};
 }
 
-export async function enablePushNotifications() {
-	throw new Error("Push ainda nao foi migrado para a VPS.");
+export async function enablePushNotifications(topics = DEFAULT_TOPICS) {
+	if (!canUseNotificationApi()) throw new Error("Este dispositivo nao suporta notificacoes.");
+	const permission = await Notification.requestPermission();
+	if (permission !== "granted") throw new Error("Permissao de notificacao nao concedida.");
+	const config = await requestVpsApi("/push/config");
+	const registration = await registerAppServiceWorker();
+	if (!registration?.pushManager) throw new Error("Push nao suportado neste navegador.");
+	let subscription = await registration.pushManager.getSubscription();
+	if (!subscription) {
+		subscription = await registration.pushManager.subscribe({
+			userVisibleOnly: true,
+			applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+		});
+	}
+	const normalized = normalizeTopics(topics);
+	await requestVpsApi("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: subscription.toJSON(), topics: normalized }) });
+	persistPushPreferences({ enabled: true, topics: normalized, token: subscription.endpoint });
+	return { subscription, topics: normalized };
 }
 
 export async function disablePushNotifications() {
-	persistPushPreferences({
-		enabled: false,
-		topics: { ...DEFAULT_TOPICS },
-		token: "",
-	});
+	const registration = await registerAppServiceWorker();
+	const subscription = await registration?.pushManager?.getSubscription();
+	if (subscription) {
+		await requestVpsApi("/push/subscribe", { method: "DELETE", body: JSON.stringify({ endpoint: subscription.endpoint }) }).catch(() => {});
+		await subscription.unsubscribe().catch(() => {});
+	}
+	persistPushPreferences({ enabled: false, topics: { ...DEFAULT_TOPICS }, token: "" });
 }
 
 export async function updatePushTopics(topics) {
 	const saved = loadSavedPushPreferences();
 	const normalized = normalizeTopics(topics);
-	persistPushPreferences({
-		enabled: false,
-		topics: normalized,
-		token: saved.token || "",
-	});
+	persistPushPreferences({ enabled: saved.enabled === true, topics: normalized, token: saved.token || "" });
+	if (saved.enabled) await syncSavedPushSubscription(normalized);
 	return { token: saved.token || "", topics: normalized };
 }
 
-export async function syncSavedPushSubscription() {
-	return null;
+export async function syncSavedPushSubscription(topicsOverride = null) {
+	if (!canUseNotificationApi() || Notification.permission !== "granted") return null;
+	const registration = await registerAppServiceWorker();
+	const subscription = await registration?.pushManager?.getSubscription();
+	if (!subscription) return null;
+	const saved = loadSavedPushPreferences();
+	const topics = normalizeTopics(topicsOverride || saved.topics || DEFAULT_TOPICS);
+	await requestVpsApi("/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: subscription.toJSON(), topics }) });
+	persistPushPreferences({ ...saved, enabled: true, topics, token: subscription.endpoint });
+	return subscription;
 }
 
 export async function bindForegroundPushNotifications() {
-	return null;
+	return registerAppServiceWorker();
+}
+
+export async function recordNotificationOpen(notificationId, channel = "IN_APP") {
+	if (!notificationId) return null;
+	return requestVpsApi("/push/events/open", { method: "POST", body: JSON.stringify({ notificationId, channel }) });
 }
 
 export async function fetchPushAdminOverview() {
-	return requestVpsApi("/push/overview").catch(() => ({
-		total: 0,
-		active: 0,
-		topics: {},
-		recent: [],
-	}));
+	return requestVpsApi("/push/overview").catch(() => ({ total: 0, active: 0, users: 0, recent: [] }));
 }
 
 export async function sendAdminPushNotification(payload) {
-	return requestVpsApi("/push/send", {
-		method: "POST",
-		body: JSON.stringify(payload || {}),
-	});
+	return requestVpsApi("/push/send", { method: "POST", body: JSON.stringify(payload || {}) });
 }

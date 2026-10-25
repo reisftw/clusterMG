@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const db = require("../db");
 const auditLog = require("../auditLog");
 const centralService = require("./tentativasCentralService");
+const alertsService = require("./tentativasAlertsService");
 
 const VIEW_PERMISSIONS = ["tentativas.visualizar"];
 const EXECUTE_PERMISSIONS = ["tentativas.executar"];
@@ -279,6 +280,7 @@ async function performOpportunitiesSyncFromMatch() {
 	const client = await db.connect();
 	let releasedAssignments = [];
 	let completedAutomatically = 0;
+	let newOpportunities = [];
 	try {
 		await client.query("begin");
 		await client.query(
@@ -310,7 +312,7 @@ async function performOpportunitiesSyncFromMatch() {
 			        updated_at = now()
 			  where active = true`,
 		);
-		await client.query(
+		const opportunityResult = await client.query(
 		`with phone_sources_raw as materialized (
 			select o.num_os as os,
 			       o.codigo_cliente,
@@ -504,9 +506,11 @@ async function performOpportunitiesSyncFromMatch() {
 			active = true,
 			removed_from_match_at = null,
 			source_payload = excluded.source_payload,
-			updated_at = now()`,
+			updated_at = now()
+		returning id, os, cidade, cidade_normalizada, (created_at = updated_at) as newly_inserted`,
 			[WITHDRAWAL_ORDER_TYPE_REGEX, VALID_PHONE_DIGITS_REGEX],
 		);
+		newOpportunities = opportunityResult.rows.filter((row) => row.newly_inserted);
 		const completionResult = await client.query(
 			`update tentativas_opportunities
 			    set status = 'COMPLETED',
@@ -540,6 +544,7 @@ async function performOpportunitiesSyncFromMatch() {
 			completedAutomatically,
 			released: releasedAssignments.length,
 			replenished,
+			newOpportunities,
 		};
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
@@ -567,6 +572,9 @@ async function syncOpportunitiesFromMatch({ force = false } = {}) {
 		opportunitiesSyncPromise = performOpportunitiesSyncFromMatch()
 			.then(async (summary) => {
 				const priority = await centralService.refreshPriorityScores({ limit: 2000 });
+				const opportunityAlerts = await alertsService
+					.publishNewOpportunityAlerts(summary.newOpportunities || [])
+					.catch((error) => ({ created: 0, error: error?.message || String(error) }));
 				const notifications = await centralService
 					.publishScheduledNotifications()
 					.catch((error) => {
@@ -577,7 +585,7 @@ async function syncOpportunitiesFromMatch({ force = false } = {}) {
 						return { callbacks: 0, alerts: 0, error: error?.message || String(error) };
 					});
 				opportunitiesLastSyncAt = Date.now();
-				return { ok: true, ...summary, priority, notifications };
+				return { ok: true, ...summary, priority, opportunityAlerts, notifications };
 			})
 			.catch((error) => {
 				console.error("[tentativas] Falha ao sincronizar oportunidades:", error);
@@ -664,8 +672,9 @@ async function saveSettings(payload = {}, user = {}) {
 			        alert_thresholds = $10::jsonb,
 			        result_options = $11::jsonb,
 			        duplicate_policy = $12,
+			        alert_settings = $13::jsonb,
 			        version = version + 1,
-			        updated_by = $13,
+			        updated_by = $14,
 			        updated_at = now()
 			  where id = 'global'
 			  returning *`,
@@ -682,6 +691,11 @@ async function saveSettings(payload = {}, user = {}) {
 				JSON.stringify(payload.alertThresholds || payload.alert_thresholds || current.alert_thresholds || {}),
 				JSON.stringify(payload.resultOptions || payload.result_options || current.result_options || []),
 				text(payload.duplicatePolicy || payload.duplicate_policy || current.duplicate_policy || "WARN").toUpperCase(),
+				JSON.stringify({
+					...alertsService.DEFAULT_SETTINGS,
+					...(current.alert_settings || {}),
+					...(payload.alertSettings || payload.alert_settings || {}),
+				}),
 				userId(user),
 			],
 		);
@@ -1801,6 +1815,11 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 	);
 	const association = result.rows[0] || null;
 	await recordAudit("city.assign", city, user, payload);
+	if (association) {
+		await alertsService.publishCityAssignmentAlert(association, user).catch((error) => {
+			console.warn("[tentativas] Falha ao avisar associacao de cidade:", error?.message || error);
+		});
+	}
 	return { ...(association || { ok: true }), assigned: 0, mode: "FULL_CITY" };
 }
 

@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const service = require("../tentativasService");
 const central = require("../tentativasCentralService");
+const alerts = require("../tentativasAlertsService");
 
 const evidenceUpload = multer({
 	storage: multer.memoryStorage(),
@@ -156,6 +157,17 @@ function createTentativasRouter({
 		}
 	});
 
+	router.post("/acessos", requireAuthenticated, requireCsrfToken, requireView, async (req, res, next) => {
+		try {
+			res.status(201).json(await alerts.recordPageVisit(req.user || {}, {
+				sessionId: req.body?.sessionId,
+				source: req.body?.source || "PWA",
+				userAgent: req.get("user-agent"),
+				metadata: { tab: req.body?.tab || "route" },
+			}));
+		} catch (error) { next(error); }
+	});
+
 	router.put(
 		"/recuperacoes/:id/status",
 		requireAuthenticated,
@@ -305,6 +317,34 @@ function createTentativasRouter({
 			} catch (error) {
 				next(error);
 			}
+		},
+	);
+
+	router.get(
+		"/admin/adocao",
+		requireAuthenticated,
+		requireManagement,
+		async (req, res, next) => {
+			try { res.json(await alerts.listUsageMetrics(req.query || {})); } catch (error) { next(error); }
+		},
+	);
+
+	router.get(
+		"/admin/alertas",
+		requireAuthenticated,
+		requireManagement,
+		async (req, res, next) => {
+			try { res.json(await alerts.listAlertHistory(req.query || {})); } catch (error) { next(error); }
+		},
+	);
+
+	router.post(
+		"/admin/alertas/executar",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireManagement,
+		async (_req, res, next) => {
+			try { res.json(await alerts.publishHourlyTechnicianAlerts()); } catch (error) { next(error); }
 		},
 	);
 

@@ -1,5 +1,6 @@
 import {
 	BarChart3,
+	BellRing,
 	CalendarClock,
 	ChevronDown,
 	ChevronLeft,
@@ -28,6 +29,11 @@ import Spinner from "../../../components/ui/Spinner";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import {
+	enablePushNotifications,
+	getPushSupportState,
+	syncSavedPushSubscription,
+} from "../../../services/pushNotificationsService";
+import {
 	baixarHistoricoTentativasCsv,
 	buscarConfiguracoesTentativas,
 	buscarDetalheTentativa,
@@ -44,6 +50,7 @@ import {
 	listarLocalidadesTentativas,
 	listarTemplatesTentativas,
 	removerCidadeTecnicoTentativas,
+	registrarAcessoTentativas,
 	salvarCidadeTecnicoTentativas,
 	salvarConfiguracoesTentativas,
 	salvarResultadoTentativa,
@@ -1354,8 +1361,10 @@ function SettingsTab() {
 	const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 	const updateWeight = (key, value) => setForm((current) => ({ ...current, score_weights: { ...(current.score_weights || {}), [key]: Number(value) } }));
 	const updateThreshold = (key, value) => setForm((current) => ({ ...current, alert_thresholds: { ...(current.alert_thresholds || {}), [key]: Number(value) } }));
+	const updateAlert = (key, value) => setForm((current) => ({ ...current, alert_settings: { ...(current.alert_settings || {}), [key]: value } }));
 	const weights = form.score_weights || {};
 	const thresholds = form.alert_thresholds || {};
+	const alertSettings = form.alert_settings || {};
 	return (
 		<section className="max-w-5xl rounded-3xl border bg-white p-5 shadow-sm">
 			<div className="flex items-center justify-between gap-3"><h2 className="text-lg font-black">Política de contato</h2><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Versão {form.version || 1}</span></div>
@@ -1383,6 +1392,30 @@ function SettingsTab() {
 					{[["staleWalletHours", "Carteira parada (h)"], ["overdueCallbacks", "Retornos vencidos"], ["invalidPhonePercent", "Telefones inválidos (%)"], ["highPriorityWithoutContact", "Prioridades sem contato"]].map(([key, label]) => <label key={key} className="grid gap-1 font-bold">{label}<input className="rounded-xl border p-3" type="number" min="0" value={thresholds[key] ?? 0} onChange={(e) => updateThreshold(key, e.target.value)} /></label>)}
 				</div>
 			</div>
+			<div className="mt-6 border-t border-slate-200 pt-5">
+				<h3 className="font-black text-slate-950">Alertas dos técnicos</h3>
+				<p className="mt-1 text-sm font-semibold text-slate-500">Define quando a Central avisa sobre cidades, novas O.S e ordens ainda abertas.</p>
+				<div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					<label className="flex items-center gap-2 rounded-xl border p-3 font-bold"><input type="checkbox" checked={alertSettings.enabled !== false} onChange={(e) => updateAlert("enabled", e.target.checked)} /> Alertas ativos</label>
+					<label className="flex items-center gap-2 rounded-xl border p-3 font-bold"><input type="checkbox" checked={alertSettings.assignmentAlerts !== false} onChange={(e) => updateAlert("assignmentAlerts", e.target.checked)} /> Nova cidade</label>
+					<label className="flex items-center gap-2 rounded-xl border p-3 font-bold"><input type="checkbox" checked={alertSettings.newOpportunityAlerts !== false} onChange={(e) => updateAlert("newOpportunityAlerts", e.target.checked)} /> Novas O.S</label>
+					<label className="flex items-center gap-2 rounded-xl border p-3 font-bold"><input type="checkbox" checked={alertSettings.hourlyAlerts !== false} onChange={(e) => updateAlert("hourlyAlerts", e.target.checked)} /> Lembrete periódico</label>
+					<label className="grid gap-1 font-bold">Intervalo (min)<input className="rounded-xl border p-3" type="number" min="15" max="480" step="15" value={alertSettings.intervalMinutes || 60} onChange={(e) => updateAlert("intervalMinutes", Number(e.target.value))} /></label>
+					<label className="grid gap-1 font-bold">Início do expediente<input className="rounded-xl border p-3" type="time" value={alertSettings.startTime || "08:00"} onChange={(e) => updateAlert("startTime", e.target.value)} /></label>
+					<label className="grid gap-1 font-bold">Fim do expediente<input className="rounded-xl border p-3" type="time" value={alertSettings.endTime || "17:00"} onChange={(e) => updateAlert("endTime", e.target.value)} /></label>
+					<label className="flex items-center gap-2 rounded-xl border p-3 font-bold"><input type="checkbox" checked={alertSettings.pushEnabled !== false} onChange={(e) => updateAlert("pushEnabled", e.target.checked)} /> Enviar por push</label>
+				</div>
+				<div className="mt-4">
+					<p className="text-sm font-black text-slate-700">Dias de envio</p>
+					<div className="mt-2 flex flex-wrap gap-2">
+						{[[0,"Dom"],[1,"Seg"],[2,"Ter"],[3,"Qua"],[4,"Qui"],[5,"Sex"],[6,"Sáb"]].map(([day,label]) => {
+							const selected = (alertSettings.weekdays || [1,2,3,4,5]).map(Number).includes(day);
+							return <label key={day} className={`flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-black ${selected ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-500"}`}><input type="checkbox" checked={selected} onChange={(event) => { const current = (alertSettings.weekdays || [1,2,3,4,5]).map(Number); updateAlert("weekdays", event.target.checked ? [...new Set([...current, day])].sort((a,b) => a-b) : current.filter((item) => item !== day)); }} />{label}</label>;
+						})}
+					</div>
+				</div>
+				<p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-600">O intervalo começa a contar no horário inicial configurado. O navegador solicitará autorização no primeiro uso do push.</p>
+			</div>
 			<label className="mt-5 grid gap-1 font-bold">Motivo da alteração<input className="rounded-xl border p-3" value={form.changeReason || ""} onChange={(e) => update("changeReason", e.target.value)} placeholder="Ex.: ajuste da política operacional de novembro" /></label>
 			<button type="button" onClick={async () => setForm(await salvarConfiguracoesTentativas(form))} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-black text-white"><Save className="h-4 w-4" /> Salvar</button>
 		</section>
@@ -1399,6 +1432,9 @@ export default function TentativasPage() {
 	const [tab, setTab] = useState(requestedTab);
 	const [workspace, setWorkspace] = useState(ADMIN_TAB_KEYS.has(requestedTab) ? "management" : "operation");
 	const [moreOpen, setMoreOpen] = useState(false);
+	const [pushState, setPushState] = useState(null);
+	const [pushBusy, setPushBusy] = useState(false);
+	const [pushError, setPushError] = useState("");
 	const tabs = admin && workspace === "management" ? ADMIN_TABS : OPERATIONAL_TABS;
 	const activeTab = !admin && ADMIN_TAB_KEYS.has(tab) ? "route" : tab;
 	const selectTab = useCallback((nextTab) => {
@@ -1411,6 +1447,28 @@ export default function TentativasPage() {
 		setWorkspace(nextWorkspace);
 		selectTab(nextWorkspace === "management" ? "management" : "route");
 	};
+	const activatePush = async () => {
+		setPushBusy(true);
+		setPushError("");
+		try {
+			await enablePushNotifications();
+			setPushState(await getPushSupportState());
+		} catch (error) {
+			setPushError(error?.message || "Não foi possível ativar as notificações neste dispositivo.");
+		} finally {
+			setPushBusy(false);
+		}
+	};
+	useEffect(() => {
+		let sessionId = sessionStorage.getItem("tentativas:visit-session");
+		if (!sessionId) {
+			sessionId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+			sessionStorage.setItem("tentativas:visit-session", sessionId);
+		}
+		void registrarAcessoTentativas({ sessionId, source: window.matchMedia?.("(display-mode: standalone)")?.matches ? "PWA" : "WEB", tab: requestedTab }).catch(() => {});
+		void syncSavedPushSubscription().catch(() => {});
+		void getPushSupportState().then(setPushState).catch(() => {});
+	}, [requestedTab]);
 	return (
 		<div className="retiradas-native-page w-full min-w-0 space-y-5 pb-24 md:pb-0">
 			<PageHeader
@@ -1419,6 +1477,16 @@ export default function TentativasPage() {
 				description="Match → contato manual via WhatsApp → resposta → agendamento → retirada."
 				icon={<div className="rounded-2xl bg-blue-600 p-3 text-white"><MessageCircle className="h-6 w-6" /></div>}
 			/>
+			{pushState?.supported && pushState.permission !== "denied" && !pushState.subscribed ? (
+				<section className="flex flex-col gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+					<div className="flex items-center gap-3">
+						<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-600 text-white"><BellRing className="h-5 w-5" /></span>
+						<div><strong className="block text-slate-950">Receba alertas das suas cidades</strong><p className="text-sm font-semibold text-slate-600">Avisos de novas O.S e lembretes de tratativas, mesmo com o PWA fechado.</p></div>
+					</div>
+					<button type="button" disabled={pushBusy} onClick={() => void activatePush()} className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-black text-white disabled:opacity-60">{pushBusy ? "Ativando..." : "Ativar notificações"}</button>
+				</section>
+			) : null}
+			{pushError ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{pushError}</div> : null}
 			{admin ? (
 				<section className={`flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${workspace === "management" ? "border-slate-800 bg-slate-950 text-white" : "border-blue-200 bg-blue-50 text-slate-950"}`}>
 					<div className="flex min-w-0 items-center gap-3">

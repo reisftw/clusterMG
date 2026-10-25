@@ -6,6 +6,7 @@ const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const agendamentoMapaReconciliation = require("./agendamentoMapaReconciliation");
 const operationalImports = require("./operationalImports");
 const tentativasService = require("./tentativas/tentativasService");
+const tentativasAlertsService = require("./tentativas/tentativasAlertsService");
 const { closeRealtimeClients } = require("./realtime");
 
 const port = Number(process.env.PORT || 3001);
@@ -17,6 +18,7 @@ const server = app.listen(port, () => {
 	agendamentoConfirmacao.startWorker();
 	agendamentoMapaReconciliation.startCompletedAppointmentsWorker();
 	tentativasService.startOpportunitiesReconciliationWorker();
+	tentativasAlertsService.startWorker();
 	operationalImports.markInterruptedImportJobs().catch((error) => {
 		console.error(
 			"[retiradas-api] Falha ao recuperar jobs de importacao:",
@@ -41,6 +43,7 @@ async function shutdown(signal) {
 	agendamentoConfirmacao.stopWorker();
 	agendamentoMapaReconciliation.stopCompletedAppointmentsWorker();
 	tentativasService.stopOpportunitiesReconciliationWorker();
+	tentativasAlertsService.stopWorker();
 	closeRealtimeClients();
 
 	const forceExit = setTimeout(() => {

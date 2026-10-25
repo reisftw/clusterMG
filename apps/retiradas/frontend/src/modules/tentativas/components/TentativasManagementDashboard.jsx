@@ -29,6 +29,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import Spinner from "../../../components/ui/Spinner";
+import TentativasAdoptionPanel from "./TentativasAdoptionPanel";
 import {
 	baixarAnalyticsTentativasCsv,
 	baixarHistoricoTentativasCsv,
@@ -305,9 +306,10 @@ export default function TentativasManagementDashboard() {
 			<nav className="flex gap-2 overflow-x-auto rounded-lg border border-slate-200 bg-white p-2 shadow-sm" aria-label="Seções da gestão de tentativas">
 				<button type="button" onClick={() => setManagementView("overview")} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-black ${managementView === "overview" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Visão geral</button>
 				<button type="button" onClick={() => setManagementView("newContacts")} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-black ${managementView === "newContacts" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Novos contatos</button>
+				<button type="button" onClick={() => setManagementView("adoption")} className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-black ${managementView === "adoption" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>Adoção e alertas</button>
 			</nav>
 
-			{managementView === "newContacts" ? <NewContactsPanel /> : <>
+			{managementView === "newContacts" ? <NewContactsPanel /> : managementView === "adoption" ? <TentativasAdoptionPanel /> : <>
 
 			{error ? <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700"><CircleAlert className="mr-2 inline h-4 w-4" />{error}<button type="button" onClick={() => void load()} className="ml-3 underline">Tentar novamente</button></div> : null}
 			{stale ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">Os dados exibidos podem estar desatualizados. Atualize o painel para obter a leitura mais recente.</div> : null}

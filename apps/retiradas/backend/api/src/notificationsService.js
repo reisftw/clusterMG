@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("./db");
 const { broadcastRealtime } = require("./realtime");
+const pushNotifications = require("./pushNotificationsService");
 
 const COLLECTION = "system_notifications";
 const PREFERENCES_COLLECTION = "notification_preferences";
@@ -279,6 +280,19 @@ async function createNotification({
 		targetPath,
 		createdAt,
 	});
+	for (const target of normalizeTargets(targets).users) {
+		await pushNotifications.recordEvent({
+			notificationId: id,
+			userId: target,
+			userEmail: String(target).includes("@") ? target : "",
+			eventType: "CREATED",
+			channel: "IN_APP",
+			dedupeKey: `${id}:${target}:created`,
+		});
+	}
+	await pushNotifications.sendNotificationToTargets(data).catch((error) => {
+		console.warn("[notifications] Falha no envio Web Push:", error?.message || error);
+	});
 	return data;
 }
 
@@ -365,6 +379,13 @@ async function getNotificationStats({ user } = {}) {
 async function markNotificationsRead({ user, ids = [], all = false } = {}) {
 	const key = userKey(user);
 	const readAt = nowIso();
+	let readIds = (Array.isArray(ids) ? ids : [])
+		.map((id) => String(id || "").trim())
+		.filter(Boolean);
+	if (all) {
+		const visibleRows = await listRawNotifications({ limit: 300, offset: 0 });
+		readIds = filterMappedNotifications(visibleRows, { user }).map((item) => item.id);
+	}
 	let result;
 	if (all) {
 		result = await db.query(
@@ -375,9 +396,7 @@ async function markNotificationsRead({ user, ids = [], all = false } = {}) {
 			[COLLECTION, ["readBy", key], readAt],
 		);
 	} else {
-		const normalizedIds = (Array.isArray(ids) ? ids : [])
-			.map((id) => String(id || "").trim())
-			.filter(Boolean);
+		const normalizedIds = readIds;
 		if (!normalizedIds.length) return { ok: true, updated: 0 };
 		result = await db.query(
 			`update app_documents
@@ -391,6 +410,7 @@ async function markNotificationsRead({ user, ids = [], all = false } = {}) {
 
 	clearCountersCache();
 	broadcastRealtime("notifications", { action: "read", userId: key });
+	await pushNotifications.recordRead({ user, notificationIds: readIds }).catch(() => {});
 	return { ok: true, updated: result.rowCount || 0 };
 }
 

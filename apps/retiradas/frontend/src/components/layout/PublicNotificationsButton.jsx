@@ -23,6 +23,9 @@ const TOPIC_META = {
 	comunicados: {
 		description: "Mensagens gerais e avisos manuais enviados pela equipe.",
 	},
+	tentativas: {
+		description: "Novas O.S, cidades atribuídas e lembretes da Central de Tentativas.",
+	},
 };
 
 function getPermissionLabel(permission) {

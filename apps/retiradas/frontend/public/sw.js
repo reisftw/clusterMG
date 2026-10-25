@@ -1,4 +1,4 @@
-const CACHE_NAME = "retiradas-pwa-v29-tentativas-new-contacts";
+const CACHE_NAME = "retiradas-pwa-v30-tentativas-push";
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
@@ -140,6 +140,7 @@ self.addEventListener("push", (event) => {
 			badge,
 			data: {
 				route,
+				notificationId: data.notificationId || payload.notificationId || "",
 			},
 		}),
 	);
@@ -149,10 +150,20 @@ self.addEventListener("notificationclick", (event) => {
 	event.notification.close();
 
 	const route = event.notification?.data?.route || "/painel";
+	const notificationId = event.notification?.data?.notificationId || "";
 	const targetUrl = new URL(route, self.location.origin).href;
 
 	event.waitUntil(
-		self.clients
+		Promise.all([
+			notificationId
+				? fetch("/api/push/events/open", {
+					method: "POST",
+					credentials: "include",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ notificationId, channel: "PUSH" }),
+				}).catch(() => null)
+				: Promise.resolve(null),
+			self.clients
 			.matchAll({ type: "window", includeUncontrolled: true })
 			.then((clients) => {
 				for (const client of clients) {
@@ -168,5 +179,6 @@ self.addEventListener("notificationclick", (event) => {
 
 				return undefined;
 			}),
+		]),
 	);
 });

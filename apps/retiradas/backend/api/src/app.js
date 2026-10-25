@@ -59,6 +59,7 @@ const createMercadoOnboardingRouter = require("./mercado/onboardingRoutes");
 const metrics = require("./metrics");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
+const createPushNotificationsRouter = require("./pushNotifications/routes/pushNotificationsRoutes");
 const createSeniorAdminRouter = require("./seniorAdmin/routes/seniorAdminRoutes");
 const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes");
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
@@ -2666,6 +2667,16 @@ function createApp() {
 		createNotificationsRouter({
 			adminRoles: ADMIN_ROLES,
 			notificationsService,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/push",
+		createPushNotificationsRouter({
+			adminRoles: ADMIN_ROLES,
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,

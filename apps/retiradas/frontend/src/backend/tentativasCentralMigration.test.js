@@ -22,6 +22,10 @@ const orderReferenceIndexMigrationPath = path.join(
 	process.cwd(),
 	"apps/retiradas/backend/sql/093_ordens_servico_fk_indexes.sql",
 );
+const alertsPushMigrationPath = path.join(
+	process.cwd(),
+	"apps/retiradas/backend/sql/095_tentativas_alertas_push_adocao.sql",
+);
 
 describe("migration 089 - Central de Tentativas", () => {
 	const sql = fs.readFileSync(migrationPath, "utf8");
@@ -114,5 +118,19 @@ describe("migration 093 - indice da referencia de tentativas", () => {
 	it("indexa somente a tabela pertencente ao schema do Retiradas", () => {
 		expect(sql).toContain("tentativas_opportunities_ordem_id_idx");
 		expect(sql).not.toContain("mercado_entregas");
+	});
+});
+
+describe("migration 095 - alertas, push e adoção de Tentativas", () => {
+	const sql = fs.readFileSync(alertsPushMigrationPath, "utf8");
+
+	it("cria estruturas aditivas para assinaturas, eventos e acessos", () => {
+		expect(sql).toContain("add column if not exists alert_settings");
+		expect(sql).toContain("create table if not exists retiradas_push_subscriptions");
+		expect(sql).toContain("create table if not exists retiradas_notification_events");
+		expect(sql).toContain("create table if not exists tentativas_page_visits");
+		expect(sql).not.toMatch(/\bdelete\s+from\b/i);
+		expect(sql).not.toMatch(/\btruncate\b/i);
+		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
 	});
 });
