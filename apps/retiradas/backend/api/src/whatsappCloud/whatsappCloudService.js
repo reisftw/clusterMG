@@ -1123,6 +1123,7 @@ function createWhatsappCloudService({
 		if (templateName === "retiradas_recolhimento_teste_v2" && !cancellationDate) {
 			throw apiError("Informe a data de cancelamento para usar o novo template.");
 		}
+		await syncTemplates(user);
 		const sent = await sendTestMessage(
 			{
 				recipientId,
