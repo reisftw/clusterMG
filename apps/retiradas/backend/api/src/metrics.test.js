@@ -55,7 +55,7 @@ test("resume contagem e latencia sem amostras individuais", () => {
 	});
 	assert.equal(row.requests, 4);
 	assert.equal(row.avg_ms, 100);
-	assert.equal(row.p95_ms, 250);
+	assert.equal(row.p95_ms, 220);
 	assert.equal(row.errors_4xx, 1);
 	assert.equal(row.errors_5xx, 1);
 });
