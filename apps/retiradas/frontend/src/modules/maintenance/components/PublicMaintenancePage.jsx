@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock3, RefreshCw, ShieldAlert, Wrench } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getPublicMaintenanceStatus } from "../services/maintenanceService";
 import "./maintenance.css";
 
@@ -16,13 +16,7 @@ function remainingLabel(value) {
 
 export default function PublicMaintenancePage({ status, onStatusChange }) {
 	const [checking, setChecking] = useState(false);
-	const [, setTick] = useState(0);
 	const estimate = remainingLabel(status?.scheduledEndAt);
-
-	useEffect(() => {
-		const timer = window.setInterval(() => setTick((value) => value + 1), 30_000);
-		return () => window.clearInterval(timer);
-	}, []);
 
 	const checkAgain = async () => {
 		setChecking(true);
