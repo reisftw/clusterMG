@@ -1,4 +1,5 @@
-const CACHE_NAME = "retiradas-pwa-v30-tentativas-push";
+const SW_VERSION = "v31-maintenance";
+const CACHE_NAME = `retiradas-pwa-${SW_VERSION}`;
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
@@ -13,7 +14,26 @@ const APP_SHELL = [
 	"/melz-logo.webp",
 	"/retorninho-loader.webp",
 	"/retorninho-grinch.webp",
+	"/retorninho-maintenance-20261024.webp",
 ];
+
+function reportSwEvent(eventType, details = {}, path = "") {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 3000);
+	return fetch("/api/maintenance/service-worker/events", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		signal: controller.signal,
+		body: JSON.stringify({
+			eventType,
+			version: SW_VERSION,
+			path,
+			details,
+		}),
+	})
+		.catch(() => null)
+		.finally(() => clearTimeout(timer));
+}
 
 function parsePushPayload(event) {
 	if (!event?.data) return {};
@@ -36,13 +56,17 @@ function parsePushPayload(event) {
 
 self.addEventListener("install", (event) => {
 	event.waitUntil(
-		caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
+		Promise.all([
+			caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
+			reportSwEvent("INSTALLED", { cacheName: CACHE_NAME }),
+		]),
 	);
 	self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
 	event.waitUntil(
+		Promise.all([
 		caches
 			.keys()
 			.then((keys) =>
@@ -52,18 +76,26 @@ self.addEventListener("activate", (event) => {
 						.map((key) => caches.delete(key)),
 				),
 			),
+		reportSwEvent("ACTIVATED", { cacheName: CACHE_NAME }),
+		self.clients.claim(),
+		]),
 	);
-	self.clients.claim();
 });
 
 function fetchNavigation(request) {
-	return fetch(request, { cache: "no-store" }).catch(
-		() =>
+	return fetch(request, { cache: "no-store" }).catch((error) => {
+		reportSwEvent(
+			"NAVIGATION_FAILURE",
+			{ message: String(error?.message || error || "Falha de rede") },
+			new URL(request.url).pathname,
+		);
+		return (
 			new Response("Aplicacao offline. Recarregue quando a conexao voltar.", {
 				status: 503,
 				headers: { "content-type": "text/plain; charset=utf-8" },
-			}),
-	);
+			})
+		);
+	});
 }
 
 function fetchAndCacheAsset(request) {
@@ -90,14 +122,20 @@ function fetchAndCacheAsset(request) {
 function fetchSameOriginAsset(request) {
 	const url = new URL(request.url);
 	if (url.pathname.startsWith("/assets/")) {
-		return fetchAndCacheAsset(request).catch(() => Response.error());
+		return fetchAndCacheAsset(request).catch((error) => {
+			reportSwEvent("CACHE_FAILURE", { message: String(error?.message || error || "Falha de cache") }, url.pathname);
+			return Response.error();
+		});
 	}
 
 	return caches
 		.match(request)
 		.then(
 			(cached) =>
-				cached || fetchAndCacheAsset(request).catch(() => Response.error()),
+				cached || fetchAndCacheAsset(request).catch((error) => {
+					reportSwEvent("CACHE_FAILURE", { message: String(error?.message || error || "Falha de cache") }, url.pathname);
+					return Response.error();
+				}),
 		);
 }
 

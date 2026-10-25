@@ -8,12 +8,16 @@ import AccessDenied from "../modules/auth/components/AccessDenied";
 import ForgotPasswordPage from "../modules/auth/components/ForgotPasswordPage";
 import LoginForm from "../modules/auth/components/LoginForm";
 import ResetPasswordPage from "../modules/auth/components/ResetPasswordPage";
+import MaintenanceBoundary from "../modules/maintenance/components/MaintenanceBoundary";
 import HomeRoute from "./HomeRoute";
 import ProtectedRoute from "./ProtectedRoute";
 import { ROUTES } from "./routes";
 
 const Dashboard = lazy(
 	() => import("../modules/dashboard/components/DashboardPage"),
+);
+const MaintenancePortal = lazy(
+	() => import("../modules/maintenance/components/MaintenancePortal"),
 );
 const Diario = lazy(() => import("../modules/diario/components/DiarioPage"));
 const AcertoEstoque = lazy(
@@ -410,7 +414,8 @@ const MERCADO_PERMISSIONS = [
 
 const AppRouter = () => (
 	<BrowserRouter>
-		<Suspense fallback={<Spinner fullScreen />}>
+		<MaintenanceBoundary>
+			<Suspense fallback={<Spinner fullScreen />}>
 			<Routes>
 				<Route path={ROUTES.PAINEL_PUBLICO} element={<PainelPublico />} />
 				<Route
@@ -454,6 +459,7 @@ const AppRouter = () => (
 
 				<Route element={<AuthenticatedRoutes />}>
 					<Route path={ROUTES.LOGIN} element={<LoginForm />} />
+					<Route path={ROUTES.MAINTENANCE} element={<MaintenancePortal />} />
 					<Route
 						path={ROUTES.FORGOT_PASSWORD}
 						element={<ForgotPasswordPage />}
@@ -1575,7 +1581,8 @@ const AppRouter = () => (
 
 				<Route path="*" element={<ErrorPage code="404" />} />
 			</Routes>
-		</Suspense>
+			</Suspense>
+		</MaintenanceBoundary>
 	</BrowserRouter>
 );
 

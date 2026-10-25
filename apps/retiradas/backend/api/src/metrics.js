@@ -322,6 +322,55 @@ async function getQuerySummary({ hours = 1 } = {}) {
 	return result.rows;
 }
 
+async function getMaintenanceMetrics({ hours = 24 } = {}) {
+	await flushMetrics();
+	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
+	const [totals, timeline, topRoutes, queryTotals] = await Promise.all([
+		metricsQuery(
+			`select count(*)::integer total_requests,
+			 count(*) filter(where status_code between 400 and 499)::integer errors_4xx,
+			 count(*) filter(where status_code>=500)::integer errors_5xx,
+			 round(avg(duration_ms)::numeric,2)::float avg_ms,
+			 round(percentile_cont(0.95) within group(order by duration_ms)::numeric,2)::float p95_ms,
+			 round(max(duration_ms)::numeric,2)::float max_ms
+			 from metrics_requests where created_at>=now()-($1::numeric*interval '1 hour')`,
+			[safeHours],
+		),
+		metricsQuery(
+			`select date_trunc('hour',created_at) bucket,
+			 count(*)::integer requests,
+			 count(*) filter(where status_code>=500)::integer errors_5xx,
+			 round(avg(duration_ms)::numeric,2)::float avg_ms
+			 from metrics_requests where created_at>=now()-($1::numeric*interval '1 hour')
+			 group by bucket order by bucket`,
+			[safeHours],
+		),
+		metricsQuery(
+			`select method,route,count(*)::integer requests,
+			 count(*) filter(where status_code>=500)::integer errors_5xx,
+			 round(avg(duration_ms)::numeric,2)::float avg_ms,
+			 round(percentile_cont(0.95) within group(order by duration_ms)::numeric,2)::float p95_ms
+			 from metrics_requests where created_at>=now()-($1::numeric*interval '1 hour')
+			 group by method,route order by errors_5xx desc,p95_ms desc,requests desc limit 12`,
+			[safeHours],
+		),
+		metricsQuery(
+			`select count(*)::integer total_queries,
+			 count(*) filter(where error is not null and error<>'')::integer errors,
+			 round(avg(duration_ms)::numeric,2)::float avg_ms,
+			 round(percentile_cont(0.95) within group(order by duration_ms)::numeric,2)::float p95_ms
+			 from metrics_queries where created_at>=now()-($1::numeric*interval '1 hour')`,
+			[safeHours],
+		),
+	]);
+	return {
+		totals: totals.rows[0] || {},
+		timeline: timeline.rows,
+		topRoutes: topRoutes.rows,
+		queries: queryTotals.rows[0] || {},
+	};
+}
+
 async function resetMetrics() {
 	await metricsQuery(
 		"truncate table metrics_queries, metrics_requests restart identity",
@@ -387,6 +436,7 @@ async function resetMetricsController(_req, res, next) {
 
 module.exports = {
 	flushMetrics,
+	getMaintenanceMetrics,
 	initMetrics,
 	metricsController,
 	metricsMiddleware,

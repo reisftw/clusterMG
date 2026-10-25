@@ -3,6 +3,7 @@ export const ROUTES = {
 	FORGOT_PASSWORD: "/esqueci-senha",
 	RESET_PASSWORD: "/redefinir-senha",
 	ACCESS_DENIED: "/acesso-negado",
+	MAINTENANCE: "/maintenance",
 
 	APP: "/app",
 	DASHBOARD: "/",

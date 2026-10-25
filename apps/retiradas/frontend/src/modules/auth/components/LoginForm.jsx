@@ -171,7 +171,7 @@ function CredentialFields({
 	);
 }
 
-const LoginForm = () => {
+const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 	const { login, verifyEmailMfa, loginWithGoogle, loginWithOkta, error } =
 		useAuthContext();
 	const navigate = useNavigate();
@@ -226,7 +226,7 @@ const LoginForm = () => {
 				resetTurnstile();
 				return;
 			}
-			navigate(ROUTES.DASHBOARD);
+			navigate(redirectTo);
 		} catch {
 			// Erro tratado no useAuth.
 		} finally {
@@ -247,7 +247,7 @@ const LoginForm = () => {
 				code: mfaCode,
 				turnstileToken,
 			});
-			navigate(ROUTES.DASHBOARD);
+			navigate(redirectTo);
 		} catch {
 			// Erro tratado no useAuth.
 		} finally {
@@ -267,14 +267,14 @@ const LoginForm = () => {
 			setIsSubmitting(true);
 			try {
 				await loginWithGoogle(response.credential);
-				navigate(ROUTES.DASHBOARD);
+				navigate(redirectTo);
 			} catch {
 				// Erro tratado no useAuth.
 			} finally {
 				setIsSubmitting(false);
 			}
 		},
-		[loginWithGoogle, navigate],
+		[loginWithGoogle, navigate, redirectTo],
 	);
 
 	useEffect(() => {
@@ -371,10 +371,10 @@ const LoginForm = () => {
 
 		setIsSubmitting(true);
 		loginWithOkta({ credential: idToken, nonce })
-			.then(() => navigate(ROUTES.DASHBOARD))
+			.then(() => navigate(redirectTo))
 			.catch(() => null)
 			.finally(() => setIsSubmitting(false));
-	}, [loginWithOkta, navigate]);
+	}, [loginWithOkta, navigate, redirectTo]);
 
 	useEffect(() => {
 		if (

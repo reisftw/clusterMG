@@ -57,6 +57,8 @@ const { createMercadoAuthRouter } = require("./mercado/auth");
 const createMercadoProviderRouter = require("./mercado/providerRoutes");
 const createMercadoOnboardingRouter = require("./mercado/onboardingRoutes");
 const metrics = require("./metrics");
+const maintenanceService = require("./maintenanceService");
+const createMaintenanceRouter = require("./maintenance/routes/maintenanceRoutes");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createPushNotificationsRouter = require("./pushNotifications/routes/pushNotificationsRoutes");
@@ -2387,6 +2389,13 @@ function createApp() {
 		message: { error: "Muitas requisicoes. Tente novamente em instantes." },
 	});
 	const antiBotGuard = antiBot.requireAntiBot();
+	const maintenanceEventLimiter = rateLimit({
+		windowMs: 60 * 1000,
+		limit: 30,
+		standardHeaders: true,
+		legacyHeaders: false,
+		message: { error: "Muitos eventos do aplicativo. Tente novamente em instantes." },
+	});
 
 	app.set("trust proxy", 1);
 	app.use(helmet());
@@ -2427,6 +2436,7 @@ function createApp() {
 			},
 		}),
 	);
+	app.use(maintenanceService.maintenanceMiddleware);
 	metrics.initMetrics().catch((error) => {
 		console.error("[metrics] Falha ao inicializar metricas:", error);
 	});
@@ -2452,6 +2462,16 @@ function createApp() {
 	);
 	app.use("/api/public/visits", rejectLargePublicVisit);
 	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
+	app.use(
+		"/api/maintenance",
+		createMaintenanceRouter({
+			maintenanceService,
+			requireAuthenticated,
+			requireCsrfToken,
+			requireRoles,
+			publicEventLimiter: maintenanceEventLimiter,
+		}),
+	);
 	app.use(vpnAccess.createMiddleware());
 
 	app.get(
