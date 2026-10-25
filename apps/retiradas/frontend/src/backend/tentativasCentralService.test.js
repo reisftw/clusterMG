@@ -99,4 +99,11 @@ describe("Central inteligente de Tentativas", () => {
 		expect(funnel.every((stage) => stage.value === 0)).toBe(true);
 		expect(funnel.slice(1).every((stage) => stage.fromPreviousRate === 0)).toBe(true);
 	});
+
+	it("declara somente os parâmetros usados no escopo de recuperações", () => {
+		expect(__testables.recoveryListScopeParams({ id: "tecnico-1", roles: ["tecnico"] })).toEqual([
+			false,
+			"tecnico-1",
+		]);
+	});
 });

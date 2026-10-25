@@ -592,7 +592,7 @@ async function listTimeline(opportunityId, user = {}) {
 async function listRecoveries(query = {}, user = {}) {
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 20, 100);
-	const params = [canManage(user), userId(user), userEmail(user)];
+	const params = recoveryListScopeParams(user);
 	const filters = [];
 	let index = params.length;
 	if (query.status) { params.push(text(query.status).toUpperCase()); filters.push(`r.status=$${++index}`); }
@@ -611,6 +611,10 @@ async function listRecoveries(query = {}, user = {}) {
 		params,
 	);
 	return { items: result.rows, page, limit, total: Number(result.rows[0]?.total_count || 0) };
+}
+
+function recoveryListScopeParams(user = {}) {
+	return [canManage(user), userId(user)];
 }
 
 async function updateRecovery(recoveryId, payload = {}, user = {}) {
@@ -1263,7 +1267,7 @@ async function listAudit(query = {}, user = {}) {
 }
 
 module.exports = {
-	__testables: { calculatePriorityScore, assertRecoveryTransition, normalizeEquipmentIdentifier, safeRate, buildSequentialFunnel, RECOVERY_TRANSITIONS },
+	__testables: { calculatePriorityScore, assertRecoveryTransition, normalizeEquipmentIdentifier, safeRate, buildSequentialFunnel, recoveryListScopeParams, RECOVERY_TRANSITIONS },
 	addEvent,
 	assertContactAllowed,
 	createCallback,
