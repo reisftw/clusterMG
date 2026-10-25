@@ -704,7 +704,7 @@ function createWhatsappCloudService({
 						language,
 						cleanText(item.category),
 						cleanText(item.status).toUpperCase() || "UNKNOWN",
-						item.components || [],
+						JSON.stringify(item.components || []),
 						countTemplateParameters(item.components),
 					],
 				);
@@ -792,7 +792,7 @@ function createWhatsappCloudService({
 				maskPhone(recipient.phone_e164),
 				templateName,
 				language,
-				variables,
+				JSON.stringify(variables),
 				user.uid || null,
 				userName(user),
 			],

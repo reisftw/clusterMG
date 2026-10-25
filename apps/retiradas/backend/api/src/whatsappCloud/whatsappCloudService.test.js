@@ -169,3 +169,61 @@ test("rate limit bloqueia teste antes de chamar a Meta", async () => {
 	);
 	assert.equal(providerCalls, 0);
 });
+
+test("sincroniza componentes de template como JSONB válido", async () => {
+	const previousAccessToken = process.env.META_ACCESS_TOKEN;
+	const previousAppSecret = process.env.META_APP_SECRET;
+	process.env.META_ACCESS_TOKEN = "token-de-teste-comprido";
+	process.env.META_APP_SECRET = "app-secret-de-teste-comprido";
+	let insertedComponents = "";
+	const config = {
+		id: 1,
+		waba_id: "2099063160707050",
+		graph_api_version: "v26.0",
+	};
+	const dbClient = {
+		async query(sql) {
+			if (sql.includes("select * from whatsapp_cloud_config")) return { rows: [config] };
+			if (sql.includes("from whatsapp_cloud_templates")) return { rows: [] };
+			return { rows: [], rowCount: 1 };
+		},
+		async connect() {
+			return {
+				async query(sql, params = []) {
+					if (sql.includes("insert into whatsapp_cloud_templates")) {
+						insertedComponents = params[6];
+					}
+					return { rows: [], rowCount: 1 };
+				},
+				release() {},
+			};
+		},
+	};
+	try {
+		const service = createWhatsappCloudService({
+			dbClient,
+			audit: { recordAuditLog: async () => {}, calculateChangedFields: () => [] },
+			messagingRepository: {},
+			providerFactory: () => ({
+				listTemplates: async () => ({
+					items: [{
+						id: "template-1",
+						name: "hello_world",
+						language: "en_US",
+						status: "APPROVED",
+						components: [{ type: "BODY", text: "Hello" }],
+					}],
+				}),
+			}),
+		});
+		await service.syncTemplates({ uid: "admin-1" });
+		assert.deepEqual(JSON.parse(insertedComponents), [
+			{ type: "BODY", text: "Hello" },
+		]);
+	} finally {
+		if (previousAccessToken === undefined) delete process.env.META_ACCESS_TOKEN;
+		else process.env.META_ACCESS_TOKEN = previousAccessToken;
+		if (previousAppSecret === undefined) delete process.env.META_APP_SECRET;
+		else process.env.META_APP_SECRET = previousAppSecret;
+	}
+});
