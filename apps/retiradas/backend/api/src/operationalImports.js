@@ -1392,7 +1392,11 @@ function buildMensageriaQueueItemFromOrder(
 	};
 }
 
-async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
+async function enqueueNewMapOrdersForMensageria(
+	newEntries = [],
+	user = {},
+	{ reprioritizeExisting = true } = {},
+) {
 	const config = await getMensageriaConfig();
 	if (config.autoEnqueueMapDiff === false)
 		return { created: 0, skipped: newEntries.length, disabled: true };
@@ -1422,6 +1426,7 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 		cidadeForaFiltro: 0,
 		tipoNaoPermitido: 0,
 		jaFinalizado: 0,
+		jaNaFila: 0,
 	};
 	const skippedSamples = [];
 
@@ -1470,6 +1475,10 @@ async function enqueueNewMapOrdersForMensageria(newEntries = [], user = {}) {
 		const existingItem = queueItemsByKey.get(key);
 		if (existingItem && isFinalMensageriaQueueEntry(existingItem)) {
 			trackSkipped("jaFinalizado", id, item);
+			continue;
+		}
+		if (existingItem && !reprioritizeExisting) {
+			trackSkipped("jaNaFila", id, item);
 			continue;
 		}
 		if (config.avoidDuplicates !== false && existingItem) {
@@ -1535,7 +1544,9 @@ async function ensureOpenMapOrdersInMensageria(finalMap = {}, user = {}) {
 			isAllowedMensageriaOrderType(item)
 		);
 	});
-	return enqueueNewMapOrdersForMensageria(entries, user);
+	return enqueueNewMapOrdersForMensageria(entries, user, {
+		reprioritizeExisting: false,
+	});
 }
 
 async function repairMensageriaQueueFromOpenMap(user = {}) {
@@ -1755,10 +1766,11 @@ async function persistMapaImport(payload = {}, user = {}, context = {}) {
 		finalMap,
 		user,
 	);
-	const mensageriaNovas = await enqueueNewMapOrdersForMensageria(
-		newMapEntries,
-		user,
-	);
+	const mensageriaNovas = {
+		considered: newMapEntries.length,
+		created: mensageriaDiff.created,
+		coveredByOpenMapSync: true,
+	};
 	const mensageriaReconciliation =
 		await reconcileMensageriaQueueWithOpenMap(finalMap).catch((error) => {
 			console.error(

@@ -117,6 +117,7 @@ function mapQueue(row = {}) {
 		COLLECTIONS.fila,
 		row,
 		mergeSource(row, {
+			id: row.id || "",
 			codigo_cliente: row.codigo_cliente || "",
 			codigoCliente: row.codigo_cliente || "",
 			cliente: row.cliente || "",
@@ -441,8 +442,70 @@ async function saveQueueMessage(id, payload = {}) {
 	return data;
 }
 
+function queuePhoneDigits(payload = {}) {
+	return text(payload.telefone_digits || payload.telefone).replace(/\D/g, "");
+}
+
+async function findOpenDuplicateQueueMessage(payload = {}) {
+	const telefoneDigits = queuePhoneDigits(payload);
+	const os = text(payload.os);
+	const status = text(payload.status);
+	if (!telefoneDigits || !os || !status) return null;
+
+	const templateId = text(payload.templateId || payload.template_id);
+	const result = await db.query(
+		`select *
+		   from mensageria_fila
+		  where telefone_digits = $1
+		    and os = $2
+		    and coalesce(template_id, '') = coalesce(
+		      (select id from mensageria_templates where id = $3),
+		      ''
+		    )
+		    and status = $4
+		    and coalesce(status, '') not in (
+		      'enviado', 'agendado', 'cancelado', 'concluido',
+		      'concluído', 'descartado', 'removido_mapa'
+		    )
+		  order by atualizado_em desc nulls last, criado_em desc nulls last
+		  limit 1`,
+		[telefoneDigits, os, templateId, status],
+	);
+	return result.rows[0]
+		? { ...dataFromDocument(mapQueue(result.rows[0])), id: result.rows[0].id }
+		: null;
+}
+
 async function enqueueMessage(payload = {}, { id } = {}) {
-	return saveQueueMessage(id, payload);
+	const existing = await findOpenDuplicateQueueMessage(payload);
+	if (existing?.id) {
+		return saveQueueMessage(existing.id, {
+			...existing,
+			...payload,
+			id: existing.id,
+		});
+	}
+
+	try {
+		return await saveQueueMessage(id, payload);
+	} catch (error) {
+		if (
+			error?.code !== "23505" ||
+			error?.constraint !== "mensageria_fila_open_dedup_idx"
+		) {
+			throw error;
+		}
+
+		// Outra requisicao pode inserir a mesma OS entre a consulta e o insert.
+		// Rele a linha vencedora e a atualiza, mantendo o enqueue idempotente.
+		const concurrent = await findOpenDuplicateQueueMessage(payload);
+		if (!concurrent?.id) throw error;
+		return saveQueueMessage(concurrent.id, {
+			...concurrent,
+			...payload,
+			id: concurrent.id,
+		});
+	}
 }
 
 async function updateQueueMessage(id, updates = {}) {
