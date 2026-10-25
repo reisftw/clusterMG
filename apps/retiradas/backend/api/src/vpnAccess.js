@@ -252,6 +252,8 @@ function createMiddleware() {
 			if (
 				req.path.startsWith("/api/admin/vpn") ||
 				req.path.startsWith("/api/vpn") ||
+				req.path === "/api/integrations/whatsapp/meta/webhook" ||
+				req.path.startsWith("/api/webhooks/") ||
 				req.path.startsWith("/api/auth") ||
 				req.path === "/api/health"
 			) {

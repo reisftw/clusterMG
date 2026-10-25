@@ -68,6 +68,7 @@ export const ROUTES = {
 	SENIOR_SETTINGS: "/configuracoes/senior",
 	DATABASE_BACKUPS: "/configuracoes/banco-de-dados",
 	EMAIL_SETTINGS: "/configuracoes/email",
+	WHATSAPP_SETTINGS: "/configuracoes/whatsapp",
 	MERCADO_SETTINGS: "/configuracoes/mercado",
 	VPN_SETTINGS: "/configuracoes/vpn",
 	AUDITORIA_LOGS: "/logs",

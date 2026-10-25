@@ -36,7 +36,7 @@ const DEFAULT_CONFIG = {
 	evolutionButtonPath: "/message/sendButtons/{instance}",
 	evolutionWebhookUrl: "https://retiradas.tech/api/webhooks/evolution",
 	officialWhatsappEnabled: false,
-	officialWhatsappBaseUrl: "https://graph.facebook.com/v20.0",
+	officialWhatsappBaseUrl: "https://graph.facebook.com/v26.0",
 	officialWhatsappAccessToken: "",
 	officialWhatsappPhoneNumberId: "",
 	officialWhatsappBusinessAccountId: "",
@@ -1386,12 +1386,24 @@ async function sendTextMessage(config, number, text) {
 
 async function sendOfficialWhatsAppMessage(config, number, text) {
 	const baseUrl = String(
-		config.officialWhatsappBaseUrl || DEFAULT_CONFIG.officialWhatsappBaseUrl,
+		config.officialWhatsappBaseUrl ||
+			(process.env.META_GRAPH_API_VERSION
+				? `https://graph.facebook.com/${process.env.META_GRAPH_API_VERSION}`
+				: DEFAULT_CONFIG.officialWhatsappBaseUrl),
 	).replace(/\/+$/, "");
 	const phoneNumberId = encodeURIComponent(
-		String(config.officialWhatsappPhoneNumberId || "").trim(),
+		String(
+			process.env.META_PHONE_NUMBER_ID ||
+				config.officialWhatsappPhoneNumberId ||
+				"",
+		).trim(),
 	);
-	const token = String(config.officialWhatsappAccessToken || "").trim();
+	const token = String(
+		process.env.META_ACCESS_TOKEN ||
+			process.env.WHATSAPP_META_ACCESS_TOKEN ||
+			config.officialWhatsappAccessToken ||
+			"",
+	).trim();
 	if (!baseUrl || !phoneNumberId || !token) {
 		throw new Error("WhatsApp oficial nao configurado.");
 	}

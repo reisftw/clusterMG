@@ -182,6 +182,13 @@ export const PERMISSION_LABELS = Object.freeze({
 	"configuracao.auditoria.view": "Logs de Auditoria",
 	manage_database_backups: "Banco de Dados",
 	manage_email: "E-mail",
+	"whatsapp.visualizar": "WhatsApp - Visualizar",
+	"whatsapp.configurar": "WhatsApp - Configurar",
+	"whatsapp.testar": "WhatsApp - Testar",
+	"whatsapp.templates": "WhatsApp - Templates",
+	"whatsapp.diagnostico": "WhatsApp - Diagnóstico",
+	"whatsapp.ativar": "WhatsApp - Ativar",
+	"whatsapp.reverter": "WhatsApp - Reverter",
 });
 
 export const PERMISSION_GROUPS = Object.freeze([
@@ -332,6 +339,13 @@ export const PERMISSION_GROUPS = Object.freeze([
 			"configuracao.auditoria.view",
 			"manage_database_backups",
 			"manage_email",
+			"whatsapp.visualizar",
+			"whatsapp.configurar",
+			"whatsapp.testar",
+			"whatsapp.templates",
+			"whatsapp.diagnostico",
+			"whatsapp.ativar",
+			"whatsapp.reverter",
 		],
 	},
 ]);
@@ -445,6 +459,13 @@ const CATALOG_TO_LEGACY_PERMISSION = Object.freeze({
 	"configuracao.banco_dados.manage": "manage_database_backups",
 	"configuracao.email.view": "manage_email",
 	"configuracao.email.manage": "manage_email",
+	"whatsapp.visualizar": "manage_mensageria",
+	"whatsapp.configurar": "manage_mensageria",
+	"whatsapp.testar": "manage_mensageria",
+	"whatsapp.templates": "manage_mensageria",
+	"whatsapp.diagnostico": "manage_mensageria",
+	"whatsapp.ativar": null,
+	"whatsapp.reverter": null,
 });
 
 const LEGACY_ROLE_PERMISSIONS = Object.freeze({
@@ -639,6 +660,13 @@ const LEGACY_ROLE_PERMISSIONS = Object.freeze({
 	"configuracao.auditoria.view": ADMIN_ONLY,
 	manage_database_backups: ADMIN_ONLY,
 	manage_email: ADMIN_ONLY,
+	"whatsapp.visualizar": ADMIN_ONLY,
+	"whatsapp.configurar": ADMIN_ONLY,
+	"whatsapp.testar": ADMIN_ONLY,
+	"whatsapp.templates": ADMIN_ONLY,
+	"whatsapp.diagnostico": ADMIN_ONLY,
+	"whatsapp.ativar": ADMIN_ONLY,
+	"whatsapp.reverter": ADMIN_ONLY,
 	view_mapeamento: FULL_OPERATION_ROLES,
 	view_tecnicos: FULL_OPERATION_ROLES,
 	view_visitantes: FULL_OPERATION_ROLES,

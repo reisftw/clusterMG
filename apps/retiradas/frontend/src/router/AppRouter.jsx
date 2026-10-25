@@ -215,6 +215,12 @@ const DatabaseBackups = lazy(
 const EmailSettings = lazy(
 	() => import("../modules/emailSettings/components/EmailSettingsPage"),
 );
+const WhatsappCloudSettings = lazy(
+	() =>
+		import(
+			"../modules/whatsappCloud/components/WhatsappCloudSettingsPage"
+		),
+);
 const ConfiguracoesGerais = lazy(
 	() => import("../modules/configuracoes/components/ConfiguracoesGeraisPage"),
 );
@@ -1148,6 +1154,19 @@ const AppRouter = () => (
 									]}
 								>
 									<EmailSettings />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.WHATSAPP_SETTINGS}
+							element={
+								<ProtectedRoute
+									requiredPermission={[
+										"whatsapp.visualizar",
+										"whatsapp.diagnostico",
+									]}
+								>
+									<WhatsappCloudSettings />
 								</ProtectedRoute>
 							}
 						/>

@@ -554,6 +554,12 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "WhatsApp",
+		path: ROUTES.WHATSAPP_SETTINGS,
+		icon: MessageCircle,
+		permission: ["whatsapp.visualizar", "whatsapp.diagnostico"],
+	},
+	{
 		label: "Logs de Auditoria",
 		path: ROUTES.AUDITORIA_LOGS,
 		icon: FileSearch,
@@ -753,6 +759,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.SENIOR_SETTINGS,
 	ROUTES.DATABASE_BACKUPS,
 	ROUTES.EMAIL_SETTINGS,
+	ROUTES.WHATSAPP_SETTINGS,
 	ROUTES.AUDITORIA_LOGS,
 ];
 
@@ -950,6 +957,7 @@ const MENU_GROUPS = [
 			ROUTES.SENIOR_SETTINGS,
 			ROUTES.DATABASE_BACKUPS,
 			ROUTES.EMAIL_SETTINGS,
+			ROUTES.WHATSAPP_SETTINGS,
 			ROUTES.AUDITORIA_LOGS,
 		],
 	},

@@ -69,6 +69,9 @@ const createServiceOrderRequestsRouter = require("./serviceOrders/requests/route
 const createReturnReceiptsRouter = require("./serviceOrders/returnReceipts/routes/returnReceiptsRoutes");
 const createTentativasRouter = require("./tentativas/routes/tentativasRoutes");
 const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
+const whatsappCloudService = require("./whatsappCloud/whatsappCloudService");
+const createWhatsappCloudRouter = require("./whatsappCloud/routes/whatsappCloudRoutes");
+const createMetaWhatsappWebhookRouter = require("./whatsappCloud/routes/metaWhatsappWebhookRoutes");
 const mapSyncUpdates = require("./mapSyncUpdatesService");
 const rankingService = require("./rankingService");
 const { createImoveisRouter } = require("./imoveis");
@@ -2461,7 +2464,20 @@ function createApp() {
 		}),
 	);
 	app.use("/api/public/visits", rejectLargePublicVisit);
-	app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "10mb" }));
+	app.use(
+		express.json({
+			limit: process.env.JSON_BODY_LIMIT || "10mb",
+			verify(req, _res, buffer) {
+				if (
+					req.originalUrl?.startsWith(
+						"/api/integrations/whatsapp/meta/webhook",
+					) || req.originalUrl?.startsWith("/api/webhooks/meta-whatsapp")
+				) {
+					req.rawBody = Buffer.from(buffer);
+				}
+			},
+		}),
+	);
 	app.use(
 		"/api/maintenance",
 		createMaintenanceRouter({
@@ -4792,6 +4808,17 @@ function createApp() {
 	);
 
 	app.use(
+		"/api/admin/whatsapp-cloud",
+		createWhatsappCloudRouter({
+			service: whatsappCloudService,
+			requireAuthenticated,
+			requireCsrfToken,
+			requireAnyPermission,
+			adminRoles: ADMIN_ROLES,
+		}),
+	);
+
+	app.use(
 		"/api/admin/cvortex",
 		createCvortexAdminRouter({
 			adminRoles: ADMIN_ROLES,
@@ -5833,6 +5860,17 @@ function createApp() {
 			requireAuthenticated,
 			requireCsrfToken,
 		}),
+	);
+
+	app.use(
+		"/api/integrations/whatsapp/meta/webhook",
+		createMetaWhatsappWebhookRouter({ service: whatsappCloudService }),
+	);
+
+	// Alias temporario para configuracoes de webhook anteriores.
+	app.use(
+		"/api/webhooks/meta-whatsapp",
+		createMetaWhatsappWebhookRouter({ service: whatsappCloudService }),
 	);
 
 	app.use(

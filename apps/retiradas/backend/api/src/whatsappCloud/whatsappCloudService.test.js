@@ -1,0 +1,139 @@
+const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
+const test = require("node:test");
+
+process.env.PGHOST ||= "127.0.0.1";
+process.env.PGUSER ||= "test";
+process.env.PGPASSWORD ||= "test";
+process.env.PGDATABASE ||= "test";
+
+const {
+	__testables,
+	createWhatsappCloudService,
+} = require("./whatsappCloudService");
+
+test("normaliza telefone E.164 e rejeita valores inválidos", () => {
+	assert.equal(__testables.normalizeE164("+55 (31) 99999-0000"), "+5531999990000");
+	assert.throws(() => __testables.normalizeE164("123"), /telefone válido/i);
+});
+
+test("normaliza webhook sem persistir o texto recebido", () => {
+	const [event] = __testables.normalizeWebhookEvents({
+		object: "whatsapp_business_account",
+		entry: [
+			{
+				changes: [
+					{
+						value: {
+							metadata: { phone_number_id: "phone-1" },
+							messages: [
+								{
+									id: "wamid.1",
+									from: "5531999990000",
+									timestamp: "1792933200",
+									type: "text",
+									text: { body: "conteúdo privado" },
+								},
+							],
+						},
+					},
+				],
+			},
+		],
+	});
+	assert.equal(event.eventType, "INCOMING_MESSAGE");
+	assert.equal(event.payload.messageType, "text");
+	assert.equal("text" in event.payload, false);
+	assert.match(event.senderMasked, /\*\*\*/);
+});
+
+test("valida assinatura HMAC oficial sem expor o App Secret", () => {
+	const previous = process.env.META_APP_SECRET;
+	process.env.META_APP_SECRET = "segredo-de-teste";
+	try {
+		const service = createWhatsappCloudService({
+			dbClient: {},
+			audit: {},
+			messagingRepository: {},
+		});
+		const rawBody = Buffer.from('{"object":"whatsapp_business_account"}');
+		const signature = crypto
+			.createHmac("sha256", process.env.META_APP_SECRET)
+			.update(rawBody)
+			.digest("hex");
+		assert.deepEqual(
+			service.verifyWebhookSignature(rawBody, `sha256=${signature}`),
+			{ ok: true, reason: "SIGNATURE_MISMATCH" },
+		);
+		assert.equal(service.verifyWebhookSignature(rawBody, "sha256=0".repeat(32)).ok, false);
+	} finally {
+		if (previous === undefined) delete process.env.META_APP_SECRET;
+		else process.env.META_APP_SECRET = previous;
+	}
+});
+
+test("deduplica o mesmo evento de webhook", async () => {
+	const keys = new Set();
+	const dbClient = {
+		async query(sql, params = []) {
+			if (sql.includes("insert into whatsapp_cloud_webhook_events")) {
+				const key = params[0];
+				if (keys.has(key)) return { rowCount: 0, rows: [] };
+				keys.add(key);
+				return { rowCount: 1, rows: [{ id: "event-1" }] };
+			}
+			if (sql.includes("from whatsapp_cloud_webhook_events") && sql.includes("processing_status")) {
+				return { rows: [] };
+			}
+			return { rowCount: 1, rows: [] };
+		},
+	};
+	const service = createWhatsappCloudService({
+		dbClient,
+		audit: { recordAuditLog: async () => {}, calculateChangedFields: () => [] },
+		messagingRepository: {},
+	});
+	const payload = {
+		object: "whatsapp_business_account",
+		entry: [{ changes: [{ value: { metadata: { phone_number_id: "1" }, statuses: [{ id: "wamid.1", status: "delivered", timestamp: "1792933200", recipient_id: "5531999990000" }] } }] }],
+	};
+	assert.equal((await service.acceptWebhook(payload)).accepted, 1);
+	const duplicate = await service.acceptWebhook(payload);
+	assert.equal(duplicate.accepted, 0);
+	assert.equal(duplicate.duplicates, 1);
+});
+
+test("rate limit bloqueia teste antes de chamar a Meta", async () => {
+	let providerCalls = 0;
+	const config = {
+		id: 1,
+		meta_test_mode: true,
+		production_enabled: false,
+		phone_number_id: "1162045177001452",
+		graph_api_version: "v26.0",
+	};
+	const dbClient = {
+		async query(sql) {
+			if (sql.includes("select * from whatsapp_cloud_config")) return { rows: [config] };
+			if (sql.includes("select * from whatsapp_cloud_test_recipients")) return { rows: [{ id: "recipient-1", phone_e164: "+15556716054", name: "Teste", authorization_status: "AUTHORIZED", meta_registered: true }] };
+			if (sql.includes("select * from whatsapp_cloud_templates")) return { rows: [{ name: "hello_world", language: "en_US", parameter_count: 0 }] };
+			if (sql.includes("global_minute")) return { rows: [{ global_minute: 5, recipient_window: 0 }] };
+			return { rows: [], rowCount: 1 };
+		},
+	};
+	const service = createWhatsappCloudService({
+		dbClient,
+		audit: { recordAuditLog: async () => {}, calculateChangedFields: () => [] },
+		messagingRepository: {},
+		providerFactory: () => ({
+			sendTemplate: async () => {
+				providerCalls += 1;
+			},
+		}),
+	});
+	await assert.rejects(
+		() => service.sendTestMessage({ recipientId: "recipient-1", template: "hello_world", language: "en_US" }),
+		/limite de cinco testes/i,
+	);
+	assert.equal(providerCalls, 0);
+});
