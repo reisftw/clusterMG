@@ -25,12 +25,6 @@ export default function MaintenanceBoundary({ children }) {
 	}, [loadStatus, location.pathname]);
 
 	useEffect(() => {
-		const intervalMs = status?.active ? 10_000 : 30_000;
-		const timer = window.setInterval(loadStatus, intervalMs);
-		return () => window.clearInterval(timer);
-	}, [loadStatus, status?.active]);
-
-	useEffect(() => {
 		if (
 			status?.active &&
 			status.redirectEnabled &&

@@ -53,7 +53,7 @@ export default function PublicMaintenancePage({ status, onStatusChange }) {
 						<span><Clock3 size={25} /></span>
 						<div>
 							<strong>Ja estamos trabalhando</strong>
-							<small>{estimate}. Esta pagina atualiza automaticamente.</small>
+							<small>{estimate}. Use o botao abaixo para consultar o retorno.</small>
 						</div>
 					</div>
 					<button type="button" onClick={checkAgain} disabled={checking}>
