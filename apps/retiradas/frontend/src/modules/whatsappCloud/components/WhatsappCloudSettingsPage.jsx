@@ -30,6 +30,21 @@ const TABS = [
 	{ id: "activation", label: "Ativação", icon: ShieldCheck },
 ];
 
+const GUIDED_FLOW_TEMPLATES = [
+	{
+		name: "retiradas_agendamento_teste_v2",
+		label: "Template atual",
+		requires: "contract",
+		buttons: ["Agendar", "Já entregue", "Falar com suporte"],
+	},
+	{
+		name: "retiradas_recolhimento_teste_v2",
+		label: "Brasil Tecpar · recolhimento",
+		requires: "cancellationDate",
+		buttons: ["AGENDAR RETIRADA", "JÁ ENTREGUE", "FALAR COM ATENDENTE"],
+	},
+];
+
 const INPUT_CLASS =
 	"mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 disabled:bg-slate-100 disabled:text-slate-500";
 const BUTTON_PRIMARY =
@@ -173,10 +188,12 @@ export default function WhatsappCloudSettingsPage() {
 		confirmed: false,
 	});
 	const [flowForm, setFlowForm] = useState({
+		templateName: "retiradas_recolhimento_teste_v2",
 		recipientId: "",
 		firstName: "",
 		contract: "",
 		city: "",
+		cancellationDate: "",
 	});
 	const [historyFilters, setHistoryFilters] = useState({
 		status: "",
@@ -244,9 +261,19 @@ export default function WhatsappCloudSettingsPage() {
 		() => recipients.filter((item) => item.authorizationStatus === "AUTHORIZED" && item.metaRegistered),
 		[recipients],
 	);
+	const selectedFlowOption = useMemo(
+		() => GUIDED_FLOW_TEMPLATES.find((item) => item.name === flowForm.templateName) || GUIDED_FLOW_TEMPLATES[0],
+		[flowForm.templateName],
+	);
 	const guidedFlowTemplate = useMemo(
-		() => templates.find((item) => item.name === "retiradas_agendamento_teste_v2" && item.language === "pt_BR"),
-		[templates],
+		() => templates.find((item) => item.name === flowForm.templateName && item.language === "pt_BR"),
+		[flowForm.templateName, templates],
+	);
+	const guidedFlowReady = Boolean(
+		flowForm.recipientId
+		&& flowForm.firstName.trim()
+		&& flowForm.city.trim()
+		&& (selectedFlowOption.requires === "contract" ? flowForm.contract.trim() : flowForm.cancellationDate),
 	);
 
 	if (loading && !config) return <Spinner fullScreen label="Carregando WhatsApp Cloud API..." />;
@@ -300,8 +327,8 @@ export default function WhatsappCloudSettingsPage() {
 		setTestForm((current) => ({ ...current, confirmed: false }));
 	};
 	const startGuidedFlow = async () => {
-		if (!flowForm.recipientId || !flowForm.firstName.trim() || !flowForm.contract.trim() || !flowForm.city.trim()) {
-			setFeedback({ type: "error", text: "Preencha destinatário, primeiro nome, contrato e cidade." });
+		if (!guidedFlowReady) {
+			setFeedback({ type: "error", text: "Preencha os dados obrigatórios do template selecionado." });
 			return;
 		}
 		await run(
@@ -520,11 +547,12 @@ export default function WhatsappCloudSettingsPage() {
 										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-600 text-white"><MessageCircle size={20} /></div>
 										<div><p className="font-black text-cyan-950">Agendar sem digitação</p><p className="text-xs font-semibold text-cyan-800">Ação → data → horário → confirmação</p></div>
 									</div>
+									<Field label="Template da primeira mensagem"><select className={INPUT_CLASS} value={flowForm.templateName} onChange={(event) => setFlowForm((current) => ({ ...current, templateName: event.target.value }))}>{GUIDED_FLOW_TEMPLATES.map((item) => <option key={item.name} value={item.name}>{item.label}</option>)}</select></Field>
 									<Field label="Destinatário do teste"><select className={INPUT_CLASS} value={flowForm.recipientId} onChange={(event) => { const recipient = authorizedRecipients.find((item) => item.id === event.target.value); setFlowForm((current) => ({ ...current, recipientId: event.target.value, firstName: recipient?.name?.split(/\s+/)?.[0] || current.firstName })); }}><option value="">Selecione</option>{authorizedRecipients.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.maskedPhone}</option>)}</select></Field>
-									<div className="grid gap-3 sm:grid-cols-3"><Field label="Primeiro nome"><input className={INPUT_CLASS} value={flowForm.firstName} onChange={(event) => setFlowForm({ ...flowForm, firstName: event.target.value })} /></Field><Field label="Contrato"><input className={INPUT_CLASS} placeholder="123456" value={flowForm.contract} onChange={(event) => setFlowForm({ ...flowForm, contract: event.target.value })} /></Field><Field label="Cidade"><input className={INPUT_CLASS} placeholder="Belo Horizonte" value={flowForm.city} onChange={(event) => setFlowForm({ ...flowForm, city: event.target.value })} /></Field></div>
-									<div className="grid grid-cols-3 gap-2">{["Agendar", "Já entregue", "Falar suporte"].map((label) => <span key={label} className="rounded-lg border border-cyan-200 bg-white px-2 py-2 text-center text-xs font-black text-cyan-900">{label}</span>)}</div>
+									<div className="grid gap-3 sm:grid-cols-3"><Field label="Primeiro nome"><input className={INPUT_CLASS} value={flowForm.firstName} onChange={(event) => setFlowForm({ ...flowForm, firstName: event.target.value })} /></Field><Field label="Cidade"><input className={INPUT_CLASS} placeholder="Belo Horizonte" value={flowForm.city} onChange={(event) => setFlowForm({ ...flowForm, city: event.target.value })} /></Field>{selectedFlowOption.requires === "contract" ? <Field label="Contrato"><input className={INPUT_CLASS} placeholder="123456" value={flowForm.contract} onChange={(event) => setFlowForm({ ...flowForm, contract: event.target.value })} /></Field> : <Field label="Data do cancelamento"><input type="date" className={INPUT_CLASS} value={flowForm.cancellationDate} onChange={(event) => setFlowForm({ ...flowForm, cancellationDate: event.target.value })} /></Field>}</div>
+									<div className="grid grid-cols-3 gap-2">{selectedFlowOption.buttons.map((label) => <span key={label} className="rounded-lg border border-cyan-200 bg-white px-2 py-2 text-center text-xs font-black text-cyan-900">{label}</span>)}</div>
 									{String(guidedFlowTemplate?.status || "").toUpperCase() !== "APPROVED" ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">O template está {guidedFlowTemplate?.status || "aguardando sincronização"}. Sincronize a aba Templates após a aprovação da Meta.</p> : null}
-									<button type="button" className={BUTTON_PRIMARY} onClick={startGuidedFlow} disabled={busy === "guided-flow" || !flowForm.recipientId || !flowForm.firstName.trim() || !flowForm.contract.trim() || !flowForm.city.trim() || String(guidedFlowTemplate?.status).toUpperCase() !== "APPROVED"}>{busy === "guided-flow" ? <Loader2 className="animate-spin" size={17} /> : <Send size={17} />} Iniciar fluxo completo</button>
+									<button type="button" className={BUTTON_PRIMARY} onClick={startGuidedFlow} disabled={busy === "guided-flow" || !guidedFlowReady || String(guidedFlowTemplate?.status).toUpperCase() !== "APPROVED"}>{busy === "guided-flow" ? <Loader2 className="animate-spin" size={17} /> : <Send size={17} />} Iniciar fluxo completo</button>
 								</div>
 								<div className="space-y-3">
 									{(testFlows.items || []).map((flow) => <article key={flow.id} className="rounded-lg border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-black text-slate-950">{flow.recipientName || "Destinatário de teste"} · {flow.recipient}</p><p className="mt-1 text-xs font-semibold text-slate-500">Iniciado em {formatDate(flow.startedAt)}{flow.selectedDate ? ` · ${flow.selectedDate}` : ""}{flow.selectedTime ? ` às ${flow.selectedTime}` : ""}</p></div><StatusBadge status={flow.state} /></div>{flow.simulatedAppointment ? <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900">Agendamento simulado: {flow.simulatedAppointment.date} às {flow.simulatedAppointment.time}</div> : null}<div className="mt-3 space-y-1">{(flow.transcript || []).slice(-6).map((entry, index) => <div key={`${flow.id}-${entry.at}-${index}`} className={`rounded-lg px-3 py-2 text-xs font-semibold ${entry.direction === "IN" ? "ml-6 bg-slate-100 text-slate-700" : "mr-6 bg-cyan-50 text-cyan-900"}`}><strong>{entry.direction === "IN" ? "Cliente" : "Retorninho"}:</strong> {entry.text}</div>)}</div></article>)}

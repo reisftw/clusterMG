@@ -76,6 +76,9 @@ test("gera três datas futuras para o fluxo guiado", () => {
 		"2026-10-28",
 	]);
 	assert.equal(__testables.normalizeFlowAction({ buttonTitle: "Já entregue" }), "flow:delivered");
+	assert.equal(__testables.normalizeFlowAction({ buttonTitle: "📅 Agendar retirada" }), "flow:schedule");
+	assert.equal(__testables.normalizeFlowAction({ buttonTitle: "✅ Já entregue" }), "flow:delivered");
+	assert.equal(__testables.normalizeFlowAction({ buttonTitle: "💬 Falar com atendente" }), "flow:support");
 });
 
 test("converte data e horário digitados somente em ações normalizadas", () => {
@@ -109,6 +112,20 @@ test("limita respostas automáticas de exceção a duas mensagens", () => {
 	assert.equal(__testables.canSendTestFlowAutoReply(1), true);
 	assert.equal(__testables.canSendTestFlowAutoReply(2), false);
 	assert.equal(__testables.canSendTestFlowAutoReply(20), false);
+});
+
+test("mantém dois templates guiados com variáveis independentes", () => {
+	const current = __testables.testFlowTemplateConfig("retiradas_agendamento_teste_v2");
+	const recollection = __testables.testFlowTemplateConfig("retiradas_recolhimento_teste_v2");
+	assert.deepEqual(
+		current.variables({ firstName: "Ana", contract: "123", city: "Betim" }),
+		["Ana", "123", "Betim"],
+	);
+	assert.deepEqual(
+		recollection.variables({ firstName: "Ana", city: "Betim", cancellationDate: "25/10/2026" }),
+		["Ana", "Betim", "25/10/2026"],
+	);
+	assert.equal(recollection.buttons[1].title, "JÁ ENTREGUE");
 });
 
 test("valida assinatura HMAC oficial sem expor o App Secret", async () => {

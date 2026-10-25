@@ -15,7 +15,25 @@ const MASKED_SECRET = "********";
 const WEBHOOK_PATH = "/api/integrations/whatsapp/meta/webhook";
 const TEST_PROVIDER = "meta_cloud_test";
 const TEST_FLOW_COLLECTION = "whatsapp_cloud_test_flows";
-const TEST_FLOW_TEMPLATE = "retiradas_agendamento_teste_v2";
+const DEFAULT_TEST_FLOW_TEMPLATE = "retiradas_recolhimento_teste_v2";
+const TEST_FLOW_TEMPLATES = Object.freeze({
+	retiradas_agendamento_teste_v2: {
+		variables: ({ firstName, contract, city }) => [firstName, contract, city],
+		buttons: [
+			{ id: "flow:schedule", title: "Agendar" },
+			{ id: "flow:delivered", title: "Já entregue" },
+			{ id: "flow:support", title: "Falar com suporte" },
+		],
+	},
+	retiradas_recolhimento_teste_v2: {
+		variables: ({ firstName, city, cancellationDate }) => [firstName, city, cancellationDate],
+		buttons: [
+			{ id: "flow:schedule", title: "AGENDAR RETIRADA" },
+			{ id: "flow:delivered", title: "JÁ ENTREGUE" },
+			{ id: "flow:support", title: "FALAR COM ATENDENTE" },
+		],
+	},
+});
 const TEST_FLOW_LANGUAGE = "pt_BR";
 const MAX_TEST_FLOW_AUTO_REPLIES = 2;
 const MAX_LIMIT = 200;
@@ -461,14 +479,18 @@ function normalizeFlowAction(payload = {}) {
 		.toLowerCase();
 	if (id.startsWith("flow:")) return id;
 	if (inputAction) return inputAction;
-	if (title === "agendar" || title === "sim") return "flow:schedule";
-	if (title === "ja entregue") return "flow:delivered";
-	if (title === "falar com suporte") return "flow:support";
+	if (title === "sim" || title.includes("agendar")) return "flow:schedule";
+	if (title.includes("ja entregue") || title.includes("entregue")) return "flow:delivered";
+	if (title.includes("falar") && (title.includes("atendente") || title.includes("suporte"))) return "flow:support";
 	return title;
 }
 
 function canSendTestFlowAutoReply(replyCount) {
 	return Number(replyCount || 0) < MAX_TEST_FLOW_AUTO_REPLIES;
+}
+
+function testFlowTemplateConfig(templateName) {
+	return TEST_FLOW_TEMPLATES[cleanText(templateName)] || null;
 }
 
 function flowDto(row = {}) {
@@ -1083,15 +1105,30 @@ function createWhatsappCloudService({
 		const firstName = cleanText(payload.firstName || recipient.name).split(/\s+/)[0];
 		const contract = cleanText(payload.contract);
 		const city = cleanText(payload.city);
-		if (!firstName || !contract || !city) {
-			throw apiError("Informe primeiro nome, contrato e cidade para iniciar o fluxo.");
+		const cancellationDate = cleanText(payload.cancellationDate);
+		const cancellationDateLabel = /^\d{4}-\d{2}-\d{2}$/.test(cancellationDate)
+			? formatDateButton(cancellationDate)
+			: cancellationDate;
+		const templateName = cleanText(payload.templateName) || DEFAULT_TEST_FLOW_TEMPLATE;
+		const templateConfig = testFlowTemplateConfig(templateName);
+		if (!templateConfig) {
+			throw apiError("Selecione um template válido para iniciar o fluxo.");
+		}
+		if (!firstName || !city) {
+			throw apiError("Informe primeiro nome e cidade para iniciar o fluxo.");
+		}
+		if (templateName === "retiradas_agendamento_teste_v2" && !contract) {
+			throw apiError("Informe o contrato para usar o template atual.");
+		}
+		if (templateName === "retiradas_recolhimento_teste_v2" && !cancellationDate) {
+			throw apiError("Informe a data de cancelamento para usar o novo template.");
 		}
 		const sent = await sendTestMessage(
 			{
 				recipientId,
-				template: TEST_FLOW_TEMPLATE,
+				template: templateName,
 				language: TEST_FLOW_LANGUAGE,
-				variables: [firstName, contract, city],
+				variables: templateConfig.variables({ firstName, contract, city, cancellationDate: cancellationDateLabel }),
 			},
 			user,
 		);
@@ -1110,19 +1147,20 @@ function createWhatsappCloudService({
 			startedAt,
 			completedAt: null,
 			startedBy: userName(user),
-			testContext: { firstName, contract, city },
+			templateName,
+			testContext: { firstName, contract, city, cancellationDate: cancellationDateLabel },
 			transcript: [
 				{
 					direction: "OUT",
 					kind: "TEMPLATE_BUTTONS",
-					text: `Mensagem completa para ${firstName}, contrato ${contract}, ${city} · Agendar | Já entregue | Falar com suporte`,
+					text: `${templateName} para ${firstName}, ${city} · ${templateConfig.buttons.map((button) => button.title).join(" | ")}`,
 					messageId: sent.messageId,
 					at: startedAt,
 				},
 			],
 		});
 		await recordAudit("test_flow_start", recipientId, user, {
-			template: TEST_FLOW_TEMPLATE,
+			template: templateName,
 			messageId: sent.messageId,
 		});
 		return flowDto(flow);
@@ -1167,15 +1205,13 @@ function createWhatsappCloudService({
 				label: "interactive_times",
 			});
 		}
+		const templateConfig = testFlowTemplateConfig(flow.templateName)
+			|| testFlowTemplateConfig(DEFAULT_TEST_FLOW_TEMPLATE);
 		return sendFlowButtons({
 			recipient,
 			config,
 			body: "Escolha uma opção para continuarmos:",
-			buttons: [
-				{ id: "flow:schedule", title: "Agendar" },
-				{ id: "flow:delivered", title: "Já entregue" },
-				{ id: "flow:support", title: "Falar com suporte" },
-			],
+			buttons: templateConfig.buttons,
 			label: "interactive_actions",
 		});
 	}
@@ -1792,6 +1828,7 @@ module.exports = {
 		normalizeWebhookEvents,
 		getTestFlowDateOptions,
 		canSendTestFlowAutoReply,
+		testFlowTemplateConfig,
 		safeEqual,
 	},
 	createWhatsappCloudService,
