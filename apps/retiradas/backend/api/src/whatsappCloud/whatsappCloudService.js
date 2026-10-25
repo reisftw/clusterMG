@@ -15,6 +15,11 @@ const MASKED_SECRET = "********";
 const WEBHOOK_PATH = "/api/integrations/whatsapp/meta/webhook";
 const TEST_PROVIDER = "meta_cloud_test";
 const MAX_LIMIT = 200;
+const SECRET_NAMES = Object.freeze({
+	accessToken: "META_ACCESS_TOKEN",
+	appSecret: "META_APP_SECRET",
+});
+const SECRET_SALT_PREFIX = "retiradas:whatsapp-cloud:";
 
 function cleanText(value) {
 	return String(value ?? "").trim();
@@ -76,23 +81,94 @@ function userName(user = {}) {
 	);
 }
 
-function getSecrets() {
-	return {
-		accessToken: cleanText(
+function getEnvironmentSecrets() {
+	const accessToken = cleanText(
 			process.env.META_ACCESS_TOKEN || process.env.WHATSAPP_META_ACCESS_TOKEN,
-		),
-		appSecret: cleanText(
+		);
+	const appSecret = cleanText(
 			process.env.META_APP_SECRET || process.env.WHATSAPP_META_APP_SECRET,
-		),
+		);
+	return {
+		accessToken,
+		appSecret,
 		verifyToken: cleanText(
 			process.env.META_WEBHOOK_VERIFY_TOKEN ||
 				process.env.WHATSAPP_OFFICIAL_VERIFY_TOKEN,
 		),
+		accessTokenSource: accessToken ? "environment" : "none",
+		appSecretSource: appSecret ? "environment" : "none",
 	};
 }
 
-function configDto(row = {}, { publicAppUrl } = {}) {
-	const secrets = getSecrets();
+function getEncryptionKeyring() {
+	const currentKeyId = cleanText(process.env.APP_AUTH_SECRET_ID || "current") || "current";
+	const currentSecret = cleanText(process.env.APP_AUTH_SECRET);
+	if (currentSecret.length < 24) {
+		throw apiError("Chave de criptografia do servidor indisponível.", 503);
+	}
+	const keyring = new Map([[currentKeyId, currentSecret]]);
+	String(process.env.APP_AUTH_PREVIOUS_SECRETS || "")
+		.split(",")
+		.map((item) => item.trim())
+		.filter(Boolean)
+		.forEach((entry) => {
+			const [keyId, ...secretParts] = entry.split(":");
+			const secret = secretParts.join(":");
+			if (keyId && secret.length >= 24) keyring.set(keyId, secret);
+		});
+	return { currentKeyId, keyring };
+}
+
+function deriveEncryptionKey(secret, keyId) {
+	return crypto.scryptSync(
+		secret,
+		`${SECRET_SALT_PREFIX}${keyId}`,
+		32,
+	);
+}
+
+function encryptStoredSecret(secretName, value) {
+	const { currentKeyId, keyring } = getEncryptionKeyring();
+	const key = deriveEncryptionKey(keyring.get(currentKeyId), currentKeyId);
+	const iv = crypto.randomBytes(12);
+	const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+	cipher.setAAD(Buffer.from(secretName));
+	const ciphertext = Buffer.concat([
+		cipher.update(cleanText(value), "utf8"),
+		cipher.final(),
+	]);
+	return {
+		ciphertext: ciphertext.toString("base64"),
+		iv: iv.toString("base64"),
+		authTag: cipher.getAuthTag().toString("base64"),
+		keyId: currentKeyId,
+	};
+}
+
+function decryptStoredSecret(row = {}) {
+	const secretName = cleanText(row.secret_name);
+	const keyId = cleanText(row.key_id);
+	const { keyring } = getEncryptionKeyring();
+	const rootSecret = keyring.get(keyId);
+	if (!rootSecret) throw apiError("Chave anterior do cofre não encontrada.", 503);
+	try {
+		const decipher = crypto.createDecipheriv(
+			"aes-256-gcm",
+			deriveEncryptionKey(rootSecret, keyId),
+			Buffer.from(row.iv, "base64"),
+		);
+		decipher.setAAD(Buffer.from(secretName));
+		decipher.setAuthTag(Buffer.from(row.auth_tag, "base64"));
+		return Buffer.concat([
+			decipher.update(Buffer.from(row.ciphertext, "base64")),
+			decipher.final(),
+		]).toString("utf8");
+	} catch {
+		throw apiError("Não foi possível abrir o cofre de credenciais.", 503);
+	}
+}
+
+function configDto(row = {}, { publicAppUrl, secrets = getEnvironmentSecrets() } = {}) {
 	const baseUrl = cleanText(publicAppUrl || process.env.PUBLIC_APP_URL || "https://retiradas.tech")
 		.replace(/\/+$/, "");
 	return {
@@ -114,6 +190,8 @@ function configDto(row = {}, { publicAppUrl } = {}) {
 			accessTokenConfigured: Boolean(secrets.accessToken),
 			appSecretConfigured: Boolean(secrets.appSecret),
 			verifyTokenConfigured: Boolean(secrets.verifyToken || row.verify_token_hash),
+			accessTokenSource: secrets.accessTokenSource || "none",
+			appSecretSource: secrets.appSecretSource || "none",
 		},
 		webhookUrl: `${baseUrl}${WEBHOOK_PATH}`,
 		lastConnectionStatus: row.last_connection_status || "NOT_TESTED",
@@ -296,15 +374,43 @@ function createWhatsappCloudService({
 		}).catch(() => {});
 	}
 
-	function providerFor(row) {
+	async function resolveSecrets() {
+		const environment = getEnvironmentSecrets();
+		if (environment.accessToken && environment.appSecret) return environment;
+		const result = await dbClient.query(
+			`select secret_name, ciphertext, iv, auth_tag, key_id
+			   from whatsapp_cloud_secrets
+			  where secret_name in ('META_ACCESS_TOKEN', 'META_APP_SECRET')`,
+		);
+		const stored = new Map(
+			result.rows.map((row) => [row.secret_name, decryptStoredSecret(row)]),
+		);
+		return {
+			...environment,
+			accessToken:
+				environment.accessToken || stored.get(SECRET_NAMES.accessToken) || "",
+			appSecret:
+				environment.appSecret || stored.get(SECRET_NAMES.appSecret) || "",
+			accessTokenSource: environment.accessToken
+				? "environment"
+				: stored.has(SECRET_NAMES.accessToken) ? "database" : "none",
+			appSecretSource: environment.appSecret
+				? "environment"
+				: stored.has(SECRET_NAMES.appSecret) ? "database" : "none",
+		};
+	}
+
+	async function providerFor(row) {
+		const secrets = await resolveSecrets();
 		return providerFactory({
-			accessToken: getSecrets().accessToken,
+			accessToken: secrets.accessToken,
 			graphApiVersion: row.graph_api_version || DEFAULT_GRAPH_VERSION,
 		});
 	}
 
 	async function getConfig() {
-		return configDto(await ensureConfig());
+		const [config, secrets] = await Promise.all([ensureConfig(), resolveSecrets()]);
+		return configDto(config, { secrets });
 	}
 
 	async function saveConfig(payload = {}, user = {}) {
@@ -355,12 +461,70 @@ function createWhatsappCloudService({
 				userName(user),
 			],
 		);
-		await recordAudit("update", "global", user, values, configDto(current));
-		return configDto(result.rows[0]);
+		const secrets = await resolveSecrets();
+		await recordAudit(
+			"update",
+			"global",
+			user,
+			values,
+			configDto(current, { secrets }),
+		);
+		return configDto(result.rows[0], { secrets });
+	}
+
+	async function saveSecrets(payload = {}, user = {}) {
+		const values = [
+			[SECRET_NAMES.accessToken, cleanText(payload.accessToken)],
+			[SECRET_NAMES.appSecret, cleanText(payload.appSecret)],
+		].filter(([, value]) => value);
+		if (!values.length) throw apiError("Informe ao menos uma credencial.");
+		for (const [name, value] of values) {
+			if (value.length < 16) throw apiError(`A credencial ${name} é inválida.`);
+			const encrypted = encryptStoredSecret(name, value);
+			await dbClient.query(
+				`insert into whatsapp_cloud_secrets
+				 (secret_name, ciphertext, iv, auth_tag, key_id,
+				  updated_by_id, updated_by_name)
+				 values ($1, $2, $3, $4, $5, $6, $7)
+				 on conflict (secret_name) do update set
+				   ciphertext = excluded.ciphertext,
+				   iv = excluded.iv,
+				   auth_tag = excluded.auth_tag,
+				   key_id = excluded.key_id,
+				   updated_by_id = excluded.updated_by_id,
+				   updated_by_name = excluded.updated_by_name`,
+				[
+					name,
+					encrypted.ciphertext,
+					encrypted.iv,
+					encrypted.authTag,
+					encrypted.keyId,
+					user.uid || null,
+					userName(user),
+				],
+			);
+		}
+		await recordAudit("secrets_update", "global", user, {
+			configured: values.map(([name]) => name),
+		});
+		return getConfig();
+	}
+
+	async function deleteSecret(name, user = {}) {
+		const normalized = cleanText(name);
+		if (!Object.values(SECRET_NAMES).includes(normalized)) {
+			throw apiError("Credencial inválida.");
+		}
+		await dbClient.query(
+			"delete from whatsapp_cloud_secrets where secret_name = $1",
+			[normalized],
+		);
+		await recordAudit("secret_delete", "global", user, { removed: normalized });
+		return getConfig();
 	}
 
 	async function generateVerifyToken(user = {}) {
-		if (getSecrets().verifyToken) {
+		if (getEnvironmentSecrets().verifyToken) {
 			throw apiError(
 				"O verify token já está definido por META_WEBHOOK_VERIFY_TOKEN no servidor.",
 				409,
@@ -380,14 +544,15 @@ function createWhatsappCloudService({
 	}
 
 	async function verifyWebhookToken(receivedToken) {
-		const envToken = getSecrets().verifyToken;
+		const envToken = getEnvironmentSecrets().verifyToken;
 		if (envToken) return safeEqual(envToken, receivedToken);
 		const row = await ensureConfig();
 		return Boolean(row.verify_token_hash) && safeEqual(row.verify_token_hash, hashValue(receivedToken));
 	}
 
-	function verifyWebhookSignature(rawBody, signatureHeader) {
-		const secret = getSecrets().appSecret;
+	async function verifyWebhookSignature(rawBody, signatureHeader) {
+		const environmentSecret = getEnvironmentSecrets().appSecret;
+		const secret = environmentSecret || (await resolveSecrets()).appSecret;
 		if (!secret) return { ok: false, reason: "META_APP_SECRET_NOT_CONFIGURED" };
 		const signature = cleanText(signatureHeader).replace(/^sha256=/i, "");
 		if (!/^[a-f0-9]{64}$/i.test(signature)) {
@@ -402,7 +567,7 @@ function createWhatsappCloudService({
 
 	async function validateConnection(user = {}) {
 		const row = await ensureConfig();
-		const provider = providerFor(row);
+		const provider = await providerFor(row);
 		const checkedAt = new Date().toISOString();
 		try {
 			const [phone, waba] = await Promise.all([
@@ -510,7 +675,8 @@ function createWhatsappCloudService({
 
 	async function syncTemplates(user = {}) {
 		const row = await ensureConfig();
-		const response = await providerFor(row).listTemplates(row.waba_id);
+		const provider = await providerFor(row);
+		const response = await provider.listTemplates(row.waba_id);
 		const client = await dbClient.connect();
 		try {
 			await client.query("begin");
@@ -632,7 +798,8 @@ function createWhatsappCloudService({
 			],
 		);
 		try {
-			const response = await providerFor(config).sendTemplate({
+			const provider = await providerFor(config);
+			const response = await provider.sendTemplate({
 				phoneNumberId: config.phone_number_id,
 				to: recipient.phone_e164,
 				template: templateName,
@@ -833,7 +1000,7 @@ function createWhatsappCloudService({
 
 	async function getActivationReadiness() {
 		const row = await ensureConfig();
-		const secrets = getSecrets();
+		const secrets = await resolveSecrets();
 		const [templateCount, successfulTestCount, webhookCount, queueState, messagingConfig] =
 			await Promise.all([
 				dbClient.query(
@@ -1007,9 +1174,10 @@ function createWhatsappCloudService({
 	}
 
 	async function getOverview() {
-		const [row, recipients, templates, tests, events, messagingConfig] =
+		const [row, secrets, recipients, templates, tests, events, messagingConfig] =
 			await Promise.all([
 				ensureConfig(),
+				resolveSecrets(),
 				dbClient.query(
 					`select count(*)::int as total,
 					        count(*) filter (where authorization_status = 'AUTHORIZED')::int as authorized
@@ -1036,7 +1204,7 @@ function createWhatsappCloudService({
 				messagingRepository.getMessagingConfig(),
 			]);
 		return {
-			config: configDto(row),
+			config: configDto(row, { secrets }),
 			gateway: {
 				currentProvider: cleanText(messagingConfig?.whatsappProvider || "evolution"),
 				currentEnabled:
@@ -1056,6 +1224,7 @@ function createWhatsappCloudService({
 		acceptWebhook,
 		activateProvider,
 		addRecipient,
+		deleteSecret,
 		generateVerifyToken,
 		getActivationReadiness,
 		getConfig,
@@ -1069,6 +1238,7 @@ function createWhatsappCloudService({
 		revokeRecipient,
 		rollbackProvider,
 		saveConfig,
+		saveSecrets,
 		sendTestMessage,
 		syncTemplates,
 		validateConnection,
@@ -1083,6 +1253,8 @@ module.exports = {
 	...service,
 	__testables: {
 		configDto,
+		decryptStoredSecret,
+		encryptStoredSecret,
 		hashValue,
 		maskPhone,
 		normalizeE164,

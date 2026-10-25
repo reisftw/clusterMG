@@ -15,7 +15,10 @@ Identificadores iniciais do ambiente de teste:
 
 ## Segredos
 
-Configure os segredos no ambiente do backend:
+Os administradores podem cadastrar ou substituir o Access Token e o App Secret
+diretamente em **Configurações > WhatsApp > Configuração**. O backend cifra os
+valores com AES-256-GCM antes de armazená-los e nunca os devolve ao navegador.
+Variáveis de ambiente continuam disponíveis como sobrescrita operacional:
 
 ```env
 META_ACCESS_TOKEN=

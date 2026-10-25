@@ -47,7 +47,7 @@ test("normaliza webhook sem persistir o texto recebido", () => {
 	assert.match(event.senderMasked, /\*\*\*/);
 });
 
-test("valida assinatura HMAC oficial sem expor o App Secret", () => {
+test("valida assinatura HMAC oficial sem expor o App Secret", async () => {
 	const previous = process.env.META_APP_SECRET;
 	process.env.META_APP_SECRET = "segredo-de-teste";
 	try {
@@ -62,13 +62,45 @@ test("valida assinatura HMAC oficial sem expor o App Secret", () => {
 			.update(rawBody)
 			.digest("hex");
 		assert.deepEqual(
-			service.verifyWebhookSignature(rawBody, `sha256=${signature}`),
+			await service.verifyWebhookSignature(rawBody, `sha256=${signature}`),
 			{ ok: true, reason: "SIGNATURE_MISMATCH" },
 		);
-		assert.equal(service.verifyWebhookSignature(rawBody, "sha256=0".repeat(32)).ok, false);
+		assert.equal(
+			(await service.verifyWebhookSignature(rawBody, `sha256=${"0".repeat(64)}`)).ok,
+			false,
+		);
 	} finally {
 		if (previous === undefined) delete process.env.META_APP_SECRET;
 		else process.env.META_APP_SECRET = previous;
+	}
+});
+
+test("cifra e decifra credenciais sem armazenar o valor em texto puro", () => {
+	const previousSecret = process.env.APP_AUTH_SECRET;
+	const previousKeyId = process.env.APP_AUTH_SECRET_ID;
+	process.env.APP_AUTH_SECRET = "chave-de-teste-com-mais-de-24-caracteres";
+	process.env.APP_AUTH_SECRET_ID = "test-key";
+	try {
+		const encrypted = __testables.encryptStoredSecret(
+			"META_ACCESS_TOKEN",
+			"token-super-secreto",
+		);
+		assert.equal(encrypted.ciphertext.includes("token-super-secreto"), false);
+		assert.equal(
+			__testables.decryptStoredSecret({
+				secret_name: "META_ACCESS_TOKEN",
+				ciphertext: encrypted.ciphertext,
+				iv: encrypted.iv,
+				auth_tag: encrypted.authTag,
+				key_id: encrypted.keyId,
+			}),
+			"token-super-secreto",
+		);
+	} finally {
+		if (previousSecret === undefined) delete process.env.APP_AUTH_SECRET;
+		else process.env.APP_AUTH_SECRET = previousSecret;
+		if (previousKeyId === undefined) delete process.env.APP_AUTH_SECRET_ID;
+		else process.env.APP_AUTH_SECRET_ID = previousKeyId;
 	}
 });
 

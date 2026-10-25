@@ -12,6 +12,7 @@ import {
 	Save,
 	Send,
 	ShieldCheck,
+	Trash2,
 	Users,
 	Webhook,
 	XCircle,
@@ -150,6 +151,10 @@ export default function WhatsappCloudSettingsPage() {
 	const [events, setEvents] = useState({ items: [], total: 0 });
 	const [readiness, setReadiness] = useState({ ready: false, checks: [] });
 	const [verifyToken, setVerifyToken] = useState("");
+	const [secretForm, setSecretForm] = useState({
+		accessToken: "",
+		appSecret: "",
+	});
 	const [providerAction, setProviderAction] = useState("");
 	const [providerReason, setProviderReason] = useState("");
 	const [recipientForm, setRecipientForm] = useState({
@@ -237,6 +242,15 @@ export default function WhatsappCloudSettingsPage() {
 		run("save", () => whatsappCloudApi.saveConfig(config), "Configuração salva com sucesso.");
 	const testConnection = () =>
 		run("diagnostics", whatsappCloudApi.diagnostics, "Conexão com a Meta validada.");
+	const saveSecrets = async (event) => {
+		event.preventDefault();
+		const result = await run(
+			"secrets",
+			() => whatsappCloudApi.saveSecrets(secretForm),
+			"Credenciais criptografadas e salvas.",
+		);
+		if (result) setSecretForm({ accessToken: "", appSecret: "" });
+	};
 	const syncTemplates = () =>
 		run("templates", whatsappCloudApi.syncTemplates, "Templates sincronizados.");
 	const addRecipient = async (event) => {
@@ -387,18 +401,49 @@ export default function WhatsappCloudSettingsPage() {
 							</label>
 						</div>
 					</Section>
-					<Section title="Segredos do servidor" description="Valores protegidos por variáveis de ambiente.">
-						<div className="space-y-3">
-							{[
-								["META_ACCESS_TOKEN", config?.secretStatus?.accessTokenConfigured],
-								["META_APP_SECRET", config?.secretStatus?.appSecretConfigured],
-								["META_WEBHOOK_VERIFY_TOKEN", config?.secretStatus?.verifyTokenConfigured],
-							].map(([name, configured]) => (
-								<div key={name} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
-									<code className="break-all text-xs font-black text-slate-700">{name}</code>
-									{configured ? <CheckCircle2 className="shrink-0 text-emerald-600" size={19} /> : <XCircle className="shrink-0 text-red-500" size={19} />}
+					<Section title="Credenciais Meta" description="Os valores são criptografados no servidor e nunca são exibidos novamente.">
+						<form onSubmit={saveSecrets} className="space-y-3">
+							<Field label="Access Token" help="Cole um novo valor somente para cadastrar ou substituir.">
+								<input
+									type="password"
+									autoComplete="new-password"
+									className={INPUT_CLASS}
+									placeholder={config?.secretStatus?.accessTokenConfigured ? "Configurado" : "Não configurado"}
+									value={secretForm.accessToken}
+									onChange={(event) => setSecretForm({ ...secretForm, accessToken: event.target.value })}
+								/>
+							</Field>
+							<div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+								<div><p className="text-xs font-black text-slate-700">META_ACCESS_TOKEN</p><p className="text-xs font-semibold text-slate-500">Origem: {config?.secretStatus?.accessTokenSource === "database" ? "cofre do sistema" : config?.secretStatus?.accessTokenSource === "environment" ? "servidor" : "não configurado"}</p></div>
+								<div className="flex items-center gap-2">
+									{config?.secretStatus?.accessTokenConfigured ? <CheckCircle2 className="text-emerald-600" size={19} /> : <XCircle className="text-red-500" size={19} />}
+									{config?.secretStatus?.accessTokenSource === "database" ? <button type="button" title="Remover Access Token" className="text-red-600" onClick={() => run("delete-access", () => whatsappCloudApi.deleteSecret("META_ACCESS_TOKEN"), "Access Token removido.")}><Trash2 size={18} /></button> : null}
 								</div>
-							))}
+							</div>
+							<Field label="App Secret" help="Use a chave secreta do aplicativo Meta for Developers.">
+								<input
+									type="password"
+									autoComplete="new-password"
+									className={INPUT_CLASS}
+									placeholder={config?.secretStatus?.appSecretConfigured ? "Configurado" : "Não configurado"}
+									value={secretForm.appSecret}
+									onChange={(event) => setSecretForm({ ...secretForm, appSecret: event.target.value })}
+								/>
+							</Field>
+							<div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+								<div><p className="text-xs font-black text-slate-700">META_APP_SECRET</p><p className="text-xs font-semibold text-slate-500">Origem: {config?.secretStatus?.appSecretSource === "database" ? "cofre do sistema" : config?.secretStatus?.appSecretSource === "environment" ? "servidor" : "não configurado"}</p></div>
+								<div className="flex items-center gap-2">
+									{config?.secretStatus?.appSecretConfigured ? <CheckCircle2 className="text-emerald-600" size={19} /> : <XCircle className="text-red-500" size={19} />}
+									{config?.secretStatus?.appSecretSource === "database" ? <button type="button" title="Remover App Secret" className="text-red-600" onClick={() => run("delete-secret", () => whatsappCloudApi.deleteSecret("META_APP_SECRET"), "App Secret removido.")}><Trash2 size={18} /></button> : null}
+								</div>
+							</div>
+							<button type="submit" className={BUTTON_PRIMARY} disabled={busy === "secrets" || (!secretForm.accessToken && !secretForm.appSecret)}>{busy === "secrets" ? <Loader2 className="animate-spin" size={17} /> : <Save size={17} />} Salvar credenciais</button>
+						</form>
+						<div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+							<div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+								<code className="break-all text-xs font-black text-slate-700">META_WEBHOOK_VERIFY_TOKEN</code>
+								{config?.secretStatus?.verifyTokenConfigured ? <CheckCircle2 className="shrink-0 text-emerald-600" size={19} /> : <XCircle className="shrink-0 text-red-500" size={19} />}
+							</div>
 							<button type="button" className={BUTTON_SECONDARY} onClick={async () => {
 								setBusy("token"); setFeedback(null);
 								try { const result = await whatsappCloudApi.generateVerifyToken(); setVerifyToken(result.token || ""); setFeedback({ type: "success", text: "Verify token gerado. Ele será exibido somente agora." }); }

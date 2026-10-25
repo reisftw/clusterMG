@@ -66,6 +66,22 @@ function createWhatsappCloudRouter({
 			res.status(201).json(await service.generateVerifyToken(req.user)),
 		),
 	);
+	router.put(
+		"/secrets",
+		requireCsrfToken,
+		requireConfigure,
+		asyncHandler(async (req, res) =>
+			res.json(await service.saveSecrets(req.body || {}, req.user)),
+		),
+	);
+	router.delete(
+		"/secrets/:name",
+		requireCsrfToken,
+		requireConfigure,
+		asyncHandler(async (req, res) =>
+			res.json(await service.deleteSecret(req.params.name, req.user)),
+		),
+	);
 	router.post(
 		"/diagnostics",
 		requireCsrfToken,

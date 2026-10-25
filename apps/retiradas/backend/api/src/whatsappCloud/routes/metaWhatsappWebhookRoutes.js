@@ -21,7 +21,7 @@ function createMetaWhatsappWebhookRouter({ service }) {
 
 	router.post("/", async (req, res, next) => {
 		try {
-			const validation = service.verifyWebhookSignature(
+			const validation = await service.verifyWebhookSignature(
 				req.rawBody,
 				req.get("x-hub-signature-256"),
 			);

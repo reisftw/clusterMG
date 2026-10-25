@@ -26,6 +26,15 @@ export const whatsappCloudApi = {
 			method: "POST",
 			body: JSON.stringify({}),
 		}),
+	saveSecrets: (payload) =>
+		requestVpsApi(`${BASE_PATH}/secrets`, {
+			method: "PUT",
+			body: JSON.stringify(payload || {}),
+		}),
+	deleteSecret: (name) =>
+		requestVpsApi(`${BASE_PATH}/secrets/${encodeURIComponent(name)}`, {
+			method: "DELETE",
+		}),
 	diagnostics: () =>
 		requestVpsApi(`${BASE_PATH}/diagnostics`, {
 			method: "POST",

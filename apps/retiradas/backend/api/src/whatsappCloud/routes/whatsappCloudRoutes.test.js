@@ -10,6 +10,8 @@ function buildApp() {
 		getOverview: async () => ({ ok: true }),
 		getConfig: async () => ({}),
 		saveConfig: async (body) => body,
+		saveSecrets: async () => ({ ok: true }),
+		deleteSecret: async () => ({ ok: true }),
 		generateVerifyToken: async () => ({ token: "one-time" }),
 		validateConnection: async () => ({ ok: true }),
 		listRecipients: async () => [],
