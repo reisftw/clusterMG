@@ -325,7 +325,7 @@ async function getQuerySummary({ hours = 1 } = {}) {
 async function getMaintenanceMetrics({ hours = 24 } = {}) {
 	await flushMetrics();
 	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
-	const [totals, timeline, topRoutes, queryTotals] = await Promise.all([
+	const [totals, timeline, topRoutes, queryTotals, audience] = await Promise.all([
 		metricsQuery(
 			`select count(*)::integer total_requests,
 			 count(*) filter(where status_code between 400 and 499)::integer errors_4xx,
@@ -362,12 +362,23 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			 from metrics_queries where created_at>=now()-($1::numeric*interval '1 hour')`,
 			[safeHours],
 		),
+		metricsQuery(
+			`select
+			 count(distinct user_id) filter(
+			   where nullif(user_id,'') is not null
+			     and created_at>=now()-interval '5 minutes'
+			 )::integer online_users,
+			 count(distinct user_id) filter(where nullif(user_id,'') is not null)::integer authenticated_visitors_today
+			 from metrics_requests
+			 where created_at>=date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'`,
+		),
 	]);
 	return {
 		totals: totals.rows[0] || {},
 		timeline: timeline.rows,
 		topRoutes: topRoutes.rows,
 		queries: queryTotals.rows[0] || {},
+		audience: audience.rows[0] || {},
 	};
 }
 

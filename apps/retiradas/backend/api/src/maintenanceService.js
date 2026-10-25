@@ -324,7 +324,7 @@ async function recordServiceWorkerEvent(payload = {}, userAgent = "") {
 
 async function getServiceWorkerMetrics(hours = 24) {
 	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
-	const [summary, versions, recent] = await Promise.all([
+	const [summary, versions, recent, dailyVisits] = await Promise.all([
 		db.query(
 			`select count(*)::integer total,
 			 count(*) filter(where event_type in ('NAVIGATION_FAILURE','CACHE_FAILURE'))::integer failures,
@@ -347,8 +347,21 @@ async function getServiceWorkerMetrics(hours = 24) {
 			 from maintenance_service_worker_events
 			 order by occurred_at desc limit 30`,
 		),
+		db.query(
+			`select
+			 count(*) filter(where event_type='HEARTBEAT')::integer visits_today,
+			 count(distinct nullif(client_id,'')) filter(where event_type='HEARTBEAT')::integer unique_visitors_today
+			 from maintenance_service_worker_events
+			 where occurred_at>=date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'
+			   and occurred_at<(date_trunc('day',now() at time zone 'America/Sao_Paulo')+interval '1 day') at time zone 'America/Sao_Paulo'`,
+		),
 	]);
-	return { ...(summary.rows[0] || {}), versions: versions.rows, recent: recent.rows };
+	return {
+		...(summary.rows[0] || {}),
+		...(dailyVisits.rows[0] || {}),
+		versions: versions.rows,
+		recent: recent.rows,
+	};
 }
 
 async function getDashboard({ hours = 24 } = {}) {

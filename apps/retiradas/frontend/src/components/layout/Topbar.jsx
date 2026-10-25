@@ -1,4 +1,13 @@
-import { Bell, Camera, CheckCheck, LogOut, Menu, Search, ShieldCheck } from "lucide-react";
+import {
+	Bell,
+	Camera,
+	CheckCheck,
+	LogOut,
+	Menu,
+	Search,
+	ShieldCheck,
+	Wrench,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import UserAvatar from "../ui/UserAvatar";
@@ -12,6 +21,7 @@ import {
 import { playSelectedNotificationSound } from "../../services/notificationSoundSettings";
 import { recordNotificationOpen } from "../../services/pushNotificationsService";
 import { AVATAR_ACCEPT, validateImageFile } from "../../utils/imageUpload";
+import { ROUTES } from "../../router/routes";
 import AuthenticatorModal from "./AuthenticatorModal";
 
 function formatNotificationDate(value) {
@@ -41,6 +51,10 @@ const Topbar = ({ onOpenMobileMenu }) => {
 	const { currentUser, realUser, refreshUser, signOut, isViewingAsRole } =
 		useAuthContext();
 	const displayUser = realUser || currentUser;
+	const isRealAdmin =
+		String(realUser?.role || currentUser?.role || "")
+			.trim()
+			.toLowerCase() === ROLES.ADMIN;
 	const isTechnician =
 		String(currentUser?.role || "")
 			.trim()
@@ -307,6 +321,21 @@ const Topbar = ({ onOpenMobileMenu }) => {
 						</div>
 					) : null}
 				</div>
+
+				{isRealAdmin ? (
+					<Link
+						to={ROUTES.MAINTENANCE}
+						onClick={() => {
+							setNotificationsOpen(false);
+							setMobileAccountOpen(false);
+						}}
+						className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-orange-50 hover:text-orange-500"
+						title="Painel de manutenção"
+						aria-label="Painel de manutenção"
+					>
+						<Wrench size={18} />
+					</Link>
+				) : null}
 
 				<div className="mx-1 hidden h-6 w-px bg-gray-200 sm:block" />
 
