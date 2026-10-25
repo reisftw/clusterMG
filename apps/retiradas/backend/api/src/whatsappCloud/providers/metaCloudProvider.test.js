@@ -52,3 +52,33 @@ test("não repete POST de envio e monta template oficial", async () => {
 		global.fetch = originalFetch;
 	}
 });
+
+test("envia até três botões interativos com identificadores estáveis", async () => {
+	const originalFetch = global.fetch;
+	let sentBody = null;
+	global.fetch = async (_url, options) => {
+		sentBody = JSON.parse(options.body);
+		return { ok: true, status: 200, text: async () => '{"messages":[{"id":"wamid.buttons"}]}' };
+	};
+	try {
+		const provider = createMetaCloudProvider({
+			accessToken: "token-test",
+			graphApiVersion: "v26.0",
+		});
+		await provider.sendInteractiveButtons({
+			phoneNumberId: "123",
+			to: "+55 31 99999-0000",
+			body: "Escolha uma opção",
+			buttons: [
+				{ id: "flow:schedule", title: "Agendar" },
+				{ id: "flow:delivered", title: "Já entregue" },
+				{ id: "flow:support", title: "Falar com suporte" },
+			],
+		});
+		assert.equal(sentBody.type, "interactive");
+		assert.equal(sentBody.interactive.action.buttons.length, 3);
+		assert.equal(sentBody.interactive.action.buttons[0].reply.id, "flow:schedule");
+	} finally {
+		global.fetch = originalFetch;
+	}
+});

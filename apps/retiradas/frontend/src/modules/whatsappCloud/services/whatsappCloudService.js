@@ -62,6 +62,12 @@ export const whatsappCloudApi = {
 			method: "POST",
 			body: JSON.stringify(payload || {}),
 		}),
+	testFlows: () => requestVpsApi(`${BASE_PATH}/tests/flows`),
+	startTestFlow: (payload) =>
+		requestVpsApi(`${BASE_PATH}/tests/flows/start`, {
+			method: "POST",
+			body: JSON.stringify(payload || {}),
+		}),
 	webhooks: (params) =>
 		requestVpsApi(withQuery(`${BASE_PATH}/webhooks`, params)),
 	readiness: () => requestVpsApi(`${BASE_PATH}/activation/readiness`),

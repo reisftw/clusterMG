@@ -6,6 +6,7 @@ const createRouter = require("./whatsappCloudRoutes");
 
 function buildApp() {
 	let sends = 0;
+	let guidedFlows = 0;
 	const service = {
 		getOverview: async () => ({ ok: true }),
 		getConfig: async () => ({}),
@@ -20,9 +21,14 @@ function buildApp() {
 		listTemplates: async () => [],
 		syncTemplates: async () => ({ items: [] }),
 		listTestMessages: async () => ({ items: [] }),
+		listTestFlows: async () => ({ items: [] }),
 		sendTestMessage: async () => {
 			sends += 1;
 			return { status: "ACCEPTED" };
+		},
+		startTestFlow: async () => {
+			guidedFlows += 1;
+			return { state: "AWAITING_ACTION" };
 		},
 		listWebhookEvents: async () => ({ items: [] }),
 		getActivationReadiness: async () => ({ ready: false, checks: [] }),
@@ -58,7 +64,11 @@ function buildApp() {
 			adminRoles: [],
 		}),
 	);
-	return { app, getSends: () => sends };
+	return {
+		app,
+		getSends: () => sends,
+		getGuidedFlows: () => guidedFlows,
+	};
 }
 
 test("RBAC protege leitura e escrita e CSRF protege envio real", async () => {
@@ -80,4 +90,16 @@ test("RBAC protege leitura e escrita e CSRF protege envio real", async () => {
 		.send({})
 		.expect(202);
 	assert.equal(context.getSends(), 1);
+	await request(context.app)
+		.post("/tests/flows/start")
+		.set("x-permission", "whatsapp.testar")
+		.send({})
+		.expect(403);
+	await request(context.app)
+		.post("/tests/flows/start")
+		.set("x-permission", "whatsapp.testar")
+		.set("x-test-csrf", "ok")
+		.send({})
+		.expect(202);
+	assert.equal(context.getGuidedFlows(), 1);
 });

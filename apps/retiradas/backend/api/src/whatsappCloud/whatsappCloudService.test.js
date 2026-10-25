@@ -47,6 +47,70 @@ test("normaliza webhook sem persistir o texto recebido", () => {
 	assert.match(event.senderMasked, /\*\*\*/);
 });
 
+test("normaliza clique de botão sem persistir o telefone completo", () => {
+	const [event] = __testables.normalizeWebhookEvents({
+		object: "whatsapp_business_account",
+		entry: [{ changes: [{ value: {
+			metadata: { phone_number_id: "phone-1" },
+			messages: [{
+				id: "wamid.button",
+				from: "5531999990000",
+				timestamp: "1792933200",
+				type: "interactive",
+				interactive: { button_reply: { id: "flow:schedule", title: "Agendar" } },
+			}],
+		} }] }],
+	});
+	assert.equal(event.payload.buttonId, "flow:schedule");
+	assert.equal(event.payload.buttonTitle, "Agendar");
+	assert.equal(event.payload.senderHash.length, 64);
+	assert.equal(JSON.stringify(event.payload).includes("5531999990000"), false);
+});
+
+test("gera três datas futuras para o fluxo guiado", () => {
+	const dates = __testables.getTestFlowDateOptions(new Date("2026-10-25T15:00:00Z"));
+	assert.equal(dates.length, 3);
+	assert.deepEqual(dates.map((item) => item.date), [
+		"2026-10-26",
+		"2026-10-27",
+		"2026-10-28",
+	]);
+	assert.equal(__testables.normalizeFlowAction({ buttonTitle: "Já entregue" }), "flow:delivered");
+});
+
+test("converte data e horário digitados somente em ações normalizadas", () => {
+	const dateEvent = __testables.normalizeWebhookEvents({
+		object: "whatsapp_business_account",
+		entry: [{ changes: [{ value: { messages: [{
+			id: "wamid.date",
+			from: "5531999990000",
+			timestamp: "1792933200",
+			type: "text",
+			text: { body: "28/10/2026" },
+		}] } }] }],
+	})[0];
+	const timeEvent = __testables.normalizeWebhookEvents({
+		object: "whatsapp_business_account",
+		entry: [{ changes: [{ value: { messages: [{
+			id: "wamid.time",
+			from: "5531999990000",
+			timestamp: "1792933200",
+			type: "text",
+			text: { body: "14:30" },
+		}] } }] }],
+	})[0];
+	assert.equal(dateEvent.payload.inputAction, "flow:date:2026-10-28");
+	assert.equal(timeEvent.payload.inputAction, "flow:time:14:30");
+	assert.equal("text" in dateEvent.payload, false);
+});
+
+test("limita respostas automáticas de exceção a duas mensagens", () => {
+	assert.equal(__testables.canSendTestFlowAutoReply(0), true);
+	assert.equal(__testables.canSendTestFlowAutoReply(1), true);
+	assert.equal(__testables.canSendTestFlowAutoReply(2), false);
+	assert.equal(__testables.canSendTestFlowAutoReply(20), false);
+});
+
 test("valida assinatura HMAC oficial sem expor o App Secret", async () => {
 	const previous = process.env.META_APP_SECRET;
 	process.env.META_APP_SECRET = "segredo-de-teste";

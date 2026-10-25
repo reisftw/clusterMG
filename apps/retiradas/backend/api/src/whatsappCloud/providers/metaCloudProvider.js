@@ -221,12 +221,63 @@ function createMetaCloudProvider({ accessToken, graphApiVersion, timeoutMs } = {
 		});
 	}
 
+	async function sendText({ phoneNumberId, to, text }) {
+		const id = encodeURIComponent(cleanText(phoneNumberId));
+		return request(`${id}/messages`, {
+			method: "POST",
+			retrySafe: false,
+			body: {
+				messaging_product: "whatsapp",
+				recipient_type: "individual",
+				to: cleanText(to).replace(/\D/g, ""),
+				type: "text",
+				text: {
+					preview_url: false,
+					body: cleanText(text).slice(0, 4096),
+				},
+			},
+		});
+	}
+
+	async function sendInteractiveButtons({ phoneNumberId, to, body, buttons = [] }) {
+		const id = encodeURIComponent(cleanText(phoneNumberId));
+		const normalizedButtons = buttons.slice(0, 3).map((button, index) => ({
+			type: "reply",
+			reply: {
+				id: cleanText(button?.id || `option-${index + 1}`).slice(0, 256),
+				title: cleanText(button?.title).slice(0, 20),
+			},
+		}));
+		if (!normalizedButtons.length || normalizedButtons.some((item) => !item.reply.title)) {
+			const error = new Error("Informe de um a três botões válidos.");
+			error.statusCode = 400;
+			throw error;
+		}
+		return request(`${id}/messages`, {
+			method: "POST",
+			retrySafe: false,
+			body: {
+				messaging_product: "whatsapp",
+				recipient_type: "individual",
+				to: cleanText(to).replace(/\D/g, ""),
+				type: "interactive",
+				interactive: {
+					type: "button",
+					body: { text: cleanText(body).slice(0, 1024) },
+					action: { buttons: normalizedButtons },
+				},
+			},
+		});
+	}
+
 	return {
 		baseUrl,
 		graphApiVersion: version,
 		listTemplates,
 		request,
+		sendInteractiveButtons,
 		sendTemplate,
+		sendText,
 		validatePhoneNumber,
 		validateWaba,
 	};

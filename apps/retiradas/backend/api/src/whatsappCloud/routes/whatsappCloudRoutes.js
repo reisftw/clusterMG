@@ -146,6 +146,21 @@ function createWhatsappCloudRouter({
 			res.status(202).json(await service.sendTestMessage(req.body || {}, req.user)),
 		),
 	);
+	router.get(
+		"/tests/flows",
+		requireView,
+		asyncHandler(async (req, res) =>
+			res.json(await service.listTestFlows(req.query || {})),
+		),
+	);
+	router.post(
+		"/tests/flows/start",
+		requireCsrfToken,
+		requireTest,
+		asyncHandler(async (req, res) =>
+			res.status(202).json(await service.startTestFlow(req.body || {}, req.user)),
+		),
+	);
 
 	router.get(
 		"/webhooks",

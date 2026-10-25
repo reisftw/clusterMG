@@ -14,6 +14,10 @@ const DEFAULT_GRAPH_VERSION = "v26.0";
 const MASKED_SECRET = "********";
 const WEBHOOK_PATH = "/api/integrations/whatsapp/meta/webhook";
 const TEST_PROVIDER = "meta_cloud_test";
+const TEST_FLOW_COLLECTION = "whatsapp_cloud_test_flows";
+const TEST_FLOW_TEMPLATE = "retiradas_agendamento_teste_v2";
+const TEST_FLOW_LANGUAGE = "pt_BR";
+const MAX_TEST_FLOW_AUTO_REPLIES = 2;
 const MAX_LIMIT = 200;
 const SECRET_NAMES = Object.freeze({
 	accessToken: "META_ACCESS_TOKEN",
@@ -285,6 +289,16 @@ function countTemplateParameters(components = []) {
 	}, 0);
 }
 
+function messageInteraction(message = {}) {
+	const interactive = message.interactive?.button_reply || {};
+	const templateButton = message.button || {};
+	return {
+		buttonId: cleanText(interactive.id || templateButton.payload),
+		buttonTitle: cleanText(interactive.title || templateButton.text),
+		inputAction: parseTypedFlowAction(message.text?.body),
+	};
+}
+
 function normalizeWebhookEvents(payload = {}) {
 	const events = [];
 	for (const entry of Array.isArray(payload.entry) ? payload.entry : []) {
@@ -323,6 +337,7 @@ function normalizeWebhookEvents(payload = {}) {
 				const eventAt = message.timestamp
 					? new Date(Number(message.timestamp) * 1000).toISOString()
 					: new Date().toISOString();
+				const interaction = messageInteraction(message);
 				const normalized = {
 					eventType: "INCOMING_MESSAGE",
 					messageId: cleanText(message.id),
@@ -333,6 +348,10 @@ function normalizeWebhookEvents(payload = {}) {
 					payload: {
 						messageType: cleanText(message.type),
 						contextMessageId: cleanText(message.context?.id),
+						senderHash: hashValue(cleanText(message.from).replace(/\D/g, "")),
+						buttonId: interaction.buttonId,
+						buttonTitle: interaction.buttonTitle,
+						inputAction: interaction.inputAction,
 					},
 				};
 				normalized.dedupeKey = hashValue(
@@ -343,6 +362,132 @@ function normalizeWebhookEvents(payload = {}) {
 		}
 	}
 	return events;
+}
+
+function saoPauloDateKey(date = new Date()) {
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).formatToParts(date);
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	return `${values.year}-${values.month}-${values.day}`;
+}
+
+function addDays(dateKey, days) {
+	const [year, month, day] = String(dateKey).split("-").map(Number);
+	const value = new Date(Date.UTC(year, month - 1, day + days, 12));
+	return value.toISOString().slice(0, 10);
+}
+
+function formatDateButton(dateKey) {
+	const [year, month, day] = String(dateKey).split("-");
+	return `${day}/${month}/${year}`;
+}
+
+function getTestFlowDateOptions(now = new Date()) {
+	const today = saoPauloDateKey(now);
+	return [1, 2, 3].map((offset) => {
+		const date = addDays(today, offset);
+		return {
+			id: `flow:date:${date}`,
+			title: formatDateButton(date),
+			date,
+		};
+	});
+}
+
+function renderTestFlowDateOptions(options = []) {
+	return options.map((option, index) => `${index + 1} - ${option.title}`).join("\n");
+}
+
+function testFlowDateMessage(options = [], { invalid = false } = {}) {
+	const choices = renderTestFlowDateOptions(options);
+	if (invalid) {
+		return `Ops, não consegui identificar a data. 😅\n\nPor favor, selecione uma das opções abaixo ou envie o dia no formato *DD/MM*:\n\n${choices}\n\nExemplo: 25/08`;
+	}
+	return `Perfeito! Escolha uma das datas abaixo para a sua retirada:\n\n${choices}\n\nSe preferir outro dia, basta digitar a data desejada (exemplo: *25/08*).`;
+}
+
+function testFlowTimeMessage(dateKey, { invalid = false, other = false } = {}) {
+	if (invalid) {
+		return "Ops, não consegui identificar o horário. 😅\n\nPor favor, digite o número de uma das opções ou envie a hora no formato 00:00:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nExemplo: *14:30*";
+	}
+	if (other) {
+		return "Perfeito! Envie o horário desejado no formato 00:00.\n\nExemplo: *14:30*";
+	}
+	return `Perfeito. Agora selecione o horário ideal para o dia ${formatDateButton(dateKey)}:\n\n1 - 09h\n2 - 12h\n3 - 16h\n4 - Outro horário\n\nDigite o número correspondente ou o horário exato que prefere (exemplo: 14:30).`;
+}
+
+function parseTypedFlowAction(value, now = new Date()) {
+	const text = cleanText(value).toLowerCase();
+	if (!text) return "";
+	if (["1", "2", "3"].includes(text)) return `flow:choice:${text}`;
+	if (text === "4" || text.includes("outro horario") || text.includes("outro horário")) {
+		return "flow:other-time";
+	}
+	const time = text.match(/^(?:horario\s+|horário\s+)?([01]?\d|2[0-3])\s*[:h]\s*([0-5]\d)$/i);
+	if (time) {
+		return `flow:time:${String(Number(time[1])).padStart(2, "0")}:${time[2]}`;
+	}
+	const date = text.match(/^(?:dia\s+)?(0?[1-9]|[12]\d|3[01])[/-](0?[1-9]|1[0-2])(?:[/-](\d{4}))?$/i);
+	if (!date) return "";
+	const today = saoPauloDateKey(now);
+	let year = Number(date[3] || today.slice(0, 4));
+	const month = Number(date[2]);
+	const day = Number(date[1]);
+	let candidate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+	const parsed = new Date(`${candidate}T12:00:00Z`);
+	if (
+		Number.isNaN(parsed.getTime()) ||
+		parsed.getUTCFullYear() !== year ||
+		parsed.getUTCMonth() + 1 !== month ||
+		parsed.getUTCDate() !== day
+	) return "";
+	if (!date[3] && candidate <= today) {
+		year += 1;
+		candidate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+	}
+	return `flow:date:${candidate}`;
+}
+
+function normalizeFlowAction(payload = {}) {
+	const id = cleanText(payload.buttonId).toLowerCase();
+	const inputAction = cleanText(payload.inputAction).toLowerCase();
+	const title = cleanText(payload.buttonTitle || id)
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.toLowerCase();
+	if (id.startsWith("flow:")) return id;
+	if (inputAction) return inputAction;
+	if (title === "agendar" || title === "sim") return "flow:schedule";
+	if (title === "ja entregue") return "flow:delivered";
+	if (title === "falar com suporte") return "flow:support";
+	return title;
+}
+
+function canSendTestFlowAutoReply(replyCount) {
+	return Number(replyCount || 0) < MAX_TEST_FLOW_AUTO_REPLIES;
+}
+
+function flowDto(row = {}) {
+	const data = row.data || row;
+	return {
+		id: row.document_id || data.id || "",
+		recipientId: data.recipientId || "",
+		recipientName: data.recipientName || "",
+		recipient: data.recipientMasked || "",
+		state: data.state || "UNKNOWN",
+		outcome: data.outcome || "",
+		selectedDate: data.selectedDate || "",
+		selectedTime: data.selectedTime || "",
+		simulatedAppointment: data.simulatedAppointment || null,
+		transcript: Array.isArray(data.transcript) ? data.transcript : [],
+		startedAt: data.startedAt || null,
+		completedAt: data.completedAt || null,
+		updatedAt: row.updated_at || data.updatedAt || null,
+	};
 }
 
 function createWhatsappCloudService({
@@ -406,6 +551,95 @@ function createWhatsappCloudService({
 			accessToken: secrets.accessToken,
 			graphApiVersion: row.graph_api_version || DEFAULT_GRAPH_VERSION,
 		});
+	}
+
+	async function getTestFlow(recipientId) {
+		const path = `${TEST_FLOW_COLLECTION}/${cleanText(recipientId)}`;
+		const result = await dbClient.query(
+			`select document_id, data, updated_at
+			   from app_documents
+			  where path = $1`,
+			[path],
+		);
+		return result.rows[0] || null;
+	}
+
+	async function saveTestFlow(recipientId, data = {}) {
+		const id = cleanText(recipientId);
+		const path = `${TEST_FLOW_COLLECTION}/${id}`;
+		const payload = { ...data, id, recipientId: id, updatedAt: new Date().toISOString() };
+		const result = await dbClient.query(
+			`insert into app_documents (path, collection_path, document_id, parent_path, data)
+			 values ($1, $2, $3, null, $4::jsonb)
+			 on conflict (path) do update set data = excluded.data
+			 returning document_id, data, updated_at`,
+			[path, TEST_FLOW_COLLECTION, id, JSON.stringify(payload)],
+		);
+		return result.rows[0];
+	}
+
+	function appendTranscript(flow = {}, entry = {}) {
+		return [
+			...(Array.isArray(flow.transcript) ? flow.transcript : []),
+			{ ...entry, at: entry.at || new Date().toISOString() },
+		].slice(-30);
+	}
+
+	async function findFlowRecipient(senderHash) {
+		if (!senderHash) return null;
+		const result = await dbClient.query(
+			`select * from whatsapp_cloud_test_recipients
+			  where authorization_status = 'AUTHORIZED' and meta_registered = true`,
+		);
+		return result.rows.find(
+			(row) => hashValue(cleanText(row.phone_e164).replace(/\D/g, "")) === senderHash,
+		) || null;
+	}
+
+	async function recordFlowOutbound({ recipient, config, response, label }) {
+		const messageId = cleanText(response.data?.messages?.[0]?.id);
+		await dbClient.query(
+			`insert into whatsapp_cloud_test_messages
+			 (recipient_id, phone_number_id, recipient_masked, template_name,
+			  template_language, variables, status, message_id, http_status,
+			  response_payload, operator_name, sent_at)
+			 values ($1, $2, $3, $4, $5, '[]'::jsonb, 'ACCEPTED', nullif($6, ''),
+			         $7, $8, 'Retorninho - fluxo de teste', now())`,
+			[
+				recipient.id,
+				config.phone_number_id,
+				maskPhone(recipient.phone_e164),
+				label,
+				TEST_FLOW_LANGUAGE,
+				messageId,
+				response.httpStatus,
+				response.data,
+			],
+		);
+		return messageId;
+	}
+
+	async function sendFlowButtons({ recipient, config, body, buttons, label }) {
+		const provider = await providerFor(config);
+		const response = await provider.sendInteractiveButtons({
+			phoneNumberId: config.phone_number_id,
+			to: recipient.phone_e164,
+			body,
+			buttons,
+		});
+		const messageId = await recordFlowOutbound({ recipient, config, response, label });
+		return { messageId, body };
+	}
+
+	async function sendFlowText({ recipient, config, text, label }) {
+		const provider = await providerFor(config);
+		const response = await provider.sendText({
+			phoneNumberId: config.phone_number_id,
+			to: recipient.phone_e164,
+			text,
+		});
+		const messageId = await recordFlowOutbound({ recipient, config, response, label });
+		return { messageId, body: text };
 	}
 
 	async function getConfig() {
@@ -838,6 +1072,296 @@ function createWhatsappCloudService({
 		}
 	}
 
+	async function startTestFlow(payload = {}, user = {}) {
+		const recipientId = cleanText(payload.recipientId);
+		const recipientResult = await dbClient.query(
+			`select * from whatsapp_cloud_test_recipients where id = $1`,
+			[recipientId],
+		);
+		const recipient = recipientResult.rows[0];
+		if (!recipient) throw apiError("Destinatário de teste não encontrado.", 404);
+		const firstName = cleanText(payload.firstName || recipient.name).split(/\s+/)[0];
+		const contract = cleanText(payload.contract);
+		const city = cleanText(payload.city);
+		if (!firstName || !contract || !city) {
+			throw apiError("Informe primeiro nome, contrato e cidade para iniciar o fluxo.");
+		}
+		const sent = await sendTestMessage(
+			{
+				recipientId,
+				template: TEST_FLOW_TEMPLATE,
+				language: TEST_FLOW_LANGUAGE,
+				variables: [firstName, contract, city],
+			},
+			user,
+		);
+		const startedAt = new Date().toISOString();
+		const flow = await saveTestFlow(recipientId, {
+			recipientName: recipient?.name || "",
+			recipientMasked: maskPhone(recipient?.phone_e164),
+			state: "AWAITING_ACTION",
+			outcome: "",
+			selectedDate: "",
+			selectedTime: "",
+			dateOptions: [],
+			invalidReplyCount: 0,
+			postFlowReplyCount: 0,
+			simulatedAppointment: null,
+			startedAt,
+			completedAt: null,
+			startedBy: userName(user),
+			testContext: { firstName, contract, city },
+			transcript: [
+				{
+					direction: "OUT",
+					kind: "TEMPLATE_BUTTONS",
+					text: `Mensagem completa para ${firstName}, contrato ${contract}, ${city} · Agendar | Já entregue | Falar com suporte`,
+					messageId: sent.messageId,
+					at: startedAt,
+				},
+			],
+		});
+		await recordAudit("test_flow_start", recipientId, user, {
+			template: TEST_FLOW_TEMPLATE,
+			messageId: sent.messageId,
+		});
+		return flowDto(flow);
+	}
+
+	async function listTestFlows(query = {}) {
+		const limit = normalizeLimit(query.limit, 30);
+		const result = await dbClient.query(
+			`select document_id, data, updated_at
+			   from app_documents
+			  where collection_path = $1
+			  order by updated_at desc
+			  limit $2`,
+			[TEST_FLOW_COLLECTION, limit],
+		);
+		return { items: result.rows.map(flowDto), total: result.rows.length };
+	}
+
+	async function resendCurrentFlowStep({ flow, recipient, config, invalid = false, other = false }) {
+		if (flow.state === "AWAITING_DATE") {
+			const options = Array.isArray(flow.dateOptions) && flow.dateOptions.length
+				? flow.dateOptions
+				: getTestFlowDateOptions();
+			return sendFlowButtons({
+				recipient,
+				config,
+				body: testFlowDateMessage(options, { invalid }),
+				buttons: options,
+				label: "interactive_dates",
+			});
+		}
+		if (flow.state === "AWAITING_TIME") {
+			return sendFlowButtons({
+				recipient,
+				config,
+				body: testFlowTimeMessage(flow.selectedDate, { invalid, other }),
+				buttons: [
+					{ id: "flow:time:09:00", title: "09h" },
+					{ id: "flow:time:12:00", title: "12h" },
+					{ id: "flow:time:16:00", title: "16h" },
+				],
+				label: "interactive_times",
+			});
+		}
+		return sendFlowButtons({
+			recipient,
+			config,
+			body: "Escolha uma opção para continuarmos:",
+			buttons: [
+				{ id: "flow:schedule", title: "Agendar" },
+				{ id: "flow:delivered", title: "Já entregue" },
+				{ id: "flow:support", title: "Falar com suporte" },
+			],
+			label: "interactive_actions",
+		});
+	}
+
+	async function processTestFlowInbound(event = {}) {
+		const senderHash = cleanText(event.normalized_payload?.senderHash);
+		const recipient = await findFlowRecipient(senderHash);
+		if (!recipient) return { ignored: true, reason: "TEST_RECIPIENT_NOT_FOUND" };
+		const flowRow = await getTestFlow(recipient.id);
+		if (!flowRow) return { ignored: true, reason: "TEST_FLOW_NOT_STARTED" };
+		const flow = flowRow.data || {};
+		if (["CANCELLED", "FAILED"].includes(flow.state)) {
+			return { ignored: true, reason: "TEST_FLOW_CLOSED" };
+		}
+		if (flow.state === "COMPLETED") {
+			if (!canSendTestFlowAutoReply(flow.postFlowReplyCount)) {
+				return { ignored: true, reason: "TEST_FLOW_REPLY_LIMIT_REACHED" };
+			}
+			const config = await ensureConfig();
+			const sent = await sendFlowText({
+				recipient,
+				config,
+				text: "Olá! Este número envia apenas mensagens automáticas do sistema e não recebe respostas.\n\nPara falar com nosso time ou tirar dúvidas, por favor, entre em contato com a Central de Retiradas pelo número *(31) 3987-0880.*",
+				label: "flow_after_completion",
+			});
+			await saveTestFlow(recipient.id, {
+				...flow,
+				postFlowReplyCount: Number(flow.postFlowReplyCount || 0) + 1,
+				transcript: appendTranscript(flow, {
+					direction: "OUT",
+					kind: "AFTER_COMPLETION",
+					text: sent.body,
+					messageId: sent.messageId,
+				}),
+			});
+			return { processed: true, reason: "TEST_FLOW_FINISHED_AUTO_REPLY" };
+		}
+		const config = await ensureConfig();
+		let action = normalizeFlowAction(event.normalized_payload || {});
+		if (flow.state === "AWAITING_DATE" && action.startsWith("flow:choice:")) {
+			const selected = (flow.dateOptions || [])[Number(action.slice(-1)) - 1];
+			action = selected?.id || action;
+		}
+		if (flow.state === "AWAITING_TIME" && action.startsWith("flow:choice:")) {
+			action = {
+				"1": "flow:time:09:00",
+				"2": "flow:time:12:00",
+				"3": "flow:time:16:00",
+			}[action.slice(-1)] || action;
+		}
+		const inboundText = cleanText(event.normalized_payload?.buttonTitle || action);
+		let next = {
+			...flow,
+			transcript: appendTranscript(flow, {
+				direction: "IN",
+				kind: "BUTTON_REPLY",
+				text: inboundText,
+				messageId: event.message_id,
+			}),
+		};
+
+		if (flow.state === "AWAITING_ACTION" && action === "flow:schedule") {
+			const dateOptions = getTestFlowDateOptions();
+			const sent = await sendFlowButtons({
+				recipient,
+				config,
+				body: testFlowDateMessage(dateOptions),
+				buttons: dateOptions,
+				label: "interactive_dates",
+			});
+			next = {
+				...next,
+				state: "AWAITING_DATE",
+				dateOptions,
+				transcript: appendTranscript(next, {
+					direction: "OUT",
+					kind: "DATE_BUTTONS",
+					text: sent.body,
+					messageId: sent.messageId,
+				}),
+			};
+		} else if (flow.state === "AWAITING_ACTION" && action === "flow:delivered") {
+			const sent = await sendFlowText({
+				recipient,
+				config,
+				text: "Informação anotada com sucesso!\n\nPara receber suporte direto do nosso time, acione a central de retiradas pelo número *(31) 3987-0880*.",
+				label: "flow_delivered_confirmation",
+			});
+			next = {
+				...next,
+				state: "COMPLETED",
+				outcome: "DELIVERED",
+				completedAt: new Date().toISOString(),
+				transcript: appendTranscript(next, { direction: "OUT", kind: "TEXT", text: sent.body, messageId: sent.messageId }),
+			};
+		} else if (flow.state === "AWAITING_ACTION" && action === "flow:support") {
+			const sent = await sendFlowText({
+				recipient,
+				config,
+				text: "Certo! Fale com a Central de Retiradas pelo número +55 31 3987-0880:\nhttps://wa.me/553139870880",
+				label: "flow_support",
+			});
+			next = {
+				...next,
+				state: "COMPLETED",
+				outcome: "SUPPORT",
+				completedAt: new Date().toISOString(),
+				transcript: appendTranscript(next, { direction: "OUT", kind: "TEXT", text: sent.body, messageId: sent.messageId }),
+			};
+		} else if (flow.state === "AWAITING_DATE") {
+			const selectedOption = (flow.dateOptions || []).find((option) => option.id === action);
+			const selectedDate = selectedOption?.date || (action.startsWith("flow:date:") ? action.slice("flow:date:".length) : "");
+			if (/^\d{4}-\d{2}-\d{2}$/.test(selectedDate) && selectedDate > saoPauloDateKey()) {
+				const sent = await sendFlowButtons({
+					recipient,
+					config,
+					body: testFlowTimeMessage(selectedDate),
+					buttons: [
+						{ id: "flow:time:09:00", title: "09h" },
+						{ id: "flow:time:12:00", title: "12h" },
+						{ id: "flow:time:16:00", title: "16h" },
+					],
+					label: "interactive_times",
+				});
+				next = {
+					...next,
+					state: "AWAITING_TIME",
+					selectedDate,
+					transcript: appendTranscript(next, { direction: "OUT", kind: "TIME_BUTTONS", text: sent.body, messageId: sent.messageId }),
+				};
+			} else {
+				const invalidReplyCount = Number(flow.invalidReplyCount || 0) + 1;
+				const sent = await resendCurrentFlowStep({ flow, recipient, config, invalid: true });
+				next.invalidReplyCount = invalidReplyCount;
+				if (!canSendTestFlowAutoReply(invalidReplyCount)) {
+					next.state = "CANCELLED";
+					next.outcome = "REPLY_LIMIT_REACHED";
+					next.completedAt = new Date().toISOString();
+				}
+				next.transcript = appendTranscript(next, { direction: "OUT", kind: "DATE_BUTTONS", text: sent.body, messageId: sent.messageId });
+			}
+		} else if (flow.state === "AWAITING_TIME" && action === "flow:other-time") {
+			const sent = await resendCurrentFlowStep({ flow, recipient, config, other: true });
+			next.transcript = appendTranscript(next, { direction: "OUT", kind: "TIME_INPUT", text: sent.body, messageId: sent.messageId });
+		} else if (flow.state === "AWAITING_TIME" && action.startsWith("flow:time:")) {
+			const selectedTime = action.slice("flow:time:".length);
+			if (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(selectedTime)) {
+				const appointment = {
+					id: crypto.randomUUID(),
+					date: flow.selectedDate,
+					time: selectedTime,
+					status: "SIMULATED",
+					createdAt: new Date().toISOString(),
+				};
+				const sent = await sendFlowText({
+					recipient,
+					config,
+					text: "Tudo certo! Seu agendamento foi registrado com sucesso.\n\nSe surgir qualquer dúvida, nossa central de retiradas está à disposição pelo WhatsApp: *(31) 3987-0880*.",
+					label: "flow_schedule_confirmation",
+				});
+				next = {
+					...next,
+					state: "COMPLETED",
+					outcome: "SCHEDULED",
+					selectedTime,
+					simulatedAppointment: appointment,
+					completedAt: new Date().toISOString(),
+					transcript: appendTranscript(next, { direction: "OUT", kind: "CONFIRMATION", text: sent.body, messageId: sent.messageId }),
+				};
+			}
+		} else {
+			const invalidReplyCount = Number(flow.invalidReplyCount || 0) + 1;
+			const sent = await resendCurrentFlowStep({ flow, recipient, config, invalid: flow.state === "AWAITING_TIME" });
+			next.invalidReplyCount = invalidReplyCount;
+			if (!canSendTestFlowAutoReply(invalidReplyCount)) {
+				next.state = "CANCELLED";
+				next.outcome = "REPLY_LIMIT_REACHED";
+				next.completedAt = new Date().toISOString();
+			}
+			next.transcript = appendTranscript(next, { direction: "OUT", kind: "BUTTONS", text: sent.body, messageId: sent.messageId });
+		}
+
+		await saveTestFlow(recipient.id, next);
+		return { processed: true, state: next.state, outcome: next.outcome || "" };
+	}
+
 	async function listTestMessages(query = {}) {
 		const limit = normalizeLimit(query.limit);
 		const offset = normalizeOffset(query.offset);
@@ -954,6 +1478,9 @@ function createWhatsappCloudService({
 							cleanText(event.normalized_payload?.errors?.[0]?.message),
 						],
 					);
+				}
+				if (event.event_type === "INCOMING_MESSAGE") {
+					await processTestFlowInbound(event);
 				}
 				await dbClient.query(
 					`update whatsapp_cloud_webhook_events
@@ -1230,6 +1757,7 @@ function createWhatsappCloudService({
 		getConfig,
 		getOverview,
 		listRecipients,
+		listTestFlows,
 		listTemplates,
 		listTestMessages,
 		listWebhookEvents,
@@ -1240,6 +1768,7 @@ function createWhatsappCloudService({
 		saveConfig,
 		saveSecrets,
 		sendTestMessage,
+		startTestFlow,
 		syncTemplates,
 		validateConnection,
 		verifyWebhookSignature,
@@ -1257,8 +1786,12 @@ module.exports = {
 		encryptStoredSecret,
 		hashValue,
 		maskPhone,
+		messageInteraction,
 		normalizeE164,
+		normalizeFlowAction,
 		normalizeWebhookEvents,
+		getTestFlowDateOptions,
+		canSendTestFlowAutoReply,
 		safeEqual,
 	},
 	createWhatsappCloudService,

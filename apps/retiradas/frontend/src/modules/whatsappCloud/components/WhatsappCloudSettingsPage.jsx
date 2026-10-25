@@ -148,6 +148,7 @@ export default function WhatsappCloudSettingsPage() {
 	const [recipients, setRecipients] = useState([]);
 	const [templates, setTemplates] = useState([]);
 	const [tests, setTests] = useState({ items: [], total: 0 });
+	const [testFlows, setTestFlows] = useState({ items: [], total: 0 });
 	const [events, setEvents] = useState({ items: [], total: 0 });
 	const [readiness, setReadiness] = useState({ ready: false, checks: [] });
 	const [verifyToken, setVerifyToken] = useState("");
@@ -171,6 +172,12 @@ export default function WhatsappCloudSettingsPage() {
 		variables: "",
 		confirmed: false,
 	});
+	const [flowForm, setFlowForm] = useState({
+		recipientId: "",
+		firstName: "",
+		contract: "",
+		city: "",
+	});
 	const [historyFilters, setHistoryFilters] = useState({
 		status: "",
 		recipientId: "",
@@ -183,13 +190,14 @@ export default function WhatsappCloudSettingsPage() {
 		setLoading(true);
 		setFeedback(null);
 		try {
-			const [overviewData, configData, recipientData, templateData, testData, eventData, readinessData] =
+			const [overviewData, configData, recipientData, templateData, testData, flowData, eventData, readinessData] =
 				await Promise.all([
 					whatsappCloudApi.overview(),
 					whatsappCloudApi.config(),
 					whatsappCloudApi.recipients(),
 					whatsappCloudApi.templates(),
 					whatsappCloudApi.tests({ limit: 50 }),
+					whatsappCloudApi.testFlows(),
 					whatsappCloudApi.webhooks({ limit: 50 }),
 					whatsappCloudApi.readiness(),
 				]);
@@ -198,6 +206,7 @@ export default function WhatsappCloudSettingsPage() {
 			setRecipients(recipientData.items || []);
 			setTemplates(templateData.items || []);
 			setTests(testData || { items: [], total: 0 });
+			setTestFlows(flowData || { items: [], total: 0 });
 			setEvents(eventData || { items: [], total: 0 });
 			setReadiness(readinessData || { ready: false, checks: [] });
 		} catch (error) {
@@ -234,6 +243,10 @@ export default function WhatsappCloudSettingsPage() {
 	const authorizedRecipients = useMemo(
 		() => recipients.filter((item) => item.authorizationStatus === "AUTHORIZED" && item.metaRegistered),
 		[recipients],
+	);
+	const guidedFlowTemplate = useMemo(
+		() => templates.find((item) => item.name === "retiradas_agendamento_teste_v2" && item.language === "pt_BR"),
+		[templates],
 	);
 
 	if (loading && !config) return <Spinner fullScreen label="Carregando WhatsApp Cloud API..." />;
@@ -285,6 +298,17 @@ export default function WhatsappCloudSettingsPage() {
 			"Teste aceito pela Meta.",
 		);
 		setTestForm((current) => ({ ...current, confirmed: false }));
+	};
+	const startGuidedFlow = async () => {
+		if (!flowForm.recipientId || !flowForm.firstName.trim() || !flowForm.contract.trim() || !flowForm.city.trim()) {
+			setFeedback({ type: "error", text: "Preencha destinatário, primeiro nome, contrato e cidade." });
+			return;
+		}
+		await run(
+			"guided-flow",
+			() => whatsappCloudApi.startTestFlow(flowForm),
+			"Fluxo guiado iniciado. Use os botões recebidos no WhatsApp.",
+		);
 	};
 	const loadHistory = async () => {
 		setBusy("history");
@@ -484,6 +508,31 @@ export default function WhatsappCloudSettingsPage() {
 							<button className={BUTTON_PRIMARY} disabled={busy === "send" || !testForm.confirmed}>{busy === "send" ? <Loader2 className="animate-spin" size={17} /> : <Send size={17} />} Enviar teste real</button>
 						</form>
 					</Section>
+					<div className="xl:col-span-2">
+						<Section
+							title="Fluxo guiado por botões"
+							description="Simula o atendimento completo sem gravar agendamentos ou alterar a Mensageria produtiva."
+							action={<StatusBadge status={guidedFlowTemplate?.status || "NÃO SINCRONIZADO"} />}
+						>
+							<div className="grid gap-4 lg:grid-cols-[minmax(0,420px)_1fr]">
+								<div className="space-y-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+									<div className="flex items-center gap-3">
+										<div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-600 text-white"><MessageCircle size={20} /></div>
+										<div><p className="font-black text-cyan-950">Agendar sem digitação</p><p className="text-xs font-semibold text-cyan-800">Ação → data → horário → confirmação</p></div>
+									</div>
+									<Field label="Destinatário do teste"><select className={INPUT_CLASS} value={flowForm.recipientId} onChange={(event) => { const recipient = authorizedRecipients.find((item) => item.id === event.target.value); setFlowForm((current) => ({ ...current, recipientId: event.target.value, firstName: recipient?.name?.split(/\s+/)?.[0] || current.firstName })); }}><option value="">Selecione</option>{authorizedRecipients.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.maskedPhone}</option>)}</select></Field>
+									<div className="grid gap-3 sm:grid-cols-3"><Field label="Primeiro nome"><input className={INPUT_CLASS} value={flowForm.firstName} onChange={(event) => setFlowForm({ ...flowForm, firstName: event.target.value })} /></Field><Field label="Contrato"><input className={INPUT_CLASS} placeholder="123456" value={flowForm.contract} onChange={(event) => setFlowForm({ ...flowForm, contract: event.target.value })} /></Field><Field label="Cidade"><input className={INPUT_CLASS} placeholder="Belo Horizonte" value={flowForm.city} onChange={(event) => setFlowForm({ ...flowForm, city: event.target.value })} /></Field></div>
+									<div className="grid grid-cols-3 gap-2">{["Agendar", "Já entregue", "Falar suporte"].map((label) => <span key={label} className="rounded-lg border border-cyan-200 bg-white px-2 py-2 text-center text-xs font-black text-cyan-900">{label}</span>)}</div>
+									{String(guidedFlowTemplate?.status || "").toUpperCase() !== "APPROVED" ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">O template está {guidedFlowTemplate?.status || "aguardando sincronização"}. Sincronize a aba Templates após a aprovação da Meta.</p> : null}
+									<button type="button" className={BUTTON_PRIMARY} onClick={startGuidedFlow} disabled={busy === "guided-flow" || !flowForm.recipientId || !flowForm.firstName.trim() || !flowForm.contract.trim() || !flowForm.city.trim() || String(guidedFlowTemplate?.status).toUpperCase() !== "APPROVED"}>{busy === "guided-flow" ? <Loader2 className="animate-spin" size={17} /> : <Send size={17} />} Iniciar fluxo completo</button>
+								</div>
+								<div className="space-y-3">
+									{(testFlows.items || []).map((flow) => <article key={flow.id} className="rounded-lg border border-slate-200 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-black text-slate-950">{flow.recipientName || "Destinatário de teste"} · {flow.recipient}</p><p className="mt-1 text-xs font-semibold text-slate-500">Iniciado em {formatDate(flow.startedAt)}{flow.selectedDate ? ` · ${flow.selectedDate}` : ""}{flow.selectedTime ? ` às ${flow.selectedTime}` : ""}</p></div><StatusBadge status={flow.state} /></div>{flow.simulatedAppointment ? <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900">Agendamento simulado: {flow.simulatedAppointment.date} às {flow.simulatedAppointment.time}</div> : null}<div className="mt-3 space-y-1">{(flow.transcript || []).slice(-6).map((entry, index) => <div key={`${flow.id}-${entry.at}-${index}`} className={`rounded-lg px-3 py-2 text-xs font-semibold ${entry.direction === "IN" ? "ml-6 bg-slate-100 text-slate-700" : "mr-6 bg-cyan-50 text-cyan-900"}`}><strong>{entry.direction === "IN" ? "Cliente" : "Retorninho"}:</strong> {entry.text}</div>)}</div></article>)}
+									{!testFlows.items?.length ? <p className="rounded-lg border border-dashed border-slate-300 p-5 text-center text-sm font-semibold text-slate-500">Nenhum fluxo guiado iniciado.</p> : null}
+								</div>
+							</div>
+						</Section>
+					</div>
 					<Section title="Histórico de testes" action={<History size={20} className="text-slate-400" />}>
 						<div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
 							<Field label="Status"><select className={INPUT_CLASS} value={historyFilters.status} onChange={(event) => setHistoryFilters({ ...historyFilters, status: event.target.value })}><option value="">Todos</option>{["ACCEPTED", "DELIVERED", "READ", "FAILED"].map((status) => <option key={status} value={status}>{status}</option>)}</select></Field>
