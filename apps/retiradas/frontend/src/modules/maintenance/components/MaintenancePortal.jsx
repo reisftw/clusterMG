@@ -124,8 +124,8 @@ function OverviewTab({ dashboard }) {
 			</div>
 
 			<section className="maintenance-panel">
-				<div className="maintenance-panel-heading"><div><Activity size={20} /><span><strong>Rotas com maior impacto</strong><small>Prioriza erros e maior latencia para facilitar o diagnostico.</small></span></div></div>
-				<div className="maintenance-table-wrap"><table><thead><tr><th>Metodo</th><th>Rota</th><th>Consultas</th><th>Media</th><th>P95</th><th>Erros 5xx</th></tr></thead><tbody>{(dashboard?.metrics?.topRoutes || []).map((item) => <tr key={`${item.method}-${item.route}`}><td><b>{item.method}</b></td><td><code>{item.route}</code></td><td>{number(item.requests)}</td><td>{number(item.avg_ms)} ms</td><td>{number(item.p95_ms)} ms</td><td className={Number(item.errors_5xx) ? "danger" : ""}>{number(item.errors_5xx)}</td></tr>)}</tbody></table></div>
+				<div className="maintenance-panel-heading"><div><Activity size={20} /><span><strong>Rotas com maior impacto</strong><small>Rotas acessadas no periodo, consolidadas sem registrar acessos individuais.</small></span></div></div>
+				<div className="maintenance-table-wrap"><table><thead><tr><th>Metodo</th><th>Rota</th><th>Acessos</th><th>Media</th><th>P95</th><th>Erros 5xx</th></tr></thead><tbody>{(dashboard?.metrics?.topRoutes || []).map((item) => <tr key={`${item.method}-${item.route}`}><td><b>{item.method}</b></td><td><code>{item.route}</code></td><td>{number(item.requests)}</td><td>{number(item.avg_ms)} ms</td><td>{number(item.p95_ms)} ms</td><td className={Number(item.errors_5xx) ? "danger" : ""}>{number(item.errors_5xx)}</td></tr>)}</tbody></table>{!(dashboard?.metrics?.topRoutes || []).length ? <p className="maintenance-empty">As rotas aparecerao apos os primeiros acessos ao sistema.</p> : null}</div>
 			</section>
 		</div>
 	);
