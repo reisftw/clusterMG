@@ -43,11 +43,13 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             apps/operacao/frontend/package-lock.json
             apps/operacao/backend/package-lock.json
 
       - name: Install dependencies
         run: |
+          npm ci --no-audit --no-fund
           npm ci --prefix apps/operacao/frontend --no-audit --no-fund
           npm ci --prefix apps/operacao/backend --no-audit --no-fund
 
