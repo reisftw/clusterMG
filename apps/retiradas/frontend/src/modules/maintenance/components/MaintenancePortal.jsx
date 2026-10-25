@@ -82,14 +82,14 @@ function RequestsChart({ items = [] }) {
 function OverviewTab({ dashboard }) {
 	const totals = dashboard?.metrics?.totals || {};
 	const queries = dashboard?.metrics?.queries || {};
-	const audience = dashboard?.metrics?.audience || {};
+	const presence = dashboard?.presence || {};
 	const status = dashboard?.status || {};
 	const sw = dashboard?.serviceWorker || {};
 	return (
 		<div className="maintenance-tab-content">
 			<section className="maintenance-metrics-grid">
 				<MetricCard icon={Server} label="APIs online" value={`${status.summary?.online || 0}/${status.summary?.total || 0}`} note={`${status.summary?.offline || 0} indisponivel(is)`} tone={status.summary?.offline ? "red" : "green"} />
-				<MetricCard icon={Users} label="Usuarios online" value={number(audience.online_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
+				<MetricCard icon={Users} label="Usuarios online" value={number(presence.online_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
 				<MetricCard icon={Eye} label="Visitas hoje" value={number(sw.visits_today)} note={`${number(sw.unique_visitors_today)} dispositivo(s) unico(s)`} tone="blue" />
 				<MetricCard icon={Activity} label="Requisicoes" value={number(totals.total_requests)} note={`Ultimas ${dashboard.hours || 24} horas`} />
 				<MetricCard icon={AlertTriangle} label="Erros 5xx" value={number(totals.errors_5xx)} note={`${number(totals.errors_4xx)} respostas 4xx`} tone={Number(totals.errors_5xx) ? "red" : "green"} />

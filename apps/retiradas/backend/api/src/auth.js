@@ -42,6 +42,8 @@ const AUTH_REQUEST_CACHE_TTL_MS = Math.max(
 	0,
 );
 const authRequestCache = new Map();
+const PRESENCE_TOUCH_INTERVAL_MS = 60_000;
+const presenceTouches = new Map();
 
 const FULL_OPERATION_ROLES = ["admin", "backoffice_retirada", "supervisor"];
 const DASHBOARD_ROLES = [
@@ -521,6 +523,47 @@ function setCachedAuthenticatedUser(payload = {}, user) {
 				authRequestCache.delete(key);
 			if (authRequestCache.size <= 1000) break;
 		}
+	}
+}
+
+async function touchAuthenticatedPresence(user = {}) {
+	const sessionId = String(user.jti || "").trim();
+	const userId = String(user.uid || user.email || "").trim();
+	if (!sessionId || !userId) return;
+	const now = Date.now();
+	if (now - Number(presenceTouches.get(sessionId) || 0) < PRESENCE_TOUCH_INTERVAL_MS) {
+		return;
+	}
+	presenceTouches.set(sessionId, now);
+	if (presenceTouches.size > 5_000) {
+		const staleBefore = now - 60 * 60 * 1000;
+		for (const [key, touchedAt] of presenceTouches.entries()) {
+			if (touchedAt < staleBefore) presenceTouches.delete(key);
+		}
+	}
+	try {
+		await db.query(
+			`insert into maintenance_active_sessions
+			 (session_id,user_id,user_email,user_role,first_seen_at,last_seen_at)
+			 values ($1,$2,$3,$4,now(),now())
+			 on conflict (session_id) do update set
+			   user_id=excluded.user_id,
+			   user_email=excluded.user_email,
+			   user_role=excluded.user_role,
+			   last_seen_at=now()`,
+			[
+				sessionId,
+				userId,
+				String(user.email || "").trim() || null,
+				String(user.role || user.profile?.role || "").trim() || null,
+			],
+		);
+	} catch (error) {
+		presenceTouches.delete(sessionId);
+		console.error(
+			"[auth] Falha ao registrar presenca da sessao:",
+			error?.message || error,
+		);
 	}
 }
 
@@ -1596,6 +1639,7 @@ async function requireAuthenticated(req, res, next) {
 			req.user = cachedUser;
 			req.authPayload = decoded;
 			req.authToken = token;
+			await touchAuthenticatedPresence(req.user);
 			db.runWithRequestContext(req.user, next);
 			return;
 		}
@@ -1624,6 +1668,7 @@ async function requireAuthenticated(req, res, next) {
 		setCachedAuthenticatedUser(decoded, req.user);
 		req.authPayload = decoded;
 		req.authToken = token;
+		await touchAuthenticatedPresence(req.user);
 		db.runWithRequestContext(req.user, next);
 	} catch (error) {
 		console.error(

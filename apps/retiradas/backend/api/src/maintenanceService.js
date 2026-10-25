@@ -364,16 +364,38 @@ async function getServiceWorkerMetrics(hours = 24) {
 	};
 }
 
+async function getPresenceMetrics() {
+	const result = await db.query(
+		`select
+		 count(distinct user_id) filter(where last_seen_at>=now()-interval '5 minutes')::integer online_users,
+		 count(distinct session_id) filter(
+		   where last_seen_at>=date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'
+		 )::integer authenticated_sessions_today
+		 from maintenance_active_sessions
+		 where last_seen_at>=date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'`,
+	);
+	return result.rows[0] || {};
+}
+
 async function getDashboard({ hours = 24 } = {}) {
 	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
-	const [state, status, requestMetrics, serviceWorker, history] = await Promise.all([
+	const [state, status, requestMetrics, serviceWorker, presence, history] = await Promise.all([
 		getPublicStatus({ force: true }),
 		apiStatus.getApiStatus(),
 		metrics.getMaintenanceMetrics({ hours: safeHours }),
 		getServiceWorkerMetrics(safeHours),
+		getPresenceMetrics(),
 		listHistory({ page: 1, limit: 8 }),
 	]);
-	return { state, status, metrics: requestMetrics, serviceWorker, history, hours: safeHours };
+	return {
+		state,
+		status,
+		metrics: requestMetrics,
+		serviceWorker,
+		presence,
+		history,
+		hours: safeHours,
+	};
 }
 
 function isExemptPath(pathname = "") {
