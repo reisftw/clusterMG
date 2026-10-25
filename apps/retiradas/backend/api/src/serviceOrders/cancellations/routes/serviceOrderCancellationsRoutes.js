@@ -6,6 +6,7 @@ function createServiceOrderCancellationsRouter({
 	requireAnyPermission,
 	requireAuthenticated,
 	requireCsrfToken,
+	requireRoles,
 } = {}) {
 	const router = express.Router();
 	const requireView = requireAnyPermission(service.VIEW_PERMISSIONS, fallbackRoles);
@@ -13,6 +14,7 @@ function createServiceOrderCancellationsRouter({
 		service.MANAGE_PERMISSIONS,
 		fallbackRoles,
 	);
+	const requireAdmin = requireRoles(["admin"]);
 
 	router.get("/", requireAuthenticated, requireView, async (req, res, next) => {
 		try {
@@ -64,6 +66,24 @@ function createServiceOrderCancellationsRouter({
 		},
 	);
 
+	router.get(
+		"/sync/:id",
+		requireAuthenticated,
+		requireView,
+		async (req, res, next) => {
+			try {
+				const run = await service.getSyncRun(req.params.id);
+				if (!run) {
+					res.status(404).json({ error: "Sincronizacao nao encontrada." });
+					return;
+				}
+				res.json({ run });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.get("/export.csv", requireAuthenticated, requireView, async (req, res, next) => {
 		try {
 			const buffer = await service.exportCsv(req.query || {});
@@ -95,7 +115,7 @@ function createServiceOrderCancellationsRouter({
 		"/sync",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireManage,
+		requireAdmin,
 		async (req, res, next) => {
 			try {
 				res.status(202).json(await service.startSync(req.body || {}, req.user || {}));
@@ -109,7 +129,7 @@ function createServiceOrderCancellationsRouter({
 		"/sync/history",
 		requireAuthenticated,
 		requireCsrfToken,
-		requireManage,
+		requireAdmin,
 		async (req, res, next) => {
 			try {
 				res

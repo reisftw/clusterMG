@@ -8,6 +8,9 @@ const TIME_ZONE = "America/Sao_Paulo";
 const METABASE_CARD_UUID = "7c9f15dd-1e51-4c77-bc7c-d19cc74218f1";
 const METABASE_BASE_URL = "https://bi.sempre.hubsoft.com.br:8443";
 const CANCELLATIONS_PAGE_LIMIT = 15;
+const SYNC_RUNNING_MAX_AGE_MS = Number(
+	process.env.HUBSOFT_CANCELLATIONS_RUNNING_MAX_AGE_MS || 30 * 60 * 1000,
+);
 const execFileAsync = promisify(execFile);
 const VIEW_PERMISSIONS = [
 	"service_orders.cancellations.view",
@@ -732,6 +735,38 @@ function syncLockKey(competencia) {
 	return Number(`91${digits}`) || 91000000;
 }
 
+async function recoverStaleSyncRuns(client = db) {
+	const result = await client.query(
+		`update service_order_cancellation_sync_runs
+		    set status = 'FAILED',
+		        finished_at = now(),
+		        duration_ms = least(2147483647, greatest(
+		          0,
+		          extract(epoch from (now() - started_at))::bigint * 1000
+		        )),
+		        error_message = coalesce(
+		          nullif(error_message, ''),
+		          'Execucao interrompida antes da conclusao. Inicie uma nova sincronizacao.'
+		        )
+		  where status = 'RUNNING'
+		    and started_at < now() - ($1::numeric * interval '1 millisecond')
+		  returning id, competencia, error_message`,
+		[SYNC_RUNNING_MAX_AGE_MS],
+	);
+	for (const run of result.rows) {
+		if (!run.competencia) continue;
+		await client.query(
+			`update service_order_cancellation_competencies
+			    set status = case when total_records > 0 then 'SYNCED' else 'ERROR' end,
+			        last_error = $3
+			  where competencia = $1
+			    and last_sync_run_id = $2`,
+			[run.competencia, run.id, run.error_message],
+		);
+	}
+	return result.rows;
+}
+
 async function upsertCompetencyShell(client, competencia, status, runId = null) {
 	await client.query(
 		`insert into service_order_cancellation_competencies
@@ -1016,26 +1051,56 @@ function runAsync(task) {
 
 async function startSync(body = {}, user = {}) {
 	const competencia = parseCompetencia(body.competencia);
-	const result = await db.query(
-		`insert into service_order_cancellation_sync_runs
-		 (competencia, status, triggered_by_uid, triggered_by_name)
-		 values ($1, 'RUNNING', $2, $3)
-		 returning *`,
-		[competencia, user.uid || null, userDisplayName(user)],
-	);
-	const run = result.rows[0];
-	await db.query(
-		`insert into service_order_cancellation_competencies
-		 (competencia, status, last_sync_run_id, last_error)
-		 values ($1, 'SYNCING', $2, null)
-		 on conflict (competencia) do update set
-		   status = 'SYNCING',
-		   last_sync_run_id = excluded.last_sync_run_id,
-		   last_error = null`,
-		[competencia, run.id],
-	);
+	const client = await db.connect();
+	let run;
+	let reused = false;
+	try {
+		await client.query("begin");
+		await client.query("select pg_advisory_xact_lock($1)", [
+			syncLockKey(competencia),
+		]);
+		await recoverStaleSyncRuns(client);
+		const active = await client.query(
+			`select *
+			   from service_order_cancellation_sync_runs
+			  where competencia = $1 and status = 'RUNNING'
+			  order by started_at desc
+			  limit 1`,
+			[competencia],
+		);
+		if (active.rows[0]) {
+			run = active.rows[0];
+			reused = true;
+		} else {
+			const result = await client.query(
+				`insert into service_order_cancellation_sync_runs
+				 (competencia, status, triggered_by_uid, triggered_by_name)
+				 values ($1, 'RUNNING', $2, $3)
+				 returning *`,
+				[competencia, user.uid || null, userDisplayName(user)],
+			);
+			run = result.rows[0];
+			await upsertCompetencyShell(client, competencia, "SYNCING", run.id);
+		}
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+	if (reused) return { run: mapSyncRun(run), reused: true };
 	runAsync(() => syncCompetencia(competencia, user, run.id));
-	return { run: mapSyncRun(run) };
+	return { run: mapSyncRun(run), reused: false };
+}
+
+async function getSyncRun(id) {
+	await recoverStaleSyncRuns();
+	const result = await db.query(
+		`select * from service_order_cancellation_sync_runs where id = $1`,
+		[id],
+	);
+	return result.rows[0] ? mapSyncRun(result.rows[0]) : null;
 }
 
 async function startHistorySync(body = {}, user = {}) {
@@ -1435,6 +1500,7 @@ async function validateCompetency(competencia, user = {}) {
 }
 
 async function listSyncHistory(query = {}) {
+	await recoverStaleSyncRuns();
 	const limit = parsePositiveInteger(query.limit, 20, 100);
 	const result = await db.query(
 		`select *
@@ -1491,6 +1557,7 @@ module.exports = {
 	exportCsv,
 	getRecord,
 	getSummary,
+	getSyncRun,
 	listCancellations,
 	listCompetencies,
 	listFilterOptions,

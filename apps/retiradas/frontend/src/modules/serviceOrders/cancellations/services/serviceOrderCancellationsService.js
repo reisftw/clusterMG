@@ -54,6 +54,12 @@ export async function buscarHistoricoSyncCancelamentos() {
 	return requestVpsApi("/service-orders/cancellations/sync/history?limit=20");
 }
 
+export async function buscarStatusSyncCancelamentos(id) {
+	return requestVpsApi(
+		`/service-orders/cancellations/sync/${encodeURIComponent(id)}`,
+	);
+}
+
 export async function sincronizarCompetenciaCancelamentos(competencia) {
 	return requestVpsApi("/service-orders/cancellations/sync", {
 		method: "POST",

@@ -6,9 +6,11 @@ import {
 	RefreshCw,
 	Search,
 	ShieldCheck,
+	Sparkles,
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useAuthContext } from "../../../../context/AuthContext";
 import {
 	buildCancelamentosExportUrl,
 	buscarCancelamentos,
@@ -17,7 +19,9 @@ import {
 	buscarFiltrosCancelamentos,
 	buscarHistoricoSyncCancelamentos,
 	buscarResumoCancelamentos,
+	buscarStatusSyncCancelamentos,
 	competenciaAtual,
+	sincronizarCompetenciaCancelamentos,
 	validarCompetenciaCancelamentos,
 } from "../services/serviceOrderCancellationsService";
 
@@ -107,10 +111,26 @@ function StatusBadge({ status }) {
 		VALIDATED: "bg-emerald-100 text-emerald-700",
 		PENDING: "bg-amber-100 text-amber-700",
 		REQUIRES_REVALIDATION: "bg-red-100 text-red-700",
+		RUNNING: "bg-blue-100 text-blue-700",
+		COMPLETE: "bg-emerald-100 text-emerald-700",
+		FAILED: "bg-red-100 text-red-700",
+	};
+	const labels = {
+		NOT_SYNCED: "Não sincronizado",
+		SYNCING: "Sincronizando",
+		SYNCED: "Sincronizado",
+		ERROR: "Erro",
+		UPDATE_AVAILABLE: "Atualização disponível",
+		VALIDATED: "Validado",
+		PENDING: "Pendente",
+		REQUIRES_REVALIDATION: "Revalidar",
+		RUNNING: "Em andamento",
+		COMPLETE: "Concluído",
+		FAILED: "Falhou",
 	};
 	return (
 		<span className={`rounded-full px-3 py-1 text-xs font-black ${map[status] || map.NOT_SYNCED}`}>
-			{status || "NOT_SYNCED"}
+			{labels[status] || status || labels.NOT_SYNCED}
 		</span>
 	);
 }
@@ -282,6 +302,10 @@ function DetailModal({ item, onClose }) {
 }
 
 export default function ServiceOrderCancellationsPage() {
+	const { realUser, currentUser } = useAuthContext();
+	const authenticatedUser = realUser || currentUser;
+	const isAdmin =
+		String(authenticatedUser?.role || "").trim().toLowerCase() === "admin";
 	const [competencia, setCompetencia] = useState(competenciaAtual());
 	const [summary, setSummary] = useState(null);
 	const [competencias, setCompetencias] = useState([]);
@@ -291,6 +315,8 @@ export default function ServiceOrderCancellationsPage() {
 	const [syncHistory, setSyncHistory] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [actionLoading, setActionLoading] = useState(false);
+	const [activeSync, setActiveSync] = useState(null);
+	const [syncMessage, setSyncMessage] = useState("");
 	const [error, setError] = useState("");
 	const [detail, setDetail] = useState(null);
 	const [tableFilters, setTableFilters] = useState({
@@ -341,7 +367,19 @@ export default function ServiceOrderCancellationsPage() {
 			buscarHistoricoSyncCancelamentos(),
 		]);
 		setCompetencias(competenciasResponse?.items || []);
-		setSyncHistory(historyResponse?.items || []);
+		const historyItems = historyResponse?.items || [];
+		setSyncHistory(historyItems);
+		const running = historyItems.find(
+			(run) => run.status === "RUNNING" && run.competencia === competencia,
+		);
+		setActiveSync((current) => {
+			if (running) return running;
+			if (
+				current?.competencia === competencia &&
+				current.status !== "RUNNING"
+			) return current;
+			return null;
+		});
 	}
 
 	async function loadCompetencia(
@@ -380,12 +418,50 @@ export default function ServiceOrderCancellationsPage() {
 
 	useEffect(() => {
 		loadStaticData().catch(() => {});
-	}, []);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [competencia]);
 
 	useEffect(() => {
 		loadCompetencia(1);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [competencia]);
+
+	useEffect(() => {
+		if (!activeSync?.id || activeSync.status !== "RUNNING") return undefined;
+		let active = true;
+		let checking = false;
+		const check = async () => {
+			if (checking) return;
+			checking = true;
+			try {
+				const response = await buscarStatusSyncCancelamentos(activeSync.id);
+				if (!active || !response?.run) return;
+				setActiveSync(response.run);
+				if (response.run.status === "COMPLETE") {
+					window.clearInterval(timer);
+					setSyncMessage(
+						`Sincronização concluída: ${formatNumber(response.run.totalHubsoft)} cancelamentos, ${formatNumber(response.run.inserted)} novos, ${formatNumber(response.run.updated)} atualizados e ${formatNumber(response.run.deleted)} removidos.`,
+					);
+					await refreshAll();
+				} else if (response.run.status === "FAILED") {
+					window.clearInterval(timer);
+					setError(response.run.error || "A sincronização não foi concluída.");
+					await refreshAll();
+				}
+			} catch (err) {
+				if (active) setError(err?.message || "Falha ao consultar a sincronização.");
+			} finally {
+				checking = false;
+			}
+		};
+		const timer = window.setInterval(check, 2500);
+		check();
+		return () => {
+			active = false;
+			window.clearInterval(timer);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activeSync?.id, activeSync?.status]);
 
 	async function refreshAll() {
 		await Promise.all([loadStaticData(), loadCompetencia(pagination.page)]);
@@ -399,6 +475,26 @@ export default function ServiceOrderCancellationsPage() {
 			await refreshAll();
 		} catch (err) {
 			setError(err?.message || "Não foi possível validar competência.");
+		} finally {
+			setActionLoading(false);
+		}
+	}
+
+	async function handleSync() {
+		setActionLoading(true);
+		setError("");
+		setSyncMessage("");
+		try {
+			const response = await sincronizarCompetenciaCancelamentos(competencia);
+			setActiveSync(response?.run || null);
+			setSyncMessage(
+				response?.reused
+					? "Esta competência já está sendo sincronizada. Acompanhando a execução atual."
+					: "Sincronização iniciada no servidor. Você pode permanecer nesta tela enquanto os dados são atualizados.",
+			);
+			await refreshAll();
+		} catch (err) {
+			setError(err?.message || "Não foi possível iniciar a sincronização.");
 		} finally {
 			setActionLoading(false);
 		}
@@ -483,12 +579,58 @@ export default function ServiceOrderCancellationsPage() {
 						</span>
 					) : null}
 				</div>
-				<div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-					A sincronização de cancelamentos agora roda pelo computador local autorizado.
-					Para atualizar o mês, execute o arquivo{" "}
-					<span className="font-black">Sincronizar-Cancelamentos-Mes-Atual.py</span>{" "}
-					neste computador e depois clique em Atualizar nesta tela.
-				</div>
+				{isAdmin ? (
+					<div className="mt-3 overflow-hidden rounded-2xl border border-blue-200 bg-blue-50">
+						<div className="flex flex-wrap items-center justify-between gap-4 p-4">
+							<div className="flex min-w-0 items-start gap-3">
+								<span className="rounded-xl bg-blue-600 p-2.5 text-white">
+									<Sparkles size={20} />
+								</span>
+								<div>
+									<p className="font-black text-blue-950">Sincronização nativa do HubSoft</p>
+									<p className="mt-1 text-sm font-semibold text-blue-800">
+										Atualiza {competenciaLabel(competencia)} diretamente no servidor, sem executar arquivos neste computador.
+									</p>
+								</div>
+							</div>
+							<button
+								type="button"
+								onClick={handleSync}
+								disabled={actionLoading || activeSync?.status === "RUNNING"}
+								className="inline-flex h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<RefreshCw
+									size={17}
+									className={actionLoading || activeSync?.status === "RUNNING" ? "animate-spin" : ""}
+								/>
+								{activeSync?.status === "RUNNING" ? "Sincronizando..." : "Sincronizar cancelamentos"}
+							</button>
+						</div>
+						{activeSync ? (
+							<div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-blue-200 bg-white/70 px-4 py-3 text-xs font-bold text-slate-600">
+								<StatusBadge status={activeSync.status} />
+								<span>Início: {formatDateTime(activeSync.startedAt)}</span>
+								{activeSync.status === "COMPLETE" ? (
+									<>
+										<span>Total: {formatNumber(activeSync.totalHubsoft)}</span>
+										<span>Novos: {formatNumber(activeSync.inserted)}</span>
+										<span>Atualizados: {formatNumber(activeSync.updated)}</span>
+										<span>Removidos: {formatNumber(activeSync.deleted)}</span>
+									</>
+								) : null}
+							</div>
+						) : null}
+						{syncMessage ? (
+							<p className="border-t border-blue-200 px-4 py-3 text-sm font-bold text-blue-900">
+								{syncMessage}
+							</p>
+						) : null}
+					</div>
+				) : (
+					<div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-600">
+						A atualização dos dados é executada por um administrador. Você pode consultar os cancelamentos já sincronizados.
+					</div>
+				)}
 			</section>
 
 			{error ? (

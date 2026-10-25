@@ -2867,6 +2867,7 @@ function createApp() {
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
+			requireRoles,
 		}),
 	);
 
