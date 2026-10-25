@@ -502,7 +502,12 @@ function approximateP95(row = {}) {
 	for (let index = 0; index < LATENCY_COLUMNS.length; index += 1) {
 		accumulated += numberValue(row[LATENCY_COLUMNS[index]]);
 		if (accumulated >= threshold) {
-			return LATENCY_BUCKETS[index] || Math.round(numberValue(row.duration_max_ms));
+			const bucketLimit = LATENCY_BUCKETS[index];
+			const observedMaximum = Math.round(numberValue(row.duration_max_ms));
+			if (!bucketLimit) return observedMaximum;
+			return observedMaximum > 0
+				? Math.min(bucketLimit, observedMaximum)
+				: bucketLimit;
 		}
 	}
 	return Math.round(numberValue(row.duration_max_ms));
