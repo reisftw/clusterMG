@@ -52,6 +52,14 @@ function number(value) {
 	return Number(value || 0).toLocaleString("pt-BR");
 }
 
+function latencyRange(totals = {}) {
+	const lower = Number(totals.p95_lower_bound_ms || 0);
+	const upper = Number(totals.p95_upper_bound_ms || totals.p95_ms || 0);
+	if (!upper) return "0 ms";
+	if (!lower || lower >= upper) return `ate ${number(upper)} ms`;
+	return `${number(lower)}-${number(upper)} ms`;
+}
+
 function MetricCard({ icon: Icon, label, value, note, tone = "blue" }) {
 	return (
 		<article className={`maintenance-metric maintenance-metric-${tone}`}>
@@ -85,17 +93,19 @@ function OverviewTab({ dashboard }) {
 	const presence = dashboard?.presence || {};
 	const status = dashboard?.status || {};
 	const sw = dashboard?.serviceWorker || {};
+	const p95Upper = Number(totals.p95_upper_bound_ms || totals.p95_ms || 0);
+	const p95Tone = p95Upper > 2500 ? "red" : p95Upper > 1000 ? "orange" : "green";
 	return (
 		<div className="maintenance-tab-content">
 			<section className="maintenance-metrics-grid">
-				<MetricCard icon={Server} label="APIs online" value={`${status.summary?.online || 0}/${status.summary?.total || 0}`} note={`${status.summary?.offline || 0} indisponivel(is)`} tone={status.summary?.offline ? "red" : "green"} />
+				<MetricCard icon={Server} label="APIs online" value={`${status.summary?.online || 0}/${status.summary?.total || 0}`} note={`${status.summary?.offline || 0} indisponivel(is) · ${status.summary?.disabled || 0} opcional(is) desativada(s)`} tone={status.summary?.offline ? "red" : "green"} />
 				<MetricCard icon={Users} label="Usuarios online" value={number(presence.online_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
 				<MetricCard icon={Eye} label="Visitas hoje" value={number(sw.visits_today)} note={`${number(sw.unique_visitors_today)} dispositivo(s) unico(s)`} tone="blue" />
 				<MetricCard icon={Activity} label="Requisicoes" value={number(totals.total_requests)} note={`Ultimas ${dashboard.hours || 24} horas`} />
-				<MetricCard icon={AlertTriangle} label="Erros 5xx" value={number(totals.errors_5xx)} note={`${number(totals.errors_4xx)} respostas 4xx`} tone={Number(totals.errors_5xx) ? "red" : "green"} />
-				<MetricCard icon={Gauge} label="Latencia p95" value={`${number(totals.p95_ms)} ms`} note={`Media de ${number(totals.avg_ms)} ms`} tone="orange" />
+				<MetricCard icon={AlertTriangle} label="Erros 5xx" value={number(totals.errors_5xx)} note={`${number(totals.errors_4xx)} respostas 4xx operacionais · ${number(totals.expected_errors_4xx)} esperadas`} tone={Number(totals.errors_5xx) ? "red" : "green"} />
+				<MetricCard icon={Gauge} label="Latencia p95" value={latencyRange(totals)} note={`Faixa estimada · media de ${number(totals.avg_ms)} ms`} tone={p95Tone} />
 				<MetricCard icon={Database} label="Consultas SQL" value={number(queries.total_queries)} note={`${number(queries.errors)} com erro`} tone={Number(queries.errors) ? "red" : "blue"} />
-				<MetricCard icon={Smartphone} label="Service worker" value={number(sw.clients)} note={`${number(sw.failures)} falhas registradas`} tone={Number(sw.failures) ? "orange" : "green"} />
+				<MetricCard icon={Smartphone} label="Service worker" value={number(sw.clients)} note={`${number(sw.failures)} falha(s) critica(s) · ${number(sw.network_failures)} oscilacao(oes) de rede`} tone={Number(sw.failures) ? "red" : Number(sw.network_failures) ? "orange" : "green"} />
 			</section>
 
 			<section className="maintenance-panel maintenance-graph-panel">
@@ -108,14 +118,14 @@ function OverviewTab({ dashboard }) {
 					<div className="maintenance-panel-heading"><div><Server size={20} /><span><strong>Servicos monitorados</strong><small>Resposta atual das integracoes e componentes internos.</small></span></div></div>
 				<div className="maintenance-service-list">
 					{(status.services || []).map((service) => (
-						<div key={service.id}><span className={service.status === "online" ? "online" : "offline"}>{service.status === "online" ? <CheckCircle2 size={18} /> : <XCircle size={18} />}</span><p><strong>{service.name}</strong><small>{service.status === "online" ? `${service.details?.responseMs ?? "-"} ms` : service.reason}</small></p></div>
+						<div key={service.id}><span className={service.status === "online" ? "online" : service.status === "disabled" ? "disabled" : "offline"}>{service.status === "online" ? <CheckCircle2 size={18} /> : service.status === "disabled" ? <Clock3 size={18} /> : <XCircle size={18} />}</span><p><strong>{service.name}</strong><small>{service.status === "online" ? `${service.details?.responseMs ?? "-"} ms` : service.reason}</small></p></div>
 					))}
 				</div>
 				</section>
 
 				<section className="maintenance-panel">
 					<div className="maintenance-panel-heading"><div><Smartphone size={20} /><span><strong>PWA e service worker</strong><small>Versoes, ativacoes e falhas de navegacao.</small></span></div></div>
-				<div className="maintenance-sw-summary"><div><small>Eventos</small><strong>{number(sw.total)}</strong></div><div><small>Clientes</small><strong>{number(sw.clients)}</strong></div><div><small>Falhas</small><strong>{number(sw.failures)}</strong></div></div>
+				<div className="maintenance-sw-summary"><div><small>Eventos</small><strong>{number(sw.total)}</strong></div><div><small>Clientes</small><strong>{number(sw.clients)}</strong></div><div><small>Falhas criticas</small><strong>{number(sw.failures)}</strong></div></div>
 				<div className="maintenance-version-list">
 					{(sw.versions || []).map((item) => <div key={item.version}><code>{item.version}</code><span>{item.events} eventos</span><small>{dateTime(item.last_seen_at)}</small></div>)}
 					{!(sw.versions || []).length ? <p className="maintenance-empty">A telemetria aparecera quando os PWA atualizarem.</p> : null}

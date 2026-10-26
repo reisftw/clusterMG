@@ -2,7 +2,7 @@ const fs = require("node:fs/promises");
 const db = require("./db");
 const databaseBackups = require("./databaseBackups");
 const sempreIntegration = require("./sempreIntegration");
-const hubsoftIntegration = require("./hubsoftIntegration");
+const hubsoftSyncProfiles = require("./hubsoftSyncProfiles");
 const cvortexIntegration = require("./cvortexIntegration");
 const mensageriaRepository = require("./mensageriaRepository");
 const operationalEventsRepository = require("./operationalEventsRepository");
@@ -102,6 +102,17 @@ function offlineService(id, name, error, details = {}) {
 	};
 }
 
+function disabledService(id, name, reason) {
+	return {
+		id,
+		name,
+		status: "disabled",
+		checkedAt: nowIso(),
+		reason,
+		details: {},
+	};
+}
+
 async function checkService(id, name, fn) {
 	const startedAt = Date.now();
 	try {
@@ -170,6 +181,35 @@ async function checkEvolutionStatus() {
 			payload?.connectionState ||
 			"desconhecido",
 	};
+}
+
+async function checkHubsoftAutomationStatus() {
+	const session = await hubsoftSyncProfiles.createAutomationSession();
+	const metadata = await hubsoftSyncProfiles.automationRequest(
+		session,
+		"/api/v1/ordem_servico/create",
+	);
+	return {
+		baseUrl: session.baseUrl,
+		authentication: "automation-session",
+		orderTypes: Array.isArray(metadata?.tipos_ordem_servico)
+			? metadata.tipos_ordem_servico.length
+			: 0,
+	};
+}
+
+async function checkCvortexService() {
+	const config = await cvortexIntegration.readConfig({ sanitized: false });
+	if (!config.enabled && !config.useCvortexForMessaging) {
+		return disabledService(
+			"cvortex",
+			"API Cvortex",
+			"Integracao opcional nao configurada.",
+		);
+	}
+	return checkService("cvortex", "API Cvortex", () =>
+		cvortexIntegration.checkStatus(),
+	);
 }
 
 function getCachedApiStatus() {
@@ -305,25 +345,26 @@ async function buildApiStatus() {
 		),
 
 		checkService("hubsoft", "API Hubsoft", async () =>
-			hubsoftIntegration.checkStatus(),
+			checkHubsoftAutomationStatus(),
 		),
 
-		checkService("cvortex", "API Cvortex", async () =>
-			cvortexIntegration.checkStatus(),
-		),
+		checkCvortexService(),
 
 		checkService("evolution-whatsapp", "API Evolution WhatsApp", async () =>
 			checkEvolutionStatus(),
 		),
 	]);
 
-	const online = services.filter(
+	const monitoredServices = services.filter(
+		(service) => service.status !== "disabled",
+	);
+	const online = monitoredServices.filter(
 		(service) => service.status === "online",
 	).length;
 	await syncServiceEvents(services);
 	const serviceEvents = await listServiceEvents().catch(() => []);
 	return {
-		ok: online === services.length,
+		ok: online === monitoredServices.length,
 		checkedAt: nowIso(),
 		runtime: {
 			status: "online",
@@ -347,8 +388,10 @@ async function buildApiStatus() {
 		},
 		summary: {
 			online,
-			offline: services.length - online,
-			total: services.length,
+			offline: monitoredServices.length - online,
+			disabled: services.length - monitoredServices.length,
+			total: monitoredServices.length,
+			configuredTotal: services.length,
 		},
 		services,
 		serviceEvents,

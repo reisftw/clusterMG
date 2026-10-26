@@ -37,6 +37,18 @@ const LATENCY_COLUMNS = [
 	"duration_le_5000",
 	"duration_gt_5000",
 ];
+const IGNORED_METRIC_ROUTES = ["/metrics"];
+const EXPECTED_4XX_ROUTES = [
+	"/api/auth/me",
+	"/api/events",
+	"/api/push/config",
+	"/api/public/sempre/equipment",
+	"/api/service-orders/return-receipts/lookup",
+	"/api/tentativas/:id/iniciar",
+	"/api/tentativas/tent_:id/iniciar",
+	"/api/tentativas/:id/timeline",
+	"/api/agendamentos/clientes/:id",
+];
 
 function nowIso() {
 	return new Date().toISOString();
@@ -50,7 +62,7 @@ function normalizePath(path = "") {
 	return String(path || "")
 		.split("?")[0]
 		.replace(
-			/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+			/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
 			":id",
 		)
 		.replace(/[0-9a-f]{8,}/gi, ":id")
@@ -68,6 +80,7 @@ function getRouteLabel(req) {
 function shouldIgnoreRequest(req) {
 	const path = String(req.originalUrl || req.url || "");
 	return (
+		IGNORED_METRIC_ROUTES.includes(normalizePath(path)) ||
 		path.startsWith("/api/admin/metrics") ||
 		path.startsWith("/api/maintenance/dashboard")
 	);
@@ -513,8 +526,31 @@ function approximateP95(row = {}) {
 	return Math.round(numberValue(row.duration_max_ms));
 }
 
+function approximateP95Range(row = {}) {
+	const requests = numberValue(row.requests ?? row.total_requests);
+	if (!requests) return { lower: 0, upper: 0 };
+	const threshold = Math.max(1, Math.ceil(requests * 0.95));
+	let accumulated = 0;
+	for (let index = 0; index < LATENCY_COLUMNS.length; index += 1) {
+		accumulated += numberValue(row[LATENCY_COLUMNS[index]]);
+		if (accumulated < threshold) continue;
+		const previousLimit = index > 0 ? LATENCY_BUCKETS[index - 1] : 0;
+		const bucketLimit = LATENCY_BUCKETS[index];
+		const observedMaximum = Math.max(0, Math.ceil(numberValue(row.duration_max_ms)));
+		return {
+			lower: previousLimit ? previousLimit + 1 : 0,
+			upper: bucketLimit
+				? Math.min(bucketLimit, observedMaximum || bucketLimit)
+				: observedMaximum,
+		};
+	}
+	const maximum = Math.max(0, Math.ceil(numberValue(row.duration_max_ms)));
+	return { lower: LATENCY_BUCKETS.at(-1) + 1, upper: maximum };
+}
+
 function mapAggregateRow(row = {}, requestsField = "requests") {
 	const requests = numberValue(row[requestsField]);
+	const p95Range = approximateP95Range({ ...row, requests });
 	return {
 		...row,
 		[requestsField]: requests,
@@ -524,6 +560,8 @@ function mapAggregateRow(row = {}, requestsField = "requests") {
 			? Math.round((numberValue(row.duration_total_ms) / requests) * 100) / 100
 			: 0,
 		p95_ms: approximateP95({ ...row, requests }),
+		p95_lower_bound_ms: p95Range.lower,
+		p95_upper_bound_ms: p95Range.upper,
 		max_ms: Math.round(numberValue(row.duration_max_ms) * 100) / 100,
 	};
 }
@@ -589,7 +627,8 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 	const [totalsResult, timelineResult, routesResult] = await Promise.all([
 		metricsQuery(
 			`select coalesce(sum(requests),0)::bigint total_requests,
-			 coalesce(sum(errors_4xx),0)::bigint errors_4xx,
+			 coalesce(sum(case when route=any($2::text[]) then 0 else errors_4xx end),0)::bigint errors_4xx,
+			 coalesce(sum(case when route=any($2::text[]) then errors_4xx else 0 end),0)::bigint expected_errors_4xx,
 			 coalesce(sum(errors_5xx),0)::bigint errors_5xx,
 			 coalesce(sum(duration_total_ms),0)::float duration_total_ms,
 			 coalesce(max(duration_max_ms),0)::float duration_max_ms,
@@ -598,21 +637,24 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			 coalesce(sum(query_total_ms),0)::float query_total_ms,
 			 ${aggregateColumns}
 			 from maintenance_route_metrics_hourly
-			 where bucket_start>=now()-($1::numeric*interval '1 hour')`,
-			[safeHours],
+			 where bucket_start>=now()-($1::numeric*interval '1 hour')
+			   and not(route=any($3::text[]))`,
+			[safeHours, EXPECTED_4XX_ROUTES, IGNORED_METRIC_ROUTES],
 		),
 		metricsQuery(
 			`select bucket_start bucket,
 			 coalesce(sum(requests),0)::bigint requests,
-			 coalesce(sum(errors_4xx),0)::bigint errors_4xx,
+			 coalesce(sum(case when route=any($2::text[]) then 0 else errors_4xx end),0)::bigint errors_4xx,
+			 coalesce(sum(case when route=any($2::text[]) then errors_4xx else 0 end),0)::bigint expected_errors_4xx,
 			 coalesce(sum(errors_5xx),0)::bigint errors_5xx,
 			 coalesce(sum(duration_total_ms),0)::float duration_total_ms,
 			 coalesce(max(duration_max_ms),0)::float duration_max_ms,
 			 ${aggregateColumns}
 			 from maintenance_route_metrics_hourly
 			 where bucket_start>=now()-($1::numeric*interval '1 hour')
+			   and not(route=any($3::text[]))
 			 group by bucket_start order by bucket_start`,
-			[safeHours],
+			[safeHours, EXPECTED_4XX_ROUTES, IGNORED_METRIC_ROUTES],
 		),
 		metricsQuery(
 			`select method,route,
@@ -624,8 +666,9 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			 ${aggregateColumns}
 			 from maintenance_route_metrics_hourly
 			 where bucket_start>=now()-($1::numeric*interval '1 hour')
+			   and not(route=any($2::text[]))
 			 group by method,route`,
-			[safeHours],
+			[safeHours, IGNORED_METRIC_ROUTES],
 		),
 	]);
 	const totals = mapAggregateRow(
@@ -646,9 +689,14 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 		totals: {
 			total_requests: totals.requests,
 			errors_4xx: totals.errors_4xx,
+			expected_errors_4xx: numberValue(
+				totalsResult.rows[0]?.expected_errors_4xx,
+			),
 			errors_5xx: totals.errors_5xx,
 			avg_ms: totals.avg_ms,
 			p95_ms: totals.p95_ms,
+			p95_lower_bound_ms: totals.p95_lower_bound_ms,
+			p95_upper_bound_ms: totals.p95_upper_bound_ms,
 			max_ms: totals.max_ms,
 		},
 		timeline: timelineResult.rows.map((row) => mapAggregateRow(row)),
@@ -734,6 +782,7 @@ module.exports = {
 	__testing: {
 		LATENCY_COLUMNS,
 		approximateP95,
+		approximateP95Range,
 		hourBucket,
 		latencyBucketIndex,
 		mapAggregateRow,

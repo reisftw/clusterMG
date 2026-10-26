@@ -290,8 +290,11 @@ async function recordServiceWorkerEvent(payload = {}, userAgent = "") {
 	const allowed = new Set([
 		"INSTALLED",
 		"ACTIVATED",
+		"INSTALL_FAILURE",
+		"ACTIVATION_FAILURE",
 		"NAVIGATION_FAILURE",
 		"CACHE_FAILURE",
+		"NETWORK_FALLBACK",
 		"UPDATE_FOUND",
 		"HEARTBEAT",
 	]);
@@ -327,7 +330,9 @@ async function getServiceWorkerMetrics(hours = 24) {
 	const [summary, versions, recent, dailyVisits] = await Promise.all([
 		db.query(
 			`select count(*)::integer total,
-			 count(*) filter(where event_type in ('NAVIGATION_FAILURE','CACHE_FAILURE'))::integer failures,
+			 count(*) filter(where event_type in ('INSTALL_FAILURE','ACTIVATION_FAILURE'))::integer failures,
+			 count(*) filter(where event_type in ('NAVIGATION_FAILURE','CACHE_FAILURE'))::integer network_failures,
+			 count(*) filter(where event_type='NETWORK_FALLBACK')::integer network_fallbacks,
 			 count(distinct nullif(client_id,''))::integer clients,
 			 max(occurred_at) last_event_at
 			 from maintenance_service_worker_events

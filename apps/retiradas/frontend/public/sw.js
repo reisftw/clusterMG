@@ -57,7 +57,15 @@ function parsePushPayload(event) {
 self.addEventListener("install", (event) => {
 	event.waitUntil(
 		Promise.all([
-			caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
+			caches
+				.open(CACHE_NAME)
+				.then((cache) => cache.addAll(APP_SHELL))
+				.catch((error) => {
+					reportSwEvent("INSTALL_FAILURE", {
+						message: String(error?.message || error || "Falha de instalacao"),
+					});
+					throw error;
+				}),
 			reportSwEvent("INSTALLED", { cacheName: CACHE_NAME }),
 		]),
 	);
@@ -74,7 +82,13 @@ self.addEventListener("activate", (event) => {
 					keys
 						.filter((key) => key !== CACHE_NAME)
 						.map((key) => caches.delete(key)),
-				),
+				)
+				.catch((error) => {
+					reportSwEvent("ACTIVATION_FAILURE", {
+						message: String(error?.message || error || "Falha de ativacao"),
+					});
+					throw error;
+				}),
 			),
 		reportSwEvent("ACTIVATED", { cacheName: CACHE_NAME }),
 		self.clients.claim(),
@@ -122,8 +136,21 @@ function fetchAndCacheAsset(request) {
 function fetchSameOriginAsset(request) {
 	const url = new URL(request.url);
 	if (url.pathname.startsWith("/assets/")) {
-		return fetchAndCacheAsset(request).catch((error) => {
-			reportSwEvent("CACHE_FAILURE", { message: String(error?.message || error || "Falha de cache") }, url.pathname);
+		return fetchAndCacheAsset(request).catch(async (error) => {
+			const cached = await caches.match(request);
+			if (cached) {
+				reportSwEvent(
+					"NETWORK_FALLBACK",
+					{ message: String(error?.message || error || "Falha de rede") },
+					url.pathname,
+				);
+				return cached;
+			}
+			reportSwEvent(
+				"CACHE_FAILURE",
+				{ message: String(error?.message || error || "Falha de cache") },
+				url.pathname,
+			);
 			return Response.error();
 		});
 	}
