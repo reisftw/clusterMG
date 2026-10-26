@@ -9,6 +9,7 @@ import {
 	Save,
 	Search,
 	Send,
+	Zap,
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,7 @@ import {
 	retomarEvolutionMensageria,
 	salvarConfigMensageria,
 } from "../services/mensageriaService";
+import MensageriaTurboModal from "./MensageriaTurboModal";
 
 const PAGE_SIZES = [20, 30, 50, 100];
 
@@ -277,6 +279,7 @@ function useMensageriaFilaController() {
 	const [pageSize, setPageSize] = useState(20);
 	const [page, setPage] = useState(1);
 	const [showQueuePreview, setShowQueuePreview] = useState(false);
+	const [showTurboModal, setShowTurboModal] = useState(false);
 
 	const loadData = async () => {
 		setLoading(true);
@@ -534,6 +537,8 @@ function useMensageriaFilaController() {
 		queuePreviewItems,
 		showQueuePreview,
 		setShowQueuePreview,
+		showTurboModal,
+		setShowTurboModal,
 		stats,
 		queueRunning,
 		workerRunning,
@@ -577,6 +582,8 @@ const MensageriaFilaPage = () => {
 		queuePreviewItems,
 		showQueuePreview,
 		setShowQueuePreview,
+		showTurboModal,
+		setShowTurboModal,
 		stats,
 		workerRunning,
 		startButtonState,
@@ -605,6 +612,14 @@ const MensageriaFilaPage = () => {
 
 	return (
 		<div className="space-y-6">
+			<MensageriaTurboModal
+				open={showTurboModal}
+				initialStatus={status?.worker?.turbo}
+				onClose={() => {
+					setShowTurboModal(false);
+					loadData();
+				}}
+			/>
 			{feedback ? (
 				<div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
 					{feedback}
@@ -628,6 +643,18 @@ const MensageriaFilaPage = () => {
 						</div>
 					</div>
 					<div className="flex flex-wrap gap-2">
+						<button
+							type="button"
+							onClick={() => setShowTurboModal(true)}
+							disabled={!canManage}
+							className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-sm hover:bg-orange-700 disabled:opacity-60"
+						>
+							<Zap
+								size={16}
+								className={status?.worker?.turbo?.running ? "animate-pulse" : ""}
+							/>
+							{status?.worker?.turbo?.running ? "Turbo em execução" : "Modo Turbo"}
+						</button>
 						<button
 							type="button"
 							onClick={loadData}

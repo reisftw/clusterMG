@@ -73,6 +73,26 @@ function createMensageriaEvolutionRouter({
 		requireFilaManage,
 		controller.runQueueOnce,
 	);
+	router.get(
+		"/turbo/status",
+		requireAuthenticated,
+		requireFilaManage,
+		controller.getTurboStatus,
+	);
+	router.post(
+		"/turbo/start",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireFilaManage,
+		controller.startTurboQueue,
+	);
+	router.post(
+		"/turbo/stop",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireFilaManage,
+		controller.stopTurboQueue,
+	);
 	router.post(
 		"/test",
 		requireAuthenticated,

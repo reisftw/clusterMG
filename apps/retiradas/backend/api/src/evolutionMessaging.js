@@ -106,6 +106,75 @@ const RECENT_INBOUND_TTL_MS = 10 * 60 * 1000;
 const QUEUE_SEND_LOCK_TTL_MS = 15 * 60 * 1000;
 const DUPLICATE_SEND_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 const QUEUE_IMMEDIATE_FAILOVER_LIMIT = 25;
+const TURBO_QUEUE_TARGET = 300;
+const TURBO_QUEUE_INTERVAL_MS = 2000;
+const TURBO_QUEUE_HISTORY_LIMIT = 400;
+
+let turboState = createTurboState();
+
+function createTurboState(overrides = {}) {
+	return {
+		status: "idle",
+		running: false,
+		stopRequested: false,
+		target: TURBO_QUEUE_TARGET,
+		intervalSeconds: TURBO_QUEUE_INTERVAL_MS / 1000,
+		attempted: 0,
+		sent: 0,
+		failed: 0,
+		skipped: 0,
+		startedAt: null,
+		finishedAt: null,
+		nextAttemptAt: null,
+		currentItem: null,
+		normalQueueWasActive: false,
+		normalQueueSuspended: false,
+		items: [],
+		error: "",
+		...overrides,
+	};
+}
+
+function getTurboStatus() {
+	return {
+		...turboState,
+		currentItem: turboState.currentItem
+			? { ...turboState.currentItem }
+			: null,
+		items: [...turboState.items],
+	};
+}
+
+function waitForTurboInterval() {
+	return new Promise((resolve) => {
+		setTimeout(resolve, TURBO_QUEUE_INTERVAL_MS);
+	});
+}
+
+async function waitForRegularWorkerIdle(timeoutMs = 30000) {
+	const deadline = Date.now() + timeoutMs;
+	while (workerRunning && Date.now() < deadline) {
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+	if (workerRunning) {
+		const error = new Error(
+			"A fila normal ainda está finalizando um envio. Tente iniciar o Turbo novamente.",
+		);
+		error.statusCode = 409;
+		throw error;
+	}
+}
+
+function appendTurboItem(item, outcome, error = "") {
+	const summary = {
+		...summarizeQueueExecutionItem(item, outcome),
+		error: String(error || ""),
+	};
+	turboState.items = [...turboState.items, summary].slice(
+		-TURBO_QUEUE_HISTORY_LIMIT,
+	);
+	return summary;
+}
 
 function nowIso() {
 	return new Date().toISOString();
@@ -907,6 +976,7 @@ async function pauseQueueForDisconnectedEvolution({
 		evolutionAutoPausedAt: nowIso(),
 		evolutionAutoPausedReason: finalReason,
 	});
+	stopTurboQueue();
 	nextRunAt = null;
 	lastSkipped = `Fila pausada automaticamente: ${finalReason}`;
 
@@ -1795,7 +1865,153 @@ async function runQueueDispatchBatch(candidates, config) {
 	return { sent, failed };
 }
 
+async function runTurboQueue(config) {
+	try {
+		while (
+			turboState.running &&
+			!turboState.stopRequested &&
+			turboState.sent < turboState.target
+		) {
+			const items = await listQueue(2000);
+			const candidate = items.find((item) => canSendItem(item, config));
+			if (!candidate) {
+				turboState.status = "completed";
+				break;
+			}
+
+			turboState.currentItem = summarizeQueueExecutionItem(candidate);
+			nextQueueExecutionItem = turboState.currentItem;
+			const result = await processQueueCandidate(candidate, config);
+			turboState.attempted += 1;
+
+			if (!result.locked) {
+				turboState.skipped += 1;
+				appendTurboItem(candidate, "skipped", result.reason);
+			} else {
+				lastQueueExecutionItem = summarizeQueueExecutionItem(
+					result.item || candidate,
+					result.outcome,
+				);
+				if (result.outcome === "sent") turboState.sent += 1;
+				else if (result.outcome === "failed") turboState.failed += 1;
+				appendTurboItem(
+					result.item || candidate,
+					result.outcome,
+					result.error,
+				);
+			}
+
+			turboState.currentItem = null;
+			if (
+				turboState.stopRequested ||
+				turboState.sent >= turboState.target
+			) {
+				break;
+			}
+
+			turboState.nextAttemptAt = new Date(
+				Date.now() + TURBO_QUEUE_INTERVAL_MS,
+			).toISOString();
+			await waitForTurboInterval();
+			turboState.nextAttemptAt = null;
+		}
+
+		if (turboState.stopRequested) turboState.status = "stopped";
+		else if (turboState.sent >= turboState.target)
+			turboState.status = "completed";
+		else if (turboState.status === "running")
+			turboState.status = "completed";
+	} catch (error) {
+		turboState.status = "failed";
+		turboState.error = error?.message || "Falha no modo Turbo.";
+		console.error("[evolutionMessaging] turbo:", error);
+	} finally {
+		turboState.running = false;
+		turboState.normalQueueSuspended = false;
+		turboState.currentItem = null;
+		turboState.nextAttemptAt = null;
+		turboState.finishedAt = nowIso();
+		nextQueueExecutionItem = null;
+		if (turboState.sent > 0 && turboState.normalQueueWasActive) {
+			const regularDelayMs =
+				Math.max(
+					5,
+					Number(
+						config.evolutionMinDelaySeconds ||
+							DEFAULT_CONFIG.evolutionMinDelaySeconds,
+					),
+				) * 1000;
+			nextRunAt = new Date(
+				Date.now() + regularDelayMs,
+			).toISOString();
+		} else if (!turboState.normalQueueWasActive) {
+			nextRunAt = null;
+		}
+	}
+}
+
+async function startTurboQueue() {
+	if (turboState.running) {
+		return { ok: true, started: false, turbo: getTurboStatus() };
+	}
+
+	turboState = createTurboState({
+		status: "preparing",
+		running: true,
+		startedAt: nowIso(),
+	});
+
+	try {
+		await waitForRegularWorkerIdle();
+		const config = await getConfig();
+		turboState.normalQueueWasActive =
+			config.evolutionPaused !== true && config.autoSend === true;
+		turboState.normalQueueSuspended = true;
+		const guardSkip = await evaluateQueueDispatchGuards(config, true);
+		if (guardSkip) {
+			const error = new Error(
+				guardSkip.skipped || "A fila não está disponível para o modo Turbo.",
+			);
+			error.statusCode = 409;
+			throw error;
+		}
+		const candidates = (await listQueue(2000)).filter((item) =>
+			canSendItem(item, config),
+		);
+		if (!candidates.length) {
+			const error = new Error("Não há clientes aptos para envio na fila.");
+			error.statusCode = 409;
+			throw error;
+		}
+
+		turboState.status = "running";
+		nextRunAt = null;
+		void runTurboQueue(config);
+		return { ok: true, started: true, turbo: getTurboStatus() };
+	} catch (error) {
+		turboState.running = false;
+		turboState.normalQueueSuspended = false;
+		turboState.status = "failed";
+		turboState.error = error?.message || "Não foi possível iniciar o modo Turbo.";
+		turboState.finishedAt = nowIso();
+		throw error;
+	}
+}
+
+function stopTurboQueue() {
+	if (turboState.running) {
+		turboState.stopRequested = true;
+		turboState.status = "stopping";
+	}
+	return { ok: true, turbo: getTurboStatus() };
+}
+
 async function processQueueOnce({ manual = false } = {}) {
+	if (turboState.running) {
+		return skippedQueue("Modo Turbo em execução.", {
+			turbo: getTurboStatus(),
+		});
+	}
 	const config = await getConfig();
 	lastRun = nowIso();
 	lastError = "";
@@ -1963,6 +2179,7 @@ function getStatus() {
 		nextRunAt,
 		lastItem: lastQueueExecutionItem,
 		nextItem: nextQueueExecutionItem,
+		turbo: getTurboStatus(),
 		sendTimeZone: SEND_TIME_ZONE,
 		sendLocalTime: `${String(localParts.hour).padStart(2, "0")}:${String(localParts.minute).padStart(2, "0")}:${String(localParts.second).padStart(2, "0")}`,
 	};
@@ -4205,6 +4422,7 @@ async function listDisconnectLogs(limit = 50) {
 module.exports = {
 	getConfig,
 	getStatus,
+	getTurboStatus,
 	getConnectionInfo,
 	isConfirmedDisconnectedConnection,
 	getAccountsConnectionInfo,
@@ -4215,6 +4433,8 @@ module.exports = {
 	getWebhookInfo,
 	listDisconnectLogs,
 	processQueueOnce,
+	startTurboQueue,
+	stopTurboQueue,
 	pauseQueueForDisconnectedEvolution,
 	registerCallback,
 	syncMissedInboundMessages,

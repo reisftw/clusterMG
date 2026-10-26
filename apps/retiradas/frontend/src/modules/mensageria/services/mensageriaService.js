@@ -392,6 +392,18 @@ export async function executarEnvioEvolutionAgora() {
 	return requestVpsApi("/mensageria/evolution/run", { method: "POST" });
 }
 
+export async function buscarStatusTurboMensageria() {
+	return requestVpsApi("/mensageria/evolution/turbo/status");
+}
+
+export async function iniciarTurboMensageria() {
+	return requestVpsApi("/mensageria/evolution/turbo/start", { method: "POST" });
+}
+
+export async function pararTurboMensageria() {
+	return requestVpsApi("/mensageria/evolution/turbo/stop", { method: "POST" });
+}
+
 export async function enviarTesteEvolution(payload) {
 	return requestVpsApi("/mensageria/evolution/test", {
 		method: "POST",

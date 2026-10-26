@@ -78,6 +78,7 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 
 	async function disconnect(_req, res, next) {
 		try {
+			evolutionMessaging.stopTurboQueue();
 			clearStatusCache();
 			res.json(await evolutionMessaging.logoutInstance());
 		} catch (error) {
@@ -123,6 +124,32 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 		}
 	}
 
+	async function getTurboStatus(_req, res, next) {
+		try {
+			res.json({ ok: true, turbo: evolutionMessaging.getTurboStatus() });
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function startTurboQueue(_req, res, next) {
+		try {
+			clearStatusCache();
+			res.status(202).json(await evolutionMessaging.startTurboQueue());
+		} catch (error) {
+			next(error);
+		}
+	}
+
+	async function stopTurboQueue(_req, res, next) {
+		try {
+			clearStatusCache();
+			res.json(evolutionMessaging.stopTurboQueue());
+		} catch (error) {
+			next(error);
+		}
+	}
+
 	async function sendTestMessage(req, res, next) {
 		try {
 			res.json(
@@ -135,6 +162,7 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 
 	async function pauseQueue(_req, res, next) {
 		try {
+			evolutionMessaging.stopTurboQueue();
 			await evolutionMessaging.saveConfigPatch({ evolutionPaused: true });
 			evolutionMessaging.resetNextRunAt();
 			clearStatusCache();
@@ -185,11 +213,14 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 		disconnect,
 		getDisconnectLogs,
 		getStatus,
+		getTurboStatus,
 		getWebhookInfo,
 		pauseQueue,
 		resumeQueue,
 		runQueueOnce,
 		sendTestMessage,
+		startTurboQueue,
+		stopTurboQueue,
 	};
 }
 
