@@ -211,14 +211,23 @@ async function findFinalizedOrder(code) {
 
 async function findOpenOrder(code) {
 	const result = await db.query(
-		`select hubsoft_number, source_type, source_status
-		   from hubsoft_sync_records
-		  where active = true
-		    and lower(coalesce(source_status, '')) in ('pendente', 'aguardando_agendamento', 'aguardando agendamento')
-		    and regexp_replace(coalesce(raw_excerpt->>'codigo_cliente', ''), '\\D', '', 'g') = $1
-		    and upper(trim(coalesce(source_type, ''))) = any($2::text[])
-		  order by source_date desc nulls last, updated_at desc
-		  limit 1`,
+		`with latest_orders as (
+		  select hubsoft_number, source_type, source_status, active, source_date, updated_at,
+		         row_number() over (
+		           partition by coalesce(nullif(hubsoft_id, ''), nullif(hubsoft_number, ''), id::text)
+		           order by updated_at desc nulls last, source_date desc nulls last
+		         ) as state_rank
+		    from hubsoft_sync_records
+		   where regexp_replace(coalesce(raw_excerpt->>'codigo_cliente', ''), '\\D', '', 'g') = $1
+		     and upper(trim(coalesce(source_type, ''))) = any($2::text[])
+		)
+		select hubsoft_number, source_type, source_status
+		  from latest_orders
+		 where state_rank = 1
+		   and active = true
+		   and lower(coalesce(source_status, '')) in ('pendente', 'aguardando_agendamento', 'aguardando agendamento')
+		 order by source_date desc nulls last, updated_at desc
+		 limit 1`,
 		[code, ALLOWED_ORDER_TYPES],
 	);
 	return result.rows[0] || null;
