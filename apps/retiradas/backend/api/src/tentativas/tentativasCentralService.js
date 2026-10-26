@@ -1150,6 +1150,22 @@ async function getMyProductivity(query = {}, user = {}) {
 		 from tentativas_opportunities o
 		 where o.active=true
 		   and o.cidade_normalizada in (select cidade_normalizada from allowed_cities)
+		   and exists (
+		     select 1
+		       from tentativas_neighborhood_locks l
+		      where l.cidade_normalizada = o.cidade_normalizada
+		        and l.bairro_grupo = coalesce(
+		          nullif(regexp_replace(
+		            regexp_replace(
+		              lower(translate(trim(coalesce(o.bairro, '')), 'áàãâäéèêëíìîïóòõôöúùûüçÁÀÃÂÄÉÈÊËÍÌÎÏÓÒÕÔÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')),
+		              '^(bairro|residencial)[[:space:]]+', '', 'i'
+		            ),
+		            '[[:space:]]+', ' ', 'g'
+		          ), ''),
+		          '__sem_bairro__'
+		        )
+		        and (l.technician_user_id=$1 or lower(coalesce(l.technician_email,''))=$2)
+		   )
 		   and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 		), contacts as (
 		 select c.* from tentativas_contacts c

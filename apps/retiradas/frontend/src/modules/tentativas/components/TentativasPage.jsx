@@ -1060,10 +1060,10 @@ function DistributionTab() {
 	}, []);
 	const saveCity = async () => {
 		setMessage("");
-		await salvarCidadeTecnicoTentativas(form);
+		const saved = await salvarCidadeTecnicoTentativas(form);
 		setForm({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
 		await load();
-		setMessage("Cidade associada. O técnico já pode acessar todas as oportunidades disponíveis nela.");
+		setMessage(`Cidade associada e bairros redistribuídos com segurança. ${formatNumber(saved?.distribution?.neighborhoods || 0)} bairro(s) e ${formatNumber(saved?.distribution?.opportunities || 0)} oportunidade(s) organizados.`);
 	};
 	const associatedSearchTerm = normalizeSearch(associatedSearch);
 	const filteredAssociatedCities = associatedSearchTerm
@@ -1092,14 +1092,14 @@ function DistributionTab() {
 						</p>
 						<h2 className="text-2xl font-black text-slate-950">Técnicos por cidade</h2>
 						<p className="text-sm font-semibold text-slate-500">
-							Cada técnico visualiza o backlog completo das cidades associadas.
+							Os bairros são divididos automaticamente entre os técnicos da cidade, sem separar clientes do mesmo bairro.
 						</p>
 					</div>
 					<div className="mt-4 grid gap-3 md:grid-cols-2">
 						{items.map((item) => (
 							<div key={`${item.technician_user_id}-${item.cidade}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
 								<strong className="block text-slate-950">{item.technician_name || "Sem técnico"}</strong>
-								<p className="mt-1 text-sm font-bold text-slate-500">{item.cidade}</p>
+								<p className="mt-1 text-sm font-bold text-slate-500">{item.cidade} · {formatNumber(item.neighborhoods || 0)} bairro(s)</p>
 								<div className="mt-3 grid grid-cols-3 gap-2 text-center">
 									<div className="rounded-xl bg-white p-2"><strong>{formatNumber(item.opportunities)}</strong><span className="block text-[11px] font-bold text-slate-500">Oportun.</span></div>
 									<div className="rounded-xl bg-white p-2"><strong>{formatNumber(item.pending)}</strong><span className="block text-[11px] font-bold text-slate-500">Pendentes</span></div>
@@ -1131,7 +1131,7 @@ function DistributionTab() {
 								value={form.cidade}
 								onChange={(cidade) => setForm((current) => ({ ...current, cidade }))}
 								label="Cidade atendida"
-								helper="A cidade inteira fica disponível para o técnico selecionado."
+								helper="Ao salvar, os bairros ainda não trabalhados são balanceados automaticamente."
 							/>
 							<label className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
 								<input
@@ -1153,7 +1153,7 @@ function DistributionTab() {
 					</section>
 
 					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-						Ao associar uma cidade, o técnico passa a visualizar todas as oportunidades dela. Bairros específicos são reservados durante a seleção; a opção Todos os bairros permanece compartilhada.
+						Cada bairro pertence a um único técnico. Ao incluir ou remover alguém, o sistema recalcula a cidade e preserva com o técnico atual os bairros que já tiveram contato, evitando mensagens duplicadas ao mesmo cliente.
 					</div>
 				</div>
 			</div>
