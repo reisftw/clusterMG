@@ -310,10 +310,18 @@ function countTemplateParameters(components = []) {
 function messageInteraction(message = {}) {
 	const interactive = message.interactive?.button_reply || {};
 	const templateButton = message.button || {};
+	const messageText = cleanText(
+		message.text?.body ||
+			interactive.title ||
+			templateButton.text ||
+			message.image?.caption ||
+			message.document?.caption,
+	).slice(0, 2000);
 	return {
 		buttonId: cleanText(interactive.id || templateButton.payload),
 		buttonTitle: cleanText(interactive.title || templateButton.text),
 		inputAction: parseTypedFlowAction(message.text?.body),
+		messageText,
 	};
 }
 
@@ -370,6 +378,7 @@ function normalizeWebhookEvents(payload = {}) {
 						buttonId: interaction.buttonId,
 						buttonTitle: interaction.buttonTitle,
 						inputAction: interaction.inputAction,
+						messageText: interaction.messageText,
 					},
 				};
 				normalized.dedupeKey = hashValue(
@@ -1491,6 +1500,7 @@ function createWhatsappCloudService({
 		);
 		for (const event of result.rows) {
 			try {
+				let flowResult = null;
 				if (event.event_type === "MESSAGE_STATUS" && event.message_id) {
 					const status = cleanText(event.status).toUpperCase();
 					const columns = {
@@ -1517,14 +1527,18 @@ function createWhatsappCloudService({
 					);
 				}
 				if (event.event_type === "INCOMING_MESSAGE") {
-					await processTestFlowInbound(event);
+					flowResult = await processTestFlowInbound(event);
 				}
 				await dbClient.query(
 					`update whatsapp_cloud_webhook_events
 					    set processing_status = 'PROCESSED', processed_at = now(),
-					        processing_error = null
+					        processing_error = null,
+					        normalized_payload = case
+					          when $2::jsonb is null then normalized_payload
+					          else normalized_payload || jsonb_build_object('flowResult', $2::jsonb)
+					        end
 					  where id = $1`,
-					[event.id],
+					[event.id, flowResult ? JSON.stringify(flowResult) : null],
 				);
 			} catch (error) {
 				await dbClient.query(

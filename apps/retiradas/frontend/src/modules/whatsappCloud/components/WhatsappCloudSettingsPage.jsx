@@ -52,6 +52,29 @@ const BUTTON_PRIMARY =
 const BUTTON_SECONDARY =
 	"inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50";
 
+const FLOW_RESULT_LABELS = {
+	TEST_RECIPIENT_NOT_FOUND: "Remetente não autorizado no ambiente de testes.",
+	TEST_FLOW_NOT_STARTED: "Mensagem recebida, mas o fluxo guiado ainda não foi iniciado.",
+	TEST_FLOW_CLOSED: "O fluxo de teste deste contato está encerrado.",
+	TEST_FLOW_REPLY_LIMIT_REACHED: "O limite de respostas automáticas deste fluxo foi atingido.",
+	TEST_FLOW_FINISHED_AUTO_REPLY: "Resposta automática enviada após a conclusão do fluxo.",
+};
+
+function webhookEventSummary(item) {
+	const payload = item?.payload || {};
+	if (payload.messageText) return payload.messageText;
+	if (payload.buttonTitle) return payload.buttonTitle;
+	if (item?.eventType === "MESSAGE_STATUS") return `Status da mensagem: ${item.status || "-"}`;
+	return "Conteúdo não textual recebido.";
+}
+
+function webhookFlowResult(item) {
+	const result = item?.payload?.flowResult || {};
+	if (result.reason && FLOW_RESULT_LABELS[result.reason]) return FLOW_RESULT_LABELS[result.reason];
+	if (result.processed) return "Evento processado pelo fluxo guiado.";
+	return "";
+}
+
 function formatDate(value) {
 	if (!value) return "-";
 	const date = new Date(value);
@@ -583,7 +606,22 @@ export default function WhatsappCloudSettingsPage() {
 
 			{activeTab === "webhooks" ? (
 				<Section title="Eventos recebidos" description="Eventos deduplicados e validados por assinatura HMAC.">
-					<div className="space-y-2">{(events.items || []).map((item) => <article key={item.id} className="rounded-lg border border-slate-200 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-black text-slate-950">{item.eventType} · {item.messageId || "sem message id"}</p><p className="text-xs font-semibold text-slate-500">{item.sender || "-"} · {formatDate(item.receivedAt)}</p></div><StatusBadge status={item.processingStatus} /></div></article>)}</div>
+					<div className="space-y-3">{(events.items || []).map((item) => {
+						const flowResult = webhookFlowResult(item);
+						return <article key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+							<div className="flex flex-wrap items-start justify-between gap-3">
+								<div className="min-w-0 flex-1">
+									<div className="flex flex-wrap items-center gap-2"><p className="font-black text-slate-950">{item.eventType === "INCOMING_MESSAGE" ? "Mensagem recebida" : "Atualização de mensagem"}</p><span className="text-xs font-bold text-slate-400">{item.payload?.messageType || item.status || ""}</span></div>
+									<p className="mt-2 whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800">{webhookEventSummary(item)}</p>
+									<p className="mt-2 text-xs font-semibold text-slate-500">{item.sender || "-"} · {formatDate(item.receivedAt)}</p>
+									<details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-cyan-700">Detalhes técnicos</summary><p className="mt-1 break-all text-xs font-semibold text-slate-500">Message ID: {item.messageId || "-"}</p></details>
+								</div>
+								<StatusBadge status={item.processingStatus} />
+							</div>
+							{flowResult ? <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">{flowResult}</p> : null}
+							{item.processingError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-800">{item.processingError}</p> : null}
+						</article>;
+					})}</div>
 				</Section>
 			) : null}
 

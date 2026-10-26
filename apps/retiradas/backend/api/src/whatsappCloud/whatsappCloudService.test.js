@@ -17,7 +17,7 @@ test("normaliza telefone E.164 e rejeita valores inválidos", () => {
 	assert.throws(() => __testables.normalizeE164("123"), /telefone válido/i);
 });
 
-test("normaliza webhook sem persistir o texto recebido", () => {
+test("normaliza webhook com texto limitado para o histórico administrativo", () => {
 	const [event] = __testables.normalizeWebhookEvents({
 		object: "whatsapp_business_account",
 		entry: [
@@ -43,7 +43,7 @@ test("normaliza webhook sem persistir o texto recebido", () => {
 	});
 	assert.equal(event.eventType, "INCOMING_MESSAGE");
 	assert.equal(event.payload.messageType, "text");
-	assert.equal("text" in event.payload, false);
+	assert.equal(event.payload.messageText, "conteúdo privado");
 	assert.match(event.senderMasked, /\*\*\*/);
 });
 
@@ -104,7 +104,7 @@ test("converte data e horário digitados somente em ações normalizadas", () =>
 	})[0];
 	assert.equal(dateEvent.payload.inputAction, "flow:date:2026-10-28");
 	assert.equal(timeEvent.payload.inputAction, "flow:time:14:30");
-	assert.equal("text" in dateEvent.payload, false);
+	assert.equal(dateEvent.payload.messageText, "28/10/2026");
 });
 
 test("limita respostas automáticas de exceção a duas mensagens", () => {
