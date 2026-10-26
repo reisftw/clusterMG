@@ -147,7 +147,7 @@ export default function MensageriaTurboModal({
 							<div>
 								<p className="text-xs font-black uppercase tracking-[0.18em] text-orange-100">Disparo controlado</p>
 								<h2 id="turbo-title" className="mt-1 text-2xl font-black text-white">Modo Turbo</h2>
-								<p className="mt-1 text-sm leading-5 text-orange-50">Até 300 clientes, um por vez, com intervalo fixo de 2 segundos.</p>
+								<p className="mt-1 text-sm leading-5 text-orange-50">Até 300 envios confirmados, com intervalo de 2 segundos. Falhas pulam imediatamente para o próximo contato.</p>
 							</div>
 						</div>
 						<button
@@ -166,11 +166,12 @@ export default function MensageriaTurboModal({
 					<div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-semibold leading-5 text-orange-900">
 						A fila normal fica suspensa durante esta execução. Assim que o Turbo terminar ou for interrompido, ela volta automaticamente com a configuração anterior.
 					</div>
-					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
 						{[
 							{ label: "Status", value: statusLabel(turbo.status), icon: isActive ? Loader2 : Clock3, spin: isActive },
 							{ label: "Enviadas", value: `${Number(turbo.sent || 0)} / ${Number(turbo.target || 300)}`, icon: CheckCircle2 },
 							{ label: "Falhas", value: Number(turbo.failed || 0), icon: AlertTriangle },
+							{ label: "Ignorados", value: Number(turbo.skipped || 0), icon: AlertTriangle },
 							{ label: "Intervalo", value: `${Number(turbo.intervalSeconds || 2)} segundos`, icon: Clock3 },
 						].map((item) => {
 							const Icon = item.icon;
@@ -221,7 +222,7 @@ export default function MensageriaTurboModal({
 										<p className="mt-0.5 text-xs font-semibold text-slate-500">O.S. {item.os || "-"} · {formatTime(item.processedAt)}</p>
 										{item.error ? <p className="mt-1 text-xs text-red-600">{item.error}</p> : null}
 									</div>
-									<span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${item.outcome === "sent" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{outcomeLabel(item.outcome)}</span>
+									<span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-black ${item.outcome === "sent" ? "bg-emerald-100 text-emerald-700" : item.outcome === "skipped" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>{outcomeLabel(item.outcome)}</span>
 								</div>
 							)) : (
 								<p className="px-4 py-8 text-center text-sm font-semibold text-slate-500">Nenhum cliente processado nesta execução.</p>

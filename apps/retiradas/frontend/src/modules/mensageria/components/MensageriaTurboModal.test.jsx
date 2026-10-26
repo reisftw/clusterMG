@@ -31,8 +31,9 @@ describe("MensageriaTurboModal", () => {
 	it("explica o lote e inicia o Turbo pelo modal", async () => {
 		render(<MensageriaTurboModal open={true} onClose={vi.fn()} />);
 
-		expect(screen.getByText(/até 300 clientes/i)).toBeInTheDocument();
-		expect(screen.getByText(/intervalo fixo de 2 segundos/i)).toBeInTheDocument();
+		expect(screen.getByText(/até 300 envios confirmados/i)).toBeInTheDocument();
+		expect(screen.getByText(/intervalo de 2 segundos/i)).toBeInTheDocument();
+		expect(screen.getByText(/falhas pulam imediatamente/i)).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: /iniciar 300 envios/i }));
 
 		await waitFor(() => expect(serviceMocks.start).toHaveBeenCalledTimes(1));

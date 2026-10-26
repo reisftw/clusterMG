@@ -259,6 +259,33 @@ function getOutboundPhoneVariants(value) {
 	return variants;
 }
 
+function evolutionErrorMessage(data, fallback) {
+	const nestedMessage = data?.response?.message;
+	const candidates = [
+		data?.message,
+		data?.errorMessage,
+		nestedMessage,
+		data?.error,
+	];
+	for (const candidate of candidates) {
+		if (Array.isArray(candidate)) {
+			const flattened = candidate.flat(Infinity).filter(Boolean).join("; ");
+			if (flattened) return flattened;
+		}
+		if (candidate && typeof candidate === "object") {
+			try {
+				return JSON.stringify(candidate);
+			} catch {
+				// Segue para a mensagem generica.
+			}
+		}
+		if (typeof candidate === "string" && candidate.trim()) {
+			return candidate.trim();
+		}
+	}
+	return fallback;
+}
+
 function phonesMatch(left, right) {
 	const leftVariants = getPhoneVariants(left);
 	const rightVariants = new Set(getPhoneVariants(right));
@@ -1375,9 +1402,7 @@ async function postEvolutionTextMessage(
 		data = null;
 	}
 	if (!response.ok) {
-		throw new Error(
-			data?.message || data?.error || `Evolution HTTP ${response.status}`,
-		);
+		throw new Error(evolutionErrorMessage(data, `Evolution HTTP ${response.status}`));
 	}
 	const statusValue = Number(
 		data?.status || data?.statusCode || data?.response?.status || 0,
@@ -1391,6 +1416,48 @@ async function postEvolutionTextMessage(
 		);
 	}
 	return { ...(data || { ok: true }), _payloadMode: payloadMode };
+}
+
+async function resolveEvolutionRecipient(config, number) {
+	const variants = getOutboundPhoneVariants(number);
+	if (!variants.length) {
+		return { checked: true, number: "", variants: [] };
+	}
+	const baseUrl = String(config.evolutionBaseUrl || "").replace(/\/+$/, "");
+	const instanceName = String(config.evolutionInstance || "").trim();
+	if (!baseUrl || !instanceName || !config.evolutionApiKey) {
+		return { checked: false, number: variants[0], variants };
+	}
+
+	try {
+		const response = await fetch(
+			`${baseUrl}/chat/whatsappNumbers/${encodeURIComponent(instanceName)}`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					apikey: String(config.evolutionApiKey),
+					Authorization: `Bearer ${config.evolutionApiKey}`,
+				},
+				body: JSON.stringify({ numbers: [...new Set(variants)] }),
+			},
+		);
+		const data = await response.json().catch(() => null);
+		if (!response.ok || !Array.isArray(data)) {
+			return { checked: false, number: variants[0], variants };
+		}
+		const found = data.find((item) => item?.exists === true);
+		const resolvedNumber = normalizeDigits(
+			found?.number || String(found?.jid || "").split("@")[0],
+		);
+		return {
+			checked: true,
+			number: resolvedNumber,
+			variants,
+		};
+	} catch {
+		return { checked: false, number: variants[0], variants };
+	}
 }
 
 async function sendTextMessage(config, number, text) {
@@ -1865,6 +1932,38 @@ async function runQueueDispatchBatch(candidates, config) {
 	return { sent, failed };
 }
 
+async function markTurboRecipientUnavailable(item, config, reason) {
+	const attempts = Math.max(
+		Number(item.tentativas || 0) + 1,
+		Number(config.retryLimit || 3),
+	);
+	const errorMessage = reason || "Telefone não possui WhatsApp ativo.";
+	await upsertQueueItem(item.id, {
+		...item,
+		status: "falhou",
+		tentativas: attempts,
+		ultimoErro: errorMessage,
+		proximaTentativaEm: "",
+		envioLockId: "",
+		envioLockEm: "",
+		atualizadoEm: nowIso(),
+	});
+	await createHistory({
+		cliente: item.cliente,
+		telefone: item.telefone,
+		os: item.os,
+		cidade: item.cidade,
+		status: "ignorado",
+		erro: errorMessage,
+		origem: getProviderName(config),
+		filaId: item.id,
+	});
+	broadcastRealtime("mensageria", {
+		action: "invalid_recipient",
+		id: item.id,
+	});
+}
+
 async function runTurboQueue(config) {
 	try {
 		while (
@@ -1873,7 +1972,7 @@ async function runTurboQueue(config) {
 			turboState.sent < turboState.target
 		) {
 			const items = await listQueue(2000);
-			const candidate = items.find((item) => canSendItem(item, config));
+			let candidate = items.find((item) => canSendItem(item, config));
 			if (!candidate) {
 				turboState.status = "completed";
 				break;
@@ -1881,6 +1980,28 @@ async function runTurboQueue(config) {
 
 			turboState.currentItem = summarizeQueueExecutionItem(candidate);
 			nextQueueExecutionItem = turboState.currentItem;
+			if (String(config.whatsappProvider || "evolution") === "evolution") {
+				const recipient = await resolveEvolutionRecipient(
+					config,
+					candidate.telefone,
+				);
+				if (recipient.checked && !recipient.number) {
+					const reason = "Telefone não possui WhatsApp ativo.";
+					await markTurboRecipientUnavailable(candidate, config, reason);
+					turboState.attempted += 1;
+					turboState.skipped += 1;
+					appendTurboItem(candidate, "skipped", reason);
+					turboState.currentItem = null;
+					continue;
+				}
+				if (
+					recipient.number &&
+					recipient.number !== normalizePhone(candidate.telefone)
+				) {
+					candidate = { ...candidate, telefone: recipient.number };
+					await upsertQueueItem(candidate.id, candidate);
+				}
+			}
 			const result = await processQueueCandidate(candidate, config);
 			turboState.attempted += 1;
 
@@ -1907,6 +2028,9 @@ async function runTurboQueue(config) {
 				turboState.sent >= turboState.target
 			) {
 				break;
+			}
+			if (result.outcome !== "sent") {
+				continue;
 			}
 
 			turboState.nextAttemptAt = new Date(
