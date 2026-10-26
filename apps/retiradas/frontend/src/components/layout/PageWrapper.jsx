@@ -16,6 +16,7 @@ import { ROUTES } from "../../router/routes";
 import AuthenticatorModal from "./AuthenticatorModal";
 import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
+import TechnicianPushPermissionPrompt from "./TechnicianPushPermissionPrompt";
 import Topbar from "./Topbar";
 import ViewportDiagnostics from "./ViewportDiagnostics";
 
@@ -234,6 +235,9 @@ const PageWrapper = ({ children }) => {
 					setWelcomeClosedForUser(currentWelcomeUserKey);
 				}}
 			/>
+			{isTechnician && !trocarSenhaObrigatorio && !showWelcomeModal ? (
+				<TechnicianPushPermissionPrompt />
+			) : null}
 			<RetorninhoAssistant />
 			<ViewportDiagnostics />
 		</div>
