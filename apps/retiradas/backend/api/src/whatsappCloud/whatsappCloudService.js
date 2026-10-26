@@ -85,6 +85,29 @@ function hashValue(value) {
 	return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
+function phoneIdentityCandidates(value) {
+	const digits = cleanText(value).replace(/\D/g, "");
+	if (!digits) return [];
+	const candidates = new Set([digits]);
+	const brazilianMobileWithNinthDigit = digits.match(/^55(\d{2})9(\d{8})$/);
+	if (brazilianMobileWithNinthDigit) {
+		candidates.add(
+			`55${brazilianMobileWithNinthDigit[1]}${brazilianMobileWithNinthDigit[2]}`,
+		);
+	}
+	const brazilianMobileWithoutNinthDigit = digits.match(/^55(\d{2})([6-9]\d{7})$/);
+	if (brazilianMobileWithoutNinthDigit) {
+		candidates.add(
+			`55${brazilianMobileWithoutNinthDigit[1]}9${brazilianMobileWithoutNinthDigit[2]}`,
+		);
+	}
+	return [...candidates];
+}
+
+function phoneIdentityHashes(value) {
+	return phoneIdentityCandidates(value).map(hashValue);
+}
+
 function safeEqual(left, right) {
 	const a = Buffer.from(hashValue(left));
 	const b = Buffer.from(hashValue(right));
@@ -622,8 +645,8 @@ function createWhatsappCloudService({
 			`select * from whatsapp_cloud_test_recipients
 			  where authorization_status = 'AUTHORIZED' and meta_registered = true`,
 		);
-		return result.rows.find(
-			(row) => hashValue(cleanText(row.phone_e164).replace(/\D/g, "")) === senderHash,
+		return result.rows.find((row) =>
+			phoneIdentityHashes(row.phone_e164).includes(senderHash),
 		) || null;
 	}
 
@@ -1839,6 +1862,8 @@ module.exports = {
 		maskPhone,
 		messageInteraction,
 		normalizeE164,
+		phoneIdentityCandidates,
+		phoneIdentityHashes,
 		normalizeFlowAction,
 		normalizeWebhookEvents,
 		getTestFlowDateOptions,

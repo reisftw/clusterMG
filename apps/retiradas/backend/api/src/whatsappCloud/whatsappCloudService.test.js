@@ -17,6 +17,23 @@ test("normaliza telefone E.164 e rejeita valores inválidos", () => {
 	assert.throws(() => __testables.normalizeE164("123"), /telefone válido/i);
 });
 
+test("reconhece o mesmo celular brasileiro com ou sem o nono dígito da Meta", () => {
+	assert.deepEqual(
+		__testables.phoneIdentityCandidates("+55 31 98466-7498"),
+		["5531984667498", "553184667498"],
+	);
+	assert.deepEqual(
+		__testables.phoneIdentityCandidates("553184667498"),
+		["553184667498", "5531984667498"],
+	);
+	assert.equal(
+		__testables.phoneIdentityHashes("+55 31 98466-7498").includes(
+			__testables.hashValue("553184667498"),
+		),
+		true,
+	);
+});
+
 test("normaliza webhook com texto limitado para o histórico administrativo", () => {
 	const [event] = __testables.normalizeWebhookEvents({
 		object: "whatsapp_business_account",
