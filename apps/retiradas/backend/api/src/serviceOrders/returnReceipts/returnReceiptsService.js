@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const db = require("../../db");
+const hubsoftSyncProfiles = require("../../hubsoftSyncProfiles");
 const {
 	generateReturnReceiptPdf,
 	isOnnet,
@@ -17,6 +18,15 @@ const ALLOWED_ORDER_TYPES = [
 	"RETIRADA & CANCELAMENTO - SEGUNDA TENTATIVA",
 	"CANCELAMENTO LOJA",
 ];
+const OPEN_ORDER_STATUSES = new Set([
+	"PENDENTE",
+	"AGUARDANDOAGENDAMENTO",
+]);
+const FINALIZED_ORDER_STATUSES = new Set([
+	"FINALIZADO",
+	"CONCLUIDO",
+	"FECHADO",
+]);
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -83,6 +93,154 @@ function parseTechnician(raw = {}) {
 			raw.usuario_fechamento ||
 			raw.usuarios_responsaveis,
 	);
+}
+
+function allowedOrderType(value) {
+	return ALLOWED_ORDER_TYPES.some((type) => normalize(type) === normalize(value));
+}
+
+function liveOrderPayload(payload = {}) {
+	return payload?.ordem_servico || payload?.data?.ordem_servico || payload?.data || payload;
+}
+
+function liveOrderStatus(order = {}) {
+	return normalize(
+		order.status?.valor ||
+			order.status?.value ||
+			order.status?.descricao ||
+			order.status_ordem_servico ||
+			order.source_status ||
+			order.status,
+	).replace(/_/g, " ");
+}
+
+function liveOrderType(order = {}) {
+	const type = order.tipo_ordem_servico || order.ordem_servico_tipo || {};
+	return text(
+		type.descricao ||
+			type.display ||
+			type.name ||
+			(typeof type === "string" ? type : "") ||
+			order.tipo ||
+			order.tipo_os,
+	);
+}
+
+function liveClientCode(order = {}) {
+	return digits(
+		order.codigo_cliente ||
+			order.cliente?.codigo_cliente ||
+			order.cliente_servico?.cliente?.codigo_cliente,
+	);
+}
+
+function liveClientName(order = {}) {
+	return text(
+		order.nome_razaosocial ||
+			order.cliente?.nome_razaosocial ||
+			order.cliente?.nome ||
+			order.cliente_servico?.cliente?.nome_razaosocial ||
+			order.cliente_servico?.cliente?.nome,
+	);
+}
+
+function liveOrderNumber(order = {}) {
+	return digits(order.numero_ordem_servico || order.num_os || order.numero_os);
+}
+
+function liveOrderDate(order = {}) {
+	return (
+		order.data_termino_executado ||
+		order.data_fechamento ||
+		order.data_resolucao ||
+		order.updated_at ||
+		order.data_cadastro ||
+		null
+	);
+}
+
+function mapLiveOrder(order, tracked = {}) {
+	const sourceType = liveOrderType(order) || text(tracked.source_type);
+	return {
+		hubsoft_id: text(order.id_ordem_servico || order.id || tracked.hubsoft_id),
+		hubsoft_number: liveOrderNumber(order) || text(tracked.hubsoft_number),
+		source_type: sourceType,
+		source_status: liveOrderStatus(order),
+		source_date: liveOrderDate(order) || tracked.source_date || null,
+		updated_at: new Date(),
+		raw_excerpt: {
+			...(tracked.raw_excerpt || {}),
+			...order,
+			codigo_cliente:
+				liveClientCode(order) || tracked.raw_excerpt?.codigo_cliente,
+			cliente_nome: liveClientName(order) || tracked.raw_excerpt?.cliente_nome,
+		},
+	};
+}
+
+async function findTrackedOrders(code) {
+	const result = await db.query(
+		`with latest_orders as (
+		  select hubsoft_id, hubsoft_number, source_type, source_status, source_date,
+		         updated_at, raw_excerpt,
+		         row_number() over (
+		           partition by coalesce(nullif(hubsoft_id, ''), nullif(hubsoft_number, ''), id::text)
+		           order by updated_at desc nulls last, source_date desc nulls last
+		         ) as state_rank
+		    from hubsoft_sync_records
+		   where regexp_replace(coalesce(raw_excerpt->>'codigo_cliente', ''), '\\D', '', 'g') = $1
+		     and upper(trim(coalesce(source_type, ''))) = any($2::text[])
+		)
+		select hubsoft_id, hubsoft_number, source_type, source_status, source_date,
+		       updated_at, raw_excerpt
+		  from latest_orders
+		 where state_rank = 1
+		 order by source_date desc nulls last, updated_at desc
+		 limit 10`,
+		[code, ALLOWED_ORDER_TYPES],
+	);
+	return result.rows;
+}
+
+async function verifyOrdersInHubsoft(code) {
+	const trackedOrders = await findTrackedOrders(code);
+	const verifiable = trackedOrders.filter((order) => text(order.hubsoft_id));
+	if (!verifiable.length) return { checked: false, orders: [] };
+
+	let session;
+	try {
+		session = await hubsoftSyncProfiles.createAutomationSession();
+	} catch (error) {
+		throw errorWithStatus(
+			`Nao foi possivel conectar ao HubSoft para confirmar a O.S. Tente novamente em instantes. (${text(error?.message) || "servico indisponivel"})`,
+			503,
+		);
+	}
+
+	const orders = [];
+	for (const tracked of verifiable) {
+		try {
+			const payload = await hubsoftSyncProfiles.automationRequest(
+				session,
+				`/api/v1/ordem_servico/${encodeURIComponent(tracked.hubsoft_id)}`,
+			);
+			const live = liveOrderPayload(payload);
+			if (!live || typeof live !== "object") {
+				throw new Error("O HubSoft nao retornou os dados da O.S.");
+			}
+			const mapped = mapLiveOrder(live, tracked);
+			if (liveClientCode(live) && liveClientCode(live) !== code) {
+				throw new Error("O codigo do cliente divergiu na verificacao da O.S.");
+			}
+			if (allowedOrderType(mapped.source_type)) orders.push(mapped);
+		} catch (error) {
+			throw errorWithStatus(
+				`Nao foi possivel confirmar a O.S ${digits(tracked.hubsoft_number) || "do cliente"} no HubSoft. Tente novamente em instantes. (${text(error?.message) || "consulta indisponivel"})`,
+				503,
+			);
+		}
+	}
+	return { checked: true, orders };
 }
 
 function mapEquipment(row = {}) {
@@ -347,14 +505,21 @@ async function buildReceiptCandidate(rawCode, user = {}) {
 	if (!code || code !== text(rawCode) || code.length > 20) {
 		throw errorWithStatus("Informe somente o codigo numerico do cliente.", 400);
 	}
-	const openOrder = await findOpenOrder(code);
+	const liveState = await verifyOrdersInHubsoft(code);
+	const liveOpenOrder = liveState.orders.find((order) =>
+		OPEN_ORDER_STATUSES.has(liveOrderStatus(order)),
+	);
+	const openOrder = liveState.checked ? liveOpenOrder : await findOpenOrder(code);
 	if (openOrder) {
 		throw errorWithStatus(
 			`A O.S ${digits(openOrder.hubsoft_number) || "de retirada"} ainda esta aberta. Finalize a O.S. no HubSoft e depois solicite o comprovante.`,
 			409,
 		);
 	}
-	const order = await findFinalizedOrder(code);
+	const order =
+		liveState.orders.find((item) =>
+			FINALIZED_ORDER_STATUSES.has(liveOrderStatus(item)),
+		) || (liveState.checked ? null : await findFinalizedOrder(code));
 	if (!order) {
 		throw errorWithStatus(
 			"Nenhuma O.S de retirada finalizada foi encontrada para este codigo de cliente.",
