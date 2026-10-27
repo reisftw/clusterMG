@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: npm
@@ -72,7 +72,7 @@ jobs:
 
       - name: Upload release artifact
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: retiradas-release
           if-no-files-found: error
@@ -110,10 +110,10 @@ jobs:
 
     steps:
       - name: Checkout verified revision
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: npm
@@ -157,21 +157,27 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+          install -m 600 .github/known_hosts/retiradas ~/.ssh/known_hosts
 
       - name: Upload verified release packages
         run: |
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=20 \
             retiradas-frontend.tar.gz \
             "$VPS_USER@$VPS_HOST:$REMOTE_FRONTEND_PACKAGE"
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=20 \
             retiradas-backend.tar.gz \
             "$VPS_USER@$VPS_HOST:$REMOTE_BACKEND_PACKAGE"
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
             release-manifest.json \
             "$VPS_USER@$VPS_HOST:$REMOTE_RELEASE_MANIFEST"
 
@@ -182,6 +188,8 @@ jobs:
           safe_version="$(printf '%s' "$RELEASE_VERSION" | tr -cs 'A-Za-z0-9._-' '-')"
           release_id="${safe_version}-${GITHUB_SHA::7}"
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=20 \
             "$VPS_USER@$VPS_HOST" \
@@ -267,6 +275,8 @@ jobs:
           safe_version="$(printf '%s' "$RELEASE_VERSION" | tr -cs 'A-Za-z0-9._-' '-')"
           release_id="${safe_version}-${GITHUB_SHA::7}"
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
             -o ServerAliveInterval=30 \
             -o ServerAliveCountMax=20 \
             "$VPS_USER@$VPS_HOST" \

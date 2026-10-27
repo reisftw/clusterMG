@@ -60,7 +60,9 @@ test("release workflows are manual and preserve verified artifacts", () => {
 			workflowName + " must not deploy on push",
 		);
 		assert.ok(
-			workflow.includes("actions/upload-artifact@v4"),
+			/actions\/upload-artifact@(v4|ea165f8d65b6e75b540449e92b4886f43607fa02)/.test(
+				workflow,
+			),
 			workflowName + " should preserve a verified release artifact",
 		);
 		assert.ok(
@@ -122,11 +124,32 @@ test("security workflow audits dependency projects and scans for secrets", () =>
 		"apps/operacao/frontend",
 		"apps/operacao/backend",
 		"npm audit",
-		"gitleaks/gitleaks-action@v2",
+		"gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc",
 	]) {
 		assert.ok(
 			workflow.includes(required),
 			"security workflow should contain " + required,
 		);
 	}
+});
+
+test("Retiradas workflows pin third-party actions and the production SSH host", () => {
+	for (const workflowName of [
+		"ci-retiradas.yml",
+		"deploy-retiradas.yml",
+		"security.yml",
+	]) {
+		const workflow = readWorkflow(workflowName);
+		assert.doesNotMatch(
+			workflow,
+			/uses:\s+[^\s]+@(v\d+|master|main)\b/,
+			workflowName + " must pin actions to immutable revisions",
+		);
+	}
+
+	const deploy = readWorkflow("deploy-retiradas.yml");
+	assert.ok(!deploy.includes("ssh-keyscan"));
+	assert.ok(deploy.includes(".github/known_hosts/retiradas"));
+	assert.ok(deploy.includes("StrictHostKeyChecking=yes"));
+	assert.ok(deploy.includes("HostKeyAlias=retiradas-production"));
 });

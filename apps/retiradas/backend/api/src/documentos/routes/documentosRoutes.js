@@ -2,13 +2,75 @@ const express = require("express");
 const multer = require("multer");
 const controller = require("../controllers/documentosController");
 
+function positiveInteger(value, fallback, maximum = Number.MAX_SAFE_INTEGER) {
+	const parsed = Number(value);
+	if (!Number.isSafeInteger(parsed) || parsed <= 0) return fallback;
+	return Math.min(parsed, maximum);
+}
+
+const UPLOAD_FILE_LIMIT_BYTES = positiveInteger(
+	process.env.DOCUMENTOS_UPLOAD_LIMIT_BYTES,
+	25 * 1024 * 1024,
+);
+const UPLOAD_MAX_FILES = positiveInteger(
+	process.env.DOCUMENTOS_UPLOAD_MAX_FILES,
+	30,
+	30,
+);
+const UPLOAD_TOTAL_LIMIT_BYTES = positiveInteger(
+	process.env.DOCUMENTOS_UPLOAD_TOTAL_LIMIT_BYTES,
+	80 * 1024 * 1024,
+);
+const REQUEST_UPLOAD_BYTES = Symbol("documentosUploadBytes");
+
+function createBoundedMemoryStorage(totalLimitBytes = UPLOAD_TOTAL_LIMIT_BYTES) {
+	return {
+		_handleFile(req, file, callback) {
+			let chunks = [];
+			let size = 0;
+			let finished = false;
+			const finish = (error, result) => {
+				if (finished) return;
+				finished = true;
+				callback(error, result);
+			};
+
+			file.stream.on("data", (chunk) => {
+				if (finished) return;
+				req[REQUEST_UPLOAD_BYTES] =
+					Number(req[REQUEST_UPLOAD_BYTES] || 0) + chunk.length;
+				if (req[REQUEST_UPLOAD_BYTES] > totalLimitBytes) {
+					chunks = [];
+					const error = new multer.MulterError(
+						"LIMIT_FILE_SIZE",
+						file.fieldname,
+					);
+					error.code = "LIMIT_TOTAL_FILE_SIZE";
+					error.message = "Conjunto de arquivos maior que o limite permitido.";
+					finish(error);
+					return;
+				}
+				size += chunk.length;
+				chunks.push(chunk);
+			});
+			file.stream.on("error", (error) => finish(error));
+			file.stream.on("end", () => {
+				if (finished) return;
+				finish(null, { buffer: Buffer.concat(chunks, size), size });
+			});
+		},
+		_removeFile(_req, file, callback) {
+			delete file.buffer;
+			callback(null);
+		},
+	};
+}
+
 const upload = multer({
-	storage: multer.memoryStorage(),
+	storage: createBoundedMemoryStorage(),
 	limits: {
-		fileSize: Number(
-			process.env.DOCUMENTOS_UPLOAD_LIMIT_BYTES || 25 * 1024 * 1024,
-		),
-		files: Number(process.env.DOCUMENTOS_UPLOAD_MAX_FILES || 30),
+		fileSize: UPLOAD_FILE_LIMIT_BYTES,
+		files: UPLOAD_MAX_FILES,
 	},
 	fileFilter: (_req, file, cb) => {
 		const name = String(file?.originalname || "").toLowerCase();
@@ -56,10 +118,13 @@ function uploadSingleFile(req, res, next) {
 			return;
 		}
 		if (error instanceof multer.MulterError) {
-			const statusCode = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+			const tooLarge = ["LIMIT_FILE_SIZE", "LIMIT_TOTAL_FILE_SIZE"].includes(
+				error.code,
+			);
+			const statusCode = tooLarge ? 413 : 400;
 			res.status(statusCode).json({
 				error:
-					error.code === "LIMIT_FILE_SIZE"
+					tooLarge
 						? "Arquivo maior que o limite permitido."
 						: `Erro no upload: ${error.message}`,
 			});
@@ -74,17 +139,20 @@ function uploadSingleFile(req, res, next) {
 }
 
 function uploadManyFiles(req, res, next) {
-	upload.array("files", 30)(req, res, (error) => {
+	upload.array("files", UPLOAD_MAX_FILES)(req, res, (error) => {
 		if (!error) {
 			next();
 			return;
 		}
 		if (error instanceof multer.MulterError) {
-			const statusCode = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+			const tooLarge = ["LIMIT_FILE_SIZE", "LIMIT_TOTAL_FILE_SIZE"].includes(
+				error.code,
+			);
+			const statusCode = tooLarge ? 413 : 400;
 			res.status(statusCode).json({
 				error:
-					error.code === "LIMIT_FILE_SIZE"
-						? "Arquivo maior que o limite permitido."
+					tooLarge
+						? error.message || "Arquivo maior que o limite permitido."
 						: `Erro no upload: ${error.message}`,
 			});
 			return;
@@ -108,8 +176,8 @@ function createDocumentosRouter({
 		? requireRoles(adminRoles)
 		: (_req, _res, next) => next();
 
-	router.get("/google/callback", controller.googleCallback);
 	router.use(requireAuthenticated);
+	router.get("/google/callback", requireAdmin, controller.googleCallback);
 	router.get("/google/status", controller.googleStatus);
 	router.get("/google/config", requireAdmin, controller.googleConfig);
 	router.post(
@@ -197,3 +265,9 @@ function createDocumentosRouter({
 }
 
 module.exports = createDocumentosRouter;
+module.exports.createBoundedMemoryStorage = createBoundedMemoryStorage;
+module.exports.uploadLimits = {
+	fileSize: UPLOAD_FILE_LIMIT_BYTES,
+	files: UPLOAD_MAX_FILES,
+	totalSize: UPLOAD_TOTAL_LIMIT_BYTES,
+};

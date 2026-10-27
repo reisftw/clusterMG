@@ -117,7 +117,7 @@ async function getOAuthClientWithCredentials() {
 	return client;
 }
 
-async function getOAuthAuthUrl() {
+async function getOAuthAuthUrl({ state } = {}) {
 	const client = await createOAuthClient();
 	if (!client) {
 		const error = new Error(
@@ -126,10 +126,16 @@ async function getOAuthAuthUrl() {
 		error.statusCode = 503;
 		throw error;
 	}
+	if (!cleanText(state)) {
+		const error = new Error("Estado OAuth ausente.");
+		error.statusCode = 500;
+		throw error;
+	}
 	return client.generateAuthUrl({
 		access_type: "offline",
 		prompt: "consent",
 		scope: DRIVE_SCOPES,
+		state: cleanText(state),
 	});
 }
 

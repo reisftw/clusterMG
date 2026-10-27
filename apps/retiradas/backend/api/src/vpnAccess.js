@@ -9,6 +9,9 @@ const CACHE_TTL_MS = Math.max(
 	Number(process.env.VPN_ACCESS_CACHE_TTL_MS || 15000),
 	0,
 );
+const TRUSTED_PROXY_CIDRS = splitLines(
+	process.env.VPN_TRUSTED_PROXY_CIDRS || "127.0.0.1/32",
+);
 
 let cachedConfig = null;
 let cachedAt = 0;
@@ -147,11 +150,16 @@ function normalizeIp(value) {
 }
 
 function getClientIp(req) {
+	const socketIp = normalizeIp(req.socket?.remoteAddress || "");
+	const trustedProxy =
+		socketIp && TRUSTED_PROXY_CIDRS.some((cidr) => cidrContains(cidr, socketIp));
+	if (!trustedProxy) return socketIp || normalizeIp(req.ip || "");
+
 	const forwarded =
 		cleanText(req.headers["cf-connecting-ip"]) ||
 		cleanText(req.headers["x-real-ip"]) ||
 		cleanText(String(req.headers["x-forwarded-for"] || "").split(",")[0]);
-	return normalizeIp(forwarded || req.ip || req.socket?.remoteAddress || "");
+	return normalizeIp(forwarded || socketIp);
 }
 
 function ipv4ToLong(ip) {

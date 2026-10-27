@@ -101,6 +101,61 @@ function userId(user) {
 	return text(user?.uid || user?.id || user?.email);
 }
 
+const GLOBAL_SUBMISSION_ROLES = new Set([
+	"admin",
+	"backoffice_retirada",
+	"supervisor_administrativo",
+	"analista_administrativo",
+]);
+const COMPANY_SUBMISSION_ROLES = new Set([
+	"lider_empresa",
+	"agente_autorizado",
+]);
+
+function forbiddenSubmissionList() {
+	const error = new Error("Sem permissão para visualizar envios de documentos.");
+	error.statusCode = 403;
+	return error;
+}
+
+function getSubmissionAccessFilters(user, { mine = false } = {}) {
+	const role = normalize(user?.role);
+	const filters = {};
+
+	if (GLOBAL_SUBMISSION_ROLES.has(role)) {
+		if (mine) {
+			const submittedBy = userId(user);
+			if (!submittedBy) throw forbiddenSubmissionList();
+			filters.submittedBy = submittedBy;
+		}
+		return filters;
+	}
+
+	if (role === "supervisor") {
+		const regional = text(user?.regional || user?.profile?.regional);
+		if (!regional) throw forbiddenSubmissionList();
+		filters.regional = regional;
+	} else if (COMPANY_SUBMISSION_ROLES.has(role)) {
+		const empresaId = text(
+			user?.empresaId ||
+				user?.empresa_id ||
+				user?.profile?.empresaId ||
+				user?.profile?.empresa_id,
+		);
+		if (!empresaId) throw forbiddenSubmissionList();
+		filters.empresaId = empresaId;
+	} else {
+		throw forbiddenSubmissionList();
+	}
+
+	if (mine) {
+		const submittedBy = userId(user);
+		if (!submittedBy) throw forbiddenSubmissionList();
+		filters.submittedBy = submittedBy;
+	}
+	return filters;
+}
+
 function safeSlug(value) {
 	return (
 		normalize(value)
@@ -1548,7 +1603,12 @@ async function listSubmissions({
 	user,
 }) {
 	const role = normalize(user?.role);
-	const filters = { status, limit, offset };
+	const filters = {
+		...getSubmissionAccessFilters(user, { mine }),
+		status,
+		limit,
+		offset,
+	};
 	if (normalize(status) === "pendente") {
 		delete filters.status;
 		if (
@@ -1564,16 +1624,6 @@ async function listSubmissions({
 	if (empresaId) {
 		const empresa = await requireEmpresaAccess(user, empresaId);
 		filters.empresaId = empresa.id;
-	} else if (role === "supervisor") {
-		filters.regional = text(user?.regional || user?.profile?.regional);
-	}
-	if (["lider_empresa", "agente_autorizado"].includes(role) || mine) {
-		filters.empresaId = text(
-			user?.empresaId ||
-				user?.empresa_id ||
-				user?.profile?.empresaId ||
-				user?.profile?.empresa_id,
-		);
 	}
 	const cacheKey = getCacheKey("submissions", {
 		filters,
@@ -1589,18 +1639,7 @@ async function listSubmissions({
 
 async function getSubmissionsDashboardSummary({ user } = {}) {
 	const role = normalize(user?.role);
-	const filters = {};
-	if (role === "supervisor") {
-		filters.regional = text(user?.regional || user?.profile?.regional);
-	}
-	if (["lider_empresa", "agente_autorizado"].includes(role)) {
-		filters.empresaId = text(
-			user?.empresaId ||
-				user?.empresa_id ||
-				user?.profile?.empresaId ||
-				user?.profile?.empresa_id,
-		);
-	}
+	const filters = getSubmissionAccessFilters(user);
 	const cacheKey = getCacheKey("submissionsDashboardSummary", {
 		filters,
 		role,
@@ -1619,10 +1658,12 @@ async function listSupervisorTreatments({ limit, offset, user }) {
 		error.statusCode = 403;
 		throw error;
 	}
-	const filters = { statuses: ["pendente"], limit, offset };
-	if (normalize(user?.role) === "supervisor") {
-		filters.regional = text(user?.regional || user?.profile?.regional);
-	}
+	const filters = {
+		...getSubmissionAccessFilters(user),
+		statuses: ["pendente"],
+		limit,
+		offset,
+	};
 	const cacheKey = getCacheKey("supervisorTreatments", {
 		filters,
 		role: normalize(user?.role),
@@ -2084,6 +2125,7 @@ module.exports = {
 	getSubmissionWithFiles,
 	getSubmissionsDashboardSummary,
 	getBillingConfig,
+	getSubmissionAccessFilters,
 	listInvoiceFields,
 	listCompanyDriveFolder,
 	listDocuments,

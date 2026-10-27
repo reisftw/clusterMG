@@ -165,6 +165,61 @@ describe("documentosService isFolderInsideClientFolder", () => {
 	});
 });
 
+describe("documentosService getSubmissionAccessFilters", () => {
+	afterEach(() => {
+		clearModules();
+		vi.restoreAllMocks();
+	});
+
+	it("nega por padrao papeis sem acesso documental", () => {
+		const { getSubmissionAccessFilters } = loadService();
+		expect(() =>
+			getSubmissionAccessFilters({ uid: "tech-1", role: "tecnico" }),
+		).toThrow("Sem permissão");
+	});
+
+	it("exige regional para supervisor", () => {
+		const { getSubmissionAccessFilters } = loadService();
+		expect(() =>
+			getSubmissionAccessFilters({ uid: "sup-1", role: "supervisor" }),
+		).toThrow("Sem permissão");
+		expect(
+			getSubmissionAccessFilters({
+				uid: "sup-1",
+				role: "supervisor",
+				profile: { regional: "Triangulo" },
+			}),
+		).toEqual({ regional: "Triangulo" });
+	});
+
+	it("exige empresa para lider e agente autorizado", () => {
+		const { getSubmissionAccessFilters } = loadService();
+		expect(() =>
+			getSubmissionAccessFilters({ uid: "lider-1", role: "lider_empresa" }),
+		).toThrow("Sem permissão");
+		expect(
+			getSubmissionAccessFilters({
+				uid: "lider-1",
+				role: "lider_empresa",
+				profile: { empresaId: "empresa-1" },
+			}),
+		).toEqual({ empresaId: "empresa-1" });
+	});
+
+	it("restringe mine ao proprio usuario ate para administrador", () => {
+		const { getSubmissionAccessFilters } = loadService();
+		expect(
+			getSubmissionAccessFilters(
+				{ uid: "admin-1", role: "admin" },
+				{ mine: true },
+			),
+		).toEqual({ submittedBy: "admin-1" });
+		expect(
+			getSubmissionAccessFilters({ uid: "admin-1", role: "admin" }),
+		).toEqual({});
+	});
+});
+
 // achado javascript:S3776 (docs/SONARQUBE-MAP.md): processBillingForEmpresa
 // foi extraida do loop de runBillingNotifications. Testes escritos ANTES
 // do refactor de complexidade pra travar o comportamento (skip por falta

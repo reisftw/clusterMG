@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ROUTES } from "../../router/routes";
 import { consultarMacPublico, normalizeMacInput } from "./terceirosService";
 
-function InfoCard({ icon: Icon, label, value, helper, tone = "slate" }) {
+function InfoCard({ icon: Icon, label, value, tone = "slate" }) {
 	const tones = {
 		slate: "border-slate-200 bg-white text-slate-800",
 		green: "border-emerald-200 bg-emerald-50 text-emerald-900",
@@ -37,9 +37,6 @@ function InfoCard({ icon: Icon, label, value, helper, tone = "slate" }) {
 					<p className="mt-1 break-words text-base font-black">
 						{value || "nao_localizado"}
 					</p>
-					{helper ? (
-						<p className="mt-1 text-xs font-semibold opacity-70">{helper}</p>
-					) : null}
 				</div>
 			</div>
 		</div>
@@ -246,20 +243,17 @@ export default function TerceirosConsultaMacPage({ portal = "terceiros" }) {
 							icon={Boxes}
 							label="Estoque atual"
 							value={result.estoqueAtual}
-							helper={result.estoqueHelper}
 							tone="blue"
 						/>
 						<InfoCard
 							icon={PackageSearch}
 							label="Produto"
 							value={result.produto}
-							helper={result.produtoHelper}
 						/>
 						<InfoCard
 							icon={UserRound}
 							label="Vinculado em"
 							value={result.vinculadoEm}
-							helper={result.vinculoHelper}
 						/>
 					</section>
 				) : null}

@@ -2400,7 +2400,7 @@ function createApp() {
 		message: { error: "Muitos eventos do aplicativo. Tente novamente em instantes." },
 	});
 
-	app.set("trust proxy", 1);
+	app.set("trust proxy", "loopback");
 	app.use(helmet());
 	app.use((req, res, next) => {
 		const origin = req.get("origin");
@@ -3018,7 +3018,14 @@ function createApp() {
 		publicWriteLimiter,
 		async (req, res, next) => {
 			try {
-				const result = await sempreIntegration.consultEquipment(req.query.mac);
+				const mac = String(req.query.mac || "")
+					.replace(/[^a-fA-F0-9]/g, "")
+					.toUpperCase();
+				if (!/^[A-F0-9]{12}$/.test(mac) || mac === "FFFFFFFFFFFF") {
+					res.status(400).json({ error: "Informe um MAC valido." });
+					return;
+				}
+				const result = await sempreIntegration.consultEquipment(mac);
 				const primary = result.primary || {};
 				const stockLocal = result.stockLocal || {};
 				res.json({
@@ -3030,12 +3037,9 @@ function createApp() {
 						: "Nao localizado",
 					estoqueAtual:
 						stockLocal.descricao || primary.estoqueLocal || "Nao localizado",
-					estoqueHelper: stockLocal.seniorId || primary.estoqueLocalId || "",
 					produto: primary.produtoNome || "Nao localizado",
-					produtoHelper: primary.produtoId || "",
 					vinculadoEm:
 						primary.vinculadoEm || primary.origemStatus || "Nao localizado",
-					vinculoHelper: primary.vinculadoTipo || "",
 				});
 			} catch (error) {
 				next(error);

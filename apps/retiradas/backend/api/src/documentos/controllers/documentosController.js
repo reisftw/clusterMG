@@ -1,5 +1,6 @@
 const service = require("../services/documentosService");
 const googleDrive = require("../services/googleDriveService");
+const googleOAuthState = require("../security/googleOAuthState");
 
 function parsePaging(query = {}) {
 	return {
@@ -407,7 +408,8 @@ async function saveGoogleConfig(req, res, next) {
 
 async function googleAuthUrl(req, res, next) {
 	try {
-		res.json({ url: await googleDrive.getOAuthAuthUrl() });
+		const state = googleOAuthState.createState(res);
+		res.json({ url: await googleDrive.getOAuthAuthUrl({ state }) });
 	} catch (error) {
 		next(error);
 	}
@@ -415,11 +417,11 @@ async function googleAuthUrl(req, res, next) {
 
 async function googleCallback(req, res, next) {
 	try {
-		if (!req.query.code) {
-			res.status(400).send("Codigo OAuth ausente.");
+		if (!req.query.code || !googleOAuthState.consumeState(req, res, req.query.state)) {
+			res.status(403).send("Callback OAuth invalido ou expirado.");
 			return;
 		}
-		await googleDrive.connectOAuth(req.query.code, req.user || {});
+		await googleDrive.connectOAuth(String(req.query.code), req.user);
 		res.send(`<!doctype html>
 <html lang="pt-BR">
   <head><meta charset="utf-8"><title>Google Drive conectado</title></head>

@@ -1,13 +1,22 @@
 const crypto = require("node:crypto");
 const argon2 = require("argon2");
 const express = require("express");
+const rateLimit = require("express-rate-limit");
 const db = require("../db");
 const emailService = require("../emailService");
+const { createAttemptTracker } = require("../security/attemptTracker");
 const registration = require("./registration");
 
 const COOKIE = "mercado_session";
 const TTL_MS = Number(process.env.MERCADO_SESSION_TTL_MS || 1000 * 60 * 60 * 12);
-const attempts = new Map();
+const ATTEMPT_TTL_MS = Number(
+	process.env.MERCADO_AUTH_ATTEMPT_TTL_MS || 15 * 60 * 1000,
+);
+const ATTEMPT_MAX_ENTRIES = Number(
+	process.env.MERCADO_AUTH_ATTEMPT_MAX_ENTRIES || 10000,
+);
+
+const attempts = createAttemptTracker();
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
 const marketPublicUrl = () => String(
 	process.env.MERCADO_PUBLIC_APP_URL || "https://mercado.retiradas.tech",
@@ -34,12 +43,25 @@ function requireMercadoAuth(req, res, next) {
 
 function createMercadoAuthRouter() {
 	const router = express.Router();
+	const publicAuthLimiter = rateLimit({
+		windowMs: Number(
+			process.env.MERCADO_AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000,
+		),
+		limit: Number(process.env.MERCADO_AUTH_RATE_LIMIT_MAX || 120),
+		standardHeaders: true,
+		legacyHeaders: false,
+		message: { error: "Muitas tentativas. Tente novamente mais tarde." },
+	});
+	router.use(
+		["/login", "/resend-verification", "/password-recovery", "/password-reset"],
+		publicAuthLimiter,
+	);
 	router.post("/register", async (req,res,next) => { try { res.status(201).json(await registration.register(req.body || {}, { appUrl: marketPublicUrl() })); } catch(error) { next(error); } });
 	router.post("/verify-email", async (req,res,next) => { try { res.json(await registration.verifyEmail(String(req.body?.token || ""))); } catch(error) { next(error); } });
 	router.post("/resend-verification", async (req, res, next) => { try {
 		const email = String(req.body?.email || "").trim().toLowerCase(); const key = `verify:${req.ip}:${email}`;
 		if ((attempts.get(key) || 0) >= 4) return res.status(429).json({ error: "Tente novamente mais tarde." });
-		attempts.set(key, (attempts.get(key) || 0) + 1);
+		attempts.increment(key);
 		const account = (await db.query("select id,email,display_name,prestador_id,email_verified_at from mercado_accounts where lower(email)=lower($1) and not disabled limit 1", [email])).rows[0];
 		if (account?.prestador_id && !account.email_verified_at) await registration.createVerification(account, marketPublicUrl());
 		res.status(202).json({ ok: true, message: "Se houver uma conta pendente, enviaremos um novo link." });
@@ -52,7 +74,7 @@ function createMercadoAuthRouter() {
 			const result = await db.query("select id,email,display_name,password_hash,disabled,locked_until,prestador_id,email_verified_at from mercado_accounts where lower(email)=lower($1) limit 1", [email]);
 			const account = result.rows[0];
 			const valid = account && !account.disabled && (!account.locked_until || new Date(account.locked_until) < new Date()) && await argon2.verify(account.password_hash, String(req.body?.password || ""));
-			if (!valid) { attempts.set(key, (attempts.get(key) || 0) + 1); return res.status(401).json({ error: "E-mail ou senha invalidos." }); }
+			if (!valid) { attempts.increment(key); return res.status(401).json({ error: "E-mail ou senha invalidos." }); }
 			if (account.prestador_id && !account.email_verified_at) return res.status(403).json({ error: "Confirme seu e-mail antes de acessar o Mercado." });
 			attempts.delete(key);
 			const raw = crypto.randomBytes(32).toString("base64url");
@@ -108,4 +130,9 @@ function createMercadoAuthRouter() {
 	});
 	return router;
 }
-module.exports = { createMercadoAuthRouter, requireMercadoAuth, current };
+module.exports = {
+	createAttemptTracker,
+	createMercadoAuthRouter,
+	requireMercadoAuth,
+	current,
+};
