@@ -1,5 +1,6 @@
 import {
 	BarChart3,
+	ArrowRightLeft,
 	BellRing,
 	CalendarClock,
 	ChevronDown,
@@ -46,6 +47,7 @@ import {
 	corrigirContatoTentativa,
 	iniciarContatoTentativa,
 	listarCidadesTecnicosTentativas,
+	listarBairrosResponsaveisTentativas,
 	listarCidadesTentativas,
 	listarLocalidadesTentativas,
 	listarTemplatesTentativas,
@@ -55,6 +57,7 @@ import {
 	salvarConfiguracoesTentativas,
 	salvarResultadoTentativa,
 	salvarTemplateTentativas,
+	transferirBairroTentativas,
 } from "../services/tentativasService";
 import {
 	AuditPanel,
@@ -1025,6 +1028,13 @@ function DistributionTab() {
 	const [associatedPage, setAssociatedPage] = useState(1);
 	const [loading, setLoading] = useState(true);
 	const [message, setMessage] = useState("");
+	const [distributionError, setDistributionError] = useState("");
+	const [neighborhoodCity, setNeighborhoodCity] = useState("");
+	const [neighborhoodData, setNeighborhoodData] = useState({ items: [], technicians: [] });
+	const [neighborhoodLoading, setNeighborhoodLoading] = useState(false);
+	const [transferItem, setTransferItem] = useState(null);
+	const [targetTechnicianId, setTargetTechnicianId] = useState("");
+	const [transferring, setTransferring] = useState(false);
 	const [form, setForm] = useState({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
 	const load = async () => {
 		const [distribution, cityLinks] = await Promise.all([
@@ -1065,6 +1075,42 @@ function DistributionTab() {
 		await load();
 		setMessage(`Cidade associada e bairros redistribuídos com segurança. ${formatNumber(saved?.distribution?.neighborhoods || 0)} bairro(s) e ${formatNumber(saved?.distribution?.opportunities || 0)} oportunidade(s) organizados.`);
 	};
+	const loadNeighborhoods = useCallback(async (cidade) => {
+		setNeighborhoodCity(cidade);
+		setNeighborhoodData({ items: [], technicians: [] });
+		setDistributionError("");
+		if (!cidade) return;
+		setNeighborhoodLoading(true);
+		try {
+			const data = await listarBairrosResponsaveisTentativas(cidade);
+			setNeighborhoodData(data || { items: [], technicians: [] });
+		} catch (error) {
+			setDistributionError(error?.message || "Não foi possível carregar os bairros.");
+		} finally {
+			setNeighborhoodLoading(false);
+		}
+	}, []);
+	const confirmTransfer = async () => {
+		if (!transferItem || !targetTechnicianId) return;
+		setTransferring(true);
+		setMessage("");
+		setDistributionError("");
+		try {
+			const result = await transferirBairroTentativas({
+				cidade: neighborhoodCity,
+				bairroGrupo: transferItem.groupKey,
+				technicianUserId: targetTechnicianId,
+			});
+			setTransferItem(null);
+			setTargetTechnicianId("");
+			await Promise.all([load(), loadNeighborhoods(neighborhoodCity)]);
+			setMessage(`${transferItem.bairro} transferido para ${result.technicianName}.`);
+		} catch (error) {
+			setDistributionError(error?.message || "Não foi possível transferir o bairro.");
+		} finally {
+			setTransferring(false);
+		}
+	};
 	const associatedSearchTerm = normalizeSearch(associatedSearch);
 	const filteredAssociatedCities = associatedSearchTerm
 		? cities.filter((item) =>
@@ -1084,6 +1130,7 @@ function DistributionTab() {
 	return (
 		<div className="space-y-4">
 			{message ? <div className="rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{message}</div> : null}
+			{distributionError ? <div className="rounded-2xl bg-red-50 p-4 font-bold text-red-700">{distributionError}</div> : null}
 			<div className="grid gap-4 xl:grid-cols-[1fr_440px]">
 				<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 					<div className="flex flex-col gap-1">
@@ -1159,6 +1206,45 @@ function DistributionTab() {
 			</div>
 
 			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<p className="text-xs font-black uppercase tracking-[0.14em] text-blue-700">Responsabilidade por bairro</p>
+						<h2 className="mt-1 text-2xl font-black text-slate-950">Transferir bairros entre técnicos</h2>
+						<p className="mt-1 text-sm font-semibold text-slate-500">Selecione a cidade para conferir o responsável atual de cada bairro.</p>
+					</div>
+					<div className="w-full lg:max-w-md">
+						<CityDropdown
+							cities={availableCities}
+							value={neighborhoodCity}
+							onChange={(cidade) => void loadNeighborhoods(cidade)}
+							label="Cidade"
+							helper="A transferência mantém todos os clientes do bairro juntos."
+						/>
+					</div>
+				</div>
+				{neighborhoodLoading ? <div className="py-10"><Spinner /></div> : null}
+				{!neighborhoodLoading && neighborhoodCity ? (
+					<div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+						{neighborhoodData.items.map((item) => (
+							<article key={item.groupKey} className="flex min-h-40 flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50 p-4">
+								<div>
+									<div className="flex items-start justify-between gap-3">
+										<div className="min-w-0"><strong className="block truncate text-slate-950">{item.bairro}</strong><span className="mt-1 block text-xs font-black uppercase tracking-[0.08em] text-blue-700">{item.manual ? "Atribuição manual" : "Distribuição automática"}</span></div>
+										<span className="rounded-xl bg-white px-2 py-1 text-xs font-black text-slate-700">{formatNumber(item.opportunities)} O.S</span>
+									</div>
+									<p className="mt-4 text-xs font-black uppercase tracking-[0.08em] text-slate-400">Responsável atual</p>
+									<p className="mt-1 truncate font-black text-slate-800">{item.technicianName || "Sem técnico"}</p>
+									<p className="mt-1 text-xs font-bold text-slate-500">{formatNumber(item.pending)} pendentes · {formatNumber(item.worked)} trabalhadas</p>
+								</div>
+								<button type="button" onClick={() => { setTransferItem(item); setTargetTechnicianId(""); }} className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 font-black text-blue-700 hover:bg-blue-50"><ArrowRightLeft className="h-4 w-4" />Transferir</button>
+							</article>
+						))}
+						{!neighborhoodData.items.length ? <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center font-bold text-slate-500 md:col-span-2 xl:col-span-3">Nenhum bairro distribuído nesta cidade.</div> : null}
+					</div>
+				) : null}
+			</section>
+
+			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<h2 className="text-lg font-black text-slate-950">Cidades associadas</h2>
@@ -1213,6 +1299,15 @@ function DistributionTab() {
 					/>
 				</div>
 			</section>
+			{transferItem ? (
+				<ModalShell title="Transferir responsabilidade" description={`${transferItem.bairro} · ${neighborhoodCity}`} size="md" onClose={() => { setTransferItem(null); setTargetTechnicianId(""); }} footer={<div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setTransferItem(null)} className="rounded-xl border px-4 py-3 font-black">Cancelar</button><button type="button" onClick={() => void confirmTransfer()} disabled={!targetTechnicianId || transferring} className="rounded-xl bg-blue-600 px-5 py-3 font-black text-white disabled:opacity-50">{transferring ? "Transferindo..." : "Confirmar transferência"}</button></div>}>
+					<div className="grid gap-4">
+						<div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs font-black uppercase tracking-[0.1em] text-slate-500">Responsável atual</p><strong className="mt-1 block text-slate-950">{transferItem.technicianName || "Sem técnico"}</strong><p className="mt-2 text-sm font-semibold text-slate-500">{formatNumber(transferItem.opportunities)} oportunidades serão transferidas juntas.</p></div>
+						<label className="grid gap-2 text-sm font-black text-slate-700">Novo técnico<select value={targetTechnicianId} onChange={(event) => setTargetTechnicianId(event.target.value)} className="min-h-12 rounded-xl border border-slate-200 bg-white px-3"><option value="">Selecione o técnico</option>{neighborhoodData.technicians.filter((technician) => technician.userId !== transferItem.technicianUserId).map((technician) => <option key={technician.userId} value={technician.userId}>{technician.userName}</option>)}</select></label>
+						<p className="text-sm font-semibold text-slate-500">A alteração é registrada no histórico e permanece válida nas próximas sincronizações.</p>
+					</div>
+				</ModalShell>
+			) : null}
 		</div>
 	);
 }

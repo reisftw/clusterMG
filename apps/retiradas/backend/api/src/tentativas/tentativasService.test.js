@@ -48,6 +48,20 @@ test("mantem bairro ja trabalhado com o tecnico que realizou o contato", () => {
 	assert.equal(preserved.preserved, true);
 });
 
+test("transferencia manual prevalece sobre o historico de contato", () => {
+	const plan = buildNeighborhoodDistributionPlan(
+		[{ group_key: "centro", bairro: "Centro", opportunities: 18 }],
+		technicians,
+		[
+			{ group_key: "centro", technician_user_id: "tech-a", preference_source: "CONTACT_HISTORY" },
+			{ group_key: "centro", technician_user_id: "tech-b", preference_source: "MANUAL" },
+		],
+	);
+
+	assert.equal(plan[0].user_id, "tech-b");
+	assert.equal(plan[0].assignment_source, "MANUAL");
+});
+
 test("ao restar um tecnico ele recebe todos os bairros da cidade", () => {
 	const plan = buildNeighborhoodDistributionPlan(
 		[

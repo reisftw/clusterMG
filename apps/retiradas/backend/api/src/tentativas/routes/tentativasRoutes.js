@@ -429,6 +429,33 @@ function createTentativasRouter({
 	);
 
 	router.get(
+		"/admin/bairros",
+		requireAuthenticated,
+		requireDistribution,
+		async (req, res, next) => {
+			try {
+				res.json(await service.listNeighborhoodAssignments(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.post(
+		"/admin/bairros/transferir",
+		requireAuthenticated,
+		requireCsrfToken,
+		requirePortfolio,
+		async (req, res, next) => {
+			try {
+				res.json(await service.transferNeighborhood(req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	router.get(
 		"/admin/usuarios",
 		requireAuthenticated,
 		requireDistribution,

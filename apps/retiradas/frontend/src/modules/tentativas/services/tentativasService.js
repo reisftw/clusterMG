@@ -172,6 +172,17 @@ export function listarCidadesTecnicosTentativas() {
 	return requestVpsApi("/tentativas/admin/cidades-tecnicos");
 }
 
+export function listarBairrosResponsaveisTentativas(cidade) {
+	return requestVpsApi(`/tentativas/admin/bairros${qs({ cidade })}`);
+}
+
+export function transferirBairroTentativas(payload = {}) {
+	return requestVpsApi("/tentativas/admin/bairros/transferir", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
 export function buscarUsuariosTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/admin/usuarios${qs(params)}`);
 }
