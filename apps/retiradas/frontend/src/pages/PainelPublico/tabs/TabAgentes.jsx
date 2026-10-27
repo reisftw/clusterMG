@@ -265,13 +265,14 @@ function getCityStatus(cidade) {
 }
 
 function getFilteredSummary(cidades = [], fallback = {}) {
+	const safeFallback = fallback && typeof fallback === "object" ? fallback : {};
 	if (!cidades.length) {
 		return {
-			totalRealizado: Number(fallback.totalRealizado || 0),
-			totalMeta: Number(fallback.totalMeta || 0),
-			totalCancelamentos: Number(fallback.totalCancelamentos || 0),
-			totalFalta: Number(fallback.totalFalta || 0),
-			percentAchieved: Number(fallback.percentAchieved || 0),
+			totalRealizado: Number(safeFallback.totalRealizado || 0),
+			totalMeta: Number(safeFallback.totalMeta || 0),
+			totalCancelamentos: Number(safeFallback.totalCancelamentos || 0),
+			totalFalta: Number(safeFallback.totalFalta || 0),
+			percentAchieved: Number(safeFallback.percentAchieved || 0),
 		};
 	}
 
