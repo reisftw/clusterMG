@@ -117,6 +117,7 @@ const Relatorios = lazy(
 	() => import("../modules/relatorios/components/RelatoriosPage"),
 );
 const Mapa = lazy(() => import("../pages/Mapa/MapaPage"));
+const Maps = lazy(() => import("../modules/maps/pages/MapsPage"));
 const MapaHistorico = lazy(() => import("../pages/Mapa/MapaHistoricoPage"));
 const MapasAtualizacoes = lazy(
 	() => import("../modules/mapas/components/MapasAtualizacoesPage"),
@@ -755,6 +756,14 @@ const AppRouter = () => (
 									requiredPermission={["view_mapa", "destaque.mapa_os.view"]}
 								>
 									<Mapa />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.MAPS}
+							element={
+								<ProtectedRoute requiredPermission="retiradas.maps.v2.access">
+									<Maps />
 								</ProtectedRoute>
 							}
 						/>

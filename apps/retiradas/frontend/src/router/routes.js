@@ -91,6 +91,7 @@ export const ROUTES = {
 	RELATORIOS: "/relatorios",
 	FERRAMENTAS: "/ferramentas",
 	MAPA: "/mapa",
+	MAPS: "/maps",
 	MAPA_HISTORICO: "/mapa/historico",
 	MAPAS_ATUALIZACOES: "/mapas/atualizacoes",
 	MERCADO: "/mercado",

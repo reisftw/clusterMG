@@ -1,0 +1,12 @@
+.maps-v2-canvas-loading {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 9px;
+	background: #edf4f8;
+	color: #52627a;
+	font-size: 12px;
+	font-weight: 800;
+}

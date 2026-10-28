@@ -59,6 +59,7 @@ const createMercadoOnboardingRouter = require("./mercado/onboardingRoutes");
 const metrics = require("./metrics");
 const maintenanceService = require("./maintenanceService");
 const createMaintenanceRouter = require("./maintenance/routes/maintenanceRoutes");
+const createMapsV2Router = require("./mapsV2/routes/mapsV2Routes");
 const vpnAccess = require("./vpnAccess");
 const createNotificationsRouter = require("./notifications/routes/notificationsRoutes");
 const createPushNotificationsRouter = require("./pushNotifications/routes/pushNotificationsRoutes");
@@ -2401,7 +2402,24 @@ function createApp() {
 	});
 
 	app.set("trust proxy", "loopback");
-	app.use(helmet());
+	const mapsCspOrigins = String(
+		process.env.MAPS_CSP_ORIGINS ||
+			"https://tiles.openfreemap.org https://*.openfreemap.org",
+	)
+		.split(/\s+/)
+		.map((item) => item.trim())
+		.filter(Boolean);
+	app.use(
+		helmet({
+			contentSecurityPolicy: {
+				directives: {
+					connectSrc: ["'self'", ...mapsCspOrigins],
+					imgSrc: ["'self'", "data:", "blob:", ...mapsCspOrigins],
+					workerSrc: ["'self'", "blob:"],
+				},
+			},
+		}),
+	);
 	app.use((req, res, next) => {
 		const origin = req.get("origin");
 		if (origin && !isAllowedOrigin(allowedOrigins, origin)) {
@@ -2901,6 +2919,16 @@ function createApp() {
 	app.use(
 		"/api/tentativas",
 		createTentativasRouter({
+			fallbackRoles: ADMIN_ROLES,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/maps",
+		createMapsV2Router({
 			fallbackRoles: ADMIN_ROLES,
 			requireAnyPermission,
 			requireAuthenticated,

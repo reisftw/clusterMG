@@ -31,6 +31,7 @@ const PAGE_TITLES = {
 	[ROUTES.TECNICOS_AUDITORIA_RELATORIOS]: "Relatórios de Bolsa Técnico",
 	[ROUTES.ESTOQUE_CONSULTA]: "Consulta de Estoque",
 	[ROUTES.MAPA]: "Mapa O.S",
+	[ROUTES.MAPS]: "Retiradas Maps",
 	[ROUTES.MAPA_HISTORICO]: "Histórico do Mapa",
 	[ROUTES.COLABORADORES]: "Colaboradores",
 	[ROUTES.FERIAS]: "Gestão de Férias",

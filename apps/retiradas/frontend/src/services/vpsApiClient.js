@@ -56,7 +56,7 @@ function wait(ms) {
 
 function isRetryableRequest(options = {}, response = null, error = null) {
 	if (isUnsafeMethod(options.method)) return false;
-	if (error) return true;
+	if (error) return error?.name !== "AbortError";
 	return response ? RETRYABLE_STATUS_CODES.has(response.status) : false;
 }
 
