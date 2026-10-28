@@ -879,6 +879,13 @@ function finesPayload({ date, startDate, endDate }) {
 	};
 }
 
+function finesSchedulerOptions(date) {
+	return {
+		date,
+		skipFineFinanceEnrichment: true,
+	};
+}
+
 async function collectPaginated(
 	session,
 	{ path, payload, pageMode = "query", onProgress, maxPages = 500 },
@@ -3293,41 +3300,22 @@ async function runSchedulerTick() {
 		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: new Date().toISOString() });
 	}
 
-	const finesBackfillYear = now.date.slice(0, 4);
-	const finesBackfillPending =
-		String(rawConfig.autoFinesBackfillYear || "") !== finesBackfillYear;
 	if (
 		config.autoSyncEnabled &&
 		config.autoFinesEnabled &&
-		(finesBackfillPending ||
-			minutesSince(rawConfig.autoFinesLastRunAt) >=
-				config.autoFinesIntervalMinutes)
+		minutesSince(rawConfig.autoFinesLastRunAt) >=
+			config.autoFinesIntervalMinutes
 	) {
 		const result = await runProfileSafely(
 			PROFILE.MULTAS,
-			finesBackfillPending
-				? {
-						startDate: `${finesBackfillYear}-01-01`,
-						endDate: now.date,
-						skipFineFinanceEnrichment: true,
-					}
-				: {
-						date: now.date,
-						skipFineFinanceEnrichment: true,
-					},
+			finesSchedulerOptions(now.date),
 		);
 		results.push({ profile: PROFILE.MULTAS, result });
 		if (succeeded(result)) {
-			const patch = {
+			await saveSchedulerState({
 				autoFinesLastRunDate: now.date,
 				autoFinesLastRunAt: new Date().toISOString(),
-			};
-			if (finesBackfillPending) {
-				patch.autoFinesBackfillYear = finesBackfillYear;
-				patch.autoFinesBackfillThrough = now.date;
-				patch.autoFinesBackfillAt = new Date().toISOString();
-			}
-			await saveSchedulerState(patch);
+			});
 		}
 	}
 
@@ -3509,6 +3497,7 @@ module.exports = {
 	__testables: {
 		extractFineRegistrationDate,
 		finesPayload,
+		finesSchedulerOptions,
 		normalizeAutomationConfig,
 	},
 };

@@ -118,6 +118,16 @@ describe("hubsoft fines automation", () => {
 		});
 	});
 
+	it("limita a rotina horaria de multas ao dia atual", () => {
+		const options = __testables.finesSchedulerOptions("2026-10-28");
+		expect(options).toEqual({
+			date: "2026-10-28",
+			skipFineFinanceEnrichment: true,
+		});
+		expect(options).not.toHaveProperty("startDate");
+		expect(options).not.toHaveProperty("endDate");
+	});
+
 	it("prioriza a data de cadastro da multa", () => {
 		expect(
 			__testables.extractFineRegistrationDate({
