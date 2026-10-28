@@ -201,3 +201,33 @@ describe("operationalImports fine daily groups", () => {
 		]);
 	});
 });
+
+describe("operationalImports diario fine preservation", () => {
+	afterEach(() => {
+		clearModules();
+		vi.restoreAllMocks();
+	});
+
+	it("preserva multas sincronizadas ao atualizar a producao diaria", () => {
+		const { buildDiarioEntryFromSaldoDay } = loadOperationalImports();
+		const entry = buildDiarioEntryFromSaldoDay({
+			dateKey: "2026-10-27",
+			row: { totalDia: 120, multas: 0 },
+			nowIso: "2026-10-28T13:00:00.000Z",
+			existing: {
+				fines: 42,
+				fineSource: "hubsoft-multas-data-cadastro",
+				fineUpdatedAt: "2026-10-28T12:41:52.332Z",
+				fineRecordIds: ["1", "2"],
+			},
+		});
+
+		expect(entry).toMatchObject({
+			deliveredTotal: 120,
+			fines: 42,
+			fineSource: "hubsoft-multas-data-cadastro",
+			fineUpdatedAt: "2026-10-28T12:41:52.332Z",
+			fineRecordIds: ["1", "2"],
+		});
+	});
+});
