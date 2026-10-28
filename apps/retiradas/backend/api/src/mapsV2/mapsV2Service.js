@@ -44,6 +44,7 @@ const ALERT_HYSTERESIS_METERS = 100;
 const MAX_ALERTS_PER_HOUR = 5;
 const NATIVE_COORDINATES_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const GEOCODE_QUEUE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/search";
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -65,6 +66,10 @@ function apiError(message, statusCode = 400, code = "MAPS_ERROR") {
 
 function featureEnabled() {
 	return String(process.env.RETIRADAS_MAPS_V2_ENABLED || "true").toLowerCase() !== "false";
+}
+
+function geocoderUrl() {
+	return text(process.env.MAPS_GEOCODER_URL) || DEFAULT_GEOCODER_URL;
 }
 
 function userProfile(user = {}) {
@@ -139,6 +144,13 @@ function numberInRange(value, min, max, fallback = null) {
 	return parsed;
 }
 
+function usableOrderCoordinates(latitudeValue, longitudeValue) {
+	const latitude = Number(latitudeValue);
+	const longitude = Number(longitudeValue);
+	return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+		latitude >= -34 && latitude <= 6 && longitude >= -74 && longitude <= -33;
+}
+
 function parseCoordinates(input = {}) {
 	const latitude = numberInRange(input.latitude ?? input.lat, -90, 90);
 	const longitude = numberInRange(input.longitude ?? input.lng, -180, 180);
@@ -211,8 +223,7 @@ function mapPoint(row, user, { origin = null } = {}) {
 	const scheduled = /AGEND/i.test(text(row.status));
 	const parsedLatitude = Number(row.latitude);
 	const parsedLongitude = Number(row.longitude);
-	const locationAvailable = Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude) &&
-		Math.abs(parsedLatitude) > 0.000001 && Math.abs(parsedLongitude) > 0.000001;
+	const locationAvailable = usableOrderCoordinates(parsedLatitude, parsedLongitude);
 	const exact = {
 		latitude: locationAvailable ? parsedLatitude : null,
 		longitude: locationAvailable ? parsedLongitude : null,
@@ -281,8 +292,7 @@ async function syncNativeCoordinates({ force = false } = {}) {
 		 select id, latitude, longitude, 'SOURCE', 'EXACT', now(), now()
 		   from ordens_servico
 		  where latitude is not null and longitude is not null
-		    and latitude between -90 and 90 and longitude between -180 and 180
-		    and abs(latitude) > 0.000001 and abs(longitude) > 0.000001
+		    and latitude between -34 and 6 and longitude between -74 and -33
 		 on conflict (order_id) do update set
 		   latitude = excluded.latitude,
 		   longitude = excluded.longitude,
@@ -316,13 +326,8 @@ function sourceFilters({ query = {}, user = {}, params = [] } = {}) {
 	if (viewport) {
 		params.push(viewport.minLat, viewport.maxLat, viewport.minLng, viewport.maxLng);
 		clauses.push(`(
-		  l.order_id is null
-		  or abs(coalesce(l.latitude, 0)) <= 0.000001
-		  or abs(coalesce(l.longitude, 0)) <= 0.000001
-		  or (
-		    l.latitude between $${params.length - 3} and $${params.length - 2}
-		    and l.longitude between $${params.length - 1} and $${params.length}
-		  )
+		  l.latitude between $${params.length - 3} and $${params.length - 2}
+		  and l.longitude between $${params.length - 1} and $${params.length}
 		)`);
 	}
 	if (text(query.city)) {
@@ -346,7 +351,8 @@ async function queryCandidateRows(query = {}, user = {}, limit = MAX_POINTS) {
 	const { clauses, viewport } = sourceFilters({ query, user, params });
 	params.push(Math.min(Math.max(Number(limit || MAX_POINTS), 1), MAX_POINTS));
 	const result = await db.query(
-		`select distinct on (o.num_os)
+		`select * from (
+		 select distinct on (o.num_os)
 		        o.id, o.num_os, o.codigo_cliente, o.nome_cliente, o.empresa,
 		        o.tipo, o.status, o.tecnico, o.cidade, o.regional, o.endereco,
 		        o.endereco_resumo, o.bairro, o.numero, o.data_abertura,
@@ -359,6 +365,11 @@ async function queryCandidateRows(query = {}, user = {}, limit = MAX_POINTS) {
 		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION')
 		  where ${clauses.join(" and ")}
 		  order by o.num_os, o.updated_at desc
+		 ) candidate
+		 order by
+		   case when latitude between -34 and 6 and longitude between -74 and -33 then 0 else 1 end,
+		   data_abertura desc nulls last,
+		   updated_at desc
 		  limit $${params.length}`,
 		params,
 	);
@@ -902,7 +913,12 @@ async function queueMissingGeocodes(limit = 200) {
 		  where o.source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')
 		    and upper(coalesce(o.tipo, '')) = any($2::text[])
 		    and upper(coalesce(o.status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'
-		    and location.order_id is null and job.order_id is null
+		    and (
+		      location.order_id is null
+		      or location.latitude not between -34 and 6
+		      or location.longitude not between -74 and -33
+		    )
+		    and job.order_id is null
 		    and nullif(trim(o.endereco), '') is not null
 		    and nullif(trim(o.cidade), '') is not null
 		  order by o.data_abertura desc nulls last
@@ -923,12 +939,31 @@ async function queueMissingGeocodes(limit = 200) {
 			[row.id, hash],
 		);
 	}
+	await db.query(
+		`insert into maps_order_locations
+		 (order_id, latitude, longitude, coordinate_source, accuracy_level, address_hash, validated_at)
+		 select job.order_id, cache.latitude, cache.longitude, 'GEOCODER', cache.accuracy_level,
+		        cache.address_hash, now()
+		   from maps_geocode_jobs job
+		   join maps_geocode_cache cache on cache.address_hash = job.address_hash
+		  where job.status = 'PENDING' and cache.status = 'RESOLVED'
+		 on conflict (order_id) do update set latitude = excluded.latitude,
+		   longitude = excluded.longitude, coordinate_source = excluded.coordinate_source,
+		   accuracy_level = excluded.accuracy_level, address_hash = excluded.address_hash,
+		   validated_at = excluded.validated_at, last_seen_at = now(), updated_at = now()`,
+	);
+	await db.query(
+		`update maps_geocode_jobs job
+		    set status = 'RESOLVED', updated_at = now()
+		   from maps_geocode_cache cache
+		  where cache.address_hash = job.address_hash
+		    and cache.status = 'RESOLVED' and job.status = 'PENDING'`,
+	);
 	return { queued: result.rows.length };
 }
 
 async function processNextGeocode() {
-	const providerUrl = text(process.env.MAPS_GEOCODER_URL);
-	if (!providerUrl) return { processed: false, reason: "provider_not_configured" };
+	const providerUrl = geocoderUrl();
 	const result = await db.query(
 		`select cache.address_hash, cache.normalized_address
 		   from maps_geocode_cache cache
@@ -952,7 +987,7 @@ async function processNextGeocode() {
 		const match = Array.isArray(data) ? data[0] : data?.items?.[0];
 		const latitude = numberInRange(match?.lat ?? match?.latitude, -90, 90);
 		const longitude = numberInRange(match?.lon ?? match?.longitude, -180, 180);
-		if (latitude === null || longitude === null) {
+		if (latitude === null || longitude === null || !usableOrderCoordinates(latitude, longitude)) {
 			await db.query(
 				`update maps_geocode_cache set status = 'NOT_FOUND', attempt_count = attempt_count + 1,
 				 updated_at = now(), resolved_at = now() where address_hash = $1`,
@@ -997,7 +1032,7 @@ async function processNextGeocode() {
 let workerTimer = null;
 let geocodeQueueLastRefreshAt = 0;
 function initializeGeocoderWorker() {
-	if (workerTimer || !featureEnabled() || !text(process.env.MAPS_GEOCODER_URL)) return;
+	if (workerTimer || !featureEnabled()) return;
 	const intervalMs = Math.max(Number(process.env.MAPS_GEOCODER_INTERVAL_MS || 1500), 1100);
 	workerTimer = setInterval(async () => {
 		try {
@@ -1024,7 +1059,7 @@ async function getHealth() {
 	return {
 		ok: true,
 		enabled: featureEnabled(),
-		geocoderConfigured: Boolean(text(process.env.MAPS_GEOCODER_URL)),
+		geocoderConfigured: Boolean(geocoderUrl()),
 		mapStyleConfigured: Boolean(text(process.env.MAPS_STYLE_URL)),
 		...tables.rows[0],
 	};

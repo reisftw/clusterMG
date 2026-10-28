@@ -8,13 +8,22 @@ import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const DEFAULT_CENTER = [-18.8, -44.1];
+const DEFAULT_ZOOM = 6;
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const MINAS_BOUNDS = L.latLngBounds([-23.1, -51.2], [-14, -39.5]);
 
 function validPoint(point) {
 	const latitude = Number(point?.latitude);
 	const longitude = Number(point?.longitude);
 	return Number.isFinite(latitude) && Number.isFinite(longitude) &&
 		Math.abs(latitude) > 0.000001 && Math.abs(longitude) > 0.000001;
+}
+
+function validOrderPoint(point) {
+	if (!validPoint(point)) return false;
+	const latitude = Number(point.latitude);
+	const longitude = Number(point.longitude);
+	return latitude >= -34 && latitude <= 6 && longitude >= -74 && longitude <= -33;
 }
 
 function pointIcon(point) {
@@ -43,6 +52,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 	const mapRef = useRef(null);
 	const clusterRef = useRef(null);
 	const userLayerRef = useRef(null);
+	const initialFrameAppliedRef = useRef(false);
 	const callbacksRef = useRef({ onViewportChange, onSelect, onError });
 
 	useEffect(() => {
@@ -57,7 +67,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 				zoomControl: false,
 				attributionControl: false,
 				preferCanvas: true,
-			}).setView(DEFAULT_CENTER, 6);
+			}).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 			mapRef.current = map;
 			L.control.zoom({ position: "topright" }).addTo(map);
 			L.control.attribution({ position: "bottomright", prefix: false })
@@ -123,10 +133,13 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 
 	useEffect(() => {
 		const cluster = clusterRef.current;
-		if (!cluster) return;
+		const map = mapRef.current;
+		if (!cluster || !map) return;
 		cluster.clearLayers();
+		const validCoordinates = [];
 		for (const point of points || []) {
-			if (!validPoint(point)) continue;
+			if (!validOrderPoint(point)) continue;
+			validCoordinates.push([Number(point.latitude), Number(point.longitude)]);
 			const marker = L.marker(
 				[Number(point.latitude), Number(point.longitude)],
 				{ icon: pointIcon(point), title: pointLabel(point), riseOnHover: true },
@@ -134,6 +147,23 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 			marker.bindTooltip(pointLabel(point), { direction: "top" });
 			marker.on("click", () => callbacksRef.current.onSelect?.(point.id));
 			cluster.addLayer(marker);
+		}
+		if (!initialFrameAppliedRef.current && (points || []).length > 0) {
+			initialFrameAppliedRef.current = true;
+			const minasCoordinates = validCoordinates.filter((coordinate) => MINAS_BOUNDS.contains(coordinate));
+			const frameCoordinates = minasCoordinates.length ? minasCoordinates : validCoordinates;
+			if (frameCoordinates.length === 1) {
+				map.setView(frameCoordinates[0], 14, { animate: false });
+			} else if (frameCoordinates.length > 1) {
+				map.fitBounds(L.latLngBounds(frameCoordinates), {
+					padding: [36, 36],
+					maxZoom: 13,
+					animate: false,
+				});
+			} else {
+				map.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: false });
+			}
+			window.setTimeout(() => map.invalidateSize({ pan: false }), 0);
 		}
 	}, [points]);
 

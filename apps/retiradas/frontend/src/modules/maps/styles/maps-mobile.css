@@ -137,7 +137,7 @@
 	position: absolute;
 	top: 12px;
 	left: 64px;
-	z-index: 6;
+	z-index: 30;
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -228,4 +228,18 @@
 	.maps-v2-sheet-summary > div {
 		min-width: 0;
 	}
+}
+
+/* Keep Leaflet's internal panes behind the application controls and sheets. */
+.maps-v2-canvas {
+	z-index: 0;
+}
+
+.maps-v2-map-actions,
+.maps-v2-sheet {
+	z-index: 20;
+}
+
+.maps-v2-error {
+	z-index: 30;
 }

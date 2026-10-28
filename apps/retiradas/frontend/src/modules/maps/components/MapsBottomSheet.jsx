@@ -1,6 +1,7 @@
 import { CalendarClock, ChevronUp, MapPin, PackageCheck, Route, Target } from "lucide-react";
 
 function distanceLabel(value) {
+	if (value === null || value === undefined || value === "") return "Distancia indisponivel";
 	const meters = Number(value);
 	if (!Number.isFinite(meters)) return "Distancia indisponivel";
 	if (meters < 1000) return `${Math.round(meters)} m`;
