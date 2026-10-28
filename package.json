@@ -51,6 +51,8 @@
 		"exceljs": "3.10.0",
 		"jspdf": "^4.2.1",
 		"jspdf-autotable": "^5.0.7",
+		"leaflet": "^1.9.4",
+		"leaflet.markercluster": "^1.5.3",
 		"lucide-react": "^0.577.0",
 		"maplibre-gl": "^6.16.0",
 		"qrcode": "^1.5.4",

@@ -153,6 +153,50 @@
 	font-weight: 800;
 }
 
+.maps-v2-property-marker {
+	border: 0;
+	background: transparent;
+}
+
+.maps-v2-property-marker > span {
+	display: grid;
+	width: 34px;
+	height: 34px;
+	place-items: center;
+	transform: rotate(-45deg);
+	border: 3px solid #fff;
+	border-radius: 50% 50% 50% 8px;
+	background: #0877e8;
+	box-shadow: 0 5px 13px rgba(15, 39, 72, 0.32);
+	color: #fff;
+}
+
+.maps-v2-property-marker svg {
+	transform: rotate(45deg);
+}
+
+.maps-v2-property-marker.is-assigned > span {
+	background: #109765;
+}
+
+.maps-v2-property-marker.is-scheduled > span {
+	background: #e8a900;
+}
+
+.maps-v2-canvas .marker-cluster-small div,
+.maps-v2-canvas .marker-cluster-medium div,
+.maps-v2-canvas .marker-cluster-large div {
+	background: #0877e8;
+	color: #fff;
+	font-weight: 850;
+}
+
+.maps-v2-canvas .marker-cluster-small,
+.maps-v2-canvas .marker-cluster-medium,
+.maps-v2-canvas .marker-cluster-large {
+	background: rgba(8, 119, 232, 0.28);
+}
+
 @media (max-width: 900px) {
 	.maps-v2-location-notice {
 		top: 58px;

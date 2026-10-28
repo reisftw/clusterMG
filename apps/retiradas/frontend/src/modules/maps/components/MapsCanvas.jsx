@@ -1,129 +1,48 @@
-import { AttributionControl, Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
-import mapLibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import { House } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
-setWorkerUrl(mapLibreWorkerUrl);
+const DEFAULT_CENTER = [-18.8, -44.1];
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
-const SOURCE_ID = "retiradas-maps-orders";
-const USER_SOURCE_ID = "retiradas-maps-user";
-const DEFAULT_CENTER = [-44.1, -18.8];
-const DEFAULT_STYLE = "https://tiles.openfreemap.org/styles/liberty";
-
-function featureCollection(points = []) {
-	return {
-		type: "FeatureCollection",
-		features: points.filter((point) => (
-			Number.isFinite(Number(point.latitude)) &&
-			Number.isFinite(Number(point.longitude)) &&
-			Math.abs(Number(point.latitude)) > 0.000001 &&
-			Math.abs(Number(point.longitude)) > 0.000001
-		)).map((point) => ({
-			type: "Feature",
-			geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
-			properties: {
-				id: point.id,
-				category: point.category,
-				scheduled: Boolean(point.scheduled),
-				orderNumber: point.orderNumber,
-				label: point.category === "opportunity" ? point.neighborhood : point.clientName || point.orderNumber,
-			},
-		})),
-	};
+function validPoint(point) {
+	const latitude = Number(point?.latitude);
+	const longitude = Number(point?.longitude);
+	return Number.isFinite(latitude) && Number.isFinite(longitude) &&
+		Math.abs(latitude) > 0.000001 && Math.abs(longitude) > 0.000001;
 }
 
-function userFeature(position) {
-	return {
-		type: "FeatureCollection",
-		features: position
-			? [{ type: "Feature", geometry: { type: "Point", coordinates: [position.longitude, position.latitude] }, properties: {} }]
-			: [],
-	};
+function pointIcon(point) {
+	const categoryClass = point?.scheduled
+		? "is-scheduled"
+		: point?.category === "assigned"
+			? "is-assigned"
+			: "is-opportunity";
+	return L.divIcon({
+		className: `maps-v2-property-marker ${categoryClass}`,
+		html: `<span>${renderToStaticMarkup(<House size={17} strokeWidth={2.5} />)}</span>`,
+		iconSize: [36, 42],
+		iconAnchor: [18, 40],
+		tooltipAnchor: [0, -37],
+	});
 }
 
-function installLayers(map, points) {
-	map.addSource(SOURCE_ID, {
-		type: "geojson",
-		data: featureCollection(points),
-		cluster: true,
-		clusterMaxZoom: 14,
-		clusterRadius: 48,
-	});
-	map.addLayer({
-		id: "maps-clusters",
-		type: "circle",
-		source: SOURCE_ID,
-		filter: ["has", "point_count"],
-		paint: {
-			"circle-color": "#0f5fd7",
-			"circle-radius": ["step", ["get", "point_count"], 20, 20, 26, 80, 32],
-			"circle-stroke-color": "#ffffff",
-			"circle-stroke-width": 3,
-		},
-	});
-	map.addLayer({
-		id: "maps-cluster-count",
-		type: "symbol",
-		source: SOURCE_ID,
-		filter: ["has", "point_count"],
-		layout: {
-			"text-field": ["get", "point_count_abbreviated"],
-			"text-font": ["Noto Sans Bold"],
-			"text-size": 13,
-		},
-		paint: { "text-color": "#ffffff" },
-	});
-	map.addLayer({
-		id: "maps-points",
-		type: "circle",
-		source: SOURCE_ID,
-		filter: ["!", ["has", "point_count"]],
-		paint: {
-			"circle-color": [
-				"case",
-				["==", ["get", "scheduled"], true], "#f5b800",
-				["==", ["get", "category"], "assigned"], "#16a36a",
-				["==", ["get", "category"], "opportunity"], "#0877e8",
-				"#78869a",
-			],
-			"circle-radius": 9,
-			"circle-stroke-color": "#ffffff",
-			"circle-stroke-width": 3,
-		},
-	});
-	map.addLayer({
-		id: "maps-point-labels",
-		type: "symbol",
-		source: SOURCE_ID,
-		filter: ["!", ["has", "point_count"]],
-		minzoom: 13,
-		layout: {
-			"text-field": ["get", "label"],
-			"text-font": ["Noto Sans Regular"],
-			"text-size": 11,
-			"text-offset": [0, 1.45],
-			"text-anchor": "top",
-		},
-		paint: { "text-color": "#0b1734", "text-halo-color": "#ffffff", "text-halo-width": 2 },
-	});
-	map.addSource(USER_SOURCE_ID, { type: "geojson", data: userFeature(null) });
-	map.addLayer({
-		id: "maps-user-position",
-		type: "circle",
-		source: USER_SOURCE_ID,
-		paint: {
-			"circle-color": "#1468ff",
-			"circle-radius": 8,
-			"circle-stroke-color": "#ffffff",
-			"circle-stroke-width": 4,
-		},
-	});
+function pointLabel(point) {
+	return point?.category === "opportunity"
+		? point?.neighborhood || point?.orderNumber || "Oportunidade"
+		: point?.clientName || point?.orderNumber || "Retirada";
 }
 
 export default function MapsCanvas({ points, userPosition, focusPoint, onViewportChange, onSelect, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
-	const pointsRef = useRef(points);
+	const clusterRef = useRef(null);
+	const userLayerRef = useRef(null);
 	const callbacksRef = useRef({ onViewportChange, onSelect, onError });
 
 	useEffect(() => {
@@ -131,68 +50,65 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 	}, [onViewportChange, onSelect, onError]);
 
 	useEffect(() => {
-		pointsRef.current = points;
-	}, [points]);
-
-	useEffect(() => {
 		if (!containerRef.current || mapRef.current) return undefined;
-		const map = new Map({
-			container: containerRef.current,
-			style: import.meta.env.VITE_MAPS_STYLE_URL || DEFAULT_STYLE,
-			center: DEFAULT_CENTER,
-			zoom: 6,
-			attributionControl: false,
-		});
-		mapRef.current = map;
-		let loaded = false;
+		let map;
+		try {
+			map = L.map(containerRef.current, {
+				zoomControl: false,
+				attributionControl: false,
+				preferCanvas: true,
+			}).setView(DEFAULT_CENTER, 6);
+			mapRef.current = map;
+			L.control.zoom({ position: "topright" }).addTo(map);
+			L.control.attribution({ position: "bottomright", prefix: false })
+				.addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>')
+				.addTo(map);
+			L.tileLayer(TILE_URL, {
+				maxZoom: 19,
+				crossOrigin: true,
+				updateWhenIdle: true,
+				keepBuffer: 2,
+			}).addTo(map);
+			clusterRef.current = L.markerClusterGroup({
+				showCoverageOnHover: false,
+				maxClusterRadius: 48,
+				spiderfyOnMaxZoom: true,
+				disableClusteringAtZoom: 17,
+			});
+			map.addLayer(clusterRef.current);
+		} catch (error) {
+			callbacksRef.current.onError?.(error?.message || "Nao foi possivel abrir o mapa.");
+			return undefined;
+		}
+
 		let userMovedMap = false;
-		map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
-		map.addControl(new AttributionControl({ compact: true }), "bottom-right");
-		map.on("load", () => {
-			loaded = true;
-			installLayers(map, pointsRef.current);
-			map.resize();
-		});
-		map.on("error", (event) => {
-			if (!loaded) callbacksRef.current.onError?.(event?.error?.message || "Nao foi possivel abrir o mapa.");
-		});
+		let viewportTimer = null;
 		map.on("movestart", (event) => {
 			if (event?.originalEvent) userMovedMap = true;
 		});
-		let viewportTimer = null;
 		map.on("moveend", () => {
 			if (!userMovedMap) return;
 			window.clearTimeout(viewportTimer);
 			viewportTimer = window.setTimeout(() => {
 				const bounds = map.getBounds();
 				callbacksRef.current.onViewportChange?.({
-					minLat: bounds.getSouth(), maxLat: bounds.getNorth(),
-					minLng: bounds.getWest(), maxLng: bounds.getEast(),
+					minLat: bounds.getSouth(),
+					maxLat: bounds.getNorth(),
+					minLng: bounds.getWest(),
+					maxLng: bounds.getEast(),
 				});
 			}, 350);
 		});
+
 		const resizeObserver = typeof ResizeObserver !== "undefined"
-			? new ResizeObserver(() => map.resize())
+			? new ResizeObserver(() => map.invalidateSize({ pan: false }))
 			: null;
 		resizeObserver?.observe(containerRef.current);
-		const resizeMap = () => map.resize();
+		const resizeMap = () => map.invalidateSize({ pan: false });
 		window.addEventListener("resize", resizeMap);
 		window.addEventListener("orientationchange", resizeMap);
-		map.on("click", "maps-points", (event) => {
-			const id = event.features?.[0]?.properties?.id;
-			if (id) callbacksRef.current.onSelect?.(id);
-		});
-		map.on("click", "maps-clusters", async (event) => {
-			const feature = event.features?.[0];
-			const clusterId = feature?.properties?.cluster_id;
-			if (clusterId === undefined) return;
-			const zoom = await map.getSource(SOURCE_ID).getClusterExpansionZoom(clusterId);
-			map.easeTo({ center: feature.geometry.coordinates, zoom });
-		});
-		for (const layerId of ["maps-points", "maps-clusters"]) {
-			map.on("mouseenter", layerId, () => { map.getCanvas().style.cursor = "pointer"; });
-			map.on("mouseleave", layerId, () => { map.getCanvas().style.cursor = ""; });
-		}
+		window.setTimeout(resizeMap, 0);
+
 		return () => {
 			window.clearTimeout(viewportTimer);
 			resizeObserver?.disconnect();
@@ -200,23 +116,48 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 			window.removeEventListener("orientationchange", resizeMap);
 			map.remove();
 			mapRef.current = null;
+			clusterRef.current = null;
+			userLayerRef.current = null;
 		};
 	}, []);
 
 	useEffect(() => {
-		const map = mapRef.current;
-		const source = map?.getSource(SOURCE_ID);
-		if (source) source.setData(featureCollection(points));
+		const cluster = clusterRef.current;
+		if (!cluster) return;
+		cluster.clearLayers();
+		for (const point of points || []) {
+			if (!validPoint(point)) continue;
+			const marker = L.marker(
+				[Number(point.latitude), Number(point.longitude)],
+				{ icon: pointIcon(point), title: pointLabel(point), riseOnHover: true },
+			);
+			marker.bindTooltip(pointLabel(point), { direction: "top" });
+			marker.on("click", () => callbacksRef.current.onSelect?.(point.id));
+			cluster.addLayer(marker);
+		}
 	}, [points]);
 
 	useEffect(() => {
-		const source = mapRef.current?.getSource(USER_SOURCE_ID);
-		if (source) source.setData(userFeature(userPosition));
+		const map = mapRef.current;
+		if (!map) return;
+		if (userLayerRef.current) {
+			map.removeLayer(userLayerRef.current);
+			userLayerRef.current = null;
+		}
+		if (!validPoint(userPosition)) return;
+		userLayerRef.current = L.circleMarker(
+			[Number(userPosition.latitude), Number(userPosition.longitude)],
+			{ radius: 8, color: "#ffffff", weight: 4, fillColor: "#1468ff", fillOpacity: 1 },
+		).addTo(map);
 	}, [userPosition]);
 
 	useEffect(() => {
-		if (!focusPoint || !mapRef.current) return;
-		mapRef.current.easeTo({ center: [focusPoint.longitude, focusPoint.latitude], zoom: Math.max(mapRef.current.getZoom(), 14), duration: 650 });
+		if (!validPoint(focusPoint) || !mapRef.current) return;
+		mapRef.current.setView(
+			[Number(focusPoint.latitude), Number(focusPoint.longitude)],
+			Math.max(mapRef.current.getZoom(), 14),
+			{ animate: true, duration: 0.65 },
+		);
 	}, [focusPoint]);
 
 	return <div ref={containerRef} className="maps-v2-canvas" aria-label="Mapa interativo de retiradas" />;
