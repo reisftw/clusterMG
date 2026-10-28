@@ -1,6 +1,9 @@
-import { AttributionControl, Map, NavigationControl } from "maplibre-gl";
+import { AttributionControl, Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import mapLibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef } from "react";
+
+setWorkerUrl(mapLibreWorkerUrl);
 
 const SOURCE_ID = "retiradas-maps-orders";
 const USER_SOURCE_ID = "retiradas-maps-user";

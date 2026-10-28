@@ -125,6 +125,7 @@ export default function RetorninhoAssistant() {
 		String(currentUser?.role || "").trim().toLowerCase(),
 	);
 	const [open, setOpen] = useState(false);
+	const [hidden, setHidden] = useState(false);
 	const [position, setPosition] = useState(savedPosition);
 	const [messages, setMessages] = useState(initialMessages);
 	const [step, setStep] = useState("code");
@@ -326,20 +327,33 @@ export default function RetorninhoAssistant() {
 		setDragging(false);
 	}
 
-	if (!canUse) return null;
+	if (!canUse || hidden) return null;
 
 	return (
 		<>
 			{!open ? (
-				<button
+				<div
+					className="fixed z-[75] h-[112px] w-[112px]"
+					style={{ left: position.x, top: position.y }}
+				>
+					<button
+						type="button"
+						onClick={() => setHidden(true)}
+						className="absolute right-0 top-0 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-slate-900 text-white shadow-lg hover:bg-slate-700"
+						aria-label="Ocultar Retorninho"
+						title="Ocultar Retorninho"
+					>
+						<X size={15} />
+					</button>
+					<button
 					type="button"
 					onPointerDown={(event) => pointerDown(event, true)}
 					onPointerMove={pointerMove}
 					onPointerUp={pointerUp}
 					onPointerCancel={pointerCancel}
 					onContextMenu={(event) => event.preventDefault()}
-					className={`fixed z-[75] flex h-[112px] w-[112px] touch-none select-none items-center justify-center rounded-full bg-transparent p-3 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-					style={{ left: position.x, top: position.y, touchAction: "none", WebkitTouchCallout: "none" }}
+					className={`flex h-[112px] w-[112px] touch-none select-none items-center justify-center rounded-full bg-transparent p-3 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+					style={{ touchAction: "none", WebkitTouchCallout: "none" }}
 					aria-label="Abrir Retorninho"
 					title="Retorninho - Solicitar O.S"
 				>
@@ -348,7 +362,8 @@ export default function RetorninhoAssistant() {
 						<span className="pointer-events-none absolute left-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/75 text-white"><Move size={15} /></span>
 						<span className="pointer-events-none absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white"><MessageCircle size={14} /></span>
 					</span>
-				</button>
+					</button>
+				</div>
 			) : (
 				<section className="fixed z-[75] flex overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 shadow-[0_24px_70px_rgba(15,23,42,0.35)]" style={panelStyle} aria-label="Conversa com Retorninho">
 					<div className="flex min-w-0 flex-1 flex-col">

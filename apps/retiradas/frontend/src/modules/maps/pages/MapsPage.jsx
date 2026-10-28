@@ -72,6 +72,7 @@ export default function MapsPage() {
 	const [categories, setCategories] = useState(["assigned", "opportunity"]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
+	const [notice, setNotice] = useState("");
 	const [lastSyncAt, setLastSyncAt] = useState("");
 	const [health, setHealth] = useState(null);
 	const [selectedId, setSelectedId] = useState("");
@@ -89,6 +90,8 @@ export default function MapsPage() {
 	const [simulatorOpen, setSimulatorOpen] = useState(false);
 	const [focusPoint, setFocusPoint] = useState(null);
 	const lastRadarPositionRef = useRef(null);
+	const locationAppliedRef = useRef(false);
+	const noticeTimerRef = useRef(null);
 	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
 
 	const requestParams = useMemo(() => {
@@ -168,8 +171,27 @@ export default function MapsPage() {
 	}, [canRadar, locationState.position, radarSettings?.enabled]);
 
 	useEffect(() => {
-		if (gpsRequested && locationState.error) setError(locationState.error);
+		if (gpsRequested && locationState.error) {
+			setError(locationState.error);
+			setNotice(locationState.error);
+		}
 	}, [gpsRequested, locationState.error]);
+
+	useEffect(() => {
+		if (!gpsRequested || !locationState.position || locationAppliedRef.current) return;
+		locationAppliedRef.current = true;
+		setGpsArea(true);
+		setSearch({ city: "", neighborhood: "" });
+		setFocusPoint({ ...locationState.position, key: Date.now() });
+		setNotice("Localizacao atualizada. Buscando oportunidades proximas.");
+	}, [gpsRequested, locationState.position]);
+
+	useEffect(() => {
+		if (!notice) return undefined;
+		window.clearTimeout(noticeTimerRef.current);
+		noticeTimerRef.current = window.setTimeout(() => setNotice(""), 4500);
+		return () => window.clearTimeout(noticeTimerRef.current);
+	}, [notice]);
 
 	async function saveRadarSettings(nextSettings) {
 		const saved = await mapsService.saveRadarSettings(nextSettings);
@@ -246,11 +268,13 @@ export default function MapsPage() {
 		if (!locationState.position) {
 			setGpsRequested(true);
 			setError("");
+			setNotice("Solicitando sua localizacao...");
 			return;
 		}
 		setGpsArea(true);
 		setSearch({ city: "", neighborhood: "" });
 		setFocusPoint({ ...locationState.position, key: Date.now() });
+		setNotice("Localizacao atualizada. Buscando oportunidades proximas.");
 	}
 
 	return (
@@ -287,6 +311,7 @@ export default function MapsPage() {
 					{canRadar ? <button type="button" onClick={() => setRadarOpen(true)} title="Configuracoes"><Settings2 size={21} /></button> : null}
 				</div>
 				{error ? <div className="maps-v2-error"><WifiOff size={18} /><span>{error}</span><button type="button" onClick={() => loadPoints()}><RefreshCw size={16} /> Tentar novamente</button></div> : null}
+				{notice ? <div className="maps-v2-location-notice" role="status"><LocateFixed size={18} /><span>{notice}</span></div> : null}
 				<MapsBottomSheet items={points} summary={summary} open={sheetOpen} onToggle={() => setSheetOpen((current) => !current)} onSelect={(item) => setSelectedId(item.id)} selectedRouteIds={selectedRouteIds} onToggleRoute={toggleRouteItem} />
 			</main>
 
