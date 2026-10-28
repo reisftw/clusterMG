@@ -142,7 +142,11 @@ function normalizeAutomationConfig(config = {}) {
 			config.autoDailyCheckpointHours,
 		),
 		autoMetaTime: normalizeTime(config.autoMetaTime, "03:00"),
-		autoFinesTime: normalizeTime(config.autoFinesTime, "18:00"),
+		autoFinesIntervalMinutes: asPositiveNumber(
+			config.autoFinesIntervalMinutes,
+			60,
+			{ min: 15, max: 24 * 60 },
+		),
 		autoMapMatchIntervalMinutes: asPositiveNumber(
 			config.autoMapMatchIntervalMinutes,
 			60,
@@ -860,8 +864,8 @@ function finesPayload({ date, startDate, endDate }) {
 	return {
 		data_inicio: toHubsoftDateOnly(initialDate),
 		data_fim: toHubsoftDateOnly(finalDate),
-		tipo_data: "data_fechamento",
-		order_by: "data_fechamento",
+		tipo_data: "data_cadastro",
+		order_by: "data_cadastro",
 		order_by_key: "ASC",
 		tipo_endereco: { valor: "instalacao" },
 		tipo_atendimento: [
@@ -870,14 +874,6 @@ function finesPayload({ date, startDate, endDate }) {
 				descricao: "MULTA - EQUIPAMENTO",
 			},
 		],
-		status_atendimento: [
-			{
-				id_atendimento_status: 3,
-				prefixo: "resolvido",
-				descricao: "RESOLVIDO",
-			},
-		],
-		status_fechamento: [{ descricao: "Concluído", valor: "concluido" }],
 		pagina: 1,
 		itens_por_pagina: PAGE_SIZE,
 	};
@@ -885,7 +881,7 @@ function finesPayload({ date, startDate, endDate }) {
 
 async function collectPaginated(
 	session,
-	{ path, payload, pageMode = "query", onProgress },
+	{ path, payload, pageMode = "query", onProgress, maxPages = 500 },
 ) {
 	const all = [];
 	let expectedTotal = 0;
@@ -910,7 +906,7 @@ async function collectPaginated(
 		expectedPages = pagination.lastPage;
 		receivedPages += 1;
 		all.push(...rows);
-		if (expectedPages > 500) {
+		if (expectedPages > maxPages) {
 			const error = new Error("Paginacao HubSoft suspeita.");
 			error.code = "SUSPICIOUS";
 			throw error;
@@ -948,8 +944,16 @@ async function collectFirstNonEmpty(session, attempts, onProgress) {
 async function collectProfile(profile, options = {}) {
 	const session = await getSession();
 	await options.onProgress?.({ stage: "Sessao HubSoft autenticada", percent: 8 });
-	const createPayload = await fetchCreateMetadata(session);
-	await options.onProgress?.({ stage: "Metadados HubSoft carregados", percent: 12 });
+	const createPayload =
+		isFinesProfile(profile) || isStoreProfile(profile)
+			? null
+			: await fetchCreateMetadata(session);
+	if (createPayload) {
+		await options.onProgress?.({
+			stage: "Metadados HubSoft carregados",
+			percent: 12,
+		});
+	}
 	if (isMetaProfile(profile)) {
 		const date =
 			options.date ||
@@ -990,29 +994,13 @@ async function collectProfile(profile, options = {}) {
 		const startDate = options.startDate || date;
 		const endDate = options.endDate || date;
 		const payload = finesPayload({ date, startDate, endDate });
-		const collected = await collectFirstNonEmpty(
-			session,
-			[
-				{
-					label: "relatorio/atendimento multa equipamento resolvido",
-					path: "/api/v1/relatorio/atendimento",
-					payload,
-					pageMode: "body",
-					percent: 20,
-				},
-				{
-					label: "relatorio/atendimento multa equipamento concluido",
-					path: "/api/v1/relatorio/atendimento",
-					payload: {
-						...payload,
-						status_atendimento: undefined,
-					},
-					pageMode: "body",
-					percent: 32,
-				},
-			],
-			options.onProgress,
-		);
+		const collected = await collectPaginated(session, {
+			path: "/api/v1/relatorio/atendimento",
+			payload,
+			pageMode: "body",
+			onProgress: options.onProgress,
+			maxPages: 2000,
+		});
 		return {
 			...collected,
 			hubsoftSession: session,
@@ -1020,11 +1008,9 @@ async function collectProfile(profile, options = {}) {
 				date,
 				startDate,
 				endDate,
-				attempt: collected?.attemptLabel || null,
 				tipo_data: payload.tipo_data,
 				tipo_atendimento: payload.tipo_atendimento,
-				status_atendimento: payload.status_atendimento,
-				status_fechamento: payload.status_fechamento,
+				tipo_endereco: payload.tipo_endereco,
 			},
 		};
 	}
@@ -1295,6 +1281,16 @@ function extractSourceDate(row = {}) {
 		row?.data_fechamento_br ||
 		row?.data_resolucao ||
 		row?.data_resolucao_br ||
+		row?.data_cadastro ||
+		row?.data_cadastro_br ||
+		row?.created_at ||
+		extractDateFromHubsoftProtocol(row?.protocolo || row?.numero_protocolo) ||
+		null
+	);
+}
+
+function extractFineRegistrationDate(row = {}) {
+	return (
 		row?.data_cadastro ||
 		row?.data_cadastro_br ||
 		row?.created_at ||
@@ -2102,7 +2098,10 @@ function recordFor(profile, row, maps) {
 	const hubsoftNumber = cleanText(
 		row.numero_ordem_servico || row.protocolo || row.id_atendimento,
 	);
-	const sourceDate = extractSourceDate(row) || extractDateFromHubsoftProtocol(hubsoftNumber);
+	const sourceDate =
+		(isFinesProfile(profile)
+			? extractFineRegistrationDate(row)
+			: extractSourceDate(row)) || extractDateFromHubsoftProtocol(hubsoftNumber);
 	const serviceName = extractServiceName(row);
 	const equipment = classifyEquipmentByServiceSpeed(
 		[
@@ -2531,6 +2530,8 @@ async function maybeApplyOperationalProfile(profile, rows, records, options, use
 		return operationalImports.persistHubsoftFineRecords({
 			profile: operationalProfile,
 			date: options.date || todaySaoPaulo(),
+			startDate: options.startDate,
+			endDate: options.endDate,
 			records,
 			user,
 		});
@@ -2640,7 +2641,7 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 		const records = collected.rows
 			.filter((row) => uniqueKeyFor(profile, row))
 			.map((row) => recordFor(profile, row, maps));
-		const recordsToPersist = isFinesProfile(profile)
+		const recordsToPersist = isFinesProfile(profile) && options.skipFineFinanceEnrichment !== true
 			? await enrichFineRecordsWithFinance(
 					collected.hubsoftSession,
 					records,
@@ -3289,18 +3290,41 @@ async function runSchedulerTick() {
 		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: new Date().toISOString() });
 	}
 
+	const finesBackfillYear = now.date.slice(0, 4);
+	const finesBackfillPending =
+		String(rawConfig.autoFinesBackfillYear || "") !== finesBackfillYear;
 	if (
+		config.autoSyncEnabled &&
 		config.autoFinesEnabled &&
-		isTimeDue(now.time, config.autoFinesTime) &&
-		rawConfig.autoFinesLastRunDate !== now.date
+		(finesBackfillPending ||
+			minutesSince(rawConfig.autoFinesLastRunAt) >=
+				config.autoFinesIntervalMinutes)
 	) {
-		const result = await runProfileSafely(PROFILE.MULTAS, { date: now.date });
+		const result = await runProfileSafely(
+			PROFILE.MULTAS,
+			finesBackfillPending
+				? {
+						startDate: `${finesBackfillYear}-01-01`,
+						endDate: now.date,
+						skipFineFinanceEnrichment: true,
+					}
+				: {
+						date: now.date,
+						skipFineFinanceEnrichment: true,
+					},
+		);
 		results.push({ profile: PROFILE.MULTAS, result });
 		if (succeeded(result)) {
-			await saveSchedulerState({
+			const patch = {
 				autoFinesLastRunDate: now.date,
 				autoFinesLastRunAt: new Date().toISOString(),
-			});
+			};
+			if (finesBackfillPending) {
+				patch.autoFinesBackfillYear = finesBackfillYear;
+				patch.autoFinesBackfillThrough = now.date;
+				patch.autoFinesBackfillAt = new Date().toISOString();
+			}
+			await saveSchedulerState(patch);
 		}
 	}
 
@@ -3479,4 +3503,9 @@ module.exports = {
 	startMetaAudit,
 	startProfileRun,
 	upsertWithdrawalTechnician,
+	__testables: {
+		extractFineRegistrationDate,
+		finesPayload,
+		normalizeAutomationConfig,
+	},
 };

@@ -1070,10 +1070,10 @@ function getNextProfileRun(profileId, state, config) {
 		);
 	}
 	if (profileId === "MULTAS") {
-		return nextDailyTime(
-			config.autoFinesTime || "18:00",
-			config.autoFinesEnabled !== false && config.autoSyncEnabled !== false,
-		);
+		if (config.autoFinesEnabled === false || config.autoSyncEnabled === false) {
+			return "Automação desativada";
+		}
+		return addMinutes(lastRun?.started_at, config.autoFinesIntervalMinutes || 60);
 	}
 	return "-";
 }
@@ -1515,12 +1515,15 @@ function HubsoftAutomationSection({ config, updateConfig }) {
 				</label>
 				<label className="block">
 					<span className="text-xs font-black uppercase text-slate-500">
-						Multas às
+						Multas a cada quantos minutos
 					</span>
 					<input
-						type="time"
-						value={config.autoFinesTime || "18:00"}
-						onChange={(event) => updateConfig("autoFinesTime", event.target.value)}
+						type="number"
+						min="15"
+						value={config.autoFinesIntervalMinutes || 60}
+						onChange={(event) =>
+							updateConfig("autoFinesIntervalMinutes", event.target.value)
+						}
 						className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-50"
 					/>
 				</label>

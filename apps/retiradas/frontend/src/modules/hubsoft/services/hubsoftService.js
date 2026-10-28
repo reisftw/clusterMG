@@ -26,7 +26,7 @@ export const DEFAULT_HUBSOFT_CONFIG = {
 	autoMetaEnabled: true,
 	autoMetaTime: "03:00",
 	autoFinesEnabled: true,
-	autoFinesTime: "18:00",
+	autoFinesIntervalMinutes: 60,
 	autoMapMatchEnabled: true,
 	autoMapMatchIntervalMinutes: 60,
 	autoDailyLastRunAt: "",

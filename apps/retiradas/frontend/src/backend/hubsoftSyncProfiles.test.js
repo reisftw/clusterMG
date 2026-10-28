@@ -5,6 +5,7 @@ process.env.PGPASSWORD ||= "test";
 
 const require = createRequire(import.meta.url);
 const { classifyOrder } = require("../../../backend/api/src/hubsoftClassification");
+const { __testables } = require("../../../backend/api/src/hubsoftSyncProfiles");
 
 function maps() {
 	return {
@@ -87,5 +88,42 @@ describe("hubsoft classification", () => {
 		const result = classifyOrder(row({ city: "Cidade Sem Cadastro" }), maps());
 		expect(result.production_channel).toBe("UNCLASSIFIED");
 		expect(result.classification_reason).toBe("CITY_NOT_FOUND");
+	});
+});
+
+describe("hubsoft fines automation", () => {
+	it("consulta multa por data de cadastro sem limitar status", () => {
+		const payload = __testables.finesPayload({ date: "2026-10-27" });
+		expect(payload).toMatchObject({
+			data_inicio: "2026-10-27",
+			data_fim: "2026-10-27",
+			tipo_data: "data_cadastro",
+			order_by: "data_cadastro",
+			tipo_endereco: { valor: "instalacao" },
+		});
+		expect(payload.tipo_atendimento).toEqual([
+			{
+				id_tipo_atendimento: 944,
+				descricao: "MULTA - EQUIPAMENTO",
+			},
+		]);
+		expect(payload).not.toHaveProperty("status_atendimento");
+		expect(payload).not.toHaveProperty("status_fechamento");
+	});
+
+	it("usa intervalo horario por padrao", () => {
+		expect(__testables.normalizeAutomationConfig({})).toMatchObject({
+			autoFinesEnabled: true,
+			autoFinesIntervalMinutes: 60,
+		});
+	});
+
+	it("prioriza a data de cadastro da multa", () => {
+		expect(
+			__testables.extractFineRegistrationDate({
+				data_cadastro: "27/10/2026 08:22",
+				data_fechamento: "28/10/2026 09:00",
+			}),
+		).toBe("27/10/2026 08:22");
 	});
 });

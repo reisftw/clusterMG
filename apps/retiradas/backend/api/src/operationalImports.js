@@ -13,7 +13,10 @@ const {
 	buildMatchData,
 	buildMatchMessages,
 } = require("./operationalMatchSnapshot");
-const { buildSnapshotDomain } = require("./publicDashboard");
+const {
+	buildSnapshotDomain,
+	invalidatePublicDashboardCache,
+} = require("./publicDashboard");
 const { randomId } = require("./secureRandom");
 
 const DIARIO_AFTER_HOURS_HORARIO = "23:59";
@@ -1084,6 +1087,7 @@ async function publishAcompanhamentoUpdate(source, payload = {}) {
 		payload.lastUpdateKey ||
 		`${source}-${payload.generatedAt || nowIso}`;
 	const sourceLabels = {
+		diario: "Diário",
 		mapa: "Mapa",
 		match: "MATCH",
 		metas: "Metas",
@@ -2249,82 +2253,168 @@ async function syncDiarioFromMetaRecord(record = {}, month, year, user = {}, opt
 	}
 }
 
+function listDateKeys(startDate, endDate) {
+	if (
+		!/^\d{4}-\d{2}-\d{2}$/.test(startDate || "") ||
+		!/^\d{4}-\d{2}-\d{2}$/.test(endDate || "") ||
+		startDate > endDate
+	) {
+		return [];
+	}
+	const dates = [];
+	const current = new Date(`${startDate}T12:00:00.000Z`);
+	const last = new Date(`${endDate}T12:00:00.000Z`);
+	while (current <= last) {
+		dates.push(current.toISOString().slice(0, 10));
+		current.setUTCDate(current.getUTCDate() + 1);
+	}
+	return dates;
+}
+
+function fineRecordDateKey(record = {}) {
+	const parsed = new Date(record.source_date || "");
+	if (!Number.isNaN(parsed.getTime())) return getLocalDateKey(parsed);
+	return dateOnlyFromOrder(record.source_date);
+}
+
+function buildFineDailyGroups(records = [], { date, startDate, endDate } = {}) {
+	const fallbackDate = date || getLocalDateKey();
+	const firstDate = String(startDate || fallbackDate).slice(0, 10);
+	const lastDate = String(endDate || date || firstDate).slice(0, 10);
+	const dates = listDateKeys(firstDate, lastDate);
+	const groups = new Map(dates.map((dateKey) => [dateKey, new Map()]));
+	for (const [index, record] of (Array.isArray(records) ? records : []).entries()) {
+		const dateKey = fineRecordDateKey(record) || (dates.length === 1 ? firstDate : "");
+		if (!groups.has(dateKey)) continue;
+		const id = String(
+			record.hubsoft_id || record.hubsoft_number || `registro-${index}`,
+		).trim();
+		groups.get(dateKey).set(id, record);
+	}
+	return dates.map((dateKey) => ({
+		date: dateKey,
+		records: [...groups.get(dateKey).values()],
+	}));
+}
+
 async function persistHubsoftFineRecords({
 	profile = "MULTAS",
 	date,
+	startDate,
+	endDate,
 	records = [],
 	user = {},
 	quiet = false,
 } = {}) {
-	const dateKey = String(date || new Date().toISOString().slice(0, 10)).slice(0, 10);
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+	const dailyGroups = buildFineDailyGroups(records, { date, startDate, endDate });
+	if (!dailyGroups.length) {
 		const error = new Error("Data invalida para sincronizacao de multas.");
 		error.statusCode = 400;
 		throw error;
 	}
 	const nowIso = new Date().toISOString();
-	const unique = new Set(
-		(Array.isArray(records) ? records : [])
-			.map((record) => String(record.hubsoft_id || record.hubsoft_number || "").trim())
-			.filter(Boolean),
-	);
-	const total = unique.size || (Array.isArray(records) ? records.length : 0);
-	const path = `acompanhamento_diario/${dateKey}`;
-	const existing =
-		(await documents.getDocument(path).catch(() => null))?.data || {};
-	const horarios = existing.horarios || DIARIO_CADASTRO_HORARIOS.reduce((result, horario) => {
-		result[horario] = 0;
-		return result;
-	}, {});
-	const data = {
-		...existing,
-		date: existing.date || dateKey,
-		monthKey: existing.monthKey || String(dateKey).slice(0, 7),
-		horarios,
-		deliveredTotal: Number(existing.deliveredTotal || existing.hourlyTotal || 0),
-		hourlyTotal: Number(existing.hourlyTotal || existing.deliveredTotal || 0),
-		afterHoursTotal: Number(existing.afterHoursTotal || horarios[DIARIO_AFTER_HOURS_HORARIO] || 0),
-		fines: total,
-		fineSource: "hubsoft-multas",
-		fineProfile: profile,
-		fineUpdatedAt: nowIso,
-		fineRecordIds: [...unique].slice(0, 200),
-		updatedBy: user.uid || existing.updatedBy || null,
-		updatedByName:
-			user.nome ||
-			user.name ||
-			user.displayName ||
-			existing.updatedByName ||
-			"HubSoft",
-		updatedAt: nowIso,
-	};
-	const writeOptions = quiet
-		? { audit: false, broadcast: false, normalized: false }
-		: undefined;
-	await documents.upsertDocument({
-		path,
-		collectionPath: "acompanhamento_diario",
-		documentId: dateKey,
-		parentPath: null,
-		data,
-	}, writeOptions);
+	const results = [];
+	for (const daily of dailyGroups) {
+		const unique = new Set(
+			daily.records
+				.map((record) =>
+					String(record.hubsoft_id || record.hubsoft_number || "").trim(),
+				)
+				.filter(Boolean),
+		);
+		const total = unique.size || daily.records.length;
+		const path = `acompanhamento_diario/${daily.date}`;
+		const existing =
+			(await documents.getDocument(path).catch(() => null))?.data || {};
+		const horarios =
+			existing.horarios ||
+			DIARIO_CADASTRO_HORARIOS.reduce((result, horario) => {
+				result[horario] = 0;
+				return result;
+			}, {});
+		await documents.upsertDocument(
+			{
+				path,
+				collectionPath: "acompanhamento_diario",
+				documentId: daily.date,
+				parentPath: null,
+				data: {
+					...existing,
+					date: existing.date || daily.date,
+					monthKey: existing.monthKey || daily.date.slice(0, 7),
+					horarios,
+					deliveredTotal: Number(
+						existing.deliveredTotal || existing.hourlyTotal || 0,
+					),
+					hourlyTotal: Number(
+						existing.hourlyTotal || existing.deliveredTotal || 0,
+					),
+					afterHoursTotal: Number(
+						existing.afterHoursTotal ||
+							horarios[DIARIO_AFTER_HOURS_HORARIO] ||
+							0,
+					),
+					fines: total,
+					fineSource: "hubsoft-multas-data-cadastro",
+					fineProfile: profile,
+					fineUpdatedAt: nowIso,
+					fineRecordIds: [...unique].slice(0, 200),
+					updatedBy: user.uid || existing.updatedBy || null,
+					updatedByName:
+						user.nome ||
+						user.name ||
+						user.displayName ||
+						existing.updatedByName ||
+						"HubSoft",
+					updatedAt: nowIso,
+				},
+			},
+			{ audit: false, broadcast: false, normalized: false },
+		);
+		results.push({ date: daily.date, fines: total });
+	}
+	invalidatePublicDashboardCache();
+	const total = results.reduce((sum, item) => sum + item.fines, 0);
+	const firstDate = results[0].date;
+	const lastDate = results[results.length - 1].date;
 	if (!quiet) {
 		await publishAcompanhamentoUpdate("diario", {
 			generatedAt: nowIso,
 			updatedBy: user.uid || null,
-			message: `Multas lancadas atualizadas pelo HubSoft para ${dateKey}.`,
+			message:
+				firstDate === lastDate
+					? `Multas lancadas atualizadas pelo HubSoft para ${firstDate}.`
+					: `Historico de multas atualizado pelo HubSoft de ${firstDate} a ${lastDate}.`,
 			summary: {
 				profile,
-				date: dateKey,
+				startDate: firstDate,
+				endDate: lastDate,
+				daysUpdated: results.length,
 				fines: total,
 			},
 		});
+		const event = {
+			source: "hubsoft-multas",
+			message: "Multas lançadas atualizadas no Diário e no acompanhamento.",
+			generatedAt: nowIso,
+			startDate: firstDate,
+			endDate: lastDate,
+			daysUpdated: results.length,
+			total,
+		};
+		broadcastRealtime("diario", event);
+		broadcastRealtime("dashboard", event);
+		broadcastRealtime("acompanhamento", event);
 	}
 	return {
 		source: "hubsoft-multas",
 		profile,
-		date: dateKey,
+		date: firstDate === lastDate ? firstDate : null,
+		startDate: firstDate,
+		endDate: lastDate,
+		daysUpdated: results.length,
 		total,
+		results,
 		updatedAt: nowIso,
 	};
 }
@@ -3834,4 +3924,5 @@ module.exports = {
 	// Exportado so pra teste (achado javascript:S3776,
 	// docs/SONARQUBE-MAP.md) — funcao pura extraida de buildOrdersFromRows.
 	buildOrderFromRow,
+	buildFineDailyGroups,
 };

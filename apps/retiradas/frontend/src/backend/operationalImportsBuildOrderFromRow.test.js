@@ -166,3 +166,38 @@ describe("operationalImports buildOrderFromRow", () => {
 		});
 	});
 });
+
+describe("operationalImports fine daily groups", () => {
+	afterEach(() => {
+		clearModules();
+		vi.restoreAllMocks();
+	});
+
+	it("agrupa multas por dia de cadastro no horario de Sao Paulo", () => {
+		const { buildFineDailyGroups } = loadOperationalImports();
+		const groups = buildFineDailyGroups(
+			[
+				{ hubsoft_id: "1", source_date: "2026-10-27T11:22:00.000Z" },
+				{ hubsoft_id: "2", source_date: "2026-10-28T01:30:00.000Z" },
+			],
+			{ startDate: "2026-10-27", endDate: "2026-10-28" },
+		);
+		expect(groups.map((group) => [group.date, group.records.length])).toEqual([
+			["2026-10-27", 2],
+			["2026-10-28", 0],
+		]);
+	});
+
+	it("mantem dias sem multa para zerar valores historicos incorretos", () => {
+		const { buildFineDailyGroups } = loadOperationalImports();
+		const groups = buildFineDailyGroups([], {
+			startDate: "2026-01-01",
+			endDate: "2026-01-03",
+		});
+		expect(groups).toEqual([
+			{ date: "2026-01-01", records: [] },
+			{ date: "2026-01-02", records: [] },
+			{ date: "2026-01-03", records: [] },
+		]);
+	});
+});
