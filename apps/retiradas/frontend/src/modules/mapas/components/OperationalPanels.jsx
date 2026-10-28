@@ -18,8 +18,16 @@ function formatNumber(value) {
 	return new Intl.NumberFormat("pt-BR").format(numberValue(value));
 }
 
+function isOtherCitiesItem(item) {
+	return String(item?.label || "")
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "")
+		.trim()
+		.toLowerCase() === "outras cidades";
+}
+
 function normalizeRankingItems(items = [], limit = 6) {
-	return (Array.isArray(items) ? items : [])
+	const normalized = (Array.isArray(items) ? items : [])
 		.map((item, index) => ({
 			id: item.id || item.label || item.name || `item-${index}`,
 			label: String(item.label || item.name || "Sem identificação").trim(),
@@ -28,8 +36,19 @@ function normalizeRankingItems(items = [], limit = 6) {
 			total: numberValue(item.total ?? item.production ?? item.value),
 		}))
 		.filter((item) => item.label && item.total > 0)
-		.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "pt-BR"))
-		.slice(0, limit);
+		.sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "pt-BR"));
+	const otherCities = normalized.filter(isOtherCitiesItem);
+	if (!otherCities.length) return normalized.slice(0, limit);
+
+	const namedCities = normalized.filter((item) => !isOtherCitiesItem(item));
+	const groupedOtherCities = otherCities.reduce(
+		(result, item) => ({ ...result, total: result.total + item.total }),
+		{ ...otherCities[0], total: 0 },
+	);
+	return [
+		...namedCities.slice(0, Math.max(0, limit - 1)),
+		groupedOtherCities,
+	];
 }
 
 function HighlightMetric({ label, value }) {

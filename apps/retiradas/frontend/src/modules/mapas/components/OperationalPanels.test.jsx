@@ -51,4 +51,35 @@ describe("operational panel timing", () => {
 		act(() => vi.advanceTimersByTime(10000));
 		expect(screen.getByText("Cidades com mais aberturas hoje")).toBeInTheDocument();
 	});
+
+	it("mantem Outras cidades no fim dos rankings de fechamentos e aberturas", () => {
+		const { container } = render(
+			<DashboardHighlights
+				closedCities={[
+					{ label: "Outras cidades", total: 30 },
+					{ label: "Betim", total: 8 },
+					{ label: "Igarapé", total: 4 },
+				]}
+				openedCities={[
+					{ label: "Outras cidades", total: 40 },
+					{ label: "Uberlândia", total: 12 },
+					{ label: "Patrocínio", total: 7 },
+				]}
+				technicians={[]}
+			/>,
+		);
+
+		const rankingLabels = () =>
+			[...container.querySelectorAll(".acomp-highlight-rank-line strong")].map(
+				(element) => element.textContent,
+			);
+
+		expect(rankingLabels()).toEqual(["Betim", "Igarapé", "Outras cidades"]);
+		fireEvent.click(screen.getByRole("tab", { name: /Aberturas/i }));
+		expect(rankingLabels()).toEqual([
+			"Uberlândia",
+			"Patrocínio",
+			"Outras cidades",
+		]);
+	});
 });
