@@ -200,6 +200,42 @@ describe("operationalImports fine daily groups", () => {
 			{ date: "2026-01-03", records: [] },
 		]);
 	});
+
+	it("une multas novas sem reduzir o total confirmado anteriormente", () => {
+		const { buildIncrementalFineSnapshot } = loadOperationalImports();
+		const snapshot = buildIncrementalFineSnapshot(
+			{
+				fines: 3,
+				fineSource: "hubsoft-multas-data-cadastro",
+				fineRecordIds: ["multa-1", "multa-2", "multa-3"],
+			},
+			[
+				{ hubsoft_id: "multa-2" },
+				{ hubsoft_id: "multa-3" },
+				{ hubsoft_id: "multa-4" },
+			],
+		);
+
+		expect(snapshot).toEqual({
+			total: 4,
+			recordIds: ["multa-1", "multa-2", "multa-3", "multa-4"],
+		});
+	});
+
+	it("nao reduz o acumulado quando o HubSoft responde parcialmente", () => {
+		const { buildIncrementalFineSnapshot } = loadOperationalImports();
+		const snapshot = buildIncrementalFineSnapshot(
+			{
+				fines: 42,
+				fineSource: "hubsoft-multas-data-cadastro",
+				fineRecordIds: ["multa-1", "multa-2"],
+			},
+			[{ hubsoft_id: "multa-2" }],
+		);
+
+		expect(snapshot.total).toBe(42);
+		expect(snapshot.recordIds).toEqual(["multa-1", "multa-2"]);
+	});
 });
 
 describe("operationalImports diario fine preservation", () => {

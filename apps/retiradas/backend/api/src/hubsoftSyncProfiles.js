@@ -2448,7 +2448,10 @@ async function persistRecords(runId, profile, records, options = {}) {
 	const periodOptions = options.preserveOutsidePeriod
 		? runDateRangeOptions(profile, options)
 		: {};
-	const deactivated = periodOptions.preserveOutsidePeriod
+	const preserveAllFineRecords = isFinesProfile(profile);
+	const deactivated = preserveAllFineRecords
+		? { rowCount: 0 }
+		: periodOptions.preserveOutsidePeriod
 		? await db.query(
 				`update hubsoft_sync_records
 	          set active = false

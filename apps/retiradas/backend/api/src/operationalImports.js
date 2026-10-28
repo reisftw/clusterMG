@@ -2315,6 +2315,30 @@ function buildFineDailyGroups(records = [], { date, startDate, endDate } = {}) {
 	}));
 }
 
+function buildIncrementalFineSnapshot(existing = {}, records = []) {
+	const incomingIds = (Array.isArray(records) ? records : [])
+		.map((record) =>
+			String(record?.hubsoft_id || record?.hubsoft_number || "").trim(),
+		)
+		.filter(Boolean);
+	const hasHubsoftHistory = String(existing?.fineSource || "").startsWith(
+		"hubsoft-multas",
+	);
+	const existingIds = hasHubsoftHistory
+		? (Array.isArray(existing.fineRecordIds) ? existing.fineRecordIds : [])
+				.map((id) => String(id || "").trim())
+				.filter(Boolean)
+		: [];
+	const mergedIds = [...new Set([...existingIds, ...incomingIds])];
+	const incomingTotal = incomingIds.length || records.length;
+	const existingTotal = hasHubsoftHistory ? Number(existing.fines || 0) : 0;
+
+	return {
+		total: Math.max(existingTotal, incomingTotal, mergedIds.length),
+		recordIds: mergedIds.slice(0, 200),
+	};
+}
+
 async function persistHubsoftFineRecords({
 	profile = "MULTAS",
 	date,
@@ -2333,17 +2357,14 @@ async function persistHubsoftFineRecords({
 	const nowIso = new Date().toISOString();
 	const results = [];
 	for (const daily of dailyGroups) {
-		const unique = new Set(
-			daily.records
-				.map((record) =>
-					String(record.hubsoft_id || record.hubsoft_number || "").trim(),
-				)
-				.filter(Boolean),
-		);
-		const total = unique.size || daily.records.length;
 		const path = `acompanhamento_diario/${daily.date}`;
 		const existing =
 			(await documents.getDocument(path).catch(() => null))?.data || {};
+		const fineSnapshot = buildIncrementalFineSnapshot(
+			existing,
+			daily.records,
+		);
+		const total = fineSnapshot.total;
 		const horarios =
 			existing.horarios ||
 			DIARIO_CADASTRO_HORARIOS.reduce((result, horario) => {
@@ -2376,7 +2397,7 @@ async function persistHubsoftFineRecords({
 					fineSource: "hubsoft-multas-data-cadastro",
 					fineProfile: profile,
 					fineUpdatedAt: nowIso,
-					fineRecordIds: [...unique].slice(0, 200),
+					fineRecordIds: fineSnapshot.recordIds,
 					updatedBy: user.uid || existing.updatedBy || null,
 					updatedByName:
 						user.nome ||
@@ -3943,5 +3964,6 @@ module.exports = {
 	// docs/SONARQUBE-MAP.md) — funcao pura extraida de buildOrdersFromRows.
 	buildOrderFromRow,
 	buildFineDailyGroups,
+	buildIncrementalFineSnapshot,
 	buildDiarioEntryFromSaldoDay,
 };
