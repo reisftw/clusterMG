@@ -1,5 +1,9 @@
 ﻿import { Component } from "react";
 import ErrorPage from "./ErrorPage";
+import {
+	isStaleAssetError,
+	reloadOnceForFreshAssets,
+} from "../../utils/staleAssetRecovery";
 
 class AppErrorBoundary extends Component {
 	state = { hasError: false };
@@ -9,6 +13,7 @@ class AppErrorBoundary extends Component {
 	}
 
 	componentDidCatch(error, info) {
+		if (isStaleAssetError(error) && reloadOnceForFreshAssets()) return;
 		console.error("[AppErrorBoundary]", error, info);
 	}
 

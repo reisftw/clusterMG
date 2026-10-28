@@ -21,6 +21,42 @@ describe("diarioService monthly goals history", () => {
 		vi.clearAllMocks();
 	});
 
+	it("usa o mesmo intervalo de segunda a sexta para producao e multas atuais", () => {
+		const boardData = buildDiarioBoardData(
+			[
+				normalizeDiarioEntry({
+					date: "2026-10-25",
+					horarios: { "11h": 99 },
+					fines: 99,
+				}),
+				normalizeDiarioEntry({
+					date: "2026-10-26",
+					horarios: { "11h": 100 },
+					fines: 12,
+				}),
+				normalizeDiarioEntry({
+					date: "2026-10-27",
+					horarios: { "11h": 120 },
+					fines: 42,
+				}),
+				normalizeDiarioEntry({
+					date: "2026-10-28",
+					horarios: { "11h": 80 },
+					fines: 10,
+				}),
+			],
+			"2026-10-28",
+		);
+
+		expect(boardData.weekRange).toEqual({
+			start: "2026-10-26",
+			end: "2026-10-30",
+		});
+		expect(boardData.currentWeek.delivered).toBe(300);
+		expect(boardData.currentWeek.fines).toBe(64);
+		expect(boardData.currentWeek.range).toEqual(boardData.weekRange);
+	});
+
 	it("cria snapshot mensal com totais e semanas do diario", () => {
 		const boardData = buildDiarioBoardData(
 			[

@@ -312,8 +312,20 @@ export function buildDiarioBoardData(
 		};
 	});
 	const currentWeek = getWeekOfMonth(referenceDateKey);
-	const currentWeekData =
-		weeks.find((item) => item.week === currentWeek) || weeks[0];
+	const currentWeekDelivered = weekEntries.reduce(
+		(sum, item) => sum + Number(item.hourlyTotal || 0),
+		0,
+	);
+	const currentWeekData = {
+		week: currentWeek,
+		delivered: currentWeekDelivered,
+		fines: weekEntries.reduce(
+			(sum, item) => sum + Number(item.fines || 0),
+			0,
+		),
+		status: classifyWeeklyProduction(currentWeekDelivered),
+		range: weekRange,
+	};
 
 	return {
 		referenceDateKey,
