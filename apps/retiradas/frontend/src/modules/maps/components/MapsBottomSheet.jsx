@@ -20,7 +20,7 @@ function PointCard({ item, selectedForRoute, onSelect, onToggleRoute }) {
 					<span>{distanceLabel(item.distanceMeters)} {item.scheduled ? "· Agendada" : ""}</span>
 				</span>
 			</button>
-			{item.category === "assigned" ? (
+			{item.category === "assigned" && item.locationAvailable ? (
 				<button
 					type="button"
 					className={`maps-v2-route-toggle ${selectedForRoute ? "is-active" : ""}`}

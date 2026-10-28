@@ -28,6 +28,7 @@ import { dispatchRadarNotification } from "../features/notifications/notificatio
 import { shouldEvaluatePosition } from "../features/radar/proximityEngine";
 import { mapsService } from "../services/mapsService";
 import "../styles/maps.css";
+import "../styles/maps-mobile.css";
 import "../styles/maps-loading.css";
 
 const MAPS_PERMISSIONS = {
@@ -65,6 +66,7 @@ export default function MapsPage() {
 	const [viewport, setViewport] = useState(null);
 	const [radiusKm, setRadiusKm] = useState(5);
 	const [gpsArea, setGpsArea] = useState(false);
+	const [gpsRequested, setGpsRequested] = useState(false);
 	const [searchDraft, setSearchDraft] = useState({ city: "", neighborhood: "" });
 	const [search, setSearch] = useState({ city: "", neighborhood: "" });
 	const [categories, setCategories] = useState(["assigned", "opportunity"]);
@@ -87,7 +89,7 @@ export default function MapsPage() {
 	const [simulatorOpen, setSimulatorOpen] = useState(false);
 	const [focusPoint, setFocusPoint] = useState(null);
 	const lastRadarPositionRef = useRef(null);
-	const locationState = useRadarLocation(Boolean(canRadar && radarSettings?.enabled));
+	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
 
 	const requestParams = useMemo(() => {
 		const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
@@ -105,14 +107,13 @@ export default function MapsPage() {
 	}, [categories, gpsArea, locationState.position, radiusKm, search, viewport]);
 
 	const loadPoints = useCallback(async (signal) => {
-		if (!requestParams.minLat && !requestParams.latitude && !requestParams.city && !requestParams.neighborhood) return;
 		setLoading(true);
 		setError("");
 		try {
 			const response = await mapsService.points(requestParams, signal);
 			setPoints(response.items || []);
 			setLastSyncAt(response.lastSyncAt || "");
-			setSummary({
+			setSummary(response.summary || {
 				assigned: (response.items || []).filter((item) => item.category === "assigned").length,
 				opportunities: (response.items || []).filter((item) => item.category === "opportunity").length,
 				scheduled: (response.items || []).filter((item) => item.scheduled).length,
@@ -165,6 +166,10 @@ export default function MapsPage() {
 			(response.alerts || []).forEach((alert) => dispatchRadarNotification(alert, () => setSheetOpen(true)));
 		}).catch(() => {});
 	}, [canRadar, locationState.position, radarSettings?.enabled]);
+
+	useEffect(() => {
+		if (gpsRequested && locationState.error) setError(locationState.error);
+	}, [gpsRequested, locationState.error]);
 
 	async function saveRadarSettings(nextSettings) {
 		const saved = await mapsService.saveRadarSettings(nextSettings);
@@ -239,8 +244,8 @@ export default function MapsPage() {
 
 	function centerOnUser() {
 		if (!locationState.position) {
-			if (canRadar && radarSettings) setRadarSettings((current) => ({ ...current, enabled: true }));
-			setRadarOpen(canRadar);
+			setGpsRequested(true);
+			setError("");
 			return;
 		}
 		setGpsArea(true);
@@ -266,12 +271,12 @@ export default function MapsPage() {
 			<div className="maps-v2-filterbar">
 				<div className="maps-v2-segmented" aria-label="Categorias do mapa"><button type="button" className={categories.includes("assigned") ? "is-active is-assigned" : ""} onClick={() => toggleCategory("assigned")}><span /> Minhas OS</button><button type="button" className={categories.includes("opportunity") ? "is-active is-opportunity" : ""} onClick={() => toggleCategory("opportunity")}><span /> Oportunidades</button></div>
 				<label className="maps-v2-radius"><Crosshair size={16} /><span>Raio</span><select value={radiusKm} onChange={(event) => setRadiusKm(Number(event.target.value))}>{VIEW_RADII.map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></label>
-				<span className="maps-v2-total"><Layers3 size={16} /> {points.length} OS nesta area</span>
+				<span className="maps-v2-total"><Layers3 size={16} /> {summary.assigned + summary.opportunities} OS nesta area</span>
 			</div>
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} onViewportChange={setViewport} onSelect={setSelectedId} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} onViewportChange={setViewport} onSelect={setSelectedId} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
 					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>

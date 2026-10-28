@@ -6,7 +6,7 @@ export default function OrderDetailPanel({ item, loading, onClose, onRequest, on
 	const [message, setMessage] = useState("");
 
 	if (!item && !loading) return null;
-	const navigateUrl = item?.category === "assigned"
+	const navigateUrl = item?.category === "assigned" && item?.locationAvailable
 		? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${item.latitude},${item.longitude}`)}`
 		: "#";
 
@@ -47,10 +47,13 @@ export default function OrderDetailPanel({ item, loading, onClose, onRequest, on
 					{item.coordinatesApproximate ? (
 						<div className="maps-v2-privacy-note"><ShieldCheck size={18} /><span>A posicao e aproximada. Dados exatos permanecem protegidos ate a atribuicao.</span></div>
 					) : null}
+					{!item.locationAvailable ? (
+						<div className="maps-v2-privacy-note"><MapPin size={18} /><span>Esta oportunidade esta disponivel, mas a localizacao ainda esta sendo processada.</span></div>
+					) : null}
 					<div className="maps-v2-detail-actions">
 						{item.category === "assigned" ? (<>
-							<a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Abrir rota <ExternalLink size={14} /></a>
-							<button type="button" className="maps-v2-primary-button" onClick={() => onAddRoute(item.id)}><Route size={17} /> Adicionar ao roteiro</button>
+							{navigateUrl !== "#" ? <a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Abrir rota <ExternalLink size={14} /></a> : null}
+							<button type="button" className="maps-v2-primary-button" disabled={!item.locationAvailable} onClick={() => onAddRoute(item.id)}><Route size={17} /> Adicionar ao roteiro</button>
 						</>) : (
 							<button type="button" className="maps-v2-primary-button" disabled={submitting} onClick={requestOrder}><PackagePlus size={17} /> {submitting ? "Enviando..." : "Solicitar esta OS"}</button>
 						)}

@@ -64,6 +64,20 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(__testables.haversineMeters(first, { latitude: -19.967, longitude: -44.198 })).toBeGreaterThanOrEqual(150);
 	});
 
+	it("mantem oportunidades sem coordenada visiveis na lista sem inventar uma posicao", () => {
+		const point = __testables.mapPoint(baseRow({ latitude: null, longitude: null }), {
+			role: "tecnico",
+			permissions: [service.MAPS_PERMISSIONS.OPPORTUNITIES],
+		});
+		expect(point).toMatchObject({
+			category: "opportunity",
+			locationAvailable: false,
+			latitude: null,
+			longitude: null,
+			coordinatesApproximate: false,
+		});
+	});
+
 	it("exibe coordenada e dados operacionais somente para ordem atribuida", () => {
 		const row = baseRow({ tecnico: "JOAO TECNICO" });
 		const point = __testables.mapPoint(row, {

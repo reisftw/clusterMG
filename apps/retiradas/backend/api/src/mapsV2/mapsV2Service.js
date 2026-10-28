@@ -209,14 +209,18 @@ function validateOrderRow(row) {
 function mapPoint(row, user, { origin = null } = {}) {
 	const category = categoryForOrder(row, user);
 	const scheduled = /AGEND/i.test(text(row.status));
+	const parsedLatitude = Number(row.latitude);
+	const parsedLongitude = Number(row.longitude);
+	const locationAvailable = Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude) &&
+		Math.abs(parsedLatitude) > 0.000001 && Math.abs(parsedLongitude) > 0.000001;
 	const exact = {
-		latitude: Number(row.latitude),
-		longitude: Number(row.longitude),
+		latitude: locationAvailable ? parsedLatitude : null,
+		longitude: locationAvailable ? parsedLongitude : null,
 	};
-	const coordinates = category === "opportunity"
+	const coordinates = category === "opportunity" && locationAvailable
 		? deterministicApproximation(row.id, exact.latitude, exact.longitude)
 		: exact;
-	const distanceMeters = origin ? haversineMeters(origin, exact) : null;
+	const distanceMeters = origin && locationAvailable ? haversineMeters(origin, exact) : null;
 	const base = {
 		id: row.id,
 		orderNumber: row.num_os,
@@ -224,7 +228,8 @@ function mapPoint(row, user, { origin = null } = {}) {
 		scheduled,
 		latitude: coordinates.latitude,
 		longitude: coordinates.longitude,
-		coordinatesApproximate: category === "opportunity",
+		coordinatesApproximate: category === "opportunity" && locationAvailable,
+		locationAvailable,
 		city: row.cidade || "Cidade nao informada",
 		neighborhood: row.bairro || "Bairro nao informado",
 		company: row.empresa || "",
@@ -277,6 +282,7 @@ async function syncNativeCoordinates({ force = false } = {}) {
 		   from ordens_servico
 		  where latitude is not null and longitude is not null
 		    and latitude between -90 and 90 and longitude between -180 and 180
+		    and abs(latitude) > 0.000001 and abs(longitude) > 0.000001
 		 on conflict (order_id) do update set
 		   latitude = excluded.latitude,
 		   longitude = excluded.longitude,
@@ -309,8 +315,15 @@ function sourceFilters({ query = {}, user = {}, params = [] } = {}) {
 	const viewport = parseViewport(query);
 	if (viewport) {
 		params.push(viewport.minLat, viewport.maxLat, viewport.minLng, viewport.maxLng);
-		clauses.push(`l.latitude between $${params.length - 3} and $${params.length - 2}`);
-		clauses.push(`l.longitude between $${params.length - 1} and $${params.length}`);
+		clauses.push(`(
+		  l.order_id is null
+		  or abs(coalesce(l.latitude, 0)) <= 0.000001
+		  or abs(coalesce(l.longitude, 0)) <= 0.000001
+		  or (
+		    l.latitude between $${params.length - 3} and $${params.length - 2}
+		    and l.longitude between $${params.length - 1} and $${params.length}
+		  )
+		)`);
 	}
 	if (text(query.city)) {
 		params.push(text(query.city));
@@ -340,7 +353,7 @@ async function queryCandidateRows(query = {}, user = {}, limit = MAX_POINTS) {
 		        o.updated_at, l.latitude, l.longitude, l.coordinate_source,
 		        l.accuracy_level, request.id as open_request_id
 		   from ordens_servico o
-		   join maps_order_locations l on l.order_id = o.id
+		   left join maps_order_locations l on l.order_id = o.id
 		   left join maps_assignment_requests request
 		     on request.order_id = o.id
 		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION')
@@ -368,7 +381,7 @@ async function listPoints(query = {}, user = {}) {
 	let items = rows.filter(validateOrderRow).map((row) => mapPoint(row, user, { origin }));
 	items = items.filter((point) => filterVisiblePoint(point, user, categories));
 	if (origin && viewport.radiusMeters) {
-		items = items.filter((point) => point.distanceMeters <= viewport.radiusMeters);
+		items = items.filter((point) => !point.locationAvailable || point.distanceMeters <= viewport.radiusMeters);
 	}
 	items.sort((left, right) => (left.distanceMeters ?? Infinity) - (right.distanceMeters ?? Infinity));
 	return {
@@ -376,6 +389,12 @@ async function listPoints(query = {}, user = {}) {
 		total: items.length,
 		truncated: rows.length >= Math.min(Number(query.limit || MAX_POINTS), MAX_POINTS),
 		lastSyncAt: rows.reduce((latest, row) => latest > text(row.updated_at) ? latest : text(row.updated_at), ""),
+		summary: {
+			assigned: items.filter((item) => item.category === "assigned").length,
+			opportunities: items.filter((item) => item.category === "opportunity").length,
+			scheduled: items.filter((item) => item.scheduled).length,
+			locationPending: items.filter((item) => !item.locationAvailable).length,
+		},
 		privacy: { opportunitiesApproximate: true },
 	};
 }
@@ -397,7 +416,7 @@ async function getOrder(orderId, user = {}) {
 		`select o.*, l.latitude, l.longitude, l.coordinate_source, l.accuracy_level,
 		        request.id as open_request_id
 		   from ordens_servico o
-		   join maps_order_locations l on l.order_id = o.id
+		   left join maps_order_locations l on l.order_id = o.id
 		   left join maps_assignment_requests request
 		     on request.order_id = o.id
 		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION')

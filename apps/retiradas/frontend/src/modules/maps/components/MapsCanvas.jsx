@@ -10,7 +10,12 @@ const DEFAULT_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 function featureCollection(points = []) {
 	return {
 		type: "FeatureCollection",
-		features: points.map((point) => ({
+		features: points.filter((point) => (
+			Number.isFinite(Number(point.latitude)) &&
+			Number.isFinite(Number(point.longitude)) &&
+			Math.abs(Number(point.latitude)) > 0.000001 &&
+			Math.abs(Number(point.longitude)) > 0.000001
+		)).map((point) => ({
 			type: "Feature",
 			geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
 			properties: {
@@ -33,10 +38,10 @@ function userFeature(position) {
 	};
 }
 
-function installLayers(map) {
+function installLayers(map, points) {
 	map.addSource(SOURCE_ID, {
 		type: "geojson",
-		data: featureCollection(),
+		data: featureCollection(points),
 		cluster: true,
 		clusterMaxZoom: 14,
 		clusterRadius: 48,
@@ -112,14 +117,19 @@ function installLayers(map) {
 	});
 }
 
-export default function MapsCanvas({ points, userPosition, focusPoint, onViewportChange, onSelect }) {
+export default function MapsCanvas({ points, userPosition, focusPoint, onViewportChange, onSelect, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
-	const callbacksRef = useRef({ onViewportChange, onSelect });
+	const pointsRef = useRef(points);
+	const callbacksRef = useRef({ onViewportChange, onSelect, onError });
 
 	useEffect(() => {
-		callbacksRef.current = { onViewportChange, onSelect };
-	}, [onViewportChange, onSelect]);
+		callbacksRef.current = { onViewportChange, onSelect, onError };
+	}, [onViewportChange, onSelect, onError]);
+
+	useEffect(() => {
+		pointsRef.current = points;
+	}, [points]);
 
 	useEffect(() => {
 		if (!containerRef.current || mapRef.current) return undefined;
@@ -131,18 +141,24 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 			attributionControl: false,
 		});
 		mapRef.current = map;
+		let loaded = false;
+		let userMovedMap = false;
 		map.addControl(new NavigationControl({ visualizePitch: true }), "top-right");
 		map.addControl(new AttributionControl({ compact: true }), "bottom-right");
 		map.on("load", () => {
-			installLayers(map);
-			const bounds = map.getBounds();
-			callbacksRef.current.onViewportChange?.({
-				minLat: bounds.getSouth(), maxLat: bounds.getNorth(),
-				minLng: bounds.getWest(), maxLng: bounds.getEast(),
-			});
+			loaded = true;
+			installLayers(map, pointsRef.current);
+			map.resize();
+		});
+		map.on("error", (event) => {
+			if (!loaded) callbacksRef.current.onError?.(event?.error?.message || "Nao foi possivel abrir o mapa.");
+		});
+		map.on("movestart", (event) => {
+			if (event?.originalEvent) userMovedMap = true;
 		});
 		let viewportTimer = null;
 		map.on("moveend", () => {
+			if (!userMovedMap) return;
 			window.clearTimeout(viewportTimer);
 			viewportTimer = window.setTimeout(() => {
 				const bounds = map.getBounds();
@@ -152,6 +168,13 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 				});
 			}, 350);
 		});
+		const resizeObserver = typeof ResizeObserver !== "undefined"
+			? new ResizeObserver(() => map.resize())
+			: null;
+		resizeObserver?.observe(containerRef.current);
+		const resizeMap = () => map.resize();
+		window.addEventListener("resize", resizeMap);
+		window.addEventListener("orientationchange", resizeMap);
 		map.on("click", "maps-points", (event) => {
 			const id = event.features?.[0]?.properties?.id;
 			if (id) callbacksRef.current.onSelect?.(id);
@@ -169,6 +192,9 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 		}
 		return () => {
 			window.clearTimeout(viewportTimer);
+			resizeObserver?.disconnect();
+			window.removeEventListener("resize", resizeMap);
+			window.removeEventListener("orientationchange", resizeMap);
 			map.remove();
 			mapRef.current = null;
 		};
