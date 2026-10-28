@@ -33,13 +33,14 @@ const MAC_PREFIX_MANUFACTURERS = {
 
 export function normalizeOnnetMac(value) {
 	return String(value || "")
-		.replace(/[^a-fA-F0-9]/g, "")
+		.replace(/[^a-zA-Z0-9]/g, "")
 		.toUpperCase()
 		.slice(0, 12);
 }
 
 export function formatOnnetMac(value) {
 	const normalized = normalizeOnnetMac(value);
+	if (!/^[A-F0-9]{12}$/.test(normalized)) return normalized;
 	return normalized.replace(/(.{2})(?=.)/g, "$1:");
 }
 

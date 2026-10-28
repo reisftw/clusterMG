@@ -178,11 +178,6 @@ function normalizeMacInput(value) {
 		.slice(0, 12);
 }
 
-function formatMac(value) {
-	const normalized = normalizeMacInput(value);
-	return normalized.replace(/(.{2})(?=.)/g, "$1:");
-}
-
 function inferMacManufacturer(value) {
 	const normalized = normalizeMacInput(value);
 	if (normalized.length < 6) return "Fabricante não identificado";
@@ -262,6 +257,20 @@ function normalizeMac(value) {
 		.toUpperCase();
 	if (mac === "FFFFFFFFFFFF") return "";
 	return mac.length === 12 ? mac : "";
+}
+
+function normalizeOnnetStockIdentifier(value) {
+	const identifier = String(value || "")
+		.replace(/[^a-zA-Z0-9]/g, "")
+		.toUpperCase();
+	if (identifier === "FFFFFFFFFFFF") return "";
+	return identifier.length === 12 ? identifier : "";
+}
+
+function formatOnnetStockIdentifier(value) {
+	const identifier = normalizeOnnetStockIdentifier(value);
+	if (!/^[A-F0-9]{12}$/.test(identifier)) return identifier;
+	return identifier.replace(/(.{2})(?=.)/g, "$1:");
 }
 
 function buildMacCandidates(...values) {
@@ -2959,20 +2968,24 @@ async function getOnnetStockDocument(documentId) {
 async function assertUniqueOnnetStockMac(mac, ignoredDocumentId = "") {
 	const existing = (await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION)).find(
 		(row) =>
-			normalizeMac(row.data?.mac) === mac &&
+			normalizeOnnetStockIdentifier(row.data?.mac) === mac &&
 			String(row.documentId || "") !== String(ignoredDocumentId || ""),
 	);
 	if (existing) {
-		const error = new Error(`MAC ${formatMac(mac)} já foi lançado no estoque Onnet.`);
+		const error = new Error(
+			`Equipamento ${formatOnnetStockIdentifier(mac)} já foi lançado no estoque Onnet.`,
+		);
 		error.statusCode = 409;
 		throw error;
 	}
 }
 
 function buildOnnetStockRecordPayload(payload = {}, user = {}, previous = {}) {
-	const mac = normalizeMac(payload.mac);
+	const mac = normalizeOnnetStockIdentifier(payload.mac);
 	if (!mac) {
-		const error = new Error("Informe um MAC válido com 12 caracteres.");
+		const error = new Error(
+			"Informe um MAC ou identificador Onnet válido com 12 caracteres.",
+		);
 		error.statusCode = 400;
 		throw error;
 	}
@@ -3004,7 +3017,7 @@ function buildOnnetStockRecordPayload(payload = {}, user = {}, previous = {}) {
 	return {
 		...previous,
 		mac,
-		macFormatado: formatMac(mac),
+		macFormatado: formatOnnetStockIdentifier(mac),
 		fabricante: String(payload.fabricante || payload.manufacturer || "").trim() || inferMacManufacturer(mac),
 		cidade,
 		tecnicoNome,
@@ -3031,7 +3044,7 @@ async function refreshOnnetStockAccountingForDate(dateText, user = {}) {
 }
 
 async function saveOnnetStockRecord(payload = {}, user = {}) {
-	const mac = normalizeMac(payload.mac);
+	const mac = normalizeOnnetStockIdentifier(payload.mac);
 	await assertUniqueOnnetStockMac(mac);
 	const record = buildOnnetStockRecordPayload(payload, user);
 	const documentId = `${record.dataEntrega}-${record.mac}`.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -3053,7 +3066,7 @@ async function updateOnnetStockRecord(documentId, payload = {}, user = {}) {
 		error.statusCode = 404;
 		throw error;
 	}
-	const mac = normalizeMac(payload.mac);
+	const mac = normalizeOnnetStockIdentifier(payload.mac);
 	await assertUniqueOnnetStockMac(mac, documentId);
 	const previous = currentDocument.data || {};
 	const record = buildOnnetStockRecordPayload(payload, user, previous);
@@ -3942,6 +3955,7 @@ async function saveMatchConfig(payload = {}, user = {}) {
 module.exports = {
 	createImportJob,
 	inferMacManufacturer,
+	formatOnnetStockIdentifier,
 	getImportJob,
 	getMatchConfig,
 	listOnnetStockRecords,
@@ -3966,4 +3980,5 @@ module.exports = {
 	buildFineDailyGroups,
 	buildIncrementalFineSnapshot,
 	buildDiarioEntryFromSaldoDay,
+	normalizeOnnetStockIdentifier,
 };

@@ -363,7 +363,7 @@ export default function EstoqueOnnetPage() {
 			</section>
 
 			<div className="grid gap-3 md:grid-cols-3">
-				<StatCard icon={Boxes} label="MACs registrados" value={total} helper="Histórico Onnet" />
+				<StatCard icon={Boxes} label="Equipamentos registrados" value={total} helper="Histórico Onnet" />
 				<StatCard icon={CheckCircle2} label="Fabricante" value={fabricante} helper={macValido ? formatOnnetMac(normalizedMac) : "Digite o MAC"} />
 				<StatCard icon={CalendarDays} label="Data do lançamento" value={formatDateTime(form.dataEntrega, form.horaEntrega)} helper="Contabiliza neste dia" />
 			</div>
@@ -372,17 +372,19 @@ export default function EstoqueOnnetPage() {
 				<form className="grid gap-4 lg:grid-cols-12" onSubmit={handleSubmit}>
 					<label className="lg:col-span-3">
 						<span className="text-xs font-black uppercase tracking-wide text-slate-500">
-							MAC do equipamento
+							MAC ou identificador do equipamento
 						</span>
 						<input
 							value={form.mac}
 							onChange={(event) => updateForm("mac", event.target.value)}
-							placeholder="A8:32:9A:00:00:00"
+							placeholder="A8:32:9A:00:00:00 ou FHTT99F06B30"
 							className="mt-1 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-black uppercase text-slate-900 outline-none focus:border-blue-400"
 							required
 						/>
 						<p className="mt-1 text-xs font-semibold text-slate-500">
-							{macValido ? formatOnnetMac(normalizedMac) : "Informe os 12 caracteres do MAC."}
+							{macValido
+								? formatOnnetMac(normalizedMac)
+								: "Informe os 12 caracteres do MAC ou identificador Onnet."}
 						</p>
 					</label>
 
