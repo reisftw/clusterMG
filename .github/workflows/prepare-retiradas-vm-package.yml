@@ -1,0 +1,171 @@
+name: Prepare Retiradas VM Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Versao exibida no pacote"
+        required: true
+        type: string
+      package_name:
+        description: "Nome do diretorio e arquivo, sem extensao"
+        required: true
+        type: string
+      download_token:
+        description: "Diretorio temporario e nao enumeravel para download"
+        required: true
+        type: string
+
+concurrency:
+  group: package-retiradas-vm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build and publish VM update package
+    runs-on: ubuntu-latest
+    environment: production-retiradas
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.VPS_USER || 'root' }}
+      PACKAGE_NAME: ${{ inputs.package_name }}
+      RELEASE_VERSION: ${{ inputs.release_version }}
+      DOWNLOAD_TOKEN: ${{ inputs.download_token }}
+
+    steps:
+      - name: Validate package inputs
+        run: |
+          [[ "$PACKAGE_NAME" =~ ^retiradas-vm-update-[A-Za-z0-9._-]+$ ]]
+          [[ "$RELEASE_VERSION" =~ ^v[A-Za-z0-9._-]+$ ]]
+          [[ "$DOWNLOAD_TOKEN" =~ ^[a-f0-9]{24,64}$ ]]
+
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Build production frontend
+        run: |
+          npm ci --no-audit --no-fund
+          export VITE_APP_ENV_LABEL="Producao"
+          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          npm run build:retiradas
+
+      - name: Assemble update package
+        run: |
+          package_root="$RUNNER_TEMP/$PACKAGE_NAME"
+          mkdir -p "$package_root"
+
+          cp ops/vm-migration/scripts/apply-retiradas-update-package.sh \
+            "$package_root/apply-update.sh"
+          sed -i "s/__RELEASE_ID__/$RELEASE_VERSION/g" \
+            "$package_root/apply-update.sh"
+          chmod 750 "$package_root/apply-update.sh"
+
+          cat > "$package_root/VERSAO.txt" <<EOF
+          Retiradas $RELEASE_VERSION
+
+          Commit: ${GITHUB_SHA::7}
+          Ambiente: Producao
+
+          Alteracoes incluidas:
+          - Percentual de entrega calculado sobre os cancelamentos reais.
+          - Alvo dinamico baseado na meta sazonal cadastrada.
+          - Acompanhamento atualizado com volume alvo de retiradas.
+          - Card de meta positivo em verde no tema Halloween.
+          - Demais funcionalidades existentes na revisao publicada.
+          EOF
+
+          tar \
+            --exclude='./node_modules' \
+            --exclude='./output' \
+            --exclude='./uploads' \
+            --exclude='./private' \
+            --exclude='./.env' \
+            -czf "$package_root/retiradas-backend.tar.gz" \
+            -C apps/retiradas/backend .
+          tar -czf "$package_root/retiradas-dist.tar.gz" -C dist .
+
+          (
+            cd "$package_root"
+            sha256sum \
+              apply-update.sh \
+              VERSAO.txt \
+              retiradas-backend.tar.gz \
+              retiradas-dist.tar.gz > SHA256SUMS.txt
+          )
+
+          tar -cf "$GITHUB_WORKSPACE/$PACKAGE_NAME.tar" \
+            -C "$RUNNER_TEMP" "$PACKAGE_NAME"
+          sha256sum "$PACKAGE_NAME.tar" > "$PACKAGE_NAME.tar.sha256"
+
+      - name: Verify package checksums
+        run: |
+          sha256sum -c "$PACKAGE_NAME.tar.sha256"
+          staging="$(mktemp -d)"
+          tar -xf "$PACKAGE_NAME.tar" -C "$staging"
+          (cd "$staging/$PACKAGE_NAME" && sha256sum -c SHA256SUMS.txt)
+          test -s "$staging/$PACKAGE_NAME/retiradas-dist.tar.gz"
+          test -s "$staging/$PACKAGE_NAME/retiradas-backend.tar.gz"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ inputs.package_name }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            ${{ inputs.package_name }}.tar
+            ${{ inputs.package_name }}.tar.sha256
+
+      - name: Configure production SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          install -m 600 .github/known_hosts/retiradas ~/.ssh/known_hosts
+
+      - name: Publish temporary download on VPS
+        run: |
+          remote_dir="/var/www/retiradas/dist/$DOWNLOAD_TOKEN"
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
+            "$VPS_USER@$VPS_HOST" \
+            "mkdir -p '$remote_dir' && chmod 755 '$remote_dir'"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
+            "$PACKAGE_NAME.tar" "$PACKAGE_NAME.tar.sha256" \
+            "$VPS_USER@$VPS_HOST:$remote_dir/"
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
+            "$VPS_USER@$VPS_HOST" \
+            "chmod 644 '$remote_dir/$PACKAGE_NAME.tar' '$remote_dir/$PACKAGE_NAME.tar.sha256'"
+
+      - name: Validate public package
+        run: |
+          validation_dir="$(mktemp -d)"
+          cd "$validation_dir"
+          curl -fsS --retry 5 --retry-delay 2 \
+            "https://retiradas.tech/$DOWNLOAD_TOKEN/$PACKAGE_NAME.tar.sha256" \
+            -o "$PACKAGE_NAME.tar.sha256"
+          curl -fsS --retry 5 --retry-delay 2 \
+            "https://retiradas.tech/$DOWNLOAD_TOKEN/$PACKAGE_NAME.tar" \
+            -o "$PACKAGE_NAME.tar"
+          sha256sum -c "$PACKAGE_NAME.tar.sha256"
