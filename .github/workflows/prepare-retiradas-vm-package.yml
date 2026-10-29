@@ -118,6 +118,7 @@ jobs:
           test -s "$staging/$PACKAGE_NAME/retiradas-backend.tar.gz"
 
       - name: Upload workflow artifact
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ inputs.package_name }}
