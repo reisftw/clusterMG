@@ -17,6 +17,7 @@ const MAPS_PERMISSIONS = Object.freeze({
 	ROUTES: "retiradas.maps.v2.manage_routes",
 	SETTINGS: "retiradas.maps.v2.manage_settings",
 	AUDIT: "retiradas.maps.v2.audit",
+	LIVE_TECHNICIANS: "retiradas.maps.v2.live_technicians",
 });
 
 const ALLOWED_RADII = new Set([100, 250, 300, 500, 1000]);
@@ -44,6 +45,13 @@ const DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/search";
 
 function broadcastMapsUpdate(action, payload = {}) {
 	broadcastRealtime("maps", {
+		action,
+		...payload,
+	});
+}
+
+function broadcastMapsAdminUpdate(action, payload = {}) {
+	broadcastRealtime("maps-admin", {
 		action,
 		...payload,
 	});
@@ -125,6 +133,11 @@ function userTechnicianName(user = {}) {
 	);
 }
 
+function isTechnicianUser(user = {}) {
+	const profile = userProfile(user);
+	return normalize(user.role || profile.role) === "TECNICO";
+}
+
 function hasPermission(user = {}, permission) {
 	const profile = userProfile(user);
 	const permissions = Array.isArray(user.permissions)
@@ -156,6 +169,20 @@ function parseCoordinates(input = {}) {
 		throw apiError("Informe latitude e longitude validas.");
 	}
 	return { latitude, longitude };
+}
+
+function optionalNumberInRange(value, min, max) {
+	if (value === undefined || value === null || value === "") return null;
+	return numberInRange(value, min, max);
+}
+
+function technicianPresenceStatus(lastSeenAt, now = Date.now()) {
+	const timestamp = new Date(lastSeenAt).getTime();
+	if (!Number.isFinite(timestamp)) return "stale";
+	const ageMs = Math.max(0, now - timestamp);
+	if (ageMs <= 2 * 60 * 1000) return "active";
+	if (ageMs <= 10 * 60 * 1000) return "recent";
+	return "stale";
 }
 
 function haversineMeters(left, right) {
@@ -1338,6 +1365,146 @@ async function processNextGeocode() {
 	}
 }
 
+async function saveTechnicianPresence(payload = {}, user = {}) {
+	if (!isTechnicianUser(user)) {
+		throw apiError("A localizacao operacional e exclusiva para tecnicos.", 403, "TECHNICIAN_REQUIRED");
+	}
+	const coordinates = parseCoordinates(payload);
+	const accuracy = optionalNumberInRange(payload.accuracy, 0, 10_000);
+	const heading = optionalNumberInRange(payload.heading, 0, 360);
+	const speed = optionalNumberInRange(payload.speed, 0, 150);
+	const technicianName = userTechnicianName(user) || userName(user);
+	const result = await db.query(
+		`insert into maps_technician_presence
+		 (user_id, latitude, longitude, accuracy_meters, heading_degrees, speed_mps,
+		  technician_name, display_name, consent_source, last_seen_at)
+		 values ($1, $2, $3, $4, $5, $6, $7, $8, 'BROWSER_GEOLOCATION', now())
+		 on conflict (user_id) do update set
+		   latitude = excluded.latitude,
+		   longitude = excluded.longitude,
+		   accuracy_meters = excluded.accuracy_meters,
+		   heading_degrees = excluded.heading_degrees,
+		   speed_mps = excluded.speed_mps,
+		   technician_name = excluded.technician_name,
+		   display_name = excluded.display_name,
+		   consent_source = excluded.consent_source,
+		   last_seen_at = now(),
+		   updated_at = now()
+		 returning last_seen_at as "lastSeenAt"`,
+		[
+			userId(user),
+			coordinates.latitude,
+			coordinates.longitude,
+			accuracy,
+			heading,
+			speed,
+			technicianName,
+			userName(user),
+		],
+	);
+	broadcastMapsAdminUpdate("TECHNICIAN_PRESENCE_UPDATED", {
+		userId: userId(user),
+	});
+	return { ok: true, lastSeenAt: result.rows[0]?.lastSeenAt || null };
+}
+
+async function listTechnicianPresence() {
+	const result = await db.query(
+		`with presence as (
+		  select location.*,
+		         app.display_name as account_display_name,
+		         app.email,
+		         app.regional,
+		         app.imported_profile,
+		         coalesce(
+		           nullif(location.technician_name, ''),
+		           nullif(app.imported_profile->>'metasTecnicoNome', ''),
+		           nullif(app.imported_profile->>'metas_tecnico_nome', ''),
+		           app.display_name,
+		           app.email
+		         ) as resolved_technician_name
+		    from maps_technician_presence location
+		    join app_users app on app.uid = location.user_id
+		   where app.disabled = false
+		     and lower(coalesce(app.role, '')) = 'tecnico'
+		), production as (
+		  select lower(trim(raw_excerpt #>> '{tecnicos,0,name}')) as technician_key,
+		         count(distinct hubsoft_id)::int as completed_today,
+		         max(source_date) as last_completion_at
+		    from hubsoft_sync_records
+		   where profile in ('META_D0', 'META_D_MINUS_ONE', 'META_AUDIT_DAILY')
+		     and active = true
+		     and production_channel = 'RETIRADA'
+		     and (source_date at time zone 'America/Sao_Paulo')::date =
+		         (now() at time zone 'America/Sao_Paulo')::date
+		     and jsonb_typeof(raw_excerpt->'tecnicos') = 'array'
+		     and jsonb_array_length(raw_excerpt->'tecnicos') = 1
+		   group by lower(trim(raw_excerpt #>> '{tecnicos,0,name}'))
+		), open_orders as (
+		  select lower(trim(tecnico)) as technician_key,
+		         count(distinct num_os)::int as open_orders
+		    from ordens_servico
+		   where source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')
+		     and upper(coalesce(tipo, '')) = any($1::text[])
+		     and upper(coalesce(status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'
+		     and nullif(trim(tecnico), '') is not null
+		   group by lower(trim(tecnico))
+		), route_stops as (
+		  select route.user_id, count(item.order_id)::int as route_stops
+		    from maps_routes route
+		    left join maps_route_items item on item.route_id = route.id
+		   where route.route_date = (now() at time zone 'America/Sao_Paulo')::date
+		     and route.status in ('DRAFT', 'ACTIVE')
+		   group by route.user_id
+		)
+		select presence.user_id as "userId",
+		       coalesce(nullif(presence.display_name, ''), presence.account_display_name,
+		                presence.resolved_technician_name) as "displayName",
+		       presence.resolved_technician_name as "technicianName",
+		       presence.regional,
+		       presence.latitude,
+		       presence.longitude,
+		       presence.accuracy_meters as "accuracyMeters",
+		       presence.heading_degrees as "headingDegrees",
+		       presence.speed_mps as "speedMps",
+		       presence.last_seen_at as "lastSeenAt",
+		       coalesce(production.completed_today, 0)::int as "completedToday",
+		       production.last_completion_at as "lastCompletionAt",
+		       coalesce(open_orders.open_orders, 0)::int as "openOrders",
+		       coalesce(route_stops.route_stops, 0)::int as "routeStops"
+		  from presence
+		  left join production
+		    on production.technician_key = lower(trim(presence.resolved_technician_name))
+		  left join open_orders
+		    on open_orders.technician_key = lower(trim(presence.resolved_technician_name))
+		  left join route_stops on route_stops.user_id = presence.user_id
+		 order by presence.last_seen_at desc`,
+		[ALLOWED_ORDER_TYPES],
+	);
+	const now = Date.now();
+	const items = result.rows.map((row) => ({
+		...row,
+		latitude: Number(row.latitude),
+		longitude: Number(row.longitude),
+		accuracyMeters: row.accuracyMeters === null ? null : Number(row.accuracyMeters),
+		headingDegrees: row.headingDegrees === null ? null : Number(row.headingDegrees),
+		speedMps: row.speedMps === null ? null : Number(row.speedMps),
+		status: technicianPresenceStatus(row.lastSeenAt, now),
+	}));
+	return {
+		items,
+		summary: {
+			total: items.length,
+			active: items.filter((item) => item.status === "active").length,
+			recent: items.filter((item) => item.status === "recent").length,
+			stale: items.filter((item) => item.status === "stale").length,
+			completedToday: items.reduce((total, item) => total + Number(item.completedToday || 0), 0),
+			openOrders: items.reduce((total, item) => total + Number(item.openOrders || 0), 0),
+		},
+		generatedAt: new Date(now).toISOString(),
+	};
+}
+
 let workerTimer = null;
 let geocodeQueueLastRefreshAt = 0;
 let geocoderCycleRunning = false;
@@ -1404,10 +1571,12 @@ module.exports = {
 	listRadarAlerts,
 	listRequests,
 	listRoutes,
+	listTechnicianPresence,
 	optimizeRoute,
 	queueMissingGeocodes,
 	resolveRequest,
 	saveRadarSettings,
+	saveTechnicianPresence,
 	simulateRadar,
 	syncNativeCoordinates,
 	updateRoute,
@@ -1425,6 +1594,7 @@ module.exports = {
 		parseCoordinates,
 		radarWithinSchedule,
 		sourceFilters,
+		technicianPresenceStatus,
 		validateOrderRow,
 	},
 };

@@ -23,6 +23,8 @@ export function useRadarLocation(enabled) {
 						latitude: position.coords.latitude,
 						longitude: position.coords.longitude,
 						accuracy,
+						heading: position.coords.heading,
+						speed: position.coords.speed,
 						timestamp: position.timestamp,
 					},
 					error: "",

@@ -156,15 +156,33 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(result.map((item) => item.order_id)).toEqual(["near", "far"]);
 	});
 
+	it("classifica a presenca do tecnico por recencia", () => {
+		const now = new Date("2026-10-29T12:00:00.000Z").getTime();
+		expect(__testables.technicianPresenceStatus("2026-10-29T11:59:00.000Z", now)).toBe("active");
+		expect(__testables.technicianPresenceStatus("2026-10-29T11:54:00.000Z", now)).toBe("recent");
+		expect(__testables.technicianPresenceStatus("2026-10-29T11:40:00.000Z", now)).toBe("stale");
+	});
+
 	it("mantem todos os endpoints do contrato protegidos no router", () => {
 		const source = fs.readFileSync(
 			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js"),
 			"utf8",
 		);
 		expect(source).toContain("router.use(requireAuthenticated, requireAccess)");
-		for (const endpoint of ["/points", "/nearby", "/summary", "/radar/evaluate", "/requests", "/routes", "/health"]) {
+		for (const endpoint of ["/points", "/nearby", "/summary", "/radar/evaluate", "/requests", "/routes", "/technicians/presence", "/admin/technicians/live", "/health"]) {
 			expect(source).toContain(`"${endpoint}"`);
 		}
+	});
+
+	it("mantem o mapa da equipe restrito ao RBAC administrativo", () => {
+		const migration = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/sql/106_maps_live_technicians.sql"),
+			"utf8",
+		);
+		expect(migration).toContain("create table if not exists maps_technician_presence");
+		expect(migration).toContain("'retiradas.maps.v2.live_technicians'");
+		expect(migration).toContain("select 'admin', 'retiradas.maps.v2.live_technicians'");
+		expect(migration).not.toContain("select 'tecnico', 'retiradas.maps.v2.live_technicians'");
 	});
 
 	it("enfileira todo o backlog sem limitar a geocodificacao a cem ordens", () => {

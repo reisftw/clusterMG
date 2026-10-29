@@ -28,6 +28,7 @@ function createMapsV2Router({
 	const requireReject = requireAnyPermission([service.MAPS_PERMISSIONS.REJECT], fallbackRoles);
 	const requireRoutes = requireAnyPermission([service.MAPS_PERMISSIONS.ROUTES], fallbackRoles);
 	const requireAudit = requireAnyPermission([service.MAPS_PERMISSIONS.AUDIT], fallbackRoles);
+	const requireLiveTechnicians = requireAnyPermission([service.MAPS_PERMISSIONS.LIVE_TECHNICIANS], fallbackRoles);
 
 	router.use(requireAuthenticated, requireAccess);
 	router.use((req, res, next) => {
@@ -97,6 +98,22 @@ function createMapsV2Router({
 	router.post("/radar/evaluate", writeLimiter, requireCsrfToken, requireRadar, async (req, res, next) => {
 		try {
 			res.json(await service.evaluateRadar(req.body || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post("/technicians/presence", writeLimiter, requireCsrfToken, async (req, res, next) => {
+		try {
+			res.json(await service.saveTechnicianPresence(req.body || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/admin/technicians/live", readLimiter, requireLiveTechnicians, async (req, res, next) => {
+		try {
+			res.json(await service.listTechnicianPresence(req.query || {}));
 		} catch (error) {
 			next(error);
 		}

@@ -17,6 +17,7 @@ import AuthenticatorModal from "./AuthenticatorModal";
 import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
 import TechnicianPushPermissionPrompt from "./TechnicianPushPermissionPrompt";
+import TechnicianLocationPresence from "./TechnicianLocationPresence";
 import Topbar from "./Topbar";
 import ViewportDiagnostics from "./ViewportDiagnostics";
 
@@ -239,6 +240,7 @@ const PageWrapper = ({ children }) => {
 			{isTechnician && !trocarSenhaObrigatorio && !showWelcomeModal ? (
 				<TechnicianPushPermissionPrompt />
 			) : null}
+			<TechnicianLocationPresence />
 			<RetorninhoAssistant />
 			<ViewportDiagnostics />
 		</div>

@@ -163,6 +163,7 @@ export const PERMISSION_LABELS = Object.freeze({
 	"retiradas.maps.v2.manage_routes": "Retiradas Maps - Gerenciar roteiros",
 	"retiradas.maps.v2.manage_settings": "Retiradas Maps - Configurações",
 	"retiradas.maps.v2.audit": "Retiradas Maps - Auditoria",
+	"retiradas.maps.v2.live_technicians": "Retiradas Maps - Técnicos ao vivo",
 	"mercado.dashboard.view": "Mercado - Dashboard",
 	"mercado.lotes.view": "Mercado - Lotes",
 	"mercado.lotes.manage": "Gerenciar lotes do Mercado",
@@ -235,6 +236,7 @@ export const PERMISSION_GROUPS = Object.freeze([
 			"retiradas.maps.v2.manage_routes",
 			"retiradas.maps.v2.manage_settings",
 			"retiradas.maps.v2.audit",
+			"retiradas.maps.v2.live_technicians",
 		],
 	},
 	{

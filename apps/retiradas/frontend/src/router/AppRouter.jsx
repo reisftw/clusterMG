@@ -118,6 +118,9 @@ const Relatorios = lazy(
 );
 const Mapa = lazy(() => import("../pages/Mapa/MapaPage"));
 const Maps = lazy(() => import("../modules/maps/pages/MapsPage"));
+const AdminTechniciansMap = lazy(
+	() => import("../modules/maps/pages/AdminTechniciansMapPage"),
+);
 const MapaHistorico = lazy(() => import("../pages/Mapa/MapaHistoricoPage"));
 const MapasAtualizacoes = lazy(
 	() => import("../modules/mapas/components/MapasAtualizacoesPage"),
@@ -539,6 +542,15 @@ const AppRouter = () => (
 							element={<MercadoConfiguracoesPage />}
 						/>
 					</Route>
+
+					<Route
+						path={ROUTES.MAPS_ADMIN}
+						element={
+							<ProtectedRoute requiredPermission="retiradas.maps.v2.live_technicians">
+								<AdminTechniciansMap />
+							</ProtectedRoute>
+						}
+					/>
 
 					<Route element={<PageWrapper />}>
 						<Route

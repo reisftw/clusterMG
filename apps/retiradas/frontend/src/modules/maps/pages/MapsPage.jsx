@@ -10,13 +10,14 @@ import {
 	Route,
 	Search,
 	Settings2,
+	UsersRound,
 	Wifi,
 	WifiOff,
 	X,
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { hasPermission } from "../../../constants/roles";
+import { Link, useLocation } from "react-router-dom";
+import { hasPermission, ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import MapsBottomSheet from "../components/MapsBottomSheet";
@@ -29,9 +30,11 @@ import { useRadarLocation } from "../features/geolocation/useRadarLocation";
 import { dispatchRadarNotification } from "../features/notifications/notificationDispatcher";
 import { shouldEvaluatePosition } from "../features/radar/proximityEngine";
 import { mapsService } from "../services/mapsService";
+import { updateTechnicianPresence } from "../services/technicianPresence";
 import "../styles/maps.css";
 import "../styles/maps-mobile.css";
 import "../styles/maps-loading.css";
+import "../styles/maps-live-link.css";
 
 const MAPS_PERMISSIONS = {
 	RADAR: "retiradas.maps.v2.radar",
@@ -40,6 +43,7 @@ const MAPS_PERMISSIONS = {
 	REJECT: "retiradas.maps.v2.reject_request",
 	ROUTES: "retiradas.maps.v2.manage_routes",
 	AUDIT: "retiradas.maps.v2.audit",
+	LIVE_TECHNICIANS: "retiradas.maps.v2.live_technicians",
 };
 const VIEW_RADII = Object.freeze([
 	{ meters: 120, label: "120 m" },
@@ -62,12 +66,14 @@ function usePermission(user, permission) {
 }
 
 export default function MapsPage() {
-	const { currentUser } = useAuthContext();
+	const { currentUser, realUser } = useAuthContext();
 	const location = useLocation();
 	const canRadar = usePermission(currentUser, MAPS_PERMISSIONS.RADAR);
 	const canRequest = usePermission(currentUser, MAPS_PERMISSIONS.REQUEST);
 	const canRoutes = usePermission(currentUser, MAPS_PERMISSIONS.ROUTES);
 	const canAudit = usePermission(currentUser, MAPS_PERMISSIONS.AUDIT);
+	const canViewLiveTechnicians = usePermission(currentUser, MAPS_PERMISSIONS.LIVE_TECHNICIANS);
+	const isTechnician = String((realUser || currentUser)?.role || "").trim().toLowerCase() === ROLES.TECNICO;
 	const canApproveRequests = usePermission(currentUser, MAPS_PERMISSIONS.APPROVE);
 	const canRejectRequests = usePermission(currentUser, MAPS_PERMISSIONS.REJECT);
 	const canManageRequests = canApproveRequests || canRejectRequests;
@@ -190,6 +196,11 @@ export default function MapsPage() {
 			(response.alerts || []).forEach((alert) => dispatchRadarNotification(alert, () => setSheetOpen(true)));
 		}).catch(() => {});
 	}, [canRadar, locationState.position, radarSettings?.enabled]);
+
+	useEffect(() => {
+		if (!isTechnician || !locationState.position) return;
+		updateTechnicianPresence(locationState.position).catch(() => {});
+	}, [isTechnician, locationState.position]);
 
 	useEffect(() => {
 		if (gpsRequested && locationState.error) {
@@ -382,7 +393,7 @@ export default function MapsPage() {
 		<div className="maps-v2-page">
 			<header className="maps-v2-header">
 				<div className="maps-v2-title"><span><MapPinned size={23} /></span><div><h1>Retiradas Maps</h1><p>{formatSync(lastSyncAt || health?.last_order_sync)}</p></div></div>
-				<div className="maps-v2-header-status"><span className={health?.ok ? "is-online" : "is-offline"}>{health?.ok ? <Wifi size={16} /> : <WifiOff size={16} />}{health?.ok ? "Conectado" : "Indisponivel"}</span>{loading ? <RefreshCw className="maps-v2-spin" size={17} /> : null}</div>
+				<div className="maps-v2-header-status">{canViewLiveTechnicians ? <Link className="maps-v2-live-link" to="/maps/adminmap"><UsersRound size={16} /> Equipe ao vivo</Link> : null}<span className={health?.ok ? "is-online" : "is-offline"}>{health?.ok ? <Wifi size={16} /> : <WifiOff size={16} />}{health?.ok ? "Conectado" : "Indisponivel"}</span>{loading ? <RefreshCw className="maps-v2-spin" size={17} /> : null}</div>
 			</header>
 
 			<form className="maps-v2-search" onSubmit={applySearch}>
