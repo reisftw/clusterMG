@@ -41,5 +41,5 @@ export const mapsService = {
 	createRoute: (payload) => send("/routes", "POST", payload),
 	updateRoute: (id, payload) => send(`/routes/${encodeURIComponent(id)}`, "PATCH", payload),
 	optimizeRoute: (id, payload) => send(`/routes/${encodeURIComponent(id)}/optimize`, "POST", payload),
-	queueGeocoding: (limit = 200) => send("/geocoding/queue", "POST", { limit }),
+	queueGeocoding: (limit = 25000) => send("/geocoding/queue", "POST", { limit }),
 };

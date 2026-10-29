@@ -3,6 +3,7 @@ import {
 	Camera,
 	CheckCheck,
 	LogOut,
+	MapPinned,
 	Menu,
 	Search,
 	ShieldCheck,
@@ -11,7 +12,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import UserAvatar from "../ui/UserAvatar";
-import { getRoleLabel, ROLES } from "../../constants/roles";
+import { getRoleLabel, hasPermission, ROLES } from "../../constants/roles";
 import { useAuthContext } from "../../context/AuthContext";
 import { atualizarAvatarPerfil } from "../../modules/auth/services/authService";
 import {
@@ -22,6 +23,8 @@ import { playSelectedNotificationSound } from "../../services/notificationSoundS
 import { recordNotificationOpen } from "../../services/pushNotificationsService";
 import { AVATAR_ACCEPT, validateImageFile } from "../../utils/imageUpload";
 import { ROUTES } from "../../router/routes";
+import { mapsService } from "../../modules/maps/services/mapsService";
+import { subscribeRealtimeTopics } from "../../services/realtimeEvents";
 import AuthenticatorModal from "./AuthenticatorModal";
 
 function formatNotificationDate(value) {
@@ -59,12 +62,17 @@ const Topbar = ({ onOpenMobileMenu }) => {
 		String(currentUser?.role || "")
 			.trim()
 			.toLowerCase() === ROLES.TECNICO;
+	const canManageMapsRequests = hasPermission(
+		currentUser,
+		"retiradas.maps.v2.view_requests",
+	);
 	const avatarInputRef = useRef(null);
 	const [notificationsOpen, setNotificationsOpen] = useState(false);
 	const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 	const [authenticatorOpen, setAuthenticatorOpen] = useState(false);
 	const [notifications, setNotifications] = useState([]);
 	const [unreadCount, setUnreadCount] = useState(0);
+	const [pendingMapsRequests, setPendingMapsRequests] = useState(0);
 	const [defaultAvatarUrl, setDefaultAvatarUrl] = useState("");
 	const [avatarError, setAvatarError] = useState("");
 	const [avatarSaving, setAvatarSaving] = useState(false);
@@ -131,6 +139,19 @@ const Topbar = ({ onOpenMobileMenu }) => {
 		[currentUser, publishCounters],
 	);
 
+	const loadPendingMapsRequests = useCallback(async () => {
+		if (!canManageMapsRequests) {
+			setPendingMapsRequests(0);
+			return;
+		}
+		try {
+			const response = await mapsService.requests({ status: "PENDING", limit: 100 });
+			setPendingMapsRequests(Array.isArray(response?.items) ? response.items.length : 0);
+		} catch {
+			setPendingMapsRequests(0);
+		}
+	}, [canManageMapsRequests]);
+
 	const handleAvatarFile = async (event) => {
 		const file = event.target.files?.[0];
 		event.target.value = "";
@@ -160,10 +181,18 @@ const Topbar = ({ onOpenMobileMenu }) => {
 		};
 		const cancelInitial = scheduleInitial(() => {
 			loadNotifications({ silent: true });
+			loadPendingMapsRequests();
 		});
 		const interval = window.setInterval(() => {
-			if (document.visibilityState === "visible") loadNotifications();
+			if (document.visibilityState === "visible") {
+				loadNotifications();
+				loadPendingMapsRequests();
+			}
 		}, 30000);
+		const unsubscribeRealtime = subscribeRealtimeTopics("notifications", () => {
+			void loadNotifications();
+			void loadPendingMapsRequests();
+		});
 		const handlePreferenceUpdate = (event) => {
 			const nextPreferences = {
 				...(notificationPreferencesRef.current ?? {}),
@@ -183,12 +212,13 @@ const Topbar = ({ onOpenMobileMenu }) => {
 		return () => {
 			cancelInitial();
 			window.clearInterval(interval);
+			unsubscribeRealtime();
 			window.removeEventListener(
 				"retiradas:notification-preferences-updated",
 				handlePreferenceUpdate,
 			);
 		};
-	}, [loadNotifications]);
+	}, [loadNotifications, loadPendingMapsRequests]);
 
 	const markAllRead = async () => {
 		await marcarNotificacoesLidas({ all: true });
@@ -237,7 +267,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 				</p>
 			</div>
 
-			<div className="mx-5 hidden min-w-0 max-w-xl flex-1 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-400 shadow-inner xl:flex">
+			<div className="mx-3 hidden min-w-0 max-w-md flex-1 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-400 shadow-inner xl:flex">
 				<Search size={18} className="shrink-0" />
 				<span className="ml-2 truncate text-sm">
 					Buscar por O.S, colaborador, cidade...
@@ -245,6 +275,25 @@ const Topbar = ({ onOpenMobileMenu }) => {
 			</div>
 
 			<div className="flex items-center gap-2">
+				{canManageMapsRequests ? (
+					<Link
+						to={`${ROUTES.MAPS}?panel=requests`}
+						onClick={() => {
+							setNotificationsOpen(false);
+							setMobileAccountOpen(false);
+						}}
+						className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+						title="Solicitacoes de retirada no Maps"
+						aria-label={`${pendingMapsRequests} solicitacoes de retirada pendentes no Maps`}
+					>
+						<MapPinned size={19} />
+						{pendingMapsRequests > 0 ? (
+							<span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-blue-600 px-1.5 py-0.5 text-center text-[10px] font-black text-white">
+								{pendingMapsRequests > 99 ? "99+" : pendingMapsRequests}
+							</span>
+						) : null}
+					</Link>
+				) : null}
 				<div className="relative">
 					<button
 						type="button"

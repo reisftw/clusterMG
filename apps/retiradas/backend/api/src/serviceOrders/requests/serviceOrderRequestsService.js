@@ -120,6 +120,11 @@ function technicianHubsoftName(user = {}) {
 	return text(profile.metasTecnicoNome || profile.metas_tecnico_nome);
 }
 
+function technicianHubsoftId(user = {}) {
+	const profile = userProfile(user);
+	return Number(profile.hubsoftTecnicoId || profile.hubsoft_tecnico_id || 0) || null;
+}
+
 function isAdmin(user = {}) {
 	return normalize(user.role || userProfile(user).role) === "ADMIN";
 }
@@ -854,10 +859,13 @@ async function resolveTechnicianHubsoft(payload = {}, user = {}) {
 	);
 	if (!canChooseTechnician(user)) {
 		const linkedName = technicianHubsoftName(user);
-		if (!linkedName) return { id: null, name: "" };
+		const linkedId = technicianHubsoftId(user);
+		if (!linkedName && !linkedId) return { id: null, name: "" };
 		const technicians = await ensureTechnicianCatalog(user);
 		const match = technicians.find(
-			(item) => normalize(item.name) === normalize(linkedName),
+			(item) => linkedId
+				? Number(item.hubsoft_technician_id) === linkedId
+				: normalize(item.name) === normalize(linkedName),
 		);
 		return {
 			id: match?.hubsoft_technician_id || null,

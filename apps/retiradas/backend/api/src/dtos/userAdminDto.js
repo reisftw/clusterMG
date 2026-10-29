@@ -40,6 +40,8 @@ const UserAdminUpdateDTO = object(
 		insumosCategoriasSolicitar: arrayOf(string({ maxLength: 120 }), { maxLength: 200 }),
 		metasTecnicoNome: string({ maxLength: 200, allowEmpty: true }),
 		metas_tecnico_nome: string({ maxLength: 200, allowEmpty: true }),
+		hubsoftTecnicoId: string({ maxLength: 80, allowEmpty: true }),
+		hubsoft_tecnico_id: string({ maxLength: 80, allowEmpty: true }),
 		agendamentosTecnicoNome: string({ maxLength: 200, allowEmpty: true }),
 		agendamentos_tecnico_nome: string({ maxLength: 200, allowEmpty: true }),
 	},

@@ -10,6 +10,7 @@ const MAPS_PERMISSIONS = Object.freeze({
 	OPPORTUNITIES: "retiradas.maps.v2.view_opportunities",
 	RADAR: "retiradas.maps.v2.radar",
 	REQUEST: "retiradas.maps.v2.request_os",
+	VIEW_REQUESTS: "retiradas.maps.v2.view_requests",
 	APPROVE: "retiradas.maps.v2.approve_request",
 	REJECT: "retiradas.maps.v2.reject_request",
 	ROUTES: "retiradas.maps.v2.manage_routes",
@@ -37,6 +38,7 @@ const ALERT_HYSTERESIS_METERS = 100;
 const MAX_ALERTS_PER_HOUR = 5;
 const NATIVE_COORDINATES_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const GEOCODE_QUEUE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const GEOCODE_QUEUE_BATCH_LIMIT = 25000;
 const DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/search";
 
 function text(value) {
@@ -446,13 +448,13 @@ async function createRequest(payload = {}, user = {}) {
 			})],
 		);
 		await notificationsService.createNotification({
-			type: "geral",
-			title: "Nova solicitacao no Maps",
-			message: `${userName(user)} solicitou uma retirada em ${order.city}.`,
+			type: "maps_solicitacao",
+			title: "Nova solicitacao de retirada no Maps",
+			message: `${userName(user)} solicitou a O.S ${order.orderNumber} em ${order.city}.`,
 			targetPath: "/maps?panel=requests",
-			severity: "info",
+			severity: "warning",
 			user,
-			targets: { roles: ["admin", "supervisor", "backoffice_retirada"] },
+			targets: { roles: ["admin", "backoffice", "backoffice_retirada"] },
 			meta: { module: "maps_v2", requestId: result.rows[0].id },
 		});
 		return { item: result.rows[0] };
@@ -1005,7 +1007,7 @@ function addressHash(address) {
 	return crypto.createHash("sha256").update(normalize(address)).digest("hex");
 }
 
-async function queueMissingGeocodes(limit = 200) {
+async function queueMissingGeocodes(limit = GEOCODE_QUEUE_BATCH_LIMIT) {
 	const result = await db.query(
 		`select o.id, o.endereco, o.numero, o.bairro, o.cidade
 		   from ordens_servico o
@@ -1024,20 +1026,35 @@ async function queueMissingGeocodes(limit = 200) {
 		    and nullif(trim(o.cidade), '') is not null
 		  order by o.data_abertura desc nulls last
 		  limit $1`,
-		[Math.min(Math.max(Number(limit || 200), 1), 1000), ALLOWED_ORDER_TYPES],
+		[
+			Math.min(Math.max(Number(limit || GEOCODE_QUEUE_BATCH_LIMIT), 1), GEOCODE_QUEUE_BATCH_LIMIT),
+			ALLOWED_ORDER_TYPES,
+		],
 	);
-	for (const row of result.rows) {
-		const address = normalizedAddress(row);
-		const hash = addressHash(address);
+	if (result.rows.length > 0) {
+		const entries = result.rows.map((row) => {
+			const address = normalizedAddress(row);
+			return { orderId: row.id, address, hash: addressHash(address) };
+		});
+		const hashes = entries.map((entry) => entry.hash);
+		const addresses = entries.map((entry) => entry.address);
+		const orderIds = entries.map((entry) => entry.orderId);
+
 		await db.query(
 			`insert into maps_geocode_cache (address_hash, normalized_address)
-			 values ($1, $2) on conflict (address_hash) do nothing`,
-			[hash, address],
+			 select distinct on (payload.address_hash)
+			        payload.address_hash, payload.normalized_address
+			   from unnest($1::text[], $2::text[]) as payload(address_hash, normalized_address)
+			  order by payload.address_hash
+			 on conflict (address_hash) do nothing`,
+			[hashes, addresses],
 		);
 		await db.query(
 			`insert into maps_geocode_jobs (order_id, address_hash)
-			 values ($1, $2) on conflict (order_id) do nothing`,
-			[row.id, hash],
+			 select payload.order_id, payload.address_hash
+			   from unnest($1::text[], $2::text[]) as payload(order_id, address_hash)
+			 on conflict (order_id) do nothing`,
+			[orderIds, hashes],
 		);
 	}
 	await db.query(
@@ -1060,7 +1077,14 @@ async function queueMissingGeocodes(limit = 200) {
 		  where cache.address_hash = job.address_hash
 		    and cache.status = 'RESOLVED' and job.status = 'PENDING'`,
 	);
-	return { queued: result.rows.length };
+	const queue = await db.query(
+		`select
+		   count(*) filter (where job.status = 'PENDING')::int as pending_orders,
+		   count(distinct job.address_hash) filter (where job.status = 'PENDING')::int as pending_addresses,
+		   count(*) filter (where job.status = 'RESOLVED')::int as resolved_orders
+		 from maps_geocode_jobs job`,
+	);
+	return { queued: result.rows.length, ...queue.rows[0] };
 }
 
 async function processNextGeocode() {
@@ -1138,7 +1162,7 @@ function initializeGeocoderWorker() {
 	workerTimer = setInterval(async () => {
 		try {
 			if (Date.now() - geocodeQueueLastRefreshAt >= GEOCODE_QUEUE_REFRESH_INTERVAL_MS) {
-				await queueMissingGeocodes(100);
+				await queueMissingGeocodes(GEOCODE_QUEUE_BATCH_LIMIT);
 				geocodeQueueLastRefreshAt = Date.now();
 			}
 			await processNextGeocode();

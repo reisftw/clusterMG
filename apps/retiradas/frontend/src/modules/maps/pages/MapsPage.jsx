@@ -237,6 +237,12 @@ export default function MapsPage() {
 		}
 	}, []);
 
+	useEffect(() => {
+		if (new URLSearchParams(window.location.search).get("panel") !== "requests") return;
+		setRequestsOpen(true);
+		void loadRequests();
+	}, [loadRequests]);
+
 	const hasPendingEffectuation = requests.some((item) =>
 		["APPROVED", "PENDING_EFFECTUATION"].includes(item.status),
 	);

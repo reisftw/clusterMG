@@ -136,7 +136,8 @@ function createMapsV2Router({
 
 	router.get("/requests", readLimiter, async (req, res, next) => {
 		try {
-			const canManage = service.hasPermission(req.user || {}, service.MAPS_PERMISSIONS.APPROVE) ||
+			const canManage = service.hasPermission(req.user || {}, service.MAPS_PERMISSIONS.VIEW_REQUESTS) ||
+				service.hasPermission(req.user || {}, service.MAPS_PERMISSIONS.APPROVE) ||
 				service.hasPermission(req.user || {}, service.MAPS_PERMISSIONS.REJECT);
 			res.json(await service.listRequests(req.query || {}, req.user || {}, canManage));
 		} catch (error) {

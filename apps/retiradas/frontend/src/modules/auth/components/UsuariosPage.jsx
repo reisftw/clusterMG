@@ -173,6 +173,7 @@ function buildInitialUserForm({
 		temporaryPassword: "",
 		avatarUrl: "",
 		metasTecnicoNome: "",
+		hubsoftTecnicoId: "",
 		agendamentosTecnicoNome: "",
 	};
 }
@@ -346,6 +347,7 @@ const NovoUsuarioModal = ({
 				...(form.role === ROLES.TECNICO
 					? {
 							metasTecnicoNome: form.metasTecnicoNome,
+							hubsoftTecnicoId: form.hubsoftTecnicoId,
 							agendamentosTecnicoNome: form.agendamentosTecnicoNome,
 						}
 					: {}),
@@ -398,7 +400,7 @@ const NovoUsuarioModal = ({
 			...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
 			...(value === ROLES.TECNICO
 				? {}
-				: { metasTecnicoNome: "", agendamentosTecnicoNome: "" }),
+				: { metasTecnicoNome: "", hubsoftTecnicoId: "", agendamentosTecnicoNome: "" }),
 		}));
 	};
 

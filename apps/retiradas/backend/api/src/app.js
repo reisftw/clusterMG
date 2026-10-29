@@ -1386,6 +1386,14 @@ async function mergeUserProfileExtras(uid, body = {}) {
 		).trim();
 	}
 	if (
+		body.hubsoftTecnicoId !== undefined ||
+		body.hubsoft_tecnico_id !== undefined
+	) {
+		allowed.hubsoftTecnicoId = String(
+			body.hubsoftTecnicoId || body.hubsoft_tecnico_id || "",
+		).trim();
+	}
+	if (
 		body.agendamentosTecnicoNome !== undefined ||
 		body.agendamentos_tecnico_nome !== undefined
 	) {

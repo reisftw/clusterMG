@@ -57,9 +57,10 @@ MAPS_WRITE_RATE_LIMIT=30
 ```
 
 O geocodificador nao e chamado durante atualizacoes do GPS. Ele trabalha em
-fila, usa cache por hash de endereco, atualiza a fila no maximo a cada cinco
-minutos e processa um endereco por intervalo. Coordenadas ja existentes em
-`ordens_servico` sao priorizadas.
+fila, usa cache por hash de endereco, cadastra em lote todo o backlog sem
+coordenada a cada cinco minutos e processa um endereco por intervalo.
+Coordenadas ja existentes em `ordens_servico` sao priorizadas. Enderecos iguais
+reutilizam o mesmo resultado, evitando chamadas externas duplicadas.
 
 ## Banco e migration
 

@@ -106,6 +106,8 @@ const EditarUsuarioModal = ({
 		avatarUrl: usuario.avatarUrl || "",
 		metasTecnicoNome:
 			usuario.metasTecnicoNome || usuario.metas_tecnico_nome || "",
+		hubsoftTecnicoId:
+			usuario.hubsoftTecnicoId || usuario.hubsoft_tecnico_id || "",
 		agendamentosTecnicoNome:
 			usuario.agendamentosTecnicoNome ||
 			usuario.agendamentos_tecnico_nome ||
@@ -232,6 +234,7 @@ const EditarUsuarioModal = ({
 				...(form.role === ROLES.TECNICO || usuario.role === ROLES.TECNICO
 					? {
 							metasTecnicoNome: form.metasTecnicoNome,
+							hubsoftTecnicoId: form.hubsoftTecnicoId,
 							agendamentosTecnicoNome: form.agendamentosTecnicoNome,
 						}
 					: {}),
@@ -291,7 +294,7 @@ const EditarUsuarioModal = ({
 			...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
 			...(value === ROLES.TECNICO
 				? {}
-				: { metasTecnicoNome: "", agendamentosTecnicoNome: "" }),
+				: { metasTecnicoNome: "", hubsoftTecnicoId: "", agendamentosTecnicoNome: "" }),
 		}));
 	};
 

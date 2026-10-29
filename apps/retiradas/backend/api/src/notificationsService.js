@@ -20,6 +20,7 @@ const DEFAULT_ENABLED_TYPES = {
 	agendamento_nao_recolhido_mapa: true,
 	agendamento_recolhido_mapa: true,
 	atendimento_caso_novo: true,
+	maps_solicitacao: true,
 	sistema_critico: true,
 	backup: true,
 	api: true,
@@ -42,6 +43,7 @@ const RETIRADA_NOTIFICATION_TYPES = new Set([
 	"agendamento_nao_recolhido_mapa",
 	"agendamento_recolhido_mapa",
 	"atendimento_caso_novo",
+	"maps_solicitacao",
 ]);
 
 const DOCUMENT_AND_SYSTEM_ROLES = new Set([
@@ -77,6 +79,15 @@ function userRole(user = {}) {
 	return String(user.role || user.profile?.role || "")
 		.trim()
 		.toLowerCase();
+}
+
+function userHasPermission(user = {}, permission) {
+	if (userRole(user) === "admin") return true;
+	const permissions = [
+		...(Array.isArray(user.permissions) ? user.permissions : []),
+		...(Array.isArray(user.profile?.permissions) ? user.profile.permissions : []),
+	].map(normalizeText);
+	return permissions.includes(permission);
 }
 
 function countersCacheKey(user = {}) {
@@ -175,7 +186,8 @@ function roleCanSeeType(role, type) {
 	if (DOCUMENT_AND_SYSTEM_ROLES.has(role)) {
 		return (
 			DOCUMENT_NOTIFICATION_TYPES.has(type) ||
-			SYSTEM_NOTIFICATION_TYPES.has(type)
+			SYSTEM_NOTIFICATION_TYPES.has(type) ||
+			type === "maps_solicitacao"
 		);
 	}
 	return true;
@@ -204,6 +216,10 @@ function targetMatchesUser(targets, user = {}) {
 function canSeeNotification(data = {}, user = {}) {
 	const role = userRole(user);
 	const type = normalizeText(data.type || "geral");
+	if (
+		type === "maps_solicitacao" &&
+		!userHasPermission(user, "retiradas.maps.v2.view_requests")
+	) return false;
 	return (
 		roleCanSeeType(role, type) &&
 		targetMatchesUser(normalizeTargets(data.targets), user)

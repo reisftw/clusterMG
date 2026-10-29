@@ -166,4 +166,25 @@ describe("Retiradas Maps 2.0 service", () => {
 			expect(source).toContain(`"${endpoint}"`);
 		}
 	});
+
+	it("enfileira todo o backlog sem limitar a geocodificacao a cem ordens", () => {
+		const source = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		expect(source).toContain("const GEOCODE_QUEUE_BATCH_LIMIT = 25000");
+		expect(source).toContain("queueMissingGeocodes(GEOCODE_QUEUE_BATCH_LIMIT)");
+		expect(source).not.toContain("queueMissingGeocodes(100)");
+		expect(source).toContain("unnest($1::text[], $2::text[])");
+	});
+
+	it("notifica imediatamente a gestao quando uma retirada e solicitada", () => {
+		const source = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		expect(source).toContain('type: "maps_solicitacao"');
+		expect(source).toContain('roles: ["admin", "backoffice", "backoffice_retirada"]');
+		expect(source).toContain('targetPath: "/maps?panel=requests"');
+	});
 });

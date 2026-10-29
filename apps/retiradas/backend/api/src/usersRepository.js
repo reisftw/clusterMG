@@ -73,6 +73,9 @@ function mapAppUserRowToProfile(row = {}) {
 	const metasTecnicoNome = text(
 		profile.metasTecnicoNome || profile.metas_tecnico_nome,
 	);
+	const hubsoftTecnicoId = text(
+		profile.hubsoftTecnicoId || profile.hubsoft_tecnico_id,
+	);
 	const agendamentosTecnicoNome = text(
 		profile.agendamentosTecnicoNome || profile.agendamentos_tecnico_nome,
 	);
@@ -113,6 +116,8 @@ function mapAppUserRowToProfile(row = {}) {
 		baseInsumosNome: insumosBaseNome,
 		metasTecnicoNome,
 		metas_tecnico_nome: metasTecnicoNome,
+		hubsoftTecnicoId,
+		hubsoft_tecnico_id: hubsoftTecnicoId,
 		agendamentosTecnicoNome,
 		agendamentos_tecnico_nome: agendamentosTecnicoNome,
 		insumosCategoriasVer: Array.isArray(profile.insumosCategoriasVer)

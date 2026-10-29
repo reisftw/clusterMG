@@ -1,5 +1,6 @@
 import { buscarAgendamentosDominio } from "../../agendamentos/services/agendamentosService";
 import { buscarTodasMetas } from "../../metas/services/metasService";
+import { buscarTecnicosSolicitacao } from "../../serviceOrders/requests/services/serviceOrderRequestsService";
 
 function text(value) {
 	return String(value || "").trim();
@@ -32,12 +33,14 @@ export function collectAppointmentTechnicianNames(appointments = []) {
 }
 
 export async function listarVinculosTecnicosAdmin() {
-	const [metas, appointments] = await Promise.all([
+	const [metas, appointments, hubsoft] = await Promise.all([
 		buscarTodasMetas(false, { preferLive: true }).catch(() => ({})),
 		buscarAgendamentosDominio({ max: 10000 }).catch(() => []),
+		buscarTecnicosSolicitacao().catch(() => ({ items: [] })),
 	]);
 	return {
 		metas: collectMetasTechnicianNames(metas),
 		agendamentos: collectAppointmentTechnicianNames(appointments),
+		hubsoft: Array.isArray(hubsoft?.items) ? hubsoft.items : [],
 	};
 }
