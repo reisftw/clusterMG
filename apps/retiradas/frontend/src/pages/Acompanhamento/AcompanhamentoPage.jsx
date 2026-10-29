@@ -30,6 +30,7 @@ import {
 import { useAgenda } from "../../modules/agenda/hooks/useAgenda";
 import { buscarAgendamentosDominio } from "../../modules/agendamentos/services/agendamentosService";
 import { useDiarioEntries } from "../../modules/diario/hooks/useDiarioEntries";
+import { getCancellationPerformance } from "../../modules/dashboard/utils/metasMetrics";
 import {
 	buildDiarioBoardData,
 	formatDateLabel as formatDiarioDateLabel,
@@ -627,21 +628,6 @@ function getDailyHorarioEntries(horarios = {}) {
 		);
 }
 
-function getDeliveredCancellationPercent(metaMes) {
-	if (!metaMes) return 0;
-
-	const total = Number(metaMes.totalOS || 0);
-	const meta = Number(metaMes.meta || 0);
-	if (meta > 0) return (total / meta) * 100;
-
-	const fallback = Number(
-		String(metaMes.percentAchieved ?? 0)
-			.replace("%", "")
-			.replace(",", "."),
-	);
-	return Number.isFinite(fallback) ? fallback : 0;
-}
-
 function getMetaPace(metaMes, month, feriadosSet = null) {
 	if (!metaMes) {
 		return {
@@ -652,7 +638,8 @@ function getMetaPace(metaMes, month, feriadosSet = null) {
 		};
 	}
 
-	const percent = getDeliveredCancellationPercent(metaMes);
+	const performance = getCancellationPerformance(metaMes);
+	const percent = performance.deliveredPercent;
 	const projection = buildMonthProjection(
 		{
 			...metaMes,
@@ -661,20 +648,24 @@ function getMetaPace(metaMes, month, feriadosSet = null) {
 		feriadosSet || new Set(),
 	);
 	const projectionPercent =
-		Number(metaMes.meta || 0) > 0 && projection
-			? (Number(projection.projecaoFinal || 0) / Number(metaMes.meta || 0)) *
+		performance.cancelamentos > 0 && projection
+			? (Number(projection.projecaoFinal || 0) / performance.cancelamentos) *
 				100
 			: percent;
-	const isLow = percent + 0.05 < 100;
+	const hasComparison =
+		performance.cancelamentos > 0 && performance.targetPercent > 0;
 
 	return {
-		status: isLow ? "low" : "ok",
+		status: hasComparison ? (performance.achieved ? "ok" : "low") : "neutral",
 		projection,
 		projectionPercent,
 		percent,
-		helper: `${formatNumber(metaMes.totalOS)} de ${formatNumber(
-			metaMes.meta,
-		)} O.S - ${percent.toFixed(1)}% da meta - Projecao ${projectionPercent.toFixed(1)}%`,
+		performance,
+		helper: hasComparison
+			? `${formatNumber(performance.total)} de ${formatNumber(
+					performance.cancelamentos,
+				)} cancelamentos - ${percent.toFixed(1)}% entregue - Alvo ${performance.targetPercent.toFixed(1)}% - Projecao ${projectionPercent.toFixed(1)}%`
+			: `${formatNumber(performance.total)} entregas - Base de cancelamentos ou alvo indisponivel`,
 	};
 }
 
@@ -1044,17 +1035,17 @@ function normalizeMetaSourceForBalance(metaMes, month, feriadosSet) {
 }
 
 // Extraido pra achado javascript:S3358 (ternario aninhado).
-function resolveMetaTileTone(hasMonthlyBalance, balanceStatus) {
-	if (hasMonthlyBalance && balanceStatus === "low") return "meta-low";
-	if (hasMonthlyBalance && balanceStatus === "ok") return "meta-ok";
+function resolveMetaTileTone(hasMetaData, status) {
+	if (hasMetaData && status === "low") return "meta-low";
+	if (hasMetaData && status === "ok") return "meta-ok";
 	return "purple";
 }
 
 function buildMetaTileData(metaMes, label, month, feriadosSet) {
 	const pace = getMetaPace(metaMes, month, feriadosSet);
-	const total = formatNumber(metaMes?.totalOS || 0);
-	const meta = formatNumber(metaMes?.meta || 0);
-	const deliveredPercent = getDeliveredCancellationPercent(metaMes);
+	const performance = pace.performance || getCancellationPerformance(metaMes);
+	const total = formatNumber(performance.total);
+	const cancelamentos = formatNumber(performance.cancelamentos);
 	const projection = pace.projection || null;
 	const saldoRows = Array.isArray(metaMes?.saldoDiario)
 		? metaMes.saldoDiario
@@ -1064,8 +1055,6 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		saldoRows.at(-1) ||
 		null;
 	const monthlyBalance = Number(lastSaldoRow?.saldoMes || 0);
-	const hasMonthlyBalance = metaMes && lastSaldoRow;
-	const balanceStatus = hasMonthlyBalance && monthlyBalance >= 0 ? "ok" : "low";
 	const dailySchedule = metaMes
 		? buildMetaDiariaSchedule({
 				month: month || metaMes.mes,
@@ -1076,10 +1065,6 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		: null;
 	const dailyGoal = Number(dailySchedule?.metaDiariaMedia || 0);
 	const currentPace = Number(projection?.ritmoAtual || 0);
-	const hasDailyGoal = dailyGoal > 0;
-	const dailyGoalText = hasDailyGoal
-		? Math.ceil(dailyGoal).toLocaleString("pt-BR")
-		: "0";
 	const balanceText = monthlyBalance.toLocaleString("pt-BR", {
 		maximumFractionDigits: 0,
 		signDisplay: "always",
@@ -1090,16 +1075,15 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		metaMes,
 		pace: {
 			...pace,
-			status: hasMonthlyBalance ? balanceStatus : pace.status,
 			dailyGoal,
 			currentPace,
 			monthlyBalance,
 		},
-		value: metaMes ? `${deliveredPercent.toFixed(1)}%` : "--",
+		value: metaMes ? `${performance.deliveredPercent.toFixed(1)}%` : "--",
 		helper: metaMes
-			? `${total}/${meta} O.S - Saldo ${balanceText} - Meta dia ${dailyGoalText} - Proj. ${pace.projectionPercent.toFixed(1)}%`
+			? `${total}/${cancelamentos} cancelamentos - Alvo ${performance.targetPercent.toFixed(1)}% - Saldo ${balanceText} - Proj. ${pace.projectionPercent.toFixed(1)}%`
 			: "Sem meta carregada",
-		tone: resolveMetaTileTone(hasMonthlyBalance, balanceStatus),
+		tone: resolveMetaTileTone(metaMes, pace.status),
 	};
 }
 
@@ -1115,16 +1099,14 @@ function buildRecentDeliveries(allData, currentMonth, limit = 3) {
 			const metaMes = getMetaSourceData(allData?.[month], "consolidado");
 			if (!metaMes) return null;
 
-			const total = Number(metaMes.totalOS || 0);
-			const meta = Number(metaMes.meta || 0);
-			const percent = getDeliveredCancellationPercent(metaMes);
+			const performance = getCancellationPerformance(metaMes);
 
 			return {
 				month,
-				total,
-				meta,
-				percent,
-				hit: meta > 0 && (total >= meta || percent >= 100),
+				total: performance.total,
+				meta: performance.targetPercent,
+				percent: performance.deliveredPercent,
+				hit: performance.achieved,
 			};
 		})
 		.filter(Boolean)
