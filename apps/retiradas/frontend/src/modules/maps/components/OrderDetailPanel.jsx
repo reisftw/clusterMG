@@ -28,7 +28,7 @@ export default function OrderDetailPanel({ item, loading, onClose, onRequest, on
 			<header>
 				<div>
 					<span className={`maps-v2-detail-kicker is-${item?.category || "loading"}`}>
-						{item?.category === "assigned" ? "Minha retirada" : "Oportunidade"}
+						{item?.assignedToCurrentUser ? "Minha retirada" : item?.requestable ? "OS disponivel" : "OS de outro tecnico"}
 					</span>
 					<h2>{item?.orderNumber || "Carregando..."}</h2>
 				</div>

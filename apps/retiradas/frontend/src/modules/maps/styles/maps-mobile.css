@@ -183,6 +183,24 @@
 	background: #e8a900;
 }
 
+.maps-v2-property-tooltip {
+	display: grid;
+	gap: 2px;
+	min-width: 150px;
+	letter-spacing: 0;
+}
+
+.maps-v2-property-tooltip strong {
+	color: #0b1734;
+	font-size: 12px;
+}
+
+.maps-v2-property-tooltip span {
+	color: #58677e;
+	font-size: 10px;
+	font-weight: 700;
+}
+
 .maps-v2-user-position-marker {
 	border: 0;
 	background: transparent;

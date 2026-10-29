@@ -39,7 +39,14 @@ const MAPS_PERMISSIONS = {
 	ROUTES: "retiradas.maps.v2.manage_routes",
 	AUDIT: "retiradas.maps.v2.audit",
 };
-const VIEW_RADII = [1, 3, 5, 10, 20];
+const VIEW_RADII = Object.freeze([
+	{ meters: 120, label: "120 m" },
+	{ meters: 250, label: "250 m" },
+	{ meters: 500, label: "500 m" },
+	{ meters: 1000, label: "1 km" },
+	{ meters: 3000, label: "3 km" },
+	{ meters: 5000, label: "5 km" },
+]);
 const MapsCanvas = lazy(() => import("../components/MapsCanvas"));
 
 function formatSync(value) {
@@ -64,9 +71,10 @@ export default function MapsPage() {
 	const [points, setPoints] = useState([]);
 	const [summary, setSummary] = useState({ assigned: 0, opportunities: 0, scheduled: 0 });
 	const [viewport, setViewport] = useState(null);
-	const [radiusKm, setRadiusKm] = useState(5);
+	const [radiusMeters, setRadiusMeters] = useState(120);
 	const [gpsArea, setGpsArea] = useState(false);
 	const [gpsRequested, setGpsRequested] = useState(false);
+	const [mapQueryPosition, setMapQueryPosition] = useState(null);
 	const [searchDraft, setSearchDraft] = useState({ city: "", neighborhood: "" });
 	const [search, setSearch] = useState({ city: "", neighborhood: "" });
 	const [categories, setCategories] = useState(["assigned", "opportunity"]);
@@ -90,6 +98,7 @@ export default function MapsPage() {
 	const [simulatorOpen, setSimulatorOpen] = useState(false);
 	const [focusPoint, setFocusPoint] = useState(null);
 	const lastRadarPositionRef = useRef(null);
+	const lastMapQueryPositionRef = useRef(null);
 	const locationAppliedRef = useRef(false);
 	const noticeTimerRef = useRef(null);
 	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
@@ -98,16 +107,24 @@ export default function MapsPage() {
 		const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 		const params = { categories: categories.join(","), limit: mobile ? 250 : 500 };
 		if (search.city || search.neighborhood) return { ...params, ...search };
-		if (gpsArea && locationState.position) {
+		if (gpsArea && mapQueryPosition) {
 			return {
 				...params,
-				latitude: locationState.position.latitude,
-				longitude: locationState.position.longitude,
-				radiusMeters: radiusKm * 1000,
+				latitude: mapQueryPosition.latitude,
+				longitude: mapQueryPosition.longitude,
+				radiusMeters,
 			};
 		}
 		return { ...params, ...(viewport || {}) };
-	}, [categories, gpsArea, locationState.position, radiusKm, search, viewport]);
+	}, [categories, gpsArea, mapQueryPosition, radiusMeters, search, viewport]);
+
+	const focusZoom = useMemo(() => {
+		if (radiusMeters <= 150) return 18;
+		if (radiusMeters <= 300) return 17;
+		if (radiusMeters <= 600) return 16;
+		if (radiusMeters <= 1500) return 15;
+		return 14;
+	}, [radiusMeters]);
 
 	const loadPoints = useCallback(async (signal) => {
 		setLoading(true);
@@ -180,11 +197,23 @@ export default function MapsPage() {
 	useEffect(() => {
 		if (!gpsRequested || !locationState.position || locationAppliedRef.current) return;
 		locationAppliedRef.current = true;
+		lastMapQueryPositionRef.current = locationState.position;
+		setMapQueryPosition(locationState.position);
 		setGpsArea(true);
 		setSearch({ city: "", neighborhood: "" });
 		setFocusPoint({ ...locationState.position, key: Date.now() });
 		setNotice("Localizacao atualizada. Buscando oportunidades proximas.");
 	}, [gpsRequested, locationState.position]);
+
+	useEffect(() => {
+		if (!gpsArea || !locationState.position) return;
+		if (!shouldEvaluatePosition(lastMapQueryPositionRef.current, locationState.position, {
+			minimumDistance: 30,
+			maximumAgeMs: 15_000,
+		})) return;
+		lastMapQueryPositionRef.current = locationState.position;
+		setMapQueryPosition(locationState.position);
+	}, [gpsArea, locationState.position]);
 
 	useEffect(() => {
 		if (!notice) return undefined;
@@ -272,6 +301,8 @@ export default function MapsPage() {
 			return;
 		}
 		setGpsArea(true);
+		lastMapQueryPositionRef.current = locationState.position;
+		setMapQueryPosition(locationState.position);
 		setSearch({ city: "", neighborhood: "" });
 		setFocusPoint({ ...locationState.position, key: Date.now() });
 		setNotice("Localizacao atualizada. Buscando oportunidades proximas.");
@@ -293,14 +324,14 @@ export default function MapsPage() {
 			</form>
 
 			<div className="maps-v2-filterbar">
-				<div className="maps-v2-segmented" aria-label="Categorias do mapa"><button type="button" className={categories.includes("assigned") ? "is-active is-assigned" : ""} onClick={() => toggleCategory("assigned")}><span /> Minhas OS</button><button type="button" className={categories.includes("opportunity") ? "is-active is-opportunity" : ""} onClick={() => toggleCategory("opportunity")}><span /> Oportunidades</button></div>
-				<label className="maps-v2-radius"><Crosshair size={16} /><span>Raio</span><select value={radiusKm} onChange={(event) => setRadiusKm(Number(event.target.value))}>{VIEW_RADII.map((radius) => <option key={radius} value={radius}>{radius} km</option>)}</select></label>
+				<div className="maps-v2-segmented" aria-label="Categorias do mapa"><button type="button" className={categories.includes("assigned") ? "is-active is-assigned" : ""} onClick={() => toggleCategory("assigned")}><span /> Minhas OS</button><button type="button" className={categories.includes("opportunity") ? "is-active is-opportunity" : ""} onClick={() => toggleCategory("opportunity")}><span /> Outras OS</button></div>
+				<label className="maps-v2-radius"><Crosshair size={16} /><span>Raio</span><select value={radiusMeters} onChange={(event) => setRadiusMeters(Number(event.target.value))}>{VIEW_RADII.map((radius) => <option key={radius.meters} value={radius.meters}>{radius.label}</option>)}</select></label>
 				<span className="maps-v2-total"><Layers3 size={16} /> {summary.assigned + summary.opportunities} OS nesta area</span>
 			</div>
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} followUser={gpsArea} onViewportChange={setViewport} onSelect={setSelectedId} onError={setError} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} onViewportChange={setViewport} onSelect={setSelectedId} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
 					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>

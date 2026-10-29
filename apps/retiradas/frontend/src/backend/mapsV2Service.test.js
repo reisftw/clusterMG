@@ -93,16 +93,25 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(__testables.validateOrderRow(baseRow({ status: "FINALIZADA" }))).toBe(false);
 	});
 
-	it("filtra no PostgreSQL somente OS proprias ou oportunidades livres antes do limite", () => {
+	it("carrega todas as retiradas da area para o tecnico sem filtrar pelo responsavel", () => {
 		const params = [];
 		const filters = __testables.sourceFilters({
 			params,
 			query: {},
 			user: { role: "tecnico", profile: { metasTecnicoNome: "JOAO TÉCNICO" } },
 		});
-		expect(filters.clauses.join(" ")).toContain("request.id is null");
-		expect(params[1]).toContain("JOAO TÉCNICO");
-		expect(params[2]).toContain("FILA");
+		expect(filters.clauses.join(" ")).not.toContain("request.id is null");
+		expect(filters.clauses.join(" ")).not.toContain("o.regional");
+		expect(params).toHaveLength(1);
+		const point = __testables.mapPoint(baseRow({ tecnico: "OUTRO TECNICO" }), {
+			role: "tecnico",
+			profile: { metasTecnicoNome: "JOAO TECNICO" },
+		});
+		expect(point).toMatchObject({
+			category: "opportunity",
+			technician: "OUTRO TECNICO",
+			requestable: false,
+		});
 	});
 
 	it("permite que a gestao visualize todas as retiradas sem habilitar solicitacao indevida", () => {

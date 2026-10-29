@@ -27,11 +27,7 @@ function validOrderPoint(point) {
 }
 
 function pointIcon(point) {
-	const categoryClass = point?.scheduled
-		? "is-scheduled"
-		: point?.category === "assigned"
-			? "is-assigned"
-			: "is-opportunity";
+	const categoryClass = point?.category === "assigned" ? "is-assigned" : "is-opportunity";
 	return L.divIcon({
 		className: `maps-v2-property-marker ${categoryClass}`,
 		html: `<span>${renderToStaticMarkup(<House size={17} strokeWidth={2.5} />)}</span>`,
@@ -45,6 +41,21 @@ function pointLabel(point) {
 	return point?.clientName || point?.orderNumber || "Retirada";
 }
 
+function pointTooltip(point) {
+	const container = document.createElement("div");
+	container.className = "maps-v2-property-tooltip";
+	const client = document.createElement("strong");
+	client.textContent = pointLabel(point);
+	const order = document.createElement("span");
+	order.textContent = `OS ${point?.orderNumber || "nao informada"}`;
+	const technician = document.createElement("span");
+	technician.textContent = point?.assignedToCurrentUser
+		? `Tecnico: ${point?.technician || "voce"} (minha OS)`
+		: `Tecnico: ${point?.technician || "disponivel"}`;
+	container.append(client, order, technician);
+	return container;
+}
+
 function userPositionIcon() {
 	return L.divIcon({
 		className: "maps-v2-user-position-marker",
@@ -54,7 +65,7 @@ function userPositionIcon() {
 	});
 }
 
-export default function MapsCanvas({ points, userPosition, focusPoint, followUser, onViewportChange, onSelect, onError }) {
+export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, onViewportChange, onSelect, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const clusterRef = useRef(null);
@@ -154,7 +165,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, followUse
 				[Number(point.latitude), Number(point.longitude)],
 				{ icon: pointIcon(point), title: pointLabel(point), riseOnHover: true },
 			);
-			marker.bindTooltip(pointLabel(point), { direction: "top" });
+			marker.bindTooltip(pointTooltip(point), { direction: "top", opacity: 0.98 });
 			marker.on("click", () => callbacksRef.current.onSelect?.(point.id));
 			cluster.addLayer(marker);
 		}
@@ -214,10 +225,10 @@ export default function MapsCanvas({ points, userPosition, focusPoint, followUse
 		if (!validPoint(focusPoint) || !mapRef.current) return;
 		mapRef.current.setView(
 			[Number(focusPoint.latitude), Number(focusPoint.longitude)],
-			Math.max(mapRef.current.getZoom(), 14),
+			Math.max(mapRef.current.getZoom(), focusZoom),
 			{ animate: true, duration: 0.65 },
 		);
-	}, [focusPoint]);
+	}, [focusPoint, focusZoom]);
 
 	return <div ref={containerRef} className="maps-v2-canvas" aria-label="Mapa interativo de retiradas" />;
 }

@@ -17,7 +17,7 @@ function PointCard({ item, selectedForRoute, onSelect, onToggleRoute }) {
 				</span>
 				<span className="maps-v2-order-copy">
 					<strong>{item.clientName || item.orderNumber}</strong>
-					<small>{item.neighborhood} · {item.city} · {item.type}</small>
+					<small>{item.neighborhood} · {item.city} · {item.assignedToCurrentUser ? "Minha OS" : item.technician || "Disponivel"}</small>
 					<span>{distanceLabel(item.distanceMeters)} {item.scheduled ? "· Agendada" : ""}</span>
 				</span>
 			</button>
@@ -52,7 +52,7 @@ export default function MapsBottomSheet({
 			</button>
 			<div className="maps-v2-sheet-summary">
 				<div><PackageCheck size={18} /><strong>{summary.assigned || 0}</strong><span>Minhas</span></div>
-				<div><Target size={18} /><strong>{summary.opportunities || 0}</strong><span>Oportunidades</span></div>
+				<div><Target size={18} /><strong>{summary.opportunities || 0}</strong><span>Outras OS</span></div>
 				<div><CalendarClock size={18} /><strong>{summary.scheduled || 0}</strong><span>Agendadas</span></div>
 			</div>
 			<div className="maps-v2-list" aria-live="polite">

@@ -29,15 +29,6 @@ const ALLOWED_ORDER_TYPES = Object.freeze([
 ]);
 const CLOSED_STATUS_PATTERN = /(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)/i;
 const AVAILABLE_TECHNICIANS = new Set(["", "FILA", "NENHUM", "NAO DEFINIDO", "SEM TECNICO"]);
-const AVAILABLE_TECHNICIANS_SQL = Object.freeze([
-	"",
-	"FILA",
-	"NENHUM",
-	"NAO DEFINIDO",
-	"NÃO DEFINIDO",
-	"SEM TECNICO",
-	"SEM TÉCNICO",
-]);
 const MAX_POINTS = 500;
 const ALERT_COOLDOWN_MINUTES = 30;
 const ALERT_HYSTERESIS_METERS = 100;
@@ -111,23 +102,6 @@ function userTechnicianNames(user = {}) {
 	].map(normalize).filter(Boolean))];
 }
 
-function userTechnicianSourceNames(user = {}) {
-	const profile = userProfile(user);
-	return [...new Set([
-		profile.metasTecnicoNome,
-		profile.metas_tecnico_nome,
-		profile.technicianName,
-		profile.nomeTecnico,
-		user.metasTecnicoNome,
-		userName(user),
-	].map((value) => text(value).toUpperCase()).filter(Boolean))];
-}
-
-function userRegional(user = {}) {
-	const profile = userProfile(user);
-	return text(profile.regional || user.regional);
-}
-
 function hasPermission(user = {}, permission) {
 	const profile = userProfile(user);
 	const permissions = Array.isArray(user.permissions)
@@ -137,12 +111,6 @@ function hasPermission(user = {}, permission) {
 			: [];
 	const role = normalize(user.role || profile.role);
 	return ["ADMIN", "SUPERADMIN"].includes(role) || permissions.includes("*") || permissions.includes(permission);
-}
-
-function canViewAllOrders(user = {}) {
-	return hasPermission(user, MAPS_PERMISSIONS.AUDIT) ||
-		hasPermission(user, MAPS_PERMISSIONS.APPROVE) ||
-		hasPermission(user, MAPS_PERMISSIONS.REJECT);
 }
 
 function numberInRange(value, min, max, fallback = null) {
@@ -217,9 +185,7 @@ function isAvailableTechnician(value) {
 function categoryForOrder(row, user) {
 	const technician = normalize(row.tecnico);
 	if (technician && userTechnicianNames(user).includes(technician)) return "assigned";
-	if (isAvailableTechnician(technician) && !row.open_request_id) return "opportunity";
-	if (canViewAllOrders(user)) return "opportunity";
-	return "unavailable";
+	return "opportunity";
 }
 
 function validateOrderRow(row) {
@@ -315,20 +281,13 @@ async function syncNativeCoordinates({ force = false } = {}) {
 	return nativeCoordinatesSyncPromise;
 }
 
-function sourceFilters({ query = {}, user = {}, params = [] } = {}) {
+function sourceFilters({ query = {}, params = [] } = {}) {
 	const clauses = [
 		"o.source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')",
 		"upper(coalesce(o.tipo, '')) = any($1::text[])",
 		"upper(coalesce(o.status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'",
 	];
 	params.push(ALLOWED_ORDER_TYPES);
-	if (!canViewAllOrders(user)) {
-		params.push(userTechnicianSourceNames(user), AVAILABLE_TECHNICIANS_SQL);
-		clauses.push(
-			`(upper(trim(coalesce(o.tecnico, ''))) = any($2::text[])
-			  or (upper(trim(coalesce(o.tecnico, ''))) = any($3::text[]) and request.id is null))`,
-		);
-	}
 	const viewport = parseViewport(query);
 	if (viewport) {
 		params.push(viewport.minLat, viewport.maxLat, viewport.minLng, viewport.maxLng);
@@ -344,11 +303,6 @@ function sourceFilters({ query = {}, user = {}, params = [] } = {}) {
 	if (text(query.neighborhood)) {
 		params.push(`%${text(query.neighborhood)}%`);
 		clauses.push(`o.bairro ilike $${params.length}`);
-	}
-	const regional = userRegional(user);
-	if (regional && normalize(user.role || userProfile(user).role) !== "ADMIN") {
-		params.push(regional);
-		clauses.push(`lower(coalesce(o.regional, '')) = lower($${params.length})`);
 	}
 	return { clauses, params, viewport };
 }
@@ -444,10 +398,6 @@ async function getOrder(orderId, user = {}) {
 	);
 	const row = result.rows[0];
 	if (!row || !validateOrderRow(row)) throw apiError("Ordem nao encontrada no Maps.", 404, "ORDER_NOT_FOUND");
-	const regional = userRegional(user);
-	if (regional && normalize(user.role || userProfile(user).role) !== "ADMIN" && normalize(row.regional) !== normalize(regional)) {
-		throw apiError("Voce nao pode visualizar esta ordem.", 403, "ORDER_FORBIDDEN");
-	}
 	const point = mapPoint(row, user);
 	if (!filterVisiblePoint(point, user, new Set())) throw apiError("Voce nao pode visualizar esta ordem.", 403, "ORDER_FORBIDDEN");
 	return point;
@@ -1101,7 +1051,6 @@ module.exports = {
 	updateRoute,
 	__testables: {
 		boundingBox,
-		canViewAllOrders,
 		categoryForOrder,
 		deterministicApproximation,
 		firstAndLastName,
