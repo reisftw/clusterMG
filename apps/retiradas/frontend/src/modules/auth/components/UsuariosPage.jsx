@@ -344,12 +344,14 @@ const NovoUsuarioModal = ({
 					? { insumosCategoriasSolicitar: form.insumosCategoriasSolicitar }
 					: {}),
 				avatarUrl: form.avatarUrl,
-				...(form.role === ROLES.TECNICO
+				...(form.metasTecnicoNome || form.hubsoftTecnicoId
 					? {
 							metasTecnicoNome: form.metasTecnicoNome,
 							hubsoftTecnicoId: form.hubsoftTecnicoId,
-							agendamentosTecnicoNome: form.agendamentosTecnicoNome,
 						}
+					: {}),
+				...(form.role === ROLES.TECNICO
+					? { agendamentosTecnicoNome: form.agendamentosTecnicoNome }
 					: {}),
 				temporaryPassword: form.temporaryPassword,
 			});
@@ -398,9 +400,7 @@ const NovoUsuarioModal = ({
 			...current,
 			role: value,
 			...(requiresEmpresa(value) ? {} : { empresaId: "", empresaNome: "" }),
-			...(value === ROLES.TECNICO
-				? {}
-				: { metasTecnicoNome: "", hubsoftTecnicoId: "", agendamentosTecnicoNome: "" }),
+			...(value === ROLES.TECNICO ? {} : { agendamentosTecnicoNome: "" }),
 		}));
 	};
 

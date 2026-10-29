@@ -32,10 +32,14 @@ export function collectAppointmentTechnicianNames(appointments = []) {
 	);
 }
 
-export async function listarVinculosTecnicosAdmin() {
+export async function listarVinculosTecnicosAdmin({ includeOperationalNames = true } = {}) {
 	const [metas, appointments, hubsoft] = await Promise.all([
-		buscarTodasMetas(false, { preferLive: true }).catch(() => ({})),
-		buscarAgendamentosDominio({ max: 10000 }).catch(() => []),
+		includeOperationalNames
+			? buscarTodasMetas(false, { preferLive: true }).catch(() => ({}))
+			: {},
+		includeOperationalNames
+			? buscarAgendamentosDominio({ max: 10000 }).catch(() => [])
+			: [],
 		buscarTecnicosSolicitacao().catch(() => ({ items: [] })),
 	]);
 	return {

@@ -16,9 +16,8 @@ export default function TechnicianBindingFields({
 	const appointmentsListId = useId();
 
 	useEffect(() => {
-		if (form.role !== ROLES.TECNICO) return undefined;
 		let active = true;
-		listarVinculosTecnicosAdmin()
+		listarVinculosTecnicosAdmin({ includeOperationalNames: form.role === ROLES.TECNICO })
 			.then((result) => {
 				if (active) setOptions(result || EMPTY_OPTIONS);
 			})
@@ -29,8 +28,6 @@ export default function TechnicianBindingFields({
 			active = false;
 		};
 	}, [form.role]);
-
-	if (form.role !== ROLES.TECNICO) return null;
 
 	const set = (field, value) =>
 		setForm((current) => ({ ...current, [field]: value }));
@@ -49,13 +46,13 @@ export default function TechnicianBindingFields({
 	return (
 		<section className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50/60 p-4 sm:p-5">
 			<div className="mb-4">
-				<h3 className="text-sm font-black text-slate-950">Vínculos do técnico</h3>
+				<h3 className="text-sm font-black text-slate-950">Vínculo com o HubSoft</h3>
 				<p className="mt-1 text-xs font-semibold text-slate-500">
-					Associe esta conta do sistema ao cadastro técnico correto no HubSoft. O
-					vínculo também identifica metas, solicitações e ordens no mapa.
+					Associe esta conta do sistema ao cadastro correspondente no HubSoft. O
+					vínculo é opcional e não altera o cargo nem as permissões do usuário.
 				</p>
 			</div>
-			<div className="grid gap-4 lg:grid-cols-2">
+			<div className={`grid gap-4 ${form.role === ROLES.TECNICO ? "lg:grid-cols-2" : ""}`}>
 				<div>
 					<label htmlFor={hubsoftSelectId} className={labelClass}>
 						<span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
@@ -85,7 +82,7 @@ export default function TechnicianBindingFields({
 							: `${options.hubsoft.length} técnico(s) disponível(is) no HubSoft.`}
 					</p>
 				</div>
-				<div>
+				{form.role === ROLES.TECNICO ? <div>
 					<label htmlFor={`${appointmentsListId}-input`} className={labelClass}>
 						<span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
 							<CalendarClock size={16} />
@@ -107,7 +104,7 @@ export default function TechnicianBindingFields({
 							<option key={name} value={name} />
 						))}
 					</datalist>
-				</div>
+				</div> : null}
 			</div>
 		</section>
 	);

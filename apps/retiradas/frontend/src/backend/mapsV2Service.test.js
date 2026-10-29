@@ -176,6 +176,21 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(source).toContain("queueMissingGeocodes(GEOCODE_QUEUE_BATCH_LIMIT)");
 		expect(source).not.toContain("queueMissingGeocodes(100)");
 		expect(source).toContain("unnest($1::text[], $2::text[])");
+		expect(source).toContain("search_variants");
+		expect(source).toContain("job.status = 'REFRESH'");
+	});
+
+	it("gera variacoes de endereco para localizar ordens sem coordenadas", () => {
+		const variants = __testables.addressSearchVariants(baseRow({
+			endereco: "Rua Petrolina",
+			numero: "167",
+			bairro: "Sao Jorge",
+			cidade: "Betim",
+		}));
+		expect(variants[0]).toMatchObject({ accuracyLevel: "ADDRESS" });
+		expect(variants[0].query).toContain("Rua Petrolina, 167, Sao Jorge, Betim");
+		expect(variants.some((item) => item.accuracyLevel === "STREET")).toBe(true);
+		expect(variants.some((item) => item.accuracyLevel === "NEIGHBORHOOD")).toBe(true);
 	});
 
 	it("notifica imediatamente a gestao quando uma retirada e solicitada", () => {

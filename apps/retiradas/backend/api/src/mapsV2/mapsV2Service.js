@@ -999,8 +999,72 @@ async function optimizeRoute(routeId, payload = {}, user = {}) {
 	}
 }
 
-function normalizedAddress(row) {
-	return [row.endereco, row.numero, row.bairro, row.cidade, "Minas Gerais", "Brasil"].map(text).filter(Boolean).join(", ");
+function sourcePayload(row = {}) {
+	if (row.source_payload && typeof row.source_payload === "object") return row.source_payload;
+	try {
+		return JSON.parse(text(row.source_payload)) || {};
+	} catch {
+		return {};
+	}
+}
+
+function nestedValue(input = {}, paths = []) {
+	for (const path of paths) {
+		const value = path.split(".").reduce((current, key) => current?.[key], input);
+		if (text(value)) return text(value);
+	}
+	return "";
+}
+
+function uniqueAddressParts(parts = []) {
+	const result = [];
+	for (const rawPart of parts) {
+		const part = text(rawPart).replace(/\s+/g, " ");
+		if (!part) continue;
+		const normalizedPart = normalize(part);
+		const current = normalize(result.join(", "));
+		if (current && (current.includes(normalizedPart) || normalizedPart.includes(current))) continue;
+		result.push(part);
+	}
+	return result.join(", ");
+}
+
+function addressSearchVariants(row = {}) {
+	const source = sourcePayload(row);
+	const city = text(row.cidade) || nestedValue(source, ["cidade", "endereco.cidade", "cliente.endereco.cidade"]);
+	const neighborhood = text(row.bairro) || nestedValue(source, ["bairro", "endereco.bairro", "cliente.endereco.bairro"]);
+	const number = text(row.numero) || nestedValue(source, ["numero", "endereco.numero", "cliente.endereco.numero"]);
+	const postalCode = nestedValue(source, ["cep", "endereco.cep", "cliente.endereco.cep"]);
+	const streets = [
+		row.endereco,
+		row.endereco_resumo,
+		nestedValue(source, [
+			"logradouro",
+			"endereco.logradouro",
+			"endereco.endereco",
+			"endereco.rua",
+			"cliente.endereco.logradouro",
+			"endereco_instalacao",
+		]),
+	].map(text).filter(Boolean);
+	const variants = [];
+	const seen = new Set();
+	const add = (parts, accuracyLevel) => {
+		const query = uniqueAddressParts([...parts, "Minas Gerais", "Brasil"]);
+		const key = normalize(query);
+		if (!city || !key || seen.has(key)) return;
+		seen.add(key);
+		variants.push({ query, accuracyLevel });
+	};
+
+	for (const street of streets) {
+		add([street, number, neighborhood, postalCode, city], "ADDRESS");
+		add([street, number, city], "ADDRESS");
+		add([street, neighborhood, city], "STREET");
+		add([street, city], "STREET");
+	}
+	if (neighborhood) add([neighborhood, city], "NEIGHBORHOOD");
+	return variants;
 }
 
 function addressHash(address) {
@@ -1009,7 +1073,8 @@ function addressHash(address) {
 
 async function queueMissingGeocodes(limit = GEOCODE_QUEUE_BATCH_LIMIT) {
 	const result = await db.query(
-		`select o.id, o.endereco, o.numero, o.bairro, o.cidade
+		`select o.id, o.endereco, o.endereco_resumo, o.numero, o.bairro, o.cidade,
+		        o.source_payload, o.updated_at
 		   from ordens_servico o
 		   left join maps_order_locations location on location.order_id = o.id
 		   left join maps_geocode_jobs job on job.order_id = o.id
@@ -1021,9 +1086,18 @@ async function queueMissingGeocodes(limit = GEOCODE_QUEUE_BATCH_LIMIT) {
 		      or location.latitude not between -34 and 6
 		      or location.longitude not between -74 and -33
 		    )
-		    and job.order_id is null
-		    and nullif(trim(o.endereco), '') is not null
-		    and nullif(trim(o.cidade), '') is not null
+		    and (
+		      job.order_id is null
+		      or job.status = 'REFRESH'
+		      or o.updated_at > job.updated_at
+		    )
+		    and coalesce(nullif(trim(o.endereco), ''), nullif(trim(o.endereco_resumo), ''),
+		                 nullif(trim(o.source_payload#>>'{endereco,logradouro}'), ''),
+		                 nullif(trim(o.source_payload->>'logradouro'), ''),
+		                 nullif(trim(o.bairro), '')) is not null
+		    and coalesce(nullif(trim(o.cidade), ''),
+		                 nullif(trim(o.source_payload->>'cidade'), ''),
+		                 nullif(trim(o.source_payload#>>'{endereco,cidade}'), '')) is not null
 		  order by o.data_abertura desc nulls last
 		  limit $1`,
 		[
@@ -1033,27 +1107,46 @@ async function queueMissingGeocodes(limit = GEOCODE_QUEUE_BATCH_LIMIT) {
 	);
 	if (result.rows.length > 0) {
 		const entries = result.rows.map((row) => {
-			const address = normalizedAddress(row);
-			return { orderId: row.id, address, hash: addressHash(address) };
-		});
+			const searchVariants = addressSearchVariants(row);
+			const address = searchVariants[0]?.query || "";
+			return { orderId: row.id, address, searchVariants, hash: address ? addressHash(address) : "" };
+		}).filter((entry) => entry.address);
 		const hashes = entries.map((entry) => entry.hash);
 		const addresses = entries.map((entry) => entry.address);
+		const variants = entries.map((entry) => JSON.stringify(entry.searchVariants));
 		const orderIds = entries.map((entry) => entry.orderId);
 
-		await db.query(
-			`insert into maps_geocode_cache (address_hash, normalized_address)
+		if (entries.length > 0) await db.query(
+			`insert into maps_geocode_cache (address_hash, normalized_address, search_variants)
 			 select distinct on (payload.address_hash)
-			        payload.address_hash, payload.normalized_address
-			   from unnest($1::text[], $2::text[]) as payload(address_hash, normalized_address)
+			        payload.address_hash, payload.normalized_address, payload.search_variants::jsonb
+			   from unnest($1::text[], $2::text[], $3::text[])
+			        as payload(address_hash, normalized_address, search_variants)
 			  order by payload.address_hash
-			 on conflict (address_hash) do nothing`,
-			[hashes, addresses],
+			 on conflict (address_hash) do update set
+			   normalized_address = excluded.normalized_address,
+			   search_variants = excluded.search_variants,
+			   variant_index = case when maps_geocode_cache.status = 'RESOLVED'
+			                        then maps_geocode_cache.variant_index else 0 end,
+			   status = case when maps_geocode_cache.status = 'RESOLVED'
+			                 then 'RESOLVED' else 'PENDING' end,
+			   next_attempt_at = case when maps_geocode_cache.status = 'RESOLVED'
+			                          then maps_geocode_cache.next_attempt_at else null end,
+			   updated_at = now()`,
+			[hashes, addresses, variants],
 		);
-		await db.query(
+		if (entries.length > 0) await db.query(
 			`insert into maps_geocode_jobs (order_id, address_hash)
 			 select payload.order_id, payload.address_hash
 			   from unnest($1::text[], $2::text[]) as payload(order_id, address_hash)
-			 on conflict (order_id) do nothing`,
+			 on conflict (order_id) do update set
+			   address_hash = excluded.address_hash,
+			   status = case
+			     when maps_geocode_jobs.address_hash <> excluded.address_hash
+			       or maps_geocode_jobs.status = 'REFRESH' then 'PENDING'
+			     else maps_geocode_jobs.status
+			   end,
+			   updated_at = now()`,
 			[orderIds, hashes],
 		);
 	}
@@ -1087,10 +1180,29 @@ async function queueMissingGeocodes(limit = GEOCODE_QUEUE_BATCH_LIMIT) {
 	return { queued: result.rows.length, ...queue.rows[0] };
 }
 
+function storedSearchVariants(value, fallbackAddress) {
+	const parsed = Array.isArray(value) ? value : [];
+	const variants = parsed.map((item) => ({
+		query: text(typeof item === "string" ? item : item?.query),
+		accuracyLevel: text(item?.accuracyLevel) || "GEOCODED",
+	})).filter((item) => item.query);
+	if (variants.length) return variants;
+	return fallbackAddress ? [{ query: fallbackAddress, accuracyLevel: "GEOCODED" }] : [];
+}
+
+function geocodeAccuracy(match = {}, fallback = "GEOCODED") {
+	const kind = normalize(match.addresstype || match.type || match.class);
+	if (/(HOUSE|BUILDING|RESIDENTIAL|PREMISE)/.test(kind)) return "ADDRESS";
+	if (/(ROAD|STREET|HIGHWAY|PEDESTRIAN)/.test(kind)) return "STREET";
+	if (/(NEIGHBOUR|NEIGHBOR|SUBURB|QUARTER)/.test(kind)) return "NEIGHBORHOOD";
+	return fallback;
+}
+
 async function processNextGeocode() {
 	const providerUrl = geocoderUrl();
 	const result = await db.query(
-		`select cache.address_hash, cache.normalized_address
+		`select cache.address_hash, cache.normalized_address, cache.search_variants,
+		        cache.variant_index
 		   from maps_geocode_cache cache
 		  where cache.status in ('PENDING', 'RETRY')
 		    and (cache.next_attempt_at is null or cache.next_attempt_at <= now())
@@ -1099,10 +1211,20 @@ async function processNextGeocode() {
 	const item = result.rows[0];
 	if (!item) return { processed: false, reason: "queue_empty" };
 	try {
+		const variants = storedSearchVariants(item.search_variants, item.normalized_address);
+		const variantIndex = Math.min(Math.max(Number(item.variant_index || 0), 0), Math.max(variants.length - 1, 0));
+		const variant = variants[variantIndex];
+		if (!variant) {
+			await db.query("update maps_geocode_cache set status = 'NOT_FOUND', updated_at = now() where address_hash = $1", [item.address_hash]);
+			await db.query("update maps_geocode_jobs set status = 'NOT_FOUND', updated_at = now() where address_hash = $1", [item.address_hash]);
+			return { processed: true, found: false, reason: "address_empty" };
+		}
 		const url = new URL(providerUrl);
-		url.searchParams.set("q", item.normalized_address);
+		url.searchParams.set("q", variant.query);
 		url.searchParams.set("format", "jsonv2");
 		url.searchParams.set("limit", "1");
+		url.searchParams.set("countrycodes", "br");
+		url.searchParams.set("addressdetails", "1");
 		const response = await fetch(url, {
 			headers: { "User-Agent": process.env.MAPS_GEOCODER_USER_AGENT || "RetiradasMaps/2.0" },
 			signal: AbortSignal.timeout(Number(process.env.MAPS_GEOCODER_TIMEOUT_MS || 8000)),
@@ -1113,6 +1235,18 @@ async function processNextGeocode() {
 		const latitude = numberInRange(match?.lat ?? match?.latitude, -90, 90);
 		const longitude = numberInRange(match?.lon ?? match?.longitude, -180, 180);
 		if (latitude === null || longitude === null || !usableOrderCoordinates(latitude, longitude)) {
+			if (variantIndex + 1 < variants.length) {
+				await db.query(
+					`update maps_geocode_cache
+					    set status = 'RETRY', variant_index = $2, attempt_count = attempt_count + 1,
+					        next_attempt_at = now() + interval '1 second',
+					        last_error = 'Endereco nao encontrado; tentando uma variacao menos especifica.',
+					        updated_at = now()
+					  where address_hash = $1`,
+					[item.address_hash, variantIndex + 1],
+				);
+				return { processed: true, found: false, retrying: true };
+			}
 			await db.query(
 				`update maps_geocode_cache set status = 'NOT_FOUND', attempt_count = attempt_count + 1,
 				 updated_at = now(), resolved_at = now() where address_hash = $1`,
@@ -1121,24 +1255,25 @@ async function processNextGeocode() {
 			await db.query("update maps_geocode_jobs set status = 'NOT_FOUND', updated_at = now() where address_hash = $1", [item.address_hash]);
 			return { processed: true, found: false };
 		}
+		const accuracyLevel = geocodeAccuracy(match, variant.accuracyLevel);
 		await db.query(
 			`update maps_geocode_cache
 			    set latitude = $2, longitude = $3, provider = $4, provider_reference = $5,
-			        accuracy_level = 'GEOCODED', status = 'RESOLVED', attempt_count = attempt_count + 1,
+			        accuracy_level = $6, status = 'RESOLVED', attempt_count = attempt_count + 1,
 			        resolved_at = now(), updated_at = now()
 			  where address_hash = $1`,
-			[item.address_hash, latitude, longitude, new URL(providerUrl).hostname, text(match.place_id || match.id)],
+			[item.address_hash, latitude, longitude, new URL(providerUrl).hostname, text(match.place_id || match.id), accuracyLevel],
 		);
 		await db.query(
 			`insert into maps_order_locations
 			 (order_id, latitude, longitude, coordinate_source, accuracy_level, address_hash, validated_at)
-			 select order_id, $2, $3, 'GEOCODER', 'GEOCODED', $1, now()
+			 select order_id, $2, $3, 'GEOCODER', $4, $1, now()
 			   from maps_geocode_jobs where address_hash = $1
 			 on conflict (order_id) do update set latitude = excluded.latitude,
 			   longitude = excluded.longitude, coordinate_source = excluded.coordinate_source,
 			   accuracy_level = excluded.accuracy_level, address_hash = excluded.address_hash,
 			   validated_at = excluded.validated_at, last_seen_at = now(), updated_at = now()`,
-			[item.address_hash, latitude, longitude],
+			[item.address_hash, latitude, longitude, accuracyLevel],
 		);
 		await db.query("update maps_geocode_jobs set status = 'RESOLVED', updated_at = now() where address_hash = $1", [item.address_hash]);
 		return { processed: true, found: true };
@@ -1156,20 +1291,30 @@ async function processNextGeocode() {
 
 let workerTimer = null;
 let geocodeQueueLastRefreshAt = 0;
+let geocoderCycleRunning = false;
+async function runGeocoderCycle() {
+	if (geocoderCycleRunning) return;
+	geocoderCycleRunning = true;
+	try {
+		if (Date.now() - geocodeQueueLastRefreshAt >= GEOCODE_QUEUE_REFRESH_INTERVAL_MS) {
+			await queueMissingGeocodes(GEOCODE_QUEUE_BATCH_LIMIT);
+			geocodeQueueLastRefreshAt = Date.now();
+		}
+		await processNextGeocode();
+	} catch (error) {
+		if (error?.code !== "42P01" && error?.code !== "42703") {
+			console.warn("[mapsV2] Falha no geocoder:", error?.message || error);
+		}
+	} finally {
+		geocoderCycleRunning = false;
+	}
+}
+
 function initializeGeocoderWorker() {
 	if (workerTimer || !featureEnabled()) return;
 	const intervalMs = Math.max(Number(process.env.MAPS_GEOCODER_INTERVAL_MS || 1500), 1100);
-	workerTimer = setInterval(async () => {
-		try {
-			if (Date.now() - geocodeQueueLastRefreshAt >= GEOCODE_QUEUE_REFRESH_INTERVAL_MS) {
-				await queueMissingGeocodes(GEOCODE_QUEUE_BATCH_LIMIT);
-				geocodeQueueLastRefreshAt = Date.now();
-			}
-			await processNextGeocode();
-		} catch (error) {
-			if (error?.code !== "42P01") console.warn("[mapsV2] Falha no geocoder:", error?.message || error);
-		}
-	}, intervalMs);
+	void runGeocoderCycle();
+	workerTimer = setInterval(runGeocoderCycle, intervalMs);
 	workerTimer.unref?.();
 }
 
@@ -1218,6 +1363,7 @@ module.exports = {
 	syncNativeCoordinates,
 	updateRoute,
 	__testables: {
+		addressSearchVariants,
 		boundingBox,
 		categoryForOrder,
 		deterministicApproximation,
