@@ -166,6 +166,47 @@ describe("auth/RBAC isolated security tests", () => {
 		).rejects.toThrow("E-mail ou senha invalidos.");
 	});
 
+	it("preserva sessoes em edicoes nao sensiveis e invalida nas sensiveis", async () => {
+		const user = {
+			uid: "user-1",
+			email: "admin@example.com",
+			display_name: "Admin",
+			role: "admin",
+			regional: "Metropolitana SUB2",
+			session_version: 3,
+			disabled: false,
+			must_change_password: false,
+		};
+		const profile = {
+			id: user.uid,
+			email: user.email,
+			nome: user.display_name,
+			role: user.role,
+		};
+		const dbQuery = buildDbQuery({ user, profile });
+		const auth = loadAuthWithDb(dbQuery);
+
+		await auth.updateLocalUser(user.uid, {
+			nome: "Admin Atualizado",
+			email: user.email,
+			role: user.role,
+			regional: user.regional,
+		});
+		const nonSensitiveUpdate = dbQuery.mock.calls.find(([sql]) =>
+			String(sql).includes("session_version = session_version"),
+		);
+		expect(nonSensitiveUpdate?.[1]?.[7]).toBe(false);
+
+		dbQuery.mockClear();
+		await auth.updateLocalUser(user.uid, {
+			email: "novo-admin@example.com",
+		});
+		const sensitiveUpdate = dbQuery.mock.calls.find(([sql]) =>
+			String(sql).includes("session_version = session_version"),
+		);
+		expect(sensitiveUpdate?.[1]?.[7]).toBe(true);
+	});
+
 	it("requireAuthenticated blocks missing, invalid and revoked sessions", async () => {
 		let auth = loadAuthWithDb(vi.fn(async () => ({ rows: [] })));
 		const passwordData = await auth.hashPassword("SenhaForte123!");

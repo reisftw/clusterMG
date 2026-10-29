@@ -231,6 +231,10 @@ const Topbar = ({ onOpenMobileMenu }) => {
 			.catch(() => {});
 	};
 
+	const notifyMapsRequestsOpen = () => {
+		window.dispatchEvent(new CustomEvent("retiradas:maps-open-requests"));
+	};
+
 	return (
 		<header className="relative z-layout-topbar flex min-w-0 items-center justify-between gap-2 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-2.5 backdrop-blur sm:px-5 lg:px-8">
 			{!isTechnician ? (
@@ -281,6 +285,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 						onClick={() => {
 							setNotificationsOpen(false);
 							setMobileAccountOpen(false);
+							notifyMapsRequestsOpen();
 						}}
 						className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 						title="Solicitacoes de retirada no Maps"
@@ -341,6 +346,9 @@ const Topbar = ({ onOpenMobileMenu }) => {
 												markOneRead(item.id);
 												void recordNotificationOpen(item.id, "IN_APP").catch(() => {});
 												setNotificationsOpen(false);
+												if (item.targetPath?.includes("panel=requests")) {
+													notifyMapsRequestsOpen();
+												}
 											}}
 											className={`block rounded-xl border p-3 transition hover:bg-slate-50 ${
 												item.read

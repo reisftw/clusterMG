@@ -15,6 +15,7 @@ import {
 	X,
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import MapsBottomSheet from "../components/MapsBottomSheet";
@@ -61,6 +62,7 @@ function usePermission(user, permission) {
 
 export default function MapsPage() {
 	const { currentUser } = useAuthContext();
+	const location = useLocation();
 	const canRadar = usePermission(currentUser, MAPS_PERMISSIONS.RADAR);
 	const canRequest = usePermission(currentUser, MAPS_PERMISSIONS.REQUEST);
 	const canRoutes = usePermission(currentUser, MAPS_PERMISSIONS.ROUTES);
@@ -238,10 +240,16 @@ export default function MapsPage() {
 	}, []);
 
 	useEffect(() => {
-		if (new URLSearchParams(window.location.search).get("panel") !== "requests") return;
-		setRequestsOpen(true);
-		void loadRequests();
-	}, [loadRequests]);
+		const openRequestsPanel = () => {
+			setRequestsOpen(true);
+			void loadRequests();
+		};
+		if (new URLSearchParams(location.search).get("panel") === "requests") {
+			openRequestsPanel();
+		}
+		window.addEventListener("retiradas:maps-open-requests", openRequestsPanel);
+		return () => window.removeEventListener("retiradas:maps-open-requests", openRequestsPanel);
+	}, [loadRequests, location.search]);
 
 	const hasPendingEffectuation = requests.some((item) =>
 		["APPROVED", "PENDING_EFFECTUATION"].includes(item.status),

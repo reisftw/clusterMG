@@ -900,6 +900,12 @@ async function updateLocalUser(uid, data = {}) {
 				? current.must_change_password
 				: Boolean(data.trocar_senha),
 	};
+	const shouldInvalidateSessions =
+		next.email !== normalizeEmail(current.email) ||
+		next.role !== normalizeRole(current.role) ||
+		next.regional !== String(current.regional || "").trim() ||
+		next.disabled !== Boolean(current.disabled) ||
+		next.mustChangePassword !== Boolean(current.must_change_password);
 
 	await db.query(
 		`update app_users
@@ -917,7 +923,7 @@ async function updateLocalUser(uid, data = {}) {
             mfa_method = case when $4 = 'tecnico' then 'email' else mfa_method end,
             totp_secret = case when $4 = 'tecnico' then null else totp_secret end,
             totp_enabled_at = case when $4 = 'tecnico' then null else totp_enabled_at end,
-            session_version = session_version + 1
+		    session_version = session_version + case when $8 then 1 else 0 end
       where uid = $1`,
 		[
 			uid,
@@ -927,6 +933,7 @@ async function updateLocalUser(uid, data = {}) {
 			next.regional,
 			next.disabled,
 			next.mustChangePassword,
+			shouldInvalidateSessions,
 		],
 	);
 
