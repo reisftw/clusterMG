@@ -1055,6 +1055,11 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		saldoRows.at(-1) ||
 		null;
 	const monthlyBalance = Number(lastSaldoRow?.saldoMes || 0);
+	const hasMonthlyBalance = Boolean(metaMes && lastSaldoRow);
+	let visualStatus = pace.status;
+	if (hasMonthlyBalance) {
+		visualStatus = monthlyBalance >= 0 ? "ok" : "low";
+	}
 	const dailySchedule = metaMes
 		? buildMetaDiariaSchedule({
 				month: month || metaMes.mes,
@@ -1075,6 +1080,7 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		metaMes,
 		pace: {
 			...pace,
+			status: visualStatus,
 			dailyGoal,
 			currentPace,
 			monthlyBalance,
@@ -1083,7 +1089,7 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		helper: metaMes
 			? `${total}/${cancelamentos} cancelamentos - Alvo ${performance.targetPercent.toFixed(1)}% - Saldo ${balanceText} - Proj. ${pace.projectionPercent.toFixed(1)}%`
 			: "Sem meta carregada",
-		tone: resolveMetaTileTone(metaMes, pace.status),
+		tone: resolveMetaTileTone(metaMes, visualStatus),
 	};
 }
 
