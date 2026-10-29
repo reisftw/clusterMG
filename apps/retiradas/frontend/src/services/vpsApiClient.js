@@ -18,6 +18,16 @@ function isFinanHost() {
 	return /^finan\./i.test(window.location.hostname);
 }
 
+export function usesSameOriginApi(hostname = "") {
+	const normalizedHostname = String(hostname || "")
+		.trim()
+		.toLowerCase();
+	return (
+		normalizedHostname === "homolog.retiradas.tech" ||
+		normalizedHostname === "retiradas.sempre.net.br"
+	);
+}
+
 export function isVpsBackendEnabled() {
 	return (
 		String(import.meta.env.VITE_DATA_BACKEND || "").toLowerCase() === "vps"
@@ -26,7 +36,10 @@ export function isVpsBackendEnabled() {
 
 export function getApiBaseUrl() {
 	if (isFinanHost()) return `${window.location.origin}/api`;
-	if (typeof window !== "undefined" && window.location.hostname === "homolog.retiradas.tech") {
+	if (
+		typeof window !== "undefined" &&
+		usesSameOriginApi(window.location.hostname)
+	) {
 		return `${window.location.origin}/api`;
 	}
 	return String(
