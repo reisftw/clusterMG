@@ -7,6 +7,10 @@ on:
         description: "Versao exibida no pacote"
         required: true
         type: string
+      app_version:
+        description: "Commit da aplicacao exibido no rodape"
+        required: true
+        type: string
       package_name:
         description: "Nome do diretorio e arquivo, sem extensao"
         required: true
@@ -34,6 +38,7 @@ jobs:
       VPS_USER: ${{ secrets.VPS_USER || 'root' }}
       PACKAGE_NAME: ${{ inputs.package_name }}
       RELEASE_VERSION: ${{ inputs.release_version }}
+      APP_VERSION: ${{ inputs.app_version }}
       DOWNLOAD_TOKEN: ${{ inputs.download_token }}
 
     steps:
@@ -41,6 +46,7 @@ jobs:
         run: |
           [[ "$PACKAGE_NAME" =~ ^retiradas-vm-update-[A-Za-z0-9._-]+$ ]]
           [[ "$RELEASE_VERSION" =~ ^v[A-Za-z0-9._-]+$ ]]
+          [[ "$APP_VERSION" =~ ^[a-f0-9]{7}$ ]]
           [[ "$DOWNLOAD_TOKEN" =~ ^[a-f0-9]{24,64}$ ]]
 
       - name: Checkout
@@ -57,7 +63,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           export VITE_APP_ENV_LABEL="Producao"
-          export VITE_APP_VERSION="${GITHUB_SHA::7}"
+          export VITE_APP_VERSION="$APP_VERSION"
           npm run build:retiradas
 
       - name: Assemble update package
@@ -74,7 +80,8 @@ jobs:
           cat > "$package_root/VERSAO.txt" <<EOF
           Retiradas $RELEASE_VERSION
 
-          Commit: ${GITHUB_SHA::7}
+          Commit da aplicacao: $APP_VERSION
+          Commit do pacote: ${GITHUB_SHA::7}
           Ambiente: Producao
 
           Alteracoes incluidas:
@@ -147,7 +154,7 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o HostKeyAlias=retiradas-production \
             "$VPS_USER@$VPS_HOST" \
-            "mkdir -p '$remote_dir' && chmod 755 '$remote_dir'"
+            "mkdir -p '$remote_dir' && find '$remote_dir' -maxdepth 1 -type f -name 'retiradas-vm-update-*.tar*' -delete && chmod 755 '$remote_dir'"
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             -o StrictHostKeyChecking=yes \
             -o HostKeyAlias=retiradas-production \
