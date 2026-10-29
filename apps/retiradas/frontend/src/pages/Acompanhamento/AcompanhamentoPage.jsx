@@ -1044,8 +1044,6 @@ function resolveMetaTileTone(hasMetaData, status) {
 function buildMetaTileData(metaMes, label, month, feriadosSet) {
 	const pace = getMetaPace(metaMes, month, feriadosSet);
 	const performance = pace.performance || getCancellationPerformance(metaMes);
-	const total = formatNumber(performance.total);
-	const cancelamentos = formatNumber(performance.cancelamentos);
 	const projection = pace.projection || null;
 	const saldoRows = Array.isArray(metaMes?.saldoDiario)
 		? metaMes.saldoDiario
@@ -1087,7 +1085,11 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		},
 		value: metaMes ? `${performance.deliveredPercent.toFixed(1)}%` : "--",
 		helper: metaMes
-			? `${total}/${cancelamentos} cancelamentos - Alvo ${performance.targetPercent.toFixed(1)}% - Saldo ${balanceText} - Proj. ${pace.projectionPercent.toFixed(1)}%`
+			? `Alvo ${formatNumber(
+					performance.targetOS,
+				)} retiradas (${performance.targetPercent.toLocaleString("pt-BR", {
+					maximumFractionDigits: 1,
+				})}%) · Saldo ${balanceText}`
 			: "Sem meta carregada",
 		tone: resolveMetaTileTone(metaMes, visualStatus),
 	};
