@@ -18,6 +18,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useLocation } from "react-router-dom";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
+import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import MapsBottomSheet from "../components/MapsBottomSheet";
 import OrderDetailPanel from "../components/OrderDetailPanel";
 import RadarPanel from "../components/RadarPanel";
@@ -92,6 +93,7 @@ export default function MapsPage() {
 	const [radarOpen, setRadarOpen] = useState(false);
 	const [radarSettings, setRadarSettings] = useState(null);
 	const [routeOpen, setRouteOpen] = useState(false);
+	const [routeSelectionMode, setRouteSelectionMode] = useState(false);
 	const [selectedRouteIds, setSelectedRouteIds] = useState([]);
 	const [routes, setRoutes] = useState([]);
 	const [requestsOpen, setRequestsOpen] = useState(false);
@@ -99,6 +101,7 @@ export default function MapsPage() {
 	const [requestsLoading, setRequestsLoading] = useState(false);
 	const [simulatorOpen, setSimulatorOpen] = useState(false);
 	const [focusPoint, setFocusPoint] = useState(null);
+	const [realtimeRevision, setRealtimeRevision] = useState(0);
 	const lastRadarPositionRef = useRef(null);
 	const lastMapQueryPositionRef = useRef(null);
 	const locationAppliedRef = useRef(false);
@@ -176,7 +179,7 @@ export default function MapsPage() {
 			if (active) setDetailLoading(false);
 		});
 		return () => { active = false; };
-	}, [selectedId]);
+	}, [realtimeRevision, selectedId]);
 
 	useEffect(() => {
 		const position = locationState.position;
@@ -239,6 +242,19 @@ export default function MapsPage() {
 		}
 	}, []);
 
+	const loadRoutes = useCallback(async () => {
+		if (!canRoutes) return;
+		const data = await mapsService.routes();
+		setRoutes(data.items || []);
+	}, [canRoutes]);
+
+	useEffect(() => subscribeRealtimeTopics("maps", (event) => {
+		void loadPoints();
+		setRealtimeRevision((current) => current + 1);
+		if (requestsOpen) void loadRequests();
+		if (String(event.action || "").startsWith("ROUTE_")) void loadRoutes();
+	}, { debounceMs: 300 }), [loadPoints, loadRequests, loadRoutes, requestsOpen]);
+
 	useEffect(() => {
 		const openRequestsPanel = () => {
 			setRequestsOpen(true);
@@ -284,6 +300,35 @@ export default function MapsPage() {
 		setSelectedRouteIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
 	}
 
+	function toggleRoutePoint(point) {
+		if (!point?.assignedToCurrentUser || !point?.locationAvailable) {
+			setNotice("A rota aceita apenas suas OS com localizacao disponivel.");
+			return;
+		}
+		toggleRouteItem(point.id);
+	}
+
+	function startRouteSelection() {
+		setRouteSelectionMode(true);
+		setSelectedId("");
+		setSheetOpen(false);
+		setNotice("Modo rota ativo. Toque nas casas verdes para selecionar as paradas.");
+	}
+
+	function finishRouteSelection() {
+		if (!selectedRouteIds.length) {
+			setNotice("Selecione ao menos uma OS verde no mapa.");
+			return;
+		}
+		setRouteSelectionMode(false);
+		setRouteOpen(true);
+	}
+
+	function cancelRouteSelection() {
+		setRouteSelectionMode(false);
+		setSelectedRouteIds([]);
+	}
+
 	function moveRouteItem(id, direction) {
 		setSelectedRouteIds((current) => {
 			const from = current.indexOf(id);
@@ -297,15 +342,14 @@ export default function MapsPage() {
 
 	async function createRoute(orderIds) {
 		await mapsService.createRoute({ name: `Roteiro ${new Date().toLocaleDateString("pt-BR")}`, orderIds });
-		const data = await mapsService.routes();
-		setRoutes(data.items || []);
+		await loadRoutes();
 		setSelectedRouteIds([]);
+		setRouteSelectionMode(false);
 	}
 
 	async function optimizeRoute(routeId, position) {
 		await mapsService.optimizeRoute(routeId, position || {});
-		const data = await mapsService.routes();
-		setRoutes(data.items || []);
+		await loadRoutes();
 	}
 
 	function applySearch(event) {
@@ -357,18 +401,27 @@ export default function MapsPage() {
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} onViewportChange={setViewport} onSelect={setSelectedId} onError={setError} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} routeSelectionMode={routeSelectionMode} selectedRouteIds={selectedRouteIds} onViewportChange={setViewport} onSelect={setSelectedId} onToggleRoute={toggleRoutePoint} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
 					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>
 					{canRadar ? <button type="button" className={radarSettings?.enabled ? "is-active" : ""} onClick={() => setRadarOpen(true)} title="Radar de proximidade"><BellRing size={21} /></button> : null}
-					{canRoutes ? <button type="button" className={selectedRouteIds.length ? "is-active" : ""} onClick={() => setRouteOpen(true)} title="Roteiro do dia"><Route size={21} /><small>{selectedRouteIds.length || ""}</small></button> : null}
+					{canRoutes ? <button type="button" className={routeSelectionMode || selectedRouteIds.length ? "is-active" : ""} onClick={routeSelectionMode ? finishRouteSelection : startRouteSelection} title={routeSelectionMode ? "Concluir selecao da rota" : "Selecionar OS no mapa para criar rota"}><Route size={21} /><small>{selectedRouteIds.length || ""}</small></button> : null}
 					{canRequest || canManageRequests ? <button type="button" onClick={openRequests} title="Solicitacoes"><Inbox size={21} /></button> : null}
 					{canAudit ? <button type="button" onClick={() => setSimulatorOpen(true)} title="Simulador"><FlaskConical size={21} /></button> : null}
 					{canRadar ? <button type="button" onClick={() => setRadarOpen(true)} title="Configuracoes"><Settings2 size={21} /></button> : null}
 				</div>
 				{error ? <div className="maps-v2-error"><WifiOff size={18} /><span>{error}</span><button type="button" onClick={() => loadPoints()}><RefreshCw size={16} /> Tentar novamente</button></div> : null}
 				{notice ? <div className="maps-v2-location-notice" role="status"><LocateFixed size={18} /><span>{notice}</span></div> : null}
+				{routeSelectionMode ? (
+					<div className="maps-v2-route-selection" role="status">
+						<Route size={19} />
+						<div><strong>Selecionando rota</strong><span>Toque nas casas verdes para adicionar ou remover.</span></div>
+						<b>{selectedRouteIds.length}</b>
+						<button type="button" onClick={finishRouteSelection} disabled={!selectedRouteIds.length}>Montar rota</button>
+						<button type="button" className="is-cancel" onClick={cancelRouteSelection} aria-label="Cancelar selecao"><X size={17} /></button>
+					</div>
+				) : null}
 				<MapsBottomSheet items={points} summary={summary} open={sheetOpen} onToggle={() => setSheetOpen((current) => !current)} onSelect={(item) => setSelectedId(item.id)} selectedRouteIds={selectedRouteIds} onToggleRoute={toggleRouteItem} />
 			</main>
 

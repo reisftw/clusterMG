@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const notificationsService = require("../notificationsService");
+const { broadcastRealtime } = require("../realtime");
 const usersRepository = require("../usersRepository");
 const serviceOrderRequestsService = require("../serviceOrders/requests/serviceOrderRequestsService");
 
@@ -40,6 +41,13 @@ const NATIVE_COORDINATES_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const GEOCODE_QUEUE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const GEOCODE_QUEUE_BATCH_LIMIT = 25000;
 const DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/search";
+
+function broadcastMapsUpdate(action, payload = {}) {
+	broadcastRealtime("maps", {
+		action,
+		...payload,
+	});
+}
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -457,6 +465,12 @@ async function createRequest(payload = {}, user = {}) {
 			targets: { roles: ["admin", "backoffice", "backoffice_retirada"] },
 			meta: { module: "maps_v2", requestId: result.rows[0].id },
 		});
+		broadcastMapsUpdate("REQUEST_CREATED", {
+			requestId: result.rows[0].id,
+			orderId,
+			requesterUserId: userId(user),
+			status: "PENDING",
+		});
 		return { item: result.rows[0] };
 	} catch (error) {
 		if (error?.code === "23505") throw apiError("Esta OS ja possui uma solicitacao em andamento.", 409, "REQUEST_CONFLICT");
@@ -504,13 +518,16 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 			`select request.*, order_row.status as order_status, order_row.tecnico,
 			        order_row.tipo, order_row.codigo_cliente
 			   from maps_assignment_requests request
-			   join ordens_servico order_row on order_row.id = request.order_id
+			   left join ordens_servico order_row on order_row.id = request.order_id
 			  where request.id = $1
 			  for update`,
 			[text(requestId)],
 		);
 		current = currentResult.rows[0];
 		if (!current) throw apiError("Solicitacao nao encontrada.", 404);
+		if (!current.order_id) {
+			throw apiError("A O.S. nao esta mais aberta no Maps.", 409, "ORDER_CHANGED");
+		}
 		const retrying = current.status === "EFFECTUATION_FAILED";
 		if (current.status !== "PENDING" && !(approve && retrying)) {
 			throw apiError("Esta solicitacao ja foi analisada.", 409);
@@ -589,16 +606,30 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 			targets: { users: [current.requester_user_id] },
 			meta: { module: "maps_v2", requestId: current.id, status: finalStatus },
 		});
+		broadcastMapsUpdate(approve ? "REQUEST_APPROVED" : "REQUEST_REJECTED", {
+			requestId: current.id,
+			orderId: current.order_id,
+			requesterUserId: current.requester_user_id,
+			status: finalStatus,
+		});
 		return { item: updated.rows[0], effectedAtSource: false };
 	} catch (error) {
 		await client?.query("rollback").catch(() => {});
 		if (approve && current?.id) {
-			await db.query(
+			const failed = await db.query(
 				`update maps_assignment_requests
 				    set status = 'EFFECTUATION_FAILED', resolution_note = $2, updated_at = now()
 				  where id = $1 and status = 'APPROVED'`,
 				[current.id, text(error?.message || error).slice(0, 500)],
 			).catch(() => {});
+			if (failed?.rowCount) {
+				broadcastMapsUpdate("REQUEST_EFFECTUATION_FAILED", {
+					requestId: current.id,
+					orderId: current.order_id,
+					requesterUserId: current.requester_user_id,
+					status: "EFFECTUATION_FAILED",
+				});
+			}
 		}
 		throw error;
 	} finally {
@@ -653,6 +684,12 @@ async function reconcileEffectuationRequests({ force = false } = {}) {
 				targets: { users: [item.requester_user_id] },
 				meta: { module: "maps_v2", requestId: item.id, status },
 			}).catch(() => {});
+			broadcastMapsUpdate(completed ? "REQUEST_EFFECTED" : "REQUEST_EFFECTUATION_FAILED", {
+				requestId: item.id,
+				orderId: item.order_id,
+				requesterUserId: item.requester_user_id,
+				status,
+			});
 		}
 		effectuationReconcileLastAt = Date.now();
 	})();
@@ -899,6 +936,10 @@ async function createRoute(payload = {}, user = {}) {
 			);
 		}
 		await client.query("commit");
+		broadcastMapsUpdate("ROUTE_CREATED", {
+			routeId: route.rows[0].id,
+			userId: userId(user),
+		});
 		return { item: route.rows[0] };
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
@@ -928,6 +969,10 @@ async function updateRoute(routeId, payload = {}, user = {}) {
 			[text(routeId), userId(user), text(payload.name)],
 		);
 		await client.query("commit");
+		broadcastMapsUpdate("ROUTE_UPDATED", {
+			routeId: text(routeId),
+			userId: userId(user),
+		});
 		return { ok: true };
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
@@ -990,6 +1035,10 @@ async function optimizeRoute(routeId, payload = {}, user = {}) {
 		await client.query("update maps_route_items set sequence_number = sequence_number - 1000 where route_id = $1", [text(routeId)]);
 		await client.query("update maps_routes set optimized_at = now(), updated_at = now() where id = $1", [text(routeId)]);
 		await client.query("commit");
+		broadcastMapsUpdate("ROUTE_OPTIMIZED", {
+			routeId: text(routeId),
+			userId: userId(user),
+		});
 		return { items: optimized.map((item, index) => ({ orderId: item.order_id, sequence: index + 1, distanceMeters: item.distanceMeters })) };
 	} catch (error) {
 		await client.query("rollback").catch(() => {});

@@ -1,5 +1,6 @@
 const db = require("../../db");
 const hubsoftSyncProfiles = require("../../hubsoftSyncProfiles");
+const { broadcastRealtime } = require("../../realtime");
 const sempreIntegration = require("../../sempreIntegration");
 
 const CREATE_PERMISSIONS = ["service_orders.requests.create"];
@@ -51,6 +52,24 @@ let liveOpenOrdersPromise = null;
 
 function text(value) {
 	return String(value ?? "").trim();
+}
+
+async function broadcastLinkedMapsUpdate(effectuationRequestId, status) {
+	const linked = await db.query(
+		`select id, order_id, requester_user_id
+		   from maps_assignment_requests
+		  where source_snapshot->>'effectuationRequestId' = $1`,
+		[text(effectuationRequestId)],
+	).catch(() => ({ rows: [] }));
+	for (const item of linked.rows) {
+		broadcastRealtime("maps", {
+			action: "EFFECTUATION_WORKER_UPDATED",
+			requestId: item.id,
+			orderId: item.order_id,
+			requesterUserId: item.requester_user_id,
+			status,
+		});
+	}
 }
 
 function digits(value) {
@@ -703,6 +722,7 @@ async function runRequest(id) {
 				finalSnapshot.cliente || clientName(summary),
 			],
 		);
+		await broadcastLinkedMapsUpdate(id, "COMPLETED");
 	} catch (error) {
 		console.error(`[serviceOrderRequests] Falha na solicitacao ${id}:`, error?.message || error);
 		await db.query(
@@ -712,6 +732,7 @@ async function runRequest(id) {
 			  where id = $1`,
 			[id, text(error?.message || error).slice(0, 1000)],
 		).catch(() => {});
+		await broadcastLinkedMapsUpdate(id, "FAILED");
 	}
 }
 

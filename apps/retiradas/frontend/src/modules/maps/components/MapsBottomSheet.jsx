@@ -1,5 +1,6 @@
 import { CalendarClock, ChevronUp, MapPin, PackageCheck, Route, Target } from "lucide-react";
 import { useState } from "react";
+import { formatMapClientLabel } from "../utils/pointLabels";
 
 const LIST_PAGE_SIZE = 150;
 
@@ -19,7 +20,7 @@ function PointCard({ item, selectedForRoute, onSelect, onToggleRoute }) {
 					{item.category === "assigned" ? <PackageCheck size={18} /> : <Target size={18} />}
 				</span>
 				<span className="maps-v2-order-copy">
-					<strong>{item.clientName || item.orderNumber}</strong>
+					<strong>{formatMapClientLabel(item)}</strong>
 					<small>{item.neighborhood} · {item.city} · {item.assignedToCurrentUser ? "Minha OS" : item.technician || "Disponivel"}</small>
 					<span>{distanceLabel(item.distanceMeters)} {item.scheduled ? "· Agendada" : ""}</span>
 				</span>

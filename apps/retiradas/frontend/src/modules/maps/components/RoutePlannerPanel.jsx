@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronUp, LoaderCircle, Navigation, Route, Sparkles, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { formatMapClientLabel } from "../utils/pointLabels";
 
 function formatDistance(value) {
 	const meters = Number(value || 0);
@@ -63,7 +64,7 @@ export default function RoutePlannerPanel({
 				{selected.length ? selected.map((item, index) => (
 					<div className="maps-v2-route-item" key={item.id}>
 						<span className="maps-v2-route-sequence">{index + 1}</span>
-						<div><strong>{item.orderNumber}</strong><small>{item.neighborhood} · {item.city}</small></div>
+						<div><strong>{formatMapClientLabel(item)}</strong><small>OS {item.orderNumber} · {item.neighborhood} · {item.city}</small></div>
 						<div className="maps-v2-route-actions">
 							<button type="button" disabled={index === 0} onClick={() => onMove(item.id, -1)} aria-label="Mover retirada para cima"><ChevronUp size={16} /></button>
 							<button type="button" disabled={index === selected.length - 1} onClick={() => onMove(item.id, 1)} aria-label="Mover retirada para baixo"><ChevronDown size={16} /></button>

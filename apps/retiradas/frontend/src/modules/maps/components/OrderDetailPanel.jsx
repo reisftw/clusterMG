@@ -1,5 +1,6 @@
 import { ExternalLink, MapPin, Navigation, PackagePlus, Route, UserRound, X } from "lucide-react";
 import { useState } from "react";
+import { formatMapClientLabel } from "../utils/pointLabels";
 
 export default function OrderDetailPanel({ item, loading, onClose, onRequest, onAddRoute }) {
 	const [submitting, setSubmitting] = useState(false);
@@ -36,11 +37,12 @@ export default function OrderDetailPanel({ item, loading, onClose, onRequest, on
 			</header>
 			{loading ? <div className="maps-v2-panel-loading">Consultando autorizacoes...</div> : (
 				<div className="maps-v2-detail-content">
-					<h3>{item.clientName || item.orderNumber}</h3>
+					<h3>{formatMapClientLabel(item)}</h3>
 					<p><MapPin size={16} /> {item.address}</p>
 					<div className="maps-v2-detail-grid">
 						<div><span>Tipo</span><strong>{item.type}</strong></div>
 						<div><span>Status</span><strong>{item.status}</strong></div>
+						<div><span>Codigo do cliente</span><strong>{item.clientCode || "-"}</strong></div>
 						<div><span>Empresa</span><strong>{item.company || "-"}</strong></div>
 						<div><span>Regional</span><strong>{item.regional || "-"}</strong></div>
 					</div>

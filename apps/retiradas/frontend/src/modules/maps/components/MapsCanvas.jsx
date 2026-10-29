@@ -7,6 +7,7 @@ import { House } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import retorninhoMapMarker from "../../../assets/retorninho-map-marker-color.png";
+import { formatMapClientLabel } from "../utils/pointLabels";
 
 const DEFAULT_CENTER = [-18.8, -44.1];
 const DEFAULT_ZOOM = 6;
@@ -28,31 +29,18 @@ function validOrderPoint(point) {
 }
 
 const PROPERTY_MARKER_HTML = `<span>${renderToStaticMarkup(<House size={17} strokeWidth={2.5} />)}</span>`;
-const PROPERTY_ICONS = {
-	assigned: L.divIcon({
-		className: "maps-v2-property-marker is-assigned",
+function pointIcon(point, selected = false) {
+	return L.divIcon({
+		className: `maps-v2-property-marker is-${point?.category === "assigned" ? "assigned" : "opportunity"}${selected ? " is-selected" : ""}`,
 		html: PROPERTY_MARKER_HTML,
 		iconSize: [36, 42],
 		iconAnchor: [18, 40],
 		tooltipAnchor: [0, -37],
-	}),
-	opportunity: L.divIcon({
-		className: "maps-v2-property-marker is-opportunity",
-		html: PROPERTY_MARKER_HTML,
-		iconSize: [36, 42],
-		iconAnchor: [18, 40],
-		tooltipAnchor: [0, -37],
-	}),
-};
-
-function pointIcon(point) {
-	return point?.category === "assigned"
-		? PROPERTY_ICONS.assigned
-		: PROPERTY_ICONS.opportunity;
+	});
 }
 
 function pointLabel(point) {
-	return point?.clientName || point?.orderNumber || "Retirada";
+	return formatMapClientLabel(point);
 }
 
 function pointTooltip(point) {
@@ -62,11 +50,13 @@ function pointTooltip(point) {
 	client.textContent = pointLabel(point);
 	const order = document.createElement("span");
 	order.textContent = `OS ${point?.orderNumber || "nao informada"}`;
+	const clientCode = document.createElement("span");
+	clientCode.textContent = `Codigo do cliente: ${point?.clientCode || "nao informado"}`;
 	const technician = document.createElement("span");
 	technician.textContent = point?.assignedToCurrentUser
 		? `Tecnico: ${point?.technician || "voce"} (minha OS)`
 		: `Tecnico: ${point?.technician || "disponivel"}`;
-	container.append(client, order, technician);
+	container.append(client, order, clientCode, technician);
 	return container;
 }
 
@@ -83,21 +73,24 @@ function userPositionIcon() {
 	});
 }
 
-export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, onViewportChange, onSelect, onError }) {
+export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, routeSelectionMode = false, selectedRouteIds = [], onViewportChange, onSelect, onToggleRoute, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const clusterRef = useRef(null);
 	const userLayerRef = useRef(null);
+	const markersByIdRef = useRef(new Map());
+	const selectedRouteIdsRef = useRef(new Set(selectedRouteIds));
 	const initialFrameAppliedRef = useRef(false);
-	const callbacksRef = useRef({ onViewportChange, onSelect, onError });
+	const callbacksRef = useRef({ onViewportChange, onSelect, onToggleRoute, onError, routeSelectionMode });
 
 	useEffect(() => {
-		callbacksRef.current = { onViewportChange, onSelect, onError };
-	}, [onViewportChange, onSelect, onError]);
+		callbacksRef.current = { onViewportChange, onSelect, onToggleRoute, onError, routeSelectionMode };
+	}, [onViewportChange, onSelect, onToggleRoute, onError, routeSelectionMode]);
 
 	useEffect(() => {
 		if (!containerRef.current || mapRef.current) return undefined;
 		let map;
+		const markersById = markersByIdRef.current;
 		try {
 			map = L.map(containerRef.current, {
 				zoomControl: false,
@@ -170,6 +163,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 			mapRef.current = null;
 			clusterRef.current = null;
 			userLayerRef.current = null;
+			markersById.clear();
 		};
 	}, []);
 
@@ -178,6 +172,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		const map = mapRef.current;
 		if (!cluster || !map) return;
 		cluster.clearLayers();
+		markersByIdRef.current.clear();
 		const validCoordinates = [];
 		const markers = [];
 		for (const point of points || []) {
@@ -185,10 +180,17 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 			validCoordinates.push([Number(point.latitude), Number(point.longitude)]);
 			const marker = L.marker(
 				[Number(point.latitude), Number(point.longitude)],
-				{ icon: pointIcon(point), title: pointLabel(point), riseOnHover: true },
+				{ icon: pointIcon(point, selectedRouteIdsRef.current.has(point.id)), title: pointLabel(point), riseOnHover: true },
 			);
 			marker.bindTooltip(() => pointTooltip(point), { direction: "top", opacity: 0.98 });
-			marker.on("click", () => callbacksRef.current.onSelect?.(point.id));
+			marker.on("click", () => {
+				if (callbacksRef.current.routeSelectionMode) {
+					callbacksRef.current.onToggleRoute?.(point);
+					return;
+				}
+				callbacksRef.current.onSelect?.(point.id);
+			});
+			markersByIdRef.current.set(point.id, { marker, point });
 			markers.push(marker);
 		}
 		if (markers.length) cluster.addLayers(markers);
@@ -210,6 +212,18 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 			window.setTimeout(() => map.invalidateSize({ pan: false }), 0);
 		}
 	}, [points]);
+
+	useEffect(() => {
+		const previous = selectedRouteIdsRef.current;
+		const next = new Set(selectedRouteIds);
+		const changed = new Set([...previous, ...next]);
+		for (const id of changed) {
+			if (previous.has(id) === next.has(id)) continue;
+			const entry = markersByIdRef.current.get(id);
+			if (entry) entry.marker.setIcon(pointIcon(entry.point, next.has(id)));
+		}
+		selectedRouteIdsRef.current = next;
+	}, [selectedRouteIds]);
 
 	useEffect(() => {
 		const map = mapRef.current;
@@ -253,5 +267,5 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		);
 	}, [focusPoint, focusZoom]);
 
-	return <div ref={containerRef} className="maps-v2-canvas" aria-label="Mapa interativo de retiradas" />;
+	return <div ref={containerRef} className={`maps-v2-canvas${routeSelectionMode ? " is-route-selection" : ""}`} aria-label="Mapa interativo de retiradas" />;
 }

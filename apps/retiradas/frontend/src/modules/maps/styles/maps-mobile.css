@@ -179,6 +179,94 @@
 	background: #109765;
 }
 
+.maps-v2-property-marker.is-selected > span {
+	transform: rotate(-45deg) scale(1.16);
+	border-color: #fff4da;
+	background: #f97316;
+	box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.28), 0 7px 16px rgba(15, 39, 72, 0.38);
+}
+
+.maps-v2-canvas.is-route-selection .leaflet-marker-icon {
+	cursor: pointer;
+}
+
+.maps-v2-route-selection {
+	position: absolute;
+	left: 50%;
+	bottom: 46px;
+	z-index: 25;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+	align-items: center;
+	gap: 10px;
+	width: min(650px, calc(100% - 28px));
+	min-height: 58px;
+	padding: 8px 10px;
+	transform: translateX(-50%);
+	border: 1px solid #bdd8f6;
+	border-radius: 8px;
+	background: rgba(255, 255, 255, 0.98);
+	box-shadow: 0 14px 34px rgba(11, 30, 57, 0.24);
+	color: #17395f;
+}
+
+.maps-v2-route-selection > svg {
+	color: #0877e8;
+}
+
+.maps-v2-route-selection > div {
+	display: grid;
+	min-width: 0;
+}
+
+.maps-v2-route-selection strong {
+	font-size: 12px;
+}
+
+.maps-v2-route-selection span {
+	font-size: 10px;
+	color: #68778d;
+}
+
+.maps-v2-route-selection b {
+	display: grid;
+	min-width: 30px;
+	height: 30px;
+	place-items: center;
+	border-radius: 6px;
+	background: #e8f3ff;
+	color: #0968c9;
+	font-size: 12px;
+}
+
+.maps-v2-route-selection button {
+	height: 34px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 6px;
+	background: #0877e8;
+	color: #fff;
+	font: inherit;
+	font-size: 10px;
+	font-weight: 850;
+	cursor: pointer;
+}
+
+.maps-v2-route-selection button:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.maps-v2-route-selection button.is-cancel {
+	display: grid;
+	width: 34px;
+	padding: 0;
+	place-items: center;
+	border: 1px solid #d7e1ec;
+	background: #fff;
+	color: #53647c;
+}
+
 .maps-v2-property-marker.is-scheduled > span {
 	background: #e8a900;
 }
@@ -303,6 +391,27 @@
 
 	.maps-v2-sheet-summary > div {
 		min-width: 0;
+	}
+
+	.maps-v2-route-selection {
+		bottom: 38px;
+		grid-template-columns: auto minmax(0, 1fr) auto auto;
+		gap: 7px;
+		width: calc(100% - 16px);
+		min-height: 54px;
+		padding: 7px 8px;
+	}
+
+	.maps-v2-route-selection > svg {
+		display: none;
+	}
+
+	.maps-v2-route-selection span {
+		display: none;
+	}
+
+	.maps-v2-route-selection button {
+		padding: 0 9px;
 	}
 }
 
