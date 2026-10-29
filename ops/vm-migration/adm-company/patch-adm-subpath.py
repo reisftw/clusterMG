@@ -168,10 +168,51 @@ for path in (FRONTEND / "src").rglob("*"):
     source = source.replace('"retiradas_okta_nonce"', '"adm:okta_nonce"')
     write(path, source)
 
-for manifest in FRONTEND.joinpath("public").glob("*.webmanifest"):
-    data = json.loads(read(manifest))
+public_root = FRONTEND / "public"
+public_assets = sorted(
+    (
+        str(path.relative_to(public_root)).replace("\\", "/")
+        for path in public_root.rglob("*")
+        if path.is_file()
+    ),
+    key=len,
+    reverse=True,
+)
+if public_assets:
+    public_pattern = re.compile(
+        r'(["\'])/(?!adm/)(%s)\1'
+        % "|".join(re.escape(asset) for asset in public_assets)
+    )
+    for path in FRONTEND.rglob("*"):
+        if path.is_dir() or "node_modules" in path.parts or path.suffix not in {
+            ".js",
+            ".jsx",
+            ".css",
+            ".html",
+        }:
+            continue
+        source = read(path)
+        source = public_pattern.sub(
+            lambda match: f'{match.group(1)}/adm/{match.group(2)}{match.group(1)}',
+            source,
+        )
+        write(path, source)
+
+
+def prefix_manifest_paths(value):
+    if isinstance(value, dict):
+        return {key: prefix_manifest_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [prefix_manifest_paths(item) for item in value]
+    if isinstance(value, str) and value.startswith("/") and not value.startswith("/adm/"):
+        return f"/adm{value}"
+    return value
+
+
+for manifest in public_root.glob("*.webmanifest"):
+    data = prefix_manifest_paths(json.loads(read(manifest)))
     for key in ("start_url", "scope"):
-        value = str(data.get(key) or "/")
+        value = str(data.get(key) or "/adm/")
         if not value.startswith("/adm"):
             data[key] = "/adm" + (value if value.startswith("/") else f"/{value}")
     write(manifest, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
