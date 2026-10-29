@@ -124,10 +124,13 @@ fi
 if sudo -u postgres psql -Atqc "select 1 from pg_database where datname = '$DB_NAME'" postgres | grep -qx 1; then
   DB_BACKUP="$BACKUP_ROOT/database-before-$STAMP.dump"
   sudo -u postgres pg_dump --format=custom --no-owner --no-privileges \
-    --file "$DB_BACKUP" "$DB_NAME"
+    "$DB_NAME" > "$DB_BACKUP"
 fi
 
-DB_PASSWORD="$(sed -n 's/^PGPASSWORD=//p' "$ENV_FILE" 2>/dev/null | tail -1)"
+DB_PASSWORD=""
+if [[ -s "$ENV_FILE" ]]; then
+  DB_PASSWORD="$(sed -n 's/^PGPASSWORD=//p' "$ENV_FILE" | tail -1)"
+fi
 DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -hex 32)}"
 ROLLBACK_REQUIRED="true"
 sudo -u postgres psql -v ON_ERROR_STOP=1 postgres <<SQL
@@ -168,11 +171,14 @@ rm -rf "$INSTALL_ROOT/backend" "$INSTALL_ROOT/frontend"
 mv "$INSTALL_ROOT/backend.new" "$INSTALL_ROOT/backend"
 mv "$INSTALL_ROOT/frontend.new" "$INSTALL_ROOT/frontend"
 
-install -d -m 700 "$ENV_DIR/credentials"
+if ! id svc-adm >/dev/null 2>&1; then
+  useradd --system --no-create-home --shell /usr/sbin/nologin svc-adm
+fi
+install -d -m 750 -o root -g svc-adm "$ENV_DIR" "$ENV_DIR/credentials"
 [[ -f "$PAYLOAD/credentials/google-drive-service-account.json" ]] && \
-  install -m 600 "$PAYLOAD/credentials/google-drive-service-account.json" "$ENV_DIR/credentials/google-drive-service-account.json"
+  install -m 640 -o root -g svc-adm "$PAYLOAD/credentials/google-drive-service-account.json" "$ENV_DIR/credentials/google-drive-service-account.json"
 [[ -f "$PAYLOAD/credentials/backup-age-key.txt" ]] && \
-  install -m 600 "$PAYLOAD/credentials/backup-age-key.txt" "$ENV_DIR/credentials/backup-age-key.txt"
+  install -m 640 -o root -g svc-adm "$PAYLOAD/credentials/backup-age-key.txt" "$ENV_DIR/credentials/backup-age-key.txt"
 
 python3 - "$PAYLOAD/env.source" "$ENV_FILE" "$DB_PASSWORD" "$TARGET_ORIGIN" <<'PY'
 import sys
@@ -212,9 +218,6 @@ Path(target_path).write_text("\n".join(f"{key}={value}" for key, value in sorted
 PY
 chmod 600 "$ENV_FILE"
 
-if ! id svc-adm >/dev/null 2>&1; then
-  useradd --system --no-create-home --shell /usr/sbin/nologin svc-adm
-fi
 mkdir -p "$INSTALL_ROOT/backend/uploads" "$INSTALL_ROOT/backups/postgres"
 chown -R root:root "$INSTALL_ROOT/backend" "$INSTALL_ROOT/frontend"
 chown -R svc-adm:svc-adm "$INSTALL_ROOT/backend/uploads" "$INSTALL_ROOT/backups/postgres"
