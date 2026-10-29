@@ -7,3 +7,5 @@
 .maps-v2-request-status.is-approved{background:#eaf2ff;color:#205fb0}
 .maps-v2-request-status.is-effected{background:#def7ea;color:#087553}
 .maps-v2-request-status.is-effectuation_failed{background:#fff0ed;color:#b23627}
+.maps-v2-sheet:not(.is-open){width:82px;max-height:22px;background:rgba(255,255,255,.94);transition:max-height .24s ease,width .24s ease}
+.maps-v2-sheet:not(.is-open) .maps-v2-sheet-summary,.maps-v2-sheet:not(.is-open) .maps-v2-list{display:none}
