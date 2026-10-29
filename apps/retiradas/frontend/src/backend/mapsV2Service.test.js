@@ -44,24 +44,18 @@ describe("Retiradas Maps 2.0 service", () => {
 		)).toBeGreaterThan(800);
 	});
 
-	it("anonimiza oportunidade no backend e nunca devolve PII ou coordenada exata", () => {
+	it("mostra cada oportunidade como cliente com coordenada exata no mapa interno", () => {
 		const row = baseRow();
 		const user = { role: "tecnico", permissions: [service.MAPS_PERMISSIONS.OPPORTUNITIES] };
 		const point = __testables.mapPoint(row, user);
 		expect(point.category).toBe("opportunity");
-		expect(point.coordinatesApproximate).toBe(true);
-		expect(point.latitude).not.toBe(row.latitude);
-		expect(point).not.toHaveProperty("clientName");
-		expect(point).not.toHaveProperty("address");
-		expect(JSON.stringify(point)).not.toContain("MARIA APARECIDA");
-		expect(JSON.stringify(point)).not.toContain("Rua A");
-	});
-
-	it("mantem aproximacao deterministica para evitar deslocamento visual a cada consulta", () => {
-		const first = __testables.deterministicApproximation("order-1", -19.967, -44.198);
-		const second = __testables.deterministicApproximation("order-1", -19.967, -44.198);
-		expect(first).toEqual(second);
-		expect(__testables.haversineMeters(first, { latitude: -19.967, longitude: -44.198 })).toBeGreaterThanOrEqual(150);
+		expect(point.coordinatesApproximate).toBe(false);
+		expect(point.latitude).toBe(row.latitude);
+		expect(point).toMatchObject({
+			clientName: "MARIA SILVA",
+			address: "Rua A, 10 - Sao Jorge",
+			requestable: true,
+		});
 	});
 
 	it("mantem oportunidades sem coordenada visiveis na lista sem inventar uma posicao", () => {
@@ -109,6 +103,24 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(filters.clauses.join(" ")).toContain("request.id is null");
 		expect(params[1]).toContain("JOAO TÉCNICO");
 		expect(params[2]).toContain("FILA");
+	});
+
+	it("permite que a gestao visualize todas as retiradas sem habilitar solicitacao indevida", () => {
+		const params = [];
+		const filters = __testables.sourceFilters({
+			params,
+			query: {},
+			user: { role: "admin" },
+		});
+		expect(filters.clauses.join(" ")).not.toContain("request.id is null");
+		expect(params).toHaveLength(1);
+		const point = __testables.mapPoint(baseRow({ tecnico: "OUTRO TECNICO" }), { role: "admin" });
+		expect(point).toMatchObject({
+			category: "opportunity",
+			clientName: "MARIA SILVA",
+			requestable: false,
+			assignedToCurrentUser: false,
+		});
 	});
 
 	it("otimiza roteiro pelo vizinho mais proximo de forma explicavel", () => {

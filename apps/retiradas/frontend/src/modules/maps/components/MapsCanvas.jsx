@@ -42,12 +42,19 @@ function pointIcon(point) {
 }
 
 function pointLabel(point) {
-	return point?.category === "opportunity"
-		? point?.neighborhood || point?.orderNumber || "Oportunidade"
-		: point?.clientName || point?.orderNumber || "Retirada";
+	return point?.clientName || point?.orderNumber || "Retirada";
 }
 
-export default function MapsCanvas({ points, userPosition, focusPoint, onViewportChange, onSelect, onError }) {
+function userPositionIcon() {
+	return L.divIcon({
+		className: "maps-v2-user-position-marker",
+		html: '<span class="maps-v2-user-position-pulse"><i /></span>',
+		iconSize: [44, 44],
+		iconAnchor: [22, 22],
+	});
+}
+
+export default function MapsCanvas({ points, userPosition, focusPoint, followUser, onViewportChange, onSelect, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const clusterRef = useRef(null);
@@ -69,6 +76,9 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 				preferCanvas: true,
 			}).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 			mapRef.current = map;
+			map.createPane("mapsUserPosition");
+			map.getPane("mapsUserPosition").style.zIndex = "750";
+			map.getPane("mapsUserPosition").style.pointerEvents = "none";
 			L.control.zoom({ position: "topright" }).addTo(map);
 			L.control.attribution({ position: "bottomright", prefix: false })
 				.addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>')
@@ -175,11 +185,30 @@ export default function MapsCanvas({ points, userPosition, focusPoint, onViewpor
 			userLayerRef.current = null;
 		}
 		if (!validPoint(userPosition)) return;
-		userLayerRef.current = L.circleMarker(
-			[Number(userPosition.latitude), Number(userPosition.longitude)],
-			{ radius: 8, color: "#ffffff", weight: 4, fillColor: "#1468ff", fillOpacity: 1 },
-		).addTo(map);
-	}, [userPosition]);
+		const position = [Number(userPosition.latitude), Number(userPosition.longitude)];
+		const accuracy = Math.max(8, Math.min(Number(userPosition.accuracy || 0), 500));
+		const layer = L.layerGroup();
+		L.circle(position, {
+			pane: "mapsUserPosition",
+			radius: accuracy,
+			color: "#1468ff",
+			weight: 1,
+			fillColor: "#4d9dff",
+			fillOpacity: 0.14,
+			interactive: false,
+		}).addTo(layer);
+		L.marker(position, {
+			pane: "mapsUserPosition",
+			icon: userPositionIcon(),
+			interactive: false,
+			zIndexOffset: 2000,
+		}).addTo(layer);
+		layer.addTo(map);
+		userLayerRef.current = layer;
+		if (followUser && !map.getBounds().pad(-0.2).contains(position)) {
+			map.panTo(position, { animate: true, duration: 0.45 });
+		}
+	}, [followUser, userPosition]);
 
 	useEffect(() => {
 		if (!validPoint(focusPoint) || !mapRef.current) return;

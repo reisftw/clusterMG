@@ -1,4 +1,4 @@
-import { ExternalLink, MapPin, Navigation, PackagePlus, Route, ShieldCheck, X } from "lucide-react";
+import { ExternalLink, MapPin, Navigation, PackagePlus, Route, UserRound, X } from "lucide-react";
 import { useState } from "react";
 
 export default function OrderDetailPanel({ item, loading, onClose, onRequest, onAddRoute }) {
@@ -6,7 +6,7 @@ export default function OrderDetailPanel({ item, loading, onClose, onRequest, on
 	const [message, setMessage] = useState("");
 
 	if (!item && !loading) return null;
-	const navigateUrl = item?.category === "assigned" && item?.locationAvailable
+	const navigateUrl = item?.locationAvailable
 		? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`${item.latitude},${item.longitude}`)}`
 		: "#";
 
@@ -36,27 +36,29 @@ export default function OrderDetailPanel({ item, loading, onClose, onRequest, on
 			</header>
 			{loading ? <div className="maps-v2-panel-loading">Consultando autorizacoes...</div> : (
 				<div className="maps-v2-detail-content">
-					<h3>{item.category === "assigned" ? item.clientName : item.neighborhood}</h3>
-					<p><MapPin size={16} /> {item.category === "assigned" ? item.address : `${item.neighborhood}, ${item.city}`}</p>
+					<h3>{item.clientName || item.orderNumber}</h3>
+					<p><MapPin size={16} /> {item.address}</p>
 					<div className="maps-v2-detail-grid">
 						<div><span>Tipo</span><strong>{item.type}</strong></div>
 						<div><span>Status</span><strong>{item.status}</strong></div>
 						<div><span>Empresa</span><strong>{item.company || "-"}</strong></div>
 						<div><span>Regional</span><strong>{item.regional || "-"}</strong></div>
 					</div>
-					{item.coordinatesApproximate ? (
-						<div className="maps-v2-privacy-note"><ShieldCheck size={18} /><span>A posicao e aproximada. Dados exatos permanecem protegidos ate a atribuicao.</span></div>
+					{!item.assignedToCurrentUser && item.technician && !item.requestable ? (
+						<div className="maps-v2-privacy-note"><UserRound size={18} /><span>OS em atendimento por {item.technician}.</span></div>
 					) : null}
 					{!item.locationAvailable ? (
 						<div className="maps-v2-privacy-note"><MapPin size={18} /><span>Esta oportunidade esta disponivel, mas a localizacao ainda esta sendo processada.</span></div>
 					) : null}
 					<div className="maps-v2-detail-actions">
-						{item.category === "assigned" ? (<>
+						{item.assignedToCurrentUser ? (<>
 							{navigateUrl !== "#" ? <a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Abrir rota <ExternalLink size={14} /></a> : null}
 							<button type="button" className="maps-v2-primary-button" disabled={!item.locationAvailable} onClick={() => onAddRoute(item.id)}><Route size={17} /> Adicionar ao roteiro</button>
-						</>) : (
+						</>) : item.requestable ? (
 							<button type="button" className="maps-v2-primary-button" disabled={submitting} onClick={requestOrder}><PackagePlus size={17} /> {submitting ? "Enviando..." : "Solicitar esta OS"}</button>
-						)}
+						) : navigateUrl !== "#" ? (
+							<a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Ver no mapa <ExternalLink size={14} /></a>
+						) : null}
 					</div>
 					{message ? <p className="maps-v2-feedback">{message}</p> : null}
 				</div>

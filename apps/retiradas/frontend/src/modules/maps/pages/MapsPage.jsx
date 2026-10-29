@@ -300,7 +300,7 @@ export default function MapsPage() {
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} onViewportChange={setViewport} onSelect={setSelectedId} onError={setError} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} followUser={gpsArea} onViewportChange={setViewport} onSelect={setSelectedId} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
 					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>

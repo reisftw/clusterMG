@@ -16,8 +16,8 @@ function PointCard({ item, selectedForRoute, onSelect, onToggleRoute }) {
 					{item.category === "assigned" ? <PackageCheck size={18} /> : <Target size={18} />}
 				</span>
 				<span className="maps-v2-order-copy">
-					<strong>{item.category === "assigned" ? item.clientName || item.orderNumber : item.neighborhood}</strong>
-					<small>{item.city} · {item.type}</small>
+					<strong>{item.clientName || item.orderNumber}</strong>
+					<small>{item.neighborhood} · {item.city} · {item.type}</small>
 					<span>{distanceLabel(item.distanceMeters)} {item.scheduled ? "· Agendada" : ""}</span>
 				</span>
 			</button>

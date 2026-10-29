@@ -135,7 +135,14 @@ function hasPermission(user = {}, permission) {
 		: Array.isArray(profile.permissions)
 			? profile.permissions
 			: [];
-	return normalize(user.role || profile.role) === "ADMIN" || permissions.includes("*") || permissions.includes(permission);
+	const role = normalize(user.role || profile.role);
+	return ["ADMIN", "SUPERADMIN"].includes(role) || permissions.includes("*") || permissions.includes(permission);
+}
+
+function canViewAllOrders(user = {}) {
+	return hasPermission(user, MAPS_PERMISSIONS.AUDIT) ||
+		hasPermission(user, MAPS_PERMISSIONS.APPROVE) ||
+		hasPermission(user, MAPS_PERMISSIONS.REJECT);
 }
 
 function numberInRange(value, min, max, fallback = null) {
@@ -211,6 +218,7 @@ function categoryForOrder(row, user) {
 	const technician = normalize(row.tecnico);
 	if (technician && userTechnicianNames(user).includes(technician)) return "assigned";
 	if (isAvailableTechnician(technician) && !row.open_request_id) return "opportunity";
+	if (canViewAllOrders(user)) return "opportunity";
 	return "unavailable";
 }
 
@@ -228,10 +236,10 @@ function mapPoint(row, user, { origin = null } = {}) {
 		latitude: locationAvailable ? parsedLatitude : null,
 		longitude: locationAvailable ? parsedLongitude : null,
 	};
-	const coordinates = category === "opportunity" && locationAvailable
-		? deterministicApproximation(row.id, exact.latitude, exact.longitude)
-		: exact;
+	const coordinates = exact;
 	const distanceMeters = origin && locationAvailable ? haversineMeters(origin, exact) : null;
+	const assignedToCurrentUser = category === "assigned";
+	const requestable = category === "opportunity" && isAvailableTechnician(row.tecnico) && !row.open_request_id;
 	const base = {
 		id: row.id,
 		orderNumber: row.num_os,
@@ -239,8 +247,13 @@ function mapPoint(row, user, { origin = null } = {}) {
 		scheduled,
 		latitude: coordinates.latitude,
 		longitude: coordinates.longitude,
-		coordinatesApproximate: category === "opportunity" && locationAvailable,
+		coordinatesApproximate: false,
 		locationAvailable,
+		requestable,
+		assignedToCurrentUser,
+		clientName: firstAndLastName(row.nome_cliente),
+		address: row.endereco_resumo || row.endereco || "Endereco nao informado",
+		technician: row.tecnico || "",
 		city: row.cidade || "Cidade nao informada",
 		neighborhood: row.bairro || "Bairro nao informado",
 		company: row.empresa || "",
@@ -251,14 +264,6 @@ function mapPoint(row, user, { origin = null } = {}) {
 		distanceMeters,
 		lastUpdatedAt: row.updated_at,
 	};
-	if (category === "assigned") {
-		return {
-			...base,
-			clientName: firstAndLastName(row.nome_cliente),
-			address: row.endereco_resumo || row.endereco || "Endereco nao informado",
-			technician: row.tecnico || "",
-		};
-	}
 	return base;
 }
 
@@ -317,11 +322,13 @@ function sourceFilters({ query = {}, user = {}, params = [] } = {}) {
 		"upper(coalesce(o.status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'",
 	];
 	params.push(ALLOWED_ORDER_TYPES);
-	params.push(userTechnicianSourceNames(user), AVAILABLE_TECHNICIANS_SQL);
-	clauses.push(
-		`(upper(trim(coalesce(o.tecnico, ''))) = any($2::text[])
-		  or (upper(trim(coalesce(o.tecnico, ''))) = any($3::text[]) and request.id is null))`,
-	);
+	if (!canViewAllOrders(user)) {
+		params.push(userTechnicianSourceNames(user), AVAILABLE_TECHNICIANS_SQL);
+		clauses.push(
+			`(upper(trim(coalesce(o.tecnico, ''))) = any($2::text[])
+			  or (upper(trim(coalesce(o.tecnico, ''))) = any($3::text[]) and request.id is null))`,
+		);
+	}
 	const viewport = parseViewport(query);
 	if (viewport) {
 		params.push(viewport.minLat, viewport.maxLat, viewport.minLng, viewport.maxLng);
@@ -406,7 +413,7 @@ async function listPoints(query = {}, user = {}) {
 			scheduled: items.filter((item) => item.scheduled).length,
 			locationPending: items.filter((item) => !item.locationAvailable).length,
 		},
-		privacy: { opportunitiesApproximate: true },
+		privacy: { opportunitiesApproximate: false },
 	};
 }
 
@@ -450,7 +457,7 @@ async function createRequest(payload = {}, user = {}) {
 	const orderId = text(payload.orderId || payload.order_id);
 	if (!orderId) throw apiError("Informe a ordem desejada.");
 	const order = await getOrder(orderId, user);
-	if (order.category !== "opportunity") throw apiError("Esta ordem nao esta disponivel para solicitacao.", 409, "ORDER_UNAVAILABLE");
+	if (order.category !== "opportunity" || !order.requestable) throw apiError("Esta ordem nao esta disponivel para solicitacao.", 409, "ORDER_UNAVAILABLE");
 	try {
 		const result = await db.query(
 			`insert into maps_assignment_requests
@@ -1094,6 +1101,7 @@ module.exports = {
 	updateRoute,
 	__testables: {
 		boundingBox,
+		canViewAllOrders,
 		categoryForOrder,
 		deterministicApproximation,
 		firstAndLastName,
