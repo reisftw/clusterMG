@@ -1,7 +1,7 @@
 ﻿import { Chart } from "chart.js/auto";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveVpsDate } from "../../../services/vpsDate";
-import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
+import { getCancellationPerformance } from "../../../modules/dashboard/utils/metasMetrics";
 import { logger } from "../../../utils/logger";
 import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
 import AnomaliaList from "../components/AnomaliaList";
@@ -69,7 +69,7 @@ function getLatestSaldoRow(saldoDiario = []) {
 		.find((row) => safeNumber(row?.totalDia) > 0 || safeNumber(row?.metaDia) > 0);
 }
 
-function buildExecutiveSummary({ d, metaBrasilTecpar, projecao, ritmo, saldoDiario }) {
+function buildExecutiveSummary({ d, configuredPerformance, projecao, ritmo, saldoDiario }) {
 	const realizado = safeNumber(d?.totalOS);
 	const meta = safeNumber(d?.meta);
 	const faltam = Math.max(0, meta - realizado);
@@ -87,7 +87,7 @@ function buildExecutiveSummary({ d, metaBrasilTecpar, projecao, ritmo, saldoDiar
 	const saldoMes = safeNumber(latestSaldo?.saldoMes, realizado - safeNumber(latestSaldo?.metaAcumulada));
 	const projectedGap = projection - meta;
 	const operationalStatus =
-		projection >= metaBrasilTecpar.meta
+		projection >= configuredPerformance.targetOS
 			? "ok"
 			: projection >= meta
 				? "warn"
@@ -100,9 +100,9 @@ function buildExecutiveSummary({ d, metaBrasilTecpar, projecao, ritmo, saldoDiar
 		projection,
 		projectionPercent,
 		cancelamentos,
-		pctMeta: meta > 0 ? (realizado / meta) * 100 : safeNumber(d?.percentAchieved),
+		pctMeta: pctCancelamentos,
 		pctCancelamentos,
-		metaBrasilTecpar,
+		configuredPerformance,
 		diasUteisRestantes,
 		plannedDaily,
 		currentPace,
@@ -117,12 +117,12 @@ function buildExecutiveSummary({ d, metaBrasilTecpar, projecao, ritmo, saldoDiar
 function buildRetorninhoMessage(summary) {
 	if (!summary) return "Carregando a leitura executiva do mês.";
 	if (summary.operationalStatus === "ok") {
-		return `Boa: a projeção atual fecha em ${formatInteger(summary.projection)} O.S. e supera a meta Brasil Tecpar de ${formatInteger(summary.metaBrasilTecpar.meta)}.`;
+		return `Boa: a projeção atual fecha em ${formatInteger(summary.projection)} O.S. e supera o alvo configurado de ${formatPercent(summary.configuredPerformance.targetPercent)}.`;
 	}
 	if (summary.requiredDaily > summary.plannedDaily && summary.diasUteisRestantes > 0) {
 		return `Para fechar o mês, precisamos de ${formatInteger(summary.requiredDaily)} O.S./dia útil nos próximos ${formatInteger(summary.diasUteisRestantes)} dias úteis.`;
 	}
-	return `O mês está em ${formatPercent(summary.pctMeta)} da meta, com saldo acumulado de ${formatSignedInteger(summary.saldoMes)} O.S.`;
+	return `A entrega real está em ${formatPercent(summary.pctCancelamentos)} dos cancelamentos, com alvo configurado de ${formatPercent(summary.configuredPerformance.targetPercent)}.`;
 }
 
 function buildPriorityActions({ summary, anomalias, regionais }) {
@@ -965,24 +965,20 @@ function SectionHeading({ eyebrow, title, action }) {
 
 function OperationalHealth({ summary }) {
 	const progress = clampPercent(summary?.pctMeta);
-	const brasilProgress =
-		summary?.metaBrasilTecpar?.meta > 0
-			? (summary.realizado / summary.metaBrasilTecpar.meta) * 100
-			: 0;
 
 	return (
 		<section className={`retiradas-health-card ${summary?.operationalStatus || "warn"}`}>
 			<SectionHeading eyebrow="Saúde operacional" title="Fechamento do mês" />
 			<div className="retiradas-health-main">
 				<div>
-					<span>Meta oficial</span>
+					<span>Entrega sobre cancelamentos</span>
 					<strong>{formatPercent(progress)}</strong>
-					<p>{formatInteger(summary?.realizado)} de {formatInteger(summary?.meta)} O.S.</p>
+					<p>{formatInteger(summary?.realizado)} de {formatInteger(summary?.cancelamentos)} cancelamentos</p>
 				</div>
 				<div>
-					<span>Brasil Tecpar 65%</span>
-					<strong>{formatPercent(brasilProgress)}</strong>
-					<p>Meta fixa: {formatInteger(summary?.metaBrasilTecpar?.meta)}</p>
+					<span>Alvo configurado</span>
+					<strong>{formatPercent(summary?.configuredPerformance?.targetPercent)}</strong>
+					<p>{formatInteger(summary?.configuredPerformance?.targetOS)} retiradas</p>
 				</div>
 			</div>
 			<div className="retiradas-health-track" aria-hidden="true">
@@ -1234,24 +1230,20 @@ export default function TabRetiradas({
 		() => getPanelPeriodLabel(month, d, lastDayWithData),
 		[d, lastDayWithData, month],
 	);
-	const metaBrasilTecpar = useMemo(
-		() =>
-			calcularMetaBrasilTecpar({
-				cancelamentos: d?.cancelamentos,
-				totalOS: d?.totalOS,
-			}),
+	const configuredPerformance = useMemo(
+		() => getCancellationPerformance(d),
 		[d],
 	);
 	const executiveSummary = useMemo(
 		() =>
 			buildExecutiveSummary({
 				d,
-				metaBrasilTecpar,
+				configuredPerformance,
 				projecao,
 				ritmo,
 				saldoDiario,
 			}),
-		[d, metaBrasilTecpar, projecao, ritmo, saldoDiario],
+		[configuredPerformance, d, projecao, ritmo, saldoDiario],
 	);
 	const priorityActions = useMemo(
 		() =>
@@ -1352,7 +1344,7 @@ export default function TabRetiradas({
 		const { metaAcumuladaPorDia: metaBrasilAcumuladaPorDia } =
 			buildMetaDiariaSchedule({
 				month,
-				meta: metaBrasilTecpar.meta,
+				meta: configuredPerformance.targetOS,
 				feriadosSet,
 				year,
 			});
@@ -1371,7 +1363,7 @@ export default function TabRetiradas({
 				);
 				brasilTecparLine.push(
 					metaBrasilAcumuladaPorDia.get(Number(ponto.dia)) ??
-						Number(metaBrasilTecpar.meta || 0),
+						Number(configuredPerformance.targetOS || 0),
 				);
 			}
 			projecaoLine[saldoDiario.length - 1] = Number(d.totalOS) || 0;
@@ -1402,7 +1394,7 @@ export default function TabRetiradas({
 						fill: false,
 					},
 					{
-						label: "Brasil Tecpar 65%",
+						label: `Alvo configurado ${formatPercent(configuredPerformance.targetPercent)}`,
 						data: brasilTecparLine,
 						borderColor: "#009f72",
 						borderDash: [2, 5],
@@ -1431,7 +1423,7 @@ export default function TabRetiradas({
 				},
 			},
 		});
-	}, [d, saldoDiario, projecao, month, feriadosSet, metaBrasilTecpar.meta]);
+	}, [configuredPerformance, d, saldoDiario, projecao, month, feriadosSet]);
 
 	useEffect(() => {
 		if (!chartMonthlyRef.current) return;
@@ -1548,7 +1540,7 @@ export default function TabRetiradas({
 				<ExecutiveKpi
 					label="Realizado"
 					value={formatInteger(executiveSummary.realizado)}
-					sub={`${formatPercent(executiveSummary.pctMeta)} da meta`}
+					sub={`${formatPercent(executiveSummary.pctCancelamentos)} dos cancelamentos`}
 					tone="orange"
 					meta={totalTrend.value ? `vs. mês anterior ${totalTrend.value}` : null}
 				/>
@@ -1562,7 +1554,7 @@ export default function TabRetiradas({
 				<ExecutiveKpi
 					label="Faltam"
 					value={formatInteger(executiveSummary.faltam)}
-					sub={`Para bater a meta · ${formatInteger(executiveSummary.metaBrasilTecpar.falta)} para Brasil Tecpar 65%`}
+					sub={`Para bater a meta · ${formatInteger(executiveSummary.configuredPerformance.missingOS)} O.S. restantes`}
 					tone={executiveSummary.faltam > 0 ? "red" : "green"}
 				/>
 				<ExecutiveKpi
@@ -1580,14 +1572,14 @@ export default function TabRetiradas({
 
 			<section className="retiradas-operational-grid">
 				<OperationalMetric
-					label="Brasil Tecpar 65%"
-					value={formatInteger(executiveSummary.metaBrasilTecpar.meta)}
+					label={`Alvo configurado ${formatPercent(executiveSummary.configuredPerformance.targetPercent)}`}
+					value={formatInteger(executiveSummary.configuredPerformance.targetOS)}
 					sub={
-						executiveSummary.metaBrasilTecpar.atingiu
-							? "Meta fixa já atingida"
-							: `${formatInteger(executiveSummary.metaBrasilTecpar.falta)} O.S. restantes`
+						executiveSummary.configuredPerformance.achieved
+							? "Alvo já atingido"
+							: `${formatInteger(executiveSummary.configuredPerformance.missingOS)} O.S. restantes`
 					}
-					tone={executiveSummary.metaBrasilTecpar.atingiu ? "ok" : "warn"}
+					tone={executiveSummary.configuredPerformance.achieved ? "ok" : "warn"}
 				/>
 				<OperationalMetric
 					label="Ritmo atual"

@@ -5,9 +5,9 @@ import ModalShell from "../../../components/ui/ModalShell";
 // Extraido pra achado javascript:S3358 (ternario aninhado).
 function resolveDetailStatusMessage(detail) {
 	const metaLabel = String(detail.metaModeLabel || "meta sazonal").toLowerCase();
-	if (detail.atingiu) return `Mes entregue dentro da ${metaLabel}.`;
-	if (detail.mesEncerrado) return `Mes encerrado sem atingir a ${metaLabel}.`;
-	return `Mes ainda em andamento abaixo da ${metaLabel}.`;
+	if (detail.atingiu) return `Taxa de entrega dentro da ${metaLabel}.`;
+	if (detail.mesEncerrado) return `Mes encerrado abaixo da ${metaLabel}.`;
+	return `Taxa real ainda abaixo da ${metaLabel}.`;
 }
 
 const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
@@ -47,18 +47,18 @@ const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
 					<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
 						<div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
 							<p className="text-xs font-semibold uppercase text-gray-400">
-								Meta
+								Cancelamentos
 							</p>
 							<p className="mt-1 text-2xl font-extrabold text-blue-700">
-								{detail.meta.toLocaleString("pt-BR")}
+								{detail.cancelamentos.toLocaleString("pt-BR")}
 							</p>
 						</div>
 						<div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
 							<p className="text-xs font-semibold uppercase text-amber-700">
-								Brasil Tecpar 65%
+								Meta configurada
 							</p>
 							<p className="mt-1 text-2xl font-extrabold text-amber-700">
-								{detail.metaBrasilTecpar.meta.toLocaleString("pt-BR")}
+								{detail.targetPercent}%
 							</p>
 						</div>
 						<div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
@@ -71,70 +71,24 @@ const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
 						</div>
 						<div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
 							<p className="text-xs font-semibold uppercase text-gray-400">
-								% atingido
+								% entregue
 							</p>
 							<p
 								className={`mt-1 text-2xl font-extrabold ${detail.atingiu ? "text-green-700" : "text-red-600"}`}
 							>
-								{detail.percentAchieved}%
+								{detail.deliveryPercent}%
 							</p>
 						</div>
 						<div className="rounded-2xl border border-gray-100 bg-gray-50 p-4">
 							<p className="text-xs font-semibold uppercase text-gray-400">
-								Saldo final
+								Falta para a meta
 							</p>
 							<p
 								className={`mt-1 text-2xl font-extrabold ${detail.saldoFinal >= 0 ? "text-green-700" : "text-red-600"}`}
 							>
-								{detail.saldoFinal >= 0
-									? `+${detail.saldoFinal}`
-									: detail.saldoFinal}
+								{detail.faltaOS.toLocaleString("pt-BR")} O.S
 							</p>
 						</div>
-					</div>
-
-					<div
-						className={`rounded-3xl border p-5 ${
-							detail.metaBrasilTecpar.atingiu
-								? "border-green-100 bg-green-50"
-								: "border-amber-100 bg-amber-50"
-						}`}
-					>
-						<p
-							className={`text-sm font-bold ${
-								detail.metaBrasilTecpar.atingiu
-									? "text-green-700"
-									: "text-amber-800"
-							}`}
-						>
-							Meta fixa Brasil Tecpar: 65% em qualquer mes.
-						</p>
-						<p className="mt-2 text-sm text-gray-700">
-							Referencia Brasil Tecpar:{" "}
-							<strong>
-								{detail.metaBrasilTecpar.meta.toLocaleString("pt-BR")} retiradas
-							</strong>{" "}
-							sobre {detail.cancelamentos.toLocaleString("pt-BR")}{" "}
-							cancelamentos.
-							{detail.metaBrasilTecpar.atingiu ? (
-								<>
-									{" "}
-									Meta atingida com{" "}
-									<strong>{detail.metaBrasilTecpar.percentAchieved}%</strong> da
-									referencia fixa.
-								</>
-							) : (
-								<>
-									{" "}
-									Faltam{" "}
-									<strong>
-										{detail.metaBrasilTecpar.falta.toLocaleString("pt-BR")}{" "}
-										retiradas
-									</strong>{" "}
-									para atingir essa referencia.
-								</>
-							)}
-						</p>
 					</div>
 
 					<div
@@ -177,7 +131,7 @@ const MetasResumoMensalMonthDetailModal = ({ detail, onClose }) => {
 
 						{!detail.atingiu && (
 							<p className="mt-4 text-sm text-gray-700">
-								Para atingir 100% da{" "}
+								Para atingir a taxa de {detail.targetPercent}% da{" "}
 								{String(detail.metaModeLabel || "meta sazonal").toLowerCase()}{" "}
 								calculada pelo criterio de {detail.metaSazonal}%, o mes
 								precisaria de{" "}

@@ -1,6 +1,7 @@
 import { FileDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
+import { getCancellationPerformance } from "../../dashboard/utils/metasMetrics";
 
 import { addClusterLogo } from "../../../utils/pdfBranding";
 
@@ -20,8 +21,8 @@ const MESES = [
 ];
 
 // Extraidos pra achado javascript:S3358 (ternario aninhado).
-function resolveStatusLabel(percentAchieved, falta) {
-	if (Number.parseFloat(percentAchieved) >= 100) return "Atingido";
+function resolveStatusLabel(achieved, falta) {
+	if (achieved) return "Atingido";
 	if (falta > 0) return `Faltam ${falta.toLocaleString("pt-BR")} OS`;
 	return "Em andamento";
 }
@@ -118,14 +119,15 @@ async function gerarPDF(dados, feriadosSet) {
 			? m.saldoDiario[m.saldoDiario.length - 1].saldoMes
 			: 0;
 		const falta = Math.max(0, m.meta - m.totalOS);
-		const status = resolveStatusLabel(m.percentAchieved, falta);
+		const performance = getCancellationPerformance(m);
+		const status = resolveStatusLabel(performance.achieved, falta);
 		return [
 			mes,
 			Math.round(m.cancelamentos).toLocaleString("pt-BR"),
-			`${m.metaModeLabel || "Meta sazonal"} ${m.metaSazonal ?? 80}%`,
+			`${m.metaModeLabel || "Meta configurada"} ${performance.targetPercent.toFixed(1)}%`,
 			Math.round(m.meta).toLocaleString("pt-BR"),
 			Number(m.totalOS).toLocaleString("pt-BR"),
-			`${m.percentAchieved}%`,
+			`${performance.deliveredPercent.toFixed(1)}%`,
 			saldo >= 0 ? `+${saldo}` : String(saldo),
 			status,
 		];
@@ -140,7 +142,7 @@ async function gerarPDF(dados, feriadosSet) {
 				"Regra Meta",
 				"Meta OS",
 				"Realizado",
-				"% Total",
+				"% Entregue",
 				"Saldo Final",
 				"Status",
 			],
@@ -185,13 +187,14 @@ async function gerarPDF(dados, feriadosSet) {
 		});
 		const metaDiaria = diasUteis > 0 ? Math.ceil(metaDiariaMedia) : 0;
 		const falta = Math.max(0, m.meta - m.totalOS);
+		const performance = getCancellationPerformance(m);
 
 		const kpis = [
 			["Cancelamentos", Math.round(m.cancelamentos).toLocaleString("pt-BR")],
-			[m.metaModeLabel || "Meta sazonal", `${m.metaSazonal ?? 80}%`],
+			[m.metaModeLabel || "Meta configurada", `${performance.targetPercent.toFixed(1)}%`],
 			["Meta OS", Math.round(m.meta).toLocaleString("pt-BR")],
 			["Realizado", Number(m.totalOS).toLocaleString("pt-BR")],
-			["% Atingido", `${m.percentAchieved}%`],
+			["% Entregue", `${performance.deliveredPercent.toFixed(1)}%`],
 			["Falta", falta > 0 ? falta.toLocaleString("pt-BR") : "—"],
 			["Dias Uteis", String(diasUteis)],
 			["Meta Diaria", `${metaDiaria} OS/dia`],

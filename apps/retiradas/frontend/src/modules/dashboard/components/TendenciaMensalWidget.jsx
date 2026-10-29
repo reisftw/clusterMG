@@ -1,10 +1,9 @@
 import { TrendingUp } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
 import DashboardWidgetCard from "./DashboardWidgetCard";
-import { INTERNAL_STATIC_DATA_UPDATED_EVENT } from "../../../services/internalStaticDataService";
-import { buscarTodasMetas } from "../../metas/services/metasService";
-import { getGoalPercent } from "../utils/metasMetrics";
+import { useMetasDashboard } from "../../metas/hooks/useMetasDashboard";
+import { getCancellationPerformance } from "../utils/metasMetrics";
 
 const MONTH_ORDER = {
 	Janeiro: 1,
@@ -23,56 +22,7 @@ const MONTH_ORDER = {
 };
 
 export default function TendenciaMensalWidget() {
-	const [allData, setAllData] = useState({});
-	const [loading, setLoading] = useState(true);
-
-	useEffect(() => {
-		let mounted = true;
-		const VERSION_KEY = "internal-static-data-version";
-
-		const carregar = (force = false) => {
-			setLoading(true);
-
-			buscarTodasMetas(force)
-				.then((data) => {
-					if (mounted && data && typeof data === "object") setAllData(data);
-					if (mounted && (!data || typeof data !== "object")) setAllData({});
-				})
-				.catch((error) => {
-					console.error("Erro ao carregar tendência mensal:", error);
-					if (mounted) setAllData({});
-				})
-				.finally(() => {
-					if (mounted) setLoading(false);
-				});
-		};
-
-		carregar();
-
-		const handleStaticDataUpdated = () => {
-			carregar(true);
-		};
-
-		const handleStorageChange = (event) => {
-			if (event.key !== VERSION_KEY) return;
-			carregar(true);
-		};
-
-		window.addEventListener(
-			INTERNAL_STATIC_DATA_UPDATED_EVENT,
-			handleStaticDataUpdated,
-		);
-		window.addEventListener("storage", handleStorageChange);
-
-		return () => {
-			mounted = false;
-			window.removeEventListener(
-				INTERNAL_STATIC_DATA_UPDATED_EVENT,
-				handleStaticDataUpdated,
-			);
-			window.removeEventListener("storage", handleStorageChange);
-		};
-	}, []);
+	const { allData, loading } = useMetasDashboard();
 
 	const items = useMemo(() => {
 		const validMonths = Object.keys(allData ?? {})
@@ -87,7 +37,7 @@ export default function TendenciaMensalWidget() {
 
 		return lastMonths.map((month) => {
 			const total = Number(allData?.[month]?.totalOS || 0);
-			const percent = getGoalPercent(allData?.[month]);
+			const percent = getCancellationPerformance(allData?.[month]).deliveredPercent;
 			return {
 				month,
 				total,
@@ -133,7 +83,7 @@ export default function TendenciaMensalWidget() {
 									</span>
 									<span className="text-xs font-semibold text-gray-500">
 										{item.total.toLocaleString("pt-BR")} O.S •{" "}
-										{item.percent.toFixed(1)}% da meta
+										{item.percent.toFixed(1)}% dos cancelamentos
 									</span>
 								</div>
 								<div className="h-2.5 rounded-full bg-gray-100 overflow-hidden">

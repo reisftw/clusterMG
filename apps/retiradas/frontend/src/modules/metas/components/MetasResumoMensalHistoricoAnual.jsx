@@ -19,12 +19,11 @@ const MetasResumoMensalHistoricoAnual = ({
 						{[
 							"Mes",
 							"Cancelamentos",
-							"Regra da Meta",
-							"Brasil Tecpar 65%",
+							"Meta configurada",
 							"Meta OS",
 							"Realizado",
 							"Saldo Final",
-							"% Total",
+							"% entregue",
 							"Status",
 						].map((header) => (
 							<th
@@ -56,7 +55,7 @@ const MetasResumoMensalHistoricoAnual = ({
 									<td className="px-4 py-3 font-semibold text-gray-700">
 										{mes}
 									</td>
-									<td colSpan={8} className="px-4 py-3 text-xs text-gray-300">
+									<td colSpan={7} className="px-4 py-3 text-xs text-gray-300">
 										Sem dados
 									</td>
 								</tr>
@@ -80,10 +79,7 @@ const MetasResumoMensalHistoricoAnual = ({
 									{item.cancelamentos.toLocaleString("pt-BR")}
 								</td>
 								<td className="px-4 py-3 font-semibold text-purple-600">
-									{item.metaModeLabel || "Meta sazonal"} {item.metaSazonal}%
-								</td>
-								<td className="px-4 py-3 font-semibold text-amber-700">
-									{item.metaBrasilTecpar.meta.toLocaleString("pt-BR")}
+									{item.metaModeLabel || "Meta sazonal"} {item.targetPercent}%
 								</td>
 								<td className="px-4 py-3 font-semibold text-blue-700">
 									{item.meta.toLocaleString("pt-BR")}
@@ -96,12 +92,12 @@ const MetasResumoMensalHistoricoAnual = ({
 										? `+${item.saldoFinal}`
 										: item.saldoFinal}
 								</td>
-								<td className="px-4 py-3 font-bold">{item.percentAchieved}%</td>
+								<td className="px-4 py-3 font-bold">{item.deliveryPercent}%</td>
 								<td className="px-4 py-3">
 									<MetasResumoMensalStatusBadge
 										mes={mes}
-										pct={item.percentAchieved}
-										metaSazonal={item.metaSazonal}
+										pct={item.deliveryPercent}
+										targetPercent={item.targetPercent}
 									/>
 								</td>
 							</tr>

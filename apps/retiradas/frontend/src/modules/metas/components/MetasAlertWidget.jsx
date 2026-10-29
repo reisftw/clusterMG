@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { getCancellationPerformance } from "../../dashboard/utils/metasMetrics";
 import { useMetasDashboard } from "../hooks/useMetasDashboard";
 
 function diasUteisRestantesNoMes(feriadosSet = new Set()) {
@@ -59,8 +60,8 @@ const MetasAlertWidget = () => {
 	const falta = Math.max(0, metaMes.meta - metaMes.totalOS);
 	const ritmoNecessario =
 		diasUteisRestantes > 0 ? falta / diasUteisRestantes : 0;
-	const pct = Number.parseFloat(metaMes.percentAchieved);
-	const risco = pct < 70 && diasUteisRestantes <= 5;
+	const performance = getCancellationPerformance(metaMes);
+	const risco = !performance.achieved && diasUteisRestantes <= 5;
 
 	if (!risco) return null;
 
@@ -78,7 +79,7 @@ const MetasAlertWidget = () => {
 
 					<p className="mb-1 text-xs text-red-700">
 						Faltam {falta.toLocaleString("pt-BR")} O.S -{" "}
-						{metaMes.percentAchieved}% concluido
+						{performance.deliveredPercent.toFixed(1)}% dos cancelamentos entregues; alvo configurado de {performance.targetPercent.toFixed(1)}%
 					</p>
 
 					<p className="text-xs font-semibold text-red-700">

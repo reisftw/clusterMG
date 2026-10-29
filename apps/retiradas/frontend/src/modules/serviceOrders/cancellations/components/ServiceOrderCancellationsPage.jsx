@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "../../../../context/AuthContext";
+import { getCancellationPerformance } from "../../../dashboard/utils/metasMetrics";
+import { applyMetasBaseConfigToAllData } from "../../../metas/constants/metasBaseConfig";
+import {
+	buscarMetasBaseConfig,
+	buscarTodasMetas,
+} from "../../../metas/services/metasService";
 import {
 	buildCancelamentosExportUrl,
 	buscarCancelamentos,
@@ -40,6 +46,20 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
 	const month = String(index + 1).padStart(2, "0");
 	return month;
 });
+const MONTH_NAMES = [
+	"Janeiro",
+	"Fevereiro",
+	"Marco",
+	"Abril",
+	"Maio",
+	"Junho",
+	"Julho",
+	"Agosto",
+	"Setembro",
+	"Outubro",
+	"Novembro",
+	"Dezembro",
+];
 
 function formatNumber(value) {
 	return NUMBER.format(Number(value || 0));
@@ -308,6 +328,7 @@ export default function ServiceOrderCancellationsPage() {
 		String(authenticatedUser?.role || "").trim().toLowerCase() === "admin";
 	const [competencia, setCompetencia] = useState(competenciaAtual());
 	const [summary, setSummary] = useState(null);
+	const [deliveryPerformance, setDeliveryPerformance] = useState(null);
 	const [competencias, setCompetencias] = useState([]);
 	const [filters, setFilters] = useState({});
 	const [items, setItems] = useState([]);
@@ -416,6 +437,35 @@ export default function ServiceOrderCancellationsPage() {
 		}
 	}
 
+	async function loadDeliveryPerformance() {
+		const monthIndex = Number(String(competencia).slice(5, 7)) - 1;
+		const monthName = MONTH_NAMES[monthIndex];
+		if (!monthName) {
+			setDeliveryPerformance(null);
+			return;
+		}
+		try {
+			const [allData, baseConfig] = await Promise.all([
+				buscarTodasMetas(true, { preferLive: true }),
+				buscarMetasBaseConfig(true, { preferLive: true }),
+			]);
+			const configured = applyMetasBaseConfigToAllData(allData, baseConfig);
+			const record =
+				configured?.[monthName] ||
+				(monthName === "Marco" ? configured?.Março : null);
+			if (!record || Number(record.cancelamentos || 0) <= 0) {
+				setDeliveryPerformance(null);
+				return;
+			}
+			setDeliveryPerformance({
+				...getCancellationPerformance(record),
+				metaModeLabel: record.metaModeLabel || "Meta configurada",
+			});
+		} catch {
+			setDeliveryPerformance(null);
+		}
+	}
+
 	useEffect(() => {
 		loadStaticData().catch(() => {});
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -423,6 +473,7 @@ export default function ServiceOrderCancellationsPage() {
 
 	useEffect(() => {
 		loadCompetencia(1);
+		loadDeliveryPerformance();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [competencia]);
 
@@ -464,7 +515,11 @@ export default function ServiceOrderCancellationsPage() {
 	}, [activeSync?.id, activeSync?.status]);
 
 	async function refreshAll() {
-		await Promise.all([loadStaticData(), loadCompetencia(pagination.page)]);
+		await Promise.all([
+			loadStaticData(),
+			loadCompetencia(pagination.page),
+			loadDeliveryPerformance(),
+		]);
 	}
 
 	async function handleValidate() {
@@ -638,6 +693,35 @@ export default function ServiceOrderCancellationsPage() {
 					{error}
 				</div>
 			) : null}
+
+			{deliveryPerformance ? (
+				<section className="space-y-5">
+					<div className="flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<p className="text-xs font-black uppercase tracking-[0.14em] text-blue-600">
+								Desempenho real · SEMPRE
+							</p>
+							<h2 className="mt-1 text-xl font-black text-slate-950">
+								Retiradas entregues sobre cancelamentos
+							</h2>
+						</div>
+						<span className={`rounded-full px-3 py-2 text-xs font-black ${deliveryPerformance.achieved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+							{deliveryPerformance.achieved ? "Alvo atingido" : `${deliveryPerformance.missingPercentagePoints.toFixed(1)} p.p. para o alvo`}
+						</span>
+					</div>
+					<div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+						<KpiCard title="Cancelamentos base" value={formatNumber(deliveryPerformance.cancelamentos)} helper="base real" />
+						<KpiCard title="Retiradas entregues" value={formatNumber(deliveryPerformance.total)} helper="realizado" tone="green" />
+						<KpiCard title="Taxa real" value={formatPercent(deliveryPerformance.deliveredPercent)} helper="sobre cancelamentos" tone={deliveryPerformance.achieved ? "green" : "orange"} />
+						<KpiCard title="Alvo configurado" value={formatPercent(deliveryPerformance.targetPercent)} helper={deliveryPerformance.metaModeLabel} tone="blue" />
+						<KpiCard title="Falta" value={formatNumber(deliveryPerformance.missingOS)} helper={deliveryPerformance.achieved ? "alvo atingido" : "retiradas"} tone={deliveryPerformance.achieved ? "green" : "red"} />
+					</div>
+				</section>
+			) : (
+				<section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-600">
+					Sem dados reais de metas para calcular a taxa de entrega desta competência.
+				</section>
+			)}
 
 			<section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 				<KpiCard title="Total de cancelamentos" value={formatNumber(currentSummary.geral.total)} helper="geral" />

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+	getCancellationPerformance,
 	getCancellationPercent,
+	getConfiguredGoalPercent,
 	getDeliveredCancellationPercent,
 	getGoalPercent,
 } from "./metasMetrics";
@@ -33,5 +35,27 @@ describe("metasMetrics", () => {
 		expect(getGoalPercent(null)).toBe(0);
 		expect(getGoalPercent({ percentAchieved: "abc" })).toBe(0);
 		expect(getCancellationPercent({ percentCancelamentos: "abc" })).toBe(0);
+	});
+
+	it("usa a meta configurada no cadastrador como alvo da taxa real", () => {
+		expect(getConfiguredGoalPercent({ metaSazonal: 65, meta: 999 })).toBe(65);
+		expect(getConfiguredGoalPercent({ meta: 650, cancelamentos: 1000 })).toBe(65);
+	});
+
+	it("compara entregas com cancelamentos sem transformar a meta em 100%", () => {
+		const performance = getCancellationPerformance({
+				totalOS: 2615,
+				cancelamentos: 5000,
+				meta: 3250,
+				metaSazonal: 65,
+			});
+		expect(performance).toMatchObject({
+			targetPercent: 65,
+			targetOS: 3250,
+			missingOS: 635,
+			achieved: false,
+		});
+		expect(performance.deliveredPercent).toBeCloseTo(52.3);
+		expect(performance.missingPercentagePoints).toBeCloseTo(12.7);
 	});
 });

@@ -2,7 +2,7 @@ import { AlertTriangle, BellRing } from "lucide-react";
 import { useMemo } from "react";
 import { useMetasDashboard } from "../../metas/hooks/useMetasDashboard";
 import DashboardWidgetCard from "./DashboardWidgetCard";
-import { getGoalPercent } from "../utils/metasMetrics";
+import { getCancellationPerformance } from "../utils/metasMetrics";
 
 function AlertItem({ icon, title, description, tone = "amber" }) {
 	const IconComponent = icon;
@@ -34,17 +34,18 @@ export default function AlertasAutomaticosWidget() {
 		const items = [];
 
 		if (metaMes) {
-			const pct = getGoalPercent(metaMes);
+			const performance = getCancellationPerformance(metaMes);
+			const pct = performance.deliveredPercent;
 			const metaLabel = String(
 				metaMes.metaModeLabel || "meta sazonal",
 			).toLowerCase();
 
-			if (pct < 100) {
+			if (!performance.achieved) {
 				items.push({
 					icon: AlertTriangle,
 					title: "Meta mensal abaixo do esperado",
-					description: `${pct.toFixed(1)}% da meta atingido frente a ${metaLabel}.`,
-					tone: pct < 80 ? "red" : "amber",
+					description: `${pct.toFixed(1)}% dos cancelamentos entregues frente ao alvo de ${performance.targetPercent.toFixed(1)}% (${metaLabel}).`,
+					tone: performance.missingPercentagePoints > 10 ? "red" : "amber",
 				});
 			}
 		}

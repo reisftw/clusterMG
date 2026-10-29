@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
 import { obterIndiceMes, obterMesAtual } from "../../../utils/mes";
 import { buildMonthProjection } from "../../../utils/metasProjection";
+import { getCancellationPerformance } from "../../dashboard/utils/metasMetrics";
 import { METAS_RESUMO_MESES } from "../constants/metasResumoMensal.constants";
 import { recalcularSaldoDiario } from "../utils/metasSaldo";
 
@@ -10,25 +10,20 @@ export { buildMonthProjection };
 export function buildMonthDetail(mes, dados, feriadosSet) {
 	if (!dados) return null;
 
-	const percentAchieved = Number.parseFloat(dados.percentAchieved || 0);
-	const metaSazonal = Number(dados.metaSazonal ?? 80);
-	const metaModeLabel = dados.metaModeLabel || "Meta sazonal";
 	const meta = Number(dados.meta || 0);
 	const totalOS = Number(dados.totalOS || 0);
-	const metaBrasilTecpar = calcularMetaBrasilTecpar({
-		cancelamentos: dados.cancelamentos,
-		totalOS,
-	});
-	const faltaOS = Math.max(0, meta - totalOS);
+	const performance = getCancellationPerformance(dados);
+	const metaSazonal = performance.targetPercent;
+	const metaModeLabel = dados.metaModeLabel || "Meta configurada";
+	const faltaOS = performance.missingOS;
 	const { diasUteis, saldoFinal } = recalcularSaldoDiario(
 		{ ...dados, mes },
 		feriadosSet,
 	);
 	const extraPorDiaUtil =
 		faltaOS > 0 && diasUteis > 0 ? Math.ceil(faltaOS / diasUteis) : 0;
-	const percentualFaltante = Math.max(
-		0,
-		Number((100 - percentAchieved).toFixed(1)),
+	const percentualFaltante = Number(
+		performance.missingPercentagePoints.toFixed(1),
 	);
 	const regionaisAbaixo = (dados.regionais ?? [])
 		.map((regional) => {
@@ -44,16 +39,16 @@ export function buildMonthDetail(mes, dados, feriadosSet) {
 
 	const monthIdx = obterIndiceMes(mes);
 	const mesEncerrado = monthIdx >= 0 && monthIdx < new Date().getMonth();
-	const atingiu = percentAchieved >= 100;
+	const atingiu = performance.achieved;
 
 	return {
 		mes,
 		meta,
 		totalOS,
-		percentAchieved,
+		deliveryPercent: Number(performance.deliveredPercent.toFixed(1)),
+		targetPercent: Number(performance.targetPercent.toFixed(1)),
 		metaSazonal,
 		metaModeLabel,
-		metaBrasilTecpar,
 		faltaOS,
 		percentualFaltante,
 		diasUteis,
@@ -82,21 +77,23 @@ export function buildHistoricoAnual(allData, feriadosSet) {
 			metaDiaria,
 			saldoFinal,
 		} = recalcularSaldoDiario({ ...dadosMes, mes }, feriadosSet);
+		const performance = getCancellationPerformance(dadosMes);
 
 		return {
 			mes,
 			vazio: false,
 			cancelamentos: Math.round(dadosMes.cancelamentos),
-			metaSazonal: dadosMes.metaSazonal ?? 80,
-			metaModeLabel: dadosMes.metaModeLabel || "Meta sazonal",
-			metaBrasilTecpar: calcularMetaBrasilTecpar({
-				cancelamentos: dadosMes.cancelamentos,
-				totalOS: dadosMes.totalOS,
-			}),
+			metaSazonal: performance.targetPercent,
+			metaModeLabel: dadosMes.metaModeLabel || "Meta configurada",
 			meta: Math.round(dadosMes.meta),
 			totalOS: Number(dadosMes.totalOS),
-			falta: Math.max(0, dadosMes.meta - dadosMes.totalOS),
-			percentAchieved: dadosMes.percentAchieved,
+			falta: performance.missingOS,
+			deliveryPercent: Number(
+				performance.deliveredPercent.toFixed(1),
+			),
+			targetPercent: Number(
+				performance.targetPercent.toFixed(1),
+			),
 			metaDiaria,
 			diasUteis: diasUteisMes,
 			saldoFinal,
@@ -139,14 +136,7 @@ export function useMetasResumoMensal(
 	const kpis = useMemo(() => {
 		if (!dadosMesSelecionado || !temMetaMesSelecionado) return [];
 
-		const percentualAtingido = Number.parseFloat(
-			dadosMesSelecionado.percentAchieved,
-		);
-		const metaSazonal = dadosMesSelecionado.metaSazonal ?? 80;
-		const metaBrasilTecpar = calcularMetaBrasilTecpar({
-			cancelamentos: dadosMesSelecionado.cancelamentos,
-			totalOS: dadosMesSelecionado.totalOS,
-		});
+		const performance = getCancellationPerformance(dadosMesSelecionado);
 
 		return [
 			{
@@ -158,18 +148,10 @@ export function useMetasResumoMensal(
 				text: "text-gray-700",
 			},
 			{
-				label: `${dadosMesSelecionado.metaModeLabel || "Meta sazonal"} ${metaSazonal}%`,
+				label: `${dadosMesSelecionado.metaModeLabel || "Meta sazonal"} ${performance.targetPercent.toFixed(1)}%`,
 				value: Math.round(dadosMesSelecionado.meta).toLocaleString("pt-BR"),
 				color: "bg-blue-50 border-blue-100",
 				text: "text-blue-700",
-			},
-			{
-				label: "Brasil Tecpar 65%",
-				value: metaBrasilTecpar.meta.toLocaleString("pt-BR"),
-				color: metaBrasilTecpar.atingiu
-					? "bg-green-50 border-green-100"
-					: "bg-amber-50 border-amber-100",
-				text: metaBrasilTecpar.atingiu ? "text-green-700" : "text-amber-700",
 			},
 			{
 				label: "Realizado",
@@ -178,23 +160,29 @@ export function useMetasResumoMensal(
 				text: "text-orange-600",
 			},
 			{
-				label: "% Atingido",
-				value: `${dadosMesSelecionado.percentAchieved}%`,
+				label: "% entregue sobre cancelamentos",
+				value: `${performance.deliveredPercent.toFixed(1)}%`,
 				color:
-					percentualAtingido >= 100
+					performance.achieved
 						? "bg-green-50 border-green-100"
 						: "bg-red-50 border-red-100",
-				text: percentualAtingido >= 100 ? "text-green-700" : "text-red-600",
+				text: performance.achieved ? "text-green-700" : "text-red-600",
+			},
+			{
+				label: "Distancia da meta",
+				value: performance.achieved
+					? "Atingida"
+					: `${performance.missingPercentagePoints.toFixed(1)} p.p.`,
+				color: performance.achieved
+					? "bg-green-50 border-green-100"
+					: "bg-amber-50 border-amber-100",
+				text: performance.achieved ? "text-green-700" : "text-amber-700",
 			},
 			{
 				label: "Falta",
 				value:
-					Math.max(0, dadosMesSelecionado.meta - dadosMesSelecionado.totalOS) >
-					0
-						? Math.max(
-								0,
-								dadosMesSelecionado.meta - dadosMesSelecionado.totalOS,
-							).toLocaleString("pt-BR")
+					performance.missingOS > 0
+						? performance.missingOS.toLocaleString("pt-BR")
 						: "—",
 				color: "bg-gray-50 border-gray-100",
 				text: "text-gray-700",

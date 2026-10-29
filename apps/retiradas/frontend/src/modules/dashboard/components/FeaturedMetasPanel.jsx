@@ -5,7 +5,10 @@ import { META_BASES } from "../../metas/constants/metasBaseConfig";
 import { useMetasDashboard } from "../../metas/hooks/useMetasDashboard";
 import { buildMonthProjection } from "../../metas/hooks/useMetasResumoMensal";
 import { recalcularSaldoDiario } from "../../metas/utils/metasSaldo";
-import { getGoalPercent } from "../utils/metasMetrics";
+import {
+	getCancellationPerformance,
+	getGoalPercent,
+} from "../utils/metasMetrics";
 import { scopeMonthToTechnician } from "../utils/technicianMetaScope";
 
 const FONTES_DADOS_DASHBOARD = META_BASES;
@@ -85,7 +88,9 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 			.map((mes) => {
 				const dados = getMetaMesPorFonte(allData?.[mes], fonteDados);
 				if (!temDadosOperacionais(dados)) return null;
-				const percent = getGoalPercent(dados);
+				const percent = technicianName
+					? getGoalPercent(dados)
+					: getCancellationPerformance(dados).deliveredPercent;
 				return {
 					mes: mes === "Marco" ? "Março" : mes,
 					total: Number(dados.totalOS || 0),
@@ -96,7 +101,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 			.filter(Boolean)
 			.reverse()
 			.slice(0, 4);
-	}, [allData, fonteDados, metaMes?.mes]);
+	}, [allData, fonteDados, metaMes?.mes, technicianName]);
 
 	const metaStats = useMemo(() => {
 		if (!temDadosOperacionais(metaMesFonte)) return null;
@@ -110,7 +115,10 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 			: null;
 		const meta = Number(metaMesFonte.meta || 0);
 		const total = Number(metaMesFonte.totalOS || 0);
-		const percent = getGoalPercent(metaMesFonte);
+		const cancellationPerformance = getCancellationPerformance(metaMesFonte);
+		const percent = technicianName
+			? getGoalPercent(metaMesFonte)
+			: cancellationPerformance.deliveredPercent;
 		const percentVisual = Math.min(100, Math.max(0, percent));
 		const falta = Math.max(0, meta - total);
 		const saldoMesAtual = saldoDiario.at(-1)?.saldoMes ?? 0;
@@ -118,9 +126,19 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 		return {
 			meta,
 			total,
+			cancelamentos: cancellationPerformance.cancelamentos,
 			percent,
 			percentVisual,
 			falta,
+			targetPercent: technicianName
+				? 100
+				: cancellationPerformance.targetPercent,
+			missingPercentagePoints: technicianName
+				? Math.max(0, 100 - percent)
+				: cancellationPerformance.missingPercentagePoints,
+			achieved: technicianName
+				? percent >= 100
+				: cancellationPerformance.achieved,
 			metaDiaria,
 			diasUteis,
 			ritmoAtual: projecao?.ritmoAtual ?? 0,
@@ -200,7 +218,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 		);
 	}
 
-	const goalReached = metaStats.percent >= 100;
+	const goalReached = metaStats.achieved;
 	const percentLabel = metaStats.percent.toLocaleString("pt-BR", {
 		minimumFractionDigits: 1,
 		maximumFractionDigits: 1,
@@ -237,7 +255,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 									{percentLabel}%
 								</span>
 								<span className="text-sm font-semibold text-slate-500">
-									da meta
+									{technicianName ? "da meta" : "dos cancelamentos"}
 								</span>
 								<span className="mt-1 text-[11px] font-bold text-orange-600">
 									atingimento
@@ -257,11 +275,11 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 								{metaStats.total.toLocaleString("pt-BR")}
 								<span className="text-xl font-bold text-slate-500 sm:text-2xl">
 									{" "}
-									/ {metaStats.meta.toLocaleString("pt-BR")}
+									/ {(technicianName ? metaStats.meta : metaStats.cancelamentos).toLocaleString("pt-BR")}
 								</span>
 							</p>
 							<p className="text-sm font-semibold text-slate-500">
-								O.S realizadas em{" "}
+								{technicianName ? "O.S realizadas em" : "retiradas sobre cancelamentos em"}{" "}
 								{metaStats.mes === "Marco" ? "Março" : metaStats.mes}
 							</p>
 						</div>
@@ -269,7 +287,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 							{metaStats.metaModeLabel}
 							{metaStats.metaSazonal == null
 								? ` ${metaStats.meta.toLocaleString("pt-BR")} O.S`
-								: ` ${metaStats.metaSazonal}%`}
+								: ` ${metaStats.targetPercent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
 						</span>
 					</div>
 
@@ -286,7 +304,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 								<span className="font-extrabold text-slate-950">
 									{metaStats.falta.toLocaleString("pt-BR")} O.S
 								</span>{" "}
-								para alcançar a meta
+								para alcançar a meta de {metaStats.targetPercent.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
 							</span>
 							<span className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
 								<TrendingUp size={14} className="mr-1 inline" />
@@ -371,7 +389,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 										{item.percent.toLocaleString("pt-BR", {
 											maximumFractionDigits: 1,
 										})}
-										% da meta
+										% {technicianName ? "da meta" : "dos cancelamentos"}
 									</p>
 								</div>
 								<p className="shrink-0 whitespace-nowrap text-right text-sm font-black tabular-nums text-blue-700">

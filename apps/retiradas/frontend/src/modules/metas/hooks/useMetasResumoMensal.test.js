@@ -134,8 +134,8 @@ describe("useMetasResumoMensal business helpers", () => {
 		expect(result.current.kpis).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					label: "% Atingido",
-					value: "75.0%",
+					label: "% entregue sobre cancelamentos",
+					value: "60.0%",
 				}),
 			]),
 		);

@@ -2,13 +2,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
 	getCancellationPercent,
-	getGoalPercent,
+	getCancellationPerformance,
 } from "../../../modules/dashboard/utils/metasMetrics";
 import { applyMetasBaseConfigToAllData } from "../../../modules/metas/constants/metasBaseConfig";
 import { buscarMetasBaseConfig } from "../../../modules/metas/services/metasService";
 import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import { resolveVpsDate } from "../../../services/vpsDate";
-import { META_SAZONAL } from "../utils/constants";
 import { useDashboardData } from "./useDashboardData";
 
 // Extraido pra achado javascript:S3358 (ternario aninhado).
@@ -36,21 +35,24 @@ function normalizeItem(item) {
 	};
 }
 
-function normalizeMonthRecord(record, monthName) {
+function normalizeMonthRecord(record) {
 	if (!record) return record;
 	const d = { ...record };
 	d.totalOS = toNumber(d.totalOS);
 	d.meta = toNumber(d.meta);
-	d.metaSazonal =
-		toNumber(d.metaSazonal) || toNumber(META_SAZONAL[monthName]) || 0;
+	d.metaSazonal = toNumber(d.metaSazonal);
 	d.cancelamentos =
 		toNumber(d.cancelamentos) ||
 		toNumber(d.totalCancelamentos) ||
 		(d.meta > 0 && d.metaSazonal > 0 ? d.meta / (d.metaSazonal / 100) : 0);
-	d.percentAchieved = Number(getGoalPercent(d).toFixed(1));
+	if (d.metaSazonal <= 0 && d.cancelamentos > 0 && d.meta > 0) {
+		d.metaSazonal = (d.meta / d.cancelamentos) * 100;
+	}
+	const performance = getCancellationPerformance(d);
+	d.percentAchieved = Number(performance.deliveredPercent.toFixed(1));
 	d.percentCancelamentos = Number(getCancellationPercent(d).toFixed(1));
 	d.status =
-		d.meta > 0 && d.totalOS >= d.meta
+		performance.achieved
 			? "Meta atingida!"
 			: `Faltam ${Math.max(0, Math.round(d.meta - d.totalOS))} O.S`;
 	d.technicians = (d.technicians || []).map(normalizeItem);
@@ -103,10 +105,10 @@ function fmtDate(value) {
 function normalizeMonthData(data) {
 	const out = { ...data };
 	for (const m of Object.keys(out)) {
-		const d = normalizeMonthRecord(out[m], m);
+		const d = normalizeMonthRecord(out[m]);
 		if (!d) continue;
-		d.onnet = normalizeMonthRecord(d.onnet, m);
-		d.onnetSempre = normalizeMonthRecord(d.onnetSempre, m);
+		d.onnet = normalizeMonthRecord(d.onnet);
+		d.onnetSempre = normalizeMonthRecord(d.onnetSempre);
 		out[m] = d;
 	}
 	if (out.Marco && !out.Março)

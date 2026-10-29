@@ -1,10 +1,9 @@
 import { MapPin, Target, TrendingUp, Users } from "lucide-react";
 import { useMemo } from "react";
 import RetorninhoLoader from "../../../components/ui/RetorninhoLoader";
-import { calcularMetaBrasilTecpar } from "../../../utils/brasilTecparMeta";
 import {
+	getCancellationPerformance,
 	getCancellationPercent,
-	getGoalPercent,
 } from "../../dashboard/utils/metasMetrics";
 import { useMetasDashboard } from "../hooks/useMetasDashboard";
 import { buildMonthProjection } from "../hooks/useMetasResumoMensal";
@@ -59,16 +58,12 @@ const MetasDashboardWidget = () => {
 	const metaModeLabel = metaMes.metaModeLabel || "Meta sazonal";
 	const cancelamentos = Math.round(metaMes.cancelamentos ?? 0);
 	const metaOS = Math.round(metaMes.meta);
-	const metaBrasilTecpar = calcularMetaBrasilTecpar({
-		cancelamentos,
-		totalOS: metaMes.totalOS,
-	});
-	const falta = Math.max(0, metaMes.meta - metaMes.totalOS);
+	const performance = getCancellationPerformance(metaMes);
+	const falta = performance.missingOS;
 	const topTec = metaMes.technicians?.[0];
 	const topReg = metaMes.regionais?.[0];
-	const percentAchieved = getGoalPercent(metaMes);
 	const percentCancelamentos = getCancellationPercent(metaMes);
-	const atingido = percentAchieved >= 100;
+	const atingido = performance.achieved;
 	const ritmoAtual = projecao?.ritmoAtual ?? 0;
 	const saldoMesAtual =
 		saldoRecalculado[saldoRecalculado.length - 1]?.saldoMes ?? 0;
@@ -101,7 +96,7 @@ const MetasDashboardWidget = () => {
 								: "text-red-500 font-semibold"
 						}
 					>
-						{percentAchieved.toFixed(1)}% da meta
+						{percentCancelamentos.toFixed(1)}% dos cancelamentos
 					</span>
 				</div>
 			</div>
@@ -125,10 +120,10 @@ const MetasDashboardWidget = () => {
 				</div>
 				<div>
 					<p className="text-[11px] text-gray-400 font-semibold mb-1">
-						Brasil Tecpar 65%
+						{metaModeLabel} {performance.targetPercent.toFixed(1)}%
 					</p>
 					<p className="text-base font-bold text-amber-700">
-						{metaBrasilTecpar.meta.toLocaleString("pt-BR")}
+						{metaOS.toLocaleString("pt-BR")}
 					</p>
 				</div>
 				<div>
@@ -143,12 +138,14 @@ const MetasDashboardWidget = () => {
 
 			<div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
 				<div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-blue-700">
-					<strong>{percentAchieved.toFixed(1)}%</strong> de atingimento sobre
-					a meta.
+					<strong>{percentCancelamentos.toFixed(1)}%</strong> de entregas sobre os
+					cancelamentos.
 				</div>
 				<div className="rounded-2xl border border-orange-100 bg-orange-50 px-3 py-2 text-orange-700">
-					<strong>{percentCancelamentos.toFixed(1)}%</strong> das O.S. sobre
-					os cancelamentos.
+					Alvo configurado: <strong>{performance.targetPercent.toFixed(1)}%</strong>
+					{performance.missingPercentagePoints > 0
+						? ` · faltam ${performance.missingPercentagePoints.toFixed(1)} p.p.`
+						: " · atingido"}
 				</div>
 			</div>
 
@@ -170,16 +167,17 @@ const MetasDashboardWidget = () => {
 
 			<div
 				className={`rounded-2xl border px-3 py-2 text-[11px] ${
-					metaBrasilTecpar.atingiu
+					performance.achieved
 						? "border-green-100 bg-green-50 text-green-700"
 						: "border-amber-100 bg-amber-50 text-amber-800"
 				}`}
 			>
-				Brasil Tecpar: <strong>{metaBrasilTecpar.percentAchieved}%</strong> da
-				meta fixa de 65%
-				{metaBrasilTecpar.atingiu
+				Taxa real: <strong>{percentCancelamentos.toFixed(1)}%</strong> sobre{" "}
+				{cancelamentos.toLocaleString("pt-BR")} cancelamentos. Meta configurada
+				de <strong>{performance.targetPercent.toFixed(1)}%</strong>
+				{performance.achieved
 					? " atingida."
-					: ` · faltam ${metaBrasilTecpar.falta.toLocaleString("pt-BR")} O.S.`}
+					: ` · faltam ${performance.missingOS.toLocaleString("pt-BR")} O.S.`}
 			</div>
 
 			<div className="grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 text-xs">
