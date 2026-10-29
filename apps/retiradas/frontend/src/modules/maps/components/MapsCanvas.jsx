@@ -6,6 +6,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { House } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import retorninhoMapMarker from "../../../assets/retorninho-map-marker.svg";
 
 const DEFAULT_CENTER = [-18.8, -44.1];
 const DEFAULT_ZOOM = 6;
@@ -59,9 +60,13 @@ function pointTooltip(point) {
 function userPositionIcon() {
 	return L.divIcon({
 		className: "maps-v2-user-position-marker",
-		html: '<span class="maps-v2-user-position-pulse"><i /></span>',
-		iconSize: [44, 44],
-		iconAnchor: [22, 22],
+		html: renderToStaticMarkup(
+			<span className="maps-v2-user-position-pulse" aria-hidden="true">
+				<img src={retorninhoMapMarker} alt="" />
+			</span>,
+		),
+		iconSize: [46, 48],
+		iconAnchor: [23, 42],
 	});
 }
 
