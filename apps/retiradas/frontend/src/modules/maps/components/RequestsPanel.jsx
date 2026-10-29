@@ -3,7 +3,10 @@ import { useState } from "react";
 
 const STATUS_LABELS = {
 	PENDING: "Aguardando analise",
-	PENDING_EFFECTUATION: "Pendente de efetivacao",
+	APPROVED: "Iniciando atribuicao",
+	PENDING_EFFECTUATION: "Transferindo no HubSoft",
+	EFFECTED: "Efetivada",
+	EFFECTUATION_FAILED: "Falha na efetivacao",
 	REJECTED: "Recusada",
 	CANCELLED: "Cancelada",
 };
@@ -18,7 +21,7 @@ export default function RequestsPanel({ open, items, canManage, loading, onClose
 		setMessage("");
 		try {
 			await onResolve(id, action);
-			setMessage(action === "approve" ? "Solicitacao aprovada para efetivacao operacional." : "Solicitacao recusada.");
+			setMessage(action === "approve" ? "Solicitacao aprovada. A transferencia ao tecnico foi iniciada." : "Solicitacao recusada.");
 		} catch (error) {
 			setMessage(error.message);
 		} finally {
@@ -38,9 +41,9 @@ export default function RequestsPanel({ open, items, canManage, loading, onClose
 						{canManage ? <p>{item.requesterName}</p> : null}
 						<div><span><MapPin size={14} /> {item.city || "Cidade nao informada"}</span><span><Clock3 size={14} /> {new Date(item.createdAt).toLocaleString("pt-BR")}</span></div>
 						{item.resolutionNote ? <small>{item.resolutionNote}</small> : null}
-						{canManage && item.status === "PENDING" ? <footer>
-							<button type="button" className="maps-v2-reject-button" disabled={busyId === item.id} onClick={() => resolve(item.id, "reject")}><XCircle size={16} /> Recusar</button>
-							<button type="button" className="maps-v2-approve-button" disabled={busyId === item.id} onClick={() => resolve(item.id, "approve")}>{busyId === item.id ? <LoaderCircle className="maps-v2-spin" size={16} /> : <Check size={16} />} Aprovar</button>
+						{canManage && ["PENDING", "EFFECTUATION_FAILED"].includes(item.status) ? <footer>
+							{item.status === "PENDING" ? <button type="button" className="maps-v2-reject-button" disabled={busyId === item.id} onClick={() => resolve(item.id, "reject")}><XCircle size={16} /> Recusar</button> : null}
+							<button type="button" className="maps-v2-approve-button" disabled={busyId === item.id} onClick={() => resolve(item.id, "approve")}>{busyId === item.id ? <LoaderCircle className="maps-v2-spin" size={16} /> : <Check size={16} />} {item.status === "EFFECTUATION_FAILED" ? "Tentar novamente" : "Aprovar e atribuir"}</button>
 						</footer> : null}
 					</article>
 				))}

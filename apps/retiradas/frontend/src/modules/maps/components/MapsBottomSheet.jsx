@@ -1,4 +1,7 @@
 import { CalendarClock, ChevronUp, MapPin, PackageCheck, Route, Target } from "lucide-react";
+import { useState } from "react";
+
+const LIST_PAGE_SIZE = 150;
 
 function distanceLabel(value) {
 	if (value === null || value === undefined || value === "") return "Distancia indisponivel";
@@ -44,6 +47,10 @@ export default function MapsBottomSheet({
 	selectedRouteIds,
 	onToggleRoute,
 }) {
+	const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
+	const visibleItems = items.slice(0, visibleCount);
+	const remaining = Math.max(items.length - visibleItems.length, 0);
+
 	return (
 		<section className={`maps-v2-sheet ${open ? "is-open" : ""}`}>
 			<button type="button" className="maps-v2-sheet-handle" onClick={onToggle} aria-expanded={open}>
@@ -56,7 +63,7 @@ export default function MapsBottomSheet({
 				<div><CalendarClock size={18} /><strong>{summary.scheduled || 0}</strong><span>Agendadas</span></div>
 			</div>
 			<div className="maps-v2-list" aria-live="polite">
-				{items.length ? items.map((item) => (
+				{items.length ? visibleItems.map((item) => (
 					<PointCard
 						key={item.id}
 						item={item}
@@ -67,6 +74,15 @@ export default function MapsBottomSheet({
 				)) : (
 					<div className="maps-v2-empty"><MapPin size={24} /><strong>Nenhuma retirada nesta area</strong><span>Mova o mapa ou altere os filtros.</span></div>
 				)}
+				{remaining ? (
+					<button
+						type="button"
+						className="maps-v2-list-more"
+						onClick={() => setVisibleCount((current) => current + LIST_PAGE_SIZE)}
+					>
+						Mostrar mais {Math.min(remaining, LIST_PAGE_SIZE)} de {items.length}
+					</button>
+				) : null}
 			</div>
 		</section>
 	);

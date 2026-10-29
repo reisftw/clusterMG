@@ -104,8 +104,7 @@ export default function MapsPage() {
 	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
 
 	const requestParams = useMemo(() => {
-		const mobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
-		const params = { categories: categories.join(","), limit: mobile ? 250 : 500 };
+		const params = { categories: categories.join(","), limit: 25000 };
 		if (search.city || search.neighborhood) return { ...params, ...search };
 		if (gpsArea && mapQueryPosition) {
 			return {
@@ -228,7 +227,7 @@ export default function MapsPage() {
 		setRadarOpen(false);
 	}
 
-	async function loadRequests() {
+	const loadRequests = useCallback(async () => {
 		setRequestsLoading(true);
 		try {
 			const data = await mapsService.requests();
@@ -236,7 +235,20 @@ export default function MapsPage() {
 		} finally {
 			setRequestsLoading(false);
 		}
-	}
+	}, []);
+
+	const hasPendingEffectuation = requests.some((item) =>
+		["APPROVED", "PENDING_EFFECTUATION"].includes(item.status),
+	);
+
+	useEffect(() => {
+		if (!requestsOpen || !hasPendingEffectuation) return undefined;
+		const timer = window.setInterval(() => {
+			void loadRequests();
+			void loadPoints();
+		}, 4000);
+		return () => window.clearInterval(timer);
+	}, [hasPendingEffectuation, loadPoints, loadRequests, requestsOpen]);
 
 	async function openRequests() {
 		setRequestsOpen(true);

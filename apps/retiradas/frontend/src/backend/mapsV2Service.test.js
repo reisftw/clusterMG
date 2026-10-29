@@ -87,6 +87,22 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(point.latitude).toBe(row.latitude);
 	});
 
+	it("marca como atribuida a solicitacao efetivada para o proprio tecnico", () => {
+		const point = __testables.mapPoint(baseRow({
+			open_request_id: "request-1",
+			open_request_status: "EFFECTED",
+			open_requester_user_id: "tech-1",
+		}), {
+			uid: "tech-1",
+			role: "tecnico",
+		});
+		expect(point).toMatchObject({
+			category: "assigned",
+			assignedToCurrentUser: true,
+			requestable: false,
+		});
+	});
+
 	it("aceita somente tipos de retirada e bloqueia ordens encerradas", () => {
 		expect(__testables.validateOrderRow(baseRow({ tipo: "CANCELAMENTO LOJA" }))).toBe(true);
 		expect(__testables.validateOrderRow(baseRow({ tipo: "INSTALACAO FTTH" }))).toBe(false);

@@ -1,6 +1,8 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const notificationsService = require("../notificationsService");
+const usersRepository = require("../usersRepository");
+const serviceOrderRequestsService = require("../serviceOrders/requests/serviceOrderRequestsService");
 
 const MAPS_PERMISSIONS = Object.freeze({
 	ACCESS: "retiradas.maps.v2.access",
@@ -29,7 +31,7 @@ const ALLOWED_ORDER_TYPES = Object.freeze([
 ]);
 const CLOSED_STATUS_PATTERN = /(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)/i;
 const AVAILABLE_TECHNICIANS = new Set(["", "FILA", "NENHUM", "NAO DEFINIDO", "SEM TECNICO"]);
-const MAX_POINTS = 500;
+const MAX_POINTS = 25000;
 const ALERT_COOLDOWN_MINUTES = 30;
 const ALERT_HYSTERESIS_METERS = 100;
 const MAX_ALERTS_PER_HOUR = 5;
@@ -100,6 +102,17 @@ function userTechnicianNames(user = {}) {
 		user.metasTecnicoNome,
 		userName(user),
 	].map(normalize).filter(Boolean))];
+}
+
+function userTechnicianName(user = {}) {
+	const profile = userProfile(user);
+	return text(
+		profile.metasTecnicoNome ||
+			profile.metas_tecnico_nome ||
+			profile.technicianName ||
+			profile.nomeTecnico ||
+			user.metasTecnicoNome,
+	);
 }
 
 function hasPermission(user = {}, permission) {
@@ -183,6 +196,10 @@ function isAvailableTechnician(value) {
 }
 
 function categoryForOrder(row, user) {
+	if (
+		row.open_request_status === "EFFECTED" &&
+		text(row.open_requester_user_id) === userId(user)
+	) return "assigned";
 	const technician = normalize(row.tecnico);
 	if (technician && userTechnicianNames(user).includes(technician)) return "assigned";
 	return "opportunity";
@@ -209,6 +226,7 @@ function mapPoint(row, user, { origin = null } = {}) {
 	const base = {
 		id: row.id,
 		orderNumber: row.num_os,
+		clientCode: row.codigo_cliente || "",
 		category,
 		scheduled,
 		latitude: coordinates.latitude,
@@ -318,12 +336,14 @@ async function queryCandidateRows(query = {}, user = {}, limit = MAX_POINTS) {
 		        o.tipo, o.status, o.tecnico, o.cidade, o.regional, o.endereco,
 		        o.endereco_resumo, o.bairro, o.numero, o.data_abertura,
 		        o.updated_at, l.latitude, l.longitude, l.coordinate_source,
-		        l.accuracy_level, request.id as open_request_id
+		        l.accuracy_level, request.id as open_request_id,
+		        request.status as open_request_status,
+		        request.requester_user_id as open_requester_user_id
 		   from ordens_servico o
 		   left join maps_order_locations l on l.order_id = o.id
 		   left join maps_assignment_requests request
 		     on request.order_id = o.id
-		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION')
+		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION', 'EFFECTED')
 		  where ${clauses.join(" and ")}
 		  order by o.num_os, o.updated_at desc
 		 ) candidate
@@ -346,6 +366,7 @@ function filterVisiblePoint(point, user, categories) {
 
 async function listPoints(query = {}, user = {}) {
 	if (!featureEnabled()) throw apiError("Retiradas Maps 2.0 esta desativado.", 503, "MAPS_DISABLED");
+	await reconcileEffectuationRequests();
 	await syncNativeCoordinates();
 	const categories = new Set(text(query.categories || query.category).split(",").map((item) => item.trim()).filter(Boolean));
 	const { rows, viewport } = await queryCandidateRows(query, user, query.limit || MAX_POINTS);
@@ -386,12 +407,13 @@ async function getSummary(query = {}, user = {}) {
 async function getOrder(orderId, user = {}) {
 	const result = await db.query(
 		`select o.*, l.latitude, l.longitude, l.coordinate_source, l.accuracy_level,
-		        request.id as open_request_id
+		        request.id as open_request_id, request.status as open_request_status,
+		        request.requester_user_id as open_requester_user_id
 		   from ordens_servico o
 		   left join maps_order_locations l on l.order_id = o.id
 		   left join maps_assignment_requests request
 		     on request.order_id = o.id
-		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION')
+		    and request.status in ('PENDING', 'APPROVED', 'PENDING_EFFECTUATION', 'EFFECTED')
 		  where o.id = $1
 		  limit 1`,
 		[text(orderId)],
@@ -416,9 +438,11 @@ async function createRequest(payload = {}, user = {}) {
 			 returning *`,
 			[orderId, userId(user), userName(user), userEmail(user), order.regional, order.city, JSON.stringify({
 				orderNumber: order.orderNumber,
+				clientCode: order.clientCode,
 				type: order.type,
 				status: order.status,
 				company: order.company,
+				technicianHubsoftName: userTechnicianName(user),
 			})],
 		);
 		await notificationsService.createNotification({
@@ -439,6 +463,7 @@ async function createRequest(payload = {}, user = {}) {
 }
 
 async function listRequests(query = {}, user = {}, canManage = false) {
+	await reconcileEffectuationRequests();
 	const params = [];
 	const clauses = ["1=1"];
 	if (!canManage) {
@@ -467,29 +492,35 @@ async function listRequests(query = {}, user = {}, canManage = false) {
 }
 
 async function resolveRequest(requestId, payload = {}, user = {}, action) {
-	const client = await db.connect();
+	let client = await db.connect();
+	let current = null;
+	let updated = null;
+	const approve = action === "approve";
 	try {
 		await client.query("begin");
 		const currentResult = await client.query(
-			`select request.*, order_row.status as order_status, order_row.tecnico, order_row.tipo
+			`select request.*, order_row.status as order_status, order_row.tecnico,
+			        order_row.tipo, order_row.codigo_cliente
 			   from maps_assignment_requests request
 			   join ordens_servico order_row on order_row.id = request.order_id
 			  where request.id = $1
 			  for update`,
 			[text(requestId)],
 		);
-		const current = currentResult.rows[0];
+		current = currentResult.rows[0];
 		if (!current) throw apiError("Solicitacao nao encontrada.", 404);
-		if (current.status !== "PENDING") throw apiError("Esta solicitacao ja foi analisada.", 409);
-		const approve = action === "approve";
+		const retrying = current.status === "EFFECTUATION_FAILED";
+		if (current.status !== "PENDING" && !(approve && retrying)) {
+			throw apiError("Esta solicitacao ja foi analisada.", 409);
+		}
 		if (approve && (!ALLOWED_ORDER_TYPES.includes(normalize(current.tipo)) || CLOSED_STATUS_PATTERN.test(text(current.order_status)) || !isAvailableTechnician(current.tecnico))) {
 			throw apiError("A OS deixou de estar elegivel para atribuicao.", 409, "ORDER_CHANGED");
 		}
-		const nextStatus = approve ? "PENDING_EFFECTUATION" : "REJECTED";
+		const nextStatus = approve ? "APPROVED" : "REJECTED";
 		const note = text(payload.note || payload.reason) || (approve
-			? "Aprovada localmente; aguardando efetivacao operacional na origem."
+			? "Aprovada. Preparando a transferencia da O.S para o tecnico no HubSoft."
 			: "Solicitacao recusada.");
-		const updated = await client.query(
+		updated = await client.query(
 			`update maps_assignment_requests
 			    set status = $2, resolution_note = $3, reviewed_by_id = $4,
 			        reviewed_by_name = $5, reviewed_at = now(), updated_at = now()
@@ -498,22 +529,135 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 			[text(requestId), nextStatus, note, userId(user), userName(user)],
 		);
 		await client.query("commit");
+		client.release();
+		client = null;
+		if (approve) {
+			const requesterProfile = await usersRepository.getUserProfile(current.requester_user_id);
+			if (!requesterProfile) {
+				throw apiError("O usuario solicitante nao foi encontrado.", 422, "REQUESTER_NOT_FOUND");
+			}
+			const technicianHubsoftName = userTechnicianName({ profile: requesterProfile });
+			if (!technicianHubsoftName) {
+				throw apiError(
+					"O solicitante nao possui tecnico HubSoft vinculado em Metas.",
+					422,
+					"TECHNICIAN_NOT_LINKED",
+				);
+			}
+			const effectuation = await serviceOrderRequestsService.createRequest(
+				{
+					clientCode: text(current.codigo_cliente),
+					technicianHubsoftName,
+				},
+				{
+					uid: current.requester_user_id,
+					email: current.requester_email,
+					nome: current.requester_name,
+					role: requesterProfile.role,
+					profile: requesterProfile,
+				},
+			);
+			const effectuationId = effectuation?.item?.id;
+			const pending = await db.query(
+				`update maps_assignment_requests
+				    set status = 'PENDING_EFFECTUATION',
+				        resolution_note = 'Aprovada. Transferencia em andamento no HubSoft.',
+				        source_snapshot = coalesce(source_snapshot, '{}'::jsonb) || $2::jsonb,
+				        updated_at = now()
+				  where id = $1
+				  returning *`,
+				[
+					current.id,
+					JSON.stringify({ effectuationRequestId: effectuationId, technicianHubsoftName }),
+				],
+			);
+			updated = pending;
+		}
+		const finalStatus = approve ? "PENDING_EFFECTUATION" : "REJECTED";
+		const finalNote = approve
+			? "Aprovada. Transferencia em andamento no HubSoft."
+			: note;
 		await notificationsService.createNotification({
 			type: "geral",
 			title: approve ? "Solicitacao aprovada" : "Solicitacao recusada",
-			message: note,
+			message: finalNote,
 			targetPath: "/maps?panel=requests",
 			severity: approve ? "success" : "warning",
 			user,
 			targets: { users: [current.requester_user_id] },
-			meta: { module: "maps_v2", requestId: current.id, status: nextStatus },
+			meta: { module: "maps_v2", requestId: current.id, status: finalStatus },
 		});
 		return { item: updated.rows[0], effectedAtSource: false };
 	} catch (error) {
-		await client.query("rollback").catch(() => {});
+		await client?.query("rollback").catch(() => {});
+		if (approve && current?.id) {
+			await db.query(
+				`update maps_assignment_requests
+				    set status = 'EFFECTUATION_FAILED', resolution_note = $2, updated_at = now()
+				  where id = $1 and status = 'APPROVED'`,
+				[current.id, text(error?.message || error).slice(0, 500)],
+			).catch(() => {});
+		}
 		throw error;
 	} finally {
-		client.release();
+		client?.release();
+	}
+}
+
+let effectuationReconcilePromise = null;
+let effectuationReconcileLastAt = 0;
+async function reconcileEffectuationRequests({ force = false } = {}) {
+	if (!force && Date.now() - effectuationReconcileLastAt < 3000) return;
+	if (effectuationReconcilePromise) return effectuationReconcilePromise;
+	effectuationReconcilePromise = (async () => {
+		const result = await db.query(
+			`select request.id, request.order_id, request.requester_user_id,
+			        service.status as service_status, service.result_message,
+			        service.error_message, service.technician_hubsoft_name
+			   from maps_assignment_requests request
+			   join service_order_requests service
+			     on service.id::text = request.source_snapshot->>'effectuationRequestId'
+			  where request.status = 'PENDING_EFFECTUATION'
+			    and service.status in ('COMPLETED', 'FAILED')`,
+		);
+		for (const item of result.rows) {
+			const completed = item.service_status === "COMPLETED";
+			const status = completed ? "EFFECTED" : "EFFECTUATION_FAILED";
+			const note = completed
+				? text(item.result_message) || "O.S transferida para o tecnico no HubSoft."
+				: text(item.error_message) || "A transferencia da O.S falhou.";
+			const changed = await db.query(
+				`update maps_assignment_requests
+				    set status = $2, resolution_note = $3, updated_at = now()
+				  where id = $1 and status = 'PENDING_EFFECTUATION'
+				  returning id`,
+				[item.id, status, note],
+			);
+			if (!changed.rowCount) continue;
+			if (completed) {
+				await db.query(
+					`update ordens_servico
+					    set tecnico = $2, updated_at = now()
+					  where id = $1`,
+					[item.order_id, item.technician_hubsoft_name],
+				);
+			}
+			await notificationsService.createNotification({
+				type: "geral",
+				title: completed ? "O.S atribuida no Maps" : "Falha ao atribuir O.S",
+				message: note,
+				targetPath: "/maps?panel=requests",
+				severity: completed ? "success" : "error",
+				targets: { users: [item.requester_user_id] },
+				meta: { module: "maps_v2", requestId: item.id, status },
+			}).catch(() => {});
+		}
+		effectuationReconcileLastAt = Date.now();
+	})();
+	try {
+		return await effectuationReconcilePromise;
+	} finally {
+		effectuationReconcilePromise = null;
 	}
 }
 

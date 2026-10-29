@@ -6,7 +6,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { House } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import retorninhoMapMarker from "../../../assets/retorninho-map-marker.svg";
+import retorninhoMapMarker from "../../../assets/retorninho-map-marker-color.png";
 
 const DEFAULT_CENTER = [-18.8, -44.1];
 const DEFAULT_ZOOM = 6;
@@ -27,15 +27,28 @@ function validOrderPoint(point) {
 	return latitude >= -34 && latitude <= 6 && longitude >= -74 && longitude <= -33;
 }
 
-function pointIcon(point) {
-	const categoryClass = point?.category === "assigned" ? "is-assigned" : "is-opportunity";
-	return L.divIcon({
-		className: `maps-v2-property-marker ${categoryClass}`,
-		html: `<span>${renderToStaticMarkup(<House size={17} strokeWidth={2.5} />)}</span>`,
+const PROPERTY_MARKER_HTML = `<span>${renderToStaticMarkup(<House size={17} strokeWidth={2.5} />)}</span>`;
+const PROPERTY_ICONS = {
+	assigned: L.divIcon({
+		className: "maps-v2-property-marker is-assigned",
+		html: PROPERTY_MARKER_HTML,
 		iconSize: [36, 42],
 		iconAnchor: [18, 40],
 		tooltipAnchor: [0, -37],
-	});
+	}),
+	opportunity: L.divIcon({
+		className: "maps-v2-property-marker is-opportunity",
+		html: PROPERTY_MARKER_HTML,
+		iconSize: [36, 42],
+		iconAnchor: [18, 40],
+		tooltipAnchor: [0, -37],
+	}),
+};
+
+function pointIcon(point) {
+	return point?.category === "assigned"
+		? PROPERTY_ICONS.assigned
+		: PROPERTY_ICONS.opportunity;
 }
 
 function pointLabel(point) {
@@ -110,6 +123,9 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 				maxClusterRadius: 48,
 				spiderfyOnMaxZoom: true,
 				disableClusteringAtZoom: 17,
+				chunkedLoading: true,
+				chunkInterval: 100,
+				chunkDelay: 25,
 			});
 			map.addLayer(clusterRef.current);
 		} catch (error) {
@@ -163,6 +179,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		if (!cluster || !map) return;
 		cluster.clearLayers();
 		const validCoordinates = [];
+		const markers = [];
 		for (const point of points || []) {
 			if (!validOrderPoint(point)) continue;
 			validCoordinates.push([Number(point.latitude), Number(point.longitude)]);
@@ -170,10 +187,11 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 				[Number(point.latitude), Number(point.longitude)],
 				{ icon: pointIcon(point), title: pointLabel(point), riseOnHover: true },
 			);
-			marker.bindTooltip(pointTooltip(point), { direction: "top", opacity: 0.98 });
+			marker.bindTooltip(() => pointTooltip(point), { direction: "top", opacity: 0.98 });
 			marker.on("click", () => callbacksRef.current.onSelect?.(point.id));
-			cluster.addLayer(marker);
+			markers.push(marker);
 		}
+		if (markers.length) cluster.addLayers(markers);
 		if (!initialFrameAppliedRef.current && (points || []).length > 0) {
 			initialFrameAppliedRef.current = true;
 			const minasCoordinates = validCoordinates.filter((coordinate) => MINAS_BOUNDS.contains(coordinate));
