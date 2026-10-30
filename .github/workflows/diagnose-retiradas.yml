@@ -47,9 +47,10 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o HostKeyAlias=retiradas-production \
             "$VPS_USER@$VPS_HOST" \
-            bash -s -- "$ROUTE_ID" <<'REMOTE'
+            bash -s -- "$ROUTE_ID" "$VERIFY_ROUTE_OPTIMIZATION" <<'REMOTE'
           set -Eeuo pipefail
           route_id="${1:-}"
+          verify_route_optimization="${2:-false}"
           set -a
           . /etc/retiradas/api.env
           set +a
@@ -109,7 +110,7 @@ jobs:
             journalctl -u retiradas-api.service --since '3 hours ago' --no-pager \
               | grep -F -B 6 -A 14 "$route_id" | tail -100 || true
 
-            if [ "${VERIFY_ROUTE_OPTIMIZATION:-false}" = "true" ]; then
+            if [ "$verify_route_optimization" = "true" ]; then
               echo "=== Deployed route optimizer verification ==="
               cd /opt/retiradas/vps/api
               ROUTE_ID="$route_id" node -e '
