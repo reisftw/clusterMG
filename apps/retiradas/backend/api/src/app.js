@@ -6042,6 +6042,29 @@ function createApp() {
 		app.locals.movimentacoesScanTimer = timer;
 	}
 
+	if (!app.locals.equipmentRecoveryReconciliationTimer) {
+		const runEquipmentRecoveryReconciliation = () => {
+			equipmentRecoveryService.runDailyIfDue().catch((error) => {
+				console.error(
+					"[equipmentRecovery] Falha na conciliacao automatica:",
+					error?.message || error,
+				);
+			});
+		};
+		const bootstrapTimer = setTimeout(
+			runEquipmentRecoveryReconciliation,
+			Number(process.env.EQUIPMENT_RECONCILIATION_BOOT_DELAY_MS || 15_000),
+		);
+		bootstrapTimer.unref?.();
+		const timer = setInterval(
+			runEquipmentRecoveryReconciliation,
+			Number(process.env.EQUIPMENT_RECONCILIATION_CHECK_INTERVAL_MS || 60 * 1000),
+		);
+		timer.unref?.();
+		app.locals.equipmentRecoveryReconciliationBootstrapTimer = bootstrapTimer;
+		app.locals.equipmentRecoveryReconciliationTimer = timer;
+	}
+
 	hubsoftSyncProfiles.startScheduler(app);
 
 	app.use((error, req, res, next) => {

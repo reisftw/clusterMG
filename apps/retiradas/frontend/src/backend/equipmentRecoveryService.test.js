@@ -5,14 +5,21 @@ process.env.DATABASE_URL ||= "postgres://test:test@localhost:5432/test";
 
 const require = createRequire(import.meta.url);
 const {
-	_private: { findMovementMatch, movementQuantity, snapshotFromRecord },
+	_private: {
+		findMovementMatch,
+		movementQuantity,
+		saoPauloClock,
+		shiftIsoDate,
+		snapshotFromRecord,
+	},
 } = require("../../../backend/api/src/equipmentRecovery/equipmentRecoveryService");
 
-function movement({ id, category = "AC", quantity = 1, technicianId = "101", technicianName = "Joao Silva" }) {
+function movement({ id, category = "AC", orderNumber = "", quantity = 1, technicianId = "101", technicianName = "Joao Silva" }) {
 	return {
 		row: {
 			id,
 			equipment_type: category,
+			os_numero: orderNumber,
 			emitido_em: "2026-09-10T12:00:00.000Z",
 			registrado_por: technicianName,
 			raw_payload: {
@@ -116,5 +123,38 @@ describe("equipmentRecoveryService", () => {
 	it("respeita quantidade maior que 1 no movimento", () => {
 		const row = { raw_payload: { quantidade: 5 } };
 		expect(movementQuantity(row)).toBe(5);
+	});
+
+	it("prioriza a conciliacao exata pelo numero da OS", () => {
+		const stock = [
+			movement({
+				id: "mov-os-1",
+				category: null,
+				orderNumber: "014326300000123456",
+				technicianId: "999",
+				technicianName: "Outro Tecnico",
+			}),
+		];
+		const match = findMovementMatch(
+			{
+				os_number: "OS 014326300000123456",
+				equipment_type: "UNKNOWN",
+				technician_id: "101",
+				technician_name: "Joao Silva",
+				closed_at: "2026-09-10T12:00:00.000Z",
+			},
+			stock,
+		);
+		expect(match?.confidence).toBe("CONFIRMED");
+		expect(match?.type).toBe("ORDER_NUMBER");
+		expect(match?.item.row.id).toBe("mov-os-1");
+	});
+
+	it("calcula a janela diaria no calendario de Sao Paulo", () => {
+		expect(shiftIsoDate("2026-10-30", -21)).toBe("2026-10-09");
+		expect(saoPauloClock(new Date("2026-10-30T07:15:00.000Z"))).toEqual({
+			date: "2026-10-30",
+			time: "04:15",
+		});
 	});
 });

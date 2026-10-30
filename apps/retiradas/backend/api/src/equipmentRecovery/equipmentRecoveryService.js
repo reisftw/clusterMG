@@ -11,7 +11,16 @@ const {
 const TIME_ZONE = "America/Sao_Paulo";
 const META_PROFILES = ["META_D0", "META_D_MINUS_ONE", "META_AUDIT_DAILY"];
 const MATCH_WINDOW_DAYS = Number(process.env.EQUIPMENT_MATCH_WINDOW_DAYS || 21);
+const AUTO_RECONCILE_INTERVAL_MS = Math.max(
+	Number(process.env.EQUIPMENT_AUTO_RECONCILE_INTERVAL_MS || 5 * 60 * 1000),
+	30_000,
+);
+const DAILY_RECONCILIATION_TIME = cleanText(
+	process.env.EQUIPMENT_RECONCILIATION_DAILY_TIME || "04:00",
+);
 const ensureSnapshotJobs = new Map();
+const lastReconciliationByRange = new Map();
+let automaticReconciliationRunning = false;
 
 function normalizeLimit(value, fallback = 20, max = 500) {
 	const parsed = Number.parseInt(value, 10);
@@ -51,6 +60,10 @@ function normalizeRecoveryStatus(value) {
 	return aliases[text] || text;
 }
 
+function normalizeOrderNumber(value) {
+	return cleanText(value).replace(/\D/g, "");
+}
+
 function asArray(value) {
 	if (Array.isArray(value)) return value;
 	if (value === undefined || value === null || value === "") return [];
@@ -72,6 +85,32 @@ function defaultDateRange(query = {}) {
 	return startDate > endDate
 		? { startDate: endDate, endDate: startDate }
 		: { startDate, endDate };
+}
+
+function saoPauloClock(now = new Date()) {
+	const parts = Object.fromEntries(
+		new Intl.DateTimeFormat("en-US", {
+			timeZone: TIME_ZONE,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			hourCycle: "h23",
+		})
+			.formatToParts(now)
+			.map((part) => [part.type, part.value]),
+	);
+	return {
+		date: `${parts.year}-${parts.month}-${parts.day}`,
+		time: `${parts.hour}:${parts.minute}`,
+	};
+}
+
+function shiftIsoDate(isoDate, days) {
+	const date = new Date(`${isoDate}T12:00:00.000Z`);
+	date.setUTCDate(date.getUTCDate() + Number(days || 0));
+	return date.toISOString().slice(0, 10);
 }
 
 function technicianKeyFromRaw(raw = {}) {
@@ -359,7 +398,28 @@ async function ensureSnapshotsForRange(query = {}) {
 			[startDate, endDate, sourceIds],
 		);
 		if (Number(existing.rows[0]?.total || 0) >= sourceIds.length) {
-			return { skipped: true, total: sourceIds.length };
+			const lastReconciledAt = Number(lastReconciliationByRange.get(key) || 0);
+			if (Date.now() - lastReconciledAt < AUTO_RECONCILE_INTERVAL_MS) {
+				return { skipped: true, total: sourceIds.length, reconciled: false };
+			}
+			const snapshots = await db.query(
+				`select *
+				   from equipment_recovery_snapshots
+				  where closed_at >= ($1::date::timestamp at time zone '${TIME_ZONE}')
+				    and closed_at < (($2::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')
+				    and os_id = any($3::text[])`,
+				[startDate, endDate, sourceIds],
+			);
+			const matchSummary = await applyMovementMatches(snapshots.rows, {
+				start_date: startDate,
+				end_date: endDate,
+			});
+			lastReconciliationByRange.set(key, Date.now());
+			return {
+				total: snapshots.rows.length,
+				reconciled: true,
+				...matchSummary,
+			};
 		}
 		const valuesByCategory = await getEquipmentValues();
 		if (!source.records.length) return { skipped: true, total: 0 };
@@ -371,6 +431,7 @@ async function ensureSnapshotsForRange(query = {}) {
 			start_date: startDate,
 			end_date: endDate,
 		});
+		lastReconciliationByRange.set(key, Date.now());
 		return { total: saved.length, ...matchSummary };
 	})().finally(() => {
 		ensureSnapshotJobs.delete(key);
@@ -488,7 +549,6 @@ async function buildMovementInventory(query = {}) {
 		 left join movimentacoes_produtos_config c on c.produto_nome = m.produto_nome
 		 where m.emitido_em >= (($1::date - interval '${MATCH_WINDOW_DAYS} days')::timestamp at time zone '${TIME_ZONE}')
 		   and m.emitido_em < (($2::date + interval '${MATCH_WINDOW_DAYS + 1} days')::timestamp at time zone '${TIME_ZONE}')
-		   and coalesce(c.categoria, '') in ('FAST','AC','AX')
 		 order by m.emitido_em asc nulls last, m.criado_em asc`,
 		[startDate, endDate],
 	);
@@ -513,12 +573,18 @@ function addIndexedMovement(index, key, item) {
 }
 
 function buildMovementIndex(movements = []) {
+	const byOrderNumber = new Map();
 	const byCategory = new Map();
 	const byCategoryAndTechnicianId = new Map();
 	const byCategoryAndTechnicianName = new Map();
 	for (const item of movements) {
 		const category = item.row.equipment_type;
 		const technician = item.technician || movementTechnician(item.row);
+		addIndexedMovement(
+			byOrderNumber,
+			normalizeOrderNumber(item.row.os_numero),
+			item,
+		);
 		addIndexedMovement(byCategory, category, item);
 		addIndexedMovement(
 			byCategoryAndTechnicianId,
@@ -531,7 +597,12 @@ function buildMovementIndex(movements = []) {
 			item,
 		);
 	}
-	return { byCategory, byCategoryAndTechnicianId, byCategoryAndTechnicianName };
+	return {
+		byOrderNumber,
+		byCategory,
+		byCategoryAndTechnicianId,
+		byCategoryAndTechnicianName,
+	};
 }
 
 function daysBetween(left, right) {
@@ -551,12 +622,24 @@ function findAvailableInsideWindow(snapshot, candidates = []) {
 
 function findMovementMatch(snapshot, movementsOrIndex) {
 	if (!featureEnabled("ENABLE_STOCK_MATCH", true)) return null;
-	if (!snapshot || snapshot.equipment_type === "UNKNOWN") return null;
+	if (!snapshot) return null;
 	const technicianName = normalizeText(snapshot.technician_name);
 	const technicianId = cleanText(snapshot.technician_id);
 	const index = Array.isArray(movementsOrIndex)
 		? buildMovementIndex(movementsOrIndex)
 		: movementsOrIndex;
+	const orderNumber = normalizeOrderNumber(snapshot.os_number);
+	const byOrderNumber = orderNumber
+		? findAvailableInsideWindow(snapshot, index.byOrderNumber.get(orderNumber) || [])
+		: null;
+	if (byOrderNumber) {
+		return {
+			item: byOrderNumber,
+			confidence: "CONFIRMED",
+			type: "ORDER_NUMBER",
+		};
+	}
+	if (snapshot.equipment_type === "UNKNOWN") return null;
 	const byId = technicianId
 		? findAvailableInsideWindow(
 				snapshot,
@@ -696,9 +779,7 @@ async function runReprocess(jobId, query = {}) {
 	}
 }
 
-async function reprocess(query = {}, user = {}) {
-	const mode = query.apply === false || query.mode === "SIMULATE" ? "SIMULATE" : "APPLY";
-	const { startDate, endDate } = defaultDateRange(query);
+async function createReprocessJob({ mode, startDate, endDate, createdBy, stage }) {
 	const jobResult = await db.query(
 		`insert into equipment_recovery_jobs
 			(status, mode, date_start, date_end, created_by, summary)
@@ -708,22 +789,112 @@ async function reprocess(query = {}, user = {}) {
 			mode,
 			startDate,
 			endDate,
-			user?.uid || user?.email || null,
+			createdBy || null,
 			JSON.stringify({
-				stage: "Na fila",
+				stage: stage || "Na fila",
 				percent: 1,
 				startDate,
 				endDate,
 			}),
 		],
 	);
-	const job = jobResult.rows[0];
+	return jobResult.rows[0];
+}
+
+async function reprocess(query = {}, user = {}) {
+	const mode = query.apply === false || query.mode === "SIMULATE" ? "SIMULATE" : "APPLY";
+	const { startDate, endDate } = defaultDateRange(query);
+	const job = await createReprocessJob({
+		mode,
+		startDate,
+		endDate,
+		createdBy: user?.uid || user?.email,
+	});
 	setImmediate(() => {
 		runReprocess(job.id, query).catch((error) => {
 			console.error("[equipmentRecovery] Falha no job de reprocessamento:", error);
 		});
 	});
 	return mapJob(job);
+}
+
+async function getFullSourceRange() {
+	const result = await db.query(
+		`select
+			min((source_date at time zone '${TIME_ZONE}')::date)::text as start_date,
+			max((source_date at time zone '${TIME_ZONE}')::date)::text as end_date
+		 from hubsoft_sync_records
+		 where profile = any($1::text[])
+		   and active = true
+		   and (raw_excerpt->>'id_tipo_ordem_servico') ~ '^\\d+$'
+		   and (raw_excerpt->>'id_tipo_ordem_servico')::int = any($2::int[])`,
+		[META_PROFILES, [...productionOsTypeIds()]],
+	);
+	const row = result.rows[0] || {};
+	return row.start_date && row.end_date
+		? { startDate: row.start_date, endDate: row.end_date }
+		: null;
+}
+
+async function automaticRunExists(mode, runDate = "") {
+	const params = [mode];
+	const dateClause = runDate
+		? `and (coalesce(finished_at, started_at) at time zone '${TIME_ZONE}')::date = $${params.push(runDate)}::date`
+		: "";
+	const result = await db.query(
+		`select exists(
+			select 1
+			  from equipment_recovery_jobs
+			 where mode = $1
+			   and (
+				status = 'COMPLETE'
+				or (status = 'RUNNING' and started_at > now() - interval '6 hours')
+			   )
+			   ${dateClause}
+		) as exists`,
+		params,
+	);
+	return result.rows[0]?.exists === true;
+}
+
+async function runAutomaticReconciliation(mode, { startDate, endDate }) {
+	const job = await createReprocessJob({
+		mode,
+		startDate,
+		endDate,
+		createdBy: "system:equipment-recovery",
+		stage: mode === "AUTO_FULL"
+			? "Conciliação inicial de todo o histórico"
+			: "Conciliação diária com Movimentações",
+	});
+	await runReprocess(job.id, {
+		start_date: startDate,
+		end_date: endDate,
+		apply: true,
+	});
+	return getJob(job.id);
+}
+
+async function runDailyIfDue(now = new Date()) {
+	if (automaticReconciliationRunning) return null;
+	automaticReconciliationRunning = true;
+	try {
+		if (!(await automaticRunExists("AUTO_FULL"))) {
+			const fullRange = await getFullSourceRange();
+			if (!fullRange) return null;
+			return await runAutomaticReconciliation("AUTO_FULL", fullRange);
+		}
+
+		const clock = saoPauloClock(now);
+		if (clock.time < DAILY_RECONCILIATION_TIME) return null;
+		if (await automaticRunExists("AUTO_DAILY", clock.date)) return null;
+		return await runAutomaticReconciliation("AUTO_DAILY", {
+			startDate: shiftIsoDate(clock.date, -MATCH_WINDOW_DAYS),
+			endDate: clock.date,
+		});
+	} finally {
+		automaticReconciliationRunning = false;
+	}
 }
 
 function summarizeSnapshots(snapshots = []) {
@@ -1179,11 +1350,15 @@ module.exports = {
 	getJob,
 	getLatestJob,
 	reprocess,
+	runDailyIfDue,
 	_private: {
 		buildMovementIndex,
 		findMovementMatch,
 		movementQuantity,
 		movementTechnician,
+		normalizeOrderNumber,
+		saoPauloClock,
+		shiftIsoDate,
 		snapshotFromRecord,
 	},
 };
