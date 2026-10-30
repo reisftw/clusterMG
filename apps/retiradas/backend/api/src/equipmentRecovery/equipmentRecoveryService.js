@@ -64,6 +64,23 @@ function normalizeOrderNumber(value) {
 	return cleanText(value).replace(/\D/g, "");
 }
 
+function normalizeClientName(value) {
+	return normalizeText(cleanText(value).replace(/^\s*\(\d+\)\s*/, ""))
+		.replace(/[^A-Z0-9]/g, "");
+}
+
+function snapshotClientName(snapshot = {}) {
+	const raw = snapshot.raw_snapshot || snapshot.rawSnapshot || {};
+	const excerpt = raw.rawExcerpt || raw.raw_excerpt || {};
+	return normalizeClientName(
+		excerpt.cliente_nome ||
+			excerpt.nome_cliente ||
+			excerpt.cliente?.nome_razaosocial ||
+			excerpt.cliente?.nome ||
+			"",
+	);
+}
+
 function asArray(value) {
 	if (Array.isArray(value)) return value;
 	if (value === undefined || value === null || value === "") return [];
@@ -574,6 +591,7 @@ function addIndexedMovement(index, key, item) {
 
 function buildMovementIndex(movements = []) {
 	const byOrderNumber = new Map();
+	const byClientName = new Map();
 	const byCategory = new Map();
 	const byCategoryAndTechnicianId = new Map();
 	const byCategoryAndTechnicianName = new Map();
@@ -583,6 +601,11 @@ function buildMovementIndex(movements = []) {
 		addIndexedMovement(
 			byOrderNumber,
 			normalizeOrderNumber(item.row.os_numero),
+			item,
+		);
+		addIndexedMovement(
+			byClientName,
+			normalizeClientName(item.row.parceiro_nome),
 			item,
 		);
 		addIndexedMovement(byCategory, category, item);
@@ -599,6 +622,7 @@ function buildMovementIndex(movements = []) {
 	}
 	return {
 		byOrderNumber,
+		byClientName,
 		byCategory,
 		byCategoryAndTechnicianId,
 		byCategoryAndTechnicianName,
@@ -637,6 +661,17 @@ function findMovementMatch(snapshot, movementsOrIndex) {
 			item: byOrderNumber,
 			confidence: "CONFIRMED",
 			type: "ORDER_NUMBER",
+		};
+	}
+	const clientName = snapshotClientName(snapshot);
+	const byClientName = clientName
+		? findAvailableInsideWindow(snapshot, index.byClientName.get(clientName) || [])
+		: null;
+	if (byClientName) {
+		return {
+			item: byClientName,
+			confidence: "CONFIRMED",
+			type: "CLIENT_NAME_WINDOW",
 		};
 	}
 	if (snapshot.equipment_type === "UNKNOWN") return null;
@@ -863,7 +898,7 @@ async function runAutomaticReconciliation(mode, { startDate, endDate }) {
 		startDate,
 		endDate,
 		createdBy: "system:equipment-recovery",
-		stage: mode === "AUTO_FULL"
+		stage: mode.startsWith("AUTO_FULL")
 			? "Conciliação inicial de todo o histórico"
 			: "Conciliação diária com Movimentações",
 	});
@@ -879,10 +914,11 @@ async function runDailyIfDue(now = new Date()) {
 	if (automaticReconciliationRunning) return null;
 	automaticReconciliationRunning = true;
 	try {
-		if (!(await automaticRunExists("AUTO_FULL"))) {
+		const fullReconciliationMode = "AUTO_FULL_CLIENT_MATCH_V2";
+		if (!(await automaticRunExists(fullReconciliationMode))) {
 			const fullRange = await getFullSourceRange();
 			if (!fullRange) return null;
-			return await runAutomaticReconciliation("AUTO_FULL", fullRange);
+			return await runAutomaticReconciliation(fullReconciliationMode, fullRange);
 		}
 
 		const clock = saoPauloClock(now);
@@ -1356,9 +1392,11 @@ module.exports = {
 		findMovementMatch,
 		movementQuantity,
 		movementTechnician,
+		normalizeClientName,
 		normalizeOrderNumber,
 		saoPauloClock,
 		shiftIsoDate,
+		snapshotClientName,
 		snapshotFromRecord,
 	},
 };

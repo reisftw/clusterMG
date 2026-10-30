@@ -150,6 +150,7 @@ function hasPermission(user = {}, permission) {
 }
 
 function numberInRange(value, min, max, fallback = null) {
+	if (value === undefined || value === null || value === "") return fallback;
 	const parsed = Number(value);
 	if (!Number.isFinite(parsed) || parsed < min || parsed > max) return fallback;
 	return parsed;
@@ -1051,9 +1052,9 @@ async function optimizeRoute(routeId, payload = {}, user = {}) {
 	const route = await db.query("select id from maps_routes where id = $1 and user_id = $2", [text(routeId), userId(user)]);
 	if (!route.rows[0]) throw apiError("Roteiro nao encontrado.", 404);
 	const items = await db.query(
-		`select item.order_id, location.latitude, location.longitude
+		`select item.order_id, item.sequence_number, location.latitude, location.longitude
 		   from maps_route_items item
-		   join maps_order_locations location on location.order_id = item.order_id
+		   left join maps_order_locations location on location.order_id = item.order_id
 		  where item.route_id = $1
 		  order by item.sequence_number`,
 		[text(routeId)],
@@ -1068,18 +1069,14 @@ async function optimizeRoute(routeId, payload = {}, user = {}) {
 	const client = await db.connect();
 	try {
 		await client.query("begin");
-		// Move todas as sequencias para uma faixa temporaria negativa antes de
-		// gravar a nova ordem. Isso evita colisao em roteiros com mais de 1.000 paradas.
-		await client.query(
-			"update maps_route_items set sequence_number = -(abs(sequence_number) + 1000000) where route_id = $1",
-			[text(routeId)],
-		);
+		// Recriar os itens dentro da mesma transacao evita qualquer colisao da
+		// restricao unica (route_id, sequence_number), inclusive em rotas grandes.
+		await client.query("delete from maps_route_items where route_id = $1", [text(routeId)]);
 		for (const [index, item] of optimized.entries()) {
 			await client.query(
-				`update maps_route_items
-				    set sequence_number = $3, distance_from_previous_meters = $4,
-				        estimated_travel_minutes = greatest(1, round($4::numeric / 400)::int)
-				  where route_id = $1 and order_id = $2`,
+				`insert into maps_route_items
+				    (route_id, order_id, sequence_number, distance_from_previous_meters, estimated_travel_minutes)
+				 values ($1, $2, $3, $4, greatest(1, round($4::numeric / 400)::int))`,
 				[text(routeId), item.order_id, index + 1, item.distanceMeters],
 			);
 		}

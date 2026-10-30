@@ -102,7 +102,6 @@ export default function MapsPage() {
 	const [routeSelectionMode, setRouteSelectionMode] = useState(false);
 	const [selectedRouteIds, setSelectedRouteIds] = useState([]);
 	const [routes, setRoutes] = useState([]);
-	const [mapRevision, setMapRevision] = useState(0);
 	const [requestsOpen, setRequestsOpen] = useState(false);
 	const [requests, setRequests] = useState([]);
 	const [requestsLoading, setRequestsLoading] = useState(false);
@@ -302,7 +301,6 @@ export default function MapsPage() {
 		else await mapsService.rejectRequest(id);
 		await loadRequests();
 		await loadPoints();
-		setMapRevision((current) => current + 1);
 	}
 
 	function toggleCategory(category) {
@@ -358,13 +356,13 @@ export default function MapsPage() {
 		await loadRoutes();
 		setSelectedRouteIds([]);
 		setRouteSelectionMode(false);
-		setMapRevision((current) => current + 1);
+		setNotice("Roteiro salvo. O mapa continua disponivel para consulta.");
 	}
 
 	async function optimizeRoute(routeId, position) {
 		await mapsService.optimizeRoute(routeId, position || {});
 		await loadRoutes();
-		setMapRevision((current) => current + 1);
+		setNotice("Roteiro otimizado. Abra o trajeto no Google Maps pelo painel.");
 	}
 
 	function applySearch(event) {
@@ -416,7 +414,7 @@ export default function MapsPage() {
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas key={mapRevision} points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} routeSelectionMode={routeSelectionMode} selectedRouteIds={selectedRouteIds} onViewportChange={setViewport} onSelect={setSelectedId} onToggleRoute={toggleRoutePoint} onError={setError} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} routeSelectionMode={routeSelectionMode} selectedRouteIds={selectedRouteIds} onViewportChange={setViewport} onSelect={setSelectedId} onToggleRoute={toggleRoutePoint} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
 					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>
