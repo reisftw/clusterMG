@@ -7,6 +7,11 @@ on:
         description: Route UUID to inspect (optional)
         required: false
         type: string
+      verify_route_optimization:
+        description: Execute the deployed optimizer for the inspected route
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -36,6 +41,7 @@ jobs:
       - name: Read sanitized production diagnostics
         env:
           ROUTE_ID: ${{ inputs.route_id }}
+          VERIFY_ROUTE_OPTIMIZATION: ${{ inputs.verify_route_optimization }}
         run: |
           ssh -i ~/.ssh/diagnostic_key -p "$VPS_PORT" \
             -o StrictHostKeyChecking=yes \
@@ -102,5 +108,27 @@ jobs:
             echo "=== Recent route errors ==="
             journalctl -u retiradas-api.service --since '3 hours ago' --no-pager \
               | grep -F -B 6 -A 14 "$route_id" | tail -100 || true
+
+            if [ "${VERIFY_ROUTE_OPTIMIZATION:-false}" = "true" ]; then
+              echo "=== Deployed route optimizer verification ==="
+              cd /opt/retiradas/vps/api
+              ROUTE_ID="$route_id" node <<'NODE'
+              const db = require("./src/db");
+              const maps = require("./src/mapsV2/mapsV2Service");
+
+              (async () => {
+                const routeId = process.env.ROUTE_ID;
+                const route = await db.query("select user_id from maps_routes where id = $1", [routeId]);
+                if (!route.rows[0]) throw new Error("Route not found");
+                const result = await maps.optimizeRoute(routeId, {}, { id: route.rows[0].user_id });
+                console.log(JSON.stringify({ ok: true, optimizedItems: result.items.length }));
+              })()
+                .finally(() => db.closePool())
+                .catch((error) => {
+                  console.error(error?.stack || error);
+                  process.exitCode = 1;
+                });
+              NODE
+            fi
           fi
           REMOTE
