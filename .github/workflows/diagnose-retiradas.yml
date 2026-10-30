@@ -74,8 +74,12 @@ jobs:
                from equipment_recovery_snapshots;"
 
           if [ -n "$route_id" ]; then
+            if ! [[ "$route_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+              echo "Invalid route UUID" >&2
+              exit 2
+            fi
             echo "=== Route ==="
-            psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -v route_id="$route_id" -c \
+            psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
               "select route.id, route.status, count(item.order_id)::int as items,
                       count(location.order_id)::int as located,
                       min(item.sequence_number) as first_sequence,
@@ -83,7 +87,7 @@ jobs:
                  from maps_routes route
                  left join maps_route_items item on item.route_id = route.id
                  left join maps_order_locations location on location.order_id = item.order_id
-                where route.id = :'route_id'::uuid
+                where route.id = '$route_id'::uuid
                 group by route.id;"
             echo "=== Recent route errors ==="
             journalctl -u retiradas-api.service --since '3 hours ago' --no-pager \
