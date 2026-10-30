@@ -2,6 +2,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
 import retorninhoMapMarker from "../../../assets/retorninho-map-marker-color.png";
+import { technicianPreviewContent } from "./technicianPreview";
 
 const DEFAULT_CENTER = [-18.8, -44.1];
 const DEFAULT_ZOOM = 6;
@@ -20,24 +21,8 @@ function markerIcon(item, selected) {
 		html: `<span><img src="${retorninhoMapMarker}" alt="" /></span>`,
 		iconSize: [58, 64],
 		iconAnchor: [29, 59],
-		tooltipAnchor: [0, -52],
+		tooltipAnchor: [28, -30],
 	});
-}
-
-function tooltipContent(item) {
-	const container = document.createElement("div");
-	container.className = "maps-admin-technician-tooltip";
-	const name = document.createElement("strong");
-	name.textContent = item.displayName || item.technicianName || "Tecnico";
-	const hubsoft = document.createElement("span");
-	const sameName = item.technicianName === item.displayName;
-	 hubsoft.textContent = sameName ? "Tecnico de retiradas" : `HubSoft: ${item.technicianName || "nao associado"}`;
-	const production = document.createElement("span");
-	production.textContent = `${Number(item.completedToday || 0)} retiradas hoje · ${Number(item.openOrders || 0)} OS abertas`;
-	const route = document.createElement("span");
-	route.textContent = `${Number(item.routeStops || 0)} paradas no roteiro · precisao ${Math.round(Number(item.accuracyMeters || 0))} m`;
-	container.append(name, hubsoft, production, route);
-	return container;
 }
 
 export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, frameRevision, onSelect, onError }) {
@@ -112,7 +97,14 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 				title: item.displayName || item.technicianName || "Tecnico",
 				riseOnHover: true,
 			});
-			marker.bindTooltip(() => tooltipContent(item), { direction: "top", opacity: 0.98, className: "maps-admin-tooltip-shell" });
+			marker.bindTooltip(() => technicianPreviewContent(item), {
+				direction: "right",
+				offset: [8, 0],
+				opacity: 1,
+				permanent: true,
+				interactive: false,
+				className: `maps-admin-tooltip-shell maps-admin-preview-card-shell is-${item.status || "stale"}${item.userId === selectedId ? " is-selected" : ""}`,
+			});
 			marker.on("click", () => callbacksRef.current.onSelect?.(item.userId));
 			marker.addTo(layer);
 			markersRef.current.set(item.userId, marker);
