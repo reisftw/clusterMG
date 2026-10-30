@@ -547,7 +547,7 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 			   from maps_assignment_requests request
 			   left join ordens_servico order_row on order_row.id = request.order_id
 			  where request.id = $1
-			  for update`,
+			  for update of request`,
 			[text(requestId)],
 		);
 		current = currentResult.rows[0];
