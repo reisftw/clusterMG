@@ -112,23 +112,20 @@ jobs:
             if [ "${VERIFY_ROUTE_OPTIMIZATION:-false}" = "true" ]; then
               echo "=== Deployed route optimizer verification ==="
               cd /opt/retiradas/vps/api
-              ROUTE_ID="$route_id" node <<'NODE'
-              const db = require("./src/db");
-              const maps = require("./src/mapsV2/mapsV2Service");
-
-              (async () => {
-                const routeId = process.env.ROUTE_ID;
-                const route = await db.query("select user_id from maps_routes where id = $1", [routeId]);
-                if (!route.rows[0]) throw new Error("Route not found");
-                const result = await maps.optimizeRoute(routeId, {}, { id: route.rows[0].user_id });
-                console.log(JSON.stringify({ ok: true, optimizedItems: result.items.length }));
-              })()
-                .finally(() => db.closePool())
-                .catch((error) => {
+              ROUTE_ID="$route_id" node -e '
+                const db = require("./src/db");
+                const maps = require("./src/mapsV2/mapsV2Service");
+                (async () => {
+                  const routeId = process.env.ROUTE_ID;
+                  const route = await db.query("select user_id from maps_routes where id = $1", [routeId]);
+                  if (!route.rows[0]) throw new Error("Route not found");
+                  const result = await maps.optimizeRoute(routeId, {}, { id: route.rows[0].user_id });
+                  console.log(JSON.stringify({ ok: true, optimizedItems: result.items.length }));
+                })().catch((error) => {
                   console.error(error?.stack || error);
                   process.exitCode = 1;
-                });
-              NODE
+                }).finally(() => db.closePool());
+              '
             fi
           fi
           REMOTE
