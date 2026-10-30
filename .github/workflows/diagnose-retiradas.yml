@@ -43,7 +43,7 @@ jobs:
             "$VPS_USER@$VPS_HOST" \
             bash -s -- "$ROUTE_ID" <<'REMOTE'
           set -Eeuo pipefail
-          route_id="$1"
+          route_id="${1:-}"
           set -a
           . /etc/retiradas/api.env
           set +a
