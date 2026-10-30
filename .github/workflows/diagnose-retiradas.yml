@@ -47,6 +47,7 @@ jobs:
           set -a
           . /etc/retiradas/api.env
           set +a
+          database_target="${DATABASE_URL:-${PGDATABASE:-retiradas}}"
 
           echo "=== API ==="
           systemctl is-active retiradas-api.service
@@ -54,7 +55,7 @@ jobs:
           echo
 
           echo "=== Latest equipment recovery jobs ==="
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+          psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
             "select mode, status, started_at, finished_at,
                     coalesce(summary->>'total', summary->>'processed', '0') as total,
                     coalesce(summary->>'matched', '0') as matched,
@@ -64,7 +65,7 @@ jobs:
               order by started_at desc limit 5;"
 
           echo "=== Reconciliation coverage ==="
-          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+          psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
             "select count(*)::int as snapshots,
                     count(*) filter (where return_status = 'MATCHED')::int as matched,
                     (select count(*)::int from movimentacoes_estoque) as movements,
@@ -74,7 +75,7 @@ jobs:
 
           if [ -n "$route_id" ]; then
             echo "=== Route ==="
-            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -v route_id="$route_id" -c \
+            psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -v route_id="$route_id" -c \
               "select route.id, route.status, count(item.order_id)::int as items,
                       count(location.order_id)::int as located,
                       min(item.sequence_number) as first_sequence,
