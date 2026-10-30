@@ -1,0 +1,91 @@
+name: Diagnose Retiradas Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      route_id:
+        description: Route UUID to inspect (optional)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.VPS_USER || 'root' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure production SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/diagnostic_key
+          chmod 600 ~/.ssh/diagnostic_key
+          install -m 600 .github/known_hosts/retiradas ~/.ssh/known_hosts
+
+      - name: Read sanitized production diagnostics
+        env:
+          ROUTE_ID: ${{ inputs.route_id }}
+        run: |
+          ssh -i ~/.ssh/diagnostic_key -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes \
+            -o HostKeyAlias=retiradas-production \
+            "$VPS_USER@$VPS_HOST" \
+            bash -s -- "$ROUTE_ID" <<'REMOTE'
+          set -Eeuo pipefail
+          route_id="$1"
+          set -a
+          . /etc/retiradas/api.env
+          set +a
+
+          echo "=== API ==="
+          systemctl is-active retiradas-api.service
+          curl -fsS http://127.0.0.1:3001/api/health
+          echo
+
+          echo "=== Latest equipment recovery jobs ==="
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+            "select mode, status, started_at, finished_at,
+                    coalesce(summary->>'total', summary->>'processed', '0') as total,
+                    coalesce(summary->>'matched', '0') as matched,
+                    coalesce(summary->>'probable', '0') as probable,
+                    coalesce(summary->>'stage', '') as stage
+               from equipment_recovery_jobs
+              order by started_at desc limit 5;"
+
+          echo "=== Reconciliation coverage ==="
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+            "select count(*)::int as snapshots,
+                    count(*) filter (where return_status = 'MATCHED')::int as matched,
+                    (select count(*)::int from movimentacoes_estoque) as movements,
+                    (select count(*)::int from movimentacoes_estoque where coalesce(os_numero, '') <> '') as movements_with_os,
+                    (select count(*)::int from movimentacoes_estoque where coalesce(parceiro_nome, '') <> '') as movements_with_client
+               from equipment_recovery_snapshots;"
+
+          if [ -n "$route_id" ]; then
+            echo "=== Route ==="
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off -v route_id="$route_id" -c \
+              "select route.id, route.status, count(item.order_id)::int as items,
+                      count(location.order_id)::int as located,
+                      min(item.sequence_number) as first_sequence,
+                      max(item.sequence_number) as last_sequence
+                 from maps_routes route
+                 left join maps_route_items item on item.route_id = route.id
+                 left join maps_order_locations location on location.order_id = item.order_id
+                where route.id = :'route_id'::uuid
+                group by route.id;"
+            echo "=== Recent route errors ==="
+            journalctl -u retiradas-api.service --since '3 hours ago' --no-pager \
+              | grep -F -B 6 -A 14 "$route_id" | tail -100 || true
+          fi
+          REMOTE
