@@ -165,6 +165,17 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(rows).toEqual([{ order_id: "valid", latitude: -19.917, longitude: -43.935 }]);
 	});
 
+	it("calcula distancia e tempo do roteiro sem reutilizar tipos SQL ambiguos", () => {
+		expect(__testables.routeTravelMetrics(0)).toEqual({
+			distanceMeters: 0,
+			estimatedTravelMinutes: 1,
+		});
+		expect(__testables.routeTravelMetrics(1_001.4)).toEqual({
+			distanceMeters: 1001,
+			estimatedTravelMinutes: 3,
+		});
+	});
+
 	it("classifica a presenca do tecnico por recencia", () => {
 		const now = new Date("2026-10-29T12:00:00.000Z").getTime();
 		expect(__testables.technicianPresenceStatus("2026-10-29T11:59:00.000Z", now)).toBe("active");

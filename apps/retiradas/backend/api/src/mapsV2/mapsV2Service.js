@@ -1048,6 +1048,14 @@ function normalizeRouteRows(rows = []) {
 		}));
 }
 
+function routeTravelMetrics(distanceMeters) {
+	const distance = Math.max(0, Math.round(Number(distanceMeters) || 0));
+	return {
+		distanceMeters: distance,
+		estimatedTravelMinutes: Math.max(1, Math.round(distance / 400)),
+	};
+}
+
 async function optimizeRoute(routeId, payload = {}, user = {}) {
 	const route = await db.query("select id from maps_routes where id = $1 and user_id = $2", [text(routeId), userId(user)]);
 	if (!route.rows[0]) throw apiError("Roteiro nao encontrado.", 404);
@@ -1073,11 +1081,12 @@ async function optimizeRoute(routeId, payload = {}, user = {}) {
 		// restricao unica (route_id, sequence_number), inclusive em rotas grandes.
 		await client.query("delete from maps_route_items where route_id = $1", [text(routeId)]);
 		for (const [index, item] of optimized.entries()) {
+			const travel = routeTravelMetrics(item.distanceMeters);
 			await client.query(
 				`insert into maps_route_items
 				    (route_id, order_id, sequence_number, distance_from_previous_meters, estimated_travel_minutes)
-				 values ($1, $2, $3, $4, greatest(1, round($4::numeric / 400)::int))`,
-				[text(routeId), item.order_id, index + 1, item.distanceMeters],
+				 values ($1, $2, $3, $4, $5)`,
+				[text(routeId), item.order_id, index + 1, travel.distanceMeters, travel.estimatedTravelMinutes],
 			);
 		}
 		await client.query("update maps_routes set optimized_at = now(), updated_at = now() where id = $1", [text(routeId)]);
@@ -1614,6 +1623,7 @@ module.exports = {
 		optimizeNearestNeighbor,
 		parseCoordinates,
 		radarWithinSchedule,
+		routeTravelMetrics,
 		sourceFilters,
 		technicianPresenceStatus,
 		validateOrderRow,
