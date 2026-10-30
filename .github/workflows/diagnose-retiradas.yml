@@ -73,6 +73,16 @@ jobs:
                     (select count(*)::int from movimentacoes_estoque where coalesce(parceiro_nome, '') <> '') as movements_with_client
                from equipment_recovery_snapshots;"
 
+          echo "=== Monthly equipment recovery ==="
+          psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+            "select to_char(date_trunc('month', closed_at), 'YYYY-MM') as month,
+                    count(*)::int as snapshots,
+                    count(*) filter (where return_status = 'MATCHED')::int as matched,
+                    count(*) filter (where return_status <> 'MATCHED' and equipment_type <> 'UNKNOWN')::int as pending
+               from equipment_recovery_snapshots
+              group by date_trunc('month', closed_at)
+              order by date_trunc('month', closed_at) desc limit 12;"
+
           if [ -n "$route_id" ]; then
             if ! [[ "$route_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
               echo "Invalid route UUID" >&2
