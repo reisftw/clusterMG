@@ -918,11 +918,14 @@ async function listRoutes(query = {}, user = {}) {
 		          'distanceMeters', item.distance_from_previous_meters,
 		          'estimatedMinutes', item.estimated_travel_minutes,
 		          'orderNumber', order_row.num_os, 'city', order_row.cidade,
-		          'neighborhood', order_row.bairro
+		          'neighborhood', order_row.bairro, 'address', order_row.endereco_resumo,
+		          'clientName', order_row.nome_cliente,
+		          'latitude', location.latitude, 'longitude', location.longitude
 		        ) order by item.sequence_number) filter (where item.order_id is not null), '[]'::jsonb) as items
 		   from maps_routes route
 		   left join maps_route_items item on item.route_id = route.id
 		   left join ordens_servico order_row on order_row.id = item.order_id
+		   left join maps_order_locations location on location.order_id = item.order_id
 		  where route.user_id = $1 ${dateClause}
 		  group by route.id order by route.route_date desc, route.updated_at desc`,
 		params,
@@ -1034,6 +1037,16 @@ function optimizeNearestNeighbor(rows, origin) {
 	return optimized;
 }
 
+function normalizeRouteRows(rows = []) {
+	return rows
+		.filter((row) => usableOrderCoordinates(row?.latitude, row?.longitude))
+		.map((row) => ({
+			...row,
+			latitude: Number(row.latitude),
+			longitude: Number(row.longitude),
+		}));
+}
+
 async function optimizeRoute(routeId, payload = {}, user = {}) {
 	const route = await db.query("select id from maps_routes where id = $1 and user_id = $2", [text(routeId), userId(user)]);
 	if (!route.rows[0]) throw apiError("Roteiro nao encontrado.", 404);
@@ -1041,25 +1054,35 @@ async function optimizeRoute(routeId, payload = {}, user = {}) {
 		`select item.order_id, location.latitude, location.longitude
 		   from maps_route_items item
 		   join maps_order_locations location on location.order_id = item.order_id
-		  where item.route_id = $1`,
+		  where item.route_id = $1
+		  order by item.sequence_number`,
 		[text(routeId)],
 	);
 	if (!items.rows.length) throw apiError("O roteiro esta vazio.");
+	const routeRows = normalizeRouteRows(items.rows);
+	if (routeRows.length !== items.rows.length) {
+		throw apiError("Uma ou mais paradas estao sem localizacao valida. Atualize o mapa antes de otimizar.", 422);
+	}
 	const origin = payload.latitude !== undefined ? parseCoordinates(payload) : null;
-	const optimized = optimizeNearestNeighbor(items.rows, origin);
+	const optimized = optimizeNearestNeighbor(routeRows, origin);
 	const client = await db.connect();
 	try {
 		await client.query("begin");
+		// Move todas as sequencias para uma faixa temporaria negativa antes de
+		// gravar a nova ordem. Isso evita colisao em roteiros com mais de 1.000 paradas.
+		await client.query(
+			"update maps_route_items set sequence_number = -(abs(sequence_number) + 1000000) where route_id = $1",
+			[text(routeId)],
+		);
 		for (const [index, item] of optimized.entries()) {
 			await client.query(
 				`update maps_route_items
 				    set sequence_number = $3, distance_from_previous_meters = $4,
 				        estimated_travel_minutes = greatest(1, round($4::numeric / 400)::int)
 				  where route_id = $1 and order_id = $2`,
-				[text(routeId), item.order_id, index + 1001, item.distanceMeters],
+				[text(routeId), item.order_id, index + 1, item.distanceMeters],
 			);
 		}
-		await client.query("update maps_route_items set sequence_number = sequence_number - 1000 where route_id = $1", [text(routeId)]);
 		await client.query("update maps_routes set optimized_at = now(), updated_at = now() where id = $1", [text(routeId)]);
 		await client.query("commit");
 		broadcastMapsUpdate("ROUTE_OPTIMIZED", {
@@ -1590,6 +1613,7 @@ module.exports = {
 		isAvailableTechnician,
 		mapPoint,
 		normalize,
+		normalizeRouteRows,
 		optimizeNearestNeighbor,
 		parseCoordinates,
 		radarWithinSchedule,

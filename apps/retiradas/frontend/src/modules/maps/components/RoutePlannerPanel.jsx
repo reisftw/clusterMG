@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronUp, LoaderCircle, Navigation, Route, Sparkles, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, LoaderCircle, Navigation, Route, Sparkles, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatMapClientLabel } from "../utils/pointLabels";
+import { buildGoogleMapsRouteLinks } from "../utils/routeNavigation";
 
 function formatDistance(value) {
 	const meters = Number(value || 0);
@@ -76,12 +77,22 @@ export default function RoutePlannerPanel({
 			<button type="button" className="maps-v2-primary-button maps-v2-full-button" disabled={!selected.length || saving} onClick={createRoute}>
 				{saving ? <LoaderCircle className="maps-v2-spin" size={18} /> : <Navigation size={18} />} Salvar roteiro
 			</button>
-			{routes.length ? <div className="maps-v2-saved-routes"><h3>Roteiros salvos</h3>{routes.map((routeItem) => (
-				<article key={routeItem.id}>
-					<div><strong>{routeItem.name}</strong><span>{routeItem.items?.length || 0} paradas · {formatDistance(routeItem.items?.reduce((sum, item) => sum + Number(item.distanceMeters || 0), 0))}</span></div>
-					<button type="button" disabled={saving} onClick={() => optimize(routeItem.id)}><Sparkles size={16} /> Otimizar</button>
-				</article>
-			))}</div> : null}
+			{routes.length ? <div className="maps-v2-saved-routes"><h3>Roteiros salvos</h3>{routes.map((routeItem) => {
+				const googleLinks = buildGoogleMapsRouteLinks(routeItem, position);
+				return (
+					<article key={routeItem.id}>
+						<div className="maps-v2-route-summary"><strong>{routeItem.name}</strong><span>{routeItem.items?.length || 0} paradas · {formatDistance(routeItem.items?.reduce((sum, item) => sum + Number(item.distanceMeters || 0), 0))}</span></div>
+						<div className="maps-v2-saved-route-actions">
+							<button type="button" disabled={saving} onClick={() => optimize(routeItem.id)}><Sparkles size={16} /> Otimizar</button>
+							{googleLinks.map((link, index) => (
+								<a key={link.url} href={link.url} target="_blank" rel="noreferrer">
+									<ExternalLink size={15} /> {googleLinks.length === 1 ? "Google Maps" : `Trecho ${index + 1}`}
+								</a>
+							))}
+						</div>
+					</article>
+				);
+			})}</div> : null}
 			{message ? <p className="maps-v2-feedback">{message}</p> : null}
 		</aside>
 	);

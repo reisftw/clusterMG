@@ -156,6 +156,15 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(result.map((item) => item.order_id)).toEqual(["near", "far"]);
 	});
 
+	it("descarta coordenadas invalidas antes de otimizar o roteiro", () => {
+		const rows = __testables.normalizeRouteRows([
+			{ order_id: "valid", latitude: "-19.917", longitude: "-43.935" },
+			{ order_id: "missing", latitude: null, longitude: null },
+			{ order_id: "outside", latitude: 80, longitude: 120 },
+		]);
+		expect(rows).toEqual([{ order_id: "valid", latitude: -19.917, longitude: -43.935 }]);
+	});
+
 	it("classifica a presenca do tecnico por recencia", () => {
 		const now = new Date("2026-10-29T12:00:00.000Z").getTime();
 		expect(__testables.technicianPresenceStatus("2026-10-29T11:59:00.000Z", now)).toBe("active");
