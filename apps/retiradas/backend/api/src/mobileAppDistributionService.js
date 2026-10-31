@@ -237,13 +237,13 @@ async function getDashboard() {
 			...(devices.rows[0] || {}),
 		},
 		timeline: timeline.rows.map((item) => ({ day: item.day, downloads: Number(item.downloads || 0) })),
-		downloadUrl: "/api/maintenance/app/download",
+		downloadUrl: "/app/download",
 	};
 }
 
 async function getPublicVersion(currentCodeValue) {
 	const active = await getActiveReleaseRow();
-	if (!active) return { available: false, updateRequired: false, downloadUrl: "/api/maintenance/app/download" };
+	if (!active) return { available: false, updateRequired: false, downloadUrl: "/app/download" };
 	const currentCode = normalizeVersionCode(currentCodeValue) || 0;
 	const activeCode = Number(active.version_code || 0);
 	const minimumCode = Number(active.minimum_supported_code || activeCode || 0);
@@ -253,7 +253,7 @@ async function getPublicVersion(currentCodeValue) {
 		currentCode,
 		minimumSupportedCode: minimumCode,
 		release: publicRelease(active),
-		downloadUrl: "/api/maintenance/app/download",
+		downloadUrl: "/app/download",
 	};
 }
 

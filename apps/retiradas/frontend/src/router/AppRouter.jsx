@@ -19,6 +19,9 @@ const Dashboard = lazy(
 const MaintenancePortal = lazy(
 	() => import("../modules/maintenance/components/MaintenancePortal"),
 );
+const MobileAppDownloadPage = lazy(
+	() => import("../modules/maintenance/components/MobileAppDownloadPage"),
+);
 const Diario = lazy(() => import("../modules/diario/components/DiarioPage"));
 const AcertoEstoque = lazy(
 	() => import("../modules/acertoEstoque/components/AcertoEstoquePage"),
@@ -427,6 +430,7 @@ const AppRouter = () => (
 		<MaintenanceBoundary>
 			<Suspense fallback={<Spinner fullScreen />}>
 			<Routes>
+				<Route path={ROUTES.APP_DOWNLOAD} element={<MobileAppDownloadPage />} />
 				<Route path={ROUTES.PAINEL_PUBLICO} element={<PainelPublico />} />
 				<Route
 					path={ROUTES.PAINEL_AGENTES}

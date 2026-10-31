@@ -4,6 +4,7 @@ export const ROUTES = {
 	RESET_PASSWORD: "/redefinir-senha",
 	ACCESS_DENIED: "/acesso-negado",
 	MAINTENANCE: "/maintenance",
+	APP_DOWNLOAD: "/app/download",
 
 	APP: "/app",
 	DASHBOARD: "/",

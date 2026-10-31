@@ -59,4 +59,15 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(androidManifest).toContain(".LocationTrackingService");
 		expect(androidManifest).toContain("android:scheme=\"retiradas\"");
 	});
+
+	it("exibe somente o endereco publico limpo para baixar o aplicativo", () => {
+		const distributionService = fs.readFileSync(
+			"apps/retiradas/backend/api/src/mobileAppDistributionService.js",
+			"utf8",
+		);
+		expect(distributionService).toContain('downloadUrl: "/app/download"');
+		expect(distributionService).not.toContain(
+			'downloadUrl: "/api/maintenance/app/download"',
+		);
+	});
 });
