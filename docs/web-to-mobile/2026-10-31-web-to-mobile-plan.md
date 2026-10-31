@@ -82,10 +82,10 @@ None for the first TWA release. A future Expo app would rewrite DOM components, 
 
 - [x] Harden manifest identity/icons for TWA - `apps/retiradas/frontend/public/manifest.webmanifest` - install metadata validates - manifest fetch and JSON checks - [from-code]
 - [x] Create permanent Android signing identity outside Git - local secure storage - SHA-256 fingerprint available without exposing private data - `keytool -list` - [inferred]
-- [ ] Publish Digital Asset Links - certificate fingerprint -> `apps/retiradas/frontend/public/.well-known/assetlinks.json` - HTTPS returns JSON 200 - curl validation - [from-code]
+- [x] Publish Digital Asset Links - certificate fingerprint -> `apps/retiradas/frontend/public/.well-known/assetlinks.json` - HTTPS returns JSON 200 - curl validation - [from-code]
 - [x] Generate Bubblewrap Android project - manifest -> `apps/retiradas/android-twa` - Gradle project uses fixed package ID - Bubblewrap validation - [inferred]
 - [x] Build signed APK and AAB - Android project -> release artifacts - signatures verify - `apksigner verify` and bundle build - [inferred]
-- [ ] Run Retiradas verification and CI/CD deployment - source -> production - tests/build green and asset links live - `npm run verify:retiradas` plus GitHub Actions - [from-code]
+- [x] Run Retiradas verification and CI/CD deployment - source -> production - tests/build green and asset links live - `npm run verify:retiradas` plus GitHub Actions - [from-code]
 - [ ] Validate production package on device - APK -> Android phone - login, session, push, location, camera, Maps, downloads and external links work - Test Plan T1-T8 - [assumption]
 
 ## Test Plan

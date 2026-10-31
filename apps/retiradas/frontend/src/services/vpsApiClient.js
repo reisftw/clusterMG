@@ -24,13 +24,13 @@ function getAppClientContext() {
 	if (typeof window === "undefined") return { mode: "web", version: "" };
 	const params = new URLSearchParams(window.location.search);
 	if (params.get("source") === "android") {
-		window.localStorage.setItem(CLIENT_MODE_KEY, "android");
+		window.sessionStorage.setItem(CLIENT_MODE_KEY, "android");
 		const incomingVersion = String(params.get("appVersion") || "").slice(0, 80);
-		if (incomingVersion) window.localStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
+		if (incomingVersion) window.sessionStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
 	}
 	return {
-		mode: window.localStorage.getItem(CLIENT_MODE_KEY) === "android" ? "android" : "web",
-		version: String(window.localStorage.getItem(CLIENT_VERSION_KEY) || "").slice(0, 80),
+		mode: window.sessionStorage.getItem(CLIENT_MODE_KEY) === "android" ? "android" : "web",
+		version: String(window.sessionStorage.getItem(CLIENT_VERSION_KEY) || "").slice(0, 80),
 	};
 }
 
