@@ -23,7 +23,7 @@ plugins {
 def twaManifest = [
     applicationId: 'br.com.brasiltecpar.retiradas',
     hostName: 'retiradas.tech', // The domain being opened in the TWA.
-    launchUrl: '/app?source=android&appVersion=3', // The start path for the TWA. Must be relative to the domain.
+    launchUrl: '/app?source=android&appVersion=1.0.2&appCode=102', // The start path for the TWA. Must be relative to the domain.
     name: 'Retiradas', // The application name.
     launcherName: 'Retiradas', // The name shown on the Android Launcher.
     themeColor: '#F97316', // The color used for the status bar.
@@ -53,12 +53,15 @@ def twaManifest = [
 android {
     compileSdkVersion 36
     namespace "br.com.brasiltecpar.retiradas"
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "br.com.brasiltecpar.retiradas"
         minSdkVersion 24
         targetSdkVersion 36
-        versionCode 3
-        versionName "3"
+        versionCode 102
+        versionName "1.0.2"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name

@@ -2,6 +2,7 @@
 import ReactDOM from "react-dom/client";
 import "./index.css";
 import AppErrorBoundary from "./components/ui/AppErrorBoundary";
+import MobileAppUpdateGate from "./components/layout/MobileAppUpdateGate";
 import { LayoutModeProvider } from "./context/LayoutModeContext";
 import { SystemProvider } from "./context/SystemContext";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -80,6 +81,7 @@ root.render(
 			<LayoutModeProvider>
 				<SystemProvider>
 					<AppErrorBoundary>
+						<MobileAppUpdateGate />
 						<AppRouter />
 					</AppErrorBoundary>
 				</SystemProvider>

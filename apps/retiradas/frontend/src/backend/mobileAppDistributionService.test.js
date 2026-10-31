@@ -40,5 +40,23 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(assetLinks[0].target.sha256_cert_fingerprints).toContain(
 			manifest.fingerprints[0].value,
 		);
+		expect(manifest.appVersionName).toBe("1.0.2");
+		expect(manifest.appVersionCode).toBe(102);
+	});
+
+	it("inclui rastreamento nativo seguro e atualizacao obrigatoria", () => {
+		const migration = fs.readFileSync(
+			"apps/retiradas/backend/sql/108_mobile_app_native_tracking.sql",
+			"utf8",
+		);
+		const androidManifest = fs.readFileSync(
+			"apps/retiradas/android-twa/app/src/main/AndroidManifest.xml",
+			"utf8",
+		);
+		expect(migration).toContain("mobile_app_devices");
+		expect(migration).toContain("minimum_supported_code");
+		expect(androidManifest).toContain("android.permission.FOREGROUND_SERVICE_LOCATION");
+		expect(androidManifest).toContain(".LocationTrackingService");
+		expect(androidManifest).toContain("android:scheme=\"retiradas\"");
 	});
 });

@@ -5,6 +5,7 @@ import {
 	BarChart3,
 	CheckCircle2,
 	Clock3,
+	Copy,
 	Database,
 	Download,
 	ExternalLink,
@@ -217,6 +218,7 @@ function AppTab() {
 	const [loadingApp, setLoadingApp] = useState(true);
 	const [uploading, setUploading] = useState(false);
 	const [message, setMessage] = useState("");
+	const [copied, setCopied] = useState(false);
 	const [form, setForm] = useState({ apk: null, versionName: "", versionCode: "", notes: "" });
 
 	const loadApp = useCallback(async () => {
@@ -245,12 +247,16 @@ function AppTab() {
 	if (loadingApp && !data) return <Spinner fullScreen={false} />;
 	const metrics = data?.metrics || {};
 	const active = data?.active;
+	const officialDownloadUrl = data?.downloadUrl
+		? new URL(data.downloadUrl, window.location.origin).href
+		: "";
 	const maxDownloads = Math.max(1, ...(data?.timeline || []).map((item) => Number(item.downloads || 0)));
 	return (
 		<div className="maintenance-tab-content maintenance-app-tab">
 			<section className="maintenance-metrics-grid">
 				<MetricCard icon={Download} label="Downloads" value={number(metrics.totalDownloads)} note={`${number(metrics.todayDownloads)} hoje`} tone="blue" />
 				<MetricCard icon={Smartphone} label="Online pelo app" value={number(metrics.online_android_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
+				<MetricCard icon={Activity} label="GPS em tempo real" value={number(metrics.live_tracking_users)} note={`${number(metrics.enrolled_devices)} aparelho(s) ativado(s)`} tone="green" />
 				<MetricCard icon={Users} label="Usuarios no app hoje" value={number(metrics.android_users_today)} note={`${number(metrics.android_sessions_today)} sessao(oes)`} tone="blue" />
 				<MetricCard icon={PackageCheck} label="Versao publicada" value={active?.versionName || "Nenhuma"} note={active ? `${fileSize(active.fileSize)} · ${dateTime(active.uploadedAt)}` : "Envie o primeiro APK"} tone={active ? "green" : "orange"} />
 			</section>
@@ -261,14 +267,15 @@ function AppTab() {
 					{active ? <>
 						<div className="maintenance-app-version"><span><PackageCheck size={30} /></span><div><small>VERSAO ATUAL</small><h2>{active.versionName}</h2><p>Codigo {active.versionCode || "-"} · {fileSize(active.fileSize)}</p></div></div>
 						<dl className="maintenance-app-details"><div><dt>SHA-256</dt><dd><code>{active.sha256}</code></dd></div><div><dt>Publicado por</dt><dd>{active.uploadedByName}</dd></div><div><dt>Ultimo download</dt><dd>{dateTime(active.lastDownloadAt)}</dd></div></dl>
-						<a className="maintenance-app-download" href={data.downloadUrl}><Download size={19} />Baixar APK atual</a>
+						<div className="maintenance-app-share"><label htmlFor="maintenance-app-link">Link oficial para compartilhar</label><div><input id="maintenance-app-link" value={officialDownloadUrl} readOnly /><button type="button" onClick={async () => { await navigator.clipboard.writeText(officialDownloadUrl); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }} title="Copiar link"><Copy size={17} />{copied ? "Copiado" : "Copiar"}</button></div></div>
+						<a className="maintenance-app-download" href={officialDownloadUrl}><Download size={19} />Baixar APK atual</a>
 					</> : <p className="maintenance-empty">Nenhum APK publicado. Use o formulario ao lado para liberar a primeira versao.</p>}
 				</section>
 
 				<form className="maintenance-panel maintenance-app-upload" onSubmit={submit}>
 					<div className="maintenance-panel-heading"><div><UploadCloud size={21} /><span><strong>Publicar nova versao</strong><small>O link muda de forma atomica e a versao anterior permanece no historico.</small></span></div></div>
 					<label className="maintenance-app-file"><UploadCloud size={25} /><span><b>{form.apk?.name || "Selecionar APK assinado"}</b><small>Arquivo .apk de ate 120 MB</small></span><input type="file" accept=".apk,application/vnd.android.package-archive" onChange={(event) => setForm({ ...form, apk: event.target.files?.[0] || null })} required /></label>
-					<div className="maintenance-duration-row"><label><span>Versao</span><input value={form.versionName} onChange={(event) => setForm({ ...form, versionName: event.target.value })} placeholder="Ex.: 1.0.0" required /></label><label><span>Codigo</span><input type="number" min="1" value={form.versionCode} onChange={(event) => setForm({ ...form, versionCode: event.target.value })} placeholder="Ex.: 2" /></label></div>
+					<div className="maintenance-duration-row"><label><span>Versao</span><input value={form.versionName} onChange={(event) => setForm({ ...form, versionName: event.target.value })} placeholder="Ex.: 1.0.2" required /></label><label><span>Codigo</span><input type="number" min="1" value={form.versionCode} onChange={(event) => setForm({ ...form, versionCode: event.target.value })} placeholder="Ex.: 102" required /></label></div>
 					<label><span>Notas da versao</span><textarea rows={3} maxLength={1000} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Principais alteracoes desta versao" /></label>
 					<button className="maintenance-app-publish" type="submit" disabled={uploading}><UploadCloud size={19} />{uploading ? "Publicando..." : "Publicar e atualizar link"}</button>
 				</form>

@@ -11,6 +11,7 @@ const DEFAULT_API_BASE_URL = "https://retiradas.tech/api";
 const FINAN_TOKEN_KEY = "finan-auth-token";
 const CLIENT_MODE_KEY = "retiradas-client-mode";
 const CLIENT_VERSION_KEY = "retiradas-app-version";
+const CLIENT_CODE_KEY = "retiradas-app-code";
 let csrfRefreshPromise = null;
 let authRefreshPromise = null;
 const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -20,17 +21,26 @@ function isFinanHost() {
 	return /^finan\./i.test(window.location.hostname);
 }
 
-function getAppClientContext() {
-	if (typeof window === "undefined") return { mode: "web", version: "" };
+export function getAppClientContext() {
+	if (typeof window === "undefined") return { mode: "web", version: "", code: 0 };
 	const params = new URLSearchParams(window.location.search);
 	if (params.get("source") === "android") {
 		window.sessionStorage.setItem(CLIENT_MODE_KEY, "android");
 		const incomingVersion = String(params.get("appVersion") || "").slice(0, 80);
 		if (incomingVersion) window.sessionStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
+		const incomingCode = Number(params.get("appCode") || 0);
+		if (Number.isSafeInteger(incomingCode) && incomingCode > 0) {
+			window.sessionStorage.setItem(CLIENT_CODE_KEY, String(incomingCode));
+		}
 	}
+	const version = String(window.sessionStorage.getItem(CLIENT_VERSION_KEY) || "").slice(0, 80);
+	const storedCode = Number(window.sessionStorage.getItem(CLIENT_CODE_KEY) || 0);
 	return {
 		mode: window.sessionStorage.getItem(CLIENT_MODE_KEY) === "android" ? "android" : "web",
-		version: String(window.sessionStorage.getItem(CLIENT_VERSION_KEY) || "").slice(0, 80),
+		version,
+		code: Number.isSafeInteger(storedCode) && storedCode > 0
+			? storedCode
+			: (/^\d+$/.test(version) ? Number(version) : 0),
 	};
 }
 

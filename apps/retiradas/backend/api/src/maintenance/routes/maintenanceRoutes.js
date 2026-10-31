@@ -78,6 +78,41 @@ function createMaintenanceRouter({
 		}
 	});
 
+	router.get("/app/version", async (req, res, next) => {
+		try {
+			res.set("Cache-Control", "no-store");
+			res.json(await mobileAppDistributionService.getPublicVersion(req.query?.currentCode));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post("/app/enrollment", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
+		try {
+			res.status(201).json(await mobileAppDistributionService.createEnrollment(req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post("/app/enrollment/exchange", async (req, res, next) => {
+		try {
+			res.json(await mobileAppDistributionService.exchangeEnrollment(req.body || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post("/app/location", async (req, res, next) => {
+		try {
+			const authorization = String(req.get("authorization") || "");
+			const deviceToken = authorization.replace(/^Device\s+/i, "").trim();
+			res.json(await mobileAppDistributionService.saveNativeLocation(deviceToken, req.body || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/app/download", async (req, res, next) => {
 		try {
 			const release = await mobileAppDistributionService.getActiveReleaseRow();

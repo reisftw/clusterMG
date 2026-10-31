@@ -19,6 +19,8 @@ import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.Manifest;
+import android.content.pm.PackageManager;
 
 
 
@@ -39,6 +41,10 @@ public class LauncherActivity
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         } else {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        }
+        if (SecureTokenStore.hasToken(this)
+                && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            LocationTrackingService.start(this);
         }
     }
 

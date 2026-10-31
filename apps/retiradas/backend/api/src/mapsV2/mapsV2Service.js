@@ -1394,7 +1394,7 @@ async function processNextGeocode() {
 	}
 }
 
-async function saveTechnicianPresence(payload = {}, user = {}) {
+async function saveTechnicianPresence(payload = {}, user = {}, options = {}) {
 	if (!isTechnicianUser(user)) {
 		throw apiError("A localizacao operacional e exclusiva para tecnicos.", 403, "TECHNICIAN_REQUIRED");
 	}
@@ -1403,11 +1403,12 @@ async function saveTechnicianPresence(payload = {}, user = {}) {
 	const heading = optionalNumberInRange(payload.heading, 0, 360);
 	const speed = optionalNumberInRange(payload.speed, 0, 150);
 	const technicianName = userTechnicianName(user) || userName(user);
+	const consentSource = text(options.consentSource || "BROWSER_GEOLOCATION", 80);
 	const result = await db.query(
 		`insert into maps_technician_presence
 		 (user_id, latitude, longitude, accuracy_meters, heading_degrees, speed_mps,
 		  technician_name, display_name, consent_source, last_seen_at)
-		 values ($1, $2, $3, $4, $5, $6, $7, $8, 'BROWSER_GEOLOCATION', now())
+		 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 		 on conflict (user_id) do update set
 		   latitude = excluded.latitude,
 		   longitude = excluded.longitude,
@@ -1429,6 +1430,7 @@ async function saveTechnicianPresence(payload = {}, user = {}) {
 			speed,
 			technicianName,
 			userName(user),
+			consentSource,
 		],
 	);
 	broadcastMapsAdminUpdate("TECHNICIAN_PRESENCE_UPDATED", {

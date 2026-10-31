@@ -23,7 +23,12 @@
     package="br.com.brasiltecpar.retiradas">
 
 
+        <uses-permission android:name="android.permission.INTERNET"/>
         <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+        <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+        <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
 
 
 
@@ -34,14 +39,15 @@
 
     <application
         android:name="Application"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/appName"
 
         android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
 
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        android:theme="@android:style/Theme.Translucent.NoTitleBar"
+        android:usesCleartextTraffic="false">
 
         <meta-data
             android:name="asset_statements"
@@ -190,6 +196,25 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </service>
+
+        <service
+            android:name=".LocationTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <activity
+            android:name=".EnrollmentActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="retiradas" android:host="enroll" />
+            </intent-filter>
+        </activity>
 
 
             <activity android:name="com.google.androidbrowserhelper.trusted.NotificationPermissionRequestActivity" />

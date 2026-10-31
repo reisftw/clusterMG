@@ -18,6 +18,7 @@ import MelzFooter from "./MelzFooter";
 import Sidebar from "./Sidebar";
 import TechnicianPushPermissionPrompt from "./TechnicianPushPermissionPrompt";
 import TechnicianLocationPresence from "./TechnicianLocationPresence";
+import NativeLocationEnrollment from "./NativeLocationEnrollment";
 import Topbar from "./Topbar";
 import ViewportDiagnostics from "./ViewportDiagnostics";
 
@@ -238,7 +239,10 @@ const PageWrapper = ({ children }) => {
 				}}
 			/>
 			{isTechnician && !trocarSenhaObrigatorio && !showWelcomeModal ? (
-				<TechnicianPushPermissionPrompt />
+				<>
+					<TechnicianPushPermissionPrompt />
+					<NativeLocationEnrollment />
+				</>
 			) : null}
 			<TechnicianLocationPresence />
 			<RetorninhoAssistant />
