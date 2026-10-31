@@ -9,6 +9,8 @@ import {
 
 const DEFAULT_API_BASE_URL = "https://retiradas.tech/api";
 const FINAN_TOKEN_KEY = "finan-auth-token";
+const CLIENT_MODE_KEY = "retiradas-client-mode";
+const CLIENT_VERSION_KEY = "retiradas-app-version";
 let csrfRefreshPromise = null;
 let authRefreshPromise = null;
 const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -16,6 +18,20 @@ const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 function isFinanHost() {
 	if (typeof window === "undefined") return false;
 	return /^finan\./i.test(window.location.hostname);
+}
+
+function getAppClientContext() {
+	if (typeof window === "undefined") return { mode: "web", version: "" };
+	const params = new URLSearchParams(window.location.search);
+	if (params.get("source") === "android") {
+		window.localStorage.setItem(CLIENT_MODE_KEY, "android");
+		const incomingVersion = String(params.get("appVersion") || "").slice(0, 80);
+		if (incomingVersion) window.localStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
+	}
+	return {
+		mode: window.localStorage.getItem(CLIENT_MODE_KEY) === "android" ? "android" : "web",
+		version: String(window.localStorage.getItem(CLIENT_VERSION_KEY) || "").slice(0, 80),
+	};
 }
 
 export function usesSameOriginApi(hostname = "") {
@@ -156,6 +172,11 @@ async function buildRequestHeaders(options = {}) {
 	const headers = {
 		...(options.headers || {}),
 	};
+	const appClient = getAppClientContext();
+	if (appClient.mode === "android") {
+		headers["X-Retiradas-Client"] = "android";
+		if (appClient.version) headers["X-Retiradas-App-Version"] = appClient.version;
+	}
 	if (!isFormData && !headers["Content-Type"])
 		headers["Content-Type"] = "application/json";
 	if (token) headers.Authorization = `Bearer ${token}`;

@@ -30,6 +30,7 @@ output
 outputs
 uploads
 reports
+artifacts/android/
 deploy-*/
 package-*/
 jdk*_temp/

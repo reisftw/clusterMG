@@ -58,6 +58,7 @@ const createMercadoProviderRouter = require("./mercado/providerRoutes");
 const createMercadoOnboardingRouter = require("./mercado/onboardingRoutes");
 const metrics = require("./metrics");
 const maintenanceService = require("./maintenanceService");
+const mobileAppDistributionService = require("./mobileAppDistributionService");
 const createMaintenanceRouter = require("./maintenance/routes/maintenanceRoutes");
 const createMapsV2Router = require("./mapsV2/routes/mapsV2Routes");
 const vpnAccess = require("./vpnAccess");
@@ -2508,6 +2509,7 @@ function createApp() {
 		"/api/maintenance",
 		createMaintenanceRouter({
 			maintenanceService,
+			mobileAppDistributionService,
 			requireAuthenticated,
 			requireCsrfToken,
 			requireRoles,

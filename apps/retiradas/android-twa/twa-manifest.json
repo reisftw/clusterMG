@@ -1,0 +1,56 @@
+{
+  "packageId": "br.com.brasiltecpar.retiradas",
+  "host": "retiradas.tech",
+  "name": "Retiradas",
+  "launcherName": "Retiradas",
+  "display": "standalone",
+  "themeColor": "#F97316",
+  "themeColorDark": "#F97316",
+  "navigationColor": "#F8FAFC",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#E2E8F0",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F8FAFC",
+  "enableNotifications": true,
+  "startUrl": "/app?source=android&appVersion=3",
+  "iconUrl": "https://retiradas.tech/pwa-512.png",
+  "maskableIconUrl": "https://retiradas.tech/pwa-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": ".signing/retiradas-release.jks",
+    "alias": "retiradas-release"
+  },
+  "appVersionName": "3",
+  "appVersionCode": 3,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://retiradas.tech/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://retiradas.tech/",
+  "minSdkVersion": 24,
+  "orientation": "portrait-primary",
+  "fingerprints": [
+    {
+      "name": "production",
+      "value": "D6:AA:94:49:78:01:5C:F5:7A:E9:FD:06:C6:49:2E:3E:61:4D:31:C6:B9:1B:38:DB:67:B7:65:03:0E:33:F4:EB"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "3"
+}

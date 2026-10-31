@@ -6,15 +6,18 @@ import {
 	CheckCircle2,
 	Clock3,
 	Database,
+	Download,
 	ExternalLink,
 	Gauge,
 	History,
 	LogOut,
+	PackageCheck,
 	Power,
 	RefreshCw,
 	Server,
 	ShieldCheck,
 	Smartphone,
+	UploadCloud,
 	Users,
 	Eye,
 	Wrench,
@@ -30,6 +33,8 @@ import {
 	deactivateMaintenance,
 	getMaintenanceDashboard,
 	getMaintenanceHistory,
+	getMobileAppDashboard,
+	uploadMobileApp,
 } from "../services/maintenanceService";
 import "./maintenance.css";
 
@@ -50,6 +55,14 @@ function duration(seconds) {
 
 function number(value) {
 	return Number(value || 0).toLocaleString("pt-BR");
+}
+
+function fileSize(value) {
+	const bytes = Number(value || 0);
+	if (!bytes) return "0 B";
+	const units = ["B", "KB", "MB", "GB"];
+	const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+	return `${(bytes / 1024 ** index).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ${units[index]}`;
 }
 
 function latencyRange(totals = {}) {
@@ -199,6 +212,83 @@ function HistoryTab({ history, page, onPage }) {
 	);
 }
 
+function AppTab() {
+	const [data, setData] = useState(null);
+	const [loadingApp, setLoadingApp] = useState(true);
+	const [uploading, setUploading] = useState(false);
+	const [message, setMessage] = useState("");
+	const [form, setForm] = useState({ apk: null, versionName: "", versionCode: "", notes: "" });
+
+	const loadApp = useCallback(async () => {
+		setLoadingApp(true); setMessage("");
+		try { setData(await getMobileAppDashboard()); }
+		catch (caught) { setMessage(caught.message || "Falha ao carregar os dados do aplicativo."); }
+		finally { setLoadingApp(false); }
+	}, []);
+
+	useEffect(() => { loadApp(); }, [loadApp]);
+
+	const submit = async (event) => {
+		event.preventDefault();
+		if (!form.apk) { setMessage("Selecione o arquivo APK assinado."); return; }
+		setUploading(true); setMessage("");
+		try {
+			await uploadMobileApp(form);
+			setForm({ apk: null, versionName: "", versionCode: "", notes: "" });
+			event.currentTarget.reset();
+			setMessage("Nova versao publicada. O link de download ja foi atualizado.");
+			await loadApp();
+		} catch (caught) { setMessage(caught.message || "Nao foi possivel publicar o APK."); }
+		finally { setUploading(false); }
+	};
+
+	if (loadingApp && !data) return <Spinner fullScreen={false} />;
+	const metrics = data?.metrics || {};
+	const active = data?.active;
+	const maxDownloads = Math.max(1, ...(data?.timeline || []).map((item) => Number(item.downloads || 0)));
+	return (
+		<div className="maintenance-tab-content maintenance-app-tab">
+			<section className="maintenance-metrics-grid">
+				<MetricCard icon={Download} label="Downloads" value={number(metrics.totalDownloads)} note={`${number(metrics.todayDownloads)} hoje`} tone="blue" />
+				<MetricCard icon={Smartphone} label="Online pelo app" value={number(metrics.online_android_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
+				<MetricCard icon={Users} label="Usuarios no app hoje" value={number(metrics.android_users_today)} note={`${number(metrics.android_sessions_today)} sessao(oes)`} tone="blue" />
+				<MetricCard icon={PackageCheck} label="Versao publicada" value={active?.versionName || "Nenhuma"} note={active ? `${fileSize(active.fileSize)} · ${dateTime(active.uploadedAt)}` : "Envie o primeiro APK"} tone={active ? "green" : "orange"} />
+			</section>
+
+			<div className="maintenance-app-columns">
+				<section className="maintenance-panel maintenance-app-current">
+					<div className="maintenance-panel-heading"><div><Smartphone size={21} /><span><strong>Aplicativo publicado</strong><small>Este e o arquivo entregue pelo link oficial.</small></span></div></div>
+					{active ? <>
+						<div className="maintenance-app-version"><span><PackageCheck size={30} /></span><div><small>VERSAO ATUAL</small><h2>{active.versionName}</h2><p>Codigo {active.versionCode || "-"} · {fileSize(active.fileSize)}</p></div></div>
+						<dl className="maintenance-app-details"><div><dt>SHA-256</dt><dd><code>{active.sha256}</code></dd></div><div><dt>Publicado por</dt><dd>{active.uploadedByName}</dd></div><div><dt>Ultimo download</dt><dd>{dateTime(active.lastDownloadAt)}</dd></div></dl>
+						<a className="maintenance-app-download" href={data.downloadUrl}><Download size={19} />Baixar APK atual</a>
+					</> : <p className="maintenance-empty">Nenhum APK publicado. Use o formulario ao lado para liberar a primeira versao.</p>}
+				</section>
+
+				<form className="maintenance-panel maintenance-app-upload" onSubmit={submit}>
+					<div className="maintenance-panel-heading"><div><UploadCloud size={21} /><span><strong>Publicar nova versao</strong><small>O link muda de forma atomica e a versao anterior permanece no historico.</small></span></div></div>
+					<label className="maintenance-app-file"><UploadCloud size={25} /><span><b>{form.apk?.name || "Selecionar APK assinado"}</b><small>Arquivo .apk de ate 120 MB</small></span><input type="file" accept=".apk,application/vnd.android.package-archive" onChange={(event) => setForm({ ...form, apk: event.target.files?.[0] || null })} required /></label>
+					<div className="maintenance-duration-row"><label><span>Versao</span><input value={form.versionName} onChange={(event) => setForm({ ...form, versionName: event.target.value })} placeholder="Ex.: 1.0.0" required /></label><label><span>Codigo</span><input type="number" min="1" value={form.versionCode} onChange={(event) => setForm({ ...form, versionCode: event.target.value })} placeholder="Ex.: 2" /></label></div>
+					<label><span>Notas da versao</span><textarea rows={3} maxLength={1000} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Principais alteracoes desta versao" /></label>
+					<button className="maintenance-app-publish" type="submit" disabled={uploading}><UploadCloud size={19} />{uploading ? "Publicando..." : "Publicar e atualizar link"}</button>
+				</form>
+			</div>
+
+			{message ? <div className="maintenance-app-message">{message}</div> : null}
+
+			<section className="maintenance-panel">
+				<div className="maintenance-panel-heading"><div><BarChart3 size={21} /><span><strong>Downloads nos ultimos 14 dias</strong><small>Contagem agregada, sem armazenar IP ou historico individual.</small></span></div></div>
+				<div className="maintenance-app-chart">{(data?.timeline || []).map((item) => <div key={item.day} title={`${number(item.downloads)} download(s)`}><span style={{ height: `${Math.max(4, Number(item.downloads || 0) / maxDownloads * 100)}%` }} /><small>{new Date(`${item.day}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</small></div>)}</div>
+			</section>
+
+			<section className="maintenance-panel">
+				<div className="maintenance-panel-heading"><div><History size={21} /><span><strong>Historico de versoes</strong><small>Auditoria das publicacoes e respectivos downloads.</small></span></div></div>
+				<div className="maintenance-table-wrap"><table><thead><tr><th>Versao</th><th>Publicada em</th><th>Tamanho</th><th>Downloads</th><th>Responsavel</th><th>Estado</th></tr></thead><tbody>{(data?.releases || []).map((item) => <tr key={item.id}><td><b>{item.versionName}</b><small className="maintenance-table-note">Codigo {item.versionCode || "-"}</small></td><td>{dateTime(item.uploadedAt)}</td><td>{fileSize(item.fileSize)}</td><td>{number(item.downloadCount)}</td><td>{item.uploadedByName}</td><td><span className={item.active ? "maintenance-release-active" : "maintenance-release-old"}>{item.active ? "Atual" : "Anterior"}</span></td></tr>)}</tbody></table>{!(data?.releases || []).length ? <p className="maintenance-empty">Nenhuma versao publicada.</p> : null}</div>
+			</section>
+		</div>
+	);
+}
+
 export default function MaintenancePortal() {
 	const { currentUser, realUser, loading, signOut } = useAuthContext();
 	const [dashboard, setDashboard] = useState(null);
@@ -232,6 +322,7 @@ export default function MaintenancePortal() {
 
 	const tabItems = useMemo(() => [
 		{ id: "overview", label: "Visao geral", icon: Activity },
+		{ id: "app", label: "Aplicativo", icon: Smartphone },
 		{ id: "control", label: "Controle", icon: Power },
 		{ id: "history", label: "Historico", icon: History },
 	], []);
@@ -250,6 +341,7 @@ export default function MaintenancePortal() {
 				{!dashboard && refreshing ? <Spinner fullScreen={false} /> : null}
 				{dashboard && activeTab === "overview" ? <OverviewTab dashboard={dashboard} /> : null}
 				{dashboard && activeTab === "control" ? <ControlTab state={dashboard.state} onChanged={load} /> : null}
+				{activeTab === "app" ? <AppTab /> : null}
 				{activeTab === "history" ? <HistoryTab history={historyData || dashboard?.history} page={historyPage} onPage={setHistoryPage} /> : null}
 			</div>
 	</main>

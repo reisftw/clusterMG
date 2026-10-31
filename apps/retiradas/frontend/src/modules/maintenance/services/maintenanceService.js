@@ -38,3 +38,19 @@ export function deactivateMaintenance() {
 		body: "{}",
 	});
 }
+
+export function getMobileAppDashboard() {
+	return requestVpsApi("/maintenance/app");
+}
+
+export function uploadMobileApp({ apk, versionName, versionCode, notes }) {
+	const body = new FormData();
+	body.append("apk", apk);
+	body.append("versionName", versionName);
+	if (versionCode) body.append("versionCode", versionCode);
+	if (notes) body.append("notes", notes);
+	return requestVpsApi("/maintenance/app/upload", {
+		method: "POST",
+		body,
+	});
+}

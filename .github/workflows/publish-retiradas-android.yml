@@ -1,0 +1,134 @@
+name: Publish Retiradas Android
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release-retiradas-android
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    name: Build, sign and publish Android app
+    runs-on: ubuntu-latest
+    environment: production-retiradas
+
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST || '145.223.27.204' }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      VPS_USER: ${{ secrets.VPS_USER || 'root' }}
+      RETIRADAS_ANDROID_KEY_ALIAS: ${{ secrets.RETIRADAS_ANDROID_KEY_ALIAS }}
+      RETIRADAS_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.RETIRADAS_ANDROID_KEYSTORE_PASSWORD }}
+      RETIRADAS_ANDROID_KEY_PASSWORD: ${{ secrets.RETIRADAS_ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Setup Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Restore protected signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RETIRADAS_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || (echo "Missing Android signing key" && exit 1)
+          test -n "$RETIRADAS_ANDROID_KEYSTORE_PASSWORD" || (echo "Missing keystore password" && exit 1)
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/retiradas-release.jks"
+          chmod 600 "$RUNNER_TEMP/retiradas-release.jks"
+          echo "RETIRADAS_ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/retiradas-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build signed APK and bundle
+        working-directory: apps/retiradas/android-twa
+        run: |
+          chmod +x gradlew
+          ./gradlew clean assembleRelease bundleRelease --no-daemon
+
+      - name: Read and verify release metadata
+        id: app
+        run: |
+          version_name="$(node -p "require('./apps/retiradas/android-twa/twa-manifest.json').appVersionName")"
+          version_code="$(node -p "require('./apps/retiradas/android-twa/twa-manifest.json').appVersionCode")"
+          apk="apps/retiradas/android-twa/app/build/outputs/apk/release/app-release.apk"
+          aab="apps/retiradas/android-twa/app/build/outputs/bundle/release/app-release.aab"
+          test -s "$apk"
+          test -s "$aab"
+          apksigner_path="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          test -x "$apksigner_path"
+          "$apksigner_path" verify --verbose --print-certs "$apk"
+          sha256sum "$apk" "$aab"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          echo "aab=$aab" >> "$GITHUB_OUTPUT"
+
+      - name: Upload signed build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: retiradas-android-v${{ steps.app.outputs.version_name }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            ${{ steps.app.outputs.apk }}
+            ${{ steps.app.outputs.aab }}
+
+      - name: Configure production SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY" || (echo "Missing VPS_SSH_KEY" && exit 1)
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          install -m 600 .github/known_hosts/retiradas ~/.ssh/known_hosts
+
+      - name: Upload Android release to production
+        env:
+          VERSION_NAME: ${{ steps.app.outputs.version_name }}
+          VERSION_CODE: ${{ steps.app.outputs.version_code }}
+          APK_PATH: ${{ steps.app.outputs.apk }}
+          AAB_PATH: ${{ steps.app.outputs.aab }}
+        run: |
+          remote_apk="/tmp/retiradas-android-${GITHUB_SHA}.apk"
+          remote_aab="/tmp/retiradas-android-${GITHUB_SHA}.aab"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
+            "$APK_PATH" "$VPS_USER@$VPS_HOST:$remote_apk"
+          scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
+            "$AAB_PATH" "$VPS_USER@$VPS_HOST:$remote_aab"
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
+            -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
+            "$VPS_USER@$VPS_HOST" bash -s -- \
+            "$remote_apk" "$remote_aab" "$VERSION_NAME" "$VERSION_CODE" <<'REMOTE'
+          set -Eeuo pipefail
+          apk="$1"
+          aab="$2"
+          version_name="$3"
+          version_code="$4"
+          bundle_dir="/opt/retiradas/mobile-releases"
+          mkdir -p "$bundle_dir"
+          install -m 600 "$aab" "$bundle_dir/Retiradas-v${version_name}.aab"
+          set -a
+          . /etc/retiradas/api.env
+          set +a
+          cd /opt/retiradas/vps
+          node scripts/publish-mobile-app.js \
+            "--file=$apk" \
+            "--version=$version_name" \
+            "--version-code=$version_code"
+          rm -f "$aab"
+          REMOTE
+
+      - name: Verify public APK download
+        run: |
+          curl --fail --silent --show-error --head \
+            https://retiradas.tech/api/maintenance/app/download

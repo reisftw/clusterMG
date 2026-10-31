@@ -1,0 +1,12 @@
+[
+	{
+		"relation": ["delegate_permission/common.handle_all_urls"],
+		"target": {
+			"namespace": "android_app",
+			"package_name": "br.com.brasiltecpar.retiradas",
+			"sha256_cert_fingerprints": [
+				"D6:AA:94:49:78:01:5C:F5:7A:E9:FD:06:C6:49:2E:3E:61:4D:31:C6:B9:1B:38:DB:67:B7:65:03:0E:33:F4:EB"
+			]
+		}
+	}
+]
