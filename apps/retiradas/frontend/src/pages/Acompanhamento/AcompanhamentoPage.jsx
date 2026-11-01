@@ -64,6 +64,7 @@ import {
 	useAcompanhamentoResumoData,
 } from "./hooks/useAcompanhamentoResumoData";
 import "./AcompanhamentoPage.css";
+import "./AcompanhamentoChristmas2026.css";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 const BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
@@ -2329,7 +2330,13 @@ function AcompanhamentoThemeStage({
 			/>
 			<div className="acomp-bg-grid" />
 			{isChristmas ? (
-				<div className="acomp-xmas-stage" aria-hidden="true">
+				<div className="acomp-xmas-stage acomp-christmas-2026-stage" aria-hidden="true">
+					<img
+						className="acomp-christmas-2026-garland"
+						src="/themes/christmas-2026/05-guirlanda.webp"
+						alt=""
+						decoding="async"
+					/>
 					<span className="acomp-xmas-corner acomp-xmas-corner-left" />
 					<span className="acomp-xmas-corner acomp-xmas-corner-right" />
 					<span className="acomp-xmas-snow-floor" />
@@ -2463,7 +2470,7 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 	const isHalloween = festiveTheme === "halloween";
 	let imageSrc = "/retorninho-esteira.webp";
 	if (isChristmas) {
-		imageSrc = "/retorninho-xmas-sleigh.webp";
+		imageSrc = "/themes/christmas-2026/06-retorninho-treno.webp";
 	} else if (isSeptember7) {
 		imageSrc = "/themes/september7/retorninho-selecao.webp";
 	} else if (isHalloween) {
@@ -2641,7 +2648,17 @@ function AcompanhamentoMainGrid({
 					empty="Aguardando nomes de atendentes"
 					className="acomp-cidades-panel"
 					limit={5}
-				/>
+				>
+					{isChristmas ? (
+						<img
+							className="acomp-christmas-2026-tree"
+							src="/themes/christmas-2026/08-arvore-natal.webp"
+							alt=""
+							aria-hidden="true"
+							decoding="async"
+						/>
+					) : null}
+				</RankingList>
 			) : null}
 			{sections.regionais ? (
 				<RankingList
@@ -2666,7 +2683,15 @@ function AcompanhamentoMainGrid({
 						getRegionalPaceText(item, dashboard.regionalDaysRemaining)
 					}
 				>
-					{festiveTheme === "halloween" ? (
+					{isChristmas ? (
+						<img
+							className="acomp-christmas-2026-regional-mascot"
+							src="/themes/christmas-2026/07-retorninho-presentes.webp"
+							alt=""
+							aria-hidden="true"
+							decoding="async"
+						/>
+					) : festiveTheme === "halloween" ? (
 						<div className="acomp-entregas-regionais-mascot" aria-hidden="true">
 							<img
 								src="/themes/halloween/mascot/retorninho-bruxo.png?v=20261019-2"
@@ -3673,7 +3698,7 @@ export default function AcompanhamentoPage() {
 
 	return (
 		<main
-			className={`acomp-page ${cursorIdle ? "is-cursor-idle" : ""} ${festiveTheme ? `acomp-festive-page is-${festiveTheme}` : ""}`}
+			className={`acomp-page ${cursorIdle ? "is-cursor-idle" : ""} ${festiveTheme ? `acomp-festive-page is-${festiveTheme}` : ""} ${festiveTheme === "christmas" ? "is-christmas-2026" : ""}`}
 		>
 			<AcompanhamentoThemeStage
 				festiveTheme={festiveTheme}
