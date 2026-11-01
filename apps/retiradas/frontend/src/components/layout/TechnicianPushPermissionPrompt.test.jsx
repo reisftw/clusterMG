@@ -5,6 +5,7 @@ import TechnicianPushPermissionPrompt from "./TechnicianPushPermissionPrompt";
 const pushMocks = vi.hoisted(() => ({
 	bind: vi.fn(),
 	enable: vi.fn(),
+	ensure: vi.fn(),
 	isAndroid: vi.fn(),
 	openSettings: vi.fn(),
 	sync: vi.fn(),
@@ -14,6 +15,7 @@ const pushMocks = vi.hoisted(() => ({
 vi.mock("../../services/pushNotificationsService", () => ({
 	bindForegroundPushNotifications: pushMocks.bind,
 	enablePushNotifications: pushMocks.enable,
+	ensurePushNotifications: pushMocks.ensure,
 	getPushSupportState: pushMocks.support,
 	isAndroidAppClient: pushMocks.isAndroid,
 	openAndroidNotificationSettings: pushMocks.openSettings,
@@ -31,9 +33,25 @@ describe("TechnicianPushPermissionPrompt", () => {
 		});
 		pushMocks.bind.mockResolvedValue(undefined);
 		pushMocks.enable.mockResolvedValue(undefined);
+		pushMocks.ensure.mockResolvedValue(undefined);
 		pushMocks.isAndroid.mockReturnValue(false);
 		pushMocks.openSettings.mockReturnValue(true);
 		pushMocks.sync.mockResolvedValue(undefined);
+	});
+
+	it("registra silenciosamente o aparelho quando a permissão já foi concedida", async () => {
+		pushMocks.support.mockResolvedValue({
+			supported: true,
+			hasNotificationApi: true,
+			hasVapidKey: true,
+			subscribed: false,
+			permission: "granted",
+		});
+
+		render(<TechnicianPushPermissionPrompt />);
+
+		await waitFor(() => expect(pushMocks.ensure).toHaveBeenCalledTimes(1));
+		expect(screen.queryByRole("button", { name: /Autorizar notificações|Registrar aparelho/ })).not.toBeInTheDocument();
 	});
 
 	it("abre as configurações nativas quando a permissão foi bloqueada no APK", async () => {

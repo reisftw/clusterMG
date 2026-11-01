@@ -1,8 +1,9 @@
 import { BellRing, CheckCircle2, Loader2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	bindForegroundPushNotifications,
 	enablePushNotifications,
+	ensurePushNotifications,
 	getPushSupportState,
 	isAndroidAppClient,
 	openAndroidNotificationSettings,
@@ -14,12 +15,23 @@ export default function TechnicianPushPermissionPrompt() {
 	const [busy, setBusy] = useState(false);
 	const [message, setMessage] = useState("");
 	const [permission, setPermission] = useState("default");
+	const enrollmentPromiseRef = useRef(null);
 	const androidApp = isAndroidAppClient();
 
 	useEffect(() => {
 		let active = true;
 
-		async function refresh({ activateWhenGranted = false } = {}) {
+		async function enrollAuthorizedDevice() {
+			if (!enrollmentPromiseRef.current) {
+				enrollmentPromiseRef.current = ensurePushNotifications()
+					.finally(() => {
+						enrollmentPromiseRef.current = null;
+					});
+			}
+			return enrollmentPromiseRef.current;
+		}
+
+		async function refresh() {
 			return getPushSupportState().then(async (support) => {
 				if (!active) return;
 				setPermission(support.permission || "default");
@@ -28,11 +40,19 @@ export default function TechnicianPushPermissionPrompt() {
 					if (active) setVisible(false);
 					return;
 				}
-				if (activateWhenGranted && support.permission === "granted") {
-					await bindForegroundPushNotifications();
-					await enablePushNotifications();
-					if (active) setVisible(false);
-					return;
+				if (support.permission === "granted") {
+					try {
+						await enrollAuthorizedDevice();
+						if (active) {
+							setMessage("");
+							setVisible(false);
+						}
+						return;
+					} catch (error) {
+						if (active) {
+							setMessage(error?.message || "A permissão está ativa, mas não foi possível registrar este aparelho.");
+						}
+					}
 				}
 				setVisible(
 					support.supported === true &&
@@ -50,7 +70,7 @@ export default function TechnicianPushPermissionPrompt() {
 
 		function handleReturnToApp() {
 			if (document.visibilityState === "visible") {
-				refresh({ activateWhenGranted: true }).catch(() => null);
+				refresh().catch(() => null);
 			}
 		}
 		document.addEventListener("visibilitychange", handleReturnToApp);
@@ -73,7 +93,8 @@ export default function TechnicianPushPermissionPrompt() {
 				return;
 			}
 			await bindForegroundPushNotifications();
-			await enablePushNotifications();
+			if (permission === "granted") await ensurePushNotifications();
+			else await enablePushNotifications();
 			setVisible(false);
 		} catch (error) {
 			const permissionBlocked =
@@ -125,7 +146,7 @@ export default function TechnicianPushPermissionPrompt() {
 				<div className="px-4 py-4 sm:px-5">
 					<div className="flex items-start gap-2 text-sm leading-5 text-slate-600">
 						<CheckCircle2 className="mt-0.5 shrink-0 text-emerald-600" size={17} aria-hidden="true" />
-						<span>A autorização vale apenas para este aparelho e pode ser alterada nas configurações do navegador.</span>
+						<span>A autorização vale apenas para este aparelho e pode ser alterada nas configurações do aplicativo.</span>
 					</div>
 
 					{message ? (
@@ -141,7 +162,7 @@ export default function TechnicianPushPermissionPrompt() {
 						className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
 					>
 						{busy ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <BellRing size={18} aria-hidden="true" />}
-						{busy ? "Ativando..." : androidApp && permission === "denied" ? "Abrir configurações" : "Autorizar notificações"}
+						{busy ? "Ativando..." : androidApp && permission === "denied" ? "Abrir configurações" : permission === "granted" ? "Registrar aparelho" : "Autorizar notificações"}
 					</button>
 				</div>
 			</section>

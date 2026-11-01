@@ -90,6 +90,13 @@ export async function enablePushNotifications(topics = DEFAULT_TOPICS) {
 	if (!canUseNotificationApi()) throw new Error("Este dispositivo nao suporta notificacoes.");
 	const permission = await Notification.requestPermission();
 	if (permission !== "granted") throw new Error("Permissao de notificacao nao concedida.");
+	return ensurePushNotifications(topics);
+}
+
+export async function ensurePushNotifications(topics = DEFAULT_TOPICS) {
+	if (!canUseNotificationApi() || Notification.permission !== "granted") {
+		throw new Error("Permissao de notificacao nao concedida.");
+	}
 	const config = await requestVpsApi("/push/config");
 	const registration = await registerAppServiceWorker();
 	if (!registration?.pushManager) throw new Error("Push nao suportado neste navegador.");

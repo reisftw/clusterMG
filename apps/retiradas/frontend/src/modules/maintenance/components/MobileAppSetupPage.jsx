@@ -16,6 +16,7 @@ import { useAuthContext } from "../../../context/AuthContext";
 import {
 	bindForegroundPushNotifications,
 	enablePushNotifications,
+	ensurePushNotifications,
 	getPushSupportState,
 	openAndroidNotificationSettings,
 	syncSavedPushSubscription,
@@ -67,6 +68,11 @@ export default function MobileAppSetupPage() {
 		const nextState = await getPushSupportState();
 		if (nextState.subscribed === true) {
 			await syncSavedPushSubscription().catch(() => null);
+		} else if (nextState.permission === "granted") {
+			await ensurePushNotifications();
+			const enrolledState = await getPushSupportState();
+			setPushState(enrolledState);
+			return;
 		}
 		setPushState(nextState);
 	}, []);
@@ -78,7 +84,7 @@ export default function MobileAppSetupPage() {
 			const nextState = await getPushSupportState();
 			if (nextState.permission === "granted" && nextState.subscribed !== true) {
 				await bindForegroundPushNotifications();
-				await enablePushNotifications();
+				await ensurePushNotifications();
 			}
 			await refreshPushState();
 		}
@@ -100,7 +106,8 @@ export default function MobileAppSetupPage() {
 				return;
 			}
 			await bindForegroundPushNotifications();
-			await enablePushNotifications();
+			if (pushState?.permission === "granted") await ensurePushNotifications();
+			else await enablePushNotifications();
 			await refreshPushState();
 		} catch (error) {
 			const blocked =

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	getSupport: vi.fn(),
 	bind: vi.fn(),
 	enable: vi.fn(),
+	ensure: vi.fn(),
 	openSettings: vi.fn(),
 	sync: vi.fn(),
 	request: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("../../../services/pushNotificationsService", () => ({
 	getPushSupportState: mocks.getSupport,
 	bindForegroundPushNotifications: mocks.bind,
 	enablePushNotifications: mocks.enable,
+	ensurePushNotifications: mocks.ensure,
 	syncSavedPushSubscription: mocks.sync,
 	openAndroidNotificationSettings: mocks.openSettings,
 }));
@@ -43,6 +45,7 @@ describe("MobileAppSetupPage", () => {
 		});
 		mocks.bind.mockResolvedValue(undefined);
 		mocks.enable.mockResolvedValue(undefined);
+		mocks.ensure.mockResolvedValue(undefined);
 		mocks.openSettings.mockReturnValue(true);
 		mocks.sync.mockResolvedValue(undefined);
 	});
