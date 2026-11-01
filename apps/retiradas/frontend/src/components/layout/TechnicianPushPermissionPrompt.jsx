@@ -4,6 +4,7 @@ import {
 	bindForegroundPushNotifications,
 	enablePushNotifications,
 	getPushSupportState,
+	syncSavedPushSubscription,
 } from "../../services/pushNotificationsService";
 
 export default function TechnicianPushPermissionPrompt() {
@@ -15,8 +16,12 @@ export default function TechnicianPushPermissionPrompt() {
 		let active = true;
 
 		getPushSupportState()
-			.then((support) => {
+			.then(async (support) => {
 				if (!active) return;
+				if (support.subscribed === true) {
+					await syncSavedPushSubscription().catch(() => null);
+					return;
+				}
 				setVisible(
 					support.supported === true &&
 						support.hasNotificationApi === true &&
@@ -72,7 +77,7 @@ export default function TechnicianPushPermissionPrompt() {
 							Ative as notificações
 						</h2>
 						<p className="mt-1 text-sm leading-5 text-blue-100">
-							Receba avisos de novas O.S, cidades atribuídas e lembretes da Central de Tentativas.
+							Receba comunicados, avisos operacionais e atualizações importantes do Retiradas.
 						</p>
 					</div>
 					<button

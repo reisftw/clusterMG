@@ -5,6 +5,7 @@ import TechnicianPushPermissionPrompt from "./TechnicianPushPermissionPrompt";
 const pushMocks = vi.hoisted(() => ({
 	bind: vi.fn(),
 	enable: vi.fn(),
+	sync: vi.fn(),
 	support: vi.fn(),
 }));
 
@@ -12,6 +13,7 @@ vi.mock("../../services/pushNotificationsService", () => ({
 	bindForegroundPushNotifications: pushMocks.bind,
 	enablePushNotifications: pushMocks.enable,
 	getPushSupportState: pushMocks.support,
+	syncSavedPushSubscription: pushMocks.sync,
 }));
 
 describe("TechnicianPushPermissionPrompt", () => {
@@ -25,6 +27,7 @@ describe("TechnicianPushPermissionPrompt", () => {
 		});
 		pushMocks.bind.mockResolvedValue(undefined);
 		pushMocks.enable.mockResolvedValue(undefined);
+		pushMocks.sync.mockResolvedValue(undefined);
 	});
 
 	it("exibe apenas a ação de autorizar e não oferece Agora não", async () => {
@@ -58,6 +61,7 @@ describe("TechnicianPushPermissionPrompt", () => {
 		render(<TechnicianPushPermissionPrompt />);
 
 		await waitFor(() => expect(pushMocks.support).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(pushMocks.sync).toHaveBeenCalledTimes(1));
 		expect(screen.queryByRole("button", { name: "Autorizar notificações" })).not.toBeInTheDocument();
 	});
 });

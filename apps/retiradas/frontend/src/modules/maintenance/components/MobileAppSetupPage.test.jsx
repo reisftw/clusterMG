@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	getSupport: vi.fn(),
 	bind: vi.fn(),
 	enable: vi.fn(),
+	sync: vi.fn(),
 	request: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ vi.mock("../../../services/pushNotificationsService", () => ({
 	getPushSupportState: mocks.getSupport,
 	bindForegroundPushNotifications: mocks.bind,
 	enablePushNotifications: mocks.enable,
+	syncSavedPushSubscription: mocks.sync,
 }));
 
 vi.mock("../../../services/vpsApiClient", () => ({
@@ -39,6 +41,7 @@ describe("MobileAppSetupPage", () => {
 		});
 		mocks.bind.mockResolvedValue(undefined);
 		mocks.enable.mockResolvedValue(undefined);
+	mocks.sync.mockResolvedValue(undefined);
 	});
 
 	it("mostra as duas autorizacoes para tecnico no aplicativo", async () => {
@@ -59,6 +62,7 @@ describe("MobileAppSetupPage", () => {
 
 		await waitFor(() => expect(mocks.enable).toHaveBeenCalledTimes(1));
 		expect(mocks.bind).toHaveBeenCalledTimes(1);
+		expect(mocks.sync).toHaveBeenCalledTimes(1);
 		expect(await screen.findByRole("button", { name: "Notificacoes ativadas" })).toBeDisabled();
 	});
 

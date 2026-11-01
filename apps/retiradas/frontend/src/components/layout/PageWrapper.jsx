@@ -239,10 +239,10 @@ const PageWrapper = ({ children }) => {
 					setWelcomeClosedForUser(currentWelcomeUserKey);
 				}}
 			/>
-			{isTechnician && pathname !== ROUTES.APP && !trocarSenhaObrigatorio && !showWelcomeModal ? (
+			{pathname !== ROUTES.APP && !trocarSenhaObrigatorio && !showWelcomeModal ? (
 				<>
 					<TechnicianPushPermissionPrompt />
-					<NativeLocationEnrollment />
+					{isTechnician ? <NativeLocationEnrollment /> : null}
 				</>
 			) : null}
 			<TechnicianLocationPresence />

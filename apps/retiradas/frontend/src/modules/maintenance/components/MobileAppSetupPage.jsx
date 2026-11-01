@@ -17,6 +17,7 @@ import {
 	bindForegroundPushNotifications,
 	enablePushNotifications,
 	getPushSupportState,
+	syncSavedPushSubscription,
 } from "../../../services/pushNotificationsService";
 import {
 	getAppClientContext,
@@ -62,7 +63,11 @@ export default function MobileAppSetupPage() {
 	});
 
 	const refreshPushState = useCallback(async () => {
-		setPushState(await getPushSupportState());
+		const nextState = await getPushSupportState();
+		if (nextState.subscribed === true) {
+			await syncSavedPushSubscription().catch(() => null);
+		}
+		setPushState(nextState);
 	}, []);
 
 	useEffect(() => {
