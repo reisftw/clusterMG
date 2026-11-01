@@ -5,6 +5,8 @@ import TechnicianPushPermissionPrompt from "./TechnicianPushPermissionPrompt";
 const pushMocks = vi.hoisted(() => ({
 	bind: vi.fn(),
 	enable: vi.fn(),
+	isAndroid: vi.fn(),
+	openSettings: vi.fn(),
 	sync: vi.fn(),
 	support: vi.fn(),
 }));
@@ -13,6 +15,8 @@ vi.mock("../../services/pushNotificationsService", () => ({
 	bindForegroundPushNotifications: pushMocks.bind,
 	enablePushNotifications: pushMocks.enable,
 	getPushSupportState: pushMocks.support,
+	isAndroidAppClient: pushMocks.isAndroid,
+	openAndroidNotificationSettings: pushMocks.openSettings,
 	syncSavedPushSubscription: pushMocks.sync,
 }));
 
@@ -27,7 +31,26 @@ describe("TechnicianPushPermissionPrompt", () => {
 		});
 		pushMocks.bind.mockResolvedValue(undefined);
 		pushMocks.enable.mockResolvedValue(undefined);
+		pushMocks.isAndroid.mockReturnValue(false);
+		pushMocks.openSettings.mockReturnValue(true);
 		pushMocks.sync.mockResolvedValue(undefined);
+	});
+
+	it("abre as configurações nativas quando a permissão foi bloqueada no APK", async () => {
+		pushMocks.isAndroid.mockReturnValue(true);
+		pushMocks.support.mockResolvedValue({
+			supported: true,
+			hasNotificationApi: true,
+			hasVapidKey: true,
+			subscribed: false,
+			permission: "denied",
+		});
+
+		render(<TechnicianPushPermissionPrompt />);
+		fireEvent.click(await screen.findByRole("button", { name: "Abrir configurações" }));
+
+		expect(pushMocks.openSettings).toHaveBeenCalledTimes(1);
+		expect(pushMocks.enable).not.toHaveBeenCalled();
 	});
 
 	it("exibe apenas a ação de autorizar e não oferece Agora não", async () => {

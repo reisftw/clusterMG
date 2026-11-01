@@ -23,6 +23,21 @@ function canUseNotificationApi() {
 	return typeof window !== "undefined" && "Notification" in window;
 }
 
+export function isAndroidAppClient() {
+	if (typeof window === "undefined") return false;
+	return (
+		window.sessionStorage.getItem("retiradas-client-mode") === "android" ||
+		window.localStorage.getItem("retiradas-client-mode") === "android" ||
+		new URLSearchParams(window.location.search).get("source") === "android"
+	);
+}
+
+export function openAndroidNotificationSettings() {
+	if (!isAndroidAppClient()) return false;
+	window.location.href = "retiradas://notification-settings";
+	return true;
+}
+
 function persistPushPreferences(value) {
 	if (typeof window !== "undefined") window.localStorage.setItem(PUSH_STORAGE_KEY, JSON.stringify(value));
 }

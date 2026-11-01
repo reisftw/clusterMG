@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 	getSupport: vi.fn(),
 	bind: vi.fn(),
 	enable: vi.fn(),
+	openSettings: vi.fn(),
 	sync: vi.fn(),
 	request: vi.fn(),
 }));
@@ -21,10 +22,11 @@ vi.mock("../../../services/pushNotificationsService", () => ({
 	bindForegroundPushNotifications: mocks.bind,
 	enablePushNotifications: mocks.enable,
 	syncSavedPushSubscription: mocks.sync,
+	openAndroidNotificationSettings: mocks.openSettings,
 }));
 
 vi.mock("../../../services/vpsApiClient", () => ({
-	getAppClientContext: () => ({ mode: "android", version: "1.0.2", code: 102 }),
+	getAppClientContext: () => ({ mode: "android", version: "1.0.3", code: 103 }),
 	requestVpsApi: mocks.request,
 }));
 
@@ -41,7 +43,24 @@ describe("MobileAppSetupPage", () => {
 		});
 		mocks.bind.mockResolvedValue(undefined);
 		mocks.enable.mockResolvedValue(undefined);
-	mocks.sync.mockResolvedValue(undefined);
+		mocks.openSettings.mockReturnValue(true);
+		mocks.sync.mockResolvedValue(undefined);
+	});
+
+	it("abre as configurações do site quando o push está bloqueado no APK", async () => {
+		mocks.getSupport.mockResolvedValue({
+			supported: true,
+			hasNotificationApi: true,
+			hasVapidKey: true,
+			subscribed: false,
+			permission: "denied",
+		});
+		render(<MemoryRouter><MobileAppSetupPage /></MemoryRouter>);
+
+		fireEvent.click(await screen.findByRole("button", { name: "Abrir configuracoes" }));
+
+		expect(mocks.openSettings).toHaveBeenCalledTimes(1);
+		expect(mocks.enable).not.toHaveBeenCalled();
 	});
 
 	it("mostra as duas autorizacoes para tecnico no aplicativo", async () => {

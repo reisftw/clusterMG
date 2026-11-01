@@ -25,7 +25,7 @@ export default function NativeLocationEnrollment() {
 			});
 			const target = new URL("retiradas://enroll");
 			target.searchParams.set("code", enrollment.code);
-			target.searchParams.set("version", context.version || "1.0.2");
+			target.searchParams.set("version", context.version || "1.0.3");
 			window.location.href = target.toString();
 		} catch (caught) {
 			setError(caught?.message || "Nao foi possivel ativar a localizacao em tempo real.");

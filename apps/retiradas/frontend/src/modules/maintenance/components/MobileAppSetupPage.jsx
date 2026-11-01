@@ -17,6 +17,7 @@ import {
 	bindForegroundPushNotifications,
 	enablePushNotifications,
 	getPushSupportState,
+	openAndroidNotificationSettings,
 	syncSavedPushSubscription,
 } from "../../../services/pushNotificationsService";
 import {
@@ -72,12 +73,32 @@ export default function MobileAppSetupPage() {
 
 	useEffect(() => {
 		refreshPushState().catch(() => setPushState({ supported: false }));
+		async function handleReturnToApp() {
+			if (document.visibilityState !== "visible") return;
+			const nextState = await getPushSupportState();
+			if (nextState.permission === "granted" && nextState.subscribed !== true) {
+				await bindForegroundPushNotifications();
+				await enablePushNotifications();
+			}
+			await refreshPushState();
+		}
+		document.addEventListener("visibilitychange", handleReturnToApp);
+		window.addEventListener("focus", handleReturnToApp);
+		return () => {
+			document.removeEventListener("visibilitychange", handleReturnToApp);
+			window.removeEventListener("focus", handleReturnToApp);
+		};
 	}, [refreshPushState]);
 
 	async function activatePush() {
 		setPushBusy(true);
 		setPushError("");
 		try {
+			if (isAndroid && pushState?.permission === "denied") {
+				openAndroidNotificationSettings();
+				setPushError("Ative Notificações para o site Retiradas e volte ao aplicativo. A inscrição será concluída automaticamente.");
+				return;
+			}
 			await bindForegroundPushNotifications();
 			await enablePushNotifications();
 			await refreshPushState();
@@ -105,7 +126,7 @@ export default function MobileAppSetupPage() {
 			});
 			const target = new URL("retiradas://enroll");
 			target.searchParams.set("code", enrollment.code);
-			target.searchParams.set("version", context.version || "1.0.2");
+			target.searchParams.set("version", context.version || "1.0.3");
 			window.location.href = target.toString();
 		} catch (error) {
 			setLocationError(
@@ -161,7 +182,7 @@ export default function MobileAppSetupPage() {
 						className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
 					>
 						{pushBusy ? <Loader2 className="animate-spin" size={18} /> : <BellRing size={18} />}
-						{pushActive ? "Notificacoes ativadas" : pushBusy ? "Ativando..." : "Autorizar notificacoes"}
+						{pushActive ? "Notificacoes ativadas" : pushBusy ? "Ativando..." : pushBlocked && isAndroid ? "Abrir configuracoes" : "Autorizar notificacoes"}
 					</button>
 				</section>
 

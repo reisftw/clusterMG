@@ -12,7 +12,7 @@
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#F8FAFC",
   "enableNotifications": true,
-  "startUrl": "/app?source=android&appVersion=1.0.2&appCode=102",
+  "startUrl": "/app?source=android&appVersion=1.0.3&appCode=103",
   "iconUrl": "https://retiradas.tech/pwa-512.png",
   "maskableIconUrl": "https://retiradas.tech/pwa-512.png",
   "splashScreenFadeOutDuration": 300,
@@ -20,8 +20,8 @@
     "path": ".signing/retiradas-release.jks",
     "alias": "retiradas-release"
   },
-  "appVersionName": "1.0.2",
-  "appVersionCode": 102,
+  "appVersionName": "1.0.3",
+  "appVersionCode": 103,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://retiradas.tech/manifest.webmanifest",
@@ -52,5 +52,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1.0.2"
+  "appVersion": "1.0.3"
 }

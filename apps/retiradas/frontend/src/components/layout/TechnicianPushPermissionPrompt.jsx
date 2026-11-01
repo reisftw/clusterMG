@@ -4,6 +4,8 @@ import {
 	bindForegroundPushNotifications,
 	enablePushNotifications,
 	getPushSupportState,
+	isAndroidAppClient,
+	openAndroidNotificationSettings,
 	syncSavedPushSubscription,
 } from "../../services/pushNotificationsService";
 
@@ -11,15 +13,25 @@ export default function TechnicianPushPermissionPrompt() {
 	const [visible, setVisible] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [message, setMessage] = useState("");
+	const [permission, setPermission] = useState("default");
+	const androidApp = isAndroidAppClient();
 
 	useEffect(() => {
 		let active = true;
 
-		getPushSupportState()
-			.then(async (support) => {
+		async function refresh({ activateWhenGranted = false } = {}) {
+			return getPushSupportState().then(async (support) => {
 				if (!active) return;
+				setPermission(support.permission || "default");
 				if (support.subscribed === true) {
 					await syncSavedPushSubscription().catch(() => null);
+					if (active) setVisible(false);
+					return;
+				}
+				if (activateWhenGranted && support.permission === "granted") {
+					await bindForegroundPushNotifications();
+					await enablePushNotifications();
+					if (active) setVisible(false);
 					return;
 				}
 				setVisible(
@@ -28,13 +40,26 @@ export default function TechnicianPushPermissionPrompt() {
 						support.hasVapidKey === true &&
 						support.subscribed !== true,
 				);
-			})
+			});
+		}
+
+		refresh()
 			.catch(() => {
 				if (active) setVisible(false);
 			});
 
+		function handleReturnToApp() {
+			if (document.visibilityState === "visible") {
+				refresh({ activateWhenGranted: true }).catch(() => null);
+			}
+		}
+		document.addEventListener("visibilitychange", handleReturnToApp);
+		window.addEventListener("focus", handleReturnToApp);
+
 		return () => {
 			active = false;
+			document.removeEventListener("visibilitychange", handleReturnToApp);
+			window.removeEventListener("focus", handleReturnToApp);
 		};
 	}, []);
 
@@ -42,6 +67,11 @@ export default function TechnicianPushPermissionPrompt() {
 		setBusy(true);
 		setMessage("");
 		try {
+			if (androidApp && permission === "denied") {
+				openAndroidNotificationSettings();
+				setMessage("Ative Notificações para o site Retiradas e volte ao aplicativo. A inscrição será concluída automaticamente.");
+				return;
+			}
 			await bindForegroundPushNotifications();
 			await enablePushNotifications();
 			setVisible(false);
@@ -50,8 +80,10 @@ export default function TechnicianPushPermissionPrompt() {
 				typeof Notification !== "undefined" &&
 				Notification.permission === "denied";
 			setMessage(
-				permissionBlocked
-					? "As notificações estão bloqueadas neste navegador. Libere-as nas configurações do site e tente novamente."
+				permissionBlocked && androidApp
+					? "Toque novamente para abrir as configurações do Retiradas e liberar as notificações."
+					: permissionBlocked
+						? "As notificações estão bloqueadas neste navegador. Libere-as nas configurações do site e tente novamente."
 					: error?.message || "Não foi possível ativar as notificações.",
 			);
 		} finally {
@@ -109,7 +141,7 @@ export default function TechnicianPushPermissionPrompt() {
 						className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-wait disabled:opacity-70"
 					>
 						{busy ? <Loader2 className="animate-spin" size={18} aria-hidden="true" /> : <BellRing size={18} aria-hidden="true" />}
-						{busy ? "Ativando..." : "Autorizar notificações"}
+						{busy ? "Ativando..." : androidApp && permission === "denied" ? "Abrir configurações" : "Autorizar notificações"}
 					</button>
 				</div>
 			</section>
