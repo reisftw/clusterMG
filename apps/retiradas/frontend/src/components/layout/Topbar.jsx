@@ -7,6 +7,7 @@ import {
 	Menu,
 	Search,
 	ShieldCheck,
+	Smartphone,
 	Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -429,6 +430,13 @@ const Topbar = ({ onOpenMobileMenu }) => {
 								</p>
 							</div>
 							<div className="grid gap-2 p-2">
+								<Link
+									to={ROUTES.APP}
+									onClick={() => setMobileAccountOpen(false)}
+									className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+								>
+									<Smartphone size={16} /> Configurar aplicativo
+								</Link>
 								<button
 									type="button"
 									onClick={() => {

@@ -26,17 +26,34 @@ export function getAppClientContext() {
 	const params = new URLSearchParams(window.location.search);
 	if (params.get("source") === "android") {
 		window.sessionStorage.setItem(CLIENT_MODE_KEY, "android");
+		window.localStorage.setItem(CLIENT_MODE_KEY, "android");
 		const incomingVersion = String(params.get("appVersion") || "").slice(0, 80);
-		if (incomingVersion) window.sessionStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
+		if (incomingVersion) {
+			window.sessionStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
+			window.localStorage.setItem(CLIENT_VERSION_KEY, incomingVersion);
+		}
 		const incomingCode = Number(params.get("appCode") || 0);
 		if (Number.isSafeInteger(incomingCode) && incomingCode > 0) {
 			window.sessionStorage.setItem(CLIENT_CODE_KEY, String(incomingCode));
+			window.localStorage.setItem(CLIENT_CODE_KEY, String(incomingCode));
 		}
 	}
-	const version = String(window.sessionStorage.getItem(CLIENT_VERSION_KEY) || "").slice(0, 80);
-	const storedCode = Number(window.sessionStorage.getItem(CLIENT_CODE_KEY) || 0);
+	const version = String(
+		window.sessionStorage.getItem(CLIENT_VERSION_KEY) ||
+			window.localStorage.getItem(CLIENT_VERSION_KEY) ||
+			"",
+	).slice(0, 80);
+	const storedCode = Number(
+		window.sessionStorage.getItem(CLIENT_CODE_KEY) ||
+			window.localStorage.getItem(CLIENT_CODE_KEY) ||
+			0,
+	);
 	return {
-		mode: window.sessionStorage.getItem(CLIENT_MODE_KEY) === "android" ? "android" : "web",
+		mode:
+			window.sessionStorage.getItem(CLIENT_MODE_KEY) === "android" ||
+			window.localStorage.getItem(CLIENT_MODE_KEY) === "android"
+				? "android"
+				: "web",
 		version,
 		code: Number.isSafeInteger(storedCode) && storedCode > 0
 			? storedCode

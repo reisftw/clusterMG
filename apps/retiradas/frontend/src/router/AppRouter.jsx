@@ -22,6 +22,9 @@ const MaintenancePortal = lazy(
 const MobileAppDownloadPage = lazy(
 	() => import("../modules/maintenance/components/MobileAppDownloadPage"),
 );
+const MobileAppSetupPage = lazy(
+	() => import("../modules/maintenance/components/MobileAppSetupPage"),
+);
 const Diario = lazy(() => import("../modules/diario/components/DiarioPage"));
 const AcertoEstoque = lazy(
 	() => import("../modules/acertoEstoque/components/AcertoEstoquePage"),
@@ -569,7 +572,7 @@ const AppRouter = () => (
 							path={ROUTES.APP}
 							element={
 								<ProtectedRoute>
-									<HomeRoute dashboard={Dashboard} />
+									<MobileAppSetupPage />
 								</ProtectedRoute>
 							}
 						/>

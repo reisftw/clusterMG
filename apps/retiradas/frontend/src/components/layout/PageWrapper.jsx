@@ -238,7 +238,7 @@ const PageWrapper = ({ children }) => {
 					setWelcomeClosedForUser(currentWelcomeUserKey);
 				}}
 			/>
-			{isTechnician && !trocarSenhaObrigatorio && !showWelcomeModal ? (
+			{isTechnician && pathname !== ROUTES.APP && !trocarSenhaObrigatorio && !showWelcomeModal ? (
 				<>
 					<TechnicianPushPermissionPrompt />
 					<NativeLocationEnrollment />
