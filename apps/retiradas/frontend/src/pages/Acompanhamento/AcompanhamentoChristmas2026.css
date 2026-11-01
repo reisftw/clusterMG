@@ -154,11 +154,12 @@
 .acomp-page.is-christmas-2026 .acomp-fines-panel,
 .acomp-page.is-christmas-2026 .acomp-tecnicos-panel,
 .acomp-page.is-christmas-2026 .acomp-delivery-hours-panel,
-.acomp-page.is-christmas-2026 .acomp-weekly-production-panel {
+.acomp-page.is-christmas-2026 .acomp-weekly-production-panel,
+.acomp-page.is-christmas-2026 .acomp-production-panel {
 	background:
-		linear-gradient(rgba(3, 42, 36, 0.22), rgba(1, 20, 25, 0.3)),
-		url("/themes/christmas-2026/02-card-verde.webp") center / 100% 100% no-repeat,
-		var(--xmas-pine-deep);
+		radial-gradient(circle at 78% 10%, rgba(57, 224, 160, 0.17), transparent 34%),
+		radial-gradient(circle at 14% 92%, rgba(12, 122, 99, 0.24), transparent 38%),
+		linear-gradient(155deg, #075644 0%, #043d35 48%, #02282c 100%);
 }
 
 .acomp-page.is-christmas-2026 .acomp-kpi:nth-child(4),
@@ -167,16 +168,105 @@
 .acomp-page.is-christmas-2026 .acomp-atendentes-panel,
 .acomp-page.is-christmas-2026 .acomp-cidades-panel {
 	background:
-		linear-gradient(rgba(101, 11, 25, 0.1), rgba(52, 5, 17, 0.3)),
-		url("/themes/christmas-2026/03-card-vermelho.webp") center / 100% 100% no-repeat,
-		var(--xmas-wine);
+		radial-gradient(circle at 78% 8%, rgba(255, 94, 108, 0.2), transparent 34%),
+		radial-gradient(circle at 18% 94%, rgba(166, 17, 48, 0.3), transparent 42%),
+		linear-gradient(155deg, #941d2d 0%, #6f0d20 48%, #3b0918 100%);
 }
 
 .acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel {
 	background:
-		linear-gradient(rgba(3, 42, 36, 0.08), rgba(1, 20, 25, 0.22)),
-		url("/themes/christmas-2026/04-card-lateral.webp") center / 100% 100% no-repeat,
-		var(--xmas-pine-deep);
+		radial-gradient(circle at 76% 72%, rgba(29, 178, 127, 0.17), transparent 32%),
+		radial-gradient(circle at 18% 8%, rgba(255, 210, 90, 0.08), transparent 28%),
+		linear-gradient(170deg, #075344 0%, #04372f 56%, #02262d 100%);
+}
+
+.acomp-page.is-christmas-2026 .acomp-kpi,
+.acomp-page.is-christmas-2026 .acomp-panel,
+.acomp-page.is-christmas-2026 .acomp-day-highlights {
+	overflow: hidden;
+}
+
+.acomp-page.is-christmas-2026 .acomp-kpi::before,
+.acomp-page.is-christmas-2026 .acomp-panel::before,
+.acomp-page.is-christmas-2026 .acomp-day-highlights::before {
+	content: "";
+	position: absolute;
+	inset: 0 0 auto;
+	z-index: 4;
+	height: 13px;
+	border-radius: 14px 14px 0 0;
+	background:
+		radial-gradient(circle at 7% 5px, #ffd65a 0 2px, transparent 2.7px),
+		radial-gradient(circle at 20% 7px, #ef4444 0 2.2px, transparent 2.9px),
+		radial-gradient(circle at 33% 5px, #4ade80 0 2px, transparent 2.7px),
+		radial-gradient(circle at 46% 7px, #38bdf8 0 2.2px, transparent 2.9px),
+		radial-gradient(circle at 59% 5px, #f472b6 0 2px, transparent 2.7px),
+		radial-gradient(circle at 72% 7px, #ffd65a 0 2.2px, transparent 2.9px),
+		radial-gradient(circle at 85% 5px, #ef4444 0 2px, transparent 2.7px),
+		linear-gradient(180deg, rgba(255, 244, 188, 0.42), rgba(255, 194, 71, 0.04)) 0 0 / 100% 1px no-repeat;
+	filter: drop-shadow(0 0 5px rgba(255, 224, 125, 0.78));
+	pointer-events: none;
+}
+
+.acomp-page.is-christmas-2026 .acomp-panel-title {
+	min-width: 0;
+	align-items: flex-start;
+	gap: clamp(6px, 0.45vw, 9px);
+}
+
+.acomp-page.is-christmas-2026 .acomp-panel-title svg {
+	flex: 0 0 auto;
+	color: #ffd65a;
+	filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.72));
+}
+
+.acomp-page.is-christmas-2026 .acomp-panel-title h2,
+.acomp-page.is-christmas-2026 .acomp-highlight-panel-title strong,
+.acomp-page.is-christmas-2026 .acomp-recent-deliveries-head h3 {
+	font-size: clamp(11px, 0.82vw, 16px);
+	font-weight: 950;
+	line-height: 1.12;
+	text-wrap: balance;
+	overflow-wrap: normal;
+	word-break: normal;
+	text-shadow:
+		0 2px 3px rgba(0, 0, 0, 0.95),
+		0 0 10px rgba(0, 0, 0, 0.48);
+}
+
+.acomp-page.is-christmas-2026 .acomp-panel-title span {
+	flex: 0 0 auto;
+	line-height: 1.15;
+}
+
+.acomp-page.is-christmas-2026 .acomp-production-panel {
+	position: relative;
+	min-height: 0;
+	padding: clamp(10px, 0.72vw, 14px);
+	box-shadow:
+		0 0 0 1px rgba(255, 137, 6, 0.34),
+		0 0 15px rgba(255, 183, 48, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.12),
+		0 10px 22px rgba(0, 0, 0, 0.4);
+}
+
+.acomp-page.is-christmas-2026 .acomp-production-panel::after {
+	content: "";
+	position: absolute;
+	right: -18px;
+	bottom: -20px;
+	z-index: 0;
+	width: 124px;
+	height: 92px;
+	background: url("/themes/christmas-2026/09-ornamentos.webp") right bottom / 270px 270px no-repeat;
+	filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.42));
+	opacity: 0.82;
+	pointer-events: none;
+}
+
+.acomp-page.is-christmas-2026 .acomp-production-panel > * {
+	position: relative;
+	z-index: 1;
 }
 
 .acomp-page.is-christmas-2026 .acomp-kpi::before,
@@ -190,6 +280,13 @@
 .acomp-page.is-christmas-2026 .acomp-ticker::before,
 .acomp-page.is-christmas-2026 .acomp-ticker::after {
 	content: none;
+}
+
+.acomp-page.is-christmas-2026 .acomp-kpi::before,
+.acomp-page.is-christmas-2026 .acomp-panel::before,
+.acomp-page.is-christmas-2026 .acomp-day-highlights::before,
+.acomp-page.is-christmas-2026 .acomp-production-panel::after {
+	content: "";
 }
 
 .acomp-page.is-christmas-2026 .acomp-kpi {
@@ -212,7 +309,6 @@
 .acomp-page.is-christmas-2026 .acomp-recent-deliveries-head h3 {
 	color: var(--xmas-warm-white);
 	letter-spacing: 0;
-	text-shadow: 0 2px 8px rgba(0, 0, 0, 0.75);
 }
 
 .acomp-page.is-christmas-2026 .acomp-panel-title,
@@ -270,8 +366,30 @@
 }
 
 .acomp-page.is-christmas-2026 .acomp-status-panel {
+	--xmas-sleigh-scale: 1.35;
 	isolation: isolate;
-	padding-right: clamp(250px, 29vw, 520px);
+	padding: clamp(12px, 0.85vw, 16px) clamp(310px, 39%, 470px) clamp(12px, 0.85vw, 16px) clamp(12px, 0.85vw, 16px);
+	background:
+		radial-gradient(ellipse at 82% 76%, rgba(22, 129, 111, 0.2), transparent 30%),
+		linear-gradient(180deg, rgba(2, 29, 49, 0.15), rgba(2, 17, 29, 0.56)),
+		linear-gradient(145deg, #075443 0%, #04362f 46%, #031d2d 100%);
+}
+
+.acomp-page.is-christmas-2026 .acomp-status-panel::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -1px;
+	z-index: 0;
+	height: 36%;
+	background:
+		radial-gradient(ellipse at 12% 100%, rgba(235, 247, 255, 0.92) 0 23%, transparent 24%),
+		radial-gradient(ellipse at 34% 108%, rgba(209, 231, 246, 0.82) 0 28%, transparent 29%),
+		radial-gradient(ellipse at 63% 112%, rgba(240, 249, 255, 0.88) 0 26%, transparent 27%),
+		radial-gradient(ellipse at 91% 106%, rgba(210, 234, 248, 0.86) 0 30%, transparent 31%);
+	opacity: 0.72;
+	pointer-events: none;
 }
 
 .acomp-page.is-christmas-2026 .acomp-status-panel > *:not(.acomp-status-retorninho) {
@@ -281,11 +399,13 @@
 
 .acomp-page.is-christmas-2026 .acomp-status-panel > .acomp-status-retorninho {
 	position: absolute;
-	right: clamp(-10px, 0.5vw, 12px);
-	bottom: clamp(-38px, -1.5vw, -10px);
+	right: clamp(8px, 1.15vw, 22px);
+	bottom: 0;
 	z-index: 1;
-	width: clamp(250px, 29vw, 520px);
-	max-height: 126%;
+	width: auto;
+	height: 100%;
+	max-width: 34%;
+	max-height: none;
 	object-fit: contain;
 	object-position: right bottom;
 	filter:
@@ -405,10 +525,10 @@
 @keyframes acompChristmas2026Float {
 	0%,
 	100% {
-		transform: translateY(0) rotate(-0.6deg);
+		transform: translateY(0) scale(var(--xmas-sleigh-scale, 1));
 	}
 	50% {
-		transform: translateY(-7px) rotate(0.8deg);
+		transform: translateY(-4px) scale(var(--xmas-sleigh-scale, 1));
 	}
 }
 
@@ -453,12 +573,15 @@
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-status-panel {
+		--xmas-sleigh-scale: 1.28;
 		min-height: 250px;
 		padding-right: clamp(190px, 34vw, 390px);
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-status-panel > .acomp-status-retorninho {
-		width: clamp(220px, 42vw, 390px);
+		width: auto;
+		height: 100%;
+		max-width: 40%;
 	}
 }
 
@@ -512,6 +635,7 @@
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-status-panel {
+		--xmas-sleigh-scale: 1.08;
 		min-height: 360px;
 		padding-right: 14px;
 		padding-bottom: 180px;
@@ -519,9 +643,11 @@
 
 	.acomp-page.is-christmas-2026 .acomp-status-panel > .acomp-status-retorninho {
 		right: -6px;
-		bottom: -30px;
-		width: min(94%, 400px);
-		max-height: 220px;
+		bottom: -12px;
+		width: auto;
+		height: 190px;
+		max-width: 94%;
+		max-height: none;
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel .acomp-ranking-list {
@@ -543,5 +669,9 @@
 	.acomp-page.is-christmas-2026 .acomp-status-panel > .acomp-status-retorninho,
 	.acomp-page.is-christmas-2026 .acomp-festive-particles span {
 		animation: none !important;
+	}
+
+	.acomp-page.is-christmas-2026 .acomp-status-panel > .acomp-status-retorninho {
+		transform: scale(var(--xmas-sleigh-scale, 1));
 	}
 }

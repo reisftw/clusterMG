@@ -279,13 +279,13 @@ export function AutomaticProduction({ summary }) {
 	const daily = summary.dailyProduction;
 	const weekly = summary.weeklyProduction;
 	return <OperationalRotation>
-		<section className="acomp-panel">
+		<section className="acomp-panel acomp-production-panel is-daily">
 			<div className="acomp-panel-title"><h2>PRODUÇÃO DO DIA</h2><span>{summary.date}</span></div>
 			<strong style={{ fontSize: 36 }}>{daily.total}</strong>
 			{daily.meta != null ? <p>Meta: {daily.meta} · {daily.percent}% · Faltam {daily.remaining}</p> : null}
 			{daily.updatedAt ? <p>Atualizado: {new Date(daily.updatedAt).toLocaleTimeString("pt-BR")}</p> : null}
 		</section>
-		<section className="acomp-panel">
+		<section className="acomp-panel acomp-production-panel is-weekly">
 			<div className="acomp-panel-title"><h2>PRODUÇÃO SEMANAL</h2></div>
 			<strong style={{ fontSize: 36 }}>{weekly.total}</strong>
 			<p>Média diária: {weekly.averagePerDay}</p>
