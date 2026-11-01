@@ -70,6 +70,7 @@ const PAGE_TITLES = {
 	[ROUTES.METAS]: "Metas",
 	[ROUTES.RANKING]: "Ranking",
 	[ROUTES.NOTIFICACOES]: "Notificações",
+	[ROUTES.PUSH_SETTINGS]: "Push",
 	[ROUTES.RELATORIOS]: "Central de Relatorios",
 	[ROUTES.FERIADOS]: "Feriados e Calendario",
 	[ROUTES.USUARIOS]: "Usuários",

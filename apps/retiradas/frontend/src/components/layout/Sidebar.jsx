@@ -484,6 +484,12 @@ const NAV_ITEMS = [
 		],
 	},
 	{
+		label: "Push",
+		path: ROUTES.PUSH_SETTINGS,
+		icon: Send,
+		permission: ["configuracao.push.view", "configuracao.push.manage"],
+	},
+	{
 		label: "Geral",
 		path: ROUTES.CONFIGURACOES_GERAIS,
 		icon: SlidersHorizontal,
@@ -749,6 +755,7 @@ const MODERN_MENU_ORDER = [
 	ROUTES.MENSAGERIA,
 	ROUTES.CONFIGURACOES_GERAIS,
 	ROUTES.NOTIFICACOES,
+	ROUTES.PUSH_SETTINGS,
 	ROUTES.REGIONAIS,
 	ROUTES.USUARIOS,
 	ROUTES.AGENTES,
@@ -946,6 +953,7 @@ const MENU_GROUPS = [
 		paths: [
 			ROUTES.CONFIGURACOES_GERAIS,
 			ROUTES.NOTIFICACOES,
+			ROUTES.PUSH_SETTINGS,
 			ROUTES.REGIONAIS,
 			ROUTES.USUARIOS,
 			ROUTES.CARGOS_PERMISSOES,

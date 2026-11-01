@@ -234,6 +234,9 @@ const WhatsappCloudSettings = lazy(
 const ConfiguracoesGerais = lazy(
 	() => import("../modules/configuracoes/components/ConfiguracoesGeraisPage"),
 );
+const PushSettings = lazy(
+	() => import("../modules/configuracoes/components/PushSettingsPage"),
+);
 const MercadoLayout = lazy(
 	() => import("../modules/mercado/components/MercadoLayout"),
 );
@@ -1094,6 +1097,16 @@ const AppRouter = () => (
 									]}
 								>
 									<ConfiguracoesGerais />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.PUSH_SETTINGS}
+							element={
+								<ProtectedRoute
+									requiredPermission={["configuracao.push.view", "configuracao.push.manage"]}
+								>
+									<PushSettings />
 								</ProtectedRoute>
 							}
 						/>

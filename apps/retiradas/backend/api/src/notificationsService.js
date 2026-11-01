@@ -170,6 +170,7 @@ function userEmpresaId(user = {}) {
 
 function normalizeTargets(targets = {}) {
 	return {
+		all: targets.all === true,
 		roles: Array.isArray(targets.roles)
 			? targets.roles.map((role) => String(role).toLowerCase())
 			: [],
@@ -306,10 +307,11 @@ async function createNotification({
 			dedupeKey: `${id}:${target}:created`,
 		});
 	}
-	await pushNotifications.sendNotificationToTargets(data).catch((error) => {
+	const pushDelivery = await pushNotifications.sendNotificationToTargets(data).catch((error) => {
 		console.warn("[notifications] Falha no envio Web Push:", error?.message || error);
+		return { selected: 0, sent: 0, failed: 0, error: error?.message || "Falha no push." };
 	});
-	return data;
+	return { ...data, pushDelivery };
 }
 
 async function notificationExists(id) {

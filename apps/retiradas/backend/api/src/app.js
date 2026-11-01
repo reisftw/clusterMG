@@ -2741,6 +2741,7 @@ function createApp() {
 		"/api/push",
 		createPushNotificationsRouter({
 			adminRoles: ADMIN_ROLES,
+			notificationsService,
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,

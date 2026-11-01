@@ -63,6 +63,7 @@ export const ROUTES = {
 	TENTATIVAS: "/tentativas",
 	EVIDENCIAS: "/evidencias",
 	CONFIGURACOES_GERAIS: "/configuracoes/geral",
+	PUSH_SETTINGS: "/configuracoes/push",
 	API_STATUS: "/configuracoes/apis",
 	HUBSOFT_SETTINGS: "/configuracoes/hubsoft",
 	CVORTEX_SETTINGS: "/configuracoes/cvortex",

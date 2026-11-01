@@ -134,6 +134,22 @@ export async function fetchPushAdminOverview() {
 	return requestVpsApi("/push/overview").catch(() => ({ total: 0, active: 0, users: 0, recent: [] }));
 }
 
+export async function fetchPushAdminRecipients(params = {}) {
+	const query = new URLSearchParams();
+	if (params.search) query.set("search", params.search);
+	if (params.role) query.set("role", params.role);
+	query.set("limit", String(params.limit || 500));
+	return requestVpsApi(`/push/admin/recipients?${query.toString()}`);
+}
+
+export async function fetchPushAdminCampaigns(params = {}) {
+	const query = new URLSearchParams({
+		page: String(params.page || 1),
+		limit: String(params.limit || 20),
+	});
+	return requestVpsApi(`/push/admin/campaigns?${query.toString()}`);
+}
+
 export async function sendAdminPushNotification(payload) {
 	return requestVpsApi("/push/send", { method: "POST", body: JSON.stringify(payload || {}) });
 }

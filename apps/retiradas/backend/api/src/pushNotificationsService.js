@@ -100,6 +100,7 @@ async function removeSubscription({ user = {}, endpoint = "" } = {}) {
 }
 
 function targetMatches(subscription, targets = {}) {
+	if (targets.all === true) return true;
 	const users = Array.isArray(targets.users) ? targets.users.map((item) => text(item).toLowerCase()) : [];
 	const roles = Array.isArray(targets.roles) ? targets.roles.map((item) => text(item).toLowerCase()) : [];
 	if (users.length && !users.includes(text(subscription.user_id).toLowerCase()) && !users.includes(text(subscription.user_email).toLowerCase())) return false;
@@ -127,7 +128,7 @@ async function recordEvent({ notificationId, userId = "", userEmail = "", eventT
 async function sendNotificationToTargets(notification = {}) {
 	if (notification.meta?.pushEnabled === false) return { sent: 0, failed: 0, skipped: true };
 	const targets = notification.targets || {};
-	if (!targets.users?.length && !targets.roles?.length) return { sent: 0, failed: 0 };
+	if (targets.all !== true && !targets.users?.length && !targets.roles?.length) return { selected: 0, sent: 0, failed: 0 };
 	await configureWebPush();
 	const subscriptions = await db.query("select * from retiradas_push_subscriptions where active=true");
 	const selected = subscriptions.rows.filter((item) => targetMatches(item, targets) && acceptsTopic(item, notification));
@@ -159,7 +160,123 @@ async function sendNotificationToTargets(notification = {}) {
 			await recordEvent({ notificationId: notification.id, userId: item.user_id, userEmail: item.user_email, eventType: "FAILED", channel: "PUSH", dedupeKey: `${notification.id}:${item.id}:failed`, metadata: { error: text(error?.message), statusCode: error?.statusCode || null } });
 		}
 	}
-	return { sent, failed };
+	return { selected: selected.length, sent, failed };
+}
+
+function normalizeTargetValues(values = []) {
+	return [...new Set((Array.isArray(values) ? values : []).map((item) => text(item).toLowerCase()).filter(Boolean))];
+}
+
+async function estimateAudience(targets = {}) {
+	const users = normalizeTargetValues(targets.users);
+	const roles = normalizeTargetValues(targets.roles);
+	if (targets.all === true) {
+		const result = await db.query("select count(*)::int total from app_users where disabled=false");
+		return Number(result.rows[0]?.total || 0);
+	}
+	if (users.length) {
+		const result = await db.query(
+			`select count(*)::int total from app_users
+			  where disabled=false and (lower(uid)=any($1::text[]) or lower(email)=any($1::text[]))`,
+			[users],
+		);
+		return Number(result.rows[0]?.total || 0);
+	}
+	if (roles.length) {
+		const result = await db.query(
+			"select count(*)::int total from app_users where disabled=false and lower(role)=any($1::text[])",
+			[roles],
+		);
+		return Number(result.rows[0]?.total || 0);
+	}
+	return 0;
+}
+
+async function listRecipients({ search = "", role = "", limit = 300 } = {}) {
+	const normalizedSearch = text(search).toLowerCase().slice(0, 120);
+	const normalizedRole = text(role).toLowerCase().slice(0, 80);
+	const safeLimit = Math.min(Math.max(Math.trunc(Number(limit)) || 300, 1), 500);
+	const result = await db.query(
+		`select u.uid, u.email, u.display_name, u.role, u.regional,
+		        count(s.id) filter (where s.active=true)::int active_devices
+		   from app_users u
+		   left join retiradas_push_subscriptions s
+		     on s.user_id=u.uid or lower(s.user_email)=lower(u.email)
+		  where u.disabled=false
+		    and ($1='' or lower(u.role)=$1)
+		    and ($2='' or lower(coalesce(u.display_name,'') || ' ' || coalesce(u.email,'')) like '%' || $2 || '%')
+		  group by u.uid,u.email,u.display_name,u.role,u.regional
+		  order by coalesce(u.display_name,u.email) asc
+		  limit $3`,
+		[normalizedRole, normalizedSearch, safeLimit],
+	);
+	return result.rows.map((item) => ({
+		id: item.uid,
+		email: item.email,
+		name: item.display_name || item.email,
+		role: item.role,
+		regional: item.regional || "",
+		activeDevices: Number(item.active_devices || 0),
+	}));
+}
+
+async function saveCampaign({ notification, targetMode, targetValues, audienceCount, user = {} }) {
+	const identity = userIdentity(user);
+	const delivery = notification.pushDelivery || {};
+	const result = await db.query(
+		`insert into retiradas_push_campaigns (
+			notification_id,title,message,severity,target_path,target_mode,target_values,
+			audience_count,selected_devices,sent_devices,failed_devices,created_by_id,created_by_name
+		 ) values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13)
+		 returning *`,
+		[
+			notification.id,
+			notification.title,
+			notification.message,
+			notification.severity || "info",
+			notification.targetPath || null,
+			targetMode,
+			JSON.stringify(targetValues || []),
+			Number(audienceCount || 0),
+			Number(delivery.selected || 0),
+			Number(delivery.sent || 0),
+			Number(delivery.failed || 0),
+			identity.id || null,
+			identity.name || identity.email || null,
+		],
+	);
+	return mapCampaign(result.rows[0]);
+}
+
+function mapCampaign(row = {}) {
+	return {
+		id: row.id,
+		notificationId: row.notification_id,
+		title: row.title,
+		message: row.message,
+		severity: row.severity,
+		targetPath: row.target_path || "",
+		targetMode: row.target_mode,
+		targetValues: row.target_values || [],
+		audienceCount: Number(row.audience_count || 0),
+		selectedDevices: Number(row.selected_devices || 0),
+		sentDevices: Number(row.sent_devices || 0),
+		failedDevices: Number(row.failed_devices || 0),
+		createdByName: row.created_by_name || "Sistema",
+		createdAt: row.created_at,
+	};
+}
+
+async function listCampaigns({ page = 1, limit = 20 } = {}) {
+	const safeLimit = Math.min(Math.max(Math.trunc(Number(limit)) || 20, 1), 100);
+	const safePage = Math.max(Math.trunc(Number(page)) || 1, 1);
+	const offset = (safePage - 1) * safeLimit;
+	const [items, count] = await Promise.all([
+		db.query("select * from retiradas_push_campaigns order by created_at desc limit $1 offset $2", [safeLimit, offset]),
+		db.query("select count(*)::int total from retiradas_push_campaigns"),
+	]);
+	const total = Number(count.rows[0]?.total || 0);
+	return { items: items.rows.map(mapCampaign), page: safePage, limit: safeLimit, total, totalPages: Math.max(Math.ceil(total / safeLimit), 1) };
 }
 
 async function recordOpen({ user = {}, notificationId = "", channel = "IN_APP" } = {}) {
@@ -176,18 +293,29 @@ async function recordRead({ user = {}, notificationIds = [] } = {}) {
 }
 
 async function getOverview() {
-	const subscriptions = await db.query(`select count(*)::int total,count(*) filter(where active)::int active,count(distinct coalesce(user_id,user_email)) filter(where active)::int users from retiradas_push_subscriptions`);
-	const recent = await db.query(`select event_type,channel,count(*)::int total from retiradas_notification_events where event_at>=now()-interval '7 days' group by event_type,channel order by event_type,channel`);
-	return { ...(subscriptions.rows[0] || { total: 0, active: 0, users: 0 }), recent: recent.rows };
+	const [subscriptions, users, recent] = await Promise.all([
+		db.query(`select count(*)::int total,count(*) filter(where active)::int active,count(distinct coalesce(user_id,user_email)) filter(where active)::int users from retiradas_push_subscriptions`),
+		db.query("select count(*)::int total from app_users where disabled=false"),
+		db.query(`select event_type,channel,count(*)::int total from retiradas_notification_events where event_at>=now()-interval '7 days' group by event_type,channel order by event_type,channel`),
+	]);
+	return {
+		...(subscriptions.rows[0] || { total: 0, active: 0, users: 0 }),
+		allUsers: Number(users.rows[0]?.total || 0),
+		recent: recent.rows,
+	};
 }
 
 module.exports = {
+	estimateAudience,
 	getOverview,
 	getPublicConfig,
+	listCampaigns,
+	listRecipients,
 	recordEvent,
 	recordOpen,
 	recordRead,
 	removeSubscription,
 	saveSubscription,
+	saveCampaign,
 	sendNotificationToTargets,
 };
