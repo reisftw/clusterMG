@@ -1086,7 +1086,7 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 		},
 		value: metaMes ? `${performance.deliveredPercent.toFixed(1)}%` : "--",
 		helper: metaMes
-			? `Alvo ${formatNumber(
+			? `Entregue ${formatNumber(performance.total)} · Alvo ${formatNumber(
 					performance.targetOS,
 				)} retiradas (${performance.targetPercent.toLocaleString("pt-BR", {
 					maximumFractionDigits: 1,
