@@ -47,6 +47,10 @@ const DEFAULT_ROUTING_URL = "https://router.project-osrm.org/route/v1/driving";
 const LOCATION_HISTORY_MIN_DISTANCE_METERS = 25;
 const LOCATION_HISTORY_MAX_INTERVAL_MS = 2 * 60 * 1000;
 const VISIT_PROXIMITY_METERS = 180;
+const VISIT_REENTRY_GAP_MINUTES = Math.min(
+	Math.max(Number.parseInt(process.env.MAPS_VISIT_REENTRY_GAP_MINUTES, 10) || 60, 15),
+	24 * 60,
+);
 const navigationCache = new Map();
 let locationHistoryCleanupAt = 0;
 
@@ -1607,7 +1611,11 @@ async function recordNearbyOrders(coordinates, user, recordedAt) {
 			 on conflict (order_id, user_id, event_date) do update set
 			   last_seen_at = greatest(maps_order_proximity_events.last_seen_at, excluded.last_seen_at),
 			   minimum_distance_meters = least(maps_order_proximity_events.minimum_distance_meters, excluded.minimum_distance_meters),
-			   observations = maps_order_proximity_events.observations + 1,
+			   observations = maps_order_proximity_events.observations + case
+			     when excluded.last_seen_at - maps_order_proximity_events.last_seen_at >= make_interval(mins => $8::int)
+			       then 1
+			     else 0
+			   end,
 			   technician_name = excluded.technician_name,
 			   metadata = maps_order_proximity_events.metadata || excluded.metadata`,
 			[
@@ -1618,6 +1626,7 @@ async function recordNearbyOrders(coordinates, user, recordedAt) {
 				recordedAt,
 				row.distanceMeters,
 				JSON.stringify({ orderNumber: row.num_os, clientCode: row.codigo_cliente }),
+				VISIT_REENTRY_GAP_MINUTES,
 			],
 		);
 	}

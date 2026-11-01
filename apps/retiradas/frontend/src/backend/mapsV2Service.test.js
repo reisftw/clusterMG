@@ -244,6 +244,32 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(source).toContain("metadata->'clientCodes'");
 	});
 
+	it("consolida leituras proximas em visitas e destaca a aproximacao no mapa", () => {
+		const service = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		const migration = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/sql/111_maps_visit_dedupe.sql"),
+			"utf8",
+		);
+		const page = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/frontend/src/modules/maps/pages/VisitCenterPage.jsx"),
+			"utf8",
+		);
+		const map = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/frontend/src/modules/maps/components/AdminTechniciansMapCanvas.jsx"),
+			"utf8",
+		);
+		expect(service).toContain("VISIT_REENTRY_GAP_MINUTES");
+		expect(service).toContain("make_interval(mins => $8::int)");
+		expect(migration).toContain("set observations = 1");
+		expect(page).toContain('import "../styles/maps-admin.css"');
+		expect(page).toContain("visitas consolidadas");
+		expect(map).toContain("maps-visit-distance-tooltip");
+		expect(map).toContain("Ponto de maior proximidade");
+	});
+
 	it("enfileira todo o backlog sem limitar a geocodificacao a cem ordens", () => {
 		const source = fs.readFileSync(
 			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),

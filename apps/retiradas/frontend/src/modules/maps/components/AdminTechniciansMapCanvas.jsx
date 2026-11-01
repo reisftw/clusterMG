@@ -125,6 +125,7 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 		layer.clearLayers();
 		const coordinates = (trackPoints || []).filter(validPoint).map((point) => [Number(point.latitude), Number(point.longitude)]);
 		if (coordinates.length >= 2) {
+			L.polyline(coordinates, { color: "#fff", weight: 11, opacity: 0.82, lineCap: "round", lineJoin: "round", interactive: false }).addTo(layer);
 			L.polyline(coordinates, { color: "#f97316", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(layer);
 		}
 		if (coordinates.length) {
@@ -133,6 +134,37 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 		}
 		if (validPoint(orderPoint)) {
 			const target = [Number(orderPoint.latitude), Number(orderPoint.longitude)];
+			if (coordinates.length) {
+				const closest = coordinates.reduce((best, point) => {
+					const distance = L.latLng(point).distanceTo(L.latLng(target));
+					return !best || distance < best.distance ? { point, distance } : best;
+				}, null);
+				const reportedDistance = Number(orderPoint.proximityDistanceMeters);
+				const distanceMeters = Number.isFinite(reportedDistance)
+					? reportedDistance
+					: closest.distance;
+				const distanceLabel = distanceMeters < 1000
+					? `${Math.round(distanceMeters)} m`
+					: `${(distanceMeters / 1000).toFixed(1).replace(".", ",")} km`;
+				L.polyline([closest.point, target], {
+					color: "#0e8ff1",
+					weight: 4,
+					opacity: 0.95,
+					dashArray: "9 8",
+					lineCap: "round",
+				}).bindTooltip(`Menor aproximacao: ${distanceLabel}`, {
+					permanent: true,
+					direction: "center",
+					className: "maps-visit-distance-tooltip",
+				}).addTo(layer);
+				L.circleMarker(closest.point, {
+					radius: 8,
+					color: "#fff",
+					weight: 3,
+					fillColor: "#0e8ff1",
+					fillOpacity: 1,
+				}).bindTooltip("Ponto de maior proximidade").addTo(layer);
+			}
 			coordinates.push(target);
 			L.circleMarker(target, { radius: 10, color: "#fff", weight: 4, fillColor: "#0e8ff1", fillOpacity: 1 })
 				.bindTooltip(`O.S. ${orderPoint.orderNumber || "selecionada"}`, { permanent: true, direction: "top" })

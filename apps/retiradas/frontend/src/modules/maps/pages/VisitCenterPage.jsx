@@ -16,6 +16,7 @@ import { Link } from "react-router-dom";
 import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import AdminTechniciansMapCanvas from "../components/AdminTechniciansMapCanvas";
 import { mapsService } from "../services/mapsService";
+import "../styles/maps-admin.css";
 import "../styles/maps-visits.css";
 
 function dateKey(daysAgo = 0) {
@@ -86,12 +87,7 @@ export default function VisitCenterPage() {
 		[data.items, selectedOrderId],
 	);
 
-	useEffect(() => {
-		setSelectedTechnician(null);
-		setTrack(null);
-	}, [selectedOrderId]);
-
-	async function showTrack(technician) {
+	const showTrack = useCallback(async (technician) => {
 		setSelectedTechnician(technician);
 		setTrackLoading(true);
 		try {
@@ -102,7 +98,17 @@ export default function VisitCenterPage() {
 		} finally {
 			setTrackLoading(false);
 		}
-	}
+	}, []);
+
+	const defaultTechnician = selectedOrder?.technicians?.[0] || null;
+	useEffect(() => {
+		setTrack(null);
+		if (!defaultTechnician) {
+			setSelectedTechnician(null);
+			return;
+		}
+		void showTrack(defaultTechnician);
+	}, [defaultTechnician, selectedOrderId, showTrack]);
 
 	function submitSearch(event) {
 		event.preventDefault();
@@ -130,7 +136,7 @@ export default function VisitCenterPage() {
 			<section className="maps-visits-summary" aria-label="Resumo das visitas">
 				<div><MapPin size={18} /><span><strong>{summary.orders || 0}</strong> O.S. visitadas</span></div>
 				<div><UsersRound size={18} /><span><strong>{summary.technicianPassages || 0}</strong> tecnico x O.S.</span></div>
-				<div><Crosshair size={18} /><span><strong>{summary.observations || 0}</strong> leituras proximas</span></div>
+				<div><Crosshair size={18} /><span><strong>{summary.observations || 0}</strong> visitas consolidadas</span></div>
 				<div><Route size={18} /><span><strong>{summary.repeatedOrders || 0}</strong> com mais de um tecnico</span></div>
 			</section>
 
@@ -147,7 +153,7 @@ export default function VisitCenterPage() {
 							<button type="button" key={item.id} className={selectedOrderId === item.id ? "is-selected" : ""} onClick={() => setSelectedOrderId(item.id)}>
 								<span className="maps-visits-position">{(page - 1) * 20 + index + 1}</span>
 								<span className="maps-visits-order-copy"><strong>O.S. {item.orderNumber}</strong><small>({item.clientCode}) {item.clientName}</small><small>{item.neighborhood} · {item.city}</small></span>
-								<span className="maps-visits-order-score"><strong>{item.uniqueTechnicians}</strong><small>tecnicos</small><em>{item.observations} passagens</em></span>
+								<span className="maps-visits-order-score"><strong>{item.uniqueTechnicians}</strong><small>tecnicos</small><em>{item.observations} visitas</em></span>
 							</button>
 						))}
 						{!loading && !data.items?.length ? <div className="maps-visits-empty"><Crosshair size={28} /><strong>Nenhuma passagem neste periodo</strong><span>A central sera preenchida quando tecnicos passarem a ate 180 m das O.S.</span></div> : null}
@@ -166,7 +172,10 @@ export default function VisitCenterPage() {
 						focusId=""
 						frameRevision={0}
 						trackPoints={track?.points || []}
-						orderPoint={selectedOrder}
+						orderPoint={selectedOrder ? {
+							...selectedOrder,
+							proximityDistanceMeters: selectedTechnician?.minimumDistanceMeters ?? selectedOrder.minimumDistanceMeters,
+						} : null}
 						onSelect={() => {}}
 						onError={setError}
 					/>
@@ -179,12 +188,12 @@ export default function VisitCenterPage() {
 							<div className="maps-visits-technicians">
 								{selectedOrder.technicians.map((technician) => (
 									<button type="button" key={technician.userId} className={selectedTechnician?.userId === technician.userId ? "is-selected" : ""} onClick={() => showTrack(technician)}>
-										<span><strong>{technician.technicianName}</strong><small><Clock3 size={12} /> {formatDateTime(technician.lastSeenAt)} · a {formatDistance(technician.minimumDistanceMeters)}</small></span>
+										<span><strong>{technician.technicianName}</strong><small><Clock3 size={12} /> {formatDateTime(technician.lastSeenAt)} · {technician.observations} visita(s) · a {formatDistance(technician.minimumDistanceMeters)}</small></span>
 										<em><Route size={15} /> Ver rota</em>
 									</button>
 								))}
 							</div>
-							{selectedTechnician ? <div className="maps-visits-track-summary"><Route size={16} /><strong>{selectedTechnician.technicianName}</strong><span>{trackLoading ? "Carregando rota..." : `${formatDistance(track?.summary?.distanceMeters)} percorridos · ${track?.summary?.positions || 0} pontos em ${selectedTechnician.latestDate}`}</span></div> : <div className="maps-visits-track-hint">Selecione um tecnico para desenhar a rota do dia da passagem.</div>}
+							{selectedTechnician ? <div className="maps-visits-track-summary"><Route size={16} /><strong>{selectedTechnician.technicianName}</strong><span>{trackLoading ? "Carregando rota..." : `${formatDistance(track?.summary?.distanceMeters)} percorridos · ${track?.summary?.positions || 0} pontos em ${selectedTechnician.latestDate}`}</span></div> : <div className="maps-visits-track-hint">A rota sera exibida automaticamente ao selecionar uma O.S.</div>}
 						</div>
 					) : null}
 				</section>
