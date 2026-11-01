@@ -39,6 +39,7 @@ export const mapsService = {
 	saveTechnicianPresence: (payload) => send("/technicians/presence", "POST", payload),
 	liveTechnicians: (params) => get("/admin/technicians/live", params),
 	technicianTrack: (id, params) => get(`/admin/technicians/${encodeURIComponent(id)}/track`, params),
+	visitCenter: (params) => get("/admin/visits", params),
 	radarAlerts: (params) => get("/radar/alerts", params),
 	dismissAlert: (id) => send(`/radar/alerts/${encodeURIComponent(id)}/dismiss`, "POST"),
 	simulateRadar: (payload) => send("/radar/simulate", "POST", payload),

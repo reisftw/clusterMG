@@ -95,6 +95,7 @@ export const ROUTES = {
 	MAPA: "/mapa",
 	MAPS: "/maps",
 	MAPS_ADMIN: "/maps/adminmap",
+	MAPS_VISITS: "/maps/visitas",
 	MAPA_HISTORICO: "/mapa/historico",
 	MAPAS_ATUALIZACOES: "/mapas/atualizacoes",
 	MERCADO: "/mercado",

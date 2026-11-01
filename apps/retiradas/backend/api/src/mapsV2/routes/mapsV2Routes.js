@@ -136,6 +136,14 @@ function createMapsV2Router({
 		}
 	});
 
+	router.get("/admin/visits", readLimiter, requireTracks, async (req, res, next) => {
+		try {
+			res.json(await service.listVisitCenter(req.query || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/radar/alerts", readLimiter, requireRadar, async (req, res, next) => {
 		try {
 			res.json(await service.listRadarAlerts(req.query || {}, req.user || {}));

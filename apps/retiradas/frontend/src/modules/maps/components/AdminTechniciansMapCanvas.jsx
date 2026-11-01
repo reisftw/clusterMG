@@ -25,7 +25,7 @@ function markerIcon(item, selected) {
 	});
 }
 
-export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, frameRevision, trackPoints = [], onSelect, onError }) {
+export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, frameRevision, trackPoints = [], orderPoint = null, onSelect, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const layerRef = useRef(null);
@@ -124,12 +124,22 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 		if (!map || !layer) return;
 		layer.clearLayers();
 		const coordinates = (trackPoints || []).filter(validPoint).map((point) => [Number(point.latitude), Number(point.longitude)]);
-		if (coordinates.length < 2) return;
-		L.polyline(coordinates, { color: "#f97316", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(layer);
-		L.circleMarker(coordinates[0], { radius: 7, color: "#fff", weight: 3, fillColor: "#109765", fillOpacity: 1 }).bindTooltip("Inicio da rota").addTo(layer);
-		L.circleMarker(coordinates.at(-1), { radius: 7, color: "#fff", weight: 3, fillColor: "#f97316", fillOpacity: 1 }).bindTooltip("Ultima posicao").addTo(layer);
-		map.fitBounds(L.latLngBounds(coordinates), { padding: [80, 80], maxZoom: 17, animate: true });
-	}, [trackPoints]);
+		if (coordinates.length >= 2) {
+			L.polyline(coordinates, { color: "#f97316", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(layer);
+		}
+		if (coordinates.length) {
+			L.circleMarker(coordinates[0], { radius: 7, color: "#fff", weight: 3, fillColor: "#109765", fillOpacity: 1 }).bindTooltip("Inicio da rota").addTo(layer);
+			L.circleMarker(coordinates.at(-1), { radius: 7, color: "#fff", weight: 3, fillColor: "#f97316", fillOpacity: 1 }).bindTooltip("Ultima posicao").addTo(layer);
+		}
+		if (validPoint(orderPoint)) {
+			const target = [Number(orderPoint.latitude), Number(orderPoint.longitude)];
+			coordinates.push(target);
+			L.circleMarker(target, { radius: 10, color: "#fff", weight: 4, fillColor: "#0e8ff1", fillOpacity: 1 })
+				.bindTooltip(`O.S. ${orderPoint.orderNumber || "selecionada"}`, { permanent: true, direction: "top" })
+				.addTo(layer);
+		}
+		if (coordinates.length) map.fitBounds(L.latLngBounds(coordinates), { padding: [80, 80], maxZoom: 17, animate: true });
+	}, [orderPoint, trackPoints]);
 
 	useEffect(() => {
 		const map = mapRef.current;

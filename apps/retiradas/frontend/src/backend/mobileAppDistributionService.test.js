@@ -40,8 +40,8 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(assetLinks[0].target.sha256_cert_fingerprints).toContain(
 			manifest.fingerprints[0].value,
 		);
-		expect(manifest.appVersionName).toBe("1.0.3");
-		expect(manifest.appVersionCode).toBe(103);
+		expect(manifest.appVersionName).toBe("1.0.4");
+		expect(manifest.appVersionCode).toBe(104);
 	});
 
 	it("inclui rastreamento nativo seguro e atualizacao obrigatoria", () => {
@@ -65,6 +65,13 @@ describe("Distribuicao do aplicativo Android", () => {
 		);
 		expect(notificationSettingsActivity).toContain("ManageDataLauncherActivity");
 		expect(notificationSettingsActivity).toContain("ACTION_APP_NOTIFICATION_SETTINGS");
+		const trackingService = fs.readFileSync(
+			"apps/retiradas/android-twa/app/src/main/java/br/com/brasiltecpar/retiradas/LocationTrackingService.java",
+			"utf8",
+		);
+		expect(trackingService).toContain("retiradas_nearby_orders");
+		expect(trackingService).toContain("showNativeRadarNotification");
+		expect(trackingService).toContain('optJSONObject("nativeNotification")');
 	});
 
 	it("exibe somente o endereco publico limpo para baixar o aplicativo", () => {

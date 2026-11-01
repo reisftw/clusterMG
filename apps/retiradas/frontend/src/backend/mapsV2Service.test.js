@@ -221,10 +221,27 @@ describe("Retiradas Maps 2.0 service", () => {
 		);
 		expect(router).toContain('router.post("/requests/batch"');
 		expect(router).toContain('router.get("/admin/technicians/:id/track"');
+		expect(router).toContain('router.get("/admin/visits"');
 		expect(migration).toContain("create table if not exists maps_technician_location_history");
 		expect(migration).toContain("create table if not exists maps_order_proximity_events");
 		expect(migration).toContain("select 'admin', 'retiradas.maps.v2.view_tracks'");
 		expect(migration).not.toContain("select 'tecnico', 'retiradas.maps.v2.view_tracks'");
+	});
+
+	it("agrega a central de visitas e devolve alerta para o canal Android nativo", () => {
+		const source = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		expect(source).toContain("async function listVisitCenter");
+		expect(source).toContain("count(*)::int as unique_technicians");
+		expect(source).toContain("total_technician_passages");
+		expect(source).toContain("nativeNotification");
+		expect(source).toContain("clientCode: nearest?.clientCode");
+		expect(source).toContain("options.returnRadar === true");
+		expect(source).toContain("alreadyNotifiedClients");
+		expect(source).toContain("metadata->'orderIds'");
+		expect(source).toContain("metadata->'clientCodes'");
 	});
 
 	it("enfileira todo o backlog sem limitar a geocodificacao a cem ordens", () => {

@@ -127,6 +127,9 @@ const Maps = lazy(() => import("../modules/maps/pages/MapsPage"));
 const AdminTechniciansMap = lazy(
 	() => import("../modules/maps/pages/AdminTechniciansMapPage"),
 );
+const VisitCenter = lazy(
+	() => import("../modules/maps/pages/VisitCenterPage"),
+);
 const MapaHistorico = lazy(() => import("../pages/Mapa/MapaHistoricoPage"));
 const MapasAtualizacoes = lazy(
 	() => import("../modules/mapas/components/MapasAtualizacoesPage"),
@@ -558,6 +561,14 @@ const AppRouter = () => (
 						element={
 							<ProtectedRoute requiredPermission="retiradas.maps.v2.live_technicians">
 								<AdminTechniciansMap />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
+						path={ROUTES.MAPS_VISITS}
+						element={
+							<ProtectedRoute requiredPermission="retiradas.maps.v2.view_tracks">
+								<VisitCenter />
 							</ProtectedRoute>
 						}
 					/>

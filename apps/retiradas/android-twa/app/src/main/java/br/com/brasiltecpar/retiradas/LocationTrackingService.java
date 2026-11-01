@@ -18,7 +18,9 @@ import android.os.IBinder;
 
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -28,6 +30,7 @@ import java.util.concurrent.Executors;
 
 public class LocationTrackingService extends Service implements LocationListener {
     private static final String CHANNEL_ID = "retiradas_live_location";
+    private static final String ALERT_CHANNEL_ID = "retiradas_nearby_orders";
     private static final int NOTIFICATION_ID = 1202;
     private static final long MIN_TIME_MS = 30_000L;
     private static final float MIN_DISTANCE_METERS = 15f;
@@ -44,7 +47,7 @@ public class LocationTrackingService extends Service implements LocationListener
     @Override
     public void onCreate() {
         super.onCreate();
-        createChannel();
+        createChannels();
         startForeground(NOTIFICATION_ID, createNotification());
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         beginLocationUpdates();
@@ -60,12 +63,18 @@ public class LocationTrackingService extends Service implements LocationListener
         return START_STICKY;
     }
 
-    private void createChannel() {
+    private void createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Localizacao em tempo real", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Mantem a localizacao operacional do tecnico atualizada.");
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Localização em tempo real", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("Mantém a localização operacional do técnico atualizada.");
         channel.setShowBadge(false);
-        getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        NotificationChannel alerts = new NotificationChannel(ALERT_CHANNEL_ID, "Retiradas próximas", NotificationManager.IMPORTANCE_HIGH);
+        alerts.setDescription("Avisa quando existe uma retirada aberta próxima ao técnico.");
+        alerts.enableVibration(true);
+        alerts.setShowBadge(true);
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(channel);
+        manager.createNotificationChannel(alerts);
     }
 
     private Notification createNotification() {
@@ -74,8 +83,8 @@ public class LocationTrackingService extends Service implements LocationListener
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
-        return builder.setContentTitle("Retiradas em operacao")
-                .setContentText("Localizacao em tempo real ativa")
+        return builder.setContentTitle("Retiradas em operação")
+                .setContentText("Localização em tempo real ativa")
                 .setSmallIcon(R.drawable.ic_notification_icon)
                 .setContentIntent(pending)
                 .setOngoing(true)
@@ -136,9 +145,8 @@ public class LocationTrackingService extends Service implements LocationListener
                 output.write(body);
             }
             int status = connection.getResponseCode();
-            try (InputStream ignored = status >= 400 ? connection.getErrorStream() : connection.getInputStream()) {
-                // Consumir a resposta permite reutilizacao correta da conexao.
-            }
+            String response = readResponse(status >= 400 ? connection.getErrorStream() : connection.getInputStream());
+            if (status >= 200 && status < 300) showNativeRadarNotification(response);
             if (status == 401 || status == 403) {
                 SecureTokenStore.clear(this);
                 stopSelf();
@@ -147,6 +155,57 @@ public class LocationTrackingService extends Service implements LocationListener
             // A proxima leitura de GPS tenta novamente sem bloquear o aplicativo.
         } finally {
             if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static String readResponse(InputStream input) throws Exception {
+        if (input == null) return "{}";
+        StringBuilder result = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) result.append(line);
+        }
+        return result.toString();
+    }
+
+    private void showNativeRadarNotification(String response) {
+        try {
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
+            JSONObject radar = new JSONObject(response).optJSONObject("radar");
+            JSONObject notification = radar == null ? null : radar.optJSONObject("nativeNotification");
+            if (notification == null) return;
+            String alertId = notification.optString("id", "");
+            String title = notification.optString("title", "Retirada próxima de você");
+            String message = notification.optString("message", "Existe uma retirada aberta próxima da sua localização.");
+            String targetPath = notification.optString("targetPath", "/maps");
+            if (alertId.isEmpty()) return;
+
+            Intent openIntent = new Intent(this, LauncherActivity.class)
+                    .setAction(Intent.ACTION_VIEW)
+                    .setData(android.net.Uri.parse("https://retiradas.tech" + targetPath));
+            int alertNotificationId = 20_000 + Math.abs(alertId.hashCode() % 100_000);
+            PendingIntent pending = PendingIntent.getActivity(
+                    this,
+                    alertNotificationId,
+                    openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+            Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    ? new Notification.Builder(this, ALERT_CHANNEL_ID)
+                    : new Notification.Builder(this).setPriority(Notification.PRIORITY_HIGH);
+            Notification alert = builder
+                    .setContentTitle(title)
+                    .setContentText(message)
+                    .setStyle(new Notification.BigTextStyle().bigText(message))
+                    .setSmallIcon(R.drawable.ic_notification_icon)
+                    .setContentIntent(pending)
+                    .setAutoCancel(true)
+                    .setCategory(Notification.CATEGORY_RECOMMENDATION)
+                    .setVisibility(Notification.VISIBILITY_PUBLIC)
+                    .build();
+            getSystemService(NotificationManager.class).notify(alertNotificationId, alert);
+        } catch (Exception ignored) {
+            // Uma resposta incompleta nao pode interromper o rastreamento nativo.
         }
     }
 

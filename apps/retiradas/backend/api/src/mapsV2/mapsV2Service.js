@@ -920,16 +920,32 @@ async function evaluateRadar(payload = {}, user = {}) {
 		return { alerts: [], status: "rate_limited", nearby: eligible.length };
 	}
 	const orderIds = eligible.map((item) => item.id);
-	let cooldown = new Set();
+	const clientCodes = [...new Set(eligible.map((item) => text(item.clientCode)).filter(Boolean))];
+	let alreadyNotifiedOrders = new Set();
+	let alreadyNotifiedClients = new Set();
 	if (orderIds.length) {
 		const result = await db.query(
-			`select order_id from maps_radar_alerts
-			  where user_id = $1 and order_id = any($2::text[]) and cooldown_until > now()`,
-			[userId(user), orderIds],
+			`select order_id, metadata from maps_radar_alerts
+			  where user_id = $1
+			    and (order_id = any($2::text[])
+			      or coalesce(metadata->'orderIds', '[]'::jsonb) ?| $2::text[]
+			      or nullif(metadata->>'clientCode', '') = any($3::text[])
+			      or coalesce(metadata->'clientCodes', '[]'::jsonb) ?| $3::text[])`,
+			[userId(user), orderIds, clientCodes],
 		);
-		cooldown = new Set(result.rows.map((row) => row.order_id));
+		alreadyNotifiedOrders = new Set(result.rows.flatMap((row) => [
+			row.order_id,
+			...(Array.isArray(row.metadata?.orderIds) ? row.metadata.orderIds : []),
+		]).filter(Boolean));
+		alreadyNotifiedClients = new Set(result.rows.flatMap((row) => [
+			row.metadata?.clientCode,
+			...(Array.isArray(row.metadata?.clientCodes) ? row.metadata.clientCodes : []),
+		]).filter(Boolean));
 	}
-	const fresh = eligible.filter((item) => !cooldown.has(item.id));
+	const fresh = eligible.filter((item) =>
+		!alreadyNotifiedOrders.has(item.id) &&
+		(!text(item.clientCode) || !alreadyNotifiedClients.has(text(item.clientCode))),
+	);
 	if (!fresh.length) return { alerts: [], status: "monitoring", nearby: eligible.length };
 	const grouped = fresh.length > 1;
 	const category = grouped ? "multiple" : fresh[0].category;
@@ -945,7 +961,11 @@ async function evaluateRadar(payload = {}, user = {}) {
 			category,
 			grouped ? Math.min(...fresh.map((item) => item.distanceMeters)) : fresh[0].distanceMeters,
 			fresh.length,
-			JSON.stringify({ orderIds: fresh.map((item) => item.id) }),
+			JSON.stringify({
+				orderIds: fresh.map((item) => item.id),
+				clientCodes: [...new Set(fresh.map((item) => text(item.clientCode)).filter(Boolean))],
+				clientCode: grouped ? null : text(fresh[0]?.clientCode) || null,
+			}),
 		],
 	);
 	await db.query("update maps_radar_settings set last_alert_at = now(), updated_at = now() where user_id = $1", [userId(user)]);
@@ -953,13 +973,16 @@ async function evaluateRadar(payload = {}, user = {}) {
 	const ageDays = nearest?.openedAt
 		? Math.max(0, Math.floor((Date.now() - new Date(nearest.openedAt).getTime()) / 86_400_000))
 		: null;
+	const notificationTitle = grouped ? `${fresh.length} retiradas próximas` : "Retirada próxima de você";
+	const notificationMessage = grouped
+		? `${fresh.length} O.S. abertas. A mais próxima é (${nearest?.clientCode || "sem código"}) ${nearest?.clientName || "Cliente"}, a ${Math.round(Number(nearest?.distanceMeters || 0))} m.`
+		: `(${nearest?.clientCode || "sem código"}) ${nearest?.clientName || "Cliente"} está a ${Math.round(Number(nearest?.distanceMeters || 0))} m${ageDays === null ? "" : ` e aguarda há ${ageDays} dia(s)`}.`;
+	const notificationPath = nearest?.id ? `/maps?order=${encodeURIComponent(nearest.id)}` : "/maps";
 	await notificationsService.createNotification({
 		type: "maps_oportunidade_proxima",
-		title: grouped ? `${fresh.length} retiradas proximas` : "Retirada proxima de voce",
-		message: grouped
-			? `${fresh.length} O.S. abertas a partir de ${Math.round(Number(nearest?.distanceMeters || 0))} m.`
-			: `${nearest?.clientName || "Cliente"} esta a ${Math.round(Number(nearest?.distanceMeters || 0))} m${ageDays === null ? "" : ` e aguarda ha ${ageDays} dia(s)`}.`,
-		targetPath: nearest?.id ? `/maps?order=${encodeURIComponent(nearest.id)}` : "/maps",
+		title: notificationTitle,
+		message: notificationMessage,
+		targetPath: notificationPath,
 		severity: "warning",
 		user,
 		targets: { users: [userId(user)] },
@@ -969,11 +992,24 @@ async function evaluateRadar(payload = {}, user = {}) {
 			orderId: nearest?.id || null,
 			distanceMeters: nearest?.distanceMeters || null,
 			clientName: nearest?.clientName || null,
+			clientCode: nearest?.clientCode || null,
 			requestable: Boolean(nearest?.requestable),
 		},
 		dedupeKey: `maps_radar_${result.rows[0]?.id}`,
 	});
-	return { alerts: result.rows, status: "alert", nearby: eligible.length };
+	return {
+		alerts: result.rows,
+		status: "alert",
+		nearby: eligible.length,
+		nativeNotification: {
+			id: result.rows[0]?.id,
+			title: notificationTitle,
+			message: notificationMessage,
+			targetPath: notificationPath,
+			orderId: nearest?.id || null,
+			clientCode: nearest?.clientCode || null,
+		},
+	};
 }
 
 async function simulateRadar(payload = {}, user = {}) {
@@ -1671,6 +1707,123 @@ async function getTechnicianTrack(technicianUserId, query = {}) {
 	};
 }
 
+function visitCenterDefaultStartDate() {
+	const today = saoPauloClock().date;
+	const date = new Date(`${today}T12:00:00.000Z`);
+	date.setUTCDate(date.getUTCDate() - 6);
+	return date.toISOString().slice(0, 10);
+}
+
+async function listVisitCenter(query = {}) {
+	const startDate = trackDate(query.startDate || visitCenterDefaultStartDate());
+	const endDate = trackDate(query.endDate || saoPauloClock().date);
+	const rangeDays = Math.floor((Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / 86_400_000);
+	if (rangeDays < 0) throw apiError("A data inicial deve ser anterior a data final.");
+	if (rangeDays > 31) throw apiError("Consulte no maximo 32 dias por vez.");
+	const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
+	const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || 20, 1), 100);
+	const offset = (page - 1) * limit;
+	const search = `%${text(query.search).slice(0, 120)}%`;
+	const result = await db.query(
+		`with technician_passages as (
+		  select event.order_id, event.user_id,
+		         coalesce(nullif(max(event.technician_name), ''), nullif(max(app.display_name), ''),
+		                  nullif(max(app.email), ''), event.user_id) as technician_name,
+		         count(*)::int as active_days,
+		         sum(event.observations)::int as observations,
+		         min(event.minimum_distance_meters)::int as minimum_distance_meters,
+		         min(event.first_seen_at) as first_seen_at,
+		         max(event.last_seen_at) as last_seen_at,
+		         max(event.event_date) as latest_date
+		    from maps_order_proximity_events event
+		    left join app_users app on app.uid = event.user_id
+		   where event.event_date between $1::date and $2::date
+		   group by event.order_id, event.user_id
+		), ranked as (
+		  select passage.order_id,
+		         count(*)::int as unique_technicians,
+		         sum(passage.observations)::int as observations,
+		         min(passage.minimum_distance_meters)::int as minimum_distance_meters,
+		         min(passage.first_seen_at) as first_seen_at,
+		         max(passage.last_seen_at) as last_seen_at,
+		         jsonb_agg(jsonb_build_object(
+		           'userId', passage.user_id,
+		           'technicianName', passage.technician_name,
+		           'activeDays', passage.active_days,
+		           'observations', passage.observations,
+		           'minimumDistanceMeters', passage.minimum_distance_meters,
+		           'firstSeenAt', passage.first_seen_at,
+		           'lastSeenAt', passage.last_seen_at,
+		           'latestDate', passage.latest_date
+		         ) order by passage.last_seen_at desc) as technicians
+		    from technician_passages passage
+		   group by passage.order_id
+		), enriched as (
+		  select ranked.*, orders.num_os, orders.codigo_cliente, orders.nome_cliente,
+		         orders.cidade, orders.bairro, orders.endereco_resumo, orders.endereco,
+		         orders.tecnico, orders.status, orders.tipo, orders.data_abertura,
+		         location.latitude, location.longitude
+		    from ranked
+		    join ordens_servico orders on orders.id = ranked.order_id
+		    left join maps_order_locations location on location.order_id = ranked.order_id
+		   where concat_ws(' ', orders.num_os, orders.codigo_cliente, orders.nome_cliente,
+		                   orders.cidade, orders.bairro, orders.tecnico) ilike $3
+		)
+		select enriched.*,
+		       count(*) over()::int as total_rows,
+		       sum(unique_technicians) over()::int as total_technician_passages,
+		       sum(observations) over()::int as total_observations,
+		       count(*) filter (where unique_technicians > 1) over()::int as repeated_orders
+		  from enriched
+		 order by unique_technicians desc, observations desc, last_seen_at desc
+		 limit $4 offset $5`,
+		[startDate, endDate, search, limit, offset],
+	);
+	const first = result.rows[0] || {};
+	const items = result.rows.map((row) => ({
+		id: row.order_id,
+		orderNumber: row.num_os || "",
+		clientCode: row.codigo_cliente || "",
+		clientName: firstAndLastName(row.nome_cliente),
+		city: row.cidade || "Cidade nao informada",
+		neighborhood: row.bairro || "Bairro nao informado",
+		address: row.endereco_resumo || row.endereco || "Endereco nao informado",
+		technician: row.tecnico || "",
+		status: row.status || "",
+		type: row.tipo || "",
+		openedAt: row.data_abertura || null,
+		latitude: row.latitude === null ? null : Number(row.latitude),
+		longitude: row.longitude === null ? null : Number(row.longitude),
+		uniqueTechnicians: Number(row.unique_technicians || 0),
+		observations: Number(row.observations || 0),
+		minimumDistanceMeters: Number(row.minimum_distance_meters || 0),
+		firstSeenAt: row.first_seen_at,
+		lastSeenAt: row.last_seen_at,
+		technicians: Array.isArray(row.technicians) ? row.technicians.map((technician) => ({
+			...technician,
+			activeDays: Number(technician.activeDays || 0),
+			observations: Number(technician.observations || 0),
+			minimumDistanceMeters: Number(technician.minimumDistanceMeters || 0),
+		})) : [],
+	}));
+	return {
+		items,
+		pagination: {
+			page,
+			limit,
+			total: Number(first.total_rows || 0),
+			pages: Math.max(1, Math.ceil(Number(first.total_rows || 0) / limit)),
+		},
+		summary: {
+			orders: Number(first.total_rows || 0),
+			technicianPassages: Number(first.total_technician_passages || 0),
+			observations: Number(first.total_observations || 0),
+			repeatedOrders: Number(first.repeated_orders || 0),
+		},
+		period: { startDate, endDate },
+	};
+}
+
 async function getNavigation(orderId, payload = {}, user = {}) {
 	const origin = parseCoordinates(payload);
 	const order = await getOrder(orderId, user);
@@ -1761,12 +1914,18 @@ async function saveTechnicianPresence(payload = {}, user = {}, options = {}) {
 		console.warn("[mapsV2] Falha ao registrar trilha operacional:", error?.message || error);
 		return { recorded: false, reason: "history_error" };
 	});
-	if (history.recorded) {
+	let radar = null;
+	if (history.recorded && options.returnRadar === true) {
+		radar = await evaluateRadar({ ...coordinates, accuracy }, user).catch((error) => {
+			if (error?.code !== "42P01") console.warn("[mapsV2] Falha no radar por localizacao:", error?.message || error);
+			return { alerts: [], status: "error" };
+		});
+	} else if (history.recorded) {
 		void evaluateRadar({ ...coordinates, accuracy }, user).catch((error) => {
 			if (error?.code !== "42P01") console.warn("[mapsV2] Falha no radar por localizacao:", error?.message || error);
 		});
 	}
-	return { ok: true, lastSeenAt: result.rows[0]?.lastSeenAt || null, history };
+	return { ok: true, lastSeenAt: result.rows[0]?.lastSeenAt || null, history, radar };
 }
 
 async function listTechnicianPresence() {
@@ -1936,6 +2095,7 @@ module.exports = {
 	listRequests,
 	listRoutes,
 	listTechnicianPresence,
+	listVisitCenter,
 	optimizeRoute,
 	queueMissingGeocodes,
 	resolveRequest,

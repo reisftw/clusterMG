@@ -389,6 +389,7 @@ async function saveNativeLocation(deviceToken, payload = {}) {
 	const authenticated = await authenticateDevice(deviceToken);
 	const saved = await mapsV2Service.saveTechnicianPresence(payload, authenticated.user, {
 		consentSource: "ANDROID_FOREGROUND_SERVICE",
+		returnRadar: true,
 	});
 	await db.query(
 		`update mobile_app_devices set last_seen_at=now(),last_location_at=now(),updated_at=now(),

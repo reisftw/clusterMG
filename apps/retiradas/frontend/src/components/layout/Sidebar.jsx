@@ -23,6 +23,7 @@ import {
 	Mail,
 	Map,
 	MapPin,
+	MapPinned,
 	MessageCircle,
 	MessageCircleReply,
 	MessagesSquare,
@@ -122,6 +123,13 @@ const NAV_ITEMS = [
 		featured: true,
 	},
 	{
+		label: "Maps",
+		path: ROUTES.MAPS,
+		icon: MapPin,
+		permission: ["retiradas.maps.v2.access"],
+		featured: true,
+	},
+	{
 		label: "Diário",
 		path: ROUTES.DIARIO,
 		icon: ClipboardList,
@@ -138,6 +146,12 @@ const NAV_ITEMS = [
 		icon: Map,
 		permission: ["view_mapa", "destaque.mapa_os.view"],
 		featured: true,
+	},
+	{
+		label: "Central de visitas",
+		path: ROUTES.MAPS_VISITS,
+		icon: MapPinned,
+		permission: ["retiradas.maps.v2.view_tracks"],
 	},
 	{
 		label: "Atualizações",
@@ -695,6 +709,7 @@ const NAV_ITEMS = [
 
 const MODERN_FEATURED_ORDER = [
 	ROUTES.DASHBOARD,
+	ROUTES.MAPS,
 	ROUTES.DIARIO,
 	ROUTES.MAPA,
 	ROUTES.METAS,
@@ -702,6 +717,8 @@ const MODERN_FEATURED_ORDER = [
 ];
 const MODERN_MENU_ORDER = [
 	ROUTES.MAPA,
+	ROUTES.MAPS,
+	ROUTES.MAPS_VISITS,
 	ROUTES.MAPAS_ATUALIZACOES,
 	ROUTES.MAPA_HISTORICO,
 	ROUTES.EMPRESAS_TECNICOS,
@@ -853,7 +870,7 @@ const MENU_GROUPS = [
 		id: "mapas",
 		label: "Mapas",
 		icon: Map,
-		paths: [ROUTES.MAPA, ROUTES.MAPAS_ATUALIZACOES, ROUTES.MAPA_HISTORICO],
+		paths: [ROUTES.MAPA, ROUTES.MAPS, ROUTES.MAPS_VISITS, ROUTES.MAPAS_ATUALIZACOES, ROUTES.MAPA_HISTORICO],
 	},
 	{
 		id: "cliente",
