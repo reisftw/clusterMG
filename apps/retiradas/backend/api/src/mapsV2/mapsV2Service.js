@@ -18,6 +18,7 @@ const MAPS_PERMISSIONS = Object.freeze({
 	SETTINGS: "retiradas.maps.v2.manage_settings",
 	AUDIT: "retiradas.maps.v2.audit",
 	LIVE_TECHNICIANS: "retiradas.maps.v2.live_technicians",
+	VIEW_TRACKS: "retiradas.maps.v2.view_tracks",
 });
 
 const ALLOWED_RADII = new Set([100, 250, 300, 500, 1000]);
@@ -42,6 +43,12 @@ const NATIVE_COORDINATES_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const GEOCODE_QUEUE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const GEOCODE_QUEUE_BATCH_LIMIT = 25000;
 const DEFAULT_GEOCODER_URL = "https://nominatim.openstreetmap.org/search";
+const DEFAULT_ROUTING_URL = "https://router.project-osrm.org/route/v1/driving";
+const LOCATION_HISTORY_MIN_DISTANCE_METERS = 25;
+const LOCATION_HISTORY_MAX_INTERVAL_MS = 2 * 60 * 1000;
+const VISIT_PROXIMITY_METERS = 180;
+const navigationCache = new Map();
+let locationHistoryCleanupAt = 0;
 
 function broadcastMapsUpdate(action, payload = {}) {
 	broadcastRealtime("maps", {
@@ -81,6 +88,10 @@ function featureEnabled() {
 
 function geocoderUrl() {
 	return text(process.env.MAPS_GEOCODER_URL) || DEFAULT_GEOCODER_URL;
+}
+
+function routingUrl() {
+	return text(process.env.MAPS_ROUTING_URL) || DEFAULT_ROUTING_URL;
 }
 
 function userProfile(user = {}) {
@@ -285,6 +296,7 @@ function mapPoint(row, user, { origin = null } = {}) {
 		priority: /SEGUNDA TENTATIVA/i.test(text(row.tipo)) ? "high" : "normal",
 		distanceMeters,
 		lastUpdatedAt: row.updated_at,
+		openedAt: row.data_abertura || null,
 	};
 	return base;
 }
@@ -460,7 +472,63 @@ async function getOrder(orderId, user = {}) {
 	if (!row || !validateOrderRow(row)) throw apiError("Ordem nao encontrada no Maps.", 404, "ORDER_NOT_FOUND");
 	const point = mapPoint(row, user);
 	if (!filterVisiblePoint(point, user, new Set())) throw apiError("Voce nao pode visualizar esta ordem.", 403, "ORDER_FORBIDDEN");
+	point.visitEvidence = await getOrderVisitEvidence(row);
 	return point;
+}
+
+async function getOrderVisitEvidence(order = {}) {
+	const treatmentResult = await db.query(
+		`select id, status, tecnico_nome as "technicianName",
+		        coalesce(nao_recolhido_em, desfecho_em, atualizado_em, updated_at) as "eventAt"
+		   from agendamentos
+		  where (nullif(trim(os), '') = $1 or nullif(trim(codigo_cliente), '') = $2)
+		    and (lower(coalesce(status, '')) = 'nao recolhido' or enviado_reagendamento = true)
+		  order by coalesce(nao_recolhido_em, desfecho_em, atualizado_em, updated_at) desc
+		  limit 1`,
+		[text(order.num_os), text(order.codigo_cliente)],
+	);
+	const treatment = treatmentResult.rows[0] || null;
+	const params = [text(order.id)];
+	let timeClause = "and event.last_seen_at >= now() - interval '30 days'";
+	if (treatment?.eventAt) {
+		params.push(treatment.eventAt);
+		timeClause = `and event.last_seen_at between $2::timestamptz - interval '3 hours' and $2::timestamptz + interval '30 minutes'`;
+	}
+	const result = await db.query(
+		`select event.user_id as "userId", event.technician_name as "technicianName",
+		        event.minimum_distance_meters as "distanceMeters", event.first_seen_at as "firstSeenAt",
+		        event.last_seen_at as "lastSeenAt", event.observations
+		   from maps_order_proximity_events event
+		  where event.order_id = $1 ${timeClause}
+		  order by event.last_seen_at desc limit 10`,
+		params,
+	);
+	const events = result.rows.map((event) => ({
+		...event,
+		distanceMeters: Number(event.distanceMeters),
+		observations: Number(event.observations || 0),
+	}));
+	const responsible = normalize(order.tecnico);
+	const ownVisit = events.find((event) => responsible && normalize(event.technicianName) === responsible);
+	const otherVisit = events.find((event) => !ownVisit || event.userId !== ownVisit.userId);
+	const status = treatment
+		? ownVisit ? "RESCHEDULE_CONFIRMED_VISIT" : otherVisit ? "RESCHEDULE_OTHER_TECHNICIAN_NEARBY" : "RESCHEDULE_WITHOUT_VISIT"
+		: ownVisit ? "RESPONSIBLE_VISITED" : otherVisit ? "OTHER_TECHNICIAN_NEARBY" : "NO_VISIT_EVIDENCE";
+	const labels = {
+		RESCHEDULE_CONFIRMED_VISIT: "A ida do tecnico ao endereco foi confirmada antes do reagendamento.",
+		RESCHEDULE_OTHER_TECHNICIAN_NEARBY: "O responsavel nao foi localizado, mas outro tecnico passou perto antes do reagendamento.",
+		RESCHEDULE_WITHOUT_VISIT: "O servico foi reagendado sem evidencia de visita ao endereco.",
+		RESPONSIBLE_VISITED: "O tecnico responsavel esteve proximo deste endereco.",
+		OTHER_TECHNICIAN_NEARBY: "Outro tecnico passou proximo deste endereco.",
+		NO_VISIT_EVIDENCE: "Nenhuma passagem de tecnico foi confirmada neste endereco.",
+	};
+	return {
+		status,
+		label: labels[status],
+		latest: ownVisit || otherVisit || null,
+		events,
+		treatment: treatment ? { id: treatment.id, status: treatment.status, eventAt: treatment.eventAt } : null,
+	};
 }
 
 async function createRequest(payload = {}, user = {}) {
@@ -471,8 +539,8 @@ async function createRequest(payload = {}, user = {}) {
 	try {
 		const result = await db.query(
 			`insert into maps_assignment_requests
-			 (order_id, requester_user_id, requester_name, requester_email, regional, city, source_snapshot)
-			 values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+			 (order_id, requester_user_id, requester_name, requester_email, regional, city, source_snapshot, batch_id)
+			 values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
 			 returning *`,
 			[orderId, userId(user), userName(user), userEmail(user), order.regional, order.city, JSON.stringify({
 				orderNumber: order.orderNumber,
@@ -481,9 +549,9 @@ async function createRequest(payload = {}, user = {}) {
 				status: order.status,
 				company: order.company,
 				technicianHubsoftName: userTechnicianName(user),
-			})],
+			}), payload.batchId || null],
 		);
-		await notificationsService.createNotification({
+		if (!payload.suppressNotification) await notificationsService.createNotification({
 			type: "maps_solicitacao",
 			title: "Nova solicitacao de retirada no Maps",
 			message: `${userName(user)} solicitou a O.S ${order.orderNumber} em ${order.city}.`,
@@ -504,6 +572,37 @@ async function createRequest(payload = {}, user = {}) {
 		if (error?.code === "23505") throw apiError("Esta OS ja possui uma solicitacao em andamento.", 409, "REQUEST_CONFLICT");
 		throw error;
 	}
+}
+
+async function createRequestBatch(payload = {}, user = {}) {
+	const orderIds = [...new Set((Array.isArray(payload.orderIds) ? payload.orderIds : []).map(text).filter(Boolean))];
+	if (!orderIds.length) throw apiError("Selecione ao menos uma O.S.");
+	if (orderIds.length > 30) throw apiError("Selecione no maximo 30 O.S. por solicitacao.", 422, "BATCH_LIMIT");
+	const batchId = crypto.randomUUID();
+	const created = [];
+	const failed = [];
+	for (const orderId of orderIds) {
+		try {
+			const response = await createRequest({ orderId, batchId, suppressNotification: true }, user);
+			created.push(response.item);
+		} catch (error) {
+			failed.push({ orderId, code: error.code || "REQUEST_FAILED", message: error.message });
+		}
+	}
+	if (created.length) {
+		await notificationsService.createNotification({
+			type: "maps_solicitacao",
+			title: "Nova solicitacao em lote no Maps",
+			message: `${userName(user)} solicitou ${created.length} O.S. pelo mapa.`,
+			targetPath: "/maps?panel=requests",
+			severity: "warning",
+			user,
+			targets: { roles: ["admin", "backoffice", "backoffice_retirada"] },
+			meta: { module: "maps_v2", batchId, requestIds: created.map((item) => item.id) },
+		});
+		broadcastMapsUpdate("REQUEST_BATCH_CREATED", { batchId, count: created.length, requesterUserId: userId(user) });
+	}
+	return { batchId, created, failed, requested: orderIds.length };
 }
 
 async function listRequests(query = {}, user = {}, canManage = false) {
@@ -850,6 +949,30 @@ async function evaluateRadar(payload = {}, user = {}) {
 		],
 	);
 	await db.query("update maps_radar_settings set last_alert_at = now(), updated_at = now() where user_id = $1", [userId(user)]);
+	const nearest = fresh.reduce((best, item) => !best || item.distanceMeters < best.distanceMeters ? item : best, null);
+	const ageDays = nearest?.openedAt
+		? Math.max(0, Math.floor((Date.now() - new Date(nearest.openedAt).getTime()) / 86_400_000))
+		: null;
+	await notificationsService.createNotification({
+		type: "maps_oportunidade_proxima",
+		title: grouped ? `${fresh.length} retiradas proximas` : "Retirada proxima de voce",
+		message: grouped
+			? `${fresh.length} O.S. abertas a partir de ${Math.round(Number(nearest?.distanceMeters || 0))} m.`
+			: `${nearest?.clientName || "Cliente"} esta a ${Math.round(Number(nearest?.distanceMeters || 0))} m${ageDays === null ? "" : ` e aguarda ha ${ageDays} dia(s)`}.`,
+		targetPath: nearest?.id ? `/maps?order=${encodeURIComponent(nearest.id)}` : "/maps",
+		severity: "warning",
+		user,
+		targets: { users: [userId(user)] },
+		meta: {
+			module: "maps_v2",
+			alertId: result.rows[0]?.id,
+			orderId: nearest?.id || null,
+			distanceMeters: nearest?.distanceMeters || null,
+			clientName: nearest?.clientName || null,
+			requestable: Boolean(nearest?.requestable),
+		},
+		dedupeKey: `maps_radar_${result.rows[0]?.id}`,
+	});
 	return { alerts: result.rows, status: "alert", nearby: eligible.length };
 }
 
@@ -1394,6 +1517,204 @@ async function processNextGeocode() {
 	}
 }
 
+function saoPauloClock(now = new Date()) {
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Sao_Paulo",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: false,
+	}).formatToParts(now).reduce((accumulator, part) => {
+		accumulator[part.type] = part.value;
+		return accumulator;
+	}, {});
+	return {
+		date: `${parts.year}-${parts.month}-${parts.day}`,
+		time: `${parts.hour}:${parts.minute}`,
+	};
+}
+
+function withinOperationalWindow(now = new Date()) {
+	const clock = saoPauloClock(now);
+	return clock.time >= "08:00" && clock.time <= "18:00";
+}
+
+async function recordNearbyOrders(coordinates, user, recordedAt) {
+	const bounds = boundingBox(coordinates.latitude, coordinates.longitude, VISIT_PROXIMITY_METERS + 40);
+	const result = await db.query(
+		`select distinct on (o.num_os) o.id, o.num_os, o.codigo_cliente, o.nome_cliente,
+		        o.data_abertura, o.tecnico, location.latitude, location.longitude
+		   from ordens_servico o
+		   join maps_order_locations location on location.order_id = o.id
+		  where o.source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')
+		    and upper(coalesce(o.tipo, '')) = any($1::text[])
+		    and upper(coalesce(o.status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'
+		    and location.latitude between $2 and $3
+		    and location.longitude between $4 and $5
+		  order by o.num_os, o.updated_at desc
+		  limit 100`,
+		[ALLOWED_ORDER_TYPES, bounds.minLat, bounds.maxLat, bounds.minLng, bounds.maxLng],
+	);
+	const nearby = result.rows.map((row) => ({
+		...row,
+		distanceMeters: haversineMeters(coordinates, row),
+	})).filter((row) => row.distanceMeters <= VISIT_PROXIMITY_METERS);
+	const eventDate = saoPauloClock(new Date(recordedAt)).date;
+	for (const row of nearby) {
+		await db.query(
+			`insert into maps_order_proximity_events
+			 (order_id, user_id, technician_name, event_date, first_seen_at, last_seen_at,
+			  minimum_distance_meters, observations, metadata)
+			 values ($1, $2, $3, $4::date, $5, $5, $6, 1, $7::jsonb)
+			 on conflict (order_id, user_id, event_date) do update set
+			   last_seen_at = greatest(maps_order_proximity_events.last_seen_at, excluded.last_seen_at),
+			   minimum_distance_meters = least(maps_order_proximity_events.minimum_distance_meters, excluded.minimum_distance_meters),
+			   observations = maps_order_proximity_events.observations + 1,
+			   technician_name = excluded.technician_name,
+			   metadata = maps_order_proximity_events.metadata || excluded.metadata`,
+			[
+				row.id,
+				userId(user),
+				userTechnicianName(user) || userName(user),
+				eventDate,
+				recordedAt,
+				row.distanceMeters,
+				JSON.stringify({ orderNumber: row.num_os, clientCode: row.codigo_cliente }),
+			],
+		);
+	}
+	return nearby;
+}
+
+async function recordOperationalPosition(payload, coordinates, user, options = {}) {
+	if (!withinOperationalWindow()) return { recorded: false, reason: "outside_work_window" };
+	if (Date.now() - locationHistoryCleanupAt > 24 * 60 * 60 * 1000) {
+		locationHistoryCleanupAt = Date.now();
+		void db.query("delete from maps_technician_location_history where recorded_at < now() - interval '90 days'")
+			.catch((error) => console.warn("[mapsV2] Falha ao limpar trilhas antigas:", error?.message || error));
+		void db.query("delete from maps_order_proximity_events where last_seen_at < now() - interval '90 days'")
+			.catch((error) => console.warn("[mapsV2] Falha ao limpar evidencias antigas:", error?.message || error));
+	}
+	const accuracy = optionalNumberInRange(payload.accuracy, 0, 10_000);
+	if (accuracy !== null && accuracy > 250) return { recorded: false, reason: "imprecise" };
+	const latest = await db.query(
+		`select latitude, longitude, recorded_at
+		   from maps_technician_location_history
+		  where user_id = $1 order by recorded_at desc limit 1`,
+		[userId(user)],
+	);
+	const previous = latest.rows[0];
+	const elapsed = previous ? Date.now() - new Date(previous.recorded_at).getTime() : Infinity;
+	const moved = previous ? haversineMeters(previous, coordinates) : Infinity;
+	if (moved < LOCATION_HISTORY_MIN_DISTANCE_METERS && elapsed < LOCATION_HISTORY_MAX_INTERVAL_MS) {
+		return { recorded: false, reason: "unchanged" };
+	}
+	const inserted = await db.query(
+		`insert into maps_technician_location_history
+		 (user_id, latitude, longitude, accuracy_meters, heading_degrees, speed_mps, consent_source)
+		 values ($1, $2, $3, $4, $5, $6, $7)
+		 returning recorded_at as "recordedAt"`,
+		[
+			userId(user), coordinates.latitude, coordinates.longitude, accuracy,
+			optionalNumberInRange(payload.heading, 0, 360), optionalNumberInRange(payload.speed, 0, 150),
+			text(options.consentSource || "BROWSER_GEOLOCATION", 80),
+		],
+	);
+	const recordedAt = inserted.rows[0]?.recordedAt || new Date().toISOString();
+	const nearby = await recordNearbyOrders(coordinates, user, recordedAt);
+	return { recorded: true, recordedAt, nearby: nearby.length };
+}
+
+function trackDate(value) {
+	const date = text(value) || saoPauloClock().date;
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw apiError("Data invalida.");
+	return date;
+}
+
+async function getTechnicianTrack(technicianUserId, query = {}) {
+	const date = trackDate(query.date);
+	const result = await db.query(
+		`select latitude, longitude, accuracy_meters as "accuracyMeters",
+		        heading_degrees as "headingDegrees", speed_mps as "speedMps",
+		        recorded_at as "recordedAt"
+		   from maps_technician_location_history
+		  where user_id = $1
+		    and recorded_at >= (($2::date + time '08:00') at time zone 'America/Sao_Paulo')
+		    and recorded_at <= (($2::date + time '18:00') at time zone 'America/Sao_Paulo')
+		  order by recorded_at asc`,
+		[text(technicianUserId), date],
+	);
+	let distanceMeters = 0;
+	for (let index = 1; index < result.rows.length; index += 1) {
+		distanceMeters += haversineMeters(result.rows[index - 1], result.rows[index]);
+	}
+	const maxPoints = 720;
+	const step = Math.max(1, Math.ceil(result.rows.length / maxPoints));
+	const points = result.rows.filter((_, index) => index % step === 0 || index === result.rows.length - 1).map((row) => ({
+		...row,
+		latitude: Number(row.latitude),
+		longitude: Number(row.longitude),
+	}));
+	return {
+		userId: text(technicianUserId),
+		date,
+		window: { start: "08:00", end: "18:00" },
+		points,
+		summary: {
+			positions: result.rows.length,
+			distanceMeters: Math.round(distanceMeters),
+			firstSeenAt: result.rows[0]?.recordedAt || null,
+			lastSeenAt: result.rows.at(-1)?.recordedAt || null,
+		},
+	};
+}
+
+async function getNavigation(orderId, payload = {}, user = {}) {
+	const origin = parseCoordinates(payload);
+	const order = await getOrder(orderId, user);
+	if (!order.locationAvailable) throw apiError("A O.S. ainda nao possui localizacao valida.", 422, "LOCATION_PENDING");
+	const destination = { latitude: Number(order.latitude), longitude: Number(order.longitude) };
+	const cacheKey = [origin.latitude.toFixed(4), origin.longitude.toFixed(4), destination.latitude.toFixed(5), destination.longitude.toFixed(5)].join(":");
+	const cached = navigationCache.get(cacheKey);
+	if (cached && cached.expiresAt > Date.now()) return cached.value;
+	const directDistance = haversineMeters(origin, destination);
+	let value = {
+		orderId: order.id,
+		distanceMeters: directDistance,
+		durationSeconds: Math.max(60, Math.round(directDistance / 8.33)),
+		geometry: [[origin.latitude, origin.longitude], [destination.latitude, destination.longitude]],
+		provider: "ESTIMATED",
+		fallback: true,
+	};
+	try {
+		const base = routingUrl().replace(/\/$/, "");
+		const url = new URL(`${base}/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}`);
+		url.searchParams.set("overview", "full");
+		url.searchParams.set("geometries", "geojson");
+		url.searchParams.set("steps", "false");
+		const response = await fetch(url, { signal: AbortSignal.timeout(Number(process.env.MAPS_ROUTING_TIMEOUT_MS || 6500)) });
+		if (response.ok) {
+			const data = await response.json();
+			const route = data?.routes?.[0];
+			if (route?.geometry?.coordinates?.length) value = {
+				...value,
+				distanceMeters: Math.round(Number(route.distance || directDistance)),
+				durationSeconds: Math.round(Number(route.duration || value.durationSeconds)),
+				geometry: route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]),
+				provider: "OSRM",
+				fallback: false,
+			};
+		}
+	} catch (error) {
+		console.warn("[mapsV2] Rota viaria indisponivel; usando estimativa:", error?.message || error);
+	}
+	navigationCache.set(cacheKey, { value, expiresAt: Date.now() + 2 * 60 * 1000 });
+	if (navigationCache.size > 300) navigationCache.delete(navigationCache.keys().next().value);
+	return value;
+}
+
 async function saveTechnicianPresence(payload = {}, user = {}, options = {}) {
 	if (!isTechnicianUser(user)) {
 		throw apiError("A localizacao operacional e exclusiva para tecnicos.", 403, "TECHNICIAN_REQUIRED");
@@ -1436,7 +1757,16 @@ async function saveTechnicianPresence(payload = {}, user = {}, options = {}) {
 	broadcastMapsAdminUpdate("TECHNICIAN_PRESENCE_UPDATED", {
 		userId: userId(user),
 	});
-	return { ok: true, lastSeenAt: result.rows[0]?.lastSeenAt || null };
+	const history = await recordOperationalPosition(payload, coordinates, user, options).catch((error) => {
+		console.warn("[mapsV2] Falha ao registrar trilha operacional:", error?.message || error);
+		return { recorded: false, reason: "history_error" };
+	});
+	if (history.recorded) {
+		void evaluateRadar({ ...coordinates, accuracy }, user).catch((error) => {
+			if (error?.code !== "42P01") console.warn("[mapsV2] Falha no radar por localizacao:", error?.message || error);
+		});
+	}
+	return { ok: true, lastSeenAt: result.rows[0]?.lastSeenAt || null, history };
 }
 
 async function listTechnicianPresence() {
@@ -1588,14 +1918,17 @@ module.exports = {
 	ALLOWED_ORDER_TYPES,
 	MAPS_PERMISSIONS,
 	createRequest,
+	createRequestBatch,
 	createRoute,
 	dismissAlert,
 	evaluateRadar,
 	featureEnabled,
 	getHealth,
+	getNavigation,
 	getOrder,
 	getRadarSettings,
 	getSummary,
+	getTechnicianTrack,
 	hasPermission,
 	initializeGeocoderWorker,
 	listPoints,
@@ -1629,5 +1962,6 @@ module.exports = {
 		sourceFilters,
 		technicianPresenceStatus,
 		validateOrderRow,
+		withinOperationalWindow,
 	},
 };

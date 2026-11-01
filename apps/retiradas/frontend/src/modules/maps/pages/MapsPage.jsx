@@ -6,6 +6,7 @@ import {
 	Layers3,
 	LocateFixed,
 	MapPinned,
+	PackagePlus,
 	RefreshCw,
 	Route,
 	Search,
@@ -101,6 +102,10 @@ export default function MapsPage() {
 	const [routeOpen, setRouteOpen] = useState(false);
 	const [routeSelectionMode, setRouteSelectionMode] = useState(false);
 	const [selectedRouteIds, setSelectedRouteIds] = useState([]);
+	const [requestSelectionMode, setRequestSelectionMode] = useState(false);
+	const [selectedRequestIds, setSelectedRequestIds] = useState([]);
+	const [navigation, setNavigation] = useState(null);
+	const [navigationLoading, setNavigationLoading] = useState(false);
 	const [routes, setRoutes] = useState([]);
 	const [requestsOpen, setRequestsOpen] = useState(false);
 	const [requests, setRequests] = useState([]);
@@ -186,6 +191,27 @@ export default function MapsPage() {
 		});
 		return () => { active = false; };
 	}, [realtimeRevision, selectedId]);
+
+	useEffect(() => {
+		if (!selectedId || !locationState.position) {
+			setNavigation(null);
+			if (selectedId && !gpsRequested) {
+				setGpsRequested(true);
+				setNotice("Ativando sua localizacao para calcular o caminho ate o cliente.");
+			}
+			return;
+		}
+		let active = true;
+		setNavigationLoading(true);
+		mapsService.navigation(selectedId, locationState.position).then((response) => {
+			if (active) setNavigation(response);
+		}).catch(() => {
+			if (active) setNavigation(null);
+		}).finally(() => {
+			if (active) setNavigationLoading(false);
+		});
+		return () => { active = false; };
+	}, [gpsRequested, locationState.position, selectedId]);
 
 	useEffect(() => {
 		const position = locationState.position;
@@ -274,6 +300,8 @@ export default function MapsPage() {
 		if (new URLSearchParams(location.search).get("panel") === "requests") {
 			openRequestsPanel();
 		}
+		const orderId = new URLSearchParams(location.search).get("order");
+		if (orderId) setSelectedId(orderId);
 		window.addEventListener("retiradas:maps-open-requests", openRequestsPanel);
 		return () => window.removeEventListener("retiradas:maps-open-requests", openRequestsPanel);
 	}, [loadRequests, location.search]);
@@ -319,11 +347,50 @@ export default function MapsPage() {
 		toggleRouteItem(point.id);
 	}
 
+	function toggleRequestPoint(point) {
+		if (!point?.requestable) {
+			setNotice("Esta O.S. nao esta disponivel para solicitacao.");
+			return;
+		}
+		setSelectedRequestIds((current) => current.includes(point.id) ? current.filter((id) => id !== point.id) : [...current, point.id]);
+	}
+
 	function startRouteSelection() {
+		setRequestSelectionMode(false);
+		setSelectedRequestIds([]);
 		setRouteSelectionMode(true);
 		setSelectedId("");
 		setSheetOpen(false);
 		setNotice("Modo rota ativo. Toque nas casas verdes para selecionar as paradas.");
+	}
+
+	function startRequestSelection() {
+		setRouteSelectionMode(false);
+		setRequestSelectionMode(true);
+		setSelectedId("");
+		setSheetOpen(false);
+		setNotice("Selecione no mapa as O.S. que deseja solicitar de uma vez.");
+	}
+
+	async function finishRequestSelection() {
+		if (!selectedRequestIds.length) {
+			setNotice("Selecione ao menos uma O.S. disponivel.");
+			return;
+		}
+		try {
+			const response = await mapsService.requestOrders(selectedRequestIds);
+			setNotice(`${response.created?.length || 0} solicitacao(oes) enviada(s) ao BackOffice${response.failed?.length ? `; ${response.failed.length} nao puderam ser enviadas` : ""}.`);
+			setSelectedRequestIds([]);
+			setRequestSelectionMode(false);
+			await loadPoints();
+		} catch (requestError) {
+			setNotice(requestError.message || "Nao foi possivel enviar as solicitacoes.");
+		}
+	}
+
+	function cancelRequestSelection() {
+		setRequestSelectionMode(false);
+		setSelectedRequestIds([]);
 	}
 
 	function finishRouteSelection() {
@@ -414,12 +481,13 @@ export default function MapsPage() {
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} routeSelectionMode={routeSelectionMode} selectedRouteIds={selectedRouteIds} onViewportChange={setViewport} onSelect={setSelectedId} onToggleRoute={toggleRoutePoint} onError={setError} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} selectionMode={routeSelectionMode ? "route" : requestSelectionMode ? "request" : ""} selectedRouteIds={selectedRouteIds} selectedRequestIds={selectedRequestIds} navigationPath={navigation?.geometry || []} onViewportChange={setViewport} onSelect={setSelectedId} onToggleRoute={toggleRoutePoint} onToggleRequest={toggleRequestPoint} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
 					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>
 					{canRadar ? <button type="button" className={radarSettings?.enabled ? "is-active" : ""} onClick={() => setRadarOpen(true)} title="Radar de proximidade"><BellRing size={21} /></button> : null}
 					{canRoutes ? <button type="button" className={routeSelectionMode || selectedRouteIds.length ? "is-active" : ""} onClick={routeSelectionMode ? finishRouteSelection : startRouteSelection} title={routeSelectionMode ? "Concluir selecao da rota" : "Selecionar OS no mapa para criar rota"}><Route size={21} /><small>{selectedRouteIds.length || ""}</small></button> : null}
+					{canRequest ? <button type="button" className={requestSelectionMode || selectedRequestIds.length ? "is-active" : ""} onClick={requestSelectionMode ? finishRequestSelection : startRequestSelection} title={requestSelectionMode ? "Enviar solicitacoes selecionadas" : "Solicitar varias O.S."}><PackagePlus size={21} /><small>{selectedRequestIds.length || ""}</small></button> : null}
 					{canRequest || canManageRequests ? <button type="button" onClick={openRequests} title="Solicitacoes"><Inbox size={21} /></button> : null}
 					{canAudit ? <button type="button" onClick={() => setSimulatorOpen(true)} title="Simulador"><FlaskConical size={21} /></button> : null}
 					{canRadar ? <button type="button" onClick={() => setRadarOpen(true)} title="Configuracoes"><Settings2 size={21} /></button> : null}
@@ -435,10 +503,19 @@ export default function MapsPage() {
 						<button type="button" className="is-cancel" onClick={cancelRouteSelection} aria-label="Cancelar selecao"><X size={17} /></button>
 					</div>
 				) : null}
+				{requestSelectionMode ? (
+					<div className="maps-v2-route-selection is-request" role="status">
+						<PackagePlus size={19} />
+						<div><strong>Solicitacao em lote</strong><span>Toque nas casas azuis para selecionar.</span></div>
+						<b>{selectedRequestIds.length}</b>
+						<button type="button" onClick={finishRequestSelection} disabled={!selectedRequestIds.length}>Solicitar todas</button>
+						<button type="button" className="is-cancel" onClick={cancelRequestSelection} aria-label="Cancelar selecao"><X size={17} /></button>
+					</div>
+				) : null}
 				<MapsBottomSheet items={points} summary={summary} open={sheetOpen} onToggle={() => setSheetOpen((current) => !current)} onSelect={(item) => setSelectedId(item.id)} selectedRouteIds={selectedRouteIds} onToggleRoute={toggleRouteItem} />
 			</main>
 
-			<OrderDetailPanel item={selectedItem} loading={detailLoading} onClose={() => setSelectedId("")} onRequest={async (orderId) => { await mapsService.requestOrder(orderId); await loadPoints(); }} onAddRoute={(orderId) => { toggleRouteItem(orderId); setRouteOpen(true); }} />
+			<OrderDetailPanel item={selectedItem} loading={detailLoading} navigation={navigation} navigationLoading={navigationLoading} onClose={() => { setSelectedId(""); setNavigation(null); }} onRequest={async (orderId) => { await mapsService.requestOrder(orderId); await loadPoints(); }} onAddRoute={(orderId) => { toggleRouteItem(orderId); setRouteOpen(true); }} />
 			<RadarPanel open={radarOpen} settings={radarSettings} locationState={locationState} onClose={() => setRadarOpen(false)} onSave={saveRadarSettings} />
 			<RoutePlannerPanel open={routeOpen} points={points} selectedIds={selectedRouteIds} routes={routes} position={locationState.position} onClose={() => setRouteOpen(false)} onMove={moveRouteItem} onRemove={toggleRouteItem} onCreate={createRoute} onOptimize={optimizeRoute} />
 			<RequestsPanel open={requestsOpen} items={requests} canManage={canManageRequests} loading={requestsLoading} onClose={() => setRequestsOpen(false)} onResolve={resolveRequest} />

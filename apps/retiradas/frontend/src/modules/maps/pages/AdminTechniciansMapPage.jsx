@@ -37,6 +37,16 @@ function timeAgo(value, now) {
 	return `ha ${Math.round(minutes / 60)} h`;
 }
 
+function todayKey() {
+	const now = new Date();
+	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function formatTrackDistance(value) {
+	const meters = Number(value || 0);
+	return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1).replace(".", ",")} km`;
+}
+
 export default function AdminTechniciansMapPage() {
 	const [items, setItems] = useState([]);
 	const [summary, setSummary] = useState({ total: 0, active: 0, recent: 0, stale: 0, completedToday: 0, openOrders: 0 });
@@ -51,6 +61,9 @@ export default function AdminTechniciansMapPage() {
 	const [frameRevision, setFrameRevision] = useState(0);
 	const [generatedAt, setGeneratedAt] = useState("");
 	const [now, setNow] = useState(Date.now());
+	const [trackDate, setTrackDate] = useState(todayKey());
+	const [track, setTrack] = useState(null);
+	const [trackLoading, setTrackLoading] = useState(false);
 
 	const load = useCallback(async ({ quiet = false } = {}) => {
 		if (!quiet) setLoading(true);
@@ -94,6 +107,23 @@ export default function AdminTechniciansMapPage() {
 
 	const selected = items.find((item) => item.userId === selectedId) || null;
 
+	useEffect(() => {
+		if (!selectedId) {
+			setTrack(null);
+			return;
+		}
+		let active = true;
+		setTrackLoading(true);
+		mapsService.technicianTrack(selectedId, { date: trackDate }).then((response) => {
+			if (active) setTrack(response);
+		}).catch((trackError) => {
+			if (active) setError(trackError.message || "Nao foi possivel carregar a rota do tecnico.");
+		}).finally(() => {
+			if (active) setTrackLoading(false);
+		});
+		return () => { active = false; };
+	}, [selectedId, trackDate]);
+
 	async function toggleFullscreen() {
 		if (document.fullscreenElement) await document.exitFullscreen();
 		else await document.documentElement.requestFullscreen();
@@ -112,6 +142,7 @@ export default function AdminTechniciansMapPage() {
 				selectedId={selectedId}
 				focusId={focusId}
 				frameRevision={frameRevision}
+				trackPoints={track?.points || []}
 				onSelect={selectTechnician}
 				onError={setError}
 			/>
@@ -159,7 +190,7 @@ export default function AdminTechniciansMapPage() {
 					))}
 					{!loading && !filteredItems.length ? <div className="maps-admin-empty"><WifiOff size={24} /><strong>Nenhum tecnico neste filtro</strong><span>A localizacao aparece depois que o tecnico autoriza o GPS no PWA.</span></div> : null}
 				</div>
-				<footer>Posicoes recentes, sem historico de deslocamento.</footer>
+				<footer>Trilha operacional registrada entre 08h e 18h.</footer>
 			</aside>
 
 			{selected ? (
@@ -173,6 +204,10 @@ export default function AdminTechniciansMapPage() {
 						<li><ClipboardList size={17} /><strong>{selected.openOrders || 0}</strong><span>OS abertas</span></li>
 						<li><Route size={17} /><strong>{selected.routeStops || 0}</strong><span>paradas na rota</span></li>
 					</ul>
+					<div className="maps-admin-track-controls">
+						<label>Rota do dia<input type="date" value={trackDate} max={todayKey()} onChange={(event) => setTrackDate(event.target.value)} /></label>
+						<div><strong>{trackLoading ? "..." : formatTrackDistance(track?.summary?.distanceMeters)}</strong><span>{track?.summary?.positions || 0} pontos · 08h as 18h</span></div>
+					</div>
 					<small>Precisao do GPS: {Math.round(Number(selected.accuracyMeters || 0))} m</small>
 				</section>
 			) : null}

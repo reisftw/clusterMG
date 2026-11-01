@@ -25,10 +25,11 @@ function markerIcon(item, selected) {
 	});
 }
 
-export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, frameRevision, onSelect, onError }) {
+export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, frameRevision, trackPoints = [], onSelect, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const layerRef = useRef(null);
+	const trackLayerRef = useRef(null);
 	const markersRef = useRef(new Map());
 	const itemsRef = useRef(items);
 	const framedRef = useRef(false);
@@ -59,6 +60,7 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 				.addTo(map);
 			L.tileLayer(TILE_URL, { maxZoom: 19, crossOrigin: true, updateWhenIdle: true, keepBuffer: 3 }).addTo(map);
 			layerRef.current = L.layerGroup().addTo(map);
+			trackLayerRef.current = L.layerGroup().addTo(map);
 		} catch (error) {
 			callbacksRef.current.onError?.(error?.message || "Nao foi possivel abrir o mapa da equipe.");
 			return undefined;
@@ -77,6 +79,7 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 			map.remove();
 			mapRef.current = null;
 			layerRef.current = null;
+			trackLayerRef.current = null;
 			markers.clear();
 		};
 	}, []);
@@ -114,6 +117,19 @@ export default function AdminTechniciansMapCanvas({ items, selectedId, focusId, 
 			map.fitBounds(L.latLngBounds(coordinates), { padding: [70, 70], maxZoom: 15, animate: false });
 		}
 	}, [items, selectedId]);
+
+	useEffect(() => {
+		const map = mapRef.current;
+		const layer = trackLayerRef.current;
+		if (!map || !layer) return;
+		layer.clearLayers();
+		const coordinates = (trackPoints || []).filter(validPoint).map((point) => [Number(point.latitude), Number(point.longitude)]);
+		if (coordinates.length < 2) return;
+		L.polyline(coordinates, { color: "#f97316", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(layer);
+		L.circleMarker(coordinates[0], { radius: 7, color: "#fff", weight: 3, fillColor: "#109765", fillOpacity: 1 }).bindTooltip("Inicio da rota").addTo(layer);
+		L.circleMarker(coordinates.at(-1), { radius: 7, color: "#fff", weight: 3, fillColor: "#f97316", fillOpacity: 1 }).bindTooltip("Ultima posicao").addTo(layer);
+		map.fitBounds(L.latLngBounds(coordinates), { padding: [80, 80], maxZoom: 17, animate: true });
+	}, [trackPoints]);
 
 	useEffect(() => {
 		const map = mapRef.current;

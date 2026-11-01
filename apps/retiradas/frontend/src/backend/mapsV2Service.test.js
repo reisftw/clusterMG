@@ -183,6 +183,11 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(__testables.technicianPresenceStatus("2026-10-29T11:40:00.000Z", now)).toBe("stale");
 	});
 
+	it("registra trilha apenas durante a janela operacional de 08h as 18h", () => {
+		expect(__testables.withinOperationalWindow(new Date("2026-11-02T11:00:00.000Z"))).toBe(true);
+		expect(__testables.withinOperationalWindow(new Date("2026-11-02T21:30:00.000Z"))).toBe(false);
+	});
+
 	it("mantem todos os endpoints do contrato protegidos no router", () => {
 		const source = fs.readFileSync(
 			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js"),
@@ -203,6 +208,23 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(migration).toContain("'retiradas.maps.v2.live_technicians'");
 		expect(migration).toContain("select 'admin', 'retiradas.maps.v2.live_technicians'");
 		expect(migration).not.toContain("select 'tecnico', 'retiradas.maps.v2.live_technicians'");
+	});
+
+	it("protege historico de deslocamento e permite solicitacao em lote", () => {
+		const router = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js"),
+			"utf8",
+		);
+		const migration = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/sql/110_maps_field_operations.sql"),
+			"utf8",
+		);
+		expect(router).toContain('router.post("/requests/batch"');
+		expect(router).toContain('router.get("/admin/technicians/:id/track"');
+		expect(migration).toContain("create table if not exists maps_technician_location_history");
+		expect(migration).toContain("create table if not exists maps_order_proximity_events");
+		expect(migration).toContain("select 'admin', 'retiradas.maps.v2.view_tracks'");
+		expect(migration).not.toContain("select 'tecnico', 'retiradas.maps.v2.view_tracks'");
 	});
 
 	it("enfileira todo o backlog sem limitar a geocodificacao a cem ordens", () => {

@@ -73,19 +73,21 @@ function userPositionIcon() {
 	});
 }
 
-export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, routeSelectionMode = false, selectedRouteIds = [], onViewportChange, onSelect, onToggleRoute, onError }) {
+export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, selectionMode = "", selectedRouteIds = [], selectedRequestIds = [], navigationPath = [], onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const clusterRef = useRef(null);
 	const userLayerRef = useRef(null);
+	const navigationLayerRef = useRef(null);
 	const markersByIdRef = useRef(new Map());
 	const selectedRouteIdsRef = useRef(new Set(selectedRouteIds));
+	const selectedRequestIdsRef = useRef(new Set(selectedRequestIds));
 	const initialFrameAppliedRef = useRef(false);
-	const callbacksRef = useRef({ onViewportChange, onSelect, onToggleRoute, onError, routeSelectionMode });
+	const callbacksRef = useRef({ onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError, selectionMode });
 
 	useEffect(() => {
-		callbacksRef.current = { onViewportChange, onSelect, onToggleRoute, onError, routeSelectionMode };
-	}, [onViewportChange, onSelect, onToggleRoute, onError, routeSelectionMode]);
+		callbacksRef.current = { onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError, selectionMode };
+	}, [onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError, selectionMode]);
 
 	useEffect(() => {
 		if (!containerRef.current || mapRef.current) return undefined;
@@ -180,12 +182,16 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 			validCoordinates.push([Number(point.latitude), Number(point.longitude)]);
 			const marker = L.marker(
 				[Number(point.latitude), Number(point.longitude)],
-				{ icon: pointIcon(point, selectedRouteIdsRef.current.has(point.id)), title: pointLabel(point), riseOnHover: true },
+				{ icon: pointIcon(point, selectedRouteIdsRef.current.has(point.id) || selectedRequestIdsRef.current.has(point.id)), title: pointLabel(point), riseOnHover: true },
 			);
 			marker.bindTooltip(() => pointTooltip(point), { direction: "top", opacity: 0.98 });
 			marker.on("click", () => {
-				if (callbacksRef.current.routeSelectionMode) {
+				if (callbacksRef.current.selectionMode === "route") {
 					callbacksRef.current.onToggleRoute?.(point);
+					return;
+				}
+				if (callbacksRef.current.selectionMode === "request") {
+					callbacksRef.current.onToggleRequest?.(point);
 					return;
 				}
 				callbacksRef.current.onSelect?.(point.id);
@@ -224,6 +230,32 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		}
 		selectedRouteIdsRef.current = next;
 	}, [selectedRouteIds]);
+
+	useEffect(() => {
+		const previous = selectedRequestIdsRef.current;
+		const next = new Set(selectedRequestIds);
+		const changed = new Set([...previous, ...next]);
+		for (const id of changed) {
+			if (previous.has(id) === next.has(id)) continue;
+			const entry = markersByIdRef.current.get(id);
+			if (entry) entry.marker.setIcon(pointIcon(entry.point, next.has(id) || selectedRouteIdsRef.current.has(id)));
+		}
+		selectedRequestIdsRef.current = next;
+	}, [selectedRequestIds]);
+
+	useEffect(() => {
+		const map = mapRef.current;
+		if (!map) return;
+		if (navigationLayerRef.current) {
+			map.removeLayer(navigationLayerRef.current);
+			navigationLayerRef.current = null;
+		}
+		const coordinates = (navigationPath || []).filter((point) => Array.isArray(point) && point.length >= 2 && Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
+		if (coordinates.length < 2) return;
+		const line = L.polyline(coordinates, { color: "#0877e8", weight: 6, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(map);
+		navigationLayerRef.current = line;
+		map.fitBounds(line.getBounds(), { padding: [52, 52], maxZoom: 18, animate: true });
+	}, [navigationPath]);
 
 	useEffect(() => {
 		const map = mapRef.current;
@@ -267,5 +299,5 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		);
 	}, [focusPoint, focusZoom]);
 
-	return <div ref={containerRef} className={`maps-v2-canvas${routeSelectionMode ? " is-route-selection" : ""}`} aria-label="Mapa interativo de retiradas" />;
+	return <div ref={containerRef} className={`maps-v2-canvas${selectionMode ? " is-route-selection" : ""}`} aria-label="Mapa interativo de retiradas" />;
 }

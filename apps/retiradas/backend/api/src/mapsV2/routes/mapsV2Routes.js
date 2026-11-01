@@ -29,6 +29,7 @@ function createMapsV2Router({
 	const requireRoutes = requireAnyPermission([service.MAPS_PERMISSIONS.ROUTES], fallbackRoles);
 	const requireAudit = requireAnyPermission([service.MAPS_PERMISSIONS.AUDIT], fallbackRoles);
 	const requireLiveTechnicians = requireAnyPermission([service.MAPS_PERMISSIONS.LIVE_TECHNICIANS], fallbackRoles);
+	const requireTracks = requireAnyPermission([service.MAPS_PERMISSIONS.VIEW_TRACKS], fallbackRoles);
 
 	router.use(requireAuthenticated, requireAccess);
 	router.use((req, res, next) => {
@@ -79,6 +80,14 @@ function createMapsV2Router({
 		}
 	});
 
+	router.get("/orders/:id/navigation", readLimiter, async (req, res, next) => {
+		try {
+			res.json(await service.getNavigation(req.params.id, req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/radar/settings", readLimiter, requireRadar, async (req, res, next) => {
 		try {
 			res.json(await service.getRadarSettings(req.user || {}));
@@ -119,6 +128,14 @@ function createMapsV2Router({
 		}
 	});
 
+	router.get("/admin/technicians/:id/track", readLimiter, requireTracks, async (req, res, next) => {
+		try {
+			res.json(await service.getTechnicianTrack(req.params.id, req.query || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.get("/radar/alerts", readLimiter, requireRadar, async (req, res, next) => {
 		try {
 			res.json(await service.listRadarAlerts(req.query || {}, req.user || {}));
@@ -138,6 +155,14 @@ function createMapsV2Router({
 	router.post("/radar/simulate", writeLimiter, requireCsrfToken, requireAudit, async (req, res, next) => {
 		try {
 			res.json(await service.simulateRadar(req.body || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post("/requests/batch", writeLimiter, requireCsrfToken, requireRequest, async (req, res, next) => {
+		try {
+			res.status(201).json(await service.createRequestBatch(req.body || {}, req.user || {}));
 		} catch (error) {
 			next(error);
 		}
