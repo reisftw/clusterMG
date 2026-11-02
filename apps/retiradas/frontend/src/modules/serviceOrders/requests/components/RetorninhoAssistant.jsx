@@ -9,6 +9,7 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { hasAnyPermission } from "../../../../constants/roles";
 import { useAuthContext } from "../../../../context/AuthContext";
 import {
@@ -46,7 +47,7 @@ function initialMessages() {
 	];
 }
 
-function clampPosition(position) {
+function clampPosition(position, bottomInset = 0) {
 	const margin = 12;
 	const viewport = window.visualViewport;
 	const viewportWidth = viewport?.width || window.innerWidth;
@@ -54,7 +55,7 @@ function clampPosition(position) {
 	const viewportLeft = viewport?.offsetLeft || 0;
 	const viewportTop = viewport?.offsetTop || 0;
 	const defaultX = viewportLeft + viewportWidth - FLOATING_TOUCH_SIZE - 12;
-	const defaultY = viewportTop + viewportHeight - FLOATING_TOUCH_SIZE - 96;
+	const defaultY = viewportTop + viewportHeight - FLOATING_TOUCH_SIZE - Math.max(96, bottomInset + 12);
 	return {
 		x: Math.min(
 			Math.max(viewportLeft + margin, Number(position?.x) || defaultX),
@@ -62,7 +63,7 @@ function clampPosition(position) {
 		),
 		y: Math.min(
 			Math.max(viewportTop + margin, Number(position?.y) || defaultY),
-			Math.max(viewportTop + margin, viewportTop + viewportHeight - FLOATING_TOUCH_SIZE - margin),
+			Math.max(viewportTop + margin, viewportTop + viewportHeight - FLOATING_TOUCH_SIZE - margin - bottomInset),
 		),
 	};
 }
@@ -120,6 +121,7 @@ function ProgressMessage({ item }) {
 
 export default function RetorninhoAssistant() {
 	const { currentUser } = useAuthContext();
+	const { pathname } = useLocation();
 	const canUse = hasAnyPermission(currentUser, ["service_orders.requests.create"]);
 	const privileged = PRIVILEGED_ROLES.has(
 		String(currentUser?.role || "").trim().toLowerCase(),
@@ -138,6 +140,8 @@ export default function RetorninhoAssistant() {
 	const [busy, setBusy] = useState(false);
 	const [loadError, setLoadError] = useState("");
 	const [dragging, setDragging] = useState(false);
+	const [mapsBottomInset, setMapsBottomInset] = useState(0);
+	const [mapsSearchOpen, setMapsSearchOpen] = useState(false);
 	const dragRef = useRef(null);
 	const messagesRef = useRef(null);
 	const mountedRef = useRef(true);
@@ -147,14 +151,45 @@ export default function RetorninhoAssistant() {
 	}, []);
 
 	useEffect(() => {
-		const handleResize = () => setPosition((current) => clampPosition(current));
+		const handleResize = () => setPosition((current) => clampPosition(current, pathname === "/maps" && !open ? mapsBottomInset : 0));
 		window.addEventListener("resize", handleResize);
 		window.visualViewport?.addEventListener("resize", handleResize);
 		return () => {
 			window.removeEventListener("resize", handleResize);
 			window.visualViewport?.removeEventListener("resize", handleResize);
 		};
-	}, []);
+	}, [mapsBottomInset, open, pathname]);
+
+	useEffect(() => {
+		if (pathname !== "/maps") return undefined;
+		const handleSheetPosition = (event) => {
+			const positionName = event.detail?.position;
+			const nextInset = positionName === "expanded" ? Math.min(window.innerHeight * 0.54, 500) : positionName === "peek" ? 156 : 38;
+			setMapsBottomInset(nextInset);
+			if (!open) {
+				setPosition((current) => {
+					const next = clampPosition(current, nextInset);
+					if (positionName === "expanded" && window.innerWidth < 640) {
+						return { ...next, x: Math.min(next.x, window.innerWidth - FLOATING_TOUCH_SIZE - 70) };
+					}
+					return next;
+				});
+			}
+		};
+		window.addEventListener("retiradas:maps-sheet-position", handleSheetPosition);
+		const initialTimer = window.setTimeout(() => handleSheetPosition({ detail: { position: "peek" } }), 0);
+		return () => {
+			window.clearTimeout(initialTimer);
+			window.removeEventListener("retiradas:maps-sheet-position", handleSheetPosition);
+		};
+	}, [open, pathname]);
+
+	useEffect(() => {
+		if (pathname !== "/maps") return undefined;
+		const handleSearchState = (event) => setMapsSearchOpen(Boolean(event.detail?.open));
+		window.addEventListener("retiradas:maps-search-state", handleSearchState);
+		return () => window.removeEventListener("retiradas:maps-search-state", handleSearchState);
+	}, [pathname]);
 
 	useEffect(() => {
 		try {
@@ -306,7 +341,7 @@ export default function RetorninhoAssistant() {
 		const deltaX = event.clientX - drag.startX;
 		const deltaY = event.clientY - drag.startY;
 		if (Math.hypot(deltaX, deltaY) > 5) drag.moved = true;
-		setPosition(clampPosition({ x: drag.origin.x + deltaX, y: drag.origin.y + deltaY }));
+		setPosition(clampPosition({ x: drag.origin.x + deltaX, y: drag.origin.y + deltaY }, pathname === "/maps" && !open ? mapsBottomInset : 0));
 	}
 
 	function pointerUp(event) {
@@ -327,7 +362,7 @@ export default function RetorninhoAssistant() {
 		setDragging(false);
 	}
 
-	if (!canUse || hidden) return null;
+	if (!canUse || hidden || (pathname === "/maps" && mapsSearchOpen && !open)) return null;
 
 	return (
 		<>

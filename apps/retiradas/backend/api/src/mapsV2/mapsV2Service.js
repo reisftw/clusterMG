@@ -466,6 +466,16 @@ function sourceFilters({ query = {}, params = [] } = {}) {
 		params.push(`%${text(query.neighborhood)}%`);
 		clauses.push(`o.bairro ilike $${params.length}`);
 	}
+	if (text(query.search)) {
+		params.push(`%${text(query.search).slice(0, 120)}%`);
+		clauses.push(`(
+		  o.cidade ilike $${params.length}
+		  or o.bairro ilike $${params.length}
+		  or o.nome_cliente ilike $${params.length}
+		  or o.codigo_cliente ilike $${params.length}
+		  or o.num_os ilike $${params.length}
+		)`);
+	}
 	return { clauses, params, viewport };
 }
 
@@ -697,6 +707,52 @@ async function createRequestBatch(payload = {}, user = {}) {
 		broadcastMapsUpdate("REQUEST_BATCH_CREATED", { batchId, count: created.length, requesterUserId: userId(user) });
 	}
 	return { batchId, created, failed, requested: orderIds.length };
+}
+
+async function listAssignableTechnicians(user = {}) {
+	return serviceOrderRequestsService.listSelectableTechnicians(user);
+}
+
+async function assignOrderToTechnician(orderId, payload = {}, user = {}) {
+	const order = await getOrder(orderId, user);
+	if (!ALLOWED_ORDER_TYPES.includes(normalize(order.type))) {
+		throw apiError(
+			"Esta O.S. não é de retirada e não pode ser atribuída por este painel.",
+			422,
+			"ORDER_TYPE_NOT_ALLOWED",
+		);
+	}
+	if (CLOSED_STATUS_PATTERN.test(text(order.status))) {
+		throw apiError("Esta O.S. já foi encerrada.", 409, "ORDER_CLOSED");
+	}
+	const technicianHubsoftId = Number(payload.technicianHubsoftId || 0);
+	const technicianHubsoftName = text(payload.technicianHubsoftName);
+	if (!technicianHubsoftId && !technicianHubsoftName) {
+		throw apiError("Selecione o técnico que receberá a O.S.");
+	}
+
+	const effectuation = await serviceOrderRequestsService.createRequest(
+		{
+			clientCode: text(order.clientCode),
+			technicianHubsoftId: technicianHubsoftId || null,
+			technicianHubsoftName,
+		},
+		user,
+	);
+	broadcastMapsUpdate("ADMIN_ASSIGNMENT_QUEUED", {
+		orderId: order.id,
+		requestId: effectuation?.item?.id || null,
+		technicianHubsoftId: technicianHubsoftId || null,
+		technicianHubsoftName,
+	});
+	return {
+		item: effectuation?.item || null,
+		order: {
+			id: order.id,
+			orderNumber: order.orderNumber,
+			clientCode: order.clientCode,
+		},
+	};
 }
 
 async function listRequests(query = {}, user = {}, canManage = false) {
@@ -2443,6 +2499,7 @@ module.exports = {
 	ALERT_HYSTERESIS_METERS,
 	ALLOWED_ORDER_TYPES,
 	MAPS_PERMISSIONS,
+	assignOrderToTechnician,
 	createRequest,
 	createRequestBatch,
 	createRoute,
@@ -2460,6 +2517,7 @@ module.exports = {
 	hasPermission,
 	initializeGeocoderWorker,
 	listPoints,
+	listAssignableTechnicians,
 	listRadarAlerts,
 	listRequests,
 	listRoutes,

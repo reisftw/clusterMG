@@ -145,6 +145,26 @@ function createMapsV2Router({
 		}
 	});
 
+	router.get("/admin/technicians/options", readLimiter, requireApprove, async (req, res, next) => {
+		try {
+			res.json(await service.listAssignableTechnicians(req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.post("/admin/orders/:id/assign", writeLimiter, requireCsrfToken, requireApprove, async (req, res, next) => {
+		try {
+			res.status(202).json(await service.assignOrderToTechnician(
+				req.params.id,
+				req.body || {},
+				req.user || {},
+			));
+		} catch (error) {
+			next(error);
+		}
+	});
+
 	router.put("/admin/monitoring/settings", writeLimiter, requireCsrfToken, requireSettings, async (req, res, next) => {
 		try {
 			res.json(await service.saveAdminPresentationSettings(req.body || {}, req.user || {}));

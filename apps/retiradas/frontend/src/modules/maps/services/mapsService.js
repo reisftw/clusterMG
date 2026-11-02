@@ -41,6 +41,11 @@ export const mapsService = {
 	adminMonitoringOverview: (params, signal) => get("/admin/monitoring/overview", params, { signal }),
 	adminMonitoringSettings: () => get("/admin/monitoring/settings"),
 	saveAdminMonitoringSettings: (payload) => send("/admin/monitoring/settings", "PUT", payload),
+	assignableTechnicians: () => get("/admin/technicians/options"),
+	assignOrderToTechnician: (orderId, technician) => send(`/admin/orders/${encodeURIComponent(orderId)}/assign`, "POST", {
+		technicianHubsoftId: technician?.id || null,
+		technicianHubsoftName: technician?.name || "",
+	}),
 	technicianTrack: (id, params) => get(`/admin/technicians/${encodeURIComponent(id)}/track`, params),
 	visitCenter: (params) => get("/admin/visits", params),
 	radarAlerts: (params) => get("/radar/alerts", params),

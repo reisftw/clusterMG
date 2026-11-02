@@ -130,6 +130,20 @@ describe("Retiradas Maps 2.0 service", () => {
 		});
 	});
 
+	it("aplica a busca inteligente em cidade, bairro, cliente, codigo e numero da OS", () => {
+		const params = [];
+		const filters = __testables.sourceFilters({
+			params,
+			query: { search: "586377" },
+			user: { role: "admin" },
+		});
+		const sql = filters.clauses.join(" ");
+		expect(sql).toContain("o.codigo_cliente");
+		expect(sql).toContain("o.num_os");
+		expect(sql).toContain("o.nome_cliente");
+		expect(params).toContain("%586377%");
+	});
+
 	it("permite que a gestao visualize todas as retiradas sem habilitar solicitacao indevida", () => {
 		const params = [];
 		const filters = __testables.sourceFilters({
@@ -327,5 +341,21 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(service).toContain("normalizeAdminPresentationSettings");
 		expect(migration).toContain("create table if not exists maps_admin_presentation_settings");
 		expect(migration).not.toMatch(/drop table/i);
+	});
+
+	it("atribui OS pelo adminmap usando RBAC e a fila segura do HubSoft", () => {
+		const serviceSource = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		const routerSource = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js"),
+			"utf8",
+		);
+		expect(routerSource).toContain('router.get("/admin/technicians/options", readLimiter, requireApprove');
+		expect(routerSource).toContain('router.post("/admin/orders/:id/assign", writeLimiter, requireCsrfToken, requireApprove');
+		expect(serviceSource).toContain("serviceOrderRequestsService.listSelectableTechnicians(user)");
+		expect(serviceSource).toContain("serviceOrderRequestsService.createRequest(");
+		expect(serviceSource).toContain('broadcastMapsUpdate("ADMIN_ASSIGNMENT_QUEUED"');
 	});
 });

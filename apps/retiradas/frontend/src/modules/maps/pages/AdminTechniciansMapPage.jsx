@@ -25,6 +25,7 @@ import {
 	Target,
 	Trophy,
 	UsersRound,
+	UserRoundCheck,
 	Wifi,
 	WifiOff,
 	X,
@@ -34,6 +35,7 @@ import { Link } from "react-router-dom";
 import { hasPermission } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
+import AdminOrderAssignmentModal from "../components/AdminOrderAssignmentModal";
 import AdminTechniciansMapCanvas from "../components/AdminTechniciansMapCanvas";
 import { mapsService } from "../services/mapsService";
 import {
@@ -165,6 +167,7 @@ export default function AdminTechniciansMapPage() {
 	const { currentUser } = useAuthContext();
 	const tvMode = useMemo(() => new URLSearchParams(window.location.search).get("mode") === "tv", []);
 	const canManageSettings = hasPermission(currentUser, "retiradas.maps.v2.manage_settings");
+	const canAssignOrders = hasPermission(currentUser, "retiradas.maps.v2.approve_request");
 	const [overview, setOverview] = useState(null);
 	const [orders, setOrders] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -193,6 +196,12 @@ export default function AdminTechniciansMapPage() {
 	const [interactionRevision, setInteractionRevision] = useState(0);
 	const [cameraCommand, setCameraCommand] = useState({ type: "overview", revision: 1 });
 	const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
+	const [assignmentOpen, setAssignmentOpen] = useState(false);
+	const [assignmentTechnicians, setAssignmentTechnicians] = useState([]);
+	const [assignmentLoading, setAssignmentLoading] = useState(false);
+	const [assignmentSaving, setAssignmentSaving] = useState(false);
+	const [assignmentError, setAssignmentError] = useState("");
+	const [assignmentNotice, setAssignmentNotice] = useState("");
 	const recentHighlightsRef = useRef([]);
 
 	const settings = useMemo(() => overview?.settings || {}, [overview?.settings]);
@@ -409,6 +418,38 @@ export default function AdminTechniciansMapPage() {
 		}
 	}
 
+	async function openAssignment() {
+		if (!selectedOrder || !canAssignOrders) return;
+		setAssignmentOpen(true);
+		setAssignmentError("");
+		if (assignmentTechnicians.length) return;
+		setAssignmentLoading(true);
+		try {
+			const response = await mapsService.assignableTechnicians();
+			setAssignmentTechnicians(response.items || []);
+		} catch (loadError) {
+			setAssignmentError(loadError.message || "Não foi possível carregar os técnicos.");
+		} finally {
+			setAssignmentLoading(false);
+		}
+	}
+
+	async function assignSelectedOrder(technician) {
+		if (!selectedOrder || !technician) return;
+		setAssignmentSaving(true);
+		setAssignmentError("");
+		try {
+			await mapsService.assignOrderToTechnician(selectedOrder.id, technician);
+			setAssignmentOpen(false);
+			setAssignmentNotice(`Transferência da O.S. ${selectedOrder.orderNumber} para ${technician.displayName || technician.name} iniciada.`);
+			await loadOrders();
+		} catch (saveError) {
+			setAssignmentError(saveError.message || "Não foi possível atribuir a O.S.");
+		} finally {
+			setAssignmentSaving(false);
+		}
+	}
+
 	return (
 		<main className={`maps-command-page${tvMode ? " is-tv" : ""}`}>
 			<header className="maps-command-header">
@@ -504,7 +545,7 @@ export default function AdminTechniciansMapPage() {
 						{detailTab === "orders" ? <div className="maps-command-detail-content"><div className="maps-command-mini-list">{orders.filter((item) => String(item.technician || "").toLocaleLowerCase("pt-BR") === String(selected.technicianName || "").toLocaleLowerCase("pt-BR")).slice(0, 12).map((item) => <button type="button" key={item.id} onClick={() => selectOrder(item.id)}><span>O.S. {item.orderNumber}</span><small>{item.city} · {item.status}</small></button>)}</div><p className="maps-command-note">A lista mostra apenas O.S. abertas vinculadas ao nome HubSoft deste técnico.</p></div> : null}
 					</> : selectedOrder ? <>
 						<header className="maps-command-selected-head"><div><span className={`maps-command-avatar${selectedOrder.priority === "high" ? " is-priority" : ""}`}><Target size={20} /></span><span><small>{selectedOrder.priority === "high" ? "Prioridade" : "Ordem aberta"}</small><strong>O.S. {selectedOrder.orderNumber}</strong><em>{selectedOrder.city} · {selectedOrder.regional || "Sem regional"}</em></span></div><button type="button" onClick={() => setSelectedOrderId("")} aria-label="Fechar"><X size={17} /></button></header>
-						<div className="maps-command-detail-content"><dl><div><dt><ClipboardList size={14} />Status</dt><dd>{selectedOrder.status}</dd></div><div><dt><UsersRound size={14} />Técnico</dt><dd>{selectedOrder.technician || "Disponível"}</dd></div><div><dt><Building2 size={14} />Localização</dt><dd>{selectedOrder.neighborhood} · {selectedOrder.city}</dd></div><div><dt><Clock3 size={14} />Atualizada</dt><dd>{timeAgo(selectedOrder.lastUpdatedAt, now)}</dd></div></dl><p className="maps-command-note">Dados pessoais do cliente são preservados nesta central de televisão.</p></div>
+						<div className="maps-command-detail-content"><dl><div><dt><ClipboardList size={14} />Status</dt><dd>{selectedOrder.status}</dd></div><div><dt><UsersRound size={14} />Técnico</dt><dd>{selectedOrder.technician || "Disponível"}</dd></div><div><dt><Building2 size={14} />Localização</dt><dd>{selectedOrder.neighborhood} · {selectedOrder.city}</dd></div><div><dt><Clock3 size={14} />Atualizada</dt><dd>{timeAgo(selectedOrder.lastUpdatedAt, now)}</dd></div></dl>{canAssignOrders ? <button type="button" className="maps-command-assign-button" onClick={openAssignment}><UserRoundCheck size={16} />Atribuir técnico</button> : null}<p className="maps-command-note">A transferência usa a fila segura do HubSoft e o mapa será atualizado assim que a atribuição for concluída.</p></div>
 					</> : <>
 						<header className="maps-command-panel-title"><div><Trophy size={18} /><span><strong>Ranking de produtividade</strong><small>Retiradas concluídas hoje</small></span></div><em>{formatTime(overview?.rankings?.updatedAt)}</em></header>
 						<div className="maps-command-ranking">{(overview?.rankings?.daily || []).map((item, index) => <button type="button" key={item.userId} onClick={() => selectTechnician(item.userId)}><span>{index + 1}</span><div><strong>{item.displayName || item.technicianName}</strong><small>{item.regional || "Sem regional"}</small></div><em>{item.completedToday}</em></button>)}{!(overview?.rankings?.daily || []).length ? <div className="maps-command-empty"><Trophy size={22} /><strong>Produção ainda sem registros</strong></div> : null}</div>
@@ -517,7 +558,9 @@ export default function AdminTechniciansMapPage() {
 
 			{loading ? <div className="maps-command-loading"><RefreshCw size={22} /><strong>Preparando a central geográfica...</strong></div> : null}
 			{error ? <div className="maps-command-error"><WifiOff size={17} /><span>{error}</span><button type="button" onClick={refreshAll}>Tentar novamente</button><button type="button" onClick={() => setError("")} aria-label="Fechar"><X size={15} /></button></div> : null}
+			{assignmentNotice ? <div className="maps-command-assignment-notice" role="status"><CheckCircle2 size={17} /><span>{assignmentNotice}</span><button type="button" onClick={() => setAssignmentNotice("")} aria-label="Fechar"><X size={15} /></button></div> : null}
 			{settingsOpen ? <SettingsDialog value={{ ...settings, layers }} onClose={() => setSettingsOpen(false)} onSave={saveSettings} saving={settingsSaving} /> : null}
+			<AdminOrderAssignmentModal open={assignmentOpen} order={selectedOrder} technicians={assignmentTechnicians} loading={assignmentLoading} saving={assignmentSaving} error={assignmentError} onClose={() => setAssignmentOpen(false)} onConfirm={assignSelectedOrder} />
 		</main>
 	);
 }

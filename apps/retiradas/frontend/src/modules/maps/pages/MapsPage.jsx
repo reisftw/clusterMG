@@ -1,16 +1,16 @@
 import {
 	BellRing,
-	Crosshair,
 	FlaskConical,
 	Inbox,
 	Layers3,
 	LocateFixed,
 	MapPinned,
+	Navigation,
 	PackagePlus,
 	RefreshCw,
 	Route,
-	Search,
 	Settings2,
+	SlidersHorizontal,
 	UsersRound,
 	Wifi,
 	WifiOff,
@@ -22,6 +22,8 @@ import { hasPermission, ROLES } from "../../../constants/roles";
 import { useAuthContext } from "../../../context/AuthContext";
 import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import MapsBottomSheet from "../components/MapsBottomSheet";
+import MapsFiltersPanel from "../components/MapsFiltersPanel";
+import MapsSmartSearch from "../components/MapsSmartSearch";
 import OrderDetailPanel from "../components/OrderDetailPanel";
 import RadarPanel from "../components/RadarPanel";
 import RequestsPanel from "../components/RequestsPanel";
@@ -32,6 +34,7 @@ import { dispatchRadarNotification } from "../features/notifications/notificatio
 import { shouldEvaluatePosition } from "../features/radar/proximityEngine";
 import { mapsService } from "../services/mapsService";
 import { updateTechnicianPresence } from "../services/technicianPresence";
+import { buildMapSearchSuggestions, readStoredMapView, storeMapView } from "../utils/mobileMapPresentation";
 import "../styles/maps.css";
 import "../styles/maps-mobile.css";
 import "../styles/maps-loading.css";
@@ -46,20 +49,18 @@ const MAPS_PERMISSIONS = {
 	AUDIT: "retiradas.maps.v2.audit",
 	LIVE_TECHNICIANS: "retiradas.maps.v2.live_technicians",
 };
-const VIEW_RADII = Object.freeze([
-	{ meters: 120, label: "120 m" },
-	{ meters: 250, label: "250 m" },
-	{ meters: 500, label: "500 m" },
-	{ meters: 1000, label: "1 km" },
-	{ meters: 3000, label: "3 km" },
-	{ meters: 5000, label: "5 km" },
-]);
 const MapsCanvas = lazy(() => import("../components/MapsCanvas"));
 
 function formatSync(value) {
-	if (!value) return "Sem sincronizacao";
+	if (!value) return "Sem sincronização";
 	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? "Sem sincronizacao" : `Atualizado ${date.toLocaleString("pt-BR")}`;
+	return Number.isNaN(date.getTime()) ? "Sem sincronização" : `Atualizado ${date.toLocaleString("pt-BR")}`;
+}
+
+function formatSyncTime(value) {
+	if (!value) return "sem sincronização";
+	const date = new Date(value);
+	return Number.isNaN(date.getTime()) ? "sem sincronização" : `atualizado às ${date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function usePermission(user, permission) {
@@ -78,16 +79,25 @@ export default function MapsPage() {
 	const canApproveRequests = usePermission(currentUser, MAPS_PERMISSIONS.APPROVE);
 	const canRejectRequests = usePermission(currentUser, MAPS_PERMISSIONS.REJECT);
 	const canManageRequests = canApproveRequests || canRejectRequests;
+	const storedView = useMemo(() => readStoredMapView(), []);
 	const [points, setPoints] = useState([]);
 	const [summary, setSummary] = useState({ assigned: 0, opportunities: 0, scheduled: 0 });
-	const [viewport, setViewport] = useState(null);
+	const [viewport, setViewport] = useState(() => storedView && [storedView.minLat, storedView.maxLat, storedView.minLng, storedView.maxLng].every(Number.isFinite) ? storedView : null);
+	const [pendingViewport, setPendingViewport] = useState(null);
 	const [radiusMeters, setRadiusMeters] = useState(120);
 	const [gpsArea, setGpsArea] = useState(false);
 	const [gpsRequested, setGpsRequested] = useState(false);
 	const [mapQueryPosition, setMapQueryPosition] = useState(null);
-	const [searchDraft, setSearchDraft] = useState({ city: "", neighborhood: "" });
-	const [search, setSearch] = useState({ city: "", neighborhood: "" });
+	const [searchDraft, setSearchDraft] = useState("");
+	const [search, setSearch] = useState({ query: "" });
+	const [searchSuggestions, setSearchSuggestions] = useState([]);
+	const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+	const [searchSuggestionsLoading, setSearchSuggestionsLoading] = useState(false);
+	const [searchSuggestionsError, setSearchSuggestionsError] = useState("");
 	const [categories, setCategories] = useState(["assigned", "opportunity"]);
+	const [sortMode, setSortMode] = useState("nearest");
+	const [filtersOpen, setFiltersOpen] = useState(false);
+	const [toolsOpen, setToolsOpen] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [notice, setNotice] = useState("");
@@ -96,7 +106,7 @@ export default function MapsPage() {
 	const [selectedId, setSelectedId] = useState("");
 	const [selectedItem, setSelectedItem] = useState(null);
 	const [detailLoading, setDetailLoading] = useState(false);
-	const [sheetOpen, setSheetOpen] = useState(false);
+	const [sheetPosition, setSheetPosition] = useState("peek");
 	const [radarOpen, setRadarOpen] = useState(false);
 	const [radarSettings, setRadarSettings] = useState(null);
 	const [routeOpen, setRouteOpen] = useState(false);
@@ -117,11 +127,12 @@ export default function MapsPage() {
 	const lastMapQueryPositionRef = useRef(null);
 	const locationAppliedRef = useRef(false);
 	const noticeTimerRef = useRef(null);
+	const pendingSearchFocusRef = useRef("");
 	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
 
 	const requestParams = useMemo(() => {
-		const params = { categories: categories.join(","), limit: 25000 };
-		if (search.city || search.neighborhood) return { ...params, ...search };
+		const params = { categories: categories.join(","), limit: 5000 };
+		if (search.query) return { ...params, search: search.query };
 		if (gpsArea && mapQueryPosition) {
 			return {
 				...params,
@@ -146,13 +157,23 @@ export default function MapsPage() {
 		setError("");
 		try {
 			const response = await mapsService.points(requestParams, signal);
-			setPoints(response.items || []);
+			const nextItems = response.items || [];
+			setPoints(nextItems);
 			setLastSyncAt(response.lastSyncAt || "");
 			setSummary(response.summary || {
-				assigned: (response.items || []).filter((item) => item.category === "assigned").length,
-				opportunities: (response.items || []).filter((item) => item.category === "opportunity").length,
-				scheduled: (response.items || []).filter((item) => item.scheduled).length,
+				assigned: nextItems.filter((item) => item.category === "assigned").length,
+				opportunities: nextItems.filter((item) => item.category === "opportunity").length,
+				scheduled: nextItems.filter((item) => item.scheduled).length,
 			});
+			if (pendingSearchFocusRef.current) {
+				const match = nextItems.find((item) => item.id === pendingSearchFocusRef.current);
+				pendingSearchFocusRef.current = "";
+				if (match?.locationAvailable) {
+					setSelectedId(match.id);
+					setFocusPoint({ latitude: match.latitude, longitude: match.longitude, key: Date.now() });
+					setSheetPosition("peek");
+				}
+			}
 		} catch (loadError) {
 			if (loadError.name !== "AbortError") setError(loadError.message);
 		} finally {
@@ -168,6 +189,34 @@ export default function MapsPage() {
 			controller.abort();
 		};
 	}, [loadPoints]);
+
+	useEffect(() => {
+		const query = searchDraft.trim();
+		if (query.length < 2 || query === search.query) {
+			setSearchSuggestions([]);
+			setSearchSuggestionsOpen(false);
+			setSearchSuggestionsLoading(false);
+			return undefined;
+		}
+		const controller = new AbortController();
+		const timer = window.setTimeout(async () => {
+			setSearchSuggestionsLoading(true);
+			setSearchSuggestionsError("");
+			setSearchSuggestionsOpen(true);
+			try {
+				const response = await mapsService.points({ search: query, categories: categories.join(","), limit: 24 }, controller.signal);
+				setSearchSuggestions(buildMapSearchSuggestions(response.items || [], query));
+			} catch (suggestionError) {
+				if (suggestionError.name !== "AbortError") setSearchSuggestionsError("Não foi possível consultar agora.");
+			} finally {
+				if (!controller.signal.aborted) setSearchSuggestionsLoading(false);
+			}
+		}, 280);
+		return () => {
+			window.clearTimeout(timer);
+			controller.abort();
+		};
+	}, [categories, search.query, searchDraft]);
 
 	useEffect(() => {
 		mapsService.health().then(setHealth).catch(() => setHealth({ ok: false }));
@@ -219,7 +268,7 @@ export default function MapsPage() {
 		if (!shouldEvaluatePosition(lastRadarPositionRef.current, position)) return;
 		lastRadarPositionRef.current = position;
 		mapsService.evaluateRadar(position).then((response) => {
-			(response.alerts || []).forEach((alert) => dispatchRadarNotification(alert, () => setSheetOpen(true)));
+			(response.alerts || []).forEach((alert) => dispatchRadarNotification(alert, () => setSheetPosition("expanded")));
 		}).catch(() => {});
 	}, [canRadar, locationState.position, radarSettings?.enabled]);
 
@@ -241,7 +290,8 @@ export default function MapsPage() {
 		lastMapQueryPositionRef.current = locationState.position;
 		setMapQueryPosition(locationState.position);
 		setGpsArea(true);
-		setSearch({ city: "", neighborhood: "" });
+		setSearch({ query: "" });
+		setSearchDraft("");
 		setFocusPoint({ ...locationState.position, key: Date.now() });
 		setNotice("Localizacao atualizada. Buscando oportunidades proximas.");
 	}, [gpsRequested, locationState.position]);
@@ -262,6 +312,15 @@ export default function MapsPage() {
 		noticeTimerRef.current = window.setTimeout(() => setNotice(""), 4500);
 		return () => window.clearTimeout(noticeTimerRef.current);
 	}, [notice]);
+
+	useEffect(() => {
+		window.dispatchEvent(new CustomEvent("retiradas:maps-sheet-position", { detail: { position: sheetPosition } }));
+	}, [sheetPosition]);
+
+	useEffect(() => {
+		window.dispatchEvent(new CustomEvent("retiradas:maps-search-state", { detail: { open: searchSuggestionsOpen } }));
+		return () => window.dispatchEvent(new CustomEvent("retiradas:maps-search-state", { detail: { open: false } }));
+	}, [searchSuggestionsOpen]);
 
 	async function saveRadarSettings(nextSettings) {
 		const saved = await mapsService.saveRadarSettings(nextSettings);
@@ -332,7 +391,10 @@ export default function MapsPage() {
 	}
 
 	function toggleCategory(category) {
-		setCategories((current) => current.includes(category) ? current.filter((item) => item !== category) : [...current, category]);
+		setCategories((current) => {
+			const next = current.includes(category) ? current.filter((item) => item !== category) : [...current, category];
+			return next.length ? next : current;
+		});
 	}
 
 	function toggleRouteItem(id) {
@@ -360,7 +422,7 @@ export default function MapsPage() {
 		setSelectedRequestIds([]);
 		setRouteSelectionMode(true);
 		setSelectedId("");
-		setSheetOpen(false);
+		setSheetPosition("collapsed");
 		setNotice("Modo rota ativo. Toque nas casas verdes para selecionar as paradas.");
 	}
 
@@ -368,7 +430,7 @@ export default function MapsPage() {
 		setRouteSelectionMode(false);
 		setRequestSelectionMode(true);
 		setSelectedId("");
-		setSheetOpen(false);
+		setSheetPosition("collapsed");
 		setNotice("Selecione no mapa as O.S. que deseja solicitar de uma vez.");
 	}
 
@@ -434,13 +496,65 @@ export default function MapsPage() {
 
 	function applySearch(event) {
 		event.preventDefault();
+		const query = searchDraft.trim();
+		if (!query) return;
 		setGpsArea(false);
-		setSearch({ city: searchDraft.city.trim(), neighborhood: searchDraft.neighborhood.trim() });
+		setPendingViewport(null);
+		setSearch({ query });
+		setSearchSuggestionsOpen(false);
+		setSheetPosition("peek");
 	}
 
 	function clearSearch() {
-		setSearchDraft({ city: "", neighborhood: "" });
-		setSearch({ city: "", neighborhood: "" });
+		setSearchDraft("");
+		setSearch({ query: "" });
+		setSearchSuggestions([]);
+		setSearchSuggestionsOpen(false);
+	}
+
+	function selectSearchSuggestion(suggestion) {
+		setSearchDraft(suggestion.label);
+		setSearch({ query: suggestion.query });
+		setSearchSuggestionsOpen(false);
+		setGpsArea(false);
+		setPendingViewport(null);
+		pendingSearchFocusRef.current = suggestion.point?.id || "";
+	}
+
+	function handleMapViewport(nextViewport) {
+		storeMapView(nextViewport);
+		if (nextViewport.userInitiated) {
+			setPendingViewport(nextViewport);
+			setGpsArea(false);
+			return;
+		}
+		if (!viewport) setViewport(nextViewport);
+	}
+
+	function searchVisibleArea() {
+		if (!pendingViewport) return;
+		setViewport(pendingViewport);
+		setPendingViewport(null);
+		setGpsArea(false);
+		setSearch({ query: "" });
+		setSearchDraft("");
+		setNotice("Buscando ordens na área visível.");
+	}
+
+	function selectPoint(itemOrId) {
+		const id = typeof itemOrId === "string" ? itemOrId : itemOrId?.id;
+		const point = points.find((entry) => entry.id === id) || (typeof itemOrId === "object" ? itemOrId : null);
+		if (!id) return;
+		setSelectedId(id);
+		setSheetPosition("peek");
+		if (point?.locationAvailable) setFocusPoint({ latitude: point.latitude, longitude: point.longitude, key: Date.now() });
+	}
+
+	function applyFilters(next) {
+		setRadiusMeters(next.radiusMeters);
+		setSortMode(next.sortMode);
+		setCategories(next.categories);
+		setFiltersOpen(false);
 	}
 
 	function centerOnUser() {
@@ -453,45 +567,48 @@ export default function MapsPage() {
 		setGpsArea(true);
 		lastMapQueryPositionRef.current = locationState.position;
 		setMapQueryPosition(locationState.position);
-		setSearch({ city: "", neighborhood: "" });
+		setSearch({ query: "" });
+		setSearchDraft("");
+		setPendingViewport(null);
 		setFocusPoint({ ...locationState.position, key: Date.now() });
-		setNotice("Localizacao atualizada. Buscando oportunidades proximas.");
+		setNotice("Localização atualizada. Buscando oportunidades próximas.");
 	}
 
 	return (
 		<div className="maps-v2-page">
 			<header className="maps-v2-header">
 				<div className="maps-v2-title"><span><MapPinned size={23} /></span><div><h1>Retiradas Maps</h1><p>{formatSync(lastSyncAt || health?.last_order_sync)}</p></div></div>
-				<div className="maps-v2-header-status">{canViewLiveTechnicians ? <Link className="maps-v2-live-link" to="/maps/adminmap"><UsersRound size={16} /> Equipe ao vivo</Link> : null}<span className={health?.ok ? "is-online" : "is-offline"}>{health?.ok ? <Wifi size={16} /> : <WifiOff size={16} />}{health?.ok ? "Conectado" : "Indisponivel"}</span>{loading ? <RefreshCw className="maps-v2-spin" size={17} /> : null}</div>
+				<div className="maps-v2-header-status">{canViewLiveTechnicians ? <Link className="maps-v2-live-link" to="/maps/adminmap"><UsersRound size={16} /> Equipe ao vivo</Link> : null}<span className={health?.ok ? "is-online" : "is-offline"}>{health?.ok ? <Wifi size={16} /> : <WifiOff size={16} />}{health?.ok ? "Conectado" : "Indisponível"}</span>{loading ? <RefreshCw className="maps-v2-spin" size={17} /> : null}</div>
 			</header>
 
-			<form className="maps-v2-search" onSubmit={applySearch}>
-				<Search size={19} />
-				<input aria-label="Buscar cidade" placeholder="Cidade" value={searchDraft.city} onChange={(event) => setSearchDraft((current) => ({ ...current, city: event.target.value }))} />
-				<input aria-label="Buscar bairro" placeholder="Bairro" value={searchDraft.neighborhood} onChange={(event) => setSearchDraft((current) => ({ ...current, neighborhood: event.target.value }))} />
-				{search.city || search.neighborhood ? <button type="button" className="maps-v2-icon-button" onClick={clearSearch} aria-label="Limpar busca"><X size={18} /></button> : null}
-				<button type="submit" className="maps-v2-search-button">Buscar</button>
-			</form>
+			<MapsSmartSearch value={searchDraft} onChange={setSearchDraft} onSubmit={applySearch} onClear={clearSearch} suggestions={searchSuggestions} onSelect={selectSearchSuggestion} loading={searchSuggestionsLoading} error={searchSuggestionsError} open={searchSuggestionsOpen} />
 
-			<div className="maps-v2-filterbar">
-				<div className="maps-v2-segmented" aria-label="Categorias do mapa"><button type="button" className={categories.includes("assigned") ? "is-active is-assigned" : ""} onClick={() => toggleCategory("assigned")}><span /> Minhas OS</button><button type="button" className={categories.includes("opportunity") ? "is-active is-opportunity" : ""} onClick={() => toggleCategory("opportunity")}><span /> Outras OS</button></div>
-				<label className="maps-v2-radius"><Crosshair size={16} /><span>Raio</span><select value={radiusMeters} onChange={(event) => setRadiusMeters(Number(event.target.value))}>{VIEW_RADII.map((radius) => <option key={radius.meters} value={radius.meters}>{radius.label}</option>)}</select></label>
-				<span className="maps-v2-total"><Layers3 size={16} /> {summary.assigned + summary.opportunities} OS nesta area</span>
+			<div className="maps-v2-quick-filters" aria-label="Filtros rápidos">
+				<button type="button" className={categories.includes("assigned") ? "is-active is-assigned" : ""} onClick={() => toggleCategory("assigned")}><span /> Minhas OS</button>
+				<button type="button" className={categories.includes("opportunity") ? "is-active is-opportunity" : ""} onClick={() => toggleCategory("opportunity")}><span /> Oportunidades</button>
+				<button type="button" className={filtersOpen ? "is-active is-filters" : ""} onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} /> Filtros</button>
+			</div>
+			<div className="maps-v2-area-status" role="status">
+				<span><Layers3 size={16} /><strong>{summary.assigned + summary.opportunities}</strong> ordens nesta área</span>
+				<span className={health?.ok ? "is-fresh" : "is-stale"}>{loading ? "sincronizando..." : formatSyncTime(lastSyncAt || health?.last_order_sync)}</span>
 			</div>
 
 			<main className="maps-v2-workspace">
 				<Suspense fallback={<div className="maps-v2-canvas-loading"><RefreshCw className="maps-v2-spin" size={22} /><span>Preparando mapa...</span></div>}>
-					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} selectionMode={routeSelectionMode ? "route" : requestSelectionMode ? "request" : ""} selectedRouteIds={selectedRouteIds} selectedRequestIds={selectedRequestIds} navigationPath={navigation?.geometry || []} onViewportChange={setViewport} onSelect={setSelectedId} onToggleRoute={toggleRoutePoint} onToggleRequest={toggleRequestPoint} onError={setError} />
+					<MapsCanvas points={points} userPosition={locationState.position} focusPoint={focusPoint} focusZoom={focusZoom} followUser={gpsArea} initialView={storedView} selectedId={selectedId} selectionMode={routeSelectionMode ? "route" : requestSelectionMode ? "request" : ""} selectedRouteIds={selectedRouteIds} selectedRequestIds={selectedRequestIds} navigationPath={navigation?.geometry || []} onViewportChange={handleMapViewport} onSelect={selectPoint} onToggleRoute={toggleRoutePoint} onToggleRequest={toggleRequestPoint} onError={setError} />
 				</Suspense>
 				<div className="maps-v2-map-actions">
-					<button type="button" onClick={centerOnUser} title="Minha localizacao"><LocateFixed size={21} /></button>
-					{canRadar ? <button type="button" className={radarSettings?.enabled ? "is-active" : ""} onClick={() => setRadarOpen(true)} title="Radar de proximidade"><BellRing size={21} /></button> : null}
-					{canRoutes ? <button type="button" className={routeSelectionMode || selectedRouteIds.length ? "is-active" : ""} onClick={routeSelectionMode ? finishRouteSelection : startRouteSelection} title={routeSelectionMode ? "Concluir selecao da rota" : "Selecionar OS no mapa para criar rota"}><Route size={21} /><small>{selectedRouteIds.length || ""}</small></button> : null}
-					{canRequest ? <button type="button" className={requestSelectionMode || selectedRequestIds.length ? "is-active" : ""} onClick={requestSelectionMode ? finishRequestSelection : startRequestSelection} title={requestSelectionMode ? "Enviar solicitacoes selecionadas" : "Solicitar varias O.S."}><PackagePlus size={21} /><small>{selectedRequestIds.length || ""}</small></button> : null}
-					{canRequest || canManageRequests ? <button type="button" onClick={openRequests} title="Solicitacoes"><Inbox size={21} /></button> : null}
-					{canAudit ? <button type="button" onClick={() => setSimulatorOpen(true)} title="Simulador"><FlaskConical size={21} /></button> : null}
-					{canRadar ? <button type="button" onClick={() => setRadarOpen(true)} title="Configuracoes"><Settings2 size={21} /></button> : null}
+					<button type="button" className={gpsArea ? "is-active" : ""} onClick={centerOnUser} title="Minha localização"><LocateFixed size={21} /></button>
+					<button type="button" className={toolsOpen ? "is-active" : ""} onClick={() => setToolsOpen((current) => !current)} title="Ferramentas do mapa"><Settings2 size={21} /></button>
 				</div>
+				{toolsOpen ? <div className="maps-v2-map-tools" aria-label="Ferramentas do mapa">
+					{canRadar ? <button type="button" className={radarSettings?.enabled ? "is-active" : ""} onClick={() => { setRadarOpen(true); setToolsOpen(false); }}><BellRing size={18} /><span>Radar</span></button> : null}
+					{canRoutes ? <button type="button" className={routeSelectionMode || selectedRouteIds.length ? "is-active" : ""} onClick={() => { routeSelectionMode ? finishRouteSelection() : startRouteSelection(); setToolsOpen(false); }}><Route size={18} /><span>Montar rota</span><small>{selectedRouteIds.length || ""}</small></button> : null}
+					{canRequest ? <button type="button" className={requestSelectionMode || selectedRequestIds.length ? "is-active" : ""} onClick={() => { requestSelectionMode ? finishRequestSelection() : startRequestSelection(); setToolsOpen(false); }}><PackagePlus size={18} /><span>Solicitar OS</span><small>{selectedRequestIds.length || ""}</small></button> : null}
+					{canRequest || canManageRequests ? <button type="button" onClick={() => { void openRequests(); setToolsOpen(false); }}><Inbox size={18} /><span>Solicitações</span></button> : null}
+					{canAudit ? <button type="button" onClick={() => { setSimulatorOpen(true); setToolsOpen(false); }}><FlaskConical size={18} /><span>Simulador</span></button> : null}
+				</div> : null}
+				{pendingViewport ? <button type="button" className="maps-v2-search-area" onClick={searchVisibleArea}><Navigation size={17} /> Buscar nesta área</button> : null}
 				{error ? <div className="maps-v2-error"><WifiOff size={18} /><span>{error}</span><button type="button" onClick={() => loadPoints()}><RefreshCw size={16} /> Tentar novamente</button></div> : null}
 				{notice ? <div className="maps-v2-location-notice" role="status"><LocateFixed size={18} /><span>{notice}</span></div> : null}
 				{routeSelectionMode ? (
@@ -512,9 +629,10 @@ export default function MapsPage() {
 						<button type="button" className="is-cancel" onClick={cancelRequestSelection} aria-label="Cancelar selecao"><X size={17} /></button>
 					</div>
 				) : null}
-				<MapsBottomSheet items={points} summary={summary} open={sheetOpen} onToggle={() => setSheetOpen((current) => !current)} onSelect={(item) => setSelectedId(item.id)} selectedRouteIds={selectedRouteIds} onToggleRoute={toggleRouteItem} />
+				<MapsBottomSheet items={points} summary={summary} position={sheetPosition} onPositionChange={setSheetPosition} onSelect={selectPoint} selectedId={selectedId} selectedRouteIds={selectedRouteIds} onToggleRoute={toggleRouteItem} sortMode={sortMode} onSortChange={setSortMode} />
 			</main>
 
+			{filtersOpen ? <MapsFiltersPanel open={true} radiusMeters={radiusMeters} sortMode={sortMode} categories={categories} onClose={() => setFiltersOpen(false)} onApply={applyFilters} /> : null}
 			<OrderDetailPanel item={selectedItem} loading={detailLoading} navigation={navigation} navigationLoading={navigationLoading} onClose={() => { setSelectedId(""); setNavigation(null); }} onRequest={async (orderId) => { await mapsService.requestOrder(orderId); await loadPoints(); }} onAddRoute={(orderId) => { toggleRouteItem(orderId); setRouteOpen(true); }} />
 			<RadarPanel open={radarOpen} settings={radarSettings} locationState={locationState} onClose={() => setRadarOpen(false)} onSave={saveRadarSettings} />
 			<RoutePlannerPanel open={routeOpen} points={points} selectedIds={selectedRouteIds} routes={routes} position={locationState.position} onClose={() => setRouteOpen(false)} onMove={moveRouteItem} onRemove={toggleRouteItem} onCreate={createRoute} onOptimize={optimizeRoute} />

@@ -73,16 +73,17 @@ function userPositionIcon() {
 	});
 }
 
-export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, selectionMode = "", selectedRouteIds = [], selectedRequestIds = [], navigationPath = [], onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError }) {
+export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom = 17, followUser, initialView, selectedId = "", selectionMode = "", selectedRouteIds = [], selectedRequestIds = [], navigationPath = [], onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError }) {
 	const containerRef = useRef(null);
 	const mapRef = useRef(null);
 	const clusterRef = useRef(null);
 	const userLayerRef = useRef(null);
 	const navigationLayerRef = useRef(null);
 	const markersByIdRef = useRef(new Map());
+	const selectedIdRef = useRef(selectedId);
 	const selectedRouteIdsRef = useRef(new Set(selectedRouteIds));
 	const selectedRequestIdsRef = useRef(new Set(selectedRequestIds));
-	const initialFrameAppliedRef = useRef(false);
+	const initialFrameAppliedRef = useRef(Boolean(initialView));
 	const callbacksRef = useRef({ onViewportChange, onSelect, onToggleRoute, onToggleRequest, onError, selectionMode });
 
 	useEffect(() => {
@@ -98,7 +99,10 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 				zoomControl: false,
 				attributionControl: false,
 				preferCanvas: true,
-			}).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+			}).setView(
+				initialView ? [Number(initialView.centerLat), Number(initialView.centerLng)] : DEFAULT_CENTER,
+				initialView ? Number(initialView.zoom || DEFAULT_ZOOM) : DEFAULT_ZOOM,
+			);
 			mapRef.current = map;
 			map.createPane("mapsUserPosition");
 			map.getPane("mapsUserPosition").style.zIndex = "750";
@@ -130,22 +134,41 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 
 		let userMovedMap = false;
 		let viewportTimer = null;
-		map.on("movestart", (event) => {
+		let initialViewportTimer = null;
+		let initialResizeTimer = null;
+		const markUserInteraction = (event) => {
 			if (event?.originalEvent) userMovedMap = true;
-		});
+		};
+		const markDirectInteraction = (event) => {
+			if (event?.target?.closest?.(".leaflet-marker-icon, .leaflet-control")) return;
+			userMovedMap = true;
+		};
+		const emitViewport = (userInitiated = false) => {
+			if (mapRef.current !== map || !map._loaded || !map._mapPane) return;
+			const bounds = map.getBounds();
+			const center = map.getCenter();
+			callbacksRef.current.onViewportChange?.({
+				minLat: bounds.getSouth(),
+				maxLat: bounds.getNorth(),
+				minLng: bounds.getWest(),
+				maxLng: bounds.getEast(),
+				centerLat: center.lat,
+				centerLng: center.lng,
+				zoom: map.getZoom(),
+				userInitiated,
+			});
+		};
+		map.on("movestart zoomstart", markUserInteraction);
+		map.on("dragstart", markDirectInteraction);
+		map.getContainer().addEventListener("wheel", markDirectInteraction, { passive: true });
+		map.getContainer().addEventListener("pointerdown", markDirectInteraction, { passive: true });
 		map.on("moveend", () => {
-			if (!userMovedMap) return;
+			const initiated = userMovedMap;
+			userMovedMap = false;
 			window.clearTimeout(viewportTimer);
-			viewportTimer = window.setTimeout(() => {
-				const bounds = map.getBounds();
-				callbacksRef.current.onViewportChange?.({
-					minLat: bounds.getSouth(),
-					maxLat: bounds.getNorth(),
-					minLng: bounds.getWest(),
-					maxLng: bounds.getEast(),
-				});
-			}, 350);
+			viewportTimer = window.setTimeout(() => emitViewport(initiated), initiated ? 220 : 0);
 		});
+		initialViewportTimer = window.setTimeout(() => emitViewport(false), 0);
 
 		const resizeObserver = typeof ResizeObserver !== "undefined"
 			? new ResizeObserver(() => map.invalidateSize({ pan: false }))
@@ -154,20 +177,24 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		const resizeMap = () => map.invalidateSize({ pan: false });
 		window.addEventListener("resize", resizeMap);
 		window.addEventListener("orientationchange", resizeMap);
-		window.setTimeout(resizeMap, 0);
+		initialResizeTimer = window.setTimeout(resizeMap, 0);
 
 		return () => {
 			window.clearTimeout(viewportTimer);
+			window.clearTimeout(initialViewportTimer);
+			window.clearTimeout(initialResizeTimer);
 			resizeObserver?.disconnect();
 			window.removeEventListener("resize", resizeMap);
 			window.removeEventListener("orientationchange", resizeMap);
+			map.getContainer().removeEventListener("wheel", markDirectInteraction);
+			map.getContainer().removeEventListener("pointerdown", markDirectInteraction);
 			map.remove();
 			mapRef.current = null;
 			clusterRef.current = null;
 			userLayerRef.current = null;
 			markersById.clear();
 		};
-	}, []);
+	}, [initialView]);
 
 	useEffect(() => {
 		const cluster = clusterRef.current;
@@ -182,7 +209,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 			validCoordinates.push([Number(point.latitude), Number(point.longitude)]);
 			const marker = L.marker(
 				[Number(point.latitude), Number(point.longitude)],
-				{ icon: pointIcon(point, selectedRouteIdsRef.current.has(point.id) || selectedRequestIdsRef.current.has(point.id)), title: pointLabel(point), riseOnHover: true },
+				{ icon: pointIcon(point, selectedIdRef.current === point.id || selectedRouteIdsRef.current.has(point.id) || selectedRequestIdsRef.current.has(point.id)), title: pointLabel(point), riseOnHover: true },
 			);
 			marker.bindTooltip(() => pointTooltip(point), { direction: "top", opacity: 0.98 });
 			marker.on("click", () => {
@@ -220,13 +247,26 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 	}, [points]);
 
 	useEffect(() => {
+		const previous = selectedIdRef.current;
+		selectedIdRef.current = selectedId;
+		for (const id of new Set([previous, selectedId])) {
+			if (!id) continue;
+			const entry = markersByIdRef.current.get(id);
+			if (!entry) continue;
+			const selected = id === selectedId || selectedRouteIdsRef.current.has(id) || selectedRequestIdsRef.current.has(id);
+			entry.marker.setIcon(pointIcon(entry.point, selected));
+			if (id === selectedId) entry.marker.openTooltip();
+		}
+	}, [selectedId]);
+
+	useEffect(() => {
 		const previous = selectedRouteIdsRef.current;
 		const next = new Set(selectedRouteIds);
 		const changed = new Set([...previous, ...next]);
 		for (const id of changed) {
 			if (previous.has(id) === next.has(id)) continue;
 			const entry = markersByIdRef.current.get(id);
-			if (entry) entry.marker.setIcon(pointIcon(entry.point, next.has(id)));
+			if (entry) entry.marker.setIcon(pointIcon(entry.point, next.has(id) || selectedRequestIdsRef.current.has(id) || selectedIdRef.current === id));
 		}
 		selectedRouteIdsRef.current = next;
 	}, [selectedRouteIds]);
@@ -238,7 +278,7 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		for (const id of changed) {
 			if (previous.has(id) === next.has(id)) continue;
 			const entry = markersByIdRef.current.get(id);
-			if (entry) entry.marker.setIcon(pointIcon(entry.point, next.has(id) || selectedRouteIdsRef.current.has(id)));
+			if (entry) entry.marker.setIcon(pointIcon(entry.point, next.has(id) || selectedRouteIdsRef.current.has(id) || selectedIdRef.current === id));
 		}
 		selectedRequestIdsRef.current = next;
 	}, [selectedRequestIds]);
