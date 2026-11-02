@@ -1,4 +1,5 @@
 const crypto = require("node:crypto");
+const auditLog = require("../auditLog");
 const db = require("../db");
 const notificationsService = require("../notificationsService");
 const { broadcastRealtime } = require("../realtime");
@@ -51,6 +52,34 @@ const VISIT_REENTRY_GAP_MINUTES = Math.min(
 	Math.max(Number.parseInt(process.env.MAPS_VISIT_REENTRY_GAP_MINUTES, 10) || 60, 15),
 	24 * 60,
 );
+const ADMIN_PRESENTATION_DEFAULTS = Object.freeze({
+	overviewSeconds: 12,
+	regionalSeconds: 10,
+	citySeconds: 8,
+	technicianSeconds: 12,
+	routeSeconds: 10,
+	inactivitySeconds: 60,
+	rankingLimit: 3,
+	activeSignalMinutes: 5,
+	attentionSignalMinutes: 15,
+	stopRadiusMeters: 80,
+	stopMinutes: 10,
+	rotateRegionals: true,
+	automaticMovement: true,
+	showPriorityOrders: true,
+	showDailyRoute: true,
+	autoResume: true,
+	layers: Object.freeze({
+		technicians: true,
+		openOrders: true,
+		assignedOrders: true,
+		priorityOrders: true,
+		routes: true,
+		regionals: true,
+		cities: true,
+		stops: true,
+	}),
+});
 const navigationCache = new Map();
 let locationHistoryCleanupAt = 0;
 
@@ -70,6 +99,62 @@ function broadcastMapsAdminUpdate(action, payload = {}) {
 
 function text(value) {
 	return String(value ?? "").trim();
+}
+
+function boundedInteger(value, fallback, minimum, maximum) {
+	const parsed = Number.parseInt(value, 10);
+	return Number.isFinite(parsed) ? Math.min(Math.max(parsed, minimum), maximum) : fallback;
+}
+
+function booleanValue(value, fallback) {
+	if (typeof value === "boolean") return value;
+	if (value === "true" || value === 1 || value === "1") return true;
+	if (value === "false" || value === 0 || value === "0") return false;
+	return fallback;
+}
+
+function normalizeAdminPresentationSettings(value = {}) {
+	const sourceLayers = value.layers || value.layerPreferences || value.layer_preferences || {};
+	const layers = Object.fromEntries(
+		Object.entries(ADMIN_PRESENTATION_DEFAULTS.layers).map(([key, fallback]) => [
+			key,
+			booleanValue(sourceLayers[key], fallback),
+		]),
+	);
+	const activeSignalMinutes = boundedInteger(
+		value.activeSignalMinutes ?? value.active_signal_minutes,
+		ADMIN_PRESENTATION_DEFAULTS.activeSignalMinutes,
+		1,
+		30,
+	);
+	const attentionSignalMinutes = Math.max(
+		activeSignalMinutes + 1,
+		boundedInteger(
+			value.attentionSignalMinutes ?? value.attention_signal_minutes,
+			ADMIN_PRESENTATION_DEFAULTS.attentionSignalMinutes,
+			2,
+			120,
+		),
+	);
+	return {
+		overviewSeconds: boundedInteger(value.overviewSeconds ?? value.overview_seconds, 12, 5, 120),
+		regionalSeconds: boundedInteger(value.regionalSeconds ?? value.regional_seconds, 10, 5, 120),
+		citySeconds: boundedInteger(value.citySeconds ?? value.city_seconds, 8, 5, 120),
+		technicianSeconds: boundedInteger(value.technicianSeconds ?? value.technician_seconds, 12, 5, 120),
+		routeSeconds: boundedInteger(value.routeSeconds ?? value.route_seconds, 10, 5, 120),
+		inactivitySeconds: boundedInteger(value.inactivitySeconds ?? value.inactivity_seconds, 60, 15, 600),
+		rankingLimit: boundedInteger(value.rankingLimit ?? value.ranking_limit, 3, 1, 10),
+		activeSignalMinutes,
+		attentionSignalMinutes,
+		stopRadiusMeters: boundedInteger(value.stopRadiusMeters ?? value.stop_radius_meters, 80, 20, 500),
+		stopMinutes: boundedInteger(value.stopMinutes ?? value.stop_minutes, 10, 5, 180),
+		rotateRegionals: booleanValue(value.rotateRegionals ?? value.rotate_regionals, true),
+		automaticMovement: booleanValue(value.automaticMovement ?? value.automatic_movement, true),
+		showPriorityOrders: booleanValue(value.showPriorityOrders ?? value.show_priority_orders, true),
+		showDailyRoute: booleanValue(value.showDailyRoute ?? value.show_daily_route, true),
+		autoResume: booleanValue(value.autoResume ?? value.auto_resume, true),
+		layers,
+	};
 }
 
 function normalize(value) {
@@ -192,12 +277,17 @@ function optionalNumberInRange(value, min, max) {
 	return numberInRange(value, min, max);
 }
 
-function technicianPresenceStatus(lastSeenAt, now = Date.now()) {
+function technicianPresenceStatus(lastSeenAt, now = Date.now(), limits = {}) {
 	const timestamp = new Date(lastSeenAt).getTime();
-	if (!Number.isFinite(timestamp)) return "stale";
+	if (!Number.isFinite(timestamp)) return "never";
 	const ageMs = Math.max(0, now - timestamp);
-	if (ageMs <= 2 * 60 * 1000) return "active";
-	if (ageMs <= 10 * 60 * 1000) return "recent";
+	const activeMinutes = boundedInteger(limits.activeSignalMinutes, 5, 1, 30);
+	const attentionMinutes = Math.max(
+		activeMinutes + 1,
+		boundedInteger(limits.attentionSignalMinutes, 15, 2, 120),
+	);
+	if (ageMs <= activeMinutes * 60 * 1000) return "active";
+	if (ageMs <= attentionMinutes * 60 * 1000) return "recent";
 	return "stale";
 }
 
@@ -1937,10 +2027,19 @@ async function saveTechnicianPresence(payload = {}, user = {}, options = {}) {
 	return { ok: true, lastSeenAt: result.rows[0]?.lastSeenAt || null, history, radar };
 }
 
-async function listTechnicianPresence() {
+async function listTechnicianPresence(query = {}) {
+	const limits = normalizeAdminPresentationSettings(query);
 	const result = await db.query(
 		`with presence as (
-		  select location.*,
+		  select app.uid as user_id,
+		         location.latitude,
+		         location.longitude,
+		         location.accuracy_meters,
+		         location.heading_degrees,
+		         location.speed_mps,
+		         location.technician_name,
+		         location.display_name,
+		         location.last_seen_at,
 		         app.display_name as account_display_name,
 		         app.email,
 		         app.regional,
@@ -1952,8 +2051,8 @@ async function listTechnicianPresence() {
 		           app.display_name,
 		           app.email
 		         ) as resolved_technician_name
-		    from maps_technician_presence location
-		    join app_users app on app.uid = location.user_id
+		    from app_users app
+		    left join maps_technician_presence location on location.user_id = app.uid
 		   where app.disabled = false
 		     and lower(coalesce(app.role, '')) = 'tecnico'
 		), production as (
@@ -1979,12 +2078,21 @@ async function listTechnicianPresence() {
 		     and nullif(trim(tecnico), '') is not null
 		   group by lower(trim(tecnico))
 		), route_stops as (
-		  select route.user_id, count(item.order_id)::int as route_stops
+		  select route.user_id, count(item.order_id)::int as planned_stops
 		    from maps_routes route
 		    left join maps_route_items item on item.route_id = route.id
 		   where route.route_date = (now() at time zone 'America/Sao_Paulo')::date
 		     and route.status in ('DRAFT', 'ACTIVE')
 		   group by route.user_id
+		), track_summary as (
+		  select user_id,
+		         min(recorded_at) as first_seen_at,
+		         max(recorded_at) as last_track_at,
+		         count(*)::int as positions_today
+		    from maps_technician_location_history
+		   where recorded_at >= (((now() at time zone 'America/Sao_Paulo')::date + time '08:00') at time zone 'America/Sao_Paulo')
+		     and recorded_at <= (((now() at time zone 'America/Sao_Paulo')::date + time '18:00') at time zone 'America/Sao_Paulo')
+		   group by user_id
 		)
 		select presence.user_id as "userId",
 		       coalesce(nullif(presence.display_name, ''), presence.account_display_name,
@@ -1997,16 +2105,26 @@ async function listTechnicianPresence() {
 		       presence.heading_degrees as "headingDegrees",
 		       presence.speed_mps as "speedMps",
 		       presence.last_seen_at as "lastSeenAt",
+		       coalesce(
+		         nullif(presence.imported_profile->>'telefoneWhatsapp', ''),
+		         nullif(presence.imported_profile->>'telefone_whatsapp', ''),
+		         nullif(presence.imported_profile->>'telefone', ''),
+		         nullif(presence.imported_profile->>'phone', '')
+		       ) as "contactPhone",
 		       coalesce(production.completed_today, 0)::int as "completedToday",
 		       production.last_completion_at as "lastCompletionAt",
 		       coalesce(open_orders.open_orders, 0)::int as "openOrders",
-		       coalesce(route_stops.route_stops, 0)::int as "routeStops"
+		       coalesce(route_stops.planned_stops, 0)::int as "plannedStops",
+		       track_summary.first_seen_at as "firstSeenAt",
+		       track_summary.last_track_at as "lastTrackAt",
+		       coalesce(track_summary.positions_today, 0)::int as "positionsToday"
 		  from presence
 		  left join production
 		    on production.technician_key = lower(trim(presence.resolved_technician_name))
 		  left join open_orders
 		    on open_orders.technician_key = lower(trim(presence.resolved_technician_name))
 		  left join route_stops on route_stops.user_id = presence.user_id
+		  left join track_summary on track_summary.user_id = presence.user_id
 		 order by presence.last_seen_at desc`,
 		[ALLOWED_ORDER_TYPES],
 	);
@@ -2018,19 +2136,259 @@ async function listTechnicianPresence() {
 		accuracyMeters: row.accuracyMeters === null ? null : Number(row.accuracyMeters),
 		headingDegrees: row.headingDegrees === null ? null : Number(row.headingDegrees),
 		speedMps: row.speedMps === null ? null : Number(row.speedMps),
-		status: technicianPresenceStatus(row.lastSeenAt, now),
+		status: technicianPresenceStatus(row.lastSeenAt, now, limits),
+		operationalStatus: Number(row.completedToday || 0) > 0
+			? "Produziu hoje"
+			: Number(row.openOrders || 0) > 0
+				? "Com ordens atribuidas"
+				: "Sem atividade registrada",
 	}));
 	return {
 		items,
 		summary: {
 			total: items.length,
+			located: items.filter((item) => item.status !== "never").length,
 			active: items.filter((item) => item.status === "active").length,
 			recent: items.filter((item) => item.status === "recent").length,
 			stale: items.filter((item) => item.status === "stale").length,
+			never: items.filter((item) => item.status === "never").length,
 			completedToday: items.reduce((total, item) => total + Number(item.completedToday || 0), 0),
 			openOrders: items.reduce((total, item) => total + Number(item.openOrders || 0), 0),
 		},
 		generatedAt: new Date(now).toISOString(),
+	};
+}
+
+async function getAdminPresentationSettings(user = {}) {
+	const result = await db.query(
+		`select * from maps_admin_presentation_settings where user_id = $1 limit 1`,
+		[userId(user)],
+	);
+	const row = result.rows[0] || {};
+	return {
+		...normalizeAdminPresentationSettings(row),
+		updatedAt: row.updated_at || null,
+	};
+}
+
+async function saveAdminPresentationSettings(payload = {}, user = {}) {
+	const previous = await getAdminPresentationSettings(user);
+	const settings = normalizeAdminPresentationSettings(payload);
+	const result = await db.query(
+		`insert into maps_admin_presentation_settings
+		 (user_id, overview_seconds, regional_seconds, city_seconds, technician_seconds,
+		  route_seconds, inactivity_seconds, ranking_limit, active_signal_minutes,
+		  attention_signal_minutes, stop_radius_meters, stop_minutes, rotate_regionals,
+		  automatic_movement, show_priority_orders, show_daily_route, auto_resume,
+		  layer_preferences, updated_by)
+		 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb,$19)
+		 on conflict (user_id) do update set
+		   overview_seconds = excluded.overview_seconds,
+		   regional_seconds = excluded.regional_seconds,
+		   city_seconds = excluded.city_seconds,
+		   technician_seconds = excluded.technician_seconds,
+		   route_seconds = excluded.route_seconds,
+		   inactivity_seconds = excluded.inactivity_seconds,
+		   ranking_limit = excluded.ranking_limit,
+		   active_signal_minutes = excluded.active_signal_minutes,
+		   attention_signal_minutes = excluded.attention_signal_minutes,
+		   stop_radius_meters = excluded.stop_radius_meters,
+		   stop_minutes = excluded.stop_minutes,
+		   rotate_regionals = excluded.rotate_regionals,
+		   automatic_movement = excluded.automatic_movement,
+		   show_priority_orders = excluded.show_priority_orders,
+		   show_daily_route = excluded.show_daily_route,
+		   auto_resume = excluded.auto_resume,
+		   layer_preferences = excluded.layer_preferences,
+		   updated_by = excluded.updated_by,
+		   updated_at = now()
+		 returning updated_at as "updatedAt"`,
+		[
+			userId(user), settings.overviewSeconds, settings.regionalSeconds,
+			settings.citySeconds, settings.technicianSeconds, settings.routeSeconds,
+			settings.inactivitySeconds, settings.rankingLimit, settings.activeSignalMinutes,
+			settings.attentionSignalMinutes, settings.stopRadiusMeters, settings.stopMinutes,
+			settings.rotateRegionals, settings.automaticMovement, settings.showPriorityOrders,
+			settings.showDailyRoute, settings.autoResume, JSON.stringify(settings.layers), userName(user),
+		],
+	);
+	const saved = { ...settings, updatedAt: result.rows[0]?.updatedAt || new Date().toISOString() };
+	await auditLog.recordAuditLog({
+		module: "maps_v2",
+		entity: "maps_admin_presentation_settings",
+		action: "update",
+		recordId: userId(user),
+		userId: userId(user),
+		userName: userName(user),
+		userEmail: userEmail(user),
+		beforeData: previous,
+		afterData: saved,
+	});
+	broadcastMapsAdminUpdate("PRESENTATION_SETTINGS_UPDATED", { userId: userId(user) });
+	return saved;
+}
+
+function percentComparison(current, previous) {
+	const currentValue = Number(current || 0);
+	const previousValue = Number(previous || 0);
+	return {
+		value: currentValue,
+		previousValue,
+		changePercent: previousValue > 0
+			? Number((((currentValue - previousValue) / previousValue) * 100).toFixed(1))
+			: null,
+	};
+}
+
+function monitoringBounds(rows = []) {
+	const valid = rows.filter((row) => usableOrderCoordinates(row.minLatitude, row.minLongitude) && usableOrderCoordinates(row.maxLatitude, row.maxLongitude));
+	if (!valid.length) return null;
+	return {
+		minLatitude: Math.min(...valid.map((row) => Number(row.minLatitude))),
+		minLongitude: Math.min(...valid.map((row) => Number(row.minLongitude))),
+		maxLatitude: Math.max(...valid.map((row) => Number(row.maxLatitude))),
+		maxLongitude: Math.max(...valid.map((row) => Number(row.maxLongitude))),
+	};
+}
+
+async function getAdminMonitoringOverview(_query = {}, user = {}) {
+	const settings = await getAdminPresentationSettings(user);
+	const presence = await listTechnicianPresence(settings);
+	const ordersResult = await db.query(
+		`with current_orders as (
+		  select distinct on (o.num_os)
+		         o.id, o.num_os, o.cidade, o.regional, o.tecnico, o.tipo,
+		         location.latitude, location.longitude
+		    from ordens_servico o
+		    left join maps_order_locations location on location.order_id = o.id
+		   where o.source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')
+		     and upper(coalesce(o.tipo, '')) = any($1::text[])
+		     and upper(coalesce(o.status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'
+		   order by o.num_os, o.updated_at desc
+		)
+		select coalesce(nullif(trim(regional), ''), 'Sem regional') as regional,
+		       coalesce(nullif(trim(cidade), ''), 'Cidade nao informada') as city,
+		       count(*)::int as "openOrders",
+		       count(*) filter (where not (upper(coalesce(trim(tecnico), '')) = any($2::text[])))::int as "assignedOrders",
+		       count(*) filter (where upper(coalesce(tipo, '')) like '%SEGUNDA TENTATIVA%')::int as "priorityOrders",
+		       avg(latitude) filter (where latitude between -34 and 6 and longitude between -74 and -33) as latitude,
+		       avg(longitude) filter (where latitude between -34 and 6 and longitude between -74 and -33) as longitude,
+		       min(latitude) filter (where latitude between -34 and 6 and longitude between -74 and -33) as "minLatitude",
+		       min(longitude) filter (where latitude between -34 and 6 and longitude between -74 and -33) as "minLongitude",
+		       max(latitude) filter (where latitude between -34 and 6 and longitude between -74 and -33) as "maxLatitude",
+		       max(longitude) filter (where latitude between -34 and 6 and longitude between -74 and -33) as "maxLongitude"
+		  from current_orders
+		 group by 1, 2
+		 order by count(*) desc, city asc`,
+		[ALLOWED_ORDER_TYPES, [...AVAILABLE_TECHNICIANS]],
+	);
+	const productionResult = await db.query(
+		`select
+		 count(distinct hubsoft_id) filter (
+		   where (source_date at time zone 'America/Sao_Paulo')::date = (now() at time zone 'America/Sao_Paulo')::date
+		 )::int as today,
+		 count(distinct hubsoft_id) filter (
+		   where (source_date at time zone 'America/Sao_Paulo')::date = (now() at time zone 'America/Sao_Paulo')::date - 1
+		 )::int as previous
+		 from hubsoft_sync_records
+		 where profile in ('META_D0', 'META_D_MINUS_ONE', 'META_AUDIT_DAILY')
+		   and active = true
+		   and production_channel = 'RETIRADA'
+		   and (source_date at time zone 'America/Sao_Paulo')::date >= (now() at time zone 'America/Sao_Paulo')::date - 1`,
+	);
+	const orderRows = ordersResult.rows.map((row) => ({
+		...row,
+		latitude: row.latitude === null ? null : Number(row.latitude),
+		longitude: row.longitude === null ? null : Number(row.longitude),
+		minLatitude: row.minLatitude === null ? null : Number(row.minLatitude),
+		minLongitude: row.minLongitude === null ? null : Number(row.minLongitude),
+		maxLatitude: row.maxLatitude === null ? null : Number(row.maxLatitude),
+		maxLongitude: row.maxLongitude === null ? null : Number(row.maxLongitude),
+	}));
+	const regionalMap = new Map();
+	for (const row of orderRows) {
+		const entry = regionalMap.get(row.regional) || {
+			name: row.regional,
+			openOrders: 0,
+			assignedOrders: 0,
+			priorityOrders: 0,
+			cities: 0,
+			rows: [],
+		};
+		entry.openOrders += Number(row.openOrders || 0);
+		entry.assignedOrders += Number(row.assignedOrders || 0);
+		entry.priorityOrders += Number(row.priorityOrders || 0);
+		entry.cities += 1;
+		entry.rows.push(row);
+		regionalMap.set(row.regional, entry);
+	}
+	for (const technician of presence.items) {
+		const regional = technician.regional || "Sem regional";
+		const entry = regionalMap.get(regional) || { name: regional, openOrders: 0, assignedOrders: 0, priorityOrders: 0, cities: 0, rows: [] };
+		entry.technicians = (entry.technicians || 0) + 1;
+		entry.locatedTechnicians = (entry.locatedTechnicians || 0) + (technician.status === "never" ? 0 : 1);
+		entry.completedToday = (entry.completedToday || 0) + Number(technician.completedToday || 0);
+		regionalMap.set(regional, entry);
+	}
+	const regionals = [...regionalMap.values()].map(({ rows, ...entry }) => ({
+		...entry,
+		technicians: entry.technicians || 0,
+		locatedTechnicians: entry.locatedTechnicians || 0,
+		completedToday: entry.completedToday || 0,
+		bounds: monitoringBounds(rows),
+	})).sort((left, right) => right.openOrders - left.openOrders || right.completedToday - left.completedToday);
+	const rankings = [...presence.items]
+		.filter((item) => Number(item.completedToday || 0) > 0)
+		.sort((left, right) => Number(right.completedToday || 0) - Number(left.completedToday || 0) || String(left.displayName).localeCompare(String(right.displayName), "pt-BR"));
+	const regionalRankings = regionals.map((regional) => ({
+		regional: regional.name,
+		items: rankings.filter((item) => (item.regional || "Sem regional") === regional.name).slice(0, settings.rankingLimit),
+	})).filter((entry) => entry.items.length);
+	const openOrders = orderRows.reduce((total, row) => total + Number(row.openOrders || 0), 0);
+	const assignedOrders = orderRows.reduce((total, row) => total + Number(row.assignedOrders || 0), 0);
+	const priorityOrders = orderRows.reduce((total, row) => total + Number(row.priorityOrders || 0), 0);
+	const production = productionResult.rows[0] || {};
+	const completed = percentComparison(production.today, production.previous);
+	const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
+	const signalAlerts = presence.items.filter((item) => item.status === "stale" && new Date(item.lastSeenAt).getTime() >= recentCutoff).slice(0, 5).map((item) => ({
+		type: "SIGNAL_LOSS",
+		severity: "warning",
+		title: "Sinal desatualizado",
+		description: `${item.displayName || item.technicianName} esta sem nova localizacao ha mais de ${settings.attentionSignalMinutes} minutos.`,
+		technicianUserId: item.userId,
+	}));
+	const alerts = [
+		...signalAlerts,
+		...(priorityOrders && settings.showPriorityOrders ? [{
+			type: "PRIORITY_ORDERS",
+			severity: "warning",
+			title: "Ordens prioritarias pendentes",
+			description: `${priorityOrders} O.S. de segunda tentativa aguardam tratamento.`,
+		}] : []),
+	];
+	return {
+		generatedAt: new Date().toISOString(),
+		settings,
+		summary: {
+			teamInField: presence.summary.active,
+			openOrders,
+			ordersInProgress: assignedOrders,
+			completedToday: completed.value,
+			stopsDetected: null,
+			techniciansNoSignal: presence.summary.stale + presence.summary.never,
+			priorityOrders,
+			comparisons: { completedToday: completed.changePercent },
+		},
+		locationHealth: presence.summary,
+		technicians: presence.items,
+		cities: orderRows,
+		regionals,
+		rankings: {
+			daily: rankings.slice(0, settings.rankingLimit),
+			regional: regionalRankings,
+			updatedAt: new Date().toISOString(),
+		},
+		alerts,
 	};
 }
 
@@ -2091,6 +2449,8 @@ module.exports = {
 	dismissAlert,
 	evaluateRadar,
 	featureEnabled,
+	getAdminMonitoringOverview,
+	getAdminPresentationSettings,
 	getHealth,
 	getNavigation,
 	getOrder,
@@ -2108,6 +2468,7 @@ module.exports = {
 	optimizeRoute,
 	queueMissingGeocodes,
 	resolveRequest,
+	saveAdminPresentationSettings,
 	saveRadarSettings,
 	saveTechnicianPresence,
 	simulateRadar,
@@ -2122,6 +2483,7 @@ module.exports = {
 		haversineMeters,
 		isAvailableTechnician,
 		mapPoint,
+		normalizeAdminPresentationSettings,
 		normalize,
 		normalizeRouteRows,
 		optimizeNearestNeighbor,

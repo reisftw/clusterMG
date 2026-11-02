@@ -2,6 +2,7 @@ const STATUS_LABELS = {
 	active: "Ao vivo",
 	recent: "Sinal recente",
 	stale: "Sem sinal recente",
+	never: "Nunca localizado",
 };
 
 export function technicianPreviewContent(item) {
@@ -28,7 +29,7 @@ export function technicianPreviewContent(item) {
 	const statItems = [
 		[Number(item.completedToday || 0), "hoje"],
 		[Number(item.openOrders || 0), "abertas"],
-		[Number(item.routeStops || 0), "na rota"],
+		[Number(item.plannedStops || item.routeStops || 0), "na rota"],
 	];
 	for (const [value, label] of statItems) {
 		const stat = document.createElement("span");

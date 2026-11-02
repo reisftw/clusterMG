@@ -305,4 +305,27 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(source).toContain('roles: ["admin", "backoffice", "backoffice_retirada"]');
 		expect(source).toContain('targetPath: "/maps?panel=requests"');
 	});
+
+	it("protege e persiste a central administrativa de monitoramento", () => {
+		const service = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		const router = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js"),
+			"utf8",
+		);
+		const migration = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/sql/112_maps_admin_monitoring.sql"),
+			"utf8",
+		);
+		expect(router).toContain('router.get("/admin/monitoring/overview"');
+		expect(router).toContain('router.put("/admin/monitoring/settings"');
+		expect(router).toContain("requireLiveTechnicians");
+		expect(router).toContain("requireSettings");
+		expect(service).toContain("getAdminMonitoringOverview");
+		expect(service).toContain("normalizeAdminPresentationSettings");
+		expect(migration).toContain("create table if not exists maps_admin_presentation_settings");
+		expect(migration).not.toMatch(/drop table/i);
+	});
 });

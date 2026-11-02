@@ -30,6 +30,7 @@ function createMapsV2Router({
 	const requireAudit = requireAnyPermission([service.MAPS_PERMISSIONS.AUDIT], fallbackRoles);
 	const requireLiveTechnicians = requireAnyPermission([service.MAPS_PERMISSIONS.LIVE_TECHNICIANS], fallbackRoles);
 	const requireTracks = requireAnyPermission([service.MAPS_PERMISSIONS.VIEW_TRACKS], fallbackRoles);
+	const requireSettings = requireAnyPermission([service.MAPS_PERMISSIONS.SETTINGS], fallbackRoles);
 
 	router.use(requireAuthenticated, requireAccess);
 	router.use((req, res, next) => {
@@ -122,7 +123,31 @@ function createMapsV2Router({
 
 	router.get("/admin/technicians/live", readLimiter, requireLiveTechnicians, async (req, res, next) => {
 		try {
-			res.json(await service.listTechnicianPresence(req.query || {}));
+			res.json(await service.listTechnicianPresence(req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/admin/monitoring/overview", readLimiter, requireLiveTechnicians, async (req, res, next) => {
+		try {
+			res.json(await service.getAdminMonitoringOverview(req.query || {}, req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.get("/admin/monitoring/settings", readLimiter, requireLiveTechnicians, async (req, res, next) => {
+		try {
+			res.json(await service.getAdminPresentationSettings(req.user || {}));
+		} catch (error) {
+			next(error);
+		}
+	});
+
+	router.put("/admin/monitoring/settings", writeLimiter, requireCsrfToken, requireSettings, async (req, res, next) => {
+		try {
+			res.json(await service.saveAdminPresentationSettings(req.body || {}, req.user || {}));
 		} catch (error) {
 			next(error);
 		}
