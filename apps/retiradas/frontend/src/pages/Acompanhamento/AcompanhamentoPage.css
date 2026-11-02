@@ -1770,6 +1770,68 @@
 	gap: 6px;
 }
 
+.acomp-production-panel.is-weekly {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	gap: 3px;
+	overflow: hidden;
+}
+
+.acomp-production-panel.is-weekly .acomp-panel-title {
+	margin-bottom: 0;
+}
+
+.acomp-production-summary {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.acomp-production-summary > strong {
+	color: #f8fafc;
+	font-size: clamp(24px, 1.7vw, 36px);
+	font-weight: 950;
+	line-height: 0.92;
+}
+
+.acomp-production-summary p {
+	margin: 0;
+	color: #cbd5e1;
+	font-size: clamp(8px, 0.58vw, 11px);
+	font-weight: 800;
+}
+
+.acomp-production-days {
+	display: grid;
+	min-width: 0;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 4px;
+}
+
+.acomp-production-days > div {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 3px;
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.07);
+	padding: 2px 4px;
+}
+
+.acomp-production-days span,
+.acomp-production-days strong {
+	font-size: clamp(7px, 0.48vw, 9px);
+	line-height: 1;
+}
+
+.acomp-production-days strong {
+	color: #f8fafc;
+	font-weight: 950;
+}
+
 .acomp-weekly-production-main {
 	display: flex;
 	align-items: center;

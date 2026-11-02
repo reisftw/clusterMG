@@ -4,6 +4,7 @@ import {
 	buildDiarioMonthlyGoalsSnapshot,
 	compareDiarioMonthlyGoals,
 	listDiarioMonthlyGoalsSnapshots,
+	monthWeekRangesFromDateKey,
 	normalizeDiarioEntry,
 } from "./diarioService";
 
@@ -21,7 +22,7 @@ describe("diarioService monthly goals history", () => {
 		vi.clearAllMocks();
 	});
 
-	it("usa o mesmo intervalo de segunda a sexta para producao e multas atuais", () => {
+	it("usa o mesmo bloco mensal de quatro semanas para producao e multas atuais", () => {
 		const boardData = buildDiarioBoardData(
 			[
 				normalizeDiarioEntry({
@@ -49,12 +50,50 @@ describe("diarioService monthly goals history", () => {
 		);
 
 		expect(boardData.weekRange).toEqual({
-			start: "2026-10-26",
-			end: "2026-10-30",
+			week: 4,
+			start: "2026-10-25",
+			end: "2026-10-31",
 		});
-		expect(boardData.currentWeek.delivered).toBe(300);
-		expect(boardData.currentWeek.fines).toBe(64);
+		expect(boardData.currentWeek.delivered).toBe(399);
+		expect(boardData.currentWeek.fines).toBe(163);
 		expect(boardData.currentWeek.range).toEqual(boardData.weekRange);
+	});
+
+	it("mantem a producao de 01/11 na primeira semana ao virar para 02/11", () => {
+		const boardData = buildDiarioBoardData(
+			[
+				normalizeDiarioEntry({
+					date: "2026-11-01",
+					horarios: { "11h": 15 },
+					fines: 2,
+				}),
+				normalizeDiarioEntry({
+					date: "2026-11-02",
+					horarios: {},
+					fines: 0,
+				}),
+			],
+			"2026-11-02",
+		);
+
+		expect(monthWeekRangesFromDateKey("2026-11-02")).toEqual([
+			{ week: 1, start: "2026-11-01", end: "2026-11-08" },
+			{ week: 2, start: "2026-11-09", end: "2026-11-16" },
+			{ week: 3, start: "2026-11-17", end: "2026-11-23" },
+			{ week: 4, start: "2026-11-24", end: "2026-11-30" },
+		]);
+		expect(boardData.currentWeek).toMatchObject({
+			week: 1,
+			delivered: 15,
+			fines: 2,
+		});
+		expect(boardData.weeks.map((week) => week.delivered)).toEqual([
+			15,
+			0,
+			0,
+			0,
+		]);
+		expect(boardData.totals.monthDelivered).toBe(15);
 	});
 
 	it("cria snapshot mensal com totais e semanas do diario", () => {

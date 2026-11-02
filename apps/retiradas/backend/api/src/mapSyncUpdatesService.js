@@ -79,6 +79,31 @@ function normalizeDate(value, fallback = todaySaoPaulo()) {
 	return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : fallback;
 }
 
+function getFourWeekMonthRange(value = todaySaoPaulo()) {
+	const date = normalizeDate(value);
+	const [year, month, day] = date.split("-").map(Number);
+	const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+	const baseLength = Math.floor(daysInMonth / 4);
+	const extraDays = daysInMonth % 4;
+	let startDay = 1;
+
+	for (let index = 0; index < 4; index += 1) {
+		const length = baseLength + (index < extraDays ? 1 : 0);
+		const endDay = startDay + length - 1;
+		if (day >= startDay && day <= endDay) {
+			const pad = (numberValue) => String(numberValue).padStart(2, "0");
+			return {
+				week: index + 1,
+				start: `${year}-${pad(month)}-${pad(startDay)}`,
+				end: `${year}-${pad(month)}-${pad(endDay)}`,
+			};
+		}
+		startDay = endDay + 1;
+	}
+
+	return { week: 1, start: `${year}-${String(month).padStart(2, "0")}-01`, end: date };
+}
+
 function normalizeLookupKey(value) {
 	return text(value)
 		.normalize("NFD")
@@ -539,16 +564,36 @@ async function getDailyProduction(date = todaySaoPaulo()) {
 }
 
 async function getWeeklyProduction(date = todaySaoPaulo()) {
-	const weekday = new Date(`${date}T12:00:00Z`).getUTCDay() || 7;
-	const start = addDays(date, 1 - weekday);
-	const rows = await rankingService.getOperationalProduction({ start_date: start, end_date: date });
-	const days = Array.from({ length: weekday }, (_, index) => ({ date: addDays(start, index), total: 0 }));
+	const range = getFourWeekMonthRange(date);
+	const elapsedDays = Math.max(
+		1,
+		Math.round(
+			(new Date(`${date}T12:00:00.000Z`) -
+				new Date(`${range.start}T12:00:00.000Z`)) /
+				86_400_000,
+		) + 1,
+	);
+	const rows = await rankingService.getOperationalProduction({
+		start_date: range.start,
+		end_date: date,
+	});
+	const days = Array.from({ length: elapsedDays }, (_, index) => ({
+		date: addDays(range.start, index),
+		total: 0,
+	}));
 	for (const row of rows) {
 		const day = days.find((entry) => entry.date === row.day);
 		if (day) day.total += number(row.total);
 	}
 	const total = days.reduce((sum, day) => sum + day.total, 0);
-	return { date, total, averagePerDay: Number((total / days.length).toFixed(1)), days };
+	return {
+		date,
+		week: range.week,
+		range,
+		total,
+		averagePerDay: Number((total / days.length).toFixed(1)),
+		days,
+	};
 }
 
 async function getOpenedCities(date = todaySaoPaulo()) {
@@ -703,6 +748,7 @@ async function getOperationalSummary(query = {}) {
 
 module.exports = {
 	captureActiveMapSnapshot,
+	getFourWeekMonthRange,
 	getLatestUpdate,
 	getOperationalSummary,
 	getUpdateDetail,

@@ -286,10 +286,22 @@ export function AutomaticProduction({ summary }) {
 			{daily.updatedAt ? <p>Atualizado: {new Date(daily.updatedAt).toLocaleTimeString("pt-BR")}</p> : null}
 		</section>
 		<section className="acomp-panel acomp-production-panel is-weekly">
-			<div className="acomp-panel-title"><h2>PRODUÇÃO SEMANAL</h2></div>
-			<strong style={{ fontSize: 36 }}>{weekly.total}</strong>
-			<p>Média diária: {weekly.averagePerDay}</p>
-			<div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{weekly.days.map((day) => <div key={day.date}><span>{day.date.slice(8)}/{day.date.slice(5, 7)}</span><strong style={{ display: "block" }}>{day.total}</strong></div>)}</div>
+			<div className="acomp-panel-title">
+				<h2>PRODUÇÃO SEMANAL</h2>
+				{weekly.week ? <span>Semana {weekly.week}</span> : null}
+			</div>
+			<div className="acomp-production-summary">
+				<strong>{weekly.total}</strong>
+				<p>Média diária: {weekly.averagePerDay}</p>
+			</div>
+			<div className="acomp-production-days">
+				{weekly.days.map((day) => (
+					<div key={day.date}>
+						<span>{day.date.slice(8)}/{day.date.slice(5, 7)}</span>
+						<strong>{day.total}</strong>
+					</div>
+				))}
+			</div>
 		</section>
 	</OperationalRotation>;
 }

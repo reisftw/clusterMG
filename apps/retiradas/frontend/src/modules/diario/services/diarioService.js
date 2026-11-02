@@ -47,24 +47,40 @@ export function monthRangeFromDateKey(dateKey = localDateKey()) {
 	};
 }
 
-export function weekRangeFromDateKey(dateKey = localDateKey()) {
+export function monthWeekRangesFromDateKey(dateKey = localDateKey()) {
 	const date = parseDateKey(dateKey) || new Date();
-	const day = date.getDay();
-	const mondayOffset = day === 0 ? -6 : 1 - day;
-	const monday = new Date(date);
-	monday.setDate(date.getDate() + mondayOffset);
-	const friday = new Date(monday);
-	friday.setDate(monday.getDate() + 4);
-	return {
-		start: localDateKey(monday),
-		end: localDateKey(friday),
-	};
+	const year = date.getFullYear();
+	const monthIndex = date.getMonth();
+	const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+	const baseLength = Math.floor(daysInMonth / 4);
+	const extraDays = daysInMonth % 4;
+	let startDay = 1;
+
+	return Array.from({ length: 4 }, (_, index) => {
+		const length = baseLength + (index < extraDays ? 1 : 0);
+		const endDay = startDay + length - 1;
+		const range = {
+			week: index + 1,
+			start: localDateKey(new Date(year, monthIndex, startDay)),
+			end: localDateKey(new Date(year, monthIndex, endDay)),
+		};
+		startDay = endDay + 1;
+		return range;
+	});
+}
+
+export function weekRangeFromDateKey(dateKey = localDateKey()) {
+	const normalizedDateKey = localDateKey(parseDateKey(dateKey) || new Date());
+	return (
+		monthWeekRangesFromDateKey(normalizedDateKey).find(
+			(range) =>
+				normalizedDateKey >= range.start && normalizedDateKey <= range.end,
+		) || monthWeekRangesFromDateKey(normalizedDateKey)[0]
+	);
 }
 
 export function getWeekOfMonth(dateKey) {
-	const date = parseDateKey(dateKey);
-	if (!date) return 1;
-	return Math.min(4, Math.floor((date.getDate() - 1) / 7) + 1);
+	return weekRangeFromDateKey(dateKey).week;
 }
 
 export function formatDateLabel(dateKey, options = {}) {
@@ -273,6 +289,7 @@ export function buildDiarioBoardData(
 	referenceDateKey = localDateKey(),
 ) {
 	const monthRange = monthRangeFromDateKey(referenceDateKey);
+	const weekRanges = monthWeekRangesFromDateKey(referenceDateKey);
 	const weekRange = weekRangeFromDateKey(referenceDateKey);
 	const sortedEntries = [...entries].sort((a, b) =>
 		a.date.localeCompare(b.date),
@@ -283,8 +300,10 @@ export function buildDiarioBoardData(
 	);
 	const weekDays = [];
 	const startDate = parseDateKey(weekRange.start);
-	if (startDate) {
-		for (let index = 0; index < 5; index += 1) {
+	const endDate = parseDateKey(weekRange.end);
+	if (startDate && endDate) {
+		const rangeLength = Math.round((endDate - startDate) / 86_400_000) + 1;
+		for (let index = 0; index < rangeLength; index += 1) {
 			const current = new Date(startDate);
 			current.setDate(startDate.getDate() + index);
 			const date = localDateKey(current);
@@ -295,9 +314,9 @@ export function buildDiarioBoardData(
 	const monthEntries = sortedEntries.filter(
 		(entry) => entry.date >= monthRange.start && entry.date <= monthRange.end,
 	);
-	const weeks = [1, 2, 3, 4].map((week) => {
+	const weeks = weekRanges.map((range) => {
 		const items = monthEntries.filter(
-			(entry) => getWeekOfMonth(entry.date) === week,
+			(entry) => entry.date >= range.start && entry.date <= range.end,
 		);
 		const delivered = items.reduce(
 			(sum, item) => sum + Number(item.hourlyTotal || 0),
@@ -305,13 +324,14 @@ export function buildDiarioBoardData(
 		);
 		const fines = items.reduce((sum, item) => sum + Number(item.fines || 0), 0);
 		return {
-			week,
+			week: range.week,
+			range,
 			delivered,
 			fines,
 			status: classifyWeeklyProduction(delivered),
 		};
 	});
-	const currentWeek = getWeekOfMonth(referenceDateKey);
+	const currentWeek = weekRange.week;
 	const currentWeekDelivered = weekEntries.reduce(
 		(sum, item) => sum + Number(item.hourlyTotal || 0),
 		0,
@@ -331,6 +351,7 @@ export function buildDiarioBoardData(
 		referenceDateKey,
 		monthKey: monthKeyFromDateKey(referenceDateKey),
 		weekRange,
+		weekRanges,
 		monthRange,
 		weekDays,
 		monthEntries,

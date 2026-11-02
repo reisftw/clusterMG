@@ -250,7 +250,6 @@
 	background-size: cover, 100% auto, 100% auto, cover;
 }
 
-.acomp-page.is-christmas-2026 .acomp-kpi.acomp-kpi-meta-ok,
 .acomp-page.is-christmas-2026 .acomp-kpi.acomp-kpi-meta-low {
 	background-color: #770f23;
 	background-image:
@@ -259,6 +258,31 @@
 	background-position: center;
 	background-repeat: no-repeat;
 	background-size: cover, auto 112%;
+}
+
+.acomp-page.is-christmas-2026 .acomp-kpi.acomp-kpi-meta-ok {
+	border-color: rgba(85, 229, 166, 0.94);
+	background-color: #04483c;
+	background-image:
+		linear-gradient(145deg, rgba(3, 94, 69, 0.08), rgba(0, 37, 38, 0.14)),
+		var(--xmas-card-green);
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: cover, auto 122%;
+	box-shadow:
+		0 0 0 1px rgba(85, 229, 166, 0.28),
+		0 0 15px rgba(85, 229, 166, 0.3),
+		inset 0 1px 0 rgba(255, 255, 255, 0.12),
+		0 10px 22px rgba(0, 0, 0, 0.4);
+}
+
+.acomp-page.is-christmas-2026 .acomp-kpi.acomp-kpi-meta-ok .acomp-kpi-icon {
+	border-color: rgba(220, 252, 231, 0.78);
+	background: linear-gradient(145deg, #74f0b4, #14a66f);
+	color: #013726;
+	box-shadow:
+		0 0 12px rgba(85, 229, 166, 0.5),
+		inset 0 1px 0 rgba(255, 255, 255, 0.52);
 }
 
 .acomp-page.is-christmas-2026 .acomp-kpi-icon,
@@ -642,6 +666,10 @@
 }
 
 @media (min-width: 1281px) and (max-height: 820px) {
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-days {
+		display: none;
+	}
+
 	.acomp-page.is-christmas-2026 .acomp-shell {
 		gap: 6px;
 		padding: 7px 10px;
@@ -680,6 +708,10 @@
 }
 
 @media (min-width: 761px) and (max-width: 1280px) {
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-days {
+		display: none;
+	}
+
 	.acomp-page.is-christmas-2026 {
 		background-position: 58% center;
 		background-attachment: scroll;
@@ -827,6 +859,27 @@
 		margin: 0;
 		font-size: 8px;
 		line-height: 1.05;
+	}
+
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-panel.is-weekly {
+		gap: 1px;
+		padding: 5px 8px;
+	}
+
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-summary {
+		gap: 5px;
+	}
+
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-summary > strong {
+		font-size: 25px;
+	}
+
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-days {
+		gap: 2px;
+	}
+
+	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-production-days > div {
+		padding: 1px 3px;
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-match-stack .acomp-operational-dots {
