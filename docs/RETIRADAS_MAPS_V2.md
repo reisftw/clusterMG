@@ -5,7 +5,7 @@ Modulo geografico aditivo do Retiradas. A rota nova e `/maps`; a rota legada
 
 ## Estado da implementacao
 
-- Mapa vetorial MapLibre com clustering, filtros, busca por cidade/bairro e
+- Mapa Leaflet com clustering, filtros, busca por cidade/bairro e
   consulta limitada por viewport ou raio.
 - Minhas retiradas com coordenada exata e oportunidades com coordenada
   aproximada no backend, sem nome, telefone ou endereco do cliente.
@@ -21,21 +21,17 @@ Modulo geografico aditivo do Retiradas. A rota nova e `/maps`; a rota legada
 
 ## Dependencia e provedor cartografico
 
-O frontend usa `maplibre-gl`. O estilo padrao e o Liberty do OpenFreeMap. Para
-producao, pode-se configurar outro estilo MapLibre compativel:
-
-```env
-VITE_MAPS_STYLE_URL=https://provedor.exemplo/styles/retiradas/style.json
-```
+O frontend usa `leaflet` e `leaflet.markercluster`. A camada atual usa tiles
+raster HTTPS do OpenStreetMap.
 
 As origens cartograficas precisam estar na CSP do backend:
 
 ```env
-MAPS_CSP_ORIGINS=https://tiles.openfreemap.org https://*.openfreemap.org
+MAPS_CSP_ORIGINS=https://tile.openstreetmap.org https://provedor.exemplo
 ```
 
 Ao trocar o provedor, incluir apenas as origens HTTPS realmente usadas pelo
-style, tiles, fontes e sprites. Nao liberar `connect-src *`.
+tiles. Nao liberar `connect-src *`.
 
 ## Variaveis do backend
 
@@ -161,9 +157,10 @@ O shell do Maps e o motor cartografico sao carregados em etapas. No build de
 homologacao desta implementacao:
 
 - shell de `/maps`: aproximadamente 32 kB bruto / 9,5 kB gzip;
-- MapLibre + canvas: aproximadamente 1,07 MB bruto / 290 kB gzip, carregado sob
-  demanda apenas ao acessar o Maps;
-- CSS do MapLibre: aproximadamente 70 kB bruto / 10 kB gzip.
+- Leaflet e o plugin de clustering sao carregados sob demanda apenas ao acessar
+  o Maps;
+- o motor anterior MapLibre foi removido para evitar dois motores cartograficos
+  no mesmo bundle e reduzir dependencias sem consumidor.
 
 Os assets do build possuem hash e podem usar cache imutavel do Nginx. O cliente
 solicita no maximo 250 pontos por viewport em telas mobile e 500 no desktop,

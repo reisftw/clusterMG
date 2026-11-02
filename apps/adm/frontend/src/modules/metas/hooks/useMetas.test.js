@@ -669,6 +669,9 @@ describe("useMetas", () => {
 	it("processa uma planilha valida e popula o estado com os dados parseados", async () => {
 		const currentMonth = MONTH_ORDER[new Date().getMonth()];
 		const currentRow = DASH_ROW[currentMonth];
+		metasMocks.buscarMetasBaseConfig.mockResolvedValue({
+			sempre: { mode: "fixa", fixedPercent: 90 },
+		});
 		metasMocks.parseAgentesWorkbook.mockReturnValue({
 			[currentMonth]: {
 				"Belo Horizonte": [{ nome: "Agente 1" }],

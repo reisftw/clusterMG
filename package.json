@@ -43,7 +43,6 @@
 		"verify:all": "npm run verify:retiradas && npm run verify:finan && npm run verify:adm && npm run verify:operacao && npm run test:contracts"
 	},
 	"dependencies": {
-		"@headlessui/react": "^2.2.9",
 		"@sentry/react": "^10.71.0",
 		"@zxing/browser": "^0.2.0",
 		"chart.js": "^4.5.1",
@@ -54,7 +53,6 @@
 		"leaflet": "^1.9.4",
 		"leaflet.markercluster": "^1.5.3",
 		"lucide-react": "^0.577.0",
-		"maplibre-gl": "^6.16.0",
 		"qrcode": "^1.5.4",
 		"react": "^19.2.4",
 		"react-chartjs-2": "^5.3.1",

@@ -10,7 +10,6 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
-		"@headlessui/react": "^2.2.9",
 		"@sentry/react": "^10.71.0",
 		"@zxing/browser": "^0.2.0",
 		"chart.js": "^4.5.1",

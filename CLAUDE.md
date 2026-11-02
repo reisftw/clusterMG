@@ -17,7 +17,7 @@ Guia de contexto para assistentes de IA trabalharem neste repositório sem perde
   - Vite `8.x`.
   - React Router DOM `7.18.x`.
   - Tailwind CSS `4.x` via PostCSS.
-  - UI com `lucide-react`, `@headlessui/react`, Chart.js e `react-chartjs-2`.
+  - UI com `lucide-react`, componentes nativos do projeto, Chart.js e `react-chartjs-2`.
   - Importação/relatórios com `xlsx`, `exceljs`, `jspdf`, `jspdf-autotable`, `html2pdf.js`.
   - Sentry opcional via `VITE_SENTRY_DSN`.
 - Backend:
