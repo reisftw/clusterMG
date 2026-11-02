@@ -2502,7 +2502,16 @@ function AcompanhamentoStatusSection({ dashboard, festiveTheme }) {
 						</div>
 					) : null}
 				</div>
-				{isHalloween ? null : (
+				{isChristmas ? (
+					<div className="acomp-status-illustration" aria-hidden="true">
+						<img
+							className="acomp-status-retorninho"
+							src={imageSrc}
+							alt=""
+							decoding="async"
+						/>
+					</div>
+				) : isHalloween ? null : (
 					<img
 						className="acomp-status-retorninho"
 						src={imageSrc}
