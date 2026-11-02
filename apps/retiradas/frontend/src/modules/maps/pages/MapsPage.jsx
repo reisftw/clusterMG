@@ -54,13 +54,13 @@ const MapsCanvas = lazy(() => import("../components/MapsCanvas"));
 function formatSync(value) {
 	if (!value) return "Sem sincronização";
 	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? "Sem sincronização" : `Atualizado ${date.toLocaleString("pt-BR")}`;
+	return Number.isNaN(date.getTime()) ? "Sem sincronização" : `Atualizado ${date.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`;
 }
 
 function formatSyncTime(value) {
 	if (!value) return "sem sincronização";
 	const date = new Date(value);
-	return Number.isNaN(date.getTime()) ? "sem sincronização" : `atualizado às ${date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+	return Number.isNaN(date.getTime()) ? "sem sincronização" : `atualizado às ${date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}`;
 }
 
 function usePermission(user, permission) {
@@ -131,7 +131,7 @@ export default function MapsPage() {
 	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
 
 	const requestParams = useMemo(() => {
-		const params = { categories: categories.join(","), limit: 5000 };
+		const params = { categories: categories.join(",") };
 		if (search.query) return { ...params, search: search.query };
 		if (gpsArea && mapQueryPosition) {
 			return {
@@ -204,7 +204,7 @@ export default function MapsPage() {
 			setSearchSuggestionsError("");
 			setSearchSuggestionsOpen(true);
 			try {
-				const response = await mapsService.points({ search: query, categories: categories.join(","), limit: 24 }, controller.signal);
+				const response = await mapsService.points({ search: query, categories: categories.join(","), preview: true, limit: 24 }, controller.signal);
 				setSearchSuggestions(buildMapSearchSuggestions(response.items || [], query));
 			} catch (suggestionError) {
 				if (suggestionError.name !== "AbortError") setSearchSuggestionsError("Não foi possível consultar agora.");
@@ -577,7 +577,7 @@ export default function MapsPage() {
 	return (
 		<div className="maps-v2-page">
 			<header className="maps-v2-header">
-				<div className="maps-v2-title"><span><MapPinned size={23} /></span><div><h1>Retiradas Maps</h1><p>{formatSync(lastSyncAt || health?.last_order_sync)}</p></div></div>
+				<div className="maps-v2-title"><span><MapPinned size={23} /></span><div><h1>Retiradas Maps</h1><p>{formatSync(health?.last_order_sync || lastSyncAt)}</p></div></div>
 				<div className="maps-v2-header-status">{canViewLiveTechnicians ? <Link className="maps-v2-live-link" to="/maps/adminmap"><UsersRound size={16} /> Equipe ao vivo</Link> : null}<span className={health?.ok ? "is-online" : "is-offline"}>{health?.ok ? <Wifi size={16} /> : <WifiOff size={16} />}{health?.ok ? "Conectado" : "Indisponível"}</span>{loading ? <RefreshCw className="maps-v2-spin" size={17} /> : null}</div>
 			</header>
 
@@ -590,7 +590,7 @@ export default function MapsPage() {
 			</div>
 			<div className="maps-v2-area-status" role="status">
 				<span><Layers3 size={16} /><strong>{summary.assigned + summary.opportunities}</strong> ordens nesta área</span>
-				<span className={health?.ok ? "is-fresh" : "is-stale"}>{loading ? "sincronizando..." : formatSyncTime(lastSyncAt || health?.last_order_sync)}</span>
+				<span className={health?.ok ? "is-fresh" : "is-stale"}>{loading ? "sincronizando..." : formatSyncTime(health?.last_order_sync || lastSyncAt)}</span>
 			</div>
 
 			<main className="maps-v2-workspace">

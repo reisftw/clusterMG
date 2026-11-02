@@ -36,7 +36,8 @@ const ALLOWED_ORDER_TYPES = Object.freeze([
 ]);
 const CLOSED_STATUS_PATTERN = /(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)/i;
 const AVAILABLE_TECHNICIANS = new Set(["", "FILA", "NENHUM", "NAO DEFINIDO", "SEM TECNICO"]);
-const MAX_POINTS = 25000;
+const MAX_POINT_PREVIEW = 100;
+const ORDER_SYNC_CACHE_TTL_MS = 30_000;
 const ALERT_COOLDOWN_MINUTES = 30;
 const ALERT_HYSTERESIS_METERS = 100;
 const MAX_ALERTS_PER_HOUR = 5;
@@ -82,6 +83,7 @@ const ADMIN_PRESENTATION_DEFAULTS = Object.freeze({
 });
 const navigationCache = new Map();
 let locationHistoryCleanupAt = 0;
+let orderSyncCache = { value: "", expiresAt: 0 };
 
 function broadcastMapsUpdate(action, payload = {}) {
 	broadcastRealtime("maps", {
@@ -479,10 +481,35 @@ function sourceFilters({ query = {}, params = [] } = {}) {
 	return { clauses, params, viewport };
 }
 
-async function queryCandidateRows(query = {}, user = {}, limit = MAX_POINTS) {
+function pointPreviewLimit(query = {}) {
+	if (!booleanValue(query.preview, false)) return null;
+	return Math.min(Math.max(Number.parseInt(query.limit, 10) || 24, 1), MAX_POINT_PREVIEW);
+}
+
+async function latestOrderSyncAt() {
+	if (orderSyncCache.expiresAt > Date.now()) return orderSyncCache.value;
+	const result = await db.query(
+		`select coalesce(
+		   (select max(coalesce(finished_at, started_at))
+		      from hubsoft_sync_runs
+		     where profile = 'MAPA' and status = 'COMPLETE'),
+		   (select max(updated_at)
+		      from ordens_servico
+		     where source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas'))
+		 ) as "lastOrderSync"`,
+	);
+	const value = result.rows[0]?.lastOrderSync || "";
+	orderSyncCache = { value, expiresAt: Date.now() + ORDER_SYNC_CACHE_TTL_MS };
+	return value;
+}
+
+async function queryCandidateRows(query = {}, user = {}, limit = null) {
 	const params = [];
 	const { clauses, viewport } = sourceFilters({ query, user, params });
-	params.push(Math.min(Math.max(Number(limit || MAX_POINTS), 1), MAX_POINTS));
+	const normalizedLimit = limit !== null && limit !== undefined && text(limit) && Number.isFinite(Number(limit))
+		? Math.min(Math.max(Number.parseInt(limit, 10), 1), MAX_POINT_PREVIEW)
+		: null;
+	if (normalizedLimit) params.push(normalizedLimit + 1);
 	const result = await db.query(
 		`select * from (
 		 select distinct on (o.num_os)
@@ -505,10 +532,15 @@ async function queryCandidateRows(query = {}, user = {}, limit = MAX_POINTS) {
 		   case when latitude between -34 and 6 and longitude between -74 and -33 then 0 else 1 end,
 		   data_abertura desc nulls last,
 		   updated_at desc
-		  limit $${params.length}`,
+		  ${normalizedLimit ? `limit $${params.length}` : ""}`,
 		params,
 	);
-	return { rows: result.rows, viewport };
+	const truncated = normalizedLimit !== null && result.rows.length > normalizedLimit;
+	return {
+		rows: truncated ? result.rows.slice(0, normalizedLimit) : result.rows,
+		viewport,
+		truncated,
+	};
 }
 
 function filterVisiblePoint(point, user, categories) {
@@ -523,7 +555,10 @@ async function listPoints(query = {}, user = {}) {
 	await reconcileEffectuationRequests();
 	await syncNativeCoordinates();
 	const categories = new Set(text(query.categories || query.category).split(",").map((item) => item.trim()).filter(Boolean));
-	const { rows, viewport } = await queryCandidateRows(query, user, query.limit || MAX_POINTS);
+	const [{ rows, viewport, truncated }, lastOrderSync] = await Promise.all([
+		queryCandidateRows(query, user, pointPreviewLimit(query)),
+		latestOrderSyncAt(),
+	]);
 	const origin = viewport?.origin || null;
 	let items = rows.filter(validateOrderRow).map((row) => mapPoint(row, user, { origin }));
 	items = items.filter((point) => filterVisiblePoint(point, user, categories));
@@ -534,8 +569,8 @@ async function listPoints(query = {}, user = {}) {
 	return {
 		items,
 		total: items.length,
-		truncated: rows.length >= Math.min(Number(query.limit || MAX_POINTS), MAX_POINTS),
-		lastSyncAt: rows.reduce((latest, row) => latest > text(row.updated_at) ? latest : text(row.updated_at), ""),
+		truncated,
+		lastSyncAt: lastOrderSync || rows.reduce((latest, row) => latest > text(row.updated_at) ? latest : text(row.updated_at), ""),
 		summary: {
 			assigned: items.filter((item) => item.category === "assigned").length,
 			opportunities: items.filter((item) => item.category === "opportunity").length,
@@ -547,7 +582,7 @@ async function listPoints(query = {}, user = {}) {
 }
 
 async function getSummary(query = {}, user = {}) {
-	const response = await listPoints({ ...query, limit: MAX_POINTS }, user);
+	const response = await listPoints(query, user);
 	return {
 		total: response.total,
 		assigned: response.items.filter((item) => item.category === "assigned").length,
@@ -1055,6 +1090,7 @@ async function evaluateRadar(payload = {}, user = {}) {
 		latitude: origin.latitude,
 		longitude: origin.longitude,
 		radiusMeters: Number(settings.radiusMeters) + ALERT_HYSTERESIS_METERS,
+		preview: true,
 		limit: 100,
 	}, user);
 	const eligible = nearby.items.filter((item) =>
@@ -1171,6 +1207,7 @@ async function simulateRadar(payload = {}, user = {}) {
 		latitude: origin.latitude,
 		longitude: origin.longitude,
 		radiusMeters: radiusMeters + ALERT_HYSTERESIS_METERS,
+		preview: true,
 		limit: 100,
 	}, user);
 	const items = nearby.items
@@ -2478,19 +2515,19 @@ function initializeGeocoderWorker() {
 }
 
 async function getHealth() {
-	const tables = await db.query(
+	const [tables, lastOrderSync] = await Promise.all([db.query(
 		`select
 		  (select count(*)::int from maps_order_locations) as geocoded,
 		  (select count(*)::int from maps_geocode_jobs where status = 'PENDING') as geocode_pending,
-		  (select count(*)::int from maps_assignment_requests where status = 'PENDING') as requests_pending,
-		  (select max(updated_at) from ordens_servico where source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')) as last_order_sync`,
-	);
+		  (select count(*)::int from maps_assignment_requests where status = 'PENDING') as requests_pending`,
+	), latestOrderSyncAt()]);
 	return {
 		ok: true,
 		enabled: featureEnabled(),
 		geocoderConfigured: Boolean(geocoderUrl()),
 		mapStyleConfigured: Boolean(text(process.env.MAPS_STYLE_URL)),
 		...tables.rows[0],
+		last_order_sync: lastOrderSync,
 	};
 }
 
@@ -2546,6 +2583,7 @@ module.exports = {
 		normalizeRouteRows,
 		optimizeNearestNeighbor,
 		parseCoordinates,
+		pointPreviewLimit,
 		radarWithinSchedule,
 		routeTravelMetrics,
 		sourceFilters,
