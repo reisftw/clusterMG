@@ -9,6 +9,9 @@ const METRICS_ENABLED =
 const MAINTENANCE_METRICS_ENABLED =
 	String(process.env.MAINTENANCE_METRICS_ENABLED || "true").toLowerCase() !==
 	"false";
+const OBSERVABILITY_ENABLED =
+	MAINTENANCE_METRICS_ENABLED &&
+	String(process.env.OBSERVABILITY_ENABLED || "true").toLowerCase() !== "false";
 const FLUSH_INTERVAL_MS = Number(process.env.METRICS_FLUSH_INTERVAL_MS || 5000);
 const AGGREGATE_FLUSH_INTERVAL_MS = Number(
 	process.env.MAINTENANCE_METRICS_FLUSH_INTERVAL_MS || 60000,
@@ -16,6 +19,18 @@ const AGGREGATE_FLUSH_INTERVAL_MS = Number(
 const MAX_BUFFER_SIZE = Number(process.env.METRICS_MAX_BUFFER_SIZE || 200);
 const MAX_QUERY_TEXT_LENGTH = Number(
 	process.env.METRICS_MAX_QUERY_TEXT_LENGTH || 500,
+);
+const MAX_QUERY_CARDINALITY = Math.max(
+	20,
+	Number(process.env.METRICS_MAX_QUERY_CARDINALITY) || 200,
+);
+const MAX_ROUTE_CARDINALITY = Math.max(
+	50,
+	Number(process.env.METRICS_MAX_ROUTE_CARDINALITY || 500),
+);
+const MAX_OPERATION_CARDINALITY = Math.max(
+	20,
+	Number(process.env.METRICS_MAX_OPERATION_CARDINALITY || 200),
 );
 
 let initialized = false;
@@ -25,6 +40,9 @@ let flushing = false;
 const requestBuffer = [];
 const queryBuffer = [];
 let aggregateBuffer = new Map();
+let operationBuffer = new Map();
+let queryCardinalityBucket = "";
+let queryCardinality = new Set();
 
 const LATENCY_BUCKETS = [50, 100, 250, 500, 1000, 2500, 5000];
 const LATENCY_COLUMNS = [
@@ -61,6 +79,8 @@ function elapsedMs(startNs) {
 function normalizePath(path = "") {
 	return String(path || "")
 		.split("?")[0]
+		.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, ":id")
+		.replace(/\b(?:\+?55)?\d{10,13}\b/g, ":id")
 		.replace(
 			/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
 			":id",
@@ -95,9 +115,31 @@ function compactQueryText(query) {
 
 function normalizeQuery(query) {
 	return compactQueryText(query)
+		.replace(/\/\*[\s\S]*?\*\//g, " ")
+		.replace(/--[^\r\n]*/g, " ")
+		.replace(/\$([a-z_][a-z0-9_]*)?\$[\s\S]*?\$\1\$/gi, "?")
+		.replace(/'(?:''|\\.|[^'])*'/g, "?")
+		.replace(/\b(?:true|false|null)\b/gi, "?")
+		.replace(/\b\d+(?:\.\d+)?\b/g, "?")
 		.replace(/\s+/g, " ")
 		.trim()
 		.slice(0, MAX_QUERY_TEXT_LENGTH);
+}
+
+function limitQueryCardinality(queryText) {
+	const bucket = hourBucket();
+	if (bucket !== queryCardinalityBucket) {
+		queryCardinalityBucket = bucket;
+		queryCardinality = new Set();
+	}
+	if (queryCardinality.has(queryText)) return queryText;
+	if (queryCardinality.size >= MAX_QUERY_CARDINALITY) return "SQL_OTHER";
+	queryCardinality.add(queryText);
+	return queryText;
+}
+
+function queryErrorLabel(error) {
+	return error ? "query_error" : null;
 }
 
 function shouldIgnoreQuery(queryText = "") {
@@ -105,7 +147,8 @@ function shouldIgnoreQuery(queryText = "") {
 	return (
 		normalized.includes("metrics_requests") ||
 		normalized.includes("metrics_queries") ||
-		normalized.includes("maintenance_route_metrics_hourly")
+		normalized.includes("maintenance_route_metrics_hourly") ||
+		normalized.includes("maintenance_operation_metrics_hourly")
 	);
 }
 
@@ -135,6 +178,14 @@ function createAggregate({ bucketStart, method, route }) {
 		queryCount: 0,
 		queryErrors: 0,
 		queryTotalMs: 0,
+		queryDurationMaxMs: 0,
+		responseBytes: 0,
+		poolWaitCount: 0,
+		poolWaitTotalMs: 0,
+		poolWaitMaxMs: 0,
+		poolTimeouts: 0,
+		longTransactions: 0,
+		lastErrorCode: "",
 	};
 }
 
@@ -147,6 +198,14 @@ function mergeAggregate(target, source) {
 	target.queryCount += source.queryCount;
 	target.queryErrors += source.queryErrors;
 	target.queryTotalMs += source.queryTotalMs;
+	target.queryDurationMaxMs = Math.max(target.queryDurationMaxMs, source.queryDurationMaxMs);
+	target.responseBytes += source.responseBytes;
+	target.poolWaitCount += source.poolWaitCount;
+	target.poolWaitTotalMs += source.poolWaitTotalMs;
+	target.poolWaitMaxMs = Math.max(target.poolWaitMaxMs, source.poolWaitMaxMs);
+	target.poolTimeouts += source.poolTimeouts;
+	target.longTransactions += source.longTransactions;
+	target.lastErrorCode = source.lastErrorCode || target.lastErrorCode;
 	for (let index = 0; index < LATENCY_COLUMNS.length; index += 1) {
 		target.latencyBuckets[index] += source.latencyBuckets[index];
 	}
@@ -157,8 +216,12 @@ function recordAggregateRequest(item) {
 	if (!MAINTENANCE_METRICS_ENABLED) return;
 	const bucketStart = hourBucket();
 	const method = String(item.method || "UNKNOWN").toUpperCase().slice(0, 16);
-	const route = normalizePath(item.route || "unknown").slice(0, 500);
-	const key = `${bucketStart}\u0000${method}\u0000${route}`;
+	let route = normalizePath(item.route || "unknown").slice(0, 500);
+	let key = `${bucketStart}\u0000${method}\u0000${route}`;
+	if (!aggregateBuffer.has(key) && aggregateBuffer.size >= MAX_ROUTE_CARDINALITY) {
+		route = "/__other__";
+		key = `${bucketStart}\u0000${method}\u0000${route}`;
+	}
 	const aggregate =
 		aggregateBuffer.get(key) || createAggregate({ bucketStart, method, route });
 	const statusCode = Number(item.statusCode || 0);
@@ -172,7 +235,62 @@ function recordAggregateRequest(item) {
 	aggregate.queryCount += Math.max(0, Number(item.queryCount) || 0);
 	aggregate.queryErrors += Math.max(0, Number(item.queryErrors) || 0);
 	aggregate.queryTotalMs += Math.max(0, Number(item.queryTotalMs) || 0);
+	aggregate.queryDurationMaxMs = Math.max(aggregate.queryDurationMaxMs, Number(item.queryDurationMaxMs) || 0);
+	aggregate.responseBytes += Math.max(0, Number(item.responseBytes) || 0);
+	aggregate.poolWaitCount += Math.max(0, Number(item.poolWaitCount) || 0);
+	aggregate.poolWaitTotalMs += Math.max(0, Number(item.poolWaitTotalMs) || 0);
+	aggregate.poolWaitMaxMs = Math.max(aggregate.poolWaitMaxMs, Number(item.poolWaitMaxMs) || 0);
+	aggregate.poolTimeouts += Math.max(0, Number(item.poolTimeouts) || 0);
+	aggregate.longTransactions += Math.max(0, Number(item.longTransactions) || 0);
+	if (item.errorCode) {
+		aggregate.lastErrorCode = sanitizeLabel(item.errorCode, 80);
+	}
 	aggregateBuffer.set(key, aggregate);
+}
+
+function sanitizeLabel(value, maxLength = 100) {
+	return String(value || "")
+		.replace(/[^a-z0-9_.:-]+/gi, "_")
+		.slice(0, maxLength) || "unknown";
+}
+
+function createOperationAggregate({ bucketStart, kind, name, stage }) {
+	return {
+		bucketStart, kind, name, stage, calls: 0, successes: 0, failures: 0,
+		timeouts: 0, fallbacks: 0, durationTotalMs: 0, durationMaxMs: 0,
+		latencyBuckets: Array(LATENCY_COLUMNS.length).fill(0), queryCount: 0,
+		queryErrors: 0, queryTotalMs: 0, processed: 0, updated: 0, ignored: 0,
+	};
+}
+
+function recordOperation(item = {}) {
+	if (!OBSERVABILITY_ENABLED) return;
+	const bucketStart = hourBucket();
+	const kind = sanitizeLabel(item.kind, 24);
+	const name = sanitizeLabel(item.name, 100);
+	let stage = sanitizeLabel(item.stage, 100);
+	let key = `${bucketStart}\u0000${kind}\u0000${name}\u0000${stage}`;
+	if (!operationBuffer.has(key) && operationBuffer.size >= MAX_OPERATION_CARDINALITY) {
+		stage = "other";
+		key = `${bucketStart}\u0000${kind}\u0000${name}\u0000${stage}`;
+	}
+	const aggregate = operationBuffer.get(key) || createOperationAggregate({ bucketStart, kind, name, stage });
+	const durationMs = Math.max(0, Number(item.durationMs) || 0);
+	aggregate.calls += 1;
+	aggregate.successes += item.success === false ? 0 : 1;
+	aggregate.failures += item.success === false ? 1 : 0;
+	aggregate.timeouts += item.timeout ? 1 : 0;
+	aggregate.fallbacks += item.fallback ? 1 : 0;
+	aggregate.durationTotalMs += durationMs;
+	aggregate.durationMaxMs = Math.max(aggregate.durationMaxMs, durationMs);
+	aggregate.latencyBuckets[latencyBucketIndex(durationMs)] += 1;
+	aggregate.queryCount += Math.max(0, Number(item.queryCount) || 0);
+	aggregate.queryErrors += Math.max(0, Number(item.queryErrors) || 0);
+	aggregate.queryTotalMs += Math.max(0, Number(item.queryTotalMs) || 0);
+	aggregate.processed += Math.max(0, Number(item.processed) || 0);
+	aggregate.updated += Math.max(0, Number(item.updated) || 0);
+	aggregate.ignored += Math.max(0, Number(item.ignored) || 0);
+	operationBuffer.set(key, aggregate);
 }
 
 function fingerprintQuery(queryText) {
@@ -181,13 +299,7 @@ function fingerprintQuery(queryText) {
 
 async function metricsQuery(text, params) {
 	const queryFn = typeof db.rawQuery === "function" ? db.rawQuery : db.query;
-	const previous = global.__retiradasMetricsSuspended === true;
-	global.__retiradasMetricsSuspended = true;
-	try {
-		return await queryFn(text, params);
-	} finally {
-		global.__retiradasMetricsSuspended = previous;
-	}
+	return queryFn(text, params, { skipMetrics: true });
 }
 
 function pushWithLimit(buffer, item) {
@@ -200,78 +312,7 @@ function pushWithLimit(buffer, item) {
 }
 
 async function ensureTables() {
-	if (METRICS_ENABLED) {
-		await metricsQuery(`
-    create table if not exists metrics_requests (
-      id bigserial primary key,
-      created_at timestamptz not null default now(),
-      method text not null,
-      route text not null,
-      status_code integer not null,
-      duration_ms numeric(12,3) not null,
-      query_count integer not null default 0,
-      query_total_ms numeric(12,3) not null default 0,
-      user_id text,
-      request_id text
-    )
-  `);
-		await metricsQuery(`
-    create index if not exists idx_metrics_requests_created_route
-    on metrics_requests (created_at desc, route, method)
-  `);
-		await metricsQuery(`
-    create table if not exists metrics_queries (
-      id bigserial primary key,
-      created_at timestamptz not null default now(),
-      method text,
-      route text,
-      query_fingerprint text not null,
-      query_text text not null,
-      duration_ms numeric(12,3) not null,
-      error text,
-      request_id text
-    )
-  `);
-		await metricsQuery(`
-    create index if not exists idx_metrics_queries_created_route
-    on metrics_queries (created_at desc, route, method)
-  `);
-		await metricsQuery(`
-    create index if not exists idx_metrics_queries_fingerprint
-    on metrics_queries (query_fingerprint, created_at desc)
-  `);
-	}
-	if (MAINTENANCE_METRICS_ENABLED) {
-		await metricsQuery(`
-      create table if not exists maintenance_route_metrics_hourly (
-        bucket_start timestamptz not null,
-        method varchar(16) not null,
-        route varchar(500) not null,
-        requests bigint not null default 0,
-        errors_4xx bigint not null default 0,
-        errors_5xx bigint not null default 0,
-        duration_total_ms double precision not null default 0,
-        duration_max_ms double precision not null default 0,
-        duration_le_50 bigint not null default 0,
-        duration_le_100 bigint not null default 0,
-        duration_le_250 bigint not null default 0,
-        duration_le_500 bigint not null default 0,
-        duration_le_1000 bigint not null default 0,
-        duration_le_2500 bigint not null default 0,
-        duration_le_5000 bigint not null default 0,
-        duration_gt_5000 bigint not null default 0,
-        query_count bigint not null default 0,
-        query_errors bigint not null default 0,
-        query_total_ms double precision not null default 0,
-        updated_at timestamptz not null default now(),
-        primary key (bucket_start, method, route)
-      )
-    `);
-		await metricsQuery(`
-      create index if not exists maintenance_route_metrics_hourly_bucket_idx
-      on maintenance_route_metrics_hourly (bucket_start desc)
-    `);
-	}
+	// O schema e exclusivamente responsabilidade das migrations versionadas.
 }
 
 async function flushRequests(items) {
@@ -329,7 +370,7 @@ async function flushAggregates(items) {
 		const batch = items.slice(offset, offset + 100);
 		const values = [];
 		const placeholders = batch.map((item, index) => {
-			const base = index * 19;
+			const base = index * 27;
 			values.push(
 				item.bucketStart,
 				item.method,
@@ -343,8 +384,16 @@ async function flushAggregates(items) {
 				item.queryCount,
 				item.queryErrors,
 				item.queryTotalMs,
+				item.queryDurationMaxMs,
+				item.responseBytes,
+				item.poolWaitCount,
+				item.poolWaitTotalMs,
+				item.poolWaitMaxMs,
+				item.poolTimeouts,
+				item.longTransactions,
+				item.lastErrorCode || null,
 			);
-			return `(${Array.from({ length: 19 }, (_, parameter) => `$${base + parameter + 1}`).join(",")},now())`;
+			return `(${Array.from({ length: 27 }, (_, parameter) => `$${base + parameter + 1}`).join(",")},now())`;
 		});
 		await metricsQuery(
 			`insert into maintenance_route_metrics_hourly (
@@ -352,7 +401,9 @@ async function flushAggregates(items) {
 			  duration_total_ms,duration_max_ms,
 			  duration_le_50,duration_le_100,duration_le_250,duration_le_500,
 			  duration_le_1000,duration_le_2500,duration_le_5000,duration_gt_5000,
-			  query_count,query_errors,query_total_ms,updated_at
+			  query_count,query_errors,query_total_ms,query_duration_max_ms,response_bytes,
+			  pool_wait_count,pool_wait_total_ms,pool_wait_max_ms,pool_timeouts,long_transactions,
+			  last_error_code,updated_at
 			) values ${placeholders.join(",")}
 			on conflict (bucket_start,method,route) do update set
 			  requests=maintenance_route_metrics_hourly.requests+excluded.requests,
@@ -371,8 +422,66 @@ async function flushAggregates(items) {
 			  query_count=maintenance_route_metrics_hourly.query_count+excluded.query_count,
 			  query_errors=maintenance_route_metrics_hourly.query_errors+excluded.query_errors,
 			  query_total_ms=maintenance_route_metrics_hourly.query_total_ms+excluded.query_total_ms,
+			  query_duration_max_ms=greatest(maintenance_route_metrics_hourly.query_duration_max_ms,excluded.query_duration_max_ms),
+			  response_bytes=maintenance_route_metrics_hourly.response_bytes+excluded.response_bytes,
+			  pool_wait_count=maintenance_route_metrics_hourly.pool_wait_count+excluded.pool_wait_count,
+			  pool_wait_total_ms=maintenance_route_metrics_hourly.pool_wait_total_ms+excluded.pool_wait_total_ms,
+			  pool_wait_max_ms=greatest(maintenance_route_metrics_hourly.pool_wait_max_ms,excluded.pool_wait_max_ms),
+			  pool_timeouts=maintenance_route_metrics_hourly.pool_timeouts+excluded.pool_timeouts,
+			  long_transactions=maintenance_route_metrics_hourly.long_transactions+excluded.long_transactions,
+			  last_error_code=coalesce(excluded.last_error_code,maintenance_route_metrics_hourly.last_error_code),
 			  updated_at=now()`,
 			values,
+		);
+	}
+}
+
+async function flushOperations(items) {
+	if (!items.length) return;
+	for (let offset = 0; offset < items.length; offset += 100) {
+		const batch = items.slice(offset, offset + 100);
+		const values = [];
+		const placeholders = batch.map((item, index) => {
+			const base = index * 25;
+			values.push(
+				item.bucketStart, item.kind, item.name, item.stage, item.calls,
+				item.successes, item.failures, item.timeouts, item.fallbacks,
+				item.durationTotalMs, item.durationMaxMs, ...item.latencyBuckets,
+				item.queryCount, item.queryErrors, item.queryTotalMs,
+				item.processed, item.updated, item.ignored,
+			);
+			return `(${Array.from({ length: 25 }, (_, parameter) => `$${base + parameter + 1}`).join(",")},now())`;
+		});
+		await metricsQuery(
+			`insert into maintenance_operation_metrics_hourly (
+			 bucket_start,kind,name,stage,calls,successes,failures,timeouts,fallbacks,
+			 duration_total_ms,duration_max_ms,duration_le_50,duration_le_100,duration_le_250,
+			 duration_le_500,duration_le_1000,duration_le_2500,duration_le_5000,duration_gt_5000,
+			 query_count,query_errors,query_total_ms,processed,updated,ignored,updated_at
+			) values ${placeholders.join(",")}
+			on conflict (bucket_start,kind,name,stage) do update set
+			 calls=maintenance_operation_metrics_hourly.calls+excluded.calls,
+			 successes=maintenance_operation_metrics_hourly.successes+excluded.successes,
+			 failures=maintenance_operation_metrics_hourly.failures+excluded.failures,
+			 timeouts=maintenance_operation_metrics_hourly.timeouts+excluded.timeouts,
+			 fallbacks=maintenance_operation_metrics_hourly.fallbacks+excluded.fallbacks,
+			 duration_total_ms=maintenance_operation_metrics_hourly.duration_total_ms+excluded.duration_total_ms,
+			 duration_max_ms=greatest(maintenance_operation_metrics_hourly.duration_max_ms,excluded.duration_max_ms),
+			 duration_le_50=maintenance_operation_metrics_hourly.duration_le_50+excluded.duration_le_50,
+			 duration_le_100=maintenance_operation_metrics_hourly.duration_le_100+excluded.duration_le_100,
+			 duration_le_250=maintenance_operation_metrics_hourly.duration_le_250+excluded.duration_le_250,
+			 duration_le_500=maintenance_operation_metrics_hourly.duration_le_500+excluded.duration_le_500,
+			 duration_le_1000=maintenance_operation_metrics_hourly.duration_le_1000+excluded.duration_le_1000,
+			 duration_le_2500=maintenance_operation_metrics_hourly.duration_le_2500+excluded.duration_le_2500,
+			 duration_le_5000=maintenance_operation_metrics_hourly.duration_le_5000+excluded.duration_le_5000,
+			 duration_gt_5000=maintenance_operation_metrics_hourly.duration_gt_5000+excluded.duration_gt_5000,
+			 query_count=maintenance_operation_metrics_hourly.query_count+excluded.query_count,
+			 query_errors=maintenance_operation_metrics_hourly.query_errors+excluded.query_errors,
+			 query_total_ms=maintenance_operation_metrics_hourly.query_total_ms+excluded.query_total_ms,
+			 processed=maintenance_operation_metrics_hourly.processed+excluded.processed,
+			 updated=maintenance_operation_metrics_hourly.updated+excluded.updated,
+			 ignored=maintenance_operation_metrics_hourly.ignored+excluded.ignored,
+			 updated_at=now()`, values,
 		);
 	}
 }
@@ -382,6 +491,11 @@ async function pruneAggregateMetrics() {
 	await metricsQuery(
 		"delete from maintenance_route_metrics_hourly where bucket_start < now()-interval '31 days'",
 	);
+	if (OBSERVABILITY_ENABLED) {
+		await metricsQuery(
+			"delete from maintenance_operation_metrics_hourly where bucket_start < now()-interval '31 days'",
+		);
+	}
 }
 
 async function flushMetrics() {
@@ -389,19 +503,23 @@ async function flushMetrics() {
 	if (
 		!requestBuffer.length &&
 		!queryBuffer.length &&
-		!aggregateBuffer.size
+		!aggregateBuffer.size &&
+		!operationBuffer.size
 	) return;
 	flushing = true;
 	const requests = requestBuffer.splice(0, requestBuffer.length);
 	const queries = queryBuffer.splice(0, queryBuffer.length);
 	const aggregates = [...aggregateBuffer.values()];
+	const operations = [...operationBuffer.values()];
 	aggregateBuffer = new Map();
+	operationBuffer = new Map();
 	try {
 		if (METRICS_ENABLED) {
 			await flushRequests(requests);
 			await flushQueries(queries);
 		}
 		if (MAINTENANCE_METRICS_ENABLED) await flushAggregates(aggregates);
+		if (OBSERVABILITY_ENABLED) await flushOperations(operations);
 	} catch (error) {
 		requestBuffer.unshift(...requests.slice(-MAX_BUFFER_SIZE));
 		queryBuffer.unshift(...queries.slice(-MAX_BUFFER_SIZE));
@@ -412,6 +530,10 @@ async function flushMetrics() {
 				key,
 				current ? mergeAggregate(current, item) : item,
 			);
+		}
+		for (const item of operations) {
+			const key = `${item.bucketStart}\u0000${item.kind}\u0000${item.name}\u0000${item.stage}`;
+			operationBuffer.set(key, item);
 		}
 		throw error;
 	} finally {
@@ -425,6 +547,7 @@ async function initMetrics() {
 	await ensureTables();
 	await pruneAggregateMetrics();
 	global.__retiradasMetricsRecordQuery = recordQuery;
+	global.__retiradasMetricsRecordPool = recordPoolEvent;
 	flushTimer = setInterval(() => {
 		flushMetrics().catch((error) => {
 			console.error("[metrics] Falha ao enviar metricas:", error);
@@ -455,11 +578,19 @@ function metricsMiddleware(req, res, next) {
 		queryCount: 0,
 		queryErrors: 0,
 		queryTotalMs: 0,
+		queryDurationMaxMs: 0,
+		poolWaitCount: 0,
+		poolWaitTotalMs: 0,
+		poolWaitMaxMs: 0,
+		poolTimeouts: 0,
+		longTransactions: 0,
 	};
 
 	asyncLocal.run(context, () => {
+		res.setHeader("X-Request-Id", context.requestId);
 		res.on("finish", () => {
 			context.route = getRouteLabel(req);
+			const contentLength = Number(res.getHeader("content-length"));
 			const item = {
 				method: context.method,
 				route: context.route,
@@ -468,7 +599,15 @@ function metricsMiddleware(req, res, next) {
 				queryCount: context.queryCount,
 				queryErrors: context.queryErrors,
 				queryTotalMs: context.queryTotalMs,
-				userId: req.user?.uid || req.user?.email || null,
+				queryDurationMaxMs: context.queryDurationMaxMs,
+				responseBytes: Number.isFinite(contentLength) ? contentLength : 0,
+				poolWaitCount: context.poolWaitCount,
+				poolWaitTotalMs: context.poolWaitTotalMs,
+				poolWaitMaxMs: context.poolWaitMaxMs,
+				poolTimeouts: context.poolTimeouts,
+				longTransactions: context.longTransactions,
+				errorCode: res.locals.metricsErrorCode || "",
+				userId: req.user?.uid || null,
 				requestId: context.requestId,
 			};
 			recordAggregateRequest(item);
@@ -480,37 +619,103 @@ function metricsMiddleware(req, res, next) {
 
 function recordQuery({ query, durationMs, error }) {
 	if (!METRICS_ENABLED && !MAINTENANCE_METRICS_ENABLED) return;
-	const queryText = normalizeQuery(query);
-	if (!queryText) return;
-	if (shouldIgnoreQuery(queryText)) return;
 
 	const context = asyncLocal.getStore();
 	if (context) {
 		context.queryCount += 1;
 		context.queryErrors += error ? 1 : 0;
 		context.queryTotalMs += durationMs;
+		context.queryDurationMaxMs = Math.max(context.queryDurationMaxMs || 0, durationMs);
 	}
 
 	if (!METRICS_ENABLED) return;
+	const queryText = normalizeQuery(query);
+	if (!queryText || shouldIgnoreQuery(queryText)) return;
+	const boundedQueryText = limitQueryCardinality(queryText);
 	pushWithLimit(queryBuffer, {
 		method: context?.method || null,
 		route: context?.route || null,
-		queryFingerprint: fingerprintQuery(queryText),
-		queryText,
+		queryFingerprint: fingerprintQuery(boundedQueryText),
+		queryText: boundedQueryText,
 		durationMs,
-		error,
+		error: queryErrorLabel(error),
 		requestId: context?.requestId || null,
 	});
+}
+
+function recordPoolEvent({ waitMs = 0, error = null, transactionMs = 0 } = {}) {
+	if (!OBSERVABILITY_ENABLED) return;
+	const context = asyncLocal.getStore();
+	const timeout = Boolean(error) && /timeout|tempo esgotado|connection terminated/i.test(String(error?.message || error));
+	if (context) {
+		context.poolWaitCount = (context.poolWaitCount || 0) + 1;
+		context.poolWaitTotalMs = (context.poolWaitTotalMs || 0) + Math.max(0, Number(waitMs) || 0);
+		context.poolWaitMaxMs = Math.max(context.poolWaitMaxMs || 0, Number(waitMs) || 0);
+		context.poolTimeouts = (context.poolTimeouts || 0) + (timeout ? 1 : 0);
+		context.longTransactions = (context.longTransactions || 0) + (Number(transactionMs) >= 2000 ? 1 : 0);
+	}
+	recordOperation({
+		kind: "database",
+		name: "postgresql",
+		stage: transactionMs ? "rls_transaction" : "pool_wait",
+		durationMs: transactionMs || waitMs,
+		success: !error,
+		timeout,
+	});
+}
+
+async function observeOperation(definition, callback) {
+	if (!OBSERVABILITY_ENABLED) return callback();
+	const parent = asyncLocal.getStore();
+	const context = parent || {
+		queryCount: 0, queryErrors: 0, queryTotalMs: 0, queryDurationMaxMs: 0,
+		poolWaitCount: 0, poolWaitTotalMs: 0, poolWaitMaxMs: 0,
+		poolTimeouts: 0, longTransactions: 0,
+	};
+	const before = {
+		queryCount: context.queryCount || 0,
+		queryErrors: context.queryErrors || 0,
+		queryTotalMs: context.queryTotalMs || 0,
+	};
+	const startedNs = process.hrtime.bigint();
+	const execute = async () => {
+		try {
+			const result = await callback();
+			const summary = typeof definition.summarize === "function" ? definition.summarize(result) || {} : {};
+			recordOperation({
+				...definition,
+				...summary,
+				durationMs: elapsedMs(startedNs),
+				success: true,
+				queryCount: (context.queryCount || 0) - before.queryCount,
+				queryErrors: (context.queryErrors || 0) - before.queryErrors,
+				queryTotalMs: (context.queryTotalMs || 0) - before.queryTotalMs,
+			});
+			return result;
+		} catch (error) {
+			recordOperation({
+				...definition,
+				durationMs: elapsedMs(startedNs),
+				success: false,
+				timeout: /timeout|tempo esgotado|aborted/i.test(String(error?.message || error)),
+				queryCount: (context.queryCount || 0) - before.queryCount,
+				queryErrors: (context.queryErrors || 0) - before.queryErrors,
+				queryTotalMs: (context.queryTotalMs || 0) - before.queryTotalMs,
+			});
+			throw error;
+		}
+	};
+	return parent ? execute() : asyncLocal.run(context, execute);
 }
 
 function numberValue(value) {
 	return Number(value || 0);
 }
 
-function approximateP95(row = {}) {
+function approximatePercentile(row = {}, percentile = 0.95) {
 	const requests = numberValue(row.requests ?? row.total_requests);
 	if (!requests) return 0;
-	const threshold = Math.max(1, Math.ceil(requests * 0.95));
+	const threshold = Math.max(1, Math.ceil(requests * Math.min(1, Math.max(0, percentile))));
 	let accumulated = 0;
 	for (let index = 0; index < LATENCY_COLUMNS.length; index += 1) {
 		accumulated += numberValue(row[LATENCY_COLUMNS[index]]);
@@ -524,6 +729,10 @@ function approximateP95(row = {}) {
 		}
 	}
 	return Math.round(numberValue(row.duration_max_ms));
+}
+
+function approximateP95(row = {}) {
+	return approximatePercentile(row, 0.95);
 }
 
 function approximateP95Range(row = {}) {
@@ -560,6 +769,8 @@ function mapAggregateRow(row = {}, requestsField = "requests") {
 			? Math.round((numberValue(row.duration_total_ms) / requests) * 100) / 100
 			: 0,
 		p95_ms: approximateP95({ ...row, requests }),
+		p50_ms: approximatePercentile({ ...row, requests }, 0.5),
+		p99_ms: approximatePercentile({ ...row, requests }, 0.99),
 		p95_lower_bound_ms: p95Range.lower,
 		p95_upper_bound_ms: p95Range.upper,
 		max_ms: Math.round(numberValue(row.duration_max_ms) * 100) / 100,
@@ -635,6 +846,13 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			 coalesce(sum(query_count),0)::bigint query_count,
 			 coalesce(sum(query_errors),0)::bigint query_errors,
 			 coalesce(sum(query_total_ms),0)::float query_total_ms,
+			 coalesce(max(query_duration_max_ms),0)::float query_duration_max_ms,
+			 coalesce(sum(response_bytes),0)::bigint response_bytes,
+			 coalesce(sum(pool_wait_count),0)::bigint pool_wait_count,
+			 coalesce(sum(pool_wait_total_ms),0)::float pool_wait_total_ms,
+			 coalesce(max(pool_wait_max_ms),0)::float pool_wait_max_ms,
+			 coalesce(sum(pool_timeouts),0)::bigint pool_timeouts,
+			 coalesce(sum(long_transactions),0)::bigint long_transactions,
 			 ${aggregateColumns}
 			 from maintenance_route_metrics_hourly
 			 where bucket_start>=now()-($1::numeric*interval '1 hour')
@@ -649,6 +867,7 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			 coalesce(sum(errors_5xx),0)::bigint errors_5xx,
 			 coalesce(sum(duration_total_ms),0)::float duration_total_ms,
 			 coalesce(max(duration_max_ms),0)::float duration_max_ms,
+			 coalesce(sum(response_bytes),0)::bigint response_bytes,
 			 ${aggregateColumns}
 			 from maintenance_route_metrics_hourly
 			 where bucket_start>=now()-($1::numeric*interval '1 hour')
@@ -663,6 +882,8 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			 coalesce(sum(errors_5xx),0)::bigint errors_5xx,
 			 coalesce(sum(duration_total_ms),0)::float duration_total_ms,
 			 coalesce(max(duration_max_ms),0)::float duration_max_ms,
+			 coalesce(sum(response_bytes),0)::bigint response_bytes,
+			 coalesce(max(last_error_code),'') last_error_code,
 			 ${aggregateColumns}
 			 from maintenance_route_metrics_hourly
 			 where bucket_start>=now()-($1::numeric*interval '1 hour')
@@ -694,10 +915,14 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 			),
 			errors_5xx: totals.errors_5xx,
 			avg_ms: totals.avg_ms,
+			p50_ms: totals.p50_ms,
 			p95_ms: totals.p95_ms,
+			p99_ms: totals.p99_ms,
 			p95_lower_bound_ms: totals.p95_lower_bound_ms,
 			p95_upper_bound_ms: totals.p95_upper_bound_ms,
 			max_ms: totals.max_ms,
+			requests_per_minute: Math.round((totals.requests / (safeHours * 60)) * 100) / 100,
+			response_bytes: numberValue(totalsResult.rows[0]?.response_bytes),
 		},
 		timeline: timelineResult.rows.map((row) => mapAggregateRow(row)),
 		topRoutes,
@@ -710,17 +935,72 @@ async function getMaintenanceMetrics({ hours = 24 } = {}) {
 							100,
 					) / 100
 				: 0,
+			max_ms: numberValue(totalsResult.rows[0]?.query_duration_max_ms),
 		},
+		pool: {
+			wait_count: numberValue(totalsResult.rows[0]?.pool_wait_count),
+			wait_avg_ms: numberValue(totalsResult.rows[0]?.pool_wait_count)
+				? Math.round((numberValue(totalsResult.rows[0]?.pool_wait_total_ms) / numberValue(totalsResult.rows[0]?.pool_wait_count)) * 100) / 100
+				: 0,
+			wait_max_ms: numberValue(totalsResult.rows[0]?.pool_wait_max_ms),
+			timeouts: numberValue(totalsResult.rows[0]?.pool_timeouts),
+			long_transactions: numberValue(totalsResult.rows[0]?.long_transactions),
+		},
+	};
+}
+
+async function getOperationMetrics({ hours = 24 } = {}) {
+	if (!OBSERVABILITY_ENABLED) return { enabled: false, items: [] };
+	await flushMetrics();
+	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
+	const aggregateColumns = LATENCY_COLUMNS.map(
+		(column) => `coalesce(sum(${column}),0)::bigint ${column}`,
+	).join(",");
+	const result = await metricsQuery(
+		`select kind,name,stage,coalesce(sum(calls),0)::bigint calls,
+		 coalesce(sum(successes),0)::bigint successes,coalesce(sum(failures),0)::bigint failures,
+		 coalesce(sum(timeouts),0)::bigint timeouts,coalesce(sum(fallbacks),0)::bigint fallbacks,
+		 coalesce(sum(duration_total_ms),0)::float duration_total_ms,
+		 coalesce(max(duration_max_ms),0)::float duration_max_ms,
+		 coalesce(sum(query_count),0)::bigint query_count,
+		 coalesce(sum(query_errors),0)::bigint query_errors,
+		 coalesce(sum(query_total_ms),0)::float query_total_ms,
+		 coalesce(sum(processed),0)::bigint processed,
+		 coalesce(sum(updated),0)::bigint updated,
+		 coalesce(sum(ignored),0)::bigint ignored,
+		 ${aggregateColumns}
+		 from maintenance_operation_metrics_hourly
+		 where bucket_start>=now()-($1::numeric*interval '1 hour')
+		 group by kind,name,stage order by failures desc,duration_total_ms desc limit 200`,
+		[safeHours],
+	);
+	return {
+		enabled: true,
+		items: result.rows.map((row) => {
+			const aggregate = mapAggregateRow({ ...row, requests: row.calls });
+			return {
+				...row,
+				calls: numberValue(row.calls), successes: numberValue(row.successes),
+				failures: numberValue(row.failures), timeouts: numberValue(row.timeouts),
+				fallbacks: numberValue(row.fallbacks), processed: numberValue(row.processed),
+				updated: numberValue(row.updated), ignored: numberValue(row.ignored),
+				avg_ms: aggregate.avg_ms, p50_ms: aggregate.p50_ms,
+				p95_ms: aggregate.p95_ms, p99_ms: aggregate.p99_ms, max_ms: aggregate.max_ms,
+				query_count: numberValue(row.query_count), query_errors: numberValue(row.query_errors),
+			};
+		}),
 	};
 }
 
 async function resetMetrics() {
 	const tables = ["maintenance_route_metrics_hourly"];
+	if (OBSERVABILITY_ENABLED) tables.push("maintenance_operation_metrics_hourly");
 	if (METRICS_ENABLED) tables.push("metrics_queries", "metrics_requests");
 	await metricsQuery(`truncate table ${tables.join(", ")} restart identity`);
 	requestBuffer.splice(0, requestBuffer.length);
 	queryBuffer.splice(0, queryBuffer.length);
 	aggregateBuffer = new Map();
+	operationBuffer = new Map();
 	return { ok: true, resetAt: nowIso() };
 }
 
@@ -781,18 +1061,36 @@ async function resetMetricsController(_req, res, next) {
 module.exports = {
 	__testing: {
 		LATENCY_COLUMNS,
+		approximatePercentile,
 		approximateP95,
 		approximateP95Range,
 		hourBucket,
 		latencyBucketIndex,
 		mapAggregateRow,
+		normalizeQuery,
 		normalizePath,
+		queryErrorLabel,
+		limitQueryCardinality,
+		recordAggregateRequest,
+		getAggregateBuffer() {
+			return [...aggregateBuffer.values()];
+		},
+		resetAggregateBuffer() {
+			aggregateBuffer = new Map();
+		},
+		resetQueryCardinality() {
+			queryCardinalityBucket = "";
+			queryCardinality = new Set();
+		},
 	},
 	flushMetrics,
 	getMaintenanceMetrics,
+	getOperationMetrics,
 	initMetrics,
 	metricsController,
 	metricsMiddleware,
+	observeOperation,
+	recordOperation,
 	resetMetrics,
 	resetMetricsController,
 };

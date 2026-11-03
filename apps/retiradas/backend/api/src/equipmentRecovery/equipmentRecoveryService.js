@@ -1,4 +1,5 @@
 const db = require("../db");
+const metrics = require("../metrics");
 const {
 	classifyEquipmentByServiceSpeed,
 	cleanText,
@@ -753,7 +754,7 @@ async function applyMovementMatches(snapshots, query = {}) {
 	return { matched, probable };
 }
 
-async function runReprocess(jobId, query = {}) {
+async function runReprocessCore(jobId, query = {}) {
 	const mode = query.apply === false || query.mode === "SIMULATE" ? "SIMULATE" : "APPLY";
 	try {
 		await updateJob(jobId, {
@@ -812,6 +813,22 @@ async function runReprocess(jobId, query = {}) {
 		);
 		throw error;
 	}
+}
+
+async function runReprocess(jobId, query = {}) {
+	return metrics.observeOperation(
+		{
+			kind: "job",
+			name: "equipment_recovery",
+			stage: query.apply === false || query.mode === "SIMULATE" ? "simulate" : "apply",
+			summarize: (result) => ({
+				processed: result?.summary?.total || result?.summary?.persisted || 0,
+				updated: result?.summary?.persisted || 0,
+				ignored: result?.summary?.unclassified || 0,
+			}),
+		},
+		() => runReprocessCore(jobId, query),
+	);
 }
 
 async function createReprocessJob({ mode, startDate, endDate, createdBy, stage }) {

@@ -61,6 +61,10 @@ function getQueryRecorder() {
 	return global.__retiradasMetricsRecordQuery;
 }
 
+function getPoolRecorder() {
+	return global.__retiradasMetricsRecordPool;
+}
+
 function nowNs() {
 	return process.hrtime.bigint();
 }
@@ -69,22 +73,20 @@ function elapsedMs(startNs) {
 	return Number(process.hrtime.bigint() - startNs) / 1e6;
 }
 
-function isMetricsSuspended() {
-	return global.__retiradasMetricsSuspended === true;
-}
-
 function shouldIgnoreMetricQuery(text) {
 	const normalized = String(
 		typeof text === "object" && text?.text ? text.text : text || "",
 	).toLowerCase();
 	return (
 		normalized.includes("metrics_requests") ||
-		normalized.includes("metrics_queries")
+		normalized.includes("metrics_queries") ||
+		normalized.includes("maintenance_route_metrics_hourly") ||
+		normalized.includes("maintenance_operation_metrics_hourly")
 	);
 }
 
 function recordQueryMetric(text, startedNs, error = null) {
-	if (isMetricsSuspended() || shouldIgnoreMetricQuery(text)) return;
+	if (shouldIgnoreMetricQuery(text)) return;
 	const recorder = getQueryRecorder();
 	if (typeof recorder !== "function") return;
 	recorder({
@@ -94,8 +96,31 @@ function recordQueryMetric(text, startedNs, error = null) {
 	});
 }
 
-async function rawQuery(text, params) {
-	return pool.query(text, params);
+async function rawQuery(text, params, { skipMetrics = false } = {}) {
+	const client = await acquireClient({ skipMetrics });
+	const startedNs = nowNs();
+	try {
+		const result = await client.query(text, params);
+		if (!skipMetrics) recordQueryMetric(text, startedNs);
+		return result;
+	} catch (error) {
+		if (!skipMetrics) recordQueryMetric(text, startedNs, error);
+		throw error;
+	} finally {
+		client.release();
+	}
+}
+
+async function acquireClient({ skipMetrics = false } = {}) {
+	const startedNs = nowNs();
+	try {
+		const client = await pool.connect();
+		if (!skipMetrics) getPoolRecorder()?.({ waitMs: elapsedMs(startedNs) });
+		return client;
+	} catch (error) {
+		if (!skipMetrics) getPoolRecorder()?.({ waitMs: elapsedMs(startedNs), error });
+		throw error;
+	}
 }
 
 function normalizeContextUser(user = {}) {
@@ -134,37 +159,34 @@ async function query(text, params) {
 	const startedNs = nowNs();
 	const context = getRequestContext();
 	if (context) {
-		const client = await pool.connect();
+		const client = await acquireClient();
+		const transactionStartedNs = nowNs();
 		try {
 			await client.query("begin");
 			await applyRequestContext(client);
 			const result = await client.query(text, params);
 			await client.query("commit");
+			getPoolRecorder()?.({ transactionMs: elapsedMs(transactionStartedNs) });
 			recordQueryMetric(text, startedNs);
 			return result;
 		} catch (error) {
 			await client.query("rollback").catch(() => {});
+			getPoolRecorder()?.({ transactionMs: elapsedMs(transactionStartedNs), error });
 			recordQueryMetric(text, startedNs, error);
 			throw error;
 		} finally {
 			client.release();
 		}
 	}
-	try {
-		const result = await rawQuery(text, params);
-		recordQueryMetric(text, startedNs);
-		return result;
-	} catch (error) {
-		recordQueryMetric(text, startedNs, error);
-		throw error;
-	}
+	return rawQuery(text, params);
 }
 
 async function connect() {
-	const client = await pool.connect();
+	const client = await acquireClient();
 	const originalQuery = client.query.bind(client);
 	let inTransaction = false;
 	let contextApplied = false;
+	let transactionStartedNs = null;
 	client.query = async (...args) => {
 		const sql = String(
 			typeof args[0] === "object" && args[0]?.text
@@ -179,6 +201,7 @@ async function connect() {
 			if (sql === "begin" || sql.startsWith("begin ")) {
 				inTransaction = true;
 				contextApplied = false;
+				transactionStartedNs = nowNs();
 				await applyRequestContext({ query: originalQuery });
 				contextApplied = true;
 			} else if (
@@ -187,8 +210,12 @@ async function connect() {
 				sql === "rollback" ||
 				sql.startsWith("rollback ")
 			) {
+				if (transactionStartedNs) {
+					getPoolRecorder()?.({ transactionMs: elapsedMs(transactionStartedNs) });
+				}
 				inTransaction = false;
 				contextApplied = false;
+				transactionStartedNs = null;
 			} else if (inTransaction && !contextApplied) {
 				await applyRequestContext({ query: originalQuery });
 				contextApplied = true;
@@ -196,11 +223,25 @@ async function connect() {
 			recordQueryMetric(args[0], startedNs);
 			return result;
 		} catch (error) {
+			if (transactionStartedNs) {
+				getPoolRecorder()?.({ transactionMs: elapsedMs(transactionStartedNs), error });
+				transactionStartedNs = null;
+			}
 			recordQueryMetric(args[0], startedNs, error);
 			throw error;
 		}
 	};
 	return client;
+}
+
+function getPoolStats() {
+	return {
+		max: Number(pool.options?.max || 10),
+		total: Number(pool.totalCount || 0),
+		idle: Number(pool.idleCount || 0),
+		inUse: Math.max(0, Number(pool.totalCount || 0) - Number(pool.idleCount || 0)),
+		waiting: Number(pool.waitingCount || 0),
+	};
 }
 
 async function healthcheck() {
@@ -216,6 +257,7 @@ module.exports = {
 	connect,
 	closePool,
 	getRequestContext,
+	getPoolStats,
 	healthcheck,
 	query,
 	rawQuery,

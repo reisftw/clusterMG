@@ -21,6 +21,21 @@ jobs:
     runs-on: ubuntu-latest
     environment: release-retiradas
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: retiradas_test
+          POSTGRES_PASSWORD: retiradas_test
+          POSTGRES_DB: retiradas_observability_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U retiradas_test -d retiradas_observability_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -44,6 +59,11 @@ jobs:
           npm run lint:retiradas
           npm run test:retiradas
           npm run test:contracts
+
+      - name: Validate observability migration on PostgreSQL
+        env:
+          OBSERVABILITY_TEST_DATABASE_URL: postgres://retiradas_test:retiradas_test@127.0.0.1:5432/retiradas_observability_test
+        run: node --test apps/retiradas/backend/sql/113_observability_wave0.integration.test.js
 
       - name: Build production candidate
         run: |

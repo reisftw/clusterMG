@@ -6078,6 +6078,7 @@ function createApp() {
 
 		console.error("[api]", error);
 		const status = error.statusCode || 500;
+		res.locals.metricsErrorCode = `HTTP_${status}`;
 		const body = { error: error.statusCode ? error.message : "Erro interno." };
 		// DTOs (Fase C — vps/api/src/dtos/): erro de validacao tem uma forma
 		// propria (`.code`, `.fields`) — `error` continua sendo a mensagem

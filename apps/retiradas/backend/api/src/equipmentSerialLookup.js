@@ -1,5 +1,6 @@
 const DEFAULT_AUTOISP_URL = "https://autoisp.sempreinternet.com.br";
 const DEFAULT_HUBSOFT_URL = "https://sempre.hubsoft.com.br";
+const metrics = require("./metrics");
 const DEFAULT_TIMEOUT_MS = 90_000;
 const SESSION_TTL_MS = 20 * 60 * 1000;
 const documents = require("./documents");
@@ -325,6 +326,7 @@ async function searchAutoIspSerial(serial, credentials) {
 			try {
 				return await searchAutoIspOnusJson(context, serial, credentials);
 			} catch {
+				metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "session_fallback", fallback: true });
 				autoIspStorageState = null;
 				autoIspStorageExpiresAt = 0;
 			}
@@ -336,12 +338,14 @@ async function searchAutoIspSerial(serial, credentials) {
 		try {
 			return await searchAutoIspOnusJson(context, serial, credentials);
 		} catch {
+			metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "json_fallback", fallback: true });
 			// Alguns seriais aparecem melhor na busca direta de assinantes.
 		}
 		try {
 			const directResult = await searchAutoIspClientSearch(page, serial, credentials);
 			if (directResult.descricaoOlt) return directResult;
 		} catch {
+			metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "client_search_fallback", fallback: true });
 			// Continua com a tela legado abaixo.
 		}
 		return await searchAutoIspSerialByUi(page, serial, credentials);
@@ -624,6 +628,7 @@ async function searchHubsoftClientByRadius(loginRadius, credentials) {
 	try {
 		return await requestHubsoftClientByWebApi(loginRadius, credentials, auth);
 	} catch {
+		metrics.recordOperation({ kind: "integration", name: "hubsoft", stage: "web_api_fallback", fallback: true });
 		hubsoftTokenCache = null;
 		// Se a API web do painel mudar, ainda tentamos a tela como fallback.
 	}
@@ -725,7 +730,10 @@ async function lookupBySerial(serialRaw) {
 		throw error;
 	}
 
-	const autoIsp = await searchAutoIspSerial(serial, autoIspCredentials);
+	const autoIsp = await metrics.observeOperation(
+		{ kind: "integration", name: "autoisp", stage: "serial_lookup" },
+		() => searchAutoIspSerial(serial, autoIspCredentials),
+	);
 		const loginRadius = cleanText(autoIsp.descricaoOlt);
 		if (!loginRadius) {
 			const error = new Error("AutoISP nao retornou descricao na OLT.");
@@ -735,9 +743,9 @@ async function lookupBySerial(serialRaw) {
 		let hubsoft = null;
 		let hubsoftError = null;
 		try {
-			hubsoft = await searchHubsoftClientByRadius(
-				loginRadius,
-				hubsoftCredentials,
+			hubsoft = await metrics.observeOperation(
+				{ kind: "integration", name: "hubsoft", stage: "client_lookup" },
+				() => searchHubsoftClientByRadius(loginRadius, hubsoftCredentials),
 			);
 		} catch (error) {
 			hubsoftError = error;
