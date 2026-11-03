@@ -227,7 +227,7 @@ export default function AdminTechniciansMapPage() {
 
 	const loadOrders = useCallback(async () => {
 		try {
-			const response = await mapsService.points({ limit: 25000 });
+			const response = await mapsService.points();
 			setOrders((response.items || []).filter((item) => item.locationAvailable));
 			setConnected(true);
 		} catch (loadError) {

@@ -144,6 +144,27 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(params).toContain("%586377%");
 	});
 
+	it("nao limita o mapa principal e limita somente a previa da busca", () => {
+		expect(__testables.pointPreviewLimit({})).toBeNull();
+		expect(__testables.pointPreviewLimit({ limit: 5000 })).toBeNull();
+		expect(__testables.pointPreviewLimit({ preview: true, limit: 30 })).toBe(30);
+		expect(__testables.pointPreviewLimit({ search: "Betim", preview: true, limit: 24 })).toBe(24);
+		expect(__testables.pointPreviewLimit({ search: "Betim", preview: true, limit: 5000 })).toBe(100);
+	});
+
+	it("usa a ultima sincronizacao MAPA concluida e o fuso de Sao Paulo", () => {
+		const backend = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/backend/api/src/mapsV2/mapsV2Service.js"),
+			"utf8",
+		);
+		const page = fs.readFileSync(
+			path.join(process.cwd(), "apps/retiradas/frontend/src/modules/maps/pages/MapsPage.jsx"),
+			"utf8",
+		);
+		expect(backend).toContain("profile = 'MAPA' and status = 'COMPLETE'");
+		expect(page).toContain('timeZone: "America/Sao_Paulo"');
+	});
+
 	it("permite que a gestao visualize todas as retiradas sem habilitar solicitacao indevida", () => {
 		const params = [];
 		const filters = __testables.sourceFilters({
