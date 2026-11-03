@@ -1996,7 +1996,7 @@ function WeeklyProductionPanel({ data }) {
 	);
 }
 
-function FinesPanel({ data }) {
+function FinesPanel({ data, isChristmas }) {
 	const currentWeekFines = Number(data.currentWeek?.fines || 0);
 	return (
 		<section className="acomp-panel acomp-fines-panel">
@@ -2009,6 +2009,15 @@ function FinesPanel({ data }) {
 				<span>na semana atual</span>
 				<small>{formatNumber(data.totals.monthFines)} no mês</small>
 			</div>
+			{isChristmas ? (
+				<img
+					className="acomp-christmas-2026-fines-mascot"
+					src="/themes/christmas-2026/07-retorninho-presentes.webp"
+					alt=""
+					aria-hidden="true"
+					decoding="async"
+				/>
+			) : null}
 		</section>
 	);
 }
@@ -2633,7 +2642,7 @@ function AcompanhamentoMainGrid({
 			{sections.agenda ? (
 				<div className="acomp-agenda-stack">
 					<AgendaPanel eventos={dashboard.eventosAgenda} />
-					<FinesPanel data={diarioBoardData} />
+					<FinesPanel data={diarioBoardData} isChristmas={isChristmas} />
 				</div>
 			) : null}
 			{sections.entregasDiarias ? (
@@ -2692,15 +2701,7 @@ function AcompanhamentoMainGrid({
 						getRegionalPaceText(item, dashboard.regionalDaysRemaining)
 					}
 				>
-					{isChristmas ? (
-						<img
-							className="acomp-christmas-2026-regional-mascot"
-							src="/themes/christmas-2026/07-retorninho-presentes.webp"
-							alt=""
-							aria-hidden="true"
-							decoding="async"
-						/>
-					) : festiveTheme === "halloween" ? (
+					{festiveTheme === "halloween" ? (
 						<div className="acomp-entregas-regionais-mascot" aria-hidden="true">
 							<img
 								src="/themes/halloween/mascot/retorninho-bruxo.png?v=20261019-2"
