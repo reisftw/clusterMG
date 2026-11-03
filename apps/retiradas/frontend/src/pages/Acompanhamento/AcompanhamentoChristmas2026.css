@@ -186,7 +186,7 @@
 }
 
 .acomp-page.is-christmas-2026 .acomp-kpi > *,
-.acomp-page.is-christmas-2026 .acomp-panel > *:not(.acomp-status-illustration):not(.acomp-christmas-2026-tree):not(.acomp-christmas-2026-regional-mascot),
+.acomp-page.is-christmas-2026 .acomp-panel > *:not(.acomp-status-illustration):not(.acomp-christmas-2026-tree):not(.acomp-christmas-2026-fines-mascot),
 .acomp-page.is-christmas-2026 .acomp-day-highlights > * {
 	position: relative;
 	z-index: 2;
@@ -545,18 +545,18 @@
 }
 
 .acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel .acomp-ranking-list {
-	padding-bottom: clamp(230px, 29vh, 360px);
+	padding-bottom: 0;
 }
 
-.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel > .acomp-christmas-2026-regional-mascot {
+.acomp-page.is-christmas-2026 .acomp-fines-panel > .acomp-christmas-2026-fines-mascot {
 	position: absolute;
-	right: clamp(-18px, -0.8vw, -7px);
-	bottom: clamp(-18px, -1.2vh, -5px);
+	right: 4px;
+	bottom: 0;
 	z-index: 2;
 	display: block;
-	width: min(94%, 270px);
+	width: min(47%, 112px);
 	height: auto;
-	max-height: 43%;
+	max-height: 82%;
 	object-fit: contain;
 	object-position: right bottom;
 	pointer-events: none;
@@ -703,7 +703,7 @@
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel .acomp-ranking-list {
-		padding-bottom: 150px;
+		padding-bottom: 0;
 	}
 }
 
@@ -905,12 +905,7 @@
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel .acomp-ranking-list {
-		padding-bottom: 168px;
-	}
-
-	.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel > .acomp-christmas-2026-regional-mascot {
-		width: min(96%, 230px);
-		max-height: 40%;
+		padding-bottom: 0;
 	}
 }
 
@@ -1003,14 +998,7 @@
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel .acomp-ranking-list {
-		padding-bottom: 210px;
-	}
-
-	.acomp-page.is-christmas-2026 .acomp-entregas-regionais-panel > .acomp-christmas-2026-regional-mascot {
-		right: -10px;
-		bottom: -8px;
-		width: min(82%, 280px);
-		max-height: 42%;
+		padding-bottom: 0;
 	}
 
 	.acomp-page.is-christmas-2026 .acomp-ticker {
