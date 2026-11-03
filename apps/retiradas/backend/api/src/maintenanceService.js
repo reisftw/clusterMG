@@ -384,10 +384,11 @@ async function getPresenceMetrics() {
 
 async function getDashboard({ hours = 24 } = {}) {
 	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
-	const [state, status, requestMetrics, serviceWorker, presence, history] = await Promise.all([
+	const [state, status, requestMetrics, operations, serviceWorker, presence, history] = await Promise.all([
 		getPublicStatus({ force: true }),
 		apiStatus.getApiStatus(),
 		metrics.getMaintenanceMetrics({ hours: safeHours }),
+		metrics.getOperationMetrics({ hours: safeHours }),
 		getServiceWorkerMetrics(safeHours),
 		getPresenceMetrics(),
 		listHistory({ page: 1, limit: 8 }),
@@ -396,6 +397,10 @@ async function getDashboard({ hours = 24 } = {}) {
 		state,
 		status,
 		metrics: requestMetrics,
+		observability: {
+			database: db.getPoolStats(),
+			operations,
+		},
 		serviceWorker,
 		presence,
 		history,

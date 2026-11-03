@@ -1,4 +1,5 @@
 const db = require("./db");
+const metrics = require("./metrics");
 const documents = require("./documents");
 const mapSyncUpdates = require("./mapSyncUpdatesService");
 const operationalImports = require("./operationalImports");
@@ -2606,7 +2607,7 @@ function assertValidInternalProfile(profile) {
 	assertValidProfile(profile);
 }
 
-async function executeProfileRun(run, profile, options = {}, user = {}) {
+async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	let lockAcquired = false;
 	let previousMapSnapshot = null;
@@ -2766,6 +2767,22 @@ async function executeProfileRun(run, profile, options = {}, user = {}) {
 	} finally {
 		if (lockAcquired) await releaseLock(profile, run.id).catch(() => {});
 	}
+}
+
+async function executeProfileRun(run, profile, options = {}, user = {}) {
+	return metrics.observeOperation(
+		{
+			kind: "job",
+			name: "hubsoft_sync",
+			stage: profile,
+			summarize: (result) => ({
+				processed: result?.received_rows || 0,
+				updated: (result?.inserted || 0) + (result?.updated || 0),
+				ignored: (result?.duplicate_rows || 0) + (result?.deactivated || 0),
+			}),
+		},
+		() => executeProfileRunCore(run, profile, options, user),
+	);
 }
 
 async function runProfile(profile, options = {}, user = {}) {

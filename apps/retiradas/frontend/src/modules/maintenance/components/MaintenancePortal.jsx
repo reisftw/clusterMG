@@ -104,6 +104,11 @@ function RequestsChart({ items = [] }) {
 function OverviewTab({ dashboard }) {
 	const totals = dashboard?.metrics?.totals || {};
 	const queries = dashboard?.metrics?.queries || {};
+	const pool = dashboard?.metrics?.pool || {};
+	const livePool = dashboard?.observability?.database || {};
+	const operations = dashboard?.observability?.operations?.items || [];
+	const integrations = operations.filter((item) => item.kind === "integration");
+	const jobs = operations.filter((item) => item.kind === "job");
 	const presence = dashboard?.presence || {};
 	const status = dashboard?.status || {};
 	const sw = dashboard?.serviceWorker || {};
@@ -116,9 +121,13 @@ function OverviewTab({ dashboard }) {
 				<MetricCard icon={Users} label="Usuarios online" value={number(presence.online_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
 				<MetricCard icon={Eye} label="Visitas hoje" value={number(sw.visits_today)} note={`${number(sw.unique_visitors_today)} dispositivo(s) unico(s)`} tone="blue" />
 				<MetricCard icon={Activity} label="Requisicoes" value={number(totals.total_requests)} note={`Ultimas ${dashboard.hours || 24} horas`} />
+				<MetricCard icon={Gauge} label="Requisicoes/min" value={number(totals.requests_per_minute)} note="Media da janela selecionada" />
 				<MetricCard icon={AlertTriangle} label="Erros 5xx" value={number(totals.errors_5xx)} note={`${number(totals.errors_4xx)} respostas 4xx operacionais · ${number(totals.expected_errors_4xx)} esperadas`} tone={Number(totals.errors_5xx) ? "red" : "green"} />
 				<MetricCard icon={Gauge} label="Latencia p95" value={latencyRange(totals)} note={`Faixa estimada · media de ${number(totals.avg_ms)} ms`} tone={p95Tone} />
 				<MetricCard icon={Database} label="Consultas SQL" value={number(queries.total_queries)} note={`${number(queries.errors)} com erro`} tone={Number(queries.errors) ? "red" : "blue"} />
+				<MetricCard icon={Database} label="Pool PostgreSQL" value={`${number(livePool.inUse)}/${number(livePool.max)}`} note={`${number(livePool.waiting)} aguardando · ${number(livePool.idle)} ociosa(s)`} tone={Number(livePool.waiting) ? "orange" : "green"} />
+				<MetricCard icon={Clock3} label="Espera do pool" value={`${number(pool.wait_avg_ms)} ms`} note={`Max ${number(pool.wait_max_ms)} ms · ${number(pool.timeouts)} timeout(s)`} tone={Number(pool.timeouts) ? "red" : Number(pool.wait_max_ms) > 500 ? "orange" : "green"} />
+				<MetricCard icon={Download} label="Resposta HTTP" value={fileSize(totals.response_bytes)} note={`P50 ${number(totals.p50_ms)} ms · P99 ${number(totals.p99_ms)} ms`} />
 				<MetricCard icon={Smartphone} label="Service worker" value={number(sw.clients)} note={`${number(sw.failures)} falha(s) critica(s) · ${number(sw.network_failures)} oscilacao(oes) de rede`} tone={Number(sw.failures) ? "red" : Number(sw.network_failures) ? "orange" : "green"} />
 			</section>
 
@@ -151,6 +160,17 @@ function OverviewTab({ dashboard }) {
 				<div className="maintenance-panel-heading"><div><Activity size={20} /><span><strong>Rotas com maior impacto</strong><small>Rotas acessadas no periodo, consolidadas sem registrar acessos individuais.</small></span></div></div>
 				<div className="maintenance-table-wrap"><table><thead><tr><th>Metodo</th><th>Rota</th><th>Acessos</th><th>Media</th><th>P95</th><th>Erros 5xx</th></tr></thead><tbody>{(dashboard?.metrics?.topRoutes || []).map((item) => <tr key={`${item.method}-${item.route}`}><td><b>{item.method}</b></td><td><code>{item.route}</code></td><td>{number(item.requests)}</td><td>{number(item.avg_ms)} ms</td><td>{number(item.p95_ms)} ms</td><td className={Number(item.errors_5xx) ? "danger" : ""}>{number(item.errors_5xx)}</td></tr>)}</tbody></table>{!(dashboard?.metrics?.topRoutes || []).length ? <p className="maintenance-empty">As rotas aparecerao apos os primeiros acessos ao sistema.</p> : null}</div>
 			</section>
+
+			<div className="maintenance-two-columns">
+				<section className="maintenance-panel">
+					<div className="maintenance-panel-heading"><div><ExternalLink size={20} /><span><strong>Integracoes externas</strong><small>Tempos agregados por provedor e etapa, sem payloads ou identificadores.</small></span></div></div>
+					<div className="maintenance-table-wrap"><table><thead><tr><th>Provedor</th><th>Etapa</th><th>Chamadas</th><th>P95</th><th>Falhas</th><th>Timeouts</th></tr></thead><tbody>{integrations.map((item) => <tr key={`${item.name}-${item.stage}`}><td><b>{item.name}</b></td><td>{item.stage}</td><td>{number(item.calls)}</td><td>{number(item.p95_ms)} ms</td><td className={Number(item.failures) ? "danger" : ""}>{number(item.failures)}</td><td>{number(item.timeouts)}</td></tr>)}</tbody></table>{!integrations.length ? <p className="maintenance-empty">Ainda nao ha execucoes de integracoes nesta janela.</p> : null}</div>
+				</section>
+				<section className="maintenance-panel">
+					<div className="maintenance-panel-heading"><div><Clock3 size={20} /><span><strong>Jobs criticos</strong><small>Duracao, volume processado e falhas das sincronizacoes observadas.</small></span></div></div>
+					<div className="maintenance-table-wrap"><table><thead><tr><th>Job</th><th>Etapa</th><th>Execucoes</th><th>P95</th><th>Processados</th><th>Falhas</th></tr></thead><tbody>{jobs.map((item) => <tr key={`${item.name}-${item.stage}`}><td><b>{item.name}</b></td><td>{item.stage}</td><td>{number(item.calls)}</td><td>{number(item.p95_ms)} ms</td><td>{number(item.processed)}</td><td className={Number(item.failures) ? "danger" : ""}>{number(item.failures)}</td></tr>)}</tbody></table>{!jobs.length ? <p className="maintenance-empty">Ainda nao ha execucoes de jobs nesta janela.</p> : null}</div>
+				</section>
+			</div>
 		</div>
 	);
 }
