@@ -144,7 +144,6 @@ export function useAcompanhamentoResumoData(options = {}) {
 
 	useEffect(() => {
 		mounted.current = true;
-		let refreshTimer = null;
 		let refreshInterval = null;
 
 		const loadData = (force = false, { silent = false } = {}) => {
@@ -166,9 +165,6 @@ export function useAcompanhamentoResumoData(options = {}) {
 		};
 
 		loadData(Boolean(refreshKey), { silent: Boolean(refreshKey) });
-		refreshTimer = window.setTimeout(() => {
-			loadData(true, { silent: true });
-		}, 750);
 		if (refreshIntervalMs > 0) {
 			refreshInterval = window.setInterval(() => {
 				loadData(true, { silent: true });
@@ -191,7 +187,6 @@ export function useAcompanhamentoResumoData(options = {}) {
 
 		return () => {
 			mounted.current = false;
-			if (refreshTimer) window.clearTimeout(refreshTimer);
 			if (refreshInterval) window.clearInterval(refreshInterval);
 			unsubscribeRealtime();
 			window.removeEventListener(UPDATED_EVENT, handleUpdated);
