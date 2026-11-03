@@ -81,7 +81,10 @@ jobs:
       - name: Validate observability migration on PostgreSQL
         env:
           OBSERVABILITY_TEST_DATABASE_URL: postgres://retiradas_test:retiradas_test@127.0.0.1:5432/retiradas_observability_test
-        run: node --test apps/retiradas/backend/sql/113_observability_wave0.integration.test.js
+        run: >-
+          node --test
+          apps/retiradas/backend/sql/113_observability_wave0.integration.test.js
+          apps/retiradas/backend/sql/119_performance_indexes.integration.test.js
 
       - name: Validate workflow contracts
         run: npm run test:contracts
