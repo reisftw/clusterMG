@@ -10,7 +10,8 @@ require.cache[auditPath] = { id: auditPath, filename: auditPath, loaded: true, e
 require.cache[centralPath] = { id: centralPath, filename: centralPath, loaded: true, exports: {} };
 require.cache[alertsPath] = { id: alertsPath, filename: alertsPath, loaded: true, exports: {} };
 
-const { buildNeighborhoodDistributionPlan } = require("./tentativasService").__testables;
+const tentativasService = require("./tentativasService");
+const { buildNeighborhoodDistributionPlan } = tentativasService.__testables;
 
 const technicians = [
 	{ user_id: "tech-a", user_email: "a@example.com", user_name: "Ana" },
@@ -74,4 +75,36 @@ test("ao restar um tecnico ele recebe todos os bairros da cidade", () => {
 	assert.equal(plan.length, 2);
 	assert.ok(plan.every((item) => item.user_id === "tech-a"));
 	assert.equal(plan.reduce((total, item) => total + item.opportunities, 0), 21);
+});
+
+test("pre-agrega oportunidades antes de cruzar a distribuicao por bairro", async () => {
+	const db = require("../db");
+	db.query = async (sql, params) => {
+		assert.match(sql, /opportunity_counts as materialized/i);
+		assert.match(sql, /left join opportunity_counts o/i);
+		assert.deepEqual(params, ["^55[0-9]{10,11}$"]);
+		return {
+			rows: [{
+				technician_user_id: "tech-a",
+				technician_name: "Ana",
+				cidade: "Betim",
+				neighborhoods: 2,
+				opportunities: 20,
+				worked: 5,
+				pending: 15,
+			}],
+		};
+	};
+
+	const result = await tentativasService.listDistribution();
+	assert.deepEqual(result.items[0], {
+		technician_user_id: "tech-a",
+		technician_name: "Ana",
+		cidade: "Betim",
+		neighborhoods: 2,
+		opportunities: 20,
+		worked: 5,
+		pending: 15,
+		coverage: 25,
+	});
 });
