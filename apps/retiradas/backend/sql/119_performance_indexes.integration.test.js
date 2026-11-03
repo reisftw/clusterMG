@@ -42,7 +42,14 @@ test("performance indexes apply concurrently and remain idempotent", { skip: !DA
 		}
 
 		const result = await client.query(
-			"select indexname from pg_indexes where schemaname = $1 order by indexname",
+			`select indexname
+			   from pg_indexes
+			  where schemaname = $1
+			    and tablename in (
+			      'maps_geocode_jobs', 'maps_geocode_cache',
+			      'mensageria_historico', 'mensageria_callbacks'
+			    )
+			  order by indexname`,
 			[schema],
 		);
 		assert.deepEqual(result.rows.map((row) => row.indexname), [
