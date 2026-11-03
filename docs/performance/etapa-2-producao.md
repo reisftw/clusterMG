@@ -26,5 +26,21 @@ codigo. ADM e Financeiro permanecem fora do escopo.
 
 ## Resultado
 
-Pendente de CI e publicacao. Este campo deve ser atualizado somente com o ID do
-workflow, commit e versao realmente observados em producao.
+- PR integrado: `#1`.
+- Commit publicado: `c172d2d0de0d4a40080edfd877ca9a190d90d2ff`.
+- Workflow: `41690131884`.
+- Versao: `v2026.11.03-performance-etapa2`.
+- Frontend ativo em:
+  `/var/www/retiradas/releases/v2026.11.03-performance-etapa2-c172d2d/dist`.
+- Backend e Nginx: ativos.
+- Migrations aplicadas: 114, 115, 116, 117, 118 e 119.
+- Backup anterior as migrations:
+  `/opt/retiradas/database-backups/v2026.11.03-performance-etapa2-c172d2d.dump`.
+- Backup validado e com 356.764.046 bytes.
+- Rollback da aplicacao preservado em `/opt/retiradas/backend-rollbacks` e no
+  ponteiro `PREVIOUS_RELEASE` da release do frontend.
+- Mercado, Operacao, ADM e Financeiro nao foram publicados.
+
+O pipeline terminou com sucesso e a verificacao independente confirmou health
+interno e HTTPS, versao incorporada no bundle, indices validos, ausencia de
+locks e ausencia de erros novos no journal do servico.
