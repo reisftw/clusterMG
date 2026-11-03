@@ -50,3 +50,20 @@ for (const status of ["FAILED", "FAILED_AUTH", "INCOMPLETE", "SCHEMA_CHANGED", "
 		assert.match(calls[0], /^select /);
 	});
 }
+
+test("consolida chamadas simultaneas e reutiliza o resumo operacional por 15 segundos", async () => {
+	calls = [];
+	const [first, concurrent] = await Promise.all([
+		service.getOperationalSummary({ date: "2026-11-03" }),
+		service.getOperationalSummary({ date: "2026-11-03" }),
+	]);
+	const queryCount = calls.length;
+
+	assert.deepEqual(concurrent, first);
+	assert.ok(queryCount > 0);
+	assert.deepEqual(
+		await service.getOperationalSummary({ date: "2026-11-03" }),
+		first,
+	);
+	assert.equal(calls.length, queryCount);
+});

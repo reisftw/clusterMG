@@ -9,6 +9,14 @@ const META_PROFILES = ["META_D0", "META_D_MINUS_ONE", "META_AUDIT_DAILY"];
 const VALID_MAP_STATUS = "COMPLETE";
 const CLASSIFIED_CHANNELS = ["RETIRADA", "REGIONAL", "AA"];
 const HIGHLIGHT_CITY_LIMIT = 5;
+const configuredOperationalSummaryCacheTtl = Number(
+	process.env.OPERATIONAL_SUMMARY_CACHE_TTL_MS || 15_000,
+);
+const OPERATIONAL_SUMMARY_CACHE_TTL_MS = Number.isFinite(configuredOperationalSummaryCacheTtl)
+	? Math.max(0, configuredOperationalSummaryCacheTtl)
+	: 15_000;
+const operationalSummaryCache = new Map();
+const operationalSummaryPending = new Map();
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -698,8 +706,7 @@ async function getClosedCities(date = todaySaoPaulo()) {
 	);
 }
 
-async function getOperationalSummary(query = {}) {
-	const date = normalizeDate(query.date);
+async function loadOperationalSummary(date) {
 	const weekDate = date;
 	const [lastMapUpdate, dailyProduction, weeklyProduction, hourlyProduction, topRanking, openedCities, closedCities, activeOpenCities, activeOpenRegionals, activeOpenCounts] =
 		await Promise.all([
@@ -744,6 +751,29 @@ async function getOperationalSummary(query = {}) {
 			items: ["dailyProduction", "weeklyProduction"],
 		},
 	};
+}
+
+async function getOperationalSummary(query = {}) {
+	const date = normalizeDate(query.date);
+	const now = Date.now();
+	const cached = operationalSummaryCache.get(date);
+	if (cached && cached.expiresAt > now) return cached.value;
+	for (const [key, entry] of operationalSummaryCache) {
+		if (entry.expiresAt <= now) operationalSummaryCache.delete(key);
+	}
+	if (operationalSummaryPending.has(date)) return operationalSummaryPending.get(date);
+
+	const pending = loadOperationalSummary(date)
+		.then((value) => {
+			operationalSummaryCache.set(date, {
+				value,
+				expiresAt: Date.now() + OPERATIONAL_SUMMARY_CACHE_TTL_MS,
+			});
+			return value;
+		})
+		.finally(() => operationalSummaryPending.delete(date));
+	operationalSummaryPending.set(date, pending);
+	return pending;
 }
 
 module.exports = {

@@ -2016,22 +2016,31 @@ async function listDistribution() {
 			  from tentativas_technician_cities
 			 where active = true
 			   and (permanent = true or current_date between coalesce(valid_from, current_date) and coalesce(valid_until, current_date))
+		), opportunity_counts as materialized (
+			select o.cidade_normalizada,
+			       coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__') as bairro_grupo,
+			       count(*)::int as opportunities,
+			       count(*) filter (where o.attempt_count > 0)::int as worked,
+			       count(*) filter (where o.attempt_count = 0)::int as pending
+			  from tentativas_opportunities o
+			 where o.active = true
+			   and coalesce(o.telefone_digits, '') ~ $1
+			   and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
+			 group by o.cidade_normalizada,
+			          coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
 		)
 		select k.technician_user_id, k.technician_name, k.cidade,
 		        count(distinct l.bairro_grupo)::int as neighborhoods,
-		        count(o.id) as opportunities,
-		        count(o.id) filter (where o.attempt_count > 0) as worked,
-		        count(o.id) filter (where o.attempt_count = 0) as pending
+		        coalesce(sum(o.opportunities), 0)::int as opportunities,
+		        coalesce(sum(o.worked), 0)::int as worked,
+		        coalesce(sum(o.pending), 0)::int as pending
 		   from distribution_keys k
 		   left join tentativas_neighborhood_locks l
 		     on l.cidade_normalizada = k.cidade_normalizada
 		    and (l.technician_user_id = k.technician_user_id or lower(coalesce(l.technician_email, '')) = lower(coalesce(k.technician_email, '')))
-		   left join tentativas_opportunities o
+		   left join opportunity_counts o
 		     on o.cidade_normalizada = k.cidade_normalizada
-		    and coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__') = l.bairro_grupo
-		    and o.active = true
-		    and coalesce(o.telefone_digits, '') ~ $1
-		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
+		    and o.bairro_grupo = l.bairro_grupo
 		  group by k.technician_user_id, k.technician_name, k.cidade
 		  order by k.technician_name, k.cidade
 		  limit 500`,

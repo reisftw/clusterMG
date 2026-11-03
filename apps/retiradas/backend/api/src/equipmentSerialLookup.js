@@ -12,6 +12,21 @@ let hubsoftStorageState = null;
 let hubsoftStorageExpiresAt = 0;
 let hubsoftTokenCache = null;
 
+function createSingleFlight() {
+	const pendingByKey = new Map();
+	return (key, loader) => {
+		if (pendingByKey.has(key)) return pendingByKey.get(key);
+		const pending = Promise.resolve().then(loader);
+		pendingByKey.set(key, pending);
+		return pending.finally(() => {
+			if (pendingByKey.get(key) === pending) pendingByKey.delete(key);
+		});
+	};
+}
+
+const runHubsoftAuthSingleFlight = createSingleFlight();
+const runSerialLookupSingleFlight = createSingleFlight();
+
 function cleanText(value) {
 	return String(value || "").replace(/\s+/g, " ").trim();
 }
@@ -557,6 +572,7 @@ async function requestHubsoftClientByWebApi(loginRadius, credentials, auth) {
 			Accept: "application/json",
 			Authorization: `${auth.tokenType || "Bearer"} ${auth.accessToken}`,
 		},
+		signal: AbortSignal.timeout(30_000),
 	}).then(async (response) => {
 		const text = await response.text();
 		const data = text ? JSON.parse(text) : null;
@@ -593,34 +609,43 @@ async function getHubsoftWebAuth(credentials) {
 		return hubsoftTokenCache.auth;
 	}
 
-	const context = await newCachedContext(
-		hubsoftStorageState,
-		hubsoftStorageExpiresAt,
-	);
-	const page = await context.newPage();
-	try {
-		await loginHubsoft(page, credentials);
-		const auth = await readHubsoftAuthToken(page);
-		if (!auth.accessToken) {
-			const error = new Error("Token web do HubSoft nao encontrado apos login.");
-			error.statusCode = 401;
-			throw error;
+	return runHubsoftAuthSingleFlight(cacheKey, async () => {
+		if (
+			hubsoftTokenCache?.cacheKey === cacheKey &&
+			hubsoftTokenCache.expiresAt > Date.now()
+		) {
+			return hubsoftTokenCache.auth;
 		}
-		const expiresAt = new Date(auth.expiresAt).getTime();
-		const fallbackExpiresAt = Date.now() + SESSION_TTL_MS;
-		hubsoftTokenCache = {
-			cacheKey,
-			auth,
-			expiresAt: Number.isFinite(expiresAt)
-				? Math.min(expiresAt - 60_000, fallbackExpiresAt)
-				: fallbackExpiresAt,
-		};
-		hubsoftStorageState = await context.storageState();
-		hubsoftStorageExpiresAt = Date.now() + SESSION_TTL_MS;
-		return auth;
-	} finally {
-		await context.close().catch(() => {});
-	}
+
+		const context = await newCachedContext(
+			hubsoftStorageState,
+			hubsoftStorageExpiresAt,
+		);
+		const page = await context.newPage();
+		try {
+			await loginHubsoft(page, credentials);
+			const auth = await readHubsoftAuthToken(page);
+			if (!auth.accessToken) {
+				const error = new Error("Token web do HubSoft nao encontrado apos login.");
+				error.statusCode = 401;
+				throw error;
+			}
+			const expiresAt = new Date(auth.expiresAt).getTime();
+			const fallbackExpiresAt = Date.now() + SESSION_TTL_MS;
+			hubsoftTokenCache = {
+				cacheKey,
+				auth,
+				expiresAt: Number.isFinite(expiresAt)
+					? Math.min(expiresAt - 60_000, fallbackExpiresAt)
+					: fallbackExpiresAt,
+			};
+			hubsoftStorageState = await context.storageState();
+			hubsoftStorageExpiresAt = Date.now() + SESSION_TTL_MS;
+			return auth;
+		} finally {
+			await context.close().catch(() => {});
+		}
+	});
 }
 
 async function searchHubsoftClientByRadius(loginRadius, credentials) {
@@ -683,14 +708,7 @@ async function searchHubsoftClientByRadius(loginRadius, credentials) {
 	}
 }
 
-async function lookupBySerial(serialRaw) {
-	const serial = normalizeSerial(serialRaw);
-	if (serial.length < 8) {
-		const error = new Error("Informe um serial valido.");
-		error.statusCode = 400;
-		throw error;
-	}
-
+async function performSerialLookup(serial) {
 	const autoIspCredentials = {
 		baseUrl: String(process.env.AUTOISP_BASE_URL || DEFAULT_AUTOISP_URL).replace(/\/+$/, ""),
 		username: resolveCredential(
@@ -734,41 +752,55 @@ async function lookupBySerial(serialRaw) {
 		{ kind: "integration", name: "autoisp", stage: "serial_lookup" },
 		() => searchAutoIspSerial(serial, autoIspCredentials),
 	);
-		const loginRadius = cleanText(autoIsp.descricaoOlt);
-		if (!loginRadius) {
-			const error = new Error("AutoISP nao retornou descricao na OLT.");
-			error.statusCode = 404;
-			throw error;
-		}
-		let hubsoft = null;
-		let hubsoftError = null;
-		try {
-			hubsoft = await metrics.observeOperation(
-				{ kind: "integration", name: "hubsoft", stage: "client_lookup" },
-				() => searchHubsoftClientByRadius(loginRadius, hubsoftCredentials),
-			);
-		} catch (error) {
-			hubsoftError = error;
-		}
-		return {
-			ok: true,
-			partial: Boolean(hubsoftError),
-			serial,
-			autoIsp,
+	const loginRadius = cleanText(autoIsp.descricaoOlt);
+	if (!loginRadius) {
+		const error = new Error("AutoISP nao retornou descricao na OLT.");
+		error.statusCode = 404;
+		throw error;
+	}
+	let hubsoft = null;
+	let hubsoftError = null;
+	try {
+		hubsoft = await metrics.observeOperation(
+			{ kind: "integration", name: "hubsoft", stage: "client_lookup" },
+			() => searchHubsoftClientByRadius(loginRadius, hubsoftCredentials),
+		);
+	} catch (error) {
+		hubsoftError = error;
+	}
+	return {
+		ok: true,
+		partial: Boolean(hubsoftError),
+		serial,
+		autoIsp,
+		loginRadius,
+		hubsoft: hubsoft || {
+			found: false,
 			loginRadius,
-			hubsoft: hubsoft || {
-				found: false,
-				loginRadius,
-				error: hubsoftError?.message || "Cliente nao encontrado no HubSoft.",
-			},
-			message: hubsoftError
-				? "Serial encontrado no AutoISP, mas o cliente ainda nao foi localizado no HubSoft."
-				: "",
-			testSerial: "4857544361b277b7",
-		};
+			error: hubsoftError?.message || "Cliente nao encontrado no HubSoft.",
+		},
+		message: hubsoftError
+			? "Serial encontrado no AutoISP, mas o cliente ainda nao foi localizado no HubSoft."
+			: "",
+		testSerial: "4857544361b277b7",
+	};
+}
+
+async function lookupBySerial(serialRaw) {
+	const serial = normalizeSerial(serialRaw);
+	if (serial.length < 8) {
+		const error = new Error("Informe um serial valido.");
+		error.statusCode = 400;
+		throw error;
+	}
+	return runSerialLookupSingleFlight(serial, () => performSerialLookup(serial));
 }
 
 module.exports = {
 	lookupBySerial,
 	normalizeSerial,
+	_testing: {
+		createSingleFlight,
+		requestHubsoftClientByWebApi,
+	},
 };
