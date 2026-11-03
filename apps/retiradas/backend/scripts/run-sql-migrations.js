@@ -24,6 +24,10 @@ function getMigrationVersion(fileName) {
 	return String(fileName || "").split("_")[0] || "";
 }
 
+function isNoTransactionMigration(sql) {
+	return /^\s*--\s*migration:no-transaction\b/im.test(String(sql || ""));
+}
+
 async function listMigrationFiles() {
 	const entries = await fs.readdir(sqlDir);
 	return entries
@@ -87,10 +91,31 @@ async function applyMigration(client, fileName) {
 	const version = getMigrationVersion(fileName);
 	const filePath = path.join(sqlDir, fileName);
 	const sql = await fs.readFile(filePath, "utf8");
+	const noTransaction = isNoTransactionMigration(sql);
+
+	console.log(`[migrations] Aplicando ${fileName}`);
+	if (noTransaction) {
+		try {
+			await client.query("set lock_timeout = '5s'");
+			await client.query("set statement_timeout = '15min'");
+			await client.query(sql);
+			await client.query(
+				`insert into schema_migrations (version, file_name)
+       values ($1, $2)
+       on conflict (version) do update set
+         file_name = excluded.file_name,
+         applied_at = now()`,
+				[version, fileName],
+			);
+		} finally {
+			await client.query("reset lock_timeout").catch(() => {});
+			await client.query("reset statement_timeout").catch(() => {});
+		}
+		return;
+	}
 
 	await client.query("begin");
 	try {
-		console.log(`[migrations] Aplicando ${fileName}`);
 		await client.query(sql);
 		await client.query(
 			`insert into schema_migrations (version, file_name)
@@ -128,12 +153,14 @@ module.exports = {
 	sqlDir,
 	getConnectionConfig,
 	getMigrationVersion,
+	isNoTransactionMigration,
 	listMigrationFiles,
 	tableExists,
 	ensureMigrationTable,
 	getAppliedMigrations,
 	getPendingMigrations,
 	maybeBaselineExistingDatabase,
+	applyMigration,
 };
 
 // So roda automaticamente quando chamado direto (`node run-sql-migrations.js`
