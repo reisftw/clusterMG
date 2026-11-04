@@ -2502,6 +2502,122 @@
 	margin-top: 12px;
 }
 
+.acomp-custom-sound-form {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 10px;
+	margin-top: 14px;
+}
+
+.acomp-custom-sound-form > label:first-child {
+	color: #cbd5e1;
+	font-size: 12px;
+	font-weight: 900;
+	text-transform: uppercase;
+}
+
+.acomp-custom-sound-form input[type="text"] {
+	display: block;
+	width: 100%;
+	margin-top: 7px;
+	border: 1px solid rgba(148, 163, 184, 0.24);
+	border-radius: 12px;
+	background: rgba(2, 6, 23, 0.52);
+	padding: 11px 12px;
+	color: #f8fafc;
+	font-size: 14px;
+	font-weight: 800;
+	outline: none;
+}
+
+.acomp-custom-sound-upload {
+	display: inline-flex;
+	min-height: 42px;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	border-radius: 12px;
+	background: #ff6b00;
+	padding: 0 14px;
+	color: #fff;
+	font-size: 13px;
+	font-weight: 900;
+	cursor: pointer;
+}
+
+.acomp-custom-sound-upload.is-disabled {
+	opacity: 0.55;
+	pointer-events: none;
+}
+
+.acomp-custom-sound-upload input {
+	display: none;
+}
+
+.acomp-custom-sound-requirements,
+.acomp-custom-sound-error {
+	margin: 8px 0 0;
+	color: #94a3b8;
+	font-size: 11px;
+	font-weight: 800;
+}
+
+.acomp-custom-sound-error {
+	color: #fca5a5;
+}
+
+.acomp-custom-sound-list {
+	display: grid;
+	gap: 7px;
+	margin-top: 12px;
+}
+
+.acomp-custom-sound-list > div {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 38px 38px;
+	gap: 5px;
+	border: 1px solid rgba(148, 163, 184, 0.2);
+	border-radius: 12px;
+	background: rgba(2, 6, 23, 0.42);
+	padding: 4px;
+}
+
+.acomp-custom-sound-list > div.is-active {
+	border-color: rgba(250, 204, 21, 0.56);
+	background: rgba(217, 119, 6, 0.18);
+}
+
+.acomp-custom-sound-list button {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	border: 0;
+	border-radius: 8px;
+	background: transparent;
+	padding: 8px;
+	color: #e2e8f0;
+	font-weight: 850;
+}
+
+.acomp-custom-sound-list button:first-child {
+	justify-content: flex-start;
+}
+
+.acomp-custom-sound-list button span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+	.acomp-custom-sound-form {
+		grid-template-columns: 1fr;
+	}
+}
+
 .acomp-ad-upload-row {
 	display: flex;
 	align-items: center;

@@ -17,6 +17,7 @@ import {
 	Trash2,
 	TrendingUp,
 	Trophy,
+	Upload,
 	Volume2,
 	X,
 } from "lucide-react";
@@ -57,14 +58,17 @@ import { useMatchPublico } from "../PainelPublico/hooks/useMatchPublico";
 import { useRetiradas } from "../PainelPublico/hooks/useRetiradas";
 import {
 	deleteAcompanhamentoAd,
+	ACOMPANHAMENTO_SOUND_MAX_ITEMS,
 	loadAcompanhamentoConfig,
 	saveAcompanhamentoConfig,
 	uploadAcompanhamentoAd,
+	uploadAcompanhamentoSound,
 } from "./acompanhamentoConfigService";
 import {
 	APPOINTMENT_NOTICE_SOUND_MODES,
 	normalizeAppointmentNoticeSound,
 	playChristmasAppointmentTone,
+	resolveAppointmentNoticeSound,
 } from "./appointmentNoticeSound";
 import {
 	invalidateAcompanhamentoResumoCache,
@@ -179,6 +183,7 @@ const DEFAULT_CONFIG = {
 	appointmentNotice: {
 		durationSeconds: 20,
 		sound: "christmas",
+		customSounds: [],
 	},
 	festive: {
 		enabled: false,
@@ -248,6 +253,9 @@ function loadPanelConfig() {
 			appointmentNotice: {
 				...DEFAULT_CONFIG.appointmentNotice,
 				...(stored?.appointmentNotice || {}),
+				customSounds: Array.isArray(stored?.appointmentNotice?.customSounds)
+					? stored.appointmentNotice.customSounds
+					: [],
 			},
 			festive: {
 				...DEFAULT_CONFIG.festive,
@@ -1278,9 +1286,46 @@ function ConfigSectionToggles({ sections, onToggle }) {
 }
 
 function AppointmentNoticeConfig({ config, onTestSound, onUpdate }) {
+	const [soundName, setSoundName] = useState("");
+	const [soundError, setSoundError] = useState("");
+	const [uploadingSound, setUploadingSound] = useState(false);
+	const customSounds = Array.isArray(config.appointmentNotice?.customSounds)
+		? config.appointmentNotice.customSounds
+		: [];
 	const selectedSound = normalizeAppointmentNoticeSound(
 		config.appointmentNotice?.sound,
+		customSounds,
 	);
+	const addSound = async (event) => {
+		const file = event.target.files?.[0];
+		event.target.value = "";
+		if (!file) return;
+		if (customSounds.length >= ACOMPANHAMENTO_SOUND_MAX_ITEMS) {
+			setSoundError("Remova um som antes de adicionar outro.");
+			return;
+		}
+		setSoundError("");
+		setUploadingSound(true);
+		try {
+			const sound = await uploadAcompanhamentoSound({ blob: file, name: soundName });
+			onUpdate({
+				customSounds: [...customSounds, sound],
+				sound: `custom:${sound.id}`,
+			});
+			setSoundName("");
+		} catch (error) {
+			setSoundError(error.message || "Nao foi possivel adicionar o som.");
+		} finally {
+			setUploadingSound(false);
+		}
+	};
+	const removeSound = (sound) => {
+		const value = `custom:${sound.id}`;
+		onUpdate({
+			customSounds: customSounds.filter((item) => item.id !== sound.id),
+			sound: selectedSound === value ? "christmas" : selectedSound,
+		});
+	};
 	return (
 		<section className="acomp-config-ads acomp-config-appointment-notice">
 			<div className="acomp-config-ads-header">
@@ -1330,6 +1375,53 @@ function AppointmentNoticeConfig({ config, onTestSound, onUpdate }) {
 					</div>
 				</fieldset>
 			</div>
+			<div className="acomp-custom-sound-form">
+				<label>
+					Nome do som
+					<input
+						type="text"
+						maxLength="60"
+						value={soundName}
+						onChange={(event) => setSoundName(event.target.value)}
+						placeholder="Ex.: Campainha da equipe"
+					/>
+				</label>
+				<label className={`acomp-custom-sound-upload ${uploadingSound ? "is-disabled" : ""}`}>
+					<Upload size={17} />
+					{uploadingSound ? "Adicionando..." : "Adicionar som"}
+					<input
+						type="file"
+						accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg"
+						disabled={uploadingSound}
+						onChange={addSound}
+					/>
+				</label>
+			</div>
+			<p className="acomp-custom-sound-requirements">
+				MP3, WAV ou OGG · de 10 KB a 1 MB · ate {ACOMPANHAMENTO_SOUND_MAX_ITEMS} sons
+			</p>
+			{soundError ? <p className="acomp-custom-sound-error">{soundError}</p> : null}
+			{customSounds.length ? (
+				<div className="acomp-custom-sound-list">
+					{customSounds.map((sound) => {
+						const value = `custom:${sound.id}`;
+						return (
+							<div key={sound.id} className={selectedSound === value ? "is-active" : ""}>
+								<button type="button" onClick={() => onUpdate({ sound: value })}>
+									<Volume2 size={16} />
+									<span>{sound.name}</span>
+								</button>
+								<button type="button" title="Ouvir" onClick={() => onTestSound(value)}>
+									<BellRing size={15} />
+								</button>
+								<button type="button" title="Excluir" onClick={() => removeSound(sound)}>
+									<Trash2 size={15} />
+								</button>
+							</div>
+						);
+					})}
+				</div>
+			) : null}
 			<div className="acomp-config-help-card">
 				O toque é emitido somente quando um novo agendamento chega ao painel.
 			</div>
@@ -3090,12 +3182,14 @@ export default function AcompanhamentoPage() {
 		},
 		[buildMetasRealtimeItems, canShowRealtimeNotice],
 	);
-	const ensureAppointmentNoticeAudio = useCallback(() => {
+	const ensureAppointmentNoticeAudio = useCallback((source = APPOINTMENT_NOTICE_SOUND_SRC) => {
 		if (typeof window === "undefined" || typeof Audio === "undefined") {
 			return null;
 		}
-		if (!appointmentNoticeAudioRef.current) {
-			appointmentNoticeAudioRef.current = new Audio(APPOINTMENT_NOTICE_SOUND_SRC);
+		const expectedSource = new URL(source, window.location.href).href;
+		if (appointmentNoticeAudioRef.current?.src !== expectedSource) {
+			appointmentNoticeAudioRef.current?.pause();
+			appointmentNoticeAudioRef.current = new Audio(source);
 			appointmentNoticeAudioRef.current.preload = "auto";
 			appointmentNoticeAudioRef.current.volume = 1;
 		}
@@ -3145,10 +3239,14 @@ export default function AcompanhamentoPage() {
 		const nowMs = Date.now();
 		if (!force && nowMs - appointmentNoticeAudioAtRef.current < 1200) return;
 		appointmentNoticeAudioAtRef.current = nowMs;
-		const selectedSound = normalizeAppointmentNoticeSound(
+		const customSounds = Array.isArray(panelConfig.appointmentNotice?.customSounds)
+			? panelConfig.appointmentNotice.customSounds
+			: [];
+		const selected = resolveAppointmentNoticeSound(
 			sound || panelConfig.appointmentNotice?.sound,
+			customSounds,
 		);
-		if (selectedSound === "christmas") {
+		if (selected.value === "christmas") {
 			const audioContext =
 				appointmentNoticeAudioContextRef.current || createAudioContext();
 			appointmentNoticeAudioContextRef.current = audioContext;
@@ -3162,7 +3260,9 @@ export default function AcompanhamentoPage() {
 			playAppointmentFallbackTone(audioContext);
 		};
 		try {
-			const audio = ensureAppointmentNoticeAudio();
+			const audio = ensureAppointmentNoticeAudio(
+				selected.value === "original" ? APPOINTMENT_NOTICE_SOUND_SRC : selected.src,
+			);
 			if (!audio) {
 				playFallback();
 				return;
@@ -3180,7 +3280,7 @@ export default function AcompanhamentoPage() {
 		} catch {
 			playFallback();
 		}
-	}, [ensureAppointmentNoticeAudio, panelConfig.appointmentNotice?.sound]);
+	}, [ensureAppointmentNoticeAudio, panelConfig.appointmentNotice]);
 	const showAppointmentNotice = useCallback(
 		(event) => {
 			const appointment = normalizeAppointmentNotice(event);
@@ -3320,6 +3420,9 @@ export default function AcompanhamentoPage() {
 					appointmentNotice: {
 						...DEFAULT_CONFIG.appointmentNotice,
 						...(stored.appointmentNotice || {}),
+						customSounds: Array.isArray(stored.appointmentNotice?.customSounds)
+							? stored.appointmentNotice.customSounds
+							: [],
 					},
 					festive: {
 						...DEFAULT_CONFIG.festive,
