@@ -776,10 +776,15 @@ async function performSerialLookup(serial) {
 		throw error;
 	}
 
-	const autoIsp = await metrics.observeOperation(
-		{ kind: "integration", name: "autoisp", stage: "serial_lookup" },
-		() => searchAutoIspSerial(serial, autoIspCredentials),
-	);
+	let autoIsp;
+	try {
+		autoIsp = await metrics.observeOperation(
+			{ kind: "integration", name: "autoisp", stage: "serial_lookup" },
+			() => searchAutoIspSerial(serial, autoIspCredentials),
+		);
+	} catch (error) {
+		throw normalizeAutoIspError(error);
+	}
 	const loginRadius = cleanText(autoIsp.descricaoOlt);
 	if (!loginRadius) {
 		const error = new Error("AutoISP nao retornou descricao na OLT.");
