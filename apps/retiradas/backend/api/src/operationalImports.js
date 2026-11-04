@@ -3164,18 +3164,66 @@ function clearAgentDashboardDay(cities = [], dayIndex, dayCount) {
 	});
 }
 
+function updateAgentDashboardStoreCity(cities = [], cityName, dayIndex, value, dayCount) {
+	const name = normalizeCity(cityName) || "Sem cidade";
+	const key = normalizeCityKey(name);
+	const current = Array.isArray(cities) ? [...cities] : [];
+	let city = current.find((item) => normalizeCityKey(item?.nome || item?.cidade) === key);
+	if (!city) {
+		city = {
+			nome: name,
+			cancelamentos: 0,
+			meta80: 0,
+			realizado: 0,
+			falta: 0,
+			pct: 0,
+			daily: createDailyArray(dayCount),
+			lojaAgentesTotal: 0,
+			lojaAgentesDaily: createDailyArray(dayCount),
+		};
+		current.push(city);
+	}
+	city.lojaAgentesDaily = normalizeDailyForMonth(city.lojaAgentesDaily, dayCount);
+	city.lojaAgentesDaily[dayIndex] = Number(value || 0);
+	city.lojaAgentesTotal = city.lojaAgentesDaily.reduce(
+		(sum, item) => sum + Number(item || 0),
+		0,
+	);
+	return current;
+}
+
+function clearAgentDashboardStoreDay(cities = [], dayIndex, dayCount) {
+	return (Array.isArray(cities) ? cities : []).map((city) => {
+		const lojaAgentesDaily = normalizeDailyForMonth(city.lojaAgentesDaily, dayCount);
+		lojaAgentesDaily[dayIndex] = 0;
+		return {
+			...city,
+			lojaAgentesDaily,
+			lojaAgentesTotal: lojaAgentesDaily.reduce(
+				(sum, value) => sum + Number(value || 0),
+				0,
+			),
+		};
+	});
+}
+
 function recalculateAgentDashboard(month, data = {}, year) {
 	const cities = Array.isArray(data.cidades) ? data.cidades : [];
 	const dayCount = getDaysInMetaMonth(month, year);
-	const normalizedCities = cities.map((city) => ({
-		...city,
-		daily: normalizeDailyForMonth(city.daily, dayCount),
-		lojaAgentesDaily: normalizeDailyForMonth(city.lojaAgentesDaily, dayCount),
-		realizado: normalizeDailyForMonth(city.daily, dayCount).reduce(
-			(sum, value) => sum + Number(value || 0),
-			0,
-		),
-	}));
+	const normalizedCities = cities.map((city) => {
+		const daily = normalizeDailyForMonth(city.daily, dayCount);
+		const lojaAgentesDaily = normalizeDailyForMonth(city.lojaAgentesDaily, dayCount);
+		return {
+			...city,
+			daily,
+			lojaAgentesDaily,
+			realizado: daily.reduce((sum, value) => sum + Number(value || 0), 0),
+			lojaAgentesTotal: lojaAgentesDaily.reduce(
+				(sum, value) => sum + Number(value || 0),
+				0,
+			),
+		};
+	});
 	const totalRealizado = normalizedCities.reduce(
 		(sum, city) => sum + Number(city.realizado || 0),
 		0,
@@ -3251,6 +3299,13 @@ async function persistHubsoftMetaRecords({
 		const channel = record.production_channel || "UNCLASSIFIED";
 		if (profile === "LOJA") {
 			grouped[fonte].LOJA += 1;
+			if (channel === "AA") {
+				const city = normalizeCity(record.source_city) || record.production_owner_name;
+				grouped.sempre.AA.set(
+					city,
+					Number(grouped.sempre.AA.get(city) || 0) + 1,
+				);
+			}
 			continue;
 		}
 		if (!["AA", "RETIRADA", "REGIONAL"].includes(channel)) {
@@ -3325,6 +3380,21 @@ async function persistHubsoftMetaRecords({
 		nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
 		for (const [city, total] of grouped.sempre.AA.entries()) {
 			nextAgents.cidades = updateAgentDashboardCity(
+				nextAgents.cidades,
+				city,
+				dayIndex,
+				total,
+				dayCount,
+			);
+		}
+	} else {
+		nextAgents.cidades = clearAgentDashboardStoreDay(
+			nextAgents.cidades,
+			dayIndex,
+			dayCount,
+		);
+		for (const [city, total] of grouped.sempre.AA.entries()) {
+			nextAgents.cidades = updateAgentDashboardStoreCity(
 				nextAgents.cidades,
 				city,
 				dayIndex,
