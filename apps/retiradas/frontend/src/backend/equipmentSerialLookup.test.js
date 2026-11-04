@@ -95,4 +95,42 @@ describe("equipmentSerialLookup", () => {
 
 		expect(normalizeAutoIspError(original)).toBe(original);
 	});
+
+	it("consulta e normaliza o contrato React atual do AutoISP", () => {
+		const { buildAutoIspOnusUrl, extractAutoIspPayloadRows } = loadLookup()._testing;
+		const url = new URL(
+			buildAutoIspOnusUrl("https://autoisp.exemplo", "4857544361b277b7"),
+		);
+		const rows = extractAutoIspPayloadRows(
+			{
+				onus: [
+					{
+						id: 963382,
+						rx_status: "online",
+						serial_number: "4857544361B277B7",
+						description: "cliente.radius",
+						olt_hostname: "OLT-01",
+						ponlink: "0/13/8",
+						onu: "62",
+						onu_model_read: "MODELO-X",
+					},
+				],
+			},
+			"4857544361b277b7",
+		);
+
+		expect(url.pathname).toBe("/onus/provisioned");
+		expect(url.searchParams.get("serial_number")).toBe("4857544361B277B7");
+		expect(rows).toEqual([
+			expect.objectContaining({
+				status: "online",
+				erpId: "963382",
+				descricaoOlt: "cliente.radius",
+				olt: "OLT-01",
+				pon: "0/13/8",
+				onuId: "62",
+				modelo: "MODELO-X",
+			}),
+		]);
+	});
 });

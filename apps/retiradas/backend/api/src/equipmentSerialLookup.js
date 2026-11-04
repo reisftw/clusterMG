@@ -222,21 +222,30 @@ function normalizeAutoIspRecord(row = {}, serial) {
 	}
 	return {
 		raw: JSON.stringify(row).slice(0, 2000),
-		status: readAutoIspArrayValue(row.signal, 1) || readAutoIspArrayValue(row.signal, 0),
+		status:
+			cleanText(row.rx_status) ||
+			readAutoIspArrayValue(row.signal, 1) ||
+			readAutoIspArrayValue(row.signal, 0),
 		serial: primarySerial || serialUpper,
 		serialAlternativo: secondarySerial,
-		erpId: readAutoIspArrayValue(row.circuit_id, 0),
+		erpId: readAutoIspArrayValue(row.circuit_id, 0) || cleanText(row.id),
 		int6Id: readAutoIspArrayValue(row.int6_id, 0),
 		descricaoOlt: normalizeToken(row.description),
-		olt: readAutoIspArrayValue(row.olt, 0),
+		olt: readAutoIspArrayValue(row.olt, 0) || cleanText(row.olt_hostname),
 		pon: cleanText(row.ponlink),
-		onuId: cleanText(row.onu_id),
-		modelo: cleanText(row.onu_info_model || row.onu_type),
+		onuId: cleanText(row.onu_id || row.onu),
+		modelo: cleanText(
+			row.onu_info_model || row.onu_model_read || row.onu_type || row.onu_profile,
+		),
 	};
 }
 
 function extractAutoIspPayloadRows(payload, serial) {
-	const rows = Array.isArray(payload?.data) ? payload.data : [];
+	const rows = Array.isArray(payload?.onus)
+		? payload.onus
+		: Array.isArray(payload?.data)
+			? payload.data
+			: [];
 	return rows
 		.map((row) => normalizeAutoIspRecord(row, serial))
 		.filter(Boolean);
@@ -288,40 +297,14 @@ async function searchAutoIspClientSearch(page, serial, credentials) {
 }
 
 function buildAutoIspOnusUrl(baseUrl, serial) {
-	const columns = [
-		{ data: "signal", searchable: "false", orderable: "false", search: "" },
-		{ data: "signal", searchable: "true", orderable: "false", search: "all" },
-		{ data: "serial_number", searchable: "true", orderable: "true", search: serial },
-		{ data: "circuit_id", searchable: "true", orderable: "true", search: "" },
-		{ data: "int6_id", searchable: "true", orderable: "true", search: "" },
-		{ data: "name", searchable: "true", orderable: "true", search: "" },
-		{ data: "description", searchable: "true", orderable: "true", search: "" },
-		{ data: "olt", searchable: "true", orderable: "true", search: "" },
-		{ data: "ponlink", searchable: "true", orderable: "true", search: "" },
-		{ data: "onu_id", searchable: "true", orderable: "true", search: "" },
-		{ data: "onu_type", searchable: "true", orderable: "true", search: "" },
-		{ data: "onu_info_model", searchable: "true", orderable: "true", search: "" },
-		{ data: "topology", searchable: "true", orderable: "true", search: "" },
-	];
 	const params = new URLSearchParams({
-		draw: "1",
-		start: "0",
-		length: "10",
-		"search[value]": "",
-		"search[regex]": "false",
-		"order[0][column]": "3",
-		"order[0][dir]": "asc",
-		_: String(Date.now()),
+		sort_field: "gpon_client_id",
+		sort_order: "desc",
+		page: "1",
+		items: "10",
+		serial_number: serial.toUpperCase(),
 	});
-	columns.forEach((column, index) => {
-		params.set(`columns[${index}][data]`, column.data);
-		params.set(`columns[${index}][name]`, "");
-		params.set(`columns[${index}][searchable]`, column.searchable);
-		params.set(`columns[${index}][orderable]`, column.orderable);
-		params.set(`columns[${index}][search][value]`, column.search);
-		params.set(`columns[${index}][search][regex]`, "false");
-	});
-	return `${baseUrl}/provisioned_onus_datatable.json?${params.toString()}`;
+	return `${baseUrl}/onus/provisioned?${params.toString()}`;
 }
 
 async function searchAutoIspOnusJson(context, serial, credentials) {
@@ -833,7 +816,9 @@ module.exports = {
 	lookupBySerial,
 	normalizeSerial,
 	_testing: {
+		buildAutoIspOnusUrl,
 		createSingleFlight,
+		extractAutoIspPayloadRows,
 		normalizeAutoIspError,
 		requestHubsoftClientByWebApi,
 	},
