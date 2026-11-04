@@ -334,7 +334,7 @@ export function AutomaticProduction({ summary }) {
 export function AutomaticHourly({ items = [] }) {
 	return <section className="acomp-panel acomp-delivery-hours-panel">
 		<div className="acomp-panel-title"><h2>ENTREGAS POR HORÁRIO</h2></div>
-		<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(56px, 1fr))", gap: 10 }}>{items.map((item) => <div key={item.hour}><span>{item.hour}</span><strong style={{ display: "block", fontSize: 22 }}>{item.total}</strong></div>)}</div>
+		<div className="acomp-automatic-hours-grid">{items.map((item) => <div key={item.hour}><span>{item.hour}</span><strong>{item.total}</strong></div>)}</div>
 		{!items.length ? <p>Sem entregas registradas hoje.</p> : null}
 	</section>;
 }
