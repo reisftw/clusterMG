@@ -2092,11 +2092,35 @@ function classifyOrder(row, maps) {
 	};
 }
 
+function classifyStoreAttendance(row, maps) {
+	const city = extractCity(row);
+	const cityKey = normalizeCityKey(city);
+	const agent = cityKey ? maps.agentsByCity.get(cityKey) : null;
+	if (agent) {
+		return {
+			production_channel: "AA",
+			production_owner_id: agent.ownerId || cityKey,
+			production_owner_name: agent.cidade || city,
+			classification_rule: "AUTHORIZED_AGENT_CITY",
+			classification_reason: "AUTHORIZED_AGENT_CITY",
+		};
+	}
+	return {
+		production_channel: "LOJA",
+		production_owner_id: null,
+		production_owner_name: null,
+		classification_rule: "STORE_DELIVERY",
+		classification_reason: cityKey ? "NON_AGENT_CITY" : "MISSING_CITY",
+	};
+}
+
 function recordFor(profile, row, maps) {
 	const isMeta = isMetaProfile(profile);
 	const classification = isMeta
 		? classifyOrder(row, maps)
-		: {
+		: isStoreProfile(profile)
+			? classifyStoreAttendance(row, maps)
+			: {
 				production_channel: null,
 				production_owner_id: null,
 				production_owner_name: null,
@@ -3512,6 +3536,7 @@ module.exports = {
 	startProfileRun,
 	upsertWithdrawalTechnician,
 	__testables: {
+		classifyStoreAttendance,
 		extractFineRegistrationDate,
 		finesPayload,
 		finesSchedulerOptions,
