@@ -2116,17 +2116,18 @@ function classifyStoreAttendance(row, maps) {
 
 function recordFor(profile, row, maps) {
 	const isMeta = isMetaProfile(profile);
-	const classification = isMeta
-		? classifyOrder(row, maps)
-		: isStoreProfile(profile)
-			? classifyStoreAttendance(row, maps)
-			: {
-				production_channel: null,
-				production_owner_id: null,
-				production_owner_name: null,
-				classification_rule: null,
-				classification_reason: null,
-		};
+	let classification = {
+		production_channel: null,
+		production_owner_id: null,
+		production_owner_name: null,
+		classification_rule: null,
+		classification_reason: null,
+	};
+	if (isMeta) {
+		classification = classifyOrder(row, maps);
+	} else if (isStoreProfile(profile)) {
+		classification = classifyStoreAttendance(row, maps);
+	}
 	const hubsoftNumber = cleanText(
 		row.numero_ordem_servico || row.protocolo || row.id_atendimento,
 	);
