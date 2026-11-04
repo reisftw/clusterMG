@@ -170,6 +170,15 @@ function getPublicDashboardCacheTtlMs() {
 	return Math.max(0, Math.min(configuredTtl, 5 * 60_000));
 }
 
+function getStaleCacheResult(cache, error) {
+	if (!cache.data) throw error;
+	return {
+		data: cache.data,
+		cacheStatus: "STALE",
+		cacheAgeMs: Date.now() - cache.cachedAt,
+	};
+}
+
 function getMatchRebuildIdleMs() {
 	const configured = Number(process.env.PUBLIC_MATCH_REBUILD_IDLE_MS);
 	if (!Number.isFinite(configured)) return DEFAULT_MATCH_REBUILD_IDLE_MS;
@@ -734,12 +743,16 @@ async function getCachedAcompanhamentoResumo() {
 	}
 
 	if (ttlMs > 0 && acompanhamentoResumoCache.pending) {
-		const data = await acompanhamentoResumoCache.pending;
-		return {
-			data,
-			cacheStatus: "JOIN",
-			cacheAgeMs: Date.now() - acompanhamentoResumoCache.cachedAt,
-		};
+		try {
+			const data = await acompanhamentoResumoCache.pending;
+			return {
+				data,
+				cacheStatus: "JOIN",
+				cacheAgeMs: Date.now() - acompanhamentoResumoCache.cachedAt,
+			};
+		} catch (error) {
+			return getStaleCacheResult(acompanhamentoResumoCache, error);
+		}
 	}
 
 	const pending = buildAcompanhamentoResumo();
@@ -756,6 +769,8 @@ async function getCachedAcompanhamentoResumo() {
 			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
 			cacheAgeMs: 0,
 		};
+	} catch (error) {
+		return getStaleCacheResult(acompanhamentoResumoCache, error);
 	} finally {
 		if (acompanhamentoResumoCache.pending === pending) {
 			acompanhamentoResumoCache.pending = null;
@@ -787,12 +802,16 @@ async function getCachedPublicDashboard(options = {}) {
 	}
 
 	if (ttlMs > 0 && publicDashboardCache.pending) {
-		const data = await publicDashboardCache.pending;
-		return {
-			data,
-			cacheStatus: "JOIN",
-			cacheAgeMs: Date.now() - publicDashboardCache.cachedAt,
-		};
+		try {
+			const data = await publicDashboardCache.pending;
+			return {
+				data,
+				cacheStatus: "JOIN",
+				cacheAgeMs: Date.now() - publicDashboardCache.cachedAt,
+			};
+		} catch (error) {
+			return getStaleCacheResult(publicDashboardCache, error);
+		}
 	}
 
 	const pending = buildPublicDashboard();
@@ -809,6 +828,8 @@ async function getCachedPublicDashboard(options = {}) {
 			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
 			cacheAgeMs: 0,
 		};
+	} catch (error) {
+		return getStaleCacheResult(publicDashboardCache, error);
 	} finally {
 		if (publicDashboardCache.pending === pending) {
 			publicDashboardCache.pending = null;
@@ -830,12 +851,16 @@ async function getCachedDashboardResumo() {
 	}
 
 	if (ttlMs > 0 && dashboardResumoCache.pending) {
-		const data = await dashboardResumoCache.pending;
-		return {
-			data,
-			cacheStatus: "JOIN",
-			cacheAgeMs: Date.now() - dashboardResumoCache.cachedAt,
-		};
+		try {
+			const data = await dashboardResumoCache.pending;
+			return {
+				data,
+				cacheStatus: "JOIN",
+				cacheAgeMs: Date.now() - dashboardResumoCache.cachedAt,
+			};
+		} catch (error) {
+			return getStaleCacheResult(dashboardResumoCache, error);
+		}
 	}
 
 	const pending = buildDashboardResumo();
@@ -852,6 +877,8 @@ async function getCachedDashboardResumo() {
 			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
 			cacheAgeMs: 0,
 		};
+	} catch (error) {
+		return getStaleCacheResult(dashboardResumoCache, error);
 	} finally {
 		if (dashboardResumoCache.pending === pending) {
 			dashboardResumoCache.pending = null;

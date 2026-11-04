@@ -78,4 +78,21 @@ describe("equipmentSerialLookup", () => {
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
+
+	it("classifica timeout do AutoISP como falha de dependencia externa", () => {
+		const { normalizeAutoIspError } = loadLookup()._testing;
+		const error = normalizeAutoIspError(new Error("Timeout 30000ms exceeded"));
+
+		expect(error.statusCode).toBe(424);
+		expect(error.message).toContain("AutoISP nao respondeu");
+	});
+
+	it("preserva erros funcionais retornados pelo AutoISP", () => {
+		const { normalizeAutoIspError } = loadLookup()._testing;
+		const original = Object.assign(new Error("Serial nao encontrado"), {
+			statusCode: 404,
+		});
+
+		expect(normalizeAutoIspError(original)).toBe(original);
+	});
 });

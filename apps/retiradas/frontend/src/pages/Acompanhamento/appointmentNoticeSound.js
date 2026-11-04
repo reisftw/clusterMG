@@ -3,10 +3,26 @@ export const APPOINTMENT_NOTICE_SOUND_MODES = [
 	{ value: "original", label: "Original" },
 ];
 
-export function normalizeAppointmentNoticeSound(value) {
-	return APPOINTMENT_NOTICE_SOUND_MODES.some((item) => item.value === value)
-		? value
-		: "christmas";
+export function normalizeAppointmentNoticeSound(value, customSounds = []) {
+	if (APPOINTMENT_NOTICE_SOUND_MODES.some((item) => item.value === value)) {
+		return value;
+	}
+	if (
+		String(value || "").startsWith("custom:") &&
+		customSounds.some((item) => `custom:${item.id}` === value && item.src)
+	) {
+		return value;
+	}
+	return "christmas";
+}
+
+export function resolveAppointmentNoticeSound(value, customSounds = []) {
+	const normalized = normalizeAppointmentNoticeSound(value, customSounds);
+	if (!normalized.startsWith("custom:")) {
+		return { value: normalized, src: "" };
+	}
+	const sound = customSounds.find((item) => `custom:${item.id}` === normalized);
+	return { value: normalized, src: sound?.src || "" };
 }
 
 export function playChristmasAppointmentTone(audioContext) {

@@ -11,13 +11,13 @@ if (!process.env.DATABASE_URL && !process.env.PGPASSWORD) {
 // `max`/`idleTimeoutMillis`/`connectionTimeoutMillis` (ficava nos defaults
 // implicitos do driver `pg`). Valores conservadores abaixo, configuraveis
 // por env caso a VPS real precise de ajuste — nao escolhidos "grandes"
-// arbitrariamente: `max: 10` mantem o mesmo teto que o driver ja usava por
-// padrao (so torna explicito), `connectionTimeoutMillis` garante que uma
+// arbitrariamente: `max: 20` usa apenas 20% do teto atual do PostgreSQL e
+// absorve jobs concorrentes, `connectionTimeoutMillis` garante que uma
 // requisicao FALHA RAPIDO (5s) em vez de travar indefinidamente esperando
 // conexao livre num pico de carga.
 function buildPoolConfig() {
 	const poolLimits = {
-		max: Number(process.env.PG_POOL_MAX || 10),
+		max: Number(process.env.PG_POOL_MAX || 20),
 		idleTimeoutMillis: Number(process.env.PG_POOL_IDLE_TIMEOUT_MS || 30_000),
 		connectionTimeoutMillis: Number(process.env.PG_POOL_CONNECTION_TIMEOUT_MS || 5_000),
 	};
@@ -236,7 +236,7 @@ async function connect() {
 
 function getPoolStats() {
 	return {
-		max: Number(pool.options?.max || 10),
+		max: Number(pool.options?.max || 20),
 		total: Number(pool.totalCount || 0),
 		idle: Number(pool.idleCount || 0),
 		inUse: Math.max(0, Number(pool.totalCount || 0) - Number(pool.idleCount || 0)),

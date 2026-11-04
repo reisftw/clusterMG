@@ -2,6 +2,11 @@ const DEFAULT_AUTOISP_URL = "https://autoisp.sempreinternet.com.br";
 const DEFAULT_HUBSOFT_URL = "https://sempre.hubsoft.com.br";
 const metrics = require("./metrics");
 const DEFAULT_TIMEOUT_MS = 90_000;
+const AUTOISP_LOOKUP_TIMEOUT_MS = Math.max(
+	Number(process.env.AUTOISP_LOOKUP_TIMEOUT_MS || 18_000),
+	5_000,
+);
+const AUTOISP_REQUEST_TIMEOUT_MS = Math.min(AUTOISP_LOOKUP_TIMEOUT_MS, 8_000);
 const SESSION_TTL_MS = 20 * 60 * 1000;
 const documents = require("./documents");
 
@@ -40,6 +45,16 @@ function normalizeSerial(value) {
 
 function normalizeToken(value) {
 	return cleanText(value).replace(/[^a-zA-Z0-9._-]/g, "").toLowerCase();
+}
+
+function normalizeAutoIspError(error) {
+	if (Number(error?.statusCode)) return error;
+	const normalized = new Error(
+		"O AutoISP nao respondeu dentro do prazo. Tente novamente em instantes.",
+	);
+	normalized.statusCode = 424;
+	normalized.cause = error;
+	return normalized;
 }
 
 function resolveCredential(...values) {
@@ -312,7 +327,7 @@ function buildAutoIspOnusUrl(baseUrl, serial) {
 async function searchAutoIspOnusJson(context, serial, credentials) {
 	const response = await context.request.get(
 		buildAutoIspOnusUrl(credentials.baseUrl, serial),
-		{ timeout: 30_000 },
+		{ timeout: AUTOISP_REQUEST_TIMEOUT_MS },
 	);
 	if (!response.ok()) {
 		const error = new Error(`AutoISP HTTP ${response.status()} ao consultar ONUs.`);
@@ -336,35 +351,48 @@ async function searchAutoIspSerial(serial, credentials) {
 		autoIspStorageState,
 		autoIspStorageExpiresAt,
 	);
+	let timeoutId;
 	try {
-		if (hasCachedSession) {
+		const lookup = (async () => {
+			if (hasCachedSession) {
+				try {
+					return await searchAutoIspOnusJson(context, serial, credentials);
+				} catch {
+					metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "session_fallback", fallback: true });
+					autoIspStorageState = null;
+					autoIspStorageExpiresAt = 0;
+				}
+			}
+			const page = await context.newPage();
+			await loginAutoIsp(page, credentials);
+			autoIspStorageState = await context.storageState();
+			autoIspStorageExpiresAt = Date.now() + SESSION_TTL_MS;
 			try {
 				return await searchAutoIspOnusJson(context, serial, credentials);
 			} catch {
-				metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "session_fallback", fallback: true });
-				autoIspStorageState = null;
-				autoIspStorageExpiresAt = 0;
+				metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "json_fallback", fallback: true });
+				// Alguns seriais aparecem melhor na busca direta de assinantes.
 			}
-		}
-		const page = await context.newPage();
-		await loginAutoIsp(page, credentials);
-		autoIspStorageState = await context.storageState();
-		autoIspStorageExpiresAt = Date.now() + SESSION_TTL_MS;
-		try {
-			return await searchAutoIspOnusJson(context, serial, credentials);
-		} catch {
-			metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "json_fallback", fallback: true });
-			// Alguns seriais aparecem melhor na busca direta de assinantes.
-		}
-		try {
-			const directResult = await searchAutoIspClientSearch(page, serial, credentials);
-			if (directResult.descricaoOlt) return directResult;
-		} catch {
-			metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "client_search_fallback", fallback: true });
-			// Continua com a tela legado abaixo.
-		}
-		return await searchAutoIspSerialByUi(page, serial, credentials);
+			try {
+				const directResult = await searchAutoIspClientSearch(page, serial, credentials);
+				if (directResult.descricaoOlt) return directResult;
+			} catch {
+				metrics.recordOperation({ kind: "integration", name: "autoisp", stage: "client_search_fallback", fallback: true });
+				// Continua com a tela legado abaixo.
+			}
+			return await searchAutoIspSerialByUi(page, serial, credentials);
+		})();
+		const deadline = new Promise((_, reject) => {
+			timeoutId = setTimeout(() => {
+				context.close().catch(() => {});
+				reject(normalizeAutoIspError(new Error("Timeout da consulta AutoISP.")));
+			}, AUTOISP_LOOKUP_TIMEOUT_MS);
+		});
+		return await Promise.race([lookup, deadline]);
+	} catch (error) {
+		throw normalizeAutoIspError(error);
 	} finally {
+		clearTimeout(timeoutId);
 		await context.close().catch(() => {});
 	}
 }
@@ -378,13 +406,13 @@ async function searchAutoIspSerialByUi(page, serial, credentials) {
 	await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
 
 	const serialInput = page.getByPlaceholder("Número de Série ONU");
-	await serialInput.waitFor({ state: "visible", timeout: 30_000 });
+	await serialInput.waitFor({ state: "visible", timeout: 6_000 });
 	const responsePromise = page
 		.waitForResponse(
 			(response) =>
 				/provisioned_onus_datatable\.json/i.test(response.url()) &&
 				response.url().includes(encodeURIComponent(serial)),
-			{ timeout: 30_000 },
+			{ timeout: 6_000 },
 		)
 		.catch(() => null);
 	await serialInput.fill(serial);
@@ -392,7 +420,7 @@ async function searchAutoIspSerialByUi(page, serial, credentials) {
 		element.dispatchEvent(new Event("input", { bubbles: true }));
 		element.dispatchEvent(new Event("change", { bubbles: true }));
 	});
-	await page.waitForTimeout(2500);
+	await page.waitForTimeout(800);
 	await serialInput.press("Enter").catch(() => {});
 	const response = await responsePromise;
 	if (response) {
@@ -400,7 +428,7 @@ async function searchAutoIspSerialByUi(page, serial, credentials) {
 		const matches = extractAutoIspPayloadRows(payload, serial);
 		if (matches.length) return matches[0];
 	}
-	await page.waitForTimeout(3500);
+	await page.waitForTimeout(1200);
 
 	const rows = await page.evaluate(() =>
 		// eslint-disable-next-line no-undef
@@ -801,6 +829,7 @@ module.exports = {
 	normalizeSerial,
 	_testing: {
 		createSingleFlight,
+		normalizeAutoIspError,
 		requestHubsoftClientByWebApi,
 	},
 };

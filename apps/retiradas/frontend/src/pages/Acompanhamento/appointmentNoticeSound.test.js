@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	normalizeAppointmentNoticeSound,
 	playChristmasAppointmentTone,
+	resolveAppointmentNoticeSound,
 } from "./appointmentNoticeSound";
 
 function createAudioContext() {
@@ -39,6 +40,21 @@ describe("appointmentNoticeSound", () => {
 		expect(normalizeAppointmentNoticeSound()).toBe("christmas");
 		expect(normalizeAppointmentNoticeSound("invalido")).toBe("christmas");
 		expect(normalizeAppointmentNoticeSound("original")).toBe("original");
+	});
+
+	it("aceita somente sons personalizados ainda cadastrados", () => {
+		const sounds = [{ id: "campainha", src: "data:audio/mp3;base64,abc" }];
+
+		expect(normalizeAppointmentNoticeSound("custom:campainha", sounds)).toBe(
+			"custom:campainha",
+		);
+		expect(normalizeAppointmentNoticeSound("custom:removido", sounds)).toBe(
+			"christmas",
+		);
+		expect(resolveAppointmentNoticeSound("custom:campainha", sounds)).toEqual({
+			value: "custom:campainha",
+			src: "data:audio/mp3;base64,abc",
+		});
 	});
 
 	it("agenda um toque natalino curto", () => {
