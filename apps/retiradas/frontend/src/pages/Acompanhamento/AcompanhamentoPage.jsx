@@ -2765,6 +2765,7 @@ function AcompanhamentoMainGrid({
 					closedTotal={dailyClosedTotal}
 					openedCities={operationalSummary?.topOpenedCities}
 					technicians={operationalSummary?.topTechnicians}
+					techniciansTotal={operationalSummary?.activeTechniciansTotal}
 				/>
 			) : null}
 			{sections.kpis ? <AcompanhamentoKpis dashboard={dashboard} /> : null}

@@ -720,7 +720,7 @@ async function loadOperationalSummary(date) {
 				dimension: "technician",
 				technician_channel: "all",
 				page: 1,
-				limit: 5,
+				limit: 100,
 			}).catch(() => ({ ranking: [] })),
 			getOpenedCities(date),
 			getClosedCities(date),
@@ -740,6 +740,9 @@ async function loadOperationalSummary(date) {
 			total: item.production,
 			type: item.typeLabel,
 		})),
+		activeTechniciansTotal: Number(
+			topRanking.pagination?.total ?? topRanking.ranking?.length ?? 0,
+		),
 		topOpenedCities: openedCities,
 		topClosedCities: closedCities,
 		topActiveOpenCities: activeOpenCities,

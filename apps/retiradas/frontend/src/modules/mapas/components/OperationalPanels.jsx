@@ -51,6 +51,27 @@ function normalizeRankingItems(items = [], limit = 6) {
 	];
 }
 
+function summarizeTechnicians(items = [], totalTechnicians) {
+	const normalized = normalizeRankingItems(items, Number.MAX_SAFE_INTEGER);
+	const visible = normalized.slice(0, 4);
+	const remaining = normalized.slice(4);
+	const remainingCount = Math.max(
+		remaining.length,
+		numberValue(totalTechnicians) - visible.length,
+	);
+	if (!remainingCount) return visible;
+
+	return [
+		...visible,
+		{
+			id: "other-technicians",
+			label: "Outros técnicos",
+			secondary: `${remainingCount} técnico${remainingCount === 1 ? "" : "s"}`,
+			total: remaining.reduce((sum, item) => sum + item.total, 0),
+		},
+	];
+}
+
 function HighlightMetric({ label, value }) {
 	return (
 		<div className="acomp-highlight-metric">
@@ -131,6 +152,7 @@ export function DashboardHighlights({
 	closedTotal,
 	openedCities = [],
 	technicians = [],
+	techniciansTotal,
 }) {
 	const slides = useMemo(
 		() => [
@@ -149,7 +171,7 @@ export function DashboardHighlights({
 				label: "Técnicos",
 				title: "Técnicos que mais fecharam hoje",
 				icon: UserCheck,
-				items: normalizeRankingItems(technicians, 6),
+				items: summarizeTechnicians(technicians, techniciansTotal),
 				emptyTitle: "Nenhum técnico com fechamento até o momento.",
 				emptyHelper:
 					"A produtividade individual será exibida assim que houver produção no dia.",
@@ -167,7 +189,7 @@ export function DashboardHighlights({
 					"A lista será atualizada quando a sincronização do mapa encontrar novas O.S.",
 			},
 		],
-		[closedCities, openedCities, technicians],
+		[closedCities, openedCities, technicians, techniciansTotal],
 	);
 	const [selected, setSelected] = useState(0);
 	const active = slides[selected % slides.length] || slides[0];
@@ -185,7 +207,10 @@ export function DashboardHighlights({
 			? slides[0].items.reduce((sum, item) => sum + item.total, 0)
 			: numberValue(closedTotal);
 	const totalOpened = slides[2].items.reduce((sum, item) => sum + item.total, 0);
-	const activeTechnicians = slides[1].items.length;
+	const activeTechnicians =
+		techniciansTotal === undefined || techniciansTotal === null
+			? normalizeRankingItems(technicians, Number.MAX_SAFE_INTEGER).length
+			: numberValue(techniciansTotal);
 	const ActiveIcon = active.icon || Trophy;
 
 	return (

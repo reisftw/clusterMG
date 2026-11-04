@@ -1756,8 +1756,12 @@
 	grid-area: match;
 	display: grid;
 	min-height: 0;
-	grid-template-rows: minmax(0, 0.82fr) minmax(0, 0.9fr);
+	grid-template-rows: minmax(64px, 0.68fr) minmax(92px, 1.04fr);
 	gap: clamp(6px, 0.5vw, 8px);
+}
+
+.acomp-match-stack .acomp-operational-rotation {
+	grid-template-rows: minmax(0, 1fr) 14px;
 }
 
 .acomp-match-stack .acomp-match-panel {

@@ -82,4 +82,30 @@ describe("operational panel timing", () => {
 			"Outras cidades",
 		]);
 	});
+
+	it("mostra o total real de técnicos e agrupa os demais após os quatro primeiros", () => {
+		const technicians = Array.from({ length: 7 }, (_, index) => ({
+			id: `tech-${index + 1}`,
+			label: `Técnico ${index + 1}`,
+			total: 10 - index,
+		}));
+		const { container } = render(
+			<DashboardHighlights
+				closedCities={[]}
+				openedCities={[]}
+				technicians={technicians}
+				techniciansTotal={7}
+			/>,
+		);
+
+		expect(
+			container.querySelectorAll(".acomp-highlight-metric strong")[1],
+		).toHaveTextContent("7");
+		fireEvent.click(screen.getByRole("tab", { name: /Técnicos/i }));
+		expect(screen.getByText("Outros técnicos")).toBeInTheDocument();
+		expect(screen.getByText("3 técnicos")).toBeInTheDocument();
+		expect(
+			container.querySelectorAll(".acomp-highlight-rank-row"),
+		).toHaveLength(5);
+	});
 });
