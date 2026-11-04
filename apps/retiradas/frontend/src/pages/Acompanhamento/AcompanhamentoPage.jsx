@@ -1,5 +1,6 @@
 import {
 	Activity,
+	BellRing,
 	CalendarCheck,
 	Clock3,
 	Eye,
@@ -16,6 +17,7 @@ import {
 	Trash2,
 	TrendingUp,
 	Trophy,
+	Volume2,
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -59,6 +61,11 @@ import {
 	saveAcompanhamentoConfig,
 	uploadAcompanhamentoAd,
 } from "./acompanhamentoConfigService";
+import {
+	APPOINTMENT_NOTICE_SOUND_MODES,
+	normalizeAppointmentNoticeSound,
+	playChristmasAppointmentTone,
+} from "./appointmentNoticeSound";
 import {
 	invalidateAcompanhamentoResumoCache,
 	useAcompanhamentoResumoData,
@@ -171,6 +178,7 @@ const DEFAULT_CONFIG = {
 	},
 	appointmentNotice: {
 		durationSeconds: 20,
+		sound: "christmas",
 	},
 	festive: {
 		enabled: false,
@@ -1269,7 +1277,10 @@ function ConfigSectionToggles({ sections, onToggle }) {
 	);
 }
 
-function AppointmentNoticeConfig({ config, onUpdate }) {
+function AppointmentNoticeConfig({ config, onTestSound, onUpdate }) {
+	const selectedSound = normalizeAppointmentNoticeSound(
+		config.appointmentNotice?.sound,
+	);
 	return (
 		<section className="acomp-config-ads acomp-config-appointment-notice">
 			<div className="acomp-config-ads-header">
@@ -1297,10 +1308,40 @@ function AppointmentNoticeConfig({ config, onUpdate }) {
 						}
 					/>
 				</label>
-				<div className="acomp-config-help-card">
-					O aviso aparece quando um novo agendamento é criado e agrupa clientes
-					do mesmo horário.
-				</div>
+				<fieldset className="acomp-sound-mode">
+					<legend>Som do alerta</legend>
+					<div className="acomp-sound-segments">
+						{APPOINTMENT_NOTICE_SOUND_MODES.map((option) => (
+							<button
+								type="button"
+								key={option.value}
+								className={selectedSound === option.value ? "is-active" : ""}
+								aria-pressed={selectedSound === option.value}
+								onClick={() => onUpdate({ sound: option.value })}
+							>
+								{option.value === "christmas" ? (
+									<BellRing size={16} />
+								) : (
+									<Volume2 size={16} />
+								)}
+								{option.label}
+							</button>
+						))}
+					</div>
+				</fieldset>
+			</div>
+			<div className="acomp-config-help-card">
+				O toque é emitido somente quando um novo agendamento chega ao painel.
+			</div>
+			<div className="acomp-meta-test-row">
+				<button
+					type="button"
+					className="is-festive"
+					onClick={() => onTestSound(selectedSound)}
+				>
+					<BellRing size={17} />
+					Ouvir som
+				</button>
 			</div>
 		</section>
 	);
@@ -1646,6 +1687,7 @@ function ConfigPanel({
 	onTestGrinch,
 	onUploadImages,
 	onRemoveImage,
+	onTestAppointmentSound,
 }) {
 	const [imageError, setImageError] = useState("");
 	const [uploading, setUploading] = useState(false);
@@ -1725,6 +1767,7 @@ function ConfigPanel({
 
 				<AppointmentNoticeConfig
 					config={config}
+					onTestSound={onTestAppointmentSound}
 					onUpdate={updateSection("appointmentNotice")}
 				/>
 				<MetaShowcaseConfig
@@ -2730,6 +2773,7 @@ function AcompanhamentoModals({
 	dashboard,
 	metaShowcase,
 	onCloseConfig,
+	onTestAppointmentSound,
 	panelConfig,
 	realtimeNotice,
 	setPanelConfig,
@@ -2756,6 +2800,7 @@ function AcompanhamentoModals({
 						Promise.all(images.map(uploadAcompanhamentoAd))
 					}
 					onRemoveImage={deleteAcompanhamentoAd}
+					onTestAppointmentSound={onTestAppointmentSound}
 				/>
 			) : null}
 			<AdOverlay image={activeAd} />
@@ -3095,11 +3140,21 @@ export default function AcompanhamentoPage() {
 			audio.muted = false;
 		}
 	}, [ensureAppointmentNoticeAudio]);
-	const playAppointmentNoticeSound = useCallback(() => {
+	const playAppointmentNoticeSound = useCallback((sound, force = false) => {
 		if (typeof window === "undefined") return;
 		const nowMs = Date.now();
-		if (nowMs - appointmentNoticeAudioAtRef.current < 1200) return;
+		if (!force && nowMs - appointmentNoticeAudioAtRef.current < 1200) return;
 		appointmentNoticeAudioAtRef.current = nowMs;
+		const selectedSound = normalizeAppointmentNoticeSound(
+			sound || panelConfig.appointmentNotice?.sound,
+		);
+		if (selectedSound === "christmas") {
+			const audioContext =
+				appointmentNoticeAudioContextRef.current || createAudioContext();
+			appointmentNoticeAudioContextRef.current = audioContext;
+			playChristmasAppointmentTone(audioContext);
+			return;
+		}
 		const playFallback = () => {
 			const audioContext =
 				appointmentNoticeAudioContextRef.current || createAudioContext();
@@ -3125,7 +3180,7 @@ export default function AcompanhamentoPage() {
 		} catch {
 			playFallback();
 		}
-	}, [ensureAppointmentNoticeAudio]);
+	}, [ensureAppointmentNoticeAudio, panelConfig.appointmentNotice?.sound]);
 	const showAppointmentNotice = useCallback(
 		(event) => {
 			const appointment = normalizeAppointmentNotice(event);
@@ -3746,6 +3801,9 @@ export default function AcompanhamentoPage() {
 				panelConfig={panelConfig}
 				realtimeNotice={mapNotice ? null : realtimeNotice}
 				setPanelConfig={setPanelConfig}
+				onTestAppointmentSound={(sound) =>
+					playAppointmentNoticeSound(sound, true)
+				}
 				showAdNow={showAdNow}
 				showFestiveNow={showFestiveNow}
 				showGrinchNow={showGrinchNow}
