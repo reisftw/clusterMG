@@ -38,6 +38,10 @@ const DOCUMENTS_READ_CACHE_TTL_MS = Math.max(
 	Number(process.env.DOCUMENTS_READ_CACHE_TTL_MS || 5000),
 	0,
 );
+const DOCUMENTS_STALE_CACHE_TTL_MS = Math.max(
+	Number(process.env.DOCUMENTS_STALE_CACHE_TTL_MS || 10 * 60 * 1000),
+	DOCUMENTS_READ_CACHE_TTL_MS,
+);
 const documentsReadCache = new Map();
 
 function getDocumentsCacheEntry(key) {
@@ -52,6 +56,7 @@ function getDocumentsCacheEntry(key) {
 }
 
 async function getOrSetDocumentsCache(key, loader) {
+	const staleEntry = documentsReadCache.get(key);
 	const cached = getDocumentsCacheEntry(key);
 	if (cached) return cached;
 
@@ -73,6 +78,16 @@ async function getOrSetDocumentsCache(key, loader) {
 			documentsReadCache.set(key, { createdAt: Date.now(), value });
 		}
 		return value;
+	} catch (error) {
+		if (
+			staleEntry &&
+			Date.now() - staleEntry.createdAt <= DOCUMENTS_STALE_CACHE_TTL_MS
+		) {
+			console.warn(`[documents] Usando cache anterior para ${key}:`, error.message);
+			documentsReadCache.set(key, staleEntry);
+			return staleEntry.value;
+		}
+		throw error;
 	} finally {
 		documentsReadCache.delete(pendingKey);
 		if (documentsReadCache.size > 500) {

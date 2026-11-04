@@ -330,4 +330,31 @@ describe("publicDashboard", () => {
 		expect(payload.agentesMatchOS.data.resumo.totalMatches).toBe(7);
 		expect(ordensRepository.listAllDocuments).not.toHaveBeenCalled();
 	});
+
+	it("mantem o ultimo dashboard valido durante indisponibilidade temporaria do banco", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-11-04T12:00:00.000Z"));
+		let databaseAvailable = true;
+		const dbQuery = vi.fn(async () => {
+			if (!databaseAvailable) throw new Error("timeout exceeded when trying to connect");
+			return { rows: [] };
+		});
+		const ordensRepository = {
+			isOrdersCollection: vi.fn(() => false),
+			getDocument: vi.fn(async () => null),
+			getCollectionLatestUpdatedAt: vi.fn(async () => null),
+			listAllDocuments: vi.fn(async () => []),
+		};
+		const publicDashboard = loadPublicDashboard({ dbQuery, ordensRepository });
+
+		const initial = await publicDashboard.getCachedPublicDashboard();
+		expect(initial.cacheStatus).toBe("MISS");
+
+		databaseAvailable = false;
+		vi.advanceTimersByTime(61_000);
+		const fallback = await publicDashboard.getCachedPublicDashboard();
+
+		expect(fallback.cacheStatus).toBe("STALE");
+		expect(fallback.data).toBe(initial.data);
+	});
 });
