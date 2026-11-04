@@ -3116,7 +3116,15 @@ async function resolveMetaFonteByCity() {
 	};
 }
 
-function updateAgentDashboardCity(cities = [], cityName, dayIndex, value, dayCount) {
+function updateAgentDashboardMetric({
+	cities,
+	cityName,
+	dayIndex,
+	value,
+	dayCount,
+	dailyField,
+	totalField,
+}) {
 	const name = normalizeCity(cityName) || "Sem cidade";
 	const key = normalizeCityKey(name);
 	const current = Array.isArray(cities) ? [...cities] : [];
@@ -3135,71 +3143,29 @@ function updateAgentDashboardCity(cities = [], cityName, dayIndex, value, dayCou
 		};
 		current.push(city);
 	}
-	city.daily = normalizeDailyForMonth(city.daily, dayCount);
-	city.daily[dayIndex] = Number(value || 0);
-	city.realizado = city.daily.reduce((sum, item) => sum + Number(item || 0), 0);
-	city.meta80 = Number(city.meta80 || city.meta || 0);
-	city.cancelamentos = Number(city.cancelamentos || 0);
-	city.falta = Math.max(0, Number(city.meta80 || 0) - city.realizado);
-	city.pct =
-		Number(city.meta80 || 0) > 0
-			? Number(((city.realizado / Number(city.meta80 || 0)) * 100).toFixed(1))
-			: 0;
-	return current.sort((left, right) => Number(right.realizado || 0) - Number(left.realizado || 0));
-}
-
-function clearAgentDashboardDay(cities = [], dayIndex, dayCount) {
-	return (Array.isArray(cities) ? cities : []).map((city) => {
-		const daily = normalizeDailyForMonth(city.daily, dayCount);
-		daily[dayIndex] = 0;
-		const realizado = daily.reduce((sum, value) => sum + Number(value || 0), 0);
-		const meta80 = Number(city.meta80 || city.meta || 0);
-		return {
-			...city,
-			daily,
-			realizado,
-			falta: Math.max(0, meta80 - realizado),
-			pct: meta80 > 0 ? Number(((realizado / meta80) * 100).toFixed(1)) : 0,
-		};
-	});
-}
-
-function updateAgentDashboardStoreCity(cities = [], cityName, dayIndex, value, dayCount) {
-	const name = normalizeCity(cityName) || "Sem cidade";
-	const key = normalizeCityKey(name);
-	const current = Array.isArray(cities) ? [...cities] : [];
-	let city = current.find((item) => normalizeCityKey(item?.nome || item?.cidade) === key);
-	if (!city) {
-		city = {
-			nome: name,
-			cancelamentos: 0,
-			meta80: 0,
-			realizado: 0,
-			falta: 0,
-			pct: 0,
-			daily: createDailyArray(dayCount),
-			lojaAgentesTotal: 0,
-			lojaAgentesDaily: createDailyArray(dayCount),
-		};
-		current.push(city);
-	}
-	city.lojaAgentesDaily = normalizeDailyForMonth(city.lojaAgentesDaily, dayCount);
-	city.lojaAgentesDaily[dayIndex] = Number(value || 0);
-	city.lojaAgentesTotal = city.lojaAgentesDaily.reduce(
+	city[dailyField] = normalizeDailyForMonth(city[dailyField], dayCount);
+	city[dailyField][dayIndex] = Number(value || 0);
+	city[totalField] = city[dailyField].reduce(
 		(sum, item) => sum + Number(item || 0),
 		0,
 	);
 	return current;
 }
 
-function clearAgentDashboardStoreDay(cities = [], dayIndex, dayCount) {
+function clearAgentDashboardMetric({
+	cities,
+	dayIndex,
+	dayCount,
+	dailyField,
+	totalField,
+}) {
 	return (Array.isArray(cities) ? cities : []).map((city) => {
-		const lojaAgentesDaily = normalizeDailyForMonth(city.lojaAgentesDaily, dayCount);
-		lojaAgentesDaily[dayIndex] = 0;
+		const daily = normalizeDailyForMonth(city[dailyField], dayCount);
+		daily[dayIndex] = 0;
 		return {
 			...city,
-			lojaAgentesDaily,
-			lojaAgentesTotal: lojaAgentesDaily.reduce(
+			[dailyField]: daily,
+			[totalField]: daily.reduce(
 				(sum, value) => sum + Number(value || 0),
 				0,
 			),
@@ -3207,17 +3173,23 @@ function clearAgentDashboardStoreDay(cities = [], dayIndex, dayCount) {
 	});
 }
 
-function recalculateAgentDashboard(month, data = {}, year) {
+function recalculateAgentDashboard(month, year, data = {}) {
 	const cities = Array.isArray(data.cidades) ? data.cidades : [];
 	const dayCount = getDaysInMetaMonth(month, year);
 	const normalizedCities = cities.map((city) => {
 		const daily = normalizeDailyForMonth(city.daily, dayCount);
 		const lojaAgentesDaily = normalizeDailyForMonth(city.lojaAgentesDaily, dayCount);
+		const realizado = daily.reduce((sum, value) => sum + Number(value || 0), 0);
+		const meta80 = Number(city.meta80 || city.meta || 0);
 		return {
 			...city,
 			daily,
 			lojaAgentesDaily,
-			realizado: daily.reduce((sum, value) => sum + Number(value || 0), 0),
+			meta80,
+			cancelamentos: Number(city.cancelamentos || 0),
+			realizado,
+			falta: Math.max(0, meta80 - realizado),
+			pct: meta80 > 0 ? Number(((realizado / meta80) * 100).toFixed(1)) : 0,
 			lojaAgentesTotal: lojaAgentesDaily.reduce(
 				(sum, value) => sum + Number(value || 0),
 				0,
@@ -3263,6 +3235,76 @@ function recalculateAgentDashboard(month, data = {}, year) {
 	};
 }
 
+function groupHubsoftMetaRecords({ records, resolveFonte, isStoreProfile }) {
+	const grouped = {
+		sempre: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0, UNCLASSIFIED: 0 },
+		onnet: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0, UNCLASSIFIED: 0 },
+	};
+	for (const record of records) {
+		const fonte = resolveFonte(record);
+		const channel = record.production_channel || "UNCLASSIFIED";
+		if (isStoreProfile) {
+			grouped[fonte].LOJA += 1;
+			if (channel === "AA") {
+				const city = normalizeCity(record.source_city) || record.production_owner_name;
+				grouped.sempre.AA.set(
+					city,
+					Number(grouped.sempre.AA.get(city) || 0) + 1,
+				);
+			}
+			continue;
+		}
+		if (!['AA', 'RETIRADA', 'REGIONAL'].includes(channel)) {
+			grouped[fonte].UNCLASSIFIED += 1;
+			continue;
+		}
+		const bucket = channel === "AA" ? "AA" : channel;
+		const name = bucket === "AA"
+			? normalizeCity(record.source_city) || record.production_owner_name
+			: record.production_owner_name || "Sem classificacao HubSoft";
+		const map = grouped[fonte][bucket];
+		map.set(name, Number(map.get(name) || 0) + 1);
+	}
+	return grouped;
+}
+
+function updateAgentDashboardGroups({
+	currentAgents,
+	grouped,
+	isStoreProfile,
+	dayIndex,
+	dayCount,
+	month,
+	year,
+}) {
+	const dailyField = isStoreProfile ? "lojaAgentesDaily" : "daily";
+	const totalField = isStoreProfile ? "lojaAgentesTotal" : "realizado";
+	let cities = clearAgentDashboardMetric({
+		cities: currentAgents.cidades,
+		dayIndex,
+		dayCount,
+		dailyField,
+		totalField,
+	});
+	for (const [city, total] of grouped.sempre.AA.entries()) {
+		cities = updateAgentDashboardMetric({
+			cities,
+			cityName: city,
+			dayIndex,
+			value: total,
+			dayCount,
+			dailyField,
+			totalField,
+		});
+	}
+	if (!isStoreProfile) {
+		cities.sort(
+			(left, right) => Number(right.realizado || 0) - Number(left.realizado || 0),
+		);
+	}
+	return recalculateAgentDashboard(month, year, { ...currentAgents, cidades: cities });
+}
+
 async function persistHubsoftMetaRecords({
 	profile,
 	date,
@@ -3290,36 +3332,7 @@ async function persistHubsoftMetaRecords({
 			cidades: [],
 		};
 	const resolveFonte = await resolveMetaFonteByCity(records);
-	const grouped = {
-		sempre: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0, UNCLASSIFIED: 0 },
-		onnet: { RETIRADA: new Map(), REGIONAL: new Map(), AA: new Map(), LOJA: 0, UNCLASSIFIED: 0 },
-	};
-	for (const record of records) {
-		const fonte = resolveFonte(record);
-		const channel = record.production_channel || "UNCLASSIFIED";
-		if (profile === "LOJA") {
-			grouped[fonte].LOJA += 1;
-			if (channel === "AA") {
-				const city = normalizeCity(record.source_city) || record.production_owner_name;
-				grouped.sempre.AA.set(
-					city,
-					Number(grouped.sempre.AA.get(city) || 0) + 1,
-				);
-			}
-			continue;
-		}
-		if (!["AA", "RETIRADA", "REGIONAL"].includes(channel)) {
-			grouped[fonte].UNCLASSIFIED += 1;
-			continue;
-		}
-		const bucket = channel === "AA" ? "AA" : channel === "RETIRADA" ? "RETIRADA" : "REGIONAL";
-		const name =
-			bucket === "AA"
-				? normalizeCity(record.source_city) || record.production_owner_name
-				: record.production_owner_name || "Sem classificacao HubSoft";
-		const map = grouped[fonte][bucket];
-		map.set(name, Number(map.get(name) || 0) + 1);
-	}
+	const grouped = groupHubsoftMetaRecords({ records, resolveFonte, isStoreProfile });
 
 	const updateBase = (baseId, sourceRecord) => {
 		let next = {
@@ -3375,35 +3388,15 @@ async function persistHubsoftMetaRecords({
 	const sempre = updateBase("sempre", currentDoc);
 	let onnet = updateBase("onnet", currentDoc.onnet || {});
 	onnet = await applyOnnetStockManualEntriesToRecord(onnet, month, year);
-	let nextAgents = currentAgents;
-	if (!isStoreProfile) {
-		nextAgents.cidades = clearAgentDashboardDay(nextAgents.cidades, dayIndex, dayCount);
-		for (const [city, total] of grouped.sempre.AA.entries()) {
-			nextAgents.cidades = updateAgentDashboardCity(
-				nextAgents.cidades,
-				city,
-				dayIndex,
-				total,
-				dayCount,
-			);
-		}
-	} else {
-		nextAgents.cidades = clearAgentDashboardStoreDay(
-			nextAgents.cidades,
-			dayIndex,
-			dayCount,
-		);
-		for (const [city, total] of grouped.sempre.AA.entries()) {
-			nextAgents.cidades = updateAgentDashboardStoreCity(
-				nextAgents.cidades,
-				city,
-				dayIndex,
-				total,
-				dayCount,
-			);
-		}
-	}
-	nextAgents = recalculateAgentDashboard(month, nextAgents, year);
+	const nextAgents = updateAgentDashboardGroups({
+		currentAgents,
+		grouped,
+		isStoreProfile,
+		dayIndex,
+		dayCount,
+		month,
+		year,
+	});
 	const combined = combineMetaRecords(sempre, onnet, month, year);
 	const nextMonth = {
 		...sempre,
