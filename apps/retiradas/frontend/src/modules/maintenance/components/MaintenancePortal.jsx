@@ -101,6 +101,98 @@ function RequestsChart({ items = [] }) {
 		</div>
 	);
 }
+
+export function MonthlyVisitsChart({ items = [] }) {
+	const max = Math.max(1, ...items.map((item) => Number(item.visits || 0)));
+	return (
+		<div className="maintenance-visits-chart" aria-label="Visitas por mes">
+			{items.map((item) => (
+				<div className="maintenance-visits-month" key={item.month}>
+					<div>
+						<strong>{number(item.visits)}</strong>
+						<small>{number(item.unique_visitors)} dispositivo(s)</small>
+					</div>
+					<span><i style={{ width: `${Math.max(4, (Number(item.visits || 0) / max) * 100)}%` }} /></span>
+					<b>{new Date(`${item.month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })}</b>
+				</div>
+			))}
+			{!items.length ? <p className="maintenance-empty">O historico mensal aparecera apos os primeiros acessos.</p> : null}
+		</div>
+	);
+}
+
+export function SystemTopology({ dashboard }) {
+	const presence = dashboard?.presence || {};
+	const status = dashboard?.status || {};
+	const services = status.services || [];
+	const onlineUsers = Number(presence.online_users || 0);
+	const visibleUsers = Math.min(24, onlineUsers);
+	const [selectedServiceId, setSelectedServiceId] = useState(null);
+	const selectedService = services.find((service) => (service.id || service.name) === selectedServiceId);
+
+	return (
+		<section className="maintenance-panel maintenance-topology-panel">
+			<div className="maintenance-panel-heading">
+				<div>
+					<Activity size={20} />
+					<span>
+						<strong>Mapa operacional em tempo real</strong>
+						<small>Usuarios ativos, entrada da aplicacao e saude dos servicos.</small>
+					</span>
+				</div>
+				<b className={status.summary?.offline ? "is-alert" : "is-online"}>
+					<i />
+					{status.summary?.offline ? `${status.summary.offline} indisponivel(is)` : "Fluxo estavel"}
+				</b>
+			</div>
+			<div className="maintenance-topology-canvas">
+				<div className="maintenance-topology-users">
+					<div className="maintenance-topology-label">
+						<Users size={17} />
+						<span><strong>{number(onlineUsers)}</strong> usuarios online</span>
+					</div>
+					<div className="maintenance-user-cloud" aria-label={`${onlineUsers} usuarios ativos`}>
+						{Array.from({ length: visibleUsers }, (_, index) => (
+							<i key={index} style={{ "--user-index": index }} />
+						))}
+						{!visibleUsers ? <small>Nenhuma sessao ativa agora</small> : null}
+					</div>
+				</div>
+
+				<div className="maintenance-topology-core">
+					<div><Activity size={18} /><span><small>ENTRADA</small><strong>Gateway</strong></span></div>
+					<div><Server size={18} /><span><small>NUCLEO</small><strong>API Retiradas</strong></span></div>
+				</div>
+
+				<div className="maintenance-topology-services">
+					{services.slice(0, 6).map((service) => {
+						const serviceId = service.id || service.name;
+						return (
+							<button
+								type="button"
+								className={`is-${service.status}${selectedServiceId === serviceId ? " is-selected" : ""}`}
+								key={serviceId}
+								onClick={() => setSelectedServiceId((current) => current === serviceId ? null : serviceId)}
+								aria-pressed={selectedServiceId === serviceId}
+							>
+								<Server size={17} />
+								<span><strong>{service.name}</strong><small>{service.status === "online" ? `${service.details?.responseMs ?? "-"} ms` : service.status === "disabled" ? "Opcional" : service.reason || "Indisponivel"}</small></span>
+							</button>
+						);
+					})}
+					{!services.length ? <p className="maintenance-empty">Servicos aguardando leitura.</p> : null}
+				</div>
+			</div>
+			{selectedService ? (
+				<div className="maintenance-topology-detail" role="status">
+					<span className={`is-${selectedService.status}`}><i /></span>
+					<div><small>SERVICO SELECIONADO</small><strong>{selectedService.name}</strong></div>
+					<p>{selectedService.status === "online" ? `Resposta em ${selectedService.details?.responseMs ?? "-"} ms` : selectedService.reason || "Sem resposta disponivel"}</p>
+				</div>
+			) : null}
+		</section>
+	);
+}
 function OverviewTab({ dashboard }) {
 	const totals = dashboard?.metrics?.totals || {};
 	const queries = dashboard?.metrics?.queries || {};
@@ -120,6 +212,10 @@ function OverviewTab({ dashboard }) {
 				<MetricCard icon={Server} label="APIs online" value={`${status.summary?.online || 0}/${status.summary?.total || 0}`} note={`${status.summary?.offline || 0} indisponivel(is) · ${status.summary?.disabled || 0} opcional(is) desativada(s)`} tone={status.summary?.offline ? "red" : "green"} />
 				<MetricCard icon={Users} label="Usuarios online" value={number(presence.online_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
 				<MetricCard icon={Eye} label="Visitas hoje" value={number(sw.visits_today)} note={`${number(sw.unique_visitors_today)} dispositivo(s) unico(s)`} tone="blue" />
+				<MetricCard icon={Eye} label="Visitas no mes" value={number(sw.visits_month)} note={`${number(sw.unique_visitors_month)} dispositivo(s) unico(s)`} tone="blue" />
+				<MetricCard icon={Eye} label="Visitas registradas" value={number(sw.visits_total)} note={`${number(sw.unique_visitors_total)} dispositivo(s) no historico`} tone="blue" />
+				<MetricCard icon={Users} label="Pessoas no mes" value={number(presence.users_month)} note="Usuarios autenticados no periodo" tone="green" />
+				<MetricCard icon={Users} label="Pessoas no total" value={number(presence.users_total)} note="Usuarios autenticados distintos" tone="green" />
 				<MetricCard icon={Activity} label="Requisicoes" value={number(totals.total_requests)} note={`Ultimas ${dashboard.hours || 24} horas`} />
 				<MetricCard icon={Gauge} label="Requisicoes/min" value={number(totals.requests_per_minute)} note="Media da janela selecionada" />
 				<MetricCard icon={AlertTriangle} label="Erros 5xx" value={number(totals.errors_5xx)} note={`${number(totals.errors_4xx)} respostas 4xx operacionais · ${number(totals.expected_errors_4xx)} esperadas`} tone={Number(totals.errors_5xx) ? "red" : "green"} />
@@ -129,6 +225,13 @@ function OverviewTab({ dashboard }) {
 				<MetricCard icon={Clock3} label="Espera do pool" value={`${number(pool.wait_avg_ms)} ms`} note={`Max ${number(pool.wait_max_ms)} ms · ${number(pool.timeouts)} timeout(s)`} tone={Number(pool.timeouts) ? "red" : Number(pool.wait_max_ms) > 500 ? "orange" : "green"} />
 				<MetricCard icon={Download} label="Resposta HTTP" value={fileSize(totals.response_bytes)} note={`P50 ${number(totals.p50_ms)} ms · P99 ${number(totals.p99_ms)} ms`} />
 				<MetricCard icon={Smartphone} label="Service worker" value={number(sw.clients)} note={`${number(sw.failures)} falha(s) critica(s) · ${number(sw.network_failures)} oscilacao(oes) de rede`} tone={Number(sw.failures) ? "red" : Number(sw.network_failures) ? "orange" : "green"} />
+			</section>
+
+			<SystemTopology dashboard={dashboard} />
+
+			<section className="maintenance-panel">
+				<div className="maintenance-panel-heading"><div><BarChart3 size={20} /><span><strong>Visitas por mes</strong><small>Acessos consolidados sem manter logs individuais indefinidamente.</small></span></div></div>
+				<MonthlyVisitsChart items={sw.monthly_visits || []} />
 			</section>
 
 			<section className="maintenance-panel maintenance-graph-panel">

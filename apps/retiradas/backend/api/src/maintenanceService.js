@@ -327,7 +327,7 @@ async function recordServiceWorkerEvent(payload = {}, userAgent = "") {
 
 async function getServiceWorkerMetrics(hours = 24) {
 	const safeHours = Math.min(24 * 30, Math.max(1, Number(hours) || 24));
-	const [summary, versions, recent, dailyVisits] = await Promise.all([
+	const [summary, versions, recent, visitSummary, monthlyVisits] = await Promise.all([
 		db.query(
 			`select count(*)::integer total,
 			 count(*) filter(where event_type in ('INSTALL_FAILURE','ACTIVATION_FAILURE'))::integer failures,
@@ -354,18 +354,29 @@ async function getServiceWorkerMetrics(hours = 24) {
 		),
 		db.query(
 			`select
-			 count(*) filter(where event_type='HEARTBEAT')::integer visits_today,
-			 count(distinct nullif(client_id,'')) filter(where event_type='HEARTBEAT')::integer unique_visitors_today
-			 from maintenance_service_worker_events
-			 where occurred_at>=date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'
-			   and occurred_at<(date_trunc('day',now() at time zone 'America/Sao_Paulo')+interval '1 day') at time zone 'America/Sao_Paulo'`,
+			 coalesce(sum(visits) filter(where visit_day=(now() at time zone 'America/Sao_Paulo')::date),0)::bigint visits_today,
+			 count(*) filter(where visit_day=(now() at time zone 'America/Sao_Paulo')::date and client_id<>'anonymous')::integer unique_visitors_today,
+			 coalesce(sum(visits) filter(where visit_day>=date_trunc('month',now() at time zone 'America/Sao_Paulo')::date),0)::bigint visits_month,
+			 count(distinct client_id) filter(where visit_day>=date_trunc('month',now() at time zone 'America/Sao_Paulo')::date and client_id<>'anonymous')::integer unique_visitors_month,
+			 coalesce(sum(visits),0)::bigint visits_total,
+			 count(distinct client_id) filter(where client_id<>'anonymous')::integer unique_visitors_total
+			 from maintenance_visit_metrics_daily`,
+		),
+		db.query(
+			`select to_char(date_trunc('month',visit_day::timestamp),'YYYY-MM') month,
+			 coalesce(sum(visits),0)::bigint visits,
+			 count(distinct client_id) filter(where client_id<>'anonymous')::integer unique_visitors
+			 from maintenance_visit_metrics_daily
+			 where visit_day>=date_trunc('month',now() at time zone 'America/Sao_Paulo')::date-interval '11 months'
+			 group by 1 order by 1`,
 		),
 	]);
 	return {
 		...(summary.rows[0] || {}),
-		...(dailyVisits.rows[0] || {}),
+		...(visitSummary.rows[0] || {}),
 		versions: versions.rows,
 		recent: recent.rows,
+		monthly_visits: monthlyVisits.rows,
 	};
 }
 
@@ -373,6 +384,10 @@ async function getPresenceMetrics() {
 	const result = await db.query(
 		`select
 		 count(distinct user_id) filter(where last_seen_at>=now()-interval '5 minutes')::integer online_users,
+		 count(distinct user_id) filter(
+		   where last_seen_at>=date_trunc('month',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'
+		 )::integer users_month,
+		 count(distinct user_id)::integer users_total,
 		 count(distinct session_id) filter(
 		   where last_seen_at>=date_trunc('day',now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo'
 		 )::integer authenticated_sessions_today

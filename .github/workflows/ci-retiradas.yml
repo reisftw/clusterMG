@@ -85,6 +85,7 @@ jobs:
           node --test
           apps/retiradas/backend/sql/113_observability_wave0.integration.test.js
           apps/retiradas/backend/sql/119_performance_indexes.integration.test.js
+          apps/retiradas/backend/sql/120_maintenance_visit_metrics.integration.test.js
 
       - name: Validate workflow contracts
         run: npm run test:contracts
