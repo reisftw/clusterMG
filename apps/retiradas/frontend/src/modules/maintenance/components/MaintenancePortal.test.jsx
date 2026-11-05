@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { SystemTopology } from "./MaintenancePortal";
+import { MonthlyVisitsChart, SystemTopology } from "./MaintenancePortal";
 
 describe("SystemTopology", () => {
 	it("representa usuarios reais e abre os detalhes do servico selecionado", () => {
@@ -23,5 +23,19 @@ describe("SystemTopology", () => {
 		fireEvent.click(screen.getByRole("button", { name: /API principal/i }));
 		expect(screen.getByText("SERVICO SELECIONADO")).toBeInTheDocument();
 		expect(screen.getByText("Resposta em 18 ms")).toBeInTheDocument();
+	});
+});
+
+describe("MonthlyVisitsChart", () => {
+	it("mostra visitas e dispositivos consolidados por mes", () => {
+		render(
+			<MonthlyVisitsChart
+				items={[{ month: "2026-11", visits: 1234, unique_visitors: 87 }]}
+			/>,
+		);
+
+		expect(screen.getByText("1.234")).toBeInTheDocument();
+		expect(screen.getByText("87 dispositivo(s)")).toBeInTheDocument();
+		expect(screen.getByText("nov. de 26")).toBeInTheDocument();
 	});
 });

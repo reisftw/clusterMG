@@ -102,6 +102,25 @@ function RequestsChart({ items = [] }) {
 	);
 }
 
+export function MonthlyVisitsChart({ items = [] }) {
+	const max = Math.max(1, ...items.map((item) => Number(item.visits || 0)));
+	return (
+		<div className="maintenance-visits-chart" aria-label="Visitas por mes">
+			{items.map((item) => (
+				<div className="maintenance-visits-month" key={item.month}>
+					<div>
+						<strong>{number(item.visits)}</strong>
+						<small>{number(item.unique_visitors)} dispositivo(s)</small>
+					</div>
+					<span><i style={{ width: `${Math.max(4, (Number(item.visits || 0) / max) * 100)}%` }} /></span>
+					<b>{new Date(`${item.month}-01T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })}</b>
+				</div>
+			))}
+			{!items.length ? <p className="maintenance-empty">O historico mensal aparecera apos os primeiros acessos.</p> : null}
+		</div>
+	);
+}
+
 export function SystemTopology({ dashboard }) {
 	const presence = dashboard?.presence || {};
 	const status = dashboard?.status || {};
@@ -193,6 +212,10 @@ function OverviewTab({ dashboard }) {
 				<MetricCard icon={Server} label="APIs online" value={`${status.summary?.online || 0}/${status.summary?.total || 0}`} note={`${status.summary?.offline || 0} indisponivel(is) · ${status.summary?.disabled || 0} opcional(is) desativada(s)`} tone={status.summary?.offline ? "red" : "green"} />
 				<MetricCard icon={Users} label="Usuarios online" value={number(presence.online_users)} note="Ativos nos ultimos 5 minutos" tone="green" />
 				<MetricCard icon={Eye} label="Visitas hoje" value={number(sw.visits_today)} note={`${number(sw.unique_visitors_today)} dispositivo(s) unico(s)`} tone="blue" />
+				<MetricCard icon={Eye} label="Visitas no mes" value={number(sw.visits_month)} note={`${number(sw.unique_visitors_month)} dispositivo(s) unico(s)`} tone="blue" />
+				<MetricCard icon={Eye} label="Visitas registradas" value={number(sw.visits_total)} note={`${number(sw.unique_visitors_total)} dispositivo(s) no historico`} tone="blue" />
+				<MetricCard icon={Users} label="Pessoas no mes" value={number(presence.users_month)} note="Usuarios autenticados no periodo" tone="green" />
+				<MetricCard icon={Users} label="Pessoas no total" value={number(presence.users_total)} note="Usuarios autenticados distintos" tone="green" />
 				<MetricCard icon={Activity} label="Requisicoes" value={number(totals.total_requests)} note={`Ultimas ${dashboard.hours || 24} horas`} />
 				<MetricCard icon={Gauge} label="Requisicoes/min" value={number(totals.requests_per_minute)} note="Media da janela selecionada" />
 				<MetricCard icon={AlertTriangle} label="Erros 5xx" value={number(totals.errors_5xx)} note={`${number(totals.errors_4xx)} respostas 4xx operacionais · ${number(totals.expected_errors_4xx)} esperadas`} tone={Number(totals.errors_5xx) ? "red" : "green"} />
@@ -205,6 +228,11 @@ function OverviewTab({ dashboard }) {
 			</section>
 
 			<SystemTopology dashboard={dashboard} />
+
+			<section className="maintenance-panel">
+				<div className="maintenance-panel-heading"><div><BarChart3 size={20} /><span><strong>Visitas por mes</strong><small>Acessos consolidados sem manter logs individuais indefinidamente.</small></span></div></div>
+				<MonthlyVisitsChart items={sw.monthly_visits || []} />
+			</section>
 
 			<section className="maintenance-panel maintenance-graph-panel">
 				<div className="maintenance-panel-heading"><div><BarChart3 size={20} /><span><strong>Volume e quedas</strong><small>Requisicoes agrupadas por hora; marcacao vermelha indica erro 5xx.</small></span></div></div>

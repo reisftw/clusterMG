@@ -456,6 +456,61 @@
 	font-size: 11px;
 }
 
+.maintenance-visits-chart {
+	display: grid;
+	grid-template-columns: repeat(6, minmax(110px, 1fr));
+	gap: 14px;
+	padding: 22px 18px;
+	overflow-x: auto;
+}
+
+.maintenance-visits-month {
+	min-width: 110px;
+	padding: 13px;
+	border: 1px solid var(--maintenance-line);
+	border-radius: 5px;
+	background: #0b1826;
+}
+
+.maintenance-visits-month > div {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.maintenance-visits-month strong {
+	font-size: 20px;
+	color: var(--maintenance-text);
+}
+
+.maintenance-visits-month small,
+.maintenance-visits-month b {
+	font-size: 10px;
+	color: var(--maintenance-muted);
+}
+
+.maintenance-visits-month > span {
+	display: block;
+	height: 5px;
+	margin: 12px 0 9px;
+	border-radius: 3px;
+	background: #132538;
+	overflow: hidden;
+}
+
+.maintenance-visits-month > span i {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, var(--maintenance-cyan), #4ade80);
+}
+
+.maintenance-visits-month b {
+	display: block;
+	text-transform: uppercase;
+}
+
 .maintenance-graph-panel {
 	background: rgba(9, 20, 33, 0.96);
 }
@@ -666,6 +721,10 @@
 	.maintenance-user-cloud {
 		min-height: 100px;
 	}
+
+	.maintenance-visits-chart {
+		grid-template-columns: repeat(3, minmax(140px, 1fr));
+	}
 }
 
 @media (max-width: 760px) {
@@ -690,5 +749,9 @@
 		align-items: flex-start;
 		gap: 12px;
 		flex-direction: column;
+	}
+
+	.maintenance-visits-chart {
+		grid-template-columns: repeat(12, minmax(150px, 1fr));
 	}
 }
