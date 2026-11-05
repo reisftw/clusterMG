@@ -1,16 +1,15 @@
-const SW_VERSION = "v31-maintenance";
+const SW_VERSION = "v32-revo";
 const CACHE_NAME = `retiradas-pwa-${SW_VERSION}`;
 const APP_SHELL = [
 	"/manifest.webmanifest",
 	"/terceiros.webmanifest",
-	"/pwa-192.png",
-	"/pwa-512.png",
-	"/terceiros-pwa-192-v2.png",
-	"/terceiros-pwa-512-v2.png",
-	"/terceiros-apple-touch-icon-v2.png",
-	"/apple-touch-icon.png",
-	"/favicon-64.png",
-	"/cluster-mg.png",
+	"/brand/revo/revo_app_icon_192px.png",
+	"/brand/revo/revo_app_icon_512px.png",
+	"/brand/revo/revo_app_maskable_512.png",
+	"/brand/revo/revo_logo_horizontal_light.svg",
+	"/brand/revo/revo_logo_horizontal_dark.svg",
+	"/brand/revo/revo_simbolo.svg",
+	"/brand/revo/favicon_64.png",
 	"/melz-logo.webp",
 	"/retorninho-loader.webp",
 	"/retorninho-grinch.webp",
@@ -44,7 +43,7 @@ function parsePushPayload(event) {
 		try {
 			return {
 				notification: {
-					title: "Painel de Retiradas",
+					title: "REVO",
 					body: event.data.text(),
 				},
 			};
@@ -191,11 +190,11 @@ self.addEventListener("push", (event) => {
 		payload?.notification || payload?.data?.notification || {};
 	const data = payload?.data || {};
 	const title =
-		notification.title || data.title || "Atualizacao no Painel de Retiradas";
+		notification.title || data.title || "Atualização no REVO";
 	const body =
 		notification.body || data.body || "Novos dados estao disponiveis.";
-	const icon = notification.icon || data.icon || "/pwa-192.png";
-	const badge = notification.badge || data.badge || "/favicon-64.png";
+	const icon = notification.icon || data.icon || "/brand/revo/revo_app_icon_192px.png";
+	const badge = notification.badge || data.badge || "/brand/revo/favicon_64.png";
 	const route = data.route || payload?.fcmOptions?.link || "/painel";
 
 	event.waitUntil(

@@ -152,7 +152,7 @@ export function gerarPDFMapa(ordens, ultimaAtualizacao) {
     </div>
     <div style="text-align:right;color:rgba(255,255,255,.5);font-size:10px;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
       <div style="background:#fff;border-radius:8px;padding:5px 7px">
-        <img src="/cluster-mg.png" alt="Cluster MG" style="display:block;width:92px;height:auto;max-height:46px;object-fit:contain" />
+        <img src="/brand/revo/revo_logo_horizontal_dark_700px.png" alt="REVO" style="display:block;width:118px;height:auto;max-height:46px;object-fit:contain" />
       </div>
       <div>Gerado em ${dataGeracao}</div>
     </div>

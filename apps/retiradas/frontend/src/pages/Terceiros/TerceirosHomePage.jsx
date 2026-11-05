@@ -114,8 +114,8 @@ export default function TerceirosHomePage({ portal = "terceiros" }) {
 		const previous = link?.getAttribute("href");
 		const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
 		const previousAppleIcon = appleIcon?.getAttribute("href");
-		link?.setAttribute("href", "/terceiros.webmanifest?v=cluster-v2");
-		appleIcon?.setAttribute("href", "/terceiros-apple-touch-icon-v2.png");
+		link?.setAttribute("href", "/terceiros.webmanifest?v=revo-v1");
+		appleIcon?.setAttribute("href", "/brand/revo/revo_app_icon_192px.png");
 		return () => {
 			if (previous) link?.setAttribute("href", previous);
 			if (previousAppleIcon) appleIcon?.setAttribute("href", previousAppleIcon);
@@ -131,8 +131,8 @@ export default function TerceirosHomePage({ portal = "terceiros" }) {
 
 				<header className="relative shrink-0 text-center">
 					<img
-						src="/cluster-mg.png"
-						alt="Cluster MG"
+						src="/brand/revo/revo_logo_horizontal_light.svg"
+						alt="REVO"
 						className="mx-auto h-auto w-64 max-w-full object-contain drop-shadow-[0_22px_34px_rgba(0,0,0,0.28)] sm:w-80"
 					/>
 					<p className="mt-5 text-xs font-black uppercase tracking-[0.34em] text-orange-300 sm:text-sm">

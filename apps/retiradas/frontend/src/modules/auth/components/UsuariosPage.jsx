@@ -515,9 +515,9 @@ const NovoUsuarioModal = ({
 					<div className="flex items-center gap-4 border-b border-slate-200 pb-5 pr-12">
 						<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#061d38] shadow-lg shadow-slate-200">
 							<img
-								src="/cluster-mg.png"
-								alt="Cluster MG"
-								className="h-full w-full object-cover"
+								src="/brand/revo/revo_simbolo.svg"
+								alt="REVO"
+								className="h-11 w-11 object-contain"
 							/>
 						</div>
 

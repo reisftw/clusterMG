@@ -136,10 +136,10 @@ async function sendNotificationToTargets(notification = {}) {
 	let failed = 0;
 	const payload = JSON.stringify({
 		notification: {
-			title: notification.title || "Retiradas",
-			body: notification.message || "Voce recebeu uma nova atualizacao.",
-			icon: "/pwa-192.png",
-			badge: "/favicon-64.png",
+			title: notification.title || "REVO",
+			body: notification.message || "Você recebeu uma nova atualização.",
+			icon: "/brand/revo/revo_app_icon_192px.png",
+			badge: "/brand/revo/favicon_64.png",
 		},
 		data: {
 			route: notification.targetPath || "/tentativas",

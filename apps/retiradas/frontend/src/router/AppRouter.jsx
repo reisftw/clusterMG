@@ -1,5 +1,12 @@
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import {
+	BrowserRouter,
+	Navigate,
+	Outlet,
+	Route,
+	Routes,
+	useLocation,
+} from "react-router-dom";
 import PageWrapper from "../components/layout/PageWrapper";
 import ErrorPage from "../components/ui/ErrorPage";
 import Spinner from "../components/ui/Spinner";
@@ -12,6 +19,7 @@ import MaintenanceBoundary from "../modules/maintenance/components/MaintenanceBo
 import HomeRoute from "./HomeRoute";
 import ProtectedRoute from "./ProtectedRoute";
 import { ROUTES } from "./routes";
+import { resolvePageTitle } from "../utils/pageTitle";
 
 const Dashboard = lazy(
 	() => import("../modules/dashboard/components/DashboardPage"),
@@ -434,8 +442,17 @@ const MERCADO_PERMISSIONS = [
 	"mercado.config.manage",
 ];
 
+function PageTitleManager() {
+	const { pathname } = useLocation();
+	useEffect(() => {
+		document.title = resolvePageTitle(pathname);
+	}, [pathname]);
+	return null;
+}
+
 const AppRouter = () => (
 	<BrowserRouter>
+		<PageTitleManager />
 		<MaintenanceBoundary>
 			<Suspense fallback={<Spinner fullScreen />}>
 			<Routes>

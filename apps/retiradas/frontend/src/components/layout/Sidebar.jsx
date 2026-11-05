@@ -1801,9 +1801,13 @@ function SidebarHeader({ collapsed, isModernLayout, isMobileDrawer, onToggleColl
 		return (
 			<div className={collapsed ? "flex flex-col items-center gap-3" : ""}>
 				<img
-					src="/cluster-mg.png"
-					alt="Sempre Internet"
-					className={`${collapsed ? "w-12 rounded-xl" : "w-52 rounded-2xl"} mx-auto h-auto max-w-full object-contain shadow-[0_18px_42px_rgba(0,0,0,0.34)]`}
+					src={
+						collapsed
+							? "/brand/revo/revo_simbolo.svg"
+							: "/brand/revo/revo_logo_horizontal_light.svg"
+					}
+					alt="REVO"
+					className={`${collapsed ? "w-12" : "w-52"} mx-auto h-auto max-w-full object-contain drop-shadow-[0_18px_36px_rgba(0,0,0,0.28)]`}
 				/>
 				<p
 					className={`${collapsed ? "sr-only" : "mt-5"} text-xs font-semibold text-slate-300`}
@@ -1825,21 +1829,15 @@ function SidebarHeader({ collapsed, isModernLayout, isMobileDrawer, onToggleColl
 
 	return (
 		<div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-			<div className="flex h-9 w-9 items-center justify-center rounded-xl shadow-md">
-				<img
-					src="/cluster-mg.png"
-					alt="Sempre Internet"
-					className="h-9 w-9 rounded-xl object-cover"
-				/>
-			</div>
-			<div className={collapsed ? "sr-only" : ""}>
-				<p className="text-sm font-bold leading-none text-gray-900">
-					Sempre Internet
-				</p>
-				<p className="mt-0.5 text-xs font-medium text-orange-500">
-					Gestão Retiradas
-				</p>
-			</div>
+			<img
+				src={
+					collapsed
+						? "/brand/revo/revo_simbolo.svg"
+						: "/brand/revo/revo_logo_horizontal_dark.svg"
+				}
+				alt="REVO"
+				className={collapsed ? "h-9 w-9 object-contain" : "h-9 w-36 object-contain"}
+			/>
 			<button
 				type="button"
 				onClick={onToggleCollapsed}

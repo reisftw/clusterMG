@@ -392,7 +392,7 @@ export function buildRetiradaReceiptHtml(retirada) {
         <main class="document">
           <header class="header">
             <div class="header-top">
-              <img class="logo" src="${getAssetUrl("/cluster-mg.png")}" alt="Sempre Internet" />
+              <img class="logo" src="${getAssetUrl("/brand/revo/revo_logo_horizontal_dark_700px.png")}" alt="REVO" />
               <div class="meta">
                 Documento institucional
                 <br />

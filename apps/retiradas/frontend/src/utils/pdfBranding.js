@@ -1,6 +1,6 @@
-const CLUSTER_LOGO_URL = "/cluster-mg.png";
+const REVO_LOGO_URL = "/brand/revo/revo_logo_horizontal_dark_700px.png";
 
-let cachedClusterLogoDataUrl = "";
+let cachedRevoLogoDataUrl = "";
 
 function getImageFormat(dataUrl) {
 	if (dataUrl.startsWith("data:image/jpeg")) return "JPEG";
@@ -11,7 +11,7 @@ function getImageFormat(dataUrl) {
 async function imageUrlToDataUrl(url) {
 	const response = await fetch(url, { cache: "force-cache" });
 	if (!response.ok)
-		throw new Error("Não foi possível carregar a logo do Cluster MG.");
+		throw new Error("Não foi possível carregar a logo REVO.");
 	const blob = await response.blob();
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader();
@@ -22,9 +22,9 @@ async function imageUrlToDataUrl(url) {
 }
 
 export async function getClusterLogoDataUrl() {
-	if (cachedClusterLogoDataUrl) return cachedClusterLogoDataUrl;
-	cachedClusterLogoDataUrl = await imageUrlToDataUrl(CLUSTER_LOGO_URL);
-	return cachedClusterLogoDataUrl;
+	if (cachedRevoLogoDataUrl) return cachedRevoLogoDataUrl;
+	cachedRevoLogoDataUrl = await imageUrlToDataUrl(REVO_LOGO_URL);
+	return cachedRevoLogoDataUrl;
 }
 
 export async function addClusterLogo(pdf, options = {}) {
@@ -55,6 +55,6 @@ export async function addClusterLogo(pdf, options = {}) {
 
 		pdf.addImage(dataUrl, getImageFormat(dataUrl), x, y, width, height);
 	} catch (error) {
-		console.warn("[pdfBranding] Logo do Cluster MG não foi adicionada:", error);
+		console.warn("[pdfBranding] Logo REVO não foi adicionada:", error);
 	}
 }

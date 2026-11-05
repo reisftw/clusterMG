@@ -921,8 +921,8 @@ function PortalHeroHeader() {
 			</div>
 			<div className="relative max-w-xl">
 				<img
-					src="/cluster-mg.png"
-					alt="Cluster MG"
+					src="/brand/revo/revo_logo_horizontal_light.svg"
+					alt="REVO"
 					className="mb-8 h-auto w-40 max-w-full object-contain sm:w-52"
 					decoding="async"
 				/>

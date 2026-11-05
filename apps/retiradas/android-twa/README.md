@@ -1,6 +1,6 @@
 # Retiradas Android TWA
 
-Android wrapper for the Retiradas PWA hosted at `https://retiradas.tech`.
+Android wrapper for the REVO PWA hosted at `https://retiradas.tech`.
 
 - Package: `br.com.brasiltecpar.retiradas`
 - Generator: Bubblewrap

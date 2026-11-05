@@ -436,9 +436,9 @@ function BrandMark() {
 	return (
 		<div className="inline-flex items-center">
 			<img
-				src="/cluster-mg.png"
-				alt="Sempre Internet"
-				className="h-16 w-auto sm:h-20 lg:h-24"
+				src="/brand/revo/revo_logo_horizontal_light.svg"
+				alt="REVO"
+				className="h-10 w-auto sm:h-12 lg:h-14"
 			/>
 		</div>
 	);

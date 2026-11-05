@@ -73,7 +73,7 @@ function verifyTotpCode(secret, code, { window = 1 } = {}) {
 }
 
 function buildOtpAuthUrl({ issuer, account, secret }) {
-	const safeIssuer = String(issuer || "Cluster MG");
+	const safeIssuer = String(issuer || "REVO");
 	const safeAccount = String(account || "usuario");
 	const label = `${safeIssuer}:${safeAccount}`;
 	const params = new URLSearchParams({

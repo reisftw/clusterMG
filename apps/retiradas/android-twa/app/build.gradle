@@ -23,16 +23,16 @@ plugins {
 def twaManifest = [
     applicationId: 'br.com.brasiltecpar.retiradas',
     hostName: 'retiradas.tech', // The domain being opened in the TWA.
-    launchUrl: '/app?source=android&appVersion=1.0.4&appCode=104', // The start path for the TWA. Must be relative to the domain.
-    name: 'Retiradas', // The application name.
-    launcherName: 'Retiradas', // The name shown on the Android Launcher.
-    themeColor: '#F97316', // The color used for the status bar.
-    themeColorDark: '#F97316', // The color used for the dark status bar.
-    navigationColor: '#F8FAFC', // The color used for the navigation bar.
+	launchUrl: '/app?source=android&appVersion=1.0.5&appCode=105', // The start path for the TWA. Must be relative to the domain.
+	name: 'REVO', // The application name.
+	launcherName: 'REVO', // The name shown on the Android Launcher.
+	themeColor: '#0A1B3D', // The color used for the status bar.
+	themeColorDark: '#0A1B3D', // The color used for the dark status bar.
+	navigationColor: '#0A1B3D', // The color used for the navigation bar.
     navigationColorDark: '#000000', // The color used for the dark navbar.
     navigationDividerColor: '#E2E8F0', // The navbar divider color.
     navigationDividerColorDark: '#000000', // The dark navbar divider color.
-    backgroundColor: '#F8FAFC', // The color used for the splash screen background.
+	backgroundColor: '#0A1B3D', // The color used for the splash screen background.
     enableNotifications: true, // Set to true to enable notification delegation.
     // Every shortcut must include the following fields:
     // - name: String that will show up in the shortcut.
@@ -60,8 +60,8 @@ android {
         applicationId "br.com.brasiltecpar.retiradas"
         minSdkVersion 24
         targetSdkVersion 36
-        versionCode 104
-        versionName "1.0.4"
+		versionCode 105
+		versionName "1.0.5"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name

@@ -249,11 +249,11 @@ function createEmailTemplate({
 	logoUrl = "",
 	theme = emailTheme,
 } = {}) {
-	const safeTitle = escapeHtml(title || "Retiradas");
-	const safePreheader = escapeHtml(preheader || title || "Sistema Retiradas");
+	const safeTitle = escapeHtml(title || "REVO");
+	const safePreheader = escapeHtml(preheader || title || "REVO — Sistema de Retiradas");
 	const resolvedLogoUrl =
 		logoUrl ||
-		`${String(appUrl || DEFAULT_CONFIG.appUrl).replace(/\/+$/, "")}/cluster-mg.png`;
+		`${String(appUrl || DEFAULT_CONFIG.appUrl).replace(/\/+$/, "")}/brand/revo/revo_logo_horizontal_dark_700px.png`;
 	const bodyMessage = messageHtml || textToHtml(message);
 	const action = buttonUrl
 		? `
@@ -316,7 +316,7 @@ function createEmailTemplate({
                     <h1 class="email-title" style="margin:20px 0 0;font-size:34px;line-height:1.12;font-weight:800;color:#ffffff">${safeTitle}</h1>
                   </td>
                   <td class="email-logo-cell" valign="middle" align="right" width="210" style="padding-left:24px">
-                    <img class="email-logo" src="${safeUrl(resolvedLogoUrl)}" width="190" alt="CLUSTER MG" style="display:block;width:190px;max-width:190px;height:auto;border:0;outline:none;text-decoration:none;border-radius:14px">
+                    <img class="email-logo" src="${safeUrl(resolvedLogoUrl)}" width="190" alt="REVO" style="display:block;width:190px;max-width:190px;height:auto;border:0;outline:none;text-decoration:none">
                   </td>
                 </tr>
               </table>

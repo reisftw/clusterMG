@@ -1,6 +1,6 @@
 {
-	"name": "Retiradas Terceiros",
-	"short_name": "Terceiros",
+	"name": "REVO — Portal de Terceiros",
+	"short_name": "REVO Terceiros",
 	"id": "/terceiros",
 	"description": "Aplicativo de apoio para tecnicos terceiros.",
 	"lang": "pt-BR",
@@ -8,23 +8,23 @@
 	"scope": "/",
 	"display": "standalone",
 	"background_color": "#061b38",
-	"theme_color": "#061b38",
+	"theme_color": "#0A1B3D",
 	"orientation": "portrait-primary",
 	"icons": [
 		{
-			"src": "/terceiros-pwa-192-v2.png",
+			"src": "/brand/revo/revo_app_icon_192px.png",
 			"sizes": "192x192",
 			"type": "image/png",
 			"purpose": "any"
 		},
 		{
-			"src": "/terceiros-pwa-512-v2.png",
+			"src": "/brand/revo/revo_app_icon_512px.png",
 			"sizes": "512x512",
 			"type": "image/png",
 			"purpose": "any"
 		},
 		{
-			"src": "/terceiros-pwa-512-v2.png",
+			"src": "/brand/revo/revo_app_maskable_512.png",
 			"sizes": "512x512",
 			"type": "image/png",
 			"purpose": "maskable"

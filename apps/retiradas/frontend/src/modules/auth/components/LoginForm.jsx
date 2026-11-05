@@ -438,9 +438,9 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 
 					<div className="relative z-10">
 						<img
-							src="/cluster-mg.png"
-							alt="Sempre Internet"
-							className="h-20 w-auto object-contain drop-shadow-lg xl:h-24"
+							src="/brand/revo/revo_logo_horizontal_light.svg"
+							alt="REVO — Sistema de Retiradas"
+							className="h-14 w-auto object-contain drop-shadow-lg xl:h-16"
 						/>
 					</div>
 
@@ -470,9 +470,9 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 						<section className="rounded-[34px] border border-white/80 bg-white/90 px-6 py-8 shadow-[0_30px_90px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:px-12 sm:py-10">
 							<div className="mb-8 flex justify-center lg:hidden">
 								<img
-									src="/cluster-mg.png"
-									alt="Sempre Internet"
-									className="h-16 w-auto object-contain"
+									src="/brand/revo/revo_logo_horizontal_dark.svg"
+									alt="REVO — Sistema de Retiradas"
+									className="h-11 w-auto object-contain"
 								/>
 							</div>
 

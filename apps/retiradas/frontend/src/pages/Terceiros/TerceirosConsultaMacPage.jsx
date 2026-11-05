@@ -75,8 +75,8 @@ export default function TerceirosConsultaMacPage({ portal = "terceiros" }) {
 		const previous = link?.getAttribute("href");
 		const appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
 		const previousAppleIcon = appleIcon?.getAttribute("href");
-		link?.setAttribute("href", "/terceiros.webmanifest?v=cluster-v2");
-		appleIcon?.setAttribute("href", "/terceiros-apple-touch-icon-v2.png");
+		link?.setAttribute("href", "/terceiros.webmanifest?v=revo-v1");
+		appleIcon?.setAttribute("href", "/brand/revo/revo_app_icon_192px.png");
 		return () => {
 			if (previous) link?.setAttribute("href", previous);
 			if (previousAppleIcon) appleIcon?.setAttribute("href", previousAppleIcon);
@@ -140,8 +140,8 @@ export default function TerceirosConsultaMacPage({ portal = "terceiros" }) {
 							<h1 className="mt-2 text-3xl font-black">Consultar MAC</h1>
 						</div>
 						<img
-							src="/cluster-mg.png"
-							alt="Cluster MG"
+							src="/brand/revo/revo_logo_horizontal_light.svg"
+							alt="REVO"
 							className="h-auto w-40 object-contain"
 							decoding="async"
 						/>

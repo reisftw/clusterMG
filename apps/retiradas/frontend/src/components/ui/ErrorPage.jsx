@@ -88,9 +88,9 @@ const ErrorPage = ({ code = "404", extraActions = null }) => {
 			<div className="relative mx-auto flex min-h-[calc(100dvh-2rem)] max-w-[1500px] flex-col">
 				<header className="flex h-14 shrink-0 items-center justify-between sm:h-16 xl:h-20">
 					<img
-						src="/cluster-mg.png"
-						alt="Sempre Internet"
-						className="h-16 w-auto object-contain sm:h-20 xl:h-24"
+						src="/brand/revo/revo_logo_horizontal_dark.svg"
+						alt="REVO"
+						className="h-10 w-auto object-contain sm:h-12 xl:h-14"
 					/>
 				</header>
 

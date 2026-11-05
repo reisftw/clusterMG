@@ -456,7 +456,7 @@ export default function AdminTechniciansMapPage() {
 				<div className="maps-command-title">
 					<Link to="/maps" title="Voltar ao Retiradas Maps"><ArrowLeft size={18} /></Link>
 					<span><LocateFixed size={20} /></span>
-					<div><strong>Sistema de Retiradas <b>| Equipe em Campo</b></strong><small>{PHASE_LABELS[presentationStep.phase] || "Central de monitoramento geográfico"}</small></div>
+					<div><strong>REVO <b>| Equipe em Campo</b></strong><small>{PHASE_LABELS[presentationStep.phase] || "Central de monitoramento geográfico"}</small></div>
 				</div>
 				<div className="maps-command-header-status">
 					<span className={connected ? "is-online" : "is-offline"}>{connected ? <Wifi size={15} /> : <WifiOff size={15} />}{connected ? "Tempo real" : "Reconectando"}</span>

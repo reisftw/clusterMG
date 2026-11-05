@@ -59,9 +59,14 @@ const TrocarSenhaModal = ({ obrigatorio = false, onClose }) => {
 				<div className="text-center space-y-1">
 					<div className="flex justify-center mb-2">
 						<img
-							src="/cluster-mg.png"
-							alt="Logo"
-							className="h-8 object-contain"
+							src="/brand/revo/revo_logo_horizontal_dark.svg"
+							alt="REVO"
+							className="h-8 w-auto object-contain dark:hidden"
+						/>
+						<img
+							src="/brand/revo/revo_logo_horizontal_light.svg"
+							alt="REVO"
+							className="hidden h-8 w-auto object-contain dark:block"
 						/>
 					</div>
 					<div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mx-auto">

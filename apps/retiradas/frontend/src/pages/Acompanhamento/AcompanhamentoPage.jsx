@@ -1035,7 +1035,6 @@ function normalizeMetaSourceForBalance(metaMes, month, feriadosSet) {
 	const source = {
 		...metaMes,
 		mes: metaMes.mes || month,
-		saldoDiario: firstArray(metaMes.rawDays, metaMes.saldoDiario),
 	};
 	const recalculated = recalcularSaldoDiario(
 		source,
@@ -1065,12 +1064,8 @@ function buildMetaTileData(metaMes, label, month, feriadosSet) {
 	const saldoRows = Array.isArray(metaMes?.saldoDiario)
 		? metaMes.saldoDiario
 		: [];
-	const lastSaldoRow =
-		[...saldoRows].reverse().find((row) => Number(row?.totalDia || 0) > 0) ||
-		saldoRows.at(-1) ||
-		null;
-	const monthlyBalance = Number(lastSaldoRow?.saldoMes || 0);
-	const hasMonthlyBalance = Boolean(metaMes && lastSaldoRow);
+	const monthlyBalance = Number(metaMes?.saldoFinal || 0);
+	const hasMonthlyBalance = Boolean(metaMes && saldoRows.length);
 	let visualStatus = pace.status;
 	if (hasMonthlyBalance) {
 		visualStatus = monthlyBalance >= 0 ? "ok" : "low";
@@ -2536,7 +2531,11 @@ function AcompanhamentoHeader({
 	return (
 		<header className="acomp-header">
 			<div className="acomp-brand">
-				<img src="/cluster-mg.png" alt="Sempre Internet" decoding="async" />
+				<img
+					src="/brand/revo/revo_logo_horizontal_light.svg"
+					alt="REVO"
+					decoding="async"
+				/>
 				<div>
 					<span>{label}</span>
 					<h1>SALA DE AGENDAMENTOS</h1>

@@ -111,7 +111,9 @@ async function imageToDataUrl(url) {
 async function exportarRequisicaoPdf(requisicao) {
 	const { jsPDF } = await import("jspdf");
 	const doc = new jsPDF({ unit: "pt", format: "a4" });
-	const logo = await imageToDataUrl("/cluster-mg.png").catch(() => "");
+	const logo = await imageToDataUrl(
+		"/brand/revo/revo_logo_horizontal_dark_700px.png",
+	).catch(() => "");
 	const width = doc.internal.pageSize.getWidth();
 	const height = doc.internal.pageSize.getHeight();
 	const margin = 42;
@@ -134,7 +136,7 @@ async function exportarRequisicaoPdf(requisicao) {
 	doc.text("Requisição de Insumo", margin + 156, y + 42);
 	doc.setFontSize(10);
 	doc.setTextColor(191, 219, 254);
-	doc.text("Sistema de Retiradas | Cluster MG", margin + 156, y + 64);
+	doc.text("REVO | Sistema de Retiradas", margin + 156, y + 64);
 	doc.setFontSize(12);
 	doc.setFont("helvetica", "normal");
 	doc.setTextColor(255, 255, 255);
@@ -221,7 +223,7 @@ async function exportarRequisicaoPdf(requisicao) {
 			doc.setFontSize(9);
 			doc.setTextColor(148, 163, 184);
 			doc.text(
-				"Documento gerado automaticamente pelo Sistema de Retiradas.",
+				"Documento gerado automaticamente pelo REVO.",
 				margin,
 				height - 34,
 			);
@@ -234,7 +236,7 @@ async function exportarRequisicaoPdf(requisicao) {
 	doc.setFontSize(9);
 	doc.setTextColor(148, 163, 184);
 	doc.text(
-		"Documento gerado automaticamente pelo Sistema de Retiradas.",
+		"Documento gerado automaticamente pelo REVO.",
 		margin,
 		height - 34,
 	);

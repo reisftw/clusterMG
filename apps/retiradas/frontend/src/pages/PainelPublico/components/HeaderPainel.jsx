@@ -82,8 +82,8 @@ export default function HeaderPainel({
 		<div className="header">
 			<div className="header-left">
 				<img
-					src="/cluster-mg.png"
-					alt="Logo Retirada Painel"
+					src="/brand/revo/revo_logo_horizontal_light.svg"
+					alt="REVO"
 					className="header-logo"
 				/>
 				<div>

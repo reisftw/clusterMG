@@ -18,7 +18,7 @@ export function dispatchRadarNotification(alert, onOpen) {
 		: `Uma retirada esta a aproximadamente ${distance} metros de voce.`;
 	const notification = new Notification(TITLES[alert.category] || "Radar de Retiradas", {
 		body,
-		icon: "/pwa-192x192.png",
+		icon: "/brand/revo/revo_app_icon_192px.png",
 		tag: `maps-radar-${alert.id}`,
 		renotify: false,
 	});

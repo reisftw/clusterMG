@@ -58,8 +58,8 @@ export default function MatchPublicoPage() {
 			<div className="match-public-header header">
 				<div className="header-left">
 					<img
-						src="/cluster-mg.png"
-						alt="Logo Retirada"
+						src="/brand/revo/revo_logo_horizontal_light.svg"
+						alt="REVO"
 						className="header-logo"
 						decoding="async"
 					/>
