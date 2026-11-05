@@ -109,6 +109,16 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(__testables.validateOrderRow(baseRow({ status: "FINALIZADA" }))).toBe(false);
 	});
 
+	it("gera contato universal do WhatsApp somente para telefone valido", () => {
+		expect(__testables.orderWhatsappUrl(baseRow({ telefone: "(31) 99999-0000" })))
+			.toBe("https://wa.me/5531999990000");
+		expect(__testables.orderWhatsappUrl(baseRow({
+			telefone: "",
+			source_payload: { cliente: { telefone_primario: "+55 31 98888-0000" } },
+		}))).toBe("https://wa.me/5531988880000");
+		expect(__testables.orderWhatsappUrl(baseRow({ telefone: "123" }))).toBe("");
+	});
+
 	it("carrega todas as retiradas da area para o tecnico sem filtrar pelo responsavel", () => {
 		const params = [];
 		const filters = __testables.sourceFilters({

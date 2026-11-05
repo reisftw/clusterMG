@@ -103,6 +103,28 @@ function text(value) {
 	return String(value ?? "").trim();
 }
 
+function orderWhatsappUrl(order = {}) {
+	const source = order.source_payload || {};
+	const candidates = [
+		order.telefone,
+		...(Array.isArray(order.telefones) ? order.telefones : []),
+		source.telefone,
+		source.telefone_primario,
+		source.telefone_principal,
+		source.celular,
+		source.whatsapp,
+		source.cliente?.telefone_primario,
+		source.cliente?.telefone,
+	];
+	for (const candidate of candidates) {
+		let digits = text(candidate).replace(/\D/g, "");
+		if (digits.startsWith("00")) digits = digits.slice(2);
+		if (!digits.startsWith("55") && /^\d{10,11}$/.test(digits)) digits = `55${digits}`;
+		if (/^55\d{10,11}$/.test(digits)) return `https://wa.me/${digits}`;
+	}
+	return "";
+}
+
 function boundedInteger(value, fallback, minimum, maximum) {
 	const parsed = Number.parseInt(value, 10);
 	return Number.isFinite(parsed) ? Math.min(Math.max(parsed, minimum), maximum) : fallback;
@@ -611,6 +633,7 @@ async function getOrder(orderId, user = {}) {
 	if (!row || !validateOrderRow(row)) throw apiError("Ordem nao encontrada no Maps.", 404, "ORDER_NOT_FOUND");
 	const point = mapPoint(row, user);
 	if (!filterVisiblePoint(point, user, new Set())) throw apiError("Voce nao pode visualizar esta ordem.", 403, "ORDER_FORBIDDEN");
+	point.whatsappUrl = orderWhatsappUrl(row);
 	point.visitEvidence = await getOrderVisitEvidence(row);
 	return point;
 }
@@ -2582,6 +2605,7 @@ module.exports = {
 		normalize,
 		normalizeRouteRows,
 		optimizeNearestNeighbor,
+		orderWhatsappUrl,
 		parseCoordinates,
 		pointPreviewLimit,
 		radarWithinSchedule,

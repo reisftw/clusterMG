@@ -1,4 +1,4 @@
-import { Clock3, ExternalLink, MapPin, Navigation, PackagePlus, Route, ShieldCheck, TriangleAlert, UserRound, X } from "lucide-react";
+import { Clock3, ExternalLink, MapPin, MessageCircle, Navigation, PackagePlus, Route, ShieldCheck, TriangleAlert, UserRound, X } from "lucide-react";
 import { useState } from "react";
 import { formatMapClientLabel } from "../utils/pointLabels";
 
@@ -78,6 +78,7 @@ export default function OrderDetailPanel({ item, loading, navigation, navigation
 						<div className="maps-v2-privacy-note"><MapPin size={18} /><span>Esta oportunidade esta disponivel, mas a localizacao ainda esta sendo processada.</span></div>
 					) : null}
 					<div className="maps-v2-detail-actions">
+						{item.whatsappUrl ? <a className="maps-v2-secondary-button" href={item.whatsappUrl} target="_blank" rel="noreferrer"><MessageCircle size={17} /> Falar no WhatsApp <ExternalLink size={14} /></a> : null}
 						{item.assignedToCurrentUser ? (<>
 							{navigateUrl !== "#" ? <a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Abrir rota <ExternalLink size={14} /></a> : null}
 							<button type="button" className="maps-v2-primary-button" disabled={!item.locationAvailable} onClick={() => onAddRoute(item.id)}><Route size={17} /> Adicionar ao roteiro</button>

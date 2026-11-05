@@ -34,6 +34,7 @@ import {
 	getPushSupportState,
 	syncSavedPushSubscription,
 } from "../../../services/pushNotificationsService";
+import { selectWhatsappUrl } from "../../../utils/whatsapp";
 import {
 	baixarHistoricoTentativasCsv,
 	buscarConfiguracoesTentativas,
@@ -770,10 +771,7 @@ function MyRoute() {
 	}, [city, neighborhood, priority, sort, position, loadRoute, loadLocalities]);
 
 	const openWhatsapp = (started, preference) => {
-		const url =
-			preference === "business"
-				? started.whatsappBusinessUrl || started.whatsappUrl
-				: started.whatsappNormalUrl || started.whatsappUrl;
+		const url = selectWhatsappUrl(started, preference, window.navigator);
 		window.open(url, "_blank", "noopener,noreferrer");
 		setPendingContact(started);
 	};
