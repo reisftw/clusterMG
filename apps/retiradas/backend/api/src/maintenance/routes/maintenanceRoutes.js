@@ -127,7 +127,7 @@ function createMaintenanceRouter({
 			res.set("Content-Type", "application/vnd.android.package-archive");
 			res.download(
 				path.resolve(release.storage_path),
-				`Retiradas-${release.version_name}.apk`,
+				`REVO-${release.version_name}.apk`,
 				(error) => {
 					if (error && !res.headersSent) next(error);
 				},
