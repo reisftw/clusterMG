@@ -101,6 +101,79 @@ function RequestsChart({ items = [] }) {
 		</div>
 	);
 }
+
+export function SystemTopology({ dashboard }) {
+	const presence = dashboard?.presence || {};
+	const status = dashboard?.status || {};
+	const services = status.services || [];
+	const onlineUsers = Number(presence.online_users || 0);
+	const visibleUsers = Math.min(24, onlineUsers);
+	const [selectedServiceId, setSelectedServiceId] = useState(null);
+	const selectedService = services.find((service) => (service.id || service.name) === selectedServiceId);
+
+	return (
+		<section className="maintenance-panel maintenance-topology-panel">
+			<div className="maintenance-panel-heading">
+				<div>
+					<Activity size={20} />
+					<span>
+						<strong>Mapa operacional em tempo real</strong>
+						<small>Usuarios ativos, entrada da aplicacao e saude dos servicos.</small>
+					</span>
+				</div>
+				<b className={status.summary?.offline ? "is-alert" : "is-online"}>
+					<i />
+					{status.summary?.offline ? `${status.summary.offline} indisponivel(is)` : "Fluxo estavel"}
+				</b>
+			</div>
+			<div className="maintenance-topology-canvas">
+				<div className="maintenance-topology-users">
+					<div className="maintenance-topology-label">
+						<Users size={17} />
+						<span><strong>{number(onlineUsers)}</strong> usuarios online</span>
+					</div>
+					<div className="maintenance-user-cloud" aria-label={`${onlineUsers} usuarios ativos`}>
+						{Array.from({ length: visibleUsers }, (_, index) => (
+							<i key={index} style={{ "--user-index": index }} />
+						))}
+						{!visibleUsers ? <small>Nenhuma sessao ativa agora</small> : null}
+					</div>
+				</div>
+
+				<div className="maintenance-topology-core">
+					<div><Activity size={18} /><span><small>ENTRADA</small><strong>Gateway</strong></span></div>
+					<div><Server size={18} /><span><small>NUCLEO</small><strong>API Retiradas</strong></span></div>
+				</div>
+
+				<div className="maintenance-topology-services">
+					{services.slice(0, 6).map((service) => {
+						const serviceId = service.id || service.name;
+						return (
+							<button
+								type="button"
+								className={`is-${service.status}${selectedServiceId === serviceId ? " is-selected" : ""}`}
+								key={serviceId}
+								onClick={() => setSelectedServiceId((current) => current === serviceId ? null : serviceId)}
+								aria-pressed={selectedServiceId === serviceId}
+							>
+								<Server size={17} />
+								<span><strong>{service.name}</strong><small>{service.status === "online" ? `${service.details?.responseMs ?? "-"} ms` : service.status === "disabled" ? "Opcional" : service.reason || "Indisponivel"}</small></span>
+							</button>
+						);
+					})}
+					{!services.length ? <p className="maintenance-empty">Servicos aguardando leitura.</p> : null}
+				</div>
+			</div>
+			{selectedService ? (
+				<div className="maintenance-topology-detail" role="status">
+					<span className={`is-${selectedService.status}`}><i /></span>
+					<div><small>SERVICO SELECIONADO</small><strong>{selectedService.name}</strong></div>
+					<p>{selectedService.status === "online" ? `Resposta em ${selectedService.details?.responseMs ?? "-"} ms` : selectedService.reason || "Sem resposta disponivel"}</p>
+				</div>
+			) : null}
+		</section>
+	);
+}
 function OverviewTab({ dashboard }) {
 	const totals = dashboard?.metrics?.totals || {};
 	const queries = dashboard?.metrics?.queries || {};
@@ -130,6 +203,8 @@ function OverviewTab({ dashboard }) {
 				<MetricCard icon={Download} label="Resposta HTTP" value={fileSize(totals.response_bytes)} note={`P50 ${number(totals.p50_ms)} ms · P99 ${number(totals.p99_ms)} ms`} />
 				<MetricCard icon={Smartphone} label="Service worker" value={number(sw.clients)} note={`${number(sw.failures)} falha(s) critica(s) · ${number(sw.network_failures)} oscilacao(oes) de rede`} tone={Number(sw.failures) ? "red" : Number(sw.network_failures) ? "orange" : "green"} />
 			</section>
+
+			<SystemTopology dashboard={dashboard} />
 
 			<section className="maintenance-panel maintenance-graph-panel">
 				<div className="maintenance-panel-heading"><div><BarChart3 size={20} /><span><strong>Volume e quedas</strong><small>Requisicoes agrupadas por hora; marcacao vermelha indica erro 5xx.</small></span></div></div>

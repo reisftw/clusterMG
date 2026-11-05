@@ -4,3 +4,691 @@
 .maintenance-app-columns{display:grid;grid-template-columns:.9fr 1.1fr;gap:18px;align-items:start}.maintenance-app-current,.maintenance-app-upload{overflow:hidden}.maintenance-app-version{display:flex;align-items:center;gap:14px;padding:20px 18px}.maintenance-app-version>span{width:58px;height:58px;display:grid;place-items:center;border-radius:10px;background:#e8f8f1;color:#07835f}.maintenance-app-version small{font-size:9px;color:#77829e;font-weight:900;letter-spacing:.08em}.maintenance-app-version h2{margin:3px 0;font-size:26px}.maintenance-app-version p{font-size:11px;color:#66728e;font-weight:700}.maintenance-app-details{padding:0 18px}.maintenance-app-details>div{padding:11px 0;border-top:1px solid #edf1f6}.maintenance-app-details dt{font-size:9px;color:#8994aa;text-transform:uppercase;font-weight:900}.maintenance-app-details dd{margin-top:4px;font-size:12px;font-weight:700}.maintenance-app-details code{display:block;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:#41506d}.maintenance-app-share{margin:16px 18px 0}.maintenance-app-share>label{display:block;margin-bottom:6px;font-size:10px;font-weight:900;color:#596680;text-transform:uppercase}.maintenance-app-share>div{display:flex;gap:7px}.maintenance-app-share input{min-width:0;flex:1;border:1px solid #d5dfeb;border-radius:7px;background:#f7f9fc;padding:10px;color:#41506d;font:inherit;font-size:11px}.maintenance-app-share button{border:0;border-radius:7px;background:#eaf3ff;color:#0d65df;padding:0 12px;display:flex;align-items:center;gap:6px;font-weight:850}.maintenance-app-download,.maintenance-app-publish{height:46px;margin:18px;border:0;border-radius:7px;background:#0d65df;color:#fff;display:flex;align-items:center;justify-content:center;gap:9px;font-weight:850;text-decoration:none}.maintenance-app-upload>label,.maintenance-app-upload>.maintenance-duration-row{display:block;margin:16px 18px}.maintenance-app-upload label>span{display:block;font-size:11px;color:#4f5b76;font-weight:850;margin-bottom:7px}.maintenance-app-upload input,.maintenance-app-upload textarea{width:100%;border:1px solid #d5dfeb;border-radius:7px;background:#fbfcfe;padding:11px 12px;color:#18213d;font:inherit;font-size:13px;outline:none}.maintenance-app-upload>.maintenance-duration-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.maintenance-app-upload>.maintenance-duration-row label{margin:0}.maintenance-app-file{position:relative!important;display:flex!important;align-items:center;gap:12px;padding:16px!important;border:1px dashed #9ec5f4;border-radius:8px;background:#f4f9ff;cursor:pointer}.maintenance-app-file>svg{color:#1471e9}.maintenance-app-file>span{margin:0!important;flex:1}.maintenance-app-file b,.maintenance-app-file small{display:block}.maintenance-app-file small{margin-top:3px;color:#7b879f}.maintenance-app-file input{position:absolute!important;inset:0;opacity:0;cursor:pointer}.maintenance-app-publish{width:calc(100% - 36px);margin-top:4px}.maintenance-app-publish:disabled{opacity:.55}.maintenance-app-message{padding:13px 15px;border:1px solid #bdd8f8;background:#eef6ff;color:#145aaa;border-radius:8px;font-size:12px;font-weight:750}.maintenance-app-chart{height:190px;display:flex;align-items:flex-end;gap:10px;padding:26px 20px 16px}.maintenance-app-chart>div{height:100%;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:7px}.maintenance-app-chart span{display:block;width:min(30px,80%);min-height:4px;background:#1471e9;border-radius:5px 5px 2px 2px}.maintenance-app-chart small{font-size:9px;color:#8994aa;white-space:nowrap}.maintenance-table-note{display:block;color:#8994aa;margin-top:3px}.maintenance-release-active,.maintenance-release-old{display:inline-flex;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}.maintenance-release-active{background:#e8f8f1;color:#087a5a}.maintenance-release-old{background:#eef2f7;color:#66728e}
 @media(max-width:1180px){.maintenance-public-hero{grid-template-columns:1fr 1.15fr}.maintenance-metrics-grid{grid-template-columns:repeat(3,1fr)}.maintenance-two-columns{grid-template-columns:1fr}.maintenance-control-grid{grid-template-columns:1fr}.maintenance-current-state{position:relative;top:auto}.maintenance-current-state>button{position:static;margin-left:auto}.maintenance-history-list dl{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){.maintenance-public-shell{padding:20px 16px 24px;justify-content:flex-start}.maintenance-public-hero{display:flex;flex-direction:column-reverse}.maintenance-public-art{margin:-8px -14px 2px}.maintenance-public-art img{width:100%}.maintenance-public-copy{text-align:center}.maintenance-running-badge{font-size:12px}.maintenance-public-copy h1{font-size:42px;line-height:1.02;margin:16px 0}.maintenance-public-copy>p{font-size:16px}.maintenance-estimate{text-align:left;padding:14px}.maintenance-public-copy>button{width:100%;min-width:0}.maintenance-public-details{grid-template-columns:1fr;padding:8px}.maintenance-public-details>div{border-right:0;border-bottom:1px solid #e3e9f2;padding:15px}.maintenance-admin-header{height:auto;min-height:68px;padding:10px 14px}.maintenance-admin-brand small,.maintenance-admin-actions>a span{display:none}.maintenance-admin-actions{gap:6px}.maintenance-admin-actions>a{width:38px;padding:0;justify-content:center;font-size:0}.maintenance-status-live,.maintenance-status-ok{font-size:10px;padding:7px 9px}.maintenance-admin-body{padding:22px 13px 40px}.maintenance-admin-title{align-items:flex-start;flex-direction:column}.maintenance-admin-title h1{font-size:28px}.maintenance-filter{width:100%}.maintenance-filter select{flex:1;min-width:0}.maintenance-tabs{overflow-x:auto}.maintenance-tabs button{white-space:nowrap;padding:11px}.maintenance-metrics-grid{grid-template-columns:repeat(2,1fr)}.maintenance-metric{padding:12px;display:block}.maintenance-metric>span{margin-bottom:9px}.maintenance-metric strong{font-size:21px}.maintenance-chart{padding-left:10px;padding-right:10px}.maintenance-service-list{grid-template-columns:1fr}.maintenance-table-wrap table{min-width:680px}.maintenance-duration-row{grid-template-columns:1fr}.maintenance-current-state{display:block}.maintenance-current-state>span{margin-bottom:12px}.maintenance-current-state>button{width:100%;margin-top:18px}.maintenance-history-list article>div>div{display:block}.maintenance-history-list dl{grid-template-columns:repeat(2,1fr)}.maintenance-admin-title p{font-size:13px}.maintenance-app-columns{grid-template-columns:1fr}.maintenance-app-upload>.maintenance-duration-row{grid-template-columns:1fr}.maintenance-app-chart{gap:5px;padding-left:10px;padding-right:10px}.maintenance-app-chart small{font-size:8px;writing-mode:vertical-rl}.maintenance-app-details code{white-space:normal;overflow-wrap:anywhere}}
+/* System Design: visual tecnico inspirado no fluxo operacional ao vivo. */
+.maintenance-admin-shell {
+	--maintenance-bg: #050a12;
+	--maintenance-surface: #091421;
+	--maintenance-surface-2: #0c1a2a;
+	--maintenance-line: #1d3549;
+	--maintenance-text: #eaf7ff;
+	--maintenance-muted: #7f98ae;
+	--maintenance-cyan: #22d3ee;
+	--maintenance-green: #22c55e;
+	--maintenance-pink: #fb7185;
+	--maintenance-amber: #f59e0b;
+	background:
+		repeating-linear-gradient(0deg, transparent 0 27px, rgba(77, 111, 140, 0.08) 28px),
+		repeating-linear-gradient(90deg, transparent 0 27px, rgba(77, 111, 140, 0.06) 28px),
+		var(--maintenance-bg);
+	color: var(--maintenance-text);
+}
+
+.maintenance-admin-header {
+	border-color: var(--maintenance-line);
+	background: rgba(5, 10, 18, 0.96);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.maintenance-admin-brand > span {
+	border: 1px solid rgba(34, 211, 238, 0.45);
+	border-radius: 6px;
+	background: #0b2230;
+	color: var(--maintenance-cyan);
+	box-shadow: 0 0 22px rgba(34, 211, 238, 0.12);
+}
+
+.maintenance-admin-brand strong,
+.maintenance-admin-title h1,
+.maintenance-panel-heading strong,
+.maintenance-form-heading strong,
+.maintenance-metric strong,
+.maintenance-current-state h2,
+.maintenance-history-list article strong,
+.maintenance-app-version h2 {
+	color: var(--maintenance-text);
+}
+
+.maintenance-admin-brand small,
+.maintenance-admin-title p,
+.maintenance-panel-heading small,
+.maintenance-form-heading small,
+.maintenance-metric p,
+.maintenance-current-state p,
+.maintenance-history-list article p,
+.maintenance-app-version p {
+	color: var(--maintenance-muted);
+}
+
+.maintenance-admin-title small {
+	color: var(--maintenance-cyan);
+	letter-spacing: 0;
+}
+
+.maintenance-admin-actions > a,
+.maintenance-admin-actions > button,
+.maintenance-filter select,
+.maintenance-filter button,
+.maintenance-pagination button {
+	border-color: var(--maintenance-line);
+	border-radius: 6px;
+	background: var(--maintenance-surface-2);
+	color: #bcd1e2;
+}
+
+.maintenance-admin-actions > a:hover,
+.maintenance-admin-actions > button:hover,
+.maintenance-filter button:hover,
+.maintenance-pagination button:hover:not(:disabled) {
+	border-color: rgba(34, 211, 238, 0.55);
+	color: var(--maintenance-cyan);
+}
+
+.maintenance-status-ok {
+	border: 1px solid rgba(34, 197, 94, 0.3);
+	background: rgba(34, 197, 94, 0.08);
+	color: #4ade80;
+}
+
+.maintenance-status-live {
+	border: 1px solid rgba(251, 113, 133, 0.34);
+	background: rgba(251, 113, 133, 0.09);
+	color: var(--maintenance-pink);
+}
+
+.maintenance-status-live i,
+.maintenance-status-ok i {
+	box-shadow: 0 0 12px currentColor;
+	animation: maintenanceStatusPulse 1.8s ease-in-out infinite;
+}
+
+.maintenance-tabs {
+	gap: 2px;
+	border-color: var(--maintenance-line);
+}
+
+.maintenance-tabs button {
+	color: var(--maintenance-muted);
+}
+
+.maintenance-tabs button:hover {
+	color: #d7eaf7;
+}
+
+.maintenance-tabs button.active {
+	border-color: var(--maintenance-cyan);
+	color: var(--maintenance-cyan);
+	text-shadow: 0 0 16px rgba(34, 211, 238, 0.25);
+}
+
+.maintenance-panel,
+.maintenance-control-form,
+.maintenance-current-state,
+.maintenance-metric {
+	border-color: var(--maintenance-line);
+	border-radius: 6px;
+	background: rgba(9, 20, 33, 0.94);
+	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.maintenance-metric {
+	position: relative;
+	overflow: hidden;
+	border-top: 2px solid #2386ad;
+}
+
+.maintenance-metric::after {
+	content: "";
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.6), transparent);
+}
+
+.maintenance-metric > span {
+	border: 1px solid rgba(34, 211, 238, 0.25);
+	border-radius: 5px;
+	background: rgba(34, 211, 238, 0.09);
+	color: var(--maintenance-cyan);
+}
+
+.maintenance-metric small,
+.maintenance-sw-summary small,
+.maintenance-current-state small,
+.maintenance-history-list dt,
+.maintenance-app-version small,
+.maintenance-app-details dt {
+	color: var(--maintenance-muted);
+	letter-spacing: 0;
+}
+
+.maintenance-metric-green {
+	border-top-color: var(--maintenance-green);
+}
+
+.maintenance-metric-green > span {
+	border-color: rgba(34, 197, 94, 0.3);
+	background: rgba(34, 197, 94, 0.1);
+	color: #4ade80;
+}
+
+.maintenance-metric-red {
+	border-top-color: var(--maintenance-pink);
+}
+
+.maintenance-metric-red > span {
+	border-color: rgba(251, 113, 133, 0.3);
+	background: rgba(251, 113, 133, 0.1);
+	color: var(--maintenance-pink);
+}
+
+.maintenance-metric-orange {
+	border-top-color: var(--maintenance-amber);
+}
+
+.maintenance-metric-orange > span {
+	border-color: rgba(245, 158, 11, 0.3);
+	background: rgba(245, 158, 11, 0.1);
+	color: #fbbf24;
+}
+
+.maintenance-panel-heading,
+.maintenance-form-heading,
+.maintenance-pagination {
+	border-color: var(--maintenance-line);
+}
+
+.maintenance-panel-heading svg,
+.maintenance-form-heading svg {
+	color: var(--maintenance-cyan);
+}
+
+.maintenance-topology-panel {
+	overflow: hidden;
+}
+
+.maintenance-topology-panel .maintenance-panel-heading > b {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	padding: 6px 10px;
+	font-size: 10px;
+	font-weight: 850;
+}
+
+.maintenance-topology-panel .maintenance-panel-heading > b i {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: currentColor;
+	box-shadow: 0 0 12px currentColor;
+}
+
+.maintenance-topology-panel .is-online {
+	color: #4ade80;
+}
+
+.maintenance-topology-panel .is-alert {
+	color: var(--maintenance-pink);
+}
+
+.maintenance-topology-canvas {
+	position: relative;
+	display: grid;
+	min-height: 320px;
+	grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.55fr) minmax(250px, 1fr);
+	align-items: center;
+	gap: clamp(28px, 5vw, 84px);
+	padding: 34px clamp(22px, 4vw, 60px);
+	background:
+		repeating-linear-gradient(0deg, transparent 0 31px, rgba(84, 123, 152, 0.06) 32px),
+		repeating-linear-gradient(90deg, transparent 0 31px, rgba(84, 123, 152, 0.06) 32px),
+		#07111d;
+}
+
+.maintenance-topology-users,
+.maintenance-topology-core,
+.maintenance-topology-services {
+	position: relative;
+	z-index: 2;
+}
+
+.maintenance-topology-users::after,
+.maintenance-topology-core::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: calc(100% + 10px);
+	width: clamp(30px, 5vw, 78px);
+	height: 2px;
+	background: repeating-linear-gradient(90deg, rgba(34, 211, 238, 0.2) 0 7px, var(--maintenance-cyan) 7px 11px);
+	box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+	animation: maintenanceSignalFlow 1.3s linear infinite;
+}
+
+.maintenance-topology-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: #a9bfd1;
+}
+
+.maintenance-topology-label svg {
+	color: var(--maintenance-cyan);
+}
+
+.maintenance-topology-label strong {
+	color: var(--maintenance-text);
+}
+
+.maintenance-user-cloud {
+	display: grid;
+	min-height: 150px;
+	grid-template-columns: repeat(6, 14px);
+	align-content: center;
+	justify-content: center;
+	gap: 14px 17px;
+	margin-top: 16px;
+}
+
+.maintenance-user-cloud i {
+	position: relative;
+	display: block;
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: var(--maintenance-green);
+	box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08), 0 0 12px rgba(34, 197, 94, 0.55);
+	animation: maintenanceUserFlow 2.8s ease-in-out infinite;
+	animation-delay: calc(var(--user-index) * -0.13s);
+}
+
+.maintenance-user-cloud i:nth-child(3n) {
+	background: var(--maintenance-cyan);
+	box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.08), 0 0 12px rgba(34, 211, 238, 0.5);
+}
+
+.maintenance-user-cloud small {
+	grid-column: 1 / -1;
+	color: var(--maintenance-muted);
+	text-align: center;
+}
+
+.maintenance-topology-core {
+	display: grid;
+	gap: 14px;
+}
+
+.maintenance-topology-core > div {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	border: 1px solid #2d4b62;
+	border-radius: 5px;
+	background: #0c1d2d;
+	padding: 13px;
+	box-shadow: inset 3px 0 var(--maintenance-cyan), 0 10px 22px rgba(0, 0, 0, 0.25);
+}
+
+.maintenance-topology-core > div:last-child {
+	box-shadow: inset 3px 0 #a78bfa, 0 10px 22px rgba(0, 0, 0, 0.25);
+}
+
+.maintenance-topology-core svg {
+	color: var(--maintenance-cyan);
+}
+
+.maintenance-topology-core span,
+.maintenance-topology-services span {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+
+.maintenance-topology-core small,
+.maintenance-topology-services small {
+	color: var(--maintenance-muted);
+	font-size: 9px;
+}
+
+.maintenance-topology-core strong,
+.maintenance-topology-services strong {
+	overflow: hidden;
+	color: var(--maintenance-text);
+	font-size: 12px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.maintenance-topology-services {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.maintenance-topology-services button {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 9px;
+	border: 1px solid var(--maintenance-line);
+	border-radius: 5px;
+	background: #0b1826;
+	padding: 11px;
+	color: var(--maintenance-muted);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.maintenance-topology-services button:hover,
+.maintenance-topology-services button.is-selected {
+	border-color: var(--maintenance-cyan);
+	background: #0d2232;
+	transform: translateY(-1px);
+}
+
+.maintenance-topology-services button.is-online svg {
+	color: var(--maintenance-green);
+}
+
+.maintenance-topology-services button.is-offline svg {
+	color: var(--maintenance-pink);
+}
+
+.maintenance-topology-services button.is-disabled svg {
+	color: var(--maintenance-amber);
+}
+
+.maintenance-topology-detail {
+	display: grid;
+	grid-template-columns: auto auto 1fr;
+	align-items: center;
+	gap: 12px;
+	border-top: 1px solid var(--maintenance-line);
+	background: #08131f;
+	padding: 12px 18px;
+}
+
+.maintenance-topology-detail > span {
+	display: grid;
+	width: 26px;
+	height: 26px;
+	place-items: center;
+	border-radius: 50%;
+	background: rgba(34, 197, 94, 0.1);
+}
+
+.maintenance-topology-detail > span i {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--maintenance-green);
+	box-shadow: 0 0 10px var(--maintenance-green);
+}
+
+.maintenance-topology-detail > span.is-offline i {
+	background: var(--maintenance-pink);
+	box-shadow: 0 0 10px var(--maintenance-pink);
+}
+
+.maintenance-topology-detail > span.is-disabled i {
+	background: var(--maintenance-amber);
+	box-shadow: 0 0 10px var(--maintenance-amber);
+}
+
+.maintenance-topology-detail div {
+	display: flex;
+	flex-direction: column;
+}
+
+.maintenance-topology-detail small {
+	color: var(--maintenance-muted);
+	font-size: 9px;
+}
+
+.maintenance-topology-detail p {
+	justify-self: end;
+	color: #aec3d3;
+	font-size: 11px;
+}
+
+.maintenance-graph-panel {
+	background: rgba(9, 20, 33, 0.96);
+}
+
+.maintenance-chart {
+	background: repeating-linear-gradient(0deg, transparent 0 39px, rgba(84, 123, 152, 0.09) 40px);
+}
+
+.maintenance-chart-bar {
+	background: linear-gradient(180deg, var(--maintenance-cyan), #176b8c);
+	box-shadow: 0 0 10px rgba(34, 211, 238, 0.18);
+}
+
+.maintenance-chart-bar i {
+	background: var(--maintenance-pink);
+}
+
+.maintenance-chart-column small,
+.maintenance-version-list small,
+.maintenance-table-note,
+.maintenance-history-list article small {
+	color: var(--maintenance-muted);
+}
+
+.maintenance-service-list > div,
+.maintenance-version-list > div,
+.maintenance-table-wrap td,
+.maintenance-history-list article,
+.maintenance-app-details > div {
+	border-color: var(--maintenance-line);
+}
+
+.maintenance-service-list .online,
+.maintenance-history-list .finished {
+	color: #4ade80;
+}
+
+.maintenance-service-list .offline,
+.maintenance-table-wrap .danger {
+	color: var(--maintenance-pink);
+}
+
+.maintenance-service-list .disabled,
+.maintenance-service-list small,
+.maintenance-version-list small,
+.maintenance-history-list article small {
+	color: var(--maintenance-muted);
+}
+
+.maintenance-sw-summary > div {
+	border: 1px solid var(--maintenance-line);
+	border-radius: 5px;
+	background: #0b1826;
+}
+
+.maintenance-sw-summary strong,
+.maintenance-version-list span,
+.maintenance-table-wrap td,
+.maintenance-history-list dd,
+.maintenance-app-details dd {
+	color: #d7e8f4;
+}
+
+.maintenance-version-list code,
+.maintenance-table-wrap code {
+	color: #67e8f9;
+}
+
+.maintenance-table-wrap th {
+	background: #07111d;
+	color: #8ea6b9;
+}
+
+.maintenance-empty {
+	color: var(--maintenance-muted);
+}
+
+.maintenance-current-state > span,
+.maintenance-history-list .finished,
+.maintenance-app-version > span {
+	border-radius: 5px;
+	background: rgba(34, 197, 94, 0.1);
+	color: #4ade80;
+}
+
+.maintenance-current-state.is-active > span,
+.maintenance-history-list .running {
+	background: rgba(251, 113, 133, 0.1);
+	color: var(--maintenance-pink);
+}
+
+.maintenance-control-form input,
+.maintenance-control-form textarea,
+.maintenance-control-form select,
+.maintenance-app-upload input,
+.maintenance-app-upload textarea,
+.maintenance-app-share input {
+	border-color: var(--maintenance-line);
+	border-radius: 5px;
+	background: #07111d;
+	color: var(--maintenance-text);
+}
+
+.maintenance-control-form input:focus,
+.maintenance-control-form textarea:focus,
+.maintenance-control-form select:focus,
+.maintenance-app-upload input:focus,
+.maintenance-app-upload textarea:focus {
+	border-color: var(--maintenance-cyan);
+	box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+}
+
+.maintenance-control-form label > span,
+.maintenance-app-upload label > span,
+.maintenance-app-share > label {
+	color: #9bb1c3;
+}
+
+.maintenance-toggle,
+.maintenance-app-file {
+	border: 1px solid var(--maintenance-line);
+	border-radius: 5px;
+	background: #0b1826;
+}
+
+.maintenance-danger-zone {
+	border-color: rgba(251, 113, 133, 0.4);
+	border-radius: 5px;
+	background: rgba(251, 113, 133, 0.08);
+	color: #fda4af;
+}
+
+.maintenance-danger-zone input {
+	border-color: rgba(251, 113, 133, 0.45);
+	background: #120d16;
+}
+
+.maintenance-activate-button,
+.maintenance-current-state > button {
+	border-radius: 5px;
+	background: #be3049;
+}
+
+.maintenance-app-share button,
+.maintenance-app-download,
+.maintenance-app-publish {
+	border-radius: 5px;
+	background: #087f9c;
+	color: #effcff;
+}
+
+.maintenance-app-message,
+.maintenance-admin-error,
+.maintenance-form-error {
+	border-color: rgba(34, 211, 238, 0.32);
+	border-radius: 5px;
+	background: rgba(34, 211, 238, 0.07);
+	color: #a5f3fc;
+}
+
+.maintenance-release-active {
+	background: rgba(34, 197, 94, 0.1);
+	color: #4ade80;
+}
+
+.maintenance-release-old {
+	background: #0b1826;
+	color: var(--maintenance-muted);
+}
+
+@keyframes maintenanceUserFlow {
+	0%, 100% { opacity: 0.42; transform: translateX(-8px) scale(0.78); }
+	45% { opacity: 1; transform: translateX(5px) scale(1.18); }
+	70% { opacity: 0.72; transform: translateX(11px) scale(0.92); }
+}
+
+@keyframes maintenanceSignalFlow {
+	from { background-position: 0 0; }
+	to { background-position: 22px 0; }
+}
+
+@keyframes maintenanceStatusPulse {
+	0%, 100% { opacity: 0.55; }
+	50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.maintenance-user-cloud i,
+	.maintenance-topology-users::after,
+	.maintenance-topology-core::after,
+	.maintenance-status-live i,
+	.maintenance-status-ok i {
+		animation: none;
+	}
+}
+
+@media (max-width: 980px) {
+	.maintenance-topology-canvas {
+		grid-template-columns: 1fr;
+		gap: 22px;
+	}
+
+	.maintenance-topology-users::after,
+	.maintenance-topology-core::after {
+		display: none;
+	}
+
+	.maintenance-user-cloud {
+		min-height: 100px;
+	}
+}
+
+@media (max-width: 760px) {
+	.maintenance-topology-canvas {
+		padding: 22px 14px;
+	}
+
+	.maintenance-topology-services {
+		grid-template-columns: 1fr;
+	}
+
+	.maintenance-topology-detail {
+		grid-template-columns: auto 1fr;
+	}
+
+	.maintenance-topology-detail p {
+		grid-column: 1 / -1;
+		justify-self: start;
+	}
+
+	.maintenance-topology-panel .maintenance-panel-heading {
+		align-items: flex-start;
+		gap: 12px;
+		flex-direction: column;
+	}
+}
