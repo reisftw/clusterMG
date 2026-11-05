@@ -363,7 +363,7 @@ async function getServiceWorkerMetrics(hours = 24) {
 			 from maintenance_visit_metrics_daily`,
 		),
 		db.query(
-			`select to_char(date_trunc('month',visit_day::timestamp),'YYYY-MM') month,
+			`select to_char(date_trunc('month',visit_day::timestamp),'YYYY-MM') as month_key,
 			 coalesce(sum(visits),0)::bigint visits,
 			 count(distinct client_id) filter(where client_id<>'anonymous')::integer unique_visitors
 			 from maintenance_visit_metrics_daily
@@ -376,7 +376,10 @@ async function getServiceWorkerMetrics(hours = 24) {
 		...(visitSummary.rows[0] || {}),
 		versions: versions.rows,
 		recent: recent.rows,
-		monthly_visits: monthlyVisits.rows,
+		monthly_visits: monthlyVisits.rows.map(({ month_key, ...row }) => ({
+			...row,
+			month: month_key,
+		})),
 	};
 }
 
