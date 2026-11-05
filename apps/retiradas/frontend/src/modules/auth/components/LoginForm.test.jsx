@@ -52,4 +52,29 @@ describe("LoginForm", () => {
 		);
 		expect(mocks.navigate).toHaveBeenCalled();
 	});
+
+	it("preserva identidade, recuperacao e controle de visibilidade da senha", () => {
+		render(
+			<MemoryRouter>
+				<LoginForm />
+			</MemoryRouter>,
+		);
+
+		expect(
+			screen.getByRole("heading", {
+				name: /gestão completa da\s*operação de retiradas/i,
+			}),
+		).toBeInTheDocument();
+		expect(screen.getByText("Operação em campo")).toBeInTheDocument();
+		expect(screen.getByRole("link", { name: /esqueceu sua senha/i })).toHaveAttribute(
+			"href",
+			"/esqueci-senha",
+		);
+
+		const password = screen.getByLabelText("Senha");
+		expect(password).toHaveAttribute("type", "password");
+		fireEvent.click(screen.getByRole("button", { name: "Mostrar senha" }));
+		expect(password).toHaveAttribute("type", "text");
+		expect(screen.getByRole("button", { name: "Ocultar senha" })).toBeInTheDocument();
+	});
 });

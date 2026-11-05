@@ -1,10 +1,14 @@
 import {
+	BarChart3,
+	CalendarDays,
 	Eye,
 	EyeOff,
 	Headphones,
+	Layers3,
 	Lock,
 	LogIn,
 	Mail,
+	MapPin,
 	ShieldCheck,
 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -23,6 +27,13 @@ const trustItems = [
 	{ label: "Acesso seguro", icon: ShieldCheck },
 	{ label: "Dados protegidos", icon: Lock },
 	{ label: "Suporte dedicado", icon: Headphones },
+];
+
+const platformFeatures = [
+	{ label: "Operação em campo", icon: MapPin },
+	{ label: "Agendamentos", icon: CalendarDays },
+	{ label: "Metas e desempenho", icon: BarChart3 },
+	{ label: "Gestão integrada", icon: Layers3 },
 ];
 
 // Extraido pra achado javascript:S3358 (ternario aninhado).
@@ -111,11 +122,13 @@ function CredentialFields({
 					<input
 						id={emailInputId}
 						type="email"
+						name="email"
+						autoComplete="email"
 						value={email}
 						onChange={(event) => onEmailChange(event.target.value)}
 						required
 						placeholder="seu@email.com"
-						className="h-16 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-16 pr-5 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+						className="h-14 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-16 pr-5 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
 					/>
 				</div>
 			</div>
@@ -135,11 +148,13 @@ function CredentialFields({
 					<input
 						id={passwordInputId}
 						type={showPassword ? "text" : "password"}
+						name="password"
+						autoComplete="current-password"
 						value={password}
 						onChange={(event) => onPasswordChange(event.target.value)}
 						required
 						placeholder="••••••••"
-						className="h-16 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-16 pr-14 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+						className="h-14 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-16 pr-14 text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
 					/>
 					<button
 						type="button"
@@ -427,71 +442,93 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 		};
 	}, [googleConfig, handleGoogleCredential]);
 	return (
-		<div className="min-h-screen overflow-hidden bg-[#061b38] text-slate-950">
-			<div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
-				<aside className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_78%_22%,rgba(255,255,255,0.18),transparent_24%),linear-gradient(135deg,#0048df_0%,#0068ff_48%,#ff8a00_100%)] px-10 py-9 text-white lg:flex lg:flex-col xl:px-16">
-					<div className="absolute inset-y-0 -right-24 w-48 rotate-[7deg] bg-gradient-to-b from-[#082b55] via-[#07305f] to-[#061b38] shadow-[-26px_0_70px_rgba(4,22,44,0.18)]" />
-					<div className="absolute -bottom-24 -left-20 h-64 w-64 rounded-full bg-white/10" />
-					<div className="absolute right-10 top-24 h-72 w-72 rounded-full border border-white/10 bg-white/10" />
-					<div className="absolute bottom-20 left-24 h-80 w-80 rounded-full border border-white/15" />
-					<div className="absolute bottom-0 right-16 h-64 w-64 rounded-full bg-orange-400/20 blur-3xl" />
+		<div className="min-h-[100dvh] overflow-x-hidden bg-[#06152f] text-slate-950 lg:h-[100dvh] lg:overflow-hidden">
+			<div className="grid min-h-[100dvh] lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,1.04fr)_minmax(520px,0.96fr)]">
+				<aside className="relative hidden overflow-hidden bg-[radial-gradient(circle_at_82%_46%,rgba(31,107,255,0.3),transparent_33%),linear-gradient(145deg,#071a38_0%,#0a2b59_58%,#0a1b3d_100%)] px-10 py-8 text-white lg:flex lg:h-full lg:flex-col xl:px-16">
+					<div className="absolute -right-8 top-[-16%] h-[76%] w-52 rotate-[29deg] bg-gradient-to-b from-[#00d4ff] via-[#1f6bff] to-transparent opacity-70 shadow-[0_0_65px_rgba(31,107,255,0.35)]" />
+					<div className="absolute -bottom-44 -left-40 h-80 w-80 rotate-45 border border-cyan-300/20 bg-blue-600/20" />
+					<div className="absolute bottom-[-12%] right-[-8%] h-96 w-96 rounded-full bg-orange-500/20 blur-3xl" />
+					<div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(255,255,255,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.04)_1px,transparent_1px)] [background-size:72px_72px]" />
 
-					<div className="relative z-10">
-						<img
-							src="/brand/revo/revo_logo_horizontal_light.svg"
-							alt="REVO — Sistema de Retiradas"
-							className="h-14 w-auto object-contain drop-shadow-lg xl:h-16"
-						/>
-					</div>
+					<img
+						src="/brand/revo/revo_logo_horizontal_light.svg"
+						alt="REVO — Sistema de Retiradas"
+						width="700"
+						height="180"
+						className="relative z-20 h-14 w-auto object-contain drop-shadow-lg xl:h-16"
+					/>
 
-					<div className="relative z-20 mt-28 max-w-xl xl:mt-32">
-						<h1 className="text-5xl font-black leading-[1.03] tracking-normal xl:text-6xl">
-							Controle total
+					<div className="relative z-20 mt-8 max-w-[590px] xl:mt-10 2xl:mt-16">
+						<h1 className="text-4xl font-black leading-[1.04] tracking-normal xl:text-5xl 2xl:text-6xl">
+							Gestão completa da
 							<br />
-							<span className="text-orange-200">na palma da mão.</span>
+							operação de <span className="text-[#ff7a00]">retiradas.</span>
 						</h1>
-						<p className="mt-6 max-w-lg text-xl leading-relaxed text-white/92">
-							Gerencie a operação de retiradas em um único lugar.
+						<p className="mt-4 max-w-[520px] text-base font-medium leading-relaxed text-blue-50/90 xl:text-lg 2xl:text-xl">
+							Mapas, agendamentos, ordens de serviço, acompanhamento em campo e
+							muito mais, na palma da sua mão.
 						</p>
 					</div>
 
+					<div className="relative z-30 mt-5 grid w-72 gap-2 xl:mt-6 2xl:mt-9 2xl:gap-3">
+						{platformFeatures.map(({ label, icon: Icon }) => (
+							<div key={label} className="flex items-center gap-3 text-sm font-extrabold text-white xl:text-base">
+								<span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-blue-300/15 bg-blue-500/20 text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,.14)]">
+									<Icon size={20} strokeWidth={2.2} />
+								</span>
+								{label}
+							</div>
+						))}
+					</div>
+
 					<img
-						src="/retorninho-cel.webp"
-						alt="Retorninho com celular"
-						className="pointer-events-none absolute bottom-28 right-14 z-10 w-[42vw] max-w-[560px] object-contain drop-shadow-[0_34px_58px_rgba(0,37,118,0.38)] xl:right-28"
+						src="/brand/revo/login/retorninho-celular-revo.png"
+						alt="Retorninho apresentando o REVO no celular"
+						width="1254"
+						height="1254"
+						fetchPriority="high"
+						className="pointer-events-none absolute bottom-4 right-[-4%] z-20 w-[48%] max-w-[560px] object-contain drop-shadow-[0_34px_54px_rgba(0,0,0,0.38)] xl:right-[1%]"
 					/>
+
+					<div className="relative z-20 mt-auto flex items-center gap-4 pt-5 text-[11px] font-bold uppercase tracking-[0.38em] text-blue-100/80">
+						<span className="h-px flex-1 bg-gradient-to-r from-transparent to-blue-200/35" />
+						Operações · Rastreamento · Recuperação
+						<span className="h-px flex-1 bg-gradient-to-l from-transparent to-blue-200/35" />
+					</div>
 				</aside>
 
-				<main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_82%_20%,rgba(19,94,168,0.42),transparent_28%),radial-gradient(circle_at_12%_84%,rgba(255,122,0,0.09),transparent_28%),linear-gradient(135deg,#082b55_0%,#061f3f_48%,#04162c_100%)] px-5 pb-16 pt-10 sm:px-8">
-					<div className="absolute left-0 top-0 h-full w-28 bg-gradient-to-r from-[#061b38]/75 to-transparent" />
-					<div className="absolute right-[-18%] top-[-20%] h-[520px] w-[520px] rounded-full border border-white/10 bg-white/5 blur-sm" />
+				<main className="relative flex min-h-[100dvh] flex-col items-center justify-center overflow-x-hidden bg-[radial-gradient(circle_at_86%_14%,rgba(31,107,255,0.3),transparent_28%),radial-gradient(circle_at_10%_88%,rgba(255,122,0,0.13),transparent_30%),linear-gradient(135deg,#0a2b59_0%,#071a38_46%,#06142b_100%)] px-4 py-6 sm:px-8 lg:h-full lg:min-h-0 lg:py-8">
+					<div className="absolute right-[-15%] top-[-18%] h-[520px] w-[520px] rounded-full border border-cyan-200/10" />
+					<div className="absolute bottom-[-18%] right-[-14%] h-72 w-96 rotate-[-24deg] bg-gradient-to-r from-transparent via-orange-500/25 to-orange-400/80 blur-sm" />
 
-					<div className="relative z-10 w-full max-w-[610px]">
-						<section className="rounded-[34px] border border-white/80 bg-white/90 px-6 py-8 shadow-[0_30px_90px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:px-12 sm:py-10">
-							<div className="mb-8 flex justify-center lg:hidden">
+					<div className="relative z-10 w-full max-w-[680px]">
+						<section className="rounded-[30px] border border-white/80 bg-[#f7f9fd]/95 px-6 py-5 shadow-[0_32px_90px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:px-10 xl:px-12">
+							<div className="mb-6 flex justify-center lg:hidden">
 								<img
 									src="/brand/revo/revo_logo_horizontal_dark.svg"
 									alt="REVO — Sistema de Retiradas"
+									width="700"
+									height="180"
 									className="h-11 w-auto object-contain"
 								/>
 							</div>
 
 							<div className="text-center">
-								<div className="mb-7 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-5 py-2 text-sm font-extrabold text-orange-600">
+								<div className="mb-3 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-5 py-1.5 text-sm font-extrabold text-orange-600">
 									<Lock size={16} />
 									Acesso Interno
 								</div>
 								<h2 className="text-3xl font-black leading-tight text-slate-950 sm:text-4xl">
-									Bem-vindo de volta
+									Bem-vindo de volta ao <span className="text-[#1f6bff]">REVO</span>
 								</h2>
-								<p className="mt-3 text-base font-medium text-slate-500 sm:text-lg">
-									Entre com suas credenciais para continuar.
+								<p className="mt-2 text-sm font-semibold text-slate-500 sm:text-base">
+									Entre com suas credenciais para acessar o Sistema de Retiradas.
 								</p>
 							</div>
 
 							<form
 								onSubmit={mfaChallenge ? handleMfaSubmit : handleSubmit}
-								className="mt-9 space-y-5"
+								className="mt-5 space-y-4"
 							>
 								{mfaChallenge ? (
 									<MfaCodePanel
@@ -514,12 +551,12 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 								)}
 
 								{error ? (
-									<div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+									<div aria-live="polite" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
 										{error}
 									</div>
 								) : null}
 								{captchaMessage ? (
-									<div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+									<div aria-live="polite" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
 										{captchaMessage}
 									</div>
 								) : null}
@@ -533,7 +570,7 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 								<button
 									type="submit"
 									disabled={isSubmitting}
-									className="mt-2 inline-flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-[linear-gradient(90deg,#ff9800_0%,#ff4b00_100%)] text-lg font-black text-white shadow-[0_18px_34px_rgba(255,95,0,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(255,95,0,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+									className="mt-1 inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[linear-gradient(90deg,#ff9800_0%,#ff4b00_100%)] text-lg font-black text-white shadow-[0_18px_34px_rgba(255,95,0,0.26)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(255,95,0,0.32)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-orange-200 motion-reduce:transform-none disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									<LogIn size={24} />
 									{resolveLoginSubmitLabel(isSubmitting, mfaChallenge)}
@@ -571,7 +608,7 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 								) : null}
 							</form>
 
-							<div className="mt-8 grid gap-3 border-t border-slate-200 pt-6 text-sm font-bold text-slate-500 sm:grid-cols-3">
+							<div className="mt-4 grid gap-2 border-t border-slate-200 pt-3 text-xs font-bold text-slate-500 sm:grid-cols-3">
 								{trustItems.map(({ label, icon: Icon }) => (
 									<div
 										key={label}
@@ -586,7 +623,7 @@ const LoginForm = ({ redirectTo = ROUTES.DASHBOARD }) => {
 					</div>
 					<MelzFooter
 						variant="dark"
-						className="absolute bottom-0 left-0 right-0 z-20 bg-transparent"
+						className="relative z-20 mt-4 w-full shrink-0 bg-transparent lg:absolute lg:bottom-0 lg:left-0 lg:right-0"
 					/>
 				</main>
 			</div>
