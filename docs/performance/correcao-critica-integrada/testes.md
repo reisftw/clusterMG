@@ -12,7 +12,15 @@
 
 ## PostgreSQL
 
-O computador de desenvolvimento nao possui PostgreSQL nem Docker. O teste de idempotencia da migration foi adicionado ao workflow oficial e deve passar no PostgreSQL isolado do CI antes da etapa de publicacao. Nenhuma migration foi executada manualmente em producao.
+O computador de desenvolvimento nao possui PostgreSQL nem Docker. O teste de idempotencia da migration foi executado no PostgreSQL isolado do CI e aprovado antes da publicacao. A migration foi aplicada em producao exclusivamente pelo workflow oficial.
+
+## CI e release
+
+- PR Retiradas: run `42331540329`, aprovado.
+- PR Mercado: run `42331540190`, aprovado.
+- Master Retiradas: run `42331841051`, aprovado.
+- Master Mercado: run `42331841037`, aprovado.
+- Release de producao: run `42332182726`, aprovado.
 
 ## Casos cobertos
 
