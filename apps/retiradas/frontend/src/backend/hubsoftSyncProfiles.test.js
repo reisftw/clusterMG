@@ -137,3 +137,19 @@ describe("hubsoft fines automation", () => {
 		).toBe("27/10/2026 08:22");
 	});
 });
+
+describe("hubsoft MAPA e MATCH", () => {
+	it("repete somente execucoes incompletas dos perfis criticos", () => {
+		expect(__testables.shouldRetryMapMatchRun({ profile: "MAPA", status: "FAILED" })).toBe(true);
+		expect(__testables.shouldRetryMapMatchRun({ profile: "MATCH", status: "INCOMPLETE" })).toBe(true);
+		expect(__testables.shouldRetryMapMatchRun({ profile: "MAPA", status: "COMPLETE" })).toBe(false);
+		expect(__testables.shouldRetryMapMatchRun({ profile: "LOJA", status: "FAILED" })).toBe(false);
+	});
+
+	it("aplica backoff exponencial com jitter e teto", () => {
+		const base = __testables.mapMatchRetryDelay(1, () => 0);
+		expect(__testables.mapMatchRetryDelay(2, () => 0)).toBe(base * 2);
+		expect(__testables.mapMatchRetryDelay(1, () => 0.999)).toBe(base + 999);
+		expect(__testables.mapMatchRetryDelay(20, () => 0.999)).toBe(300_000);
+	});
+});

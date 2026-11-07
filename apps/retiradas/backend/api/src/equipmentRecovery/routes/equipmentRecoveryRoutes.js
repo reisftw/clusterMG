@@ -30,7 +30,7 @@ function createEquipmentRecoveryRouter({
 
 	router.get("/technicians", ...authorize, async (req, res, next) => {
 		try {
-			res.json({ items: await equipmentRecoveryService.listTechnicians(req.query || {}) });
+			res.json(await equipmentRecoveryService.listTechnicians(req.query || {}));
 		} catch (error) {
 			next(error);
 		}

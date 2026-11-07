@@ -31,6 +31,14 @@ const MAP_MATCH_RETRY_DELAY_MS = Math.min(
 	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_RETRY_DELAY_MS || 30_000), 5_000),
 	5 * 60_000,
 );
+const PAGE_RETRY_ATTEMPTS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_PAGE_RETRY_ATTEMPTS || 3), 1),
+	5,
+);
+const PERSIST_BATCH_SIZE = Math.min(
+	Math.max(Number(process.env.HUBSOFT_PERSIST_BATCH_SIZE || 500), 100),
+	1000,
+);
 const MAP_MATCH_WATCHDOG_MS = Math.min(
 	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_WATCHDOG_MS || 2 * 60 * 60_000), 5 * 60_000),
 	4 * 60 * 60_000,
@@ -903,10 +911,18 @@ async function collectPaginated(
 		const body =
 			pageMode === "body" ? { ...payload, pagina: page, page } : payload;
 		const targetPath = pageMode === "query" ? `${path}?page=${page}` : path;
-		const json = await hubsoftRequest(session, targetPath, {
-			method: "POST",
-			body,
-		});
+		let json;
+		for (let attempt = 1; attempt <= PAGE_RETRY_ATTEMPTS; attempt += 1) {
+			try {
+				json = await hubsoftRequest(session, targetPath, { method: "POST", body });
+				break;
+			} catch (error) {
+				if (attempt >= PAGE_RETRY_ATTEMPTS || ["SCHEMA_CHANGED", "FAILED_AUTH"].includes(error?.code)) throw error;
+				const backoff = 1000 * 2 ** (attempt - 1) + Math.floor(Math.random() * 500);
+				await onProgress?.({ stage: `Retentando pagina ${page} (${attempt}/${PAGE_RETRY_ATTEMPTS})`, percent: Math.min(45, 15 + page), checkpointPage: page - 1 });
+				await wait(backoff);
+			}
+		}
 		const rows = rowsOf(json);
 		assertEnvelope(json, rows);
 		const pagination = paginationOf(json, rows);
@@ -2282,6 +2298,15 @@ async function updateRunProgress(runId, patch = {}) {
 			heartbeatAt: new Date().toISOString(),
 		},
 	});
+	await db.query(
+		`update hubsoft_sync_runs
+		    set checkpoint_stage = $2,
+		        checkpoint_page = coalesce($3, checkpoint_page),
+		        checkpoint_batch = coalesce($4, checkpoint_batch),
+		        checkpoint_at = now()
+		  where id = $1`,
+		[runId, patch.stage || "Processando", patch.checkpointPage ?? null, patch.checkpointBatch ?? null],
+	);
 }
 
 async function releaseStaleLock(profile) {
@@ -2423,12 +2448,14 @@ function runDateRangeOptions(profile, options = {}) {
 async function persistRecords(runId, profile, records, options = {}) {
 	let inserted = 0;
 	let updated = 0;
-	const activeIds = [];
-	for (const record of records) {
-		const sourceDate =
-			record.source_date ||
-			safeTimestamp(extractDateFromHubsoftProtocol(record.hubsoft_number));
-		activeIds.push(record.hubsoft_id);
+	const activeIds = records.map((record) => record.hubsoft_id);
+	for (let offset = 0; offset < records.length; offset += PERSIST_BATCH_SIZE) {
+		const batchNumber = Math.floor(offset / PERSIST_BATCH_SIZE) + 1;
+		const batch = records.slice(offset, offset + PERSIST_BATCH_SIZE).map((record) => ({
+			...record,
+			source_date: record.source_date || safeTimestamp(extractDateFromHubsoftProtocol(record.hubsoft_number)),
+			raw_excerpt: record.raw_excerpt || {},
+		}));
 		const result = await db.query(
 			`insert into hubsoft_sync_records
           (sync_run_id, profile, entity_type, hubsoft_id, hubsoft_number,
@@ -2436,8 +2463,17 @@ async function persistRecords(runId, profile, records, options = {}) {
            production_channel, production_owner_id, production_owner_name,
            classification_rule, classification_reason, classified_at,
            raw_excerpt, active)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                 $11, $12, $13, $14, $15, $16, $17::jsonb, true)
+		 select $1, item.profile, item.entity_type, item.hubsoft_id, item.hubsoft_number,
+		        item.source_status, item.source_type, item.source_city, item.source_city_id,
+		        item.source_date, item.production_channel, item.production_owner_id,
+		        item.production_owner_name, item.classification_rule,
+		        item.classification_reason, item.classified_at, item.raw_excerpt, true
+		   from jsonb_to_recordset($2::jsonb) as item(
+			profile text, entity_type text, hubsoft_id text, hubsoft_number text,
+			source_status text, source_type text, source_city text, source_city_id text,
+			source_date timestamptz, production_channel text, production_owner_id text,
+			production_owner_name text, classification_rule text, classification_reason text,
+			classified_at timestamptz, raw_excerpt jsonb)
          on conflict (profile, entity_type, hubsoft_id) do update set
            sync_run_id = excluded.sync_run_id,
            hubsoft_number = excluded.hubsoft_number,
@@ -2453,30 +2489,31 @@ async function persistRecords(runId, profile, records, options = {}) {
            classification_reason = excluded.classification_reason,
            classified_at = excluded.classified_at,
            raw_excerpt = excluded.raw_excerpt,
-           active = true
+		   active = true
+		 where (hubsoft_sync_records.hubsoft_number, hubsoft_sync_records.source_status,
+		        hubsoft_sync_records.source_type, hubsoft_sync_records.source_city,
+		        hubsoft_sync_records.source_city_id, hubsoft_sync_records.source_date,
+		        hubsoft_sync_records.production_channel, hubsoft_sync_records.production_owner_id,
+		        hubsoft_sync_records.production_owner_name, hubsoft_sync_records.classification_rule,
+		        hubsoft_sync_records.classification_reason, hubsoft_sync_records.classified_at,
+		        hubsoft_sync_records.raw_excerpt, hubsoft_sync_records.active)
+		       is distinct from
+		       (excluded.hubsoft_number, excluded.source_status, excluded.source_type,
+		        excluded.source_city, excluded.source_city_id, excluded.source_date,
+		        excluded.production_channel, excluded.production_owner_id,
+		        excluded.production_owner_name, excluded.classification_rule,
+		        excluded.classification_reason, excluded.classified_at,
+		        excluded.raw_excerpt, true)
          returning (xmax = 0) as inserted`,
-			[
-				runId,
-				record.profile,
-				record.entity_type,
-				record.hubsoft_id,
-				record.hubsoft_number,
-				record.source_status,
-				record.source_type,
-				record.source_city,
-				record.source_city_id,
-				sourceDate,
-				record.production_channel,
-				record.production_owner_id,
-				record.production_owner_name,
-				record.classification_rule,
-				record.classification_reason,
-				record.classified_at,
-				JSON.stringify(record.raw_excerpt || {}),
-			],
+			[runId, JSON.stringify(batch)],
 		);
-		if (result.rows[0]?.inserted) inserted += 1;
-		else updated += 1;
+		inserted += result.rows.filter((row) => row.inserted).length;
+		updated += result.rows.filter((row) => !row.inserted).length;
+		await options.onProgress?.({
+			stage: `Salvando lote ${batchNumber} de ${Math.ceil(records.length / PERSIST_BATCH_SIZE)}`,
+			percent: Math.min(82, 72 + Math.round(((offset + batch.length) / Math.max(1, records.length)) * 10)),
+			checkpointBatch: batchNumber,
+		});
 	}
 	const periodOptions = options.preserveOutsidePeriod
 		? runDateRangeOptions(profile, options)
@@ -2707,6 +2744,7 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 			persistence = await persistRecords(run.id, profile, recordsToPersist, {
 				...options,
 				...runDateRangeOptions(profile, options),
+				onProgress: (progress) => updateRunProgress(run.id, progress),
 			});
 			await updateRunProgress(run.id, {
 				stage: "Aplicando nos paineis operacionais",
@@ -3183,14 +3221,22 @@ function shouldRetryMapMatchRun(run) {
 	].includes(run.status);
 }
 
+function mapMatchRetryDelay(attempt, random = Math.random) {
+	return Math.min(
+		5 * 60_000,
+		MAP_MATCH_RETRY_DELAY_MS * 2 ** Math.max(0, attempt - 1) + Math.floor(random() * 1000),
+	);
+}
+
 async function runMapMatchProfileWithRetry(profile, options = {}) {
 	let lastRun = null;
 	for (let attempt = 0; attempt <= MAP_MATCH_RETRY_ATTEMPTS; attempt += 1) {
 		if (attempt > 0) {
+			const retryDelay = mapMatchRetryDelay(attempt);
 			console.warn(
-				`[hubsoftSyncProfiles] Retentando ${profile} (${attempt}/${MAP_MATCH_RETRY_ATTEMPTS}).`,
+				`[hubsoftSyncProfiles] Retentando ${profile} (${attempt}/${MAP_MATCH_RETRY_ATTEMPTS}) em ${retryDelay}ms.`,
 			);
-			await wait(MAP_MATCH_RETRY_DELAY_MS);
+			await wait(retryDelay);
 		}
 		lastRun = await runProfileSafely(profile, {
 			...options,
@@ -3541,6 +3587,8 @@ module.exports = {
 		extractFineRegistrationDate,
 		finesPayload,
 		finesSchedulerOptions,
+		mapMatchRetryDelay,
 		normalizeAutomationConfig,
+		shouldRetryMapMatchRun,
 	},
 };

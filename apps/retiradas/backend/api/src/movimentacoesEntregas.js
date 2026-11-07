@@ -136,6 +136,8 @@ async function fetchNotesPage({ page, start, end }) {
 // pra mostrar "pagina X de Y" em vez de parecer travado numa varredura longa.
 async function fetchNotasDevolucaoComodatoJanela({ start, end, onProgress }) {
 	const movimentos = [];
+	let ignoradas = 0;
+	let rejeitadas = 0;
 	let page = 1;
 	let totalPages = 1;
 	let notasConsultadas = 0;
@@ -144,8 +146,13 @@ async function fetchNotasDevolucaoComodatoJanela({ start, end, onProgress }) {
 		const notes = extractArray(payload, ["data"]);
 		notasConsultadas += notes.length;
 		for (const note of notes) {
-			if (!isDevolucaoComodato(note)) continue;
-			movimentos.push(...extractMovimentos(note));
+			if (!isDevolucaoComodato(note)) {
+				ignoradas += 1;
+				continue;
+			}
+			const extracted = extractMovimentos(note);
+			if (!extracted.length) rejeitadas += 1;
+			movimentos.push(...extracted);
 		}
 		totalPages = Number(payload?.meta?.totalPages || 1);
 		if (onProgress) {
@@ -160,7 +167,7 @@ async function fetchNotasDevolucaoComodatoJanela({ start, end, onProgress }) {
 		page += 1;
 	}
 	const limiteAtingido = page >= NOTES_MAX_PAGES && page < totalPages;
-	return { movimentos, limiteAtingido, paginasConsultadas: page, totalPages };
+	return { movimentos, limiteAtingido, paginasConsultadas: page, totalPages, ignoradas, rejeitadas };
 }
 
 // Confronta uma devolucao contra as O.S. abertas no mapa/match: mesma
@@ -219,9 +226,12 @@ const SCAN_WINDOW_MAX_DAYS = 366;
 // usa o intervalo pedido — permite reprocessar o historico inteiro e achar
 // O.S. que ficaram abertas mesmo com o equipamento ja retirado ha tempos.
 function getScanWindow({ dataInicio, dataFim } = {}) {
-	const end = dataFim ? new Date(dataFim) : new Date();
-	const defaultStart = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-	const start = dataInicio ? new Date(dataInicio) : defaultStart;
+	const normalized = movimentacoesRepository.normalizeDateRange
+		? movimentacoesRepository.normalizeDateRange({ dataInicio, dataFim })
+		: { dataInicio, dataFim };
+	const end = normalized.dataFim ? new Date(normalized.dataFim) : new Date();
+	const defaultStart = new Date(end.getTime() - 48 * 60 * 60 * 1000);
+	const start = normalized.dataInicio ? new Date(normalized.dataInicio) : defaultStart;
 	const maxRangeMs = SCAN_WINDOW_MAX_DAYS * 24 * 60 * 60 * 1000;
 	const boundedStart =
 		end.getTime() - start.getTime() > maxRangeMs
@@ -236,10 +246,18 @@ async function runScan({
 	dataInicio,
 	dataFim,
 	anoTodo = false,
+	recovery2026 = false,
+	scheduledDate = "",
 } = {}) {
-	const job = await movimentacoesRepository.createScanJob({ manual, user });
+	const { start, end } = getScanWindow({ dataInicio, dataFim });
+	const job = await movimentacoesRepository.createScanJob({
+		manual,
+		user,
+		requestedStart: start.toISOString(),
+		requestedEnd: end.toISOString(),
+	});
 	setImmediate(() => {
-		executeScanJob(job.id, { dataInicio, dataFim, anoTodo, user }).catch((error) => {
+		executeScanJob(job.id, { dataInicio: start.toISOString(), dataFim: end.toISOString(), anoTodo, recovery2026, scheduledDate, user }).catch((error) => {
 			console.error(
 				`[movimentacoesEntregas] Falha no job de varredura ${job.id}:`,
 				error?.message || error,
@@ -255,7 +273,7 @@ async function runScan({
 // gente grava backfillAnualConcluidoEm na config, so como informacao (a
 // tela mostra "ultima varredura completa em: DD/MM") — o botao continua
 // disponivel pra admin rodar de novo se precisar, nao some.
-async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, user = {} } = {}) {
+async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, recovery2026 = false, scheduledDate = "", user = {} } = {}) {
 	await movimentacoesRepository.updateScanJob(jobId, {
 		status: "running",
 		stage: "Consultando devoluções no Portal de Movimentações",
@@ -265,6 +283,8 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 
 	try {
 		let { start, end } = getScanWindow({ dataInicio, dataFim });
+		const requestedStart = start.toISOString();
+		const requestedEnd = end.toISOString();
 
 		// Retomada: se essa e a varredura do ano (anoTodo) e uma rodada
 		// anterior ja tinha avancado ate uma certa janela antes de parar (erro,
@@ -281,6 +301,16 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 				}
 			}
 		}
+		if (!retomandoDe) {
+			const checkpoint = await movimentacoesRepository.getResumeCheckpoint?.({ requestedStart, requestedEnd });
+			if (checkpoint) {
+				const checkpointDate = new Date(checkpoint);
+				if (checkpointDate >= start && checkpointDate < end) {
+					retomandoDe = checkpointDate;
+					start = new Date(checkpointDate.getTime() + 1);
+				}
+			}
+		}
 
 		const janelas = buildDateWindows(start, end, WINDOW_DAYS);
 		if (retomandoDe) {
@@ -294,10 +324,12 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 		let casadas = 0;
 		let semMatch = 0;
 		let algumLimiteAtingido = false;
+		let ignored = 0;
+		let rejected = 0;
 
 		for (const [indiceJanela, janela] of janelas.entries()) {
 			const rotuloJanela = `${janela.start.toLocaleDateString("pt-BR")} a ${janela.end.toLocaleDateString("pt-BR")}`;
-			const { movimentos, limiteAtingido } = await fetchNotasDevolucaoComodatoJanela({
+			const { movimentos, limiteAtingido, ignoradas, rejeitadas } = await fetchNotasDevolucaoComodatoJanela({
 				start: janela.start,
 				end: janela.end,
 				onProgress: async ({ page, totalPages: total }) => {
@@ -311,6 +343,8 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 				},
 			});
 			if (limiteAtingido) algumLimiteAtingido = true;
+			ignored += ignoradas;
+			rejected += rejeitadas;
 			totalEncontradas += movimentos.length;
 
 			// Salva o resultado de cada movimento assim que a janela termina de
@@ -329,6 +363,11 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 				processed,
 				casadas,
 				semMatch,
+				ignored,
+				rejected,
+				checkpointWindowStart: janela.start.toISOString(),
+				checkpointWindowEnd: limiteAtingido ? undefined : janela.end.toISOString(),
+				checkpoint: { window: indiceJanela + 1, windows: janelas.length, complete: !limiteAtingido },
 			});
 
 			// So marca o "ponto de retomada" quando a janela NAO bateu no teto
@@ -343,9 +382,11 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 		}
 
 		if (algumLimiteAtingido) {
-			console.warn(
-				`[movimentacoesEntregas] Ao menos uma janela da varredura atingiu o teto de ${NOTES_MAX_PAGES} páginas — pode haver devoluções não processadas nesta rodada.`,
+			const error = new Error(
+				`Varredura incompleta: uma janela atingiu o teto de ${NOTES_MAX_PAGES} paginas.`,
 			);
+			error.code = "INCOMPLETE_PAGINATION";
+			throw error;
 		}
 
 		const resultadoFinal = {
@@ -355,6 +396,8 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 			periodo: { inicio: start.toISOString(), fim: end.toISOString() },
 			janelasProcessadas: janelas.length,
 			limiteAtingido: algumLimiteAtingido,
+			ignored,
+			rejected,
 		};
 		await movimentacoesRepository.updateScanJob(jobId, {
 			status: "completed",
@@ -373,6 +416,12 @@ async function executeScanJob(jobId, { dataInicio, dataFim, anoTodo = false, use
 				},
 				user,
 			);
+		}
+		if (recovery2026 && !algumLimiteAtingido) {
+			await movimentacoesRepository.saveConfig({ historicalRecovery2026At: new Date().toISOString(), lastSuccessAt: new Date().toISOString() }, user);
+		}
+		if (scheduledDate && !algumLimiteAtingido) {
+			await movimentacoesRepository.saveConfig({ lastRunDate: scheduledDate, lastRunAt: new Date().toISOString(), lastSuccessAt: new Date().toISOString() }, user);
 		}
 		return resultadoFinal;
 	} catch (error) {
@@ -413,6 +462,20 @@ async function runDailyIfDue(user = {}) {
 	);
 	const today = `${parts.year}-${parts.month}-${parts.day}`;
 	const currentTime = `${parts.hour}:${parts.minute}`;
+	if (!config.historicalRecovery2026At) {
+		if (await movimentacoesRepository.hasActiveScanJob?.()) {
+			return { ok: true, skipped: true, reason: "Recuperacao historica em andamento." };
+		}
+		const recoveryEnd = today < "2026-11-30" ? today : "2026-11-30";
+		const job = await runScan({
+			user,
+			manual: false,
+			dataInicio: "2026-10-01",
+			dataFim: recoveryEnd,
+			recovery2026: true,
+		});
+		return { ok: true, jobId: job.id, recovery: "2026-10-01/2026-11-30" };
+	}
 	if (config.lastRunDate === today || currentTime < config.dailyScanTime) {
 		return {
 			ok: true,
@@ -420,11 +483,10 @@ async function runDailyIfDue(user = {}) {
 			reason: "Fora da janela ou rotina já executada hoje.",
 		};
 	}
-	const job = await runScan({ user, manual: false });
-	await movimentacoesRepository.saveConfig(
-		{ lastRunDate: today, lastRunAt: new Date().toISOString() },
-		user,
-	);
+	if (await movimentacoesRepository.hasActiveScanJob?.()) {
+		return { ok: true, skipped: true, reason: "Varredura em andamento." };
+	}
+	const job = await runScan({ user, manual: false, scheduledDate: today });
 	return { ok: true, jobId: job.id };
 }
 

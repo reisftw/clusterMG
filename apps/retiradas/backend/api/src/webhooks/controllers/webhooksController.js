@@ -5,6 +5,7 @@ function createWebhooksController({
 	atendimentoService,
 	cvortexIntegration,
 	evolutionMessaging,
+	evolutionWebhookQueue,
 }) {
 	async function handleEvolutionWebhook(req, res, next) {
 		try {
@@ -13,24 +14,9 @@ function createWebhooksController({
 			) {
 				return;
 			}
-			const confirmationResult = await agendamentoConfirmacao
-				.registerIncomingResponse(req.body || {})
-				.catch((error) => {
-					console.warn(
-						"[confirmacao-agendamentos] Falha ao processar resposta:",
-						error?.message || error,
-					);
-					return null;
-				});
-			if (confirmationResult?.confirmed) {
-				res.json({ ok: true, confirmation: confirmationResult });
-				return;
-			}
-			const result = await evolutionMessaging.registerCallback({
-				...(req.body || {}),
-				webhookEvent: req.params?.event || req.body?.event || "",
-			});
-			res.json(result);
+			const eventName = req.params?.event || req.body?.event || "";
+			const result = await evolutionWebhookQueue.enqueue(req.body || {}, eventName);
+			res.json({ ok: true, ...result });
 		} catch (error) {
 			next(error);
 		}

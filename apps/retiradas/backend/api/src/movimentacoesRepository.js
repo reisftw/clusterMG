@@ -10,6 +10,8 @@ const DEFAULT_CONFIG = Object.freeze({
 	lastRunAt: null,
 	backfillAnualConcluidoEm: null,
 	backfillUltimaJanelaFim: null,
+	lastSuccessAt: null,
+	historicalRecovery2026At: null,
 });
 
 function text(value) {
@@ -30,6 +32,32 @@ function normalizePage(value) {
 	const parsed = Number(value || 1);
 	if (!Number.isFinite(parsed)) return 1;
 	return Math.max(Math.trunc(parsed), 1);
+}
+
+function normalizeDateBoundary(value, endOfDay = false) {
+	if (!value) return undefined;
+	const raw = text(value);
+	const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+		? `${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}-03:00`
+		: raw;
+	const date = new Date(normalized);
+	if (Number.isNaN(date.getTime())) {
+		const error = new Error("Periodo de movimentacoes invalido.");
+		error.statusCode = 400;
+		throw error;
+	}
+	return date.toISOString();
+}
+
+function normalizeDateRange({ dataInicio, dataFim } = {}) {
+	const start = normalizeDateBoundary(dataInicio, false);
+	const end = normalizeDateBoundary(dataFim, true);
+	if (start && end && new Date(start) > new Date(end)) {
+		const error = new Error("A data inicial deve ser anterior a data final.");
+		error.statusCode = 400;
+		throw error;
+	}
+	return { dataInicio: start, dataFim: end };
 }
 
 function mapMovimentacao(row = {}) {
@@ -89,6 +117,20 @@ async function upsertMovimentacao(movimento = {}) {
 		  serie, observacao_raw, estoque_destino, raw_payload, criado_em, atualizado_em)
 		 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,now(),now())
 		 on conflict (id) do update set
+		   nota_id = excluded.nota_id,
+		   numero = excluded.numero,
+		   movimento_estoque_id = excluded.movimento_estoque_id,
+		   tipo_operacao = excluded.tipo_operacao,
+		   emitido_em = excluded.emitido_em,
+		   empresa_nome = excluded.empresa_nome,
+		   parceiro_nome = excluded.parceiro_nome,
+		   registrado_por = excluded.registrado_por,
+		   produto_nome = excluded.produto_nome,
+		   produto_codigo = excluded.produto_codigo,
+		   serie = excluded.serie,
+		   observacao_raw = excluded.observacao_raw,
+		   estoque_destino = excluded.estoque_destino,
+		   raw_payload = excluded.raw_payload,
 		   atualizado_em = now()
 		 returning *`,
 		[
@@ -506,6 +548,8 @@ async function readConfig() {
 		lastRunAt: row.last_run_at || null,
 		backfillAnualConcluidoEm: row.backfill_anual_concluido_em || null,
 		backfillUltimaJanelaFim: row.backfill_ultima_janela_fim || null,
+		lastSuccessAt: row.last_success_at || null,
+		historicalRecovery2026At: row.historical_recovery_2026_at || null,
 	};
 }
 
@@ -523,12 +567,16 @@ async function saveConfig(payload = {}, user = {}) {
 			payload.backfillUltimaJanelaFim !== undefined
 				? payload.backfillUltimaJanelaFim
 				: current.backfillUltimaJanelaFim,
+		lastSuccessAt: payload.lastSuccessAt ?? current.lastSuccessAt,
+		historicalRecovery2026At:
+			payload.historicalRecovery2026At ?? current.historicalRecovery2026At,
 	};
 	await db.query(
 		`insert into movimentacoes_config
 		 (id, enabled, daily_scan_time, timezone, last_run_date, last_run_at,
-		  backfill_anual_concluido_em, backfill_ultima_janela_fim, updated_at, updated_by)
-		 values ($1,$2,$3,$4,$5,$6,$7,$8,now(),$9)
+		  backfill_anual_concluido_em, backfill_ultima_janela_fim,
+		  last_success_at, historical_recovery_2026_at, updated_at, updated_by)
+		 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now(),$11)
 		 on conflict (id) do update set
 		   enabled = excluded.enabled,
 		   daily_scan_time = excluded.daily_scan_time,
@@ -537,6 +585,8 @@ async function saveConfig(payload = {}, user = {}) {
 		   last_run_at = excluded.last_run_at,
 		   backfill_anual_concluido_em = excluded.backfill_anual_concluido_em,
 		   backfill_ultima_janela_fim = excluded.backfill_ultima_janela_fim,
+		   last_success_at = excluded.last_success_at,
+		   historical_recovery_2026_at = excluded.historical_recovery_2026_at,
 		   updated_at = now(),
 		   updated_by = excluded.updated_by`,
 		[
@@ -548,6 +598,8 @@ async function saveConfig(payload = {}, user = {}) {
 			next.lastRunAt,
 			next.backfillAnualConcluidoEm,
 			next.backfillUltimaJanelaFim,
+			next.lastSuccessAt,
+			next.historicalRecovery2026At,
 			nullableText(user?.uid || user?.email),
 		],
 	);
@@ -558,17 +610,20 @@ function randomJobId() {
 	return `movscan_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 }
 
-async function createScanJob({ manual = false, user = {} } = {}) {
+async function createScanJob({ manual = false, user = {}, requestedStart, requestedEnd } = {}) {
 	const id = randomJobId();
 	await db.query(
 		`insert into movimentacoes_scan_jobs
-		 (id, status, stage, percent, manual, created_at, created_by, created_by_name)
-		 values ($1,'queued','Aguardando processamento',0,$2,now(),$3,$4)`,
+		 (id, status, stage, percent, manual, created_at, created_by, created_by_name,
+		  requested_start, requested_end)
+		 values ($1,'queued','Aguardando processamento',0,$2,now(),$3,$4,$5,$6)`,
 		[
 			id,
 			Boolean(manual),
 			nullableText(user?.uid),
 			nullableText(user?.profile?.nome || user?.email),
+			requestedStart || null,
+			requestedEnd || null,
 		],
 	);
 	return getScanJob(id);
@@ -588,6 +643,14 @@ async function updateScanJob(id, patch = {}) {
 	if (patch.processed !== undefined) set("processed", patch.processed);
 	if (patch.casadas !== undefined) set("casadas", patch.casadas);
 	if (patch.semMatch !== undefined) set("sem_match", patch.semMatch);
+	if (patch.ignored !== undefined) set("ignored", patch.ignored);
+	if (patch.rejected !== undefined) set("rejected", patch.rejected);
+	if (patch.checkpointWindowStart !== undefined) set("checkpoint_window_start", patch.checkpointWindowStart);
+	if (patch.checkpointWindowEnd !== undefined) set("checkpoint_window_end", patch.checkpointWindowEnd);
+	if (patch.checkpoint !== undefined) {
+		params.push(JSON.stringify(patch.checkpoint || {}));
+		fields.push(`checkpoint = $${params.length}::jsonb`);
+	}
 	if (patch.resultado !== undefined) {
 		params.push(JSON.stringify(patch.resultado));
 		fields.push(`resultado = $${params.length}::jsonb`);
@@ -614,6 +677,13 @@ function mapScanJob(row) {
 		processed: row.processed,
 		casadas: row.casadas,
 		semMatch: row.sem_match,
+		ignored: row.ignored,
+		rejected: row.rejected,
+		requestedStart: row.requested_start,
+		requestedEnd: row.requested_end,
+		checkpointWindowStart: row.checkpoint_window_start,
+		checkpointWindowEnd: row.checkpoint_window_end,
+		checkpoint: row.checkpoint || {},
 		manual: row.manual,
 		resultado: row.resultado,
 		error: row.error,
@@ -631,6 +701,30 @@ async function getScanJob(id) {
 	return mapScanJob(result.rows[0]);
 }
 
+async function getResumeCheckpoint({ requestedStart, requestedEnd } = {}) {
+	const result = await db.query(
+		`select checkpoint_window_end
+		   from movimentacoes_scan_jobs
+		  where requested_start = $1 and requested_end = $2
+		    and status = 'failed' and checkpoint_window_end is not null
+		  order by finished_at desc nulls last, created_at desc
+		  limit 1`,
+		[requestedStart, requestedEnd],
+	);
+	return result.rows[0]?.checkpoint_window_end || null;
+}
+
+async function hasActiveScanJob() {
+	const result = await db.query(
+		`select exists(
+			select 1 from movimentacoes_scan_jobs
+			 where status in ('queued', 'running')
+			   and created_at > now() - interval '6 hours'
+		) active`,
+	);
+	return result.rows[0]?.active === true;
+}
+
 module.exports = {
 	buscarMovimentacaoPorParceiro,
 	createScanJob,
@@ -643,10 +737,13 @@ module.exports = {
 	getRankingTecnicos,
 	getResumoCategoriaProdutos,
 	getScanJob,
+	getResumeCheckpoint,
+	hasActiveScanJob,
 	listMovimentacoes,
 	marcarComoCasada,
 	marcarComoSemMatch,
 	readConfig,
+	normalizeDateRange,
 	saveConfig,
 	saveProdutoConfig,
 	updateScanJob,

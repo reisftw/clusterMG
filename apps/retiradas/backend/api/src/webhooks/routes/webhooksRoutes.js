@@ -8,6 +8,7 @@ function createWebhooksRouter({
 	atendimentoService,
 	cvortexIntegration,
 	evolutionMessaging,
+	evolutionWebhookQueue,
 }) {
 	const router = express.Router();
 	const controller = createWebhooksController({
@@ -15,6 +16,7 @@ function createWebhooksRouter({
 		atendimentoService,
 		cvortexIntegration,
 		evolutionMessaging,
+		evolutionWebhookQueue,
 	});
 
 	router.post("/evolution", controller.handleEvolutionWebhook);
