@@ -428,7 +428,9 @@ async function markNotificationsRead({ user, ids = [], all = false } = {}) {
 
 	clearCountersCache();
 	broadcastRealtime("notifications", { action: "read", userId: key });
-	await pushNotifications.recordRead({ user, notificationIds: readIds }).catch(() => {});
+	setImmediate(() => {
+		pushNotifications.recordRead({ user, notificationIds: readIds }).catch(() => {});
+	});
 	return { ok: true, updated: result.rowCount || 0 };
 }
 

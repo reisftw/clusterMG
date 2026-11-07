@@ -331,6 +331,7 @@ export default function EquipmentRecoveryPage() {
 		impact: null,
 		summary: null,
 		technicians: [],
+		techniciansMeta: { page: 1, totalPages: 1, total: 0, limit: 25 },
 		pending: { items: [], page: 1, totalPages: 1, total: 0 },
 		records: { items: [], page: 1, totalPages: 1, total: 0 },
 		options: { technicians: [], osTypes: [], channels: [] },
@@ -338,6 +339,9 @@ export default function EquipmentRecoveryPage() {
 	const [page, setPage] = useState(1);
 	const [limit, setLimit] = useState(10);
 	const [sort, setSort] = useState("pending");
+	const [technicianPage, setTechnicianPage] = useState(1);
+	const [technicianLimit, setTechnicianLimit] = useState(25);
+	const [technicianSearch, setTechnicianSearch] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
@@ -347,37 +351,58 @@ export default function EquipmentRecoveryPage() {
 	const [selectedTechnician, setSelectedTechnician] = useState(null);
 
 	const params = useMemo(() => ({ ...filters, page, limit }), [filters, page, limit]);
+	const loadTechnicians = useCallback(async () => {
+		try {
+			const technicians = await buscarTecnicosRecuperacao({
+				...filters,
+				sort,
+				page: technicianPage,
+				limit: technicianLimit,
+				search: technicianSearch,
+			});
+			setData((current) => ({
+				...current,
+				technicians: technicians?.items || [],
+				techniciansMeta: technicians || { page: technicianPage, totalPages: 1, total: 0, limit: technicianLimit },
+			}));
+		} catch (err) {
+			setError(err.message || "Não foi possível carregar os técnicos.");
+		}
+	}, [filters, sort, technicianPage, technicianLimit, technicianSearch]);
 
 	const load = useCallback(async () => {
 		setLoading(true);
 		setError("");
 		try {
-			const [impact, summary, technicians, pending, records, options] = await Promise.all([
+			const [impact, summary, pending, records, options] = await Promise.all([
 				buscarImpactoRecuperacao(filters),
 				buscarResumoRecuperacao(filters),
-				buscarTecnicosRecuperacao({ ...filters, sort }),
 				buscarPendenciasRecuperacao(params),
 				buscarRegistrosRecuperacao(params),
 				buscarOpcoesRecuperacao(filters),
 			]);
-			setData({
+			setData((current) => ({
+				...current,
 				impact,
 				summary,
-				technicians: technicians?.items || [],
 				pending,
 				records,
 				options,
-			});
+			}));
 		} catch (err) {
 			setError(err.message || "Não foi possível carregar a recuperação.");
 		} finally {
 			setLoading(false);
 		}
-	}, [filters, params, sort]);
+	}, [filters, params]);
 
 	useEffect(() => {
 		load();
 	}, [load]);
+
+	useEffect(() => {
+		loadTechnicians();
+	}, [loadTechnicians]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -401,7 +426,7 @@ export default function EquipmentRecoveryPage() {
 				setJob(next);
 				if (next.status === "COMPLETE") {
 					setMessage(`Reprocessamento concluído: ${next.summary?.persisted || next.summary?.total || 0} O.S.`);
-					load();
+					void Promise.all([load(), loadTechnicians()]);
 				}
 				if (next.status === "FAILED") setError(next.errorMessage || "Falha no reprocessamento.");
 			} catch (err) {
@@ -412,11 +437,12 @@ export default function EquipmentRecoveryPage() {
 			cancelled = true;
 			window.clearInterval(timer);
 		};
-	}, [job?.id, job?.status, load]);
+	}, [job?.id, job?.status, load, loadTechnicians]);
 
 	function setPeriodRange(next) {
 		setPeriod(next);
 		setPage(1);
+		setTechnicianPage(1);
 		if (next === "today") setFilters((current) => ({ ...current, start_date: today, end_date: today }));
 		if (next === "yesterday") setFilters((current) => ({ ...current, start_date: dateDaysAgo(1), end_date: dateDaysAgo(1) }));
 		if (next === "7d") setFilters((current) => ({ ...current, start_date: dateDaysAgo(6), end_date: today }));
@@ -492,7 +518,7 @@ export default function EquipmentRecoveryPage() {
 						</p>
 					</div>
 					<div className="flex flex-wrap gap-2">
-						<button type="button" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700" onClick={load} disabled={loading}>
+						<button type="button" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700" onClick={() => void Promise.all([load(), loadTechnicians()])} disabled={loading}>
 							<RefreshCw size={16} /> Atualizar
 						</button>
 						<button type="button" className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-blue-700" onClick={() => handleReprocess(false)} disabled={loading}>
@@ -681,12 +707,18 @@ export default function EquipmentRecoveryPage() {
 				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<h2 className="text-xl font-black text-slate-950">Técnicos</h2>
-						<select className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black" value={sort} onChange={(event) => setSort(event.target.value)}>
+						<div className="flex flex-wrap gap-2">
+						<input aria-label="Pesquisar técnico" className="min-w-52 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold" placeholder="Pesquisar por nome" value={technicianSearch} onChange={(event) => { setTechnicianPage(1); setTechnicianSearch(event.target.value); }} />
+						<select className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black" value={technicianLimit} onChange={(event) => { setTechnicianPage(1); setTechnicianLimit(Number(event.target.value)); }}>
+							<option value={25}>25 por página</option><option value={50}>50 por página</option><option value={100}>100 por página</option>
+						</select>
+						<select className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-black" value={sort} onChange={(event) => { setTechnicianPage(1); setSort(event.target.value); }}>
 							<option value="pending">Ordenar por pendências</option>
 							<option value="os">Ordenar por O.S.</option>
 							<option value="value">Ordenar por valor pendente</option>
 							<option value="returnRate">Ordenar por taxa de devolução</option>
 						</select>
+						</div>
 					</div>
 					{selectedTechnician ? (
 						<div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-800">
@@ -697,10 +729,17 @@ export default function EquipmentRecoveryPage() {
 						{data.technicians.map((item) => <TechnicianCard key={item.technicianKey} item={item} onSelect={pickTechnician} />)}
 					</div>
 					{!data.technicians.length ? <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-500">Nenhum técnico calculado nesse período.</p> : null}
+					<div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm font-bold text-slate-600">
+						<span>{number(data.techniciansMeta?.total)} técnico(s) · página {data.techniciansMeta?.page || 1} de {data.techniciansMeta?.totalPages || 1}</span>
+						<div className="flex gap-2">
+							<button type="button" className="rounded-lg border border-slate-200 px-3 py-1 disabled:opacity-40" disabled={technicianPage <= 1} onClick={() => setTechnicianPage((current) => Math.max(1, current - 1))}>Anterior</button>
+							<button type="button" className="rounded-lg border border-slate-200 px-3 py-1 disabled:opacity-40" disabled={technicianPage >= (data.techniciansMeta?.totalPages || 1)} onClick={() => setTechnicianPage((current) => current + 1)}>Próxima</button>
+						</div>
+					</div>
 				</div>
 				<div className="space-y-4">
 					<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-						<h3 className="text-lg font-black text-slate-950">Técnicos com mais pendências</h3>
+						<h3 className="text-lg font-black text-slate-950">Mais pendências nesta página</h3>
 						<div className="mt-4 space-y-3">
 							{topPending.map((item, index) => (
 								<BarRow key={item.technicianKey} label={`${index + 1}. ${splitTechnicianName(item.technicianName).name}`} value={item.pendentes} max={Math.max(1, topPending[0]?.pendentes || 0)} tone="bg-orange-500" right={`${number(item.pendentes)} pend.`} />
@@ -708,7 +747,7 @@ export default function EquipmentRecoveryPage() {
 						</div>
 					</div>
 					<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-						<h3 className="text-lg font-black text-slate-950">Maior valor pendente por técnico</h3>
+						<h3 className="text-lg font-black text-slate-950">Maior valor nesta página</h3>
 						<div className="mt-4 space-y-3">
 							{topValue.map((item, index) => (
 								<BarRow key={item.technicianKey} label={`${index + 1}. ${splitTechnicianName(item.technicianName).name}`} value={item.valorPendente} max={Math.max(1, topValue[0]?.valorPendente || 0)} tone="bg-blue-500" right={currency(item.valorPendente)} />

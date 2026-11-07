@@ -3,9 +3,13 @@ function createMovimentacoesController({
 	movimentacoesEntregas,
 	movimentacoesOrdensFechadas,
 }) {
+	const rangeOf = (value) =>
+		movimentacoesRepository.normalizeDateRange
+			? movimentacoesRepository.normalizeDateRange(value)
+			: { dataInicio: value?.dataInicio, dataFim: value?.dataFim };
 	async function getDashboard(req, res, next) {
 		try {
-			const { dataInicio, dataFim } = req.query;
+			const { dataInicio, dataFim } = rangeOf(req.query);
 			const [resumoPorEmpresaDia, rankingTecnicos, rankingProdutos] =
 				await Promise.all([
 					movimentacoesRepository.getResumoPorEmpresaDia({
@@ -27,12 +31,12 @@ function createMovimentacoesController({
 
 	async function listMovimentacoes(req, res, next) {
 		try {
+			const range = rangeOf(req.query);
 			res.json(
 				await movimentacoesRepository.listMovimentacoes({
 					page: req.query.page,
 					limit: req.query.limit,
-					dataInicio: req.query.dataInicio,
-					dataFim: req.query.dataFim,
+					...range,
 					empresa: req.query.empresa,
 					tecnico: req.query.tecnico,
 					produto: req.query.produto,
@@ -48,7 +52,7 @@ function createMovimentacoesController({
 
 	async function getEquipamentos(req, res, next) {
 		try {
-			const { dataInicio, dataFim } = req.query;
+			const { dataInicio, dataFim } = rangeOf(req.query);
 			res.json({
 				produtos: await movimentacoesRepository.getRankingProdutosComConfig({
 					dataInicio,
@@ -62,7 +66,7 @@ function createMovimentacoesController({
 
 	async function getResumoCategoriaEquipamentos(req, res, next) {
 		try {
-			const { dataInicio, dataFim } = req.query;
+			const { dataInicio, dataFim } = rangeOf(req.query);
 			res.json({
 				categorias: await movimentacoesRepository.getResumoCategoriaProdutos({
 					dataInicio,
@@ -130,8 +134,8 @@ function createMovimentacoesController({
 
 	async function getCidades(req, res, next) {
 		try {
-			const { dataInicio, dataFim, pageRetiradas, pageDevolvidas, pageEstoques } =
-				req.query;
+			const { dataInicio, dataFim } = rangeOf(req.query);
+			const { pageRetiradas, pageDevolvidas, pageEstoques } = req.query;
 			const [rankingCidadesRetiradas, rankingCidadesDevolvidas, rankingEstoques] =
 				await Promise.all([
 					movimentacoesRepository.getRankingCidadesRetiradas({

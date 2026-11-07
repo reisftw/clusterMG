@@ -16,17 +16,18 @@ const AUTO_RECONCILE_INTERVAL_MS = Math.max(
 	Number(process.env.EQUIPMENT_AUTO_RECONCILE_INTERVAL_MS || 5 * 60 * 1000),
 	30_000,
 );
-const DAILY_RECONCILIATION_TIME = cleanText(
-	process.env.EQUIPMENT_RECONCILIATION_DAILY_TIME || "04:00",
-);
-const ensureSnapshotJobs = new Map();
-const lastReconciliationByRange = new Map();
 let automaticReconciliationRunning = false;
 
 function normalizeLimit(value, fallback = 20, max = 500) {
 	const parsed = Number.parseInt(value, 10);
 	if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
 	return Math.min(parsed, max);
+}
+
+function technicianPagination(query = {}) {
+	const page = normalizePage(query.page);
+	const limit = [25, 50, 100].includes(Number(query.limit)) ? Number(query.limit) : 25;
+	return { page, limit, offset: (page - 1) * limit };
 }
 
 function normalizePage(value) {
@@ -399,65 +400,6 @@ async function getSourceRecords(query = {}) {
 	return { ...base, records: result.rows };
 }
 
-async function ensureSnapshotsForRange(query = {}) {
-	const { startDate, endDate } = defaultDateRange(query);
-	const key = `${startDate}:${endDate}`;
-	if (ensureSnapshotJobs.has(key)) return ensureSnapshotJobs.get(key);
-	const promise = (async () => {
-		const source = await getSourceRecords({ start_date: startDate, end_date: endDate });
-		if (!source.records.length) return { skipped: true, total: 0 };
-		const sourceIds = [...new Set(source.records.map((record) => String(record.hubsoft_id)).filter(Boolean))];
-		const existing = await db.query(
-			`select count(*)::int as total
-			   from equipment_recovery_snapshots
-			  where closed_at >= ($1::date::timestamp at time zone '${TIME_ZONE}')
-			    and closed_at < (($2::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')
-			    and os_id = any($3::text[])`,
-			[startDate, endDate, sourceIds],
-		);
-		if (Number(existing.rows[0]?.total || 0) >= sourceIds.length) {
-			const lastReconciledAt = Number(lastReconciliationByRange.get(key) || 0);
-			if (Date.now() - lastReconciledAt < AUTO_RECONCILE_INTERVAL_MS) {
-				return { skipped: true, total: sourceIds.length, reconciled: false };
-			}
-			const snapshots = await db.query(
-				`select *
-				   from equipment_recovery_snapshots
-				  where closed_at >= ($1::date::timestamp at time zone '${TIME_ZONE}')
-				    and closed_at < (($2::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')
-				    and os_id = any($3::text[])`,
-				[startDate, endDate, sourceIds],
-			);
-			const matchSummary = await applyMovementMatches(snapshots.rows, {
-				start_date: startDate,
-				end_date: endDate,
-			});
-			lastReconciliationByRange.set(key, Date.now());
-			return {
-				total: snapshots.rows.length,
-				reconciled: true,
-				...matchSummary,
-			};
-		}
-		const valuesByCategory = await getEquipmentValues();
-		if (!source.records.length) return { skipped: true, total: 0 };
-		const saved = [];
-		for (const record of source.records) {
-			saved.push(await upsertSnapshot(snapshotFromRecord(record, valuesByCategory)));
-		}
-		const matchSummary = await applyMovementMatches(saved, {
-			start_date: startDate,
-			end_date: endDate,
-		});
-		lastReconciliationByRange.set(key, Date.now());
-		return { total: saved.length, ...matchSummary };
-	})().finally(() => {
-		ensureSnapshotJobs.delete(key);
-	});
-	ensureSnapshotJobs.set(key, promise);
-	return promise;
-}
-
 async function getImpact(query = {}) {
 	const params = [];
 	const { startDate, endDate } = defaultDateRange(query);
@@ -500,60 +442,69 @@ async function getImpact(query = {}) {
 	};
 }
 
-async function upsertSnapshot(snapshot) {
-	const result = await db.query(
-		`insert into equipment_recovery_snapshots
-			(os_record_id, os_id, os_number, os_type_id, os_type, production_channel,
-			 technician_id, technician_name, technician_name_normalized,
-			 city_id, city_name, service_name, service_speed_mbps, equipment_type,
-			 equipment_unit_value, equipment_value_source, equipment_value_product_name,
-			 closed_at, raw_snapshot, calculated_at)
-		 values
-			($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,now())
-		 on conflict (os_id) do update set
-			os_record_id = excluded.os_record_id,
-			os_number = excluded.os_number,
-			os_type_id = excluded.os_type_id,
-			os_type = excluded.os_type,
-			production_channel = excluded.production_channel,
-			technician_id = excluded.technician_id,
-			technician_name = excluded.technician_name,
-			technician_name_normalized = excluded.technician_name_normalized,
-			city_id = excluded.city_id,
-			city_name = excluded.city_name,
-			service_name = excluded.service_name,
-			service_speed_mbps = excluded.service_speed_mbps,
-			equipment_type = excluded.equipment_type,
-			equipment_unit_value = excluded.equipment_unit_value,
-			equipment_value_source = excluded.equipment_value_source,
-			equipment_value_product_name = excluded.equipment_value_product_name,
-			closed_at = excluded.closed_at,
-			raw_snapshot = excluded.raw_snapshot,
-			calculated_at = now()
-		 returning *`,
-		[
-			snapshot.osRecordId,
-			snapshot.osId,
-			snapshot.osNumber,
-			snapshot.osTypeId,
-			snapshot.osType,
-			snapshot.productionChannel,
-			snapshot.technicianId,
-			snapshot.technicianName,
-			snapshot.technicianNameNormalized,
-			snapshot.cityId,
-			snapshot.cityName,
-			snapshot.serviceName,
-			snapshot.serviceSpeedMbps,
-			snapshot.equipmentType,
-			snapshot.equipmentUnitValue,
-			snapshot.equipmentValueSource,
-			snapshot.equipmentValueProductName,
-			snapshot.closedAt,
-			JSON.stringify(snapshot.rawSnapshot || {}),
-		],
-	);
-	return result.rows[0];
+async function upsertSnapshots(snapshots = []) {
+	const saved = [];
+	for (let offset = 0; offset < snapshots.length; offset += 500) {
+		const batch = snapshots.slice(offset, offset + 500).map((snapshot) => ({
+			os_record_id: snapshot.osRecordId,
+			os_id: snapshot.osId,
+			os_number: snapshot.osNumber,
+			os_type_id: snapshot.osTypeId,
+			os_type: snapshot.osType,
+			production_channel: snapshot.productionChannel,
+			technician_id: snapshot.technicianId,
+			technician_name: snapshot.technicianName,
+			technician_name_normalized: snapshot.technicianNameNormalized,
+			city_id: snapshot.cityId,
+			city_name: snapshot.cityName,
+			service_name: snapshot.serviceName,
+			service_speed_mbps: snapshot.serviceSpeedMbps,
+			equipment_type: snapshot.equipmentType,
+			equipment_unit_value: snapshot.equipmentUnitValue,
+			equipment_value_source: snapshot.equipmentValueSource,
+			equipment_value_product_name: snapshot.equipmentValueProductName,
+			closed_at: snapshot.closedAt,
+			raw_snapshot: snapshot.rawSnapshot || {},
+		}));
+		const result = await db.query(
+			`insert into equipment_recovery_snapshots
+				(os_record_id, os_id, os_number, os_type_id, os_type, production_channel,
+				 technician_id, technician_name, technician_name_normalized, city_id, city_name,
+				 service_name, service_speed_mbps, equipment_type, equipment_unit_value,
+				 equipment_value_source, equipment_value_product_name, closed_at, raw_snapshot, calculated_at)
+			 select x.os_record_id::uuid, x.os_id, x.os_number, x.os_type_id, x.os_type,
+			        x.production_channel, x.technician_id, x.technician_name,
+			        x.technician_name_normalized, x.city_id, x.city_name, x.service_name,
+			        x.service_speed_mbps, x.equipment_type, x.equipment_unit_value,
+			        x.equipment_value_source, x.equipment_value_product_name, x.closed_at,
+			        x.raw_snapshot, now()
+			   from jsonb_to_recordset($1::jsonb) as x(
+				os_record_id text, os_id text, os_number text, os_type_id integer, os_type text,
+				production_channel text, technician_id text, technician_name text,
+				technician_name_normalized text, city_id text, city_name text, service_name text,
+				service_speed_mbps numeric, equipment_type text, equipment_unit_value numeric,
+				equipment_value_source text, equipment_value_product_name text,
+				closed_at timestamptz, raw_snapshot jsonb)
+			 on conflict (os_id) do update set
+				os_record_id = excluded.os_record_id, os_number = excluded.os_number,
+				os_type_id = excluded.os_type_id, os_type = excluded.os_type,
+				production_channel = excluded.production_channel,
+				technician_id = excluded.technician_id, technician_name = excluded.technician_name,
+				technician_name_normalized = excluded.technician_name_normalized,
+				city_id = excluded.city_id, city_name = excluded.city_name,
+				service_name = excluded.service_name, service_speed_mbps = excluded.service_speed_mbps,
+				equipment_type = excluded.equipment_type,
+				equipment_unit_value = excluded.equipment_unit_value,
+				equipment_value_source = excluded.equipment_value_source,
+				equipment_value_product_name = excluded.equipment_value_product_name,
+				closed_at = excluded.closed_at, raw_snapshot = excluded.raw_snapshot,
+				calculated_at = now()
+			 returning *`,
+			[JSON.stringify(batch)],
+		);
+		saved.push(...result.rows);
+	}
+	return saved;
 }
 
 async function buildMovementInventory(query = {}) {
@@ -708,47 +659,45 @@ async function applyMovementMatches(snapshots, query = {}) {
 	const movementIndex = buildMovementIndex(movements);
 	let matched = 0;
 	let probable = 0;
+	const updates = [];
+	const allocations = [];
 	for (const snapshot of snapshots) {
 		const match = findMovementMatch(snapshot, movementIndex);
 		if (!match) {
-			await db.query(
-				`update equipment_recovery_snapshots
-					set return_status = case when equipment_type = 'UNKNOWN' then 'UNCLASSIFIED' else 'PENDING' end,
-					    match_confidence = 'NOT_FOUND',
-					    match_type = null,
-					    movement_id = null,
-					    movement_at = null
-				 where id = $1`,
-				[snapshot.id],
-			);
+			updates.push({ id: snapshot.id, return_status: snapshot.equipment_type === "UNKNOWN" ? "UNCLASSIFIED" : "PENDING", match_confidence: "NOT_FOUND" });
 			continue;
 		}
 		match.item.consume();
 		if (match.confidence === "CONFIRMED") matched += 1;
 		if (match.confidence === "PROBABLE") probable += 1;
+		updates.push({ id: snapshot.id, return_status: "MATCHED", match_confidence: match.confidence, match_type: match.type, movement_id: match.item.row.id, movement_at: match.item.row.emitido_em });
+		allocations.push({ recovery_id: snapshot.id, movement_id: match.item.row.id, match_confidence: match.confidence, match_type: match.type });
+	}
+	for (let offset = 0; offset < updates.length; offset += 1000) {
 		await db.query(
-			`update equipment_recovery_snapshots
-				set return_status = 'MATCHED',
-				    match_confidence = $2,
-				    match_type = $3,
-				    movement_id = $4,
-				    movement_at = $5,
-				    calculated_at = now()
-			 where id = $1`,
-			[
-				snapshot.id,
-				match.confidence,
-				match.type,
-				match.item.row.id,
-				match.item.row.emitido_em,
-			],
+			`update equipment_recovery_snapshots snapshot
+			    set return_status = item.return_status,
+			        match_confidence = item.match_confidence,
+			        match_type = item.match_type,
+			        movement_id = item.movement_id,
+			        movement_at = item.movement_at,
+			        calculated_at = now()
+			   from jsonb_to_recordset($1::jsonb) as item(
+				id uuid, return_status text, match_confidence text, match_type text,
+				movement_id text, movement_at timestamptz)
+			  where snapshot.id = item.id`,
+			[JSON.stringify(updates.slice(offset, offset + 1000))],
 		);
+	}
+	for (let offset = 0; offset < allocations.length; offset += 1000) {
 		await db.query(
 			`insert into equipment_recovery_movement_allocations
 				(recovery_id, movement_id, quantity, match_confidence, match_type)
-			 values ($1,$2,1,$3,$4)
+			 select item.recovery_id, item.movement_id, 1, item.match_confidence, item.match_type
+			   from jsonb_to_recordset($1::jsonb) as item(
+				recovery_id uuid, movement_id text, match_confidence text, match_type text)
 			 on conflict (recovery_id, movement_id) do nothing`,
-			[snapshot.id, match.item.row.id, match.confidence, match.type],
+			[JSON.stringify(allocations.slice(offset, offset + 1000))],
 		);
 	}
 	return { matched, probable };
@@ -767,23 +716,10 @@ async function runReprocessCore(jobId, query = {}) {
 		);
 		const summary = summarizeSnapshots(snapshots);
 		if (mode === "APPLY") {
-			const saved = [];
-			for (const [index, snapshot] of snapshots.entries()) {
-				saved.push(await upsertSnapshot(snapshot));
-				if (index % 100 === 0) {
-					await updateJob(jobId, {
-						summary: {
-							stage: "Gravando snapshots",
-							percent: Math.min(
-								70,
-								15 + Math.round(((index + 1) / Math.max(1, snapshots.length)) * 55),
-							),
-							processed: index + 1,
-							total: snapshots.length,
-						},
-					});
-				}
-			}
+			const saved = await upsertSnapshots(snapshots);
+			await updateJob(jobId, {
+				summary: { stage: "Snapshots gravados em lotes", percent: 70, processed: saved.length, total: snapshots.length },
+			});
 			await updateJob(jobId, {
 				summary: {
 					stage: "Conciliando movimentações de estoque",
@@ -909,6 +845,19 @@ async function automaticRunExists(mode, runDate = "") {
 	return result.rows[0]?.exists === true;
 }
 
+async function automaticRunRecently(mode, intervalMs) {
+	const result = await db.query(
+		`select exists(
+			select 1 from equipment_recovery_jobs
+			 where mode = $1
+			   and ((status = 'RUNNING' and started_at > now() - interval '30 minutes')
+			     or (status = 'COMPLETE' and finished_at > now() - ($2::text || ' milliseconds')::interval))
+		) as exists`,
+		[mode, String(intervalMs)],
+	);
+	return result.rows[0]?.exists === true;
+}
+
 async function runAutomaticReconciliation(mode, { startDate, endDate }) {
 	const job = await createReprocessJob({
 		mode,
@@ -939,9 +888,8 @@ async function runDailyIfDue(now = new Date()) {
 		}
 
 		const clock = saoPauloClock(now);
-		if (clock.time < DAILY_RECONCILIATION_TIME) return null;
-		if (await automaticRunExists("AUTO_DAILY", clock.date)) return null;
-		return await runAutomaticReconciliation("AUTO_DAILY", {
+		if (await automaticRunRecently("AUTO_INCREMENTAL", AUTO_RECONCILE_INTERVAL_MS)) return null;
+		return await runAutomaticReconciliation("AUTO_INCREMENTAL", {
 			startDate: shiftIsoDate(clock.date, -MATCH_WINDOW_DAYS),
 			endDate: clock.date,
 		});
@@ -1089,7 +1037,6 @@ function mapEquipmentRows(rows = []) {
 }
 
 async function getSummary(query = {}) {
-	await ensureSnapshotsForRange(query);
 	const params = [];
 	const base = snapshotFilters(query, params);
 	const result = await db.query(
@@ -1164,6 +1111,12 @@ async function getSummary(query = {}) {
 	const row = result.rows[0] || {};
 	const classified = Number(row.classificados || 0);
 	const total = Number(row.total || 0);
+	const freshness = await db.query(
+		`select
+			(select max(finished_at) from hubsoft_sync_runs where profile = any($1::text[]) and status = 'COMPLETE') as last_sync_at,
+			(select max(finished_at) from equipment_recovery_jobs where status = 'COMPLETE') as last_reconciled_at`,
+		[META_PROFILES],
+	);
 	return {
 		startDate: base.startDate,
 		endDate: base.endDate,
@@ -1204,13 +1157,21 @@ async function getSummary(query = {}) {
 			d4d5: Number(deadlineResult.rows[0]?.d4_d5 || 0),
 			overdue: Number(deadlineResult.rows[0]?.overdue || 0),
 		},
+		freshness: {
+			lastSyncAt: freshness.rows[0]?.last_sync_at || null,
+			lastReconciledAt: freshness.rows[0]?.last_reconciled_at || null,
+		},
 	};
 }
 
 async function listTechnicians(query = {}) {
-	await ensureSnapshotsForRange(query);
+	const { page, limit, offset } = technicianPagination(query);
 	const params = [];
 	const base = snapshotFilters(query, params);
+	const search = cleanText(query.search || query.q);
+	const where = search
+		? `${base.where} and coalesce(technician_name, '') ilike $${base.params.push(`%${search}%`)}`
+		: base.where;
 	const sort = cleanText(query.sort || "pending");
 	const orderBy = {
 		os: "retirados desc",
@@ -1234,16 +1195,18 @@ async function listTechnicians(query = {}) {
 			count(*) filter (where equipment_type = 'AC')::int as ac,
 			count(*) filter (where equipment_type = 'AX')::int as ax,
 			count(*) filter (where equipment_type = 'UNKNOWN')::int as unknown
-		 from equipment_recovery_snapshots
-		 where ${base.where}
+			 from equipment_recovery_snapshots
+			 where ${where}
 		 group by 1, 2
 		)
-		select *, case when retirados > 0 then devolvidos::numeric / retirados else 0 end as taxa_devolucao
+		select *, count(*) over()::int as total_count,
+		       case when retirados > 0 then devolvidos::numeric / retirados else 0 end as taxa_devolucao
 		  from grouped
-		 order by ${orderBy}, technician_name`,
+		 order by ${orderBy}, technician_name, technician_key
+		 limit $${base.params.push(limit)} offset $${base.params.push(offset)}`,
 		base.params,
 	);
-	return result.rows.map((row) => ({
+	const items = result.rows.map((row) => ({
 		technicianKey: row.technician_key,
 		technicianName: row.technician_name,
 		retirados: Number(row.retirados || 0),
@@ -1264,10 +1227,11 @@ async function listTechnicians(query = {}) {
 			UNKNOWN: Number(row.unknown || 0),
 		},
 	}));
+	const total = Number(result.rows[0]?.total_count || 0);
+	return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 async function listPending(query = {}) {
-	await ensureSnapshotsForRange(query);
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 20);
 	const offset = (page - 1) * limit;
@@ -1297,7 +1261,6 @@ async function listPending(query = {}) {
 }
 
 async function listRecords(query = {}) {
-	await ensureSnapshotsForRange(query);
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 20);
 	const offset = (page - 1) * limit;
@@ -1326,7 +1289,6 @@ async function listRecords(query = {}) {
 }
 
 async function getOptions(query = {}) {
-	await ensureSnapshotsForRange(query);
 	const params = [];
 	const base = snapshotFilters(
 		{ start_date: query.start_date, end_date: query.end_date },
@@ -1415,5 +1377,6 @@ module.exports = {
 		shiftIsoDate,
 		snapshotClientName,
 		snapshotFromRecord,
+		technicianPagination,
 	},
 };

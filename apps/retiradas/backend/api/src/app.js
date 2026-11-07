@@ -20,6 +20,7 @@ const { UserAdminUpdateDTO } = require("./dtos/userAdminDto");
 const notificationsService = require("./notificationsService");
 const agendamentoEsteiraCommands = require("./agendamentoEsteiraCommands");
 const evolutionMessaging = require("./evolutionMessaging");
+const evolutionWebhookQueue = require("./evolutionWebhookQueue");
 const agendamentoConfirmacao = require("./agendamentoConfirmacao");
 const antiBot = require("./antiBot");
 const atendimentoService = require("./atendimento/atendimentoService");
@@ -5923,6 +5924,7 @@ function createApp() {
 			atendimentoService,
 			cvortexIntegration,
 			evolutionMessaging,
+			evolutionWebhookQueue,
 		}),
 	);
 
@@ -6067,6 +6069,11 @@ function createApp() {
 		app.locals.equipmentRecoveryReconciliationBootstrapTimer = bootstrapTimer;
 		app.locals.equipmentRecoveryReconciliationTimer = timer;
 	}
+
+	evolutionWebhookQueue.startWorker(app, {
+		agendamentoConfirmacao,
+		evolutionMessaging,
+	});
 
 	hubsoftSyncProfiles.startScheduler(app);
 

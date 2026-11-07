@@ -12,6 +12,7 @@ const {
 		saoPauloClock,
 		shiftIsoDate,
 		snapshotFromRecord,
+		technicianPagination,
 	},
 } = require("../../../backend/api/src/equipmentRecovery/equipmentRecoveryService");
 
@@ -180,6 +181,20 @@ describe("equipmentRecoveryService", () => {
 		expect(saoPauloClock(new Date("2026-10-30T07:15:00.000Z"))).toEqual({
 			date: "2026-10-30",
 			time: "04:15",
+		});
+	});
+
+	it("pagina tecnicos no backend apenas em lotes de 25, 50 ou 100", () => {
+		expect(technicianPagination({})).toEqual({ page: 1, limit: 25, offset: 0 });
+		expect(technicianPagination({ page: "3", limit: "50" })).toEqual({
+			page: 3,
+			limit: 50,
+			offset: 100,
+		});
+		expect(technicianPagination({ page: 0, limit: 75 })).toEqual({
+			page: 1,
+			limit: 25,
+			offset: 0,
 		});
 	});
 });
