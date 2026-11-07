@@ -17,7 +17,18 @@ O workflow preserva:
 ## Registro
 
 - Branch de trabalho: `codex/p0-correcao-integrada`.
-- Commit publicado: pendente.
-- Workflow e run ID: pendente.
-- Horario: pendente.
-- Resultado: pendente.
+- Commit publicado: `c955bc7df7780c5bb8858f4a778f687b031aeecd`.
+- Versao: `v2026.11.07-c955bc7-p0`.
+- Workflow: `Prepare Retiradas Release`.
+- Run: `#154` (`42332182726`).
+- URL: `https://github.com/reisftw/clusterMG/actions/runs/42332182726`.
+- Resultado: build, migration e publicacao concluidos com sucesso.
+- Regra de deploy: uma unica execucao oficial; nenhum deploy manual ou segunda tentativa.
+
+## Smoke de producao
+
+- `retiradas-api.service`: ativo desde `2026-11-07 03:09:30 UTC`.
+- Health check local e publico: aprovado.
+- Frontend publicado contem o marcador `c955bc7`.
+- Migration `121_integrated_p0_reliability.sql`: registrada no banco de producao.
+- Journal do servico desde a publicacao: sem entradas de warning ou error durante o smoke.
