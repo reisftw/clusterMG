@@ -215,6 +215,9 @@ const MensageriaCallback = lazy(
 const Tentativas = lazy(
 	() => import("../modules/tentativas/components/TentativasPage"),
 );
+const Retorninho = lazy(
+	() => import("../modules/retorninho/components/RetorninhoPage"),
+);
 const Evidencias = lazy(
 	() => import("../modules/evidencias/components/EvidenciasPage"),
 );
@@ -1096,6 +1099,14 @@ const AppRouter = () => (
 									]}
 								>
 									<Tentativas />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.RETORNINHO}
+							element={
+								<ProtectedRoute requiredPermission={["retorninho.view"]}>
+									<Retorninho />
 								</ProtectedRoute>
 							}
 						/>

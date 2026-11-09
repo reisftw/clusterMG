@@ -1,6 +1,6 @@
 const express = require("express");
 
-function createMetaWhatsappWebhookRouter({ service }) {
+function createMetaWhatsappWebhookRouter({ service, onValidatedPayload }) {
 	const router = express.Router();
 
 	router.get("/", async (req, res, next) => {
@@ -33,6 +33,11 @@ function createMetaWhatsappWebhookRouter({ service }) {
 			const result = await service.acceptWebhook(req.body || {}, {
 				signatureValid: true,
 			});
+			if (typeof onValidatedPayload === "function") {
+				await onValidatedPayload(req.body || {}).catch((error) => {
+					console.error("[retorninho] Falha ao enfileirar webhook Meta:", error?.message || error);
+				});
+			}
 			res.status(200).json(result);
 		} catch (error) {
 			next(error);

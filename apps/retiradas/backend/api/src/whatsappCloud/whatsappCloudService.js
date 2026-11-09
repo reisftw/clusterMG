@@ -1126,6 +1126,23 @@ function createWhatsappCloudService({
 		}
 	}
 
+	async function validateOperationalChannel(phoneNumberId) {
+		const config = await ensureConfig();
+		const provider = await providerFor(config);
+		const response = await provider.validatePhoneNumber(cleanText(phoneNumberId));
+		return response.data || {};
+	}
+
+	async function sendOperationalText({ phoneNumberId, to, text }) {
+		const config = await ensureConfig();
+		const provider = await providerFor(config);
+		const response = await provider.sendText({ phoneNumberId, to, text });
+		return {
+			messageId: cleanText(response.data?.messages?.[0]?.id),
+			httpStatus: response.httpStatus,
+		};
+	}
+
 	async function startTestFlow(payload = {}, user = {}) {
 		const recipientId = cleanText(payload.recipientId);
 		const recipientResult = await dbClient.query(
@@ -1842,8 +1859,10 @@ function createWhatsappCloudService({
 		saveConfig,
 		saveSecrets,
 		sendTestMessage,
+		sendOperationalText,
 		startTestFlow,
 		syncTemplates,
+		validateOperationalChannel,
 		validateConnection,
 		verifyWebhookSignature,
 		verifyWebhookToken,

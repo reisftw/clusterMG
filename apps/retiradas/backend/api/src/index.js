@@ -8,6 +8,7 @@ const operationalImports = require("./operationalImports");
 const tentativasService = require("./tentativas/tentativasService");
 const tentativasAlertsService = require("./tentativas/tentativasAlertsService");
 const maintenanceService = require("./maintenanceService");
+const retorninhoService = require("./retorninho/retorninhoService");
 const { closeRealtimeClients } = require("./realtime");
 
 const port = Number(process.env.PORT || 3001);
@@ -21,6 +22,7 @@ const server = app.listen(port, () => {
 	tentativasService.startOpportunitiesReconciliationWorker();
 	tentativasAlertsService.startWorker();
 	maintenanceService.startWorker();
+	retorninhoService.startWorker();
 	operationalImports.startOnnetStockAccountingWorker();
 	operationalImports.markInterruptedImportJobs().catch((error) => {
 		console.error(
@@ -48,6 +50,7 @@ async function shutdown(signal) {
 	tentativasService.stopOpportunitiesReconciliationWorker();
 	tentativasAlertsService.stopWorker();
 	maintenanceService.stopWorker();
+	retorninhoService.stopWorker();
 	operationalImports.stopOnnetStockAccountingWorker();
 	closeRealtimeClients();
 
