@@ -10,8 +10,8 @@ const VIEW_RADII = Object.freeze([
 	{ meters: 5000, label: "5 km" },
 ]);
 
-export default function MapsFiltersPanel({ open, radiusMeters, sortMode, categories, onClose, onApply }) {
-	const [draft, setDraft] = useState({ radiusMeters, sortMode, categories });
+export default function MapsFiltersPanel({ open, radiusMeters, sortMode, categories, filters, onClose, onApply }) {
+	const [draft, setDraft] = useState({ radiusMeters, sortMode, categories, ...filters });
 
 	if (!open) return null;
 	const toggleCategory = (category) => {
@@ -39,6 +39,12 @@ export default function MapsFiltersPanel({ open, radiusMeters, sortMode, categor
 				</div>
 				<label className="maps-v2-filter-field"><span><Crosshair size={16} /> Raio ao usar minha localização</span><select value={draft.radiusMeters} onChange={(event) => setDraft((current) => ({ ...current, radiusMeters: Number(event.target.value) }))}>{VIEW_RADII.map((radius) => <option key={radius.meters} value={radius.meters}>{radius.label}</option>)}</select></label>
 				<label className="maps-v2-filter-field"><span><SlidersHorizontal size={16} /> Ordenar lista por</span><select value={draft.sortMode} onChange={(event) => setDraft((current) => ({ ...current, sortMode: event.target.value }))}><option value="nearest">Mais próximas</option><option value="farthest">Mais distantes</option><option value="priority">Prioridade operacional</option><option value="scheduled">Agendadas primeiro</option></select></label>
+				<div className="maps-v2-filter-grid">
+					<label className="maps-v2-filter-field"><span>Regional</span><input value={draft.regional || ""} onChange={(event) => setDraft((current) => ({ ...current, regional: event.target.value }))} placeholder="Todas" /></label>
+					<label className="maps-v2-filter-field"><span>Cidade</span><input value={draft.city || ""} onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))} placeholder="Todas" /></label>
+					<label className="maps-v2-filter-field"><span>Status</span><select value={draft.status || ""} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}><option value="">Todos</option><option value="AGENDADA">Agendada</option><option value="PENDENTE">Pendente</option></select></label>
+					<label className="maps-v2-filter-field"><span>Atribuição</span><select value={draft.assignment || ""} onChange={(event) => setDraft((current) => ({ ...current, assignment: event.target.value }))}><option value="">Todas</option><option value="MINHAS">Minhas O.S.</option><option value="DISPONIVEIS">Disponíveis</option><option value="OUTROS">Outros técnicos</option></select></label>
+				</div>
 				<footer className="maps-v2-modal-actions"><button type="button" className="maps-v2-secondary-button" onClick={onClose}>Cancelar</button><button type="button" className="maps-v2-primary-button" onClick={() => onApply(draft)}>Aplicar filtros</button></footer>
 			</section>
 		</div>

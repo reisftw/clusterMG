@@ -136,7 +136,8 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(point).toMatchObject({
 			category: "opportunity",
 			technician: "OUTRO TECNICO",
-			requestable: false,
+			requestable: true,
+			assignedToOtherTechnician: true,
 		});
 	});
 
@@ -152,6 +153,43 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(sql).toContain("o.num_os");
 		expect(sql).toContain("o.nome_cliente");
 		expect(params).toContain("%586377%");
+	});
+
+	it("normaliza acentos e espaços repetidos na busca parcial", () => {
+		const params = [];
+		const filters = __testables.sourceFilters({
+			params,
+			query: { search: "  Rua   São   Jorge  " },
+			user: { role: "admin" },
+		});
+		expect(params).toContain("%rua sao jorge%");
+		expect(filters.clauses.join(" ")).toContain("regexp_replace");
+	});
+
+	it("combina filtros normalizados de regional, cidade, status e atribuicao", () => {
+		const params = [];
+		const filters = __testables.sourceFilters({
+			params,
+			query: {
+				assignment: "OUTROS",
+				city: "Uberlândia",
+				regional: "Triângulo Mineiro",
+				status: "PENDENTE",
+			},
+			user: { role: "tecnico", profile: { metasTecnicoNome: "JOÃO TÉCNICO" } },
+		});
+		const sql = filters.clauses.join(" ");
+		expect(sql).toContain("o.regional");
+		expect(sql).toContain("o.cidade");
+		expect(sql).toContain("o.status");
+		expect(sql).toContain("o.tecnico");
+		expect(params).toEqual(
+			expect.arrayContaining([
+				"triangulo mineiro",
+				"uberlandia",
+				["JOAO TECNICO"],
+			]),
+		);
 	});
 
 	it("nao limita o mapa principal e limita somente a previa da busca", () => {
@@ -175,7 +213,7 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(page).toContain('timeZone: "America/Sao_Paulo"');
 	});
 
-	it("permite que a gestao visualize todas as retiradas sem habilitar solicitacao indevida", () => {
+	it("permite que a gestao visualize e transfira retiradas de outro tecnico", () => {
 		const params = [];
 		const filters = __testables.sourceFilters({
 			params,
@@ -188,8 +226,9 @@ describe("Retiradas Maps 2.0 service", () => {
 		expect(point).toMatchObject({
 			category: "opportunity",
 			clientName: "MARIA SILVA",
-			requestable: false,
+			requestable: true,
 			assignedToCurrentUser: false,
+			assignedToOtherTechnician: true,
 		});
 	});
 

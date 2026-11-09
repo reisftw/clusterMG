@@ -39,4 +39,21 @@ describe("operationalImports estoque Onnet", () => {
 			"A8:32:9A:00:00:00",
 		);
 	});
+
+	it("contabiliza somente lançamentos elegíveis no mês correto", () => {
+		const { buildOnnetStockManualSnapshot } = loadOperationalImports();
+		const snapshot = buildOnnetStockManualSnapshot([
+			{ data: { cidade: "Betim", dataEntrega: "2026-11-03", mac: "A8329A000001", tecnicoNome: "Técnico A" } },
+			{ data: { cidade: "Betim", dataEntrega: "2026-11-04", mac: "A8329A000002", tecnicoNome: "Técnico A" } },
+			{ data: { cidade: "Betim", dataEntrega: "2026-10-31", mac: "A8329A000003", tecnicoNome: "Técnico B" } },
+			{ data: { cidade: "", dataEntrega: "2026-11-05", mac: "A8329A000004", tecnicoNome: "Técnico B" } },
+		], "Novembro", 2026);
+
+		expect(snapshot.total).toBe(2);
+		expect(snapshot.rawDays).toEqual([
+			expect.objectContaining({ dia: 3, equipe: 1, totalDia: 1 }),
+			expect.objectContaining({ dia: 4, equipe: 1, totalDia: 1 }),
+		]);
+		expect(snapshot.technicians[0]).toEqual(expect.objectContaining({ name: "Técnico A", total: 2 }));
+	});
 });

@@ -83,7 +83,7 @@ export default function OrderDetailPanel({ item, loading, navigation, navigation
 							{navigateUrl !== "#" ? <a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Abrir rota <ExternalLink size={14} /></a> : null}
 							<button type="button" className="maps-v2-primary-button" disabled={!item.locationAvailable} onClick={() => onAddRoute(item.id)}><Route size={17} /> Adicionar ao roteiro</button>
 						</>) : item.requestable ? (
-							<button type="button" className="maps-v2-primary-button" disabled={submitting} onClick={requestOrder}><PackagePlus size={17} /> {submitting ? "Enviando..." : "Solicitar esta OS"}</button>
+							<button type="button" className="maps-v2-primary-button" disabled={submitting} onClick={requestOrder}><PackagePlus size={17} /> {submitting ? "Enviando..." : item.assignedToOtherTechnician ? "Solicitar transferência" : "Solicitar esta O.S."}</button>
 						) : navigateUrl !== "#" ? (
 							<a className="maps-v2-secondary-button" href={navigateUrl} target="_blank" rel="noreferrer"><Navigation size={17} /> Ver no mapa <ExternalLink size={14} /></a>
 						) : null}

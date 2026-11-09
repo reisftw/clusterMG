@@ -38,6 +38,7 @@ const CLOSED_STATUS_PATTERN = /(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)/i;
 const AVAILABLE_TECHNICIANS = new Set(["", "FILA", "NENHUM", "NAO DEFINIDO", "SEM TECNICO"]);
 const MAX_POINT_PREVIEW = 100;
 const ORDER_SYNC_CACHE_TTL_MS = 30_000;
+const RECONCILIATION_CACHE_TTL_MS = 60_000;
 const ALERT_COOLDOWN_MINUTES = 30;
 const ALERT_HYSTERESIS_METERS = 100;
 const MAX_ALERTS_PER_HOUR = 5;
@@ -84,6 +85,7 @@ const ADMIN_PRESENTATION_DEFAULTS = Object.freeze({
 const navigationCache = new Map();
 let locationHistoryCleanupAt = 0;
 let orderSyncCache = { value: "", expiresAt: 0 };
+let reconciliationCache = { value: null, expiresAt: 0 };
 
 function broadcastMapsUpdate(action, payload = {}) {
 	broadcastRealtime("maps", {
@@ -186,6 +188,10 @@ function normalize(value) {
 		.normalize("NFD")
 		.replace(/[\u0300-\u036f]/g, "")
 		.toUpperCase();
+}
+
+function normalizedSql(column) {
+	return `trim(regexp_replace(translate(lower(coalesce(${column}, '')), 'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'), '[[:space:]]+', ' ', 'g'))`;
 }
 
 function apiError(message, statusCode = 400, code = "MAPS_ERROR") {
@@ -389,7 +395,8 @@ function mapPoint(row, user, { origin = null } = {}) {
 	const coordinates = exact;
 	const distanceMeters = origin && locationAvailable ? haversineMeters(origin, exact) : null;
 	const assignedToCurrentUser = category === "assigned";
-	const requestable = category === "opportunity" && isAvailableTechnician(row.tecnico) && !row.open_request_id;
+	const assignedToOtherTechnician = category === "opportunity" && !isAvailableTechnician(row.tecnico);
+	const requestable = category === "opportunity" && !row.open_request_id;
 	const base = {
 		id: row.id,
 		orderNumber: row.num_os,
@@ -402,6 +409,7 @@ function mapPoint(row, user, { origin = null } = {}) {
 		locationAvailable,
 		requestable,
 		assignedToCurrentUser,
+		assignedToOtherTechnician,
 		clientName: firstAndLastName(row.nome_cliente),
 		address: row.endereco_resumo || row.endereco || "Endereco nao informado",
 		technician: row.tecnico || "",
@@ -467,7 +475,7 @@ async function syncNativeCoordinates({ force = false } = {}) {
 	return nativeCoordinatesSyncPromise;
 }
 
-function sourceFilters({ query = {}, params = [] } = {}) {
+function sourceFilters({ query = {}, user = {}, params = [] } = {}) {
 	const clauses = [
 		"o.source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')",
 		"upper(coalesce(o.tipo, '')) = any($1::text[])",
@@ -483,21 +491,53 @@ function sourceFilters({ query = {}, params = [] } = {}) {
 		)`);
 	}
 	if (text(query.city)) {
-		params.push(text(query.city));
-		clauses.push(`lower(o.cidade) = lower($${params.length})`);
+		params.push(normalize(query.city).toLowerCase());
+		clauses.push(`${normalizedSql("o.cidade")} = $${params.length}`);
 	}
 	if (text(query.neighborhood)) {
-		params.push(`%${text(query.neighborhood)}%`);
-		clauses.push(`o.bairro ilike $${params.length}`);
+		params.push(`%${normalize(query.neighborhood).toLowerCase()}%`);
+		clauses.push(`${normalizedSql("o.bairro")} like $${params.length}`);
+	}
+	if (text(query.regional)) {
+		params.push(normalize(query.regional).toLowerCase());
+		clauses.push(`${normalizedSql("o.regional")} = $${params.length}`);
+	}
+	if (text(query.status)) {
+		const status = normalize(query.status);
+		if (status === "AGENDADA") clauses.push("upper(coalesce(o.status, '')) like '%AGEND%'");
+		else if (status === "PENDENTE") clauses.push("upper(coalesce(o.status, '')) like '%PEND%'");
+		else {
+			params.push(status.toLowerCase());
+			clauses.push(`${normalizedSql("o.status")} = $${params.length}`);
+		}
+	}
+	if (text(query.assignment)) {
+		const assignment = normalize(query.assignment);
+		const technicianNames = userTechnicianNames(user);
+		if (assignment === "MINHAS") {
+			params.push(technicianNames);
+			clauses.push(`upper(coalesce(o.tecnico, '')) = any($${params.length}::text[])`);
+		} else if (assignment === "DISPONIVEIS") {
+			params.push([...AVAILABLE_TECHNICIANS]);
+			clauses.push(`upper(trim(coalesce(o.tecnico, ''))) = any($${params.length}::text[])`);
+		} else if (assignment === "OUTROS") {
+			params.push([...AVAILABLE_TECHNICIANS], technicianNames);
+			clauses.push(`upper(trim(coalesce(o.tecnico, ''))) <> all($${params.length - 1}::text[])
+			  and upper(coalesce(o.tecnico, '')) <> all($${params.length}::text[])`);
+		}
 	}
 	if (text(query.search)) {
-		params.push(`%${text(query.search).slice(0, 120)}%`);
+		params.push(`%${normalize(query.search).toLowerCase().replace(/\s+/g, " ").slice(0, 120)}%`);
 		clauses.push(`(
-		  o.cidade ilike $${params.length}
-		  or o.bairro ilike $${params.length}
-		  or o.nome_cliente ilike $${params.length}
-		  or o.codigo_cliente ilike $${params.length}
-		  or o.num_os ilike $${params.length}
+		  ${normalizedSql("o.cidade")} like $${params.length}
+		  or ${normalizedSql("o.bairro")} like $${params.length}
+		  or ${normalizedSql("o.nome_cliente")} like $${params.length}
+		  or ${normalizedSql("o.codigo_cliente")} like $${params.length}
+		  or ${normalizedSql("o.num_os")} like $${params.length}
+		  or ${normalizedSql("o.endereco")} like $${params.length}
+		  or ${normalizedSql("o.endereco_resumo")} like $${params.length}
+		  or ${normalizedSql("o.numero")} like $${params.length}
+		  or ${normalizedSql("o.regional")} like $${params.length}
 		)`);
 	}
 	return { clauses, params, viewport };
@@ -522,6 +562,66 @@ async function latestOrderSyncAt() {
 	);
 	const value = result.rows[0]?.lastOrderSync || "";
 	orderSyncCache = { value, expiresAt: Date.now() + ORDER_SYNC_CACHE_TTL_MS };
+	return value;
+}
+
+async function getReconciliationMetrics({ force = false } = {}) {
+	if (!force && reconciliationCache.value && reconciliationCache.expiresAt > Date.now()) {
+		return reconciliationCache.value;
+	}
+	const result = await db.query(
+		`with source as (
+		  select o.*, row_number() over (partition by o.num_os order by o.updated_at desc) as row_number
+		    from ordens_servico o
+		   where o.source_collection in ('ordens_abertas', 'mapa_os_abertas', 'match_os_abertas')
+		), latest as (
+		  select * from source where row_number = 1
+		), eligible as (
+		  select latest.*, location.latitude, location.longitude, location.coordinate_source,
+		         job.status as geocode_status
+		    from latest
+		    left join maps_order_locations location on location.order_id = latest.id
+		    left join maps_geocode_jobs job on job.order_id = latest.id
+		   where upper(coalesce(latest.tipo, '')) = any($1::text[])
+		     and upper(coalesce(latest.status, '')) !~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)'
+		)
+		select
+		  (select count(*)::int from source) as "sourceRows",
+		  (select count(*)::int from latest) as "sourceOrders",
+		  (select count(*)::int from latest
+		    where not (upper(coalesce(tipo, '')) = any($1::text[]))) as "typeExcluded",
+		  (select count(*)::int from latest
+		    where upper(coalesce(tipo, '')) = any($1::text[])
+		      and upper(coalesce(status, '')) ~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)') as "statusExcluded",
+		  count(*)::int as "eligibleTotal",
+		  count(*) filter (where latitude between -34 and 6 and longitude between -74 and -33)::int as "geolocated",
+		  count(*) filter (where not (latitude between -34 and 6 and longitude between -74 and -33))::int as "locationPending",
+		  count(*) filter (where coordinate_source = 'SOURCE')::int as "sourceCoordinates",
+		  count(*) filter (where coordinate_source <> 'SOURCE')::int as "geocodedCoordinates",
+		  count(*) filter (where geocode_status = 'PENDING')::int as "geocodePending",
+		  count(*) filter (where geocode_status = 'NOT_FOUND')::int as "geocodeNotFound",
+		  count(*) filter (where geocode_status = 'FAILED')::int as "geocodeFailed"
+		from eligible`,
+		[ALLOWED_ORDER_TYPES],
+	);
+	const row = result.rows[0] || {};
+	const value = {
+		sourceRows: Number(row.sourceRows || 0),
+		sourceOrders: Number(row.sourceOrders || 0),
+		duplicateRows: Math.max(0, Number(row.sourceRows || 0) - Number(row.sourceOrders || 0)),
+		typeExcluded: Number(row.typeExcluded || 0),
+		statusExcluded: Number(row.statusExcluded || 0),
+		eligibleTotal: Number(row.eligibleTotal || 0),
+		geolocated: Number(row.geolocated || 0),
+		locationPending: Number(row.locationPending || 0),
+		sourceCoordinates: Number(row.sourceCoordinates || 0),
+		geocodedCoordinates: Number(row.geocodedCoordinates || 0),
+		geocodePending: Number(row.geocodePending || 0),
+		geocodeNotFound: Number(row.geocodeNotFound || 0),
+		geocodeFailed: Number(row.geocodeFailed || 0),
+		generatedAt: new Date().toISOString(),
+	};
+	reconciliationCache = { value, expiresAt: Date.now() + RECONCILIATION_CACHE_TTL_MS };
 	return value;
 }
 
@@ -577,9 +677,10 @@ async function listPoints(query = {}, user = {}) {
 	await reconcileEffectuationRequests();
 	await syncNativeCoordinates();
 	const categories = new Set(text(query.categories || query.category).split(",").map((item) => item.trim()).filter(Boolean));
-	const [{ rows, viewport, truncated }, lastOrderSync] = await Promise.all([
+	const [{ rows, viewport, truncated }, lastOrderSync, reconciliation] = await Promise.all([
 		queryCandidateRows(query, user, pointPreviewLimit(query)),
 		latestOrderSyncAt(),
+		getReconciliationMetrics(),
 	]);
 	const origin = viewport?.origin || null;
 	let items = rows.filter(validateOrderRow).map((row) => mapPoint(row, user, { origin }));
@@ -597,8 +698,11 @@ async function listPoints(query = {}, user = {}) {
 			assigned: items.filter((item) => item.category === "assigned").length,
 			opportunities: items.filter((item) => item.category === "opportunity").length,
 			scheduled: items.filter((item) => item.scheduled).length,
-			locationPending: items.filter((item) => !item.locationAvailable).length,
+			locationPending: reconciliation.locationPending,
+			eligibleTotal: reconciliation.eligibleTotal,
+			geolocated: reconciliation.geolocated,
 		},
+		reconciliation,
 		privacy: { opportunitiesApproximate: false },
 	};
 }
@@ -698,6 +802,8 @@ async function createRequest(payload = {}, user = {}) {
 	if (!orderId) throw apiError("Informe a ordem desejada.");
 	const order = await getOrder(orderId, user);
 	if (order.category !== "opportunity" || !order.requestable) throw apiError("Esta ordem nao esta disponivel para solicitacao.", 409, "ORDER_UNAVAILABLE");
+	const previousTechnician = text(order.technician);
+	const isTransfer = !isAvailableTechnician(previousTechnician);
 	try {
 		const result = await db.query(
 			`insert into maps_assignment_requests
@@ -710,13 +816,27 @@ async function createRequest(payload = {}, user = {}) {
 				type: order.type,
 				status: order.status,
 				company: order.company,
+				previousTechnician,
+				transferType: isAvailableTechnician(previousTechnician) ? "ASSIGNMENT" : "TRANSFER",
 				technicianHubsoftName: userTechnicianName(user),
 			}), payload.batchId || null],
 		);
+		await auditLog.recordAuditLog({
+			module: "maps_v2",
+			entity: "maps_assignment_requests",
+			action: isTransfer ? "transfer_request" : "assignment_request",
+			recordId: result.rows[0].id,
+			userId: userId(user),
+			userName: userName(user),
+			userEmail: userEmail(user),
+			afterData: { orderId, orderNumber: order.orderNumber, previousTechnician },
+		});
 		if (!payload.suppressNotification) await notificationsService.createNotification({
 			type: "maps_solicitacao",
 			title: "Nova solicitacao de retirada no Maps",
-			message: `${userName(user)} solicitou a O.S ${order.orderNumber} em ${order.city}.`,
+			message: isTransfer
+				? `${userName(user)} solicitou a transferencia da O.S ${order.orderNumber}, atribuida a ${previousTechnician}.`
+				: `${userName(user)} solicitou a O.S ${order.orderNumber} em ${order.city}.`,
 			targetPath: "/maps?panel=requests",
 			severity: "warning",
 			user,
@@ -867,7 +987,14 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 		if (current.status !== "PENDING" && !(approve && retrying)) {
 			throw apiError("Esta solicitacao ja foi analisada.", 409);
 		}
-		if (approve && (!ALLOWED_ORDER_TYPES.includes(normalize(current.tipo)) || CLOSED_STATUS_PATTERN.test(text(current.order_status)) || !isAvailableTechnician(current.tecnico))) {
+		const snapshot = current.source_snapshot && typeof current.source_snapshot === "object"
+			? current.source_snapshot
+			: {};
+		const previousTechnician = text(snapshot.previousTechnician);
+		const technicianUnchanged = Object.prototype.hasOwnProperty.call(snapshot, "previousTechnician")
+			? normalize(current.tecnico) === normalize(previousTechnician)
+			: isAvailableTechnician(current.tecnico);
+		if (approve && (!ALLOWED_ORDER_TYPES.includes(normalize(current.tipo)) || CLOSED_STATUS_PATTERN.test(text(current.order_status)) || !technicianUnchanged)) {
 			throw apiError("A OS deixou de estar elegivel para atribuicao.", 409, "ORDER_CHANGED");
 		}
 		const nextStatus = approve ? "APPROVED" : "REJECTED";
@@ -940,6 +1067,17 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 			user,
 			targets: { users: [current.requester_user_id] },
 			meta: { module: "maps_v2", requestId: current.id, status: finalStatus },
+		});
+		await auditLog.recordAuditLog({
+			module: "maps_v2",
+			entity: "maps_assignment_requests",
+			action: `${approve ? "approve" : "reject"}_${snapshot.transferType === "TRANSFER" ? "transfer" : "assignment"}`,
+			recordId: current.id,
+			userId: userId(user),
+			userName: userName(user),
+			userEmail: userEmail(user),
+			beforeData: { status: current.status, technician: current.tecnico },
+			afterData: { status: finalStatus, technician: snapshot.technicianHubsoftName || "", note: finalNote },
 		});
 		broadcastMapsUpdate(approve ? "REQUEST_APPROVED" : "REQUEST_REJECTED", {
 			requestId: current.id,
@@ -2538,12 +2676,12 @@ function initializeGeocoderWorker() {
 }
 
 async function getHealth() {
-	const [tables, lastOrderSync] = await Promise.all([db.query(
+	const [tables, lastOrderSync, reconciliation] = await Promise.all([db.query(
 		`select
 		  (select count(*)::int from maps_order_locations) as geocoded,
 		  (select count(*)::int from maps_geocode_jobs where status = 'PENDING') as geocode_pending,
 		  (select count(*)::int from maps_assignment_requests where status = 'PENDING') as requests_pending`,
-	), latestOrderSyncAt()]);
+	), latestOrderSyncAt(), getReconciliationMetrics()]);
 	return {
 		ok: true,
 		enabled: featureEnabled(),
@@ -2551,6 +2689,7 @@ async function getHealth() {
 		mapStyleConfigured: Boolean(text(process.env.MAPS_STYLE_URL)),
 		...tables.rows[0],
 		last_order_sync: lastOrderSync,
+		reconciliation,
 	};
 }
 

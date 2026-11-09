@@ -203,6 +203,7 @@ export default function AdminTechniciansMapPage() {
 	const [assignmentError, setAssignmentError] = useState("");
 	const [assignmentNotice, setAssignmentNotice] = useState("");
 	const recentHighlightsRef = useRef([]);
+	const refreshPromiseRef = useRef(null);
 
 	const settings = useMemo(() => overview?.settings || {}, [overview?.settings]);
 	const technicians = useMemo(() => overview?.technicians || [], [overview?.technicians]);
@@ -236,15 +237,23 @@ export default function AdminTechniciansMapPage() {
 		}
 	}, []);
 
-	const refreshAll = useCallback(async () => {
-		await Promise.all([loadOverview(), loadOrders()]);
+	const refreshAll = useCallback(({ quiet = false } = {}) => {
+		if (refreshPromiseRef.current) return refreshPromiseRef.current;
+		const refresh = Promise.all([
+			loadOverview({ quiet }),
+			loadOrders(),
+		]).finally(() => {
+			if (refreshPromiseRef.current === refresh) refreshPromiseRef.current = null;
+		});
+		refreshPromiseRef.current = refresh;
+		return refresh;
 	}, [loadOrders, loadOverview]);
 
 	useEffect(() => {
 		refreshAll();
-		const unsubscribeAdmin = subscribeRealtimeTopics("maps-admin", () => loadOverview({ quiet: true }), { debounceMs: 800 });
-		const unsubscribeMaps = subscribeRealtimeTopics("maps", () => Promise.all([loadOverview({ quiet: true }), loadOrders()]), { debounceMs: 1200 });
-		const fallback = window.setInterval(() => loadOverview({ quiet: true }), 60_000);
+		const unsubscribeAdmin = subscribeRealtimeTopics("maps-admin", () => refreshAll({ quiet: true }), { debounceMs: 800 });
+		const unsubscribeMaps = subscribeRealtimeTopics("maps", () => refreshAll({ quiet: true }), { debounceMs: 1200 });
+		const fallback = window.setInterval(() => refreshAll({ quiet: true }), 60_000);
 		return () => {
 			unsubscribeAdmin();
 			unsubscribeMaps();

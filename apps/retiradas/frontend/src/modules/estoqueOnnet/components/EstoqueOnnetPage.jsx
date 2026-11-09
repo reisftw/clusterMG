@@ -16,14 +16,18 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { hasPermission } from "../../../constants/roles";
+import { useAuthContext } from "../../../context/AuthContext";
 import { useRegionais } from "../../regionais/hooks/useRegionais";
 import {
 	formatOnnetMac,
 	inferOnnetManufacturer,
 	atualizarEstoqueOnnet,
+	conciliarEstoqueOnnet,
 	excluirEstoqueOnnet,
 	listarEstoqueOnnet,
 	normalizeOnnetMac,
+	obterContabilizacaoEstoqueOnnet,
 	salvarEstoqueOnnet,
 } from "../services/estoqueOnnetService";
 
@@ -119,6 +123,7 @@ function StatCard({ icon: Icon, label, value, helper }) {
 }
 
 export default function EstoqueOnnetPage() {
+	const { currentUser } = useAuthContext();
 	const { regionais } = useRegionais();
 	const [form, setForm] = useState(initialForm);
 	const [records, setRecords] = useState([]);
@@ -137,6 +142,11 @@ export default function EstoqueOnnetPage() {
 	const [exporting, setExporting] = useState("");
 	const [message, setMessage] = useState("");
 	const [error, setError] = useState("");
+	const [accounting, setAccounting] = useState(null);
+	const [reconciling, setReconciling] = useState(false);
+	const canReconcile =
+		hasPermission(currentUser, "estoque.equipamentos.manage") ||
+		hasPermission(currentUser, "manage_equipamentos");
 
 	const cidades = useMemo(
 		() =>
@@ -169,21 +179,45 @@ export default function EstoqueOnnetPage() {
 		setLoading(true);
 		setError("");
 		try {
-			const response = await listarEstoqueOnnet({
-				...filters,
-				page,
-				limit: 50,
-				query,
-			});
+			const [response, accountingStatus] = await Promise.all([
+				listarEstoqueOnnet({
+					...filters,
+					page,
+					limit: 50,
+					query,
+				}),
+				obterContabilizacaoEstoqueOnnet().catch(() => null),
+			]);
 			setRecords(response.items || []);
 			setTotal(Number(response.total || 0));
 			setTotalPages(Number(response.totalPages || 1));
+			if (accountingStatus) setAccounting(accountingStatus);
 		} catch (requestError) {
 			setError(requestError?.message || "Não foi possível carregar o estoque Onnet.");
 		} finally {
 			setLoading(false);
 		}
 	}, [filters, page, query]);
+
+	const handleReconcile = async () => {
+		setReconciling(true);
+		setError("");
+		setMessage("");
+		try {
+			const response = await conciliarEstoqueOnnet(true);
+			setAccounting(response);
+			setMessage(
+				`${Number(response.eligible || 0)} equipamento(s) conferido(s) nas metas Onnet.`,
+			);
+		} catch (requestError) {
+			setError(
+				requestError?.message ||
+					"Não foi possível conciliar o estoque com as metas Onnet.",
+			);
+		} finally {
+			setReconciling(false);
+		}
+	};
 
 	useEffect(() => {
 		load();
@@ -362,11 +396,37 @@ export default function EstoqueOnnetPage() {
 				</div>
 			</section>
 
-			<div className="grid gap-3 md:grid-cols-3">
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 				<StatCard icon={Boxes} label="Equipamentos registrados" value={total} helper="Histórico Onnet" />
+				<StatCard
+					icon={CheckCircle2}
+					label="Contabilizados nas metas"
+					value={Number(accounting?.eligible || 0)}
+					helper={
+						accounting?.reconciledAt
+							? `Última conciliação: ${new Date(accounting.reconciledAt).toLocaleString("pt-BR")}`
+							: "Aguardando primeira conciliação"
+					}
+				/>
 				<StatCard icon={CheckCircle2} label="Fabricante" value={fabricante} helper={macValido ? formatOnnetMac(normalizedMac) : "Digite o MAC"} />
 				<StatCard icon={CalendarDays} label="Data do lançamento" value={formatDateTime(form.dataEntrega, form.horaEntrega)} helper="Contabiliza neste dia" />
 			</div>
+
+			{canReconcile ? (
+				<div className="flex justify-end">
+					<button
+						type="button"
+						onClick={handleReconcile}
+						disabled={reconciling}
+						className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
+					>
+						<RefreshCw
+							className={`h-4 w-4 ${reconciling ? "animate-spin" : ""}`}
+						/>
+						{reconciling ? "Conferindo histórico..." : "Conciliar histórico com as metas"}
+					</button>
+				</div>
+			) : null}
 
 			<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 				<form className="grid gap-4 lg:grid-cols-12" onSubmit={handleSubmit}>

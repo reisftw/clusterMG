@@ -21,6 +21,7 @@ const server = app.listen(port, () => {
 	tentativasService.startOpportunitiesReconciliationWorker();
 	tentativasAlertsService.startWorker();
 	maintenanceService.startWorker();
+	operationalImports.startOnnetStockAccountingWorker();
 	operationalImports.markInterruptedImportJobs().catch((error) => {
 		console.error(
 			"[retiradas-api] Falha ao recuperar jobs de importacao:",
@@ -47,6 +48,7 @@ async function shutdown(signal) {
 	tentativasService.stopOpportunitiesReconciliationWorker();
 	tentativasAlertsService.stopWorker();
 	maintenanceService.stopWorker();
+	operationalImports.stopOnnetStockAccountingWorker();
 	closeRealtimeClients();
 
 	const forceExit = setTimeout(() => {
