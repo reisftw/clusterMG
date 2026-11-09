@@ -334,6 +334,28 @@ async function listRawNotifications({ limit, offset } = {}) {
 	return result.rows;
 }
 
+async function listRawNotificationsByIds(ids = []) {
+	if (!ids.length) return [];
+	const result = await db.query(
+		`select document_id, path, data, updated_at, imported_at
+		   from app_documents
+		  where collection_path = $1
+		    and document_id = any($2::text[])`,
+		[COLLECTION, ids],
+	);
+	return result.rows;
+}
+
+async function listRawNotificationsForMarkAll() {
+	const result = await db.query(
+		`select document_id, path, data, updated_at, imported_at
+		   from app_documents
+		  where collection_path = $1`,
+		[COLLECTION],
+	);
+	return result.rows;
+}
+
 function filterMappedNotifications(
 	items,
 	{ user, type, severity, unread } = {},
@@ -401,30 +423,21 @@ async function markNotificationsRead({ user, ids = [], all = false } = {}) {
 		.map((id) => String(id || "").trim())
 		.filter(Boolean);
 	if (all) {
-		const visibleRows = await listRawNotifications({ limit: 300, offset: 0 });
+		const visibleRows = await listRawNotificationsForMarkAll();
 		readIds = filterMappedNotifications(visibleRows, { user }).map((item) => item.id);
+	} else if (readIds.length) {
+		const requestedRows = await listRawNotificationsByIds(readIds);
+		readIds = filterMappedNotifications(requestedRows, { user }).map((item) => item.id);
 	}
-	let result;
-	if (all) {
-		result = await db.query(
-			`update app_documents
-          set data = jsonb_set(coalesce(data, '{}'::jsonb), $2::text[], to_jsonb($3::text), true),
-              updated_at = now()
-        where collection_path = $1`,
-			[COLLECTION, ["readBy", key], readAt],
-		);
-	} else {
-		const normalizedIds = readIds;
-		if (!normalizedIds.length) return { ok: true, updated: 0 };
-		result = await db.query(
-			`update app_documents
+	if (!readIds.length) return { ok: true, updated: 0 };
+	const result = await db.query(
+		`update app_documents
           set data = jsonb_set(coalesce(data, '{}'::jsonb), $3::text[], to_jsonb($4::text), true),
               updated_at = now()
         where collection_path = $1
           and document_id = any($2::text[])`,
-			[COLLECTION, normalizedIds, ["readBy", key], readAt],
-		);
-	}
+		[COLLECTION, readIds, ["readBy", key], readAt],
+	);
 
 	clearCountersCache();
 	broadcastRealtime("notifications", { action: "read", userId: key });
@@ -620,7 +633,6 @@ async function getCounters({ user } = {}) {
 	const cacheKey = countersCacheKey(user || {});
 	const cached = getCachedCounters(cacheKey);
 	if (cached) return cached;
-	await syncPendingDocumentNotifications({ user });
 	const notifications = await listNotifications({ user, limit: 20 });
 	const counters = {
 		documentosPendentes: await countPendingDocuments(user || {}),
