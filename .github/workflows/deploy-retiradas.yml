@@ -7,6 +7,11 @@ on:
         description: "Versao rastreavel da release, por exemplo v1.2.0"
         required: true
         type: string
+      publish_android:
+        description: "Publicar o APK Android do mesmo commit"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: release-retiradas
@@ -58,6 +63,12 @@ jobs:
         run: |
           npm run lint:retiradas
           npm run test:retiradas
+          node --test \
+            apps/retiradas/backend/api/src/dashboardReadPath.test.js \
+            apps/retiradas/backend/api/src/staleWhileRevalidateCache.test.js \
+            apps/retiradas/backend/api/src/notificationsService.test.js \
+            apps/retiradas/backend/api/src/mapSyncUpdatesService.test.js \
+            apps/retiradas/backend/api/src/hubsoftSyncProfiles.storeClassification.test.js
           npm run test:contracts
 
       - name: Validate observability migration on PostgreSQL
@@ -379,3 +390,10 @@ jobs:
           rm -f "$frontend_package" "$release_manifest"
           echo "Release ativa: $release_root"
           REMOTE
+
+  publish-android:
+    name: Publish matching Android app
+    needs: [prepare, publish]
+    if: github.ref == 'refs/heads/master' && inputs.publish_android
+    uses: ./.github/workflows/publish-retiradas-android.yml
+    secrets: inherit

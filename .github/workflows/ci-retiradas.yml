@@ -11,6 +11,8 @@ on:
       - "package-lock.json"
       - "eslint.config.js"
       - ".github/workflows/ci-retiradas.yml"
+      - ".github/workflows/deploy-retiradas.yml"
+      - ".github/workflows/publish-retiradas-android.yml"
   push:
     branches:
       - master
@@ -29,6 +31,8 @@ on:
       - "package-lock.json"
       - "eslint.config.js"
       - ".github/workflows/ci-retiradas.yml"
+      - ".github/workflows/deploy-retiradas.yml"
+      - ".github/workflows/publish-retiradas-android.yml"
   workflow_dispatch:
 
 permissions:
@@ -77,6 +81,15 @@ jobs:
 
       - name: Test Retiradas
         run: npm run test:retiradas
+
+      - name: Test critical backend regressions
+        run: >-
+          node --test
+          apps/retiradas/backend/api/src/dashboardReadPath.test.js
+          apps/retiradas/backend/api/src/staleWhileRevalidateCache.test.js
+          apps/retiradas/backend/api/src/notificationsService.test.js
+          apps/retiradas/backend/api/src/mapSyncUpdatesService.test.js
+          apps/retiradas/backend/api/src/hubsoftSyncProfiles.storeClassification.test.js
 
       - name: Validate observability migration on PostgreSQL
         env:
