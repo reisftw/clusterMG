@@ -37,6 +37,27 @@ function text(value) {
 	return String(value ?? "").trim();
 }
 
+function welcomeMessage(displayName, hour = Number(new Intl.DateTimeFormat("pt-BR", {
+	timeZone: "America/Sao_Paulo",
+	hour: "2-digit",
+	hour12: false,
+}).format(new Date()))) {
+	const firstName = text(displayName).split(/\s+/)[0] || "técnico";
+	const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+	return `${greeting}, ${firstName}! 👋
+
+Eu sou o Retorninho, assistente virtual do REVO. Posso ajudar com:
+
+1. Consultar O.S. ou cliente
+2. Buscar oportunidades próximas
+3. Solicitar uma O.S. para o seu nome
+4. Consultar protocolo
+5. Ver sua produtividade
+6. Consultar equipamento ou procedimento
+
+Envie o número da opção ou escreva o que você precisa.`;
+}
+
 function normalize(value) {
 	return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").toUpperCase();
 }
@@ -1027,7 +1048,7 @@ async function processInbound(payload) {
 				return localDecision;
 			});
 			await recordEvent("TECHNICAL", "AI_CALL", "SUCCESS", { ...context.event, durationMs: Date.now() - startedAt, details: { model: config.ai_model, tokens: decision.usage || {} } });
-			if (!decision.tool) result = { reply: "Olá! Sou o Retorninho. Posso consultar O.S., buscar oportunidades, iniciar uma atribuição, acompanhar protocolos, consultar produtividade, equipamentos e procedimentos." };
+			if (!decision.tool) result = { reply: welcomeMessage(identity.name) };
 			else if (!allowedTools(authorization).includes(decision.tool)) result = { reply: "Essa ferramenta não está liberada para o seu acesso." };
 			else if (!featureEnabled(config, decision.tool)) result = { reply: "Essa funcionalidade está pausada pela configuração administrativa." };
 			else result = await TOOLS[decision.tool](decision.args || {}, context);
@@ -1217,5 +1238,5 @@ module.exports = {
 	stopWorker,
 	updateAuthorization,
 	verifyWebhookSecret,
-	_test: { incomingMessage, metaMessages, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig },
+	_test: { incomingMessage, metaMessages, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig, welcomeMessage },
 };
