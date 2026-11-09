@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 process.env.DATABASE_URL ||= "postgresql://test:test@127.0.0.1:5432/test";
+const evolutionMessaging = require("../evolutionMessaging");
 const service = require("./retorninhoService");
 
 test("extrai somente a mensagem recebida da instância Evolution", () => {
@@ -56,4 +57,19 @@ test("deduplicação muda por instância e mensagem", () => {
 test("paginações são limitadas no backend", () => {
 	assert.deepEqual(service._test.pageOf({ page: "2", limit: "5000" }), { page: 2, limit: 100, offset: 100 });
 	assert.deepEqual(service._test.pageOf({ page: "-2", limit: "0" }), { page: 1, limit: 25, offset: 0 });
+});
+
+test("reutiliza a Evolution protegida da Mensageria sem duplicar a chave", async (t) => {
+	const originalGetConfig = evolutionMessaging.getConfig;
+	t.after(() => { evolutionMessaging.getConfig = originalGetConfig; });
+	evolutionMessaging.getConfig = async () => ({
+		evolutionBaseUrl: "http://127.0.0.1:8080",
+		evolutionApiKey: "segredo-somente-no-backend",
+	});
+
+	const config = await service._test.resolveEvolutionConfig({});
+	assert.equal(config.evolutionBaseUrl, "http://127.0.0.1:8080");
+	assert.equal(config.evolutionApiKey, "segredo-somente-no-backend");
+	assert.equal(config.evolutionInstance, "retorninho-ia");
+	assert.equal(config.configurationSource, "mensageria");
 });

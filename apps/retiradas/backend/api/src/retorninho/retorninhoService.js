@@ -7,6 +7,7 @@ const rolePermissions = require("../rolePermissions");
 const usersRepository = require("../usersRepository");
 const ai = require("./retorninhoAi");
 const security = require("./retorninhoSecurity");
+const { LIST_PROTOCOLS_SQL, LIST_QUEUE_SQL } = require("./retorninhoSql");
 
 const INSTANCE_NAME = "retorninho-ia";
 const MAX_ATTEMPTS = 6;
@@ -124,7 +125,20 @@ async function configRow() {
 }
 
 async function getConfig() {
-	return maskConfig(await configRow());
+	const row = await configRow();
+	const config = maskConfig(row);
+	if (config.provider !== "evolution") return config;
+	try {
+		const resolved = await resolveEvolutionConfig(row);
+		return {
+			...config,
+			evolutionUrl: resolved.evolutionBaseUrl,
+			evolutionApiKeyConfigured: Boolean(resolved.evolutionApiKey),
+			evolutionConfigSource: resolved.configurationSource,
+		};
+	} catch {
+		return config;
+	}
 }
 
 async function recordEvent(category, eventName, status, data = {}) {
@@ -155,7 +169,7 @@ async function saveConfig(payload = {}, user = {}) {
 		: current.transfer_policy;
 	const evolutionSecret = payload.evolutionApiKey ? security.encrypt("RETORNINHO_EVOLUTION_API_KEY", payload.evolutionApiKey) : null;
 	const aiSecret = payload.aiApiKey ? security.encrypt("RETORNINHO_AI_API_KEY", payload.aiApiKey) : null;
-	const result = await db.query(
+	await db.query(
 		`update retorninho_config set
 		 enabled=$1, automatic_replies=$2, provider=$3, evolution_url=$4,
 		 evolution_api_key_ciphertext=coalesce($5,evolution_api_key_ciphertext),
@@ -196,7 +210,7 @@ async function saveConfig(payload = {}, user = {}) {
 		],
 	);
 	await recordEvent("AUDIT", "CONFIG_UPDATED", "SUCCESS", { userUid: actor.uid, userName: actor.name, details: { provider, transferPolicy, enabled: payload.enabled === true } });
-	return maskConfig(result.rows[0]);
+	return getConfig();
 }
 
 async function clearSecret(name, user = {}) {
@@ -212,7 +226,7 @@ async function clearSecret(name, user = {}) {
 	return getConfig();
 }
 
-function evolutionConfig(row) {
+async function resolveEvolutionConfig(row) {
 	let apiKey = "";
 	if (row.evolution_api_key_ciphertext) {
 		apiKey = security.decrypt("RETORNINHO_EVOLUTION_API_KEY", {
@@ -231,13 +245,22 @@ function evolutionConfig(row) {
 			keyId: row.secret_key_id,
 		});
 	}
+	let baseUrl = text(row.evolution_url);
+	let configurationSource = baseUrl && apiKey ? "retorninho" : "mensageria";
+	if (!baseUrl || !apiKey) {
+		const shared = await evolutionMessaging.getConfig();
+		baseUrl ||= text(shared.evolutionBaseUrl);
+		apiKey ||= text(shared.evolutionApiKey);
+	}
 	return {
 		whatsappProvider: "evolution",
 		evolutionEnabled: true,
-		evolutionUrl: text(row.evolution_url),
+		evolutionUrl: baseUrl,
+		evolutionBaseUrl: baseUrl,
 		evolutionApiKey: apiKey,
 		evolutionInstance: INSTANCE_NAME,
 		evolutionWebhookUrl: `${text(process.env.PUBLIC_APP_URL || process.env.APP_URL).replace(/\/$/, "")}/api/retorninho/webhook/evolution?secret=${encodeURIComponent(webhookSecret)}`,
+		configurationSource,
 	};
 }
 
@@ -274,15 +297,18 @@ async function instanceStatus() {
 		const cloud = await whatsappCloudService.getConfig();
 		return { provider: "meta", instanceName: INSTANCE_NAME, connected: Boolean(cloud.secretStatus?.accessTokenConfigured), configured: true };
 	}
-	if (!row.evolution_url || !row.evolution_api_key_ciphertext) return { provider: "evolution", instanceName: INSTANCE_NAME, connected: false, configured: false };
-	const status = await evolutionMessaging.getConnectionInfo(evolutionConfig(row));
-	return { provider: "evolution", instanceName: INSTANCE_NAME, configured: true, ...status };
+	const config = await resolveEvolutionConfig(row);
+	if (!config.evolutionBaseUrl || !config.evolutionApiKey) return { provider: "evolution", instanceName: INSTANCE_NAME, connected: false, configured: false };
+	const status = await evolutionMessaging.getConnectionInfo(config);
+	return { provider: "evolution", instanceName: INSTANCE_NAME, configured: true, configurationSource: config.configurationSource, ...status };
 }
 
 async function connectInstance(user = {}) {
 	const row = await ensureWebhookSecret();
 	if (row.provider !== "evolution") throw apiError("Conecte o número Meta pelo fluxo oficial.", 409);
-	const result = await evolutionMessaging.createOrConnectInstance(evolutionConfig(row), { persist: false });
+	const config = await resolveEvolutionConfig(row);
+	if (!config.evolutionBaseUrl || !config.evolutionApiKey) throw apiError("Configure a Evolution na Mensageria antes de conectar o Retorninho.", 409, "EVOLUTION_NOT_CONFIGURED");
+	const result = await evolutionMessaging.createOrConnectInstance(config, { persist: false });
 	const actor = userIdentity(user);
 	await db.query("update retorninho_config set last_instance_event_at=now(),last_instance_event='CONNECT_REQUESTED' where id='global'");
 	await recordEvent("AUDIT", "INSTANCE_CONNECT", "SUCCESS", { userUid: actor.uid, userName: actor.name, provider: "evolution" });
@@ -298,7 +324,7 @@ async function connectInstance(user = {}) {
 async function disconnectInstance(user = {}) {
 	const row = await configRow();
 	if (row.provider !== "evolution") throw apiError("Desconexão Meta deve ser realizada pelo fluxo oficial.", 409);
-	const result = await evolutionMessaging.logoutInstance(evolutionConfig(row));
+	const result = await evolutionMessaging.logoutInstance(await resolveEvolutionConfig(row));
 	const actor = userIdentity(user);
 	await db.query("update retorninho_config set enabled=false,automatic_replies=false,last_instance_event_at=now(),last_instance_event='DISCONNECTED' where id='global'");
 	await recordEvent("AUDIT", "INSTANCE_DISCONNECT", "SUCCESS", { userUid: actor.uid, userName: actor.name, provider: "evolution" });
@@ -462,16 +488,7 @@ async function listProtocols(query = {}) {
 	const type = text(query.type).toUpperCase();
 	const search = text(query.search);
 	const result = await db.query(
-		`select count(*) over() total_count,p.*,
-		 requester.display_name requester_name,target.display_name target_name,current_user.display_name current_name
-		 from retorninho_protocols p
-		 left join app_users requester on requester.uid=p.requester_user_uid
-		 left join app_users target on target.uid=p.target_user_uid
-		 left join app_users current_user on current_user.uid=p.current_user_uid
-		 where ($1='' or p.status=$1)
-		 and ($2='' or p.type=$2)
-		 and ($3='' or p.protocol_number ilike $4 or coalesce(p.service_order_number,'') ilike $4)
-		 order by p.created_at desc,p.id desc limit $5 offset $6`,
+		LIST_PROTOCOLS_SQL,
 		[status, type, search, `%${search}%`, limit, offset],
 	);
 	return { items: result.rows, pagination: pagination(result.rows, page, limit) };
@@ -506,13 +523,7 @@ async function exportEvents(category, query = {}) {
 async function listQueue(query = {}) {
 	const { page, limit, offset } = pageOf(query);
 	const status = text(query.status).toUpperCase();
-	const result = await db.query(
-		`select count(*) over() total_count,id,kind event_type,status,attempts,${MAX_ATTEMPTS}::int max_attempts,
-		 next_attempt_at,last_error,created_at,processed_at
-		 from retorninho_queue where ($1='' or status=$1)
-		 order by created_at desc,id desc limit $2 offset $3`,
-		[status, limit, offset],
-	);
+	const result = await db.query(LIST_QUEUE_SQL, [MAX_ATTEMPTS, status, limit, offset]);
 	return { items: result.rows, pagination: pagination(result.rows, page, limit) };
 }
 
@@ -1035,7 +1046,7 @@ async function processOutbound(payload) {
 		if (!config.meta_phone_number_id) throw apiError("Phone Number ID do Retorninho não configurado.", 409, "META_PHONE_NOT_CONFIGURED");
 		response = await whatsappCloudService.sendOperationalText({ phoneNumberId: config.meta_phone_number_id, to: payload.phone, text: payload.body });
 	} else {
-		response = await evolutionMessaging.sendWhatsAppMessage(evolutionConfig(config), payload.phone, payload.body, { source: "retorninho_ia" });
+		response = await evolutionMessaging.sendWhatsAppMessage(await resolveEvolutionConfig(config), payload.phone, payload.body, { source: "retorninho_ia" });
 	}
 	await db.query("update retorninho_messages set status='SENT',provider_message_id=coalesce($2,provider_message_id),processed_at=now() where id=$1", [payload.messageId, response.messageId || null]);
 	await recordEvent("TECHNICAL", "MESSAGE_SENT", "SUCCESS", { correlationId: payload.correlationId, conversationId: payload.conversationId, messageId: payload.messageId, protocolId: payload.protocolId, provider: config.provider, details: { mode: response.mode || "cloud_api", providerMessageId: response.messageId || null } });
@@ -1206,5 +1217,5 @@ module.exports = {
 	stopWorker,
 	updateAuthorization,
 	verifyWebhookSecret,
-	_test: { incomingMessage, metaMessages, webhookDedupe, pageOf, minimalOrder },
+	_test: { incomingMessage, metaMessages, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig },
 };
