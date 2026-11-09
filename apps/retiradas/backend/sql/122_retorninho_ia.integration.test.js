@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { Client } = require("pg");
 const { applyMigration } = require("../scripts/run-sql-migrations");
+const { LIST_PROTOCOLS_SQL, LIST_QUEUE_SQL } = require("../api/src/retorninho/retorninhoSql");
 
 const DATABASE_URL = process.env.OBSERVABILITY_TEST_DATABASE_URL;
 
@@ -12,7 +13,7 @@ test("Retorninho IA migration is additive, paused and idempotent", { skip: !DATA
 	try {
 		await client.query(`create schema ${schema}`);
 		await client.query(`set search_path to ${schema}, public`);
-		await client.query(`create table app_users (uid text primary key)`);
+		await client.query(`create table app_users (uid text primary key, display_name text)`);
 		await client.query(`create table app_roles (id text primary key)`);
 		await client.query(`insert into app_roles (id) values ('admin')`);
 		await client.query(`create table app_permissions (
@@ -44,6 +45,11 @@ test("Retorninho IA migration is additive, paused and idempotent", { skip: !DATA
 		assert.equal(sequence.rows[0].present, true);
 		const permissions = await client.query("select count(*)::int total from app_role_permissions where role_id='admin'");
 		assert.equal(permissions.rows[0].total, 4);
+
+		const protocols = await client.query(LIST_PROTOCOLS_SQL, ["", "SELF_ASSIGNMENT", "", "%%", 25, 0]);
+		assert.deepEqual(protocols.rows, []);
+		const queue = await client.query(LIST_QUEUE_SQL, [6, "", 25, 0]);
+		assert.deepEqual(queue.rows, []);
 	} finally {
 		await client.query(`drop schema if exists ${schema} cascade`);
 		await client.end();

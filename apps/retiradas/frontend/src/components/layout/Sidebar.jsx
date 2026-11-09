@@ -489,7 +489,7 @@ const NAV_ITEMS = [
 		featured: true,
 	},
 	{
-		label: "Retorninho IA",
+		label: "Visão geral",
 		path: ROUTES.RETORNINHO,
 		icon: Bot,
 		permission: ["retorninho.view"],
@@ -858,7 +858,6 @@ const CLIENTE_MENSAGERIA_PATHS = [
 	ROUTES.MENSAGERIA_CALLBACK,
 	ROUTES.MENSAGERIA_API,
 	ROUTES.MENSAGERIA,
-	ROUTES.RETORNINHO,
 ];
 
 const DIRECT_MENU_DUPLICATE_PATHS = new Set();
@@ -906,7 +905,7 @@ const MENU_GROUPS = [
 	},
 	{
 		id: "retorninho",
-		label: "Retorninho IA",
+		label: "Retorninho",
 		icon: Bot,
 		paths: [ROUTES.RETORNINHO],
 	},
