@@ -163,3 +163,18 @@ test("Retiradas workflows pin third-party actions and the production SSH host", 
 	assert.ok(deploy.includes("StrictHostKeyChecking=yes"));
 	assert.ok(deploy.includes("HostKeyAlias=retiradas-production"));
 });
+
+test("secret scan runs for every protected change and baselines only exact historical findings", () => {
+	const workflow = readWorkflow("security.yml");
+	const baseline = fs.readFileSync(
+		path.join(process.cwd(), ".gitleaksignore"),
+		"utf8",
+	);
+	assert.doesNotMatch(workflow, /^\s+paths:/m);
+	assert.ok(!baseline.includes("*"));
+	const fingerprints = baseline
+		.split(/\r?\n/)
+		.filter((line) => line && !line.startsWith("#"));
+	assert.equal(fingerprints.length, 13);
+	assert.equal(new Set(fingerprints).size, fingerprints.length);
+});
