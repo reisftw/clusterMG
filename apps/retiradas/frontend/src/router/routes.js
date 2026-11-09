@@ -61,6 +61,7 @@ export const ROUTES = {
 	MENSAGERIA_BACKLOG: "/mensageria/backlog",
 	MENSAGERIA_CALLBACK: "/mensageria/callback",
 	TENTATIVAS: "/tentativas",
+	RETORNINHO: "/retorninho",
 	EVIDENCIAS: "/evidencias",
 	CONFIGURACOES_GERAIS: "/configuracoes/geral",
 	PUSH_SETTINGS: "/configuracoes/push",

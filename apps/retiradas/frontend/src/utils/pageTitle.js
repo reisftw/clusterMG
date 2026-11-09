@@ -8,6 +8,7 @@ const EXACT_TITLES = new Map([
 	["/redefinir-senha", "Redefinir senha | REVO"],
 	["/acesso-negado", "Acesso negado | REVO"],
 	["/maintenance", "Manutenção | REVO"],
+	["/retorninho", "Retorninho IA | REVO"],
 	["/app/download", "Baixar aplicativo | REVO"],
 	["/diario", "Diário | REVO"],
 	["/mapa", "Mapa de Ordens de Serviço | REVO"],

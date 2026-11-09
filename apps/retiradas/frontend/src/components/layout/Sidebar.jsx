@@ -2,6 +2,7 @@ import {
 	BadgeDollarSign,
 	BarChart3,
 	BellRing,
+	Bot,
 	Boxes,
 	Building2,
 	CalendarCheck,
@@ -488,6 +489,12 @@ const NAV_ITEMS = [
 		featured: true,
 	},
 	{
+		label: "Retorninho IA",
+		path: ROUTES.RETORNINHO,
+		icon: Bot,
+		permission: ["retorninho.view"],
+	},
+	{
 		label: "Notificações",
 		path: ROUTES.NOTIFICACOES,
 		icon: BellRing,
@@ -851,6 +858,7 @@ const CLIENTE_MENSAGERIA_PATHS = [
 	ROUTES.MENSAGERIA_CALLBACK,
 	ROUTES.MENSAGERIA_API,
 	ROUTES.MENSAGERIA,
+	ROUTES.RETORNINHO,
 ];
 
 const DIRECT_MENU_DUPLICATE_PATHS = new Set();
@@ -895,6 +903,12 @@ const MENU_GROUPS = [
 		label: "Tentativas",
 		icon: Phone,
 		paths: [ROUTES.TENTATIVAS],
+	},
+	{
+		id: "retorninho",
+		label: "Retorninho IA",
+		icon: Bot,
+		paths: [ROUTES.RETORNINHO],
 	},
 	{
 		id: "ordens_servico",

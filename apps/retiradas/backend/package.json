@@ -23,6 +23,7 @@
 		"migrate:normalized:apply": "node scripts/run-normalized-migrations.js"
 	},
 	"dependencies": {
+		"@google/genai": "^1.52.0",
 		"archiver": "^8.0.0",
 		"argon2": "^0.45.1",
 		"compression": "^1.8.1",

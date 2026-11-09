@@ -70,6 +70,8 @@ const createServiceOrderCancellationsRouter = require("./serviceOrders/cancellat
 const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serviceOrderFinesRoutes");
 const createServiceOrderRequestsRouter = require("./serviceOrders/requests/routes/serviceOrderRequestsRoutes");
 const createReturnReceiptsRouter = require("./serviceOrders/returnReceipts/routes/returnReceiptsRoutes");
+const createRetorninhoRouter = require("./retorninho/routes/retorninhoRoutes");
+const retorninhoService = require("./retorninho/retorninhoService");
 const createTentativasRouter = require("./tentativas/routes/tentativasRoutes");
 const createWebhooksRouter = require("./webhooks/routes/webhooksRoutes");
 const whatsappCloudService = require("./whatsappCloud/whatsappCloudService");
@@ -2948,6 +2950,15 @@ function createApp() {
 		"/api/maps",
 		createMapsV2Router({
 			fallbackRoles: ADMIN_ROLES,
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/retorninho",
+		createRetorninhoRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,
@@ -5941,13 +5952,13 @@ function createApp() {
 
 	app.use(
 		"/api/integrations/whatsapp/meta/webhook",
-		createMetaWhatsappWebhookRouter({ service: whatsappCloudService }),
+		createMetaWhatsappWebhookRouter({ service: whatsappCloudService, onValidatedPayload: retorninhoService.enqueueMetaWebhook }),
 	);
 
 	// Alias temporario para configuracoes de webhook anteriores.
 	app.use(
 		"/api/webhooks/meta-whatsapp",
-		createMetaWhatsappWebhookRouter({ service: whatsappCloudService }),
+		createMetaWhatsappWebhookRouter({ service: whatsappCloudService, onValidatedPayload: retorninhoService.enqueueMetaWebhook }),
 	);
 
 	app.use(
