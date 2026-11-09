@@ -3314,7 +3314,7 @@ async function runMapMatchScheduler(rawConfig, config) {
 	mapMatchSchedulerRunning = true;
 	mapMatchSchedulerStartedAt = Date.now();
 	const results = [];
-	(async () => {
+	void (async () => {
 		try {
 			const mapResult = mapDue
 				? await runMapMatchProfileWithRetry(PROFILE.MAPA)
@@ -3369,112 +3369,102 @@ async function runMapMatchScheduler(rawConfig, config) {
 	];
 }
 
+function succeeded(run) {
+	return [RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(run?.status);
+}
+
+async function runDailyScheduler({ rawConfig, config, now, results }) {
+	const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
+	const checkpointDue = config.autoDailyCheckpointHours.includes(now.hour) && rawConfig.autoDailyLastCheckpointKey !== checkpointKey;
+	const intervalDue = minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes;
+	const retryDue = minutesSince(rawConfig.autoDailyLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES;
+	if (!config.autoDailyEnabled || !retryDue || (!intervalDue && !checkpointDue)) return false;
+
+	const dailyResult = await runProfileSafely(PROFILE.META_D0, { date: now.date });
+	results.push({ profile: PROFILE.META_D0, result: dailyResult });
+	const storeResult = await runProfileSafely(PROFILE.LOJA, { date: now.date });
+	results.push({ profile: PROFILE.LOJA, result: storeResult });
+	const attemptedAt = new Date().toISOString();
+	await saveSchedulerState({ autoDailyLastAttemptAt: attemptedAt });
+	if (succeeded(dailyResult) && succeeded(storeResult)) {
+		const patch = { autoDailyLastRunAt: attemptedAt };
+		if (checkpointDue) {
+			patch.autoDailyLastCheckpointKey = checkpointKey;
+			patch.autoDailyLastCheckpointAt = attemptedAt;
+		}
+		await saveSchedulerState(patch);
+	}
+	return true;
+}
+
+async function runPreviousDayScheduler({ rawConfig, config, now, results }) {
+	const due = config.autoMetaEnabled &&
+		isTimeDue(now.time, config.autoMetaTime) &&
+		rawConfig.autoMetaLastRunDate !== now.date &&
+		minutesSince(rawConfig.autoMetaLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES;
+	if (!due) return;
+
+	const result = await runProfileSafely(PROFILE.META_D_MINUS_ONE, {
+		date: addDays(now.date, -1),
+	});
+	results.push({ profile: PROFILE.META_D_MINUS_ONE, result });
+	const attemptedAt = new Date().toISOString();
+	await saveSchedulerState({ autoMetaLastAttemptAt: attemptedAt });
+	if (succeeded(result)) await saveSchedulerState({
+		autoMetaLastRunDate: now.date,
+		autoMetaLastRunAt: attemptedAt,
+	});
+}
+
+async function runStoreScheduler({ rawConfig, config, now, results, storeAttemptedThisTick }) {
+	if (!config.autoMetaEnabled || !standaloneStoreDue({
+		storeAttemptedThisTick,
+		timeDue: isTimeDue(now.time, config.autoMetaTime),
+		lastRunDate: rawConfig.autoStoreLastRunDate,
+		currentDate: now.date,
+		lastAttemptAt: rawConfig.autoStoreLastAttemptAt,
+	})) return;
+
+	const result = await runProfileSafely(PROFILE.LOJA, { date: now.date });
+	results.push({ profile: PROFILE.LOJA, result });
+	const attemptedAt = new Date().toISOString();
+	await saveSchedulerState({ autoStoreLastAttemptAt: attemptedAt });
+	if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: attemptedAt });
+}
+
+async function runFinesScheduler({ rawConfig, config, now, results }) {
+	const due = config.autoSyncEnabled &&
+		config.autoFinesEnabled &&
+		minutesSince(rawConfig.autoFinesLastRunAt) >= config.autoFinesIntervalMinutes &&
+		minutesSince(rawConfig.autoFinesLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES;
+	if (!due) return;
+
+	const result = await runProfileSafely(PROFILE.MULTAS, finesSchedulerOptions(now.date));
+	results.push({ profile: PROFILE.MULTAS, result });
+	const attemptedAt = new Date().toISOString();
+	await saveSchedulerState({ autoFinesLastAttemptAt: attemptedAt });
+	if (succeeded(result)) await saveSchedulerState({
+		autoFinesLastRunDate: now.date,
+		autoFinesLastRunAt: attemptedAt,
+	});
+}
+
 async function runSchedulerTick() {
 	if (schedulerTickRunning) return { ok: true, skipped: "already_running" };
 	schedulerTickRunning = true;
 	try {
-	const rawConfig = await readConfig();
-	const config = normalizeAutomationConfig(rawConfig);
-	if (!config.autoSyncEnabled) return { ok: true, skipped: "disabled" };
+		const rawConfig = await readConfig();
+		const config = normalizeAutomationConfig(rawConfig);
+		if (!config.autoSyncEnabled) return { ok: true, skipped: "disabled" };
 
-	const now = localDateParts();
-	const results = [];
-	const succeeded = (run) => [RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(run?.status);
-	const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
-	const checkpointDue = config.autoDailyCheckpointHours.includes(now.hour) && rawConfig.autoDailyLastCheckpointKey !== checkpointKey;
-	const dailyAttemptDue = minutesSince(rawConfig.autoDailyLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES;
-	let storeAttemptedThisTick = false;
-
-	if (
-		config.autoDailyEnabled &&
-		dailyAttemptDue &&
-		(minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes || checkpointDue)
-	) {
-		const dailyResult = await runProfileSafely(PROFILE.META_D0, { date: now.date });
-		results.push({
-			profile: PROFILE.META_D0,
-			result: dailyResult,
-		});
-		const storeResult = await runProfileSafely(PROFILE.LOJA, { date: now.date });
-		storeAttemptedThisTick = true;
-		results.push({
-			profile: PROFILE.LOJA,
-			result: storeResult,
-		});
-		await saveSchedulerState({ autoDailyLastAttemptAt: new Date().toISOString() });
-		const patch = { autoDailyLastRunAt: new Date().toISOString() };
-		if (config.autoDailyCheckpointHours.includes(now.hour)) {
-			const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
-			if (rawConfig.autoDailyLastCheckpointKey !== checkpointKey) {
-				patch.autoDailyLastCheckpointKey = checkpointKey;
-				patch.autoDailyLastCheckpointAt = new Date().toISOString();
-			}
-		}
-		if (succeeded(dailyResult) && succeeded(storeResult)) await saveSchedulerState(patch);
-	}
-
-	if (
-		config.autoMetaEnabled &&
-		isTimeDue(now.time, config.autoMetaTime) &&
-		rawConfig.autoMetaLastRunDate !== now.date &&
-		minutesSince(rawConfig.autoMetaLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES
-	) {
-		results.push({
-			profile: PROFILE.META_D_MINUS_ONE,
-			result: await runProfileSafely(PROFILE.META_D_MINUS_ONE, {
-				date: addDays(now.date, -1),
-			}),
-		});
-		const attemptedAt = new Date().toISOString();
-		await saveSchedulerState({ autoMetaLastAttemptAt: attemptedAt });
-		if (succeeded(results[results.length - 1].result)) await saveSchedulerState({
-			autoMetaLastRunDate: now.date,
-			autoMetaLastRunAt: attemptedAt,
-		});
-	}
-
-	if (
-		config.autoMetaEnabled &&
-		standaloneStoreDue({
-			storeAttemptedThisTick,
-			timeDue: isTimeDue(now.time, config.autoMetaTime),
-			lastRunDate: rawConfig.autoStoreLastRunDate,
-			currentDate: now.date,
-			lastAttemptAt: rawConfig.autoStoreLastAttemptAt,
-		})
-	) {
-		const result = await runProfileSafely(PROFILE.LOJA, { date: now.date });
-		results.push({ profile: PROFILE.LOJA, result });
-		const attemptedAt = new Date().toISOString();
-		await saveSchedulerState({ autoStoreLastAttemptAt: attemptedAt });
-		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: attemptedAt });
-	}
-
-	if (
-		config.autoSyncEnabled &&
-		config.autoFinesEnabled &&
-		minutesSince(rawConfig.autoFinesLastRunAt) >=
-			config.autoFinesIntervalMinutes &&
-		minutesSince(rawConfig.autoFinesLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES
-	) {
-		const result = await runProfileSafely(
-			PROFILE.MULTAS,
-			finesSchedulerOptions(now.date),
-		);
-		results.push({ profile: PROFILE.MULTAS, result });
-		const attemptedAt = new Date().toISOString();
-		await saveSchedulerState({ autoFinesLastAttemptAt: attemptedAt });
-		if (succeeded(result)) {
-			await saveSchedulerState({
-				autoFinesLastRunDate: now.date,
-				autoFinesLastRunAt: attemptedAt,
-			});
-		}
-	}
-
-	results.push(...(await runMapMatchScheduler(rawConfig, config)));
-
-	return { ok: true, results };
+		const now = localDateParts();
+		const results = [];
+		const storeAttemptedThisTick = await runDailyScheduler({ rawConfig, config, now, results });
+		await runPreviousDayScheduler({ rawConfig, config, now, results });
+		await runStoreScheduler({ rawConfig, config, now, results, storeAttemptedThisTick });
+		await runFinesScheduler({ rawConfig, config, now, results });
+		results.push(...(await runMapMatchScheduler(rawConfig, config)));
+		return { ok: true, results };
 	} finally {
 		schedulerTickRunning = false;
 	}
