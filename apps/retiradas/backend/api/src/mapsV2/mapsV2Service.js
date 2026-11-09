@@ -87,6 +87,28 @@ let locationHistoryCleanupAt = 0;
 let orderSyncCache = { value: "", expiresAt: 0 };
 let reconciliationCache = { value: null, expiresAt: 0 };
 
+function unavailableReconciliationMetrics() {
+	return {
+		...(reconciliationCache.value || {
+			sourceRows: null,
+			sourceOrders: null,
+			duplicateRows: null,
+			typeExcluded: null,
+			statusExcluded: null,
+			eligibleTotal: null,
+			geolocated: null,
+			locationPending: null,
+			sourceCoordinates: null,
+			geocodedCoordinates: null,
+			geocodePending: null,
+			geocodeNotFound: null,
+			geocodeFailed: null,
+			generatedAt: null,
+		}),
+		available: false,
+	};
+}
+
 function broadcastMapsUpdate(action, payload = {}) {
 	broadcastRealtime("maps", {
 		action,
@@ -577,7 +599,8 @@ async function getReconciliationMetrics({ force = false } = {}) {
 		), latest as (
 		  select * from source where row_number = 1
 		), eligible as (
-		  select latest.*, location.latitude, location.longitude, location.coordinate_source,
+		  select latest.*, location.latitude as map_latitude, location.longitude as map_longitude,
+		         location.coordinate_source,
 		         job.status as geocode_status
 		    from latest
 		    left join maps_order_locations location on location.order_id = latest.id
@@ -594,8 +617,8 @@ async function getReconciliationMetrics({ force = false } = {}) {
 		    where upper(coalesce(tipo, '')) = any($1::text[])
 		      and upper(coalesce(status, '')) ~ '(CONCLUID|FINALIZ|FECHAD|CANCELAD|REALIZAD)') as "statusExcluded",
 		  count(*)::int as "eligibleTotal",
-		  count(*) filter (where latitude between -34 and 6 and longitude between -74 and -33)::int as "geolocated",
-		  count(*) filter (where not (latitude between -34 and 6 and longitude between -74 and -33))::int as "locationPending",
+		  count(*) filter (where map_latitude between -34 and 6 and map_longitude between -74 and -33)::int as "geolocated",
+		  count(*) filter (where not (map_latitude between -34 and 6 and map_longitude between -74 and -33))::int as "locationPending",
 		  count(*) filter (where coordinate_source = 'SOURCE')::int as "sourceCoordinates",
 		  count(*) filter (where coordinate_source <> 'SOURCE')::int as "geocodedCoordinates",
 		  count(*) filter (where geocode_status = 'PENDING')::int as "geocodePending",
@@ -623,6 +646,15 @@ async function getReconciliationMetrics({ force = false } = {}) {
 	};
 	reconciliationCache = { value, expiresAt: Date.now() + RECONCILIATION_CACHE_TTL_MS };
 	return value;
+}
+
+async function getReconciliationMetricsSafe() {
+	try {
+		return { ...(await getReconciliationMetrics()), available: true };
+	} catch (error) {
+		console.warn("[mapsV2] Metricas de reconciliacao indisponiveis; mapa mantido ativo:", error?.code || error?.message || error);
+		return unavailableReconciliationMetrics();
+	}
 }
 
 async function queryCandidateRows(query = {}, user = {}, limit = null) {
@@ -680,7 +712,7 @@ async function listPoints(query = {}, user = {}) {
 	const [{ rows, viewport, truncated }, lastOrderSync, reconciliation] = await Promise.all([
 		queryCandidateRows(query, user, pointPreviewLimit(query)),
 		latestOrderSyncAt(),
-		getReconciliationMetrics(),
+		getReconciliationMetricsSafe(),
 	]);
 	const origin = viewport?.origin || null;
 	let items = rows.filter(validateOrderRow).map((row) => mapPoint(row, user, { origin }));
@@ -2681,7 +2713,7 @@ async function getHealth() {
 		  (select count(*)::int from maps_order_locations) as geocoded,
 		  (select count(*)::int from maps_geocode_jobs where status = 'PENDING') as geocode_pending,
 		  (select count(*)::int from maps_assignment_requests where status = 'PENDING') as requests_pending`,
-	), latestOrderSyncAt(), getReconciliationMetrics()]);
+	), latestOrderSyncAt(), getReconciliationMetricsSafe()]);
 	return {
 		ok: true,
 		enabled: featureEnabled(),

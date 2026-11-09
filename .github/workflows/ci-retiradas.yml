@@ -89,6 +89,7 @@ jobs:
           apps/retiradas/backend/api/src/staleWhileRevalidateCache.test.js
           apps/retiradas/backend/api/src/notificationsService.test.js
           apps/retiradas/backend/api/src/mapSyncUpdatesService.test.js
+          apps/retiradas/backend/api/src/mapsV2/mapsV2Service.test.js
           apps/retiradas/backend/api/src/hubsoftSyncProfiles.storeClassification.test.js
 
       - name: Validate observability migration on PostgreSQL
