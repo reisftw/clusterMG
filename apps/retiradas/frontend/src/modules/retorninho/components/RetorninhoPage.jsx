@@ -204,6 +204,7 @@ export default function RetorninhoPage() {
 	const [selectedConversation, setSelectedConversation] = useState(null);
 	const [messages, setMessages] = useState(EMPTY_PAGE);
 	const [connection, setConnection] = useState(null);
+	const [instance, setInstance] = useState(null);
 
 	const visibleTabs = useMemo(() => TABS.filter(([key]) => canAudit || !["technical", "operational", "audit"].includes(key)), [canAudit]);
 	const metrics = dashboard?.metrics || {};
@@ -213,10 +214,21 @@ export default function RetorninhoPage() {
 		try {
 			const [nextDashboard, nextConfig] = await Promise.all([retorninhoApi.dashboard({ hours: 24 }), retorninhoApi.config()]);
 			setDashboard(nextDashboard);
+			setInstance(nextDashboard?.instance || null);
 			setConfig((current) => current && current.id === nextConfig.id ? current : nextConfig);
 		} catch (error) {
 			setFeedback({ type: "error", text: error.message || "Não foi possível carregar o Retorninho IA." });
 		} finally { setLoading(false); }
+	}, []);
+
+	const loadInstance = useCallback(async () => {
+		try {
+			const nextInstance = await retorninhoApi.instance();
+			setInstance(nextInstance);
+			return nextInstance;
+		} catch {
+			return null;
+		}
 	}, []);
 
 	const loadTab = useCallback(async () => {
@@ -253,6 +265,31 @@ export default function RetorninhoPage() {
 		return () => globalThis.clearTimeout(timer);
 	}, [search]);
 	useEffect(() => { loadTab(); }, [loadTab]);
+	useEffect(() => {
+		if (tab === "whatsapp") loadInstance();
+	}, [loadInstance, tab]);
+	useEffect(() => {
+		if (tab !== "whatsapp" || !connection || instance?.connected) return undefined;
+		let cancelled = false;
+		let attempts = 0;
+		let timer;
+		const poll = async () => {
+			attempts += 1;
+			const nextInstance = await loadInstance();
+			if (cancelled) return;
+			if (nextInstance?.connected) {
+				setConnection(null);
+				setFeedback({ type: "success", text: "WhatsApp conectado com sucesso." });
+				return;
+			}
+			if (attempts < 40) timer = globalThis.setTimeout(poll, 3000);
+		};
+		timer = globalThis.setTimeout(poll, 3000);
+		return () => {
+			cancelled = true;
+			globalThis.clearTimeout(timer);
+		};
+	}, [connection, instance?.connected, loadInstance, tab]);
 
 	async function run(action, success, { reloadTab = true, reloadBase = false } = {}) {
 		setSaving(true);
@@ -279,6 +316,7 @@ export default function RetorninhoPage() {
 			const result = await retorninhoApi.connect();
 			setConnection(result);
 			setFeedback({ type: "success", text: "Solicitação de conexão enviada." });
+			await loadInstance();
 			await loadBase();
 		} catch (error) {
 			setFeedback({ type: "error", text: error.message || "Não foi possível conectar a instância." });
@@ -328,7 +366,7 @@ export default function RetorninhoPage() {
 					<Section title="Atividade por regional"><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{(dashboard?.regional || []).map((item) => <div key={item.regional} className="flex items-center justify-between rounded-md bg-slate-50 p-3 text-sm"><strong className="text-slate-700">{item.regional}</strong><span className="font-black text-slate-950">{item.total}</span></div>)}{!dashboard?.regional?.length && <p className="text-sm font-semibold text-slate-500">Ainda não há atividade operacional neste período.</p>}</div></Section>
 				</>}
 
-				{tab === "whatsapp" && <Section title="Canal WhatsApp" actions={canManage && <button type="button" className={PRIMARY} disabled={saving} onClick={saveConfig}><Save size={17} />Salvar</button>}><ConfigFields form={config || {}} setForm={setConfig} group="whatsapp" /><div className="mt-5 flex flex-wrap gap-2"><button type="button" className={PRIMARY} disabled={!canManage || saving || config?.provider !== "evolution"} onClick={connectWhatsapp}><Wifi size={17} />Conectar instância</button><button type="button" className={SECONDARY} disabled={!canManage || saving || config?.provider !== "evolution"} onClick={() => run(retorninhoApi.disconnect, "Instância desconectada e agente pausado.", { reloadBase: true })}><Unplug size={17} />Desconectar</button></div>{connection?.connect?.base64 && <div className="mt-5 max-w-xs rounded-lg border border-slate-200 bg-white p-3"><p className="mb-2 text-sm font-bold text-slate-700">Leia o QR Code no WhatsApp</p><img className="aspect-square w-full" src={connection.connect.base64.startsWith("data:") ? connection.connect.base64 : `data:image/png;base64,${connection.connect.base64}`} alt="QR Code para conectar o Retorninho" /></div>}</Section>}
+				{tab === "whatsapp" && <Section title="Canal WhatsApp" actions={canManage && <button type="button" className={PRIMARY} disabled={saving} onClick={saveConfig}><Save size={17} />Salvar</button>}><ConfigFields form={config || {}} setForm={setConfig} group="whatsapp" /><div className={`mt-5 flex flex-col gap-2 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between ${instance?.connected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}><div><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${instance?.connected ? "bg-emerald-500" : "bg-slate-400"}`} /><p className="font-black text-slate-950">{instance?.connected ? "WhatsApp conectado" : instance?.configured === false ? "Evolution não configurada" : "WhatsApp desconectado"}</p></div><p className="mt-1 text-sm font-semibold text-slate-600">{instance?.connected && instance?.number ? `Número conectado: ${instance.number}` : instance?.connected ? "Instância pronta para receber mensagens." : connection ? "Aguardando a leitura e confirmação do QR Code." : "Conecte a instância para iniciar o atendimento."}</p></div><button type="button" className={SECONDARY} disabled={saving} onClick={loadInstance}><RefreshCw size={16} />Atualizar status</button></div><div className="mt-5 flex flex-wrap gap-2"><button type="button" className={PRIMARY} disabled={!canManage || saving || config?.provider !== "evolution"} onClick={connectWhatsapp}><Wifi size={17} />{instance?.connected ? "Reconectar instância" : "Conectar instância"}</button><button type="button" className={SECONDARY} disabled={!canManage || saving || config?.provider !== "evolution" || !instance?.connected} onClick={() => run(retorninhoApi.disconnect, "Instância desconectada e agente pausado.", { reloadBase: true })}><Unplug size={17} />Desconectar</button></div>{connection?.connect?.base64 && !instance?.connected && <div className="mt-5 max-w-xs rounded-lg border border-slate-200 bg-white p-3"><p className="mb-2 text-sm font-bold text-slate-700">Leia o QR Code no WhatsApp</p><img className="aspect-square w-full" src={connection.connect.base64.startsWith("data:") ? connection.connect.base64 : `data:image/png;base64,${connection.connect.base64}`} alt="QR Code para conectar o Retorninho" /></div>}</Section>}
 
 				{tab === "ai" && <Section title="Modelo e instruções" actions={canManage && <button type="button" className={PRIMARY} disabled={saving} onClick={saveConfig}><Save size={17} />Salvar</button>}><ConfigFields form={config || {}} setForm={setConfig} group="ai" /></Section>}
 
