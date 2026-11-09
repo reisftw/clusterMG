@@ -2,6 +2,7 @@ name: Publish Retiradas Android
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: release-retiradas-android

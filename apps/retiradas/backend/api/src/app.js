@@ -2856,7 +2856,13 @@ function createApp() {
 		requireAnyPermission(["view_mapa", "destaque.mapa_os.view"], ADMIN_ROLES),
 		async (req, res, next) => {
 			try {
-				res.json(await mapSyncUpdates.getOperationalSummary(req.query || {}));
+				const summary = await mapSyncUpdates.getOperationalSummary(
+					req.query || {},
+					{ includeCacheMeta: true },
+				);
+				res.setHeader("X-Cache-Status", summary.cacheStatus);
+				res.setHeader("X-Cache-Age-Ms", String(summary.cacheAgeMs || 0));
+				res.json(summary.data);
 			} catch (error) {
 				next(error);
 			}

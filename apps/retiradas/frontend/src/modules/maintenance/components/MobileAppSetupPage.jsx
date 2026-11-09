@@ -6,6 +6,7 @@ import {
 	Loader2,
 	LocateFixed,
 	MapPinned,
+	Power,
 	ShieldCheck,
 	Smartphone,
 } from "lucide-react";
@@ -43,26 +44,23 @@ function StatusBadge({ active, children }) {
 	);
 }
 
-export default function MobileAppSetupPage() {
-	const { currentUser, realUser } = useAuthContext();
-	const authenticatedUser = realUser || currentUser;
-	const context = useMemo(() => getAppClientContext(), []);
-	const isAndroid = context.mode === "android";
-	const isTechnician =
-		String(authenticatedUser?.role || "").trim().toLowerCase() === ROLES.TECNICO;
+function getInitialLocationEnrollment() {
+	const params = new URLSearchParams(window.location.search);
+	if (params.get("nativeEnrolled") === "1") {
+		window.localStorage.setItem(ENROLLED_KEY, "1");
+		return true;
+	}
+	if (params.get("nativeEnrolled") === "0") {
+		window.localStorage.removeItem(ENROLLED_KEY);
+		return false;
+	}
+	return window.localStorage.getItem(ENROLLED_KEY) === "1";
+}
+
+function usePushSetup(isAndroid) {
 	const [pushState, setPushState] = useState(null);
 	const [pushBusy, setPushBusy] = useState(false);
-	const [locationBusy, setLocationBusy] = useState(false);
 	const [pushError, setPushError] = useState("");
-	const [locationError, setLocationError] = useState("");
-	const [locationEnrolled] = useState(() => {
-		const params = new URLSearchParams(window.location.search);
-		if (params.get("nativeEnrolled") === "1") {
-			window.localStorage.setItem(ENROLLED_KEY, "1");
-			return true;
-		}
-		return window.localStorage.getItem(ENROLLED_KEY) === "1";
-	});
 
 	const refreshPushState = useCallback(async () => {
 		const nextState = await getPushSupportState();
@@ -123,6 +121,57 @@ export default function MobileAppSetupPage() {
 		}
 	}
 
+	return {
+		activatePush,
+		pushActive: pushState?.subscribed === true,
+		pushBlocked: pushState?.permission === "denied",
+		pushBusy,
+		pushError,
+		pushState,
+	};
+}
+
+function PushSetupCard({ isAndroid }) {
+	const {
+		activatePush,
+		pushActive,
+		pushBlocked,
+		pushBusy,
+		pushError,
+		pushState,
+	} = usePushSetup(isAndroid);
+
+	return (
+		<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="flex items-start justify-between gap-3">
+				<span className="grid size-11 place-items-center rounded-lg bg-blue-50 text-blue-700"><BellRing size={22} /></span>
+				<StatusBadge active={pushActive}>
+					{pushActive ? "Ativas" : pushBlocked ? "Bloqueadas" : "Pendente"}
+				</StatusBadge>
+			</div>
+			<h2 className="mt-4 text-lg font-black text-slate-950">Notificacoes push</h2>
+			<p className="mt-2 text-sm leading-6 text-slate-600">
+				Receba novas O.S, cidades atribuidas e alertas operacionais mesmo fora da tela atual.
+			</p>
+			{pushError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{pushError}</p> : null}
+			<button
+				type="button"
+				onClick={activatePush}
+				disabled={pushBusy || pushActive || pushState?.supported === false}
+				className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+			>
+				{pushBusy ? <Loader2 className="animate-spin" size={18} /> : <BellRing size={18} />}
+				{pushActive ? "Notificacoes ativadas" : pushBusy ? "Ativando..." : pushBlocked && isAndroid ? "Abrir configuracoes" : "Autorizar notificacoes"}
+			</button>
+		</section>
+	);
+}
+
+function useLocationSetup(context) {
+	const [locationBusy, setLocationBusy] = useState(false);
+	const [locationError, setLocationError] = useState("");
+	const [locationEnrolled, setLocationEnrolled] = useState(getInitialLocationEnrollment);
+
 	async function activateLocation() {
 		setLocationBusy(true);
 		setLocationError("");
@@ -143,8 +192,85 @@ export default function MobileAppSetupPage() {
 		}
 	}
 
-	const pushActive = pushState?.subscribed === true;
-	const pushBlocked = pushState?.permission === "denied";
+	function stopLocation() {
+		setLocationBusy(true);
+		setLocationError("");
+		setLocationEnrolled(false);
+		window.localStorage.removeItem(ENROLLED_KEY);
+		window.location.href = "retiradas://stop-location";
+	}
+
+	return {
+		activateLocation,
+		locationBusy,
+		locationEnrolled,
+		locationError,
+		stopLocation,
+	};
+}
+
+function LocationSetupCard({ context, isAndroid, isTechnician }) {
+	const {
+		activateLocation,
+		locationBusy,
+		locationEnrolled,
+		locationError,
+		stopLocation,
+	} = useLocationSetup(context);
+
+	return (
+		<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+			<div className="flex items-start justify-between gap-3">
+				<span className="grid size-11 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><MapPinned size={22} /></span>
+				<StatusBadge active={isTechnician && locationEnrolled}>
+					{!isTechnician ? "Somente tecnico" : locationEnrolled ? "Configurada" : "Pendente"}
+				</StatusBadge>
+			</div>
+			<h2 className="mt-4 text-lg font-black text-slate-950">Localizacao em tempo real</h2>
+			<p className="mt-2 text-sm leading-6 text-slate-600">
+				{isTechnician
+					? "Permite que a operacao acompanhe sua posicao durante o expediente, inclusive com o aplicativo minimizado."
+					: "A localizacao operacional e enviada somente por contas com cargo Tecnico. Contas administrativas podem acompanhar os tecnicos, mas nao enviam posicao."}
+			</p>
+			{locationError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{locationError}</p> : null}
+			{isTechnician ? (
+				<div className="mt-5 grid gap-2">
+					<button
+						type="button"
+						onClick={activateLocation}
+						disabled={locationBusy || !isAndroid}
+						className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+					>
+						{locationBusy ? <Loader2 className="animate-spin" size={18} /> : <LocateFixed size={18} />}
+						{locationBusy ? "Ativando..." : locationEnrolled ? "Configurar novamente" : "Autorizar localizacao"}
+					</button>
+					{locationEnrolled ? (
+						<button
+							type="button"
+							onClick={stopLocation}
+							disabled={locationBusy || !isAndroid}
+							className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							<Power size={18} /> Desativar localizacao
+						</button>
+					) : null}
+				</div>
+			) : (
+				<div className="mt-5 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-800">
+					<ShieldCheck className="mt-0.5 shrink-0" size={18} /> Nenhuma localizacao sera coletada desta conta.
+				</div>
+			)}
+		</section>
+	);
+}
+
+export default function MobileAppSetupPage() {
+	const { currentUser, realUser } = useAuthContext();
+	const authenticatedUser = realUser || currentUser;
+	const context = useMemo(() => getAppClientContext(), []);
+	const isAndroid = context.mode === "android";
+	const isTechnician =
+		String(authenticatedUser?.role || "").trim().toLowerCase() === ROLES.TECNICO;
 
 	return (
 		<div className="mx-auto w-full max-w-4xl space-y-5 pb-8">
@@ -170,59 +296,8 @@ export default function MobileAppSetupPage() {
 			) : null}
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="flex items-start justify-between gap-3">
-						<span className="grid size-11 place-items-center rounded-lg bg-blue-50 text-blue-700"><BellRing size={22} /></span>
-						<StatusBadge active={pushActive}>
-							{pushActive ? "Ativas" : pushBlocked ? "Bloqueadas" : "Pendente"}
-						</StatusBadge>
-					</div>
-					<h2 className="mt-4 text-lg font-black text-slate-950">Notificacoes push</h2>
-					<p className="mt-2 text-sm leading-6 text-slate-600">
-						Receba novas O.S, cidades atribuidas e alertas operacionais mesmo fora da tela atual.
-					</p>
-					{pushError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{pushError}</p> : null}
-					<button
-						type="button"
-						onClick={activatePush}
-						disabled={pushBusy || pushActive || pushState?.supported === false}
-						className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-					>
-						{pushBusy ? <Loader2 className="animate-spin" size={18} /> : <BellRing size={18} />}
-						{pushActive ? "Notificacoes ativadas" : pushBusy ? "Ativando..." : pushBlocked && isAndroid ? "Abrir configuracoes" : "Autorizar notificacoes"}
-					</button>
-				</section>
-
-				<section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-					<div className="flex items-start justify-between gap-3">
-						<span className="grid size-11 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><MapPinned size={22} /></span>
-						<StatusBadge active={isTechnician && locationEnrolled}>
-							{!isTechnician ? "Somente tecnico" : locationEnrolled ? "Configurada" : "Pendente"}
-						</StatusBadge>
-					</div>
-					<h2 className="mt-4 text-lg font-black text-slate-950">Localizacao em tempo real</h2>
-					<p className="mt-2 text-sm leading-6 text-slate-600">
-						{isTechnician
-							? "Permite que a operacao acompanhe sua posicao durante o expediente, inclusive com o aplicativo minimizado."
-							: "A localizacao operacional e enviada somente por contas com cargo Tecnico. Contas administrativas podem acompanhar os tecnicos, mas nao enviam posicao."}
-					</p>
-					{locationError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{locationError}</p> : null}
-					{isTechnician ? (
-						<button
-							type="button"
-							onClick={activateLocation}
-							disabled={locationBusy || !isAndroid}
-							className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-						>
-							{locationBusy ? <Loader2 className="animate-spin" size={18} /> : <LocateFixed size={18} />}
-							{locationBusy ? "Ativando..." : locationEnrolled ? "Configurar novamente" : "Autorizar localizacao"}
-						</button>
-					) : (
-						<div className="mt-5 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-800">
-							<ShieldCheck className="mt-0.5 shrink-0" size={18} /> Nenhuma localizacao sera coletada desta conta.
-						</div>
-					)}
-				</section>
+				<PushSetupCard isAndroid={isAndroid} />
+				<LocationSetupCard context={context} isAndroid={isAndroid} isTechnician={isTechnician} />
 			</div>
 
 			<div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">

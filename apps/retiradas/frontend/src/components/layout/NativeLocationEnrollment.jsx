@@ -9,7 +9,9 @@ export default function NativeLocationEnrollment() {
 	const [visible] = useState(() => {
 		if (context.mode !== "android") return false;
 		const enrolledOnReturn = new URLSearchParams(window.location.search).get("nativeEnrolled") === "1";
+		const disabledOnReturn = new URLSearchParams(window.location.search).get("nativeEnrolled") === "0";
 		if (enrolledOnReturn) window.localStorage.setItem(ENROLLED_KEY, "1");
+		if (disabledOnReturn) window.localStorage.removeItem(ENROLLED_KEY);
 		return !enrolledOnReturn && window.localStorage.getItem(ENROLLED_KEY) !== "1";
 	});
 	const [busy, setBusy] = useState(false);

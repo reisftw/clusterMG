@@ -67,3 +67,14 @@ test("consolida chamadas simultaneas e reutiliza o resumo operacional por 15 seg
 	);
 	assert.equal(calls.length, queryCount);
 });
+
+test("expõe idade e estado do cache sem alterar o payload do resumo", async () => {
+	const cached = await service.getOperationalSummary(
+		{ date: "2026-11-03" },
+		{ includeCacheMeta: true },
+	);
+
+	assert.equal(cached.cacheStatus, "HIT");
+	assert.ok(cached.cacheAgeMs >= 0);
+	assert.deepEqual(cached.data, await service.getOperationalSummary({ date: "2026-11-03" }));
+});

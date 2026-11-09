@@ -106,6 +106,16 @@ test("Retiradas release has a master-only production adapter with rollback", () 
 	}
 });
 
+test("Retiradas can publish the Android build from the same release run", () => {
+	const deploy = readWorkflow("deploy-retiradas.yml");
+	const android = readWorkflow("publish-retiradas-android.yml");
+
+	assert.ok(deploy.includes("publish_android:"));
+	assert.ok(deploy.includes("uses: ./.github/workflows/publish-retiradas-android.yml"));
+	assert.ok(deploy.includes("needs: [prepare, publish]"));
+	assert.match(android, /^  workflow_call:/m);
+});
+
 test("Mercado and Operacao release workflows remain artifact-only", () => {
 	for (const workflowName of ["deploy-mercado.yml", "deploy-operacao.yml"]) {
 		const workflow = readWorkflow(workflowName);

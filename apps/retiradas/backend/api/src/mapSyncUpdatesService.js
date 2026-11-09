@@ -2,6 +2,7 @@ const db = require("./db");
 const rankingService = require("./rankingService");
 const regionaisRepository = require("./regionaisRepository");
 const { buildSnapshotDiff } = require("./mapSnapshotDiff");
+const { readStaleWhileRevalidate } = require("./staleWhileRevalidateCache");
 
 const TIME_ZONE = "America/Sao_Paulo";
 const MAP_PROFILE = "MAPA";
@@ -15,8 +16,10 @@ const configuredOperationalSummaryCacheTtl = Number(
 const OPERATIONAL_SUMMARY_CACHE_TTL_MS = Number.isFinite(configuredOperationalSummaryCacheTtl)
 	? Math.max(0, configuredOperationalSummaryCacheTtl)
 	: 15_000;
+const OPERATIONAL_SUMMARY_BACKGROUND_REFRESH = !["0", "false", "off", "nao"].includes(
+	String(process.env.OPERATIONAL_SUMMARY_BACKGROUND_REFRESH ?? "true").trim().toLowerCase(),
+);
 const operationalSummaryCache = new Map();
-const operationalSummaryPending = new Map();
 
 function text(value) {
 	return String(value ?? "").trim();
@@ -756,27 +759,29 @@ async function loadOperationalSummary(date) {
 	};
 }
 
-async function getOperationalSummary(query = {}) {
+async function getOperationalSummary(query = {}, { includeCacheMeta = false } = {}) {
 	const date = normalizeDate(query.date);
-	const now = Date.now();
-	const cached = operationalSummaryCache.get(date);
-	if (cached && cached.expiresAt > now) return cached.value;
-	for (const [key, entry] of operationalSummaryCache) {
-		if (entry.expiresAt <= now) operationalSummaryCache.delete(key);
+	let cache = operationalSummaryCache.get(date);
+	if (!cache) {
+		cache = { data: null, cachedAt: 0, pending: null };
+		operationalSummaryCache.set(date, cache);
 	}
-	if (operationalSummaryPending.has(date)) return operationalSummaryPending.get(date);
-
-	const pending = loadOperationalSummary(date)
-		.then((value) => {
-			operationalSummaryCache.set(date, {
-				value,
-				expiresAt: Date.now() + OPERATIONAL_SUMMARY_CACHE_TTL_MS,
-			});
-			return value;
-		})
-		.finally(() => operationalSummaryPending.delete(date));
-	operationalSummaryPending.set(date, pending);
-	return pending;
+	for (const [key, entry] of operationalSummaryCache) {
+		if (
+			key !== date &&
+			!entry.pending &&
+			Date.now() - Number(entry.cachedAt || 0) > Math.max(OPERATIONAL_SUMMARY_CACHE_TTL_MS * 10, 5 * 60_000)
+		) {
+			operationalSummaryCache.delete(key);
+		}
+	}
+	const result = await readStaleWhileRevalidate(
+		cache,
+		() => loadOperationalSummary(date),
+		OPERATIONAL_SUMMARY_CACHE_TTL_MS,
+		{ backgroundRefresh: OPERATIONAL_SUMMARY_BACKGROUND_REFRESH },
+	);
+	return includeCacheMeta ? result : result.data;
 }
 
 module.exports = {

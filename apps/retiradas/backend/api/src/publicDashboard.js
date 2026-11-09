@@ -4,9 +4,13 @@ const {
 	buildMatchData,
 	buildMatchMessages,
 } = require("./operationalMatchSnapshot");
+const { readStaleWhileRevalidate } = require("./staleWhileRevalidateCache");
 
 const DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS = 60_000;
 const DEFAULT_MATCH_REBUILD_IDLE_MS = 120_000;
+const PUBLIC_DASHBOARD_BACKGROUND_REFRESH = !["0", "false", "off", "nao"].includes(
+	String(process.env.PUBLIC_DASHBOARD_BACKGROUND_REFRESH ?? "true").trim().toLowerCase(),
+);
 
 const publicDashboardCache = {
 	data: null,
@@ -168,15 +172,6 @@ function getPublicDashboardCacheTtlMs() {
 	if (!Number.isFinite(configuredTtl))
 		return DEFAULT_PUBLIC_DASHBOARD_CACHE_TTL_MS;
 	return Math.max(0, Math.min(configuredTtl, 5 * 60_000));
-}
-
-function getStaleCacheResult(cache, error) {
-	if (!cache.data) throw error;
-	return {
-		data: cache.data,
-		cacheStatus: "STALE",
-		cacheAgeMs: Date.now() - cache.cachedAt,
-	};
 }
 
 function getMatchRebuildIdleMs() {
@@ -726,56 +721,12 @@ async function buildAcompanhamentoResumo() {
 }
 
 async function getCachedAcompanhamentoResumo() {
-	const ttlMs = getPublicDashboardCacheTtlMs();
-	const now = Date.now();
-	const cacheAgeMs = now - acompanhamentoResumoCache.cachedAt;
-
-	if (
-		ttlMs > 0 &&
-		acompanhamentoResumoCache.data &&
-		cacheAgeMs < ttlMs
-	) {
-		return {
-			data: acompanhamentoResumoCache.data,
-			cacheStatus: "HIT",
-			cacheAgeMs,
-		};
-	}
-
-	if (ttlMs > 0 && acompanhamentoResumoCache.pending) {
-		try {
-			const data = await acompanhamentoResumoCache.pending;
-			return {
-				data,
-				cacheStatus: "JOIN",
-				cacheAgeMs: Date.now() - acompanhamentoResumoCache.cachedAt,
-			};
-		} catch (error) {
-			return getStaleCacheResult(acompanhamentoResumoCache, error);
-		}
-	}
-
-	const pending = buildAcompanhamentoResumo();
-	acompanhamentoResumoCache.pending = pending;
-
-	try {
-		const data = await pending;
-		if (ttlMs > 0) {
-			acompanhamentoResumoCache.data = data;
-			acompanhamentoResumoCache.cachedAt = Date.now();
-		}
-		return {
-			data,
-			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
-			cacheAgeMs: 0,
-		};
-	} catch (error) {
-		return getStaleCacheResult(acompanhamentoResumoCache, error);
-	} finally {
-		if (acompanhamentoResumoCache.pending === pending) {
-			acompanhamentoResumoCache.pending = null;
-		}
-	}
+	return readStaleWhileRevalidate(
+		acompanhamentoResumoCache,
+		buildAcompanhamentoResumo,
+		getPublicDashboardCacheTtlMs(),
+		{ backgroundRefresh: PUBLIC_DASHBOARD_BACKGROUND_REFRESH },
+	);
 }
 
 async function getCachedPublicDashboard(options = {}) {
@@ -789,101 +740,21 @@ async function getCachedPublicDashboard(options = {}) {
 		};
 	}
 
-	const ttlMs = getPublicDashboardCacheTtlMs();
-	const now = Date.now();
-	const cacheAgeMs = now - publicDashboardCache.cachedAt;
-
-	if (ttlMs > 0 && publicDashboardCache.data && cacheAgeMs < ttlMs) {
-		return {
-			data: publicDashboardCache.data,
-			cacheStatus: "HIT",
-			cacheAgeMs,
-		};
-	}
-
-	if (ttlMs > 0 && publicDashboardCache.pending) {
-		try {
-			const data = await publicDashboardCache.pending;
-			return {
-				data,
-				cacheStatus: "JOIN",
-				cacheAgeMs: Date.now() - publicDashboardCache.cachedAt,
-			};
-		} catch (error) {
-			return getStaleCacheResult(publicDashboardCache, error);
-		}
-	}
-
-	const pending = buildPublicDashboard();
-	publicDashboardCache.pending = pending;
-
-	try {
-		const data = await pending;
-		if (ttlMs > 0) {
-			publicDashboardCache.data = data;
-			publicDashboardCache.cachedAt = Date.now();
-		}
-		return {
-			data,
-			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
-			cacheAgeMs: 0,
-		};
-	} catch (error) {
-		return getStaleCacheResult(publicDashboardCache, error);
-	} finally {
-		if (publicDashboardCache.pending === pending) {
-			publicDashboardCache.pending = null;
-		}
-	}
+	return readStaleWhileRevalidate(
+		publicDashboardCache,
+		buildPublicDashboard,
+		getPublicDashboardCacheTtlMs(),
+		{ backgroundRefresh: PUBLIC_DASHBOARD_BACKGROUND_REFRESH },
+	);
 }
 
 async function getCachedDashboardResumo() {
-	const ttlMs = getPublicDashboardCacheTtlMs();
-	const now = Date.now();
-	const cacheAgeMs = now - dashboardResumoCache.cachedAt;
-
-	if (ttlMs > 0 && dashboardResumoCache.data && cacheAgeMs < ttlMs) {
-		return {
-			data: dashboardResumoCache.data,
-			cacheStatus: "HIT",
-			cacheAgeMs,
-		};
-	}
-
-	if (ttlMs > 0 && dashboardResumoCache.pending) {
-		try {
-			const data = await dashboardResumoCache.pending;
-			return {
-				data,
-				cacheStatus: "JOIN",
-				cacheAgeMs: Date.now() - dashboardResumoCache.cachedAt,
-			};
-		} catch (error) {
-			return getStaleCacheResult(dashboardResumoCache, error);
-		}
-	}
-
-	const pending = buildDashboardResumo();
-	dashboardResumoCache.pending = pending;
-
-	try {
-		const data = await pending;
-		if (ttlMs > 0) {
-			dashboardResumoCache.data = data;
-			dashboardResumoCache.cachedAt = Date.now();
-		}
-		return {
-			data,
-			cacheStatus: ttlMs > 0 ? "MISS" : "BYPASS",
-			cacheAgeMs: 0,
-		};
-	} catch (error) {
-		return getStaleCacheResult(dashboardResumoCache, error);
-	} finally {
-		if (dashboardResumoCache.pending === pending) {
-			dashboardResumoCache.pending = null;
-		}
-	}
+	return readStaleWhileRevalidate(
+		dashboardResumoCache,
+		buildDashboardResumo,
+		getPublicDashboardCacheTtlMs(),
+		{ backgroundRefresh: PUBLIC_DASHBOARD_BACKGROUND_REFRESH },
+	);
 }
 
 async function buildSnapshotDomain(domain, { compact = false } = {}) {

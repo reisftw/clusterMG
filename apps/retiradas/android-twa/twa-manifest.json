@@ -12,7 +12,7 @@
   "navigationDividerColorDark": "#000000",
 	"backgroundColor": "#0A1B3D",
   "enableNotifications": true,
-	"startUrl": "/app?source=android&appVersion=1.0.5&appCode=105",
+	"startUrl": "/app?source=android&appVersion=1.0.6&appCode=106",
 	"iconUrl": "https://retiradas.tech/brand/revo/revo_app_icon_512px.png",
 	"maskableIconUrl": "https://retiradas.tech/brand/revo/revo_app_maskable_512.png",
   "splashScreenFadeOutDuration": 300,
@@ -20,8 +20,8 @@
     "path": ".signing/retiradas-release.jks",
     "alias": "retiradas-release"
   },
-	"appVersionName": "1.0.5",
-	"appVersionCode": 105,
+	"appVersionName": "1.0.6",
+	"appVersionCode": 106,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://retiradas.tech/manifest.webmanifest",
@@ -52,5 +52,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-	"appVersion": "1.0.5"
+	"appVersion": "1.0.6"
 }
