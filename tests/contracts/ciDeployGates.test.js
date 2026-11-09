@@ -134,6 +134,7 @@ test("security workflow audits dependency projects and scans for secrets", () =>
 		"apps/operacao/frontend",
 		"apps/operacao/backend",
 		"npm audit",
+		"pull-requests: read",
 		"gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc",
 	]) {
 		assert.ok(
