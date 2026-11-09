@@ -1,0 +1,15 @@
+# Baseline histórico verificado em 2026-11-09. Cada entrada ignora somente o
+# achado exato; novos segredos nos mesmos arquivos ou commits continuam bloqueados.
+190c7dbc19ab8433314c8c8bf101b8f058d4941a:src/backend/finan/pinLock.test.js:generic-api-key:239
+190c7dbc19ab8433314c8c8bf101b8f058d4941a:src/backend/finan/pinLock.test.js:generic-api-key:251
+190c7dbc19ab8433314c8c8bf101b8f058d4941a:vps/api/.env.example:generic-api-key:29
+39e5f4f1ab1b06b919f590eb7cf8c9c1fb957a42:src/backend/app.characterization.test.js:generic-api-key:331
+39e5f4f1ab1b06b919f590eb7cf8c9c1fb957a42:src/backend/app.characterization.test.js:generic-api-key:332
+39e5f4f1ab1b06b919f590eb7cf8c9c1fb957a42:src/backend/app.characterization.test.js:generic-api-key:333
+3bf3de934a0ba809d4c6401594ed2bb9a3f9ca2a:vps/api/.env.example:generic-api-key:29
+5dc387315112cb3ba6898a2bcb5ecf6680e26385:src/backend/app.characterization.test.js:generic-api-key:378
+5dc387315112cb3ba6898a2bcb5ecf6680e26385:src/backend/app.characterization.test.js:generic-api-key:379
+609e06f83ab4f4f2e3242e97dfbf8ee562045355:vps/api/.env.example:generic-api-key:29
+95a2b33b35fec7bea2ae176c037010a6da3b94fe:.env:gcp-api-key:1
+95a2b33b35fec7bea2ae176c037010a6da3b94fe:src/modules/frota/hooks/useFrota.js:generic-api-key:80
+e9c6c0fb290081448c5b5bff5541b6eb03feda2a:vps/api/.env.example:generic-api-key:29

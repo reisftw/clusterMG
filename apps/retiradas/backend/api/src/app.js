@@ -5339,6 +5339,33 @@ function createApp() {
 		},
 	);
 
+	app.get(
+		"/api/estoque/onnet/accounting/status",
+		requireAuthenticated,
+		requireAnyPermission(ESTOQUE_ONNET_VIEW_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (_req, res, next) => {
+			try {
+				res.json(await operationalImports.getOnnetStockAccountingStatus());
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	app.post(
+		"/api/estoque/onnet/accounting/reconcile",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireAnyPermission(ESTOQUE_ONNET_MANAGE_PERMISSIONS, ESTOQUE_INTEGRADO_ROLES),
+		async (req, res, next) => {
+			try {
+				res.json(await operationalImports.reconcileOnnetStockAccounting({ full: Boolean(req.body?.full), user: req.user }));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	app.put(
 		"/api/estoque/onnet/:id",
 		requireAuthenticated,

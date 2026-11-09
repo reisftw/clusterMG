@@ -134,6 +134,7 @@ test("security workflow audits dependency projects and scans for secrets", () =>
 		"apps/operacao/frontend",
 		"apps/operacao/backend",
 		"npm audit",
+		"pull-requests: read",
 		"gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc",
 	]) {
 		assert.ok(
@@ -162,4 +163,19 @@ test("Retiradas workflows pin third-party actions and the production SSH host", 
 	assert.ok(deploy.includes(".github/known_hosts/retiradas"));
 	assert.ok(deploy.includes("StrictHostKeyChecking=yes"));
 	assert.ok(deploy.includes("HostKeyAlias=retiradas-production"));
+});
+
+test("secret scan runs for every protected change and baselines only exact historical findings", () => {
+	const workflow = readWorkflow("security.yml");
+	const baseline = fs.readFileSync(
+		path.join(process.cwd(), ".gitleaksignore"),
+		"utf8",
+	);
+	assert.doesNotMatch(workflow, /^\s+paths:/m);
+	assert.ok(!baseline.includes("*"));
+	const fingerprints = baseline
+		.split(/\r?\n/)
+		.filter((line) => line && !line.startsWith("#"));
+	assert.equal(fingerprints.length, 13);
+	assert.equal(new Set(fingerprints).size, fingerprints.length);
 });

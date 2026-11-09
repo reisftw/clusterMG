@@ -30,7 +30,7 @@ export default function MapsSmartSearch({
 			<Search size={19} aria-hidden="true" />
 			<input
 				aria-label="Buscar cidade, bairro, cliente ou ordem de serviço"
-				placeholder="Buscar cidade, bairro ou cliente..."
+				placeholder="O.S., cliente, endereço, bairro ou cidade..."
 				value={value}
 				onChange={(event) => onChange(event.target.value)}
 				autoComplete="off"

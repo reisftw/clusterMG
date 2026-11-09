@@ -95,6 +95,7 @@ export default function MapsPage() {
 	const [searchSuggestionsLoading, setSearchSuggestionsLoading] = useState(false);
 	const [searchSuggestionsError, setSearchSuggestionsError] = useState("");
 	const [categories, setCategories] = useState(["assigned", "opportunity"]);
+	const [filters, setFilters] = useState({ regional: "", city: "", status: "", assignment: "" });
 	const [sortMode, setSortMode] = useState("nearest");
 	const [filtersOpen, setFiltersOpen] = useState(false);
 	const [toolsOpen, setToolsOpen] = useState(false);
@@ -131,7 +132,7 @@ export default function MapsPage() {
 	const locationState = useRadarLocation(Boolean(gpsRequested || (canRadar && radarSettings?.enabled)));
 
 	const requestParams = useMemo(() => {
-		const params = { categories: categories.join(",") };
+		const params = { categories: categories.join(","), ...filters };
 		if (search.query) return { ...params, search: search.query };
 		if (gpsArea && mapQueryPosition) {
 			return {
@@ -142,7 +143,7 @@ export default function MapsPage() {
 			};
 		}
 		return { ...params, ...(viewport || {}) };
-	}, [categories, gpsArea, mapQueryPosition, radiusMeters, search, viewport]);
+	}, [categories, filters, gpsArea, mapQueryPosition, radiusMeters, search, viewport]);
 
 	const focusZoom = useMemo(() => {
 		if (radiusMeters <= 150) return 18;
@@ -554,6 +555,7 @@ export default function MapsPage() {
 		setRadiusMeters(next.radiusMeters);
 		setSortMode(next.sortMode);
 		setCategories(next.categories);
+		setFilters({ regional: next.regional || "", city: next.city || "", status: next.status || "", assignment: next.assignment || "" });
 		setFiltersOpen(false);
 	}
 
@@ -590,6 +592,7 @@ export default function MapsPage() {
 			</div>
 			<div className="maps-v2-area-status" role="status">
 				<span><Layers3 size={16} /><strong>{summary.assigned + summary.opportunities}</strong> ordens nesta área</span>
+				{Number.isFinite(Number(summary.eligibleTotal)) ? <span><strong>{summary.geolocated || 0}</strong> no mapa de <strong>{summary.eligibleTotal || 0}</strong> elegíveis</span> : null}
 				<span className={health?.ok ? "is-fresh" : "is-stale"}>{loading ? "sincronizando..." : formatSyncTime(health?.last_order_sync || lastSyncAt)}</span>
 			</div>
 
@@ -632,7 +635,7 @@ export default function MapsPage() {
 				<MapsBottomSheet items={points} summary={summary} position={sheetPosition} onPositionChange={setSheetPosition} onSelect={selectPoint} selectedId={selectedId} selectedRouteIds={selectedRouteIds} onToggleRoute={toggleRouteItem} sortMode={sortMode} onSortChange={setSortMode} />
 			</main>
 
-			{filtersOpen ? <MapsFiltersPanel open={true} radiusMeters={radiusMeters} sortMode={sortMode} categories={categories} onClose={() => setFiltersOpen(false)} onApply={applyFilters} /> : null}
+			{filtersOpen ? <MapsFiltersPanel open={true} radiusMeters={radiusMeters} sortMode={sortMode} categories={categories} filters={filters} onClose={() => setFiltersOpen(false)} onApply={applyFilters} /> : null}
 			<OrderDetailPanel item={selectedItem} loading={detailLoading} navigation={navigation} navigationLoading={navigationLoading} onClose={() => { setSelectedId(""); setNavigation(null); }} onRequest={async (orderId) => { await mapsService.requestOrder(orderId); await loadPoints(); }} onAddRoute={(orderId) => { toggleRouteItem(orderId); setRouteOpen(true); }} />
 			<RadarPanel open={radarOpen} settings={radarSettings} locationState={locationState} onClose={() => setRadarOpen(false)} onSave={saveRadarSettings} />
 			<RoutePlannerPanel open={routeOpen} points={points} selectedIds={selectedRouteIds} routes={routes} position={locationState.position} onClose={() => setRouteOpen(false)} onMove={moveRouteItem} onRemove={toggleRouteItem} onCreate={createRoute} onOptimize={optimizeRoute} />

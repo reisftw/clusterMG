@@ -89,3 +89,14 @@ export async function excluirEstoqueOnnet(id) {
 		method: "DELETE",
 	});
 }
+
+export async function obterContabilizacaoEstoqueOnnet() {
+	return requestVpsApi("/estoque/onnet/accounting/status");
+}
+
+export async function conciliarEstoqueOnnet(full = false) {
+	return requestVpsApi("/estoque/onnet/accounting/reconcile", {
+		method: "POST",
+		body: JSON.stringify({ full }),
+	});
+}

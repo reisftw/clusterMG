@@ -66,7 +66,11 @@ const MONTHORDER = [
 const DEFAULT_MATCH_IGNORED_TYPES = [];
 const IMPORT_JOB_COLLECTION = "operational_import_jobs";
 const ESTOQUE_ONNET_COLLECTION = "estoque_onnet";
+const ESTOQUE_ONNET_ACCOUNTING_CONFIG = "config/estoque_onnet_accounting";
 const importJobPromises = new Map();
+let onnetAccountingTimer = null;
+let onnetAccountingBootstrapTimer = null;
+let onnetAccountingPromise = null;
 const AGENT_CITY_EXCLUSION_KEYS = new Set(["POMPEU"]);
 
 const ONNET_MAC_PREFIX_MANUFACTURERS = {
@@ -2778,10 +2782,13 @@ function buildOnnetStockManualSnapshot(records = [], month, year) {
 		const data = record?.data || record || {};
 		const dateKey = String(data.dataEntrega || data.deliveryDate || "").slice(0, 10);
 		if (!dateKey || !isSameMonthDate(dateKey, month, year)) return;
+		if (!normalizeOnnetStockIdentifier(data.mac)) return;
+		if (!normalizeCity(data.cidade || data.city)) return;
+		const tecnico = String(data.tecnicoNome || data.tecnico || "").trim();
+		if (!tecnico) return;
 		const day = getMetaDayFromDate(dateKey);
 		const dayIndex = day - 1;
 		if (dayIndex < 0 || dayIndex >= dayCount) return;
-		const tecnico = String(data.tecnicoNome || data.tecnico || "Sem técnico").trim();
 		const currentDay = rawByDay.get(day) || {
 			dia: day,
 			equipe: 0,
@@ -2913,6 +2920,138 @@ async function refreshOnnetStockAccountingForMonth({ month, year, user = {} }) {
 	});
 	scheduleDashboardSnapshotRefresh(nowIso);
 	return { month, year, total: Number(onnet.manualStock?.total || 0), updatedAt: nowIso };
+}
+
+async function getOnnetStockAccountingMetrics(records) {
+	const rows = records || await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION);
+	const cityMap = await loadCityMap();
+	const byMonth = new Map();
+	const byRegional = new Map();
+	const ignored = { invalidDate: 0, invalidMac: 0, missingCity: 0, missingTechnician: 0 };
+	let eligible = 0;
+	for (const row of rows) {
+		const data = row?.data || row || {};
+		const date = String(data.dataEntrega || data.deliveryDate || "").slice(0, 10);
+		const mac = normalizeOnnetStockIdentifier(data.mac);
+		const city = normalizeCity(data.cidade || data.city);
+		const technician = String(data.tecnicoNome || data.tecnico || "").trim();
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) ignored.invalidDate += 1;
+		else if (!mac) ignored.invalidMac += 1;
+		else if (!city) ignored.missingCity += 1;
+		else if (!technician) ignored.missingTechnician += 1;
+		else {
+			eligible += 1;
+			const monthKey = date.slice(0, 7);
+			const regional = cityMap[normalizeCityKey(city)]?.regional || "Sem regional";
+			byMonth.set(monthKey, Number(byMonth.get(monthKey) || 0) + 1);
+			byRegional.set(regional, Number(byRegional.get(regional) || 0) + 1);
+		}
+	}
+	return {
+		totalRecords: rows.length,
+		eligible,
+		ignored,
+		byMonth: [...byMonth.entries()].map(([period, total]) => ({ period, total })).sort((a, b) => a.period.localeCompare(b.period)),
+		byRegional: [...byRegional.entries()].map(([regional, total]) => ({ regional, total })).sort((a, b) => b.total - a.total),
+	};
+}
+
+async function reconcileOnnetStockAccounting({ full = false, user = {} } = {}) {
+	if (onnetAccountingPromise) return onnetAccountingPromise;
+	onnetAccountingPromise = (async () => {
+		const lockClient = await db.connect();
+		let locked = false;
+		try {
+			const lock = await lockClient.query("select pg_try_advisory_lock(hashtext('estoque_onnet_accounting')) as locked");
+			locked = Boolean(lock.rows[0]?.locked);
+			if (!locked) return { skipped: true, reason: "already_running" };
+			const records = await documents.listAllDocuments(ESTOQUE_ONNET_COLLECTION);
+			const metrics = await getOnnetStockAccountingMetrics(records);
+			const currentDate = getLocalDateKey();
+			const periods = full
+				? metrics.byMonth.map((item) => item.period)
+				: [currentDate.slice(0, 7)];
+			const results = [];
+			for (const period of [...new Set(periods)]) {
+				const [yearText, monthText] = period.split("-");
+				const monthIndex = Number(monthText) - 1;
+				if (!MONTHORDER[monthIndex] || !Number(yearText)) continue;
+				results.push(await refreshOnnetStockAccountingForMonth({
+					month: MONTHORDER[monthIndex],
+					year: Number(yearText),
+					user,
+				}));
+			}
+			const nowIso = new Date().toISOString();
+			const previous = (await documents.getDocument(ESTOQUE_ONNET_ACCOUNTING_CONFIG).catch(() => null))?.data || {};
+			const summary = {
+				...metrics,
+				full,
+				monthsReconciled: results.length,
+				reconciledAt: nowIso,
+				reconciledDate: currentDate,
+				initializedAt: previous.initializedAt || (full ? nowIso : null),
+			};
+			await documents.upsertDocument({
+				path: ESTOQUE_ONNET_ACCOUNTING_CONFIG,
+				collectionPath: "config",
+				documentId: "estoque_onnet_accounting",
+				parentPath: null,
+				data: summary,
+			});
+			await auditLog.recordAuditLog({
+				module: "estoque_onnet",
+				entity: "metas_onnet",
+				action: full ? "historical_reconciliation" : "daily_reconciliation",
+				recordId: currentDate,
+				userId: user.uid || "system",
+				userName: user.nome || user.name || "Rotina automática",
+				userEmail: user.email || "",
+				afterData: { eligible: metrics.eligible, ignored: metrics.ignored, monthsReconciled: results.length },
+			});
+			return summary;
+		} finally {
+			if (locked) await lockClient.query("select pg_advisory_unlock(hashtext('estoque_onnet_accounting'))").catch(() => {});
+			lockClient.release();
+		}
+	})().finally(() => {
+		onnetAccountingPromise = null;
+	});
+	return onnetAccountingPromise;
+}
+
+async function getOnnetStockAccountingStatus() {
+	const stored = (await documents.getDocument(ESTOQUE_ONNET_ACCOUNTING_CONFIG).catch(() => null))?.data || null;
+	if (stored) return stored;
+	return { ...(await getOnnetStockAccountingMetrics()), initializedAt: null, reconciledAt: null, reconciledDate: null };
+}
+
+async function runOnnetStockAccountingIfDue() {
+	const status = await getOnnetStockAccountingStatus();
+	const today = getLocalDateKey();
+	if (status.reconciledDate === today) return { skipped: true, reason: "already_reconciled_today" };
+	return reconcileOnnetStockAccounting({
+		full: !status.initializedAt,
+		user: { uid: "system", role: "admin", nome: "Rotina automática" },
+	});
+}
+
+function startOnnetStockAccountingWorker() {
+	if (onnetAccountingTimer) return;
+	const run = () => runOnnetStockAccountingIfDue().catch((error) => {
+		console.error("[estoque-onnet] Falha na conciliação das metas:", error?.message || error);
+	});
+	onnetAccountingBootstrapTimer = setTimeout(run, Number(process.env.ONNET_ACCOUNTING_BOOT_DELAY_MS || 30_000));
+	onnetAccountingBootstrapTimer.unref?.();
+	onnetAccountingTimer = setInterval(run, Number(process.env.ONNET_ACCOUNTING_CHECK_INTERVAL_MS || 60 * 60 * 1000));
+	onnetAccountingTimer.unref?.();
+}
+
+function stopOnnetStockAccountingWorker() {
+	if (onnetAccountingBootstrapTimer) clearTimeout(onnetAccountingBootstrapTimer);
+	if (onnetAccountingTimer) clearInterval(onnetAccountingTimer);
+	onnetAccountingBootstrapTimer = null;
+	onnetAccountingTimer = null;
 }
 
 function normalizeDateFilter(value) {
@@ -4022,6 +4161,8 @@ module.exports = {
 	getImportJob,
 	getMatchConfig,
 	listOnnetStockRecords,
+	getOnnetStockAccountingMetrics,
+	getOnnetStockAccountingStatus,
 	markInterruptedImportJobs,
 	persistMapaImport,
 	persistMatchImport,
@@ -4031,17 +4172,21 @@ module.exports = {
 	publishAcompanhamentoUpdate,
 	repairMensageriaQueueFromOpenMap,
 	refreshDashboardSnapshot,
+	reconcileOnnetStockAccounting,
 	deleteOnnetStockRecord,
 	saveOnnetStockRecord,
 	saveMatchConfig,
 	saveMetasBaseConfig,
 	saveMetasForceTaskConfig,
 	updateOnnetStockRecord,
+	startOnnetStockAccountingWorker,
+	stopOnnetStockAccountingWorker,
 	// Exportado so pra teste (achado javascript:S3776,
 	// docs/SONARQUBE-MAP.md) — funcao pura extraida de buildOrdersFromRows.
 	buildOrderFromRow,
 	buildFineDailyGroups,
 	buildIncrementalFineSnapshot,
+	buildOnnetStockManualSnapshot,
 	buildDiarioEntryFromSaldoDay,
 	normalizeOnnetStockIdentifier,
 };
