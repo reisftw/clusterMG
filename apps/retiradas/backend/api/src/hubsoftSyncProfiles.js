@@ -24,7 +24,7 @@ const HUBSOFT_REQUEST_TIMEOUT_MS = Math.min(
 );
 const SCHEDULER_CHECK_INTERVAL_MS = 60 * 1000;
 const MAP_MATCH_RETRY_ATTEMPTS = Math.min(
-	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_RETRY_ATTEMPTS || 2), 0),
+	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_RETRY_ATTEMPTS || 0), 0),
 	5,
 );
 const MAP_MATCH_RETRY_DELAY_MS = Math.min(
@@ -42,6 +42,10 @@ const PERSIST_BATCH_SIZE = Math.min(
 const MAP_MATCH_WATCHDOG_MS = Math.min(
 	Math.max(Number(process.env.HUBSOFT_MAP_MATCH_WATCHDOG_MS || 2 * 60 * 60_000), 5 * 60_000),
 	4 * 60 * 60_000,
+);
+const SCHEDULER_FAILURE_RETRY_MINUTES = Math.min(
+	Math.max(Number(process.env.HUBSOFT_FAILURE_RETRY_MINUTES || 15), 1),
+	60,
 );
 const MAP_PHONE_ENRICH_START_DATE =
 	process.env.HUBSOFT_MAP_PHONE_ENRICH_START_DATE || "2026-01-01";
@@ -3190,6 +3194,39 @@ function lastRunFor(rawConfig, profile) {
 	return null;
 }
 
+function lastAttemptFor(rawConfig, profile) {
+	if (profile === PROFILE.MAPA) return rawConfig.autoMapLastAttemptAt;
+	if (profile === PROFILE.MATCH) return rawConfig.autoMatchLastAttemptAt;
+	return null;
+}
+
+function schedulerProfileDue({
+	lastSuccessAt,
+	lastAttemptAt,
+	successIntervalMinutes,
+	retryIntervalMinutes = SCHEDULER_FAILURE_RETRY_MINUTES,
+}) {
+	return (
+		minutesSince(lastSuccessAt) >= successIntervalMinutes &&
+		minutesSince(lastAttemptAt) >= retryIntervalMinutes
+	);
+}
+
+function standaloneStoreDue({
+	storeAttemptedThisTick,
+	timeDue,
+	lastRunDate,
+	currentDate,
+	lastAttemptAt,
+}) {
+	return (
+		!storeAttemptedThisTick &&
+		timeDue &&
+		lastRunDate !== currentDate &&
+		minutesSince(lastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES
+	);
+}
+
 async function runProfileSafely(profile, options = {}) {
 	try {
 		return await runProfile(
@@ -3261,12 +3298,16 @@ async function runMapMatchScheduler(rawConfig, config) {
 		mapMatchSchedulerStartedAt = 0;
 	}
 
-	const mapDue =
-		minutesSince(lastRunFor(rawConfig, PROFILE.MAPA)) >=
-		config.autoMapMatchIntervalMinutes;
-	const matchDue =
-		minutesSince(lastRunFor(rawConfig, PROFILE.MATCH)) >=
-		config.autoMapMatchIntervalMinutes;
+	const mapDue = schedulerProfileDue({
+		lastSuccessAt: lastRunFor(rawConfig, PROFILE.MAPA),
+		lastAttemptAt: lastAttemptFor(rawConfig, PROFILE.MAPA),
+		successIntervalMinutes: config.autoMapMatchIntervalMinutes,
+	});
+	const matchDue = schedulerProfileDue({
+		lastSuccessAt: lastRunFor(rawConfig, PROFILE.MATCH),
+		lastAttemptAt: lastAttemptFor(rawConfig, PROFILE.MATCH),
+		successIntervalMinutes: config.autoMapMatchIntervalMinutes,
+	});
 
 	if (!mapDue && !matchDue) return [];
 
@@ -3280,6 +3321,7 @@ async function runMapMatchScheduler(rawConfig, config) {
 				: null;
 			if (mapDue) {
 				results.push({ profile: PROFILE.MAPA, result: mapResult });
+				await saveSchedulerState({ autoMapLastAttemptAt: new Date().toISOString() });
 				if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(mapResult?.status)) {
 					await saveSchedulerState({
 						autoMapLastRunAt: mapResult.started_at || new Date().toISOString(),
@@ -3292,6 +3334,7 @@ async function runMapMatchScheduler(rawConfig, config) {
 				: null;
 			if (matchDue) {
 				results.push({ profile: PROFILE.MATCH, result: matchResult });
+				await saveSchedulerState({ autoMatchLastAttemptAt: new Date().toISOString() });
 				if ([RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(matchResult?.status)) {
 					await saveSchedulerState({
 						autoMatchLastRunAt: matchResult.started_at || new Date().toISOString(),
@@ -3339,9 +3382,12 @@ async function runSchedulerTick() {
 	const succeeded = (run) => [RUN_STATUS.COMPLETE, RUN_STATUS.VALID_EMPTY_RESULT].includes(run?.status);
 	const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
 	const checkpointDue = config.autoDailyCheckpointHours.includes(now.hour) && rawConfig.autoDailyLastCheckpointKey !== checkpointKey;
+	const dailyAttemptDue = minutesSince(rawConfig.autoDailyLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES;
+	let storeAttemptedThisTick = false;
 
 	if (
 		config.autoDailyEnabled &&
+		dailyAttemptDue &&
 		(minutesSince(rawConfig.autoDailyLastRunAt) >= config.autoDailyIntervalMinutes || checkpointDue)
 	) {
 		const dailyResult = await runProfileSafely(PROFILE.META_D0, { date: now.date });
@@ -3350,10 +3396,12 @@ async function runSchedulerTick() {
 			result: dailyResult,
 		});
 		const storeResult = await runProfileSafely(PROFILE.LOJA, { date: now.date });
+		storeAttemptedThisTick = true;
 		results.push({
 			profile: PROFILE.LOJA,
 			result: storeResult,
 		});
+		await saveSchedulerState({ autoDailyLastAttemptAt: new Date().toISOString() });
 		const patch = { autoDailyLastRunAt: new Date().toISOString() };
 		if (config.autoDailyCheckpointHours.includes(now.hour)) {
 			const checkpointKey = `${now.date}-${String(now.hour).padStart(2, "0")}`;
@@ -3368,7 +3416,8 @@ async function runSchedulerTick() {
 	if (
 		config.autoMetaEnabled &&
 		isTimeDue(now.time, config.autoMetaTime) &&
-		rawConfig.autoMetaLastRunDate !== now.date
+		rawConfig.autoMetaLastRunDate !== now.date &&
+		minutesSince(rawConfig.autoMetaLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES
 	) {
 		results.push({
 			profile: PROFILE.META_D_MINUS_ONE,
@@ -3376,33 +3425,49 @@ async function runSchedulerTick() {
 				date: addDays(now.date, -1),
 			}),
 		});
+		const attemptedAt = new Date().toISOString();
+		await saveSchedulerState({ autoMetaLastAttemptAt: attemptedAt });
 		if (succeeded(results[results.length - 1].result)) await saveSchedulerState({
 			autoMetaLastRunDate: now.date,
-			autoMetaLastRunAt: new Date().toISOString(),
+			autoMetaLastRunAt: attemptedAt,
 		});
 	}
 
-	if (config.autoMetaEnabled && isTimeDue(now.time, config.autoMetaTime) && rawConfig.autoStoreLastRunDate !== now.date) {
+	if (
+		config.autoMetaEnabled &&
+		standaloneStoreDue({
+			storeAttemptedThisTick,
+			timeDue: isTimeDue(now.time, config.autoMetaTime),
+			lastRunDate: rawConfig.autoStoreLastRunDate,
+			currentDate: now.date,
+			lastAttemptAt: rawConfig.autoStoreLastAttemptAt,
+		})
+	) {
 		const result = await runProfileSafely(PROFILE.LOJA, { date: now.date });
 		results.push({ profile: PROFILE.LOJA, result });
-		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: new Date().toISOString() });
+		const attemptedAt = new Date().toISOString();
+		await saveSchedulerState({ autoStoreLastAttemptAt: attemptedAt });
+		if (succeeded(result)) await saveSchedulerState({ autoStoreLastRunDate: now.date, autoStoreLastRunAt: attemptedAt });
 	}
 
 	if (
 		config.autoSyncEnabled &&
 		config.autoFinesEnabled &&
 		minutesSince(rawConfig.autoFinesLastRunAt) >=
-			config.autoFinesIntervalMinutes
+			config.autoFinesIntervalMinutes &&
+		minutesSince(rawConfig.autoFinesLastAttemptAt) >= SCHEDULER_FAILURE_RETRY_MINUTES
 	) {
 		const result = await runProfileSafely(
 			PROFILE.MULTAS,
 			finesSchedulerOptions(now.date),
 		);
 		results.push({ profile: PROFILE.MULTAS, result });
+		const attemptedAt = new Date().toISOString();
+		await saveSchedulerState({ autoFinesLastAttemptAt: attemptedAt });
 		if (succeeded(result)) {
 			await saveSchedulerState({
 				autoFinesLastRunDate: now.date,
-				autoFinesLastRunAt: new Date().toISOString(),
+				autoFinesLastRunAt: attemptedAt,
 			});
 		}
 	}
@@ -3589,6 +3654,8 @@ module.exports = {
 		finesSchedulerOptions,
 		mapMatchRetryDelay,
 		normalizeAutomationConfig,
+		schedulerProfileDue,
+		standaloneStoreDue,
 		shouldRetryMapMatchRun,
 	},
 };

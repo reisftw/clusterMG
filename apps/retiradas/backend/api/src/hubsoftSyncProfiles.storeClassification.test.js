@@ -35,3 +35,44 @@ test("mantem entrega de cidade sem AA apenas como loja", () => {
 	assert.equal(classification.production_channel, "LOJA");
 	assert.equal(classification.production_owner_name, null);
 });
+
+test("aguarda o backoff depois de uma falha sem atrasar a proxima janela normal", () => {
+	const now = Date.now();
+	const minutesAgo = (minutes) => new Date(now - minutes * 60_000).toISOString();
+
+	assert.equal(__testables.schedulerProfileDue({
+		lastSuccessAt: minutesAgo(120),
+		lastAttemptAt: minutesAgo(2),
+		successIntervalMinutes: 60,
+		retryIntervalMinutes: 15,
+	}), false);
+	assert.equal(__testables.schedulerProfileDue({
+		lastSuccessAt: minutesAgo(120),
+		lastAttemptAt: minutesAgo(16),
+		successIntervalMinutes: 60,
+		retryIntervalMinutes: 15,
+	}), true);
+	assert.equal(__testables.schedulerProfileDue({
+		lastSuccessAt: minutesAgo(30),
+		lastAttemptAt: minutesAgo(30),
+		successIntervalMinutes: 60,
+		retryIntervalMinutes: 15,
+	}), false);
+});
+
+test("nao executa LOJA duas vezes quando a rotina diaria ja a executou no mesmo ciclo", () => {
+	assert.equal(__testables.standaloneStoreDue({
+		storeAttemptedThisTick: true,
+		timeDue: true,
+		lastRunDate: null,
+		currentDate: "2026-11-08",
+		lastAttemptAt: null,
+	}), false);
+	assert.equal(__testables.standaloneStoreDue({
+		storeAttemptedThisTick: false,
+		timeDue: true,
+		lastRunDate: null,
+		currentDate: "2026-11-08",
+		lastAttemptAt: null,
+	}), true);
+});
