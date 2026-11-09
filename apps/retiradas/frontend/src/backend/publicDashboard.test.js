@@ -354,7 +354,7 @@ describe("publicDashboard", () => {
 		vi.advanceTimersByTime(61_000);
 		const fallback = await publicDashboard.getCachedPublicDashboard();
 
-		expect(fallback.cacheStatus).toBe("STALE");
+		expect(fallback.cacheStatus).toBe("STALE_REFRESH");
 		expect(fallback.data).toBe(initial.data);
 	});
 });
