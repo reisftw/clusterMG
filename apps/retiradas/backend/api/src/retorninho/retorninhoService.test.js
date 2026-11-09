@@ -73,3 +73,15 @@ test("reutiliza a Evolution protegida da Mensageria sem duplicar a chave", async
 	assert.equal(config.evolutionInstance, "retorninho-ia");
 	assert.equal(config.configurationSource, "mensageria");
 });
+
+test("monta boas-vindas personalizadas com as funções disponíveis", () => {
+	const morning = service._test.welcomeMessage("Rodrigo Reis", 9);
+	const afternoon = service._test.welcomeMessage("Rodrigo Reis", 14);
+	const evening = service._test.welcomeMessage("Rodrigo Reis", 20);
+
+	assert.match(morning, /^Bom dia, Rodrigo!/);
+	assert.match(afternoon, /^Boa tarde, Rodrigo!/);
+	assert.match(evening, /^Boa noite, Rodrigo!/);
+	assert.match(morning, /1\. Consultar O\.S\. ou cliente/);
+	assert.match(morning, /6\. Consultar equipamento ou procedimento/);
+});
