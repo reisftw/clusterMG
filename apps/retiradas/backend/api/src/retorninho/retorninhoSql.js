@@ -1,9 +1,9 @@
 const LIST_PROTOCOLS_SQL = `select count(*) over() total_count,p.*,
-	 requester.display_name requester_name,target.display_name target_name,current_user.display_name current_name
+	 requester.display_name requester_name,target.display_name target_name,assigned_user.display_name current_name
 	 from retorninho_protocols p
 	 left join app_users requester on requester.uid=p.requester_user_uid
 	 left join app_users target on target.uid=p.target_user_uid
-	 left join app_users current_user on current_user.uid=p.current_user_uid
+	 left join app_users assigned_user on assigned_user.uid=p.current_user_uid
 	 where ($1::text='' or p.status=$1::text)
 	 and ($2::text='' or p.type=$2::text)
 	 and ($3::text='' or p.protocol_number ilike $4::text or coalesce(p.service_order_number,'') ilike $4::text)
