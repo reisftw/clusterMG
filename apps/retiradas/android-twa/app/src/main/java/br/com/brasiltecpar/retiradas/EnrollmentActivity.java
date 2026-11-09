@@ -30,6 +30,11 @@ public class EnrollmentActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Uri data = getIntent().getData();
+        if (data != null && "stop-location".equals(data.getHost())) {
+            LocationTrackingService.stop(this);
+            finishIntoApp(false, "Localizacao em tempo real desativada.");
+            return;
+        }
         enrollmentCode = data == null ? "" : String.valueOf(data.getQueryParameter("code"));
         String requestedVersion = data == null ? "" : data.getQueryParameter("version");
         if (requestedVersion != null && !requestedVersion.isEmpty()) appVersion = requestedVersion;
@@ -117,7 +122,7 @@ public class EnrollmentActivity extends Activity {
     private void finishIntoApp(boolean enrolled, String message) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
         Uri target = Uri.parse("https://retiradas.tech/app?source=android&appVersion=" + BuildConfig.VERSION_NAME
-                + "&appCode=" + BuildConfig.VERSION_CODE + (enrolled ? "&nativeEnrolled=1" : ""));
+                + "&appCode=" + BuildConfig.VERSION_CODE + "&nativeEnrolled=" + (enrolled ? "1" : "0"));
         startActivity(new Intent(Intent.ACTION_VIEW, target).setPackage(getPackageName()));
         finish();
     }

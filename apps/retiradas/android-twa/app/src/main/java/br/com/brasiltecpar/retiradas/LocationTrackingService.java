@@ -44,6 +44,11 @@ public class LocationTrackingService extends Service implements LocationListener
         else context.startService(intent);
     }
 
+    static void stop(Context context) {
+        context.stopService(new Intent(context, LocationTrackingService.class));
+        SecureTokenStore.clear(context);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();

@@ -35,6 +35,7 @@ vi.mock("../../../services/vpsApiClient", () => ({
 describe("MobileAppSetupPage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		window.localStorage.clear();
 		mocks.user.role = "tecnico";
 		mocks.getSupport.mockResolvedValue({
 			supported: true,
@@ -86,6 +87,18 @@ describe("MobileAppSetupPage", () => {
 		expect(mocks.bind).toHaveBeenCalledTimes(1);
 		expect(mocks.sync).toHaveBeenCalledTimes(1);
 		expect(await screen.findByRole("button", { name: "Notificacoes ativadas" })).toBeDisabled();
+	});
+
+	it("permite desativar a localizacao nativa quando o rastreamento esta ativo", async () => {
+		window.localStorage.setItem("retiradas-native-location-enrolled-v1", "1");
+		render(<MemoryRouter><MobileAppSetupPage /></MemoryRouter>);
+
+		const stopButton = await screen.findByRole("button", { name: "Desativar localizacao" });
+		expect(stopButton).toBeInTheDocument();
+
+		fireEvent.click(stopButton);
+
+		expect(window.localStorage.getItem("retiradas-native-location-enrolled-v1")).toBeNull();
 	});
 
 	it("explica que conta administrativa nao envia localizacao", async () => {

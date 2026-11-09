@@ -40,8 +40,8 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(assetLinks[0].target.sha256_cert_fingerprints).toContain(
 			manifest.fingerprints[0].value,
 		);
-		expect(manifest.appVersionName).toBe("1.0.5");
-		expect(manifest.appVersionCode).toBe(105);
+		expect(manifest.appVersionName).toBe("1.0.6");
+		expect(manifest.appVersionCode).toBe(106);
 	});
 
 	it("inclui rastreamento nativo seguro e atualizacao obrigatoria", () => {

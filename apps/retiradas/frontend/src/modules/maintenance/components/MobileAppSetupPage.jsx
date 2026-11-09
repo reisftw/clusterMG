@@ -6,6 +6,7 @@ import {
 	Loader2,
 	LocateFixed,
 	MapPinned,
+	Power,
 	ShieldCheck,
 	Smartphone,
 } from "lucide-react";
@@ -55,11 +56,15 @@ export default function MobileAppSetupPage() {
 	const [locationBusy, setLocationBusy] = useState(false);
 	const [pushError, setPushError] = useState("");
 	const [locationError, setLocationError] = useState("");
-	const [locationEnrolled] = useState(() => {
+	const [locationEnrolled, setLocationEnrolled] = useState(() => {
 		const params = new URLSearchParams(window.location.search);
 		if (params.get("nativeEnrolled") === "1") {
 			window.localStorage.setItem(ENROLLED_KEY, "1");
 			return true;
+		}
+		if (params.get("nativeEnrolled") === "0") {
+			window.localStorage.removeItem(ENROLLED_KEY);
+			return false;
 		}
 		return window.localStorage.getItem(ENROLLED_KEY) === "1";
 	});
@@ -143,6 +148,14 @@ export default function MobileAppSetupPage() {
 		}
 	}
 
+	function stopLocation() {
+		setLocationBusy(true);
+		setLocationError("");
+		setLocationEnrolled(false);
+		window.localStorage.removeItem(ENROLLED_KEY);
+		window.location.href = "retiradas://stop-location";
+	}
+
 	const pushActive = pushState?.subscribed === true;
 	const pushBlocked = pushState?.permission === "denied";
 
@@ -208,15 +221,27 @@ export default function MobileAppSetupPage() {
 					</p>
 					{locationError ? <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{locationError}</p> : null}
 					{isTechnician ? (
-						<button
-							type="button"
-							onClick={activateLocation}
-							disabled={locationBusy || !isAndroid}
-							className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-						>
-							{locationBusy ? <Loader2 className="animate-spin" size={18} /> : <LocateFixed size={18} />}
-							{locationBusy ? "Ativando..." : locationEnrolled ? "Configurar novamente" : "Autorizar localizacao"}
-						</button>
+						<div className="mt-5 grid gap-2">
+							<button
+								type="button"
+								onClick={activateLocation}
+								disabled={locationBusy || !isAndroid}
+								className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+							>
+								{locationBusy ? <Loader2 className="animate-spin" size={18} /> : <LocateFixed size={18} />}
+								{locationBusy ? "Ativando..." : locationEnrolled ? "Configurar novamente" : "Autorizar localizacao"}
+							</button>
+							{locationEnrolled ? (
+								<button
+									type="button"
+									onClick={stopLocation}
+									disabled={locationBusy || !isAndroid}
+									className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 font-bold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									<Power size={18} /> Desativar localizacao
+								</button>
+							) : null}
+						</div>
 					) : (
 						<div className="mt-5 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-800">
 							<ShieldCheck className="mt-0.5 shrink-0" size={18} /> Nenhuma localizacao sera coletada desta conta.
