@@ -1,4 +1,4 @@
-const SW_VERSION = "v32-revo";
+const SW_VERSION = "v33-saldo-mensal";
 const CACHE_NAME = `retiradas-pwa-${SW_VERSION}`;
 const APP_SHELL = [
 	"/manifest.webmanifest",

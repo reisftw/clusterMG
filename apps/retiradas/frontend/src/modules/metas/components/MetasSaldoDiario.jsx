@@ -21,7 +21,7 @@ const Badge = ({ v }) => {
 };
 
 const MetasSaldoDiario = ({ dados, feriadosSet = new Set() }) => {
-	const { metaDiaria, saldoDiario: sd } = useMemo(
+	const { metaDiaria, saldoDiario: sd, saldoFinal } = useMemo(
 		() => recalcularSaldoDiario(dados, feriadosSet),
 		[dados, feriadosSet],
 	);
@@ -40,7 +40,7 @@ const MetasSaldoDiario = ({ dados, feriadosSet = new Set() }) => {
 	const totRegionais = sd.reduce((s, x) => s + x.regionais, 0);
 	const totDia = sd.reduce((s, x) => s + x.totalDia, 0);
 	const totMeta = sd.reduce((s, x) => s + x.metaDia, 0);
-	const lastSaldo = sd[sd.length - 1]?.saldoMes ?? 0;
+	const lastSaldo = saldoFinal;
 
 	return (
 		<div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

@@ -49,4 +49,31 @@ describe("recalcularSaldoDiario", () => {
 		).toBe(20);
 		expect(resultado.saldoDiario.at(-1)?.totalDia).toBe(10);
 	});
+
+	it("usa toda a entrega mensal e conta producao de fim de semana", () => {
+		const resultado = recalcularSaldoDiario(
+			{
+				mes: "Novembro",
+				meta: 2602,
+				totalOS: 691,
+				saldoDiario: [
+					{ dia: 3, totalDia: 110 },
+					{ dia: 4, totalDia: 105 },
+					{ dia: 5, totalDia: 100 },
+					{ dia: 6, totalDia: 95 },
+					{ dia: 7, totalDia: 40 },
+					{ dia: 9, totalDia: 100 },
+					{ dia: 10, totalDia: 101 },
+				],
+			},
+			new Set(),
+			2026,
+		);
+
+		expect(resultado.saldoDiario.find((row) => row.dia === 7)?.metaDia).toBe(0);
+		expect(
+			resultado.saldoDiario.reduce((total, row) => total + row.totalDia, 0),
+		).toBe(691);
+		expect(resultado.saldoFinal).toBe(-91);
+	});
 });

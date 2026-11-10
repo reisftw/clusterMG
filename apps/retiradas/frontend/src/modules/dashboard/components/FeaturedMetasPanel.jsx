@@ -106,7 +106,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 	const metaStats = useMemo(() => {
 		if (!temDadosOperacionais(metaMesFonte)) return null;
 
-		const { metaDiaria, diasUteis, saldoDiario } = recalcularSaldoDiario(
+		const { metaDiaria, diasUteis, saldoFinal } = recalcularSaldoDiario(
 			metaMesFonte,
 			feriadosSet,
 		);
@@ -121,7 +121,7 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 			: cancellationPerformance.deliveredPercent;
 		const percentVisual = Math.min(100, Math.max(0, percent));
 		const falta = Math.max(0, meta - total);
-		const saldoMesAtual = saldoDiario.at(-1)?.saldoMes ?? 0;
+		const saldoMesAtual = saldoFinal;
 
 		return {
 			meta,

@@ -390,6 +390,15 @@ function isAvailableTechnician(value) {
 	return AVAILABLE_TECHNICIANS.has(normalize(value));
 }
 
+function requestAlreadyEffected(current, snapshot = {}) {
+	const targetTechnician = text(snapshot.technicianHubsoftName);
+	return Boolean(
+		current?.status === "EFFECTUATION_FAILED" &&
+			targetTechnician &&
+			normalize(current?.tecnico) === normalize(targetTechnician),
+	);
+}
+
 function categoryForOrder(row, user) {
 	if (
 		row.open_request_status === "EFFECTED" &&
@@ -1015,13 +1024,40 @@ async function resolveRequest(requestId, payload = {}, user = {}, action) {
 		if (!current.order_id) {
 			throw apiError("A O.S. nao esta mais aberta no Maps.", 409, "ORDER_CHANGED");
 		}
+		const snapshot = current.source_snapshot && typeof current.source_snapshot === "object"
+			? current.source_snapshot
+			: {};
+		if (approve && ["APPROVED", "PENDING_EFFECTUATION", "EFFECTED"].includes(current.status)) {
+			await client.query("commit");
+			client.release();
+			client = null;
+			return { item: current, effectedAtSource: current.status === "EFFECTED" };
+		}
 		const retrying = current.status === "EFFECTUATION_FAILED";
 		if (current.status !== "PENDING" && !(approve && retrying)) {
 			throw apiError("Esta solicitacao ja foi analisada.", 409);
 		}
-		const snapshot = current.source_snapshot && typeof current.source_snapshot === "object"
-			? current.source_snapshot
-			: {};
+		if (approve && requestAlreadyEffected(current, snapshot)) {
+			updated = await client.query(
+				`update maps_assignment_requests
+				    set status = 'EFFECTED',
+				        resolution_note = 'O.S. ja atribuida ao tecnico no HubSoft.',
+				        updated_at = now()
+				  where id = $1
+				  returning *`,
+				[current.id],
+			);
+			await client.query("commit");
+			client.release();
+			client = null;
+			broadcastMapsUpdate("REQUEST_EFFECTED", {
+				requestId: current.id,
+				orderId: current.order_id,
+				requesterUserId: current.requester_user_id,
+				status: "EFFECTED",
+			});
+			return { item: updated.rows[0], effectedAtSource: true };
+		}
 		const previousTechnician = text(snapshot.previousTechnician);
 		const technicianUnchanged = Object.prototype.hasOwnProperty.call(snapshot, "previousTechnician")
 			? normalize(current.tecnico) === normalize(previousTechnician)
@@ -2771,6 +2807,7 @@ module.exports = {
 		firstAndLastName,
 		haversineMeters,
 		isAvailableTechnician,
+		requestAlreadyEffected,
 		mapPoint,
 		normalizeAdminPresentationSettings,
 		normalize,
