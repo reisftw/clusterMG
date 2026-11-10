@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recalcularSaldoDiario } from "./metasSaldo";
 
 describe("recalcularSaldoDiario", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(2026, 10, 10, 12));
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("reconcilia a serie diaria defasada com o total oficial", () => {
 		const resultado = recalcularSaldoDiario(
 			{
@@ -74,6 +83,21 @@ describe("recalcularSaldoDiario", () => {
 		expect(
 			resultado.saldoDiario.reduce((total, row) => total + row.totalDia, 0),
 		).toBe(691);
-		expect(resultado.saldoFinal).toBe(-91);
+		expect(resultado.saldoFinal).toBe(-90);
+	});
+
+	it("calcula o saldo pelo total mensal mesmo sem serie diaria", () => {
+		const resultado = recalcularSaldoDiario(
+			{
+				mes: "Novembro",
+				meta: 1903,
+				totalOS: 521,
+				saldoDiario: [],
+			},
+			new Set(),
+			2026,
+		);
+
+		expect(resultado.saldoFinal).toBe(-50);
 	});
 });
