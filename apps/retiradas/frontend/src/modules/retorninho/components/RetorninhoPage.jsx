@@ -329,6 +329,17 @@ export default function RetorninhoPage() {
 		catch (error) { setFeedback({ type: "error", text: error.message }); }
 	}
 
+	async function openProtocolReprocess(item) {
+		setSaving(true);
+		setFeedback(null);
+		try {
+			const result = await retorninhoApi.technicians();
+			setModal({ type: "reprocessProtocol", item, technicians: result.items || [] });
+		} catch (error) {
+			setFeedback({ type: "error", text: error.message || "Não foi possível carregar os técnicos." });
+		} finally { setSaving(false); }
+	}
+
 	async function downloadEvents(category) {
 		try {
 			const result = await retorninhoApi.exportEvents(category, { limit: 1000 });
@@ -377,7 +388,7 @@ export default function RetorninhoPage() {
 				{tab === "users" && <UsersSection data={pageData} search={search} setSearch={setSearch} page={page} setPage={setPage} canManage={canManage} saving={saving} openModal={setModal} run={run} />}
 				{tab === "knowledge" && <KnowledgeSection data={pageData} search={search} setSearch={setSearch} page={page} setPage={setPage} canManage={canManage} openModal={setModal} />}
 				{tab === "conversations" && <ConversationsSection data={pageData} search={search} setSearch={setSearch} page={page} setPage={setPage} selected={selectedConversation} messages={messages} onSelect={openConversation} canManage={canManage} run={run} />}
-				{["orders", "protocols"].includes(tab) && <ProtocolsSection data={pageData} search={search} setSearch={setSearch} status={status} setStatus={setStatus} page={page} setPage={setPage} title={tab === "orders" ? "Ordens e atribuições" : "Protocolos e histórico"} />}
+				{["orders", "protocols"].includes(tab) && <ProtocolsSection data={pageData} search={search} setSearch={setSearch} status={status} setStatus={setStatus} page={page} setPage={setPage} title={tab === "orders" ? "Ordens e atribuições" : "Protocolos e histórico"} canReprocess={canReprocess && tab === "orders"} onReprocess={openProtocolReprocess} />}
 				{tab === "technical" && <><EventsSection data={pageData} search={search} setSearch={setSearch} status={status} setStatus={setStatus} page={page} setPage={setPage} title="Logs técnicos" onExport={() => downloadEvents("TECHNICAL")} /><QueueSection data={queueData} status={status} setStatus={setStatus} page={page} setPage={setPage} canReprocess={canReprocess} run={run} /></>}
 				{["operational", "audit"].includes(tab) && <EventsSection data={pageData} search={search} setSearch={setSearch} status={status} setStatus={setStatus} page={page} setPage={setPage} title={tab === "operational" ? "Tentativas operacionais" : "Auditoria"} onExport={() => downloadEvents(tab === "operational" ? "OPERATIONAL" : "AUDIT")} />}
 				{loading && dashboard && <div className="flex justify-center py-4"><Loader2 className="animate-spin text-blue-600" /></div>}
@@ -386,6 +397,7 @@ export default function RetorninhoPage() {
 
 		{modal?.type === "authorize" && <AuthorizeModal item={modal.item} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => run(() => retorninhoApi.authorizeUser(payload), "Técnico autorizado.")} />}
 		{modal?.type === "knowledge" && <KnowledgeModal item={modal.item} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => run(() => retorninhoApi.saveKnowledge(modal.item?.id, payload), "Artigo salvo.")} />}
+		{modal?.type === "reprocessProtocol" && <ReprocessProtocolModal item={modal.item} technicians={modal.technicians} saving={saving} onClose={() => setModal(null)} onSubmit={(payload) => run(() => retorninhoApi.reprocessProtocol(modal.item.id, payload), "Protocolo devolvido para processamento.")} />}
 	</div>
 	);
 }
@@ -418,8 +430,15 @@ function ConversationsSection({ data, search, setSearch, setPage, selected, mess
 	return <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]"><Section title="Conversas" actions={<SearchBar search={search} setSearch={setSearch} status="" setStatus={() => {}} />}><div className="space-y-2">{data.items.map((item) => <button key={item.id} type="button" className={`w-full rounded-md border p-3 text-left ${selected?.id === item.id ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`} onClick={() => onSelect(item)}><div className="flex justify-between gap-2"><strong>{item.user_name || item.email}</strong><StatusBadge value={item.status} /></div><p className="mt-1 line-clamp-2 text-sm text-slate-600">{item.last_message || "Sem mensagens"}</p><span className="mt-2 block text-xs text-slate-400">{formatDate(item.last_message_at)}</span></button>)}{!data.items.length && <p className="py-10 text-center text-sm font-semibold text-slate-500">Nenhuma conversa encontrada.</p>}</div><Pager pagination={data.pagination} onPage={setPage} /></Section><Section title={selected ? selected.user_name || selected.email : "Mensagens"} actions={actions}><div className="max-h-[620px] space-y-2 overflow-y-auto">{messages.items.map((item) => <div key={item.id} className={`rounded-md p-3 text-sm ${item.direction === "OUTBOUND" ? "ml-6 bg-blue-600 text-white" : "mr-6 bg-slate-100 text-slate-800"}`}><p>{item.body || `[${item.message_type}]`}</p><span className={`mt-2 block text-xs ${item.direction === "OUTBOUND" ? "text-blue-100" : "text-slate-400"}`}>{formatDate(item.created_at)} · {item.status}</span></div>)}{!selected && <p className="py-10 text-center text-sm font-semibold text-slate-500">Selecione uma conversa.</p>}</div></Section></div>;
 }
 
-function ProtocolsSection({ data, search, setSearch, status, setStatus, setPage, title }) {
-	return <Section title={title} actions={<SearchBar search={search} setSearch={setSearch} status={status} setStatus={setStatus} statuses={["CREATED", "VALIDATING", "WAITING_TECHNICIAN", "PROCESSING", "COMPLETED", "FAILED", "EXPIRED"]} />}><Table headers={["Protocolo", "Tipo", "O.S.", "Solicitante", "Destino", "Status", "Criado"]} empty={!data.items.length}>{data.items.map((item) => <tr key={item.id}><td className="px-3 py-3 font-black text-blue-700">{item.protocol_number}</td><td className="px-3 py-3">{item.type}</td><td className="px-3 py-3">{item.service_order_number || "-"}</td><td className="px-3 py-3">{item.requester_name || "-"}</td><td className="px-3 py-3">{item.target_name || item.current_name || "-"}</td><td className="px-3 py-3"><StatusBadge value={item.status} /></td><td className="px-3 py-3">{formatDate(item.created_at)}</td></tr>)}</Table><Pager pagination={data.pagination} onPage={setPage} /></Section>;
+function ProtocolsSection({ data, search, setSearch, status, setStatus, setPage, title, canReprocess = false, onReprocess }) {
+	const headers = ["Protocolo", "Tipo", "O.S.", "Solicitante", "Destino", "Status", "Criado", ...(canReprocess ? ["Ações"] : [])];
+	return <Section title={title} actions={<SearchBar search={search} setSearch={setSearch} status={status} setStatus={setStatus} statuses={["CREATED", "VALIDATING", "WAITING_TECHNICIAN", "PROCESSING", "COMPLETED", "FAILED", "EXPIRED"]} />}><Table headers={headers} empty={!data.items.length}>{data.items.map((item) => <tr key={item.id}><td className="px-3 py-3 font-black text-blue-700">{item.protocol_number}</td><td className="px-3 py-3">{item.type}</td><td className="px-3 py-3">{item.service_order_number || "-"}</td><td className="px-3 py-3">{item.requester_name || "-"}</td><td className="px-3 py-3">{item.target_name || item.current_name || "-"}</td><td className="px-3 py-3"><StatusBadge value={item.status} /></td><td className="px-3 py-3">{formatDate(item.created_at)}</td>{canReprocess && <td className="px-3 py-3"><button type="button" className={SECONDARY} disabled={item.status !== "FAILED"} onClick={() => onReprocess(item)}><ListRestart size={16} />Direcionar e reprocessar</button></td>}</tr>)}</Table><Pager pagination={data.pagination} onPage={setPage} /></Section>;
+}
+
+function ReprocessProtocolModal({ item, technicians, saving, onClose, onSubmit }) {
+	const [technicianId, setTechnicianId] = useState("");
+	const selected = technicians.find((technician) => String(technician.id) === technicianId);
+	return <Modal title={`Reprocessar ${item.protocol_number}`} onClose={onClose}><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (selected) onSubmit({ technicianHubsoftId: selected.id, technicianHubsoftName: selected.name }); }}><div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"><strong className="block text-slate-900">O.S. {item.service_order_number}</strong><span className="text-slate-500">Escolha o técnico que receberá a ordem antes de reprocessar.</span></div><label className="space-y-1 text-sm font-bold">Técnico HubSoft<select className={INPUT} value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} required><option value="">Selecione o técnico</option>{technicians.map((technician) => <option key={technician.id} value={technician.id}>{technician.displayName || technician.name}</option>)}</select></label><div className="flex justify-end gap-2"><button type="button" className={SECONDARY} onClick={onClose}>Cancelar</button><button type="submit" className={PRIMARY} disabled={saving || !selected}>{saving && <Loader2 className="animate-spin" size={16} />}Reprocessar</button></div></form></Modal>;
 }
 
 function QueueSection({ data, status, setStatus, setPage, canReprocess, run }) {

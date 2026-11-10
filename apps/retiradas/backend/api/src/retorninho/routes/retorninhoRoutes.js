@@ -82,6 +82,12 @@ function createRetorninhoRouter({ requireAnyPermission, requireAuthenticated, re
 	router.get("/protocols", readLimiter, requireView, async (req, res, next) => {
 		try { res.json(await service.listProtocols(req.query || {})); } catch (error) { next(error); }
 	});
+	router.get("/technicians", readLimiter, requireReprocess, async (req, res, next) => {
+		try { res.json(await service.listAssignableTechnicians(req.user || {})); } catch (error) { next(error); }
+	});
+	router.post("/protocols/:id/reprocess", writeLimiter, requireCsrfToken, requireReprocess, async (req, res, next) => {
+		try { res.json(await service.reprocessProtocol(req.params.id, req.body || {}, req.user || {})); } catch (error) { next(error); }
+	});
 	router.get("/queue", readLimiter, requireAudit, async (req, res, next) => {
 		try { res.json(await service.listQueue(req.query || {})); } catch (error) { next(error); }
 	});
