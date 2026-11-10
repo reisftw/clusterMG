@@ -109,3 +109,19 @@ test("resolve as opções numeradas do menu sem depender da IA externa", () => {
 		{ city: "Uberlândia" },
 	);
 });
+
+test("preserva o técnico HubSoft vinculado no processamento do protocolo", () => {
+	assert.deepEqual(service._test.protocolTechnicianPayload({}, {
+		hubsoftTecnicoId: "240",
+		metasTecnicoNome: "RODRIGO DIVINO",
+	}), { technicianHubsoftId: 240, technicianHubsoftName: "RODRIGO DIVINO" });
+	assert.deepEqual(service._test.protocolTechnicianPayload({ metadata: {
+		targetTechnicianHubsoftId: 4508,
+		targetTechnicianHubsoftName: "RODRIGO REIS",
+	} }, {}), { technicianHubsoftId: 4508, technicianHubsoftName: "RODRIGO REIS" });
+});
+
+test("acrescenta a orientação do menu uma única vez em toda resposta", () => {
+	assert.equal(service._test.appendMenuHint("Tudo certo."), "Tudo certo.\n\nPara voltar ao menu inicial, digite *Menu*.");
+	assert.equal(service._test.appendMenuHint("Para voltar, digite Menu."), "Para voltar, digite Menu.");
+});

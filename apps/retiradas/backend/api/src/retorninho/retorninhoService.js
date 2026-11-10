@@ -4,6 +4,7 @@ const evolutionMessaging = require("../evolutionMessaging");
 const whatsappCloudService = require("../whatsappCloud/whatsappCloudService");
 const mapsService = require("../mapsV2/mapsV2Service");
 const rolePermissions = require("../rolePermissions");
+const serviceOrderRequestsService = require("../serviceOrders/requests/serviceOrderRequestsService");
 const usersRepository = require("../usersRepository");
 const ai = require("./retorninhoAi");
 const security = require("./retorninhoSecurity");
@@ -744,13 +745,20 @@ async function saveMessage(conversationId, direction, body, options = {}) {
 
 async function queueOutbound({ conversation, phone, body, correlationId, protocolId = null }) {
 	const provider = conversation.provider || "evolution";
-	const message = await saveMessage(conversation.id, "OUTBOUND", body, { correlationId, status: "QUEUED", provider });
+	const finalBody = appendMenuHint(body);
+	const message = await saveMessage(conversation.id, "OUTBOUND", finalBody, { correlationId, status: "QUEUED", provider });
 	if (!message) return null;
 	await db.query(
 		`insert into retorninho_queue (kind,dedupe_key,payload) values ('OUTBOUND',$1,$2::jsonb) on conflict (dedupe_key) do nothing`,
-		[`outbound:${message.id}`, JSON.stringify({ messageId: message.id, conversationId: conversation.id, phone, body, correlationId, protocolId, provider })],
+		[`outbound:${message.id}`, JSON.stringify({ messageId: message.id, conversationId: conversation.id, phone, body: finalBody, correlationId, protocolId, provider })],
 	);
 	return message;
+}
+
+function appendMenuHint(body) {
+	const value = text(body);
+	if (/digite\s+[*_]?menu[*_]?/i.test(value)) return value;
+	return `${value}\n\nPara voltar ao menu inicial, digite *Menu*.`;
 }
 
 async function updateConversationSession(conversationId, patch = {}) {
@@ -843,7 +851,12 @@ async function createProtocol({ type, order, context, policy, status = "CREATED"
 		 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,case when $4='WAITING_TECHNICIAN' then now()+($12::text||' minutes')::interval end,$13::jsonb)
 		 returning *`,
 		[protocolNumber, context.conversation.id, type, status, order.id, order.orderNumber, context.identity.uid,
-			currentUserUid, targetUserUid, policy, reason, String(context.config.transfer_acceptance_minutes), JSON.stringify({ clientCode: order.clientCode, currentTechnician: order.technician })],
+			currentUserUid, targetUserUid, policy, reason, String(context.config.transfer_acceptance_minutes), JSON.stringify({
+				clientCode: order.clientCode,
+				currentTechnician: order.technician,
+				targetTechnicianHubsoftId: context.user.hubsoftTecnicoId || context.user.hubsoft_tecnico_id || null,
+				targetTechnicianHubsoftName: context.user.metasTecnicoNome || context.user.metas_tecnico_nome || "",
+			})],
 	);
 	await db.query("insert into retorninho_protocol_events (protocol_id,to_status,actor_user_uid,reason) values ($1,$2,$3,$4)", [result.rows[0].id, status, context.identity.uid, reason]);
 	return result.rows[0];
@@ -993,6 +1006,7 @@ async function transitionProtocol(protocol, status, actorUid, reason = null, dat
 		return updated.rows[0];
 	} catch (error) {
 		await client.query("rollback").catch(() => {});
+		if (error.code === "23505") throw apiError("Esta O.S. já possui outro protocolo em andamento.", 409, "PROTOCOL_CONFLICT");
 		throw error;
 	} finally {
 		client.release();
@@ -1100,7 +1114,8 @@ async function processInbound(payload) {
 	}
 	if (!result) {
 		const localDecision = ai.fallbackDecision(body);
-		if (localDecision.intent === "confirm") result = await confirmPending(context, true);
+		if (localDecision.intent === "greeting") result = { reply: welcomeMessage(identity.name) };
+		else if (localDecision.intent === "confirm") result = await confirmPending(context, true);
 		else if (localDecision.intent === "cancel") result = await confirmPending(context, false);
 		else if (localDecision.intent === "more" && conversation.session_data?.lastSearch) {
 			result = await toolSearch({ ...conversation.session_data.lastSearch, page: Number(conversation.session_data.lastSearchPage || 1) + 1 }, context);
@@ -1176,7 +1191,11 @@ async function processProtocolUnlocked(payload) {
 	const profile = await usersRepository.getUserProfile(protocol.target_user_uid || protocol.requester_user_uid);
 	const user = await rolePermissions.enrichUserWithPermissions(profile);
 	try {
-		const result = await mapsService.assignOrderToTechnician(protocol.service_order_id, {}, user);
+		const result = await mapsService.assignOrderToTechnician(
+			protocol.service_order_id,
+			protocolTechnicianPayload(protocol, profile),
+			user,
+		);
 		await db.query("update retorninho_protocols set operation_request_id=$2 where id=$1", [protocol.id, result.item?.id || null]);
 		await db.query(
 			`insert into retorninho_queue (kind,dedupe_key,payload,next_attempt_at)
@@ -1188,6 +1207,69 @@ async function processProtocolUnlocked(payload) {
 		await recordEvent("OPERATIONAL", "ASSIGNMENT_FAILED", "FAILED", { protocolId: protocol.id, userUid: protocol.requester_user_uid, serviceOrderNumber: protocol.service_order_number, errorCode: error.code || "ASSIGNMENT_FAILED", details: { message: text(error.message).slice(0, 500) } });
 		throw error;
 	}
+}
+
+function protocolTechnicianPayload(protocol = {}, profile = {}) {
+	const metadata = protocol.metadata || {};
+	return {
+		technicianHubsoftId: Number(metadata.targetTechnicianHubsoftId || profile.hubsoftTecnicoId || profile.hubsoft_tecnico_id || 0) || null,
+		technicianHubsoftName: text(metadata.targetTechnicianHubsoftName || profile.metasTecnicoNome || profile.metas_tecnico_nome),
+	};
+}
+
+async function listAssignableTechnicians(user = {}) {
+	return serviceOrderRequestsService.listSelectableTechnicians(user);
+}
+
+async function reprocessProtocol(id, payload = {}, user = {}) {
+	const requestedId = Number(payload.technicianHubsoftId || 0);
+	const technicians = await serviceOrderRequestsService.listSelectableTechnicians(user);
+	const technician = technicians.items.find((item) => item.id === requestedId);
+	if (!technician) throw apiError("Selecione um técnico HubSoft válido.", 422);
+	const technicianHubsoftId = technician.id;
+	const technicianHubsoftName = technician.name;
+	const actor = userIdentity(user);
+	const client = await db.connect();
+	let protocol;
+	try {
+		await client.query("begin");
+		const result = await client.query(
+			`update retorninho_protocols
+			    set status='AUTHORIZED',reason='Reprocessamento administrativo solicitado.',completed_at=null,
+			        operation_request_id=null,
+			        metadata=coalesce(metadata,'{}'::jsonb)||$2::jsonb,
+			        updated_at=now()
+			  where id=$1 and status='FAILED'
+			  returning *`,
+			[id, JSON.stringify({ targetTechnicianHubsoftId: technicianHubsoftId, targetTechnicianHubsoftName: technicianHubsoftName })],
+		);
+		protocol = result.rows[0];
+		if (!protocol) throw apiError("Protocolo não encontrado ou não está com falha.", 409, "PROTOCOL_NOT_REPROCESSABLE");
+		await client.query(
+			`insert into retorninho_protocol_events (protocol_id,from_status,to_status,actor_user_uid,reason,data)
+			 values ($1,'FAILED','AUTHORIZED',$2,$3,$4::jsonb)`,
+			[protocol.id, actor.uid || null, "Reprocessamento administrativo solicitado.", JSON.stringify({ technicianHubsoftId, technicianHubsoftName })],
+		);
+		await client.query(
+			`insert into retorninho_queue (kind,dedupe_key,payload) values ('PROTOCOL',$1,$2::jsonb)`,
+			[`protocol:${protocol.id}:reprocess:${Date.now()}`, JSON.stringify({ protocolId: protocol.id, correlationId: crypto.randomUUID() })],
+		);
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		if (error.code === "23505") throw apiError("Esta O.S. já possui outro protocolo em andamento.", 409, "PROTOCOL_CONFLICT");
+		throw error;
+	} finally {
+		client.release();
+	}
+	await recordEvent("AUDIT", "PROTOCOL_REPROCESSED", "SUCCESS", {
+		protocolId: protocol.id,
+		userUid: actor.uid,
+		userName: actor.name,
+		serviceOrderNumber: protocol.service_order_number,
+		details: { technicianHubsoftId, technicianHubsoftName },
+	});
+	return protocol;
 }
 
 async function processProtocol(payload) {
@@ -1293,9 +1375,11 @@ module.exports = {
 	listKnowledge,
 	listMessages,
 	listProtocols,
+	listAssignableTechnicians,
 	listQueue,
 	listUsers,
 	reprocessQueue,
+	reprocessProtocol,
 	runQueueBatch,
 	saveConfig,
 	saveKnowledge,
@@ -1304,5 +1388,5 @@ module.exports = {
 	stopWorker,
 	updateAuthorization,
 	verifyWebhookSecret,
-	_test: { incomingMessage, menuChoice, metaMessages, pendingMenuArgs, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig, welcomeMessage },
+	_test: { appendMenuHint, incomingMessage, menuChoice, metaMessages, pendingMenuArgs, protocolTechnicianPayload, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig, welcomeMessage },
 };

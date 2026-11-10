@@ -3,6 +3,10 @@ const test = require("node:test");
 const { fallbackDecision, safePrompt, TOOL_NAMES } = require("./retorninhoAi");
 
 test("identifica consultas e ações sem depender do modelo externo", () => {
+	assert.deepEqual(fallbackDecision("Oi"), { intent: "greeting" });
+	assert.deepEqual(fallbackDecision("Olá"), { intent: "greeting" });
+	assert.deepEqual(fallbackDecision("Boa tarde"), { intent: "greeting" });
+	assert.deepEqual(fallbackDecision("Menu"), { intent: "greeting" });
 	assert.deepEqual(fallbackDecision("Consulte a OS 014326299000122032"), {
 		tool: "consultar_os",
 		args: { query: "014326299000122032" },

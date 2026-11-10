@@ -1,5 +1,7 @@
 const LIST_PROTOCOLS_SQL = `select count(*) over() total_count,p.*,
-	 requester.display_name requester_name,target.display_name target_name,assigned_user.display_name current_name
+	 requester.display_name requester_name,
+	 coalesce(nullif(p.metadata->>'targetTechnicianHubsoftName',''),target.display_name) target_name,
+	 assigned_user.display_name current_name
 	 from retorninho_protocols p
 	 left join app_users requester on requester.uid=p.requester_user_uid
 	 left join app_users target on target.uid=p.target_user_uid

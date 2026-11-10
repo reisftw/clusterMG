@@ -83,6 +83,7 @@ function fallbackDecision(message) {
 	const value = text(message);
 	const normalized = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 	const identifier = value.match(/(?:RET-\d{8}-\d{6}|\d{4,20})/i)?.[0] || "";
+	if (/^(?:oi+|ola|opa|bom dia|boa tarde|boa noite|menu|inicio)$/.test(normalized)) return { intent: "greeting" };
 	if (/\b(mostrar mais|mais resultados|proxima pagina)\b/.test(normalized)) return { intent: "more" };
 	if (/\b(confirmo|pode fazer|sim,? atribua|assumir agora)\b/.test(normalized)) return { intent: "confirm" };
 	if (/\b(cancelar|desistir|nao quero)\b/.test(normalized)) return { intent: "cancel" };
@@ -108,6 +109,7 @@ async function decide({ apiKey, config, message, history = [] }) {
 	if (!apiKey) return fallbackDecision(message);
 	const { GoogleGenAI } = await import("@google/genai");
 	const ai = new GoogleGenAI({ apiKey });
+	const timeoutMs = Math.max(1000, Math.min(30000, Number(config.timeout_ms) || 15000));
 	const response = await ai.models.generateContent({
 		model: config.ai_model,
 		contents: [
@@ -118,6 +120,8 @@ async function decide({ apiKey, config, message, history = [] }) {
 			{ role: "user", parts: [{ text: text(message).slice(0, 2000) }] },
 		],
 		config: {
+			httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } },
+			abortSignal: AbortSignal.timeout(timeoutMs),
 			systemInstruction: safePrompt(config.system_prompt),
 			temperature: Number(config.temperature || 0.2),
 			maxOutputTokens: Number(config.max_tokens || 1024),
