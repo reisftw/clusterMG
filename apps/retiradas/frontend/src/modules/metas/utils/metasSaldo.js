@@ -41,9 +41,9 @@ export function recalcularSaldoDiario(
 		};
 	}
 
-	const linhasComMovimento = dados.saldoDiario.filter(
-		(row) => Number(row?.totalDia || 0) > 0,
-	);
+	let linhasComMovimento = dados.saldoDiario
+		.filter((row) => Number(row?.totalDia || 0) > 0)
+		.map((row) => ({ ...row }));
 
 	if (linhasComMovimento.length === 0) {
 		return {
@@ -52,6 +52,35 @@ export function recalcularSaldoDiario(
 			saldoDiario: [],
 			saldoFinal: 0,
 		};
+	}
+
+	const temTotalOficial = ![null, undefined, ""].includes(dados?.totalOS);
+	const totalOficial = Number(dados?.totalOS);
+	const totalDiario = linhasComMovimento.reduce(
+		(total, row) => total + Number(row?.totalDia || 0),
+		0,
+	);
+	let diferenca = temTotalOficial && Number.isFinite(totalOficial)
+		? totalOficial - totalDiario
+		: 0;
+
+	if (diferenca > 0) {
+		const ultimaLinha = linhasComMovimento.at(-1);
+		ultimaLinha.totalDia = Number(ultimaLinha.totalDia || 0) + diferenca;
+	} else if (diferenca < 0) {
+		for (
+			let index = linhasComMovimento.length - 1;
+			index >= 0 && diferenca < 0;
+			index -= 1
+		) {
+			const totalDia = Number(linhasComMovimento[index].totalDia || 0);
+			const desconto = Math.min(totalDia, Math.abs(diferenca));
+			linhasComMovimento[index].totalDia = totalDia - desconto;
+			diferenca += desconto;
+		}
+		linhasComMovimento = linhasComMovimento.filter(
+			(row) => Number(row.totalDia || 0) > 0,
+		);
 	}
 
 	let saldoMes = 0;
