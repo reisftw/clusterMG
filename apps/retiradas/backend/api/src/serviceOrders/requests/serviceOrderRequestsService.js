@@ -419,6 +419,21 @@ function metadataOrderType(metadata = {}, description = "") {
 	);
 }
 
+function candidateOrderTypes(metadata = {}, description = "") {
+	const types = [
+		metadataOrderType(metadata, description),
+		findTargetType(metadata),
+	].filter(Boolean);
+	return types.filter(
+		(item, index) =>
+			types.findIndex(
+				(candidate) =>
+					Number(candidate.id_tipo_ordem_servico) ===
+					Number(item.id_tipo_ordem_servico),
+			) === index,
+	);
+}
+
 async function loadTodayOpenWithdrawalOrders(session, metadata) {
 	const day = saoPauloDateParts().iso;
 	if (
@@ -472,14 +487,14 @@ async function findOpenOrderUnlocked(session, metadata, code) {
 	);
 	for (const candidate of eligibleCandidates) {
 		const date = text(candidate.data_cadastro_dia);
-		const type = metadataOrderType(metadata, candidate.tipo);
-		if (!date || !type) continue;
+		const types = candidateOrderTypes(metadata, candidate.tipo);
+		if (!date || !types.length) continue;
 		const body = {
 			data_inicio: `${date}T00:00:00.000-03:00`,
 			data_fim: `${date}T23:59:59.999-03:00`,
 			tipo_data: "data_cadastro",
 			status_ordem_servico: OPEN_STATUSES,
-			tipo_ordem_servicos: [type],
+			tipo_ordem_servicos: types,
 			pagina: 1,
 			itens_por_pagina: 1000,
 		};
@@ -1120,6 +1135,7 @@ module.exports = {
 	__testables: {
 		applyTargetState,
 		canChooseTechnician,
+		candidateOrderTypes,
 		findOpenOrder,
 		clientId,
 		clientOrdersUrl,
