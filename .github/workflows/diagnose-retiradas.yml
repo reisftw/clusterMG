@@ -73,6 +73,10 @@ jobs:
              having sum(errors_5xx) > 0
               order by errors_5xx desc, requests desc;"
 
+          echo "=== Recent API errors (last 24 hours, sanitized tail) ==="
+          journalctl -u retiradas-api.service --since '24 hours ago' --no-pager -p err \
+            | tail -300 || true
+
           echo "=== Latest equipment recovery jobs ==="
           psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
             "select mode, status, started_at, finished_at,
