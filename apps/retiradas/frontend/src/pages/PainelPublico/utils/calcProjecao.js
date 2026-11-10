@@ -1,9 +1,7 @@
 ﻿import { formatarChaveFeriado } from "../../../utils/diaUtil";
 import { obterIndiceMes } from "../../../utils/mes";
-import {
-	buildMetaDiariaSchedule,
-	buildMonthProjection,
-} from "../../../utils/metasProjection";
+import { recalcularSaldoDiario } from "../../../modules/metas/utils/metasSaldo";
+import { buildMonthProjection } from "../../../utils/metasProjection";
 import { isDiaUtil } from "./diasUteis";
 import { buscarFeriadosNacionais } from "./feriados";
 
@@ -49,29 +47,17 @@ export async function calcSaldoDiario(d, month, feriadosInput = null) {
 	if (feriadosInput instanceof Set) feriadosSet = feriadosInput;
 	else if (Array.isArray(feriadosInput)) feriadosSet = new Set(feriadosInput);
 	else feriadosSet = await buscarFeriadosNacionais(year);
-	const {
-		diasUteis: duMes,
-		metaDiariaMedia,
-		metaPorDia,
-		metaAcumuladaPorDia,
-	} = buildMetaDiariaSchedule({
-		month,
-		meta: d.meta,
+	const saldoFonte =
+		Array.isArray(d?.saldoDiario) && d.saldoDiario.length
+			? d.saldoDiario
+			: d?.rawDays || [];
+	const saldo = recalcularSaldoDiario(
+		{ ...d, mes: month, saldoDiario: saldoFonte },
 		feriadosSet,
 		year,
-	});
-	const metaDiaria = Math.ceil(metaDiariaMedia);
-
-	const raw = d.rawDays || [];
-	let lastActive = 0;
-	raw.forEach((r, i) => {
-		if (r.totalDia > 0) lastActive = i;
-	});
-	const dias = raw.slice(0, lastActive + 1);
-
-	let saldoMes = 0;
+	);
 	const monthIndex = obterIndiceMes(month);
-	const lista = dias.map((r) => {
+	const lista = saldo.saldoDiario.map((r) => {
 		const dia = Number(r.dia) || 0;
 		const date = monthIndex >= 0 ? new Date(year, monthIndex, dia) : null;
 		const dayOfWeek = date ? date.getDay() : -1;
@@ -79,24 +65,20 @@ export async function calcSaldoDiario(d, month, feriadosInput = null) {
 		const feriado =
 			monthIndex >= 0 &&
 			feriadosSet.has(formatarChaveFeriado(monthIndex + 1, dia));
-		const util = isDiaUtil(month, dia, feriadosSet, year);
-		const metaDoDia = metaPorDia.get(dia) || 0;
-		const saldoDia = r.totalDia - metaDoDia;
-		saldoMes += saldoDia;
 		return {
 			...r,
-			util,
 			fimDeSemana,
 			feriado,
 			tipoDia: resolveTipoDia(feriado, fimDeSemana),
-			metaDia: metaDoDia,
-			metaAcumulada: metaAcumuladaPorDia.get(dia) || 0,
-			saldoDia,
-			saldoMes,
 		};
 	});
 
-	return { lista, duMes, metaDiaria, feriadosSet };
+	return {
+		lista,
+		duMes: saldo.diasUteis,
+		metaDiaria: saldo.metaDiaria,
+		feriadosSet,
+	};
 }
 
 export async function calcProjecao(d, month, feriadosInput = null) {
