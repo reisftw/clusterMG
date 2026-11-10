@@ -61,6 +61,18 @@ jobs:
           curl -fsS http://127.0.0.1:3001/api/health
           echo
 
+          echo "=== API 5xx by route (last 24 hours) ==="
+          psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+            "select method, route,
+                    sum(errors_5xx)::bigint as errors_5xx,
+                    sum(requests)::bigint as requests,
+                    max(last_error_code) as last_error_code
+               from maintenance_route_metrics_hourly
+              where bucket_start >= now() - interval '24 hours'
+              group by method, route
+             having sum(errors_5xx) > 0
+              order by errors_5xx desc, requests desc;"
+
           echo "=== Latest equipment recovery jobs ==="
           psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
             "select mode, status, started_at, finished_at,

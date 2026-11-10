@@ -49,3 +49,20 @@ test("reconciliation uses explicit map coordinates when source orders also expos
 	assert.equal(result.reconciliation.available, true);
 	assert.equal(result.reconciliation.geolocated, 1);
 });
+
+test("retry recognizes an order already assigned to the requested technician", () => {
+	assert.equal(
+		service.__testables.requestAlreadyEffected(
+			{ status: "EFFECTUATION_FAILED", tecnico: "ANA ANDRADE | FABIO TELECOM" },
+			{ technicianHubsoftName: "ANA ANDRADE | FABIO TELECOM" },
+		),
+		true,
+	);
+	assert.equal(
+		service.__testables.requestAlreadyEffected(
+			{ status: "EFFECTUATION_FAILED", tecnico: "FILA" },
+			{ technicianHubsoftName: "ANA ANDRADE | FABIO TELECOM" },
+		),
+		false,
+	);
+});

@@ -12,12 +12,12 @@ import { recalcularSaldoDiario } from "../utils/metasSaldo";
 const MetasDashboardWidget = () => {
 	const { metaMes, loading, feriadosSet } = useMetasDashboard();
 
-	const { metaDiaria, diasUteis, saldoRecalculado, projecao } = useMemo(() => {
+	const { metaDiaria, diasUteis, saldoFinal, projecao } = useMemo(() => {
 		if (!metaMes) {
 			return {
 				metaDiaria: 0,
 				diasUteis: 0,
-				saldoRecalculado: [],
+				saldoFinal: 0,
 				projecao: null,
 			};
 		}
@@ -25,16 +25,16 @@ const MetasDashboardWidget = () => {
 		const {
 			diasUteis,
 			metaDiaria,
-			saldoDiario: saldoRecalculado,
+			saldoFinal,
 		} = recalcularSaldoDiario(metaMes, feriadosSet);
 
 		if (!metaMes?.saldoDiario?.length) {
-			return { metaDiaria, diasUteis, saldoRecalculado: [], projecao: null };
+			return { metaDiaria, diasUteis, saldoFinal, projecao: null };
 		}
 
 		const projecao = buildMonthProjection(metaMes, feriadosSet);
 
-		return { metaDiaria, diasUteis, saldoRecalculado, projecao };
+		return { metaDiaria, diasUteis, saldoFinal, projecao };
 	}, [metaMes, feriadosSet]);
 
 	if (loading) {
@@ -65,8 +65,7 @@ const MetasDashboardWidget = () => {
 	const percentCancelamentos = getCancellationPercent(metaMes);
 	const atingido = performance.achieved;
 	const ritmoAtual = projecao?.ritmoAtual ?? 0;
-	const saldoMesAtual =
-		saldoRecalculado[saldoRecalculado.length - 1]?.saldoMes ?? 0;
+	const saldoMesAtual = saldoFinal;
 
 	return (
 		<div className="bg-white rounded-xl border border-gray-100 p-5 flex flex-col gap-4">
