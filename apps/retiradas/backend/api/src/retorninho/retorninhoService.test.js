@@ -34,6 +34,17 @@ test("extrai localização recebida pela Evolution", () => {
 	assert.deepEqual(parsed.location, { latitude: -19.92, longitude: -44.10 });
 });
 
+test("extrai a opção clicada em botões da Evolution", () => {
+	const parsed = service._test.incomingMessage({
+		instance: "retorninho-ia",
+		data: {
+			key: { id: "msg-button", remoteJid: "5531999991234@s.whatsapp.net" },
+			message: { buttonsResponseMessage: { selectedButtonId: "2", selectedDisplayText: "Buscar oportunidades" } },
+		},
+	});
+	assert.equal(parsed.body, "2");
+});
+
 test("normaliza somente mensagens recebidas do webhook Meta", () => {
 	const parsed = service._test.metaMessages({
 		entry: [{ changes: [{ value: {
@@ -84,4 +95,17 @@ test("monta boas-vindas personalizadas com as funções disponíveis", () => {
 	assert.match(evening, /^Boa noite, Rodrigo!/);
 	assert.match(morning, /1\. Consultar O\.S\. ou cliente/);
 	assert.match(morning, /6\. Consultar equipamento ou procedimento/);
+});
+
+test("resolve as opções numeradas do menu sem depender da IA externa", () => {
+	assert.deepEqual(service._test.menuChoice("1"), {
+		tool: "consultar_os",
+		prompt: "Informe o número da O.S. ou o código do cliente.",
+	});
+	assert.equal(service._test.menuChoice("5").tool, "consultar_produtividade");
+	assert.equal(service._test.menuChoice("opção inválida"), null);
+	assert.deepEqual(
+		service._test.pendingMenuArgs("buscar_oportunidades", "Uberlândia"),
+		{ city: "Uberlândia" },
+	);
 });

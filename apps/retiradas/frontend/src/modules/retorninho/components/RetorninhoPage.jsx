@@ -168,7 +168,7 @@ function ConfigFields({ form, setForm, group }) {
 	);
 	if (group === "ai") return (
 		<div className="grid gap-4 sm:grid-cols-2">
-			<label className="space-y-1 text-sm font-bold text-slate-700">Modelo<input className={INPUT} value={form.aiModel || "gemini-2.5-flash"} onChange={(event) => set("aiModel", event.target.value)} /></label>
+			<label className="space-y-1 text-sm font-bold text-slate-700">Modelo<input className={INPUT} value={form.aiModel || "gemini-flash-latest"} onChange={(event) => set("aiModel", event.target.value)} /></label>
 			<label className="space-y-1 text-sm font-bold text-slate-700">Nova chave Gemini<input className={INPUT} type="password" value={form.aiApiKey || ""} onChange={(event) => set("aiApiKey", event.target.value)} placeholder={form.aiApiKeyConfigured ? "Chave protegida configurada" : "Informe a chave"} autoComplete="new-password" /></label>
 			<label className="space-y-1 text-sm font-bold text-slate-700">Temperatura<input className={INPUT} type="number" min="0" max="1" step="0.1" value={form.temperature ?? 0.2} onChange={(event) => set("temperature", Number(event.target.value))} /></label>
 			<label className="space-y-1 text-sm font-bold text-slate-700">Limite de tokens<input className={INPUT} type="number" min="128" max="8192" value={form.maxTokens ?? 1024} onChange={(event) => set("maxTokens", Number(event.target.value))} /></label>
