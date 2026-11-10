@@ -50,6 +50,7 @@ jobs:
             bash -s -- "$ROUTE_ID" "$VERIFY_ROUTE_OPTIMIZATION" <<'REMOTE'
           set -Eeuo pipefail
           route_id="${1:-}"
+          [ "$route_id" = "false" ] && route_id=""
           verify_route_optimization="${2:-false}"
           set -a
           . /etc/retiradas/api.env
