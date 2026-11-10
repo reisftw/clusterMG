@@ -73,6 +73,25 @@ jobs:
              having sum(errors_5xx) > 0
               order by errors_5xx desc, requests desc;"
 
+          echo "=== API 5xx timeline (last 24 hours) ==="
+          psql "$database_target" -X -v ON_ERROR_STOP=1 -P pager=off -c \
+            "select bucket_start, route, errors_5xx, requests
+               from maintenance_route_metrics_hourly
+              where bucket_start >= now() - interval '24 hours'
+                and errors_5xx > 0
+              order by bucket_start desc, errors_5xx desc;"
+
+          echo "=== Deployed Maps health self-check ==="
+          cd /opt/retiradas/vps/api
+          node -e '
+            const db = require("./src/db");
+            const maps = require("./src/mapsV2/mapsV2Service");
+            maps.getHealth()
+              .then((result) => console.log(JSON.stringify({ ok: result.ok, reconciliation: result.reconciliation?.available !== false })))
+              .catch((error) => { console.error(error?.stack || error); process.exitCode = 1; })
+              .finally(() => db.closePool());
+          '
+
           echo "=== Recent API errors (last 24 hours, sanitized tail) ==="
           journalctl -u retiradas-api.service --since '24 hours ago' --no-pager -p err \
             | tail -300 || true
