@@ -1,9 +1,23 @@
 ﻿import { isDiaUtil } from "../../../utils/diaUtil";
 import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
+import { NOMES_MESES } from "../../../utils/mes";
+
+function calcularSaldoMensalAtual(meta, totalOS, mes, ano) {
+	const monthIndex = NOMES_MESES.indexOf(mes);
+	if (monthIndex < 0) return null;
+
+	const now = new Date();
+	if (ano !== now.getFullYear() || monthIndex !== now.getMonth()) return null;
+
+	const totalDays = new Date(ano, monthIndex + 1, 0).getDate();
+	const completedDays = Math.max(0, now.getDate() - 1);
+	const expectedToDate = Math.round((meta * completedDays) / totalDays);
+	return totalOS - expectedToDate;
+}
 
 /**
- * Recalcula a meta diaria e o saldo acumulado do mes usando a mesma regra
- * de dias uteis em todos os pontos da UI.
+ * Recalcula a serie diaria e usa, no mes atual, o saldo mensal canonico:
+ * realizado oficial menos a parcela da meta dos dias ja concluidos.
  *
  * @param {object|null|undefined} dados
  * @param {Iterable<string>|null|undefined} feriadosSet
@@ -31,13 +45,21 @@ export function recalcularSaldoDiario(
 				metaAcumuladaPorDia: new Map(),
 			};
 	const metaDiaria = Math.ceil(metaDiariaMedia);
+	const temTotalOficial = ![null, undefined, ""].includes(dados?.totalOS);
+	const totalOficial = Number(dados?.totalOS);
+	const saldoMensalOficial = calcularSaldoMensalAtual(
+		meta,
+		temTotalOficial && Number.isFinite(totalOficial) ? totalOficial : 0,
+		mes,
+		ano,
+	);
 
 	if (!Array.isArray(dados?.saldoDiario) || dados.saldoDiario.length === 0) {
 		return {
 			diasUteis,
 			metaDiaria,
 			saldoDiario: [],
-			saldoFinal: 0,
+			saldoFinal: saldoMensalOficial ?? 0,
 		};
 	}
 
@@ -50,15 +72,21 @@ export function recalcularSaldoDiario(
 			diasUteis,
 			metaDiaria,
 			saldoDiario: [],
-			saldoFinal: 0,
+			saldoFinal: saldoMensalOficial ?? 0,
 		};
 	}
 
-	const temTotalOficial = ![null, undefined, ""].includes(dados?.totalOS);
-	const totalOficial = Number(dados?.totalOS);
 	const totalDiario = linhasComMovimento.reduce(
 		(total, row) => total + Number(row?.totalDia || 0),
 		0,
+	);
+	const saldoMensalAtual = calcularSaldoMensalAtual(
+		meta,
+		temTotalOficial && Number.isFinite(totalOficial)
+			? totalOficial
+			: totalDiario,
+		mes,
+		ano,
 	);
 	let diferenca = temTotalOficial && Number.isFinite(totalOficial)
 		? totalOficial - totalDiario
@@ -104,11 +132,15 @@ export function recalcularSaldoDiario(
 			saldoMes,
 		};
 	});
+	if (saldoMensalAtual !== null && saldoDiario.length > 0) {
+		saldoDiario[saldoDiario.length - 1].saldoMes = saldoMensalAtual;
+	}
 
 	return {
 		diasUteis,
 		metaDiaria,
 		saldoDiario,
-		saldoFinal: saldoDiario[saldoDiario.length - 1]?.saldoMes ?? 0,
+		saldoFinal:
+			saldoMensalAtual ?? saldoDiario[saldoDiario.length - 1]?.saldoMes ?? 0,
 	};
 }
