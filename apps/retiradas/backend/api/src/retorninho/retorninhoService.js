@@ -30,6 +30,15 @@ const ALL_TOOLS = Object.freeze([
 	"consultar_equipamento",
 	"consultar_conhecimento",
 ]);
+const DEFAULT_AI_MODEL = "gemini-flash-latest";
+const MENU_CHOICES = Object.freeze({
+	1: Object.freeze({ tool: "consultar_os", prompt: "Informe o número da O.S. ou o código do cliente." }),
+	2: Object.freeze({ tool: "buscar_oportunidades", prompt: "Informe a cidade onde deseja buscar oportunidades ou compartilhe sua localização." }),
+	3: Object.freeze({ tool: "solicitar_os", prompt: "Informe o número da O.S. ou o código do cliente que deseja assumir." }),
+	4: Object.freeze({ tool: "consultar_protocolo" }),
+	5: Object.freeze({ tool: "consultar_produtividade" }),
+	6: Object.freeze({ tool: "consultar_equipamento", prompt: "Informe o MAC, serial, número da O.S. ou código do cliente." }),
+});
 let workerTimer = null;
 let workerBusy = false;
 
@@ -56,6 +65,10 @@ Eu sou o Retorninho, assistente virtual do REVO. Posso ajudar com:
 6. Consultar equipamento ou procedimento
 
 Envie o número da opção ou escreva o que você precisa.`;
+}
+
+function menuChoice(value) {
+	return MENU_CHOICES[text(value).replace(/[.)\s]/g, "")] || null;
 }
 
 function normalize(value) {
@@ -116,7 +129,7 @@ function maskConfig(row = {}) {
 		evolutionUrl: row.evolution_url || "",
 		evolutionApiKeyConfigured: Boolean(row.evolution_api_key_ciphertext),
 		aiProvider: row.ai_provider || "gemini",
-		aiModel: row.ai_model || "gemini-2.5-flash",
+		aiModel: row.ai_model || DEFAULT_AI_MODEL,
 		aiApiKeyConfigured: Boolean(row.ai_api_key_ciphertext || process.env.GEMINI_API_KEY),
 		temperature: Number(row.temperature || 0.2),
 		maxTokens: Number(row.max_tokens || 1024),
@@ -211,7 +224,7 @@ async function saveConfig(payload = {}, user = {}) {
 			payload.enabled === true, payload.automaticReplies === true, provider,
 			text(payload.evolutionUrl || current.evolution_url) || null,
 			evolutionSecret?.ciphertext || null, evolutionSecret?.iv || null, evolutionSecret?.authTag || null,
-			text(payload.aiModel || current.ai_model || "gemini-2.5-flash"),
+			text(payload.aiModel || current.ai_model || DEFAULT_AI_MODEL),
 			aiSecret?.ciphertext || null, aiSecret?.iv || null, aiSecret?.authTag || null,
 			evolutionSecret?.keyId || aiSecret?.keyId || null,
 			Math.min(Math.max(Number(payload.temperature ?? current.temperature), 0), 1),
@@ -594,7 +607,21 @@ function incomingMessage(payload = {}) {
 		messageId: text(data.key?.id || payload.key?.id || data.id || payload.id),
 		fromMe: Boolean(data.key?.fromMe || payload.key?.fromMe),
 		phone: remoteJid.split("@")[0],
-		body: text(message.conversation || message.extendedTextMessage?.text || message.ephemeralMessage?.message?.conversation || data.text || payload.text),
+		body: text(
+			message.conversation ||
+			message.extendedTextMessage?.text ||
+			message.ephemeralMessage?.message?.conversation ||
+			message.buttonsResponseMessage?.selectedButtonId ||
+			message.buttonsResponseMessage?.selectedDisplayText ||
+			message.listResponseMessage?.singleSelectReply?.selectedRowId ||
+			message.listResponseMessage?.title ||
+			message.templateButtonReplyMessage?.selectedId ||
+			message.templateButtonReplyMessage?.selectedDisplayText ||
+			data.text ||
+			data.body ||
+			payload.text ||
+			payload.body,
+		),
 		location: message.locationMessage ? { latitude: Number(message.locationMessage.degreesLatitude), longitude: Number(message.locationMessage.degreesLongitude) } : null,
 		provider: "evolution",
 	};
@@ -926,6 +953,30 @@ const TOOLS = {
 	consultar_conhecimento: toolKnowledge,
 };
 
+async function executeTool(tool, args, context) {
+	try {
+		return await TOOLS[tool](args, context);
+	} catch (error) {
+		if (Number(error?.statusCode || 500) < 500) return { reply: error.message };
+		throw error;
+	}
+}
+
+async function executeAuthorizedTool(tool, args, context) {
+	if (!allowedTools(context.authorization).includes(tool)) return { reply: "Essa ferramenta não está liberada para o seu acesso." };
+	if (!featureEnabled(context.config, tool)) return { reply: "Essa funcionalidade está pausada pela configuração administrativa." };
+	return executeTool(tool, args, context);
+}
+
+function pendingMenuArgs(tool, body, location) {
+	if (tool === "buscar_oportunidades") {
+		if (location) return { latitude: location.latitude, longitude: location.longitude };
+		return { city: text(body) };
+	}
+	if (tool === "consultar_protocolo" || tool === "consultar_produtividade") return {};
+	return { query: text(body) };
+}
+
 async function transitionProtocol(protocol, status, actorUid, reason = null, data = {}) {
 	const client = await db.connect();
 	try {
@@ -1030,6 +1081,23 @@ async function processInbound(payload) {
 		: simpleTransferDecision
 			? await handleTransferDecision(context, /recuso|nego|nao/i.test(body) ? "deny" : "accept", pendingTransfer)
 		: null;
+	const pendingMenuTool = text(conversation.session_data?.pendingMenuTool);
+	if (!result && pendingMenuTool && TOOLS[pendingMenuTool]) {
+		if (/^(menu|voltar|cancelar)$/i.test(body)) {
+			await updateConversationSession(conversation.id, { pendingMenuTool: null });
+			result = { reply: welcomeMessage(identity.name) };
+		} else {
+			await updateConversationSession(conversation.id, { pendingMenuTool: null });
+			result = await executeAuthorizedTool(pendingMenuTool, pendingMenuArgs(pendingMenuTool, body, incoming.location), context);
+		}
+	}
+	const selectedMenu = !result ? menuChoice(body) : null;
+	if (selectedMenu?.prompt) {
+		await updateConversationSession(conversation.id, { pendingMenuTool: selectedMenu.tool });
+		result = { reply: selectedMenu.prompt };
+	} else if (selectedMenu) {
+		result = await executeAuthorizedTool(selectedMenu.tool, {}, context);
+	}
 	if (!result) {
 		const localDecision = ai.fallbackDecision(body);
 		if (localDecision.intent === "confirm") result = await confirmPending(context, true);
@@ -1049,9 +1117,7 @@ async function processInbound(payload) {
 			});
 			await recordEvent("TECHNICAL", "AI_CALL", "SUCCESS", { ...context.event, durationMs: Date.now() - startedAt, details: { model: config.ai_model, tokens: decision.usage || {} } });
 			if (!decision.tool) result = { reply: welcomeMessage(identity.name) };
-			else if (!allowedTools(authorization).includes(decision.tool)) result = { reply: "Essa ferramenta não está liberada para o seu acesso." };
-			else if (!featureEnabled(config, decision.tool)) result = { reply: "Essa funcionalidade está pausada pela configuração administrativa." };
-			else result = await TOOLS[decision.tool](decision.args || {}, context);
+			else result = await executeAuthorizedTool(decision.tool, decision.args || {}, context);
 			await db.query("update retorninho_messages set tool_calls=$2::jsonb,token_usage=$3::jsonb,processed_at=now(),status='PROCESSING' where id=$1", [message.id, JSON.stringify(decision.tool ? [{ name: decision.tool, args: decision.args || {} }] : []), JSON.stringify(decision.usage || {})]);
 		}
 	}
@@ -1238,5 +1304,5 @@ module.exports = {
 	stopWorker,
 	updateAuthorization,
 	verifyWebhookSecret,
-	_test: { incomingMessage, metaMessages, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig, welcomeMessage },
+	_test: { incomingMessage, menuChoice, metaMessages, pendingMenuArgs, webhookDedupe, pageOf, minimalOrder, resolveEvolutionConfig, welcomeMessage },
 };
