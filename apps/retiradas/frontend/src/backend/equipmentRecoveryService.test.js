@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
 	_private: {
 		findMovementMatch,
+		movementDestinationTechnician,
 		movementQuantity,
 		normalizeClientName,
 		saoPauloClock,
@@ -125,6 +126,15 @@ describe("equipmentRecoveryService", () => {
 	it("respeita quantidade maior que 1 no movimento", () => {
 		const row = { raw_payload: { quantidade: 5 } };
 		expect(movementQuantity(row)).toBe(5);
+	});
+
+	it("identifica o tecnico que recebeu o equipamento pela movimentacao", () => {
+		expect(movementDestinationTechnician(
+			"Origem: Cliente: ANA | Destino: Técnico: JOSEVAL CAMPOS - TÉCNICO RETIRADA | Usuario: 578",
+		)).toBe("JOSEVAL CAMPOS - TÉCNICO RETIRADA");
+		expect(movementDestinationTechnician(
+			"Origem: Cliente: ANA\nDestino: Tecnico: EDNEI CARDOSO\nUsuario: 579",
+		)).toBe("EDNEI CARDOSO");
 	});
 
 	it("prioriza a conciliacao exata pelo numero da OS", () => {
