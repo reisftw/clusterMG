@@ -174,6 +174,44 @@ describe("equipmentRecoveryService", () => {
 	it("normaliza prefixo de codigo e pontuacao no nome do cliente", () => {
 		expect(normalizeClientName("(55131) Camila Alves de Lima Fúmega"))
 			.toBe("CAMILAALVESDELIMAFUMEGA");
+		expect(normalizeClientName("37834088 DEISE MARA DO NASCIMENTO MONTEIRO"))
+			.toBe("DEISEMARADONASCIMENTOMONTEIRO");
+	});
+
+	it("concilia cliente exato mesmo quando fechamento e entrada estao distantes", () => {
+		const stock = [movement({ id: "mov-antigo", technicianName: "registro@sempre.net.br" })];
+		stock[0].row.emitido_em = "2026-04-01T12:00:00.000Z";
+		stock[0].row.parceiro_nome = "(55131) Camila Alves de Lima Fumega";
+		const match = findMovementMatch(
+			{
+				os_number: "014326300000999999",
+				equipment_type: "AC",
+				technician_id: "101",
+				technician_name: "Tecnico Diferente",
+				closed_at: "2026-11-10T12:00:00.000Z",
+				raw_snapshot: { rawExcerpt: { cliente_nome: "CAMILA ALVES DE LIMA FUMEGA" } },
+			},
+			stock,
+		);
+		expect(match?.confidence).toBe("CONFIRMED");
+		expect(match?.type).toBe("CLIENT_NAME_WINDOW");
+		expect(match?.item.row.id).toBe("mov-antigo");
+	});
+
+	it("nao concilia por tecnico quando a movimentacao esta fora da janela segura", () => {
+		const stock = [movement({ id: "mov-tecnico-antigo" })];
+		stock[0].row.emitido_em = "2026-04-01T12:00:00.000Z";
+		const match = findMovementMatch(
+			{
+				os_number: "014326300000999999",
+				equipment_type: "AC",
+				technician_id: "101",
+				technician_name: "Joao Silva",
+				closed_at: "2026-11-10T12:00:00.000Z",
+			},
+			stock,
+		);
+		expect(match).toBeNull();
 	});
 
 	it("calcula a janela diaria no calendario de Sao Paulo", () => {
