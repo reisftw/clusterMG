@@ -53,17 +53,14 @@ function extractOperacaoDaObservacao(observacao) {
 	return cleanText(match?.[1]);
 }
 
-// So conta como devolucao relevante quando a nota e "Devolucao de comodato"
-// E a operacao registrada na observacao e "Retirada" — os dois juntos, como
-// no exemplo real (movimento_estoque_id=2369046): tipo_operacao "Devolução
-// de comodato" com "Operacao: Retirada" na observacao. Uma nota so com um
-// dos dois nao e a devolucao de equipamento ao estoque que a feature trata.
+// O Playground usa duas operacoes para a mesma entrada fisica no estoque:
+// "Retirada" e "Retorno ao Estoque". Ambas precisam alimentar Movimentacoes.
 function isDevolucaoComodato(note = {}) {
 	const tipoOperacaoOk = normalizeText(note.tipo_operacao?.descricao).includes(
 		"devolucao de comodato",
 	);
-	const operacaoOk =
-		normalizeText(extractOperacaoDaObservacao(note.observacao)) === "retirada";
+	const operacao = normalizeText(extractOperacaoDaObservacao(note.observacao));
+	const operacaoOk = ["retirada", "retorno ao estoque"].includes(operacao);
 	return tipoOperacaoOk && operacaoOk;
 }
 
@@ -466,15 +463,15 @@ async function runDailyIfDue(user = {}) {
 		if (await movimentacoesRepository.hasActiveScanJob?.()) {
 			return { ok: true, skipped: true, reason: "Recuperacao historica em andamento." };
 		}
-		const recoveryEnd = today < "2026-11-30" ? today : "2026-11-30";
+		const recoveryEnd = today < "2026-12-31" ? today : "2026-12-31";
 		const job = await runScan({
 			user,
 			manual: false,
-			dataInicio: "2026-10-01",
+			dataInicio: "2026-01-01",
 			dataFim: recoveryEnd,
 			recovery2026: true,
 		});
-		return { ok: true, jobId: job.id, recovery: "2026-10-01/2026-11-30" };
+		return { ok: true, jobId: job.id, recovery: `2026-01-01/${recoveryEnd}` };
 	}
 	if (config.lastRunDate === today || currentTime < config.dailyScanTime) {
 		return {
