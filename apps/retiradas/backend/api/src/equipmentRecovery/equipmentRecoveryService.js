@@ -1228,8 +1228,9 @@ async function getSummary(query = {}) {
 		 left join movimentacoes_produtos_config config on config.produto_nome = movement.produto_nome
 		 left join lateral (
 			select snapshot.closed_at
-			from equipment_recovery_snapshots snapshot
-			where snapshot.movement_id = movement.id
+			from equipment_recovery_movement_allocations allocation
+			join equipment_recovery_snapshots snapshot on snapshot.id = allocation.recovery_id
+			where allocation.movement_id = movement.id
 			order by snapshot.closed_at desc nulls last
 			limit 1
 		 ) recovery on true
@@ -1455,9 +1456,10 @@ async function listWarehouseMovements(query = {}) {
 		${equipmentWhere}`;
 	const joins = `left join movimentacoes_produtos_config config on config.produto_nome = movement.produto_nome
 		left join lateral (
-			select snapshot.closed_at, snapshot.os_number, snapshot.client_name
-			from equipment_recovery_snapshots snapshot
-			where snapshot.movement_id = movement.id
+			select snapshot.closed_at, snapshot.os_number
+			from equipment_recovery_movement_allocations allocation
+			join equipment_recovery_snapshots snapshot on snapshot.id = allocation.recovery_id
+			where allocation.movement_id = movement.id
 			order by snapshot.closed_at desc nulls last
 			limit 1
 		) recovery on true`;
@@ -1470,8 +1472,7 @@ async function listWarehouseMovements(query = {}) {
 	);
 	const rowsResult = await db.query(
 		`select movement.*, config.categoria as equipment_type, config.valor as configured_value,
-			recovery.closed_at as recovery_closed_at, recovery.os_number as recovery_os_number,
-			recovery.client_name as recovery_client_name
+			recovery.closed_at as recovery_closed_at, recovery.os_number as recovery_os_number
 		 from movimentacoes_estoque movement
 		 ${joins}
 		 where ${where}
