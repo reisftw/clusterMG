@@ -260,6 +260,38 @@ describe("movimentacoesEntregas", () => {
 		expect(findOrdensAbertasBySerie).not.toHaveBeenCalled();
 	});
 
+	it("importa Devolucao de comodato registrada como Retorno ao Estoque", async () => {
+		const notaRetorno = noteDevolucaoComodato();
+		notaRetorno.observacao =
+			"Operacao: Retorno ao Estoque | movimento_estoque_id: 2369048";
+		const requestSempreRaw = vi.fn(async () => ({
+			data: [notaRetorno],
+			meta: { totalPages: 1 },
+		}));
+		const upsertMovimentacao = vi.fn(async (movimento) => ({
+			id: "mov-retorno",
+			statusMatch: "pendente",
+			...movimento,
+		}));
+		const marcarComoSemMatch = vi.fn(async (id) => ({ id, statusMatch: "sem_match" }));
+
+		const service = loadService({
+			requestSempreRaw,
+			findOrdensAbertasBySerie: vi.fn(async () => []),
+			deleteDocument: vi.fn(),
+			upsertMovimentacao,
+			marcarComoCasada: vi.fn(),
+			marcarComoSemMatch,
+		});
+
+		await service.runScan({ user: { uid: "u1" }, manual: true });
+		await new Promise((resolve) => setImmediate(resolve));
+		await new Promise((resolve) => setImmediate(resolve));
+
+		expect(upsertMovimentacao).toHaveBeenCalledTimes(1);
+		expect(marcarComoSemMatch).toHaveBeenCalledWith("mov-retorno");
+	});
+
 	it("ignora item cujo produto nao e ONT/ONU, roteador ou camera de video (insumo/conector)", async () => {
 		const notaComInsumo = noteDevolucaoComodato();
 		notaComInsumo.itens = [
