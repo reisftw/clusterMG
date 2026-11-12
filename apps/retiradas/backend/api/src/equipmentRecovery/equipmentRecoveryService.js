@@ -509,7 +509,7 @@ async function upsertSnapshots(snapshots = []) {
 	return saved;
 }
 
-async function buildMovementInventory(reservedQuantities = new Map()) {
+async function buildMovementInventory() {
 	const result = await db.query(
 		`select
 			m.*,
@@ -519,7 +519,7 @@ async function buildMovementInventory(reservedQuantities = new Map()) {
 		 left join movimentacoes_produtos_config c on c.produto_nome = m.produto_nome
 		 order by m.emitido_em asc nulls last, m.criado_em asc`,
 	);
-	const used = new Map(reservedQuantities);
+	const used = new Map();
 	return result.rows.map((row) => ({
 		row,
 		technician: movementTechnician(row),
@@ -662,20 +662,7 @@ function findMovementMatch(snapshot, movementsOrIndex) {
 }
 
 async function applyMovementMatches(snapshots) {
-	const snapshotIds = snapshots.map((snapshot) => snapshot.id).filter(Boolean);
-	const reservedResult = snapshotIds.length
-		? await db.query(
-				`select movement_id, sum(quantity)::int as quantity
-				   from equipment_recovery_movement_allocations
-				  where not (recovery_id = any($1::uuid[]))
-				  group by movement_id`,
-				[snapshotIds],
-			)
-		: { rows: [] };
-	const reservedQuantities = new Map(
-		reservedResult.rows.map((row) => [row.movement_id, Number(row.quantity || 0)]),
-	);
-	const movements = await buildMovementInventory(reservedQuantities);
+	const movements = await buildMovementInventory();
 	const movementIndex = buildMovementIndex(movements);
 	let matched = 0;
 	let probable = 0;
@@ -693,11 +680,8 @@ async function applyMovementMatches(snapshots) {
 		updates.push({ id: snapshot.id, return_status: "MATCHED", match_confidence: match.confidence, match_type: match.type, movement_id: match.item.row.id, movement_at: match.item.row.emitido_em });
 		allocations.push({ recovery_id: snapshot.id, movement_id: match.item.row.id, match_confidence: match.confidence, match_type: match.type });
 	}
-	const client = await db.connect();
-	try {
-		await client.query("begin");
-		for (let offset = 0; offset < updates.length; offset += 1000) {
-			await client.query(
+	for (let offset = 0; offset < updates.length; offset += 1000) {
+		await db.query(
 			`update equipment_recovery_snapshots snapshot
 			    set return_status = item.return_status,
 			        match_confidence = item.match_confidence,
@@ -710,16 +694,10 @@ async function applyMovementMatches(snapshots) {
 				movement_id text, movement_at timestamptz)
 			  where snapshot.id = item.id`,
 			[JSON.stringify(updates.slice(offset, offset + 1000))],
-			);
-		}
-		if (snapshotIds.length) {
-			await client.query(
-				"delete from equipment_recovery_movement_allocations where recovery_id = any($1::uuid[])",
-				[snapshotIds],
-			);
-		}
-		for (let offset = 0; offset < allocations.length; offset += 1000) {
-			await client.query(
+		);
+	}
+	for (let offset = 0; offset < allocations.length; offset += 1000) {
+		await db.query(
 			`insert into equipment_recovery_movement_allocations
 				(recovery_id, movement_id, quantity, match_confidence, match_type)
 			 select item.recovery_id, item.movement_id, 1, item.match_confidence, item.match_type
@@ -727,14 +705,7 @@ async function applyMovementMatches(snapshots) {
 				recovery_id uuid, movement_id text, match_confidence text, match_type text)
 			 on conflict (recovery_id, movement_id) do nothing`,
 			[JSON.stringify(allocations.slice(offset, offset + 1000))],
-			);
-		}
-		await client.query("commit");
-	} catch (error) {
-		await client.query("rollback").catch(() => {});
-		throw error;
-	} finally {
-		client.release();
+		);
 	}
 	return { matched, probable };
 }
