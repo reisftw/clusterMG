@@ -154,6 +154,7 @@ describe("equipmentRecoveryService", () => {
 
 	it("concilia a devolucao pelo nome do cliente quando a movimentacao nao possui OS", () => {
 		const stock = [movement({ id: "mov-client-1", technicianName: "registro@sempre.net.br" })];
+		stock[0].row.emitido_em = "2026-04-01T12:00:00.000Z";
 		stock[0].row.parceiro_nome = "(55131) Camila Alves de Lima Fumega";
 		const match = findMovementMatch(
 			{
@@ -161,7 +162,7 @@ describe("equipmentRecoveryService", () => {
 				equipment_type: "AC",
 				technician_id: "101",
 				technician_name: "Tecnico Diferente",
-				closed_at: "2026-09-10T12:00:00.000Z",
+				closed_at: "2026-11-10T12:00:00.000Z",
 				raw_snapshot: { rawExcerpt: { cliente_nome: "CAMILA ALVES DE LIMA FUMEGA" } },
 			},
 			stock,
@@ -174,6 +175,8 @@ describe("equipmentRecoveryService", () => {
 	it("normaliza prefixo de codigo e pontuacao no nome do cliente", () => {
 		expect(normalizeClientName("(55131) Camila Alves de Lima Fúmega"))
 			.toBe("CAMILAALVESDELIMAFUMEGA");
+		expect(normalizeClientName("37834088 DEISE MARA DO NASCIMENTO MONTEIRO"))
+			.toBe("DEISEMARADONASCIMENTOMONTEIRO");
 	});
 
 	it("calcula a janela diaria no calendario de Sao Paulo", () => {

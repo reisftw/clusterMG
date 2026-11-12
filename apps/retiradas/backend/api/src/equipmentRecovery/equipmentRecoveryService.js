@@ -67,7 +67,9 @@ function normalizeOrderNumber(value) {
 }
 
 function normalizeClientName(value) {
-	return normalizeText(cleanText(value).replace(/^\s*\(\d+\)\s*/, ""))
+	return normalizeText(
+		cleanText(value).replace(/^\s*(?:\(\d+\)|\d+[-\s|:]+)\s*/, ""),
+	)
 		.replace(/[^A-Z0-9]/g, "");
 }
 
@@ -507,8 +509,7 @@ async function upsertSnapshots(snapshots = []) {
 	return saved;
 }
 
-async function buildMovementInventory(query = {}) {
-	const { startDate, endDate } = defaultDateRange(query);
+async function buildMovementInventory() {
 	const result = await db.query(
 		`select
 			m.*,
@@ -516,10 +517,7 @@ async function buildMovementInventory(query = {}) {
 			c.valor as configured_value
 		 from movimentacoes_estoque m
 		 left join movimentacoes_produtos_config c on c.produto_nome = m.produto_nome
-		 where m.emitido_em >= (($1::date - interval '${MATCH_WINDOW_DAYS} days')::timestamp at time zone '${TIME_ZONE}')
-		   and m.emitido_em < (($2::date + interval '${MATCH_WINDOW_DAYS + 1} days')::timestamp at time zone '${TIME_ZONE}')
 		 order by m.emitido_em asc nulls last, m.criado_em asc`,
-		[startDate, endDate],
 	);
 	const used = new Map();
 	return result.rows.map((row) => ({
@@ -588,12 +586,19 @@ function daysBetween(left, right) {
 	return Math.abs(a - b) / 86_400_000;
 }
 
-function findAvailableInsideWindow(snapshot, candidates = []) {
-	return candidates.find(
-		(item) =>
-			item.remaining() > 0 &&
-			daysBetween(snapshot.closed_at, item.row.emitido_em) <= MATCH_WINDOW_DAYS,
-	);
+function findAvailableMovement(snapshot, candidates = [], { maxDays = null } = {}) {
+	return candidates
+		.filter((item) => item.remaining() > 0)
+		.filter(
+			(item) =>
+				maxDays === null ||
+				daysBetween(snapshot.closed_at, item.row.emitido_em) <= maxDays,
+		)
+		.sort(
+			(left, right) =>
+				daysBetween(snapshot.closed_at, left.row.emitido_em) -
+				daysBetween(snapshot.closed_at, right.row.emitido_em),
+		)[0];
 }
 
 function findMovementMatch(snapshot, movementsOrIndex) {
@@ -606,7 +611,7 @@ function findMovementMatch(snapshot, movementsOrIndex) {
 		: movementsOrIndex;
 	const orderNumber = normalizeOrderNumber(snapshot.os_number);
 	const byOrderNumber = orderNumber
-		? findAvailableInsideWindow(snapshot, index.byOrderNumber.get(orderNumber) || [])
+		? findAvailableMovement(snapshot, index.byOrderNumber.get(orderNumber) || [])
 		: null;
 	if (byOrderNumber) {
 		return {
@@ -617,7 +622,7 @@ function findMovementMatch(snapshot, movementsOrIndex) {
 	}
 	const clientName = snapshotClientName(snapshot);
 	const byClientName = clientName
-		? findAvailableInsideWindow(snapshot, index.byClientName.get(clientName) || [])
+		? findAvailableMovement(snapshot, index.byClientName.get(clientName) || [])
 		: null;
 	if (byClientName) {
 		return {
@@ -628,20 +633,22 @@ function findMovementMatch(snapshot, movementsOrIndex) {
 	}
 	if (snapshot.equipment_type === "UNKNOWN") return null;
 	const byId = technicianId
-		? findAvailableInsideWindow(
+		? findAvailableMovement(
 				snapshot,
 				index.byCategoryAndTechnicianId.get(
 					`${snapshot.equipment_type}|${technicianId}`,
 				) || [],
+				{ maxDays: MATCH_WINDOW_DAYS },
 			)
 		: null;
 	if (byId) return { item: byId, confidence: "CONFIRMED", type: "TECHNICIAN_ID" };
 	const byName = technicianName
-		? findAvailableInsideWindow(
+		? findAvailableMovement(
 				snapshot,
 				index.byCategoryAndTechnicianName.get(
 					`${snapshot.equipment_type}|${technicianName}`,
 				) || [],
+				{ maxDays: MATCH_WINDOW_DAYS },
 			)
 		: null;
 	if (byName) {
@@ -654,8 +661,8 @@ function findMovementMatch(snapshot, movementsOrIndex) {
 	return null;
 }
 
-async function applyMovementMatches(snapshots, query = {}) {
-	const movements = await buildMovementInventory(query);
+async function applyMovementMatches(snapshots) {
+	const movements = await buildMovementInventory();
 	const movementIndex = buildMovementIndex(movements);
 	let matched = 0;
 	let probable = 0;
@@ -728,7 +735,7 @@ async function runReprocessCore(jobId, query = {}) {
 					total: snapshots.length,
 				},
 			});
-			const matchSummary = await applyMovementMatches(saved, query);
+			const matchSummary = await applyMovementMatches(saved);
 			Object.assign(summary, matchSummary, { persisted: saved.length });
 		}
 		await db.query(
