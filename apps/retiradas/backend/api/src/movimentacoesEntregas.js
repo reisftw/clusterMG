@@ -56,9 +56,8 @@ function extractOperacaoDaObservacao(observacao) {
 // O Playground usa duas operacoes para a mesma entrada fisica no estoque:
 // "Retirada" e "Retorno ao Estoque". Ambas precisam alimentar Movimentacoes.
 function isDevolucaoComodato(note = {}) {
-	const tipoOperacaoOk = normalizeText(note.tipo_operacao?.descricao).includes(
-		"devolucao de comodato",
-	);
+	const tipoOperacao = normalizeText(note.tipo_operacao?.descricao);
+	const tipoOperacaoOk = tipoOperacao.includes("devolucao de comodato");
 	const operacao = normalizeText(extractOperacaoDaObservacao(note.observacao));
 	const operacaoOk = ["retirada", "retorno ao estoque"].includes(operacao);
 	return tipoOperacaoOk && operacaoOk;
@@ -107,7 +106,14 @@ function extractMovimentos(note = {}) {
 				item.estoque_local_destino?.descricao ||
 					item.estoque_local_destino?.display,
 			),
-			rawPayload: { nota: note.id, item },
+			rawPayload: {
+				nota: note.id,
+				status: cleanText(note.status),
+				situacao: cleanText(note.situacao),
+				clientId: note.parceiro?.id || null,
+				clientExternalId: cleanText(note.parceiro?.externo_id),
+				item,
+			},
 		}));
 }
 
@@ -118,7 +124,8 @@ async function fetchNotesPage({ page, start, end }) {
 	});
 	params.append("filter.emitido_em", `$gte:${start.toISOString()}`);
 	params.append("filter.emitido_em", `$lte:${end.toISOString()}`);
-	params.append("filter.status", "$in:transmitido,cancelado,rejeitado");
+	params.append("filter.status", "$eq:rejeitado");
+	params.append("filter.tipo_operacao.id", "$eq:7");
 	return sempreIntegration.requestSempreRaw(`/nota?${params.toString()}`, {
 		timeoutMs: NOTES_TIMEOUT_MS,
 	});

@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
 	_private: {
 		findMovementMatch,
+		mapWarehouseMovement,
 		movementDestinationTechnician,
 		movementQuantity,
 		normalizeClientName,
@@ -135,6 +136,33 @@ describe("equipmentRecoveryService", () => {
 		expect(movementDestinationTechnician(
 			"Origem: Cliente: ANA\nDestino: Tecnico: EDNEI CARDOSO\nUsuario: 579",
 		)).toBe("EDNEI CARDOSO");
+	});
+
+	it("mapeia devolucao rejeitada e prioriza os dados da OS conciliada", () => {
+		const item = mapWarehouseMovement({
+			id: "mov-1",
+			nota_id: "3166610",
+			numero: "2461062",
+			movimento_estoque_id: "2461062",
+			parceiro_nome: "RENATA FERNANDES MATIAS DIAS",
+			produto_nome: "ONT AX",
+			serie: "ABC123",
+			emitido_em: "2026-10-27T19:32:58.000Z",
+			configured_value: 260,
+			equipment_type: "AX",
+			recovery_os_number: "014326300000123456",
+			recovery_client_name: "RENATA FERNANDES",
+			recovery_closed_at: "2026-10-28T12:00:00.000Z",
+			raw_payload: { clientId: 353721 },
+			observacao_raw: "Operacao: Retorno ao Estoque | Destino: Local de Estoque: PATROCINIO",
+			status_match: "sem_match",
+		});
+		expect(item.custodyStatus).toBe("WAREHOUSE");
+		expect(item.osNumber).toBe("014326300000123456");
+		expect(item.clientName).toBe("RENATA FERNANDES");
+		expect(item.custodyAt).toBe("2026-10-28T12:00:00.000Z");
+		expect(item.equipmentUnitValue).toBe(260);
+		expect(item.hubsoftUrl).toContain("/cliente/editar/353721/ordem_servico");
 	});
 
 	it("prioriza a conciliacao exata pelo numero da OS", () => {
