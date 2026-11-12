@@ -6,6 +6,7 @@ import {
 	Clock3,
 	Download,
 	Eye,
+	ExternalLink,
 	Filter,
 	RefreshCw,
 	ShieldAlert,
@@ -36,7 +37,9 @@ const today = new Intl.DateTimeFormat("en-CA", {
 }).format(new Date());
 
 const STATUS_LABELS = {
-	MATCHED: "Devolvido",
+	MATCHED: "Movimentação conciliada",
+	WAREHOUSE: "Devolvido ao estoque",
+	TECHNICIAN_BAG: "Em bolsa técnica",
 	PENDING: "Pendente",
 	PROBABLE: "Devolução provável",
 	UNCLASSIFIED: "Não classificado",
@@ -94,6 +97,8 @@ function monthStart() {
 function statusFor(item = {}) {
 	if (item.equipmentType === "UNKNOWN") return "UNCLASSIFIED";
 	if (item.matchConfidence === "PROBABLE") return "PROBABLE";
+	if (item.returnStatus === "MATCHED" && item.custodyStatus === "WAREHOUSE") return "WAREHOUSE";
+	if (item.returnStatus === "MATCHED" && item.custodyStatus === "TECHNICIAN_BAG") return "TECHNICIAN_BAG";
 	if (item.returnStatus === "MATCHED") return "MATCHED";
 	if (item.matchConfidence === "NOT_FOUND") return "NOT_FOUND";
 	return item.returnStatus || "PENDING";
@@ -107,7 +112,7 @@ function splitTechnicianName(value = "") {
 	};
 }
 
-function KpiCard({ title, value, subtitle, icon: Icon, tone = "blue", tooltip }) {
+function KpiCard({ title, value, subtitle, icon: Icon, tone = "blue", tooltip, onClick }) {
 	const tones = {
 		blue: "bg-blue-50 text-blue-600",
 		green: "bg-emerald-50 text-emerald-600",
@@ -116,11 +121,17 @@ function KpiCard({ title, value, subtitle, icon: Icon, tone = "blue", tooltip })
 		slate: "bg-slate-100 text-slate-600",
 		purple: "bg-violet-50 text-violet-600",
 	};
+	const Card = onClick ? "button" : "div";
 	return (
-		<div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+		<Card
+			type={onClick ? "button" : undefined}
+			title={tooltip}
+			onClick={onClick}
+			className={`min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm ${onClick ? "transition hover:border-blue-300 hover:shadow-md" : ""}`}
+		>
 			<div className="flex items-start justify-between gap-4">
 				<div className="min-w-0">
-					<p className="text-xs font-black uppercase tracking-wide text-slate-500" title={tooltip}>
+					<p className="text-xs font-black uppercase tracking-wide text-slate-500">
 						{title}
 					</p>
 					<p className="mt-2 break-words text-3xl font-black leading-tight text-slate-950">
@@ -132,13 +143,15 @@ function KpiCard({ title, value, subtitle, icon: Icon, tone = "blue", tooltip })
 					<Icon size={22} />
 				</div>
 			</div>
-		</div>
+		</Card>
 	);
 }
 
 function StatusBadge({ status }) {
 	const styles = {
 		MATCHED: "border-emerald-200 bg-emerald-50 text-emerald-700",
+		WAREHOUSE: "border-teal-200 bg-teal-50 text-teal-700",
+		TECHNICIAN_BAG: "border-blue-200 bg-blue-50 text-blue-700",
 		PENDING: "border-amber-200 bg-amber-50 text-amber-700",
 		PROBABLE: "border-blue-200 bg-blue-50 text-blue-700",
 		UNCLASSIFIED: "border-orange-200 bg-orange-50 text-orange-700",
@@ -146,6 +159,8 @@ function StatusBadge({ status }) {
 	};
 	const symbols = {
 		MATCHED: "✓",
+		WAREHOUSE: "✓",
+		TECHNICIAN_BAG: "→",
 		PENDING: "●",
 		PROBABLE: "?",
 		UNCLASSIFIED: "!",
@@ -211,16 +226,16 @@ function EquipmentCard({ item }) {
 					<strong className="text-base text-slate-900">{number(item.total)}</strong>
 				</div>
 				<div>
-					<p>Recolhidos</p>
-					<strong className="text-base text-emerald-700">{number(item.returned)}</strong>
+					<p>Em bolsa</p>
+					<strong className="text-base text-blue-700">{number(item.inBag)}</strong>
 				</div>
 				<div>
-					<p>Pendentes</p>
-					<strong className="text-base text-orange-700">{number(item.pending)}</strong>
+					<p>No estoque</p>
+					<strong className="text-base text-emerald-700">{number(item.returned)}</strong>
 				</div>
 			</div>
 			<p className="mt-3 text-sm font-black text-slate-800">
-				{classified ? `${currency(item.returnedValue)} recuperados` : "Valor não calculável"}
+				{classified ? `${currency(item.returnedValue)} devolvidos ao estoque` : "Valor não calculável"}
 			</p>
 		</div>
 	);
@@ -242,7 +257,7 @@ function TechnicianCard({ item, onSelect }) {
 					<p className="text-2xl font-black text-slate-950">{number(item.retirados)}</p>
 				</div>
 				<div className="rounded-xl bg-emerald-50 p-3">
-					<p className="text-xs font-black uppercase text-emerald-600">Recolhidos</p>
+					<p className="text-xs font-black uppercase text-emerald-600">No estoque</p>
 					<p className="text-2xl font-black text-slate-950">{number(item.devolvidos)}</p>
 				</div>
 				<div className="rounded-xl bg-orange-50 p-3">
@@ -271,7 +286,7 @@ function TechnicianCard({ item, onSelect }) {
 			</div>
 			<div className="mt-4 grid grid-cols-2 gap-2 text-sm">
 				<div>
-					<p className="font-bold text-slate-500">Recuperado</p>
+					<p className="font-bold text-slate-500">Devolvido ao estoque</p>
 					<p className="font-black text-emerald-700">{currency(item.valorDevolvido)}</p>
 				</div>
 				<div>
@@ -329,6 +344,85 @@ function DetailModal({ item, onClose }) {
 	);
 }
 
+function WarehouseReturnsModal({ filters, onClose }) {
+	const [page, setPage] = useState(1);
+	const [data, setData] = useState({ items: [], total: 0, totalPages: 1 });
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+
+	useEffect(() => {
+		let active = true;
+		buscarRegistrosRecuperacao({ ...filters, custody: "WAREHOUSE", page, limit: 25 })
+			.then((result) => {
+				if (active) setData(result);
+			})
+			.catch((requestError) => {
+				if (active) setError(requestError?.message || "Não foi possível carregar as devoluções.");
+			})
+			.finally(() => {
+				if (active) setLoading(false);
+			});
+		return () => {
+			active = false;
+		};
+	}, [filters, page]);
+
+	return (
+		<div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+			<div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+				<div className="flex items-start justify-between gap-4">
+					<div>
+						<p className="text-xs font-black uppercase tracking-[0.22em] text-teal-600">Devolução de comodato</p>
+						<h2 className="mt-1 text-2xl font-black text-slate-950">Equipamentos devolvidos ao estoque</h2>
+						<p className="mt-1 text-sm font-bold text-slate-500">{number(data.total)} item(ns) no período selecionado, inclusive registros com item em erro.</p>
+					</div>
+					<button type="button" className="rounded-xl border border-slate-200 p-2 text-slate-600" onClick={onClose} aria-label="Fechar">
+						<X size={20} />
+					</button>
+				</div>
+				{error ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</div> : null}
+				{loading ? <p className="mt-6 rounded-xl bg-slate-50 p-6 text-center font-bold text-slate-500">Carregando devoluções...</p> : null}
+				{!loading ? (
+					<div className="mt-5 space-y-3">
+						{data.items.map((item) => (
+							<div key={item.id} className="grid gap-3 rounded-2xl border border-slate-200 p-4 md:grid-cols-[1.2fr_1fr_auto] md:items-center">
+								<div className="min-w-0">
+									<p className="truncate text-base font-black text-slate-950">{item.clientName}</p>
+									<p className="mt-1 text-sm font-bold text-slate-600">{item.productName}</p>
+									<p className="mt-1 text-xs font-bold text-slate-500">Serial/MAC: {item.serial}</p>
+								</div>
+								<div className="text-sm font-bold text-slate-600">
+									<p>Movimento: {item.custodyMovementNumber || item.custodyMovementId}</p>
+									<p>Data da devolução: {item.custodyAt ? new Date(item.custodyAt).toLocaleString("pt-BR") : "-"}</p>
+									<p>Responsável: {item.technicianName}</p>
+								</div>
+								<div className="flex flex-wrap gap-2 md:justify-end">
+									{item.hubsoftUrl ? (
+										<a className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-sm font-black text-white" href={item.hubsoftUrl} target="_blank" rel="noreferrer">
+											HubSoft <ExternalLink size={15} />
+										</a>
+									) : null}
+									<a className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700" href="/movimentacoes">
+										Movimentações <ExternalLink size={15} />
+									</a>
+								</div>
+							</div>
+						))}
+						{!data.items.length ? <p className="rounded-xl bg-slate-50 p-6 text-center font-bold text-slate-500">Nenhuma devolução encontrada nesse período.</p> : null}
+					</div>
+				) : null}
+				<div className="mt-5 flex items-center justify-between gap-3 text-sm font-bold text-slate-600">
+					<span>Página {page} de {data.totalPages || 1}</span>
+					<div className="flex gap-2">
+						<button type="button" className="rounded-lg border border-slate-200 px-3 py-1 disabled:opacity-40" disabled={page <= 1 || loading} onClick={() => { setLoading(true); setError(""); setPage((current) => Math.max(1, current - 1)); }}>Anterior</button>
+						<button type="button" className="rounded-lg border border-slate-200 px-3 py-1 disabled:opacity-40" disabled={page >= (data.totalPages || 1) || loading} onClick={() => { setLoading(true); setError(""); setPage((current) => current + 1); }}>Próxima</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export default function EquipmentRecoveryPage() {
 	const [period, setPeriod] = useState("today");
 	const [filters, setFilters] = useState({
@@ -358,6 +452,7 @@ export default function EquipmentRecoveryPage() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [message, setMessage] = useState("");
+	const [warehouseModalOpen, setWarehouseModalOpen] = useState(false);
 	const [job, setJob] = useState(null);
 	const [confirmApply, setConfirmApply] = useState(false);
 	const [selectedRow, setSelectedRow] = useState(null);
@@ -644,14 +739,15 @@ export default function EquipmentRecoveryPage() {
 				<KpiCard title="O.S. válidas" value={number(summary.total)} subtitle={`Nova regra adiciona ${number(data.impact?.delta)}`} icon={ShieldCheck} />
 				<KpiCard title="Classificados" value={number(summary.classificados)} subtitle={`${percent(summary.taxaClassificacao)} da base`} icon={Box} tone="green" />
 				<KpiCard title="Não classificados" value={number(summary.desconhecidos)} subtitle="Requer diagnóstico" icon={ShieldAlert} tone="orange" />
-				<KpiCard title="Recolhidos" value={number(summary.devolvidos)} subtitle={`${number(summary.emBolsa)} em bolsa · ${number(summary.devolvidosEstoque)} no estoque`} icon={CheckCircle2} tone="green" />
+				<KpiCard title="Recolhidos" value={number(summary.recolhidos)} subtitle={`${number(summary.emBolsa)} em bolsa · ${number(summary.devolvidos)} conciliados`} icon={CheckCircle2} tone="green" tooltip="Equipamentos cuja movimentação foi conciliada com uma O.S.; estar recolhido não significa que já voltou ao estoque." />
 				<KpiCard title="Pendentes" value={number(summary.pendentes)} subtitle={`${number(summary.vencidas)} vencida(s)`} icon={Clock3} tone="orange" />
-				<KpiCard title="No estoque" value={number(summary.devolvidosEstoque)} subtitle={`${number(summary.custodiaNaoIdentificada)} sem rastreio de custódia`} icon={BarChart3} tone="purple" />
+				<KpiCard title="No estoque" value={number(summary.devolvidosEstoque)} subtitle="Clique para ver os equipamentos" icon={BarChart3} tone="purple" tooltip="Devoluções de comodato rejeitadas (tipo 7) encontradas no Playground. Registros com item em erro também são contabilizados." onClick={() => setWarehouseModalOpen(true)} />
 			</div>
 
-			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
 				<KpiCard title="Valor recuperado" value={currency(summary.valorClassificado)} subtitle="Equipamentos classificados" icon={Wallet} tooltip="Valor estimado dos equipamentos classificados pela regra de velocidade." />
-				<KpiCard title="Valor recolhido" value={currency(summary.valorDevolvido)} subtitle={`${currency(summary.valorEmBolsa)} em bolsa · ${currency(summary.valorDevolvidoEstoque)} no estoque`} icon={CheckCircle2} tone="green" />
+				<KpiCard title="Valor recolhido" value={currency(summary.valorRecolhido)} subtitle={`${currency(summary.valorEmBolsa)} em bolsa`} icon={CheckCircle2} tone="blue" tooltip="Valor dos equipamentos com movimentação conciliada, ainda que permaneçam em bolsa." />
+				<KpiCard title="Valor devolvido" value={currency(summary.valorDevolvidoEstoque)} subtitle="Confirmado por devolução de comodato" icon={CheckCircle2} tone="green" tooltip="Valor configurado dos equipamentos presentes nas devoluções de comodato rejeitadas do Playground." />
 				<KpiCard title="Valor pendente" value={currency(summary.valorPendente)} subtitle="Valor em risco" icon={AlertTriangle} tone="orange" />
 				<KpiCard title="Valor não classificado" value={summary.desconhecidos ? "Não calculável" : currency(summary.valorNaoClassificado)} subtitle={`${number(summary.desconhecidos)} O.S. sem equipamento`} icon={ShieldAlert} tone="slate" />
 			</div>
@@ -689,9 +785,9 @@ export default function EquipmentRecoveryPage() {
 				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 					<h2 className="text-lg font-black text-slate-950">Status da recuperação</h2>
 					<div className="mt-4 space-y-4">
-						<BarRow label="Recolhidos" value={summary.status?.matched} max={maxStatus} tone="bg-emerald-500" />
+						<BarRow label="Recolhidos" value={summary.status?.collected} max={maxStatus} tone="bg-blue-500" />
 						<BarRow label="Em bolsa técnica" value={summary.emBolsa} max={maxStatus} tone="bg-blue-500" />
-						<BarRow label="Devolvidos ao estoque" value={summary.devolvidosEstoque} max={maxStatus} tone="bg-teal-500" />
+						<BarRow label="Devoluções de comodato" value={summary.devolvidosEstoque} max={maxStatus} tone="bg-teal-500" />
 						<BarRow label="Pendentes" value={summary.status?.pending} max={maxStatus} tone="bg-orange-500" />
 						<BarRow label="Prováveis" value={summary.status?.probable} max={maxStatus} tone="bg-blue-500" />
 						<BarRow label="Não classificados" value={summary.status?.unclassified} max={maxStatus} tone="bg-amber-500" />
@@ -854,7 +950,7 @@ export default function EquipmentRecoveryPage() {
 						<div className="mt-4 grid gap-3 rounded-2xl bg-orange-50 p-4 text-sm font-bold text-orange-800">
 							<p>O.S. afetadas: {number(summary.total)}</p>
 							<p>Classificações: {number(summary.classificados)}</p>
-							<p>Matches/recolhimentos: {number(summary.devolvidos)}</p>
+							<p>Matches/recolhimentos: {number(summary.recolhidos)}</p>
 							<p>Valor total classificado: {currency(summary.valorClassificado)}</p>
 						</div>
 						<div className="mt-5 flex justify-end gap-2">
@@ -866,6 +962,7 @@ export default function EquipmentRecoveryPage() {
 			) : null}
 
 			<DetailModal item={selectedRow} onClose={() => setSelectedRow(null)} />
+			{warehouseModalOpen ? <WarehouseReturnsModal filters={filters} onClose={() => setWarehouseModalOpen(false)} /> : null}
 		</div>
 	);
 }

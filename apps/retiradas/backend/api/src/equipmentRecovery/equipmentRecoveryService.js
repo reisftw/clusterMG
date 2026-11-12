@@ -979,6 +979,13 @@ function snapshotFilters(query = {}, params = []) {
 
 function mapSnapshot(row = {}) {
 	const raw = row.raw_snapshot || {};
+	const excerpt = raw.rawExcerpt || raw.raw_excerpt || {};
+	const clientId = cleanText(
+		excerpt.id_cliente ||
+			excerpt.cliente?.id_cliente ||
+			excerpt.cliente_servico?.id_cliente ||
+			excerpt.cliente_servico?.cliente?.id_cliente,
+	);
 	return {
 		id: row.id,
 		osId: row.os_id,
@@ -1002,6 +1009,16 @@ function mapSnapshot(row = {}) {
 		custodyStatus: row.custody_status || null,
 		custodyTechnicianName: row.custody_technician_name || null,
 		custodyAt: row.custody_at || null,
+		custodyMovementId: row.custody_movement_id || null,
+		custodyMovementNumber: row.custody_movement_number || null,
+		custodyNoteId: row.custody_note_id || null,
+		serial: row.custody_serial || null,
+		productName: row.custody_product_name || null,
+		clientName: row.custody_client_name || snapshotClientName(row),
+		clientId: clientId || null,
+		hubsoftUrl: clientId
+			? `https://sempre.hubsoft.com.br/cliente/editar/${encodeURIComponent(clientId)}/ordem_servico`
+			: null,
 		classificationReason: raw.classificationReason || "",
 		serviceCandidates: raw.serviceCandidates || [],
 		rawService: raw.rawService || "",
@@ -1014,12 +1031,21 @@ const RECOVERY_CUSTODY_CTE = `with latest_movement_state as (
 	select distinct on (upper(trim(m.serie)))
 		upper(trim(m.serie)) as serial_key,
 		case
+			when upper(coalesce(m.tipo_operacao, '')) in ('DEVOLUÇÃO DE COMODATO', 'DEVOLUCAO DE COMODATO') then 'WAREHOUSE'
+			when lower(coalesce(m.raw_payload #>> '{item,estoque_local_destino,prefixo}', '')) = 'estoque' then 'WAREHOUSE'
+			when lower(coalesce(m.raw_payload #>> '{item,estoque_local_destino,prefixo}', '')) = 'tecnico' then 'TECHNICIAN_BAG'
 			when upper(coalesce(m.observacao_raw, '')) like '%RETORNO AO ESTOQUE%' then 'WAREHOUSE'
 			when upper(coalesce(m.observacao_raw, '')) like '%OPERACAO: RETIRADA%'
 			  or upper(coalesce(m.observacao_raw, '')) like '%OPERAÇÃO: RETIRADA%' then 'TECHNICIAN_BAG'
 			else 'UNKNOWN'
 		end as custody_status,
 		coalesce(m.emitido_em, m.criado_em) as custody_at
+		,m.id as custody_movement_id
+		,m.numero as custody_movement_number
+		,m.nota_id as custody_note_id
+		,m.serie as custody_serial
+		,m.produto_nome as custody_product_name
+		,m.parceiro_nome as custody_client_name
 	from movimentacoes_estoque m
 	where nullif(trim(m.serie), '') is not null
 	order by upper(trim(m.serie)), coalesce(m.emitido_em, m.criado_em) desc nulls last, m.criado_em desc, m.id desc
@@ -1041,6 +1067,12 @@ const RECOVERY_CUSTODY_CTE = `with latest_movement_state as (
 		case when s.return_status = 'MATCHED' then lm.custody_status end as custody_status,
 		case when s.return_status = 'MATCHED' then lm.custody_technician_name end as custody_technician_name,
 		case when s.return_status = 'MATCHED' then lm.custody_at end as custody_at
+		,case when s.return_status = 'MATCHED' then lm.custody_movement_id end as custody_movement_id
+		,case when s.return_status = 'MATCHED' then lm.custody_movement_number end as custody_movement_number
+		,case when s.return_status = 'MATCHED' then lm.custody_note_id end as custody_note_id
+		,case when s.return_status = 'MATCHED' then lm.custody_serial end as custody_serial
+		,case when s.return_status = 'MATCHED' then lm.custody_product_name end as custody_product_name
+		,case when s.return_status = 'MATCHED' then lm.custody_client_name end as custody_client_name
 	from equipment_recovery_snapshots s
 	left join movimentacoes_estoque matched_movement on matched_movement.id = s.movement_id
 	left join latest_movement_by_serial lm on lm.serial_key = upper(trim(matched_movement.serie))
@@ -1053,6 +1085,8 @@ function mapEquipmentRows(rows = []) {
 			{
 				category,
 				total: 0,
+				collected: 0,
+				inBag: 0,
 				returned: 0,
 				pending: 0,
 				probable: 0,
@@ -1068,6 +1102,8 @@ function mapEquipmentRows(rows = []) {
 		const current = expected.get(category) || {
 			category,
 			total: 0,
+			collected: 0,
+			inBag: 0,
 			returned: 0,
 			pending: 0,
 			probable: 0,
@@ -1077,6 +1113,8 @@ function mapEquipmentRows(rows = []) {
 			pendingValue: 0,
 		};
 		current.total = Number(row.total || 0);
+		current.collected = Number(row.recolhidos || 0);
+		current.inBag = Number(row.em_bolsa || 0);
 		current.returned = Number(row.devolvidos || 0);
 		current.pending = Number(row.pendentes || 0);
 		current.probable = Number(row.provaveis || 0);
@@ -1112,17 +1150,20 @@ async function getSummary(query = {}) {
 		base.params,
 	);
 	const equipmentResult = await db.query(
-		`select
+		`${RECOVERY_CUSTODY_CTE}
+		 select
 			equipment_type,
 			count(*)::int as total,
-			count(*) filter (where return_status = 'MATCHED')::int as devolvidos,
-			count(*) filter (where return_status <> 'MATCHED')::int as pendentes,
+			count(*) filter (where return_status = 'MATCHED')::int as recolhidos,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::int as em_bolsa,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as devolvidos,
+			count(*) filter (where not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::int as pendentes,
 			count(*) filter (where match_confidence = 'PROBABLE')::int as provaveis,
 			count(*) filter (where match_confidence = 'NOT_FOUND')::int as nao_localizados,
 			sum(coalesce(equipment_unit_value, 0))::numeric as valor_total,
-			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED')::numeric as valor_devolvido,
-			sum(coalesce(equipment_unit_value, 0)) filter (where return_status <> 'MATCHED')::numeric as valor_pendente
-		 from equipment_recovery_snapshots
+			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::numeric as valor_devolvido,
+			sum(coalesce(equipment_unit_value, 0)) filter (where not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::numeric as valor_pendente
+		 from recovery_custody
 		 where ${base.where}
 		 group by equipment_type
 		 order by equipment_type`,
@@ -1140,24 +1181,27 @@ async function getSummary(query = {}) {
 		base.params,
 	);
 	const statusResult = await db.query(
-		`select
-			count(*) filter (where return_status = 'MATCHED')::int as matched,
-			count(*) filter (where return_status <> 'MATCHED' and equipment_type <> 'UNKNOWN')::int as pending,
+		`${RECOVERY_CUSTODY_CTE}
+		 select
+			count(*) filter (where return_status = 'MATCHED')::int as collected,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as matched,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::int as pending,
 			count(*) filter (where match_confidence = 'PROBABLE')::int as probable,
 			count(*) filter (where equipment_type = 'UNKNOWN')::int as unclassified,
 			count(*) filter (where match_confidence = 'NOT_FOUND' and equipment_type <> 'UNKNOWN')::int as not_found
-		   from equipment_recovery_snapshots
+		   from recovery_custody
 		  where ${base.where}`,
 		base.params,
 	);
 	const deadlineResult = await db.query(
-		`select
-			count(*) filter (where return_status = 'MATCHED')::int as matched,
-			count(*) filter (where return_status <> 'MATCHED' and equipment_type <> 'UNKNOWN' and now() - closed_at <= interval '1 day')::int as within_deadline,
-			count(*) filter (where return_status <> 'MATCHED' and equipment_type <> 'UNKNOWN' and now() - closed_at > interval '1 day' and now() - closed_at <= interval '3 days')::int as d1_d3,
-			count(*) filter (where return_status <> 'MATCHED' and equipment_type <> 'UNKNOWN' and now() - closed_at > interval '3 days' and now() - closed_at <= interval '5 days')::int as d4_d5,
-			count(*) filter (where return_status <> 'MATCHED' and equipment_type <> 'UNKNOWN' and now() - closed_at > interval '5 days')::int as overdue
-		   from equipment_recovery_snapshots
+		`${RECOVERY_CUSTODY_CTE}
+		 select
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as matched,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE') and now() - closed_at <= interval '1 day')::int as within_deadline,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE') and now() - closed_at > interval '1 day' and now() - closed_at <= interval '3 days')::int as d1_d3,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE') and now() - closed_at > interval '3 days' and now() - closed_at <= interval '5 days')::int as d4_d5,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE') and now() - closed_at > interval '5 days')::int as overdue
+		   from recovery_custody
 		  where ${base.where}`,
 		base.params,
 	);
@@ -1167,14 +1211,37 @@ async function getSummary(query = {}) {
 			count(*) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::int as em_bolsa,
 			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as devolvidos_estoque,
 			count(*) filter (where return_status = 'MATCHED' and coalesce(custody_status, 'UNKNOWN') = 'UNKNOWN')::int as custodia_nao_identificada,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::int as pendentes_estoque,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE') and closed_at < now() - interval '5 days')::int as vencidas_estoque,
 			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::numeric as valor_em_bolsa,
-			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::numeric as valor_devolvido_estoque
+			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::numeric as valor_devolvido_estoque,
+			sum(coalesce(equipment_unit_value, 0)) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::numeric as valor_pendente_estoque
 		 from recovery_custody
 		 where ${base.where}`,
 		base.params,
 	);
+	const warehouseResult = await db.query(
+		`select
+			count(*)::int as total,
+			sum(coalesce(config.valor, 0))::numeric as valor
+		 from movimentacoes_estoque movement
+		 left join movimentacoes_produtos_config config on config.produto_nome = movement.produto_nome
+		 left join lateral (
+			select snapshot.closed_at
+			from equipment_recovery_snapshots snapshot
+			where snapshot.movement_id = movement.id
+			order by snapshot.closed_at desc nulls last
+			limit 1
+		 ) recovery on true
+		 where upper(coalesce(movement.tipo_operacao, '')) in ('DEVOLUÇÃO DE COMODATO', 'DEVOLUCAO DE COMODATO')
+		   and lower(coalesce(movement.raw_payload->>'status', '')) = 'rejeitado'
+		   and coalesce(recovery.closed_at, movement.emitido_em) >= ($1::date::timestamp at time zone '${TIME_ZONE}')
+		   and coalesce(recovery.closed_at, movement.emitido_em) < (($2::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')`,
+		[base.startDate, base.endDate],
+	);
 	const row = result.rows[0] || {};
 	const custody = custodyResult.rows[0] || {};
+	const warehouse = warehouseResult.rows[0] || {};
 	const classified = Number(row.classificados || 0);
 	const total = Number(row.total || 0);
 	const freshness = await db.query(
@@ -1188,26 +1255,30 @@ async function getSummary(query = {}) {
 		endDate: base.endDate,
 		total,
 		classificados: classified,
-		devolvidos: Number(row.devolvidos || 0),
+		recolhidos: Number(row.devolvidos || 0),
+		devolvidos: Number(custody.devolvidos_estoque || 0),
 		emBolsa: Number(custody.em_bolsa || 0),
-		devolvidosEstoque: Number(custody.devolvidos_estoque || 0),
+		devolvidosEstoque: Number(warehouse.total || 0),
+		devolvidosEstoqueConciliados: Number(custody.devolvidos_estoque || 0),
 		custodiaNaoIdentificada: Number(custody.custodia_nao_identificada || 0),
-		pendentes: Number(row.pendentes || 0),
+		pendentes: Number(custody.pendentes_estoque || 0),
 		desconhecidos: Number(row.desconhecidos || 0),
 		provaveis: Number(row.provaveis || 0),
 		naoLocalizados: Number(row.nao_localizados || 0),
-		vencidas: Number(row.vencidas || 0),
+		vencidas: Number(custody.vencidas_estoque || 0),
 		taxaDevolucao:
 			total > 0
-				? Number(row.devolvidos || 0) / total
+				? Number(custody.devolvidos_estoque || 0) / total
 				: 0,
 		taxaClassificacao: total > 0 ? classified / total : 0,
 		valorTotal: Number(row.valor_total || 0),
 		valorClassificado: Number(row.valor_classificado || 0),
-		valorDevolvido: Number(row.valor_devolvido || 0),
+		valorRecolhido: Number(row.valor_devolvido || 0),
+		valorDevolvido: Number(warehouse.valor || 0),
 		valorEmBolsa: Number(custody.valor_em_bolsa || 0),
-		valorDevolvidoEstoque: Number(custody.valor_devolvido_estoque || 0),
-		valorPendente: Number(row.valor_pendente || 0),
+		valorDevolvidoEstoque: Number(warehouse.valor || 0),
+		valorDevolvidoEstoqueConciliado: Number(custody.valor_devolvido_estoque || 0),
+		valorPendente: Number(custody.valor_pendente_estoque || 0),
 		valorNaoClassificado: Number(row.valor_nao_classificado || 0),
 		equipamentos: mapEquipmentRows(equipmentResult.rows),
 		motivosNaoClassificacao: reasonsResult.rows.map((item) => ({
@@ -1215,6 +1286,7 @@ async function getSummary(query = {}) {
 			total: Number(item.total || 0),
 		})),
 		status: {
+			collected: Number(statusResult.rows[0]?.collected || 0),
 			matched: Number(statusResult.rows[0]?.matched || 0),
 			pending: Number(statusResult.rows[0]?.pending || 0),
 			probable: Number(statusResult.rows[0]?.probable || 0),
@@ -1257,15 +1329,15 @@ async function listTechnicians(query = {}) {
 			coalesce(technician_name, 'Sem tecnico identificado') as technician_name,
 			count(*)::int as retirados,
 			count(*) filter (where equipment_type <> 'UNKNOWN')::int as classificados,
-			count(*) filter (where return_status = 'MATCHED')::int as devolvidos,
+			count(*) filter (where return_status = 'MATCHED')::int as recolhidos,
 			count(*) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::int as em_bolsa,
-			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as devolvidos_estoque,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as devolvidos,
 			count(*) filter (where return_status = 'MATCHED' and coalesce(custody_status, 'UNKNOWN') = 'UNKNOWN')::int as custodia_nao_identificada,
-			count(*) filter (where return_status <> 'MATCHED')::int as pendentes,
+			count(*) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::int as pendentes,
 			array_remove(array_agg(distinct custody_technician_name) filter (where custody_status = 'TECHNICIAN_BAG'), null) as tecnicos_bolsa,
 			sum(coalesce(equipment_unit_value, 0))::numeric as valor_total,
-			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED')::numeric as valor_devolvido,
-			sum(coalesce(equipment_unit_value, 0)) filter (where return_status <> 'MATCHED')::numeric as valor_pendente,
+			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::numeric as valor_devolvido,
+			sum(coalesce(equipment_unit_value, 0)) filter (where equipment_type <> 'UNKNOWN' and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE'))::numeric as valor_pendente,
 			count(*) filter (where equipment_type = 'FAST')::int as fast,
 			count(*) filter (where equipment_type = 'AC')::int as ac,
 			count(*) filter (where equipment_type = 'AX')::int as ax,
@@ -1286,9 +1358,10 @@ async function listTechnicians(query = {}) {
 		technicianName: row.technician_name,
 		retirados: Number(row.retirados || 0),
 		classificados: Number(row.classificados || 0),
+		recolhidos: Number(row.recolhidos || 0),
 		devolvidos: Number(row.devolvidos || 0),
 		emBolsa: Number(row.em_bolsa || 0),
-		devolvidosEstoque: Number(row.devolvidos_estoque || 0),
+		devolvidosEstoque: Number(row.devolvidos || 0),
 		custodiaNaoIdentificada: Number(row.custodia_nao_identificada || 0),
 		tecnicosBolsa: row.tecnicos_bolsa || [],
 		pendentes: Number(row.pendentes || 0),
@@ -1316,14 +1389,15 @@ async function listPending(query = {}) {
 	const offset = (page - 1) * limit;
 	const params = [];
 	const base = snapshotFilters(query, params);
-	const where = `${base.where} and return_status <> 'MATCHED'`;
+	const where = `${base.where} and not (return_status = 'MATCHED' and custody_status = 'WAREHOUSE')`;
 	const totalResult = await db.query(
-		`select count(*)::int as total from equipment_recovery_snapshots where ${where}`,
+		`${RECOVERY_CUSTODY_CTE} select count(*)::int as total from recovery_custody where ${where}`,
 		base.params,
 	);
 	const rowsResult = await db.query(
-		`select *
-		 from equipment_recovery_snapshots
+		`${RECOVERY_CUSTODY_CTE}
+		 select *
+		 from recovery_custody
 		 where ${where}
 		 order by closed_at desc nulls last, technician_name, os_number
 		 limit ${limit} offset ${offset}`,
@@ -1339,21 +1413,106 @@ async function listPending(query = {}) {
 	};
 }
 
+function mapWarehouseMovement(row = {}) {
+	const raw = row.raw_payload || {};
+	const clientId = cleanText(raw.clientId);
+	return {
+		id: `movement:${row.id}`,
+		osNumber: row.recovery_os_number || row.os_numero || "Sem O.S. conciliada",
+		clientName: row.recovery_client_name || row.parceiro_nome || "Cliente não identificado",
+		technicianName: movementDestinationTechnician(row.observacao_raw) || row.registrado_por || "-",
+		equipmentType: row.equipment_type || "UNKNOWN",
+		equipmentUnitValue: Number(row.configured_value || 0),
+		productName: row.produto_nome || "-",
+		serial: row.serie || "-",
+		returnStatus: "MATCHED",
+		custodyStatus: "WAREHOUSE",
+		custodyAt: row.recovery_closed_at || row.emitido_em || row.criado_em || null,
+		custodyMovementId: row.movimento_estoque_id || row.id,
+		custodyMovementNumber: row.numero || null,
+		custodyNoteId: row.nota_id || null,
+		matchConfidence: row.status_match === "casada" ? "CONFIRMED" : "MOVEMENT_ONLY",
+		hubsoftUrl: clientId
+			? `https://sempre.hubsoft.com.br/cliente/editar/${encodeURIComponent(clientId)}/ordem_servico`
+			: null,
+	};
+}
+
+async function listWarehouseMovements(query = {}) {
+	const page = normalizePage(query.page);
+	const limit = normalizeLimit(query.limit, 20);
+	const offset = (page - 1) * limit;
+	const { startDate, endDate } = defaultDateRange(query);
+	const params = [startDate, endDate];
+	const equipment = normalizeEquipment(query.equipment);
+	const equipmentWhere = equipment
+		? `and coalesce(config.categoria, 'UNKNOWN') = $${params.push(equipment)}`
+		: "";
+	const where = `upper(coalesce(movement.tipo_operacao, '')) in ('DEVOLUÇÃO DE COMODATO', 'DEVOLUCAO DE COMODATO')
+		and lower(coalesce(movement.raw_payload->>'status', '')) = 'rejeitado'
+		and coalesce(recovery.closed_at, movement.emitido_em) >= ($1::date::timestamp at time zone '${TIME_ZONE}')
+		and coalesce(recovery.closed_at, movement.emitido_em) < (($2::date + interval '1 day')::timestamp at time zone '${TIME_ZONE}')
+		${equipmentWhere}`;
+	const joins = `left join movimentacoes_produtos_config config on config.produto_nome = movement.produto_nome
+		left join lateral (
+			select snapshot.closed_at, snapshot.os_number, snapshot.client_name
+			from equipment_recovery_snapshots snapshot
+			where snapshot.movement_id = movement.id
+			order by snapshot.closed_at desc nulls last
+			limit 1
+		) recovery on true`;
+	const totalResult = await db.query(
+		`select count(*)::int as total
+		 from movimentacoes_estoque movement
+		 ${joins}
+		 where ${where}`,
+		params,
+	);
+	const rowsResult = await db.query(
+		`select movement.*, config.categoria as equipment_type, config.valor as configured_value,
+			recovery.closed_at as recovery_closed_at, recovery.os_number as recovery_os_number,
+			recovery.client_name as recovery_client_name
+		 from movimentacoes_estoque movement
+		 ${joins}
+		 where ${where}
+		 order by coalesce(recovery.closed_at, movement.emitido_em) desc nulls last, movement.criado_em desc, movement.id
+		 limit ${limit} offset ${offset}`,
+		params,
+	);
+	const total = Number(totalResult.rows[0]?.total || 0);
+	return {
+		items: rowsResult.rows.map(mapWarehouseMovement),
+		page,
+		limit,
+		total,
+		totalPages: Math.max(1, Math.ceil(total / limit)),
+	};
+}
+
 async function listRecords(query = {}) {
 	const page = normalizePage(query.page);
 	const limit = normalizeLimit(query.limit, 20);
 	const offset = (page - 1) * limit;
 	const params = [];
 	const base = snapshotFilters(query, params);
+	const custody = ["TECHNICIAN_BAG", "WAREHOUSE", "UNKNOWN"].includes(cleanText(query.custody).toUpperCase())
+		? cleanText(query.custody).toUpperCase()
+		: "";
+	if (custody === "WAREHOUSE") return listWarehouseMovements(query);
+	const where = custody
+		? `${base.where} and coalesce(custody_status, 'UNKNOWN') = $${base.params.push(custody)}`
+		: base.where;
 	const totalResult = await db.query(
-		`select count(*)::int as total from equipment_recovery_snapshots where ${base.where}`,
+		custody
+			? `${RECOVERY_CUSTODY_CTE} select count(*)::int as total from recovery_custody where ${where}`
+			: `select count(*)::int as total from equipment_recovery_snapshots where ${where}`,
 		base.params,
 	);
 	const rowsResult = await db.query(
 		`${RECOVERY_CUSTODY_CTE}
 		 select *
 		   from recovery_custody
-		  where ${base.where}
+		  where ${where}
 		  order by closed_at desc nulls last, technician_name, os_number
 		  limit ${limit} offset ${offset}`,
 		base.params,
@@ -1449,6 +1608,7 @@ module.exports = {
 	_private: {
 		buildMovementIndex,
 		findMovementMatch,
+		mapWarehouseMovement,
 		movementQuantity,
 		movementDestinationTechnician,
 		movementTechnician,

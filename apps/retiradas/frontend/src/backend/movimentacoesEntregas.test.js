@@ -36,6 +36,7 @@ function noteDevolucaoComodato({ serie = "6C4CBCC488B8", parceiro = "Cleide dos 
 		numero: "1001",
 		externo_id: "movimento_estoque_id=2369046",
 		emitido_em: "2026-08-28T15:58:13.000Z",
+		status: "rejeitado",
 		observacao: "Operacao: Retirada | movimento_estoque_id: 2369046",
 		tipo_operacao: { descricao: "Devolução de comodato" },
 		empresa: { nome_razaosocial: "ON TELECOM LTDA" },
@@ -44,6 +45,7 @@ function noteDevolucaoComodato({ serie = "6C4CBCC488B8", parceiro = "Cleide dos 
 		itens: [
 			{
 				serie,
+				status: "erro",
 				produto: { descricao: "ONT GPON XX530V AX3000 WIFI 6", codigo: "S1.05.110.01" },
 			},
 		],
@@ -126,6 +128,12 @@ describe("movimentacoesEntregas", () => {
 		await new Promise((resolve) => setImmediate(resolve));
 
 		expect(job.id).toBeTruthy();
+		expect(upsertMovimentacao).toHaveBeenCalledWith(expect.objectContaining({
+			rawPayload: expect.objectContaining({
+				status: "rejeitado",
+				item: expect.objectContaining({ status: "erro" }),
+			}),
+		}));
 		expect(findOrdensAbertasBySerie).toHaveBeenCalledWith("6C4CBCC488B8");
 		expect(deleteDocument).toHaveBeenCalledWith("match_os_abertas/321");
 		expect(marcarComoCasada).toHaveBeenCalledWith("mov-1", {
@@ -345,6 +353,8 @@ describe("movimentacoesEntregas", () => {
 		expect(requestSempreRaw).toHaveBeenCalledTimes(3);
 		const primeiraUrl = requestSempreRaw.mock.calls[0][0];
 		expect(primeiraUrl).toContain("filter.emitido_em=%24gte%3A2026-01-01T00%3A00%3A00.000Z");
+		expect(primeiraUrl).toContain("filter.status=%24eq%3Arejeitado");
+		expect(primeiraUrl).toContain("filter.tipo_operacao.id=%24eq%3A7");
 		const ultimaUrl = requestSempreRaw.mock.calls[2][0];
 		expect(ultimaUrl).toContain("filter.emitido_em=%24lte%3A2026-02-14T00%3A00%3A00.000Z");
 	});
