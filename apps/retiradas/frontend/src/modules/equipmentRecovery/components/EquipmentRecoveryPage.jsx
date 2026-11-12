@@ -211,7 +211,7 @@ function EquipmentCard({ item }) {
 					<strong className="text-base text-slate-900">{number(item.total)}</strong>
 				</div>
 				<div>
-					<p>Devolvidos</p>
+					<p>Recolhidos</p>
 					<strong className="text-base text-emerald-700">{number(item.returned)}</strong>
 				</div>
 				<div>
@@ -242,7 +242,7 @@ function TechnicianCard({ item, onSelect }) {
 					<p className="text-2xl font-black text-slate-950">{number(item.retirados)}</p>
 				</div>
 				<div className="rounded-xl bg-emerald-50 p-3">
-					<p className="text-xs font-black uppercase text-emerald-600">Devolvidos</p>
+					<p className="text-xs font-black uppercase text-emerald-600">Recolhidos</p>
 					<p className="text-2xl font-black text-slate-950">{number(item.devolvidos)}</p>
 				</div>
 				<div className="rounded-xl bg-orange-50 p-3">
@@ -250,6 +250,17 @@ function TechnicianCard({ item, onSelect }) {
 					<p className="text-2xl font-black text-slate-950">{number(item.pendentes)}</p>
 				</div>
 			</div>
+			<div className="mt-3 grid grid-cols-2 gap-2 text-sm font-black">
+				<div className="rounded-xl bg-blue-50 p-3 text-blue-800">
+					<p className="text-xs uppercase">Em bolsa</p>
+					<p className="text-xl text-slate-950">{number(item.emBolsa)}</p>
+				</div>
+				<div className="rounded-xl bg-emerald-50 p-3 text-emerald-800">
+					<p className="text-xs uppercase">No estoque</p>
+					<p className="text-xl text-slate-950">{number(item.devolvidosEstoque)}</p>
+				</div>
+			</div>
+			{item.tecnicosBolsa?.length ? <p className="mt-3 line-clamp-2 text-xs font-bold text-slate-500">Custódia identificada: {item.tecnicosBolsa.join(" · ")}</p> : null}
 			<div className="mt-4 grid grid-cols-4 gap-2 text-center text-xs font-black">
 				{["FAST", "AC", "AX", "UNKNOWN"].map((type) => (
 					<div key={type} className="rounded-xl border border-slate-100 bg-slate-50 p-2">
@@ -304,6 +315,8 @@ function DetailModal({ item, onClose }) {
 					<p><strong>Valor:</strong> {currency(item.equipmentUnitValue)}</p>
 					<p><strong>Movimentação encontrada:</strong> {item.movementId || "-"}</p>
 					<p><strong>Confiança:</strong> {item.matchConfidence || "-"}</p>
+					<p><strong>Custódia atual:</strong> {item.custodyStatus === "TECHNICIAN_BAG" ? "Em bolsa técnica" : item.custodyStatus === "WAREHOUSE" ? "Devolvido ao estoque" : "Sem rastreio de custódia"}</p>
+					<p><strong>Técnico da bolsa:</strong> {item.custodyTechnicianName || "-"}</p>
 				</div>
 				<div className="mt-4 rounded-xl bg-slate-50 p-4">
 					<p className="text-xs font-black uppercase text-slate-500">Candidatos de serviço lidos</p>
@@ -631,14 +644,14 @@ export default function EquipmentRecoveryPage() {
 				<KpiCard title="O.S. válidas" value={number(summary.total)} subtitle={`Nova regra adiciona ${number(data.impact?.delta)}`} icon={ShieldCheck} />
 				<KpiCard title="Classificados" value={number(summary.classificados)} subtitle={`${percent(summary.taxaClassificacao)} da base`} icon={Box} tone="green" />
 				<KpiCard title="Não classificados" value={number(summary.desconhecidos)} subtitle="Requer diagnóstico" icon={ShieldAlert} tone="orange" />
-				<KpiCard title="Devolvidos" value={number(summary.devolvidos)} subtitle={`Taxa ${percent(summary.taxaDevolucao)}`} icon={CheckCircle2} tone="green" />
+				<KpiCard title="Recolhidos" value={number(summary.devolvidos)} subtitle={`${number(summary.emBolsa)} em bolsa · ${number(summary.devolvidosEstoque)} no estoque`} icon={CheckCircle2} tone="green" />
 				<KpiCard title="Pendentes" value={number(summary.pendentes)} subtitle={`${number(summary.vencidas)} vencida(s)`} icon={Clock3} tone="orange" />
-				<KpiCard title="Taxa de devolução" value={percent(summary.taxaDevolucao)} subtitle="Itens conciliados" icon={BarChart3} tone="purple" />
+				<KpiCard title="No estoque" value={number(summary.devolvidosEstoque)} subtitle={`${number(summary.custodiaNaoIdentificada)} sem rastreio de custódia`} icon={BarChart3} tone="purple" />
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 				<KpiCard title="Valor recuperado" value={currency(summary.valorClassificado)} subtitle="Equipamentos classificados" icon={Wallet} tooltip="Valor estimado dos equipamentos classificados pela regra de velocidade." />
-				<KpiCard title="Valor devolvido" value={currency(summary.valorDevolvido)} subtitle="Conciliado com estoque" icon={CheckCircle2} tone="green" />
+				<KpiCard title="Valor recolhido" value={currency(summary.valorDevolvido)} subtitle={`${currency(summary.valorEmBolsa)} em bolsa · ${currency(summary.valorDevolvidoEstoque)} no estoque`} icon={CheckCircle2} tone="green" />
 				<KpiCard title="Valor pendente" value={currency(summary.valorPendente)} subtitle="Valor em risco" icon={AlertTriangle} tone="orange" />
 				<KpiCard title="Valor não classificado" value={summary.desconhecidos ? "Não calculável" : currency(summary.valorNaoClassificado)} subtitle={`${number(summary.desconhecidos)} O.S. sem equipamento`} icon={ShieldAlert} tone="slate" />
 			</div>
@@ -676,7 +689,9 @@ export default function EquipmentRecoveryPage() {
 				<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 					<h2 className="text-lg font-black text-slate-950">Status da recuperação</h2>
 					<div className="mt-4 space-y-4">
-						<BarRow label="Devolvidos" value={summary.status?.matched} max={maxStatus} tone="bg-emerald-500" />
+						<BarRow label="Recolhidos" value={summary.status?.matched} max={maxStatus} tone="bg-emerald-500" />
+						<BarRow label="Em bolsa técnica" value={summary.emBolsa} max={maxStatus} tone="bg-blue-500" />
+						<BarRow label="Devolvidos ao estoque" value={summary.devolvidosEstoque} max={maxStatus} tone="bg-teal-500" />
 						<BarRow label="Pendentes" value={summary.status?.pending} max={maxStatus} tone="bg-orange-500" />
 						<BarRow label="Prováveis" value={summary.status?.probable} max={maxStatus} tone="bg-blue-500" />
 						<BarRow label="Não classificados" value={summary.status?.unclassified} max={maxStatus} tone="bg-amber-500" />
@@ -807,7 +822,10 @@ export default function EquipmentRecoveryPage() {
 									</td>
 									<td className="px-3 py-3"><EquipmentBadge type={item.equipmentType} /></td>
 									<td className="px-3 py-3 font-black text-slate-800">{currency(item.equipmentUnitValue)}</td>
-									<td className="px-3 py-3"><StatusBadge status={statusFor(item)} /></td>
+									<td className="px-3 py-3">
+										<StatusBadge status={statusFor(item)} />
+										{item.returnStatus === "MATCHED" ? <p className="mt-1 text-xs font-bold text-slate-500">{item.custodyStatus === "TECHNICIAN_BAG" ? "Em bolsa" : item.custodyStatus === "WAREHOUSE" ? "No estoque" : "Custódia não identificada"}</p> : null}
+									</td>
 									<td className="px-3 py-3">
 										<button type="button" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-black text-slate-700" onClick={() => setSelectedRow(item)}>
 											<Eye size={14} /> Ver detalhes
@@ -836,7 +854,7 @@ export default function EquipmentRecoveryPage() {
 						<div className="mt-4 grid gap-3 rounded-2xl bg-orange-50 p-4 text-sm font-bold text-orange-800">
 							<p>O.S. afetadas: {number(summary.total)}</p>
 							<p>Classificações: {number(summary.classificados)}</p>
-							<p>Matches/devoluções: {number(summary.devolvidos)}</p>
+							<p>Matches/recolhimentos: {number(summary.devolvidos)}</p>
 							<p>Valor total classificado: {currency(summary.valorClassificado)}</p>
 						</div>
 						<div className="mt-5 flex justify-end gap-2">

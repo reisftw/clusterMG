@@ -193,8 +193,13 @@ function classifySnapshotService(raw = {}) {
 	};
 }
 
+function movementDestinationTechnician(observation = "") {
+	return cleanText(String(observation || "").match(/Destino:\s*T[eé]cnico:\s*([^|\r\n]+)/i)?.[1]);
+}
+
 function movementTechnician(row = {}) {
 	const raw = row.raw_payload || {};
+	const destinationName = movementDestinationTechnician(row.observacao_raw);
 	return {
 		id: cleanText(
 			raw.tecnicoId ||
@@ -207,6 +212,7 @@ function movementTechnician(row = {}) {
 			raw.tecnicoNome ||
 				raw.tecnico_nome ||
 				raw.tecnico?.nome ||
+				destinationName ||
 				row.registrado_por ||
 				raw.usuarioRecebedorNome ||
 				"",
@@ -215,6 +221,7 @@ function movementTechnician(row = {}) {
 			raw.tecnicoNome ||
 				raw.tecnico_nome ||
 				raw.tecnico?.nome ||
+				destinationName ||
 				row.registrado_por ||
 				raw.usuarioRecebedorNome ||
 				"",
@@ -992,6 +999,9 @@ function mapSnapshot(row = {}) {
 		matchType: row.match_type,
 		movementId: row.movement_id,
 		movementAt: row.movement_at,
+		custodyStatus: row.custody_status || null,
+		custodyTechnicianName: row.custody_technician_name || null,
+		custodyAt: row.custody_at || null,
 		classificationReason: raw.classificationReason || "",
 		serviceCandidates: raw.serviceCandidates || [],
 		rawService: raw.rawService || "",
@@ -999,6 +1009,42 @@ function mapSnapshot(row = {}) {
 		parsedSpeedMbps: raw.parsedSpeedMbps || null,
 	};
 }
+
+const RECOVERY_CUSTODY_CTE = `with latest_movement_state as (
+	select distinct on (upper(trim(m.serie)))
+		upper(trim(m.serie)) as serial_key,
+		case
+			when upper(coalesce(m.observacao_raw, '')) like '%RETORNO AO ESTOQUE%' then 'WAREHOUSE'
+			when upper(coalesce(m.observacao_raw, '')) like '%OPERACAO: RETIRADA%'
+			  or upper(coalesce(m.observacao_raw, '')) like '%OPERAÇÃO: RETIRADA%' then 'TECHNICIAN_BAG'
+			else 'UNKNOWN'
+		end as custody_status,
+		coalesce(m.emitido_em, m.criado_em) as custody_at
+	from movimentacoes_estoque m
+	where nullif(trim(m.serie), '') is not null
+	order by upper(trim(m.serie)), coalesce(m.emitido_em, m.criado_em) desc nulls last, m.criado_em desc, m.id desc
+), latest_bag_by_serial as (
+	select distinct on (upper(trim(m.serie)))
+		upper(trim(m.serie)) as serial_key,
+		nullif(trim(substring(m.observacao_raw from '(?i)Destino:[[:space:]]*T[eé]cnico:[[:space:]]*([^|\\r\\n]+)')), '') as custody_technician_name
+	from movimentacoes_estoque m
+	where nullif(trim(m.serie), '') is not null
+	  and (upper(coalesce(m.observacao_raw, '')) like '%OPERACAO: RETIRADA%'
+	    or upper(coalesce(m.observacao_raw, '')) like '%OPERAÇÃO: RETIRADA%')
+	order by upper(trim(m.serie)), coalesce(m.emitido_em, m.criado_em) desc nulls last, m.criado_em desc, m.id desc
+), latest_movement_by_serial as (
+	select state.*, bag.custody_technician_name
+	from latest_movement_state state
+	left join latest_bag_by_serial bag using (serial_key)
+), recovery_custody as (
+	select s.*,
+		case when s.return_status = 'MATCHED' then lm.custody_status end as custody_status,
+		case when s.return_status = 'MATCHED' then lm.custody_technician_name end as custody_technician_name,
+		case when s.return_status = 'MATCHED' then lm.custody_at end as custody_at
+	from equipment_recovery_snapshots s
+	left join movimentacoes_estoque matched_movement on matched_movement.id = s.movement_id
+	left join latest_movement_by_serial lm on lm.serial_key = upper(trim(matched_movement.serie))
+)`;
 
 function mapEquipmentRows(rows = []) {
 	const expected = new Map(
@@ -1115,7 +1161,20 @@ async function getSummary(query = {}) {
 		  where ${base.where}`,
 		base.params,
 	);
+	const custodyResult = await db.query(
+		`${RECOVERY_CUSTODY_CTE}
+		 select
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::int as em_bolsa,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as devolvidos_estoque,
+			count(*) filter (where return_status = 'MATCHED' and coalesce(custody_status, 'UNKNOWN') = 'UNKNOWN')::int as custodia_nao_identificada,
+			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::numeric as valor_em_bolsa,
+			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::numeric as valor_devolvido_estoque
+		 from recovery_custody
+		 where ${base.where}`,
+		base.params,
+	);
 	const row = result.rows[0] || {};
+	const custody = custodyResult.rows[0] || {};
 	const classified = Number(row.classificados || 0);
 	const total = Number(row.total || 0);
 	const freshness = await db.query(
@@ -1130,6 +1189,9 @@ async function getSummary(query = {}) {
 		total,
 		classificados: classified,
 		devolvidos: Number(row.devolvidos || 0),
+		emBolsa: Number(custody.em_bolsa || 0),
+		devolvidosEstoque: Number(custody.devolvidos_estoque || 0),
+		custodiaNaoIdentificada: Number(custody.custodia_nao_identificada || 0),
 		pendentes: Number(row.pendentes || 0),
 		desconhecidos: Number(row.desconhecidos || 0),
 		provaveis: Number(row.provaveis || 0),
@@ -1143,6 +1205,8 @@ async function getSummary(query = {}) {
 		valorTotal: Number(row.valor_total || 0),
 		valorClassificado: Number(row.valor_classificado || 0),
 		valorDevolvido: Number(row.valor_devolvido || 0),
+		valorEmBolsa: Number(custody.valor_em_bolsa || 0),
+		valorDevolvidoEstoque: Number(custody.valor_devolvido_estoque || 0),
 		valorPendente: Number(row.valor_pendente || 0),
 		valorNaoClassificado: Number(row.valor_nao_classificado || 0),
 		equipamentos: mapEquipmentRows(equipmentResult.rows),
@@ -1177,7 +1241,7 @@ async function listTechnicians(query = {}) {
 	const base = snapshotFilters(query, params);
 	const search = cleanText(query.search || query.q);
 	const where = search
-		? `${base.where} and coalesce(technician_name, '') ilike $${base.params.push(`%${search}%`)}`
+		? `${base.where} and (coalesce(technician_name, '') ilike $${base.params.push(`%${search}%`)} or coalesce(custody_technician_name, '') ilike $${base.params.push(`%${search}%`)})`
 		: base.where;
 	const sort = cleanText(query.sort || "pending");
 	const orderBy = {
@@ -1187,14 +1251,18 @@ async function listTechnicians(query = {}) {
 		returnRate: "taxa_devolucao desc nulls last, retirados desc",
 	}[sort] || "pendentes desc, retirados desc";
 	const result = await db.query(
-		`with grouped as (
+		`${RECOVERY_CUSTODY_CTE}, grouped as (
 		select
 			coalesce(technician_id, technician_name_normalized, 'SEM_TECNICO') as technician_key,
 			coalesce(technician_name, 'Sem tecnico identificado') as technician_name,
 			count(*)::int as retirados,
 			count(*) filter (where equipment_type <> 'UNKNOWN')::int as classificados,
 			count(*) filter (where return_status = 'MATCHED')::int as devolvidos,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'TECHNICIAN_BAG')::int as em_bolsa,
+			count(*) filter (where return_status = 'MATCHED' and custody_status = 'WAREHOUSE')::int as devolvidos_estoque,
+			count(*) filter (where return_status = 'MATCHED' and coalesce(custody_status, 'UNKNOWN') = 'UNKNOWN')::int as custodia_nao_identificada,
 			count(*) filter (where return_status <> 'MATCHED')::int as pendentes,
+			array_remove(array_agg(distinct custody_technician_name) filter (where custody_status = 'TECHNICIAN_BAG'), null) as tecnicos_bolsa,
 			sum(coalesce(equipment_unit_value, 0))::numeric as valor_total,
 			sum(coalesce(equipment_unit_value, 0)) filter (where return_status = 'MATCHED')::numeric as valor_devolvido,
 			sum(coalesce(equipment_unit_value, 0)) filter (where return_status <> 'MATCHED')::numeric as valor_pendente,
@@ -1202,7 +1270,7 @@ async function listTechnicians(query = {}) {
 			count(*) filter (where equipment_type = 'AC')::int as ac,
 			count(*) filter (where equipment_type = 'AX')::int as ax,
 			count(*) filter (where equipment_type = 'UNKNOWN')::int as unknown
-			 from equipment_recovery_snapshots
+			 from recovery_custody
 			 where ${where}
 		 group by 1, 2
 		)
@@ -1219,6 +1287,10 @@ async function listTechnicians(query = {}) {
 		retirados: Number(row.retirados || 0),
 		classificados: Number(row.classificados || 0),
 		devolvidos: Number(row.devolvidos || 0),
+		emBolsa: Number(row.em_bolsa || 0),
+		devolvidosEstoque: Number(row.devolvidos_estoque || 0),
+		custodiaNaoIdentificada: Number(row.custodia_nao_identificada || 0),
+		tecnicosBolsa: row.tecnicos_bolsa || [],
 		pendentes: Number(row.pendentes || 0),
 		taxaDevolucao:
 			Number(row.retirados || 0) > 0
@@ -1278,8 +1350,9 @@ async function listRecords(query = {}) {
 		base.params,
 	);
 	const rowsResult = await db.query(
-		`select *
-		   from equipment_recovery_snapshots
+		`${RECOVERY_CUSTODY_CTE}
+		 select *
+		   from recovery_custody
 		  where ${base.where}
 		  order by closed_at desc nulls last, technician_name, os_number
 		  limit ${limit} offset ${offset}`,
@@ -1377,6 +1450,7 @@ module.exports = {
 		buildMovementIndex,
 		findMovementMatch,
 		movementQuantity,
+		movementDestinationTechnician,
 		movementTechnician,
 		normalizeClientName,
 		normalizeOrderNumber,
