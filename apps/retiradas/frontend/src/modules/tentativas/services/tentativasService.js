@@ -23,6 +23,13 @@ export function listarLocalidadesTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/localidades${qs(params)}`);
 }
 
+export function solicitarBairroTentativas(payload = {}) {
+	return requestVpsApi("/tentativas/bairros/solicitar", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
 export function listarRetornosTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/retornos${qs(params)}`);
 }
@@ -178,6 +185,17 @@ export function listarBairrosResponsaveisTentativas(cidade) {
 
 export function transferirBairroTentativas(payload = {}) {
 	return requestVpsApi("/tentativas/admin/bairros/transferir", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
+export function listarSolicitacoesBairroTentativas(params = {}) {
+	return requestVpsApi(`/tentativas/admin/bairros/solicitacoes${qs(params)}`);
+}
+
+export function resolverSolicitacaoBairroTentativas(id, action, payload = {}) {
+	return requestVpsApi(`/tentativas/admin/bairros/solicitacoes/${encodeURIComponent(id)}/${action}`, {
 		method: "POST",
 		body: JSON.stringify(payload),
 	});

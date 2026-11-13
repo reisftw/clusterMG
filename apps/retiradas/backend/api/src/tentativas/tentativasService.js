@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const db = require("../db");
 const auditLog = require("../auditLog");
+const notificationsService = require("../notificationsService");
 const centralService = require("./tentativasCentralService");
 const alertsService = require("./tentativasAlertsService");
 
@@ -94,6 +95,12 @@ function normalizeNeighborhoodGroup(value) {
 	const normalized = normalizeText(value);
 	if (normalized === "__sem_bairro__") return normalized;
 	return normalized.replace(/^(bairro|residencial)\s+/, "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeNeighborhoodClaimHours(value) {
+	const hours = Number(value);
+	if (!Number.isFinite(hours)) return 24;
+	return Math.min(24, Math.max(1, Math.ceil(hours)));
 }
 
 function neighborhoodGroupExpression(alias = "o") {
@@ -822,13 +829,6 @@ async function listCities(_query = {}, user = {}) {
 			   and coalesce(o.telefone_digits, '') ~ $4
 			   and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 			   and ($3::boolean = true or exists (select 1 from allowed a where a.cidade_normalizada = o.cidade_normalizada))
-			   and ($3::boolean = true or exists (
-			     select 1
-			       from tentativas_neighborhood_locks l
-			      where l.cidade_normalizada = o.cidade_normalizada
-			        and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
-			        and (l.technician_user_id = $1 or lower(coalesce(l.technician_email, '')) = $2)
-			   ))
 			 group by o.cidade, o.cidade_normalizada
 		)
 		select * from counts order by total desc, cidade asc`,
@@ -1167,29 +1167,263 @@ async function selectNeighborhood(cidade, bairro, user = {}) {
 		error.statusCode = 403;
 		throw error;
 	}
-	if (!groupKey) return { locked: true, allOwnedNeighborhoods: true };
-	let current = await db.query(
-		`select * from tentativas_neighborhood_locks
-		  where cidade_normalizada = $1 and bairro_grupo = $2
+	if (!groupKey) return { locked: false, allNeighborhoods: true };
+	const current = await db.query(
+		`select * from tentativas_neighborhood_claims
+		  where cidade_normalizada = $1 and bairro_grupo = $2 and expires_at > now()
 		  limit 1`,
 		[cityKey, groupKey],
 	);
-	if (!current.rowCount) {
-		await rebalanceCityNeighborhoods(cidade);
-		current = await db.query(
-			`select * from tentativas_neighborhood_locks
-			  where cidade_normalizada = $1 and bairro_grupo = $2
-			  limit 1`,
-			[cityKey, groupKey],
-		);
-	}
 	const owner = current.rows[0];
-	if (!owner || (owner.technician_user_id !== userId(user) && owner.technician_email !== userEmail(user))) {
-		const error = new Error(`Bairro atribuido a ${owner?.technician_name || "outro tecnico"}.`);
+	if (!owner) {
+		const error = new Error("Solicite este bairro antes de iniciar as tratativas.");
 		error.statusCode = 409;
 		throw error;
 	}
-	return { locked: true, groupKey, owner: owner.technician_name };
+	if (owner.technician_user_id !== userId(user) && owner.technician_email !== userEmail(user)) {
+		const error = new Error(`Bairro reservado por ${owner.technician_name || "outro tecnico"} ate ${owner.expires_at}.`);
+		error.statusCode = 409;
+		throw error;
+	}
+	return { locked: true, groupKey, owner: owner.technician_name, expiresAt: owner.expires_at };
+}
+
+async function requestNeighborhood(payload = {}, user = {}) {
+	if (hasAdminAccess(user)) {
+		const error = new Error("Apenas tecnicos podem solicitar bairros.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const city = text(payload.cidade || payload.city);
+	const cityKey = normalizeText(city);
+	const groupKey = normalizeNeighborhoodGroup(payload.bairroGrupo || payload.groupKey || payload.bairro);
+	const neighborhoodName = text(payload.bairroNome || payload.bairro) || groupKey;
+	const hours = normalizeNeighborhoodClaimHours(payload.hours ?? payload.horas);
+	if (!cityKey || !groupKey) {
+		const error = new Error("Informe a cidade e o bairro.");
+		error.statusCode = 400;
+		throw error;
+	}
+	if (!(await ensureTechnicianCanUseCity(city, user))) {
+		const error = new Error("Cidade nao autorizada para este tecnico.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const client = await db.connect();
+	let claim;
+	let pendingRequest;
+	try {
+		await client.query("begin");
+		await client.query("select pg_advisory_xact_lock(hashtext($1))", [
+			`tentativas-bairro:${cityKey}:${groupKey}`,
+		]);
+		const current = await client.query(
+			`select * from tentativas_neighborhood_claims
+			  where cidade_normalizada = $1 and bairro_grupo = $2 and expires_at > now()
+			  for update`,
+			[cityKey, groupKey],
+		);
+		const owner = current.rows[0];
+		if (owner && owner.technician_user_id !== userId(user) && owner.technician_email !== userEmail(user)) {
+			let requestResult = await client.query(
+				`insert into tentativas_neighborhood_claim_requests (
+					id, cidade, cidade_normalizada, bairro_grupo, bairro_nome,
+					requester_user_id, requester_email, requester_name,
+					current_owner_user_id, current_owner_name, requested_hours
+				) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+				on conflict (cidade_normalizada, bairro_grupo) where status = 'PENDING' do nothing
+				returning *`,
+				[
+					id("tncr"), city, cityKey, groupKey, neighborhoodName,
+					userId(user), userEmail(user), userName(user),
+					owner.technician_user_id, owner.technician_name, hours,
+				],
+			);
+			if (!requestResult.rows[0]) {
+				requestResult = await client.query(
+					`select * from tentativas_neighborhood_claim_requests
+					  where cidade_normalizada = $1 and bairro_grupo = $2 and status = 'PENDING'
+					  limit 1 for update`,
+					[cityKey, groupKey],
+				);
+				if (requestResult.rows[0]?.requester_user_id !== userId(user)) {
+					const error = new Error("Este bairro já possui uma solicitação aguardando análise.");
+					error.statusCode = 409;
+					throw error;
+				}
+			}
+			pendingRequest = requestResult.rows[0];
+			await client.query("commit");
+			claim = null;
+		} else {
+			const result = await client.query(
+				`insert into tentativas_neighborhood_claims (
+					cidade_normalizada, bairro_grupo, technician_user_id,
+					technician_email, technician_name, requested_at, expires_at
+				) values ($1,$2,$3,$4,$5,now(),now() + ($6::int * interval '1 hour'))
+				on conflict (cidade_normalizada, bairro_grupo) do update set
+					technician_user_id = excluded.technician_user_id,
+					technician_email = excluded.technician_email,
+					technician_name = excluded.technician_name,
+					requested_at = excluded.requested_at,
+					expires_at = excluded.expires_at
+				returning *`,
+				[cityKey, groupKey, userId(user), userEmail(user), userName(user), hours],
+			);
+			claim = result.rows[0];
+			await client.query("commit");
+		}
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+	if (pendingRequest) {
+		await notificationsService.createNotification({
+			type: "geral",
+			title: "Solicitação de bairro em Tentativas",
+			message: `${userName(user)} solicitou ${neighborhoodName}, em ${city}, atualmente reservado por ${pendingRequest.current_owner_name || "outro técnico"}.`,
+			targetPath: "/tentativas?tab=distribution",
+			severity: "warning",
+			user,
+			targets: { roles: ["admin", "backoffice", "backoffice_retirada"] },
+			meta: { module: "tentativas", requestId: pendingRequest.id, kind: "neighborhood_claim" },
+			dedupeKey: `tentativas-bairro-${pendingRequest.id}`,
+		});
+		await recordAudit("neighborhood.claim.request", pendingRequest.id, user, {
+			city, groupKey, hours, currentOwner: pendingRequest.current_owner_name,
+		});
+		return {
+			status: "PENDING_APPROVAL",
+			requestId: pendingRequest.id,
+			city,
+			groupKey,
+			hours,
+			currentOwnerName: pendingRequest.current_owner_name || "",
+		};
+	}
+	await recordAudit("neighborhood.claim", `${cityKey}:${groupKey}`, user, { hours, expiresAt: claim.expires_at });
+	return { status: "CLAIMED", city, groupKey, hours, expiresAt: claim.expires_at, technicianName: claim.technician_name };
+}
+
+async function listNeighborhoodClaimRequests(query = {}) {
+	const status = text(query.status || "PENDING").toUpperCase();
+	const limit = Math.min(Math.max(Number(query.limit || 50), 1), 100);
+	const params = [];
+	const clauses = ["1=1"];
+	if (status) {
+		params.push(status);
+		clauses.push(`status = $${params.length}`);
+	}
+	params.push(limit);
+	const result = await db.query(
+		`select id, cidade, bairro_grupo as "groupKey", bairro_nome as bairro,
+		        requester_user_id as "requesterUserId", requester_name as "requesterName",
+		        current_owner_user_id as "currentOwnerUserId", current_owner_name as "currentOwnerName",
+		        requested_hours as "requestedHours", status, requested_at as "requestedAt",
+		        reviewed_at as "reviewedAt", reviewed_by_name as "reviewedByName",
+		        resolution_note as "resolutionNote"
+		   from tentativas_neighborhood_claim_requests
+		  where ${clauses.join(" and ")}
+		  order by requested_at desc
+		  limit $${params.length}`,
+		params,
+	);
+	return { items: result.rows };
+}
+
+async function resolveNeighborhoodClaimRequest(requestId, payload = {}, user = {}, action = "approve") {
+	const approve = action === "approve";
+	const client = await db.connect();
+	let request;
+	try {
+		await client.query("begin");
+		const current = await client.query(
+			`select * from tentativas_neighborhood_claim_requests where id = $1 for update`,
+			[text(requestId)],
+		);
+		request = current.rows[0];
+		if (!request) {
+			const error = new Error("Solicitação de bairro não encontrada.");
+			error.statusCode = 404;
+			throw error;
+		}
+		if (request.status !== "PENDING") {
+			const error = new Error("Esta solicitação já foi analisada.");
+			error.statusCode = 409;
+			throw error;
+		}
+		await client.query("select pg_advisory_xact_lock(hashtext($1))", [
+			`tentativas-bairro:${request.cidade_normalizada}:${request.bairro_grupo}`,
+		]);
+		if (approve) {
+			const eligibility = await client.query(
+				`select 1
+				   from tentativas_technician_cities c
+				   join app_users u on u.uid = c.user_id or lower(u.email) = lower(coalesce(c.user_email, ''))
+				  where c.active = true and c.cidade_normalizada = $1
+				    and (c.user_id = $2 or lower(coalesce(c.user_email, '')) = lower($3))
+				    and (c.permanent = true or current_date between coalesce(c.valid_from, current_date) and coalesce(c.valid_until, current_date))
+				    and lower(coalesce(u.role, '')) = 'tecnico' and u.disabled = false
+				  limit 1`,
+				[request.cidade_normalizada, request.requester_user_id, request.requester_email || ""],
+			);
+			if (!eligibility.rowCount) {
+				const error = new Error("O técnico não está mais associado a esta cidade.");
+				error.statusCode = 409;
+				throw error;
+			}
+			await client.query(
+				`insert into tentativas_neighborhood_claims (
+					cidade_normalizada, bairro_grupo, technician_user_id,
+					technician_email, technician_name, requested_at, expires_at
+				) values ($1,$2,$3,$4,$5,now(),now() + ($6::int * interval '1 hour'))
+				on conflict (cidade_normalizada, bairro_grupo) do update set
+					technician_user_id = excluded.technician_user_id,
+					technician_email = excluded.technician_email,
+					technician_name = excluded.technician_name,
+					requested_at = excluded.requested_at,
+					expires_at = excluded.expires_at`,
+				[
+					request.cidade_normalizada, request.bairro_grupo,
+					request.requester_user_id, request.requester_email,
+					request.requester_name, request.requested_hours,
+				],
+			);
+		}
+		const note = text(payload.note || payload.reason) || (approve ? "Solicitação aprovada." : "Solicitação recusada.");
+		const updated = await client.query(
+			`update tentativas_neighborhood_claim_requests
+			    set status = $2, reviewed_at = now(), reviewed_by_id = $3,
+			        reviewed_by_name = $4, resolution_note = $5
+			  where id = $1 returning *`,
+			[text(requestId), approve ? "APPROVED" : "REJECTED", userId(user), userName(user), note],
+		);
+		request = updated.rows[0];
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+	await notificationsService.createNotification({
+		type: "geral",
+		title: approve ? "Bairro liberado" : "Solicitação de bairro recusada",
+		message: approve
+			? `${request.bairro_nome}, em ${request.cidade}, foi liberado para você por ${request.requested_hours} hora(s).`
+			: `${request.bairro_nome}, em ${request.cidade}, não foi liberado.`,
+		targetPath: "/tentativas?tab=route",
+		severity: approve ? "success" : "warning",
+		user,
+		targets: { users: [request.requester_user_id] },
+		meta: { module: "tentativas", requestId: request.id, status: request.status },
+	});
+	await recordAudit(`neighborhood.claim.${approve ? "approve" : "reject"}`, request.id, user, {
+		city: request.cidade, groupKey: request.bairro_grupo, requester: request.requester_name,
+	});
+	return { item: request };
 }
 
 function mapOpportunity(row = {}) {
@@ -1267,12 +1501,19 @@ async function getMyRoute(query = {}, user = {}) {
 		    and coalesce(o.telefone_digits, '') ~ $5
 		    and o.cidade_normalizada = $1
 		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
-		    and ($12::boolean = true or exists (
+		    and ($12::boolean = true or not exists (
 		      select 1
-		        from tentativas_neighborhood_locks l
-		       where l.cidade_normalizada = o.cidade_normalizada
-		         and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
-		         and (l.technician_user_id = $13 or lower(coalesce(l.technician_email, '')) = $14)
+		        from tentativas_neighborhood_claims active_claim
+		       where active_claim.cidade_normalizada = o.cidade_normalizada
+		         and active_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and active_claim.expires_at > now()
+		    ) or exists (
+		      select 1
+		        from tentativas_neighborhood_claims own_claim
+		       where own_claim.cidade_normalizada = o.cidade_normalizada
+		         and own_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and own_claim.expires_at > now()
+		         and (own_claim.technician_user_id = $13 or lower(coalesce(own_claim.technician_email, '')) = $14)
 		    ))
 		    and (
 		      $2::text = ''
@@ -1353,19 +1594,26 @@ async function listNeighborhoods(query = {}, user = {}) {
 		            power(sin(radians((avg(o.longitude)::double precision - $3::double precision) / 2)), 2)
 		          ))
 		        else null end as distance_km,
-		        max(l.technician_user_id) is not null as locked,
-		        bool_or(l.technician_user_id = $5) as locked_by_me,
-		        max(l.technician_name) as lock_owner_name
+		        max(claim.technician_user_id) is not null as locked,
+		        bool_or(claim.technician_user_id = $5 or lower(coalesce(claim.technician_email, '')) = $7) as locked_by_me,
+		        max(claim.technician_name) as lock_owner_name,
+		        max(claim.expires_at) as lock_expires_at,
+		        bool_or(request.status = 'PENDING' and (request.requester_user_id = $5 or lower(coalesce(request.requester_email, '')) = $7)) as request_pending_by_me
 		   from tentativas_opportunities o
-		   left join tentativas_neighborhood_locks l
-		     on l.cidade_normalizada = o.cidade_normalizada
-		    and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		   left join tentativas_neighborhood_claims claim
+		     on claim.cidade_normalizada = o.cidade_normalizada
+		    and claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		    and claim.expires_at > now()
+		   left join tentativas_neighborhood_claim_requests request
+		     on request.cidade_normalizada = o.cidade_normalizada
+		    and request.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		    and request.status = 'PENDING'
 		  where o.active=true and o.cidade_normalizada=$1
 		    and coalesce(o.telefone_digits, '') ~ $6
 		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 		  group by coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
 		  order by distance_km asc nulls last, opportunities desc, bairro asc`,
-		[normalizeText(cidade), hasCoordinates ? latitude : null, hasCoordinates ? longitude : null, hasCoordinates, userId(user), VALID_PHONE_DIGITS_REGEX],
+		[normalizeText(cidade), hasCoordinates ? latitude : null, hasCoordinates ? longitude : null, hasCoordinates, userId(user), VALID_PHONE_DIGITS_REGEX, userEmail(user)],
 	);
 	return {
 		city: cidade,
@@ -1382,6 +1630,8 @@ async function listNeighborhoods(query = {}, user = {}) {
 			locked: !admin && Boolean(row.locked),
 			lockedByMe: Boolean(row.locked_by_me),
 			lockOwnerName: row.lock_owner_name || "",
+			lockExpiresAt: row.lock_expires_at || null,
+			requestPendingByMe: Boolean(row.request_pending_by_me),
 		})),
 	};
 }
@@ -1413,12 +1663,19 @@ async function findAssignmentForUser(opportunityId, user = {}, client = db) {
 		         and lower(coalesce(u.role, '')) = 'tecnico'
 		         and u.disabled = false
 		    ))
-		    and ($2::boolean = true or exists (
+		    and ($2::boolean = true or not exists (
 		      select 1
-		        from tentativas_neighborhood_locks l
-		       where l.cidade_normalizada = o.cidade_normalizada
-		         and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
-		         and (l.technician_user_id = $3 or lower(coalesce(l.technician_email, '')) = $4)
+		        from tentativas_neighborhood_claims active_claim
+		       where active_claim.cidade_normalizada = o.cidade_normalizada
+		         and active_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and active_claim.expires_at > now()
+		    ) or exists (
+		      select 1
+		        from tentativas_neighborhood_claims own_claim
+		       where own_claim.cidade_normalizada = o.cidade_normalizada
+		         and own_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and own_claim.expires_at > now()
+		         and (own_claim.technician_user_id = $3 or lower(coalesce(own_claim.technician_email, '')) = $4)
 		    ))
 		  limit 1
 		  for update of o`,
@@ -1975,9 +2232,10 @@ async function getRanking() {
 		        count(distinct c.opportunity_id) filter (where c.result = 'COMPLETED') as completed
 		   from technicians t
 		   left join technician_scope s on s.technician_user_id = t.technician_user_id
-		   left join tentativas_neighborhood_locks l
+		   left join tentativas_neighborhood_claims l
 		     on l.cidade_normalizada = s.cidade_normalizada
 		    and l.technician_user_id = t.technician_user_id
+		    and l.expires_at > now()
 		   left join tentativas_opportunities o
 		     on o.cidade_normalizada = s.cidade_normalizada
 		    and coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__') = l.bairro_grupo
@@ -2035,9 +2293,10 @@ async function listDistribution() {
 		        coalesce(sum(o.worked), 0)::int as worked,
 		        coalesce(sum(o.pending), 0)::int as pending
 		   from distribution_keys k
-		   left join tentativas_neighborhood_locks l
+		   left join tentativas_neighborhood_claims l
 		     on l.cidade_normalizada = k.cidade_normalizada
 		    and (l.technician_user_id = k.technician_user_id or lower(coalesce(l.technician_email, '')) = lower(coalesce(k.technician_email, '')))
+		    and l.expires_at > now()
 		   left join opportunity_counts o
 		     on o.cidade_normalizada = k.cidade_normalizada
 		    and o.bairro_grupo = l.bairro_grupo
@@ -2066,11 +2325,6 @@ async function listNeighborhoodAssignments(query = {}) {
 		throw error;
 	}
 	const cityKey = normalizeText(city);
-	const locksResult = await db.query(
-		"select 1 from tentativas_neighborhood_locks where cidade_normalizada = $1 limit 1",
-		[cityKey],
-	);
-	if (!locksResult.rowCount) await rebalanceCityNeighborhoods(city);
 	const [techniciansResult, neighborhoodsResult] = await Promise.all([
 		db.query(
 			`select distinct on (coalesce(nullif(c.user_id, ''), lower(c.user_email)))
@@ -2089,28 +2343,25 @@ async function listNeighborhoodAssignments(query = {}) {
 			[cityKey],
 		),
 		db.query(
-			`select l.bairro_grupo,
+			`select coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__') as bairro_grupo,
 			        coalesce(min(nullif(trim(o.bairro), '')), 'Bairro nao informado') as bairro,
-			        l.technician_user_id,
-			        l.technician_email,
-			        l.technician_name,
+			        max(claim.technician_user_id) as technician_user_id,
+			        max(claim.technician_email) as technician_email,
+			        max(claim.technician_name) as technician_name,
+			        max(claim.expires_at) as expires_at,
 			        count(o.id)::int as opportunities,
 			        count(o.id) filter (where o.attempt_count > 0)::int as worked,
-			        count(o.id) filter (where o.attempt_count = 0)::int as pending,
-			        (ov.bairro_grupo is not null) as manual
-			   from tentativas_neighborhood_locks l
-			   left join tentativas_neighborhood_overrides ov
-			     on ov.cidade_normalizada = l.cidade_normalizada
-			    and ov.bairro_grupo = l.bairro_grupo
-			   left join tentativas_opportunities o
-			     on o.cidade_normalizada = l.cidade_normalizada
-			    and coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__') = l.bairro_grupo
+			        count(o.id) filter (where o.attempt_count = 0)::int as pending
+			   from tentativas_opportunities o
+			   left join tentativas_neighborhood_claims claim
+			     on claim.cidade_normalizada = o.cidade_normalizada
+			    and claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+			    and claim.expires_at > now()
+			  where o.cidade_normalizada = $1
 			    and o.active = true
 			    and coalesce(o.telefone_digits, '') ~ $2
 			    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
-			  where l.cidade_normalizada = $1
-			  group by l.bairro_grupo, l.technician_user_id, l.technician_email,
-			           l.technician_name, ov.bairro_grupo
+			  group by coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
 			  order by bairro asc`,
 			[cityKey, VALID_PHONE_DIGITS_REGEX],
 		),
@@ -2131,7 +2382,8 @@ async function listNeighborhoodAssignments(query = {}) {
 			opportunities: Number(row.opportunities || 0),
 			worked: Number(row.worked || 0),
 			pending: Number(row.pending || 0),
-			manual: Boolean(row.manual),
+			expiresAt: row.expires_at || null,
+			manual: Boolean(row.technician_user_id),
 		})),
 	};
 }
@@ -2141,6 +2393,7 @@ async function transferNeighborhood(payload = {}, user = {}) {
 	const cityKey = normalizeText(city);
 	const groupKey = normalizeNeighborhoodGroup(payload.bairroGrupo || payload.groupKey || payload.bairro);
 	const targetUserId = text(payload.technicianUserId || payload.userId);
+	const hours = normalizeNeighborhoodClaimHours(payload.hours ?? payload.horas);
 	if (!cityKey || !groupKey || !targetUserId) {
 		const error = new Error("Informe cidade, bairro e tecnico de destino.");
 		error.statusCode = 400;
@@ -2152,20 +2405,15 @@ async function transferNeighborhood(payload = {}, user = {}) {
 	try {
 		await client.query("begin");
 		await client.query("select pg_advisory_xact_lock(hashtext($1))", [
-			`tentativas-distribuicao-bairros:${cityKey}`,
+			`tentativas-bairro:${cityKey}:${groupKey}`,
 		]);
 		const currentResult = await client.query(
-			`select * from tentativas_neighborhood_locks
-			  where cidade_normalizada = $1 and bairro_grupo = $2
+			`select * from tentativas_neighborhood_claims
+			  where cidade_normalizada = $1 and bairro_grupo = $2 and expires_at > now()
 			  for update`,
 			[cityKey, groupKey],
 		);
 		before = currentResult.rows[0];
-		if (!before) {
-			const error = new Error("Bairro nao encontrado na distribuicao desta cidade.");
-			error.statusCode = 404;
-			throw error;
-		}
 		const targetResult = await client.query(
 			`select u.uid as user_id, lower(u.email) as user_email,
 			        coalesce(u.display_name, u.email) as user_name
@@ -2189,25 +2437,24 @@ async function transferNeighborhood(payload = {}, user = {}) {
 			throw error;
 		}
 		await client.query(
-			`insert into tentativas_neighborhood_overrides (
+			`insert into tentativas_neighborhood_claims (
 				cidade_normalizada, bairro_grupo, technician_user_id,
-				technician_email, technician_name, assigned_by, assigned_by_name
-			) values ($1,$2,$3,$4,$5,$6,$7)
+				technician_email, technician_name, requested_at, expires_at
+			) values ($1,$2,$3,$4,$5,now(),now() + ($6::int * interval '1 hour'))
 			on conflict (cidade_normalizada, bairro_grupo) do update set
 				technician_user_id = excluded.technician_user_id,
 				technician_email = excluded.technician_email,
 				technician_name = excluded.technician_name,
-				assigned_by = excluded.assigned_by,
-				assigned_by_name = excluded.assigned_by_name,
-				updated_at = now()`,
-			[cityKey, groupKey, target.user_id, target.user_email, target.user_name, userId(user), userName(user)],
+				requested_at = excluded.requested_at,
+				expires_at = excluded.expires_at`,
+			[cityKey, groupKey, target.user_id, target.user_email, target.user_name, hours],
 		);
 		await client.query(
-			`update tentativas_neighborhood_locks
-			    set technician_user_id = $3, technician_email = $4,
-			        technician_name = $5, updated_at = now()
-			  where cidade_normalizada = $1 and bairro_grupo = $2`,
-			[cityKey, groupKey, target.user_id, target.user_email, target.user_name],
+			`update tentativas_neighborhood_claim_requests
+			    set status = 'REJECTED', reviewed_at = now(), reviewed_by_id = $3,
+			        reviewed_by_name = $4, resolution_note = 'Bairro atribuído manualmente pela gestão.'
+			  where cidade_normalizada = $1 and bairro_grupo = $2 and status = 'PENDING'`,
+			[cityKey, groupKey, userId(user), userName(user)],
 		);
 		await client.query("commit");
 	} catch (error) {
@@ -2216,14 +2463,13 @@ async function transferNeighborhood(payload = {}, user = {}) {
 	} finally {
 		client.release();
 	}
-	const distribution = await rebalanceCityNeighborhoods(city);
 	const result = {
 		city,
 		groupKey,
 		technicianUserId: target.user_id,
 		technicianEmail: target.user_email,
 		technicianName: target.user_name,
-		distribution,
+		hours,
 	};
 	await recordAudit("neighborhood.transfer", `${cityKey}:${groupKey}`, user, result, before || {});
 	return result;
@@ -2271,7 +2517,20 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 		],
 	);
 	const association = result.rows[0] || null;
-	const distribution = await rebalanceCityNeighborhoods(city);
+	const availabilityResult = await db.query(
+		`select count(distinct coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__'))::int as neighborhoods,
+		        count(*)::int as opportunities
+		   from tentativas_opportunities o
+		  where o.active = true and o.cidade_normalizada = $1
+		    and coalesce(o.telefone_digits, '') ~ $2
+		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')`,
+		[normalizeText(city), VALID_PHONE_DIGITS_REGEX],
+	);
+	const distribution = {
+		city,
+		neighborhoods: Number(availabilityResult.rows[0]?.neighborhoods || 0),
+		opportunities: Number(availabilityResult.rows[0]?.opportunities || 0),
+	};
 	await recordAudit("city.assign", city, user, payload);
 	if (association) {
 		await alertsService.publishCityAssignmentAlert(association, user).catch((error) => {
@@ -2280,8 +2539,8 @@ async function saveTechnicianCity(payload = {}, user = {}) {
 	}
 	return {
 		...(association || { ok: true }),
-		assigned: distribution.opportunities,
-		mode: "NEIGHBORHOOD_BALANCED",
+		assigned: 0,
+		mode: "TECHNICIAN_SELECTS_NEIGHBORHOOD",
 		distribution,
 	};
 }
@@ -2298,13 +2557,19 @@ async function removeTechnicianCity(idValue, user = {}) {
 		throw error;
 	}
 	await db.query(
-		`delete from tentativas_neighborhood_overrides
+		`delete from tentativas_neighborhood_claims
 		  where cidade_normalizada = $1 and technician_user_id = $2`,
 		[association.cidade_normalizada, association.user_id],
 	);
-	const distribution = await rebalanceCityNeighborhoods(association.cidade);
+	await db.query(
+		`update tentativas_neighborhood_claim_requests
+		    set status = 'REJECTED', reviewed_at = now(), reviewed_by_id = $3,
+		        reviewed_by_name = $4, resolution_note = 'Associação do técnico com a cidade foi removida.'
+		  where cidade_normalizada = $1 and requester_user_id = $2 and status = 'PENDING'`,
+		[association.cidade_normalizada, association.user_id, userId(user), userName(user)],
+	);
 	await recordAudit("city.remove", idValue, user, { active: false });
-	return { ok: true, distribution };
+	return { ok: true };
 }
 
 async function listTechnicianCities() {
@@ -2524,6 +2789,7 @@ module.exports = {
 		firstValidPhone,
 		formatCustomerIdentification,
 		normalizeNeighborhoodGroup,
+		normalizeNeighborhoodClaimHours,
 		normalizePhone,
 		renderTemplate,
 	},
@@ -2553,12 +2819,15 @@ module.exports = {
 	listCities,
 	listDistribution,
 	listNeighborhoodAssignments,
+	listNeighborhoodClaimRequests,
 	listHistory,
 	listNeighborhoods,
 	listTechnicianCities,
 	searchUsers,
 	listTemplates,
 	removeTechnicianCity,
+	requestNeighborhood,
+	resolveNeighborhoodClaimRequest,
 	rebalanceAllActiveCityNeighborhoods,
 	rebalanceCityNeighborhoods,
 	saveResult,

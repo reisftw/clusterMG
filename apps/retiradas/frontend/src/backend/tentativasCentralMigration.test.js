@@ -26,6 +26,10 @@ const alertsPushMigrationPath = path.join(
 	process.cwd(),
 	"apps/retiradas/backend/sql/095_tentativas_alertas_push_adocao.sql",
 );
+const neighborhoodClaimMigrationPath = path.join(
+	process.cwd(),
+	"apps/retiradas/backend/sql/124_tentativas_bairro_solicitacoes.sql",
+);
 
 describe("migration 089 - Central de Tentativas", () => {
 	const sql = fs.readFileSync(migrationPath, "utf8");
@@ -129,6 +133,22 @@ describe("migration 095 - alertas, push e adoção de Tentativas", () => {
 		expect(sql).toContain("create table if not exists retiradas_push_subscriptions");
 		expect(sql).toContain("create table if not exists retiradas_notification_events");
 		expect(sql).toContain("create table if not exists tentativas_page_visits");
+		expect(sql).not.toMatch(/\bdelete\s+from\b/i);
+		expect(sql).not.toMatch(/\btruncate\b/i);
+		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);
+	});
+});
+
+describe("migration 124 - solicitações temporárias de bairro", () => {
+	const sql = fs.readFileSync(neighborhoodClaimMigrationPath, "utf8");
+
+	it("mantém uma reserva exclusiva com prazo máximo de 24 horas", () => {
+		expect(sql).toContain("create table if not exists tentativas_neighborhood_claims");
+		expect(sql).toContain("create table if not exists tentativas_neighborhood_claim_requests");
+		expect(sql).toContain("primary key (cidade_normalizada, bairro_grupo)");
+		expect(sql).toContain("expires_at <= requested_at + interval '24 hours'");
+		expect(sql).toContain("requested_hours between 1 and 24");
+		expect(sql).toContain("where status = 'PENDING'");
 		expect(sql).not.toMatch(/\bdelete\s+from\b/i);
 		expect(sql).not.toMatch(/\btruncate\b/i);
 		expect(sql).not.toMatch(/\bdrop\s+(table|column|schema)\b/i);

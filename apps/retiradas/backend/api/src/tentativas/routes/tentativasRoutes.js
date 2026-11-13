@@ -105,6 +105,20 @@ function createTentativasRouter({
 		}
 	});
 
+	router.post(
+		"/bairros/solicitar",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireView,
+		async (req, res, next) => {
+			try {
+				res.status(201).json(await service.requestNeighborhood(req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.get("/retornos", requireAuthenticated, requireView, async (req, res, next) => {
 		try {
 			res.json(await central.listCallbacks(req.query || {}, req.user || {}));
@@ -454,6 +468,40 @@ function createTentativasRouter({
 			}
 		},
 	);
+
+	router.get(
+		"/admin/bairros/solicitacoes",
+		requireAuthenticated,
+		requireDistribution,
+		async (req, res, next) => {
+			try {
+				res.json(await service.listNeighborhoodClaimRequests(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	for (const action of ["approve", "reject"]) {
+		router.post(
+			`/admin/bairros/solicitacoes/:id/${action}`,
+			requireAuthenticated,
+			requireCsrfToken,
+			requirePortfolio,
+			async (req, res, next) => {
+				try {
+					res.json(await service.resolveNeighborhoodClaimRequest(
+						req.params.id,
+						req.body || {},
+						req.user || {},
+						action,
+					));
+				} catch (error) {
+					next(error);
+				}
+			},
+		);
+	}
 
 	router.get(
 		"/admin/usuarios",
