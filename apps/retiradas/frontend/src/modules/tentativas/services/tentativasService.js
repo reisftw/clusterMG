@@ -23,6 +23,13 @@ export function listarLocalidadesTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/localidades${qs(params)}`);
 }
 
+export function solicitarBairroTentativas(payload = {}) {
+	return requestVpsApi("/tentativas/bairros/solicitar", {
+		method: "POST",
+		body: JSON.stringify(payload),
+	});
+}
+
 export function listarRetornosTentativas(params = {}) {
 	return requestVpsApi(`/tentativas/retornos${qs(params)}`);
 }

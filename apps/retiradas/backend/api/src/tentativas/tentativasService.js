@@ -96,6 +96,12 @@ function normalizeNeighborhoodGroup(value) {
 	return normalized.replace(/^(bairro|residencial)\s+/, "").replace(/\s+/g, " ").trim();
 }
 
+function normalizeNeighborhoodClaimHours(value) {
+	const hours = Number(value);
+	if (!Number.isFinite(hours)) return 24;
+	return Math.min(24, Math.max(1, Math.ceil(hours)));
+}
+
 function neighborhoodGroupExpression(alias = "o") {
 	return `regexp_replace(
 		regexp_replace(
@@ -822,13 +828,6 @@ async function listCities(_query = {}, user = {}) {
 			   and coalesce(o.telefone_digits, '') ~ $4
 			   and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 			   and ($3::boolean = true or exists (select 1 from allowed a where a.cidade_normalizada = o.cidade_normalizada))
-			   and ($3::boolean = true or exists (
-			     select 1
-			       from tentativas_neighborhood_locks l
-			      where l.cidade_normalizada = o.cidade_normalizada
-			        and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
-			        and (l.technician_user_id = $1 or lower(coalesce(l.technician_email, '')) = $2)
-			   ))
 			 group by o.cidade, o.cidade_normalizada
 		)
 		select * from counts order by total desc, cidade asc`,
@@ -1167,29 +1166,90 @@ async function selectNeighborhood(cidade, bairro, user = {}) {
 		error.statusCode = 403;
 		throw error;
 	}
-	if (!groupKey) return { locked: true, allOwnedNeighborhoods: true };
-	let current = await db.query(
-		`select * from tentativas_neighborhood_locks
-		  where cidade_normalizada = $1 and bairro_grupo = $2
+	if (!groupKey) return { locked: false, allNeighborhoods: true };
+	const current = await db.query(
+		`select * from tentativas_neighborhood_claims
+		  where cidade_normalizada = $1 and bairro_grupo = $2 and expires_at > now()
 		  limit 1`,
 		[cityKey, groupKey],
 	);
-	if (!current.rowCount) {
-		await rebalanceCityNeighborhoods(cidade);
-		current = await db.query(
-			`select * from tentativas_neighborhood_locks
-			  where cidade_normalizada = $1 and bairro_grupo = $2
-			  limit 1`,
-			[cityKey, groupKey],
-		);
-	}
 	const owner = current.rows[0];
-	if (!owner || (owner.technician_user_id !== userId(user) && owner.technician_email !== userEmail(user))) {
-		const error = new Error(`Bairro atribuido a ${owner?.technician_name || "outro tecnico"}.`);
+	if (!owner) {
+		const error = new Error("Solicite este bairro antes de iniciar as tratativas.");
 		error.statusCode = 409;
 		throw error;
 	}
-	return { locked: true, groupKey, owner: owner.technician_name };
+	if (owner.technician_user_id !== userId(user) && owner.technician_email !== userEmail(user)) {
+		const error = new Error(`Bairro reservado por ${owner.technician_name || "outro tecnico"} ate ${owner.expires_at}.`);
+		error.statusCode = 409;
+		throw error;
+	}
+	return { locked: true, groupKey, owner: owner.technician_name, expiresAt: owner.expires_at };
+}
+
+async function requestNeighborhood(payload = {}, user = {}) {
+	if (hasAdminAccess(user)) {
+		const error = new Error("Apenas tecnicos podem solicitar bairros.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const city = text(payload.cidade || payload.city);
+	const cityKey = normalizeText(city);
+	const groupKey = normalizeNeighborhoodGroup(payload.bairroGrupo || payload.groupKey || payload.bairro);
+	const hours = normalizeNeighborhoodClaimHours(payload.hours ?? payload.horas);
+	if (!cityKey || !groupKey) {
+		const error = new Error("Informe a cidade e o bairro.");
+		error.statusCode = 400;
+		throw error;
+	}
+	if (!(await ensureTechnicianCanUseCity(city, user))) {
+		const error = new Error("Cidade nao autorizada para este tecnico.");
+		error.statusCode = 403;
+		throw error;
+	}
+	const client = await db.connect();
+	let claim;
+	try {
+		await client.query("begin");
+		await client.query("select pg_advisory_xact_lock(hashtext($1))", [
+			`tentativas-bairro:${cityKey}:${groupKey}`,
+		]);
+		const current = await client.query(
+			`select * from tentativas_neighborhood_claims
+			  where cidade_normalizada = $1 and bairro_grupo = $2 and expires_at > now()
+			  for update`,
+			[cityKey, groupKey],
+		);
+		const owner = current.rows[0];
+		if (owner && owner.technician_user_id !== userId(user) && owner.technician_email !== userEmail(user)) {
+			const error = new Error(`Bairro reservado por ${owner.technician_name || "outro tecnico"}.`);
+			error.statusCode = 409;
+			throw error;
+		}
+		const result = await client.query(
+			`insert into tentativas_neighborhood_claims (
+				cidade_normalizada, bairro_grupo, technician_user_id,
+				technician_email, technician_name, requested_at, expires_at
+			) values ($1,$2,$3,$4,$5,now(),now() + ($6::int * interval '1 hour'))
+			on conflict (cidade_normalizada, bairro_grupo) do update set
+				technician_user_id = excluded.technician_user_id,
+				technician_email = excluded.technician_email,
+				technician_name = excluded.technician_name,
+				requested_at = excluded.requested_at,
+				expires_at = excluded.expires_at
+			returning *`,
+			[cityKey, groupKey, userId(user), userEmail(user), userName(user), hours],
+		);
+		claim = result.rows[0];
+		await client.query("commit");
+	} catch (error) {
+		await client.query("rollback").catch(() => {});
+		throw error;
+	} finally {
+		client.release();
+	}
+	await recordAudit("neighborhood.claim", `${cityKey}:${groupKey}`, user, { hours, expiresAt: claim.expires_at });
+	return { city, groupKey, hours, expiresAt: claim.expires_at, technicianName: claim.technician_name };
 }
 
 function mapOpportunity(row = {}) {
@@ -1267,12 +1327,19 @@ async function getMyRoute(query = {}, user = {}) {
 		    and coalesce(o.telefone_digits, '') ~ $5
 		    and o.cidade_normalizada = $1
 		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
-		    and ($12::boolean = true or exists (
+		    and ($12::boolean = true or not exists (
 		      select 1
-		        from tentativas_neighborhood_locks l
-		       where l.cidade_normalizada = o.cidade_normalizada
-		         and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
-		         and (l.technician_user_id = $13 or lower(coalesce(l.technician_email, '')) = $14)
+		        from tentativas_neighborhood_claims active_claim
+		       where active_claim.cidade_normalizada = o.cidade_normalizada
+		         and active_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and active_claim.expires_at > now()
+		    ) or exists (
+		      select 1
+		        from tentativas_neighborhood_claims own_claim
+		       where own_claim.cidade_normalizada = o.cidade_normalizada
+		         and own_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and own_claim.expires_at > now()
+		         and (own_claim.technician_user_id = $13 or lower(coalesce(own_claim.technician_email, '')) = $14)
 		    ))
 		    and (
 		      $2::text = ''
@@ -1353,19 +1420,21 @@ async function listNeighborhoods(query = {}, user = {}) {
 		            power(sin(radians((avg(o.longitude)::double precision - $3::double precision) / 2)), 2)
 		          ))
 		        else null end as distance_km,
-		        max(l.technician_user_id) is not null as locked,
-		        bool_or(l.technician_user_id = $5) as locked_by_me,
-		        max(l.technician_name) as lock_owner_name
+		        max(claim.technician_user_id) is not null as locked,
+		        bool_or(claim.technician_user_id = $5 or lower(coalesce(claim.technician_email, '')) = $7) as locked_by_me,
+		        max(claim.technician_name) as lock_owner_name,
+		        max(claim.expires_at) as lock_expires_at
 		   from tentativas_opportunities o
-		   left join tentativas_neighborhood_locks l
-		     on l.cidade_normalizada = o.cidade_normalizada
-		    and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		   left join tentativas_neighborhood_claims claim
+		     on claim.cidade_normalizada = o.cidade_normalizada
+		    and claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		    and claim.expires_at > now()
 		  where o.active=true and o.cidade_normalizada=$1
 		    and coalesce(o.telefone_digits, '') ~ $6
 		    and o.status not in ('COMPLETED','CANCELLED','REFUSED','INVALID_PHONE','ALREADY_RETURNED','EQUIPMENT_UNAVAILABLE')
 		  group by coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
 		  order by distance_km asc nulls last, opportunities desc, bairro asc`,
-		[normalizeText(cidade), hasCoordinates ? latitude : null, hasCoordinates ? longitude : null, hasCoordinates, userId(user), VALID_PHONE_DIGITS_REGEX],
+		[normalizeText(cidade), hasCoordinates ? latitude : null, hasCoordinates ? longitude : null, hasCoordinates, userId(user), VALID_PHONE_DIGITS_REGEX, userEmail(user)],
 	);
 	return {
 		city: cidade,
@@ -1382,6 +1451,7 @@ async function listNeighborhoods(query = {}, user = {}) {
 			locked: !admin && Boolean(row.locked),
 			lockedByMe: Boolean(row.locked_by_me),
 			lockOwnerName: row.lock_owner_name || "",
+			lockExpiresAt: row.lock_expires_at || null,
 		})),
 	};
 }
@@ -1413,12 +1483,19 @@ async function findAssignmentForUser(opportunityId, user = {}, client = db) {
 		         and lower(coalesce(u.role, '')) = 'tecnico'
 		         and u.disabled = false
 		    ))
-		    and ($2::boolean = true or exists (
+		    and ($2::boolean = true or not exists (
 		      select 1
-		        from tentativas_neighborhood_locks l
-		       where l.cidade_normalizada = o.cidade_normalizada
-		         and l.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
-		         and (l.technician_user_id = $3 or lower(coalesce(l.technician_email, '')) = $4)
+		        from tentativas_neighborhood_claims active_claim
+		       where active_claim.cidade_normalizada = o.cidade_normalizada
+		         and active_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and active_claim.expires_at > now()
+		    ) or exists (
+		      select 1
+		        from tentativas_neighborhood_claims own_claim
+		       where own_claim.cidade_normalizada = o.cidade_normalizada
+		         and own_claim.bairro_grupo = coalesce(nullif(${neighborhoodGroupExpression("o")}, ''), '__sem_bairro__')
+		         and own_claim.expires_at > now()
+		         and (own_claim.technician_user_id = $3 or lower(coalesce(own_claim.technician_email, '')) = $4)
 		    ))
 		  limit 1
 		  for update of o`,
@@ -2524,6 +2601,7 @@ module.exports = {
 		firstValidPhone,
 		formatCustomerIdentification,
 		normalizeNeighborhoodGroup,
+		normalizeNeighborhoodClaimHours,
 		normalizePhone,
 		renderTemplate,
 	},
@@ -2559,6 +2637,7 @@ module.exports = {
 	searchUsers,
 	listTemplates,
 	removeTechnicianCity,
+	requestNeighborhood,
 	rebalanceAllActiveCityNeighborhoods,
 	rebalanceCityNeighborhoods,
 	saveResult,

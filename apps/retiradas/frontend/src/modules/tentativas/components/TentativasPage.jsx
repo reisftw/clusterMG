@@ -58,6 +58,7 @@ import {
 	salvarConfiguracoesTentativas,
 	salvarResultadoTentativa,
 	salvarTemplateTentativas,
+	solicitarBairroTentativas,
 	transferirBairroTentativas,
 } from "../services/tentativasService";
 import {
@@ -327,10 +328,11 @@ function CityDropdown({
 	);
 }
 
-function NeighborhoodDropdown({ items = [], value = "", onChange, onUseLocation, hasLocation }) {
+function NeighborhoodDropdown({ items = [], value = "", onChange, onRequest, onUseLocation, hasLocation, requesting, canRequest, adminAccess }) {
 	const [open, setOpen] = useState(false);
+	const [claimHours, setClaimHours] = useState(24);
 	const selected = items.find((item) => {
-		const itemValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.groupKey || item.bairro;
+		const itemValue = item.groupKey || (item.bairro === "Bairro nao informado" ? "__sem_bairro__" : item.bairro);
 		return itemValue === value;
 	});
 	const choose = (nextValue) => {
@@ -347,18 +349,31 @@ function NeighborhoodDropdown({ items = [], value = "", onChange, onUseLocation,
 				<button type="button" onClick={() => setOpen(true)} className="min-h-11 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700">Escolher</button>
 			</div>
 			{open ? (
-				<ModalShell title="Selecionar bairro" description="Bairros equivalentes aparecem agrupados sem alterar os dados originais." size="md" onClose={() => setOpen(false)}>
+				<ModalShell title="Selecionar bairro" description="Solicite um bairro por até 24 horas. Durante esse prazo, somente você poderá atuar nele." size="md" onClose={() => setOpen(false)}>
 					<div className="grid gap-2">
 						<button type="button" onClick={() => { onUseLocation?.(); setOpen(false); }} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-black text-white"><MapPin className="h-4 w-4" />{hasLocation ? "Atualizar minha localização" : "Usar minha localização"}</button>
 						<button type="button" onClick={() => choose("")} className={`min-h-12 rounded-xl border px-4 text-left font-black ${!value ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}>Todos os bairros</button>
+						<label className="grid gap-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-black text-slate-700">
+							Prazo da solicitação
+							<select value={claimHours} onChange={(event) => setClaimHours(Number(event.target.value))} className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 font-bold">
+								<option value={1}>1 hora</option><option value={4}>4 horas</option><option value={8}>8 horas</option><option value={12}>12 horas</option><option value={24}>24 horas</option>
+							</select>
+						</label>
 						{items.map((item) => {
-							const itemValue = item.bairro === "Bairro nao informado" ? "__SEM_BAIRRO__" : item.groupKey || item.bairro;
+							const itemValue = item.groupKey || (item.bairro === "Bairro nao informado" ? "__sem_bairro__" : item.bairro);
 							const unavailable = item.locked && !item.lockedByMe;
 							return (
-								<button type="button" key={itemValue} disabled={unavailable} onClick={() => choose(itemValue)} className={`flex min-h-14 items-center justify-between gap-3 rounded-xl border px-4 text-left ${value === itemValue ? "border-blue-400 bg-blue-50" : unavailable ? "cursor-not-allowed border-amber-200 bg-amber-50 opacity-75" : "border-slate-200 bg-white"}`}>
-									<span className="min-w-0"><strong className="block truncate text-slate-950">{item.bairro}</strong><span className="text-xs font-bold text-slate-500">{formatNumber(item.opportunities)} oportunidade(s){item.originalValues?.length > 1 ? ` · ${item.originalValues.length} variações agrupadas` : ""}</span>{unavailable ? <span className="mt-1 block text-xs font-black text-amber-700">Em uso por {item.lockOwnerName || "outro técnico"}</span> : item.lockedByMe ? <span className="mt-1 block text-xs font-black text-emerald-700">Reservado para você</span> : null}</span>
-									{item.distanceKm != null ? <span className="shrink-0 text-xs font-black text-emerald-700">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
-								</button>
+								<div key={itemValue} className={`flex min-h-16 items-center justify-between gap-3 rounded-xl border px-4 py-3 ${value === itemValue ? "border-blue-400 bg-blue-50" : unavailable ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
+									<button type="button" disabled={!item.lockedByMe && !adminAccess} onClick={() => choose(itemValue)} className="min-w-0 flex-1 text-left disabled:cursor-default">
+										<strong className="block truncate text-slate-950">{item.bairro}</strong>
+										<span className="text-xs font-bold text-slate-500">{formatNumber(item.opportunities)} oportunidade(s){item.originalValues?.length > 1 ? ` · ${item.originalValues.length} variações agrupadas` : ""}</span>
+										{unavailable ? <span className="mt-1 block text-xs font-black text-amber-700">Reservado por {item.lockOwnerName || "outro técnico"} até {formatDateTime(item.lockExpiresAt)}</span> : item.lockedByMe ? <span className="mt-1 block text-xs font-black text-emerald-700">Liberado para você até {formatDateTime(item.lockExpiresAt)}</span> : <span className="mt-1 block text-xs font-bold text-blue-700">Disponível para solicitação</span>}
+									</button>
+									<div className="grid shrink-0 justify-items-end gap-2">
+										{item.distanceKm != null ? <span className="text-xs font-black text-emerald-700">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
+										{adminAccess ? <button type="button" onClick={() => choose(itemValue)} className="min-h-9 rounded-lg bg-slate-700 px-3 text-xs font-black text-white">Abrir</button> : !item.locked && canRequest ? <button type="button" disabled={requesting === itemValue} onClick={() => onRequest?.(item, claimHours)} className="min-h-9 rounded-lg bg-blue-600 px-3 text-xs font-black text-white disabled:opacity-50">{requesting === itemValue ? "Solicitando..." : "Solicitar"}</button> : item.lockedByMe ? <button type="button" onClick={() => choose(itemValue)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Abrir</button> : null}
+									</div>
+								</div>
 							);
 						})}
 					</div>
@@ -503,7 +518,7 @@ function ResultModal({ contact, onClose, onSaved, editing = false, correctionAll
 			} else {
 				await salvarResultadoTentativa(contact.contactId, payload);
 			}
-			onSaved?.();
+			await onSaved?.();
 			onClose();
 		} catch (err) {
 			setError(err.message || "Falha ao salvar resultado.");
@@ -677,7 +692,9 @@ function MyRoute() {
 		window.localStorage.getItem(whatsappPreferenceKey(currentUser)),
 	);
 	const [contactingId, setContactingId] = useState("");
+	const [requestingNeighborhood, setRequestingNeighborhood] = useState("");
 	const contactInFlightRef = useRef(false);
+	const routeScrollRef = useRef(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 
@@ -751,6 +768,28 @@ function MyRoute() {
 		);
 	};
 
+	const requestNeighborhood = async (item, hours) => {
+		const groupKey = item.groupKey || item.bairro;
+		setRequestingNeighborhood(groupKey);
+		setError("");
+		try {
+			await solicitarBairroTentativas({ cidade: city, bairroGrupo: groupKey, hours });
+			await loadLocalities(city);
+			setNeighborhood(groupKey);
+			setPage(1);
+		} catch (err) {
+			setError(err.message || "Não foi possível solicitar o bairro.");
+		} finally {
+			setRequestingNeighborhood("");
+		}
+	};
+
+	const reloadCurrentPosition = async () => {
+		const scrollTop = routeScrollRef.current ?? window.scrollY;
+		await loadRoute(city, page);
+		window.setTimeout(() => window.scrollTo({ top: scrollTop, behavior: "auto" }), 0);
+	};
+
 	useEffect(() => {
 		loadCities();
 	}, [loadCities]);
@@ -791,6 +830,7 @@ function MyRoute() {
 	const contact = async (item) => {
 		if (contactInFlightRef.current) return;
 		contactInFlightRef.current = true;
+		routeScrollRef.current = window.scrollY;
 		setContactingId(item.id);
 		setError("");
 		try {
@@ -874,8 +914,12 @@ function MyRoute() {
 				items={localities}
 				value={neighborhood}
 				onChange={(value) => { setNeighborhood(value); setPage(1); }}
+				onRequest={requestNeighborhood}
 				onUseLocation={requestLocation}
 				hasLocation={Boolean(position)}
+				requesting={requestingNeighborhood}
+				canRequest={normalizeSearch(currentUser?.role || currentUser?.profile?.role) === "tecnico"}
+				adminAccess={canManage(currentUser)}
 			/>
 
 			<section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-3xl sm:p-4">
@@ -967,7 +1011,7 @@ function MyRoute() {
 				<PaginationControls page={page} totalPages={Math.max(1, Math.ceil(Number(routeData?.total || 0) / Number(routeData?.limit || 30)))} onPageChange={(nextPage) => void loadRoute(city, nextPage)} />
 			</section>
 
-			<ResultModal contact={pendingContact} onClose={() => setPendingContact(null)} onSaved={() => loadRoute()} />
+			<ResultModal contact={pendingContact} onClose={() => setPendingContact(null)} onSaved={reloadCurrentPosition} />
 			<WhatsappChoiceModal
 				contact={whatsappChoiceContact}
 				onChoose={chooseWhatsapp}

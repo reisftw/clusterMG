@@ -105,6 +105,20 @@ function createTentativasRouter({
 		}
 	});
 
+	router.post(
+		"/bairros/solicitar",
+		requireAuthenticated,
+		requireCsrfToken,
+		requireView,
+		async (req, res, next) => {
+			try {
+				res.status(201).json(await service.requestNeighborhood(req.body || {}, req.user || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.get("/retornos", requireAuthenticated, requireView, async (req, res, next) => {
 		try {
 			res.json(await central.listCallbacks(req.query || {}, req.user || {}));

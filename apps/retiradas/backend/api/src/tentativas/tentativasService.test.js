@@ -6,12 +6,17 @@ const auditPath = require.resolve("../auditLog");
 const centralPath = require.resolve("./tentativasCentralService");
 const alertsPath = require.resolve("./tentativasAlertsService");
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: {} };
-require.cache[auditPath] = { id: auditPath, filename: auditPath, loaded: true, exports: async () => ({}) };
+require.cache[auditPath] = {
+	id: auditPath,
+	filename: auditPath,
+	loaded: true,
+	exports: { recordAuditLog: async () => ({}) },
+};
 require.cache[centralPath] = { id: centralPath, filename: centralPath, loaded: true, exports: {} };
 require.cache[alertsPath] = { id: alertsPath, filename: alertsPath, loaded: true, exports: {} };
 
 const tentativasService = require("./tentativasService");
-const { buildNeighborhoodDistributionPlan } = tentativasService.__testables;
+const { buildNeighborhoodDistributionPlan, normalizeNeighborhoodClaimHours } = tentativasService.__testables;
 
 const technicians = [
 	{ user_id: "tech-a", user_email: "a@example.com", user_name: "Ana" },
@@ -107,4 +112,50 @@ test("pre-agrega oportunidades antes de cruzar a distribuicao por bairro", async
 		pending: 15,
 		coverage: 25,
 	});
+});
+
+test("limita a solicitação de bairro entre uma e vinte e quatro horas", () => {
+	assert.equal(normalizeNeighborhoodClaimHours(undefined), 24);
+	assert.equal(normalizeNeighborhoodClaimHours(0), 1);
+	assert.equal(normalizeNeighborhoodClaimHours(6.2), 7);
+	assert.equal(normalizeNeighborhoodClaimHours(48), 24);
+});
+
+test("registra a solicitação do bairro de forma transacional", async () => {
+	const db = require("../db");
+	const statements = [];
+	db.query = async (sql, params) => {
+		assert.match(sql, /tentativas_technician_cities/i);
+		assert.deepEqual(params, ["betim", "tech-a", "a@example.com"]);
+		return { rowCount: 1, rows: [{ ok: 1 }] };
+	};
+	db.connect = async () => ({
+		query: async (sql, params = []) => {
+			statements.push({ sql, params });
+			if (/select \* from tentativas_neighborhood_claims/i.test(sql)) {
+				return { rowCount: 0, rows: [] };
+			}
+			if (/insert into tentativas_neighborhood_claims/i.test(sql)) {
+				return {
+					rowCount: 1,
+					rows: [{ technician_name: "Ana", expires_at: "2026-11-14T12:00:00.000Z" }],
+				};
+			}
+			return { rowCount: 0, rows: [] };
+		},
+		release() {},
+	});
+
+	const result = await tentativasService.requestNeighborhood(
+		{ cidade: "Betim", bairroGrupo: "Centro", hours: 48 },
+		{ uid: "tech-a", email: "a@example.com", nome: "Ana", role: "tecnico" },
+	);
+
+	assert.equal(result.hours, 24);
+	assert.equal(result.groupKey, "centro");
+	assert.ok(statements.some(({ sql }) => /pg_advisory_xact_lock/i.test(sql)));
+	assert.ok(statements.some(({ sql, params }) =>
+		/insert into tentativas_neighborhood_claims/i.test(sql) && params.at(-1) === 24,
+	));
+	assert.equal(statements.at(-1).sql, "commit");
 });
