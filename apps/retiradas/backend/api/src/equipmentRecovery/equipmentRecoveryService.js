@@ -1031,7 +1031,8 @@ const RECOVERY_CUSTODY_CTE = `with latest_movement_state as (
 	select distinct on (upper(trim(m.serie)))
 		upper(trim(m.serie)) as serial_key,
 		case
-			when upper(coalesce(m.tipo_operacao, '')) in ('DEVOLUÇÃO DE COMODATO', 'DEVOLUCAO DE COMODATO') then 'WAREHOUSE'
+			when upper(coalesce(m.tipo_operacao, '')) in ('DEVOLUÇÃO DE COMODATO', 'DEVOLUCAO DE COMODATO')
+			  and lower(coalesce(m.raw_payload->>'status', '')) = 'rejeitado' then 'WAREHOUSE'
 			when lower(coalesce(m.raw_payload #>> '{item,estoque_local_destino,prefixo}', '')) = 'estoque' then 'WAREHOUSE'
 			when lower(coalesce(m.raw_payload #>> '{item,estoque_local_destino,prefixo}', '')) = 'tecnico' then 'TECHNICIAN_BAG'
 			when upper(coalesce(m.observacao_raw, '')) like '%RETORNO AO ESTOQUE%' then 'WAREHOUSE'
