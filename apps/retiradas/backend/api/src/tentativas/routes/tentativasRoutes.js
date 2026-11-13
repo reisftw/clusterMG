@@ -470,6 +470,40 @@ function createTentativasRouter({
 	);
 
 	router.get(
+		"/admin/bairros/solicitacoes",
+		requireAuthenticated,
+		requireDistribution,
+		async (req, res, next) => {
+			try {
+				res.json(await service.listNeighborhoodClaimRequests(req.query || {}));
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
+	for (const action of ["approve", "reject"]) {
+		router.post(
+			`/admin/bairros/solicitacoes/:id/${action}`,
+			requireAuthenticated,
+			requireCsrfToken,
+			requirePortfolio,
+			async (req, res, next) => {
+				try {
+					res.json(await service.resolveNeighborhoodClaimRequest(
+						req.params.id,
+						req.body || {},
+						req.user || {},
+						action,
+					));
+				} catch (error) {
+					next(error);
+				}
+			},
+		);
+	}
+
+	router.get(
 		"/admin/usuarios",
 		requireAuthenticated,
 		requireDistribution,

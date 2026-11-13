@@ -51,6 +51,7 @@ import {
 	listarBairrosResponsaveisTentativas,
 	listarCidadesTentativas,
 	listarLocalidadesTentativas,
+	listarSolicitacoesBairroTentativas,
 	listarTemplatesTentativas,
 	removerCidadeTecnicoTentativas,
 	registrarAcessoTentativas,
@@ -60,6 +61,7 @@ import {
 	salvarTemplateTentativas,
 	solicitarBairroTentativas,
 	transferirBairroTentativas,
+	resolverSolicitacaoBairroTentativas,
 } from "../services/tentativasService";
 import {
 	AuditPanel,
@@ -349,7 +351,7 @@ function NeighborhoodDropdown({ items = [], value = "", onChange, onRequest, onU
 				<button type="button" onClick={() => setOpen(true)} className="min-h-11 shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-700">Escolher</button>
 			</div>
 			{open ? (
-				<ModalShell title="Selecionar bairro" description="Solicite um bairro por até 24 horas. Durante esse prazo, somente você poderá atuar nele." size="md" onClose={() => setOpen(false)}>
+				<ModalShell title="Selecionar bairro" description="Escolha um bairro por até 24 horas. Se outro técnico estiver atuando nele, o BackOffice receberá um pedido de liberação." size="md" onClose={() => setOpen(false)}>
 					<div className="grid gap-2">
 						<button type="button" onClick={() => { onUseLocation?.(); setOpen(false); }} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 font-black text-white"><MapPin className="h-4 w-4" />{hasLocation ? "Atualizar minha localização" : "Usar minha localização"}</button>
 						<button type="button" onClick={() => choose("")} className={`min-h-12 rounded-xl border px-4 text-left font-black ${!value ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700"}`}>Todos os bairros</button>
@@ -367,11 +369,11 @@ function NeighborhoodDropdown({ items = [], value = "", onChange, onRequest, onU
 									<button type="button" disabled={!item.lockedByMe && !adminAccess} onClick={() => choose(itemValue)} className="min-w-0 flex-1 text-left disabled:cursor-default">
 										<strong className="block truncate text-slate-950">{item.bairro}</strong>
 										<span className="text-xs font-bold text-slate-500">{formatNumber(item.opportunities)} oportunidade(s){item.originalValues?.length > 1 ? ` · ${item.originalValues.length} variações agrupadas` : ""}</span>
-										{unavailable ? <span className="mt-1 block text-xs font-black text-amber-700">Reservado por {item.lockOwnerName || "outro técnico"} até {formatDateTime(item.lockExpiresAt)}</span> : item.lockedByMe ? <span className="mt-1 block text-xs font-black text-emerald-700">Liberado para você até {formatDateTime(item.lockExpiresAt)}</span> : <span className="mt-1 block text-xs font-bold text-blue-700">Disponível para solicitação</span>}
+										{item.requestPendingByMe ? <span className="mt-1 block text-xs font-black text-amber-700">Aguardando aprovação do BackOffice</span> : unavailable ? <span className="mt-1 block text-xs font-black text-amber-700">Reservado por {item.lockOwnerName || "outro técnico"} até {formatDateTime(item.lockExpiresAt)}</span> : item.lockedByMe ? <span className="mt-1 block text-xs font-black text-emerald-700">Liberado para você até {formatDateTime(item.lockExpiresAt)}</span> : <span className="mt-1 block text-xs font-bold text-blue-700">Disponível para solicitação</span>}
 									</button>
 									<div className="grid shrink-0 justify-items-end gap-2">
 										{item.distanceKm != null ? <span className="text-xs font-black text-emerald-700">{item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toFixed(1)} km`}</span> : null}
-										{adminAccess ? <button type="button" onClick={() => choose(itemValue)} className="min-h-9 rounded-lg bg-slate-700 px-3 text-xs font-black text-white">Abrir</button> : !item.locked && canRequest ? <button type="button" disabled={requesting === itemValue} onClick={() => onRequest?.(item, claimHours)} className="min-h-9 rounded-lg bg-blue-600 px-3 text-xs font-black text-white disabled:opacity-50">{requesting === itemValue ? "Solicitando..." : "Solicitar"}</button> : item.lockedByMe ? <button type="button" onClick={() => choose(itemValue)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Abrir</button> : null}
+										{adminAccess ? <button type="button" onClick={() => choose(itemValue)} className="min-h-9 rounded-lg bg-slate-700 px-3 text-xs font-black text-white">Abrir</button> : item.lockedByMe ? <button type="button" onClick={() => choose(itemValue)} className="min-h-9 rounded-lg bg-emerald-600 px-3 text-xs font-black text-white">Abrir</button> : item.requestPendingByMe ? <button type="button" disabled className="min-h-9 rounded-lg bg-amber-200 px-3 text-xs font-black text-amber-800">Pendente</button> : canRequest ? <button type="button" disabled={requesting === itemValue} onClick={() => onRequest?.(item, claimHours)} className={`min-h-9 rounded-lg px-3 text-xs font-black text-white disabled:opacity-50 ${unavailable ? "bg-amber-600" : "bg-blue-600"}`}>{requesting === itemValue ? "Solicitando..." : unavailable ? "Pedir liberação" : "Escolher"}</button> : null}
 									</div>
 								</div>
 							);
@@ -693,6 +695,7 @@ function MyRoute() {
 	);
 	const [contactingId, setContactingId] = useState("");
 	const [requestingNeighborhood, setRequestingNeighborhood] = useState("");
+	const [neighborhoodNotice, setNeighborhoodNotice] = useState("");
 	const contactInFlightRef = useRef(false);
 	const routeScrollRef = useRef(null);
 	const [loading, setLoading] = useState(true);
@@ -772,11 +775,22 @@ function MyRoute() {
 		const groupKey = item.groupKey || item.bairro;
 		setRequestingNeighborhood(groupKey);
 		setError("");
+		setNeighborhoodNotice("");
 		try {
-			await solicitarBairroTentativas({ cidade: city, bairroGrupo: groupKey, hours });
+			const result = await solicitarBairroTentativas({
+				cidade: city,
+				bairroGrupo: groupKey,
+				bairroNome: item.bairro,
+				hours,
+			});
 			await loadLocalities(city);
-			setNeighborhood(groupKey);
-			setPage(1);
+			if (result.status === "PENDING_APPROVAL") {
+				setNeighborhoodNotice(`Pedido enviado ao BackOffice. ${item.bairro} continua com ${result.currentOwnerName || "outro técnico"} até a aprovação.`);
+			} else {
+				setNeighborhood(groupKey);
+				setPage(1);
+				setNeighborhoodNotice(`${item.bairro} reservado para você por ${result.hours} hora(s).`);
+			}
 		} catch (err) {
 			setError(err.message || "Não foi possível solicitar o bairro.");
 		} finally {
@@ -889,6 +903,7 @@ function MyRoute() {
 	return (
 		<div className="space-y-4">
 			{error ? <div className="rounded-2xl bg-red-50 p-4 font-bold text-red-700">{error}</div> : null}
+			{neighborhoodNotice ? <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 font-bold text-blue-800">{neighborhoodNotice}</div> : null}
 			{whatsappPreference ? (
 				<div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
 					<span>
@@ -1065,6 +1080,7 @@ function MyRoute() {
 function DistributionTab() {
 	const [items, setItems] = useState([]);
 	const [cities, setCities] = useState([]);
+	const [claimRequests, setClaimRequests] = useState([]);
 	const [availableCities, setAvailableCities] = useState([]);
 	const [associatedSearch, setAssociatedSearch] = useState("");
 	const [associatedPage, setAssociatedPage] = useState(1);
@@ -1077,25 +1093,30 @@ function DistributionTab() {
 	const [transferItem, setTransferItem] = useState(null);
 	const [targetTechnicianId, setTargetTechnicianId] = useState("");
 	const [transferring, setTransferring] = useState(false);
+	const [resolvingRequestId, setResolvingRequestId] = useState("");
 	const [form, setForm] = useState({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
 	const load = async () => {
-		const [distribution, cityLinks] = await Promise.all([
+		const [distribution, cityLinks, requests] = await Promise.all([
 			buscarDistribuicaoTentativas(),
 			listarCidadesTecnicosTentativas(),
+			listarSolicitacoesBairroTentativas({ status: "PENDING" }),
 		]);
 		setItems(distribution.items || []);
 		setCities(cityLinks.items || []);
+		setClaimRequests(requests.items || []);
 	};
 	useEffect(() => {
 		let cancelled = false;
 		async function loadInitial() {
-			const [distribution, cityLinks] = await Promise.all([
+			const [distribution, cityLinks, requests] = await Promise.all([
 				buscarDistribuicaoTentativas(),
 				listarCidadesTecnicosTentativas(),
+				listarSolicitacoesBairroTentativas({ status: "PENDING" }),
 			]);
 			if (cancelled) return;
 			setItems(distribution.items || []);
 			setCities(cityLinks.items || []);
+			setClaimRequests(requests.items || []);
 			setLoading(false);
 			listarCidadesTentativas()
 				.then((cityOptions) => {
@@ -1115,7 +1136,7 @@ function DistributionTab() {
 		const saved = await salvarCidadeTecnicoTentativas(form);
 		setForm({ userId: "", userEmail: "", userName: "", cidade: "", permanent: true });
 		await load();
-		setMessage(`Cidade associada e bairros redistribuídos com segurança. ${formatNumber(saved?.distribution?.neighborhoods || 0)} bairro(s) e ${formatNumber(saved?.distribution?.opportunities || 0)} oportunidade(s) organizados.`);
+		setMessage(`Cidade associada com sucesso. O técnico já pode escolher entre ${formatNumber(saved?.distribution?.neighborhoods || 0)} bairro(s) disponíveis.`);
 	};
 	const loadNeighborhoods = useCallback(async (cidade) => {
 		setNeighborhoodCity(cidade);
@@ -1153,6 +1174,22 @@ function DistributionTab() {
 			setTransferring(false);
 		}
 	};
+	const resolveClaimRequest = async (request, action) => {
+		setResolvingRequestId(request.id);
+		setDistributionError("");
+		setMessage("");
+		try {
+			await resolverSolicitacaoBairroTentativas(request.id, action);
+			await load();
+			setMessage(action === "approve"
+				? `${request.bairro} liberado para ${request.requesterName}.`
+				: `Solicitação de ${request.requesterName} recusada.`);
+		} catch (error) {
+			setDistributionError(error?.message || "Não foi possível analisar a solicitação.");
+		} finally {
+			setResolvingRequestId("");
+		}
+	};
 	const associatedSearchTerm = normalizeSearch(associatedSearch);
 	const filteredAssociatedCities = associatedSearchTerm
 		? cities.filter((item) =>
@@ -1173,6 +1210,22 @@ function DistributionTab() {
 		<div className="space-y-4">
 			{message ? <div className="rounded-2xl bg-emerald-50 p-4 font-bold text-emerald-700">{message}</div> : null}
 			{distributionError ? <div className="rounded-2xl bg-red-50 p-4 font-bold text-red-700">{distributionError}</div> : null}
+			{claimRequests.length ? (
+				<section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+					<div className="flex items-start gap-3">
+						<BellRing className="mt-1 h-5 w-5 text-amber-700" />
+						<div><p className="text-xs font-black uppercase tracking-[0.14em] text-amber-700">Aguardando permissão</p><h2 className="text-xl font-black text-slate-950">Solicitações de bairros</h2></div>
+					</div>
+					<div className="mt-4 grid gap-3 lg:grid-cols-2">
+						{claimRequests.map((request) => (
+							<article key={request.id} className="rounded-2xl border border-amber-200 bg-white p-4">
+								<div className="flex flex-wrap items-start justify-between gap-2"><div><strong className="block text-slate-950">{request.bairro} · {request.cidade}</strong><p className="mt-1 text-sm font-bold text-slate-600">{request.requesterName} solicita por {request.requestedHours} hora(s)</p><p className="mt-1 text-xs font-semibold text-slate-500">Responsável atual: {request.currentOwnerName || "Não informado"}</p></div><span className="rounded-lg bg-amber-100 px-2 py-1 text-xs font-black text-amber-800">Pendente</span></div>
+								<div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={resolvingRequestId === request.id} onClick={() => void resolveClaimRequest(request, "reject")} className="min-h-11 rounded-xl border border-red-200 font-black text-red-700 disabled:opacity-50">Recusar</button><button type="button" disabled={resolvingRequestId === request.id} onClick={() => void resolveClaimRequest(request, "approve")} className="min-h-11 rounded-xl bg-emerald-600 font-black text-white disabled:opacity-50">{resolvingRequestId === request.id ? "Salvando..." : "Aprovar"}</button></div>
+							</article>
+						))}
+					</div>
+				</section>
+			) : null}
 			<div className="grid gap-4 xl:grid-cols-[1fr_440px]">
 				<section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
 					<div className="flex flex-col gap-1">
@@ -1180,9 +1233,7 @@ function DistributionTab() {
 							Distribuição atual
 						</p>
 						<h2 className="text-2xl font-black text-slate-950">Técnicos por cidade</h2>
-						<p className="text-sm font-semibold text-slate-500">
-							Os bairros são divididos automaticamente entre os técnicos da cidade, sem separar clientes do mesmo bairro.
-						</p>
+						<p className="text-sm font-semibold text-slate-500">A associação libera a cidade; cada técnico escolhe os bairros em que atuará.</p>
 					</div>
 					<div className="mt-4 grid gap-3 md:grid-cols-2">
 						{items.map((item) => (
@@ -1220,7 +1271,7 @@ function DistributionTab() {
 								value={form.cidade}
 								onChange={(cidade) => setForm((current) => ({ ...current, cidade }))}
 								label="Cidade atendida"
-								helper="Ao salvar, os bairros ainda não trabalhados são balanceados automaticamente."
+								helper="Ao salvar, o técnico poderá escolher os bairros disponíveis nessa cidade."
 							/>
 							<label className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-600">
 								<input
@@ -1242,7 +1293,7 @@ function DistributionTab() {
 					</section>
 
 					<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-800">
-						Cada bairro pertence a um único técnico. Ao incluir ou remover alguém, o sistema recalcula a cidade e preserva com o técnico atual os bairros que já tiveram contato, evitando mensagens duplicadas ao mesmo cliente.
+					Cada bairro pode ser reservado por até 24 horas. Se já estiver com outro técnico, a troca depende da aprovação de Admin ou BackOffice.
 					</div>
 				</div>
 			</div>
