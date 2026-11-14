@@ -45,22 +45,40 @@ async function tableExists(client, tableName) {
 async function ensureMigrationTable(client) {
 	await client.query(`
     create table if not exists schema_migrations (
-      version text primary key,
-      file_name text not null,
+      version text not null,
+      file_name text primary key,
       applied_at timestamptz not null default now()
     )
+  `);
+	await client.query(`
+    do $$
+    begin
+      if not exists (
+        select 1
+        from pg_constraint
+        where conrelid = 'schema_migrations'::regclass
+          and contype = 'p'
+          and pg_get_constraintdef(oid) = 'PRIMARY KEY (file_name)'
+      ) then
+        alter table schema_migrations drop constraint if exists schema_migrations_pkey;
+        alter table schema_migrations
+          add constraint schema_migrations_pkey primary key (file_name);
+      end if;
+    end $$
+  `);
+	await client.query(`
+    create index if not exists schema_migrations_version_idx
+      on schema_migrations (version)
   `);
 }
 
 async function getAppliedMigrations(client) {
-	const result = await client.query("select version from schema_migrations");
-	return new Set(result.rows.map((row) => String(row.version || "")));
+	const result = await client.query("select file_name from schema_migrations");
+	return new Set(result.rows.map((row) => String(row.file_name || "")));
 }
 
-function getPendingMigrations(files, appliedVersions) {
-	return files.filter(
-		(fileName) => !appliedVersions.has(getMigrationVersion(fileName)),
-	);
+function getPendingMigrations(files, appliedFiles) {
+	return files.filter((fileName) => !appliedFiles.has(fileName));
 }
 
 async function maybeBaselineExistingDatabase(client, files) {
@@ -76,10 +94,10 @@ async function maybeBaselineExistingDatabase(client, files) {
 		await client.query(
 			`insert into schema_migrations (version, file_name)
        values ($1, $2)
-       on conflict (version) do nothing`,
+       on conflict (file_name) do nothing`,
 			[version, fileName],
 		);
-		applied.add(version);
+		applied.add(fileName);
 	}
 	console.log(
 		`[migrations] Baseline aplicado para ${baselineFiles.length} migration(s) existentes.`,
@@ -102,8 +120,8 @@ async function applyMigration(client, fileName) {
 			await client.query(
 				`insert into schema_migrations (version, file_name)
        values ($1, $2)
-       on conflict (version) do update set
-         file_name = excluded.file_name,
+       on conflict (file_name) do update set
+         version = excluded.version,
          applied_at = now()`,
 				[version, fileName],
 			);
@@ -116,12 +134,14 @@ async function applyMigration(client, fileName) {
 
 	await client.query("begin");
 	try {
+		await client.query("set local lock_timeout = '5s'");
+		await client.query("set local statement_timeout = '15min'");
 		await client.query(sql);
 		await client.query(
 			`insert into schema_migrations (version, file_name)
        values ($1, $2)
-       on conflict (version) do update set
-         file_name = excluded.file_name,
+       on conflict (file_name) do update set
+         version = excluded.version,
          applied_at = now()`,
 			[version, fileName],
 		);
@@ -132,12 +152,24 @@ async function applyMigration(client, fileName) {
 	}
 }
 
+async function acquireMigrationLock(client) {
+	const result = await client.query(
+		"select pg_try_advisory_lock(hashtext('retiradas_sql_migrations')) as acquired",
+	);
+	if (result.rows[0]?.acquired !== true) {
+		throw new Error(
+			"Outra execucao de migrations ja esta em andamento. Tente novamente depois que ela terminar.",
+		);
+	}
+}
+
 async function main() {
 	const files = await listMigrationFiles();
 	const client = new Client(getConnectionConfig());
 	await client.connect();
 	try {
 		await ensureMigrationTable(client);
+		await acquireMigrationLock(client);
 		const applied = await maybeBaselineExistingDatabase(client, files);
 		const pending = getPendingMigrations(files, applied);
 		for (const fileName of pending) {
@@ -145,6 +177,9 @@ async function main() {
 		}
 		console.log(`[migrations] Concluido. Pendentes aplicadas: ${pending.length}.`);
 	} finally {
+		await client
+			.query("select pg_advisory_unlock(hashtext('retiradas_sql_migrations'))")
+			.catch(() => {});
 		await client.end();
 	}
 }
@@ -161,6 +196,7 @@ module.exports = {
 	getPendingMigrations,
 	maybeBaselineExistingDatabase,
 	applyMigration,
+	acquireMigrationLock,
 };
 
 // So roda automaticamente quando chamado direto (`node run-sql-migrations.js`

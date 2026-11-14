@@ -3,12 +3,24 @@ const test = require("node:test");
 
 const {
 	applyMigration,
+	acquireMigrationLock,
 	getMigrationVersion,
 	getPendingMigrations,
 	isNoTransactionMigration,
 } = require("./run-sql-migrations");
 
-test("identifica migrations aplicadas pelo numero da versao", () => {
+test("falha imediatamente quando outro runner possui a trava global", async () => {
+	const client = {
+		query: async () => ({ rows: [{ acquired: false }] }),
+	};
+
+	await assert.rejects(
+		() => acquireMigrationLock(client),
+		/Outra execucao de migrations ja esta em andamento/,
+	);
+});
+
+test("identifica migrations aplicadas pelo nome completo", () => {
 	const files = [
 		"013_documentos_agentes_midia.sql",
 		"013_roles_permissions.sql",
@@ -18,12 +30,22 @@ test("identifica migrations aplicadas pelo numero da versao", () => {
 	];
 
 	assert.deepEqual(
-		getPendingMigrations(files, new Set(["013", "067"])),
-		["079_tecnico_sem_mfa.sql"],
+		getPendingMigrations(
+			files,
+			new Set([
+				"013_documentos_agentes_midia.sql",
+				"067_hubsoft_sync_profiles.sql",
+			]),
+		),
+		[
+			"013_roles_permissions.sql",
+			"067_totp_mfa.sql",
+			"079_tecnico_sem_mfa.sql",
+		],
 	);
 });
 
-test("mantem todos os arquivos de uma versao ainda nao aplicada", () => {
+test("mantem migrations de mesmo numero como arquivos independentes", () => {
 	const files = [
 		"013_documentos_agentes_midia.sql",
 		"013_roles_permissions.sql",
@@ -32,6 +54,28 @@ test("mantem todos os arquivos de uma versao ainda nao aplicada", () => {
 	assert.deepEqual(getPendingMigrations(files, new Set()), files);
 	assert.equal(getMigrationVersion(files[0]), "013");
 	assert.equal(getMigrationVersion(files[1]), "013");
+});
+
+test("aplica timeouts locais dentro da migration transacional", async () => {
+	const calls = [];
+	const client = {
+		query: async (sql, params) => {
+			calls.push({ sql, params });
+			return { rows: [] };
+		},
+	};
+
+	await applyMigration(client, "013_documentos_agentes_midia.sql");
+
+	assert.deepEqual(
+		calls.slice(0, 3).map((call) => call.sql),
+		[
+			"begin",
+			"set local lock_timeout = '5s'",
+			"set local statement_timeout = '15min'",
+		],
+	);
+	assert.equal(calls.at(-1).sql, "commit");
 });
 
 test("identifica migration que precisa rodar fora de transacao", () => {
