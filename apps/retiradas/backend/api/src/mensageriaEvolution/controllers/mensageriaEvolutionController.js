@@ -1,10 +1,36 @@
 function createMensageriaEvolutionController({ evolutionMessaging }) {
+	const requestTimeoutMs = Math.max(
+		Number(process.env.MENSAGERIA_EVOLUTION_REQUEST_TIMEOUT_MS || 15_000),
+		1,
+	);
 	const statusCacheTtlMs = Math.max(
 		Number(process.env.MENSAGERIA_EVOLUTION_STATUS_CACHE_TTL_MS || 5000),
 		0,
 	);
 	let statusCache = null;
 	let statusCachePromise = null;
+
+	async function withEvolutionTimeout(operation, label) {
+		let timer;
+		try {
+			return await Promise.race([
+				Promise.resolve().then(operation),
+				new Promise((_, reject) => {
+					timer = setTimeout(() => {
+						const error = new Error(
+							`Evolution excedeu o limite de ${requestTimeoutMs} ms em ${label}.`,
+						);
+						error.code = "EVOLUTION_TIMEOUT";
+						error.statusCode = 504;
+						reject(error);
+					}, requestTimeoutMs);
+					timer.unref?.();
+				}),
+			]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
 
 	function clearStatusCache() {
 		statusCache = null;
@@ -28,7 +54,10 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 		if (!statusCachePromise) {
 			statusCachePromise = (async () => {
 				const config = await evolutionMessaging.getConfig();
-				const connection = await evolutionMessaging.getConnectionInfo(config);
+				const connection = await withEvolutionTimeout(
+					() => evolutionMessaging.getConnectionInfo(config),
+					"consulta de conexao",
+				);
 				if (
 					String(config.whatsappProvider || "evolution") === "evolution" &&
 					config.evolutionEnabled &&
@@ -48,7 +77,10 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 					worker: evolutionMessaging.getStatus(),
 					connection,
 					accountsConnection:
-						await evolutionMessaging.getAccountsConnectionInfo(),
+						await withEvolutionTimeout(
+							() => evolutionMessaging.getAccountsConnectionInfo(),
+							"consulta das contas",
+						),
 				};
 				if (statusCacheTtlMs) statusCache = { createdAt: Date.now(), payload };
 				return payload;
@@ -70,7 +102,12 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 	async function connect(_req, res, next) {
 		try {
 			clearStatusCache();
-			res.json(await evolutionMessaging.createOrConnectInstance());
+			res.json(
+				await withEvolutionTimeout(
+					() => evolutionMessaging.createOrConnectInstance(),
+					"conexao da instancia",
+				),
+			);
 		} catch (error) {
 			next(error);
 		}
@@ -80,7 +117,12 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 		try {
 			evolutionMessaging.stopTurboQueue();
 			clearStatusCache();
-			res.json(await evolutionMessaging.logoutInstance());
+			res.json(
+				await withEvolutionTimeout(
+					() => evolutionMessaging.logoutInstance(),
+					"desconexao da instancia",
+				),
+			);
 		} catch (error) {
 			next(error);
 		}
@@ -94,7 +136,12 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 				});
 			}
 			clearStatusCache();
-			res.json(await evolutionMessaging.configureWebhook());
+			res.json(
+				await withEvolutionTimeout(
+					() => evolutionMessaging.configureWebhook(),
+					"configuracao do webhook",
+				),
+			);
 		} catch (error) {
 			next(error);
 		}
@@ -102,7 +149,12 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 
 	async function getWebhookInfo(_req, res, next) {
 		try {
-			res.json(await evolutionMessaging.getWebhookInfo());
+			res.json(
+				await withEvolutionTimeout(
+					() => evolutionMessaging.getWebhookInfo(),
+					"consulta do webhook",
+				),
+			);
 		} catch (error) {
 			next(error);
 		}
@@ -118,7 +170,12 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 
 	async function runQueueOnce(_req, res, next) {
 		try {
-			res.json(await evolutionMessaging.processQueueOnce({ manual: true }));
+			res.json(
+				await withEvolutionTimeout(
+					() => evolutionMessaging.processQueueOnce({ manual: true }),
+					"processamento manual da fila",
+				),
+			);
 		} catch (error) {
 			next(error);
 		}
@@ -153,7 +210,10 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 	async function sendTestMessage(req, res, next) {
 		try {
 			res.json(
-				await evolutionMessaging.sendTestMessage(req.body || {}, req.user),
+				await withEvolutionTimeout(
+					() => evolutionMessaging.sendTestMessage(req.body || {}, req.user),
+					"envio de teste",
+				),
 			);
 		} catch (error) {
 			next(error);
@@ -188,8 +248,15 @@ function createMensageriaEvolutionController({ evolutionMessaging }) {
 			});
 			const nextConfig = await evolutionMessaging.getConfig();
 			evolutionMessaging.wakeQueueWorker();
-			const missedMessages = await evolutionMessaging
-				.syncMissedInboundMessages?.({ config: nextConfig, hoursBack: 72, limit: 150 })
+			const missedMessages = await withEvolutionTimeout(
+				() =>
+					evolutionMessaging.syncMissedInboundMessages?.({
+						config: nextConfig,
+						hoursBack: 72,
+						limit: 150,
+					}),
+				"sincronizacao de mensagens recebidas",
+			)
 				.catch((error) => ({
 					ok: false,
 					error: String(error?.message || error),

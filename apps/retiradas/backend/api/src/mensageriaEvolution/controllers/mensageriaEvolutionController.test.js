@@ -60,3 +60,30 @@ test("inicia, consulta e interrompe o modo Turbo", async () => {
 	assert.equal(stopResponse.payload.turbo.status, "stopping");
 	assert.deepEqual(calls, ["start", "status", "stop"]);
 });
+
+test("interrompe chamada Evolution que excede o timeout configurado", async () => {
+	const previousTimeout = process.env.MENSAGERIA_EVOLUTION_REQUEST_TIMEOUT_MS;
+	process.env.MENSAGERIA_EVOLUTION_REQUEST_TIMEOUT_MS = "10";
+	try {
+		const evolutionMessaging = {
+			createOrConnectInstance: () => new Promise(() => {}),
+		};
+		const controller = createMensageriaEvolutionController({ evolutionMessaging });
+		const response = responseRecorder();
+		let capturedError;
+
+		await controller.connect({}, response, (error) => {
+			capturedError = error;
+		});
+
+		assert.equal(capturedError?.code, "EVOLUTION_TIMEOUT");
+		assert.equal(capturedError?.statusCode, 504);
+		assert.match(capturedError?.message || "", /conexao da instancia/);
+	} finally {
+		if (previousTimeout === undefined) {
+			delete process.env.MENSAGERIA_EVOLUTION_REQUEST_TIMEOUT_MS;
+		} else {
+			process.env.MENSAGERIA_EVOLUTION_REQUEST_TIMEOUT_MS = previousTimeout;
+		}
+	}
+});

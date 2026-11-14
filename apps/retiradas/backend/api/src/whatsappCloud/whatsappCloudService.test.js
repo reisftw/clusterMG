@@ -233,6 +233,99 @@ test("deduplica o mesmo evento de webhook", async () => {
 	assert.equal(duplicate.duplicates, 1);
 });
 
+test("deduplica reentregas concorrentes do mesmo webhook", async () => {
+	const keys = new Set();
+	const dbClient = {
+		async query(sql, params = []) {
+			if (sql.includes("insert into whatsapp_cloud_webhook_events")) {
+				const key = params[0];
+				if (keys.has(key)) return { rowCount: 0, rows: [] };
+				keys.add(key);
+				await new Promise((resolve) => setImmediate(resolve));
+				return { rowCount: 1, rows: [{ id: "event-1" }] };
+			}
+			if (sql.includes("for update skip locked")) return { rows: [] };
+			return { rowCount: 1, rows: [] };
+		},
+	};
+	const service = createWhatsappCloudService({
+		dbClient,
+		audit: { recordAuditLog: async () => {}, calculateChangedFields: () => [] },
+		messagingRepository: {},
+	});
+	const payload = {
+		object: "whatsapp_business_account",
+		entry: [{ changes: [{ value: { metadata: { phone_number_id: "1" }, messages: [{ id: "wamid.concurrent", from: "5531999990000", timestamp: "1792933200", type: "text", text: { body: "Oi" } }] } }] }],
+	};
+
+	const results = await Promise.all([
+		service.acceptWebhook(payload),
+		service.acceptWebhook(payload),
+	]);
+
+	assert.equal(results.reduce((total, result) => total + result.accepted, 0), 1);
+	assert.equal(results.reduce((total, result) => total + result.duplicates, 0), 1);
+});
+
+test("claim atomico impede dois workers de processarem o mesmo evento", async () => {
+	const event = {
+		id: "event-1",
+		event_type: "MESSAGE_STATUS",
+		message_id: "wamid.1",
+		status: "delivered",
+		event_at: new Date("2026-11-14T12:00:00Z"),
+		received_at: new Date("2026-11-14T12:00:00Z"),
+		normalized_payload: {},
+		processing_status: "PENDING",
+		processing_error: null,
+		claim_token: null,
+	};
+	let messageUpdates = 0;
+	let completions = 0;
+	const dbClient = {
+		async query(sql, params = []) {
+			if (sql.includes("for update skip locked")) {
+				assert.match(sql, /processing_status = 'PROCESSING'/);
+				assert.match(sql, /claimed_at < now\(\) - interval '5 minutes'/);
+				if (event.processing_status !== "PENDING") return { rows: [] };
+				event.processing_status = "PROCESSING";
+				event.claim_token = params[0];
+				return { rows: [{ ...event }] };
+			}
+			if (sql.includes("update whatsapp_cloud_test_messages")) {
+				messageUpdates += 1;
+				await new Promise((resolve) => setImmediate(resolve));
+				return { rowCount: 1, rows: [] };
+			}
+			if (sql.includes("processing_status = 'PROCESSED'")) {
+				assert.match(sql, /claim_token = \$3/);
+				if (event.claim_token !== params[2]) return { rowCount: 0, rows: [] };
+				event.processing_status = "PROCESSED";
+				event.processing_error = null;
+				event.claim_token = null;
+				completions += 1;
+				return { rowCount: 1, rows: [] };
+			}
+			return { rowCount: 1, rows: [] };
+		},
+	};
+	const service = createWhatsappCloudService({
+		dbClient,
+		audit: { recordAuditLog: async () => {}, calculateChangedFields: () => [] },
+		messagingRepository: {},
+	});
+
+	const results = await Promise.all([
+		service.processPendingWebhookEvents(),
+		service.processPendingWebhookEvents(),
+	]);
+
+	assert.deepEqual(results.map((result) => result.processed).sort(), [0, 1]);
+	assert.equal(messageUpdates, 1);
+	assert.equal(completions, 1);
+	assert.equal(event.processing_status, "PROCESSED");
+});
+
 test("rate limit bloqueia teste antes de chamar a Meta", async () => {
 	let providerCalls = 0;
 	const config = {
