@@ -8,6 +8,7 @@ export const FERIADOS_NACIONAIS_FIXOS = Object.freeze([
 	"10-12",
 	"11-02",
 	"11-15",
+	"11-20",
 	"12-25",
 ]);
 

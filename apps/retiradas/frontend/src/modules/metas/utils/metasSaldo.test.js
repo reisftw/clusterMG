@@ -35,7 +35,7 @@ describe("recalcularSaldoDiario", () => {
 			resultado.saldoDiario.reduce((total, row) => total + row.totalDia, 0),
 		).toBe(185);
 		expect(resultado.saldoDiario.at(-1)?.totalDia).toBe(17);
-		expect(resultado.saldoFinal).toBe(-25);
+		expect(resultado.saldoFinal).toBe(-37);
 	});
 
 	it("remove do dia mais recente uma correcao feita no total oficial", () => {
@@ -83,7 +83,7 @@ describe("recalcularSaldoDiario", () => {
 		expect(
 			resultado.saldoDiario.reduce((total, row) => total + row.totalDia, 0),
 		).toBe(691);
-		expect(resultado.saldoFinal).toBe(-91);
+		expect(resultado.saldoFinal).toBe(-131);
 	});
 
 	it("calcula o saldo pelo total mensal mesmo sem serie diaria", () => {
@@ -98,7 +98,7 @@ describe("recalcularSaldoDiario", () => {
 			2026,
 		);
 
-		expect(resultado.saldoFinal).toBe(-52);
+		expect(resultado.saldoFinal).toBe(-82);
 	});
 
 	it("mantem o saldo acumulado coerente com a meta diaria da Sempre", () => {
@@ -125,7 +125,7 @@ describe("recalcularSaldoDiario", () => {
 					{ dia: 14, totalDia: 17 },
 				],
 			},
-			new Set(["11-20"]),
+			new Set(),
 			2026,
 		);
 
