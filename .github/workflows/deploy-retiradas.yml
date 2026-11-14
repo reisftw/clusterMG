@@ -21,8 +21,41 @@ permissions:
   contents: read
 
 jobs:
+  sonar-gate:
+    name: Require approved SonarCloud analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      pull-requests: read
+    steps:
+      - name: Validate source pull request quality gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_head="$(gh api "repos/$REPOSITORY/commits/$RELEASE_SHA/pulls" --jq '.[0].head.sha // empty')"
+          test -n "$pr_head" || { echo "Release commit is not associated with a pull request."; exit 1; }
+          for attempt in {1..30}; do
+            conclusion="$(gh api "repos/$REPOSITORY/commits/$pr_head/check-runs" \
+              --jq '[.check_runs[] | select(.name == "SonarCloud Code Analysis")][0].conclusion // empty')"
+            case "$conclusion" in
+              success) echo "SonarCloud Quality Gate approved for $pr_head."; exit 0 ;;
+              failure|cancelled|timed_out|action_required|stale)
+                echo "SonarCloud Quality Gate rejected for $pr_head: $conclusion"; exit 1 ;;
+            esac
+            echo "Waiting for SonarCloud analysis ($attempt/30)..."
+            sleep 10
+          done
+          echo "SonarCloud analysis did not finish within 5 minutes."
+          exit 1
+
   prepare:
     name: Build verified Retiradas release candidate
+    needs: sonar-gate
     runs-on: ubuntu-latest
     environment: release-retiradas
 

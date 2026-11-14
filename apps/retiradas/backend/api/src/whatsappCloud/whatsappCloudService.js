@@ -1555,7 +1555,9 @@ function createWhatsappCloudService({
 			 returning event.*`,
 			[claimToken],
 		);
-		for (const event of result.rows) {
+		async function processClaimedEvent(index) {
+			if (index >= result.rows.length) return;
+			const event = result.rows[index];
 			try {
 				let flowResult = null;
 				if (event.event_type === "MESSAGE_STATUS" && event.message_id) {
@@ -1612,7 +1614,9 @@ function createWhatsappCloudService({
 					[event.id, cleanText(error.message), claimToken],
 				);
 			}
+			return processClaimedEvent(index + 1);
 		}
+		await processClaimedEvent(0);
 		return { processed: result.rows.length };
 	}
 

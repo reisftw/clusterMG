@@ -71,12 +71,12 @@ export function watchForServiceWorkerUpdate(registration) {
 	const notify = () => {
 		if (!registration.waiting || !navigator.serviceWorker.controller) return;
 		window.dispatchEvent(new CustomEvent(PWA_UPDATE_AVAILABLE_EVENT, { detail: { registration } }));
-		reportServiceWorkerEvent("UPDATE_READY", registration);
+		void reportServiceWorkerEvent("UPDATE_READY", registration);
 	};
 
 	notify();
 	registration.addEventListener("updatefound", () => {
-		reportServiceWorkerEvent("UPDATE_FOUND", registration);
+		void reportServiceWorkerEvent("UPDATE_FOUND", registration);
 		const installing = registration.installing;
 		installing?.addEventListener("statechange", () => {
 			if (installing.state === "installed") notify();

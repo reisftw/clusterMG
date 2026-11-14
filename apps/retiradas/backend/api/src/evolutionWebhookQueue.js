@@ -135,16 +135,18 @@ function createProcessor({
 		if (running) return;
 		running = true;
 		try {
-			for (let index = 0; index < BATCH_SIZE; index += 1) {
-				const event = await queueStore.claimNext();
-				if (!event) break;
-				await processEvent(event).catch((error) =>
-					queueStore.markFailed(event, error),
-				);
-			}
+			await processNext(0);
 		} finally {
 			running = false;
 		}
+	}
+
+	async function processNext(index) {
+		if (index >= BATCH_SIZE) return;
+		const event = await queueStore.claimNext();
+		if (!event) return;
+		await processEvent(event).catch((error) => queueStore.markFailed(event, error));
+		return processNext(index + 1);
 	}
 
 	return { runBatch };
