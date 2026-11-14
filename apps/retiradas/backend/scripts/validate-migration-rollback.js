@@ -12,9 +12,52 @@ const destructivePatterns = [
 ];
 
 function stripSqlComments(sql) {
-	return String(sql || "")
-		.replace(/\/\*[\s\S]*?\*\//g, " ")
-		.replace(/--.*$/gm, " ");
+	const source = String(sql || "");
+	let result = "";
+	let index = 0;
+	let quote = null;
+	while (index < source.length) {
+		const current = source[index];
+		const next = source[index + 1];
+		if (quote) {
+			if (current === quote && next === quote) {
+				result += "  ";
+				index += 2;
+				continue;
+			}
+			if (current === quote) {
+				quote = null;
+				result += current;
+			} else {
+				result += current === "\n" ? "\n" : " ";
+			}
+			index += 1;
+			continue;
+		}
+		if (current === "'" || current === '"') {
+			quote = current;
+			result += current;
+			index += 1;
+			continue;
+		}
+		if (current === "-" && next === "-") {
+			index += 2;
+			while (index < source.length && source[index] !== "\n") index += 1;
+			result += "\n";
+			index += 1;
+			continue;
+		}
+		if (current === "/" && next === "*") {
+			index += 2;
+			while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index += 1;
+			index = Math.min(index + 2, source.length);
+			result += " ";
+			continue;
+		}
+		result += current;
+		index += 1;
+	}
+	return result;
 }
 
 function validateMigrationSql(sql, fileName = "migration.sql") {

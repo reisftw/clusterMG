@@ -27,3 +27,9 @@ test("ignora exemplos destrutivos presentes apenas em comentarios", () => {
 	assert.equal(stripSqlComments(sql).includes("drop table"), false);
 	assert.deepEqual(validateMigrationSql(sql), []);
 });
+
+test("preserva marcadores de comentario dentro de strings SQL", () => {
+	const sql = "select '-- drop table safe' as line, '/* truncate safe */' as block;";
+	assert.equal(stripSqlComments(sql).startsWith("select '"), true);
+	assert.deepEqual(validateMigrationSql(sql), []);
+});

@@ -386,23 +386,20 @@ function hubsoftRetryDelay(attempt, random = Math.random) {
 async function fetchHubsoft(url, options = {}, { retryTransient = true } = {}) {
 	return metrics.observeOperation(
 		{ kind: "external", name: "hubsoft", stage: cleanText(options.method || "GET").toUpperCase() },
-		async () => {
-			const maxAttempts = retryTransient ? HUBSOFT_REQUEST_MAX_ATTEMPTS : 1;
-			for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-				try {
-					const response = await fetchWithTimeout(url, options);
-					if (!isTransientHubsoftStatus(response.status) || attempt === maxAttempts) {
-						return response;
-					}
-					await response.body?.cancel?.().catch(() => {});
-				} catch (error) {
-					if (!isTransientHubsoftError(error) || attempt === maxAttempts) throw error;
-				}
-				await wait(hubsoftRetryDelay(attempt));
-			}
-			throw new Error("Falha inesperada ao consultar HubSoft.");
-		},
+		() => fetchHubsoftAttempt(url, options, retryTransient ? HUBSOFT_REQUEST_MAX_ATTEMPTS : 1),
 	);
+}
+
+async function fetchHubsoftAttempt(url, options, maxAttempts, attempt = 1) {
+	try {
+		const response = await fetchWithTimeout(url, options);
+		if (!isTransientHubsoftStatus(response.status) || attempt === maxAttempts) return response;
+		await response.body?.cancel?.().catch(() => {});
+	} catch (error) {
+		if (!isTransientHubsoftError(error) || attempt === maxAttempts) throw error;
+	}
+	await wait(hubsoftRetryDelay(attempt));
+	return fetchHubsoftAttempt(url, options, maxAttempts, attempt + 1);
 }
 
 async function authenticateWithOAuth(config) {
@@ -2750,96 +2747,118 @@ function assertValidInternalProfile(profile) {
 	assertValidProfile(profile);
 }
 
+function runStatusForError(error) {
+	return {
+		FAILED_AUTH: RUN_STATUS.FAILED_AUTH,
+		SCHEMA_CHANGED: RUN_STATUS.SCHEMA_CHANGED,
+		SUSPICIOUS: RUN_STATUS.SUSPICIOUS,
+	}[error.code] || RUN_STATUS.FAILED;
+}
+
+async function collectProfileRun(run, profile, options, user, lockOwner) {
+	await updateRunProgress(run.id, { stage: "Iniciando execucao", percent: 3 }, lockOwner);
+	if (options.discoverTechnicians !== false) {
+		await updateRunProgress(run.id, {
+			stage: "Atualizando tecnicos de retirada",
+			percent: 5,
+		}, lockOwner);
+		await discoverWithdrawalTechnicians(user).catch(() => null);
+	}
+	const collected = await collectProfile(profile, {
+		...options,
+		onProgress: (progress) => updateRunProgress(run.id, progress, lockOwner),
+	});
+	await updateRunProgress(run.id, { stage: "Normalizando registros", percent: 55 }, lockOwner);
+	const keys = collected.rows.map((row) => uniqueKeyFor(profile, row)).filter(Boolean);
+	const uniqueRows = new Set(keys).size;
+	const collectedStats = {
+		expectedTotal: collected.expectedTotal,
+		expectedPages: collected.expectedPages,
+		receivedPages: collected.receivedPages,
+		receivedRows: collected.rows.length,
+		uniqueRows,
+		duplicateRows: keys.length - uniqueRows,
+	};
+	await updateRunProgress(run.id, { stage: "Classificando producao", percent: 62 }, lockOwner);
+	const maps = await buildClassificationMaps();
+	const records = collected.rows
+		.filter((row) => uniqueKeyFor(profile, row))
+		.map((row) => recordFor(profile, row, maps));
+	const recordsToPersist = isFinesProfile(profile) && options.skipFineFinanceEnrichment !== true
+		? await enrichFineRecordsWithFinance(
+				collected.hubsoftSession,
+				records,
+				(progress) => updateRunProgress(run.id, progress, lockOwner),
+			)
+		: records;
+	let status = validateCollected(collectedStats, uniqueRows);
+	if (status === RUN_STATUS.SUSPICIOUS && shouldTolerateDuplicateRows(profile, collectedStats)) {
+		status = RUN_STATUS.COMPLETE;
+	}
+	return { collected, collectedStats, records, recordsToPersist, status, uniqueRows };
+}
+
+async function persistProfileRun(run, profile, options, user, lockOwner, data) {
+	const defaultPersistence = { inserted: 0, updated: 0, deactivated: 0 };
+	const canPersist = data.status === RUN_STATUS.COMPLETE || (
+		data.status === RUN_STATUS.VALID_EMPTY_RESULT && ![PROFILE.MAPA, PROFILE.MATCH].includes(profile)
+	);
+	if (!canPersist) return { persistence: defaultPersistence, operational: null, previousMapSnapshot: null };
+	await updateRunProgress(run.id, { stage: "Salvando historico HubSoft", percent: 72 }, lockOwner);
+	const shouldCaptureMap = [PROFILE.MAPA, PROFILE.MATCH].includes(profile) && data.status === RUN_STATUS.COMPLETE;
+	const previousMapSnapshot = shouldCaptureMap
+		? await mapSyncUpdates.captureActiveMapSnapshot(profile)
+		: null;
+	const persistence = await persistRecords(run.id, profile, data.recordsToPersist, {
+		...options,
+		...runDateRangeOptions(profile, options),
+		onProgress: (progress) => updateRunProgress(run.id, progress, lockOwner),
+	});
+	await updateRunProgress(run.id, {
+		stage: "Aplicando nos paineis operacionais",
+		percent: 84,
+	}, lockOwner);
+	const operational = await maybeApplyOperationalProfile(
+		profile,
+		data.collected.rows,
+		data.recordsToPersist,
+		options,
+		user,
+	);
+	return { persistence, operational, previousMapSnapshot };
+}
+
+async function publishCompletedMapRun(run, profile, user, status, records, previousMapSnapshot, finishedAt) {
+	if (![PROFILE.MAPA, PROFILE.MATCH].includes(profile) || status !== RUN_STATUS.COMPLETE) return;
+	const mapUpdate = await mapSyncUpdates
+		.processCompletedMapRun({ runId: run.id, previousSnapshot: previousMapSnapshot, currentRecords: records, finishedAt })
+		.catch((error) => {
+			console.error("[hubsoftSyncProfiles] Falha ao registrar diff do MAPA:", error);
+			return null;
+		});
+	if (!mapUpdate) return;
+	const updateLabel = profile === PROFILE.MATCH ? "Match" : "Mapa";
+	await operationalImports.publishAcompanhamentoUpdate?.(profile.toLowerCase(), {
+		generatedAt: finishedAt,
+		updatedBy: user.uid || null,
+		notify: mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
+		notifyAcompanhamento: mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
+		message: `${updateLabel} atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
+		summary: { mapUpdate },
+	});
+}
+
 async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
 	let lockOwner = null;
 	let stopLockHeartbeat = null;
-	let previousMapSnapshot = null;
 	try {
 		lockOwner = await acquireLock(profile, run.id, user);
 		stopLockHeartbeat = startLockHeartbeat(profile, run.id, lockOwner);
-		await updateRunProgress(run.id, {
-			stage: "Iniciando execucao",
-			percent: 3,
-		}, lockOwner);
-		if (options.discoverTechnicians !== false) {
-			await updateRunProgress(run.id, {
-				stage: "Atualizando tecnicos de retirada",
-				percent: 5,
-			}, lockOwner);
-			await discoverWithdrawalTechnicians(user).catch(() => null);
-		}
-		const collected = await collectProfile(profile, {
-			...options,
-			onProgress: (progress) => updateRunProgress(run.id, progress, lockOwner),
-		});
-		await updateRunProgress(run.id, {
-			stage: "Normalizando registros",
-			percent: 55,
-		}, lockOwner);
-		const keys = collected.rows.map((row) => uniqueKeyFor(profile, row)).filter(Boolean);
-		const uniqueRows = new Set(keys).size;
-		const duplicateRows = keys.length - uniqueRows;
-		const collectedStats = {
-			expectedTotal: collected.expectedTotal,
-			expectedPages: collected.expectedPages,
-			receivedPages: collected.receivedPages,
-			receivedRows: collected.rows.length,
-			uniqueRows,
-			duplicateRows,
-		};
-		await updateRunProgress(run.id, {
-			stage: "Classificando producao",
-			percent: 62,
-		}, lockOwner);
-		const maps = await buildClassificationMaps();
-		const records = collected.rows
-			.filter((row) => uniqueKeyFor(profile, row))
-			.map((row) => recordFor(profile, row, maps));
-		const recordsToPersist = isFinesProfile(profile) && options.skipFineFinanceEnrichment !== true
-			? await enrichFineRecordsWithFinance(
-					collected.hubsoftSession,
-					records,
-					(progress) => updateRunProgress(run.id, progress, lockOwner),
-				)
-			: records;
-		let status = validateCollected(
-			{ ...collectedStats, receivedRows: collected.rows.length },
-			uniqueRows,
-		);
-		if (
-			status === RUN_STATUS.SUSPICIOUS &&
-			shouldTolerateDuplicateRows(profile, collectedStats)
-		) {
-			status = RUN_STATUS.COMPLETE;
-		}
-		let persistence = { inserted: 0, updated: 0, deactivated: 0 };
-		let operational = null;
-		if (status === RUN_STATUS.COMPLETE || (status === RUN_STATUS.VALID_EMPTY_RESULT && ![PROFILE.MAPA, PROFILE.MATCH].includes(profile))) {
-			await updateRunProgress(run.id, {
-				stage: "Salvando historico HubSoft",
-				percent: 72,
-			}, lockOwner);
-			if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
-				previousMapSnapshot = await mapSyncUpdates.captureActiveMapSnapshot(profile);
-			}
-			persistence = await persistRecords(run.id, profile, recordsToPersist, {
-				...options,
-				...runDateRangeOptions(profile, options),
-				onProgress: (progress) => updateRunProgress(run.id, progress, lockOwner),
-			});
-			await updateRunProgress(run.id, {
-				stage: "Aplicando nos paineis operacionais",
-				percent: 84,
-			}, lockOwner);
-			operational = await maybeApplyOperationalProfile(
-				profile,
-				collected.rows,
-				recordsToPersist,
-				options,
-				user,
-			);
-		}
+		const data = await collectProfileRun(run, profile, options, user, lockOwner);
+		const persisted = await persistProfileRun(run, profile, options, user, lockOwner, data);
+		const { collected, collectedStats, records, status, uniqueRows } = data;
+		const { persistence, operational, previousMapSnapshot } = persisted;
 		const unclassified = records.filter(
 			(record) => record.production_channel === "UNCLASSIFIED",
 		).length;
@@ -2862,7 +2881,7 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 			received_pages: collectedStats.receivedPages,
 			received_rows: collectedStats.receivedRows,
 			unique_rows: uniqueRows,
-			duplicate_rows: duplicateRows,
+			duplicate_rows: collectedStats.duplicateRows,
 			inserted: persistence.inserted,
 			updated: persistence.updated,
 			deactivated: persistence.deactivated,
@@ -2870,37 +2889,10 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 			request_summary: collected.requestSummary,
 			result_summary: resultSummary,
 		});
-		if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
-			const mapUpdate = await mapSyncUpdates
-				.processCompletedMapRun({
-					runId: run.id,
-					previousSnapshot: previousMapSnapshot,
-					currentRecords: records,
-					finishedAt,
-				})
-				.catch((error) => {
-					console.error(
-						"[hubsoftSyncProfiles] Falha ao registrar diff do MAPA:",
-						error,
-					);
-					return null;
-				});
-			if (mapUpdate) {
-				const updateLabel = profile === PROFILE.MATCH ? "Match" : "Mapa";
-				await operationalImports.publishAcompanhamentoUpdate?.(profile.toLowerCase(), {
-					generatedAt: finishedAt,
-					updatedBy: user.uid || null,
-					notify: mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
-					notifyAcompanhamento:
-						mapUpdate.addedCount > 0 || mapUpdate.executedCount > 0,
-					message: `${updateLabel} atualizado automaticamente: ${mapUpdate.addedCount} nova(s), ${mapUpdate.executedCount} executada(s) confirmada(s).`,
-					summary: { mapUpdate },
-				});
-			}
-		}
+		await publishCompletedMapRun(run, profile, user, status, records, previousMapSnapshot, finishedAt);
 		return getRun(run.id);
 	} catch (error) {
-		const status = error.code === "FAILED_AUTH" ? RUN_STATUS.FAILED_AUTH : error.code === "SCHEMA_CHANGED" ? RUN_STATUS.SCHEMA_CHANGED : error.code === "SUSPICIOUS" ? RUN_STATUS.SUSPICIOUS : RUN_STATUS.FAILED;
+		const status = runStatusForError(error);
 		await updateRun(run.id, {
 			status,
 			finished_at: new Date().toISOString(),
@@ -3117,11 +3109,12 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 		]);
 		const metaByDate = groupRecordsBySourceDate(metaRecords);
 		const storeByDate = groupRecordsBySourceDate(storeRecords);
-		for (let index = 0; index < validDates.length; index += 1) {
+		async function applyAuditDate(index) {
+			if (index >= validDates.length) return;
 			const date = validDates[index];
 			if (appliedDates.has(date)) {
 				results.push({ date, skipped: true, reason: "checkpoint" });
-				continue;
+				return applyAuditDate(index + 1);
 			}
 			const metaDayRecords = metaByDate.get(date) || [];
 			const storeDayRecords = storeByDate.get(date) || [];
@@ -3164,7 +3157,9 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 				appliedDates: [...appliedDates],
 				results,
 			}, lockOwner);
+			return applyAuditDate(index + 1);
 		}
+		await applyAuditDate(0);
 		const finishedAt = new Date().toISOString();
 		await operationalImports.publishAcompanhamentoUpdate?.("metas", {
 			generatedAt: finishedAt,

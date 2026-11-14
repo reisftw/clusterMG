@@ -106,6 +106,19 @@ test("Retiradas release has a master-only production adapter with rollback", () 
 	}
 });
 
+test("Retiradas release blocks publication when SonarCloud rejects the source PR", () => {
+	const workflow = readWorkflow("deploy-retiradas.yml");
+	for (const required of [
+		"sonar-gate:",
+		"SonarCloud Code Analysis",
+		"needs: sonar-gate",
+		"checks: read",
+		"pull-requests: read",
+	]) {
+		assert.ok(workflow.includes(required), `Retiradas release should require ${required}`);
+	}
+});
+
 test("Retiradas can publish the Android build from the same release run", () => {
 	const deploy = readWorkflow("deploy-retiradas.yml");
 	const android = readWorkflow("publish-retiradas-android.yml");
