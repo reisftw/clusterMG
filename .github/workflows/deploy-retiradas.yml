@@ -69,7 +69,11 @@ jobs:
             apps/retiradas/backend/api/src/notificationsService.test.js \
             apps/retiradas/backend/api/src/mapSyncUpdatesService.test.js \
             apps/retiradas/backend/api/src/mapsV2/mapsV2Service.test.js \
-            apps/retiradas/backend/api/src/hubsoftSyncProfiles.storeClassification.test.js
+            apps/retiradas/backend/api/src/hubsoftSyncProfiles.storeClassification.test.js \
+            apps/retiradas/backend/api/src/hubsoftSyncProfiles.resilience.test.js \
+            apps/retiradas/backend/api/src/evolutionWebhookQueue.test.js \
+            apps/retiradas/backend/api/src/mensageriaEvolution/controllers/mensageriaEvolutionController.test.js \
+            apps/retiradas/backend/api/src/whatsappCloud/whatsappCloudService.test.js
           npm run test:contracts
 
       - name: Validate observability migration on PostgreSQL
@@ -83,7 +87,15 @@ jobs:
           apps/retiradas/backend/sql/121_integrated_p0_reliability.integration.test.js
           apps/retiradas/backend/sql/122_retorninho_ia.integration.test.js
           apps/retiradas/backend/sql/124_tentativas_bairro_solicitacoes.integration.test.js
+          apps/retiradas/backend/sql/125_webhook_claims_and_reliability.integration.test.js
           apps/retiradas/backend/scripts/run-sql-migrations.integration.test.js
+
+      - name: Validate migration rollback compatibility
+        shell: bash
+        run: |
+          mapfile -t migrations < <(git diff --name-only --diff-filter=AM HEAD^ HEAD -- 'apps/retiradas/backend/sql/*.sql')
+          node apps/retiradas/backend/scripts/validate-migration-rollback.js "${migrations[@]}"
+          node --test apps/retiradas/backend/scripts/validate-migration-rollback.test.js
 
       - name: Build production candidate
         run: |

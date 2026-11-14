@@ -11,6 +11,7 @@
 		"documentos:cobranca": "node scripts/documentos-cobranca.js",
 		"migrate:sql": "node scripts/run-sql-migrations.js",
 		"migrate:preflight": "node scripts/migration-preflight.js",
+		"migrate:validate-rollback": "node scripts/validate-migration-rollback.js",
 		"reconcile:agendamentos-mapa": "node scripts/reconcile-agendamentos-mapa.js",
 		"receipts:reissue": "node scripts/reissue-return-receipts.js",
 		"acerto:migrate-empresas": "node scripts/migrate-acerto-empresas-tecnicos.js",
