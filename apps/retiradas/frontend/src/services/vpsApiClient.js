@@ -392,27 +392,7 @@ export async function listPublicVpsDocuments(
 		limit: String(limit),
 		offset: String(offset),
 	});
-	const response = await fetchWithRetry(
-		`${getApiBaseUrl()}/public/documents?${params.toString()}`,
-		{
-			cache: "no-store",
-			credentials: "include",
-			headers: {
-				"Content-Type": "application/json",
-			},
-		},
-	);
-
-	let data = null;
-	try {
-		data = await response.json();
-	} catch {
-		data = null;
-	}
-
-	if (!response.ok) {
-		throw new Error(data?.error || `Erro HTTP ${response.status}.`);
-	}
+	const data = await requestVpsApi(`/documents?${params.toString()}`);
 
 	return (data?.items || []).map((item) => ({
 		id: item.documentId,
