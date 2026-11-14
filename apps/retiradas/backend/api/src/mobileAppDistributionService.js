@@ -257,6 +257,25 @@ async function getPublicVersion(currentCodeValue) {
 	};
 }
 
+async function updateReleaseNotes(releaseId, notes) {
+	const id = text(releaseId, 80);
+	if (!id) {
+		const error = new Error("Versao do aplicativo nao informada.");
+		error.statusCode = 400;
+		throw error;
+	}
+	const result = await db.query(
+		`update mobile_app_releases set notes=$2 where id=$1 returning *`,
+		[id, text(notes, 1000) || null],
+	);
+	if (!result.rows[0]) {
+		const error = new Error("Versao do aplicativo nao encontrada.");
+		error.statusCode = 404;
+		throw error;
+	}
+	return publicRelease(result.rows[0]);
+}
+
 async function createEnrollment(user = {}) {
 	requireTechnician(user);
 	const profile = user.profile || user;
@@ -405,6 +424,7 @@ module.exports = {
 	getActiveReleaseRow,
 	getDashboard,
 	getPublicVersion,
+	updateReleaseNotes,
 	createEnrollment,
 	exchangeEnrollment,
 	saveNativeLocation,

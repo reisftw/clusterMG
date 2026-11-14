@@ -1,0 +1,4 @@
+Agora o aplicativo abre diretamente no Dashboard.
+Após atualizar, um card apresenta as novas funcionalidades.
+As novidades ficam disponíveis pelo indicador de versão do site.
+Saldo e ritmo das metas foram alinhados entre Dashboard, Metas e Acompanhamento.

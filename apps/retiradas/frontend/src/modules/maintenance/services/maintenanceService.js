@@ -54,3 +54,10 @@ export function uploadMobileApp({ apk, versionName, versionCode, notes }) {
 		body,
 	});
 }
+
+export function updateMobileAppReleaseNotes(releaseId, notes) {
+	return requestVpsApi(`/maintenance/app/releases/${encodeURIComponent(releaseId)}/notes`, {
+		method: "PATCH",
+		body: JSON.stringify({ notes }),
+	});
+}
