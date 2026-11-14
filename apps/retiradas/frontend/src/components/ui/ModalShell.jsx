@@ -23,6 +23,24 @@ const FOCUSABLE_SELECTOR = [
 	"[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+let openModalCount = 0;
+let previousBodyOverflow = "";
+
+function lockBodyScroll() {
+	if (openModalCount === 0) {
+		previousBodyOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+	}
+	openModalCount += 1;
+
+	return () => {
+		openModalCount = Math.max(0, openModalCount - 1);
+		if (openModalCount === 0) {
+			document.body.style.overflow = previousBodyOverflow;
+		}
+	};
+}
+
 function isFocusableElement(element) {
 	if (!(element instanceof HTMLElement)) return false;
 	if (
@@ -57,6 +75,7 @@ export default function ModalShell({
 
 	useEffect(() => {
 		if (!open) return undefined;
+		const unlockBodyScroll = lockBodyScroll();
 
 		previousFocusRef.current =
 			document.activeElement instanceof HTMLElement
@@ -74,6 +93,7 @@ export default function ModalShell({
 		}, 0);
 
 		return () => {
+			unlockBodyScroll();
 			const previousFocus = previousFocusRef.current;
 			if (previousFocus && document.contains(previousFocus)) {
 				window.setTimeout(
