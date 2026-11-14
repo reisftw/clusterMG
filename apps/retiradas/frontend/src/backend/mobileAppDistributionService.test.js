@@ -40,8 +40,15 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(assetLinks[0].target.sha256_cert_fingerprints).toContain(
 			manifest.fingerprints[0].value,
 		);
-		expect(manifest.appVersionName).toBe("1.0.6");
-		expect(manifest.appVersionCode).toBe(106);
+		expect(manifest.appVersionName).toBe("1.0.7");
+		expect(manifest.appVersionCode).toBe(107);
+		expect(manifest.startUrl).toBe("/?source=android&appVersion=1.0.7&appCode=107");
+		const gradle = fs.readFileSync("apps/retiradas/android-twa/app/build.gradle", "utf8");
+		const webManifest = JSON.parse(fs.readFileSync("apps/retiradas/android-twa/app/src/main/res/raw/web_app_manifest.json", "utf8"));
+		expect(gradle).toContain('versionCode 107');
+		expect(gradle).toContain('versionName "1.0.7"');
+		expect(gradle).toContain('appVersion=1.0.7&appCode=107');
+		expect(webManifest.start_url).toBe(manifest.startUrl);
 	});
 
 	it("inclui rastreamento nativo seguro e atualizacao obrigatoria", () => {
@@ -83,5 +90,13 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(distributionService).not.toContain(
 			'downloadUrl: "/api/maintenance/app/download"',
 		);
+	});
+
+	it("permite ao administrador atualizar as novidades da versao ativa", () => {
+		const routes = fs.readFileSync("apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js", "utf8");
+		const distributionService = fs.readFileSync("apps/retiradas/backend/api/src/mobileAppDistributionService.js", "utf8");
+		expect(routes).toContain('"/app/releases/:releaseId/notes"');
+		expect(routes).toContain("requireCsrfToken");
+		expect(distributionService).toContain("async function updateReleaseNotes");
 	});
 });

@@ -101,6 +101,7 @@ jobs:
         run: |
           remote_apk="/tmp/retiradas-android-${GITHUB_SHA}.apk"
           remote_aab="/tmp/retiradas-android-${GITHUB_SHA}.aab"
+          notes_base64="$(base64 -w0 apps/retiradas/android-twa/RELEASE_NOTES.txt)"
           scp -i ~/.ssh/deploy_key -P "$VPS_PORT" \
             -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
             "$APK_PATH" "$VPS_USER@$VPS_HOST:$remote_apk"
@@ -110,12 +111,13 @@ jobs:
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" \
             -o StrictHostKeyChecking=yes -o HostKeyAlias=retiradas-production \
             "$VPS_USER@$VPS_HOST" bash -s -- \
-            "$remote_apk" "$remote_aab" "$VERSION_NAME" "$VERSION_CODE" <<'REMOTE'
+            "$remote_apk" "$remote_aab" "$VERSION_NAME" "$VERSION_CODE" "$notes_base64" <<'REMOTE'
           set -Eeuo pipefail
           apk="$1"
           aab="$2"
           version_name="$3"
           version_code="$4"
+          notes="$(printf '%s' "$5" | base64 --decode)"
           bundle_dir="/opt/retiradas/mobile-releases"
           mkdir -p "$bundle_dir"
           install -m 600 "$aab" "$bundle_dir/Retiradas-v${version_name}.aab"
@@ -126,7 +128,8 @@ jobs:
           node scripts/publish-mobile-app.js \
             "--file=$apk" \
             "--version=$version_name" \
-            "--version-code=$version_code"
+            "--version-code=$version_code" \
+            "--notes=$notes"
           rm -f "$aab"
           REMOTE
 

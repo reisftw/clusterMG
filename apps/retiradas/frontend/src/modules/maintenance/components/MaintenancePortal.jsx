@@ -35,6 +35,7 @@ import {
 	getMaintenanceDashboard,
 	getMaintenanceHistory,
 	getMobileAppDashboard,
+	updateMobileAppReleaseNotes,
 	uploadMobileApp,
 } from "../services/maintenanceService";
 import "./maintenance.css";
@@ -340,13 +341,19 @@ function AppTab() {
 	const [data, setData] = useState(null);
 	const [loadingApp, setLoadingApp] = useState(true);
 	const [uploading, setUploading] = useState(false);
+	const [savingNotes, setSavingNotes] = useState(false);
+	const [notesDraft, setNotesDraft] = useState("");
 	const [message, setMessage] = useState("");
 	const [copied, setCopied] = useState(false);
 	const [form, setForm] = useState({ apk: null, versionName: "", versionCode: "", notes: "" });
 
 	const loadApp = useCallback(async () => {
 		setLoadingApp(true); setMessage("");
-		try { setData(await getMobileAppDashboard()); }
+		try {
+			const next = await getMobileAppDashboard();
+			setData(next);
+			setNotesDraft(next?.active?.notes || "");
+		}
 		catch (caught) { setMessage(caught.message || "Falha ao carregar os dados do aplicativo."); }
 		finally { setLoadingApp(false); }
 	}, []);
@@ -361,10 +368,21 @@ function AppTab() {
 			await uploadMobileApp(form);
 			setForm({ apk: null, versionName: "", versionCode: "", notes: "" });
 			event.currentTarget.reset();
-			setMessage("Nova versao publicada. O link de download ja foi atualizado.");
 			await loadApp();
+			setMessage("Nova versao publicada. O link de download ja foi atualizado.");
 		} catch (caught) { setMessage(caught.message || "Nao foi possivel publicar o APK."); }
 		finally { setUploading(false); }
+	};
+
+	const saveNotes = async () => {
+		if (!data?.active?.id) return;
+		setSavingNotes(true); setMessage("");
+		try {
+			await updateMobileAppReleaseNotes(data.active.id, notesDraft);
+			await loadApp();
+			setMessage("Novidades da versao atualizadas. Elas ja estao disponiveis no aplicativo e no rodape do site.");
+		} catch (caught) { setMessage(caught.message || "Nao foi possivel salvar as novidades."); }
+		finally { setSavingNotes(false); }
 	};
 
 	if (loadingApp && !data) return <Spinner fullScreen={false} />;
@@ -390,6 +408,8 @@ function AppTab() {
 					{active ? <>
 						<div className="maintenance-app-version"><span><PackageCheck size={30} /></span><div><small>VERSAO ATUAL</small><h2>{active.versionName}</h2><p>Codigo {active.versionCode || "-"} · {fileSize(active.fileSize)}</p></div></div>
 						<dl className="maintenance-app-details"><div><dt>SHA-256</dt><dd><code>{active.sha256}</code></dd></div><div><dt>Publicado por</dt><dd>{active.uploadedByName}</dd></div><div><dt>Ultimo download</dt><dd>{dateTime(active.lastDownloadAt)}</dd></div></dl>
+						<label><span>Novidades desta versao</span><textarea rows={5} maxLength={1000} value={notesDraft} onChange={(event) => setNotesDraft(event.target.value)} placeholder="Uma melhoria por linha" /></label>
+						<button className="maintenance-app-publish" type="button" disabled={savingNotes} onClick={saveNotes}><PackageCheck size={19} />{savingNotes ? "Salvando..." : "Salvar novidades"}</button>
 						<div className="maintenance-app-share"><label htmlFor="maintenance-app-link">Link oficial para compartilhar</label><div><input id="maintenance-app-link" value={officialDownloadUrl} readOnly /><button type="button" onClick={async () => { await navigator.clipboard.writeText(officialDownloadUrl); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }} title="Copiar link"><Copy size={17} />{copied ? "Copiado" : "Copiar"}</button></div></div>
 						<a className="maintenance-app-download" href={officialDownloadUrl}><Download size={19} />Baixar APK atual</a>
 					</> : <p className="maintenance-empty">Nenhum APK publicado. Use o formulario ao lado para liberar a primeira versao.</p>}

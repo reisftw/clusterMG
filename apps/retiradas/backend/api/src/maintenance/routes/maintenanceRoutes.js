@@ -87,6 +87,23 @@ function createMaintenanceRouter({
 		}
 	});
 
+	router.patch(
+		"/app/releases/:releaseId/notes",
+		...requireAdmin,
+		requireCsrfToken,
+		async (req, res, next) => {
+			try {
+				const release = await mobileAppDistributionService.updateReleaseNotes(
+					req.params.releaseId,
+					req.body?.notes,
+				);
+				res.json({ ok: true, release });
+			} catch (error) {
+				next(error);
+			}
+		},
+	);
+
 	router.post("/app/enrollment", requireAuthenticated, requireCsrfToken, async (req, res, next) => {
 		try {
 			res.status(201).json(await mobileAppDistributionService.createEnrollment(req.user || {}));
