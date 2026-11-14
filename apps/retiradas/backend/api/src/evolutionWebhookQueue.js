@@ -98,23 +98,37 @@ async function markFailed(event, error) {
 	);
 }
 
-function createProcessor({ agendamentoConfirmacao, evolutionMessaging }) {
+async function requeueFailed(id) {
+	const result = await db.query(
+		`update evolution_webhook_events
+		    set status = 'PENDING', attempts = 0, next_attempt_at = now(),
+		        locked_at = null, processed_at = null, last_error = null,
+		        updated_at = now()
+		  where id = $1 and status = 'FAILED'
+		  returning id`,
+		[id],
+	);
+	return Number(result?.rowCount || result?.rows?.length || 0) > 0;
+}
+
+function createProcessor({
+	agendamentoConfirmacao,
+	evolutionMessaging,
+	queueStore = { claimNext, markFailed, markProcessed },
+}) {
 	let running = false;
 
 	async function processEvent(event) {
-		const confirmation = await agendamentoConfirmacao
-			.registerIncomingResponse(event.payload || {})
-			.catch((error) => {
-				console.warn("[evolution-webhook] Falha na confirmacao:", error?.message || error);
-				return null;
-			});
+		const confirmation = await agendamentoConfirmacao.registerIncomingResponse(
+			event.payload || {},
+		);
 		if (!confirmation?.confirmed) {
 			await evolutionMessaging.registerCallback({
 				...(event.payload || {}),
 				webhookEvent: event.event_name || event.payload?.event || "",
 			});
 		}
-		await markProcessed(event.id);
+		await queueStore.markProcessed(event.id);
 	}
 
 	async function runBatch() {
@@ -122,9 +136,11 @@ function createProcessor({ agendamentoConfirmacao, evolutionMessaging }) {
 		running = true;
 		try {
 			for (let index = 0; index < BATCH_SIZE; index += 1) {
-				const event = await claimNext();
+				const event = await queueStore.claimNext();
 				if (!event) break;
-				await processEvent(event).catch((error) => markFailed(event, error));
+				await processEvent(event).catch((error) =>
+					queueStore.markFailed(event, error),
+				);
 			}
 		} finally {
 			running = false;
@@ -149,5 +165,7 @@ module.exports = {
 	createProcessor,
 	dedupeKey,
 	enqueue,
+	requeueFailed,
 	startWorker,
+	_test: { markFailed },
 };

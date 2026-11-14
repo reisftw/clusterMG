@@ -1,3 +1,5 @@
+const crypto = require("node:crypto");
+const os = require("node:os");
 const db = require("./db");
 const metrics = require("./metrics");
 const documents = require("./documents");
@@ -21,6 +23,18 @@ const PAGE_SIZE = Math.min(
 const HUBSOFT_REQUEST_TIMEOUT_MS = Math.min(
 	Math.max(Number(process.env.HUBSOFT_REQUEST_TIMEOUT_MS || 90_000), 15_000),
 	5 * 60_000,
+);
+const HUBSOFT_REQUEST_MAX_ATTEMPTS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_REQUEST_MAX_ATTEMPTS || 3), 1),
+	5,
+);
+const HUBSOFT_REQUEST_BACKOFF_MS = Math.min(
+	Math.max(Number(process.env.HUBSOFT_REQUEST_BACKOFF_MS || 750), 100),
+	10_000,
+);
+const HUBSOFT_MAX_CONCURRENCY = Math.min(
+	Math.max(Number(process.env.HUBSOFT_MAX_CONCURRENCY || 6), 1),
+	12,
 );
 const SCHEDULER_CHECK_INTERVAL_MS = 60 * 1000;
 const MAP_MATCH_RETRY_ATTEMPTS = Math.min(
@@ -61,12 +75,16 @@ const SCHEDULER_USER = {
 	nome: "Rotina automática HubSoft",
 	role: "admin",
 };
+const HUBSOFT_INSTANCE_ID = cleanText(process.env.HUBSOFT_INSTANCE_ID) ||
+	`${os.hostname()}:${process.pid}:${crypto.randomUUID()}`;
 let schedulerTickRunning = false;
 let mapMatchSchedulerRunning = false;
 let mapMatchSchedulerStartedAt = 0;
 let automationSessionCache = null;
 let automationSessionPromise = null;
 const mapPhoneLookupCache = new Map();
+let hubsoftRequestsInFlight = 0;
+const hubsoftRequestWaiters = [];
 
 const PROFILE = Object.freeze({
 	MAPA: "MAPA",
@@ -316,7 +334,20 @@ async function parseResponse(response) {
 	}
 }
 
+async function acquireHubsoftRequestSlot() {
+	if (hubsoftRequestsInFlight >= HUBSOFT_MAX_CONCURRENCY) {
+		await new Promise((resolve) => hubsoftRequestWaiters.push(resolve));
+	}
+	hubsoftRequestsInFlight += 1;
+}
+
+function releaseHubsoftRequestSlot() {
+	hubsoftRequestsInFlight = Math.max(0, hubsoftRequestsInFlight - 1);
+	hubsoftRequestWaiters.shift()?.();
+}
+
 async function fetchWithTimeout(url, options = {}) {
+	await acquireHubsoftRequestSlot();
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), HUBSOFT_REQUEST_TIMEOUT_MS);
 	try {
@@ -334,7 +365,44 @@ async function fetchWithTimeout(url, options = {}) {
 		throw error;
 	} finally {
 		clearTimeout(timeout);
+		releaseHubsoftRequestSlot();
 	}
+}
+
+function isTransientHubsoftStatus(status) {
+	return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function isTransientHubsoftError(error) {
+	const code = error?.code || error?.cause?.code;
+	return error?.statusCode === 504 || ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"].includes(code);
+}
+
+function hubsoftRetryDelay(attempt, random = Math.random) {
+	const jitter = Math.floor(random() * HUBSOFT_REQUEST_BACKOFF_MS);
+	return Math.min(HUBSOFT_REQUEST_BACKOFF_MS * 2 ** (attempt - 1) + jitter, 30_000);
+}
+
+async function fetchHubsoft(url, options = {}, { retryTransient = true } = {}) {
+	return metrics.observeOperation(
+		{ kind: "external", name: "hubsoft", stage: cleanText(options.method || "GET").toUpperCase() },
+		async () => {
+			const maxAttempts = retryTransient ? HUBSOFT_REQUEST_MAX_ATTEMPTS : 1;
+			for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+				try {
+					const response = await fetchWithTimeout(url, options);
+					if (!isTransientHubsoftStatus(response.status) || attempt === maxAttempts) {
+						return response;
+					}
+					await response.body?.cancel?.().catch(() => {});
+				} catch (error) {
+					if (!isTransientHubsoftError(error) || attempt === maxAttempts) throw error;
+				}
+				await wait(hubsoftRetryDelay(attempt));
+			}
+			throw new Error("Falha inesperada ao consultar HubSoft.");
+		},
+	);
 }
 
 async function authenticateWithOAuth(config) {
@@ -348,7 +416,7 @@ async function authenticateWithOAuth(config) {
 	const grantType = cleanText(config.grantType || "password");
 	if (!clientId || !clientSecret || !username || !password) return null;
 
-	const response = await fetchWithTimeout(`${baseUrl}/oauth/token`, {
+	const response = await fetchHubsoft(`${baseUrl}/oauth/token`, {
 		method: "POST",
 		headers: {
 			Accept: "application/json",
@@ -585,7 +653,7 @@ async function refreshAutomationSession(failedSession) {
 async function hubsoftRequest(
 	session,
 	path,
-	{ method = "GET", body, retryAuthentication = true } = {},
+	{ method = "GET", body, retryAuthentication = true, retryTransient = method === "GET" } = {},
 ) {
 	if (!session?.token) {
 		const error = new Error("Sessao HubSoft indisponivel.");
@@ -594,7 +662,7 @@ async function hubsoftRequest(
 		throw error;
 	}
 	const url = /^https?:\/\//i.test(path) ? path : `${session.baseUrl}${path}`;
-	const response = await fetchWithTimeout(url, {
+	const response = await fetchHubsoft(url, {
 		method,
 		headers: {
 			Accept: "application/json",
@@ -602,7 +670,7 @@ async function hubsoftRequest(
 			...(body ? { "Content-Type": "application/json;charset=UTF-8" } : {}),
 		},
 		...(body ? { body: JSON.stringify(body) } : {}),
-	});
+	}, { retryTransient });
 	const payload = await parseResponse(response);
 	if (
 		response.status === 401 &&
@@ -615,6 +683,7 @@ async function hubsoftRequest(
 			method,
 			body,
 			retryAuthentication: false,
+			retryTransient,
 		});
 	}
 	if (!response.ok) {
@@ -2279,19 +2348,26 @@ async function updateRun(id, patch = {}) {
 	return next;
 }
 
-async function updateRunProgress(runId, patch = {}) {
+async function updateRunProgress(runId, patch = {}, lockOwner = null) {
 	const run = await getRun(runId);
-	if (run?.profile) {
-		await db.query(
+	if (run?.profile && lockOwner) {
+		const renewed = await db.query(
 			`update hubsoft_sync_locks
           set expires_at = $3
-        where profile = $1 and sync_run_id = $2`,
+			where profile = $1 and sync_run_id = $2 and locked_by = $4
+			returning profile`,
 			[
 				run.profile,
 				runId,
 				new Date(Date.now() + LOCK_TTL_MS).toISOString(),
+				lockOwner,
 			],
 		);
+		if (!renewed.rows.length) {
+			const error = new Error(`Lock do profile ${run.profile} nao pertence mais a esta execucao.`);
+			error.code = "LOCK_LOST";
+			throw error;
+		}
 	}
 	await updateRun(runId, {
 		status: RUN_STATUS.RUNNING,
@@ -2317,6 +2393,7 @@ async function releaseStaleLock(profile) {
 	const result = await db.query(
 		`select l.profile,
 		        l.sync_run_id,
+		        l.locked_by,
 		        l.expires_at,
 		        r.status,
 		        r.started_at,
@@ -2342,7 +2419,16 @@ async function releaseStaleLock(profile) {
 	);
 	const stale = result.rows[0];
 	if (!stale) return false;
-	await db.query(`delete from hubsoft_sync_locks where profile = $1`, [profile]);
+	const deleted = await db.query(
+		`delete from hubsoft_sync_locks
+		  where profile = $1
+		    and sync_run_id is not distinct from $2
+		    and locked_by is not distinct from $3
+		    and expires_at = $4
+		returning profile`,
+		[profile, stale.sync_run_id, stale.locked_by, stale.expires_at],
+	);
+	if (!deleted.rows.length) return false;
 	if (stale.sync_run_id && stale.status === RUN_STATUS.RUNNING) {
 		await updateRun(stale.sync_run_id, {
 			status: RUN_STATUS.FAILED,
@@ -2361,37 +2447,10 @@ async function releaseStaleLock(profile) {
 }
 
 async function releaseOrphanedSchedulerLocks() {
-	const result = await db.query(
-		`select l.profile, l.sync_run_id, r.status, r.result_summary
-		   from hubsoft_sync_locks l
-		   left join hubsoft_sync_runs r on r.id = l.sync_run_id
-		  where l.locked_by = $1
-		    and (r.id is null or r.status = $2)`,
-		[SCHEDULER_USER.uid, RUN_STATUS.RUNNING],
+	const results = await Promise.all(
+		Object.values(PROFILE).map((profile) => releaseStaleLock(profile)),
 	);
-	if (!result.rows.length) return 0;
-	await db.query(
-		`delete from hubsoft_sync_locks
-		  where locked_by = $1
-		    and profile = any($2::text[])`,
-		[SCHEDULER_USER.uid, result.rows.map((row) => row.profile)],
-	);
-	for (const row of result.rows) {
-		if (!row.sync_run_id || row.status !== RUN_STATUS.RUNNING) continue;
-		await updateRun(row.sync_run_id, {
-			status: RUN_STATUS.FAILED,
-			finished_at: new Date().toISOString(),
-			error_code: "STALE_RUN",
-			error_message:
-				"Execução interrompida por reinício da API. A rotina automática pode retomar em seguida.",
-			result_summary: {
-				...(row.result_summary || {}),
-				stage: "Execução interrompida",
-				heartbeatAt: new Date().toISOString(),
-			},
-		}).catch(() => null);
-	}
-	return result.rows.length;
+	return results.filter(Boolean).length;
 }
 
 async function getActiveLock(profile) {
@@ -2410,6 +2469,8 @@ async function getActiveLock(profile) {
 async function acquireLock(profile, runId, user = {}) {
 	await releaseStaleLock(profile);
 	const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
+	const actor = cleanText(user.uid || user.email || "system").replaceAll("|", "_");
+	const lockOwner = `${HUBSOFT_INSTANCE_ID}|${actor}|${crypto.randomUUID()}`;
 	const result = await db.query(
 		`insert into hubsoft_sync_locks (profile, sync_run_id, expires_at, locked_by)
        values ($1, $2, $3, $4)
@@ -2420,21 +2481,37 @@ async function acquireLock(profile, runId, user = {}) {
          locked_by = excluded.locked_by
        where hubsoft_sync_locks.expires_at < now()
        returning *`,
-		[profile, runId, expiresAt, user.uid || user.email || null],
+		[profile, runId, expiresAt, lockOwner],
 	);
 	if (!result.rows.length) {
 		const error = new Error(`Profile ${profile} ja esta em execucao.`);
 		error.code = "ALREADY_RUNNING";
 		throw error;
 	}
+	return lockOwner;
 }
 
-async function releaseLock(profile, runId) {
+async function releaseLock(profile, runId, lockOwner) {
 	await db.query(
 		`delete from hubsoft_sync_locks
-      where profile = $1 and sync_run_id = $2`,
-		[profile, runId],
+		where profile = $1 and sync_run_id = $2 and locked_by = $3`,
+		[profile, runId, lockOwner],
 	);
+}
+
+function startLockHeartbeat(profile, runId, lockOwner) {
+	const timer = setInterval(() => {
+		db.query(
+			`update hubsoft_sync_locks
+			    set expires_at = $4
+			  where profile = $1 and sync_run_id = $2 and locked_by = $3`,
+			[profile, runId, lockOwner, new Date(Date.now() + LOCK_TTL_MS).toISOString()],
+		).catch((error) => {
+			console.error("[hubsoftSyncProfiles] Falha ao renovar lock:", sanitizeErrorMessage(error));
+		});
+	}, Math.max(5_000, Math.floor(LOCK_TTL_MS / 3)));
+	timer.unref?.();
+	return () => clearInterval(timer);
 }
 
 function runDateRangeOptions(profile, options = {}) {
@@ -2675,30 +2752,31 @@ function assertValidInternalProfile(profile) {
 
 async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 	const started = new Date(run.started_at || Date.now()).getTime() || Date.now();
-	let lockAcquired = false;
+	let lockOwner = null;
+	let stopLockHeartbeat = null;
 	let previousMapSnapshot = null;
 	try {
-		await acquireLock(profile, run.id, user);
-		lockAcquired = true;
+		lockOwner = await acquireLock(profile, run.id, user);
+		stopLockHeartbeat = startLockHeartbeat(profile, run.id, lockOwner);
 		await updateRunProgress(run.id, {
 			stage: "Iniciando execucao",
 			percent: 3,
-		});
+		}, lockOwner);
 		if (options.discoverTechnicians !== false) {
 			await updateRunProgress(run.id, {
 				stage: "Atualizando tecnicos de retirada",
 				percent: 5,
-			});
+			}, lockOwner);
 			await discoverWithdrawalTechnicians(user).catch(() => null);
 		}
 		const collected = await collectProfile(profile, {
 			...options,
-			onProgress: (progress) => updateRunProgress(run.id, progress),
+			onProgress: (progress) => updateRunProgress(run.id, progress, lockOwner),
 		});
 		await updateRunProgress(run.id, {
 			stage: "Normalizando registros",
 			percent: 55,
-		});
+		}, lockOwner);
 		const keys = collected.rows.map((row) => uniqueKeyFor(profile, row)).filter(Boolean);
 		const uniqueRows = new Set(keys).size;
 		const duplicateRows = keys.length - uniqueRows;
@@ -2713,7 +2791,7 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 		await updateRunProgress(run.id, {
 			stage: "Classificando producao",
 			percent: 62,
-		});
+		}, lockOwner);
 		const maps = await buildClassificationMaps();
 		const records = collected.rows
 			.filter((row) => uniqueKeyFor(profile, row))
@@ -2722,7 +2800,7 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 			? await enrichFineRecordsWithFinance(
 					collected.hubsoftSession,
 					records,
-					(progress) => updateRunProgress(run.id, progress),
+					(progress) => updateRunProgress(run.id, progress, lockOwner),
 				)
 			: records;
 		let status = validateCollected(
@@ -2741,19 +2819,19 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 			await updateRunProgress(run.id, {
 				stage: "Salvando historico HubSoft",
 				percent: 72,
-			});
+			}, lockOwner);
 			if ([PROFILE.MAPA, PROFILE.MATCH].includes(profile) && status === RUN_STATUS.COMPLETE) {
 				previousMapSnapshot = await mapSyncUpdates.captureActiveMapSnapshot(profile);
 			}
 			persistence = await persistRecords(run.id, profile, recordsToPersist, {
 				...options,
 				...runDateRangeOptions(profile, options),
-				onProgress: (progress) => updateRunProgress(run.id, progress),
+				onProgress: (progress) => updateRunProgress(run.id, progress, lockOwner),
 			});
 			await updateRunProgress(run.id, {
 				stage: "Aplicando nos paineis operacionais",
 				percent: 84,
-			});
+			}, lockOwner);
 			operational = await maybeApplyOperationalProfile(
 				profile,
 				collected.rows,
@@ -2832,7 +2910,8 @@ async function executeProfileRunCore(run, profile, options = {}, user = {}) {
 		});
 		throw error;
 	} finally {
-		if (lockAcquired) await releaseLock(profile, run.id).catch(() => {});
+		stopLockHeartbeat?.();
+		if (lockOwner) await releaseLock(profile, run.id, lockOwner).catch(() => {});
 	}
 }
 
@@ -2954,10 +3033,11 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 	const validDates = normalizeAuditDates(dates);
 	const results = [];
 	const appliedDates = new Set();
-	let lockAcquired = false;
+	let lockOwner = null;
+	let stopLockHeartbeat = null;
 	try {
-		await acquireLock(PROFILE.META_AUDIT, run.id, user);
-		lockAcquired = true;
+		lockOwner = await acquireLock(PROFILE.META_AUDIT, run.id, user);
+		stopLockHeartbeat = startLockHeartbeat(PROFILE.META_AUDIT, run.id, lockOwner);
 		if (!validDates.length) {
 			const error = new Error("Informe ao menos uma data para auditar metas.");
 			error.code = "EMPTY_AUDIT_DATES";
@@ -2994,7 +3074,7 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 				dates: validDates,
 				appliedDates: [...previousAppliedDates],
 				results,
-			});
+			}, lockOwner);
 			metaRun = await runInternalProfile(
 				PROFILE.META_AUDIT_DAILY,
 				{
@@ -3019,7 +3099,7 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 				dates: validDates,
 				appliedDates: [...previousAppliedDates],
 				results,
-			});
+			}, lockOwner);
 			storeRun = await runInternalProfile(
 				PROFILE.META_AUDIT_STORE,
 				{
@@ -3083,7 +3163,7 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 				dates: validDates,
 				appliedDates: [...appliedDates],
 				results,
-			});
+			}, lockOwner);
 		}
 		const finishedAt = new Date().toISOString();
 		await operationalImports.publishAcompanhamentoUpdate?.("metas", {
@@ -3134,7 +3214,10 @@ async function executeMetaAuditRun(run, dates = [], user = {}, options = {}) {
 		});
 		throw error;
 	} finally {
-		if (lockAcquired) await releaseLock(PROFILE.META_AUDIT, run.id).catch(() => {});
+		stopLockHeartbeat?.();
+		if (lockOwner) {
+			await releaseLock(PROFILE.META_AUDIT, run.id, lockOwner).catch(() => {});
+		}
 	}
 }
 
@@ -3638,12 +3721,19 @@ module.exports = {
 	startProfileRun,
 	upsertWithdrawalTechnician,
 	__testables: {
+		acquireLock,
 		classifyStoreAttendance,
 		extractFineRegistrationDate,
+		fetchHubsoft,
+		fetchWithTimeout,
 		finesPayload,
 		finesSchedulerOptions,
+		hubsoftRetryDelay,
+		isTransientHubsoftError,
+		isTransientHubsoftStatus,
 		mapMatchRetryDelay,
 		normalizeAutomationConfig,
+		releaseLock,
 		schedulerProfileDue,
 		standaloneStoreDue,
 		shouldRetryMapMatchRun,

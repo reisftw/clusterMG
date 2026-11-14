@@ -1532,11 +1532,28 @@ function createWhatsappCloudService({
 	}
 
 	async function processPendingWebhookEvents() {
+		const claimToken = crypto.randomUUID();
 		const result = await dbClient.query(
-			`select * from whatsapp_cloud_webhook_events
-			  where processing_status = 'PENDING'
-			  order by received_at
-			  limit 100`,
+			`with candidates as (
+			   select id
+			     from whatsapp_cloud_webhook_events
+			    where processing_status = 'PENDING'
+			       or (processing_status = 'PROCESSING'
+			           and claimed_at < now() - interval '5 minutes')
+			    order by received_at
+			    limit 100
+			    for update skip locked
+			 )
+			 update whatsapp_cloud_webhook_events event
+			    set processing_status = 'PROCESSING',
+			        processing_error = null,
+			        claim_token = $1,
+			        claimed_at = now(),
+			        processing_attempts = processing_attempts + 1
+			   from candidates
+			  where event.id = candidates.id
+			 returning event.*`,
+			[claimToken],
 		);
 		for (const event of result.rows) {
 			try {
@@ -1573,19 +1590,26 @@ function createWhatsappCloudService({
 					`update whatsapp_cloud_webhook_events
 					    set processing_status = 'PROCESSED', processed_at = now(),
 					        processing_error = null,
+					        claim_token = null,
+					        claimed_at = null,
 					        normalized_payload = case
 					          when $2::jsonb is null then normalized_payload
 					          else normalized_payload || jsonb_build_object('flowResult', $2::jsonb)
 					        end
-					  where id = $1`,
-					[event.id, flowResult ? JSON.stringify(flowResult) : null],
+					  where id = $1
+					    and processing_status = 'PROCESSING'
+					    and claim_token = $3`,
+					[event.id, flowResult ? JSON.stringify(flowResult) : null, claimToken],
 				);
 			} catch (error) {
 				await dbClient.query(
 					`update whatsapp_cloud_webhook_events
-					    set processing_status = 'FAILED', processing_error = $2
-					  where id = $1`,
-					[event.id, cleanText(error.message)],
+					    set processing_status = 'FAILED', processing_error = $2,
+					        claim_token = null, claimed_at = null
+					  where id = $1
+					    and processing_status = 'PROCESSING'
+					    and claim_token = $3`,
+					[event.id, cleanText(error.message), claimToken],
 				);
 			}
 		}

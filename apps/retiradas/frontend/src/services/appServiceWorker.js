@@ -1,6 +1,8 @@
 let serviceWorkerRegistrationPromise = null;
 const APP_SERVICE_WORKER_VERSION = import.meta.env.VITE_APP_VERSION || "local";
 const SERVICE_WORKER_CLIENT_KEY = "retiradas-sw-client-id";
+const PWA_UPDATE_CONFIRMED_KEY = "retiradas-pwa-update-confirmed";
+export const PWA_UPDATE_AVAILABLE_EVENT = "retiradas:pwa-update-available";
 
 function buildServiceWorkerUrl() {
 	const params = new URLSearchParams({
@@ -50,6 +52,38 @@ function reportServiceWorkerEvent(eventType, registration, details = {}) {
 	}).catch(() => null);
 }
 
+export function activateWaitingServiceWorker(registration) {
+	registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
+}
+
+export function confirmPwaUpdate(registration, storage) {
+	storage.setItem(PWA_UPDATE_CONFIRMED_KEY, "1");
+	activateWaitingServiceWorker(registration);
+}
+
+export function consumePwaUpdateConfirmation(storage) {
+	if (storage.getItem(PWA_UPDATE_CONFIRMED_KEY) !== "1") return false;
+	storage.removeItem(PWA_UPDATE_CONFIRMED_KEY);
+	return true;
+}
+
+export function watchForServiceWorkerUpdate(registration) {
+	const notify = () => {
+		if (!registration.waiting || !navigator.serviceWorker.controller) return;
+		window.dispatchEvent(new CustomEvent(PWA_UPDATE_AVAILABLE_EVENT, { detail: { registration } }));
+		reportServiceWorkerEvent("UPDATE_READY", registration);
+	};
+
+	notify();
+	registration.addEventListener("updatefound", () => {
+		reportServiceWorkerEvent("UPDATE_FOUND", registration);
+		const installing = registration.installing;
+		installing?.addEventListener("statechange", () => {
+			if (installing.state === "installed") notify();
+		});
+	});
+}
+
 export function registerAppServiceWorker() {
 	if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
 		return Promise.resolve(null);
@@ -60,9 +94,7 @@ export function registerAppServiceWorker() {
 			.register(buildServiceWorkerUrl())
 			.then((registration) => {
 				reportServiceWorkerEvent("HEARTBEAT", registration);
-				registration.addEventListener("updatefound", () => {
-					reportServiceWorkerEvent("UPDATE_FOUND", registration);
-				});
+				watchForServiceWorkerUpdate(registration);
 				return registration;
 			})
 			.catch((error) => {

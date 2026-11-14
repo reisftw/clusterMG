@@ -7,7 +7,12 @@ import { LayoutModeProvider } from "./context/LayoutModeContext";
 import { SystemProvider } from "./context/SystemContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import AppRouter from "./router/AppRouter";
-import { registerAppServiceWorker } from "./services/appServiceWorker";
+import {
+	confirmPwaUpdate,
+	consumePwaUpdateConfirmation,
+	PWA_UPDATE_AVAILABLE_EVENT,
+	registerAppServiceWorker,
+} from "./services/appServiceWorker";
 import { initErrorTracking } from "./services/errorTracking";
 import {
 	isStaleAssetError,
@@ -49,16 +54,34 @@ if (typeof window !== "undefined" && isStandaloneMode()) {
 }
 
 if ("serviceWorker" in navigator) {
-	let refreshingAfterUpdate = false;
 	navigator.serviceWorker.addEventListener("controllerchange", () => {
-		if (refreshingAfterUpdate) return;
-		refreshingAfterUpdate = true;
+		if (!consumePwaUpdateConfirmation(window.sessionStorage)) return;
 		window.location.reload();
 	});
 
 	window.addEventListener("load", () => {
 		registerAppServiceWorker();
 	});
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+function PwaUpdateNotice() {
+	const [registration, setRegistration] = React.useState(null);
+
+	React.useEffect(() => {
+		const showUpdate = (event) => setRegistration(event.detail.registration);
+		window.addEventListener(PWA_UPDATE_AVAILABLE_EVENT, showUpdate);
+		return () => window.removeEventListener(PWA_UPDATE_AVAILABLE_EVENT, showUpdate);
+	}, []);
+
+	if (!registration) return null;
+	return (
+		<div role="status" aria-live="polite" style={{ position: "fixed", right: 16, bottom: 16, zIndex: 10000, display: "flex", maxWidth: 380, alignItems: "center", gap: 12, padding: 14, border: "1px solid #cbd5e1", borderRadius: 8, background: "#fff", boxShadow: "0 12px 32px rgba(15, 23, 42, .22)", color: "#0f172a" }}>
+			<span style={{ flex: 1, fontSize: 14 }}><strong>Nova versão disponível</strong><br />Atualize quando puder para usar as melhorias mais recentes.</span>
+			<button type="button" onClick={() => setRegistration(null)} style={{ border: 0, background: "transparent", color: "#475569", cursor: "pointer" }}>Depois</button>
+			<button type="button" onClick={() => confirmPwaUpdate(registration, window.sessionStorage)} style={{ border: 0, borderRadius: 6, padding: "9px 12px", background: "#0877e8", color: "#fff", cursor: "pointer", fontWeight: 700 }}>Atualizar agora</button>
+		</div>
+	);
 }
 
 if (typeof window !== "undefined") {
@@ -82,6 +105,7 @@ root.render(
 			<LayoutModeProvider>
 				<SystemProvider>
 					<AppErrorBoundary>
+						<PwaUpdateNotice />
 						<MobileAppUpdateGate />
 						<AppRouter />
 					</AppErrorBoundary>
