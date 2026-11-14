@@ -68,7 +68,10 @@ self.addEventListener("install", (event) => {
 			reportSwEvent("INSTALLED", { cacheName: CACHE_NAME }),
 		]),
 	);
-	self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+	if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

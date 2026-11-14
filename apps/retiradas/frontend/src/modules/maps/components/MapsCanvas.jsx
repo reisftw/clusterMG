@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import retorninhoMapMarker from "../../../assets/retorninho-map-marker-color.png";
 import { formatMapClientLabel } from "../utils/pointLabels";
+import { reconcileMapMarkers } from "../utils/reconcileMapMarkers";
 
 const DEFAULT_CENTER = [-18.8, -44.1];
 const DEFAULT_ZOOM = 6;
@@ -200,33 +201,47 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		const cluster = clusterRef.current;
 		const map = mapRef.current;
 		if (!cluster || !map) return;
-		cluster.clearLayers();
-		markersByIdRef.current.clear();
 		const validCoordinates = [];
-		const markers = [];
-		for (const point of points || []) {
-			if (!validOrderPoint(point)) continue;
+		const validPoints = (points || []).filter((point) => {
+			if (!validOrderPoint(point) || point?.id == null) return false;
 			validCoordinates.push([Number(point.latitude), Number(point.longitude)]);
+			return true;
+		});
+		const isSelected = (id) => selectedIdRef.current === id || selectedRouteIdsRef.current.has(id) || selectedRequestIdsRef.current.has(id);
+		const createMarker = (point) => {
 			const marker = L.marker(
 				[Number(point.latitude), Number(point.longitude)],
-				{ icon: pointIcon(point, selectedIdRef.current === point.id || selectedRouteIdsRef.current.has(point.id) || selectedRequestIdsRef.current.has(point.id)), title: pointLabel(point), riseOnHover: true },
+				{ icon: pointIcon(point, isSelected(point.id)), title: pointLabel(point), riseOnHover: true },
 			);
-			marker.bindTooltip(() => pointTooltip(point), { direction: "top", opacity: 0.98 });
+			marker.bindTooltip(() => pointTooltip(markersByIdRef.current.get(point.id)?.point || point), { direction: "top", opacity: 0.98 });
 			marker.on("click", () => {
+				const currentPoint = markersByIdRef.current.get(point.id)?.point || point;
 				if (callbacksRef.current.selectionMode === "route") {
-					callbacksRef.current.onToggleRoute?.(point);
+					callbacksRef.current.onToggleRoute?.(currentPoint);
 					return;
 				}
 				if (callbacksRef.current.selectionMode === "request") {
-					callbacksRef.current.onToggleRequest?.(point);
+					callbacksRef.current.onToggleRequest?.(currentPoint);
 					return;
 				}
 				callbacksRef.current.onSelect?.(point.id);
 			});
-			markersByIdRef.current.set(point.id, { marker, point });
-			markers.push(marker);
-		}
-		if (markers.length) cluster.addLayers(markers);
+			return marker;
+		};
+		const updateMarker = (marker, point) => {
+			marker.setLatLng([Number(point.latitude), Number(point.longitude)]);
+			marker.setIcon(pointIcon(point, isSelected(point.id)));
+			marker.options.title = pointLabel(point);
+			marker.getElement()?.setAttribute("title", pointLabel(point));
+			marker.getTooltip()?.setContent(() => pointTooltip(markersByIdRef.current.get(point.id)?.point || point));
+		};
+		reconcileMapMarkers({
+			points: validPoints,
+			markersById: markersByIdRef.current,
+			cluster,
+			createMarker,
+			updateMarker,
+		});
 		if (!initialFrameAppliedRef.current && (points || []).length > 0) {
 			initialFrameAppliedRef.current = true;
 			const minasCoordinates = validCoordinates.filter((coordinate) => MINAS_BOUNDS.contains(coordinate));
