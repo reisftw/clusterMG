@@ -5,6 +5,7 @@ const metasDashboardMocks = vi.hoisted(() => ({
 	buscarTodasMetas: vi.fn(),
 	buscarFeriados: vi.fn(),
 	buscarMetasBaseConfig: vi.fn(),
+	subscribeRealtimeTopics: vi.fn(),
 }));
 
 vi.mock("../services/metasService", () => ({
@@ -13,12 +14,17 @@ vi.mock("../services/metasService", () => ({
 	buscarMetasBaseConfig: metasDashboardMocks.buscarMetasBaseConfig,
 }));
 
+vi.mock("../../../services/realtimeEvents", () => ({
+	subscribeRealtimeTopics: metasDashboardMocks.subscribeRealtimeTopics,
+}));
+
 describe("useMetasDashboard", () => {
 	beforeEach(() => {
 		vi.useFakeTimers({ shouldAdvanceTime: true });
 		vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
 		metasDashboardMocks.buscarFeriados.mockResolvedValue(new Set());
 		metasDashboardMocks.buscarMetasBaseConfig.mockResolvedValue(null);
+		metasDashboardMocks.subscribeRealtimeTopics.mockReturnValue(() => {});
 	});
 
 	afterEach(() => {
@@ -85,5 +91,26 @@ describe("useMetasDashboard", () => {
 			false,
 			{ allowFallback: false, preferLive: false },
 		);
+	});
+
+	it("recarrega os indicadores quando chegam novas entregas", async () => {
+		metasDashboardMocks.buscarTodasMetas
+			.mockResolvedValueOnce({
+				Setembro: { mes: "Setembro", totalOS: 15, meta: 100 },
+			})
+			.mockResolvedValueOnce({
+				Setembro: { mes: "Setembro", totalOS: 18, meta: 100 },
+			});
+
+		const { result } = renderHook(() => useMetasDashboard());
+		await waitFor(() => expect(result.current.metaMes?.totalOS).toBe(15));
+
+		const onMetasUpdated = metasDashboardMocks.subscribeRealtimeTopics.mock.calls[0][1];
+		onMetasUpdated();
+
+		await waitFor(() => expect(result.current.metaMes?.totalOS).toBe(18));
+		expect(metasDashboardMocks.buscarTodasMetas).toHaveBeenLastCalledWith(true, {
+			allowFallback: true,
+		});
 	});
 });

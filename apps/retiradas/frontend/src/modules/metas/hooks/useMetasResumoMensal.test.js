@@ -50,7 +50,7 @@ describe("useMetasResumoMensal business helpers", () => {
 		expect(historico[1].vazio).toBe(true);
 	});
 
-	it("recalcula saldo final e meta diaria com a mesma regra do saldo diario", () => {
+	it("fecha mes historico contra a meta mensal completa", () => {
 		const historico = buildHistoricoAnual(
 			{
 				Maio: {
@@ -73,10 +73,10 @@ describe("useMetasResumoMensal business helpers", () => {
 
 		expect(maio.metaDiaria).toBe(5);
 		expect(maio.diasUteis).toBe(20);
-		expect(maio.saldoFinal).toBe(20);
+		expect(maio.saldoFinal).toBe(-75);
 	});
 
-	it("ignora linhas zeradas no saldo final do resumo mensal", () => {
+	it("mantem o total oficial mesmo quando as linhas diarias estao zeradas", () => {
 		const historico = buildHistoricoAnual(
 			{
 				Junho: {
@@ -97,7 +97,7 @@ describe("useMetasResumoMensal business helpers", () => {
 
 		const junho = historico.find((item) => item.mes === "Junho");
 
-		expect(junho.saldoFinal).toBe(0);
+		expect(junho.saldoFinal).toBe(-910);
 	});
 
 	it("monta o estado derivado do hook para um mes atual", () => {

@@ -83,7 +83,7 @@ describe("recalcularSaldoDiario", () => {
 		expect(
 			resultado.saldoDiario.reduce((total, row) => total + row.totalDia, 0),
 		).toBe(691);
-		expect(resultado.saldoFinal).toBe(-90);
+		expect(resultado.saldoFinal).toBe(-91);
 	});
 
 	it("calcula o saldo pelo total mensal mesmo sem serie diaria", () => {
@@ -98,6 +98,39 @@ describe("recalcularSaldoDiario", () => {
 			2026,
 		);
 
-		expect(resultado.saldoFinal).toBe(-50);
+		expect(resultado.saldoFinal).toBe(-52);
+	});
+
+	it("mantem o saldo acumulado coerente com a meta diaria da Sempre", () => {
+		vi.setSystemTime(new Date(2026, 10, 14, 12));
+		const resultado = recalcularSaldoDiario(
+			{
+				mes: "Novembro",
+				meta: 1903,
+				totalOS: 806,
+				saldoDiario: [
+					{ dia: 1, totalDia: 15 },
+					{ dia: 2, totalDia: 12 },
+					{ dia: 3, totalDia: 95 },
+					{ dia: 4, totalDia: 77 },
+					{ dia: 5, totalDia: 93 },
+					{ dia: 6, totalDia: 77 },
+					{ dia: 7, totalDia: 25 },
+					{ dia: 8, totalDia: 13 },
+					{ dia: 9, totalDia: 69 },
+					{ dia: 10, totalDia: 67 },
+					{ dia: 11, totalDia: 61 },
+					{ dia: 12, totalDia: 110 },
+					{ dia: 13, totalDia: 75 },
+					{ dia: 14, totalDia: 17 },
+				],
+			},
+			new Set(["11-20"]),
+			2026,
+		);
+
+		expect(resultado.saldoDiario.reduce((sum, row) => sum + row.metaDia, 0)).toBe(903);
+		expect(resultado.saldoDiario.at(-1)?.saldoMes).toBe(-97);
+		expect(resultado.saldoFinal).toBe(-97);
 	});
 });

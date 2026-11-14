@@ -2,16 +2,17 @@
 import { buildMetaDiariaSchedule } from "../../../utils/metasProjection";
 import { NOMES_MESES } from "../../../utils/mes";
 
-function calcularSaldoMensalAtual(meta, totalOS, mes, ano) {
+function calcularSaldoMensalAtual(meta, totalOS, mes, ano, metaAcumuladaPorDia) {
 	const monthIndex = NOMES_MESES.indexOf(mes);
 	if (monthIndex < 0) return null;
 
 	const now = new Date();
-	if (ano !== now.getFullYear() || monthIndex !== now.getMonth()) return null;
+	const currentMonthIndex = now.getFullYear() * 12 + now.getMonth();
+	const requestedMonthIndex = ano * 12 + monthIndex;
+	if (requestedMonthIndex > currentMonthIndex) return totalOS;
+	if (requestedMonthIndex < currentMonthIndex) return totalOS - meta;
 
-	const totalDays = new Date(ano, monthIndex + 1, 0).getDate();
-	const completedDays = Math.max(0, now.getDate() - 1);
-	const expectedToDate = Math.round((meta * completedDays) / totalDays);
+	const expectedToDate = Number(metaAcumuladaPorDia.get(now.getDate()) || 0);
 	return totalOS - expectedToDate;
 }
 
@@ -52,6 +53,7 @@ export function recalcularSaldoDiario(
 		temTotalOficial && Number.isFinite(totalOficial) ? totalOficial : 0,
 		mes,
 		ano,
+		metaAcumuladaPorDia,
 	);
 
 	if (!Array.isArray(dados?.saldoDiario) || dados.saldoDiario.length === 0) {
@@ -87,6 +89,7 @@ export function recalcularSaldoDiario(
 			: totalDiario,
 		mes,
 		ano,
+		metaAcumuladaPorDia,
 	);
 	let diferenca = temTotalOficial && Number.isFinite(totalOficial)
 		? totalOficial - totalDiario
@@ -111,7 +114,7 @@ export function recalcularSaldoDiario(
 		);
 	}
 
-	let saldoMes = 0;
+	let totalAcumulado = 0;
 	const saldoDiario = linhasComMovimento.map((row) => {
 		const dia = Number(row?.dia || 0);
 		const totalDia = Number(row?.totalDia || 0);
@@ -119,7 +122,8 @@ export function recalcularSaldoDiario(
 		const metaDia = util ? metaPorDia.get(dia) || 0 : 0;
 		const saldoDia = totalDia - metaDia;
 
-		saldoMes += saldoDia;
+		totalAcumulado += totalDia;
+		const saldoMes = totalAcumulado - (metaAcumuladaPorDia.get(dia) || 0);
 
 		return {
 			...row,

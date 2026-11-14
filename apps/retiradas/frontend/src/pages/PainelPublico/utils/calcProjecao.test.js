@@ -56,7 +56,7 @@ describe("calcProjecao", () => {
 		const metas = buildMonthProjection(dadosJulho, feriadosSet);
 		const painel = await calcProjecao(dadosJulho, "Julho", feriadosSet);
 
-		expect(painel.projecaoFinal).toBe(1962);
+		expect(painel.projecaoFinal).toBe(2074);
 		expect(painel.projecaoFinal).toBe(metas.projecaoFinal);
 		expect(painel.diasUteisRestantes).toBe(metas.diasRestantes);
 		expect(painel.pctProjecaoCancelamentos).toBe(metas.pctProjetado);
