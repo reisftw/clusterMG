@@ -851,7 +851,7 @@ function isRegionalScopedAcertoUser(user) {
 	return hasRole(user, REGIONAL_SCOPED_ACERTO_ROLES);
 }
 
-const PUBLIC_COLLECTIONS = new Set([
+const AUTHENTICATED_SHARED_COLLECTIONS = new Set([
 	"ordens_abertas",
 	"match_os_abertas",
 	"ordens_legadas",
@@ -3031,25 +3031,6 @@ function createApp() {
 		}
 	});
 
-	app.get("/api/public/documents", publicReadLimiter, async (req, res, next) => {
-		try {
-			const collectionPath = String(req.query.collection || "").trim();
-			if (!PUBLIC_COLLECTIONS.has(collectionPath)) {
-				res.status(404).json({ error: "Colecao publica nao encontrada." });
-				return;
-			}
-
-			const items = await documents.listDocuments({
-				collectionPath,
-				limit: req.query.limit,
-				offset: req.query.offset,
-			});
-			res.json({ items });
-		} catch (error) {
-			next(error);
-		}
-	});
-
 	app.get("/api/public/documents/*", publicReadLimiter, async (req, res, next) => {
 		try {
 			const documentPath = req.params[0];
@@ -4184,10 +4165,10 @@ function createApp() {
 		},
 	);
 
-	app.get("/api/documents", async (req, res, next) => {
+	app.get("/api/documents", requireAuthenticated, async (req, res, next) => {
 		try {
 			const collectionPath = String(req.query.collection || "").trim();
-			if (!PUBLIC_COLLECTIONS.has(collectionPath)) {
+			if (!AUTHENTICATED_SHARED_COLLECTIONS.has(collectionPath)) {
 				next();
 				return;
 			}
@@ -4198,26 +4179,6 @@ function createApp() {
 				offset: req.query.offset,
 			});
 			res.json({ items });
-		} catch (error) {
-			next(error);
-		}
-	});
-
-	app.get("/api/documents/*", async (req, res, next) => {
-		try {
-			const documentPath = req.params[0];
-			if (!PUBLIC_DOCUMENTS.has(documentPath)) {
-				next();
-				return;
-			}
-
-			const item = await documents.getDocument(documentPath);
-			if (!item) {
-				res.status(404).json({ error: "Documento nao encontrado." });
-				return;
-			}
-
-			res.json(item);
 		} catch (error) {
 			next(error);
 		}

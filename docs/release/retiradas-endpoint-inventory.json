@@ -1,6 +1,6 @@
 {
   "generatedBy": "scripts/audit-retiradas-endpoints.cjs",
-  "entryCount": 366,
+  "entryCount": 534,
   "entries": [
     {
       "method": "GET",
@@ -171,7 +171,7 @@
       "localPath": "/",
       "mountPath": "/api/agendamentos",
       "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
-      "line": 109,
+      "line": 113,
       "gates": [
         "authenticated",
         "permission"
@@ -183,9 +183,34 @@
       "localPath": "/logs",
       "mountPath": "/api/agendamentos",
       "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
-      "line": 127,
+      "line": 131,
       "gates": [
         "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/agendamentos/reconciliacao/status",
+      "localPath": "/reconciliacao/status",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 144,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/agendamentos/reconciliacao/executar",
+      "localPath": "/reconciliacao/executar",
+      "mountPath": "/api/agendamentos",
+      "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
+      "line": 154,
+      "gates": [
+        "authenticated",
+        "csrf",
         "permission"
       ]
     },
@@ -195,7 +220,7 @@
       "localPath": "/",
       "mountPath": "/api/agendamentos",
       "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
-      "line": 140,
+      "line": 182,
       "gates": [
         "authenticated",
         "csrf",
@@ -208,7 +233,7 @@
       "localPath": "/:id",
       "mountPath": "/api/agendamentos",
       "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
-      "line": 175,
+      "line": 217,
       "gates": [
         "authenticated",
         "csrf",
@@ -221,7 +246,7 @@
       "localPath": "/:id",
       "mountPath": "/api/agendamentos",
       "file": "apps/retiradas/backend/api/src/agendamentos/routes/agendamentosRoutes.js",
-      "line": 218,
+      "line": 260,
       "gates": [
         "authenticated",
         "csrf",
@@ -234,7 +259,7 @@
       "localPath": "/api/admin/metrics",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2397,
+      "line": 2478,
       "gates": [
         "public-or-custom"
       ]
@@ -245,7 +270,7 @@
       "localPath": "/api/admin/metrics/reset",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2402,
+      "line": 2483,
       "gates": [
         "public-or-custom"
       ]
@@ -256,7 +281,7 @@
       "localPath": "/api/admin/audit-logs",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2419,
+      "line": 2524,
       "gates": [
         "authenticated",
         "permission"
@@ -268,7 +293,7 @@
       "localPath": "/api/admin/audit-logs/options",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2432,
+      "line": 2537,
       "gates": [
         "authenticated",
         "permission"
@@ -280,7 +305,7 @@
       "localPath": "/api/admin/audit-logs/:id",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2445,
+      "line": 2550,
       "gates": [
         "authenticated",
         "permission"
@@ -292,7 +317,7 @@
       "localPath": "/api/admin/vpn/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2463,
+      "line": 2568,
       "gates": [
         "authenticated",
         "permission"
@@ -304,7 +329,7 @@
       "localPath": "/api/admin/vpn/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2482,
+      "line": 2587,
       "gates": [
         "authenticated",
         "permission",
@@ -317,7 +342,7 @@
       "localPath": "/api/admin/vpn/logs",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2496,
+      "line": 2601,
       "gates": [
         "authenticated",
         "permission"
@@ -329,7 +354,7 @@
       "localPath": "/api/admin/vpn/access-check",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2512,
+      "line": 2617,
       "gates": [
         "authenticated",
         "permission"
@@ -341,7 +366,7 @@
       "localPath": "/api/vpn/access-check",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2534,
+      "line": 2639,
       "gates": [
         "authenticated"
       ]
@@ -352,7 +377,7 @@
       "localPath": "/api/ranking",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2629,
+      "line": 2754,
       "gates": [
         "authenticated",
         "permission"
@@ -364,7 +389,7 @@
       "localPath": "/api/ranking/detail",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2645,
+      "line": 2770,
       "gates": [
         "authenticated",
         "permission"
@@ -376,7 +401,7 @@
       "localPath": "/api/ranking/export.xlsx",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2661,
+      "line": 2786,
       "gates": [
         "authenticated",
         "permission"
@@ -388,7 +413,7 @@
       "localPath": "/api/mapas/atualizacoes",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2686,
+      "line": 2811,
       "gates": [
         "authenticated",
         "permission"
@@ -400,7 +425,7 @@
       "localPath": "/api/mapas/atualizacoes/latest",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2699,
+      "line": 2824,
       "gates": [
         "authenticated",
         "permission"
@@ -412,7 +437,7 @@
       "localPath": "/api/mapas/atualizacoes/:id",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2712,
+      "line": 2837,
       "gates": [
         "authenticated",
         "permission"
@@ -424,7 +449,7 @@
       "localPath": "/api/acompanhamento/operational-summary",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2730,
+      "line": 2855,
       "gates": [
         "authenticated",
         "permission"
@@ -436,7 +461,7 @@
       "localPath": "/api/acompanhamento/resumo",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2743,
+      "line": 2874,
       "gates": [
         "public-or-custom"
       ]
@@ -447,7 +472,7 @@
       "localPath": "/api/dashboard/resumo",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2799,
+      "line": 2968,
       "gates": [
         "authenticated"
       ]
@@ -458,7 +483,7 @@
       "localPath": "/api/public/dashboard",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2813,
+      "line": 2982,
       "gates": [
         "public-or-custom"
       ]
@@ -469,7 +494,7 @@
       "localPath": "/api/public/static/:domain",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2830,
+      "line": 2999,
       "gates": [
         "public-or-custom"
       ]
@@ -480,7 +505,7 @@
       "localPath": "/api/public/documents",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2865,
+      "line": 3034,
       "gates": [
         "public-or-custom"
       ]
@@ -491,7 +516,7 @@
       "localPath": "/api/public/documents/*",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2884,
+      "line": 3053,
       "gates": [
         "public-or-custom"
       ]
@@ -502,7 +527,7 @@
       "localPath": "/api/public/sempre/equipment",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2904,
+      "line": 3073,
       "gates": [
         "public-or-custom"
       ]
@@ -513,7 +538,7 @@
       "localPath": "/api/public/visits",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2934,
+      "line": 3107,
       "gates": [
         "public-or-custom"
       ]
@@ -524,7 +549,7 @@
       "localPath": "/api/auth/google/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2954,
+      "line": 3127,
       "gates": [
         "public-or-custom"
       ]
@@ -535,7 +560,7 @@
       "localPath": "/api/auth/okta/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2966,
+      "line": 3139,
       "gates": [
         "public-or-custom"
       ]
@@ -546,7 +571,7 @@
       "localPath": "/api/auth/anti-bot/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2980,
+      "line": 3153,
       "gates": [
         "public-or-custom"
       ]
@@ -557,7 +582,7 @@
       "localPath": "/api/auth/google",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 2984,
+      "line": 3157,
       "gates": [
         "public-or-custom"
       ]
@@ -568,7 +593,7 @@
       "localPath": "/api/auth/okta",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3012,
+      "line": 3185,
       "gates": [
         "public-or-custom"
       ]
@@ -579,7 +604,7 @@
       "localPath": "/api/auth/login",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3043,
+      "line": 3216,
       "gates": [
         "public-or-custom"
       ]
@@ -590,7 +615,7 @@
       "localPath": "/api/auth/mfa/email/verify",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3119,
+      "line": 3302,
       "gates": [
         "public-or-custom"
       ]
@@ -601,7 +626,7 @@
       "localPath": "/api/auth/mfa/totp/status",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3150,
+      "line": 3333,
       "gates": [
         "authenticated"
       ]
@@ -612,7 +637,7 @@
       "localPath": "/api/auth/mfa/totp/setup",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3154,
+      "line": 3337,
       "gates": [
         "authenticated",
         "csrf"
@@ -624,7 +649,7 @@
       "localPath": "/api/auth/mfa/totp/confirm",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3167,
+      "line": 3350,
       "gates": [
         "authenticated",
         "csrf"
@@ -636,7 +661,7 @@
       "localPath": "/api/auth/mfa/totp/disable",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3190,
+      "line": 3373,
       "gates": [
         "authenticated",
         "csrf"
@@ -648,7 +673,7 @@
       "localPath": "/api/auth/logout",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3206,
+      "line": 3389,
       "gates": [
         "authenticated",
         "csrf"
@@ -660,9 +685,21 @@
       "localPath": "/api/auth/me",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3221,
+      "line": 3404,
       "gates": [
         "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard/technician/appointments",
+      "localPath": "/api/dashboard/technician/appointments",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 3438,
+      "gates": [
+        "authenticated",
+        "permission"
       ]
     },
     {
@@ -671,7 +708,7 @@
       "localPath": "/api/auth/avatar",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3255,
+      "line": 3492,
       "gates": [
         "authenticated",
         "csrf"
@@ -683,7 +720,7 @@
       "localPath": "/api/auth/change-password",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3295,
+      "line": 3532,
       "gates": [
         "authenticated",
         "csrf"
@@ -695,7 +732,7 @@
       "localPath": "/api/auth/forgot-password",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3333,
+      "line": 3570,
       "gates": [
         "public-or-custom"
       ]
@@ -706,7 +743,7 @@
       "localPath": "/api/auth/reset-password",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3371,
+      "line": 3608,
       "gates": [
         "public-or-custom"
       ]
@@ -717,7 +754,7 @@
       "localPath": "/api/admin/oauth/google",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3401,
+      "line": 3638,
       "gates": [
         "authenticated",
         "role"
@@ -729,7 +766,7 @@
       "localPath": "/api/admin/oauth/google",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3424,
+      "line": 3661,
       "gates": [
         "authenticated",
         "role",
@@ -742,7 +779,7 @@
       "localPath": "/api/admin/oauth/okta",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3459,
+      "line": 3696,
       "gates": [
         "authenticated",
         "role"
@@ -754,7 +791,7 @@
       "localPath": "/api/admin/oauth/okta",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3484,
+      "line": 3721,
       "gates": [
         "authenticated",
         "role",
@@ -767,7 +804,7 @@
       "localPath": "/api/insumos/requisicoes",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3535,
+      "line": 3772,
       "gates": [
         "authenticated"
       ]
@@ -778,7 +815,7 @@
       "localPath": "/api/insumos/requisicoes",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3585,
+      "line": 3822,
       "gates": [
         "authenticated",
         "csrf"
@@ -790,7 +827,7 @@
       "localPath": "/api/insumos/requisicoes/:id/aprovar",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3676,
+      "line": 3913,
       "gates": [
         "authenticated",
         "csrf"
@@ -802,7 +839,7 @@
       "localPath": "/api/insumos/requisicoes/:id/rejeitar",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3781,
+      "line": 4018,
       "gates": [
         "authenticated",
         "csrf"
@@ -814,7 +851,7 @@
       "localPath": "/api/insumos/requisicoes/:id/entregar",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3839,
+      "line": 4076,
       "gates": [
         "authenticated",
         "csrf"
@@ -826,7 +863,7 @@
       "localPath": "/api/insumos/requisicoes/expirar",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3932,
+      "line": 4169,
       "gates": [
         "authenticated",
         "csrf"
@@ -838,7 +875,7 @@
       "localPath": "/api/documents",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3950,
+      "line": 4187,
       "gates": [
         "public-or-custom"
       ]
@@ -849,7 +886,7 @@
       "localPath": "/api/documents/*",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 3969,
+      "line": 4206,
       "gates": [
         "public-or-custom"
       ]
@@ -860,7 +897,7 @@
       "localPath": "/api/documents",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4015,
+      "line": 4252,
       "gates": [
         "authenticated"
       ]
@@ -871,7 +908,7 @@
       "localPath": "/api/documents/*",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4062,
+      "line": 4299,
       "gates": [
         "authenticated"
       ]
@@ -882,7 +919,7 @@
       "localPath": "/api/static/:domain",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4093,
+      "line": 4330,
       "gates": [
         "authenticated"
       ]
@@ -893,7 +930,7 @@
       "localPath": "/api/static/refresh",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4135,
+      "line": 4372,
       "gates": [
         "authenticated",
         "role",
@@ -906,7 +943,7 @@
       "localPath": "/api/admin/users",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4187,
+      "line": 4424,
       "gates": [
         "authenticated"
       ]
@@ -917,7 +954,7 @@
       "localPath": "/api/admin/users",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4214,
+      "line": 4451,
       "gates": [
         "authenticated",
         "csrf"
@@ -929,7 +966,7 @@
       "localPath": "/api/admin/avatars",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4319,
+      "line": 4556,
       "gates": [
         "authenticated",
         "csrf"
@@ -941,7 +978,7 @@
       "localPath": "/api/admin/roles",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4342,
+      "line": 4579,
       "gates": [
         "authenticated",
         "permission"
@@ -953,7 +990,7 @@
       "localPath": "/api/admin/roles/:roleId",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4367,
+      "line": 4604,
       "gates": [
         "authenticated",
         "permission",
@@ -966,7 +1003,7 @@
       "localPath": "/api/admin/roles/:roleId",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4409,
+      "line": 4646,
       "gates": [
         "authenticated",
         "permission",
@@ -979,7 +1016,7 @@
       "localPath": "/api/admin/users/:uid",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4438,
+      "line": 4675,
       "gates": [
         "authenticated",
         "csrf"
@@ -991,7 +1028,7 @@
       "localPath": "/api/admin/users/:uid",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4493,
+      "line": 4730,
       "gates": [
         "authenticated",
         "role",
@@ -1004,7 +1041,7 @@
       "localPath": "/api/admin/users/:uid/first-access",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4524,
+      "line": 4761,
       "gates": [
         "authenticated",
         "csrf"
@@ -1016,7 +1053,7 @@
       "localPath": "/api/admin/users/:uid/mfa/reset",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4573,
+      "line": 4810,
       "gates": [
         "authenticated",
         "csrf"
@@ -1028,7 +1065,7 @@
       "localPath": "/api/admin/api-status",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4609,
+      "line": 4846,
       "gates": [
         "authenticated",
         "role"
@@ -1040,7 +1077,7 @@
       "localPath": "/api/admin/regionais",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4668,
+      "line": 4916,
       "gates": [
         "authenticated",
         "permission"
@@ -1052,7 +1089,7 @@
       "localPath": "/api/integrations/sempre/equipment",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4707,
+      "line": 4955,
       "gates": [
         "authenticated",
         "permission"
@@ -1064,7 +1101,7 @@
       "localPath": "/api/integrations/sempre/equipment/serial",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4720,
+      "line": 4968,
       "gates": [
         "authenticated",
         "permission"
@@ -1076,7 +1113,7 @@
       "localPath": "/api/integrations/sempre/equipment/mapa",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4733,
+      "line": 4981,
       "gates": [
         "authenticated",
         "role"
@@ -1088,7 +1125,7 @@
       "localPath": "/api/integrations/sempre/equipment/treatments",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4761,
+      "line": 5009,
       "gates": [
         "authenticated",
         "role"
@@ -1100,7 +1137,7 @@
       "localPath": "/api/integrations/sempre/equipment/treatments",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4774,
+      "line": 5022,
       "gates": [
         "authenticated",
         "role",
@@ -1113,7 +1150,7 @@
       "localPath": "/api/integrations/sempre/equipment/history",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4794,
+      "line": 5042,
       "gates": [
         "authenticated",
         "permission"
@@ -1125,7 +1162,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4812,
+      "line": 5060,
       "gates": [
         "authenticated",
         "permission"
@@ -1137,7 +1174,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4828,
+      "line": 5076,
       "gates": [
         "authenticated",
         "permission"
@@ -1149,7 +1186,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4844,
+      "line": 5092,
       "gates": [
         "authenticated",
         "permission",
@@ -1162,7 +1199,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/logs",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4863,
+      "line": 5111,
       "gates": [
         "authenticated",
         "permission"
@@ -1174,7 +1211,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/relatorios",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4885,
+      "line": 5133,
       "gates": [
         "authenticated",
         "permission"
@@ -1186,7 +1223,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/relatorios/refresh",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4906,
+      "line": 5154,
       "gates": [
         "authenticated",
         "permission",
@@ -1199,7 +1236,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/relatorios/email",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4937,
+      "line": 5185,
       "gates": [
         "authenticated",
         "permission",
@@ -1212,7 +1249,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/refresh",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4959,
+      "line": 5207,
       "gates": [
         "authenticated",
         "permission",
@@ -1225,7 +1262,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/jobs/:jobId",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 4978,
+      "line": 5226,
       "gates": [
         "authenticated",
         "permission"
@@ -1237,7 +1274,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/refresh/:id",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5001,
+      "line": 5249,
       "gates": [
         "authenticated",
         "permission",
@@ -1250,7 +1287,7 @@
       "localPath": "/api/tecnicos/auditoria/bolsa/run-daily",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5023,
+      "line": 5271,
       "gates": [
         "authenticated",
         "permission",
@@ -1263,7 +1300,7 @@
       "localPath": "/api/estoque/onnet",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5068,
+      "line": 5316,
       "gates": [
         "authenticated",
         "permission"
@@ -1275,7 +1312,32 @@
       "localPath": "/api/estoque/onnet",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5089,
+      "line": 5337,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/estoque/onnet/accounting/status",
+      "localPath": "/api/estoque/onnet/accounting/status",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5353,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/estoque/onnet/accounting/reconcile",
+      "localPath": "/api/estoque/onnet/accounting/reconcile",
+      "mountPath": null,
+      "file": "apps/retiradas/backend/api/src/app.js",
+      "line": 5366,
       "gates": [
         "authenticated",
         "permission",
@@ -1288,7 +1350,7 @@
       "localPath": "/api/estoque/onnet/:id",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5105,
+      "line": 5380,
       "gates": [
         "authenticated",
         "permission",
@@ -1301,7 +1363,7 @@
       "localPath": "/api/estoque/onnet/:id",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5125,
+      "line": 5400,
       "gates": [
         "authenticated",
         "permission",
@@ -1314,7 +1376,7 @@
       "localPath": "/api/admin/documents",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5141,
+      "line": 5416,
       "gates": [
         "authenticated",
         "csrf"
@@ -1326,7 +1388,7 @@
       "localPath": "/api/admin/documents/*",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5285,
+      "line": 5560,
       "gates": [
         "authenticated",
         "csrf"
@@ -1338,7 +1400,7 @@
       "localPath": "/api/admin/documents/*",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5377,
+      "line": 5652,
       "gates": [
         "authenticated",
         "csrf"
@@ -1350,7 +1412,7 @@
       "localPath": "/api/imports/mapa",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5410,
+      "line": 5685,
       "gates": [
         "authenticated",
         "role",
@@ -1363,7 +1425,7 @@
       "localPath": "/api/imports/match",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5432,
+      "line": 5707,
       "gates": [
         "authenticated",
         "role",
@@ -1376,7 +1438,7 @@
       "localPath": "/api/imports/jobs/:jobId",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5454,
+      "line": 5729,
       "gates": [
         "authenticated"
       ]
@@ -1387,7 +1449,7 @@
       "localPath": "/api/agendamentos/clientes/:codigo",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5471,
+      "line": 5746,
       "gates": [
         "authenticated"
       ]
@@ -1398,7 +1460,7 @@
       "localPath": "/api/imports/metas",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5530,
+      "line": 5805,
       "gates": [
         "authenticated",
         "role",
@@ -1411,7 +1473,7 @@
       "localPath": "/api/imports/metas/forca-tarefa",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5551,
+      "line": 5826,
       "gates": [
         "authenticated",
         "role",
@@ -1424,7 +1486,7 @@
       "localPath": "/api/imports/metas/base-config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5572,
+      "line": 5847,
       "gates": [
         "authenticated",
         "role",
@@ -1437,7 +1499,7 @@
       "localPath": "/api/imports/match/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5593,
+      "line": 5868,
       "gates": [
         "authenticated"
       ]
@@ -1448,7 +1510,7 @@
       "localPath": "/api/imports/match/config",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5605,
+      "line": 5880,
       "gates": [
         "authenticated",
         "role",
@@ -1461,7 +1523,7 @@
       "localPath": "/api/agendamento-esteira/commands",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5626,
+      "line": 5901,
       "gates": [
         "authenticated",
         "csrf"
@@ -1473,7 +1535,7 @@
       "localPath": "/api/static/:domain",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5688,
+      "line": 5975,
       "gates": [
         "public-or-custom"
       ]
@@ -1484,7 +1546,7 @@
       "localPath": "/api/documents/*",
       "mountPath": null,
       "file": "apps/retiradas/backend/api/src/app.js",
-      "line": 5717,
+      "line": 6004,
       "gates": [
         "public-or-custom"
       ]
@@ -1863,9 +1925,9 @@
       "localPath": "/google/callback",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 111,
+      "line": 180,
       "gates": [
-        "public-or-custom"
+        "authenticated"
       ]
     },
     {
@@ -1874,7 +1936,7 @@
       "localPath": "/google/status",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 113,
+      "line": 181,
       "gates": [
         "authenticated"
       ]
@@ -1885,7 +1947,7 @@
       "localPath": "/google/config",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 114,
+      "line": 182,
       "gates": [
         "authenticated"
       ]
@@ -1896,7 +1958,7 @@
       "localPath": "/google/config",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 115,
+      "line": 183,
       "gates": [
         "authenticated",
         "csrf"
@@ -1908,7 +1970,7 @@
       "localPath": "/google/auth-url",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 121,
+      "line": 189,
       "gates": [
         "authenticated"
       ]
@@ -1919,7 +1981,7 @@
       "localPath": "/fields",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 122,
+      "line": 190,
       "gates": [
         "authenticated"
       ]
@@ -1930,7 +1992,7 @@
       "localPath": "/fields",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 123,
+      "line": 191,
       "gates": [
         "authenticated",
         "csrf"
@@ -1942,7 +2004,7 @@
       "localPath": "/invoice-fields",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 124,
+      "line": 192,
       "gates": [
         "authenticated"
       ]
@@ -1953,7 +2015,7 @@
       "localPath": "/invoice-fields",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 125,
+      "line": 193,
       "gates": [
         "authenticated",
         "csrf"
@@ -1965,7 +2027,7 @@
       "localPath": "/billing-config",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 131,
+      "line": 199,
       "gates": [
         "authenticated"
       ]
@@ -1976,7 +2038,7 @@
       "localPath": "/billing-config",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 132,
+      "line": 200,
       "gates": [
         "authenticated",
         "csrf"
@@ -1988,7 +2050,7 @@
       "localPath": "/admin/purge-history",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 138,
+      "line": 206,
       "gates": [
         "authenticated",
         "csrf"
@@ -2000,7 +2062,7 @@
       "localPath": "/submissions",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 144,
+      "line": 212,
       "gates": [
         "authenticated"
       ]
@@ -2011,7 +2073,7 @@
       "localPath": "/submissions/resumo",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 145,
+      "line": 213,
       "gates": [
         "authenticated"
       ]
@@ -2022,7 +2084,7 @@
       "localPath": "/submissions/tratativas",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 150,
+      "line": 218,
       "gates": [
         "authenticated"
       ]
@@ -2033,7 +2095,7 @@
       "localPath": "/submissions/:id/zip",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 151,
+      "line": 219,
       "gates": [
         "authenticated"
       ]
@@ -2044,7 +2106,7 @@
       "localPath": "/submissions/:id",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 152,
+      "line": 220,
       "gates": [
         "authenticated"
       ]
@@ -2055,7 +2117,7 @@
       "localPath": "/submissions",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 153,
+      "line": 221,
       "gates": [
         "authenticated",
         "csrf"
@@ -2067,7 +2129,7 @@
       "localPath": "/submissions/:id/invoices",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 160,
+      "line": 228,
       "gates": [
         "authenticated",
         "csrf"
@@ -2079,7 +2141,7 @@
       "localPath": "/submissions/:id/review",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 167,
+      "line": 235,
       "gates": [
         "authenticated",
         "csrf"
@@ -2091,7 +2153,7 @@
       "localPath": "/",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 172,
+      "line": 240,
       "gates": [
         "authenticated"
       ]
@@ -2102,7 +2164,7 @@
       "localPath": "/folders/:empresaId/browser",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 173,
+      "line": 241,
       "gates": [
         "authenticated"
       ]
@@ -2113,7 +2175,7 @@
       "localPath": "/folders/:empresaId/browser/:fileId/download",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 174,
+      "line": 242,
       "gates": [
         "authenticated"
       ]
@@ -2124,7 +2186,7 @@
       "localPath": "/:id/download",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 178,
+      "line": 246,
       "gates": [
         "authenticated"
       ]
@@ -2135,7 +2197,7 @@
       "localPath": "/folders/:empresaId",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 179,
+      "line": 247,
       "gates": [
         "authenticated",
         "csrf"
@@ -2147,7 +2209,7 @@
       "localPath": "/folders/:empresaId/subfolders",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 180,
+      "line": 248,
       "gates": [
         "authenticated",
         "csrf"
@@ -2159,7 +2221,7 @@
       "localPath": "/upload",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 185,
+      "line": 253,
       "gates": [
         "authenticated",
         "csrf"
@@ -2171,7 +2233,7 @@
       "localPath": "/:id/rename",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 192,
+      "line": 260,
       "gates": [
         "authenticated",
         "csrf"
@@ -2183,7 +2245,7 @@
       "localPath": "/:id/approval",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 193,
+      "line": 261,
       "gates": [
         "authenticated",
         "csrf"
@@ -2195,7 +2257,7 @@
       "localPath": "/:id",
       "mountPath": "/api/documentos",
       "file": "apps/retiradas/backend/api/src/documentos/routes/documentosRoutes.js",
-      "line": 194,
+      "line": 262,
       "gates": [
         "authenticated",
         "csrf"
@@ -2930,6 +2992,514 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/maintenance/app/location",
+      "localPath": "/app/location",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 106,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/app/download",
+      "localPath": "/app/download",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 116,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/app/upload",
+      "localPath": "/app/upload",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 140,
+      "gates": [
+        "csrf",
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/history",
+      "localPath": "/history",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 167,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/activate",
+      "localPath": "/activate",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 175,
+      "gates": [
+        "csrf",
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/deactivate",
+      "localPath": "/deactivate",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 190,
+      "gates": [
+        "csrf",
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/status",
+      "localPath": "/status",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 43,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/service-worker/events",
+      "localPath": "/service-worker/events",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 52,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/dashboard",
+      "localPath": "/dashboard",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 65,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/app",
+      "localPath": "/app",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 73,
+      "gates": [
+        "role",
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/app/version",
+      "localPath": "/app/version",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 81,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/app/enrollment",
+      "localPath": "/app/enrollment",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 90,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/app/enrollment/exchange",
+      "localPath": "/app/enrollment/exchange",
+      "mountPath": "/api/maintenance",
+      "file": "apps/retiradas/backend/api/src/maintenance/routes/maintenanceRoutes.js",
+      "line": 98,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/maps/radar/settings",
+      "localPath": "/radar/settings",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 100,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/radar/evaluate",
+      "localPath": "/radar/evaluate",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 108,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/technicians/presence",
+      "localPath": "/technicians/presence",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 116,
+      "gates": [
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/admin/technicians/live",
+      "localPath": "/admin/technicians/live",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 124,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/admin/monitoring/overview",
+      "localPath": "/admin/monitoring/overview",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 132,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/admin/monitoring/settings",
+      "localPath": "/admin/monitoring/settings",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 140,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/admin/technicians/options",
+      "localPath": "/admin/technicians/options",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 148,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/admin/orders/:id/assign",
+      "localPath": "/admin/orders/:id/assign",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 156,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/maps/admin/monitoring/settings",
+      "localPath": "/admin/monitoring/settings",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 168,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/admin/technicians/:id/track",
+      "localPath": "/admin/technicians/:id/track",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 176,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/admin/visits",
+      "localPath": "/admin/visits",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 184,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/radar/alerts",
+      "localPath": "/radar/alerts",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 192,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/radar/alerts/:id/dismiss",
+      "localPath": "/radar/alerts/:id/dismiss",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 200,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/radar/simulate",
+      "localPath": "/radar/simulate",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 208,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/requests/batch",
+      "localPath": "/requests/batch",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 216,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/requests",
+      "localPath": "/requests",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 224,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/requests",
+      "localPath": "/requests",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 232,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/requests/:id/approve",
+      "localPath": "/requests/:id/approve",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 243,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/requests/:id/reject",
+      "localPath": "/requests/:id/reject",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 251,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/routes",
+      "localPath": "/routes",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 259,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/routes",
+      "localPath": "/routes",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 267,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/maps/routes/:id",
+      "localPath": "/routes/:id",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 275,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/routes/:id/optimize",
+      "localPath": "/routes/:id/optimize",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 283,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/maps/geocoding/queue",
+      "localPath": "/geocoding/queue",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 291,
+      "gates": [
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/health",
+      "localPath": "/health",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 44,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/points",
+      "localPath": "/points",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 52,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/nearby",
+      "localPath": "/nearby",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 60,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/summary",
+      "localPath": "/summary",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 68,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/orders/:id",
+      "localPath": "/orders/:id",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 76,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/orders/:id/navigation",
+      "localPath": "/orders/:id/navigation",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 84,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/maps/radar/settings",
+      "localPath": "/radar/settings",
+      "mountPath": "/api/maps",
+      "file": "apps/retiradas/backend/api/src/mapsV2/routes/mapsV2Routes.js",
+      "line": 92,
+      "gates": [
+        "permission"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/mensageria/config",
       "localPath": "/config",
@@ -3118,6 +3688,32 @@
       ]
     },
     {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/pause",
+      "localPath": "/pause",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 103,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/resume",
+      "localPath": "/resume",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 110,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
       "method": "GET",
       "path": "/api/mensageria/evolution/status",
       "localPath": "/status",
@@ -3206,25 +3802,24 @@
       ]
     },
     {
-      "method": "POST",
-      "path": "/api/mensageria/evolution/test",
-      "localPath": "/test",
+      "method": "GET",
+      "path": "/api/mensageria/evolution/turbo/status",
+      "localPath": "/turbo/status",
       "mountPath": "/api/mensageria/evolution",
       "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
       "line": 76,
       "gates": [
         "authenticated",
-        "csrf",
         "permission"
       ]
     },
     {
       "method": "POST",
-      "path": "/api/mensageria/evolution/pause",
-      "localPath": "/pause",
+      "path": "/api/mensageria/evolution/turbo/start",
+      "localPath": "/turbo/start",
       "mountPath": "/api/mensageria/evolution",
       "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
-      "line": 83,
+      "line": 82,
       "gates": [
         "authenticated",
         "csrf",
@@ -3233,15 +3828,259 @@
     },
     {
       "method": "POST",
-      "path": "/api/mensageria/evolution/resume",
-      "localPath": "/resume",
+      "path": "/api/mensageria/evolution/turbo/stop",
+      "localPath": "/turbo/stop",
       "mountPath": "/api/mensageria/evolution",
       "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
-      "line": 90,
+      "line": 89,
       "gates": [
         "authenticated",
         "csrf",
         "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mensageria/evolution/test",
+      "localPath": "/test",
+      "mountPath": "/api/mensageria/evolution",
+      "file": "apps/retiradas/backend/api/src/mensageriaEvolution/routes/mensageriaEvolutionRoutes.js",
+      "line": 96,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/password-reset",
+      "localPath": "/password-reset",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 109,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/register",
+      "localPath": "/register",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 59,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/verify-email",
+      "localPath": "/verify-email",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 60,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/resend-verification",
+      "localPath": "/resend-verification",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 61,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/login",
+      "localPath": "/login",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 69,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/auth/me",
+      "localPath": "/me",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 86,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/logout",
+      "localPath": "/logout",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 87,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/auth/password-recovery",
+      "localPath": "/password-recovery",
+      "mountPath": "/api/mercado/auth",
+      "file": "apps/retiradas/backend/api/src/mercado/auth.js",
+      "line": 89,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/onboarding/cep/:cep",
+      "localPath": "/cep/:cep",
+      "mountPath": "/api/mercado/onboarding",
+      "file": "apps/retiradas/backend/api/src/mercado/onboardingRoutes.js",
+      "line": 49,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/onboarding/profile",
+      "localPath": "/profile",
+      "mountPath": "/api/mercado/onboarding",
+      "file": "apps/retiradas/backend/api/src/mercado/onboardingRoutes.js",
+      "line": 50,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/onboarding/documents",
+      "localPath": "/documents",
+      "mountPath": "/api/mercado/onboarding",
+      "file": "apps/retiradas/backend/api/src/mercado/onboardingRoutes.js",
+      "line": 55,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/onboarding/documents/:id/content",
+      "localPath": "/documents/:id/content",
+      "mountPath": "/api/mercado/onboarding",
+      "file": "apps/retiradas/backend/api/src/mercado/onboardingRoutes.js",
+      "line": 60,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/onboarding/admin/prestadores",
+      "localPath": "/admin/prestadores",
+      "mountPath": "/api/mercado/onboarding",
+      "file": "apps/retiradas/backend/api/src/mercado/onboardingRoutes.js",
+      "line": 62,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/onboarding/admin/prestadores/:id/decision",
+      "localPath": "/admin/prestadores/:id/decision",
+      "mountPath": "/api/mercado/onboarding",
+      "file": "apps/retiradas/backend/api/src/mercado/onboardingRoutes.js",
+      "line": 63,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/provider/dashboard",
+      "localPath": "/dashboard",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 132,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/provider/cidades",
+      "localPath": "/cidades",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 138,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/provider/lotes",
+      "localPath": "/lotes",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 139,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/mercado/provider/lotes/:id",
+      "localPath": "/lotes/:id",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 143,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/provider/montagem/preview",
+      "localPath": "/montagem/preview",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 152,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/provider/montagem/confirmar",
+      "localPath": "/montagem/confirmar",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 162,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/mercado/provider/os/:id/${method}",
+      "localPath": "/os/:id/${method}",
+      "mountPath": "/api/mercado/provider",
+      "file": "apps/retiradas/backend/api/src/mercado/providerRoutes.js",
+      "line": 183,
+      "gates": [
+        "public-or-custom"
       ]
     },
     {
@@ -3876,6 +4715,399 @@
     },
     {
       "method": "GET",
+      "path": "/api/push/config",
+      "localPath": "/config",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 13,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/subscribe",
+      "localPath": "/subscribe",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 16,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/push/subscribe",
+      "localPath": "/subscribe",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 19,
+      "gates": [
+        "authenticated",
+        "csrf"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/events/open",
+      "localPath": "/events/open",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 22,
+      "gates": [
+        "authenticated"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/push/overview",
+      "localPath": "/overview",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 25,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/push/admin/recipients",
+      "localPath": "/admin/recipients",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 28,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/push/admin/campaigns",
+      "localPath": "/admin/campaigns",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 31,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/push/send",
+      "localPath": "/send",
+      "mountPath": "/api/push",
+      "file": "apps/retiradas/backend/api/src/pushNotifications/routes/pushNotificationsRoutes.js",
+      "line": 34,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/events/:category/export",
+      "localPath": "/events/:category/export",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 104,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/queue/:id/reprocess",
+      "localPath": "/queue/:id/reprocess",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 114,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/webhook/evolution",
+      "localPath": "/webhook/evolution",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 15,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/dashboard",
+      "localPath": "/dashboard",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 30,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/config",
+      "localPath": "/config",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 33,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/retorninho/config",
+      "localPath": "/config",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 36,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/retorninho/config/secrets/:name",
+      "localPath": "/config/secrets/:name",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 39,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/instance",
+      "localPath": "/instance",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 42,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/instance/connect",
+      "localPath": "/instance/connect",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 45,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/instance/disconnect",
+      "localPath": "/instance/disconnect",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 48,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/authorized-users",
+      "localPath": "/authorized-users",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 52,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/authorized-users",
+      "localPath": "/authorized-users",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 55,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/retorninho/authorized-users/:id",
+      "localPath": "/authorized-users/:id",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 58,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/knowledge",
+      "localPath": "/knowledge",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 62,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/knowledge",
+      "localPath": "/knowledge",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 65,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/retorninho/knowledge/:id",
+      "localPath": "/knowledge/:id",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 68,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/conversations",
+      "localPath": "/conversations",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 72,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/conversations/:id/messages",
+      "localPath": "/conversations/:id/messages",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 75,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/retorninho/conversations/:id",
+      "localPath": "/conversations/:id",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 78,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/protocols",
+      "localPath": "/protocols",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 82,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/technicians",
+      "localPath": "/technicians",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 85,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/retorninho/protocols/:id/reprocess",
+      "localPath": "/protocols/:id/reprocess",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 88,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/queue",
+      "localPath": "/queue",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 91,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/retorninho/events/:category",
+      "localPath": "/events/:category",
+      "mountPath": "/api/retorninho",
+      "file": "apps/retiradas/backend/api/src/retorninho/routes/retorninhoRoutes.js",
+      "line": 94,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/admin/senior/config",
       "localPath": "/config",
       "mountPath": "/api/admin/senior",
@@ -3913,16 +5145,41 @@
       ]
     },
     {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 101,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/cancellations/sync",
+      "localPath": "/sync",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 114,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "role"
+      ]
+    },
+    {
       "method": "POST",
       "path": "/api/service-orders/cancellations/sync/history",
       "localPath": "/sync/history",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 108,
+      "line": 128,
       "gates": [
         "authenticated",
         "csrf",
-        "permission"
+        "role"
       ]
     },
     {
@@ -3931,7 +5188,7 @@
       "localPath": "/agents/targets/rebuild",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 124,
+      "line": 144,
       "gates": [
         "authenticated",
         "csrf",
@@ -3944,7 +5201,7 @@
       "localPath": "/:competencia/validate",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 138,
+      "line": 158,
       "gates": [
         "authenticated",
         "csrf",
@@ -3957,7 +5214,7 @@
       "localPath": "/",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 17,
+      "line": 19,
       "gates": [
         "authenticated",
         "permission"
@@ -3969,7 +5226,7 @@
       "localPath": "/resumo",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 25,
+      "line": 27,
       "gates": [
         "authenticated",
         "permission"
@@ -3981,7 +5238,7 @@
       "localPath": "/competencias",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 33,
+      "line": 35,
       "gates": [
         "authenticated",
         "permission"
@@ -3993,7 +5250,7 @@
       "localPath": "/filters",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 46,
+      "line": 48,
       "gates": [
         "authenticated",
         "permission"
@@ -4005,7 +5262,19 @@
       "localPath": "/sync/history",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 54,
+      "line": 56,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/cancellations/sync/:id",
+      "localPath": "/sync/:id",
+      "mountPath": "/api/service-orders/cancellations",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
+      "line": 69,
       "gates": [
         "authenticated",
         "permission"
@@ -4017,34 +5286,9 @@
       "localPath": "/export.csv",
       "mountPath": "/api/service-orders/cancellations",
       "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 67,
+      "line": 87,
       "gates": [
         "authenticated",
-        "permission"
-      ]
-    },
-    {
-      "method": "GET",
-      "path": "/api/service-orders/cancellations/:id",
-      "localPath": "/:id",
-      "mountPath": "/api/service-orders/cancellations",
-      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 81,
-      "gates": [
-        "authenticated",
-        "permission"
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/api/service-orders/cancellations/sync",
-      "localPath": "/sync",
-      "mountPath": "/api/service-orders/cancellations",
-      "file": "apps/retiradas/backend/api/src/serviceOrders/cancellations/routes/serviceOrderCancellationsRoutes.js",
-      "line": 94,
-      "gates": [
-        "authenticated",
-        "csrf",
         "permission"
       ]
     },
@@ -4087,11 +5331,470 @@
     },
     {
       "method": "GET",
+      "path": "/api/service-orders/requests/mine",
+      "localPath": "/mine",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 13,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/requests/history",
+      "localPath": "/history",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 21,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/requests/technicians",
+      "localPath": "/technicians",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 29,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/requests/technicians/refresh",
+      "localPath": "/technicians/refresh",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 37,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/requests/equipment",
+      "localPath": "/equipment",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 51,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/requests/:id",
+      "localPath": "/:id",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 67,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/requests",
+      "localPath": "/",
+      "mountPath": "/api/service-orders/requests",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/requests/routes/serviceOrderRequestsRoutes.js",
+      "line": 80,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/return-receipts/lookup",
+      "localPath": "/lookup",
+      "mountPath": "/api/service-orders/return-receipts",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/returnReceipts/routes/returnReceiptsRoutes.js",
+      "line": 24,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/return-receipts/mine",
+      "localPath": "/mine",
+      "mountPath": "/api/service-orders/return-receipts",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/returnReceipts/routes/returnReceiptsRoutes.js",
+      "line": 32,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/return-receipts/history",
+      "localPath": "/history",
+      "mountPath": "/api/service-orders/return-receipts",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/returnReceipts/routes/returnReceiptsRoutes.js",
+      "line": 40,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-orders/return-receipts/:id/download",
+      "localPath": "/:id/download",
+      "mountPath": "/api/service-orders/return-receipts",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/returnReceipts/routes/returnReceiptsRoutes.js",
+      "line": 48,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-orders/return-receipts",
+      "localPath": "/",
+      "mountPath": "/api/service-orders/return-receipts",
+      "file": "apps/retiradas/backend/api/src/serviceOrders/returnReceipts/routes/returnReceiptsRoutes.js",
+      "line": 61,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/localidades",
+      "localPath": "/localidades",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 100,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/bairros/solicitar",
+      "localPath": "/bairros/solicitar",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 108,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/retornos",
+      "localPath": "/retornos",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 122,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tentativas/retornos/:id",
+      "localPath": "/retornos/:id",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 130,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/:id/retornos",
+      "localPath": "/:id/retornos",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 144,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/recuperacoes",
+      "localPath": "/recuperacoes",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 158,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/produtividade",
+      "localPath": "/produtividade",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 166,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/acessos",
+      "localPath": "/acessos",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 174,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tentativas/recuperacoes/:id/status",
+      "localPath": "/recuperacoes/:id/status",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 185,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/recuperacoes/:id/evidencias",
+      "localPath": "/recuperacoes/:id/evidencias",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 199,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/historico",
+      "localPath": "/historico",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 214,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/historico/export.csv",
+      "localPath": "/historico/export.csv",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 222,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/contacts/:id/resultado",
+      "localPath": "/contacts/:id/resultado",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 241,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/tentativas/contacts/:id/corrigir",
+      "localPath": "/contacts/:id/corrigir",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 255,
+      "gates": [
+        "authenticated",
+        "permission",
+        "csrf"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/resumo",
+      "localPath": "/admin/resumo",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 269,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/analytics",
+      "localPath": "/admin/analytics",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 282,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/analytics/export.csv",
+      "localPath": "/admin/analytics/export.csv",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 295,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/inteligencia",
+      "localPath": "/admin/inteligencia",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 311,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/novos-contatos",
+      "localPath": "/admin/novos-contatos",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 324,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/adocao",
+      "localPath": "/admin/adocao",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 337,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/alertas",
+      "localPath": "/admin/alertas",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 346,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/alertas/executar",
+      "localPath": "/admin/alertas/executar",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 355,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/auditoria",
+      "localPath": "/admin/auditoria",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 365,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/recalcular-prioridades",
+      "localPath": "/admin/recalcular-prioridades",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 378,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/atribuicoes/:id/transferir",
+      "localPath": "/admin/atribuicoes/:id/transferir",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 392,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/tentativas/admin/ranking",
       "localPath": "/admin/ranking",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 111,
+      "line": 406,
       "gates": [
         "authenticated",
         "permission"
@@ -4103,7 +5806,7 @@
       "localPath": "/admin/distribuicao",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 124,
+      "line": 419,
       "gates": [
         "authenticated",
         "permission"
@@ -4115,9 +5818,59 @@
       "localPath": "/admin/cidades-tecnicos",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 137,
+      "line": 432,
       "gates": [
         "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/bairros",
+      "localPath": "/admin/bairros",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 445,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/bairros/transferir",
+      "localPath": "/admin/bairros/transferir",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 458,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/admin/bairros/solicitacoes",
+      "localPath": "/admin/bairros/solicitacoes",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 472,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/tentativas/admin/bairros/solicitacoes/:id/${action}",
+      "localPath": "/admin/bairros/solicitacoes/:id/${action}",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 486,
+      "gates": [
+        "authenticated",
+        "csrf",
         "permission"
       ]
     },
@@ -4127,7 +5880,7 @@
       "localPath": "/admin/usuarios",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 150,
+      "line": 506,
       "gates": [
         "authenticated",
         "permission"
@@ -4139,7 +5892,7 @@
       "localPath": "/admin/cidades-tecnicos",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 163,
+      "line": 519,
       "gates": [
         "authenticated",
         "csrf",
@@ -4152,7 +5905,7 @@
       "localPath": "/admin/cidades-tecnicos/:id",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 177,
+      "line": 533,
       "gates": [
         "authenticated",
         "csrf",
@@ -4165,7 +5918,7 @@
       "localPath": "/admin/campanhas",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 191,
+      "line": 547,
       "gates": [
         "authenticated",
         "csrf",
@@ -4178,7 +5931,7 @@
       "localPath": "/admin/templates",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 205,
+      "line": 561,
       "gates": [
         "authenticated",
         "permission"
@@ -4190,7 +5943,7 @@
       "localPath": "/admin/templates",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 218,
+      "line": 574,
       "gates": [
         "authenticated",
         "csrf",
@@ -4203,7 +5956,7 @@
       "localPath": "/admin/configuracoes",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 232,
+      "line": 588,
       "gates": [
         "authenticated",
         "permission"
@@ -4215,10 +5968,22 @@
       "localPath": "/admin/configuracoes",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 245,
+      "line": 601,
       "gates": [
         "authenticated",
         "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/tentativas/:id/timeline",
+      "localPath": "/:id/timeline",
+      "mountPath": "/api/tentativas",
+      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
+      "line": 615,
+      "gates": [
+        "authenticated",
         "permission"
       ]
     },
@@ -4228,7 +5993,7 @@
       "localPath": "/:id",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 259,
+      "line": 623,
       "gates": [
         "authenticated",
         "permission"
@@ -4240,7 +6005,7 @@
       "localPath": "/:id/iniciar",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 272,
+      "line": 636,
       "gates": [
         "authenticated",
         "csrf",
@@ -4253,7 +6018,7 @@
       "localPath": "/cidades",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 41,
+      "line": 84,
       "gates": [
         "authenticated",
         "permission"
@@ -4265,56 +6030,7 @@
       "localPath": "/minha-rota",
       "mountPath": "/api/tentativas",
       "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 49,
-      "gates": [
-        "authenticated",
-        "permission"
-      ]
-    },
-    {
-      "method": "GET",
-      "path": "/api/tentativas/historico",
-      "localPath": "/historico",
-      "mountPath": "/api/tentativas",
-      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 57,
-      "gates": [
-        "authenticated",
-        "permission"
-      ]
-    },
-    {
-      "method": "GET",
-      "path": "/api/tentativas/historico/export.csv",
-      "localPath": "/historico/export.csv",
-      "mountPath": "/api/tentativas",
-      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 65,
-      "gates": [
-        "authenticated",
-        "permission"
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/api/tentativas/contacts/:id/resultado",
-      "localPath": "/contacts/:id/resultado",
-      "mountPath": "/api/tentativas",
-      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 84,
-      "gates": [
-        "authenticated",
-        "csrf",
-        "permission"
-      ]
-    },
-    {
-      "method": "GET",
-      "path": "/api/tentativas/admin/resumo",
-      "localPath": "/admin/resumo",
-      "mountPath": "/api/tentativas",
-      "file": "apps/retiradas/backend/api/src/tentativas/routes/tentativasRoutes.js",
-      "line": 98,
+      "line": 92,
       "gates": [
         "authenticated",
         "permission"
@@ -4326,7 +6042,7 @@
       "localPath": "/evolution",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 20,
+      "line": 22,
       "gates": [
         "public-or-custom"
       ]
@@ -4337,7 +6053,7 @@
       "localPath": "/evolution/:event",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 21,
+      "line": 23,
       "gates": [
         "public-or-custom"
       ]
@@ -4348,7 +6064,7 @@
       "localPath": "/evolution-confirmacao",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 22,
+      "line": 24,
       "gates": [
         "public-or-custom"
       ]
@@ -4359,7 +6075,7 @@
       "localPath": "/evolution-confirmacao/:event",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 26,
+      "line": 28,
       "gates": [
         "public-or-custom"
       ]
@@ -4370,7 +6086,7 @@
       "localPath": "/evolution-atendimento",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 30,
+      "line": 32,
       "gates": [
         "public-or-custom"
       ]
@@ -4381,7 +6097,7 @@
       "localPath": "/evolution-atendimento/:event",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 34,
+      "line": 36,
       "gates": [
         "public-or-custom"
       ]
@@ -4392,7 +6108,7 @@
       "localPath": "/cvortex",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 38,
+      "line": 40,
       "gates": [
         "public-or-custom"
       ]
@@ -4403,7 +6119,7 @@
       "localPath": "/whatsapp-official",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 39,
+      "line": 41,
       "gates": [
         "public-or-custom"
       ]
@@ -4414,9 +6130,305 @@
       "localPath": "/whatsapp-official",
       "mountPath": "/api/webhooks",
       "file": "apps/retiradas/backend/api/src/webhooks/routes/webhooksRoutes.js",
-      "line": 40,
+      "line": 42,
       "gates": [
         "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/integrations/whatsapp/meta/webhook",
+      "localPath": "/",
+      "mountPath": "/api/integrations/whatsapp/meta/webhook",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/metaWhatsappWebhookRoutes.js",
+      "line": 22,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/meta-whatsapp",
+      "localPath": "/",
+      "mountPath": "/api/webhooks/meta-whatsapp",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/metaWhatsappWebhookRoutes.js",
+      "line": 22,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/integrations/whatsapp/meta/webhook",
+      "localPath": "/",
+      "mountPath": "/api/integrations/whatsapp/meta/webhook",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/metaWhatsappWebhookRoutes.js",
+      "line": 6,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks/meta-whatsapp",
+      "localPath": "/",
+      "mountPath": "/api/webhooks/meta-whatsapp",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/metaWhatsappWebhookRoutes.js",
+      "line": 6,
+      "gates": [
+        "public-or-custom"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/recipients",
+      "localPath": "/recipients",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 101,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/whatsapp-cloud/recipients/:id",
+      "localPath": "/recipients/:id",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 109,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/templates",
+      "localPath": "/templates",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 118,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/templates/sync",
+      "localPath": "/templates/sync",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 125,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/tests",
+      "localPath": "/tests",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 134,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/tests/send",
+      "localPath": "/tests/send",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 141,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/tests/flows",
+      "localPath": "/tests/flows",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 149,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/tests/flows/start",
+      "localPath": "/tests/flows/start",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 156,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/webhooks",
+      "localPath": "/webhooks",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 165,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/activation/readiness",
+      "localPath": "/activation/readiness",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 172,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/activation",
+      "localPath": "/activation",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 179,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/rollback",
+      "localPath": "/rollback",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 187,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/overview",
+      "localPath": "/overview",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 43,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 48,
+      "gates": [
+        "authenticated",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/whatsapp-cloud/config",
+      "localPath": "/config",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 53,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/verify-token",
+      "localPath": "/verify-token",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 61,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/admin/whatsapp-cloud/secrets",
+      "localPath": "/secrets",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 69,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/admin/whatsapp-cloud/secrets/:name",
+      "localPath": "/secrets/:name",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 77,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/whatsapp-cloud/diagnostics",
+      "localPath": "/diagnostics",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 85,
+      "gates": [
+        "authenticated",
+        "csrf",
+        "permission"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/whatsapp-cloud/recipients",
+      "localPath": "/recipients",
+      "mountPath": "/api/admin/whatsapp-cloud",
+      "file": "apps/retiradas/backend/api/src/whatsappCloud/routes/whatsappCloudRoutes.js",
+      "line": 94,
+      "gates": [
+        "authenticated",
+        "permission"
       ]
     }
   ]

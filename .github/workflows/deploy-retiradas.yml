@@ -83,6 +83,7 @@ jobs:
           apps/retiradas/backend/sql/121_integrated_p0_reliability.integration.test.js
           apps/retiradas/backend/sql/122_retorninho_ia.integration.test.js
           apps/retiradas/backend/sql/124_tentativas_bairro_solicitacoes.integration.test.js
+          apps/retiradas/backend/scripts/run-sql-migrations.integration.test.js
 
       - name: Build production candidate
         run: |

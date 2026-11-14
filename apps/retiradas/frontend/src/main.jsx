@@ -18,6 +18,7 @@ initErrorTracking();
 
 const PUBLIC_PWA_PATHS = new Set([
 	"/painel",
+	"/painel/agentes",
 	"/painel/relatorios",
 	"/painel/mapa",
 	"/painel/match",

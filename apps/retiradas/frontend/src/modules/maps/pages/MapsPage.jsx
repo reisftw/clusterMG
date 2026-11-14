@@ -126,6 +126,8 @@ export default function MapsPage() {
 	const [realtimeRevision, setRealtimeRevision] = useState(0);
 	const lastRadarPositionRef = useRef(null);
 	const lastMapQueryPositionRef = useRef(null);
+	const pointsRequestRevisionRef = useRef(0);
+	const lastNavigationPositionRef = useRef(null);
 	const locationAppliedRef = useRef(false);
 	const noticeTimerRef = useRef(null);
 	const pendingSearchFocusRef = useRef("");
@@ -154,10 +156,12 @@ export default function MapsPage() {
 	}, [radiusMeters]);
 
 	const loadPoints = useCallback(async (signal) => {
+		const requestRevision = ++pointsRequestRevisionRef.current;
 		setLoading(true);
 		setError("");
 		try {
 			const response = await mapsService.points(requestParams, signal);
+			if (signal?.aborted || requestRevision !== pointsRequestRevisionRef.current) return;
 			const nextItems = response.items || [];
 			setPoints(nextItems);
 			setLastSyncAt(response.lastSyncAt || "");
@@ -176,9 +180,14 @@ export default function MapsPage() {
 				}
 			}
 		} catch (loadError) {
-			if (loadError.name !== "AbortError") setError(loadError.message);
+			if (
+				loadError.name !== "AbortError" &&
+				requestRevision === pointsRequestRevisionRef.current
+			) setError(loadError.message);
 		} finally {
-			if (!signal?.aborted) setLoading(false);
+			if (!signal?.aborted && requestRevision === pointsRequestRevisionRef.current) {
+				setLoading(false);
+			}
 		}
 	}, [requestParams]);
 
@@ -245,22 +254,40 @@ export default function MapsPage() {
 	useEffect(() => {
 		if (!selectedId || !locationState.position) {
 			setNavigation(null);
+			lastNavigationPositionRef.current = null;
 			if (selectedId && !gpsRequested) {
 				setGpsRequested(true);
 				setNotice("Ativando sua localizacao para calcular o caminho ate o cliente.");
 			}
 			return;
 		}
+		const previousNavigation = lastNavigationPositionRef.current;
+		if (
+			previousNavigation?.selectedId === selectedId &&
+			!shouldEvaluatePosition(previousNavigation, locationState.position, {
+				minimumDistance: 15,
+				maximumAgeMs: 10_000,
+			})
+		) return undefined;
+		lastNavigationPositionRef.current = {
+			...locationState.position,
+			selectedId,
+		};
+		const controller = new AbortController();
 		let active = true;
 		setNavigationLoading(true);
-		mapsService.navigation(selectedId, locationState.position).then((response) => {
+		mapsService.navigation(selectedId, locationState.position, controller.signal).then((response) => {
 			if (active) setNavigation(response);
-		}).catch(() => {
+		}).catch((navigationError) => {
+			if (navigationError.name === "AbortError") return;
 			if (active) setNavigation(null);
 		}).finally(() => {
 			if (active) setNavigationLoading(false);
 		});
-		return () => { active = false; };
+		return () => {
+			active = false;
+			controller.abort();
+		};
 	}, [gpsRequested, locationState.position, selectedId]);
 
 	useEffect(() => {
