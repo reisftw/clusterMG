@@ -120,9 +120,7 @@ async function applyMigration(client, fileName) {
 			await client.query(
 				`insert into schema_migrations (version, file_name)
        values ($1, $2)
-       on conflict (file_name) do update set
-         version = excluded.version,
-         applied_at = now()`,
+	       on conflict do nothing`,
 				[version, fileName],
 			);
 		} finally {
@@ -140,9 +138,7 @@ async function applyMigration(client, fileName) {
 		await client.query(
 			`insert into schema_migrations (version, file_name)
        values ($1, $2)
-       on conflict (file_name) do update set
-         version = excluded.version,
-         applied_at = now()`,
+	       on conflict do nothing`,
 			[version, fileName],
 		);
 		await client.query("commit");
