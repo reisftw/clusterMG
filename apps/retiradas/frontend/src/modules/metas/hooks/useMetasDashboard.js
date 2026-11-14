@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from "react";
 import { INTERNAL_STATIC_DATA_UPDATED_EVENT } from "../../../services/internalStaticDataService";
+import { subscribeRealtimeTopics } from "../../../services/realtimeEvents";
 import { applyMetasBaseConfigToAllData } from "../constants/metasBaseConfig";
 import {
 	buscarFeriados,
@@ -96,8 +97,14 @@ export const useMetasDashboard = ({ snapshotOnly = false } = {}) => {
 			handleStaticDataUpdated,
 		);
 		window.addEventListener("storage", handleStorageChange);
+		const unsubscribeRealtime = subscribeRealtimeTopics(
+			"metas",
+			() => carregar(true),
+			{ debounceMs: 250 },
+		);
 
 		return () => {
+			unsubscribeRealtime();
 			window.removeEventListener(
 				INTERNAL_STATIC_DATA_UPDATED_EVENT,
 				handleStaticDataUpdated,

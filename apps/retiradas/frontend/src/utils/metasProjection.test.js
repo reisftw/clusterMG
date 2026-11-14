@@ -24,7 +24,7 @@ describe("metasProjection", () => {
 		});
 
 		expect(projection).not.toBeNull();
-		expect(projection.ritmoAtual).toBe(40);
+		expect(projection.ritmoAtual).toBe(30);
 		expect(projection.ultimoDiaComDados).toBe(8);
 		expect(projection.projecaoFinal).toBeGreaterThan(150);
 		expect(projection.pctProjecaoMeta).toMatch(/\d+\.\d/);
@@ -80,7 +80,26 @@ describe("metasProjection", () => {
 
 		const projection = buildMonthProjection(dados, new Set(["07-16"]));
 
-		expect(projection.projecaoFinal).toBe(1962);
+		expect(projection.projecaoFinal).toBe(2074);
 		expect(projection.diasRestantes).toBe(14);
+	});
+
+	it("inclui entregas de fim de semana no ritmo por dia util decorrido", () => {
+		const projection = buildMetasProjection({
+			month: "Novembro",
+			year: 2026,
+			projectionUntilDay: 14,
+			totalOS: 806,
+			saldoDiario: [
+				{ dia: 3, totalDia: 95 },
+				{ dia: 4, totalDia: 77 },
+				{ dia: 7, totalDia: 25 },
+				{ dia: 8, totalDia: 13 },
+				{ dia: 13, totalDia: 596 },
+			],
+		});
+
+		expect(projection.diasAmostra).toBe(9);
+		expect(projection.ritmoAtual).toBe(90);
 	});
 });

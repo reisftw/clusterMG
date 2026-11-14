@@ -82,7 +82,6 @@ const BACKGROUND_REFRESH_INTERVAL_MS = 60 * 1000;
 const CURSOR_IDLE_TIMEOUT_MS = 60 * 1000;
 const CONFIG_STORAGE_KEY = "acompanhamento-panel-config";
 const APPOINTMENT_NOTICE_SOUND_SRC = "/audio/appointment-alert.wav";
-const METAS_NATIONAL_ONLY_FERIADOS = new Set();
 const MONTH_ORDER = [
 	"Janeiro",
 	"Fevereiro",
@@ -3770,7 +3769,7 @@ export default function AcompanhamentoPage() {
 			currentMonth,
 			customInsights: panelConfig.customInsights,
 			eventos,
-			feriadosSet: METAS_NATIONAL_ONLY_FERIADOS,
+			feriadosSet: retiradas.feriadosSet || new Set(),
 			matchPublicoData,
 			now,
 			publicData,
@@ -3785,6 +3784,7 @@ export default function AcompanhamentoPage() {
 		publicData,
 		realtimeAcompanhamento,
 		retiradas.allData,
+		retiradas.feriadosSet,
 	]);
 
 	const showMetaShowcase = useCallback(

@@ -67,8 +67,6 @@ export function buildMetasProjection({
 	feriadosSet = new Set(),
 	year = new Date().getFullYear(),
 	projectionUntilDay = null,
-	minSampleDays = 5,
-	sampleSize = 10,
 }) {
 	if (!month || !Array.isArray(saldoDiario) || saldoDiario.length === 0) {
 		return null;
@@ -87,31 +85,25 @@ export function buildMetasProjection({
 			? saldoComUtil.filter((row) => Number(row.dia || 0) <= cutoffDay)
 			: saldoComUtil;
 
-	const diasComProducao = saldoAteCorte.filter(
-		(row) => row.util && Number(row.totalDia) > 0,
-	);
-	if (diasComProducao.length === 0) {
-		return null;
-	}
-
-	const amostra =
-		diasComProducao.length >= minSampleDays
-			? diasComProducao.slice(-sampleSize)
-			: diasComProducao;
-
-	const ritmoAtual =
-		amostra.reduce((sum, row) => sum + Number(row.totalDia || 0), 0) /
-		amostra.length;
-
 	const ultimoDiaComDados = saldoAteCorte.reduce(
 		(ultimoDia, row) =>
 			Number(row.totalDia) > 0 ? Number(row.dia) || ultimoDia : ultimoDia,
 		0,
 	);
+	const monthIndex = NOMES_MESES.indexOf(month);
+	const now = new Date();
+	const isCurrentMonth = monthIndex === now.getMonth() && year === now.getFullYear();
+	const effectiveCutoff = cutoffDay || (isCurrentMonth ? now.getDate() : ultimoDiaComDados);
 	const totalRealizado =
 		cutoffDay > 0
 			? saldoAteCorte.reduce((sum, row) => sum + Number(row.totalDia || 0), 0)
 			: Number(totalOS) || 0;
+	let diasUteisDecorridos = 0;
+	for (let dia = 1; dia <= effectiveCutoff; dia += 1) {
+		if (isDiaUtil(month, dia, normalizedFeriadosSet, year)) diasUteisDecorridos += 1;
+	}
+	if (diasUteisDecorridos === 0) return null;
+	const ritmoAtual = totalRealizado / diasUteisDecorridos;
 
 	const { totalDiasNoMes } = buildMetaDiariaSchedule({
 		month,
@@ -152,7 +144,7 @@ export function buildMetasProjection({
 
 	return {
 		ritmoAtual: Math.round(ritmoAtual),
-		diasAmostra: amostra.length,
+		diasAmostra: diasUteisDecorridos,
 		ultimoDiaComDados,
 		diasUteisRestantes,
 		projecaoFinal,
