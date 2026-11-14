@@ -33,7 +33,7 @@ test(
 			);
 
 			const primaryKey = await client.query(`
-        select array_agg(attribute.attname order by key_column.ordinality) as columns
+				select string_agg(attribute.attname, ',' order by key_column.ordinality) as columns
         from pg_constraint constraint_definition
         cross join lateral unnest(constraint_definition.conkey)
           with ordinality as key_column(attribute_number, ordinality)
@@ -47,7 +47,7 @@ test(
 				"select version, file_name from schema_migrations order by file_name",
 			);
 
-			assert.deepEqual(primaryKey.rows[0].columns, ["file_name"]);
+			assert.equal(primaryKey.rows[0].columns, "file_name");
 			assert.deepEqual(rows.rows, [
 				{
 					version: "013",
