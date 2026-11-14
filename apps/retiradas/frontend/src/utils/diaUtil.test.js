@@ -27,6 +27,7 @@ describe("diaUtil", () => {
 		expect(isDiaUtil("Janeiro", 1, ["01-01"], 2026)).toBe(false);
 		expect(isDiaUtil("Janeiro", 2, ["01-01"], 2026)).toBe(true);
 		expect(isDiaUtil("Janeiro", 3, [], 2026)).toBe(false);
+		expect(isDiaUtil("Novembro", 20, [], 2026)).toBe(false);
 	});
 
 	it("conta dias uteis no mes", () => {
