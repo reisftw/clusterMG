@@ -2423,6 +2423,15 @@ function createApp() {
 		.filter(Boolean);
 	app.use(
 		helmet({
+			crossOriginEmbedderPolicy: false,
+			crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+			crossOriginResourcePolicy: false,
+			referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+			hsts: {
+				maxAge: 31_536_000,
+				includeSubDomains: false,
+				preload: false,
+			},
 			contentSecurityPolicy: {
 				directives: {
 					connectSrc: ["'self'", ...mapsCspOrigins],

@@ -20,15 +20,22 @@ test("Operacao: nginx CSP não permite style-src inline amplo", () => {
 	assert.ok(config.includes("object-src 'none'"));
 });
 
-test("Retiradas: nginx tem header CSP presente com origem de fonte explícita", () => {
-	// Retiradas usa style-src 'self' 'unsafe-inline' de proposito (ver
-	// comentario no proprio arquivo, incidente de 2026-09-09 com Google
-	// Fonts) — politica mais permissiva que a da Operacao, não uma
-	// regressao. Só confirma que o header existe e que a origem de fonte
-	// segue explícita (allowlist, não wildcard).
+test("Retiradas: nginx aplica a politica versionada em todas as respostas estaticas", () => {
 	const config = readConfig("apps/retiradas/backend/nginx/retiradas.conf");
+	const headers = readConfig(
+		"apps/retiradas/backend/nginx/retiradas-security-headers.conf",
+	);
 
-	assert.match(config, /Content-Security-Policy/);
-	assert.ok(config.includes("https://fonts.googleapis.com"));
-	assert.ok(!config.includes("style-src *"));
+	assert.equal(
+		config.match(/include \/etc\/nginx\/snippets\/retiradas-security-headers\.conf;/g)?.length,
+		5,
+	);
+	assert.match(headers, /Content-Security-Policy/);
+	assert.ok(headers.includes("https://fonts.googleapis.com"));
+	assert.ok(headers.includes("style-src 'self' 'unsafe-inline'"));
+	assert.ok(headers.includes("https://accounts.google.com"));
+	assert.ok(headers.includes("object-src 'none'"));
+	assert.ok(headers.includes("frame-ancestors 'self'"));
+	assert.ok(headers.includes('Strict-Transport-Security "max-age=31536000"'));
+	assert.ok(!headers.includes("includeSubDomains"));
 });
