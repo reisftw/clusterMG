@@ -115,6 +115,8 @@ test("Retiradas release installs Nginx hardening with validation and rollback", 
 		"nginx_headers_backup",
 		"Rollback do Nginx concluido",
 		"nginx -t",
+		"headers_ready",
+		"Waiting for Nginx workers",
 		"content-security-policy",
 		"strict-transport-security",
 	]) {
