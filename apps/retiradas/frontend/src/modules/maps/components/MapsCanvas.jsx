@@ -100,6 +100,9 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 				zoomControl: false,
 				attributionControl: false,
 				preferCanvas: true,
+				minZoom: 3,
+				maxBounds: [[-85, -180], [85, 180]],
+				maxBoundsViscosity: 1,
 			}).setView(
 				initialView ? [Number(initialView.centerLat), Number(initialView.centerLng)] : DEFAULT_CENTER,
 				initialView ? Number(initialView.zoom || DEFAULT_ZOOM) : DEFAULT_ZOOM,
@@ -114,6 +117,8 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 				.addTo(map);
 			L.tileLayer(TILE_URL, {
 				maxZoom: 19,
+				minZoom: 3,
+				noWrap: true,
 				crossOrigin: true,
 				updateWhenIdle: true,
 				keepBuffer: 2,
@@ -340,8 +345,8 @@ export default function MapsCanvas({ points, userPosition, focusPoint, focusZoom
 		}).addTo(layer);
 		layer.addTo(map);
 		userLayerRef.current = layer;
-		if (followUser && !map.getBounds().pad(-0.2).contains(position)) {
-			map.panTo(position, { animate: true, duration: 0.45 });
+		if (followUser) {
+			map.setView(position, Math.max(map.getZoom(), 16), { animate: true, duration: 0.45 });
 		}
 	}, [followUser, userPosition]);
 

@@ -260,7 +260,7 @@ const Topbar = ({ onOpenMobileMenu }) => {
 
 			<div className="min-w-0 flex-1 lg:flex-none">
 				<h2 className="retiradas-mobile-greeting truncate text-lg font-black text-slate-950">
-					Olá, {displayUser?.nome?.split(" ")?.[0] || "Usuário"}
+					<span className="retiradas-mobile-greeting-prefix">Olá, </span>{displayUser?.nome?.split(" ")?.[0] || "Usuário"}
 				</h2>
 				<p className="retiradas-mobile-date truncate text-xs font-medium text-slate-500">
 					{new Date().toLocaleDateString("pt-BR", {

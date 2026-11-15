@@ -1,4 +1,5 @@
-Agora o aplicativo abre diretamente no Dashboard.
-Após atualizar, um card apresenta as novas funcionalidades.
-As novidades ficam disponíveis pelo indicador de versão do site.
-Saldo e ritmo das metas foram alinhados entre Dashboard, Metas e Acompanhamento.
+Layout do aplicativo ajustado para telas menores.
+Detalhes da O.S. ficaram mais compactos e fáceis de navegar.
+Maps agora centraliza no GPS e mantém os indicadores organizados.
+Meta mensal e status dos agendamentos não cortam mais os textos.
+Notas da versão e acesso às novidades foram corrigidos.

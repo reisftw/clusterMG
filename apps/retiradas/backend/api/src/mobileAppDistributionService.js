@@ -244,7 +244,12 @@ async function getDashboard() {
 async function getPublicVersion(currentCodeValue) {
 	const active = await getActiveReleaseRow();
 	if (!active) return { available: false, updateRequired: false, downloadUrl: "/app/download" };
-	const currentCode = normalizeVersionCode(currentCodeValue) || 0;
+	const currentCode = Number(currentCodeValue || 0);
+	if (!Number.isSafeInteger(currentCode) || currentCode < 0) {
+		const error = new Error("O codigo da versao deve ser um inteiro nao negativo.");
+		error.statusCode = 400;
+		throw error;
+	}
 	const activeCode = Number(active.version_code || 0);
 	const minimumCode = Number(active.minimum_supported_code || activeCode || 0);
 	return {

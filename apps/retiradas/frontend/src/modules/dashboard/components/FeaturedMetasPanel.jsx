@@ -250,8 +250,8 @@ const FeaturedMetasPanel = ({ technicianName = "", snapshotOnly = false }) => {
 								background: `conic-gradient(#f97316 ${metaStats.percentVisual * 3.6}deg, #e5e7eb 0deg)`,
 							}}
 						>
-							<div className="flex h-24 w-24 flex-col items-center justify-center rounded-full bg-white sm:h-28 sm:w-28">
-								<span className="text-3xl font-black text-slate-950 sm:text-4xl">
+							<div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white">
+								<span className="whitespace-nowrap text-3xl font-black leading-none text-slate-950">
 									{percentLabel}%
 								</span>
 								<span className="text-sm font-semibold text-slate-500">

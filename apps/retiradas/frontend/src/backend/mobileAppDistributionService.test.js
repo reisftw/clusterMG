@@ -13,6 +13,9 @@ process.env.PGDATABASE ||= "test";
 const mobileApp = require(
 	path.join(process.cwd(), "apps/retiradas/backend/api/src/mobileAppDistributionService.js"),
 );
+const mobileAppDb = require(
+	path.join(process.cwd(), "apps/retiradas/backend/api/src/db.js"),
+);
 
 describe("Distribuicao do aplicativo Android", () => {
 	it("aceita versoes rastreaveis e bloqueia nomes inseguros", () => {
@@ -24,6 +27,20 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(mobileApp.normalizeVersionCode("3")).toBe(3);
 		expect(mobileApp.normalizeVersionCode("")).toBeNull();
 		expect(() => mobileApp.normalizeVersionCode("3.2")).toThrow(/inteiro positivo/);
+	});
+
+	it("aceita codigo zero para abrir as novidades pelo rodape", async () => {
+		const originalQuery = mobileAppDb.query;
+		mobileAppDb.query = async () => ({
+			rows: [{ id: "release-108", version_name: "1.0.8", version_code: 108, active: true }],
+		});
+		try {
+			const result = await mobileApp.getPublicVersion("0");
+			expect(result.currentCode).toBe(0);
+			expect(result.release.versionName).toBe("1.0.8");
+		} finally {
+			mobileAppDb.query = originalQuery;
+		}
 	});
 
 	it("mantem pacote e certificado iguais no TWA e no Digital Asset Links", () => {
@@ -40,14 +57,14 @@ describe("Distribuicao do aplicativo Android", () => {
 		expect(assetLinks[0].target.sha256_cert_fingerprints).toContain(
 			manifest.fingerprints[0].value,
 		);
-		expect(manifest.appVersionName).toBe("1.0.7");
-		expect(manifest.appVersionCode).toBe(107);
-		expect(manifest.startUrl).toBe("/?source=android&appVersion=1.0.7&appCode=107");
+		expect(manifest.appVersionName).toBe("1.0.8");
+		expect(manifest.appVersionCode).toBe(108);
+		expect(manifest.startUrl).toBe("/?source=android&appVersion=1.0.8&appCode=108");
 		const gradle = fs.readFileSync("apps/retiradas/android-twa/app/build.gradle", "utf8");
 		const webManifest = JSON.parse(fs.readFileSync("apps/retiradas/android-twa/app/src/main/res/raw/web_app_manifest.json", "utf8"));
-		expect(gradle).toContain('versionCode 107');
-		expect(gradle).toContain('versionName "1.0.7"');
-		expect(gradle).toContain('appVersion=1.0.7&appCode=107');
+		expect(gradle).toContain('versionCode 108');
+		expect(gradle).toContain('versionName "1.0.8"');
+		expect(gradle).toContain('appVersion=1.0.8&appCode=108');
 		expect(webManifest.start_url).toBe(manifest.startUrl);
 	});
 

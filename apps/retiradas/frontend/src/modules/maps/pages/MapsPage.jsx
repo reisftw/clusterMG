@@ -618,8 +618,8 @@ export default function MapsPage() {
 				<button type="button" className={filtersOpen ? "is-active is-filters" : ""} onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} /> Filtros</button>
 			</div>
 			<div className="maps-v2-area-status" role="status">
-				<span><Layers3 size={16} /><strong>{summary.assigned + summary.opportunities}</strong> ordens nesta área</span>
-				{Number.isFinite(Number(summary.eligibleTotal)) ? <span><strong>{summary.geolocated || 0}</strong> no mapa de <strong>{summary.eligibleTotal || 0}</strong> elegíveis</span> : null}
+				<span className="maps-v2-area-total"><Layers3 size={16} /><strong>{summary.assigned + summary.opportunities}</strong> ordens nesta área</span>
+				{Number.isFinite(Number(summary.eligibleTotal)) ? <span className="maps-v2-area-coverage"><strong>{summary.geolocated || 0}</strong> no mapa de <strong>{summary.eligibleTotal || 0}</strong> elegíveis</span> : null}
 				<span className={health?.ok ? "is-fresh" : "is-stale"}>{loading ? "sincronizando..." : formatSyncTime(health?.last_order_sync || lastSyncAt)}</span>
 			</div>
 
