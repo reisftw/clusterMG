@@ -15,7 +15,7 @@ import { useAgendamentos } from "../hooks/useAgendamentos";
 
 const StatusBadge = ({ status }) => (
 	<span
-		className={`rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${
+		className={`max-w-[112px] shrink-0 whitespace-nowrap rounded-lg border px-2 py-1 text-[10px] font-semibold ${
 			STATUS_STYLES[status] || "border-gray-200 bg-gray-100 text-gray-600"
 		}`}
 	>
