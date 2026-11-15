@@ -72,8 +72,8 @@ CSP e HSTS simultaneamente, com valores diferentes.
 ## Publicacao e rastreabilidade
 
 - Branch: `codex/security-http-hardening`
-- Pull request: a preencher apos abertura
-- Commits: a preencher apos abertura
+- Pull request: `#47`
+- Commits: `04cfeaa`, `80a6a08`, `7a590ee`
 - Versao de producao: a preencher apos publicacao oficial
 - Observatory depois: a preencher apos nova varredura
 
