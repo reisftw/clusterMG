@@ -107,6 +107,24 @@ test("Retiradas release has a master-only production adapter with rollback", () 
 	}
 });
 
+test("Retiradas release installs Nginx hardening with validation and rollback", () => {
+	const workflow = readWorkflow("deploy-retiradas.yml");
+	for (const required of [
+		"retiradas-security-headers.conf",
+		"nginx_site_backup",
+		"nginx_headers_backup",
+		"Rollback do Nginx concluido",
+		"nginx -t",
+		"content-security-policy",
+		"strict-transport-security",
+	]) {
+		assert.ok(
+			workflow.includes(required),
+			`Retiradas Nginx release should contain ${required}`,
+		);
+	}
+});
+
 test("Retiradas release blocks publication when SonarCloud rejects the source PR", () => {
 	const workflow = readWorkflow("deploy-retiradas.yml");
 	for (const required of [
