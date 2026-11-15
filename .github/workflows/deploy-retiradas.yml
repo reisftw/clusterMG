@@ -395,19 +395,31 @@ jobs:
           nginx -t
           systemctl reload nginx
 
-          root_headers="$(curl -fsS -D - -o /dev/null https://retiradas.tech/)"
-          api_headers="$(curl -fsS -D - -o /dev/null https://retiradas.tech/api/health)"
-          for header in \
-            content-security-policy \
-            strict-transport-security \
-            x-content-type-options \
-            x-frame-options \
-            referrer-policy \
-            permissions-policy; do
-            printf '%s' "$root_headers" | grep -qi "^${header}:"
+          headers_ready() {
+            root_headers="$(curl -fsS -D - -o /dev/null https://retiradas.tech/)" || return 1
+            api_headers="$(curl -fsS -D - -o /dev/null https://retiradas.tech/api/health)" || return 1
+            for header in \
+              content-security-policy \
+              strict-transport-security \
+              x-content-type-options \
+              x-frame-options \
+              referrer-policy \
+              permissions-policy; do
+              printf '%s' "$root_headers" | grep -qi "^${header}:" || return 1
+            done
+            test "$(printf '%s' "$api_headers" | grep -ci '^strict-transport-security:')" -eq 1 || return 1
+            test "$(printf '%s' "$api_headers" | grep -ci '^content-security-policy:')" -eq 1 || return 1
+          }
+          headers_verified=0
+          for attempt in $(seq 1 15); do
+            if headers_ready; then
+              headers_verified=1
+              break
+            fi
+            echo "Waiting for Nginx workers to expose the verified headers ($attempt/15)..."
+            sleep 1
           done
-          test "$(printf '%s' "$api_headers" | grep -ci '^strict-transport-security:')" -eq 1
-          test "$(printf '%s' "$api_headers" | grep -ci '^content-security-policy:')" -eq 1
+          test "$headers_verified" -eq 1
 
           deployed=0
           nginx_deployed=0
