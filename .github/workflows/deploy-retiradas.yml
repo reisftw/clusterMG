@@ -294,15 +294,32 @@ jobs:
           backup_file="$backup_root/${release_id}.tar.gz"
           database_backup_root="/opt/retiradas/database-backups"
           database_backup="$database_backup_root/${release_id}.dump"
+          nginx_site="/etc/nginx/sites-available/retiradas"
+          nginx_headers="/etc/nginx/snippets/retiradas-security-headers.conf"
+          nginx_site_backup="$backup_root/${release_id}-nginx-site.conf"
+          nginx_headers_backup="$backup_root/${release_id}-nginx-headers.conf"
           staging="$(mktemp -d /tmp/retiradas-backend-stage.XXXXXX)"
           deployed=0
           dependencies_switched=0
+          nginx_deployed=0
+          nginx_headers_existed=0
           previous_node_modules="$backup_root/${release_id}-node_modules"
 
           cleanup() {
             rm -rf "$staging"
           }
           rollback() {
+            if [ "$nginx_deployed" -eq 1 ]; then
+              install -m 0644 "$nginx_site_backup" "$nginx_site"
+              if [ "$nginx_headers_existed" -eq 1 ]; then
+                install -m 0644 "$nginx_headers_backup" "$nginx_headers"
+              else
+                rm -f "$nginx_headers"
+              fi
+              nginx -t
+              systemctl reload nginx
+              echo "Rollback do Nginx concluido." >&2
+            fi
             if [ "$deployed" -eq 1 ] && [ -s "$backup_file" ]; then
               tar -xzf "$backup_file" -C "$backend_root"
               if [ "$dependencies_switched" -eq 1 ] && [ -d "$previous_node_modules" ]; then
@@ -319,6 +336,12 @@ jobs:
 
           test -s "$backend_package"
           mkdir -p "$backup_root"
+          test -s "$nginx_site"
+          install -m 0600 "$nginx_site" "$nginx_site_backup"
+          if [ -s "$nginx_headers" ]; then
+            install -m 0600 "$nginx_headers" "$nginx_headers_backup"
+            nginx_headers_existed=1
+          fi
           tar \
             --exclude='./node_modules' \
             --exclude='./output' \
@@ -364,7 +387,30 @@ jobs:
           curl -fsS --retry 15 --retry-delay 2 --retry-connrefused \
             http://127.0.0.1:3001/api/health >/dev/null
 
+          test -s "$backend_root/nginx/retiradas.conf"
+          test -s "$backend_root/nginx/retiradas-security-headers.conf"
+          nginx_deployed=1
+          install -m 0644 "$backend_root/nginx/retiradas.conf" "$nginx_site"
+          install -m 0644 "$backend_root/nginx/retiradas-security-headers.conf" "$nginx_headers"
+          nginx -t
+          systemctl reload nginx
+
+          root_headers="$(curl -fsS -D - -o /dev/null https://retiradas.tech/)"
+          api_headers="$(curl -fsS -D - -o /dev/null https://retiradas.tech/api/health)"
+          for header in \
+            content-security-policy \
+            strict-transport-security \
+            x-content-type-options \
+            x-frame-options \
+            referrer-policy \
+            permissions-policy; do
+            printf '%s' "$root_headers" | grep -qi "^${header}:"
+          done
+          test "$(printf '%s' "$api_headers" | grep -ci '^strict-transport-security:')" -eq 1
+          test "$(printf '%s' "$api_headers" | grep -ci '^content-security-policy:')" -eq 1
+
           deployed=0
+          nginx_deployed=0
           rm -f "$backend_package"
           find "$backup_root" -mindepth 1 -maxdepth 1 -mtime +30 -exec rm -rf {} +
           find "$database_backup_root" -type f -name '*.dump' -mtime +30 -delete
