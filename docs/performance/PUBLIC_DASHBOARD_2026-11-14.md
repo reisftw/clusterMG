@@ -117,3 +117,24 @@ Considerar a entrega validada somente quando:
 - snapshots continuarem atualizados dentro do SLA;
 - o formato completo continuar acessivel apenas pelo escape documentado.
 
+## Resultado pos-deploy
+
+Release `v2026.11.14-dashboard-performance`, workflow 43658322299, publicado com
+sucesso em 2026-11-15. O aplicativo Android nao fez parte desta release.
+
+| Validacao | Resultado |
+| --- | ---: |
+| Saude da API | HTTP 200 |
+| Payload padrao | 405.477 bytes |
+| Reducao do payload | 99,32% |
+| Primeira reconstrucao observada | 2,74 s |
+| 30 leituras leves - P50 | 28 ms |
+| 30 leituras leves - P95 | 243 ms |
+| 30 leituras leves - P99 | 2,47 s |
+| Erros nas 30 leituras | 0 |
+| Contrato legado `?compact=0` | HTTP 200, 45.805.466 bytes |
+
+O P99 capturou uma renovacao do cache. O P95 ficou abaixo do limite de 2 segundos e
+a taxa de erros foi zero. A resposta validada manteve os 12 meses, configuracao de
+metas e totais auxiliares esperados.
+
