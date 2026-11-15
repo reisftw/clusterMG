@@ -167,6 +167,37 @@ async function listCollectionData(collectionPath, { limit = 10000 } = {}) {
 	return result.rows;
 }
 
+async function listCompactDashboardData(limit = 36) {
+	const result = await db.query(
+		`select document_id as "documentId",
+		        (data - 'onnet' - 'onnetSempre') || jsonb_strip_nulls(jsonb_build_object(
+		          'onnet', case when jsonb_typeof(data->'onnet') = 'object'
+		                        then (data->'onnet') - 'onnet' - 'onnetSempre' end,
+		          'onnetSempre', case when jsonb_typeof(data->'onnetSempre') = 'object'
+		                              then (data->'onnetSempre') - 'onnet' - 'onnetSempre' end
+		        )) as data
+		   from app_documents
+		  where collection_path = 'dashboard'
+		  order by document_id
+		  limit $1`,
+		[limit],
+	);
+	return result.rows;
+}
+
+async function countDashboardCollections() {
+	const result = await db.query(
+		`select collection_path as collection, count(*)::int as total
+		   from app_documents
+		  where collection_path = any($1::text[])
+		  group by collection_path`,
+		[["feriados", "ferias", "colaboradores"]],
+	);
+	return Object.fromEntries(
+		result.rows.map((row) => [row.collection, Number(row.total || 0)]),
+	);
+}
+
 function getPublicDashboardCacheTtlMs() {
 	const configuredTtl = Number(process.env.PUBLIC_DASHBOARD_CACHE_TTL_MS);
 	if (!Number.isFinite(configuredTtl))
@@ -553,6 +584,44 @@ async function buildDashboardDomain() {
 	};
 }
 
+async function buildCompactDashboardDomain() {
+	const [dashboardRows, counts, config] = await Promise.all([
+		listCompactDashboardData(36),
+		countDashboardCollections(),
+		getDocumentData("config/metas"),
+	]);
+	const generatedAt = new Date().toISOString();
+	const baseConfig = config?.baseConfig || null;
+	const forcaTarefa = config?.forcaTarefa || null;
+
+	return {
+		domain: "dashboard",
+		generatedAt,
+		compact: true,
+		dashboard: {
+			data: {
+				feriadosTotal: counts.feriados || 0,
+				feriasTotal: counts.ferias || 0,
+				colaboradoresTotal: counts.colaboradores || 0,
+			},
+		},
+		metas: {
+			lastUpdate: config?.lastUpdate || null,
+			baseConfig,
+			forcaTarefa,
+		},
+		painel: {
+			retiradas: {
+				result: compactDashboardResult(rowsToDocumentMap(dashboardRows)),
+				meta: { generatedAt, lastUpdate: config?.lastUpdate || null },
+				baseConfig,
+				feriadosTotal: counts.feriados || 0,
+			},
+			forcaTarefa,
+		},
+	};
+}
+
 async function buildDashboardResumo() {
 	const [feriadosRows, feriasRows, colaboradoresRows] = await Promise.all([
 		listCollectionData("feriados", { limit: 300 }),
@@ -759,8 +828,9 @@ async function getCachedDashboardResumo() {
 
 async function buildSnapshotDomain(domain, { compact = false } = {}) {
 	if (domain === "dashboard") {
+		if (compact) return buildCompactDashboardDomain();
 		const snapshot = await buildDashboardDomain();
-		return compact ? compactSnapshotDomain(domain, snapshot) : snapshot;
+		return snapshot;
 	}
 	if (domain === "rh") {
 		const snapshot = await buildRhDomain();
@@ -783,6 +853,7 @@ async function buildSnapshotDomain(domain, { compact = false } = {}) {
 module.exports = {
 	buildAcompanhamentoResumo,
 	buildDashboardResumo,
+	buildCompactDashboardDomain,
 	buildPublicDashboard,
 	buildSnapshotDomain,
 	getCachedAcompanhamentoResumo,

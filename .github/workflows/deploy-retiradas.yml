@@ -100,6 +100,7 @@ jobs:
           npm run test:retiradas
           node --test \
             apps/retiradas/backend/api/src/dashboardReadPath.test.js \
+            apps/retiradas/backend/api/src/publicDashboard.performance.test.js \
             apps/retiradas/backend/api/src/staleWhileRevalidateCache.test.js \
             apps/retiradas/backend/api/src/notificationsService.test.js \
             apps/retiradas/backend/api/src/mapSyncUpdatesService.test.js \

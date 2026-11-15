@@ -180,6 +180,18 @@ describe("publicDashboard", () => {
 					],
 				};
 			}
+			if (String(sql).includes("group by collection_path")) {
+				return {
+					rows: [
+						{ collection: "feriados", total: 2 },
+						{ collection: "ferias", total: 5 },
+						{ collection: "colaboradores", total: 5 },
+					],
+				};
+			}
+			if (String(sql).includes("collection_path = 'dashboard'")) {
+				return { rows: rowsByCollection.dashboard };
+			}
 			const collection = params[0];
 			return { rows: rowsByCollection[collection] || [] };
 		});

@@ -2621,6 +2621,7 @@ function recalculateMetaRecord(record = {}, month, year) {
 }
 
 function combineMetaRecords(sempre = {}, onnet = {}, month, year) {
+	const { onnet: _nestedOnnet, onnetSempre: _nestedCombined, ...sempreBase } = sempre;
 	const rawByDay = new Map();
 	for (const record of [sempre, onnet]) {
 		for (const row of record.rawDays || record.saldoDiario || []) {
@@ -2646,7 +2647,7 @@ function combineMetaRecords(sempre = {}, onnet = {}, month, year) {
 	}
 	return recalculateMetaRecord(
 		{
-			...sempre,
+			...sempreBase,
 			mes: month,
 			month,
 			ano: year,
@@ -4188,5 +4189,6 @@ module.exports = {
 	buildIncrementalFineSnapshot,
 	buildOnnetStockManualSnapshot,
 	buildDiarioEntryFromSaldoDay,
+	combineMetaRecords,
 	normalizeOnnetStockIdentifier,
 };

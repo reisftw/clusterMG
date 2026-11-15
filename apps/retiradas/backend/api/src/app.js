@@ -2999,9 +2999,10 @@ function createApp() {
 	app.get("/api/public/static/:domain", publicReadLimiter, async (req, res, next) => {
 		try {
 			const domain = String(req.params.domain || "").trim();
-			const compact = ["1", "true", "yes"].includes(
-				String(req.query.compact || "").toLowerCase(),
-			);
+			const compactParam = String(req.query.compact ?? "").toLowerCase();
+			const compact = compactParam
+				? ["1", "true", "yes"].includes(compactParam)
+				: domain === "dashboard";
 			const cacheOptions = { compact };
 			const cached = getCachedPublicStaticSnapshot(domain, cacheOptions);
 			if (cached) {
