@@ -5,6 +5,7 @@ RELEASE_ID="__RELEASE_ID__"
 PACKAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_PACKAGE="$PACKAGE_DIR/retiradas-dist.tar.gz"
 BACKEND_PACKAGE="$PACKAGE_DIR/retiradas-backend.tar.gz"
+NODE_MODULES_PACKAGE="$PACKAGE_DIR/retiradas-node-modules.tar.gz"
 CHECKSUM_FILE="$PACKAGE_DIR/SHA256SUMS.txt"
 
 FRONTEND_PATH="${RETIRADAS_FRONTEND_PATH:-/var/www/retiradas/dist}"
@@ -72,6 +73,7 @@ tar -czf "$BACKUP_DIR/frontend-before.tar.gz" -C "$FRONTEND_REAL" .
 CURRENT_LOCK_HASH="$(sha256sum "$API_PATH/package-lock.json" 2>/dev/null | awk '{print $1}')"
 NEXT_LOCK_HASH="$(sha256sum "$STAGING/backend/package-lock.json" 2>/dev/null | awk '{print $1}')"
 APPLIED=0
+DEPENDENCIES_BACKED_UP=0
 
 rollback() {
   local status=$?
@@ -80,6 +82,10 @@ rollback() {
     find "$FRONTEND_REAL" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
     tar -xzf "$BACKUP_DIR/frontend-before.tar.gz" -C "$FRONTEND_REAL"
     tar -xzf "$BACKUP_DIR/backend-before.tar.gz" -C "$API_PATH"
+    if [ "$DEPENDENCIES_BACKED_UP" -eq 1 ]; then
+      rm -rf "$API_PATH/node_modules"
+      mv "$BACKUP_DIR/node_modules-before" "$API_PATH/node_modules"
+    fi
     systemctl restart "$SERVICE" || true
   fi
   rm -rf "$STAGING"
@@ -100,8 +106,18 @@ chown -R www-data:www-data "$API_PATH/uploads" /var/www/.cache /var/www/.npm
 chmod -R u+rwX,g+rwX "$API_PATH/uploads"
 
 if [ -z "$CURRENT_LOCK_HASH" ] || [ "$CURRENT_LOCK_HASH" != "$NEXT_LOCK_HASH" ]; then
-  echo "Dependencias alteradas; instalando backend..."
-  npm install --prefix "$API_PATH" --omit=dev --no-audit --no-fund
+  if [ -s "$NODE_MODULES_PACKAGE" ]; then
+    echo "Dependencias alteradas; aplicando pacote offline..."
+    if [ -d "$API_PATH/node_modules" ]; then
+      mv "$API_PATH/node_modules" "$BACKUP_DIR/node_modules-before"
+      DEPENDENCIES_BACKED_UP=1
+    fi
+    mkdir -p "$API_PATH/node_modules"
+    tar -xzf "$NODE_MODULES_PACKAGE" -C "$API_PATH/node_modules"
+  else
+    echo "Dependencias alteradas; instalando backend..."
+    npm install --prefix "$API_PATH" --omit=dev --no-audit --no-fund
+  fi
 else
   echo "Dependencias inalteradas; mantendo node_modules existente."
 fi
