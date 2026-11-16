@@ -108,7 +108,7 @@ function classifyOrder(order, config) {
 }
 
 function applyTargetType(order, target) {
-	const updated = JSON.parse(JSON.stringify(order));
+	const updated = structuredClone(order);
 	updated.id_tipo_ordem_servico = Number(target.id_tipo_ordem_servico || target.id);
 	updated.tipo_ordem_servico = target;
 	return updated;
@@ -221,7 +221,7 @@ async function saveConfig(input = {}, user = {}) {
 		[companyKey, clean(input.companyName || "Padrão"), JSON.stringify(sourceTypes), JSON.stringify(targetType), openStatuses,
 		 Math.min(Math.max(Number(input.batchLimit || 500), 1), 5000), Math.min(Math.max(Number(input.concurrency || 2), 1), 5), owner.id],
 	);
-	auditLog.recordAuditLog({ action: "update", module: "service_orders", entity: "port_release_config", recordId: companyKey,
+	await auditLog.recordAuditLog({ action: "update", module: "service_orders", entity: "port_release_config", recordId: companyKey,
 		userId: owner.id, userName: owner.name, beforeData: null, afterData: { companyKey, sourceTypeIds: sourceTypes.map((item) => item.id), targetTypeId: targetType.id, openStatuses },
 		changedFields: ["source_types", "target_type", "open_statuses"] });
 	return result.rows[0];
@@ -271,7 +271,8 @@ async function search(input = {}, user = {}) {
 	const types = (metadata?.tipos_ordem_servico || []).filter((item) => allTypeIds.has(Number(item.id_tipo_ordem_servico || item.id)));
 	const statuses = [...new Set(configs.flatMap((item) => item.open_statuses || []))];
 	const found = [];
-	for (const day of days) found.push(...await queryDay(session, day, types, statuses));
+	const dayResults = await Promise.all(days.map((day) => queryDay(session, day, types, statuses)));
+	for (const rows of dayResults) found.push(...rows);
 	const requested = new Set(parsed.valid);
 	const results = found.filter((item) => requested.has(clientCode(item))).map((item) => {
 		const config = configFor(configs, item);
@@ -299,10 +300,10 @@ async function search(input = {}, user = {}) {
 			"insert into service_order_port_release_searches (requested_by, invalid_codes, duplicates) values ($1, $2::jsonb, $3) returning id",
 			[owner.id, JSON.stringify(parsed.invalid), parsed.duplicates],
 		)).rows[0];
-		for (let index = 0; index < results.length; index += 1) {
-			await client.query("insert into service_order_port_release_search_results (search_id, position, result) values ($1, $2, $3::jsonb)",
-				[searchRow.id, index, JSON.stringify(results[index])]);
-		}
+		await Promise.all(results.map((result, index) => client.query(
+			"insert into service_order_port_release_search_results (search_id, position, result) values ($1, $2, $3::jsonb)",
+			[searchRow.id, index, JSON.stringify(result)],
+		)));
 		await client.query("commit");
 		return getSearch(searchRow.id, input, user);
 	} catch (error) {
@@ -370,7 +371,7 @@ async function createBatch(input = {}, user = {}) {
 			);
 		}
 		await client.query("commit");
-		auditLog.recordAuditLog({ action: "create", module: "service_orders", entity: "port_release_batch", recordId: batch.id,
+		await auditLog.recordAuditLog({ action: "create", module: "service_orders", entity: "port_release_batch", recordId: batch.id,
 			userId: owner.id, userName: owner.name, beforeData: null, afterData: { total: orders.length, reason: clean(input.reason) }, changedFields: ["total", "reason"] });
 		enqueue(batch.id);
 		return batch;
@@ -428,7 +429,7 @@ async function finishOperation(id, status, before, after, message = "", external
 		[id, status, before ? JSON.stringify(before) : null, after ? JSON.stringify(after) : null, message, externalId],
 	);
 	const operation = updated.rows[0];
-	if (operation) auditLog.recordAuditLog({ action: "update", module: "service_orders", entity: "port_release_operation", recordId: id,
+	if (operation) await auditLog.recordAuditLog({ action: "update", module: "service_orders", entity: "port_release_operation", recordId: id,
 		userId: operation.requested_by, userName: operation.requested_by_name, beforeData: before, afterData: { ...after, result: status, error: message || undefined },
 		changedFields: ["id_tipo_ordem_servico", "status"] });
 }
@@ -439,7 +440,10 @@ async function runBatch(id) {
 	const session = await hubsoftSyncProfiles.createAutomationSession();
 	const metadata = await hubsoftSyncProfiles.automationRequest(session, "/api/v1/ordem_servico/create");
 	const operations = (await db.query("select * from service_order_port_release_operations where batch_id = $1 and status = 'QUEUED' order by requested_at", [id])).rows;
-	for (const operation of operations) await processOperation(operation, session, configs, metadata);
+	for (const operation of operations) {
+		// Deliberately sequential: one authenticated HubSoft session must not mutate orders concurrently.
+		await processOperation(operation, session, configs, metadata); // NOSONAR
+	}
 	const counts = (await db.query(
 		`select count(*)::int processed, count(*) filter (where status='SUCCESS')::int succeeded,
 		 count(*) filter (where status='SKIPPED')::int skipped, count(*) filter (where status='ERROR')::int failed,
@@ -484,7 +488,7 @@ async function drain() {
 	while (workers < concurrency && queue.length) {
 		const id = queue.shift();
 		workers += 1;
-		runBatch(id).catch(async (error) => {
+		void runBatch(id).catch(async (error) => {
 			await db.query("update service_order_port_release_batches set status='FAILED', completed_at=now() where id=$1", [id]).catch(() => {});
 			console.error("[port-release] batch failed", { batchId: id, error: clean(error.message || error) });
 		}).finally(() => { queued.delete(id); workers -= 1; scheduleDrain(); });
@@ -547,7 +551,7 @@ async function exportRows(query = {}, format = "csv") {
 		XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers, ...data]), "Liberações");
 		return { content: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }), contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename: "liberacao-portas.xlsx" };
 	}
-	const quote = (value) => `"${clean(value).replace(/"/g, '""')}"`;
+	const quote = (value) => `"${clean(value).replaceAll('"', '""')}"`;
 	return { content: `\ufeff${[headers, ...data].map((line) => line.map(quote).join(";")).join("\n")}`, contentType: "text/csv; charset=utf-8", filename: "liberacao-portas.csv" };
 }
 

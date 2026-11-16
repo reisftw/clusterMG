@@ -96,6 +96,7 @@ create index if not exists service_order_port_release_operations_company_idx
 create index if not exists service_order_port_release_operations_status_idx
 	on service_order_port_release_operations (status, requested_at desc);
 
+-- The repeated section and feature labels below are intentional RBAC catalog seed values. -- NOSONAR
 insert into app_permissions (
 	id, section_id, section_label, feature_id, feature_label, action,
 	sort_order, legacy_permission, description
@@ -117,6 +118,7 @@ on conflict (id) do update set
 	active = true,
 	deprecated = false;
 
+-- Role identifiers repeat because each role receives an explicit permission matrix. -- NOSONAR
 insert into app_role_permissions (role_id, permission)
 select role_id, permission
 from (values
