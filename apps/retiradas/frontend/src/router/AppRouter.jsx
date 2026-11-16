@@ -73,6 +73,9 @@ const ServiceOrderCancellations = lazy(
 const ServiceOrderFines = lazy(
 	() => import("../modules/serviceOrders/fines/components/ServiceOrderFinesPage"),
 );
+const PortRelease = lazy(
+	() => import("../modules/serviceOrders/portRelease/components/PortReleasePage"),
+);
 const ServiceOrderRequests = lazy(
 	() =>
 		import(
@@ -756,6 +759,14 @@ const AppRouter = () => (
 									]}
 								>
 									<ServiceOrderFines />
+								</ProtectedRoute>
+							}
+						/>
+						<Route
+							path={ROUTES.ORDENS_SERVICO_LIBERACAO_PORTAS}
+							element={
+								<ProtectedRoute requiredPermission="liberacao_portas.view">
+									<PortRelease />
 								</ProtectedRoute>
 							}
 						/>

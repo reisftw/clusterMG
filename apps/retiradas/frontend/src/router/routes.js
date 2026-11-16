@@ -21,6 +21,7 @@ export const ROUTES = {
 	ORDENS_SERVICO_COMPROVANTE: "/ordens-servico/comprovante",
 	ORDENS_SERVICO_CANCELAMENTOS: "/ordens-servico/cancelamentos",
 	ORDENS_SERVICO_MULTAS: "/ordens-servico/multas",
+	ORDENS_SERVICO_LIBERACAO_PORTAS: "/ordens-servico/liberacao-portas",
 	ORDENS_SERVICO_RECUPERACAO_ATIVOS: "/ordens-servico/recuperacao-ativos",
 	ESTOQUE_CONSULTA: "/estoque/consulta",
 	FERIAS: "/ferias",
