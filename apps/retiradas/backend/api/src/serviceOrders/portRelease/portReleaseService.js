@@ -529,14 +529,14 @@ async function listHistory(query = {}) {
 async function stats(query = {}) {
 	const where = historyWhere(query);
 	const row = (await db.query(
-		`select count(*) filter (where status='SUCCESS')::int total,
-		 count(distinct client_code) filter (where status='SUCCESS')::int clients,
-		 count(*) filter (where status='SUCCESS' and requested_at::date=(now() at time zone 'America/Sao_Paulo')::date)::int today,
-		 count(*) filter (where status='SUCCESS' and date_trunc('month', requested_at at time zone 'America/Sao_Paulo')=date_trunc('month', now() at time zone 'America/Sao_Paulo'))::int month,
-		 count(*) filter (where status in ('ERROR','INDETERMINATE'))::int failures
+		`select coalesce(sum(case when o.status='SUCCESS' then 1 else 0 end), 0)::int total,
+		 count(distinct case when o.status='SUCCESS' then o.client_code end)::int clients,
+		 coalesce(sum(case when o.status='SUCCESS' and (o.requested_at at time zone 'America/Sao_Paulo')::date=(now() at time zone 'America/Sao_Paulo')::date then 1 else 0 end), 0)::int today,
+		 coalesce(sum(case when o.status='SUCCESS' and date_trunc('month', o.requested_at at time zone 'America/Sao_Paulo')=date_trunc('month', now() at time zone 'America/Sao_Paulo') then 1 else 0 end), 0)::int month,
+		 coalesce(sum(case when o.status in ('ERROR','INDETERMINATE') then 1 else 0 end), 0)::int failures
 		 from service_order_port_release_operations o where ${where.sql}`, where.values,
 	)).rows[0];
-	const types = (await db.query(`select source_type_name name, count(*)::int total from service_order_port_release_operations o where ${where.sql} and status='SUCCESS' group by source_type_name order by total desc limit 5`, where.values)).rows;
+	const types = (await db.query(`select o.source_type_name name, count(*)::int total from service_order_port_release_operations o where ${where.sql} and o.status='SUCCESS' group by o.source_type_name order by total desc limit 5`, where.values)).rows;
 	return { ...row, topSourceTypes: types };
 }
 

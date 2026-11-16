@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { parseCodes, __testables } = require("./portReleaseService");
+const { parseCodes, stats, __testables } = require("./portReleaseService");
 const db = require("../../db");
 const hubsoft = require("../../hubsoftSyncProfiles");
 
@@ -126,4 +126,24 @@ test("timeout sem leitura de confirmação fica indeterminado", async () => {
 
 test("mudança de status entre pesquisa e execução ignora a ordem", async () => {
 	assert.equal(await operationResult([{ ...openOrder, status: "finalizada" }]), "SKIPPED");
+});
+
+test("estatísticas retornam zeros e tipos sem falhar quando não há operações", async () => {
+	const originalQuery = db.query;
+	const queries = [];
+	db.query = async (sql, params = []) => {
+		queries.push({ sql, params });
+		if (queries.length === 1) return { rows: [{ total: 0, clients: 0, today: 0, month: 0, failures: 0 }] };
+		return { rows: [] };
+	};
+	try {
+		assert.deepEqual(await stats({ company: "3" }), {
+			total: 0, clients: 0, today: 0, month: 0, failures: 0, topSourceTypes: [],
+		});
+		assert.match(queries[0].sql, /o\.status='SUCCESS'/);
+		assert.match(queries[1].sql, /o\.source_type_name/);
+		assert.deepEqual(queries[0].params, ["3"]);
+	} finally {
+		db.query = originalQuery;
+	}
 });
