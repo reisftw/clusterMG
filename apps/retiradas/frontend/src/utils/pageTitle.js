@@ -24,6 +24,7 @@ const EXACT_TITLES = new Map([
 	["/usuarios", "Usuários | REVO"],
 	["/configuracoes/cargos", "Cargos e Permissões | REVO"],
 	["/notificacoes", "Notificações | REVO"],
+	["/ordens-servico/liberacao-portas", "Liberação de Portas | REVO"],
 	["/relatorios", "Relatórios | REVO"],
 	["/painel", "Painel Operacional | REVO"],
 	["/painel/agentes", "Painel de Agentes | REVO"],

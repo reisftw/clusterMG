@@ -14,6 +14,7 @@ import {
 	ClipboardList,
 	Clock,
 	Database,
+	DoorOpen,
 	FileCheck2,
 	FileClock,
 	FileSearch,
@@ -298,6 +299,12 @@ const NAV_ITEMS = [
 			"movimentacoes.view",
 			"movimentacoes.manage",
 		],
+	},
+	{
+		label: "Liberação de Portas",
+		path: ROUTES.ORDENS_SERVICO_LIBERACAO_PORTAS,
+		icon: DoorOpen,
+		permission: ["liberacao_portas.view"],
 	},
 	{
 		label: "Logística",
@@ -918,6 +925,7 @@ const MENU_GROUPS = [
 			ROUTES.ORDENS_SERVICO_COMPROVANTE,
 			ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 			ROUTES.ORDENS_SERVICO_MULTAS,
+			ROUTES.ORDENS_SERVICO_LIBERACAO_PORTAS,
 			ROUTES.ORDENS_SERVICO_RECUPERACAO_ATIVOS,
 		],
 	},

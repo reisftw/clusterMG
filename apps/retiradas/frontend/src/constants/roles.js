@@ -332,6 +332,12 @@ export const PERMISSION_GROUPS = Object.freeze([
 			"service_orders.requests.history",
 			"service_orders.return_receipts.create",
 			"service_orders.return_receipts.history",
+			"liberacao_portas.view",
+			"liberacao_portas.search",
+			"liberacao_portas.execute",
+			"liberacao_portas.history",
+			"liberacao_portas.export",
+			"liberacao_portas.manage",
 		],
 	},
 	{

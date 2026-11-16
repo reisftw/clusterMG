@@ -77,6 +77,7 @@ const PAGE_TITLES = {
 	[ROUTES.REGRAS]: "Regras",
 	[ROUTES.ORDENS_SERVICO_SOLICITACAO]: "Solicitação de O.S",
 	[ROUTES.ORDENS_SERVICO_COMPROVANTE]: "Comprovante de devolução",
+	[ROUTES.ORDENS_SERVICO_LIBERACAO_PORTAS]: "Liberação de Portas",
 };
 
 const SIDEBAR_COLLAPSED_KEY = "retiradas-sidebar-collapsed";
