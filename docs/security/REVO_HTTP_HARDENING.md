@@ -13,7 +13,7 @@ Os modulos Adm, Finan, Mercado e Operacao nao foram alterados nem publicados.
 | X-Content-Type-Options | Ausente nas respostas estaticas | `nosniff` | Sim |
 | Referrer-Policy | Ausente nas respostas estaticas | `strict-origin-when-cross-origin` | Sim |
 | COOP/COEP/CORP | Inconsistente entre Nginx e Express | COOP compativel com popups; COEP/CORP nao forcados | Sim |
-| Observatory | D, 30/100 | A medir depois da publicacao | Pendente |
+| Observatory | D, 30/100 | A+, 120/100 | Sim, 12/12 testes |
 
 ## Causa raiz
 
@@ -74,8 +74,19 @@ CSP e HSTS simultaneamente, com valores diferentes.
 - Branch: `codex/security-http-hardening`
 - Pull request: `#47`
 - Commits: `04cfeaa`, `80a6a08`, `7a590ee`
-- Versao de producao: a preencher apos publicacao oficial
-- Observatory depois: a preencher apos nova varredura
+- Versao de producao: `v2026.11.15-http-hardening.1`
+- Workflow oficial: `43776473020`
+- Observatory depois: A+, 120/100, scan `135864866` em 2026-11-16
+
+## Validacao em producao
+
+- HTML, API health, service worker e manifesto responderam HTTP 200, com tipos
+  MIME corretos, CSP e HSTS emitidos exatamente uma vez.
+- HTTP redireciona para HTTPS com 301; `/api/auth/me` sem sessao permanece 401.
+- Login, painel, mapa, match, AA Sempre e devolucao abriram sem erro de pagina
+  e sem violacao de CSP no navegador automatizado.
+- `retiradas-api.service` permaneceu ativo, health respondeu com sucesso e o
+  journal nao registrou novo erro 500 na janela posterior a publicacao.
 
 ## Rollback
 
