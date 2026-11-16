@@ -96,17 +96,37 @@ create index if not exists service_order_port_release_operations_company_idx
 create index if not exists service_order_port_release_operations_status_idx
 	on service_order_port_release_operations (status, requested_at desc);
 
--- The repeated section and feature labels below are intentional RBAC catalog seed values. -- NOSONAR
+with catalog as (
+	select
+		'service_orders'::text as section_id,
+		'Ordem de Servico'::text as section_label,
+		'port_release'::text as feature_id,
+		'Liberacao de Portas'::text as feature_label
+), permissions(id, sort_order, description) as (
+	values
+		('liberacao_portas.view', 720, 'Visualizar o modulo Liberacao de Portas.'),
+		('liberacao_portas.search', 721, 'Consultar clientes e ordens elegiveis.'),
+		('liberacao_portas.execute', 722, 'Alterar o tipo de ordens no HubSoft.'),
+		('liberacao_portas.history', 723, 'Consultar o historico de liberacoes.'),
+		('liberacao_portas.export', 724, 'Exportar relatorios de liberacoes.'),
+		('liberacao_portas.manage', 725, 'Gerenciar tipos e regras do modulo.')
+)
 insert into app_permissions (
 	id, section_id, section_label, feature_id, feature_label, action,
 	sort_order, legacy_permission, description
-) values
-	('liberacao_portas.view', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'view', 720, null, 'Visualizar o modulo Liberacao de Portas.'),
-	('liberacao_portas.search', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'search', 721, null, 'Consultar clientes e ordens elegiveis.'),
-	('liberacao_portas.execute', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'execute', 722, null, 'Alterar o tipo de ordens no HubSoft.'),
-	('liberacao_portas.history', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'history', 723, null, 'Consultar o historico de liberacoes.'),
-	('liberacao_portas.export', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'export', 724, null, 'Exportar relatorios de liberacoes.'),
-	('liberacao_portas.manage', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'manage', 725, null, 'Gerenciar tipos e regras do modulo.')
+)
+select
+	p.id,
+	c.section_id,
+	c.section_label,
+	c.feature_id,
+	c.feature_label,
+	case when p.id in ('liberacao_portas.execute', 'liberacao_portas.manage') then 'manage' else 'view' end,
+	p.sort_order,
+	null,
+	p.description
+from permissions p
+cross join catalog c
 on conflict (id) do update set
 	section_id = excluded.section_id,
 	section_label = excluded.section_label,
