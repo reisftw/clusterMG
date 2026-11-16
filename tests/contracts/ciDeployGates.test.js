@@ -140,6 +140,21 @@ test("Retiradas release blocks publication when SonarCloud rejects the source PR
 	}
 });
 
+test("company VM update can replace backend dependencies offline with rollback", () => {
+	const installer = fs.readFileSync(
+		path.join(process.cwd(), "ops/vm-migration/scripts/apply-retiradas-update-package.sh"),
+		"utf8",
+	);
+	for (const required of [
+		"retiradas-node-modules.tar.gz",
+		"node_modules-before",
+		"Dependencias alteradas; aplicando pacote offline",
+		'mv "$BACKUP_DIR/node_modules-before" "$API_PATH/node_modules"',
+	]) {
+		assert.ok(installer.includes(required), `VM installer should contain ${required}`);
+	}
+});
+
 test("Retiradas can publish the Android build from the same release run", () => {
 	const deploy = readWorkflow("deploy-retiradas.yml");
 	const android = readWorkflow("publish-retiradas-android.yml");
