@@ -102,10 +102,10 @@ insert into app_permissions (
 	sort_order, legacy_permission, description
 ) values
 	('liberacao_portas.view', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'view', 720, null, 'Visualizar o modulo Liberacao de Portas.'),
-	('liberacao_portas.search', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'search', 721, null, 'Consultar clientes e ordens elegiveis.'),
-	('liberacao_portas.execute', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'execute', 722, null, 'Alterar o tipo de ordens no HubSoft.'),
-	('liberacao_portas.history', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'history', 723, null, 'Consultar o historico de liberacoes.'),
-	('liberacao_portas.export', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'export', 724, null, 'Exportar relatorios de liberacoes.'),
+	('liberacao_portas.search', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'view', 721, null, 'Consultar clientes e ordens elegiveis.'),
+	('liberacao_portas.execute', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'manage', 722, null, 'Alterar o tipo de ordens no HubSoft.'),
+	('liberacao_portas.history', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'view', 723, null, 'Consultar o historico de liberacoes.'),
+	('liberacao_portas.export', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'view', 724, null, 'Exportar relatorios de liberacoes.'),
 	('liberacao_portas.manage', 'service_orders', 'Ordem de Servico', 'port_release', 'Liberacao de Portas', 'manage', 725, null, 'Gerenciar tipos e regras do modulo.')
 on conflict (id) do update set
 	section_id = excluded.section_id,
