@@ -3245,18 +3245,15 @@ export default function AcompanhamentoPage() {
 			sound || panelConfig.appointmentNotice?.sound,
 			customSounds,
 		);
-		if (selected.value === "christmas") {
-			const audioContext =
-				appointmentNoticeAudioContextRef.current || createAudioContext();
-			appointmentNoticeAudioContextRef.current = audioContext;
-			playChristmasAppointmentTone(audioContext);
-			return;
-		}
 		const playFallback = () => {
 			const audioContext =
 				appointmentNoticeAudioContextRef.current || createAudioContext();
 			appointmentNoticeAudioContextRef.current = audioContext;
-			playAppointmentFallbackTone(audioContext);
+			if (selected.value === "christmas") {
+				playChristmasAppointmentTone(audioContext);
+			} else {
+				playAppointmentFallbackTone(audioContext);
+			}
 		};
 		try {
 			const audio = ensureAppointmentNoticeAudio(
@@ -3268,6 +3265,9 @@ export default function AcompanhamentoPage() {
 			}
 			audio.muted = false;
 			audio.volume = 1;
+			if (selected.value === "christmas" && !audio.paused && !audio.ended) {
+				return;
+			}
 			audio.currentTime = 0;
 			const playPromise = audio.play();
 			if (playPromise?.catch) {

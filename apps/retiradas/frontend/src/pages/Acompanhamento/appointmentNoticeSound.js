@@ -3,6 +3,9 @@ export const APPOINTMENT_NOTICE_SOUND_MODES = [
 	{ value: "original", label: "Original" },
 ];
 
+export const CHRISTMAS_APPOINTMENT_NOTICE_SOUND_SRC =
+	"/audio/christmas-appointment-alert.wav";
+
 export function normalizeAppointmentNoticeSound(value, customSounds = []) {
 	if (APPOINTMENT_NOTICE_SOUND_MODES.some((item) => item.value === value)) {
 		return value;
@@ -18,7 +21,13 @@ export function normalizeAppointmentNoticeSound(value, customSounds = []) {
 
 export function resolveAppointmentNoticeSound(value, customSounds = []) {
 	const normalized = normalizeAppointmentNoticeSound(value, customSounds);
-	if (!normalized.startsWith("custom:")) {
+	if (normalized === "christmas") {
+		return {
+			value: normalized,
+			src: CHRISTMAS_APPOINTMENT_NOTICE_SOUND_SRC,
+		};
+	}
+	if (normalized === "original") {
 		return { value: normalized, src: "" };
 	}
 	const sound = customSounds.find((item) => `custom:${item.id}` === normalized);

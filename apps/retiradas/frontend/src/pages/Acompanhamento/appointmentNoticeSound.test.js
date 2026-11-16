@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+	CHRISTMAS_APPOINTMENT_NOTICE_SOUND_SRC,
 	normalizeAppointmentNoticeSound,
 	playChristmasAppointmentTone,
 	resolveAppointmentNoticeSound,
@@ -40,6 +41,10 @@ describe("appointmentNoticeSound", () => {
 		expect(normalizeAppointmentNoticeSound()).toBe("christmas");
 		expect(normalizeAppointmentNoticeSound("invalido")).toBe("christmas");
 		expect(normalizeAppointmentNoticeSound("original")).toBe("original");
+		expect(resolveAppointmentNoticeSound("christmas")).toEqual({
+			value: "christmas",
+			src: CHRISTMAS_APPOINTMENT_NOTICE_SOUND_SRC,
+		});
 	});
 
 	it("aceita somente sons personalizados ainda cadastrados", () => {
