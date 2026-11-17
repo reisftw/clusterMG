@@ -24,6 +24,8 @@ trap 'rollback' ERR
 
 install -d -m 0750 "$root/releases" "$root/shared" "$root/backups"
 id liliane >/dev/null 2>&1 || useradd --system --home "$root" --shell /usr/sbin/nologin liliane
+chown root:liliane "$root" "$root/releases"
+chmod 0755 "$root" "$root/releases"
 rm -rf "$release"
 install -d -m 0750 "$release"
 cp -a "$source_root/backend" "$source_root/frontend" "$source_root/ops" "$release/"
@@ -87,6 +89,7 @@ chmod 0600 "$evolution_env"
 docker compose --env-file "$evolution_env" -f "$release/ops/docker-compose.evolution.yml" up -d
 
 chown -R liliane:liliane "$release"
+chmod 0755 "$release" "$release/frontend"
 set -a
 . "$env_file"
 set +a
@@ -106,7 +109,7 @@ systemctl daemon-reload
 systemctl enable --now liliane-api.service
 nginx -t
 systemctl reload nginx
-curl -fsS --retry 20 --retry-delay 2 http://127.0.0.1:3401/health >/dev/null
+curl -fsS --retry 20 --retry-delay 2 --retry-connrefused http://127.0.0.1:3401/health >/dev/null
 
 trap - ERR
 find "$root/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf

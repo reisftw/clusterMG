@@ -4,7 +4,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import PDFDocument from "pdfkit";
 import argon2 from "argon2";
-import { changePassword, confirmMfa, login, logout, requireAuth, requireCsrf, requirePasswordChanged, requireRole, startMfa } from "./auth.js";
+import { changePassword, confirmMfa, login, logout, requireAuth, requireCsrf, requirePasswordChanged, requireRole, resetPasswordWithTotp, startMfa } from "./auth.js";
 import { config } from "./config.js";
 import { hmac, sha256 } from "./crypto.js";
 import { pool, transaction } from "./db.js";
@@ -72,6 +72,7 @@ export function createApp() {
   app.post("/auth/login", rateLimit({ windowMs: 15 * 60_000, limit: 10 }), asyncRoute(login));
   app.post("/auth/mfa/setup", rateLimit({ windowMs: 15 * 60_000, limit: 10 }), asyncRoute(startMfa));
   app.post("/auth/mfa/confirm", rateLimit({ windowMs: 15 * 60_000, limit: 10 }), asyncRoute(confirmMfa));
+  app.post("/auth/password/reset", rateLimit({ windowMs: 15 * 60_000, limit: 5 }), asyncRoute(resetPasswordWithTotp));
   app.post("/auth/logout", asyncRoute(logout));
   app.get("/auth/me", requireAuth, (req, res) => res.json({ user: req.authUser }));
   app.use((req, res, next) => req.path.startsWith("/webhooks/") ? next() : requireAuth(req, res, next));
