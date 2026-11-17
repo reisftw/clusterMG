@@ -14,6 +14,9 @@ export const ROLES = {
 	TECNICO: "tecnico",
 	ESTOQUE: "estoque",
 	SUPERVISOR_ESTOQUE: "supervisor_estoque",
+	ATENDENTE_LOJA: "atendente_loja",
+	SUPERVISOR_LOJA: "supervisor_loja",
+	COORDENADOR_LOJA: "coordenador_loja",
 };
 
 export const CARGOS_RETIRADAS = [
@@ -30,6 +33,9 @@ export const CARGOS_RETIRADAS = [
 	{ value: ROLES.BACKOFFICE, label: "Backoffice" },
 	{ value: ROLES.TECNICO, label: "Técnico" },
 	{ value: ROLES.VISITANTE, label: "Visitante" },
+	{ value: ROLES.ATENDENTE_LOJA, label: "Atendente de Loja" },
+	{ value: ROLES.SUPERVISOR_LOJA, label: "Supervisor de Loja" },
+	{ value: ROLES.COORDENADOR_LOJA, label: "Coordenador de Loja" },
 ];
 
 export const CARGOS_FS = [];
@@ -152,6 +158,12 @@ export const PERMISSION_LABELS = Object.freeze({
 	"service_orders.requests.history": "Histórico de solicitações de O.S",
 	"service_orders.return_receipts.create": "Gerar comprovante de devolução",
 	"service_orders.return_receipts.history": "Histórico de comprovantes de devolução",
+	"loja.entregas.create": "Loja - Nova entrega",
+	"loja.entregas.mine": "Loja - Minhas entregas",
+	"loja.entregas.store": "Loja - Entregas da loja",
+	"loja.historico.view": "Loja - Histórico",
+	"loja.protocolos.view": "Loja - Protocolos",
+	"loja.lojas.manage": "Loja - Gerenciar lojas",
 	"retiradas.maps.v2.access": "Retiradas Maps - Acessar",
 	"retiradas.maps.v2.view_assigned": "Retiradas Maps - Minhas retiradas",
 	"retiradas.maps.v2.view_opportunities": "Retiradas Maps - Oportunidades",
@@ -324,6 +336,10 @@ export const PERMISSION_GROUPS = Object.freeze([
 			"tentativas.relatorio.exportar",
 			"tentativas.override",
 		],
+	},
+	{
+		label: "Loja",
+		permissions: ["loja.entregas.create","loja.entregas.mine","loja.entregas.store","loja.historico.view","loja.protocolos.view","loja.lojas.manage"],
 	},
 	{
 		label: "Ordem de Serviço",

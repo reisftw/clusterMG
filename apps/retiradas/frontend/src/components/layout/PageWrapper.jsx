@@ -77,6 +77,10 @@ const PAGE_TITLES = {
 	[ROUTES.REGRAS]: "Regras",
 	[ROUTES.ORDENS_SERVICO_SOLICITACAO]: "Solicitação de O.S",
 	[ROUTES.ORDENS_SERVICO_COMPROVANTE]: "Comprovante de devolução",
+	[ROUTES.ENTREGA_LOJA]: "Entrega em Loja",
+	[ROUTES.LOJA_HISTORICO]: "Histórico de entregas em loja",
+	[ROUTES.LOJA_PROTOCOLOS]: "Protocolos de entrega em loja",
+	[ROUTES.LOJA_LOJAS]: "Lojas",
 	[ROUTES.ORDENS_SERVICO_LIBERACAO_PORTAS]: "Liberação de Portas",
 };
 

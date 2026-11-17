@@ -71,6 +71,7 @@ const createServiceOrderFinesRouter = require("./serviceOrders/fines/routes/serv
 const createServiceOrderRequestsRouter = require("./serviceOrders/requests/routes/serviceOrderRequestsRoutes");
 const createPortReleaseRouter = require("./serviceOrders/portRelease/routes/portReleaseRoutes");
 const createReturnReceiptsRouter = require("./serviceOrders/returnReceipts/routes/returnReceiptsRoutes");
+const createStoreDeliveriesRouter = require("./storeDeliveries/routes/storeDeliveriesRoutes");
 const createRetorninhoRouter = require("./retorninho/routes/retorninhoRoutes");
 const retorninhoService = require("./retorninho/retorninhoService");
 const createTentativasRouter = require("./tentativas/routes/tentativasRoutes");
@@ -2927,6 +2928,15 @@ function createApp() {
 	app.use(
 		"/api/service-orders/return-receipts",
 		createReturnReceiptsRouter({
+			requireAnyPermission,
+			requireAuthenticated,
+			requireCsrfToken,
+		}),
+	);
+
+	app.use(
+		"/api/store-deliveries",
+		createStoreDeliveriesRouter({
 			requireAnyPermission,
 			requireAuthenticated,
 			requireCsrfToken,

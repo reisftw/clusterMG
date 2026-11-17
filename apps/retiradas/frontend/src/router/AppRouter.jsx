@@ -88,6 +88,9 @@ const ReturnReceipts = lazy(
 			"../modules/serviceOrders/returnReceipts/components/ReturnReceiptsPage"
 		),
 );
+const StoreDeliveries = lazy(
+	() => import("../modules/storeDeliveries/components/StoreDeliveriesPage"),
+);
 const Colaboradores = lazy(
 	() => import("../modules/colaboradores/components/ColaboradoresPage"),
 );
@@ -734,6 +737,22 @@ const AppRouter = () => (
 								</ProtectedRoute>
 							}
 						/>
+						{[
+							ROUTES.ENTREGA_LOJA,
+							ROUTES.LOJA_HISTORICO,
+							ROUTES.LOJA_PROTOCOLOS,
+							ROUTES.LOJA_LOJAS,
+						].map((path) => (
+							<Route
+								key={path}
+								path={path}
+								element={
+									<ProtectedRoute requiredPermission={["loja.entregas.create","loja.entregas.mine","loja.entregas.store","loja.historico.view","loja.protocolos.view","loja.lojas.manage"]}>
+										<StoreDeliveries />
+									</ProtectedRoute>
+								}
+							/>
+						))}
 						<Route
 							path={ROUTES.ORDENS_SERVICO_CANCELAMENTOS}
 							element={
