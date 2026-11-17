@@ -1,5 +1,6 @@
 const db = require("../db");
 const auditLog = require("../auditLog");
+const equipmentSerialLookup = require("../equipmentSerialLookup");
 const hubsoft = require("../hubsoftSyncProfiles");
 const portRelease = require("../serviceOrders/portRelease/portReleaseService");
 const {
@@ -120,8 +121,48 @@ function matchesSearch(item, term) {
     return digits(item.document) === queryDigits;
   }
   if (/^\d+$/.test(query)) return item.clientCode === queryDigits;
-  if (queryMac.length >= 8 && item.equipment.some((equipment) => normalizeMac(equipment.mac || equipment.serial) === queryMac)) return true;
-  return normalizeText(item.clientName) === normalizeText(query);
+  if (isMacSearch(query) && item.equipment.some((equipment) => normalizeMac(equipment.mac || equipment.serial) === queryMac)) return true;
+  return normalizeText(item.clientName).includes(normalizeText(query));
+}
+
+function isMacSearch(value) {
+  const normalized = normalizeMac(value);
+  return normalized.length === 12 && /\d/.test(normalized);
+}
+
+async function searchAccesses(session, query) {
+  const modes = [11, 14].includes(digits(query).length) ? ["cpf_cnpj", "cliente"] : ["cliente"];
+  const rows = [];
+  for (const mode of modes) {
+    try {
+      const payload = await hubsoft.automationRequest(
+        session,
+        `/api/v1/cliente/acesso/paginado/20?page=1&busca=${mode}&termo_busca=${encodeURIComponent(query)}`,
+      );
+      rows.push(...rowsOf(payload));
+    } catch (error) {
+      if (mode === modes.at(-1)) throw error;
+    }
+  }
+  return rows;
+}
+
+async function findClientByMac(session, query) {
+  const mac = normalizeMac(query);
+  const local = (await db.query(
+    `select codigo_cliente, nome_cliente
+       from ordens_servico
+      where regexp_replace(upper(concat_ws(' ', mac_addr, phy_addr, macs_equipamento::text, source_payload::text)), '[^A-Z0-9]', '', 'g') like $1
+      order by updated_at desc limit 1`,
+    [`%${mac}%`],
+  )).rows[0];
+  let clientCode = digits(local?.codigo_cliente);
+  if (!clientCode) {
+    const lookup = await equipmentSerialLookup.lookupBySerial(mac);
+    clientCode = digits(lookup?.hubsoft?.clientCode);
+  }
+  if (!clientCode) return [];
+  return searchAccesses(session, clientCode);
 }
 
 async function searchClients(term) {
@@ -129,17 +170,20 @@ async function searchClients(term) {
   if (query.length < 3)
     throw fail("Informe CPF, código ou nome completo.", 400);
   const session = await hubsoft.createAutomationSession();
-  const payload = await hubsoft.automationRequest(
-    session,
-    `/api/v1/cliente/acesso/paginado/20?page=1&busca=cliente&termo_busca=${encodeURIComponent(query)}`,
-  );
-  const mapped = rowsOf(payload).map((row) => {
+  const sourceRows = isMacSearch(query)
+    ? await findClientByMac(session, query)
+    : await searchAccesses(session, query);
+  const mapped = sourceRows.map((row) => {
     const item = mapClientAccess(row);
     const service = row.cliente_servico || row.acesso || row.servico || row;
     const client = row.cliente || service.cliente || row;
-    return { ...item, document: digits(client.cpf_cnpj || client.documento) };
+    return { ...item, document: digits(client.cpf_cnpj || client.cpf || client.cnpj || client.documento || row.cpf_cnpj) };
   });
-  const exact = mapped.filter((item) => item.clientCode && item.clientName && matchesSearch(item, query));
+  let exact = mapped.filter((item) => item.clientCode && item.clientName && matchesSearch(item, query));
+  if (!exact.length && [11, 14].includes(digits(query).length)) {
+    const clients = [...new Set(mapped.filter((item) => item.clientCode && item.clientName).map((item) => item.clientCode))];
+    if (clients.length === 1) exact = mapped.filter((item) => item.clientCode === clients[0]);
+  }
   const seen = new Set();
   let items = exact
     .filter((item) => item.clientCode && item.clientName)
@@ -152,7 +196,7 @@ async function searchClients(term) {
     .sort((left, right) => right.equipment.length - left.equipment.length)
     .slice(0, 1)
     .map(({ document: _DOCUMENT, ...item }) => item);
-  if (!items.length && normalizeMac(query).length >= 8 && !/^\d+$/.test(query)) {
+  if (!items.length && isMacSearch(query)) {
     const mac = normalizeMac(query);
     const local = (await db.query(
       `select codigo_cliente, nome_cliente, servico, source_payload, mac_addr, phy_addr, macs_equipamento
@@ -634,5 +678,5 @@ module.exports = {
   listStoreUsers,
   saveStore,
   searchClients,
-  __testables: { normalizeMac, validateItems, mapClientAccess, matchesSearch },
+  __testables: { normalizeMac, validateItems, isMacSearch, mapClientAccess, matchesSearch },
 };

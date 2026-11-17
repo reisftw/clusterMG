@@ -25,11 +25,13 @@ test("mapeia contrato, servico e equipamento em formato aninhado do HubSoft", ()
 	assert.equal(item.equipment[0].mac, "FH-TT99");
 });
 
-test("busca de cliente exige correspondencia exata", () => {
+test("busca de cliente aceita nome parcial sem confundir texto com MAC", () => {
 	const item = { clientCode: "44741", clientName: "ÍTALO SILVA VILELA", document: "12345678901", equipment: [{ mac: "FHTT99F06B30" }] };
 	assert.equal(service.__testables.matchesSearch(item, "44741"), true);
 	assert.equal(service.__testables.matchesSearch(item, "123.456.789-01"), true);
 	assert.equal(service.__testables.matchesSearch(item, "italo silva vilela"), true);
-	assert.equal(service.__testables.matchesSearch(item, "ITALO"), false);
+	assert.equal(service.__testables.matchesSearch(item, "ITALO"), true);
 	assert.equal(service.__testables.matchesSearch(item, "fh:tt:99:f0:6b:30"), true);
+	assert.equal(service.__testables.isMacSearch("Rodrigo Reis"), false);
+	assert.equal(service.__testables.isMacSearch("FHTT99F06B30"), true);
 });
