@@ -126,7 +126,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
 export async function changePassword(req: Request, res: Response): Promise<void> {
   const currentPassword = String(req.body?.currentPassword || "");
   const newPassword = String(req.body?.newPassword || "");
-  if (newPassword.length < 14 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+  if (!validPassword(newPassword)) {
     res.status(422).json({ error: "A nova senha deve ter 14 caracteres, maiúscula, minúscula e número." });
     return;
   }
@@ -139,5 +139,28 @@ export async function changePassword(req: Request, res: Response): Promise<void>
   await pool.query("update users set password_hash=$2,must_change_password=false,updated_at=now() where id=$1", [req.authUser!.id, hash]);
   await pool.query("update user_sessions set revoked_at=now() where user_id=$1 and id<>$2", [req.authUser!.id, req.sessionId]);
   req.authUser!.mustChangePassword = false;
+  res.json({ ok: true });
+}
+
+const validPassword = (password: string): boolean => password.length >= 14 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password);
+
+export async function resetPasswordWithTotp(req: Request, res: Response): Promise<void> {
+  const username = String(req.body?.username || "").trim().toLowerCase();
+  const code = String(req.body?.code || "").trim();
+  const newPassword = String(req.body?.newPassword || "");
+  if (!username || !/^\d{6}$/.test(code) || !validPassword(newPassword)) {
+    res.status(422).json({ error: "Informe usuário, código de 6 dígitos e uma senha válida com 14 caracteres." });
+    return;
+  }
+  const result = await pool.query("select id,totp_secret_encrypted,totp_enabled from users where username=$1 and active=true", [username]);
+  const user = result.rows[0];
+  const validCode = user?.totp_enabled && user.totp_secret_encrypted && verifyTotp(decrypt(user.totp_secret_encrypted), code);
+  if (!validCode) {
+    res.status(422).json({ error: "Não foi possível validar o usuário e o código informado." });
+    return;
+  }
+  const hash = await argon2.hash(newPassword, { type: argon2.argon2id });
+  await pool.query("update users set password_hash=$2,must_change_password=false,failed_attempts=0,locked_until=null,updated_at=now() where id=$1", [user.id, hash]);
+  await pool.query("update user_sessions set revoked_at=now() where user_id=$1 and revoked_at is null", [user.id]);
   res.json({ ok: true });
 }
