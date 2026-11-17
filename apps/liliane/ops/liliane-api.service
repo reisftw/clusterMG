@@ -1,0 +1,23 @@
+[Unit]
+Description=Aprovacoes Lili API
+After=network-online.target postgresql.service docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=liliane
+Group=liliane
+WorkingDirectory=/opt/liliane/current/backend
+EnvironmentFile=/opt/liliane/shared/.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/liliane/shared
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

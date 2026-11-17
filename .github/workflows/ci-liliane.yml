@@ -1,0 +1,56 @@
+name: CI Aprovacoes Lili
+
+on:
+  pull_request:
+    paths:
+      - "apps/liliane/**"
+      - ".github/workflows/ci-liliane.yml"
+      - "package.json"
+  push:
+    branches: [master]
+    paths:
+      - "apps/liliane/**"
+      - ".github/workflows/ci-liliane.yml"
+      - "package.json"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate and audit Lili
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: liliane_test
+          POSTGRES_PASSWORD: liliane_test
+          POSTGRES_DB: aprovacoes_lili_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U liliane_test -d aprovacoes_lili_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/liliane/backend/package-lock.json
+            apps/liliane/frontend/package-lock.json
+      - run: npm ci --prefix apps/liliane/backend --no-audit --no-fund
+      - run: npm ci --prefix apps/liliane/frontend --no-audit --no-fund
+      - run: npm run verify:liliane
+        env:
+          TEST_DATABASE_URL: postgres://liliane_test:liliane_test@127.0.0.1:5432/aprovacoes_lili_test
+          DATABASE_URL: postgres://liliane_test:liliane_test@127.0.0.1:5432/aprovacoes_lili_test
+          APP_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+          INTEGRITY_KEY: ci-integrity-key
+          EVOLUTION_WEBHOOK_SECRET: ci-webhook-secret
+      - run: npm audit --omit=dev --audit-level=high --prefix apps/liliane/backend
+      - run: npm audit --omit=dev --audit-level=high --prefix apps/liliane/frontend
