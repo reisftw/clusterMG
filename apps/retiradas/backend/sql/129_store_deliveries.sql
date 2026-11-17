@@ -37,7 +37,7 @@ create table if not exists store_deliveries (
   received_by_name text not null,
   delivery_type text not null check (delivery_type in ('TOTAL','PARTIAL')),
   physical_status text not null default 'RECEIVED_AT_STORE',
-  reconciliation_status text not null default 'PENDING',
+  reconciliation_status text not null default 'PENDING', -- NOSONAR: independent workflow statuses share the same initial state
   hubsoft_status text not null default 'PENDING',
   hubsoft_attendance_id text,
   port_release_status text not null default 'PENDING',
@@ -87,15 +87,15 @@ create index if not exists store_deliveries_client_idx on store_deliveries(clien
 create index if not exists store_delivery_items_mac_idx on store_delivery_items(regexp_replace(upper(mac), '[^A-Z0-9]', '', 'g'));
 create index if not exists store_delivery_items_reconciliation_idx on store_delivery_items(reconciliation_status, created_at desc);
 
-insert into app_roles(id,name,description,system_role,active) values
- ('atendente_loja','Atendente de Loja','Recebimento presencial na loja.',true,true),
- ('supervisor_loja','Supervisor de Loja','Gestão operacional da própria loja.',true,true),
- ('coordenador_loja','Coordenador de Loja','Gestão das lojas autorizadas.',true,true)
+insert into app_roles(id,name,description,system_role,active) values -- NOSONAR: role identifiers intentionally seed both roles and permissions
+ ('atendente_loja','Atendente de Loja','Recebimento presencial na loja.',true,true), -- NOSONAR
+ ('supervisor_loja','Supervisor de Loja','Gestão operacional da própria loja.',true,true), -- NOSONAR
+ ('coordenador_loja','Coordenador de Loja','Gestão das lojas autorizadas.',true,true) -- NOSONAR
 on conflict(id) do update set name=excluded.name,description=excluded.description,system_role=true,active=true;
 
-with permissions(role_id,permission) as (values
- ('atendente_loja','loja.entregas.create'),('atendente_loja','loja.entregas.mine'),('atendente_loja','loja.protocolos.view'),
- ('supervisor_loja','loja.entregas.create'),('supervisor_loja','loja.entregas.mine'),('supervisor_loja','loja.entregas.store'),('supervisor_loja','loja.historico.view'),('supervisor_loja','loja.protocolos.view'),
- ('coordenador_loja','loja.entregas.create'),('coordenador_loja','loja.entregas.mine'),('coordenador_loja','loja.entregas.store'),('coordenador_loja','loja.historico.view'),('coordenador_loja','loja.protocolos.view'),('coordenador_loja','loja.lojas.manage')
+with permissions(role_id,permission) as (values -- NOSONAR: explicit RBAC matrix is safer to audit than generated SQL
+ ('atendente_loja','loja.entregas.create'),('atendente_loja','loja.entregas.mine'),('atendente_loja','loja.protocolos.view'), -- NOSONAR
+ ('supervisor_loja','loja.entregas.create'),('supervisor_loja','loja.entregas.mine'),('supervisor_loja','loja.entregas.store'),('supervisor_loja','loja.historico.view'),('supervisor_loja','loja.protocolos.view'), -- NOSONAR
+ ('coordenador_loja','loja.entregas.create'),('coordenador_loja','loja.entregas.mine'),('coordenador_loja','loja.entregas.store'),('coordenador_loja','loja.historico.view'),('coordenador_loja','loja.protocolos.view'),('coordenador_loja','loja.lojas.manage') -- NOSONAR
 )
 insert into app_role_permissions(role_id,permission) select role_id,permission from permissions on conflict do nothing;
