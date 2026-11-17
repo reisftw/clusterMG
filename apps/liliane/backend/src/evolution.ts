@@ -15,7 +15,10 @@ async function request(path: string, init: RequestInit = {}): Promise<EvolutionR
 }
 
 export const evolution = {
-  async status(): Promise<EvolutionResult> { return request(`/instance/connectionState/${encodeURIComponent(config.evolutionInstance)}`); },
+  async status(): Promise<EvolutionResult> {
+    try { return await request(`/instance/connectionState/${encodeURIComponent(config.evolutionInstance)}`); }
+    catch { return request(`/instance/fetchInstances?instanceName=${encodeURIComponent(config.evolutionInstance)}`); }
+  },
   async qr(): Promise<EvolutionResult> { return request(`/instance/connect/${encodeURIComponent(config.evolutionInstance)}`); },
   async create(): Promise<EvolutionResult> {
     return request("/instance/create", { method: "POST", body: JSON.stringify({ instanceName: config.evolutionInstance, qrcode: true, integration: "WHATSAPP-BAILEYS" }) });

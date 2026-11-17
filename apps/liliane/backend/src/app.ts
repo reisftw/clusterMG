@@ -199,7 +199,15 @@ export function createApp() {
     await audit(req.authUser!.id, "RESET_MFA", "user", param(req.params.id), req); res.json({ ok: true });
   }));
 
-  app.get("/whatsapp/status", requireRole("ADMIN"), asyncRoute(async (_req, res) => { try { res.json({ configured: Boolean(config.evolutionApiKey), decisionsEnabled: config.decisionsEnabled, provider: await evolution.status() }); } catch (error) { res.json({ configured: Boolean(config.evolutionApiKey), decisionsEnabled: config.decisionsEnabled, error: (error as Error).message }); } }));
+  app.get("/whatsapp/status", requireRole("ADMIN"), asyncRoute(async (_req, res) => {
+    try {
+      const provider = await evolution.status();
+      const first = Array.isArray(provider) ? provider[0] as Record<string, unknown> | undefined : undefined;
+      const instance = (provider.instance || first?.instance || first || {}) as Record<string, unknown>;
+      const state = clean(instance.state || provider.state, 40).toLowerCase();
+      res.json({ configured: Boolean(config.evolutionApiKey), decisionsEnabled: config.decisionsEnabled, connected: ["open", "connected"].includes(state), state: state || "unknown" });
+    } catch (error) { res.json({ configured: Boolean(config.evolutionApiKey), decisionsEnabled: config.decisionsEnabled, connected: false, state: "unavailable", error: (error as Error).message }); }
+  }));
   app.post("/whatsapp/connect", requireRole("ADMIN"), asyncRoute(async (_req, res) => { try { await evolution.create(); } catch { /* existing instance */ } await evolution.configureWebhook(`${config.publicBaseUrl}/api/webhooks/evolution/${config.webhookSecret}`); res.json(await evolution.qr()); }));
   app.post("/whatsapp/test", requireRole("ADMIN"), asyncRoute(async (req, res) => { res.json(await evolution.sendText(phone(req.body?.phone), "Teste da integração Aprovações Lili.")); }));
 
