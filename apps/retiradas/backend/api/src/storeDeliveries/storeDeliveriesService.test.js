@@ -16,3 +16,20 @@ test("mapeia acesso do HubSoft sem expor CPF integral", () => {
 	assert.equal(item.documentMasked,"*******8901");
 	assert.equal(item.equipment[0].productName,"ONU");
 });
+
+test("mapeia contrato, servico e equipamento em formato aninhado do HubSoft", () => {
+	const item = service.__testables.mapClientAccess({ cliente_servico: { id_cliente_servico: 22, numero_plano: "CTR-22", cliente: { codigo_cliente: "44741", nome_razaosocial: "ITALO" }, servico: { id_servico: 7, descricao: "FIBRA" }, equipamentos_cliente: [{ equipamento: { id_equipamento: 5, nome: "ONU" }, phy_addr: "FH-TT99" }] } });
+	assert.equal(item.contractId, "22");
+	assert.equal(item.serviceId, "7");
+	assert.equal(item.serviceName, "FIBRA");
+	assert.equal(item.equipment[0].mac, "FH-TT99");
+});
+
+test("busca de cliente exige correspondencia exata", () => {
+	const item = { clientCode: "44741", clientName: "ÍTALO SILVA VILELA", document: "12345678901", equipment: [{ mac: "FHTT99F06B30" }] };
+	assert.equal(service.__testables.matchesSearch(item, "44741"), true);
+	assert.equal(service.__testables.matchesSearch(item, "123.456.789-01"), true);
+	assert.equal(service.__testables.matchesSearch(item, "italo silva vilela"), true);
+	assert.equal(service.__testables.matchesSearch(item, "ITALO"), false);
+	assert.equal(service.__testables.matchesSearch(item, "fh:tt:99:f0:6b:30"), true);
+});

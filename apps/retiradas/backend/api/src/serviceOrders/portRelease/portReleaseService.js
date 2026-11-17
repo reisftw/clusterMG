@@ -42,6 +42,16 @@ function rowsOf(payload) {
 	return Array.isArray(rows) ? rows : [];
 }
 
+function paginationOf(payload, rows) {
+	const page = payload?.ordens_servico || payload?.paginador || payload || {};
+	const perPage = Number(page.per_page ?? page.itens_por_pagina ?? 1000) || 1000;
+	const total = Number(page.total ?? payload?.total ?? rows.length) || rows.length;
+	return {
+		currentPage: Number(page.current_page ?? page.pagina ?? 1) || 1,
+		lastPage: Number(page.last_page ?? page.total_paginas ?? Math.max(1, Math.ceil(total / perPage))) || 1,
+	};
+}
+
 function orderPayload(payload) {
 	return payload?.ordem_servico || payload?.data || null;
 }
@@ -229,7 +239,7 @@ async function saveConfig(input = {}, user = {}) {
 
 async function localCandidates(codes) {
 	const result = await db.query(
-		`select distinct on (codigo_cliente, num_os) codigo_cliente, num_os, tipo,
+		`select distinct on (codigo_cliente, num_os) codigo_cliente, nome_cliente, num_os, tipo,
 		 to_char(data_cadastro at time zone 'UTC', 'YYYY-MM-DD') as day, updated_at
 		 from ordens_servico where codigo_cliente = any($1::text[]) and coalesce(num_os, '') <> ''
 		 order by codigo_cliente, num_os, updated_at desc`, [codes],
@@ -238,15 +248,24 @@ async function localCandidates(codes) {
 }
 
 async function queryDay(session, day, types, statuses) {
-	const payload = await hubsoftSyncProfiles.automationRequest(session, "/api/v1/ordem_servico/consultar/paginado/1000?page=1", {
-		method: "POST",
-		body: {
+	const rows = [];
+	let page = 1;
+	let lastPage = 1;
+	do {
+		const payload = await hubsoftSyncProfiles.automationRequest(session, `/api/v1/ordem_servico/consultar/paginado/1000?page=${page}`, {
+			method: "POST",
+			body: {
 			data_inicio: `${day}T00:00:00.000-03:00`, data_fim: `${day}T23:59:59.999-03:00`,
 			tipo_data: "data_cadastro", status_ordem_servico: statuses,
-			tipo_ordem_servicos: types, pagina: 1, itens_por_pagina: 1000,
-		},
-	});
-	return rowsOf(payload);
+			tipo_ordem_servicos: types, pagina: page, itens_por_pagina: 1000,
+			},
+		});
+		const current = rowsOf(payload);
+		rows.push(...current);
+		lastPage = paginationOf(payload, current).lastPage;
+		page += 1;
+	} while (page <= lastPage);
+	return rows;
 }
 
 async function search(input = {}, user = {}) {
@@ -256,8 +275,7 @@ async function search(input = {}, user = {}) {
 		error.statusCode = 422;
 		throw error;
 	}
-	const max = Math.max(...configs.map((item) => Number(item.batch_limit || 500)));
-	const parsed = parseCodes(input.codes, max);
+	const parsed = parseCodes(input.codes, 500);
 	if (!parsed.valid.length) {
 		const error = new Error("Informe ao menos um código de cliente válido.");
 		error.statusCode = 422;
@@ -271,8 +289,7 @@ async function search(input = {}, user = {}) {
 	const types = (metadata?.tipos_ordem_servico || []).filter((item) => allTypeIds.has(Number(item.id_tipo_ordem_servico || item.id)));
 	const statuses = [...new Set(configs.flatMap((item) => item.open_statuses || []))];
 	const found = [];
-	const dayResults = await Promise.all(days.map((day) => queryDay(session, day, types, statuses)));
-	for (const rows of dayResults) found.push(...rows);
+	for (const day of days) found.push(...await queryDay(session, day, types, statuses));
 	const requested = new Set(parsed.valid);
 	const results = found.filter((item) => requested.has(clientCode(item))).map((item) => {
 		const config = configFor(configs, item);
@@ -290,7 +307,8 @@ async function search(input = {}, user = {}) {
 		};
 	});
 	const foundCodes = new Set(results.map((item) => item.clientCode));
-	for (const code of parsed.valid) if (!foundCodes.has(code)) results.push({ clientCode: code, eligibility: "NOT_FOUND", observation: "Nenhuma ordem de cancelamento/retirada em aberto encontrada." });
+	const localNames = new Map(candidates.filter((item) => clean(item.nome_cliente)).map((item) => [digits(item.codigo_cliente), clean(item.nome_cliente)]));
+	for (const code of parsed.valid) if (!foundCodes.has(code)) results.push({ clientCode: code, clientName: localNames.get(code) || "", eligibility: "NOT_FOUND", observation: "Nenhuma ordem de cancelamento/retirada em aberto encontrada." });
 	const owner = actor(user);
 	const client = await db.connect();
 	try {
@@ -610,4 +628,4 @@ async function exportRows(query = {}, format = "csv") {
 }
 
 module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getSearch, initialize, listHistory, parseCodes, retryOperation, saveConfig, search, stats,
-	__testables: { applyTargetType, classifyOrder, clientCode, company, evidence, normalizeStatus, orderId, processOperation, typeId } };
+	__testables: { applyTargetType, classifyOrder, clientCode, company, evidence, normalizeStatus, orderId, paginationOf, processOperation, typeId } };

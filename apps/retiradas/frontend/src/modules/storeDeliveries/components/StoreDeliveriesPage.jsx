@@ -404,7 +404,7 @@ function NewDelivery() {
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           className="h-12 min-w-0 flex-1 rounded-lg border border-slate-300 px-4"
-          placeholder="CPF, código ou nome completo"
+          placeholder="CPF, código, nome completo ou MAC"
         />
         <button
           type="submit"

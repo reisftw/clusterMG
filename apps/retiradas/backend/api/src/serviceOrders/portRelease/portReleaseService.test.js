@@ -6,15 +6,11 @@ const db = require("../../db");
 const hubsoft = require("../../hubsoftSyncProfiles");
 
 test("parseCodes preserva zeros, separadores e remove duplicados", () => {
-	assert.deepEqual(parseCodes("00123, 456;00123\n789"), {
-		valid: ["00123", "456", "789"], invalid: [], duplicates: 1,
-	});
+	assert.deepEqual(parseCodes("00123, 456;00123\n789"), { valid: ["00123", "456", "789"], invalid: [], duplicates: 1 });
 });
 
 test("parseCodes separa inválidos sem bloquear válidos", () => {
-	assert.deepEqual(parseCodes("123 ABC 456-7"), {
-		valid: ["123"], invalid: ["ABC", "456-7"], duplicates: 0,
-	});
+	assert.deepEqual(parseCodes("123 ABC 456-7"), { valid: ["123"], invalid: ["ABC", "456-7"], duplicates: 0 });
 });
 
 test("parseCodes aplica limite configurável", () => {
@@ -26,26 +22,11 @@ test("normaliza status do contrato HubSoft", () => {
 });
 
 test("evidência mantém apenas campos necessários para auditoria", () => {
-	const result = __testables.evidence({
-		id_ordem_servico: 7,
-		numero_ordem_servico: "OS-99",
-		codigo_cliente: "001",
-		id_tipo_ordem_servico: 12,
-		tipo_ordem_servico: { id_tipo_ordem_servico: 12, descricao: "Retirada" },
-		status: "pendente",
-		token: "não deve sair",
-	});
-	assert.deepEqual(result, {
-		serviceOrderId: "7", serviceOrderNumber: "99", clientCode: "001",
-		typeId: 12, typeName: "Retirada", status: "pendente",
-	});
+	const result = __testables.evidence({ id_ordem_servico: 7, numero_ordem_servico: "OS-99", codigo_cliente: "001", id_tipo_ordem_servico: 12, tipo_ordem_servico: { id_tipo_ordem_servico: 12, descricao: "Retirada" }, status: "pendente", token: "não deve sair" });
+	assert.deepEqual(result, { serviceOrderId: "7", serviceOrderNumber: "99", clientCode: "001", typeId: 12, typeName: "Retirada", status: "pendente" });
 });
 
-const config = {
-	source_types: [{ id: 12, name: "Retirada" }],
-	target_type: { id: 99, name: "Liberação de Portas" },
-	open_statuses: ["pendente", "aguardando_agendamento"],
-};
+const config = { source_types: [{ id: 12, name: "Retirada" }], target_type: { id: 99, name: "Liberação de Portas" }, open_statuses: ["pendente", "aguardando_agendamento"] };
 
 test("classifica uma O.S aberta de origem configurada como elegível", () => {
 	assert.equal(__testables.classifyOrder({ id_tipo_ordem_servico: 12, status: "pendente" }, config), "ELIGIBLE");
@@ -93,11 +74,7 @@ async function operationResult(orderResponses, configOverride = config) {
 		return { ordem_servico: response };
 	};
 	try {
-		await __testables.processOperation(
-			{ id: "op-1", client_code: "001", service_order_id: "7", target_type_id: 99 }, {},
-			[{ company_key: "DEFAULT", ...configOverride }],
-			{ tipos_ordem_servico: [{ id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" }] },
-		);
+		await __testables.processOperation({ id: "op-1", client_code: "001", service_order_id: "7", target_type_id: 99 }, {}, [{ company_key: "DEFAULT", ...configOverride }], { tipos_ordem_servico: [{ id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" }] });
 		return updates.at(-1)?.params?.[1];
 	} finally {
 		db.query = originalQuery;
@@ -108,25 +85,11 @@ async function operationResult(orderResponses, configOverride = config) {
 const openOrder = { id_ordem_servico: 7, codigo_cliente: "001", id_tipo_ordem_servico: 12, tipo_ordem_servico: { id_tipo_ordem_servico: 12, descricao: "Retirada" }, status: "pendente" };
 const changedOrder = { ...openOrder, id_tipo_ordem_servico: 99, tipo_ordem_servico: { id_tipo_ordem_servico: 99, descricao: "Liberação de Portas" } };
 
-test("confirma sucesso somente após nova leitura do HubSoft", async () => {
-	assert.equal(await operationResult([openOrder, {}, changedOrder]), "SUCCESS");
-});
-
-test("resposta PUT sem confirmação é registrada como erro", async () => {
-	assert.equal(await operationResult([openOrder, {}, openOrder]), "ERROR");
-});
-
-test("timeout seguido de confirmação não repete a alteração", async () => {
-	assert.equal(await operationResult([openOrder, new Error("timeout"), changedOrder]), "SUCCESS");
-});
-
-test("timeout sem leitura de confirmação fica indeterminado", async () => {
-	assert.equal(await operationResult([openOrder, new Error("timeout"), new Error("timeout")]), "INDETERMINATE");
-});
-
-test("mudança de status entre pesquisa e execução ignora a ordem", async () => {
-	assert.equal(await operationResult([{ ...openOrder, status: "finalizada" }]), "SKIPPED");
-});
+test("confirma sucesso somente após nova leitura do HubSoft", async () => { assert.equal(await operationResult([openOrder, {}, changedOrder]), "SUCCESS"); });
+test("resposta PUT sem confirmação é registrada como erro", async () => { assert.equal(await operationResult([openOrder, {}, openOrder]), "ERROR"); });
+test("timeout seguido de confirmação não repete a alteração", async () => { assert.equal(await operationResult([openOrder, new Error("timeout"), changedOrder]), "SUCCESS"); });
+test("timeout sem leitura de confirmação fica indeterminado", async () => { assert.equal(await operationResult([openOrder, new Error("timeout"), new Error("timeout")]), "INDETERMINATE"); });
+test("mudança de status entre pesquisa e execução ignora a ordem", async () => { assert.equal(await operationResult([{ ...openOrder, status: "finalizada" }]), "SKIPPED"); });
 
 test("estatísticas retornam zeros e tipos sem falhar quando não há operações", async () => {
 	const originalQuery = db.query;
@@ -137,14 +100,17 @@ test("estatísticas retornam zeros e tipos sem falhar quando não há operaçõe
 		return { rows: [] };
 	};
 	try {
-		assert.deepEqual(await stats({ company: "3" }), {
-			total: 0, clients: 0, today: 0, month: 0, failures: 0, topSourceTypes: [],
-		});
+		assert.deepEqual(await stats({ company: "3" }), { total: 0, clients: 0, today: 0, month: 0, failures: 0, topSourceTypes: [] });
 		assert.match(queries[0].sql, /o\.status='SUCCESS'/);
 		assert.match(queries[0].sql, /::int "month"/);
 		assert.match(queries[1].sql, /o\.source_type_name/);
 		assert.deepEqual(queries[0].params, ["3"]);
-	} finally {
-		db.query = originalQuery;
-	}
+	} finally { db.query = originalQuery; }
+});
+
+test("interpreta a paginacao retornada pelo HubSoft", () => {
+	assert.deepEqual(
+		__testables.paginationOf({ ordens_servico: { current_page: 1, last_page: 3, per_page: 1000, total: 2500 } }, new Array(1000)),
+		{ currentPage: 1, lastPage: 3 },
+	);
 });
