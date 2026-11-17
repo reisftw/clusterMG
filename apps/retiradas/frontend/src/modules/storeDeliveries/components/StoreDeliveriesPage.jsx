@@ -300,7 +300,9 @@ function NewDelivery() {
   const [stores, setStores] = useState([]);
   const [storeId, setStoreId] = useState("");
   const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const scanRef = useRef(null);
+  const idempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => {
     listarLojas()
       .then((r) => {
@@ -340,6 +342,16 @@ function NewDelivery() {
           ],
     );
   };
+  const toggle = (item) => {
+    const mac = normalMac(item.mac || item.serial);
+    if (checked.some((row) => normalMac(row.mac) === mac)) {
+      setChecked((current) =>
+        current.filter((row) => normalMac(row.mac) !== mac),
+      );
+      return;
+    }
+    add(item);
+  };
   const readScan = (e) => {
     e.preventDefault();
     const mac = normalMac(scan);
@@ -359,10 +371,11 @@ function NewDelivery() {
     );
   };
   const confirm = async () => {
-    if (!selected || !checked.length) return;
+    if (!selected || !checked.length || submitting) return;
+    setSubmitting(true);
     try {
       const response = await confirmarEntregaLoja({
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: idempotencyKey.current,
         storeId,
         clientCode: selected.clientCode,
         clientName: selected.clientName,
@@ -377,8 +390,11 @@ function NewDelivery() {
       setResults([]);
       setChecked([]);
       setTerm("");
+      idempotencyKey.current = crypto.randomUUID();
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setSubmitting(false);
     }
   };
   return (
@@ -485,7 +501,7 @@ function NewDelivery() {
                 <button
                   type="button"
                   key={`${item.assetId}-${item.mac}`}
-                  onClick={() => add(item)}
+                  onClick={() => toggle(item)}
                   className={`flex items-center justify-between rounded-lg border p-4 text-left ${isChecked ? "border-emerald-500 bg-emerald-50" : "border-slate-200"}`}
                 >
                   <div>
@@ -510,11 +526,11 @@ function NewDelivery() {
             <button
               type="button"
               onClick={confirm}
-              disabled={!checked.length}
+              disabled={!checked.length || submitting}
               className="inline-flex h-12 items-center gap-2 rounded-lg bg-emerald-700 px-5 font-black text-white disabled:opacity-50"
             >
               <PackageCheck />
-              Confirmar devolução
+              {submitting ? "Confirmando..." : "Confirmar devolução"}
             </button>
           </div>
         </section>

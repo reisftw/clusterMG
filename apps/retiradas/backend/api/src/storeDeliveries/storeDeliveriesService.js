@@ -139,17 +139,15 @@ async function resolveStore(user, requestedId) {
   const scope = await userScope(user);
   const requested = clean(requestedId);
   const managed = new Set(scope.managedStoreIds.map(String));
-  const id =
-    scope.storeId ||
-    (requested && (isAdmin(user) || managed.has(requested)) ? requested : "");
-  if (!id) throw fail("Seu usuário não possui uma loja ativa vinculada.", 422);
-  if (
-    !isAdmin(user) &&
-    id !== String(scope.storeId) &&
-    !managed.has(String(id))
-  ) {
+  const allowedRequested =
+    isAdmin(user) ||
+    requested === String(scope.storeId) ||
+    managed.has(requested);
+  if (requested && !allowedRequested) {
     throw fail("A loja informada não pertence ao usuário autenticado.", 403);
   }
+  const id = requested || scope.storeId;
+  if (!id) throw fail("Seu usuário não possui uma loja ativa vinculada.", 422);
   const store = (
     await db.query(
       "select * from store_locations where id=$1 and active=true",
