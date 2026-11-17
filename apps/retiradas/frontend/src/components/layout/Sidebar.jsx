@@ -267,6 +267,12 @@ const NAV_ITEMS = [
 		permission: ["service_orders.return_receipts.create"],
 	},
 	{
+		label: "Entrega em Loja",
+		path: ROUTES.ENTREGA_LOJA,
+		icon: Building2,
+		permission: ["loja.entregas.create","loja.entregas.mine","loja.entregas.store","loja.historico.view","loja.protocolos.view","loja.lojas.manage"],
+	},
+	{
 		label: "Cancelamentos",
 		path: ROUTES.ORDENS_SERVICO_CANCELAMENTOS,
 		icon: ClipboardCheck,
@@ -915,6 +921,12 @@ const MENU_GROUPS = [
 		label: "Retorninho",
 		icon: Bot,
 		paths: [ROUTES.RETORNINHO],
+	},
+	{
+		id: "loja",
+		label: "Loja",
+		icon: Building2,
+		paths: [ROUTES.ENTREGA_LOJA, ROUTES.LOJA_HISTORICO, ROUTES.LOJA_PROTOCOLOS, ROUTES.LOJA_LOJAS],
 	},
 	{
 		id: "ordens_servico",

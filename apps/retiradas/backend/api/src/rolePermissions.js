@@ -4,6 +4,9 @@ const ADMIN_ROLE = "admin";
 
 const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
 	admin: ["*"],
+	atendente_loja: ["loja.entregas.create", "loja.entregas.mine", "loja.protocolos.view"],
+	supervisor_loja: ["loja.entregas.create", "loja.entregas.mine", "loja.entregas.store", "loja.historico.view", "loja.protocolos.view"],
+	coordenador_loja: ["loja.entregas.create", "loja.entregas.mine", "loja.entregas.store", "loja.historico.view", "loja.protocolos.view", "loja.lojas.manage"],
 	backoffice_retirada: [
 		"view_dashboard",
 		"view_diario",
