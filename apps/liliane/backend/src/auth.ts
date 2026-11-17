@@ -137,9 +137,9 @@ export async function changePassword(req: Request, res: Response): Promise<void>
   }
   const hash = await argon2.hash(newPassword, { type: argon2.argon2id });
   await pool.query("update users set password_hash=$2,must_change_password=false,updated_at=now() where id=$1", [req.authUser!.id, hash]);
-  await pool.query("update user_sessions set revoked_at=now() where user_id=$1 and id<>$2", [req.authUser!.id, req.sessionId]);
-  req.authUser!.mustChangePassword = false;
-  res.json({ ok: true });
+  await pool.query("update user_sessions set revoked_at=now() where user_id=$1 and revoked_at is null", [req.authUser!.id]);
+  clearSessionCookies(res);
+  res.json({ ok: true, reauthenticate: true });
 }
 
 const validPassword = (password: string): boolean => password.length >= 14 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /\d/.test(password);
