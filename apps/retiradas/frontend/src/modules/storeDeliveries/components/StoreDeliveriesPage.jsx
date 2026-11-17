@@ -3,6 +3,7 @@ import {
   Check,
   Download,
   History,
+  Loader2,
   PackageCheck,
   Plus,
   ScanLine,
@@ -301,6 +302,7 @@ function NewDelivery() {
   const [storeId, setStoreId] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [searching, setSearching] = useState(false);
   const scanRef = useRef(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => {
@@ -314,11 +316,19 @@ function NewDelivery() {
   }, []);
   const search = async (e) => {
     e.preventDefault();
+    if (searching) return;
+    setSearching(true);
     try {
-      setMessage("");
-      setResults((await buscarClientesLoja(term)).items || []);
+      setMessage("Buscando cliente, contrato e equipamentos no HubSoft...");
+      setSelected(null);
+      setResults([]);
+      const items = (await buscarClientesLoja(term)).items || [];
+      setResults(items);
+      setMessage(items.length ? "Cliente localizado." : "Nenhum cliente corresponde à busca informada.");
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setSearching(false);
     }
   };
   const equipment = selected?.equipment || [];
@@ -408,10 +418,11 @@ function NewDelivery() {
         />
         <button
           type="submit"
-          className="inline-flex h-12 items-center gap-2 rounded-lg bg-blue-700 px-5 font-black text-white"
+          disabled={searching || term.trim().length < 3}
+          className="inline-flex h-12 items-center gap-2 rounded-lg bg-blue-700 px-5 font-black text-white disabled:cursor-wait disabled:opacity-60"
         >
-          <Search size={18} />
-          Buscar
+          {searching ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
+          {searching ? "Buscando..." : "Buscar"}
         </button>
       </form>
       {message ? (
