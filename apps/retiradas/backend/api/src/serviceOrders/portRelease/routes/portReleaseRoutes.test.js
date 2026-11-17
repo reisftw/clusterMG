@@ -45,6 +45,21 @@ test("usuário com permissão somente de consulta não executa lote", async () =
 	assert.equal(response.status, 403);
 });
 
+test("reenvio de falha exige permissão de execução", async () => {
+	const response = await request(app()).post("/api/operations/op-1/retry").set("x-user", "yes").set("x-permissions", "liberacao_portas.history");
+	assert.equal(response.status, 403);
+});
+
+test("usuário autorizado consegue reenviar uma falha", async () => {
+	const original = service.retryOperation;
+	service.retryOperation = async () => ({ id: "batch-retry", status: "QUEUED" });
+	try {
+		const response = await request(app()).post("/api/operations/op-1/retry").set("x-user", "yes").set("x-permissions", "liberacao_portas.execute");
+		assert.equal(response.status, 202);
+		assert.equal(response.body.id, "batch-retry");
+	} finally { service.retryOperation = original; }
+});
+
 test("exportação exige permissão própria", async () => {
 	const response = await request(app()).get("/api/export.csv").set("x-user", "yes").set("x-permissions", "liberacao_portas.history");
 	assert.equal(response.status, 403);

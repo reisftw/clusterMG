@@ -22,6 +22,12 @@ const normalizeMac = (value) =>
   clean(value)
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
+const normalizeText = (value) =>
+  clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toUpperCase();
 const actor = (user = {}) => {
   const profile = user.profile || user;
   return {
@@ -61,10 +67,16 @@ function rowsOf(payload = {}) {
 }
 
 function mapClientAccess(row = {}) {
-  const client = row.cliente || row.cliente_servico?.cliente || row;
-  const service = row.cliente_servico || row.servico || row;
+  const service = row.cliente_servico || row.acesso || row.servico || row;
+  const client = row.cliente || service.cliente || row;
   const equipments =
-    row.equipamentos || service.equipamentos || row.equipamentos_cliente || [];
+    row.equipamentos ||
+    service.equipamentos ||
+    row.equipamentos_cliente ||
+    service.equipamentos_cliente ||
+    row.cliente_servico_equipamentos ||
+    service.cliente_servico_equipamentos ||
+    [];
   return {
     clientId: clean(client.id_cliente || client.id),
     clientCode: digits(client.codigo_cliente || row.codigo_cliente),
@@ -76,28 +88,40 @@ function mapClientAccess(row = {}) {
       "*",
     ),
     contractId: clean(
-      service.id_cliente_servico || service.id_contrato || service.contrato,
+      service.id_cliente_servico || service.id_contrato || service.numero_plano || service.contrato,
     ),
     serviceId: clean(
       service.id_servico || service.servico?.id_servico || service.id,
     ),
     serviceName: clean(
-      service.servico?.descricao || service.descricao || service.nome,
+      service.servico?.descricao || service.plano?.descricao || service.display || service.descricao || service.nome,
     ),
     company: clean(
       service.empresa?.nome || service.empresa?.razao_social || row.empresa,
     ),
     status: clean(service.status || service.status_contrato || row.status),
     equipment: (Array.isArray(equipments) ? equipments : []).map((item) => ({
-      assetId: clean(item.id_equipamento || item.id),
+      assetId: clean(item.id_equipamento || item.equipamento?.id_equipamento || item.id),
       productName: clean(
-        item.nome || item.produto?.nome || item.descricao || "Equipamento",
+        item.nome || item.equipamento?.nome || item.produto?.nome || item.descricao || "Equipamento",
       ),
-      model: clean(item.modelo || item.produto?.modelo),
-      mac: clean(item.mac || item.endereco_mac || item.numero_serie),
-      serial: clean(item.serial || item.numero_serie),
+      model: clean(item.modelo || item.equipamento?.modelo || item.produto?.modelo),
+      mac: clean(item.mac || item.endereco_mac || item.mac_addr || item.phy_addr || item.serie || item.numero_serie),
+      serial: clean(item.serial || item.serie || item.numero_serie),
     })),
   };
+}
+
+function matchesSearch(item, term) {
+  const query = clean(term);
+  const queryDigits = digits(query);
+  const queryMac = normalizeMac(query);
+  if (queryDigits.length === 11 || queryDigits.length === 14) {
+    return digits(item.document) === queryDigits;
+  }
+  if (/^\d+$/.test(query)) return item.clientCode === queryDigits;
+  if (queryMac.length >= 8 && item.equipment.some((equipment) => normalizeMac(equipment.mac || equipment.serial) === queryMac)) return true;
+  return normalizeText(item.clientName) === normalizeText(query);
 }
 
 async function searchClients(term) {
@@ -109,16 +133,44 @@ async function searchClients(term) {
     session,
     `/api/v1/cliente/acesso/paginado/20?page=1&busca=cliente&termo_busca=${encodeURIComponent(query)}`,
   );
+  const mapped = rowsOf(payload).map((row) => {
+    const item = mapClientAccess(row);
+    const service = row.cliente_servico || row.acesso || row.servico || row;
+    const client = row.cliente || service.cliente || row;
+    return { ...item, document: digits(client.cpf_cnpj || client.documento) };
+  });
+  const exact = mapped.filter((item) => item.clientCode && item.clientName && matchesSearch(item, query));
   const seen = new Set();
-  const items = rowsOf(payload)
-    .map(mapClientAccess)
+  let items = exact
     .filter((item) => item.clientCode && item.clientName)
     .filter((item) => {
       const key = `${item.clientCode}:${item.contractId}:${item.serviceId}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    });
+    })
+    .sort((left, right) => right.equipment.length - left.equipment.length)
+    .slice(0, 1)
+    .map(({ document: _DOCUMENT, ...item }) => item);
+  if (!items.length && normalizeMac(query).length >= 8 && !/^\d+$/.test(query)) {
+    const mac = normalizeMac(query);
+    const local = (await db.query(
+      `select codigo_cliente, nome_cliente, servico, source_payload, mac_addr, phy_addr, macs_equipamento
+       from ordens_servico
+       where regexp_replace(upper(concat_ws(' ', mac_addr, phy_addr, macs_equipamento::text, source_payload::text)), '[^A-Z0-9]', '', 'g') like $1
+       order by updated_at desc limit 1`,
+      [`%${mac}%`],
+    )).rows[0];
+    if (local) {
+      const payload = local.source_payload || {};
+      items = [{
+        clientId: clean(payload.id_cliente), clientCode: digits(local.codigo_cliente), clientName: clean(local.nome_cliente), documentMasked: "",
+        contractId: clean(payload.id_cliente_servico || payload.numero_plano), serviceId: clean(payload.id_servico),
+        serviceName: clean(local.servico || payload.servico), company: clean(payload.empresa), status: clean(payload.status),
+        equipment: [{ assetId: "", productName: "Equipamento", model: "", mac, serial: "" }],
+      }];
+    }
+  }
   return { items };
 }
 
@@ -582,5 +634,5 @@ module.exports = {
   listStoreUsers,
   saveStore,
   searchClients,
-  __testables: { normalizeMac, validateItems, mapClientAccess },
+  __testables: { normalizeMac, validateItems, mapClientAccess, matchesSearch },
 };
