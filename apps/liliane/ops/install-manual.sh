@@ -106,7 +106,8 @@ if ! grep -q 'snippets/liliane.conf' "$site"; then
   sed -i '/^[[:space:]]*location \/ {/i\	include /etc/nginx/snippets/liliane.conf;\n' "$site"
 fi
 systemctl daemon-reload
-systemctl enable --now liliane-api.service
+systemctl enable liliane-api.service
+systemctl restart liliane-api.service
 nginx -t
 systemctl reload nginx
 curl -fsS --retry 20 --retry-delay 2 --retry-connrefused http://127.0.0.1:3401/health >/dev/null
