@@ -31,6 +31,18 @@ Retiradas data to provider APIs. Changes need privacy and authorization tests.
 | Backend | \`apps/operacao/backend\` | Dedicated API, migrations, and integrations. |
 | Shared package | \`apps/operacao/shared\` | Only Operacao may change it without cross-module review. |
 
+## Aprovações Lili
+
+| Area | Location | Owner boundary |
+| --- | --- | --- |
+| Frontend | `apps/liliane/frontend` | Interface exclusiva em `/liliane`. |
+| Backend | `apps/liliane/backend` | API, autenticação, migrações e decisões de aprovação. |
+| Operations | `apps/liliane/ops` | Serviço, Nginx e Evolution isolados do Retiradas. |
+
+Aprovações Lili compartilha apenas a VPS e o domínio com Retiradas. Banco,
+processo, credenciais, sessão WhatsApp e release são independentes. Um deploy
+do Lili não pode reiniciar ou publicar Retiradas, Mercado ou Operacao.
+
 The deployed legacy path is \`/opt/retiradas/apps/rot\`; it is a deployment
 target, not a source directory. Source lives under \`apps/operacao\`.
 
@@ -56,5 +68,6 @@ publish either module as a side effect of this work.
 | Retiradas UI/API only | \`npm run verify:retiradas\` |
 | Mercado UI/API | Retiradas lint, test, build, and Mercado API contract test |
 | Operacao | \`npm run verify:operacao\` |
+| Aprovações Lili | `npm run verify:liliane` |
 | Workflow/tooling | Relevant CI contract tests and workflow review |
 | Database schema | Target module validation plus migration/rollback review |

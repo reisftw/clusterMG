@@ -1,0 +1,33 @@
+{
+  "name": "aprovacoes-lili-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "migrate": "node dist/migrate.js",
+    "bootstrap": "node dist/bootstrap.js",
+    "test": "node --test --import tsx test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "argon2": "^0.45.1",
+    "express": "^4.22.2",
+    "express-rate-limit": "^8.6.1",
+    "helmet": "^8.1.0",
+    "pdfkit": "^0.17.2",
+    "pg": "^8.16.3",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.1",
+    "@types/pdfkit": "^0.17.5",
+    "@types/pg": "^8.15.6",
+    "@types/qrcode": "^1.5.6",
+    "supertest": "^7.2.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
