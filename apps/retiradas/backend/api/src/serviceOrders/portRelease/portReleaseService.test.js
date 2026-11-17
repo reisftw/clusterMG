@@ -141,6 +141,7 @@ test("estatísticas retornam zeros e tipos sem falhar quando não há operaçõe
 			total: 0, clients: 0, today: 0, month: 0, failures: 0, topSourceTypes: [],
 		});
 		assert.match(queries[0].sql, /o\.status='SUCCESS'/);
+		assert.match(queries[0].sql, /::int "month"/);
 		assert.match(queries[1].sql, /o\.source_type_name/);
 		assert.deepEqual(queries[0].params, ["3"]);
 	} finally {

@@ -532,7 +532,7 @@ async function stats(query = {}) {
 		`select coalesce(sum(case when o.status='SUCCESS' then 1 else 0 end), 0)::int total,
 		 count(distinct case when o.status='SUCCESS' then o.client_code end)::int clients,
 		 coalesce(sum(case when o.status='SUCCESS' and (o.requested_at at time zone 'America/Sao_Paulo')::date=(now() at time zone 'America/Sao_Paulo')::date then 1 else 0 end), 0)::int today,
-		 coalesce(sum(case when o.status='SUCCESS' and date_trunc('month', o.requested_at at time zone 'America/Sao_Paulo')=date_trunc('month', now() at time zone 'America/Sao_Paulo') then 1 else 0 end), 0)::int month,
+		 coalesce(sum(case when o.status='SUCCESS' and date_trunc('month', o.requested_at at time zone 'America/Sao_Paulo')=date_trunc('month', now() at time zone 'America/Sao_Paulo') then 1 else 0 end), 0)::int "month",
 		 coalesce(sum(case when o.status in ('ERROR','INDETERMINATE') then 1 else 0 end), 0)::int failures
 		 from service_order_port_release_operations o where ${where.sql}`, where.values,
 	)).rows[0];
