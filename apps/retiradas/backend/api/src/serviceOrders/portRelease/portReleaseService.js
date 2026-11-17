@@ -320,7 +320,7 @@ async function getSearch(id, input = {}, user = {}) {
 	)).rows[0];
 	if (!searchRow) return null;
 	const page = Math.max(Number(input.page || 1), 1);
-	const limit = Math.min(Math.max(Number(input.limit || 50), 1), 200);
+	const limit = Math.min(Math.max(Number(input.limit || 500), 1), 500);
 	const total = Number((await db.query("select count(*) from service_order_port_release_search_results where search_id=$1", [id])).rows[0].count);
 	const rows = (await db.query(
 		"select id, result from service_order_port_release_search_results where search_id=$1 order by position limit $2 offset $3",
@@ -502,6 +502,51 @@ async function getBatch(id) {
 	return { ...batch, operations };
 }
 
+async function retryOperation(id, user = {}) {
+	const owner = actor(user);
+	const client = await db.connect();
+	try {
+		await client.query("begin");
+		const original = (await client.query(
+			"select * from service_order_port_release_operations where id=$1 for update",
+			[id],
+		)).rows[0];
+		if (!original) throw Object.assign(new Error("Falha não encontrada."), { statusCode: 404 });
+		if (!["ERROR", "INDETERMINATE"].includes(original.status)) {
+			throw Object.assign(new Error("Somente operações com erro podem ser reenviadas."), { statusCode: 409 });
+		}
+		if (original.status === "INDETERMINATE") {
+			await client.query(
+				"update service_order_port_release_operations set status='ERROR', error_message=concat_ws(' ', error_message, '[Reenvio autorizado após resultado indeterminado.]') where id=$1",
+				[id],
+			);
+		}
+		const batch = (await client.query(
+			`insert into service_order_port_release_batches (total, reason, note, requested_by, requested_by_name)
+			 values (1, $1, $2, $3, $4) returning *`,
+			[original.reason, clean(original.note), owner.id, owner.name],
+		)).rows[0];
+		await client.query(
+			`insert into service_order_port_release_operations
+			 (batch_id, client_code, client_name, service_order_id, service_order_number, company_key, company_name,
+			 source_type_id, source_type_name, target_type_id, target_type_name, reason, note, requested_by, requested_by_name)
+			 values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+			[batch.id, original.client_code, original.client_name, original.service_order_id, original.service_order_number,
+				original.company_key, original.company_name, original.source_type_id, original.source_type_name,
+				original.target_type_id, original.target_type_name, original.reason, clean(original.note), owner.id, owner.name],
+		);
+		await client.query("commit");
+		await auditLog.recordAuditLog({ action: "create", module: "service_orders", entity: "port_release_retry", recordId: batch.id,
+			userId: owner.id, userName: owner.name, beforeData: { operationId: id, status: original.status }, afterData: { batchId: batch.id }, changedFields: ["status"] });
+		enqueue(batch.id);
+		return batch;
+	} catch (error) {
+		await client.query("rollback");
+		if (error.code === "23505") error.statusCode = 409;
+		throw error;
+	} finally { client.release(); }
+}
+
 function historyWhere(query = {}) {
 	const clauses = ["1=1"];
 	const values = [];
@@ -513,12 +558,17 @@ function historyWhere(query = {}) {
 	if (query.source_type) add("o.source_type_id = ?::bigint", query.source_type);
 	if (query.reason) add("o.reason = ?", query.reason);
 	if (query.status) add("o.status = ?", query.status);
+	if (clean(query.failures) === "1") clauses.push(`o.status in ('ERROR','INDETERMINATE') and not exists (
+		select 1 from service_order_port_release_operations resolved
+		where resolved.service_order_id=o.service_order_id and resolved.requested_at>o.requested_at
+		and resolved.status in ('SUCCESS','SKIPPED')
+	)`);
 	return { sql: clauses.join(" and "), values };
 }
 
 async function listHistory(query = {}) {
 	const page = Math.max(Number(query.page || 1), 1);
-	const limit = Math.min(Math.max(Number(query.limit || 25), 1), 200);
+	const limit = Math.min(Math.max(Number(query.limit || 500), 1), 500);
 	const where = historyWhere(query);
 	const count = Number((await db.query(`select count(*) from service_order_port_release_operations o where ${where.sql}`, where.values)).rows[0].count);
 	const result = await db.query(`select o.* from service_order_port_release_operations o where ${where.sql} order by o.requested_at desc limit $${where.values.length + 1} offset $${where.values.length + 2}`,
@@ -533,7 +583,11 @@ async function stats(query = {}) {
 		 count(distinct case when o.status='SUCCESS' then o.client_code end)::int clients,
 		 coalesce(sum(case when o.status='SUCCESS' and (o.requested_at at time zone 'America/Sao_Paulo')::date=(now() at time zone 'America/Sao_Paulo')::date then 1 else 0 end), 0)::int today,
 		 coalesce(sum(case when o.status='SUCCESS' and date_trunc('month', o.requested_at at time zone 'America/Sao_Paulo')=date_trunc('month', now() at time zone 'America/Sao_Paulo') then 1 else 0 end), 0)::int "month",
-		 coalesce(sum(case when o.status in ('ERROR','INDETERMINATE') then 1 else 0 end), 0)::int failures
+		 coalesce(sum(case when o.status in ('ERROR','INDETERMINATE') and not exists (
+			 select 1 from service_order_port_release_operations resolved
+			 where resolved.service_order_id=o.service_order_id and resolved.requested_at>o.requested_at
+			 and resolved.status in ('SUCCESS','SKIPPED')
+		 ) then 1 else 0 end), 0)::int failures
 		 from service_order_port_release_operations o where ${where.sql}`, where.values,
 	)).rows[0];
 	const types = (await db.query(`select o.source_type_name name, count(*)::int total from service_order_port_release_operations o where ${where.sql} and o.status='SUCCESS' group by o.source_type_name order by total desc limit 5`, where.values)).rows;
@@ -555,5 +609,5 @@ async function exportRows(query = {}, format = "csv") {
 	return { content: `\ufeff${[headers, ...data].map((line) => line.map(quote).join(";")).join("\n")}`, contentType: "text/csv; charset=utf-8", filename: "liberacao-portas.csv" };
 }
 
-module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getSearch, initialize, listHistory, parseCodes, saveConfig, search, stats,
+module.exports = { PERMISSIONS, REASONS: [...REASONS], catalog, createBatch, exportRows, getBatch, getConfigs, getSearch, initialize, listHistory, parseCodes, retryOperation, saveConfig, search, stats,
 	__testables: { applyTargetType, classifyOrder, clientCode, company, evidence, normalizeStatus, orderId, processOperation, typeId } };

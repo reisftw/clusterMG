@@ -35,6 +35,9 @@ function createPortReleaseRouter({ requireAnyPermission, requireAuthenticated, r
 			res.json(batch);
 		} catch (error) { next(error); }
 	});
+	router.post("/operations/:id/retry", requireAuthenticated, requireCsrfToken, allow("execute"), async (req, res, next) => {
+		try { res.status(202).json(await service.retryOperation(req.params.id, req.user || {})); } catch (error) { next(error); }
+	});
 	router.get("/history", requireAuthenticated, allow("history"), async (req, res, next) => {
 		try { res.json(await service.listHistory(req.query || {})); } catch (error) { next(error); }
 	});

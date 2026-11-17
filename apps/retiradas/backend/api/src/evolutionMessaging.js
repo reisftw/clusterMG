@@ -17,7 +17,7 @@ const SUPPORTED_WHATSAPP_PROVIDERS = new Set([
 const AUTOMATION_ATTENDANT_ID = "retorninho";
 const AUTOMATION_ATTENDANT_NAME = "RETORNINHO";
 const SEND_TIME_ZONE = "America/Sao_Paulo";
-const GUIDED_SCHEDULE_TIMES = new Set(["09:00", "12:00", "16:00"]);
+const GUIDED_SCHEDULE_TIMES = new Set(["09:00", "12:00", "16:00", "17:00"]);
 const GUIDED_SCHEDULE_TIME_OPTIONS = "1 - 09h\n2 - 12h\n3 - 16h";
 const CENTRAL_REDIRECT_MESSAGE =
 	"Olá! Este número é utilizado apenas por um sistema automático de mensagens.\n\n" +
