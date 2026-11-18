@@ -23,7 +23,7 @@ const providerEventId = (body: Record<string, unknown>): string => clean(body.id
 const instanceOf = (body: Record<string, unknown>): string => clean(body.instance || (body.data as Record<string, unknown> | undefined)?.instance, 120);
 const eventTypeOf = (body: Record<string, unknown>): string => clean(body.event || body.type, 120).toLowerCase();
 const param = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] || "" : value || "";
-const voteIdentity = (value: unknown): string => clean(value, 240).split("@")[0]!.replace(/\D/g, "");
+const voteIdentity = (value: unknown): string => clean(value, 240).split("@")[0]!.split(":")[0]!.replace(/\D/g, "");
 const requestScope = (req: Request, alias = "r"): { sql: string; values: unknown[] } => req.authUser?.role === "ADMIN" ? { sql: "1=1", values: [] } : { sql: `${alias}.requester_id=$1`, values: [req.authUser!.id] };
 
 export function parseVoteEvent(body: Record<string, unknown>): { pollId: string; voter: string; selected: string } {
@@ -35,11 +35,29 @@ export function parseVoteEvent(body: Record<string, unknown>): { pollId: string;
   const vote = (update.vote || {}) as Record<string, unknown>;
   const pollUpdates = Array.isArray(data.pollUpdates) ? data.pollUpdates as Record<string, unknown>[] : [];
   const firstUpdate = pollUpdates[0] || {};
+  const firstVote = (firstUpdate.vote || {}) as Record<string, unknown>;
+  const firstKey = (firstUpdate.pollUpdateMessageKey || firstUpdate.pollCreationMessageKey || firstUpdate.key || {}) as Record<string, unknown>;
+  const selectedOptions = Array.isArray(firstVote.selectedOptions)
+    ? firstVote.selectedOptions
+    : Array.isArray(firstUpdate.selectedOptions)
+      ? firstUpdate.selectedOptions
+      : [];
+  const firstSelected = selectedOptions[0];
+  const selectedValue = typeof firstSelected === "object" && firstSelected !== null
+    ? (firstSelected as Record<string, unknown>).name || (firstSelected as Record<string, unknown>).optionName || (firstSelected as Record<string, unknown>).text || (firstSelected as Record<string, unknown>).value
+    : firstSelected;
   return {
-    pollId: clean(data.pollId || data.messageId || creationKey.id || key.id, 240),
-    voter: clean(data.voter || data.remoteJid || data.participant || key.participant || key.remoteJid, 240),
-    selected: clean(data.selectedOption || data.optionName || (typeof data.vote === "string" ? data.vote : "") || vote.name || firstUpdate.name || firstUpdate.optionName, 120).toLowerCase(),
+    pollId: clean(data.pollId || creationKey.id || firstKey.id || data.keyId || data.messageId || key.id, 240),
+    voter: clean(data.voter || data.remoteJid || data.participant || firstUpdate.voter || firstUpdate.participant || key.participant || key.remoteJid, 240),
+    selected: clean(data.selectedOption || data.optionName || (typeof data.vote === "string" ? data.vote : "") || vote.name || firstUpdate.name || firstUpdate.optionName || (typeof firstUpdate.vote === "string" ? firstUpdate.vote : "") || firstVote.name || selectedValue, 120).toLowerCase(),
   };
+}
+
+export function decisionFromSelection(selected: string): "APPROVED" | "REJECTED" | "FOLLOW_UP" | null {
+  if (selected.includes("reprovar")) return "REJECTED";
+  if (selected.includes("aprovar")) return "APPROVED";
+  if (selected.includes("acompanhar") || selected.includes("tratativa")) return "FOLLOW_UP";
+  return null;
 }
 
 async function audit(userId: string | null, action: string, entity: string, entityId: string | null, req: Request, metadata: Record<string, unknown> = {}): Promise<void> {
@@ -140,11 +158,11 @@ export function createApp() {
   app.post("/requests/:id/send", requireRole("OPERATOR"), asyncRoute(async (req, res) => {
     const result = await transaction(async (client) => {
       const scope = requestScope(req);
-      const selected = await client.query(`select r.*,a.full_name approver_name,a.phone_e164 from approval_requests r join approvers a on a.id=r.approver_id where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
+      const selected = await client.query(`select r.*,a.full_name approver_name,m.recipient_snapshot from approval_requests r join approvers a on a.id=r.approver_id join approval_messages m on m.request_id=r.id and m.kind='POLL' where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
       const row = selected.rows[0]; if (!row || row.status !== "PENDING") throw Object.assign(new Error("Solicitação não está pendente."), { status: 409 });
       const message = `*APROVAÇÕES LILI*\n\nProtocolo: ${row.protocol}\nAssunto: ${row.subject}\nDescrição: ${row.description}${row.amount_cents === null ? "" : `\nValor: ${money(Number(row.amount_cents))}`}\nSolicitante: ${req.authUser!.displayName}${row.deadline_at ? `\nPrazo: ${new Date(row.deadline_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}`;
-      if (message.length > 900) await evolution.sendText(row.phone_e164, message);
-      const sent = await evolution.sendPoll(row.phone_e164, message.length > 900 ? `${row.protocol} — Selecione a decisão` : `${message}\n\nSelecione a decisão.`);
+      if (message.length > 900) await evolution.sendText(row.recipient_snapshot, message);
+      const sent = await evolution.sendPoll(row.recipient_snapshot, message.length > 900 ? `${row.protocol} — Selecione a decisão` : `${message}\n\nSelecione a decisão.`);
       const messageId = providerMessageId(sent);
       await client.query("update approval_messages set status='SENT',provider_message_id=$2,provider_poll_id=$2,attempts=attempts+1,sent_at=now() where request_id=$1 and kind='POLL'", [row.id, messageId]);
       await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,'SENT','SYSTEM',null,$2)", [row.id, { messageId }]);
@@ -219,19 +237,32 @@ export function createApp() {
     if (!inserted.rowCount) { res.status(200).json({ duplicate: true }); return; }
     if (!config.decisionsEnabled) { await pool.query("update webhook_events set status='REVIEW',reason='Decisões bloqueadas até homologação real',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
     const { pollId, voter, selected } = parseVoteEvent(body);
-    if (!pollId || !voter || (!selected.includes("aprovar") && !selected.includes("reprovar"))) { await pool.query("update webhook_events set status='REVIEW',reason='Evento de voto não verificável',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
-    const finalized = await transaction(async (client) => {
-      const lookup = await client.query("select r.*,a.id approver_id,a.phone_e164 from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where m.provider_poll_id=$1 for update", [pollId]);
+    const decision = decisionFromSelection(selected);
+    if (!pollId || !voter || !decision) {
+      const reason = `Evento de voto não verificável (enquete: ${pollId ? "sim" : "não"}, votante: ${voter ? "sim" : "não"}, opção: ${selected ? "não reconhecida" : "ausente"})`;
+      await pool.query("update webhook_events set status='REVIEW',reason=$2,processed_at=now() where provider_event_id=$1", [eventId, reason]);
+      res.status(202).json({ review: true });
+      return;
+    }
+    let finalized: { requestId: string; protocol: string; phone: string; decision: "APPROVED" | "REJECTED" | "FOLLOW_UP" };
+    try {
+      finalized = await transaction(async (client) => {
+      const lookup = await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where m.provider_poll_id=$1 for update", [pollId]);
       const row = lookup.rows[0]; if (!row || row.status !== "PENDING" || (row.deadline_at && new Date(row.deadline_at) < new Date())) throw Object.assign(new Error("Solicitação não está aberta."), { status: 409 });
-      if (voteIdentity(voter) !== voteIdentity(row.phone_e164)) throw Object.assign(new Error("Votante não autorizado."), { status: 403 });
-      const decision = selected.includes("reprovar") ? "REJECTED" : "APPROVED"; const integrity = hmac(`${row.id}|${decision}|${eventId}`);
+      if (voteIdentity(voter) !== voteIdentity(row.recipient_snapshot)) throw Object.assign(new Error("Votante não autorizado."), { status: 403 });
+      const integrity = hmac(`${row.id}|${decision}|${eventId}`);
       await client.query("insert into approval_decisions(request_id,approver_id,decision,voter_identifier_hash,provider_event_id,provider_message_id,integrity_hash) values($1,$2,$3,$4,$5,$6,$7)", [row.id, row.approver_id, decision, sha256(voter), eventId, pollId, integrity]);
       await client.query("update approval_requests set status=$2,decided_at=now(),updated_at=now() where id=$1", [row.id, decision]);
       await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,$2,'APPROVER',$3,$4)", [row.id, decision, row.approver_id, { providerEventId: eventId }]);
       await client.query("update webhook_events set status='PROCESSED',processed_at=now() where provider_event_id=$1", [eventId]);
-      return { requestId: row.id, protocol: row.protocol, phone: row.phone_e164, decision };
-    });
-    await evolution.sendText(finalized.phone, `${finalized.protocol} registrada como ${finalized.decision === "APPROVED" ? "APROVADA" : "REPROVADA"}.`).catch(async (error) => {
+      return { requestId: row.id, protocol: row.protocol, phone: row.recipient_snapshot, decision };
+      });
+    } catch (error) {
+      await pool.query("update webhook_events set status='FAILED',reason=$2,processed_at=now() where provider_event_id=$1", [eventId, clean((error as Error).message, 300)]);
+      throw error;
+    }
+    const decisionLabel = finalized.decision === "APPROVED" ? "APROVADA" : finalized.decision === "REJECTED" ? "REPROVADA" : "EM ACOMPANHAMENTO";
+    await evolution.sendText(finalized.phone, `${finalized.protocol} registrada como ${decisionLabel}.`).catch(async (error) => {
       await pool.query("insert into approval_events(request_id,event_type,actor_type,metadata) values($1,'CONFIRMATION_FAILED','SYSTEM',$2)", [finalized.requestId, { error: clean((error as Error).message, 300) }]);
     });
     res.json({ ok: true });
@@ -241,7 +272,8 @@ export function createApp() {
     const scope = requestScope(req); const result = await pool.query(`select r.*,u.display_name requester_name,a.full_name approver_name,d.id decision_id,d.decision,d.decided_at,d.provider_message_id,d.integrity_hash from approval_requests r join users u on u.id=r.requester_id join approvers a on a.id=r.approver_id join approval_decisions d on d.request_id=r.id where r.id=$${scope.values.length + 1} and ${scope.sql}`, [...scope.values, param(req.params.id)]);
     const row = result.rows[0]; if (!row) { res.status(404).json({ error: "Comprovante indisponível." }); return; }
     res.type("application/pdf").attachment(`${row.protocol}.pdf`); const pdf = new PDFDocument({ size: "A4", margin: 56 }); pdf.pipe(res);
-    pdf.fontSize(20).text("APROVAÇÕES LILI", { align: "center" }).moveDown(); pdf.fontSize(11).text(`Protocolo: ${row.protocol}`).text(`Assunto: ${row.subject}`).text(`Descrição: ${row.description}`).text(`Valor: ${money(row.amount_cents) || "Não informado"}`).text(`Solicitante: ${row.requester_name}`).text(`Aprovador: ${row.approver_name}`).text(`Decisão: ${row.decision === "APPROVED" ? "APROVADA" : "REPROVADA"}`).text(`Data: ${new Date(row.decided_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`).text(`ID da decisão: ${row.decision_id}`).text(`ID da mensagem: ${row.provider_message_id || "Não disponível"}`).moveDown().fontSize(9).text(`Código de verificação: ${row.integrity_hash}`).moveDown().text("Registro eletrônico interno de aprovação via WhatsApp. Este documento não equivale automaticamente a uma assinatura digital certificada."); pdf.end();
+    const decisionLabel = row.decision === "APPROVED" ? "APROVADA" : row.decision === "REJECTED" ? "REPROVADA" : "EM ACOMPANHAMENTO";
+    pdf.fontSize(20).text("APROVAÇÕES LILI", { align: "center" }).moveDown(); pdf.fontSize(11).text(`Protocolo: ${row.protocol}`).text(`Assunto: ${row.subject}`).text(`Descrição: ${row.description}`).text(`Valor: ${money(row.amount_cents) || "Não informado"}`).text(`Solicitante: ${row.requester_name}`).text(`Aprovador: ${row.approver_name}`).text(`Decisão: ${decisionLabel}`).text(`Data: ${new Date(row.decided_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`).text(`ID da decisão: ${row.decision_id}`).text(`ID da mensagem: ${row.provider_message_id || "Não disponível"}`).moveDown().fontSize(9).text(`Código de verificação: ${row.integrity_hash}`).moveDown().text("Registro eletrônico interno de aprovação via WhatsApp. Este documento não equivale automaticamente a uma assinatura digital certificada."); pdf.end();
   }));
 
   app.get("/receipts/:decisionId/verify", asyncRoute(async (req, res) => {

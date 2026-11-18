@@ -50,3 +50,29 @@ test("webhook reconhece voto verificável sem confiar no nome do contato", async
     message: { pollUpdateMessage: { pollCreationMessageKey: { id: "poll-42" }, vote: { name: "✅ Aprovar" } } },
   } }), { pollId: "poll-42", voter: "5531999999999@s.whatsapp.net", selected: "✅ aprovar" });
 });
+
+test("webhook reconhece pollUpdates real da Evolution e acompanhamento", async () => {
+  const { parseVoteEvent } = await import("../src/app.js");
+  assert.deepEqual(parseVoteEvent({ data: {
+    remoteJid: "5531984667498@s.whatsapp.net",
+    pollUpdates: [{ pollUpdateMessageKey: { id: "poll-43" }, vote: { selectedOptions: ["🔎 Acompanhar tratativa"] } }],
+  } }), { pollId: "poll-43", voter: "5531984667498@s.whatsapp.net", selected: "🔎 acompanhar tratativa" });
+});
+
+test("decisões da enquete têm estados distintos", async () => {
+  const { decisionFromSelection } = await import("../src/app.js");
+  assert.equal(decisionFromSelection("✅ aprovar"), "APPROVED");
+  assert.equal(decisionFromSelection("❌ reprovar"), "REJECTED");
+  assert.equal(decisionFromSelection("🔎 acompanhar tratativa"), "FOLLOW_UP");
+  assert.equal(decisionFromSelection("opção desconhecida"), null);
+});
+
+test("webhook aceita opção da Evolution representada como objeto", async () => {
+  const { parseVoteEvent } = await import("../src/app.js");
+  const parsed = parseVoteEvent({ data: {
+    participant: "5531984667498:12@s.whatsapp.net",
+    pollUpdates: [{ pollCreationMessageKey: { id: "poll-44" }, vote: { selectedOptions: [{ name: "❌ Reprovar" }] } }],
+  } });
+  assert.equal(parsed.pollId, "poll-44");
+  assert.equal(parsed.selected, "❌ reprovar");
+});

@@ -35,7 +35,7 @@ export const evolution = {
   async sendPoll(number: string, name: string): Promise<EvolutionResult> {
     return request(`/message/sendPoll/${encodeURIComponent(config.evolutionInstance)}`, {
       method: "POST",
-      body: JSON.stringify({ number: number.replace(/\D/g, ""), name, selectableCount: 1, values: ["✅ Aprovar", "❌ Reprovar"] }),
+      body: JSON.stringify({ number: number.replace(/\D/g, ""), name, selectableCount: 1, values: ["✅ Aprovar", "❌ Reprovar", "🔎 Acompanhar tratativa"] }),
     });
   },
 };
