@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -19,11 +20,21 @@ const phone = (value: unknown): string => {
   return `+${digits}`;
 };
 const money = (cents: number | null) => cents === null ? null : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+const dateTime = (value: string | Date | null) => value ? new Date(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "Não informado";
+const exactCents = (amountCents: unknown, legacyAmount: unknown): number | null => {
+  if (amountCents !== undefined && amountCents !== null && amountCents !== "") {
+    const cents = Number(amountCents); return Number.isSafeInteger(cents) ? cents : null;
+  }
+  const match = String(legacyAmount ?? "").trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
+  if (!match) return null;
+  const cents = BigInt(match[1]!) * 100n + BigInt((match[2] || "").padEnd(2, "0"));
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
+};
 const providerEventId = (body: Record<string, unknown>): string => clean(body.id || (body.data as Record<string, unknown> | undefined)?.id || body.eventId || sha256(JSON.stringify(body)), 240);
 const instanceOf = (body: Record<string, unknown>): string => clean(body.instance || (body.data as Record<string, unknown> | undefined)?.instance, 120);
 const eventTypeOf = (body: Record<string, unknown>): string => clean(body.event || body.type, 120).toLowerCase();
 const param = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] || "" : value || "";
-const voteIdentity = (value: unknown): string => clean(value, 240).split("@")[0]!.split(":")[0]!.replace(/\D/g, "");
+const voteIdentity = (value: unknown): string => clean(value, 240).split("@")[0]!.replace(/\D/g, "");
 const requestScope = (req: Request, alias = "r"): { sql: string; values: unknown[] } => req.authUser?.role === "ADMIN" ? { sql: "1=1", values: [] } : { sql: `${alias}.requester_id=$1`, values: [req.authUser!.id] };
 
 export function parseVoteEvent(body: Record<string, unknown>): { pollId: string; voter: string; selected: string } {
@@ -34,31 +45,28 @@ export function parseVoteEvent(body: Record<string, unknown>): { pollId: string;
   const creationKey = (update.pollCreationMessageKey || {}) as Record<string, unknown>;
   const vote = (update.vote || {}) as Record<string, unknown>;
   const pollUpdates = Array.isArray(data.pollUpdates) ? data.pollUpdates as Record<string, unknown>[] : [];
-  const firstUpdate = pollUpdates[0] || {};
-  const firstVote = (firstUpdate.vote || {}) as Record<string, unknown>;
-  const firstKey = (firstUpdate.pollUpdateMessageKey || firstUpdate.pollCreationMessageKey || firstUpdate.key || {}) as Record<string, unknown>;
-  const selectedOptions = Array.isArray(firstVote.selectedOptions)
-    ? firstVote.selectedOptions
-    : Array.isArray(firstUpdate.selectedOptions)
-      ? firstUpdate.selectedOptions
-      : [];
-  const firstSelected = selectedOptions[0];
-  const selectedValue = typeof firstSelected === "object" && firstSelected !== null
-    ? (firstSelected as Record<string, unknown>).name || (firstSelected as Record<string, unknown>).optionName || (firstSelected as Record<string, unknown>).text || (firstSelected as Record<string, unknown>).value
-    : firstSelected;
+  const selectedUpdate = pollUpdates.find((item) => Array.isArray(item.voters) && item.voters.length > 0) || pollUpdates[0] || {};
+  const voters = Array.isArray(selectedUpdate.voters) ? selectedUpdate.voters : [];
+  const updateVote = (selectedUpdate.vote || {}) as Record<string, unknown>;
+  const selectedOptions = Array.isArray(updateVote.selectedOptions) ? updateVote.selectedOptions : [];
+  const selectedOption = selectedOptions[0];
+  const selectedOptionName = typeof selectedOption === "string" ? selectedOption : clean((selectedOption as Record<string, unknown> | undefined)?.name, 120);
+  const pollKey = (selectedUpdate.pollUpdateMessageKey || selectedUpdate.pollCreationMessageKey || selectedUpdate.key || {}) as Record<string, unknown>;
   return {
-    pollId: clean(data.pollId || creationKey.id || firstKey.id || data.keyId || data.messageId || key.id, 240),
-    voter: clean(data.voter || data.remoteJid || data.participant || firstUpdate.voter || firstUpdate.participant || key.participant || key.remoteJid, 240),
-    selected: clean(data.selectedOption || data.optionName || (typeof data.vote === "string" ? data.vote : "") || vote.name || firstUpdate.name || firstUpdate.optionName || (typeof firstUpdate.vote === "string" ? firstUpdate.vote : "") || firstVote.name || selectedValue, 120).toLowerCase(),
+    pollId: clean(data.pollId || data.messageId || creationKey.id || pollKey.id || key.id, 240),
+    voter: clean(data.voter || data.remoteJid || data.participant || key.participant || key.remoteJid || voters[0], 240),
+    selected: clean(data.selectedOption || data.optionName || (typeof data.vote === "string" ? data.vote : "") || vote.name || selectedOptionName || selectedUpdate.name || selectedUpdate.optionName, 120).toLowerCase(),
   };
 }
 
-export function decisionFromSelection(selected: string): "APPROVED" | "REJECTED" | "FOLLOW_UP" | null {
-  if (selected.includes("reprovar")) return "REJECTED";
-  if (selected.includes("aprovar")) return "APPROVED";
-  if (selected.includes("acompanhar") || selected.includes("tratativa")) return "FOLLOW_UP";
+export function decisionFromSelected(selected: string): "APPROVED" | "REJECTED" | "FOLLOW_UP" | null {
+  if (/acompanhar tratativa/u.test(selected)) return "FOLLOW_UP";
+  if (/\breprovar\b/u.test(selected)) return "REJECTED";
+  if (/\baprovar\b/u.test(selected)) return "APPROVED";
   return null;
 }
+
+export const decisionFromSelection = decisionFromSelected;
 
 async function audit(userId: string | null, action: string, entity: string, entityId: string | null, req: Request, metadata: Record<string, unknown> = {}): Promise<void> {
   await pool.query("insert into audit_logs(user_id,action,entity_type,entity_id,ip_hash,metadata) values($1,$2,$3,$4,$5,$6)", [userId, action, entity, entityId, sha256(req.ip || ""), metadata]);
@@ -109,6 +117,11 @@ export function createApp() {
     res.json({ stats, recent: recent.rows });
   }));
 
+  app.get("/request-options", asyncRoute(async (_req, res) => {
+    const categories = await pool.query("select distinct category from approval_requests where nullif(trim(category),'') is not null order by category");
+    res.json({ categories: categories.rows.map((row) => row.category) });
+  }));
+
   app.get("/requests", asyncRoute(async (req, res) => {
     const page = Math.max(Number(req.query.page || 1), 1); const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
     const status = clean(req.query.status, 30); const search = clean(req.query.search, 180);
@@ -132,8 +145,8 @@ export function createApp() {
   app.post("/requests", requireRole("OPERATOR"), asyncRoute(async (req, res) => {
     const subject = clean(req.body?.subject, 180); const description = clean(req.body?.description); const key = clean(req.get("idempotency-key"), 180);
     if (subject.length < 3 || description.length < 3 || !key) { res.status(422).json({ error: "Assunto, descrição e chave de idempotência são obrigatórios." }); return; }
-    const amountCents = req.body?.amount === "" || req.body?.amount == null ? null : Math.round(Number(req.body.amount) * 100);
-    if (amountCents !== null && (!Number.isSafeInteger(amountCents) || amountCents < 0)) { res.status(422).json({ error: "Valor inválido." }); return; }
+    const amountCents = exactCents(req.body?.amountCents, req.body?.amount);
+    if (amountCents === null || amountCents <= 0) { res.status(422).json({ error: "Informe um valor maior que zero." }); return; }
     const deadlineAt = req.body?.deadlineAt ? new Date(req.body.deadlineAt) : null;
     if (deadlineAt && (Number.isNaN(deadlineAt.getTime()) || deadlineAt <= new Date())) { res.status(422).json({ error: "O prazo deve ser uma data futura." }); return; }
     const record = await transaction(async (client) => {
@@ -158,11 +171,11 @@ export function createApp() {
   app.post("/requests/:id/send", requireRole("OPERATOR"), asyncRoute(async (req, res) => {
     const result = await transaction(async (client) => {
       const scope = requestScope(req);
-      const selected = await client.query(`select r.*,a.full_name approver_name,m.recipient_snapshot from approval_requests r join approvers a on a.id=r.approver_id join approval_messages m on m.request_id=r.id and m.kind='POLL' where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
+      const selected = await client.query(`select r.*,a.full_name approver_name,a.phone_e164 from approval_requests r join approvers a on a.id=r.approver_id where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
       const row = selected.rows[0]; if (!row || row.status !== "PENDING") throw Object.assign(new Error("Solicitação não está pendente."), { status: 409 });
-      const message = `*APROVAÇÕES LILI*\n\nProtocolo: ${row.protocol}\nAssunto: ${row.subject}\nDescrição: ${row.description}${row.amount_cents === null ? "" : `\nValor: ${money(Number(row.amount_cents))}`}\nSolicitante: ${req.authUser!.displayName}${row.deadline_at ? `\nPrazo: ${new Date(row.deadline_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : ""}`;
-      if (message.length > 900) await evolution.sendText(row.recipient_snapshot, message);
-      const sent = await evolution.sendPoll(row.recipient_snapshot, message.length > 900 ? `${row.protocol} — Selecione a decisão` : `${message}\n\nSelecione a decisão.`);
+      const message = `*${row.subject}*\n${row.description}\n\n*Protocolo:* ${row.protocol}${row.amount_cents === null ? "" : `\n*Valor:* ${money(Number(row.amount_cents))}`}\n*Solicitante:* ${req.authUser!.displayName}${row.deadline_at ? `\n*Prazo:* ${dateTime(row.deadline_at)}` : ""}`;
+      if (message.length > 900) await evolution.sendText(row.phone_e164, message);
+      const sent = await evolution.sendPoll(row.phone_e164, message.length > 900 ? `${row.protocol} — Selecione a decisão` : `${message}\n\nSelecione a decisão.`);
       const messageId = providerMessageId(sent);
       await client.query("update approval_messages set status='SENT',provider_message_id=$2,provider_poll_id=$2,attempts=attempts+1,sent_at=now() where request_id=$1 and kind='POLL'", [row.id, messageId]);
       await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,'SENT','SYSTEM',null,$2)", [row.id, { messageId }]);
@@ -181,13 +194,21 @@ export function createApp() {
 
   app.get("/approvers", requireRole("ADMIN"), asyncRoute(async (_req, res) => { res.json((await pool.query("select * from approvers order by full_name")).rows); }));
   app.post("/approvers", requireRole("ADMIN"), asyncRoute(async (req, res) => {
-    const result = await pool.query("insert into approvers(full_name,internal_id,phone_e164,kind,active,identity_confirmed_at,created_by) values($1,$2,$3,$4,true,$5,$6) returning *", [clean(req.body?.fullName, 180), clean(req.body?.internalId, 100), phone(req.body?.phone), req.body?.kind === "SUBSTITUTE" ? "SUBSTITUTE" : "PRIMARY", req.body?.identityConfirmed ? new Date() : null, req.authUser!.id]);
+    const fullName = clean(req.body?.fullName, 180); const internalId = clean(req.body?.internalId, 100);
+    if (!fullName || !internalId) { res.status(422).json({ error: "Nome e identificação interna são obrigatórios." }); return; }
+    const result = await pool.query("insert into approvers(full_name,internal_id,phone_e164,kind,active,identity_confirmed_at,created_by) values($1,$2,$3,$4,true,$5,$6) returning *", [fullName, internalId, phone(req.body?.phone), req.body?.kind === "SUBSTITUTE" ? "SUBSTITUTE" : "PRIMARY", req.body?.identityConfirmed ? new Date() : null, req.authUser!.id]);
     await audit(req.authUser!.id, "CREATE", "approver", result.rows[0].id, req); res.status(201).json(result.rows[0]);
   }));
   app.patch("/approvers/:id", requireRole("ADMIN"), asyncRoute(async (req, res) => {
-    const result = await pool.query("update approvers set full_name=coalesce(nullif($2,''),full_name),phone_e164=coalesce($3,phone_e164),active=coalesce($4,active),identity_confirmed_at=case when $5::boolean then coalesce(identity_confirmed_at,now()) else identity_confirmed_at end,updated_at=now() where id=$1 returning *", [param(req.params.id), clean(req.body?.fullName, 180), req.body?.phone ? phone(req.body.phone) : null, typeof req.body?.active === "boolean" ? req.body.active : null, Boolean(req.body?.identityConfirmed)]);
+    const result = await pool.query("update approvers set full_name=coalesce(nullif($2,''),full_name),internal_id=coalesce(nullif($3,''),internal_id),phone_e164=coalesce($4,phone_e164),kind=coalesce($5,kind),active=coalesce($6,active),identity_confirmed_at=case when $7::boolean then coalesce(identity_confirmed_at,now()) else identity_confirmed_at end,updated_at=now() where id=$1 returning *", [param(req.params.id), clean(req.body?.fullName, 180), clean(req.body?.internalId, 100), req.body?.phone ? phone(req.body.phone) : null, ["PRIMARY", "SUBSTITUTE"].includes(req.body?.kind) ? req.body.kind : null, typeof req.body?.active === "boolean" ? req.body.active : null, Boolean(req.body?.identityConfirmed)]);
     if (!result.rows[0]) { res.status(404).json({ error: "Aprovador não encontrado." }); return; }
     await audit(req.authUser!.id, "UPDATE", "approver", param(req.params.id), req); res.json(result.rows[0]);
+  }));
+  app.delete("/approvers/:id", requireRole("ADMIN"), asyncRoute(async (req, res) => {
+    const result = await pool.query("update approvers set active=false,updated_at=now() where id=$1 and active=true returning id", [param(req.params.id)]);
+    if (!result.rows[0]) { res.status(404).json({ error: "Aprovador não encontrado ou já excluído." }); return; }
+    await pool.query("update approver_substitutions set active=false where (primary_approver_id=$1 or substitute_approver_id=$1) and active=true", [param(req.params.id)]);
+    await audit(req.authUser!.id, "DELETE", "approver", param(req.params.id), req); res.json({ ok: true });
   }));
   app.get("/substitutions", requireRole("ADMIN"), asyncRoute(async (_req, res) => { res.json((await pool.query("select s.*,p.full_name primary_name,a.full_name substitute_name from approver_substitutions s join approvers p on p.id=s.primary_approver_id join approvers a on a.id=s.substitute_approver_id order by s.created_at desc")).rows); }));
   app.post("/substitutions", requireRole("ADMIN"), asyncRoute(async (req, res) => {
@@ -227,6 +248,11 @@ export function createApp() {
     } catch (error) { res.json({ configured: Boolean(config.evolutionApiKey), decisionsEnabled: config.decisionsEnabled, connected: false, state: "unavailable", error: (error as Error).message }); }
   }));
   app.post("/whatsapp/connect", requireRole("ADMIN"), asyncRoute(async (_req, res) => { try { await evolution.create(); } catch { /* existing instance */ } await evolution.configureWebhook(`${config.publicBaseUrl}/api/webhooks/evolution/${config.webhookSecret}`); res.json(await evolution.qr()); }));
+  app.post("/whatsapp/disconnect", requireRole("ADMIN"), asyncRoute(async (req, res) => {
+    await evolution.disconnect();
+    await audit(req.authUser!.id, "DISCONNECT", "whatsapp_instance", config.evolutionInstance, req);
+    res.json({ ok: true });
+  }));
   app.post("/whatsapp/test", requireRole("ADMIN"), asyncRoute(async (req, res) => { res.json(await evolution.sendText(phone(req.body?.phone), "Teste da integração Aprovações Lili.")); }));
 
   app.post("/webhooks/evolution/:secret", rateLimit({ windowMs: 60_000, limit: 300 }), asyncRoute(async (req, res) => {
@@ -236,31 +262,19 @@ export function createApp() {
     const inserted = await pool.query("insert into webhook_events(provider_event_id,instance_name,event_type,payload_hash,status) values($1,$2,$3,$4,'RECEIVED') on conflict(provider_event_id) do nothing returning id", [eventId, instance, eventType, sha256(JSON.stringify(body))]);
     if (!inserted.rowCount) { res.status(200).json({ duplicate: true }); return; }
     if (!config.decisionsEnabled) { await pool.query("update webhook_events set status='REVIEW',reason='Decisões bloqueadas até homologação real',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
-    const { pollId, voter, selected } = parseVoteEvent(body);
-    const decision = decisionFromSelection(selected);
-    if (!pollId || !voter || !decision) {
-      const reason = `Evento de voto não verificável (enquete: ${pollId ? "sim" : "não"}, votante: ${voter ? "sim" : "não"}, opção: ${selected ? "não reconhecida" : "ausente"})`;
-      await pool.query("update webhook_events set status='REVIEW',reason=$2,processed_at=now() where provider_event_id=$1", [eventId, reason]);
-      res.status(202).json({ review: true });
-      return;
-    }
-    let finalized: { requestId: string; protocol: string; phone: string; decision: "APPROVED" | "REJECTED" | "FOLLOW_UP" };
-    try {
-      finalized = await transaction(async (client) => {
+    const { pollId, voter, selected } = parseVoteEvent(body); const parsedDecision = decisionFromSelected(selected);
+    if (!pollId || !voter || !parsedDecision) { await pool.query("update webhook_events set status='REVIEW',reason='Evento de voto não verificável',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
+    const finalized = await transaction(async (client) => {
       const lookup = await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where m.provider_poll_id=$1 for update", [pollId]);
       const row = lookup.rows[0]; if (!row || row.status !== "PENDING" || (row.deadline_at && new Date(row.deadline_at) < new Date())) throw Object.assign(new Error("Solicitação não está aberta."), { status: 409 });
       if (voteIdentity(voter) !== voteIdentity(row.recipient_snapshot)) throw Object.assign(new Error("Votante não autorizado."), { status: 403 });
-      const integrity = hmac(`${row.id}|${decision}|${eventId}`);
+      const decision = parsedDecision; const integrity = hmac(`${row.id}|${decision}|${eventId}`);
       await client.query("insert into approval_decisions(request_id,approver_id,decision,voter_identifier_hash,provider_event_id,provider_message_id,integrity_hash) values($1,$2,$3,$4,$5,$6,$7)", [row.id, row.approver_id, decision, sha256(voter), eventId, pollId, integrity]);
       await client.query("update approval_requests set status=$2,decided_at=now(),updated_at=now() where id=$1", [row.id, decision]);
       await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,$2,'APPROVER',$3,$4)", [row.id, decision, row.approver_id, { providerEventId: eventId }]);
       await client.query("update webhook_events set status='PROCESSED',processed_at=now() where provider_event_id=$1", [eventId]);
       return { requestId: row.id, protocol: row.protocol, phone: row.recipient_snapshot, decision };
-      });
-    } catch (error) {
-      await pool.query("update webhook_events set status='FAILED',reason=$2,processed_at=now() where provider_event_id=$1", [eventId, clean((error as Error).message, 300)]);
-      throw error;
-    }
+    });
     const decisionLabel = finalized.decision === "APPROVED" ? "APROVADA" : finalized.decision === "REJECTED" ? "REPROVADA" : "EM ACOMPANHAMENTO";
     await evolution.sendText(finalized.phone, `${finalized.protocol} registrada como ${decisionLabel}.`).catch(async (error) => {
       await pool.query("insert into approval_events(request_id,event_type,actor_type,metadata) values($1,'CONFIRMATION_FAILED','SYSTEM',$2)", [finalized.requestId, { error: clean((error as Error).message, 300) }]);
@@ -269,11 +283,40 @@ export function createApp() {
   }));
 
   app.get("/requests/:id/receipt.pdf", asyncRoute(async (req, res) => {
-    const scope = requestScope(req); const result = await pool.query(`select r.*,u.display_name requester_name,a.full_name approver_name,d.id decision_id,d.decision,d.decided_at,d.provider_message_id,d.integrity_hash from approval_requests r join users u on u.id=r.requester_id join approvers a on a.id=r.approver_id join approval_decisions d on d.request_id=r.id where r.id=$${scope.values.length + 1} and ${scope.sql}`, [...scope.values, param(req.params.id)]);
+    const scope = requestScope(req); const result = await pool.query(`select r.*,u.display_name requester_name,a.full_name approver_name,a.internal_id approver_internal_id,a.phone_e164 approver_phone,a.identity_confirmed_at,d.id decision_id,d.decision,d.decided_at,d.provider_message_id,d.integrity_hash from approval_requests r join users u on u.id=r.requester_id join approvers a on a.id=r.approver_id join approval_decisions d on d.request_id=r.id where r.id=$${scope.values.length + 1} and ${scope.sql}`, [...scope.values, param(req.params.id)]);
     const row = result.rows[0]; if (!row) { res.status(404).json({ error: "Comprovante indisponível." }); return; }
-    res.type("application/pdf").attachment(`${row.protocol}.pdf`); const pdf = new PDFDocument({ size: "A4", margin: 56 }); pdf.pipe(res);
-    const decisionLabel = row.decision === "APPROVED" ? "APROVADA" : row.decision === "REJECTED" ? "REPROVADA" : "EM ACOMPANHAMENTO";
-    pdf.fontSize(20).text("APROVAÇÕES LILI", { align: "center" }).moveDown(); pdf.fontSize(11).text(`Protocolo: ${row.protocol}`).text(`Assunto: ${row.subject}`).text(`Descrição: ${row.description}`).text(`Valor: ${money(row.amount_cents) || "Não informado"}`).text(`Solicitante: ${row.requester_name}`).text(`Aprovador: ${row.approver_name}`).text(`Decisão: ${decisionLabel}`).text(`Data: ${new Date(row.decided_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`).text(`ID da decisão: ${row.decision_id}`).text(`ID da mensagem: ${row.provider_message_id || "Não disponível"}`).moveDown().fontSize(9).text(`Código de verificação: ${row.integrity_hash}`).moveDown().text("Registro eletrônico interno de aprovação via WhatsApp. Este documento não equivale automaticamente a uma assinatura digital certificada."); pdf.end();
+    res.type("application/pdf").attachment(`${row.protocol}.pdf`); const pdf = new PDFDocument({ size: "A4", margin: 48, info: { Title: `${row.protocol} - ${row.subject}`, Author: "Sempre Internet" } }); pdf.pipe(res);
+    const logo = fileURLToPath(new URL("../assets/sempre-logo.png", import.meta.url));
+    const navy = "#102A43"; const blue = "#155EEF"; const border = "#D9E2EC"; const soft = "#F5F8FC"; const green = "#067647"; const red = "#B42318";
+    pdf.image(logo, 48, 35, { fit: [115, 58] }).fillColor(navy).fontSize(9).text("COMPROVANTE DE DECISÃO", 330, 45, { width: 217, align: "right" }).fillColor("#667085").fontSize(8).text(row.protocol, 330, 62, { width: 217, align: "right" });
+    pdf.moveTo(48, 100).lineTo(547, 100).strokeColor(border).stroke();
+    pdf.fillColor(navy).fontSize(21).text(row.subject, 48, 122, { width: 385 });
+    const approved = row.decision === "APPROVED"; const decision = approved ? "APROVADA" : "REPROVADA";
+    pdf.roundedRect(445, 118, 102, 30, 6).fill(approved ? "#ECFDF3" : "#FEF3F2").fillColor(approved ? green : red).fontSize(10).text(decision, 445, 128, { width: 102, align: "center" });
+    const fullDescription = String(row.description || ""); const description = fullDescription.length > 900 ? `${fullDescription.slice(0, 897)}...` : fullDescription;
+    pdf.fillColor("#475467").fontSize(9).text(description, 48, 160, { width: 499, height: 92, lineGap: 2, ellipsis: true });
+    if (fullDescription.length > 900) pdf.fillColor("#667085").fontSize(7).text("Descrição resumida no comprovante. O conteúdo integral permanece registrado no sistema.", 48, 255, { width: 499 });
+    let y = 278;
+    const section = (title: string) => { pdf.fillColor(blue).fontSize(9).text(title.toUpperCase(), 48, y); y += 20; };
+    const pair = (leftLabel: string, leftValue: string, rightLabel: string, rightValue: string) => {
+      pdf.roundedRect(48, y, 499, 45, 5).fillAndStroke(soft, border);
+      pdf.fillColor("#667085").fontSize(7).text(leftLabel.toUpperCase(), 60, y + 9, { width: 220 }).fillColor(navy).fontSize(10).text(leftValue, 60, y + 22, { width: 220 });
+      pdf.moveTo(297, y + 7).lineTo(297, y + 38).strokeColor(border).stroke();
+      pdf.fillColor("#667085").fontSize(7).text(rightLabel.toUpperCase(), 310, y + 9, { width: 225 }).fillColor(navy).fontSize(10).text(rightValue, 310, y + 22, { width: 225 }); y += 53;
+    };
+    section("Dados da solicitação");
+    pair("Protocolo", row.protocol, "Valor", row.amount_cents === null ? "Não informado" : money(Number(row.amount_cents))!);
+    pair("Solicitante", row.requester_name, "Prazo", dateTime(row.deadline_at));
+    pair("Categoria", row.category || "Não informada", "Prioridade", row.priority === "URGENT" ? "Urgente" : "Normal");
+    y += 5; section("Confirmação pelo WhatsApp");
+    pair("Decisão", decision, "Data e hora", dateTime(row.decided_at));
+    pair("Aprovador", row.approver_name, "Identificação interna", row.approver_internal_id);
+    pair("WhatsApp validado", row.approver_phone, "Identidade", row.identity_confirmed_at ? "Cadastro confirmado" : "Número conferido no voto");
+    pdf.roundedRect(48, y, 499, 54, 5).fillAndStroke("#FFFFFF", border).fillColor("#667085").fontSize(7).text("EVIDÊNCIA DO PROVEDOR", 60, y + 9).fillColor(navy).fontSize(8).text(`Mensagem: ${row.provider_message_id || "Não disponível"}\nDecisão: ${row.decision_id}`, 60, y + 22, { width: 475 }); y += 69;
+    pdf.moveTo(48, y).lineTo(547, y).strokeColor(border).stroke(); y += 12;
+    pdf.fillColor("#667085").fontSize(7).text(`Código de integridade: ${row.integrity_hash}`, 48, y, { width: 499 });
+    pdf.fontSize(7).text("Registro eletrônico interno de aprovação via WhatsApp. A identidade foi validada pelo número cadastrado do aprovador. Este documento não equivale automaticamente a uma assinatura digital certificada.", 48, y + 18, { width: 499, align: "justify" });
+    pdf.end();
   }));
 
   app.get("/receipts/:decisionId/verify", asyncRoute(async (req, res) => {
@@ -281,8 +324,10 @@ export function createApp() {
     if (!result.rows[0]) { res.status(404).json({ valid: false }); return; } res.json({ valid: true, protocol: result.rows[0].protocol, status: result.rows[0].status, decidedAt: result.rows[0].decided_at });
   }));
 
-  app.use((error: Error & { status?: number }, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((error: Error & { status?: number; code?: string }, _req: Request, res: Response, _next: NextFunction) => {
     console.error(JSON.stringify({ level: "error", message: error.message, stack: config.production ? undefined : error.stack }));
+    if (error.code === "23505") { res.status(409).json({ error: "Já existe um cadastro com essa identificação ou WhatsApp." }); return; }
+    if (error.code === "23514") { res.status(422).json({ error: "Os dados informados não atendem ao formato esperado." }); return; }
     res.status(error.status || 500).json({ error: error.status ? error.message : "Erro interno." });
   });
   return app;

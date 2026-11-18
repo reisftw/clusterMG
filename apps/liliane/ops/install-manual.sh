@@ -8,6 +8,7 @@ fi
 
 source_root="${1:?Informe a pasta extraida da release.}"
 release_id="${2:?Informe o identificador da release.}"
+public_base_url="${LILI_PUBLIC_BASE_URL:-https://retiradas.tech/liliane}"
 root=/opt/liliane
 release="$root/releases/$release_id"
 previous=""
@@ -29,7 +30,9 @@ chmod 0755 "$root" "$root/releases"
 rm -rf "$release"
 install -d -m 0750 "$release"
 cp -a "$source_root/backend" "$source_root/frontend" "$source_root/ops" "$release/"
-npm ci --omit=dev --no-audit --no-fund --prefix "$release/backend"
+if [ ! -d "$release/backend/node_modules" ]; then
+  npm ci --omit=dev --no-audit --no-fund --prefix "$release/backend"
+fi
 
 env_file="$root/shared/.env"
 evolution_env="$root/shared/evolution.env"
@@ -45,7 +48,7 @@ if [ ! -s "$env_file" ]; then
 NODE_ENV=production
 PORT=3401
 DATABASE_URL=postgres://liliane_app:${db_password}@127.0.0.1:5432/aprovacoes_lili
-PUBLIC_BASE_URL=https://retiradas.tech/liliane
+PUBLIC_BASE_URL=${public_base_url}
 APP_ENCRYPTION_KEY=${encryption_key}
 INTEGRITY_KEY=${integrity_key}
 EVOLUTION_WEBHOOK_SECRET=${webhook_secret}
@@ -114,4 +117,4 @@ curl -fsS --retry 20 --retry-delay 2 --retry-connrefused http://127.0.0.1:3401/h
 
 trap - ERR
 find "$root/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf
-echo "Aprovacoes Lili publicado em https://retiradas.tech/liliane/"
+echo "Aprovacoes Lili publicado em ${public_base_url%/}/"

@@ -47,11 +47,20 @@ test("RBAC bloqueia operador em rota administrativa", async () => {
 });
 
 test("webhook reconhece voto verificável sem confiar no nome do contato", async () => {
-  const { parseVoteEvent } = await import("../src/app.js");
+  const { decisionFromSelected, parseVoteEvent } = await import("../src/app.js");
   assert.deepEqual(parseVoteEvent({ data: {
     key: { remoteJid: "5531999999999@s.whatsapp.net" },
     message: { pollUpdateMessage: { pollCreationMessageKey: { id: "poll-42" }, vote: { name: "✅ Aprovar" } } },
   } }), { pollId: "poll-42", voter: "5531999999999@s.whatsapp.net", selected: "✅ aprovar" });
+  assert.deepEqual(parseVoteEvent({ data: {
+    pollId: "poll-43",
+    pollUpdates: [
+      { name: "✅ Aprovar", voters: [] },
+      { name: "❌ Reprovar", voters: ["5531999999999@s.whatsapp.net"] },
+    ],
+  } }), { pollId: "poll-43", voter: "5531999999999@s.whatsapp.net", selected: "❌ reprovar" });
+  assert.equal(decisionFromSelected("❌ reprovar"), "REJECTED");
+  assert.equal(decisionFromSelected("✅ aprovar"), "APPROVED");
 });
 
 test("webhook reconhece pollUpdates real da Evolution e acompanhamento", async () => {

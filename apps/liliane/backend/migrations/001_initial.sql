@@ -52,7 +52,7 @@ create table if not exists approvers (
   id uuid primary key default gen_random_uuid(),
   full_name text not null,
   internal_id text not null unique,
-  phone_e164 text not null unique check (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'),
+  phone_e164 text not null unique check (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
   kind text not null check (kind in ('PRIMARY','SUBSTITUTE')),
   active boolean not null default true,
   identity_confirmed_at timestamptz,

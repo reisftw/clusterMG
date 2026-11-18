@@ -20,6 +20,7 @@ export const evolution = {
     catch { return request(`/instance/fetchInstances?instanceName=${encodeURIComponent(config.evolutionInstance)}`); }
   },
   async qr(): Promise<EvolutionResult> { return request(`/instance/connect/${encodeURIComponent(config.evolutionInstance)}`); },
+  async disconnect(): Promise<EvolutionResult> { return request(`/instance/logout/${encodeURIComponent(config.evolutionInstance)}`, { method: "DELETE" }); },
   async create(): Promise<EvolutionResult> {
     return request("/instance/create", { method: "POST", body: JSON.stringify({ instanceName: config.evolutionInstance, qrcode: true, integration: "WHATSAPP-BAILEYS" }) });
   },
