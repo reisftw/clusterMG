@@ -4,6 +4,7 @@ const csrf = () => decodeURIComponent(document.cookie.split(";").map((item) => i
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${base}${path}`, {
     ...init,
+    cache: "no-store",
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(csrf() ? { "X-CSRF-Token": csrf() } : {}), ...(init.headers || {}) },
   });

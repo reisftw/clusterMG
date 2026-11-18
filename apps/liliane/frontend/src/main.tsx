@@ -56,7 +56,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null); const [loading, setLoading] = useState(true); const [tab, setTab] = useState("dashboard"); const [open, setOpen] = useState(false); const [dashboard, setDashboard] = useState<{ stats: Record<string, number>; recent: RequestItem[] }>({ stats: {}, recent: [] }); const [items, setItems] = useState<RequestItem[]>([]); const [page, setPage] = useState(1); const [total, setTotal] = useState(0); const [error, setError] = useState("");
   const loadMe = useCallback(() => api<{ user: User }>("/auth/me").then((result) => setUser(result.user)).catch(() => setUser(null)).finally(() => setLoading(false)), []);
   const refresh = useCallback(() => { api<typeof dashboard>("/dashboard").then(setDashboard).catch((caught) => setError(caught.message)); api<{ items: RequestItem[]; pagination: { total: number } }>(`/requests?page=${page}&limit=25`).then((result) => { setItems(result.items); setTotal(result.pagination.total); }).catch(() => undefined); }, [page]);
-  useEffect(() => { void loadMe(); }, [loadMe]); useEffect(() => { if (user && !user.mustChangePassword) { refresh(); const timer = window.setInterval(refresh, 30_000); return () => clearInterval(timer); } }, [user, refresh]);
+  useEffect(() => { void loadMe(); }, [loadMe]); useEffect(() => { if (user && !user.mustChangePassword) { refresh(); const timer = window.setInterval(refresh, 5_000); const onFocus = () => refresh(); window.addEventListener("focus", onFocus); return () => { clearInterval(timer); window.removeEventListener("focus", onFocus); }; } }, [user, refresh]);
   const nav = useMemo(() => [{ id: "dashboard", label: "Visão geral", icon: LayoutDashboard }, { id: "requests", label: "Solicitações", icon: FileCheck2 }, ...(user?.role === "ADMIN" ? [{ id: "admin", label: "Administração", icon: Settings }] : [])], [user]);
   if (loading) return <div className="loading">Carregando...</div>; if (!user) return <Login onReady={loadMe} />; if (user.mustChangePassword) return <ChangePassword done={() => setUser(null)} />;
   const cards = [{ key: "PENDING", label: "Pendentes", icon: Clock3 }, { key: "APPROVED", label: "Aprovadas", icon: CheckCircle2 }, { key: "REJECTED", label: "Reprovadas", icon: XCircle }, { key: "FOLLOW_UP", label: "Em acompanhamento", icon: RefreshCw }, { key: "EXPIRED", label: "Expiradas", icon: Clock3 }];
@@ -64,6 +64,10 @@ function App() {
     {tab === "dashboard" && <><section className="stats">{cards.map(({ key, label, icon: Icon }) => <article key={key}><div className={`stat-icon ${key.toLowerCase()}`}><Icon /></div><div><span>{label}</span><strong>{dashboard.stats[key] || 0}</strong></div></article>)}</section><section className="panel"><header><h2>Solicitações recentes</h2><button className="link" onClick={() => setTab("requests")}>Ver histórico</button></header><RequestTable items={dashboard.recent} /></section></>}
     {tab === "requests" && <section className="panel"><header><div><h2>Histórico completo</h2><p className="muted">Acompanhe decisões, prazos e comprovantes.</p></div></header><RequestTable items={items} /><footer className="pagination"><span>{total} solicitação(ões)</span><div><button className="icon" disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft /></button><span>Página {page}</span><button className="icon" disabled={page * 25 >= total} onClick={() => setPage((value) => value + 1)}><ChevronRight /></button></div></footer></section>}
     {tab === "admin" && <AdminPanel />}{open && <NewRequest close={() => setOpen(false)} saved={refresh} />}</main></div>;
+}
+
+if ("serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("/liliane/liliane-sw.js", { scope: "/liliane/" });
 }
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

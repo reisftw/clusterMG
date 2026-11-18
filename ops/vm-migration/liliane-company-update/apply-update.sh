@@ -38,7 +38,8 @@ cd "$package_dir"
 sha256sum -c SHA256SUMS.txt
 previous="$(readlink -f "$root/current")"
 
-install -d -m 0750 "$root/releases" "$root/backups"
+install -d -m 0755 "$root/releases"
+install -d -m 0750 "$root/backups"
 sudo -u postgres pg_dump -Fc --no-owner --no-privileges aprovacoes_lili > "$backup"
 test -s "$backup"
 
@@ -51,7 +52,7 @@ if [ -f "$release/frontend/dist/index.html" ]; then
   rm -rf "$release/frontend/dist"
 fi
 chown -R liliane:liliane "$release"
-chmod 0755 "$release" "$release/frontend"
+chmod 0755 "$root" "$root/releases" "$release" "$release/frontend"
 
 systemctl stop liliane-api.service
 set -a
