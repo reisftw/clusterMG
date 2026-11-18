@@ -36,6 +36,16 @@ const eventTypeOf = (body: Record<string, unknown>): string => clean(body.event 
 const param = (value: string | string[] | undefined): string => Array.isArray(value) ? value[0] || "" : value || "";
 const voteIdentity = (value: unknown): string => clean(value, 240).split("@")[0]!.replace(/\D/g, "");
 const requestScope = (req: Request, alias = "r"): { sql: string; values: unknown[] } => req.authUser?.role === "ADMIN" ? { sql: "1=1", values: [] } : { sql: `${alias}.requester_id=$1`, values: [req.authUser!.id] };
+const pollOptions = ["✅ Aprovar", "❌ Reprovar", "🔎 Acompanhar tratativa"];
+const pollOptionName = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  const object = value as { name?: unknown; type?: unknown; data?: unknown } | undefined;
+  if (object?.name) return clean(object.name, 120);
+  const bytes = Array.isArray(value) ? value : object?.type === "Buffer" && Array.isArray(object.data) ? object.data : null;
+  if (!bytes) return "";
+  const selectedHash = Buffer.from(bytes).toString("hex");
+  return pollOptions.find((option) => crypto.createHash("sha256").update(option).digest("hex") === selectedHash) || "";
+};
 
 export function parseVoteEvent(body: Record<string, unknown>): { pollId: string; voter: string; selected: string } {
   const data = (body.data || {}) as Record<string, unknown>;
@@ -50,7 +60,7 @@ export function parseVoteEvent(body: Record<string, unknown>): { pollId: string;
   const updateVote = (selectedUpdate.vote || {}) as Record<string, unknown>;
   const selectedOptions = Array.isArray(updateVote.selectedOptions) ? updateVote.selectedOptions : [];
   const selectedOption = selectedOptions[0];
-  const selectedOptionName = typeof selectedOption === "string" ? selectedOption : clean((selectedOption as Record<string, unknown> | undefined)?.name, 120);
+  const selectedOptionName = pollOptionName(selectedOption);
   const pollKey = (selectedUpdate.pollUpdateMessageKey || selectedUpdate.pollCreationMessageKey || selectedUpdate.key || {}) as Record<string, unknown>;
   return {
     pollId: clean(data.pollId || data.messageId || creationKey.id || pollKey.id || key.id, 240),

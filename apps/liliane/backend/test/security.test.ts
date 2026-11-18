@@ -88,3 +88,15 @@ test("webhook aceita opção da Evolution representada como objeto", async () =>
   assert.equal(parsed.pollId, "poll-44");
   assert.equal(parsed.selected, "❌ reprovar");
 });
+
+test("webhook decodifica hash binário da opção da enquete", async () => {
+  const crypto = await import("node:crypto");
+  const { parseVoteEvent } = await import("../src/app.js");
+  const optionHash = [...crypto.createHash("sha256").update("🔎 Acompanhar tratativa").digest()];
+  const parsed = parseVoteEvent({ data: {
+    remoteJid: "5531984667498@s.whatsapp.net",
+    pollUpdates: [{ pollUpdateMessageKey: { id: "poll-45" }, vote: { selectedOptions: [{ type: "Buffer", data: optionHash }] } }],
+  } });
+  assert.equal(parsed.pollId, "poll-45");
+  assert.equal(parsed.selected, "🔎 acompanhar tratativa");
+});
