@@ -100,3 +100,12 @@ test("webhook decodifica hash binário da opção da enquete", async () => {
   assert.equal(parsed.pollId, "poll-45");
   assert.equal(parsed.selected, "🔎 acompanhar tratativa");
 });
+
+test("webhook aceita decisão textual com protocolo e número autorizado", async () => {
+  const { parseTextDecision } = await import("../src/app.js");
+  assert.deepEqual(parseTextDecision({ data: {
+    key: { remoteJid: "5531984667498@s.whatsapp.net" },
+    message: { conversation: "APR-000005 ACOMPANHAR tratativa" },
+  } }), { protocol: "APR-000005", voter: "5531984667498@s.whatsapp.net", decision: "FOLLOW_UP" });
+  assert.equal(parseTextDecision({ data: { message: { conversation: "APROVAR" } } }), null);
+});

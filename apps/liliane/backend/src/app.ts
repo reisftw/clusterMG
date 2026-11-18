@@ -78,6 +78,18 @@ export function decisionFromSelected(selected: string): "APPROVED" | "REJECTED" 
 
 export const decisionFromSelection = decisionFromSelected;
 
+export function parseTextDecision(body: Record<string, unknown>): { protocol: string; voter: string; decision: "APPROVED" | "REJECTED" | "FOLLOW_UP" } | null {
+  const data = (body.data || {}) as Record<string, unknown>;
+  const key = (data.key || {}) as Record<string, unknown>;
+  const message = (data.message || {}) as Record<string, unknown>;
+  const extended = (message.extendedTextMessage || {}) as Record<string, unknown>;
+  const text = clean(message.conversation || extended.text || data.text, 500);
+  const protocol = text.match(/\bAPR-\d{6}\b/i)?.[0]?.toUpperCase() || "";
+  const decision = decisionFromSelected(text.toLowerCase());
+  const voter = clean(data.remoteJid || data.participant || key.participant || key.remoteJid, 240);
+  return protocol && voter && decision ? { protocol, voter, decision } : null;
+}
+
 async function audit(userId: string | null, action: string, entity: string, entityId: string | null, req: Request, metadata: Record<string, unknown> = {}): Promise<void> {
   await pool.query("insert into audit_logs(user_id,action,entity_type,entity_id,ip_hash,metadata) values($1,$2,$3,$4,$5,$6)", [userId, action, entity, entityId, sha256(req.ip || ""), metadata]);
 }
@@ -272,14 +284,17 @@ export function createApp() {
     const inserted = await pool.query("insert into webhook_events(provider_event_id,instance_name,event_type,payload_hash,status) values($1,$2,$3,$4,'RECEIVED') on conflict(provider_event_id) do nothing returning id", [eventId, instance, eventType, sha256(JSON.stringify(body))]);
     if (!inserted.rowCount) { res.status(200).json({ duplicate: true }); return; }
     if (!config.decisionsEnabled) { await pool.query("update webhook_events set status='REVIEW',reason='Decisões bloqueadas até homologação real',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
-    const { pollId, voter, selected } = parseVoteEvent(body); const parsedDecision = decisionFromSelected(selected);
-    if (!pollId || !voter || !parsedDecision) { await pool.query("update webhook_events set status='REVIEW',reason='Evento de voto não verificável',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
+    const { pollId, voter, selected } = parseVoteEvent(body); const textDecision = parseTextDecision(body); const parsedDecision = decisionFromSelected(selected) || textDecision?.decision;
+    if ((!pollId && !textDecision?.protocol) || !(voter || textDecision?.voter) || !parsedDecision) { await pool.query("update webhook_events set status='REVIEW',reason='Evento de voto não verificável',processed_at=now() where provider_event_id=$1", [eventId]); res.status(202).json({ review: true }); return; }
     const finalized = await transaction(async (client) => {
-      const lookup = await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where m.provider_poll_id=$1 for update", [pollId]);
+      const lookup = textDecision
+        ? await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where r.protocol=$1 and m.kind='POLL' for update", [textDecision.protocol])
+        : await client.query("select r.*,a.id approver_id,m.recipient_snapshot from approval_messages m join approval_requests r on r.id=m.request_id join approvers a on a.id=r.approver_id where m.provider_poll_id=$1 for update", [pollId]);
       const row = lookup.rows[0]; if (!row || row.status !== "PENDING" || (row.deadline_at && new Date(row.deadline_at) < new Date())) throw Object.assign(new Error("Solicitação não está aberta."), { status: 409 });
-      if (voteIdentity(voter) !== voteIdentity(row.recipient_snapshot)) throw Object.assign(new Error("Votante não autorizado."), { status: 403 });
+      const verifiedVoter = textDecision?.voter || voter;
+      if (voteIdentity(verifiedVoter) !== voteIdentity(row.recipient_snapshot)) throw Object.assign(new Error("Votante não autorizado."), { status: 403 });
       const decision = parsedDecision; const integrity = hmac(`${row.id}|${decision}|${eventId}`);
-      await client.query("insert into approval_decisions(request_id,approver_id,decision,voter_identifier_hash,provider_event_id,provider_message_id,integrity_hash) values($1,$2,$3,$4,$5,$6,$7)", [row.id, row.approver_id, decision, sha256(voter), eventId, pollId, integrity]);
+      await client.query("insert into approval_decisions(request_id,approver_id,decision,voter_identifier_hash,provider_event_id,provider_message_id,integrity_hash) values($1,$2,$3,$4,$5,$6,$7)", [row.id, row.approver_id, decision, sha256(verifiedVoter), eventId, pollId || eventId, integrity]);
       await client.query("update approval_requests set status=$2,decided_at=now(),updated_at=now() where id=$1", [row.id, decision]);
       await client.query("insert into approval_events(request_id,event_type,actor_type,actor_id,metadata) values($1,$2,'APPROVER',$3,$4)", [row.id, decision, row.approver_id, { providerEventId: eventId }]);
       await client.query("update webhook_events set status='PROCESSED',processed_at=now() where provider_event_id=$1", [eventId]);
