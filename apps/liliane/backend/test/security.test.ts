@@ -109,3 +109,9 @@ test("webhook aceita decisão textual com protocolo e número autorizado", async
   } }), { protocol: "APR-000005", voter: "5531984667498@s.whatsapp.net", decision: "FOLLOW_UP" });
   assert.equal(parseTextDecision({ data: { message: { conversation: "APROVAR" } } }), null);
 });
+
+test("reenvio preserva o destinatário congelado da solicitação", async () => {
+  const source = await import("node:fs/promises").then((fs) => fs.readFile(new URL("../src/app.ts", import.meta.url), "utf8"));
+  assert.match(source, /m\.recipient_snapshot phone_e164/);
+  assert.doesNotMatch(source, /a\.phone_e164 from approval_requests/);
+});

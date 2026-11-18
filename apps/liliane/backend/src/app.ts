@@ -193,7 +193,7 @@ export function createApp() {
   app.post("/requests/:id/send", requireRole("OPERATOR"), asyncRoute(async (req, res) => {
     const result = await transaction(async (client) => {
       const scope = requestScope(req);
-      const selected = await client.query(`select r.*,a.full_name approver_name,a.phone_e164 from approval_requests r join approvers a on a.id=r.approver_id where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
+      const selected = await client.query(`select r.*,a.full_name approver_name,m.recipient_snapshot phone_e164 from approval_requests r join approvers a on a.id=r.approver_id join approval_messages m on m.request_id=r.id and m.kind='POLL' where r.id=$${scope.values.length + 1} and ${scope.sql} for update`, [...scope.values, param(req.params.id)]);
       const row = selected.rows[0]; if (!row || row.status !== "PENDING") throw Object.assign(new Error("Solicitação não está pendente."), { status: 409 });
       const message = `*${row.subject}*\n${row.description}\n\n*Protocolo:* ${row.protocol}${row.amount_cents === null ? "" : `\n*Valor:* ${money(Number(row.amount_cents))}`}\n*Solicitante:* ${req.authUser!.displayName}${row.deadline_at ? `\n*Prazo:* ${dateTime(row.deadline_at)}` : ""}`;
       if (message.length > 900) await evolution.sendText(row.phone_e164, message);
